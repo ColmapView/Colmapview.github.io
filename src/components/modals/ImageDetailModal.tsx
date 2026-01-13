@@ -848,13 +848,13 @@ export function ImageDetailModal() {
                 <button
                   onClick={goToPrev}
                   disabled={!hasPrev}
-                  className={`px-4 py-1.5 rounded text-base ${
+                  className={`w-24 py-1.5 rounded text-base ${
                     hasPrev
                       ? 'bg-ds-hover hover:bg-ds-elevated text-ds-primary'
                       : 'bg-ds-secondary text-ds-muted cursor-not-allowed'
                   }`}
                 >
-                  ← Previous
+                  ← Prev
                 </button>
                 <div className="flex items-center text-base">
                   <input
@@ -886,7 +886,7 @@ export function ImageDetailModal() {
                 <button
                   onClick={goToNext}
                   disabled={!hasNext}
-                  className={`px-4 py-1.5 rounded text-base ${
+                  className={`w-24 py-1.5 rounded text-base ${
                     hasNext
                       ? 'bg-ds-hover hover:bg-ds-elevated text-ds-primary'
                       : 'bg-ds-secondary text-ds-muted cursor-not-allowed'
