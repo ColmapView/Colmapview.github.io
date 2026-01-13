@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useReconstructionStore, useViewerStore } from '../../store';
+import { getImageFile } from '../../utils/imageFileUtils';
 
 type ViewMode = 'gallery' | 'list';
 
@@ -243,7 +244,7 @@ export function ImageGallery() {
         return {
           imageId: img.imageId,
           name: img.name,
-          file: loadedFiles?.imageFiles.get(img.name),
+          file: getImageFile(loadedFiles?.imageFiles, img.name),
           numPoints2D: img.points2D.length,
           numPoints3D,
           cameraId: img.cameraId,

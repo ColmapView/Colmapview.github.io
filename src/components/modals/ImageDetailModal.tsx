@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import { useReconstructionStore, useViewerStore } from '../../store';
 import type { Camera, Image } from '../../types/colmap';
+import { getImageFile } from '../../utils/imageFileUtils';
 
 const CAMERA_MODEL_NAMES: Record<number, string> = {
   0: 'SIMPLE_PINHOLE',
@@ -285,7 +286,7 @@ export function ImageDetailModal() {
 
   const image = imageDetailId !== null ? reconstruction?.images.get(imageDetailId) : null;
   const camera = image ? reconstruction?.cameras.get(image.cameraId) : null;
-  const imageFile = image ? loadedFiles?.imageFiles.get(image.name) : null;
+  const imageFile = image ? getImageFile(loadedFiles?.imageFiles, image.name) : null;
 
   // Memoize point counts
   const { numPoints2D, numPoints3D } = useMemo(() => {
@@ -327,7 +328,7 @@ export function ImageDetailModal() {
   // Get matched image data
   const matchedImage = matchedImageId !== null ? reconstruction?.images.get(matchedImageId) : null;
   const matchedCamera = matchedImage ? reconstruction?.cameras.get(matchedImage.cameraId) : null;
-  const matchedImageFile = matchedImage ? loadedFiles?.imageFiles.get(matchedImage.name) : null;
+  const matchedImageFile = matchedImage ? getImageFile(loadedFiles?.imageFiles, matchedImage.name) : null;
 
   // Compute match lines between current and matched image
   const matchLines = useMemo(() => {

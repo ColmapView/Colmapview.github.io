@@ -4,6 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import { Line, Html } from '@react-three/drei';
 import { useReconstructionStore, useViewerStore } from '../../store';
 import type { Camera, Image } from '../../types/colmap';
+import { getImageFile } from '../../utils/imageFileUtils';
 
 // Cycle through CMY colors (Cyan -> Magenta -> Yellow -> Cyan)
 function cmyToHex(t: number): string {
@@ -265,7 +266,7 @@ export function CameraFrustums() {
         camera,
         position: getImageWorldPosition(image),
         quaternion: getImageWorldQuaternion(image),
-        imageFile: loadedFiles?.imageFiles.get(image.name),
+        imageFile: getImageFile(loadedFiles?.imageFiles, image.name),
       });
     }
 

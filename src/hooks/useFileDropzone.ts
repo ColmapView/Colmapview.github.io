@@ -9,6 +9,7 @@ import {
 } from '../parsers';
 import { useReconstructionStore } from '../store';
 import type { Reconstruction } from '../types/colmap';
+import { collectImageFiles } from '../utils/imageFileUtils';
 
 export function useFileDropzone() {
   const {
@@ -95,21 +96,6 @@ export function useFileDropzone() {
     };
   }, []);
 
-  const collectImageFiles = useCallback((files: Map<string, File>): Map<string, File> => {
-    const imageFiles = new Map<string, File>();
-    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
-
-    for (const [path, file] of files) {
-      const lowerPath = path.toLowerCase();
-      if (imageExtensions.some(ext => lowerPath.endsWith(ext))) {
-        // Extract just the filename for matching with COLMAP image names
-        const filename = path.split('/').pop() ?? path;
-        imageFiles.set(filename, file);
-      }
-    }
-
-    return imageFiles;
-  }, []);
 
   const processFiles = useCallback(async (files: Map<string, File>) => {
     setLoading(true);
@@ -185,7 +171,6 @@ export function useFileDropzone() {
     setError,
     setProgress,
     findColmapFiles,
-    collectImageFiles,
   ]);
 
   const handleDrop = useCallback(async (e: React.DragEvent<HTMLElement>) => {
