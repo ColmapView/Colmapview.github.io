@@ -80,7 +80,7 @@ export function useFileDropzone() {
 
         // Check with any folder prefix (for when user drops a parent folder)
         for (const [key, file] of files) {
-          if (key.endsWith('/' + p) || key === p) {
+          if (key.endsWith('/' + p)) {
             return file;
           }
         }
@@ -95,7 +95,6 @@ export function useFileDropzone() {
       databaseFile: findFile(dbPaths),
     };
   }, []);
-
 
   const processFiles = useCallback(async (files: Map<string, File>) => {
     setLoading(true);

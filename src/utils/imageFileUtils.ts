@@ -12,30 +12,22 @@
  * - project/sparse/0/images.bin + project/images/1/photo.jpg
  * - or many other variations
  *
- * This utility handles all these edge cases.
+ * Strategy: Store images under multiple lookup keys for O(1) retrieval.
  */
 
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'];
 
-/**
- * Check if a path is an image file based on extension
- */
 function isImageFile(path: string): boolean {
   const lowerPath = path.toLowerCase();
   return IMAGE_EXTENSIONS.some(ext => lowerPath.endsWith(ext));
 }
 
 /**
- * Generate all possible path suffixes for a given path.
- * For "project/images/1/photo.jpg", generates:
- * - "project/images/1/photo.jpg"
- * - "images/1/photo.jpg"
- * - "1/photo.jpg"
- * - "photo.jpg"
+ * Generate path suffixes for lookup.
+ * "project/images/1/photo.jpg" -> ["project/images/1/photo.jpg", "images/1/photo.jpg", "1/photo.jpg", "photo.jpg"]
  */
-function generatePathSuffixes(path: string): string[] {
-  const normalizedPath = path.replace(/\\/g, '/');
-  const parts = normalizedPath.split('/');
+function getPathSuffixes(path: string): string[] {
+  const parts = path.split('/');
   const suffixes: string[] = [];
 
   for (let i = 0; i < parts.length; i++) {
@@ -46,46 +38,31 @@ function generatePathSuffixes(path: string): string[] {
 }
 
 /**
- * Collect image files from a file map and create a lookup map that handles
- * various COLMAP naming conventions.
- *
- * Stores each image under multiple keys:
- * 1. All path suffixes (to handle nested folders)
- * 2. Both original case and lowercase (for case-insensitive matching)
- * 3. Handles both forward and backslash separators
+ * Collect image files from a file map and create a lookup map.
+ * Stores each image under multiple keys (path suffixes, case variants) for fast O(1) lookup.
  */
 export function collectImageFiles(files: Map<string, File>): Map<string, File> {
   const imageFiles = new Map<string, File>();
-
-  // Helper to add a key if not already present (first match wins)
-  const addKey = (key: string, file: File) => {
-    if (!key) return;
-
-    // Store under original key
-    if (!imageFiles.has(key)) {
-      imageFiles.set(key, file);
-    }
-
-    // Store under lowercase key for case-insensitive matching
-    const lowerKey = key.toLowerCase();
-    if (lowerKey !== key && !imageFiles.has(lowerKey)) {
-      imageFiles.set(lowerKey, file);
-    }
-  };
 
   for (const [path, file] of files) {
     if (!isImageFile(path)) {
       continue;
     }
 
-    // Normalize backslashes to forward slashes
     const normalizedPath = path.replace(/\\/g, '/');
-
-    // Generate all path suffixes
-    const suffixes = generatePathSuffixes(normalizedPath);
+    const suffixes = getPathSuffixes(normalizedPath);
 
     for (const suffix of suffixes) {
-      addKey(suffix, file);
+      // Store under original case (first match wins)
+      if (!imageFiles.has(suffix)) {
+        imageFiles.set(suffix, file);
+      }
+
+      // Store under lowercase for case-insensitive matching
+      const lowerSuffix = suffix.toLowerCase();
+      if (!imageFiles.has(lowerSuffix)) {
+        imageFiles.set(lowerSuffix, file);
+      }
     }
   }
 
@@ -95,10 +72,6 @@ export function collectImageFiles(files: Map<string, File>): Map<string, File> {
 /**
  * Look up an image file by COLMAP image name.
  * Handles various path formats and case sensitivity issues.
- *
- * @param imageFiles - Map of image files from collectImageFiles
- * @param imageName - Image name from COLMAP (may include path, backslashes, different case)
- * @returns The matching File or undefined
  */
 export function getImageFile(
   imageFiles: Map<string, File> | undefined,
@@ -108,48 +81,15 @@ export function getImageFile(
     return undefined;
   }
 
-  // Try exact match first (most common case)
-  const exactMatch = imageFiles.get(imageName);
+  // Normalize backslashes and try direct lookup
+  const normalizedName = imageName.replace(/\\/g, '/');
+
+  // Try exact match (most common case)
+  const exactMatch = imageFiles.get(normalizedName);
   if (exactMatch) {
     return exactMatch;
   }
 
-  // Normalize the COLMAP image name (handle backslashes)
-  const normalizedName = imageName.replace(/\\/g, '/');
-  if (normalizedName !== imageName) {
-    const normalizedMatch = imageFiles.get(normalizedName);
-    if (normalizedMatch) {
-      return normalizedMatch;
-    }
-  }
-
-  // Try lowercase (case-insensitive match)
-  const lowerName = normalizedName.toLowerCase();
-  if (lowerName !== normalizedName) {
-    const lowerMatch = imageFiles.get(lowerName);
-    if (lowerMatch) {
-      return lowerMatch;
-    }
-  }
-
-  // Try just the filename (strip any path)
-  const filename = normalizedName.split('/').pop();
-  if (filename && filename !== normalizedName) {
-    const filenameMatch = imageFiles.get(filename);
-    if (filenameMatch) {
-      return filenameMatch;
-    }
-
-    // Also try lowercase filename
-    const lowerFilename = filename.toLowerCase();
-    if (lowerFilename !== filename) {
-      const lowerFilenameMatch = imageFiles.get(lowerFilename);
-      if (lowerFilenameMatch) {
-        return lowerFilenameMatch;
-      }
-    }
-  }
-
-  // No match found
-  return undefined;
+  // Try lowercase match
+  return imageFiles.get(normalizedName.toLowerCase());
 }
