@@ -134,39 +134,62 @@ export function useFileDropzone() {
     setProgress(0);
 
     try {
-      // Check if newFiles contains any COLMAP metadata files
-      const droppedColmapFiles = Array.from(newFiles.values()).some(file => {
-        const name = file.name.toLowerCase();
-        return name === 'cameras.bin' || name === 'cameras.txt' ||
-               name === 'images.bin' || name === 'images.txt' ||
-               name === 'points3d.bin' || name === 'points3d.txt';
-      });
+      // Check if newFiles contains a COMPLETE set of COLMAP files
+      const newColmapFiles = findColmapFiles(newFiles);
+      const hasCompleteNewDataset = !!(newColmapFiles.camerasFile &&
+                                       newColmapFiles.imagesFile &&
+                                       newColmapFiles.points3DFile);
 
-      // Merge with existing dropped files
-      const files = new Map<string, File>(existingDroppedFiles ?? []);
-      for (const [path, file] of newFiles) {
-        files.set(path, file);
+      // If dropping a complete new dataset, start fresh; otherwise merge
+      let files: Map<string, File>;
+      if (hasCompleteNewDataset) {
+        // New complete dataset - replace everything
+        files = newFiles;
+      } else {
+        // Partial drop (just images, masks, etc.) - merge with existing
+        files = new Map<string, File>(existingDroppedFiles ?? []);
+        for (const [path, file] of newFiles) {
+          files.set(path, file);
+        }
       }
       setDroppedFiles(files);
 
-      // Find COLMAP files in merged set
-      const { camerasFile, imagesFile, points3DFile, databaseFile } = findColmapFiles(files);
+      // Find COLMAP files in the file set
+      const { camerasFile, imagesFile, points3DFile, databaseFile } = hasCompleteNewDataset
+        ? newColmapFiles
+        : findColmapFiles(files);
 
       // Collect image files and check for masks folder
       const imageFiles = collectImageFiles(files);
       const hasMasks = hasMaskFiles(files);
 
       // Determine what to use for COLMAP files
-      const finalCamerasFile = camerasFile ?? existingLoadedFiles?.camerasFile;
-      const finalImagesFile = imagesFile ?? existingLoadedFiles?.imagesFile;
-      const finalPoints3DFile = points3DFile ?? existingLoadedFiles?.points3DFile;
-      const finalDatabaseFile = databaseFile ?? existingLoadedFiles?.databaseFile;
+      // For complete new dataset: use new files only
+      // For partial drop: fall back to existing if not in new drop
+      const finalCamerasFile = hasCompleteNewDataset
+        ? camerasFile
+        : (camerasFile ?? existingLoadedFiles?.camerasFile);
+      const finalImagesFile = hasCompleteNewDataset
+        ? imagesFile
+        : (imagesFile ?? existingLoadedFiles?.imagesFile);
+      const finalPoints3DFile = hasCompleteNewDataset
+        ? points3DFile
+        : (points3DFile ?? existingLoadedFiles?.points3DFile);
+      const finalDatabaseFile = hasCompleteNewDataset
+        ? databaseFile
+        : (databaseFile ?? existingLoadedFiles?.databaseFile);
 
-      // Merge image files with existing
-      const finalImageFiles = new Map<string, File>(existingLoadedFiles?.imageFiles ?? []);
-      for (const [key, file] of imageFiles) {
-        finalImageFiles.set(key, file);
-      }
+      // For complete new dataset: use only new images
+      // For partial drop: merge with existing
+      const finalImageFiles = hasCompleteNewDataset
+        ? imageFiles
+        : (() => {
+            const merged = new Map<string, File>(existingLoadedFiles?.imageFiles ?? []);
+            for (const [key, file] of imageFiles) {
+              merged.set(key, file);
+            }
+            return merged;
+          })();
 
       // Update loaded files reference
       setLoadedFiles({
@@ -175,11 +198,11 @@ export function useFileDropzone() {
         points3DFile: finalPoints3DFile,
         databaseFile: finalDatabaseFile,
         imageFiles: finalImageFiles,
-        hasMasks: hasMasks || existingLoadedFiles?.hasMasks || false,
+        hasMasks: hasCompleteNewDataset ? hasMasks : (hasMasks || existingLoadedFiles?.hasMasks || false),
       });
 
-      // Only parse COLMAP if new COLMAP files were dropped OR no existing reconstruction
-      if (droppedColmapFiles || !existingReconstruction) {
+      // Parse COLMAP if: new complete dataset OR no existing reconstruction
+      if (hasCompleteNewDataset || !existingReconstruction) {
         if (!finalCamerasFile || !finalImagesFile || !finalPoints3DFile) {
           throw new Error(
             'Missing required COLMAP files. Expected cameras.bin/txt, images.bin/txt, and points3D.bin/txt'
