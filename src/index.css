@@ -1,0 +1,284 @@
+@import "tailwindcss";
+
+@theme {
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.25rem;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.5rem;
+  --text-base: 1.0625rem;
+  --text-base--line-height: 1.75rem;
+  --text-lg: 1.1875rem;
+  --text-lg--line-height: 1.875rem;
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 2rem;
+  --text-2xl: 1.625rem;
+  --text-2xl--line-height: 2.25rem;
+}
+
+:root {
+  /* Backgrounds */
+  --bg-void: #0a0a0a;
+  --bg-primary: #0f0f0f;
+  --bg-secondary: #161616;
+  --bg-tertiary: #1e1e1e;
+  --bg-hover: #262626;
+  --bg-input: #1a1a1a;
+  --bg-elevated: #242424;
+
+  /* Text */
+  --text-primary: #e8e8e8;
+  --text-secondary: #8a8a8a;
+  --text-muted: #5a5a5a;
+
+  /* Borders */
+  --border-color: #2a2a2a;
+  --border-light: #3a3a3a;
+  --border-subtle: #222222;
+
+  /* Accent (Silver/Neutral) */
+  --accent: #b8b8b8;
+  --accent-hover: #d0d0d0;
+  --accent-dim: rgba(184, 184, 184, 0.12);
+
+  /* Semantic Colors */
+  --success: #6b9b6b;
+  --warning: #b89b6b;
+  --error: #b86b6b;
+  --info: #6b8bb8;
+
+  /* 3D Visualization Colors (preserved) */
+  --frustum-default: #ff0000;
+  --frustum-selected: #ff00ff;
+  --point-triangulated: #00ff00;
+  --point-untriangulated: #ff0000;
+  --match-line: #ff00ff;
+
+  /* Typography */
+  --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  --font-base: 1rem;
+
+  /* Spacing */
+  --spacing-xs: 2px;
+  --spacing-sm: 4px;
+  --spacing-md: 8px;
+  --spacing-lg: 12px;
+  --spacing-xl: 16px;
+  --spacing-2xl: 24px;
+  --spacing-3xl: 32px;
+
+  /* Border Radius */
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6), 0 4px 8px rgba(0, 0, 0, 0.4);
+
+  /* Transitions */
+  --transition-fast: 0.1s ease-out;
+  --transition-base: 0.15s ease-out;
+  --transition-slow: 0.25s ease-out;
+  --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Component Sizes */
+  --button-height: 24px;
+  --button-height-sm: 20px;
+  --button-height-lg: 28px;
+  --input-height: 22px;
+  --checkbox-size: 14px;
+  --slider-thumb: 14px;
+  --scrollbar-width: 6px;
+
+  /* Icon Sizes */
+  --icon-xs: 14px;
+  --icon-sm: 16px;
+  --icon-base: 18px;
+  --icon-md: 20px;
+  --icon-lg: 24px;
+
+  /* Z-Index Scale */
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 500;
+  --z-modal: 1000;
+  --z-toast: 1500;
+  --z-tooltip: 2000;
+
+  /* Base styles */
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: dark;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Focus states for accessibility */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Backgrounds */
+.bg-ds-void { background-color: var(--bg-void); }
+.bg-ds-primary { background-color: var(--bg-primary); }
+.bg-ds-secondary { background-color: var(--bg-secondary); }
+.bg-ds-tertiary { background-color: var(--bg-tertiary); }
+.bg-ds-hover { background-color: var(--bg-hover); }
+.bg-ds-input { background-color: var(--bg-input); }
+.bg-ds-elevated { background-color: var(--bg-elevated); }
+
+/* Text */
+.text-ds-primary { color: var(--text-primary); }
+.text-ds-secondary { color: var(--text-secondary); }
+.text-ds-muted { color: var(--text-muted); }
+
+/* Borders */
+.border-ds { border-color: var(--border-color); }
+.border-ds-light { border-color: var(--border-light); }
+.border-ds-subtle { border-color: var(--border-subtle); }
+
+/* Accent */
+.bg-ds-accent { background-color: var(--accent); }
+.text-ds-accent { color: var(--accent); }
+.border-ds-accent { border-color: var(--accent); }
+
+/* Semantic */
+.text-ds-success { color: var(--success); }
+.text-ds-warning { color: var(--warning); }
+.text-ds-error { color: var(--error); }
+.text-ds-info { color: var(--info); }
+.bg-ds-success { background-color: var(--success); }
+.bg-ds-warning { background-color: var(--warning); }
+.bg-ds-error { background-color: var(--error); }
+.bg-ds-info { background-color: var(--info); }
+
+/* 3D Visualization */
+.text-ds-frustum { color: var(--frustum-default); }
+.text-ds-frustum-selected { color: var(--frustum-selected); }
+.border-ds-frustum-selected { border-color: var(--frustum-selected); }
+
+/* Shadows */
+.shadow-ds-xs { box-shadow: var(--shadow-xs); }
+.shadow-ds-sm { box-shadow: var(--shadow-sm); }
+.shadow-ds-md { box-shadow: var(--shadow-md); }
+.shadow-ds-lg { box-shadow: var(--shadow-lg); }
+
+/* Form accents */
+.accent-ds-accent { accent-color: var(--accent); }
+.accent-ds-success { accent-color: var(--success); }
+.accent-ds-error { accent-color: var(--error); }
+
+/* Focus states */
+.focus-ds:focus { border-color: var(--accent); outline: none; }
+
+/* Hover states */
+.hover-ds-hover:hover { background-color: var(--bg-hover); }
+.hover-ds-elevated:hover { background-color: var(--bg-elevated); }
+.hover-ds-text-primary:hover { color: var(--text-primary); }
+
+/* Tooltips require position: relative or absolute on the element */
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  padding: 6px 10px;
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-base);
+  white-space: nowrap;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-light);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--transition-fast), visibility var(--transition-fast);
+  pointer-events: none;
+  z-index: var(--z-tooltip);
+}
+
+[data-tooltip]:hover::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Tooltip position variants */
+[data-tooltip-pos="bottom"]::after {
+  bottom: auto;
+  top: 100%;
+  transform: translateX(-50%) translateY(4px);
+}
+
+[data-tooltip-pos="left"]::after {
+  bottom: auto;
+  left: auto;
+  right: 100%;
+  top: 50%;
+  transform: translateX(-4px) translateY(-50%);
+}
+
+[data-tooltip-pos="right"]::after {
+  bottom: auto;
+  left: 100%;
+  top: 50%;
+  transform: translateX(4px) translateY(-50%);
+}

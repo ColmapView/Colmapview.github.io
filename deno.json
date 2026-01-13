@@ -1,0 +1,28 @@
+{
+  "unstable": ["sloppy-imports"],
+  "tasks": {
+    "dev": "deno run -A npm:vite",
+    "build": "deno run -A npm:vite build",
+    "preview": "deno run -A npm:vite preview",
+    "lint": "deno lint",
+    "check": "deno check src/**/*.ts src/**/*.tsx",
+    "test": "deno test --allow-read --allow-env src/",
+    "test:watch": "deno test --allow-read --allow-env --watch src/",
+    "test:coverage": "deno test --allow-read --allow-env --coverage=coverage src/"
+  },
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "deno.ns"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "react"
+  },
+  "nodeModulesDir": "auto",
+  "imports": {
+    "react": "npm:react@^19.2.0",
+    "react-dom": "npm:react-dom@^19.2.0",
+    "react/jsx-runtime": "npm:react@^19.2.0/jsx-runtime",
+    "three": "npm:three@^0.182.0",
+    "@react-three/fiber": "npm:@react-three/fiber@^9.5.0",
+    "@react-three/drei": "npm:@react-three/drei@^10.7.7",
+    "zustand": "npm:zustand@^5.0.10"
+  }
+}
