@@ -7,9 +7,9 @@ import {
   parseCamerasBinary,
   parseCamerasText,
 } from '../parsers';
-import { useReconstructionStore } from '../store';
+import { useReconstructionStore, useViewerStore } from '../store';
 import type { Reconstruction } from '../types/colmap';
-import { collectImageFiles } from '../utils/imageFileUtils';
+import { collectImageFiles, hasMaskFiles } from '../utils/imageFileUtils';
 
 export function useFileDropzone() {
   const {
@@ -19,6 +19,8 @@ export function useFileDropzone() {
     setError,
     setProgress,
   } = useReconstructionStore();
+  const resetView = useViewerStore((s) => s.resetView);
+  const setSelectedImageId = useViewerStore((s) => s.setSelectedImageId);
 
   const scanEntry = useCallback(async (
     entry: FileSystemEntry,
@@ -126,8 +128,9 @@ export function useFileDropzone() {
         );
       }
 
-      // Collect image files
+      // Collect image files and check for masks folder
       const imageFiles = collectImageFiles(files);
+      const hasMasks = hasMaskFiles(files);
 
       // Store loaded files reference
       setLoadedFiles({
@@ -136,6 +139,7 @@ export function useFileDropzone() {
         points3DFile,
         databaseFile,
         imageFiles,
+        hasMasks,
       });
 
       setProgress(10);
@@ -170,6 +174,10 @@ export function useFileDropzone() {
       const reconstruction: Reconstruction = { cameras, images, points3D };
       setReconstruction(reconstruction);
 
+      // Reset viewer state for new dataset
+      setSelectedImageId(null);
+      resetView();
+
       console.log(
         `Loaded: ${cameras.size} cameras, ${images.size} images, ${points3D.size} points`
       );
@@ -185,6 +193,8 @@ export function useFileDropzone() {
     setError,
     setProgress,
     findColmapFiles,
+    resetView,
+    setSelectedImageId,
   ]);
 
   const handleDrop = useCallback(async (e: React.DragEvent<HTMLElement>) => {

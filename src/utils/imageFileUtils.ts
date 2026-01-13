@@ -38,6 +38,20 @@ function getPathSuffixes(path: string): string[] {
 }
 
 /**
+ * Check if any files are in a masks/ folder.
+ * Used to determine whether to show mask overlay controls.
+ */
+export function hasMaskFiles(files: Map<string, File>): boolean {
+  for (const path of files.keys()) {
+    const normalized = path.replace(/\\/g, '/').toLowerCase();
+    if (normalized.includes('/masks/') || normalized.startsWith('masks/')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Collect image files from a file map and create a lookup map.
  * Stores each image under multiple keys (path suffixes, case variants) for fast O(1) lookup.
  */

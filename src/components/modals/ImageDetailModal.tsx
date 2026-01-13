@@ -292,7 +292,8 @@ export function ImageDetailModal() {
   const image = imageDetailId !== null ? reconstruction?.images.get(imageDetailId) : null;
   const camera = image ? reconstruction?.cameras.get(image.cameraId) : null;
   const imageFile = image ? getImageFile(loadedFiles?.imageFiles, image.name) : null;
-  const maskFile = image ? getMaskFile(loadedFiles?.imageFiles, image.name) : null;
+  // Only look for mask if masks folder exists
+  const maskFile = (image && loadedFiles?.hasMasks) ? getMaskFile(loadedFiles?.imageFiles, image.name) : null;
   const hasMask = !!maskFile;
 
   // Memoize point counts

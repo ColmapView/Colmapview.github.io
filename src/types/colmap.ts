@@ -77,6 +77,7 @@ export interface LoadedFiles {
   points3DFile?: File;
   databaseFile?: File;
   imageFiles: Map<string, File>;
+  hasMasks: boolean;
 }
 
 // Color mode for point cloud visualization

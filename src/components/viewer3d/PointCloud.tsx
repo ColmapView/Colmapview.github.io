@@ -1,6 +1,6 @@
 import { useMemo, useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import { useReconstructionStore, useViewerStore } from '../../store';
 
 // Cycle through CMY colors (Cyan -> Magenta -> Yellow -> Cyan)
@@ -49,9 +49,8 @@ export function PointCloud() {
   const selectedImageId = useViewerStore((s) => s.selectedImageId);
   const rainbowMode = useViewerStore((s) => s.rainbowMode);
   const rainbowSpeed = useViewerStore((s) => s.rainbowSpeed);
-  const geometryRef = useRef<THREE.BufferGeometry>(null);
-  const selectedGeometryRef = useRef<THREE.BufferGeometry>(null);
   const selectedMaterialRef = useRef<THREE.PointsMaterial>(null);
+  const { invalidate } = useThree();
 
   const [rainbowHue, setRainbowHue] = useState(0);
 
@@ -151,33 +150,39 @@ export function PointCloud() {
     return { positions, colors, selectedPositions, selectedColors };
   }, [reconstruction, colorMode, minTrackLength, selectedImageId]);
 
-  useEffect(() => {
-    if (!geometryRef.current || !positions || !colors) return;
-    const geometry = geometryRef.current;
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geometry.computeBoundingSphere();
+  // Create geometry objects in useMemo to ensure proper updates when reconstruction changes
+  const geometry = useMemo(() => {
+    if (!positions || !colors) return null;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.computeBoundingSphere();
+    return geo;
   }, [positions, colors]);
 
-  useEffect(() => {
-    if (!selectedGeometryRef.current || !selectedPositions || !selectedColors) return;
-    const geometry = selectedGeometryRef.current;
-    geometry.setAttribute('position', new THREE.BufferAttribute(selectedPositions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(selectedColors, 3));
-    geometry.computeBoundingSphere();
+  const selectedGeometry = useMemo(() => {
+    if (!selectedPositions || !selectedColors || selectedPositions.length === 0) return null;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(selectedPositions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(selectedColors, 3));
+    geo.computeBoundingSphere();
+    return geo;
   }, [selectedPositions, selectedColors]);
 
-  if (!positions || !colors) return null;
+  // Force re-render when geometry changes
+  useEffect(() => {
+    invalidate();
+  }, [geometry, selectedGeometry, invalidate]);
+
+  if (!geometry) return null;
 
   return (
     <>
-      <points matrixAutoUpdate={false}>
-        <bufferGeometry ref={geometryRef} />
+      <points matrixAutoUpdate={false} geometry={geometry}>
         <pointsMaterial size={pointSize} vertexColors sizeAttenuation={false} />
       </points>
-      {selectedPositions && selectedPositions.length > 0 && (
-        <points matrixAutoUpdate={false}>
-          <bufferGeometry ref={selectedGeometryRef} />
+      {selectedGeometry && (
+        <points matrixAutoUpdate={false} geometry={selectedGeometry}>
           <pointsMaterial
             ref={selectedMaterialRef}
             size={pointSize + 1}

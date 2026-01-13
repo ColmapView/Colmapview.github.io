@@ -66,6 +66,13 @@ export function DropZone({ children }: DropZoneProps) {
       {loading && (
         <div className="absolute inset-0 bg-ds-void/80 z-[500] flex items-center justify-center">
           <div className="text-center">
+            <div className="flex justify-center mb-4">
+              <div className="flex space-x-2">
+                <div className="w-3 h-3 rounded-full bg-ds-accent animate-bounce" style={{ animationDelay: '0ms' }} />
+                <div className="w-3 h-3 rounded-full bg-ds-accent animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="w-3 h-3 rounded-full bg-ds-accent animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+            </div>
             <div className="text-xl mb-4 text-ds-primary">Loading...</div>
             <div className="w-64 h-2 bg-ds-tertiary rounded-full overflow-hidden">
               <div
