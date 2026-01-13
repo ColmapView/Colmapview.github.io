@@ -118,7 +118,9 @@ export function getMaskFile(
   const normalized = imageName.replace(/\\/g, '/');
 
   // Strategy 1: Replace 'images/' with 'masks/' anywhere in path
+  // Only use if it actually contains 'images/' to replace
   const replaced = normalized.replace(/\/images\//i, '/masks/').replace(/^images\//i, 'masks/');
+  const hasImagesInPath = replaced !== normalized;
 
   // Strategy 2: Strip leading images/ and prepend masks/
   const stripped = normalized.replace(/^images\//i, '');
@@ -128,15 +130,21 @@ export function getMaskFile(
   const filename = normalized.split('/').pop() || '';
   const maskByFilename = `masks/${filename}`;
 
-  // Try all strategies with both exact and .png suffix
-  const tryPaths = [
-    replaced,
-    `${replaced}.png`,
-    maskPath,
-    `${maskPath}.png`,
-    maskByFilename,
-    `${maskByFilename}.png`,
-  ];
+  // Build list of paths to try - only include paths that have 'masks/' in them
+  const tryPaths: string[] = [];
+
+  // Only add replaced paths if the original had 'images/' in it
+  if (hasImagesInPath) {
+    tryPaths.push(replaced, `${replaced}.png`);
+  }
+
+  // Always try masks/ prefixed paths
+  tryPaths.push(maskPath, `${maskPath}.png`);
+
+  // Add filename-only fallback if different from maskPath
+  if (maskByFilename !== maskPath) {
+    tryPaths.push(maskByFilename, `${maskByFilename}.png`);
+  }
 
   for (const path of tryPaths) {
     const match = imageFiles.get(path) || imageFiles.get(path.toLowerCase());
