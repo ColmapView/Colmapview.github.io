@@ -177,10 +177,10 @@ function ImageItem({ imageId, name, file, numPoints2D, numPoints3D, cameraId: _c
       {/* Shadow gradient overlay */}
       <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-black/70 via-black/30 to-transparent pointer-events-none" />
       {/* Info overlay */}
-      <div className="absolute bottom-0 left-0 right-0 px-1.5 py-1.5">
+      <div className="absolute bottom-0 left-0 right-0 px-1.5 py-1.5 overflow-hidden">
         <div className="text-ds-primary text-base truncate" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8), 0 2px 8px rgba(0,0,0,0.6)' }}>{name}</div>
-        <div className="text-ds-secondary text-base" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8), 0 2px 8px rgba(0,0,0,0.6)' }}>
-          ID: {imageId} · <span className="text-ds-success">{numPoints3D}</span>/{numPoints2D}
+        <div className="text-ds-secondary text-base truncate" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8), 0 2px 8px rgba(0,0,0,0.6)' }}>
+          {imageId} · <span className="text-ds-success">{numPoints3D}</span>/{numPoints2D}
         </div>
       </div>
     </div>
