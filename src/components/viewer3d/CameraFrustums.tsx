@@ -145,8 +145,8 @@ function CameraFrustum({
           map={showImagePlane && texture ? texture : null}
           color={showImagePlane && texture ? undefined : displayColor}
           side={THREE.DoubleSide}
-          transparent={!isSelected}
-          opacity={isSelected ? 1 : (hovered ? (showImagePlane && texture ? 0.3 : 0.6) : (showImagePlane && texture ? imagePlaneOpacity : 0.3))}
+          transparent={!isSelected || hovered}
+          opacity={isSelected && !hovered ? 1 : (hovered ? (showImagePlane && texture ? 0.3 : 0.6) : (showImagePlane && texture ? imagePlaneOpacity : 0.3))}
         />
       </mesh>
       {hovered && (
