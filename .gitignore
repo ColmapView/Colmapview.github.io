@@ -44,3 +44,6 @@ coverage/
 # Deno
 deno.lock
 tmpclaude-*
+
+# Playwright
+.playwright-mcp/
