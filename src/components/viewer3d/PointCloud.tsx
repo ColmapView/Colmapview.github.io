@@ -41,6 +41,11 @@ function jetColormap(t: number): [number, number, number] {
   }
 }
 
+// Convert sRGB to linear color space (Three.js expects linear vertex colors)
+function sRGBToLinear(c: number): number {
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
 export function PointCloud() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const colorMode = useViewerStore((s) => s.colorMode);
@@ -119,7 +124,12 @@ export function PointCloud() {
         const trackNorm = (point.track.length - minTrack) / (maxTrack - minTrack);
         return [0.1 + trackNorm * 0.1, 0.1 + trackNorm * 0.9, 0.5 - trackNorm * 0.2];
       }
-      return [point.rgb[0] / 255, point.rgb[1] / 255, point.rgb[2] / 255];
+      // Convert sRGB colors from COLMAP to linear space for proper rendering
+      return [
+        sRGBToLinear(point.rgb[0] / 255),
+        sRGBToLinear(point.rgb[1] / 255),
+        sRGBToLinear(point.rgb[2] / 255),
+      ];
     };
 
     // Regular points
