@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef, memo } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { Line, Html } from '@react-three/drei';
@@ -57,7 +57,7 @@ interface CameraFrustumProps {
   onContextMenu?: () => void;
 }
 
-function CameraFrustum({
+const CameraFrustum = memo(function CameraFrustum({
   position,
   quaternion,
   camera,
@@ -179,7 +179,7 @@ function CameraFrustum({
       )}
     </group>
   );
-}
+});
 
 export function CameraFrustums() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
@@ -195,7 +195,9 @@ export function CameraFrustums() {
   const rainbowMode = useViewerStore((s) => s.rainbowMode);
   const rainbowSpeed = useViewerStore((s) => s.rainbowSpeed);
 
-  const [rainbowHue, setRainbowHue] = useState(0);
+  // Use ref for rainbow animation to avoid re-renders every frame
+  const rainbowHueRef = useRef(0);
+  const [, forceUpdate] = useState(0);
 
   // Clear texture cache when reconstruction changes
   useEffect(() => {
@@ -204,11 +206,18 @@ export function CameraFrustums() {
     };
   }, [reconstruction]);
 
+  // Update rainbow hue without causing re-renders every frame
+  // Only force update when rainbow mode is active to show animation
   useFrame((_, delta) => {
     if (rainbowMode && selectedImageId !== null) {
-      setRainbowHue((h) => (h + delta * rainbowSpeed * 0.5) % 1);
+      rainbowHueRef.current = (rainbowHueRef.current + delta * rainbowSpeed * 0.5) % 1;
+      // Force update at animation framerate for smooth color transition
+      forceUpdate((n) => n + 1);
     }
   });
+
+  // Extract imageFiles to avoid recalculating when other loadedFiles properties change
+  const imageFiles = loadedFiles?.imageFiles;
 
   const frustums = useMemo(() => {
     if (!reconstruction || !showCameras) return [];
@@ -230,16 +239,16 @@ export function CameraFrustums() {
         camera,
         position: getImageWorldPosition(image),
         quaternion: getImageWorldQuaternion(image),
-        imageFile: getImageFile(loadedFiles?.imageFiles, image.name),
+        imageFile: getImageFile(imageFiles, image.name),
       });
     }
 
     return result;
-  }, [reconstruction, showCameras, loadedFiles]);
+  }, [reconstruction, showCameras, imageFiles]);
 
   if (!showCameras || frustums.length === 0) return null;
 
-  const selectedColor = rainbowMode ? rainbowToHex(rainbowHue) : '#ff00ff';
+  const selectedColor = rainbowMode ? rainbowToHex(rainbowHueRef.current) : '#ff00ff';
 
   return (
     <group>

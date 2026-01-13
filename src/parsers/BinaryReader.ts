@@ -64,14 +64,15 @@ export class BinaryReader {
 
   /**
    * Read a null-terminated string (ASCII)
+   * Uses array + join pattern to avoid O(n²) string concatenation
    */
   readString(): string {
-    let str = '';
+    const chars: string[] = [];
     let char: number;
     while ((char = this.readUint8()) !== 0) {
-      str += String.fromCharCode(char);
+      chars.push(String.fromCharCode(char));
     }
-    return str;
+    return chars.join('');
   }
 
   skip(bytes: number): void {

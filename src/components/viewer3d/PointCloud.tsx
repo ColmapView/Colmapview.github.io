@@ -182,6 +182,19 @@ export function PointCloud() {
     return geo;
   }, [selectedPositions, selectedColors]);
 
+  // Dispose geometries when they change to prevent GPU memory leaks
+  useEffect(() => {
+    return () => {
+      geometry?.dispose();
+    };
+  }, [geometry]);
+
+  useEffect(() => {
+    return () => {
+      selectedGeometry?.dispose();
+    };
+  }, [selectedGeometry]);
+
   if (!geometry) return null;
 
   return (
@@ -195,7 +208,6 @@ export function PointCloud() {
             ref={selectedMaterialRef}
             size={pointSize + 1}
             vertexColors={!rainbowMode}
-            color={rainbowMode ? rainbowColor(rainbowHue) : undefined}
             sizeAttenuation={false}
           />
         </points>

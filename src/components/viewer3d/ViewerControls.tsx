@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo, useCallback } from 'react';
 import { useViewerStore } from '../../store';
 import type { ColorMode } from '../../types/colmap';
 
@@ -105,7 +105,7 @@ interface SliderRowProps {
   formatValue?: (value: number) => string;
 }
 
-function SliderRow({ label, value, min, max, step, onChange, formatValue }: SliderRowProps) {
+const SliderRow = memo(function SliderRow({ label, value, min, max, step, onChange, formatValue }: SliderRowProps) {
   const displayValue = formatValue ? formatValue(value) : String(value);
   return (
     <div className={styles.row}>
@@ -124,14 +124,14 @@ function SliderRow({ label, value, min, max, step, onChange, formatValue }: Slid
       </div>
     </div>
   );
-}
+});
 
 interface PanelWrapperProps {
   title: string;
   children: React.ReactNode;
 }
 
-function PanelWrapper({ title, children }: PanelWrapperProps) {
+const PanelWrapper = memo(function PanelWrapper({ title, children }: PanelWrapperProps) {
   return (
     <>
       <div className={styles.panelBridge} />
@@ -143,7 +143,7 @@ function PanelWrapper({ title, children }: PanelWrapperProps) {
       </div>
     </>
   );
-}
+});
 
 const styles = {
   button: 'w-16 h-16 rounded-lg flex items-center justify-center transition-colors relative',
@@ -178,7 +178,7 @@ interface ControlButtonProps {
   children?: React.ReactNode;
 }
 
-function ControlButton({
+const ControlButton = memo(function ControlButton({
   panelId,
   activePanel,
   setActivePanel,
@@ -212,7 +212,7 @@ function ControlButton({
       )}
     </div>
   );
-}
+});
 
 export function ViewerControls() {
   const [activePanel, setActivePanel] = useState<PanelType>(null);
@@ -247,16 +247,16 @@ export function ViewerControls() {
   const setBackgroundColor = useViewerStore((s) => s.setBackgroundColor);
   const resetView = useViewerStore((s) => s.resetView);
 
-  const toggleBackground = () => {
+  const toggleBackground = useCallback(() => {
     const current = parseInt(backgroundColor.slice(1, 3), 16);
     const newVal = current < 128 ? 'ff' : '00';
     setBackgroundColor(`#${newVal}${newVal}${newVal}`);
-  };
+  }, [backgroundColor, setBackgroundColor]);
 
-  const handleBrightnessChange = (v: number) => {
+  const handleBrightnessChange = useCallback((v: number) => {
     const hex = Math.round(v).toString(16).padStart(2, '0');
     setBackgroundColor(`#${hex}${hex}${hex}`);
-  };
+  }, [setBackgroundColor]);
 
   return (
     <div className="absolute top-3 right-3 flex flex-col gap-2 z-10">
