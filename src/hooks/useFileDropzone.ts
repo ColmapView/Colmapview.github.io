@@ -10,9 +10,6 @@ import {
 import { useReconstructionStore } from '../store';
 import type { Reconstruction } from '../types/colmap';
 
-/**
- * Hook for handling file/folder drops and parsing COLMAP data
- */
 export function useFileDropzone() {
   const {
     setReconstruction,
@@ -22,9 +19,6 @@ export function useFileDropzone() {
     setProgress,
   } = useReconstructionStore();
 
-  /**
-   * Recursively scan a FileSystemEntry and collect all files
-   */
   const scanEntry = useCallback(async (
     entry: FileSystemEntry,
     path: string,
@@ -57,9 +51,6 @@ export function useFileDropzone() {
     }
   }, []);
 
-  /**
-   * Find COLMAP files from the file map
-   */
   const findColmapFiles = useCallback((files: Map<string, File>): {
     camerasFile?: File;
     imagesFile?: File;
@@ -104,9 +95,6 @@ export function useFileDropzone() {
     };
   }, []);
 
-  /**
-   * Collect image files from the file map
-   */
   const collectImageFiles = useCallback((files: Map<string, File>): Map<string, File> => {
     const imageFiles = new Map<string, File>();
     const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
@@ -123,9 +111,6 @@ export function useFileDropzone() {
     return imageFiles;
   }, []);
 
-  /**
-   * Process the collected files and parse COLMAP data
-   */
   const processFiles = useCallback(async (files: Map<string, File>) => {
     setLoading(true);
     setError(null);
@@ -203,9 +188,6 @@ export function useFileDropzone() {
     collectImageFiles,
   ]);
 
-  /**
-   * Handle drop event
-   */
   const handleDrop = useCallback(async (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -243,9 +225,6 @@ export function useFileDropzone() {
     await processFiles(files);
   }, [scanEntry, processFiles]);
 
-  /**
-   * Handle drag over event
-   */
   const handleDragOver = useCallback((e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
     e.stopPropagation();

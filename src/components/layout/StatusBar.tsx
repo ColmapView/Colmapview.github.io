@@ -13,7 +13,6 @@ export function StatusBar() {
   const imageCount = useReconstructionStore(selectImageCount);
   const cameraCount = useReconstructionStore(selectCameraCount);
 
-  // Calculate additional statistics
   const stats = useMemo(() => {
     if (!reconstruction) return null;
 
@@ -22,7 +21,6 @@ export function StatusBar() {
 
     let sumError = 0;
     let errorCount = 0;
-    let sumTrack = 0;
     let totalObservations = 0;
 
     for (const p of points) {
@@ -30,13 +28,12 @@ export function StatusBar() {
         sumError += p.error;
         errorCount++;
       }
-      sumTrack += p.track.length;
       totalObservations += p.track.length;
     }
 
     return {
       avgError: errorCount > 0 ? sumError / errorCount : 0,
-      avgTrack: sumTrack / points.length,
+      avgTrack: totalObservations / points.length,
       observations: totalObservations,
     };
   }, [reconstruction]);

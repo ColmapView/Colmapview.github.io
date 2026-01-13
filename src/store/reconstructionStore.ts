@@ -2,18 +2,12 @@ import { create } from 'zustand';
 import type { Reconstruction, LoadedFiles } from '../types/colmap';
 
 interface ReconstructionState {
-  // Parsed reconstruction data
   reconstruction: Reconstruction | null;
-
-  // Raw loaded files
   loadedFiles: LoadedFiles | null;
-
-  // Loading state
   loading: boolean;
   error: string | null;
   progress: number;
 
-  // Actions
   setReconstruction: (rec: Reconstruction) => void;
   setLoadedFiles: (files: LoadedFiles) => void;
   setLoading: (loading: boolean) => void;
@@ -56,7 +50,6 @@ export const useReconstructionStore = create<ReconstructionState>((set) => ({
   }),
 }));
 
-// Selector helpers
 export const selectPointCount = (state: ReconstructionState) =>
   state.reconstruction?.points3D.size ?? 0;
 

@@ -140,7 +140,7 @@ const styles = {
   buttonHover: 'bg-ds-hover text-ds-primary',
   buttonInactive: 'bg-ds-void/50 text-ds-secondary hover:bg-ds-void/70 hover:text-ds-primary',
   panelWrapper: 'absolute right-[72px] top-0',
-  panelBridge: 'absolute right-16 top-0 w-2 h-16', // invisible bridge in the gap between button and panel
+  panelBridge: 'absolute right-16 top-0 w-2 h-16',
   panel: 'bg-ds-tertiary border border-ds rounded-lg p-4 min-w-[220px] shadow-ds-lg',
   panelTitle: 'text-ds-primary text-base font-medium mb-3',
   label: 'text-ds-secondary text-base whitespace-nowrap w-20',
@@ -148,6 +148,61 @@ const styles = {
   slider: 'w-28 accent-ds-accent',
   row: 'flex items-center justify-between gap-2',
 };
+
+function getButtonClass(isActive: boolean, isHovered: boolean): string {
+  if (isActive) return `${styles.button} ${styles.buttonActive}`;
+  if (isHovered) return `${styles.button} ${styles.buttonHover}`;
+  return `${styles.button} ${styles.buttonInactive}`;
+}
+
+interface ControlButtonProps {
+  panelId: PanelType;
+  activePanel: PanelType;
+  setActivePanel: (panel: PanelType) => void;
+  icon: React.ReactNode;
+  tooltip: string;
+  isActive?: boolean;
+  onClick?: () => void;
+  panelTitle?: string;
+  children?: React.ReactNode;
+}
+
+function ControlButton({
+  panelId,
+  activePanel,
+  setActivePanel,
+  icon,
+  tooltip,
+  isActive = false,
+  onClick,
+  panelTitle,
+  children,
+}: ControlButtonProps) {
+  const isHovered = activePanel === panelId;
+  const hasPanel = panelTitle && children;
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setActivePanel(panelId)}
+      onMouseLeave={() => setActivePanel(null)}
+    >
+      <button
+        onClick={onClick}
+        className={getButtonClass(isActive, isHovered)}
+        data-tooltip={tooltip}
+        data-tooltip-pos="left"
+      >
+        {icon}
+      </button>
+      {hasPanel && isHovered && (
+        <PanelWrapper title={panelTitle}>
+          {children}
+        </PanelWrapper>
+      )}
+    </div>
+  );
+}
 
 export function ViewerControls() {
   const [activePanel, setActivePanel] = useState<PanelType>(null);
@@ -178,6 +233,17 @@ export function ViewerControls() {
   const setBackgroundColor = useViewerStore((s) => s.setBackgroundColor);
   const resetView = useViewerStore((s) => s.resetView);
 
+  const toggleBackground = () => {
+    const current = parseInt(backgroundColor.slice(1, 3), 16);
+    const newVal = current < 128 ? 'ff' : '00';
+    setBackgroundColor(`#${newVal}${newVal}${newVal}`);
+  };
+
+  const handleBrightnessChange = (v: number) => {
+    const hex = Math.round(v).toString(16).padStart(2, '0');
+    setBackgroundColor(`#${hex}${hex}${hex}`);
+  };
+
   return (
     <div className="absolute top-3 right-3 flex flex-col gap-2 z-10">
       <button
@@ -189,175 +255,116 @@ export function ViewerControls() {
         <ResetIcon className="w-8 h-8" />
       </button>
 
-      <div
-        className="relative"
-        onMouseEnter={() => setActivePanel('points')}
-        onMouseLeave={() => setActivePanel(null)}
+      <ControlButton
+        panelId="points"
+        activePanel={activePanel}
+        setActivePanel={setActivePanel}
+        icon={<PointIcon className="w-8 h-8" />}
+        tooltip="Point settings"
+        panelTitle="Points"
       >
-        <button
-          className={`${styles.button} ${activePanel === 'points' ? styles.buttonHover : styles.buttonInactive}`}
-          data-tooltip="Point settings"
-          data-tooltip-pos="left"
-        >
-          <PointIcon className="w-8 h-8" />
-        </button>
-        {activePanel === 'points' && (
-          <PanelWrapper title="Points">
-            <div className="space-y-2">
-              <SliderRow label="Size" value={pointSize} min={1} max={10} step={0.5} onChange={setPointSize} />
-              <SliderRow label="Min Track" value={minTrackLength} min={0} max={20} step={1} onChange={(v) => setMinTrackLength(Math.round(v))} />
-            </div>
-          </PanelWrapper>
-        )}
-      </div>
+        <div className="space-y-2">
+          <SliderRow label="Size" value={pointSize} min={1} max={10} step={0.5} onChange={setPointSize} />
+          <SliderRow label="Min Track" value={minTrackLength} min={0} max={20} step={1} onChange={(v) => setMinTrackLength(Math.round(v))} />
+        </div>
+      </ControlButton>
 
-      <div
-        className="relative"
-        onMouseEnter={() => setActivePanel('color')}
-        onMouseLeave={() => setActivePanel(null)}
+      <ControlButton
+        panelId="color"
+        activePanel={activePanel}
+        setActivePanel={setActivePanel}
+        icon={<ColorIcon className="w-8 h-8" />}
+        tooltip="Color mode"
+        panelTitle="Color"
       >
-        <button
-          className={`${styles.button} ${activePanel === 'color' ? styles.buttonHover : styles.buttonInactive}`}
-          data-tooltip="Color mode"
-          data-tooltip-pos="left"
-        >
-          <ColorIcon className="w-8 h-8" />
-        </button>
-        {activePanel === 'color' && (
-          <PanelWrapper title="Color">
-            <div className={styles.row}>
-              <label className={styles.label}>Mode</label>
-              <select
-                value={colorMode}
-                onChange={(e) => setColorMode(e.target.value as ColorMode)}
-                className="bg-ds-input text-ds-primary text-base rounded px-2 py-1 border border-ds"
-              >
-                <option value="rgb">RGB</option>
-                <option value="error">Error</option>
-                <option value="trackLength">Track Length</option>
-              </select>
-            </div>
-          </PanelWrapper>
-        )}
-      </div>
+        <div className={styles.row}>
+          <label className={styles.label}>Mode</label>
+          <select
+            value={colorMode}
+            onChange={(e) => setColorMode(e.target.value as ColorMode)}
+            className="bg-ds-input text-ds-primary text-base rounded px-2 py-1 border border-ds"
+          >
+            <option value="rgb">RGB</option>
+            <option value="error">Error</option>
+            <option value="trackLength">Track Length</option>
+          </select>
+        </div>
+      </ControlButton>
 
-      <div
-        className="relative"
-        onMouseEnter={() => setActivePanel('scale')}
-        onMouseLeave={() => setActivePanel(null)}
+      <ControlButton
+        panelId="scale"
+        activePanel={activePanel}
+        setActivePanel={setActivePanel}
+        icon={<CameraIcon className="w-8 h-8" />}
+        tooltip="Cameras"
+        isActive={showCameras}
+        onClick={() => setShowCameras(!showCameras)}
+        panelTitle="Cameras"
       >
-        <button
-          onClick={() => setShowCameras(!showCameras)}
-          className={`${styles.button} ${showCameras ? styles.buttonActive : activePanel === 'scale' ? styles.buttonHover : styles.buttonInactive}`}
-          data-tooltip="Cameras"
-          data-tooltip-pos="left"
-        >
-          <CameraIcon className="w-8 h-8" />
-        </button>
-        {activePanel === 'scale' && (
-          <PanelWrapper title="Cameras">
-            <SliderRow label="Scale" value={cameraScale} min={0.05} max={1} step={0.05} onChange={setCameraScale} formatValue={(v) => v.toFixed(2)} />
-          </PanelWrapper>
-        )}
-      </div>
+        <SliderRow label="Scale" value={cameraScale} min={0.05} max={1} step={0.05} onChange={setCameraScale} formatValue={(v) => v.toFixed(2)} />
+      </ControlButton>
 
       {showCameras && (
         <>
-          <div
-            className="relative"
-            onMouseEnter={() => setActivePanel('imagePlanes')}
-            onMouseLeave={() => setActivePanel(null)}
+          <ControlButton
+            panelId="imagePlanes"
+            activePanel={activePanel}
+            setActivePanel={setActivePanel}
+            icon={<ImageIcon className="w-8 h-8" />}
+            tooltip="Image planes"
+            isActive={showImagePlanes}
+            onClick={() => setShowImagePlanes(!showImagePlanes)}
+            panelTitle="Image Planes"
           >
-            <button
-              onClick={() => setShowImagePlanes(!showImagePlanes)}
-              className={`${styles.button} ${showImagePlanes ? styles.buttonActive : activePanel === 'imagePlanes' ? styles.buttonHover : styles.buttonInactive}`}
-              data-tooltip="Image planes"
-              data-tooltip-pos="left"
-            >
-              <ImageIcon className="w-8 h-8" />
-            </button>
-            {activePanel === 'imagePlanes' && (
-              <PanelWrapper title="Image Planes">
-                <SliderRow label="Opacity" value={imagePlaneOpacity} min={0} max={1} step={0.05} onChange={setImagePlaneOpacity} formatValue={(v) => v.toFixed(2)} />
-              </PanelWrapper>
-            )}
-          </div>
+            <SliderRow label="Opacity" value={imagePlaneOpacity} min={0} max={1} step={0.05} onChange={setImagePlaneOpacity} formatValue={(v) => v.toFixed(2)} />
+          </ControlButton>
 
-          <div
-            className="relative"
-            onMouseEnter={() => setActivePanel('matches')}
-            onMouseLeave={() => setActivePanel(null)}
+          <ControlButton
+            panelId="matches"
+            activePanel={activePanel}
+            setActivePanel={setActivePanel}
+            icon={<MatchIcon className="w-8 h-8" />}
+            tooltip="Matches"
+            isActive={showMatches}
+            onClick={() => setShowMatches(!showMatches)}
+            panelTitle="Matches"
           >
-            <button
-              onClick={() => setShowMatches(!showMatches)}
-              className={`${styles.button} ${showMatches ? styles.buttonActive : activePanel === 'matches' ? styles.buttonHover : styles.buttonInactive}`}
-              data-tooltip="Matches"
-              data-tooltip-pos="left"
-            >
-              <MatchIcon className="w-8 h-8" />
-            </button>
-            {activePanel === 'matches' && (
-              <PanelWrapper title="Matches">
-                <SliderRow label="Opacity" value={matchesOpacity} min={0} max={1} step={0.05} onChange={setMatchesOpacity} formatValue={(v) => v.toFixed(2)} />
-              </PanelWrapper>
-            )}
-          </div>
+            <SliderRow label="Opacity" value={matchesOpacity} min={0} max={1} step={0.05} onChange={setMatchesOpacity} formatValue={(v) => v.toFixed(2)} />
+          </ControlButton>
         </>
       )}
 
-      <div
-        className="relative"
-        onMouseEnter={() => setActivePanel('axes')}
-        onMouseLeave={() => setActivePanel(null)}
+      <ControlButton
+        panelId="axes"
+        activePanel={activePanel}
+        setActivePanel={setActivePanel}
+        icon={<AxesIcon className="w-8 h-8" />}
+        tooltip="Axes"
+        isActive={showAxes}
+        onClick={() => setShowAxes(!showAxes)}
+        panelTitle="Axes"
       >
-        <button
-          onClick={() => setShowAxes(!showAxes)}
-          className={`${styles.button} ${showAxes ? styles.buttonActive : activePanel === 'axes' ? styles.buttonHover : styles.buttonInactive}`}
-          data-tooltip="Axes"
-          data-tooltip-pos="left"
-        >
-          <AxesIcon className="w-8 h-8" />
-        </button>
-        {activePanel === 'axes' && (
-          <PanelWrapper title="Axes">
-            <SliderRow label="Opacity" value={axesOpacity} min={0} max={1} step={0.05} onChange={setAxesOpacity} formatValue={(v) => v.toFixed(2)} />
-          </PanelWrapper>
-        )}
-      </div>
+        <SliderRow label="Opacity" value={axesOpacity} min={0} max={1} step={0.05} onChange={setAxesOpacity} formatValue={(v) => v.toFixed(2)} />
+      </ControlButton>
 
-      <div
-        className="relative"
-        onMouseEnter={() => setActivePanel('bg')}
-        onMouseLeave={() => setActivePanel(null)}
+      <ControlButton
+        panelId="bg"
+        activePanel={activePanel}
+        setActivePanel={setActivePanel}
+        icon={<BgIcon className="w-8 h-8" />}
+        tooltip="Background"
+        onClick={toggleBackground}
+        panelTitle="Background"
       >
-        <button
-          onClick={() => {
-            const current = parseInt(backgroundColor.slice(1, 3), 16);
-            const newVal = current < 128 ? 'ff' : '00';
-            setBackgroundColor(`#${newVal}${newVal}${newVal}`);
-          }}
-          className={`${styles.button} ${activePanel === 'bg' ? styles.buttonHover : styles.buttonInactive}`}
-          data-tooltip="Background"
-          data-tooltip-pos="left"
-        >
-          <BgIcon className="w-8 h-8" />
-        </button>
-        {activePanel === 'bg' && (
-          <PanelWrapper title="Background">
-            <SliderRow
-              label="Brightness"
-              value={parseInt(backgroundColor.slice(1, 3), 16)}
-              min={0}
-              max={255}
-              step={1}
-              onChange={(v) => {
-                const hex = Math.round(v).toString(16).padStart(2, '0');
-                setBackgroundColor(`#${hex}${hex}${hex}`);
-              }}
-            />
-          </PanelWrapper>
-        )}
-      </div>
+        <SliderRow
+          label="Brightness"
+          value={parseInt(backgroundColor.slice(1, 3), 16)}
+          min={0}
+          max={255}
+          step={1}
+          onChange={handleBrightnessChange}
+        />
+      </ControlButton>
     </div>
   );
 }

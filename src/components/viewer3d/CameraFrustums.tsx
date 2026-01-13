@@ -4,6 +4,16 @@ import { Line } from '@react-three/drei';
 import { useReconstructionStore, useViewerStore } from '../../store';
 import type { Camera, Image } from '../../types/colmap';
 
+function getImageWorldPosition(image: Image): THREE.Vector3 {
+  const quat = new THREE.Quaternion(image.qvec[1], image.qvec[2], image.qvec[3], image.qvec[0]).invert();
+  const t = new THREE.Vector3(image.tvec[0], image.tvec[1], image.tvec[2]);
+  return t.negate().applyQuaternion(quat);
+}
+
+function getImageWorldQuaternion(image: Image): THREE.Quaternion {
+  return new THREE.Quaternion(image.qvec[1], image.qvec[2], image.qvec[3], image.qvec[0]).invert();
+}
+
 interface CameraFrustumProps {
   position: THREE.Vector3;
   quaternion: THREE.Quaternion;
@@ -34,7 +44,6 @@ function CameraFrustum({
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
   const urlsToCleanup = useRef<string[]>([]);
 
-  // Load texture from image file
   useEffect(() => {
     if (!imageFile || !showImagePlane) {
       setTexture(null);
@@ -69,7 +78,6 @@ function CameraFrustum({
     };
   }, [imageFile, showImagePlane]);
 
-  // Cleanup all URLs on unmount
   useEffect(() => {
     return () => {
       for (const url of urlsToCleanup.current) {
@@ -86,25 +94,15 @@ function CameraFrustum({
     const halfHeight = halfWidth / aspectRatio;
     const depth = scale;
 
-    // Define the 5 vertices
     const apex: [number, number, number] = [0, 0, 0];
     const bl: [number, number, number] = [-halfWidth, -halfHeight, depth];
     const br: [number, number, number] = [halfWidth, -halfHeight, depth];
     const tr: [number, number, number] = [halfWidth, halfHeight, depth];
     const tl: [number, number, number] = [-halfWidth, halfHeight, depth];
 
-    // Create line segments as arrays of points for drei's Line component
     const lineSegments: [number, number, number][][] = [
-      // Lines from apex to corners
-      [apex, bl],
-      [apex, br],
-      [apex, tr],
-      [apex, tl],
-      // Near plane rectangle
-      [bl, br],
-      [br, tr],
-      [tr, tl],
-      [tl, bl],
+      [apex, bl], [apex, br], [apex, tr], [apex, tl],
+      [bl, br], [br, tr], [tr, tl], [tl, bl],
     ];
 
     return {
@@ -118,8 +116,6 @@ function CameraFrustum({
       {lineSegments.map((points, i) => (
         <Line key={i} points={points} color={color} lineWidth={1.5} />
       ))}
-
-      {/* Front plane - either image texture or semi-transparent fill */}
       <mesh
         position={[0, 0, planeSize.depth]}
         onClick={(e) => {
@@ -183,37 +179,12 @@ export function CameraFrustums() {
       const camera = reconstruction.cameras.get(image.cameraId);
       if (!camera) continue;
 
-      // COLMAP stores cam_from_world (rotation and translation that transforms world to camera)
-      // We need world_from_cam for rendering the camera position in world coordinates
-
-      // Create quaternion from COLMAP format (qw, qx, qy, qz)
-      const quat = new THREE.Quaternion(
-        image.qvec[1], // qx
-        image.qvec[2], // qy
-        image.qvec[3], // qz
-        image.qvec[0]  // qw
-      );
-
-      // Invert to get world_from_cam rotation
-      const worldFromCamQuat = quat.clone().invert();
-
-      // Translation in COLMAP is camera position in world = -R^T * t
-      const translation = new THREE.Vector3(
-        image.tvec[0],
-        image.tvec[1],
-        image.tvec[2]
-      );
-      const position = translation.clone().negate().applyQuaternion(worldFromCamQuat);
-
-      // Find the corresponding image file
-      const imageFile = loadedFiles?.imageFiles.get(image.name);
-
       result.push({
         image,
         camera,
-        position,
-        quaternion: worldFromCamQuat,
-        imageFile,
+        position: getImageWorldPosition(image),
+        quaternion: getImageWorldQuaternion(image),
+        imageFile: loadedFiles?.imageFiles.get(image.name),
       });
     }
 
@@ -244,16 +215,11 @@ export function CameraFrustums() {
   );
 }
 
-/**
- * Renders lines connecting the selected camera to all matched cameras.
- * Two cameras are "matched" if they share common 3D points.
- */
 export function CameraMatches() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const selectedImageId = useViewerStore((s) => s.selectedImageId);
   const showMatches = useViewerStore((s) => s.showMatches);
   const matchesOpacity = useViewerStore((s) => s.matchesOpacity);
-  const cameraScale = useViewerStore((s) => s.cameraScale);
 
   const matchLines = useMemo(() => {
     if (!reconstruction || selectedImageId === null || !showMatches) return [];
@@ -261,27 +227,15 @@ export function CameraMatches() {
     const selectedImage = reconstruction.images.get(selectedImageId);
     if (!selectedImage) return [];
 
-    // Get camera position for selected image
-    const getImagePosition = (image: Image): THREE.Vector3 => {
-      const quat = new THREE.Quaternion(
-        image.qvec[1], image.qvec[2], image.qvec[3], image.qvec[0]
-      ).invert();
-      const t = new THREE.Vector3(image.tvec[0], image.tvec[1], image.tvec[2]);
-      return t.negate().applyQuaternion(quat);
-    };
-
-    const selectedPos = getImagePosition(selectedImage);
-
-    // Find matched images by looking at shared 3D points
+    const selectedPos = getImageWorldPosition(selectedImage);
     const matchedImageIds = new Set<number>();
 
     for (const point2D of selectedImage.points2D) {
-      if (point2D.point3DId === BigInt(-1)) continue; // No 3D point
+      if (point2D.point3DId === BigInt(-1)) continue;
 
       const point3D = reconstruction.points3D.get(point2D.point3DId);
       if (!point3D) continue;
 
-      // Add all other images that see this point
       for (const trackElem of point3D.track) {
         if (trackElem.imageId !== selectedImageId) {
           matchedImageIds.add(trackElem.imageId);
@@ -289,17 +243,13 @@ export function CameraMatches() {
       }
     }
 
-    // Create lines to matched cameras (apex to apex)
     const lines: { start: [number, number, number]; end: [number, number, number] }[] = [];
 
     for (const matchedId of matchedImageIds) {
       const matchedImage = reconstruction.images.get(matchedId);
       if (!matchedImage) continue;
 
-      const matchedPos = getImagePosition(matchedImage);
-
-      // Line from selected camera apex to matched camera apex
-      // Apex is at camera position (0,0,0 in local coords)
+      const matchedPos = getImageWorldPosition(matchedImage);
       lines.push({
         start: [selectedPos.x, selectedPos.y, selectedPos.z],
         end: [matchedPos.x, matchedPos.y, matchedPos.z],

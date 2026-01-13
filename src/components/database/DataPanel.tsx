@@ -17,7 +17,6 @@ export function DataPanel() {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Tabs */}
       <div className="flex border-b border-ds">
         {(['cameras', 'images', 'points'] as const).map((tab) => (
           <button
@@ -36,7 +35,6 @@ export function DataPanel() {
         ))}
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-auto">
         {activeTab === 'cameras' && <CamerasTable />}
         {activeTab === 'images' && <ImagesTable />}

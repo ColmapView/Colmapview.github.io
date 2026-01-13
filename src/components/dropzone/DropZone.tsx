@@ -11,7 +11,6 @@ export function DropZone({ children }: DropZoneProps) {
   const { handleDrop, handleDragOver } = useFileDropzone();
   const { loading, progress, error, setError } = useReconstructionStore();
 
-  // Auto-dismiss error after 5 seconds
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => {
@@ -30,7 +29,6 @@ export function DropZone({ children }: DropZoneProps) {
   const onDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    // Only set to false if leaving the drop zone entirely
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setIsDragOver(false);
     }
@@ -51,7 +49,6 @@ export function DropZone({ children }: DropZoneProps) {
     >
       {children}
 
-      {/* Drag overlay */}
       {isDragOver && (
         <div className="absolute inset-0 bg-ds-accent/10 border-4 border-dashed border-ds-accent z-[500] flex items-center justify-center backdrop-blur-sm">
           <div className="text-center">
@@ -66,7 +63,6 @@ export function DropZone({ children }: DropZoneProps) {
         </div>
       )}
 
-      {/* Loading overlay */}
       {loading && (
         <div className="absolute inset-0 bg-ds-void/80 z-[500] flex items-center justify-center">
           <div className="text-center">
@@ -82,7 +78,6 @@ export function DropZone({ children }: DropZoneProps) {
         </div>
       )}
 
-      {/* Error display */}
       {error && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[500] bg-ds-tertiary border border-ds-error text-ds-primary px-6 py-3 rounded-lg shadow-ds-lg max-w-md flex items-start gap-3">
           <div>

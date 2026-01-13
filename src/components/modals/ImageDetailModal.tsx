@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import { useReconstructionStore, useViewerStore } from '../../store';
 import type { Camera, Image } from '../../types/colmap';
 
-// Camera model names matching COLMAP
 const CAMERA_MODEL_NAMES: Record<number, string> = {
   0: 'SIMPLE_PINHOLE',
   1: 'PINHOLE',
@@ -17,7 +16,6 @@ const CAMERA_MODEL_NAMES: Record<number, string> = {
   10: 'THIN_PRISM_FISHEYE',
 };
 
-// Parameter names for each camera model
 const CAMERA_PARAM_NAMES: Record<number, string> = {
   0: 'f, cx, cy',
   1: 'fx, fy, cx, cy',
@@ -40,7 +38,6 @@ function formatCameraInfo(camera: Camera): string {
 }
 
 function formatRigid3d(qvec: number[], tvec: number[]): string {
-  // COLMAP uses xyzw order for display
   const rotStr = [qvec[1], qvec[2], qvec[3], qvec[0]].map(v => v.toFixed(6)).join(', ');
   const transStr = tvec.map(v => v.toFixed(5)).join(', ');
   return `Rigid3d(rotation_xyzw=[${rotStr}], translation=[${transStr}])`;
@@ -57,7 +54,6 @@ interface KeypointCanvasProps {
   showPoints3D: boolean;
 }
 
-// Memoized KeypointCanvas to prevent unnecessary re-renders
 const KeypointCanvas = memo(function KeypointCanvas({
   image,
   camera,
@@ -77,21 +73,17 @@ const KeypointCanvas = memo(function KeypointCanvas({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Scale factors from image coordinates to display coordinates
     const scaleX = imageWidth / camera.width;
     const scaleY = imageHeight / camera.height;
 
-    // Batch draw points by color for better performance
     const triangulatedPoints: { x: number; y: number }[] = [];
     const untriangulatedPoints: { x: number; y: number }[] = [];
 
     for (const point of image.points2D) {
       const isTriangulated = point.point3DId !== BigInt(-1);
 
-      // Skip based on filter settings
       if (isTriangulated && !showPoints3D) continue;
       if (!isTriangulated && !showPoints2D) continue;
 
@@ -105,7 +97,6 @@ const KeypointCanvas = memo(function KeypointCanvas({
       }
     }
 
-    // Draw untriangulated points (red) in one batch
     if (untriangulatedPoints.length > 0) {
       ctx.fillStyle = '#ff0000';
       ctx.beginPath();
@@ -116,7 +107,6 @@ const KeypointCanvas = memo(function KeypointCanvas({
       ctx.fill();
     }
 
-    // Draw triangulated points (green) in one batch
     if (triangulatedPoints.length > 0) {
       ctx.fillStyle = '#00ff00';
       ctx.beginPath();
@@ -128,7 +118,6 @@ const KeypointCanvas = memo(function KeypointCanvas({
     }
   }, [image, camera, imageWidth, imageHeight, showPoints2D, showPoints3D]);
 
-  // Calculate the position to center the canvas over the object-contain image
   const offsetX = (containerWidth - imageWidth) / 2;
   const offsetY = (containerHeight - imageHeight) / 2;
 
@@ -159,7 +148,6 @@ interface MatchCanvasProps {
   gap: number;
 }
 
-// Memoized MatchCanvas to draw green lines between matched keypoints
 const MatchCanvas = memo(function MatchCanvas({
   lines,
   image1Camera,
@@ -181,23 +169,19 @@ const MatchCanvas = memo(function MatchCanvas({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Calculate offsets for centering each image in its half
     const halfWidth = (containerWidth - gap) / 2;
     const offset1X = (halfWidth - image1Width) / 2;
     const offset1Y = (containerHeight - image1Height) / 2;
     const offset2X = halfWidth + gap + (halfWidth - image2Width) / 2;
     const offset2Y = (containerHeight - image2Height) / 2;
 
-    // Scale factors from image coordinates to display coordinates
     const scale1X = image1Width / image1Camera.width;
     const scale1Y = image1Height / image1Camera.height;
     const scale2X = image2Width / image2Camera.width;
     const scale2Y = image2Height / image2Camera.height;
 
-    // Draw lines
     ctx.strokeStyle = '#00ff00';
     ctx.lineWidth = 1;
     ctx.globalAlpha = 0.7;
@@ -214,7 +198,6 @@ const MatchCanvas = memo(function MatchCanvas({
       ctx.stroke();
     }
 
-    // Draw small circles at endpoints
     ctx.globalAlpha = 1;
     ctx.fillStyle = '#00ff00';
     for (const { point1, point2 } of lines) {
@@ -245,18 +228,7 @@ const MatchCanvas = memo(function MatchCanvas({
 
 const MIN_WIDTH = 400;
 const MIN_HEIGHT = 300;
-
-// Debounce helper
-function useDebounce<T extends (...args: unknown[]) => void>(fn: T, delay: number): T {
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  return useCallback((...args: Parameters<T>) => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    timeoutRef.current = setTimeout(() => fn(...args), delay);
-  }, [fn, delay]) as T;
-}
+const RESIZE_DEBOUNCE_MS = 16;
 
 export function ImageDetailModal() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
@@ -597,8 +569,9 @@ export function ImageDetailModal() {
     }
   }, [isDragging, isResizing]);
 
-  // Debounced container size update
-  const updateContainerSizeImmediate = useCallback(() => {
+  const resizeTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const updateContainerSize = useCallback(() => {
     if (imageContainerRef.current) {
       setContainerSize({
         width: imageContainerRef.current.clientWidth,
@@ -607,35 +580,32 @@ export function ImageDetailModal() {
     }
   }, []);
 
-  const updateContainerSizeDebounced = useDebounce(updateContainerSizeImmediate, 16);
-
-  // Track container size for image scaling
   useEffect(() => {
     if (!imageContainerRef.current) return;
 
-    // Initial update immediately
-    updateContainerSizeImmediate();
+    updateContainerSize();
 
     const observer = new ResizeObserver(() => {
-      // Debounce during resize for smoother performance
-      updateContainerSizeDebounced();
+      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
+      resizeTimeoutRef.current = setTimeout(updateContainerSize, RESIZE_DEBOUNCE_MS);
     });
 
     observer.observe(imageContainerRef.current);
-    return () => observer.disconnect();
-  }, [updateContainerSizeImmediate, updateContainerSizeDebounced, imageDetailId]);
+    return () => {
+      observer.disconnect();
+      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
+    };
+  }, [updateContainerSize, imageDetailId]);
 
   if (imageDetailId === null || !image || !camera) return null;
 
   return (
     <div className="fixed inset-0 z-[1000] pointer-events-none">
-      {/* Background overlay - click to close */}
       <div
         className="absolute inset-0 bg-ds-void/50 pointer-events-auto"
         onClick={closeImageDetail}
       />
 
-      {/* Modal */}
       <div
         className="absolute bg-ds-tertiary rounded-lg shadow-ds-lg flex flex-col pointer-events-auto"
         style={{
@@ -646,7 +616,6 @@ export function ImageDetailModal() {
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header - draggable */}
         <div
           className="flex items-center justify-between px-4 py-2 border-b border-ds cursor-move select-none"
           onMouseDown={handleDragStart}
@@ -665,9 +634,7 @@ export function ImageDetailModal() {
           </button>
         </div>
 
-        {/* Content */}
         <div className="flex flex-col flex-1 overflow-hidden p-4 gap-4">
-          {/* Top: Info table */}
           <div className="flex-shrink-0 overflow-auto">
             <table className="w-full text-base">
               <tbody>
@@ -681,14 +648,11 @@ export function ImageDetailModal() {
             </table>
           </div>
 
-          {/* Bottom: Image with optional keypoint overlay */}
           <div className="flex-1 min-h-0 flex flex-col">
             <div ref={imageContainerRef} className="relative flex-1 min-h-0 bg-ds-secondary rounded overflow-hidden">
               {isMatchViewMode ? (
-                /* Side-by-side match view */
                 <>
                   <div className="absolute inset-0 flex" style={{ gap: MATCH_VIEW_GAP }}>
-                    {/* Left image */}
                     <div className="flex-1 flex items-center justify-center">
                       {imageSrc ? (
                         <img
@@ -702,7 +666,6 @@ export function ImageDetailModal() {
                         <div className="text-ds-muted">No image</div>
                       )}
                     </div>
-                    {/* Right image */}
                     <div className="flex-1 flex items-center justify-center">
                       {matchedImageSrc ? (
                         <img
@@ -717,7 +680,6 @@ export function ImageDetailModal() {
                       )}
                     </div>
                   </div>
-                  {/* Match lines canvas overlay */}
                   {matchLines.length > 0 && sideBySideDimensions.image1Width > 0 && (
                     <MatchCanvas
                       lines={matchLines}
@@ -734,7 +696,6 @@ export function ImageDetailModal() {
                   )}
                 </>
               ) : imageSrc ? (
-                /* Single image view */
                 <>
                   <img
                     src={imageSrc}
@@ -760,9 +721,7 @@ export function ImageDetailModal() {
               )}
             </div>
 
-            {/* Bottom controls */}
             <div className="mt-2 flex items-center justify-between">
-              {/* Keypoints toggles and match controls */}
               <div className="flex items-center gap-4">
                 {!isMatchViewMode && (
                   <>
@@ -793,7 +752,6 @@ export function ImageDetailModal() {
                   </>
                 )}
 
-                {/* Match visualization controls */}
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -823,7 +781,6 @@ export function ImageDetailModal() {
                 )}
               </div>
 
-              {/* Navigation buttons */}
               <div className="flex items-center gap-2">
                 <button
                   onClick={goToPrev}
@@ -879,41 +836,14 @@ export function ImageDetailModal() {
           </div>
         </div>
 
-        {/* Resize handles */}
-        {/* Corners */}
-        <div
-          className="absolute top-0 left-0 w-3 h-3 cursor-nw-resize"
-          onMouseDown={(e) => handleResizeStart(e, 'nw')}
-        />
-        <div
-          className="absolute top-0 right-0 w-3 h-3 cursor-ne-resize"
-          onMouseDown={(e) => handleResizeStart(e, 'ne')}
-        />
-        <div
-          className="absolute bottom-0 left-0 w-3 h-3 cursor-sw-resize"
-          onMouseDown={(e) => handleResizeStart(e, 'sw')}
-        />
-        <div
-          className="absolute bottom-0 right-0 w-3 h-3 cursor-se-resize"
-          onMouseDown={(e) => handleResizeStart(e, 'se')}
-        />
-        {/* Edges */}
-        <div
-          className="absolute top-0 left-3 right-3 h-1 cursor-n-resize"
-          onMouseDown={(e) => handleResizeStart(e, 'n')}
-        />
-        <div
-          className="absolute bottom-0 left-3 right-3 h-1 cursor-s-resize"
-          onMouseDown={(e) => handleResizeStart(e, 's')}
-        />
-        <div
-          className="absolute left-0 top-3 bottom-3 w-1 cursor-w-resize"
-          onMouseDown={(e) => handleResizeStart(e, 'w')}
-        />
-        <div
-          className="absolute right-0 top-3 bottom-3 w-1 cursor-e-resize"
-          onMouseDown={(e) => handleResizeStart(e, 'e')}
-        />
+        <div className="absolute top-0 left-0 w-3 h-3 cursor-nw-resize" onMouseDown={(e) => handleResizeStart(e, 'nw')} />
+        <div className="absolute top-0 right-0 w-3 h-3 cursor-ne-resize" onMouseDown={(e) => handleResizeStart(e, 'ne')} />
+        <div className="absolute bottom-0 left-0 w-3 h-3 cursor-sw-resize" onMouseDown={(e) => handleResizeStart(e, 'sw')} />
+        <div className="absolute bottom-0 right-0 w-3 h-3 cursor-se-resize" onMouseDown={(e) => handleResizeStart(e, 'se')} />
+        <div className="absolute top-0 left-3 right-3 h-1 cursor-n-resize" onMouseDown={(e) => handleResizeStart(e, 'n')} />
+        <div className="absolute bottom-0 left-3 right-3 h-1 cursor-s-resize" onMouseDown={(e) => handleResizeStart(e, 's')} />
+        <div className="absolute left-0 top-3 bottom-3 w-1 cursor-w-resize" onMouseDown={(e) => handleResizeStart(e, 'w')} />
+        <div className="absolute right-0 top-3 bottom-3 w-1 cursor-e-resize" onMouseDown={(e) => handleResizeStart(e, 'e')} />
       </div>
     </div>
   );

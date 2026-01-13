@@ -2,9 +2,6 @@ import { useMemo, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useReconstructionStore, useViewerStore } from '../../store';
 
-/**
- * Jet colormap: blue -> cyan -> green -> yellow -> red
- */
 function jetColormap(t: number): [number, number, number] {
   t = Math.max(0, Math.min(1, t));
   if (t < 0.25) {
@@ -29,7 +26,6 @@ export function PointCloud() {
   const { positions, colors } = useMemo(() => {
     if (!reconstruction) return { positions: null, colors: null };
 
-    // Filter points by minimum track length
     const points = Array.from(reconstruction.points3D.values())
       .filter(p => p.track.length >= minTrackLength);
     const count = points.length;
@@ -41,7 +37,6 @@ export function PointCloud() {
     const errorColors = new Float32Array(count * 3);
     const trackColors = new Float32Array(count * 3);
 
-    // Build set of point IDs visible in selected image for fast lookup
     const selectedImagePointIds = new Set<bigint>();
     if (selectedImageId !== null) {
       const selectedImage = reconstruction.images.get(selectedImageId);
@@ -54,7 +49,6 @@ export function PointCloud() {
       }
     }
 
-    // Calculate min/max for normalization
     let minError = Infinity, maxError = -Infinity;
     let minTrack = Infinity, maxTrack = -Infinity;
 
@@ -67,7 +61,6 @@ export function PointCloud() {
       maxTrack = Math.max(maxTrack, p.track.length);
     }
 
-    // Handle case where all errors are the same
     if (minError === maxError) {
       maxError = minError + 1;
     }
@@ -75,44 +68,29 @@ export function PointCloud() {
       maxTrack = minTrack + 1;
     }
 
+    const HIGHLIGHT_COLOR: [number, number, number] = [1, 0, 1];
+
     points.forEach((point, i) => {
       const i3 = i * 3;
-
-      // Position
       positions[i3] = point.xyz[0];
       positions[i3 + 1] = point.xyz[1];
       positions[i3 + 2] = point.xyz[2];
 
-      // Check if this point is visible in selected image
       const isHighlighted = selectedImagePointIds.has(point.point3DId);
 
       if (isHighlighted) {
-        // Highlight color: magenta
-        rgbColors[i3] = 1;
-        rgbColors[i3 + 1] = 0;
-        rgbColors[i3 + 2] = 1;
-        errorColors[i3] = 1;
-        errorColors[i3 + 1] = 0;
-        errorColors[i3 + 2] = 1;
-        trackColors[i3] = 1;
-        trackColors[i3 + 1] = 0;
-        trackColors[i3 + 2] = 1;
+        rgbColors.set(HIGHLIGHT_COLOR, i3);
+        errorColors.set(HIGHLIGHT_COLOR, i3);
+        trackColors.set(HIGHLIGHT_COLOR, i3);
       } else {
-        // RGB colors
         rgbColors[i3] = point.rgb[0] / 255;
         rgbColors[i3 + 1] = point.rgb[1] / 255;
         rgbColors[i3 + 2] = point.rgb[2] / 255;
 
-        // Error colormap
-        const errorNorm = point.error >= 0
-          ? (point.error - minError) / (maxError - minError)
-          : 0;
+        const errorNorm = point.error >= 0 ? (point.error - minError) / (maxError - minError) : 0;
         const ec = jetColormap(errorNorm);
-        errorColors[i3] = ec[0];
-        errorColors[i3 + 1] = ec[1];
-        errorColors[i3 + 2] = ec[2];
+        errorColors.set(ec, i3);
 
-        // Track length colormap (blue -> green)
         const trackNorm = (point.track.length - minTrack) / (maxTrack - minTrack);
         trackColors[i3] = 0.1 + trackNorm * 0.1;
         trackColors[i3 + 1] = 0.1 + trackNorm * 0.9;
@@ -120,23 +98,15 @@ export function PointCloud() {
       }
     });
 
-    // Select color array based on mode
-    let selectedColors: Float32Array;
-    switch (colorMode) {
-      case 'error':
-        selectedColors = errorColors;
-        break;
-      case 'trackLength':
-        selectedColors = trackColors;
-        break;
-      default:
-        selectedColors = rgbColors;
-    }
+    const colorsByMode: Record<string, Float32Array> = {
+      rgb: rgbColors,
+      error: errorColors,
+      trackLength: trackColors,
+    };
 
-    return { positions, colors: selectedColors };
+    return { positions, colors: colorsByMode[colorMode] ?? rgbColors };
   }, [reconstruction, colorMode, minTrackLength, selectedImageId]);
 
-  // Update geometry attributes when data changes
   useEffect(() => {
     if (!geometryRef.current || !positions || !colors) return;
 
