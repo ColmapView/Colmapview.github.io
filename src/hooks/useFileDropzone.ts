@@ -134,6 +134,14 @@ export function useFileDropzone() {
     setProgress(0);
 
     try {
+      // Check if newFiles contains any COLMAP metadata files
+      const droppedColmapFiles = Array.from(newFiles.values()).some(file => {
+        const name = file.name.toLowerCase();
+        return name === 'cameras.bin' || name === 'cameras.txt' ||
+               name === 'images.bin' || name === 'images.txt' ||
+               name === 'points3d.bin' || name === 'points3d.txt';
+      });
+
       // Merge with existing dropped files
       const files = new Map<string, File>(existingDroppedFiles ?? []);
       for (const [path, file] of newFiles) {
@@ -143,7 +151,6 @@ export function useFileDropzone() {
 
       // Find COLMAP files in merged set
       const { camerasFile, imagesFile, points3DFile, databaseFile } = findColmapFiles(files);
-      const hasNewColmapFiles = !!(camerasFile && imagesFile && points3DFile);
 
       // Collect image files and check for masks folder
       const imageFiles = collectImageFiles(files);
@@ -171,8 +178,8 @@ export function useFileDropzone() {
         hasMasks: hasMasks || existingLoadedFiles?.hasMasks || false,
       });
 
-      // Only parse COLMAP if we have new files OR no existing reconstruction
-      if (hasNewColmapFiles || !existingReconstruction) {
+      // Only parse COLMAP if new COLMAP files were dropped OR no existing reconstruction
+      if (droppedColmapFiles || !existingReconstruction) {
         if (!finalCamerasFile || !finalImagesFile || !finalPoints3DFile) {
           throw new Error(
             'Missing required COLMAP files. Expected cameras.bin/txt, images.bin/txt, and points3D.bin/txt'
