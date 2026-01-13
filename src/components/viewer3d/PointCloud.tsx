@@ -1,6 +1,6 @@
 import { useMemo, useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
 import { useReconstructionStore, useViewerStore } from '../../store';
 
 // Cycle through CMY colors (Cyan -> Magenta -> Yellow -> Cyan)
@@ -50,8 +50,6 @@ export function PointCloud() {
   const rainbowMode = useViewerStore((s) => s.rainbowMode);
   const rainbowSpeed = useViewerStore((s) => s.rainbowSpeed);
   const selectedMaterialRef = useRef<THREE.PointsMaterial>(null);
-  const { invalidate } = useThree();
-
   const [rainbowHue, setRainbowHue] = useState(0);
 
   useFrame((_, delta) => {
@@ -168,11 +166,6 @@ export function PointCloud() {
     geo.computeBoundingSphere();
     return geo;
   }, [selectedPositions, selectedColors]);
-
-  // Force re-render when geometry changes
-  useEffect(() => {
-    invalidate();
-  }, [geometry, selectedGeometry, invalidate]);
 
   if (!geometry) return null;
 
