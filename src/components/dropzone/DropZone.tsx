@@ -9,13 +9,7 @@ interface DropZoneProps {
 export function DropZone({ children }: DropZoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const { handleDrop, handleDragOver } = useFileDropzone();
-  const { loading, progress, error, setError, reconstruction, loadedFiles } = useReconstructionStore();
-
-  // Determine what's missing for guidance
-  const hasReconstruction = !!reconstruction;
-  const hasImages = (loadedFiles?.imageFiles?.size ?? 0) > 0;
-  const needsImages = hasReconstruction && !hasImages;
-  const needsReconstruction = hasImages && !hasReconstruction;
+  const { loading, progress, error, setError } = useReconstructionStore();
 
   useEffect(() => {
     if (error) {
@@ -106,12 +100,6 @@ export function DropZone({ children }: DropZoneProps) {
         </div>
       )}
 
-      {!loading && (needsImages || needsReconstruction) && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] bg-ds-tertiary/90 border border-ds text-ds-primary px-4 py-2 rounded-lg shadow-ds text-sm">
-          {needsImages && "Drop images folder to view thumbnails"}
-          {needsReconstruction && "Drop sparse folder to load 3D reconstruction"}
-        </div>
-      )}
     </div>
   );
 }
