@@ -7,29 +7,27 @@ import type { Camera, Image } from '../../types/colmap';
 import { getImageFile } from '../../utils/imageFileUtils';
 import { useFrustumTexture, clearFrustumTextureCache } from '../../hooks/useFrustumTexture';
 
-// Cycle through CMY colors (Cyan -> Magenta -> Yellow -> Cyan)
-function cmyToHex(t: number): string {
-  const phase = (t % 1) * 3;
+// Cycle through dark saturated colors (no white transition)
+function rainbowToHex(t: number): string {
+  // Use HSL with full saturation and reduced lightness for darker colors
+  const hue = t % 1;
+  const saturation = 1.0;
+  const lightness = 0.4; // Darker than default 0.5
+
+  // Convert HSL to RGB
+  const c = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const x = c * (1 - Math.abs((hue * 6) % 2 - 1));
+  const m = lightness - c / 2;
+
   let r = 0, g = 0, b = 0;
-  if (phase < 1) {
-    // Cyan to Magenta
-    r = phase;
-    g = 1 - phase;
-    b = 1;
-  } else if (phase < 2) {
-    // Magenta to Yellow
-    const p = phase - 1;
-    r = 1;
-    g = p;
-    b = 1 - p;
-  } else {
-    // Yellow to Cyan
-    const p = phase - 2;
-    r = 1 - p;
-    g = 1;
-    b = p;
-  }
-  const toHex = (v: number) => Math.round(v * 255).toString(16).padStart(2, '0');
+  if (hue < 1/6) { r = c; g = x; b = 0; }
+  else if (hue < 2/6) { r = x; g = c; b = 0; }
+  else if (hue < 3/6) { r = 0; g = c; b = x; }
+  else if (hue < 4/6) { r = 0; g = x; b = c; }
+  else if (hue < 5/6) { r = x; g = 0; b = c; }
+  else { r = c; g = 0; b = x; }
+
+  const toHex = (v: number) => Math.round((v + m) * 255).toString(16).padStart(2, '0');
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
@@ -241,7 +239,7 @@ export function CameraFrustums() {
 
   if (!showCameras || frustums.length === 0) return null;
 
-  const selectedColor = rainbowMode ? cmyToHex(rainbowHue) : '#ff00ff';
+  const selectedColor = rainbowMode ? rainbowToHex(rainbowHue) : '#ff00ff';
 
   return (
     <group>
