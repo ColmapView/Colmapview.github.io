@@ -60,56 +60,67 @@ export function useFileDropzone() {
     points3DFile?: File;
     databaseFile?: File;
   } => {
-    // Search directories in order of preference
-    const searchDirs = ['', 'sparse/', 'sparse/0/'];
-    // File extensions in order of preference (binary first)
-    const extensions = ['.bin', '.txt'];
-
-    const findFileByPath = (path: string): File | undefined => {
-      // Check direct path
-      if (files.has(path)) return files.get(path);
-
-      // Check with any folder prefix (for when user drops a parent folder)
-      for (const [key, file] of files) {
-        if (key.endsWith('/' + path)) {
-          return file;
-        }
-      }
-      return undefined;
+    // Group files by their parent directory
+    const getParentDir = (path: string): string => {
+      const lastSlash = path.lastIndexOf('/');
+      return lastSlash >= 0 ? path.substring(0, lastSlash) : '';
     };
 
-    // Try to find all three files from the same directory
-    for (const dir of searchDirs) {
-      for (const ext of extensions) {
-        const camerasFile = findFileByPath(`${dir}cameras${ext}`);
-        const imagesFile = findFileByPath(`${dir}images${ext}`);
-        const points3DFile = findFileByPath(`${dir}points3D${ext}`);
+    // Find all directories containing COLMAP files
+    const colmapDirs = new Map<string, { cameras?: File; images?: File; points3D?: File; database?: File }>();
 
-        // If all three files found in this directory, use them
-        if (camerasFile && imagesFile && points3DFile) {
-          // Also look for database file
-          const databaseFile = findFileByPath('database.db') || findFileByPath('colmap.db');
-          return { camerasFile, imagesFile, points3DFile, databaseFile };
-        }
+    for (const [path, file] of files) {
+      const name = file.name.toLowerCase();
+      const dir = getParentDir(path);
+
+      if (!colmapDirs.has(dir)) {
+        colmapDirs.set(dir, {});
+      }
+      const dirFiles = colmapDirs.get(dir)!;
+
+      // Match COLMAP files (prefer .bin over .txt)
+      if (name === 'cameras.bin' || (name === 'cameras.txt' && !dirFiles.cameras?.name.endsWith('.bin'))) {
+        dirFiles.cameras = file;
+      } else if (name === 'images.bin' || (name === 'images.txt' && !dirFiles.images?.name.endsWith('.bin'))) {
+        dirFiles.images = file;
+      } else if (name === 'points3d.bin' || (name === 'points3d.txt' && !dirFiles.points3D?.name.endsWith('.bin'))) {
+        dirFiles.points3D = file;
+      } else if (name === 'database.db' || name === 'colmap.db') {
+        dirFiles.database = file;
       }
     }
 
-    // Fallback: search for files independently (allows mixed directories/formats)
-    const findFile = (baseName: string): File | undefined => {
-      for (const dir of searchDirs) {
-        for (const ext of extensions) {
-          const file = findFileByPath(`${dir}${baseName}${ext}`);
-          if (file) return file;
-        }
+    // Find directories with all three required files
+    const validDirs: { dir: string; files: NonNullable<typeof colmapDirs extends Map<string, infer V> ? V : never> }[] = [];
+    for (const [dir, dirFiles] of colmapDirs) {
+      if (dirFiles.cameras && dirFiles.images && dirFiles.points3D) {
+        validDirs.push({ dir, files: dirFiles });
       }
-      return undefined;
-    };
+    }
 
+    if (validDirs.length === 0) {
+      return {};
+    }
+
+    // Sort by preference: sparse/0 > sparse > shorter paths > others
+    validDirs.sort((a, b) => {
+      const score = (dir: string) => {
+        const lower = dir.toLowerCase();
+        if (lower.endsWith('/sparse/0') || lower === 'sparse/0') return 0;
+        if (lower.endsWith('/sparse') || lower === 'sparse') return 1;
+        if (lower.includes('/sparse/')) return 2;
+        if (lower.includes('/sparse')) return 3;
+        return 4 + dir.length; // Prefer shorter paths
+      };
+      return score(a.dir) - score(b.dir);
+    });
+
+    const best = validDirs[0].files;
     return {
-      camerasFile: findFile('cameras'),
-      imagesFile: findFile('images'),
-      points3DFile: findFile('points3D'),
-      databaseFile: findFileByPath('database.db') || findFileByPath('colmap.db'),
+      camerasFile: best.cameras,
+      imagesFile: best.images,
+      points3DFile: best.points3D,
+      databaseFile: best.database,
     };
   }, []);
 
