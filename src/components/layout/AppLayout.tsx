@@ -21,6 +21,11 @@ export function AppLayout() {
 
       <StatusBar />
       <ImageDetailModal />
+
+      {/* Copyright */}
+      <div className="fixed bottom-1 right-2 text-xs text-ds-muted/50 pointer-events-none select-none">
+        opsiclear.com © 2026
+      </div>
     </div>
   );
 }

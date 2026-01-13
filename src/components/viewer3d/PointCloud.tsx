@@ -1,15 +1,16 @@
-import { useMemo, useRef, useEffect, useState } from 'react';
+import { useMemo, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useReconstructionStore, useViewerStore } from '../../store';
+import type { Point3D } from '../../types/colmap';
+
+// Reusable Color object to avoid allocations in animation loop
+const tempColor = new THREE.Color();
 
 // Cycle through dark saturated colors (no white transition)
 function rainbowColor(t: number): THREE.Color {
-  // Use HSL with full saturation and reduced lightness for darker colors
   const hue = t % 1;
-  const saturation = 1.0;
-  const lightness = 0.4; // Darker than default 0.5
-  return new THREE.Color().setHSL(hue, saturation, lightness);
+  return tempColor.setHSL(hue, 1.0, 0.4);
 }
 
 function jetColormap(t: number): [number, number, number] {
@@ -39,35 +40,34 @@ export function PointCloud() {
   const rainbowMode = useViewerStore((s) => s.rainbowMode);
   const rainbowSpeed = useViewerStore((s) => s.rainbowSpeed);
   const selectedMaterialRef = useRef<THREE.PointsMaterial>(null);
-  const [rainbowHue, setRainbowHue] = useState(0);
+  // Use ref instead of state to avoid re-renders on every frame
+  const rainbowHueRef = useRef(0);
 
+  // Update rainbow color directly in useFrame without triggering re-renders
   useFrame((_, delta) => {
-    if (rainbowMode && selectedImageId !== null) {
-      setRainbowHue((h) => (h + delta * rainbowSpeed * 0.5) % 1);
+    if (rainbowMode && selectedImageId !== null && selectedMaterialRef.current) {
+      rainbowHueRef.current = (rainbowHueRef.current + delta * rainbowSpeed * 0.5) % 1;
+      selectedMaterialRef.current.color.copy(rainbowColor(rainbowHueRef.current));
     }
   });
 
-  // Update selected points color when rainbow mode is active
+  // Handle rainbow mode toggle (only runs when rainbowMode changes)
   useEffect(() => {
     if (!selectedMaterialRef.current) return;
     if (rainbowMode) {
       selectedMaterialRef.current.vertexColors = false;
-      selectedMaterialRef.current.color = rainbowColor(rainbowHue);
+      selectedMaterialRef.current.color.copy(rainbowColor(rainbowHueRef.current));
       selectedMaterialRef.current.needsUpdate = true;
     } else {
       selectedMaterialRef.current.vertexColors = true;
       selectedMaterialRef.current.needsUpdate = true;
     }
-  }, [rainbowMode, rainbowHue]);
+  }, [rainbowMode]);
 
   const { positions, colors, selectedPositions, selectedColors } = useMemo(() => {
     if (!reconstruction) return { positions: null, colors: null, selectedPositions: null, selectedColors: null };
 
-    const allPoints = Array.from(reconstruction.points3D.values())
-      .filter(p => p.track.length >= minTrackLength);
-
-    if (allPoints.length === 0) return { positions: null, colors: null, selectedPositions: null, selectedColors: null };
-
+    // Build set of selected image point IDs
     const selectedImagePointIds = new Set<bigint>();
     if (selectedImageId !== null) {
       const selectedImage = reconstruction.images.get(selectedImageId);
@@ -80,19 +80,34 @@ export function PointCloud() {
       }
     }
 
-    const regularPoints = allPoints.filter(p => !selectedImagePointIds.has(p.point3DId));
-    const highlightedPoints = allPoints.filter(p => selectedImagePointIds.has(p.point3DId));
-
+    // SINGLE PASS: filter, compute stats, and categorize simultaneously
     let minError = Infinity, maxError = -Infinity;
     let minTrack = Infinity, maxTrack = -Infinity;
+    const regularPoints: Point3D[] = [];
+    const highlightedPoints: Point3D[] = [];
 
-    for (const p of allPoints) {
-      if (p.error >= 0) {
-        minError = Math.min(minError, p.error);
-        maxError = Math.max(maxError, p.error);
+    for (const point of reconstruction.points3D.values()) {
+      // Filter by track length
+      if (point.track.length < minTrackLength) continue;
+
+      // Update stats
+      if (point.error >= 0) {
+        minError = Math.min(minError, point.error);
+        maxError = Math.max(maxError, point.error);
       }
-      minTrack = Math.min(minTrack, p.track.length);
-      maxTrack = Math.max(maxTrack, p.track.length);
+      minTrack = Math.min(minTrack, point.track.length);
+      maxTrack = Math.max(maxTrack, point.track.length);
+
+      // Categorize into regular vs highlighted
+      if (selectedImagePointIds.has(point.point3DId)) {
+        highlightedPoints.push(point);
+      } else {
+        regularPoints.push(point);
+      }
+    }
+
+    if (regularPoints.length === 0 && highlightedPoints.length === 0) {
+      return { positions: null, colors: null, selectedPositions: null, selectedColors: null };
     }
 
     if (minError === maxError) maxError = minError + 1;
@@ -100,7 +115,7 @@ export function PointCloud() {
 
     const HIGHLIGHT_COLOR: [number, number, number] = [1, 0, 1];
 
-    const computeColor = (point: typeof allPoints[0], mode: string): [number, number, number] => {
+    const computeColor = (point: Point3D, mode: string): [number, number, number] => {
       if (mode === 'error') {
         const errorNorm = point.error >= 0 ? (point.error - minError) / (maxError - minError) : 0;
         return jetColormap(errorNorm);
@@ -116,28 +131,34 @@ export function PointCloud() {
       ];
     };
 
-    // Regular points
+    // Regular points - use direct indexing instead of .set() for small arrays
     const positions = new Float32Array(regularPoints.length * 3);
     const colors = new Float32Array(regularPoints.length * 3);
-    regularPoints.forEach((point, i) => {
+    for (let i = 0; i < regularPoints.length; i++) {
+      const point = regularPoints[i];
       const i3 = i * 3;
       positions[i3] = point.xyz[0];
       positions[i3 + 1] = point.xyz[1];
       positions[i3 + 2] = point.xyz[2];
       const c = computeColor(point, colorMode);
-      colors.set(c, i3);
-    });
+      colors[i3] = c[0];
+      colors[i3 + 1] = c[1];
+      colors[i3 + 2] = c[2];
+    }
 
     // Selected/highlighted points
     const selectedPositions = new Float32Array(highlightedPoints.length * 3);
     const selectedColors = new Float32Array(highlightedPoints.length * 3);
-    highlightedPoints.forEach((point, i) => {
+    for (let i = 0; i < highlightedPoints.length; i++) {
+      const point = highlightedPoints[i];
       const i3 = i * 3;
       selectedPositions[i3] = point.xyz[0];
       selectedPositions[i3 + 1] = point.xyz[1];
       selectedPositions[i3 + 2] = point.xyz[2];
-      selectedColors.set(HIGHLIGHT_COLOR, i3);
-    });
+      selectedColors[i3] = HIGHLIGHT_COLOR[0];
+      selectedColors[i3 + 1] = HIGHLIGHT_COLOR[1];
+      selectedColors[i3 + 2] = HIGHLIGHT_COLOR[2];
+    }
 
     return { positions, colors, selectedPositions, selectedColors };
   }, [reconstruction, colorMode, minTrackLength, selectedImageId]);
