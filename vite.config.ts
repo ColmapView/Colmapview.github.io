@@ -5,7 +5,7 @@ import path from 'node:path';
 export default defineConfig({
   plugins: [react()],
 
-  base: process.env.GITHUB_ACTIONS ? '/colmap-webview/' : './',
+  base: '/',
 
   resolve: {
     alias: {

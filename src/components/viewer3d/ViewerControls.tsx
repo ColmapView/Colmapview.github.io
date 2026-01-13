@@ -43,6 +43,17 @@ function MatchIcon({ className }: { className?: string }) {
   );
 }
 
+function RainbowIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" strokeWidth="2">
+      <path d="M4 18a8 8 0 0 1 16 0" stroke="#ff0000" />
+      <path d="M6 18a6 6 0 0 1 12 0" stroke="#ffff00" />
+      <path d="M8 18a4 4 0 0 1 8 0" stroke="#00ff00" />
+      <path d="M10 18a2 2 0 0 1 4 0" stroke="#00ffff" />
+    </svg>
+  );
+}
+
 function AxesIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -82,7 +93,7 @@ function ResetIcon({ className }: { className?: string }) {
   );
 }
 
-type PanelType = 'points' | 'color' | 'scale' | 'imagePlanes' | 'matches' | 'axes' | 'bg' | null;
+type PanelType = 'points' | 'color' | 'scale' | 'imagePlanes' | 'matches' | 'rainbow' | 'axes' | 'bg' | null;
 
 interface SliderRowProps {
   label: string;
@@ -190,8 +201,7 @@ function ControlButton({
       <button
         onClick={onClick}
         className={getButtonClass(isActive, isHovered)}
-        data-tooltip={tooltip}
-        data-tooltip-pos="left"
+        {...(!hasPanel && { 'data-tooltip': tooltip, 'data-tooltip-pos': 'left' })}
       >
         {icon}
       </button>
@@ -225,6 +235,10 @@ export function ViewerControls() {
   const setShowMatches = useViewerStore((s) => s.setShowMatches);
   const matchesOpacity = useViewerStore((s) => s.matchesOpacity);
   const setMatchesOpacity = useViewerStore((s) => s.setMatchesOpacity);
+  const rainbowMode = useViewerStore((s) => s.rainbowMode);
+  const setRainbowMode = useViewerStore((s) => s.setRainbowMode);
+  const rainbowSpeed = useViewerStore((s) => s.rainbowSpeed);
+  const setRainbowSpeed = useViewerStore((s) => s.setRainbowSpeed);
   const showAxes = useViewerStore((s) => s.showAxes);
   const setShowAxes = useViewerStore((s) => s.setShowAxes);
   const axesOpacity = useViewerStore((s) => s.axesOpacity);
@@ -330,6 +344,19 @@ export function ViewerControls() {
             panelTitle="Matches"
           >
             <SliderRow label="Opacity" value={matchesOpacity} min={0} max={1} step={0.05} onChange={setMatchesOpacity} formatValue={(v) => v.toFixed(2)} />
+          </ControlButton>
+
+          <ControlButton
+            panelId="rainbow"
+            activePanel={activePanel}
+            setActivePanel={setActivePanel}
+            icon={<RainbowIcon className="w-8 h-8" />}
+            tooltip="Rainbow mode"
+            isActive={rainbowMode}
+            onClick={() => setRainbowMode(!rainbowMode)}
+            panelTitle="Rainbow"
+          >
+            <SliderRow label="Speed" value={rainbowSpeed} min={0.1} max={5} step={0.1} onChange={setRainbowSpeed} formatValue={(v) => v.toFixed(1)} />
           </ControlButton>
         </>
       )}

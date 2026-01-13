@@ -1,8 +1,25 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { Line } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber';
+import { Line, Html } from '@react-three/drei';
 import { useReconstructionStore, useViewerStore } from '../../store';
 import type { Camera, Image } from '../../types/colmap';
+
+// Convert hue (0-1) to hex color string
+function hueToHex(hue: number): string {
+  const h = hue * 6;
+  const c = 1;
+  const x = 1 - Math.abs(h % 2 - 1);
+  let r = 0, g = 0, b = 0;
+  if (h < 1) { r = c; g = x; }
+  else if (h < 2) { r = x; g = c; }
+  else if (h < 3) { g = c; b = x; }
+  else if (h < 4) { g = x; b = c; }
+  else if (h < 5) { r = x; b = c; }
+  else { r = c; b = x; }
+  const toHex = (v: number) => Math.round(v * 255).toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
 
 function getImageWorldPosition(image: Image): THREE.Vector3 {
   const quat = new THREE.Quaternion(image.qvec[1], image.qvec[2], image.qvec[3], image.qvec[0]).invert();
@@ -18,6 +35,7 @@ interface CameraFrustumProps {
   position: THREE.Vector3;
   quaternion: THREE.Quaternion;
   camera: Camera;
+  image: Image;
   scale: number;
   color?: string;
   imageFile?: File;
@@ -32,6 +50,7 @@ function CameraFrustum({
   position,
   quaternion,
   camera,
+  image,
   scale,
   color = '#ff0000',
   imageFile,
@@ -42,6 +61,7 @@ function CameraFrustum({
   onContextMenu,
 }: CameraFrustumProps) {
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
+  const [hovered, setHovered] = useState(false);
   const urlsToCleanup = useRef<string[]>([]);
 
   useEffect(() => {
@@ -111,10 +131,17 @@ function CameraFrustum({
     };
   }, [camera, scale]);
 
+  // Compute hover color (brighter/cyan tint)
+  const displayColor = hovered ? '#00ffff' : color;
+  const lineWidth = hovered ? 2.5 : 1.5;
+
+  // Count valid 2D points (those with 3D correspondences)
+  const numPoints = image.points2D.filter(p => p.point3DId !== BigInt(-1)).length;
+
   return (
     <group position={position} quaternion={quaternion}>
       {lineSegments.map((points, i) => (
-        <Line key={i} points={points} color={color} lineWidth={1.5} />
+        <Line key={i} points={points} color={displayColor} lineWidth={lineWidth} />
       ))}
       <mesh
         position={[0, 0, planeSize.depth]}
@@ -132,9 +159,11 @@ function CameraFrustum({
         }}
         onPointerOver={(e) => {
           e.stopPropagation();
+          setHovered(true);
           document.body.style.cursor = 'pointer';
         }}
         onPointerOut={() => {
+          setHovered(false);
           document.body.style.cursor = 'auto';
         }}
       >
@@ -142,12 +171,42 @@ function CameraFrustum({
         <meshBasicMaterial
           key={showImagePlane && texture ? texture.uuid : 'no-texture'}
           map={showImagePlane && texture ? texture : null}
-          color={showImagePlane && texture ? undefined : color}
+          color={showImagePlane && texture ? undefined : displayColor}
           side={THREE.DoubleSide}
           transparent
-          opacity={showImagePlane && texture ? imagePlaneOpacity : 0.3}
+          opacity={hovered ? 0.6 : (showImagePlane && texture ? imagePlaneOpacity : 0.3)}
         />
       </mesh>
+      {hovered && (
+        <Html
+          position={[0, 0, 0]}
+          style={{ pointerEvents: 'none' }}
+        >
+          <div className="bg-ds-tertiary border border-ds rounded-lg px-3 py-2 shadow-ds-lg whitespace-nowrap text-sm">
+            <div className="text-ds-primary">{image.name}</div>
+            <div className="text-ds-secondary">#{image.imageId}</div>
+            <div className="text-ds-secondary">{numPoints} points</div>
+            <div className="flex items-center gap-3 text-ds-tertiary mt-2 border-t border-ds pt-2">
+              <span className="flex items-center gap-1">
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="6" y="2" width="12" height="20" rx="6"/>
+                  <path d="M12 2v8"/>
+                  <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
+                </svg>
+                select
+              </span>
+              <span className="flex items-center gap-1">
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="6" y="2" width="12" height="20" rx="6"/>
+                  <path d="M12 2v8"/>
+                  <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
+                </svg>
+                view
+              </span>
+            </div>
+          </div>
+        </Html>
+      )}
     </group>
   );
 }
@@ -163,6 +222,16 @@ export function CameraFrustums() {
   const imagePlaneOpacity = useViewerStore((s) => s.imagePlaneOpacity);
   const openImageDetail = useViewerStore((s) => s.openImageDetail);
   const flyToImage = useViewerStore((s) => s.flyToImage);
+  const rainbowMode = useViewerStore((s) => s.rainbowMode);
+  const rainbowSpeed = useViewerStore((s) => s.rainbowSpeed);
+
+  const [rainbowHue, setRainbowHue] = useState(0);
+
+  useFrame((_, delta) => {
+    if (rainbowMode && selectedImageId !== null) {
+      setRainbowHue((h) => (h + delta * rainbowSpeed * 0.5) % 1);
+    }
+  });
 
   const frustums = useMemo(() => {
     if (!reconstruction || !showCameras) return [];
@@ -193,6 +262,8 @@ export function CameraFrustums() {
 
   if (!showCameras || frustums.length === 0) return null;
 
+  const selectedColor = rainbowMode ? hueToHex(rainbowHue) : '#ff00ff';
+
   return (
     <group>
       {frustums.map((f) => (
@@ -201,8 +272,9 @@ export function CameraFrustums() {
           position={f.position}
           quaternion={f.quaternion}
           camera={f.camera}
+          image={f.image}
           scale={cameraScale}
-          color={f.image.imageId === selectedImageId ? '#ff00ff' : '#ff0000'}
+          color={f.image.imageId === selectedImageId ? selectedColor : '#ff0000'}
           imageFile={f.imageFile}
           showImagePlane={showImagePlanes}
           imagePlaneOpacity={imagePlaneOpacity}

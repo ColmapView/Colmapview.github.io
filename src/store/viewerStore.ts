@@ -18,6 +18,8 @@ interface ViewerState {
   imagePlaneOpacity: number;
   showMatches: boolean;
   matchesOpacity: number;
+  rainbowMode: boolean;
+  rainbowSpeed: number;
   imageDetailId: number | null;
   showPoints2D: boolean;
   showPoints3D: boolean;
@@ -40,6 +42,8 @@ interface ViewerState {
   setImagePlaneOpacity: (opacity: number) => void;
   setShowMatches: (show: boolean) => void;
   setMatchesOpacity: (opacity: number) => void;
+  setRainbowMode: (enabled: boolean) => void;
+  setRainbowSpeed: (speed: number) => void;
   openImageDetail: (id: number) => void;
   closeImageDetail: () => void;
   setShowPoints2D: (show: boolean) => void;
@@ -62,12 +66,14 @@ export const useViewerStore = create<ViewerState>((set) => ({
   backgroundColor: '#ffffff',
   viewResetTrigger: 0,
   minTrackLength: 2,
-  showAxes: true,
+  showAxes: false,
   axesOpacity: 1,
   showImagePlanes: false,
   imagePlaneOpacity: 0.9,
   showMatches: false,
   matchesOpacity: 1,
+  rainbowMode: false,
+  rainbowSpeed: 1,
   imageDetailId: null,
   showPoints2D: false,
   showPoints3D: false,
@@ -90,6 +96,8 @@ export const useViewerStore = create<ViewerState>((set) => ({
   setImagePlaneOpacity: (imagePlaneOpacity) => set({ imagePlaneOpacity }),
   setShowMatches: (showMatches) => set({ showMatches }),
   setMatchesOpacity: (matchesOpacity) => set({ matchesOpacity }),
+  setRainbowMode: (rainbowMode) => set({ rainbowMode }),
+  setRainbowSpeed: (rainbowSpeed) => set({ rainbowSpeed }),
   openImageDetail: (imageDetailId) => set({ imageDetailId, matchedImageId: null }),
   closeImageDetail: () => set({ imageDetailId: null, matchedImageId: null }),
   setShowPoints2D: (showPoints2D) => set({ showPoints2D }),
