@@ -93,3 +93,55 @@ export function getImageFile(
   // Try lowercase match
   return imageFiles.get(normalizedName.toLowerCase());
 }
+
+/**
+ * Look up a mask file for an image.
+ * Masks are stored in masks/ folder mirroring images/ structure.
+ * Supports both exact match and .png suffix variants.
+ *
+ * Tries multiple strategies to handle various folder structures:
+ * 1. Replace 'images/' with 'masks/' anywhere in path
+ * 2. Strip leading 'images/' and prepend 'masks/'
+ * 3. Just filename with 'masks/' prefix (fallback)
+ *
+ * Examples:
+ * - "images/cam1/photo.jpg" -> "masks/cam1/photo.jpg" or "masks/cam1/photo.jpg.png"
+ * - "data/images/cam1/photo.jpg" -> "data/masks/cam1/photo.jpg.png"
+ * - "cam1/photo.jpg" -> "masks/cam1/photo.jpg.png"
+ */
+export function getMaskFile(
+  imageFiles: Map<string, File> | undefined,
+  imageName: string
+): File | undefined {
+  if (!imageFiles || !imageName) return undefined;
+
+  const normalized = imageName.replace(/\\/g, '/');
+
+  // Strategy 1: Replace 'images/' with 'masks/' anywhere in path
+  const replaced = normalized.replace(/\/images\//i, '/masks/').replace(/^images\//i, 'masks/');
+
+  // Strategy 2: Strip leading images/ and prepend masks/
+  const stripped = normalized.replace(/^images\//i, '');
+  const maskPath = `masks/${stripped}`;
+
+  // Strategy 3: Just filename with masks/ prefix (fallback)
+  const filename = normalized.split('/').pop() || '';
+  const maskByFilename = `masks/${filename}`;
+
+  // Try all strategies with both exact and .png suffix
+  const tryPaths = [
+    replaced,
+    `${replaced}.png`,
+    maskPath,
+    `${maskPath}.png`,
+    maskByFilename,
+    `${maskByFilename}.png`,
+  ];
+
+  for (const path of tryPaths) {
+    const match = imageFiles.get(path) || imageFiles.get(path.toLowerCase());
+    if (match) return match;
+  }
+
+  return undefined;
+}

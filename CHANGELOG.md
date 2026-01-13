@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-01-13
+
+### Added
+
+- **Mask Overlay Support**: Load mask images from `/masks` folder mirroring the images folder structure
+  - Supports exact filename match (`masks/photo.jpg`) and `.png` suffix (`masks/photo.jpg.png`)
+  - Toggle mask overlay in Image Detail Modal with adjustable opacity slider
+  - Press 'M' keyboard shortcut to toggle mask on/off
+  - Robust path matching handles various folder structures
+
+### Changed
+
+- Improved file finding logic for COLMAP files (better handling of nested directories)
+- Refactored frustum texture loading into dedicated hook for better code organization
+- Updated README with clearer project description
+
 ## [0.1.1] - 2026-01-13
 
 ### Changed
@@ -50,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript for type safety
 - Deno native test runner for testing
 
-[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/ColmapView/colmapview.github.io/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/ColmapView/colmapview.github.io/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ColmapView/colmapview.github.io/releases/tag/v0.1.0

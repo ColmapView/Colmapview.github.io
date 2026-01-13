@@ -1,6 +1,8 @@
 # ColmapView
 
-A web-based 3D viewer for COLMAP reconstruction data. View point clouds, camera frustums, and image matches directly in your browser.
+The easiest way to view COLMAP reconstruction data. Open the page, drag and drop your files, done.
+
+View point clouds, camera frustums, and image matches directly in your browser. No installation required. More visualization features than the original COLMAP GUI.
 
 **[Live Demo](https://colmapview.github.io/)** | **[Releases](https://github.com/ColmapView/colmapview.github.io/releases)**
 

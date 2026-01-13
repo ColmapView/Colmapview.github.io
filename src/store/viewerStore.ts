@@ -26,6 +26,8 @@ interface ViewerState {
   showMatchesInModal: boolean;
   matchedImageId: number | null;
   flyToImageId: number | null;
+  showMaskOverlay: boolean;
+  maskOpacity: number;
 
   setPointSize: (size: number) => void;
   setColorMode: (mode: ColorMode) => void;
@@ -53,6 +55,8 @@ interface ViewerState {
   resetView: () => void;
   flyToImage: (id: number) => void;
   clearFlyTo: () => void;
+  setShowMaskOverlay: (show: boolean) => void;
+  setMaskOpacity: (opacity: number) => void;
 }
 
 export const useViewerStore = create<ViewerState>((set) => ({
@@ -80,6 +84,8 @@ export const useViewerStore = create<ViewerState>((set) => ({
   showMatchesInModal: false,
   matchedImageId: null,
   flyToImageId: null,
+  showMaskOverlay: false,
+  maskOpacity: 0.7,
 
   setPointSize: (pointSize) => set({ pointSize }),
   setColorMode: (colorMode) => set({ colorMode }),
@@ -107,4 +113,6 @@ export const useViewerStore = create<ViewerState>((set) => ({
   resetView: () => set((state) => ({ viewResetTrigger: state.viewResetTrigger + 1 })),
   flyToImage: (flyToImageId) => set({ flyToImageId }),
   clearFlyTo: () => set({ flyToImageId: null }),
+  setShowMaskOverlay: (showMaskOverlay) => set({ showMaskOverlay }),
+  setMaskOpacity: (maskOpacity) => set({ maskOpacity }),
 }));

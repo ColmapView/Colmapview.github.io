@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import { useReconstructionStore, useViewerStore } from '../../store';
 import type { Camera, Image } from '../../types/colmap';
-import { getImageFile } from '../../utils/imageFileUtils';
+import { getImageFile, getMaskFile } from '../../utils/imageFileUtils';
 
 const CAMERA_MODEL_NAMES: Record<number, string> = {
   0: 'SIMPLE_PINHOLE',
@@ -245,6 +245,10 @@ export function ImageDetailModal() {
   const setShowMatchesInModal = useViewerStore((s) => s.setShowMatchesInModal);
   const matchedImageId = useViewerStore((s) => s.matchedImageId);
   const setMatchedImageId = useViewerStore((s) => s.setMatchedImageId);
+  const showMaskOverlay = useViewerStore((s) => s.showMaskOverlay);
+  const setShowMaskOverlay = useViewerStore((s) => s.setShowMaskOverlay);
+  const maskOpacity = useViewerStore((s) => s.maskOpacity);
+  const setMaskOpacity = useViewerStore((s) => s.setMaskOpacity);
 
   // Get sorted list of image IDs for navigation
   const imageIds = useMemo(() => {
@@ -270,6 +274,7 @@ export function ImageDetailModal() {
 
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [matchedImageSrc, setMatchedImageSrc] = useState<string | null>(null);
+  const [maskSrc, setMaskSrc] = useState<string | null>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const imageContainerRef = useRef<HTMLDivElement>(null);
 
@@ -287,6 +292,8 @@ export function ImageDetailModal() {
   const image = imageDetailId !== null ? reconstruction?.images.get(imageDetailId) : null;
   const camera = image ? reconstruction?.cameras.get(image.cameraId) : null;
   const imageFile = image ? getImageFile(loadedFiles?.imageFiles, image.name) : null;
+  const maskFile = image ? getMaskFile(loadedFiles?.imageFiles, image.name) : null;
+  const hasMask = !!maskFile;
 
   // Memoize point counts
   const { numPoints2D, numPoints3D } = useMemo(() => {
@@ -465,6 +472,21 @@ export function ImageDetailModal() {
     };
   }, [matchedImageFile]);
 
+  // Load mask when available
+  useEffect(() => {
+    if (!maskFile) {
+      setMaskSrc(null);
+      return;
+    }
+
+    const url = URL.createObjectURL(maskFile);
+    setMaskSrc(url);
+
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [maskFile]);
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -474,6 +496,10 @@ export function ImageDetailModal() {
         goToPrev();
       } else if (e.key === 'ArrowRight') {
         goToNext();
+      } else if (e.key === 'm' || e.key === 'M') {
+        if (hasMask) {
+          setShowMaskOverlay(!showMaskOverlay);
+        }
       }
     };
 
@@ -481,7 +507,7 @@ export function ImageDetailModal() {
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
     }
-  }, [imageDetailId, closeImageDetail, goToPrev, goToNext]);
+  }, [imageDetailId, closeImageDetail, goToPrev, goToNext, hasMask, showMaskOverlay, setShowMaskOverlay]);
 
   // Drag handlers
   const handleDragStart = useCallback((e: React.MouseEvent) => {
@@ -704,6 +730,15 @@ export function ImageDetailModal() {
                     className="absolute inset-0 w-full h-full object-contain"
                     draggable={false}
                   />
+                  {showMaskOverlay && maskSrc && (
+                    <img
+                      src={maskSrc}
+                      alt="mask"
+                      className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                      style={{ opacity: maskOpacity ?? 0.7 }}
+                      draggable={false}
+                    />
+                  )}
                   {(showPoints2D || showPoints3D) && renderedImageWidth > 0 && (
                     <KeypointCanvas
                       image={image}
@@ -750,6 +785,32 @@ export function ImageDetailModal() {
                         Show Points3D <span className="text-ds-success">({numPoints3D})</span>
                       </label>
                     </div>
+                    {hasMask && (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="showMaskOverlay"
+                          checked={showMaskOverlay}
+                          onChange={(e) => setShowMaskOverlay(e.target.checked)}
+                          className="w-5 h-5 accent-ds-warning"
+                        />
+                        <label htmlFor="showMaskOverlay" className="text-ds-primary text-base">
+                          Show Mask
+                        </label>
+                        {showMaskOverlay && (
+                          <input
+                            type="range"
+                            min="0.1"
+                            max="1"
+                            step="0.1"
+                            value={maskOpacity}
+                            onChange={(e) => setMaskOpacity(parseFloat(e.target.value))}
+                            className="w-20"
+                            title={`Mask opacity: ${Math.round(maskOpacity * 100)}%`}
+                          />
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
 

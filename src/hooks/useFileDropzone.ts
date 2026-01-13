@@ -58,41 +58,56 @@ export function useFileDropzone() {
     points3DFile?: File;
     databaseFile?: File;
   } => {
-    // Common paths to check (in order of preference)
-    const cameraPaths = [
-      'cameras.bin', 'sparse/cameras.bin', 'sparse/0/cameras.bin',
-      'cameras.txt', 'sparse/cameras.txt', 'sparse/0/cameras.txt',
-    ];
-    const imagePaths = [
-      'images.bin', 'sparse/images.bin', 'sparse/0/images.bin',
-      'images.txt', 'sparse/images.txt', 'sparse/0/images.txt',
-    ];
-    const pointsPaths = [
-      'points3D.bin', 'sparse/points3D.bin', 'sparse/0/points3D.bin',
-      'points3D.txt', 'sparse/points3D.txt', 'sparse/0/points3D.txt',
-    ];
-    const dbPaths = ['database.db', 'colmap.db'];
+    // Search directories in order of preference
+    const searchDirs = ['', 'sparse/', 'sparse/0/'];
+    // File extensions in order of preference (binary first)
+    const extensions = ['.bin', '.txt'];
 
-    const findFile = (paths: string[]): File | undefined => {
-      for (const p of paths) {
-        // Check direct path
-        if (files.has(p)) return files.get(p);
+    const findFileByPath = (path: string): File | undefined => {
+      // Check direct path
+      if (files.has(path)) return files.get(path);
 
-        // Check with any folder prefix (for when user drops a parent folder)
-        for (const [key, file] of files) {
-          if (key.endsWith('/' + p)) {
-            return file;
-          }
+      // Check with any folder prefix (for when user drops a parent folder)
+      for (const [key, file] of files) {
+        if (key.endsWith('/' + path)) {
+          return file;
+        }
+      }
+      return undefined;
+    };
+
+    // Try to find all three files from the same directory
+    for (const dir of searchDirs) {
+      for (const ext of extensions) {
+        const camerasFile = findFileByPath(`${dir}cameras${ext}`);
+        const imagesFile = findFileByPath(`${dir}images${ext}`);
+        const points3DFile = findFileByPath(`${dir}points3D${ext}`);
+
+        // If all three files found in this directory, use them
+        if (camerasFile && imagesFile && points3DFile) {
+          // Also look for database file
+          const databaseFile = findFileByPath('database.db') || findFileByPath('colmap.db');
+          return { camerasFile, imagesFile, points3DFile, databaseFile };
+        }
+      }
+    }
+
+    // Fallback: search for files independently (allows mixed directories/formats)
+    const findFile = (baseName: string): File | undefined => {
+      for (const dir of searchDirs) {
+        for (const ext of extensions) {
+          const file = findFileByPath(`${dir}${baseName}${ext}`);
+          if (file) return file;
         }
       }
       return undefined;
     };
 
     return {
-      camerasFile: findFile(cameraPaths),
-      imagesFile: findFile(imagePaths),
-      points3DFile: findFile(pointsPaths),
-      databaseFile: findFile(dbPaths),
+      camerasFile: findFile('cameras'),
+      imagesFile: findFile('images'),
+      points3DFile: findFile('points3D'),
+      databaseFile: findFileByPath('database.db') || findFileByPath('colmap.db'),
     };
   }, []);
 

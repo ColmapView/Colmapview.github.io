@@ -1,10 +1,11 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { Line, Html } from '@react-three/drei';
 import { useReconstructionStore, useViewerStore } from '../../store';
 import type { Camera, Image } from '../../types/colmap';
 import { getImageFile } from '../../utils/imageFileUtils';
+import { useFrustumTexture, clearFrustumTextureCache } from '../../hooks/useFrustumTexture';
 
 // Cycle through CMY colors (Cyan -> Magenta -> Yellow -> Cyan)
 function cmyToHex(t: number): string {
@@ -73,52 +74,10 @@ function CameraFrustum({
   onDoubleClick,
   onContextMenu,
 }: CameraFrustumProps) {
-  const [texture, setTexture] = useState<THREE.Texture | null>(null);
   const [hovered, setHovered] = useState(false);
-  const urlsToCleanup = useRef<string[]>([]);
 
-  useEffect(() => {
-    if (!imageFile || !showImagePlane) {
-      setTexture(null);
-      return;
-    }
-
-    const url = URL.createObjectURL(imageFile);
-    urlsToCleanup.current.push(url);
-
-    let cancelled = false;
-    const loader = new THREE.TextureLoader();
-    loader.load(
-      url,
-      (tex) => {
-        if (!cancelled) {
-          tex.colorSpace = THREE.SRGBColorSpace;
-          tex.flipY = false;
-          tex.needsUpdate = true;
-          setTexture(tex);
-        }
-      },
-      undefined,
-      (error) => {
-        if (!cancelled) {
-          console.error('Error loading texture:', error);
-        }
-      }
-    );
-
-    return () => {
-      cancelled = true;
-    };
-  }, [imageFile, showImagePlane]);
-
-  useEffect(() => {
-    return () => {
-      for (const url of urlsToCleanup.current) {
-        URL.revokeObjectURL(url);
-      }
-      urlsToCleanup.current = [];
-    };
-  }, []);
+  // Use optimized texture loading with caching and thumbnails
+  const texture = useFrustumTexture(imageFile, image.name, showImagePlane);
 
   const { lineSegments, planeSize } = useMemo(() => {
     const aspectRatio = camera.width / camera.height;
@@ -187,7 +146,7 @@ function CameraFrustum({
           color={showImagePlane && texture ? undefined : displayColor}
           side={THREE.DoubleSide}
           transparent={!isSelected}
-          opacity={isSelected ? 1 : (hovered ? 0.6 : (showImagePlane && texture ? imagePlaneOpacity : 0.3))}
+          opacity={isSelected ? 1 : (hovered ? (showImagePlane && texture ? 0.3 : 0.6) : (showImagePlane && texture ? imagePlaneOpacity : 0.3))}
         />
       </mesh>
       {hovered && (
@@ -239,6 +198,13 @@ export function CameraFrustums() {
   const rainbowSpeed = useViewerStore((s) => s.rainbowSpeed);
 
   const [rainbowHue, setRainbowHue] = useState(0);
+
+  // Clear texture cache when reconstruction changes
+  useEffect(() => {
+    return () => {
+      clearFrustumTextureCache();
+    };
+  }, [reconstruction]);
 
   useFrame((_, delta) => {
     if (rainbowMode && selectedImageId !== null) {
