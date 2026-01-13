@@ -39,23 +39,33 @@ export function StatusBar() {
   }, [reconstruction]);
 
   return (
-    <footer className="h-10 border-t border-ds bg-ds-secondary text-ds-secondary text-base px-4 flex items-center gap-6">
-      {reconstruction ? (
-        <>
-          <span>Points: {pointCount.toLocaleString()}</span>
-          <span>Images: {imageCount.toLocaleString()}</span>
-          <span>Cameras: {cameraCount.toLocaleString()}</span>
-          {stats && (
-            <>
-              <span>Observations: {stats.observations.toLocaleString()}</span>
-              <span>Avg Track: {stats.avgTrack.toFixed(2)}</span>
-              <span>Avg Reproj Error: {stats.avgError.toFixed(3)}px</span>
-            </>
-          )}
-        </>
-      ) : (
-        <span>{loading ? 'Loading...' : 'Drop COLMAP folder to load'}</span>
-      )}
+    <footer className="h-10 border-t border-ds bg-ds-tertiary text-ds-secondary text-base px-4 flex items-center justify-between">
+      <div className="flex items-center gap-6">
+        {reconstruction ? (
+          <>
+            <span>Points: {pointCount.toLocaleString()}</span>
+            <span>Images: {imageCount.toLocaleString()}</span>
+            <span>Cameras: {cameraCount.toLocaleString()}</span>
+            {stats && (
+              <>
+                <span>Observations: {stats.observations.toLocaleString()}</span>
+                <span>Avg Track: {stats.avgTrack.toFixed(2)}</span>
+                <span>Avg Reproj Error: {stats.avgError.toFixed(3)}px</span>
+              </>
+            )}
+          </>
+        ) : (
+          <span>{loading ? 'Loading...' : 'Drop COLMAP folder to load'}</span>
+        )}
+      </div>
+      <a
+        href="https://opsiclear.com"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-ds-tertiary hover:text-ds-primary transition-colors underline"
+      >
+        opsiclear.com
+      </a>
     </footer>
   );
 }

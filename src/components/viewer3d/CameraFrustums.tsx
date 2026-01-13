@@ -48,6 +48,7 @@ interface CameraFrustumProps {
   image: Image;
   scale: number;
   color?: string;
+  isSelected?: boolean;
   imageFile?: File;
   showImagePlane?: boolean;
   imagePlaneOpacity?: number;
@@ -63,6 +64,7 @@ function CameraFrustum({
   image,
   scale,
   color = '#ff0000',
+  isSelected = false,
   imageFile,
   showImagePlane = false,
   imagePlaneOpacity = 0.9,
@@ -183,8 +185,8 @@ function CameraFrustum({
           map={showImagePlane && texture ? texture : null}
           color={showImagePlane && texture ? undefined : displayColor}
           side={THREE.DoubleSide}
-          transparent
-          opacity={hovered ? 0.6 : (showImagePlane && texture ? imagePlaneOpacity : 0.3)}
+          transparent={!isSelected}
+          opacity={isSelected ? 1 : (hovered ? 0.6 : (showImagePlane && texture ? imagePlaneOpacity : 0.3))}
         />
       </mesh>
       {hovered && (
@@ -285,6 +287,7 @@ export function CameraFrustums() {
           image={f.image}
           scale={cameraScale}
           color={f.image.imageId === selectedImageId ? selectedColor : '#ff0000'}
+          isSelected={f.image.imageId === selectedImageId}
           imageFile={f.imageFile}
           showImagePlane={showImagePlanes}
           imagePlaneOpacity={imagePlaneOpacity}
