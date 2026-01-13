@@ -1,4 +1,6 @@
 {
+  "name": "colmapview",
+  "version": "0.1.0",
   "unstable": ["sloppy-imports"],
   "tasks": {
     "dev": "deno run -A npm:vite",
