@@ -3,18 +3,28 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useReconstructionStore, useViewerStore } from '../../store';
 
-// Convert hue (0-1) to THREE.Color
-function hueToColor(hue: number): THREE.Color {
-  const h = hue * 6;
-  const c = 1;
-  const x = 1 - Math.abs(h % 2 - 1);
+// Cycle through CMY colors (Cyan -> Magenta -> Yellow -> Cyan)
+function cmyToColor(t: number): THREE.Color {
+  const phase = (t % 1) * 3;
   let r = 0, g = 0, b = 0;
-  if (h < 1) { r = c; g = x; }
-  else if (h < 2) { r = x; g = c; }
-  else if (h < 3) { g = c; b = x; }
-  else if (h < 4) { g = x; b = c; }
-  else if (h < 5) { r = x; b = c; }
-  else { r = c; b = x; }
+  if (phase < 1) {
+    // Cyan to Magenta
+    r = phase;
+    g = 1 - phase;
+    b = 1;
+  } else if (phase < 2) {
+    // Magenta to Yellow
+    const p = phase - 1;
+    r = 1;
+    g = p;
+    b = 1 - p;
+  } else {
+    // Yellow to Cyan
+    const p = phase - 2;
+    r = 1 - p;
+    g = 1;
+    b = p;
+  }
   return new THREE.Color(r, g, b);
 }
 
@@ -56,7 +66,7 @@ export function PointCloud() {
     if (!selectedMaterialRef.current) return;
     if (rainbowMode) {
       selectedMaterialRef.current.vertexColors = false;
-      selectedMaterialRef.current.color = hueToColor(rainbowHue);
+      selectedMaterialRef.current.color = cmyToColor(rainbowHue);
       selectedMaterialRef.current.needsUpdate = true;
     } else {
       selectedMaterialRef.current.vertexColors = true;
@@ -172,7 +182,7 @@ export function PointCloud() {
             ref={selectedMaterialRef}
             size={pointSize + 1}
             vertexColors={!rainbowMode}
-            color={rainbowMode ? hueToColor(rainbowHue) : undefined}
+            color={rainbowMode ? cmyToColor(rainbowHue) : undefined}
             sizeAttenuation={false}
           />
         </points>

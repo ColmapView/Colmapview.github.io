@@ -5,18 +5,28 @@ import { Line, Html } from '@react-three/drei';
 import { useReconstructionStore, useViewerStore } from '../../store';
 import type { Camera, Image } from '../../types/colmap';
 
-// Convert hue (0-1) to hex color string
-function hueToHex(hue: number): string {
-  const h = hue * 6;
-  const c = 1;
-  const x = 1 - Math.abs(h % 2 - 1);
+// Cycle through CMY colors (Cyan -> Magenta -> Yellow -> Cyan)
+function cmyToHex(t: number): string {
+  const phase = (t % 1) * 3;
   let r = 0, g = 0, b = 0;
-  if (h < 1) { r = c; g = x; }
-  else if (h < 2) { r = x; g = c; }
-  else if (h < 3) { g = c; b = x; }
-  else if (h < 4) { g = x; b = c; }
-  else if (h < 5) { r = x; b = c; }
-  else { r = c; b = x; }
+  if (phase < 1) {
+    // Cyan to Magenta
+    r = phase;
+    g = 1 - phase;
+    b = 1;
+  } else if (phase < 2) {
+    // Magenta to Yellow
+    const p = phase - 1;
+    r = 1;
+    g = p;
+    b = 1 - p;
+  } else {
+    // Yellow to Cyan
+    const p = phase - 2;
+    r = 1 - p;
+    g = 1;
+    b = p;
+  }
   const toHex = (v: number) => Math.round(v * 255).toString(16).padStart(2, '0');
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
@@ -262,7 +272,7 @@ export function CameraFrustums() {
 
   if (!showCameras || frustums.length === 0) return null;
 
-  const selectedColor = rainbowMode ? hueToHex(rainbowHue) : '#ff00ff';
+  const selectedColor = rainbowMode ? cmyToHex(rainbowHue) : '#ff00ff';
 
   return (
     <group>

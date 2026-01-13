@@ -46,7 +46,8 @@ interface ImageItemProps {
   viewMode: ViewMode;
 }
 
-function ImageItem({ imageId, name, file, numPoints2D, numPoints3D, cameraId, cameraWidth, cameraHeight, covisibleCount, avgError, onClick, onDoubleClick, onContextMenu, isSelected, itemRef, viewMode }: ImageItemProps) {
+function ImageItem({ imageId, name, file, numPoints2D, numPoints3D, cameraId: _cameraId, cameraWidth, cameraHeight, covisibleCount, avgError, onClick, onDoubleClick, onContextMenu, isSelected, itemRef, viewMode }: ImageItemProps) {
+  void _cameraId; // Reserved for future use
   const [src, setSrc] = useState<string | null>(null);
   const localRef = useRef<HTMLDivElement>(null);
 
@@ -257,7 +258,7 @@ export function ImageGallery() {
   // Create refs for each image
   const getRef = (imageId: number) => {
     if (!itemRefs.current.has(imageId)) {
-      itemRefs.current.set(imageId, { current: null } as React.RefObject<HTMLDivElement>);
+      itemRefs.current.set(imageId, { current: null } as unknown as React.RefObject<HTMLDivElement>);
     }
     return itemRefs.current.get(imageId)!;
   };
