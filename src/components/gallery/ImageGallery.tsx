@@ -275,6 +275,7 @@ export function ImageGallery() {
   }, [selectedImageId]);
 
   // Handle shift+scroll to zoom (gallery only)
+  // Note: reconstruction in deps ensures effect re-runs when container first mounts
   useEffect(() => {
     const container = containerRef.current;
     if (!container || viewMode !== 'gallery') return;
@@ -296,7 +297,7 @@ export function ImageGallery() {
 
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
-  }, [viewMode]);
+  }, [viewMode, reconstruction]);
 
   if (!reconstruction) {
     return (
