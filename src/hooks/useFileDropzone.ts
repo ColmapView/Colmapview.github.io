@@ -13,8 +13,12 @@ import { collectImageFiles, hasMaskFiles } from '../utils/imageFileUtils';
 
 export function useFileDropzone() {
   const {
+    reconstruction: existingReconstruction,
+    loadedFiles: existingLoadedFiles,
+    droppedFiles: existingDroppedFiles,
     setReconstruction,
     setLoadedFiles,
+    setDroppedFiles,
     setLoading,
     setError,
     setProgress,
@@ -124,82 +128,115 @@ export function useFileDropzone() {
     };
   }, []);
 
-  const processFiles = useCallback(async (files: Map<string, File>) => {
+  const processFiles = useCallback(async (newFiles: Map<string, File>) => {
     setLoading(true);
     setError(null);
     setProgress(0);
 
     try {
-      // Find COLMAP files
-      const { camerasFile, imagesFile, points3DFile, databaseFile } = findColmapFiles(files);
-
-      if (!camerasFile || !imagesFile || !points3DFile) {
-        throw new Error(
-          'Missing required COLMAP files. Expected cameras.bin/txt, images.bin/txt, and points3D.bin/txt'
-        );
+      // Merge with existing dropped files
+      const files = new Map<string, File>(existingDroppedFiles ?? []);
+      for (const [path, file] of newFiles) {
+        files.set(path, file);
       }
+      setDroppedFiles(files);
+
+      // Find COLMAP files in merged set
+      const { camerasFile, imagesFile, points3DFile, databaseFile } = findColmapFiles(files);
+      const hasNewColmapFiles = !!(camerasFile && imagesFile && points3DFile);
 
       // Collect image files and check for masks folder
       const imageFiles = collectImageFiles(files);
       const hasMasks = hasMaskFiles(files);
 
-      // Store loaded files reference
+      // Determine what to use for COLMAP files
+      const finalCamerasFile = camerasFile ?? existingLoadedFiles?.camerasFile;
+      const finalImagesFile = imagesFile ?? existingLoadedFiles?.imagesFile;
+      const finalPoints3DFile = points3DFile ?? existingLoadedFiles?.points3DFile;
+      const finalDatabaseFile = databaseFile ?? existingLoadedFiles?.databaseFile;
+
+      // Merge image files with existing
+      const finalImageFiles = new Map<string, File>(existingLoadedFiles?.imageFiles ?? []);
+      for (const [key, file] of imageFiles) {
+        finalImageFiles.set(key, file);
+      }
+
+      // Update loaded files reference
       setLoadedFiles({
-        camerasFile,
-        imagesFile,
-        points3DFile,
-        databaseFile,
-        imageFiles,
-        hasMasks,
+        camerasFile: finalCamerasFile,
+        imagesFile: finalImagesFile,
+        points3DFile: finalPoints3DFile,
+        databaseFile: finalDatabaseFile,
+        imageFiles: finalImageFiles,
+        hasMasks: hasMasks || existingLoadedFiles?.hasMasks || false,
       });
 
-      setProgress(10);
+      // Only parse COLMAP if we have new files OR no existing reconstruction
+      if (hasNewColmapFiles || !existingReconstruction) {
+        if (!finalCamerasFile || !finalImagesFile || !finalPoints3DFile) {
+          throw new Error(
+            'Missing required COLMAP files. Expected cameras.bin/txt, images.bin/txt, and points3D.bin/txt'
+          );
+        }
 
-      // Parse cameras
-      const camerasBuffer = await camerasFile.arrayBuffer();
-      const isCamerasBinary = camerasFile.name.endsWith('.bin');
-      const cameras = isCamerasBinary
-        ? parseCamerasBinary(camerasBuffer)
-        : parseCamerasText(await camerasFile.text());
+        setProgress(10);
 
-      setProgress(30);
+        // Parse cameras
+        const camerasBuffer = await finalCamerasFile.arrayBuffer();
+        const isCamerasBinary = finalCamerasFile.name.endsWith('.bin');
+        const cameras = isCamerasBinary
+          ? parseCamerasBinary(camerasBuffer)
+          : parseCamerasText(await finalCamerasFile.text());
 
-      // Parse images
-      const imagesBuffer = await imagesFile.arrayBuffer();
-      const isImagesBinary = imagesFile.name.endsWith('.bin');
-      const images = isImagesBinary
-        ? parseImagesBinary(imagesBuffer)
-        : parseImagesText(await imagesFile.text());
+        setProgress(30);
 
-      setProgress(60);
+        // Parse images
+        const imagesBuffer = await finalImagesFile.arrayBuffer();
+        const isImagesBinary = finalImagesFile.name.endsWith('.bin');
+        const images = isImagesBinary
+          ? parseImagesBinary(imagesBuffer)
+          : parseImagesText(await finalImagesFile.text());
 
-      // Parse points3D
-      const pointsBuffer = await points3DFile.arrayBuffer();
-      const isPointsBinary = points3DFile.name.endsWith('.bin');
-      const points3D = isPointsBinary
-        ? parsePoints3DBinary(pointsBuffer)
-        : parsePoints3DText(await points3DFile.text());
+        setProgress(60);
 
-      setProgress(90);
+        // Parse points3D
+        const pointsBuffer = await finalPoints3DFile.arrayBuffer();
+        const isPointsBinary = finalPoints3DFile.name.endsWith('.bin');
+        const points3D = isPointsBinary
+          ? parsePoints3DBinary(pointsBuffer)
+          : parsePoints3DText(await finalPoints3DFile.text());
 
-      const reconstruction: Reconstruction = { cameras, images, points3D };
-      setReconstruction(reconstruction);
+        setProgress(90);
 
-      // Reset viewer state for new dataset
-      setSelectedImageId(null);
-      resetView();
+        const reconstruction: Reconstruction = { cameras, images, points3D };
+        setReconstruction(reconstruction);
 
-      console.log(
-        `Loaded: ${cameras.size} cameras, ${images.size} images, ${points3D.size} points`
-      );
+        // Reset viewer state for new reconstruction
+        setSelectedImageId(null);
+        resetView();
+
+        console.log(
+          `Loaded: ${cameras.size} cameras, ${images.size} images, ${points3D.size} points`
+        );
+      } else {
+        // Just updating images/masks, keep existing reconstruction
+        setProgress(100);
+        console.log(`Updated: ${finalImageFiles.size} image files, hasMasks: ${hasMasks}`);
+      }
 
     } catch (err) {
       console.error('Error processing files:', err);
       setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setLoading(false);
     }
   }, [
+    existingReconstruction,
+    existingLoadedFiles,
+    existingDroppedFiles,
     setReconstruction,
     setLoadedFiles,
+    setDroppedFiles,
     setLoading,
     setError,
     setProgress,

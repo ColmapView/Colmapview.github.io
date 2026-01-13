@@ -4,12 +4,14 @@ import type { Reconstruction, LoadedFiles } from '../types/colmap';
 interface ReconstructionState {
   reconstruction: Reconstruction | null;
   loadedFiles: LoadedFiles | null;
+  droppedFiles: Map<string, File> | null;
   loading: boolean;
   error: string | null;
   progress: number;
 
   setReconstruction: (rec: Reconstruction) => void;
   setLoadedFiles: (files: LoadedFiles) => void;
+  setDroppedFiles: (files: Map<string, File>) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   setProgress: (progress: number) => void;
@@ -19,6 +21,7 @@ interface ReconstructionState {
 export const useReconstructionStore = create<ReconstructionState>((set) => ({
   reconstruction: null,
   loadedFiles: null,
+  droppedFiles: null,
   loading: false,
   error: null,
   progress: 0,
@@ -32,6 +35,8 @@ export const useReconstructionStore = create<ReconstructionState>((set) => ({
 
   setLoadedFiles: (loadedFiles) => set({ loadedFiles }),
 
+  setDroppedFiles: (droppedFiles) => set({ droppedFiles }),
+
   setLoading: (loading) => set({ loading }),
 
   setError: (error) => set({
@@ -44,6 +49,7 @@ export const useReconstructionStore = create<ReconstructionState>((set) => ({
   clear: () => set({
     reconstruction: null,
     loadedFiles: null,
+    droppedFiles: null,
     error: null,
     progress: 0,
     loading: false
