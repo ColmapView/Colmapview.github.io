@@ -204,6 +204,12 @@ export function ImageGallery() {
   const [cameraFilter, setCameraFilter] = useState<number | 'all'>('all');
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Clear refs and reset filter when reconstruction changes
+  useEffect(() => {
+    itemRefs.current.clear();
+    setCameraFilter('all');
+  }, [reconstruction]);
+
   // Get list of available cameras
   const cameras = useMemo(() => {
     if (!reconstruction) return [];

@@ -199,8 +199,15 @@ export function CameraFrustums() {
   const rainbowHueRef = useRef(0);
   const [, forceUpdate] = useState(0);
 
-  // Clear texture cache when reconstruction changes
+  // Clear texture cache when reconstruction changes (immediately, not just on cleanup)
+  const prevReconstructionRef = useRef(reconstruction);
   useEffect(() => {
+    if (reconstruction !== prevReconstructionRef.current) {
+      // Clear cache immediately when reconstruction changes
+      clearFrustumTextureCache();
+      prevReconstructionRef.current = reconstruction;
+    }
+    // Also clear on unmount
     return () => {
       clearFrustumTextureCache();
     };
