@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import { useReconstructionStore, useViewerStore } from '../../store';
 import type { Camera, Image } from '../../types/colmap';
 import { getImageFile, getMaskFile } from '../../utils/imageFileUtils';
+import { useFileUrl } from '../../hooks/useFileUrl';
+import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, buttonStyles, inputStyles, checkboxGroupStyles, tableStyles } from '../../theme';
 
 const CAMERA_MODEL_NAMES: Record<number, string> = {
   0: 'SIMPLE_PINHOLE',
@@ -99,7 +101,7 @@ const KeypointCanvas = memo(function KeypointCanvas({
     }
 
     if (untriangulatedPoints.length > 0) {
-      ctx.fillStyle = '#ff0000';
+      ctx.fillStyle = VIZ_COLORS.point.untriangulated;
       ctx.beginPath();
       for (const { x, y } of untriangulatedPoints) {
         ctx.moveTo(x + 2, y);
@@ -109,7 +111,7 @@ const KeypointCanvas = memo(function KeypointCanvas({
     }
 
     if (triangulatedPoints.length > 0) {
-      ctx.fillStyle = '#00ff00';
+      ctx.fillStyle = VIZ_COLORS.point.triangulated;
       ctx.beginPath();
       for (const { x, y } of triangulatedPoints) {
         ctx.moveTo(x + 2, y);
@@ -183,9 +185,9 @@ const MatchCanvas = memo(function MatchCanvas({
     const scale2X = image2Width / image2Camera.width;
     const scale2Y = image2Height / image2Camera.height;
 
-    ctx.strokeStyle = '#00ff00';
+    ctx.strokeStyle = VIZ_COLORS.point.triangulated;
     ctx.lineWidth = 1;
-    ctx.globalAlpha = 0.7;
+    ctx.globalAlpha = OPACITY.matchLines;
 
     for (const { point1, point2 } of lines) {
       const x1 = offset1X + point1[0] * scale1X;
@@ -200,7 +202,7 @@ const MatchCanvas = memo(function MatchCanvas({
     }
 
     ctx.globalAlpha = 1;
-    ctx.fillStyle = '#00ff00';
+    ctx.fillStyle = VIZ_COLORS.point.triangulated;
     for (const { point1, point2 } of lines) {
       const x1 = offset1X + point1[0] * scale1X;
       const y1 = offset1Y + point1[1] * scale1Y;
@@ -227,9 +229,9 @@ const MatchCanvas = memo(function MatchCanvas({
   );
 });
 
-const MIN_WIDTH = 400;
-const MIN_HEIGHT = 300;
-const RESIZE_DEBOUNCE_MS = 16;
+const MIN_WIDTH = SIZE.modalMinWidth;
+const MIN_HEIGHT = SIZE.modalMinHeight;
+const RESIZE_DEBOUNCE_MS = TIMING.resizeDebounce;
 
 export function ImageDetailModal() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
@@ -272,9 +274,6 @@ export function ImageDetailModal() {
     }
   }, [hasNext, imageIds, currentIndex, openImageDetail]);
 
-  const [imageSrc, setImageSrc] = useState<string | null>(null);
-  const [matchedImageSrc, setMatchedImageSrc] = useState<string | null>(null);
-  const [maskSrc, setMaskSrc] = useState<string | null>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const imageContainerRef = useRef<HTMLDivElement>(null);
 
@@ -296,6 +295,10 @@ export function ImageDetailModal() {
   const maskFile = (image && loadedFiles?.hasMasks) ? getMaskFile(loadedFiles?.imageFiles, image.name) : null;
   const hasMask = !!maskFile;
 
+  // Create blob URLs for images with automatic cleanup
+  const imageSrc = useFileUrl(imageFile);
+  const maskSrc = useFileUrl(maskFile);
+
   // Memoize point counts
   const { numPoints2D, numPoints3D } = useMemo(() => {
     if (!image) return { numPoints2D: 0, numPoints3D: 0 };
@@ -307,36 +310,27 @@ export function ImageDetailModal() {
     return { numPoints2D: total, numPoints3D: triangulated };
   }, [image]);
 
-  // Compute connected images (images that share 3D points with current image)
+  // Get connected images from pre-computed index (O(1) lookup instead of O(m*k))
   const connectedImages = useMemo(() => {
-    if (!reconstruction || !image) return [];
+    if (!reconstruction || imageDetailId === null) return [];
 
-    const matchCounts = new Map<number, number>();
-    for (const point2D of image.points2D) {
-      if (point2D.point3DId === BigInt(-1)) continue;
-      const point3D = reconstruction.points3D.get(point2D.point3DId);
-      if (!point3D) continue;
-      for (const trackElem of point3D.track) {
-        if (trackElem.imageId !== imageDetailId) {
-          matchCounts.set(trackElem.imageId,
-            (matchCounts.get(trackElem.imageId) || 0) + 1);
-        }
-      }
-    }
+    const connections = reconstruction.connectedImagesIndex.get(imageDetailId);
+    if (!connections) return [];
 
-    return Array.from(matchCounts.entries())
+    return Array.from(connections.entries())
       .sort((a, b) => b[1] - a[1]) // Sort by match count descending
       .map(([id, count]) => ({
         imageId: id,
         matchCount: count,
         name: reconstruction.images.get(id)?.name || `Image ${id}`
       }));
-  }, [reconstruction, image, imageDetailId]);
+  }, [reconstruction, imageDetailId]);
 
   // Get matched image data
   const matchedImage = matchedImageId !== null ? reconstruction?.images.get(matchedImageId) : null;
   const matchedCamera = matchedImage ? reconstruction?.cameras.get(matchedImage.cameraId) : null;
   const matchedImageFile = matchedImage ? getImageFile(loadedFiles?.imageFiles, matchedImage.name) : null;
+  const matchedImageSrc = useFileUrl(matchedImageFile);
 
   // Compute match lines between current and matched image
   const matchLines = useMemo(() => {
@@ -372,7 +366,7 @@ export function ImageDetailModal() {
 
   // Check if we're in side-by-side match view mode
   const isMatchViewMode = showMatchesInModal && matchedImageId !== null && matchedImage && matchedCamera;
-  const MATCH_VIEW_GAP = 16;
+  const MATCH_VIEW_GAP = GAP.matchView;
 
   // Memoize rendered image dimensions (single image mode)
   const { renderedImageWidth, renderedImageHeight } = useMemo(() => {
@@ -405,31 +399,18 @@ export function ImageDetailModal() {
     }
 
     const halfWidth = (containerSize.width - MATCH_VIEW_GAP) / 2;
-    const containerHeight = containerSize.height;
+    const height = containerSize.height;
+    const containerAspect = halfWidth / height;
 
     // Calculate dimensions for image 1
     const aspect1 = camera.width / camera.height;
-    const containerAspect1 = halfWidth / containerHeight;
-    let image1Width: number, image1Height: number;
-    if (aspect1 > containerAspect1) {
-      image1Width = halfWidth;
-      image1Height = halfWidth / aspect1;
-    } else {
-      image1Height = containerHeight;
-      image1Width = containerHeight * aspect1;
-    }
+    const image1Width = aspect1 > containerAspect ? halfWidth : height * aspect1;
+    const image1Height = aspect1 > containerAspect ? halfWidth / aspect1 : height;
 
     // Calculate dimensions for image 2
     const aspect2 = matchedCamera.width / matchedCamera.height;
-    const containerAspect2 = halfWidth / containerHeight;
-    let image2Width: number, image2Height: number;
-    if (aspect2 > containerAspect2) {
-      image2Width = halfWidth;
-      image2Height = halfWidth / aspect2;
-    } else {
-      image2Height = containerHeight;
-      image2Width = containerHeight * aspect2;
-    }
+    const image2Width = aspect2 > containerAspect ? halfWidth : height * aspect2;
+    const image2Height = aspect2 > containerAspect ? halfWidth / aspect2 : height;
 
     return { image1Width, image1Height, image2Width, image2Height };
   }, [camera, matchedCamera, containerSize.width, containerSize.height]);
@@ -442,51 +423,6 @@ export function ImageDetailModal() {
       setPosition({ x: centerX, y: centerY });
     }
   }, [imageDetailId]);
-
-  // Load image when modal opens
-  useEffect(() => {
-    if (!imageFile) {
-      setImageSrc(null);
-      return;
-    }
-
-    const url = URL.createObjectURL(imageFile);
-    setImageSrc(url);
-
-    return () => {
-      URL.revokeObjectURL(url);
-    };
-  }, [imageFile]);
-
-  // Load matched image when selected
-  useEffect(() => {
-    if (!matchedImageFile) {
-      setMatchedImageSrc(null);
-      return;
-    }
-
-    const url = URL.createObjectURL(matchedImageFile);
-    setMatchedImageSrc(url);
-
-    return () => {
-      URL.revokeObjectURL(url);
-    };
-  }, [matchedImageFile]);
-
-  // Load mask when available
-  useEffect(() => {
-    if (!maskFile) {
-      setMaskSrc(null);
-      return;
-    }
-
-    const url = URL.createObjectURL(maskFile);
-    setMaskSrc(url);
-
-    return () => {
-      URL.revokeObjectURL(url);
-    };
-  }, [maskFile]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -645,10 +581,10 @@ export function ImageDetailModal() {
         onClick={(e) => e.stopPropagation()}
       >
         <div
-          className="flex items-center justify-between px-4 py-2 border-b border-ds cursor-move select-none"
+          className="flex items-center justify-between px-3 py-1 border-b border-ds cursor-move select-none rounded-t-lg"
           onMouseDown={handleDragStart}
         >
-          <h2 className="text-ds-primary font-semibold">
+          <h2 className="text-ds-primary font-semibold text-base">
             {isMatchViewMode
               ? `Image Matches: ${image?.name} ↔ ${matchedImage?.name} (${matchLines.length} matches)`
               : 'Image Information'}
@@ -656,7 +592,7 @@ export function ImageDetailModal() {
           <button
             onClick={closeImageDetail}
             onMouseDown={(e) => e.stopPropagation()}
-            className="text-ds-muted hover:text-ds-primary text-2xl leading-none px-2 cursor-pointer"
+            className={buttonStyles.close}
           >
             ×
           </button>
@@ -762,40 +698,40 @@ export function ImageDetailModal() {
               <div className="flex items-center gap-4">
                 {!isMatchViewMode && (
                   <>
-                    <div className="flex items-center gap-2">
+                    <div className={checkboxGroupStyles.container}>
                       <input
                         type="checkbox"
                         id="showPoints2D"
                         checked={showPoints2D}
                         onChange={(e) => setShowPoints2D(e.target.checked)}
-                        className="w-5 h-5 accent-ds-error"
+                        className={`${checkboxGroupStyles.checkbox} accent-ds-error`}
                       />
-                      <label htmlFor="showPoints2D" className="text-ds-primary text-base">
+                      <label htmlFor="showPoints2D" className={checkboxGroupStyles.label}>
                         Show Points2D <span className="text-ds-error">({numPoints2D - numPoints3D})</span>
                       </label>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className={checkboxGroupStyles.container}>
                       <input
                         type="checkbox"
                         id="showPoints3D"
                         checked={showPoints3D}
                         onChange={(e) => setShowPoints3D(e.target.checked)}
-                        className="w-5 h-5 accent-ds-success"
+                        className={`${checkboxGroupStyles.checkbox} accent-ds-success`}
                       />
-                      <label htmlFor="showPoints3D" className="text-ds-primary text-base">
+                      <label htmlFor="showPoints3D" className={checkboxGroupStyles.label}>
                         Show Points3D <span className="text-ds-success">({numPoints3D})</span>
                       </label>
                     </div>
                     {hasMask && (
-                      <div className="flex items-center gap-2">
+                      <div className={checkboxGroupStyles.container}>
                         <input
                           type="checkbox"
                           id="showMaskOverlay"
                           checked={showMaskOverlay}
                           onChange={(e) => setShowMaskOverlay(e.target.checked)}
-                          className="w-5 h-5 accent-ds-warning"
+                          className={`${checkboxGroupStyles.checkbox} accent-ds-warning`}
                         />
-                        <label htmlFor="showMaskOverlay" className="text-ds-primary text-base">
+                        <label htmlFor="showMaskOverlay" className={checkboxGroupStyles.label}>
                           Show Mask
                         </label>
                         {showMaskOverlay && (
@@ -806,7 +742,7 @@ export function ImageDetailModal() {
                             step="0.1"
                             value={maskOpacity}
                             onChange={(e) => setMaskOpacity(parseFloat(e.target.value))}
-                            className="w-20"
+                            className={`${inputStyles.range.sm} ${inputStyles.range.base}`}
                             title={`Mask opacity: ${Math.round(maskOpacity * 100)}%`}
                           />
                         )}
@@ -815,15 +751,15 @@ export function ImageDetailModal() {
                   </>
                 )}
 
-                <div className="flex items-center gap-2">
+                <div className={checkboxGroupStyles.container}>
                   <input
                     type="checkbox"
                     id="showMatchesInModal"
                     checked={showMatchesInModal}
                     onChange={(e) => setShowMatchesInModal(e.target.checked)}
-                    className="w-5 h-5 accent-ds-success"
+                    className={`${checkboxGroupStyles.checkbox} accent-ds-success`}
                   />
-                  <label htmlFor="showMatchesInModal" className="text-ds-primary text-base">
+                  <label htmlFor="showMatchesInModal" className={checkboxGroupStyles.label}>
                     Show Matches
                   </label>
                 </div>
@@ -832,7 +768,7 @@ export function ImageDetailModal() {
                   <select
                     value={matchedImageId ?? ''}
                     onChange={(e) => setMatchedImageId(e.target.value ? parseInt(e.target.value) : null)}
-                    className="bg-ds-input text-ds-primary text-base px-2 py-1.5 rounded border border-ds focus-ds"
+                    className={`${inputStyles.select} ${inputStyles.sizes.md}`}
                   >
                     <option value="">Select connected image...</option>
                     {connectedImages.map(({ imageId, matchCount, name }) => (
@@ -848,10 +784,8 @@ export function ImageDetailModal() {
                 <button
                   onClick={goToPrev}
                   disabled={!hasPrev}
-                  className={`w-24 py-1.5 rounded text-base ${
-                    hasPrev
-                      ? 'bg-ds-hover hover:bg-ds-elevated text-ds-primary'
-                      : 'bg-ds-secondary text-ds-muted cursor-not-allowed'
+                  className={`${buttonStyles.base} ${buttonStyles.sizes.md} w-24 ${
+                    hasPrev ? buttonStyles.variants.secondary : buttonStyles.disabled + ' bg-ds-secondary text-ds-muted'
                   }`}
                 >
                   ← Prev
@@ -861,7 +795,7 @@ export function ImageDetailModal() {
                     type="text"
                     defaultValue={imageDetailId ?? ''}
                     key={imageDetailId}
-                    className="w-16 px-2 py-1.5 rounded-l text-center bg-ds-input text-ds-primary border border-ds focus-ds"
+                    className={`${inputStyles.base} ${inputStyles.sizes.md} w-16 rounded-l rounded-r-none text-center`}
                     onKeyDown={(e) => {
                       e.stopPropagation();
                       if (e.key === 'Enter') {
@@ -886,10 +820,8 @@ export function ImageDetailModal() {
                 <button
                   onClick={goToNext}
                   disabled={!hasNext}
-                  className={`w-24 py-1.5 rounded text-base ${
-                    hasNext
-                      ? 'bg-ds-hover hover:bg-ds-elevated text-ds-primary'
-                      : 'bg-ds-secondary text-ds-muted cursor-not-allowed'
+                  className={`${buttonStyles.base} ${buttonStyles.sizes.md} w-24 ${
+                    hasNext ? buttonStyles.variants.secondary : buttonStyles.disabled + ' bg-ds-secondary text-ds-muted'
                   }`}
                 >
                   Next →
@@ -921,9 +853,9 @@ interface InfoRowProps {
 
 function InfoRow({ label, value, valueColor = 'text-ds-primary', multiline = false }: InfoRowProps) {
   return (
-    <tr className="border-b border-ds-subtle">
-      <td className="px-3 py-2 text-ds-secondary align-top whitespace-nowrap">{label}</td>
-      <td className={`px-3 py-2 ${valueColor} ${multiline ? 'break-all' : ''}`}>
+    <tr className={tableStyles.row}>
+      <td className={`${tableStyles.headerCell} align-top whitespace-nowrap`}>{label}</td>
+      <td className={`${tableStyles.cell} ${valueColor !== 'text-ds-primary' ? valueColor : ''} ${multiline ? 'break-all' : ''}`}>
         {value}
       </td>
     </tr>

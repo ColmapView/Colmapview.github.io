@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useReconstructionStore, useViewerStore } from '../../store';
 import type { Point3D } from '../../types/colmap';
+import { SRGB, RAINBOW, VIZ_COLORS, COLORMAP, BRIGHTNESS } from '../../theme';
 
 // Reusable Color object to avoid allocations in animation loop
 const tempColor = new THREE.Color();
@@ -10,25 +11,28 @@ const tempColor = new THREE.Color();
 // Cycle through dark saturated colors (no white transition)
 function rainbowColor(t: number): THREE.Color {
   const hue = t % 1;
-  return tempColor.setHSL(hue, 1.0, 0.4);
+  return tempColor.setHSL(hue, RAINBOW.saturation, RAINBOW.lightness);
 }
 
 function jetColormap(t: number): [number, number, number] {
+  const { threshold1, threshold2, threshold3, multiplier } = COLORMAP.jet;
   t = Math.max(0, Math.min(1, t));
-  if (t < 0.25) {
-    return [0, t * 4, 1];
-  } else if (t < 0.5) {
-    return [0, 1, 1 - (t - 0.25) * 4];
-  } else if (t < 0.75) {
-    return [(t - 0.5) * 4, 1, 0];
+  if (t < threshold1) {
+    return [0, t * multiplier, 1];
+  } else if (t < threshold2) {
+    return [0, 1, 1 - (t - threshold1) * multiplier];
+  } else if (t < threshold3) {
+    return [(t - threshold2) * multiplier, 1, 0];
   } else {
-    return [1, 1 - (t - 0.75) * 4, 0];
+    return [1, 1 - (t - threshold3) * multiplier, 0];
   }
 }
 
 // Convert sRGB to linear color space (Three.js expects linear vertex colors)
 function sRGBToLinear(c: number): number {
-  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  return c <= SRGB.threshold
+    ? c / SRGB.linearScale
+    : Math.pow((c + SRGB.gammaOffset) / SRGB.gammaScale, SRGB.gamma);
 }
 
 export function PointCloud() {
@@ -46,7 +50,7 @@ export function PointCloud() {
   // Update rainbow color directly in useFrame without triggering re-renders
   useFrame((_, delta) => {
     if (rainbowMode && selectedImageId !== null && selectedMaterialRef.current) {
-      rainbowHueRef.current = (rainbowHueRef.current + delta * rainbowSpeed * 0.5) % 1;
+      rainbowHueRef.current = (rainbowHueRef.current + delta * rainbowSpeed * RAINBOW.speedMultiplier) % 1;
       selectedMaterialRef.current.color.copy(rainbowColor(rainbowHueRef.current));
     }
   });
@@ -59,7 +63,9 @@ export function PointCloud() {
       selectedMaterialRef.current.color.copy(rainbowColor(rainbowHueRef.current));
       selectedMaterialRef.current.needsUpdate = true;
     } else {
-      selectedMaterialRef.current.vertexColors = true;
+      // Reset to magenta when rainbow mode is disabled
+      selectedMaterialRef.current.vertexColors = false;
+      selectedMaterialRef.current.color.setRGB(VIZ_COLORS.highlight[0], VIZ_COLORS.highlight[1], VIZ_COLORS.highlight[2]);
       selectedMaterialRef.current.needsUpdate = true;
     }
   }, [rainbowMode]);
@@ -113,21 +119,22 @@ export function PointCloud() {
     if (minError === maxError) maxError = minError + 1;
     if (minTrack === maxTrack) maxTrack = minTrack + 1;
 
-    const HIGHLIGHT_COLOR: [number, number, number] = [1, 0, 1];
+    const HIGHLIGHT_COLOR = VIZ_COLORS.highlight;
 
     const computeColor = (point: Point3D, mode: string): [number, number, number] => {
       if (mode === 'error') {
         const errorNorm = point.error >= 0 ? (point.error - minError) / (maxError - minError) : 0;
         return jetColormap(errorNorm);
       } else if (mode === 'trackLength') {
+        const { baseR, rangeR, baseG, rangeG, baseB, rangeB } = COLORMAP.trackLength;
         const trackNorm = (point.track.length - minTrack) / (maxTrack - minTrack);
-        return [0.1 + trackNorm * 0.1, 0.1 + trackNorm * 0.9, 0.5 - trackNorm * 0.2];
+        return [baseR + trackNorm * rangeR, baseG + trackNorm * rangeG, baseB - trackNorm * rangeB];
       }
       // Convert sRGB colors from COLMAP to linear space for proper rendering
       return [
-        sRGBToLinear(point.rgb[0] / 255),
-        sRGBToLinear(point.rgb[1] / 255),
-        sRGBToLinear(point.rgb[2] / 255),
+        sRGBToLinear(point.rgb[0] / BRIGHTNESS.max),
+        sRGBToLinear(point.rgb[1] / BRIGHTNESS.max),
+        sRGBToLinear(point.rgb[2] / BRIGHTNESS.max),
       ];
     };
 
@@ -207,7 +214,8 @@ export function PointCloud() {
           <pointsMaterial
             ref={selectedMaterialRef}
             size={pointSize + 1}
-            vertexColors={!rainbowMode}
+            vertexColors={false}
+            color={VIZ_COLORS.frustum.selected}
             sizeAttenuation={false}
           />
         </points>

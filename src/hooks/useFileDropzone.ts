@@ -6,10 +6,13 @@ import {
   parseImagesText,
   parseCamerasBinary,
   parseCamerasText,
+  computeImageStats,
 } from '../parsers';
 import { useReconstructionStore, useViewerStore } from '../store';
 import type { Reconstruction } from '../types/colmap';
-import { collectImageFiles, hasMaskFiles } from '../utils/imageFileUtils';
+import { collectImageFiles, hasMaskFiles, getImageFile } from '../utils/imageFileUtils';
+import { prefetchThumbnails, clearThumbnailCache } from './useThumbnail';
+import { clearFrustumTextureCache } from './useFrustumTexture';
 
 export function useFileDropzone() {
   const {
@@ -19,6 +22,7 @@ export function useFileDropzone() {
     setLoading,
     setError,
     setProgress,
+    clear,
   } = useReconstructionStore();
   const resetView = useViewerStore((s) => s.resetView);
   const setSelectedImageId = useViewerStore((s) => s.setSelectedImageId);
@@ -126,8 +130,11 @@ export function useFileDropzone() {
   }, []);
 
   const processFiles = useCallback(async (files: Map<string, File>) => {
+    // Clear existing dataset and caches first
+    clear();
+    clearThumbnailCache();
+    clearFrustumTextureCache();
     setLoading(true);
-    setError(null);
     setProgress(0);
 
     try {
@@ -160,33 +167,52 @@ export function useFileDropzone() {
       setProgress(10);
 
       // Parse cameras
-      const camerasBuffer = await camerasFile.arrayBuffer();
-      const isCamerasBinary = camerasFile.name.endsWith('.bin');
-      const cameras = isCamerasBinary
-        ? parseCamerasBinary(camerasBuffer)
+      const cameras = camerasFile.name.endsWith('.bin')
+        ? parseCamerasBinary(await camerasFile.arrayBuffer())
         : parseCamerasText(await camerasFile.text());
 
-      setProgress(30);
+      setProgress(15);
 
       // Parse images
-      const imagesBuffer = await imagesFile.arrayBuffer();
-      const isImagesBinary = imagesFile.name.endsWith('.bin');
-      const images = isImagesBinary
-        ? parseImagesBinary(imagesBuffer)
+      const images = imagesFile.name.endsWith('.bin')
+        ? parseImagesBinary(await imagesFile.arrayBuffer())
         : parseImagesText(await imagesFile.text());
 
-      setProgress(60);
+      setProgress(25);
 
       // Parse points3D
-      const pointsBuffer = await points3DFile.arrayBuffer();
-      const isPointsBinary = points3DFile.name.endsWith('.bin');
-      const points3D = isPointsBinary
-        ? parsePoints3DBinary(pointsBuffer)
+      const points3D = points3DFile.name.endsWith('.bin')
+        ? parsePoints3DBinary(await points3DFile.arrayBuffer())
         : parsePoints3DText(await points3DFile.text());
 
-      setProgress(90);
+      setProgress(40);
 
-      const reconstruction: Reconstruction = { cameras, images, points3D };
+      // Pre-compute image statistics and connected images index
+      const { imageStats, connectedImagesIndex } = computeImageStats(images, points3D);
+
+      const reconstruction: Reconstruction = { cameras, images, points3D, imageStats, connectedImagesIndex };
+
+      setProgress(45);
+
+      // Prefetch thumbnails for all images (progress 45-95%, ~50% of total)
+      const imagesToPrefetch: Array<{ file: File; name: string }> = [];
+      for (const image of images.values()) {
+        const file = getImageFile(imageFiles, image.name);
+        if (file) {
+          imagesToPrefetch.push({ file, name: image.name });
+        }
+      }
+
+      if (imagesToPrefetch.length > 0) {
+        await prefetchThumbnails(imagesToPrefetch, (thumbProgress) => {
+          // Scale thumbnail progress from 45% to 95% (50% of total progress)
+          setProgress(45 + Math.round(thumbProgress * 50));
+        });
+      }
+
+      setProgress(95);
+
+      // Set reconstruction (this will set progress to 100 and loading to false)
       setReconstruction(reconstruction);
 
       // Reset viewer state for new reconstruction
@@ -194,7 +220,7 @@ export function useFileDropzone() {
       resetView();
 
       console.log(
-        `Loaded: ${cameras.size} cameras, ${images.size} images, ${points3D.size} points`
+        `Loaded: ${cameras.size} cameras, ${images.size} images, ${points3D.size} points, ${imagesToPrefetch.length} thumbnails cached`
       );
 
     } catch (err) {
@@ -204,6 +230,7 @@ export function useFileDropzone() {
       setLoading(false);
     }
   }, [
+    clear,
     setReconstruction,
     setLoadedFiles,
     setDroppedFiles,

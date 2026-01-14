@@ -1,6 +1,10 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
-import { useReconstructionStore, useViewerStore } from '../../store';
+import { useMemo, useState, useEffect, useRef, memo, startTransition } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { useReconstructionStore } from '../../store';
 import { getImageFile } from '../../utils/imageFileUtils';
+import { useThumbnail } from '../../hooks/useThumbnail';
+import { useImageSelection } from '../../hooks/useImageSelection';
+import { COLUMNS, GAP, SIZE, TIMING, ASPECT_RATIO, buttonStyles, getTooltipProps, galleryStyles, listStyles, inputStyles } from '../../theme';
 
 type ViewMode = 'gallery' | 'list';
 
@@ -28,7 +32,7 @@ function ListIcon({ className }: { className?: string }) {
   );
 }
 
-interface ImageItemProps {
+interface ImageData {
   imageId: number;
   name: string;
   file?: File;
@@ -39,182 +43,122 @@ interface ImageItemProps {
   cameraHeight: number;
   covisibleCount: number;
   avgError: number;
-  onClick: () => void;
-  onDoubleClick: () => void;
-  onContextMenu: () => void;
-  isSelected: boolean;
-  itemRef?: React.RefObject<HTMLDivElement>;
-  viewMode: ViewMode;
 }
 
-function ImageItem({ imageId, name, file, numPoints2D, numPoints3D, cameraId: _cameraId, cameraWidth, cameraHeight, covisibleCount, avgError, onClick, onDoubleClick, onContextMenu, isSelected, itemRef, viewMode }: ImageItemProps) {
-  void _cameraId; // Reserved for future use
-  const [src, setSrc] = useState<string | null>(null);
-  const localRef = useRef<HTMLDivElement>(null);
+interface GalleryItemProps {
+  img: ImageData;
+  isSelected: boolean;
+  onClick: (id: number) => void;
+  onDoubleClick: (id: number) => void;
+  onContextMenu: (id: number) => void;
+  aspectRatio: number;
+  isScrolling: boolean;
+}
 
-  const setRef = (el: HTMLDivElement | null) => {
-    (localRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-    if (itemRef) {
-      (itemRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-    }
-  };
+const GalleryItem = memo(function GalleryItem({ img, isSelected, onClick, onDoubleClick, onContextMenu, aspectRatio, isScrolling }: GalleryItemProps) {
+  // Use async thumbnail loading - decodes off-main-thread to avoid blocking orbit controls
+  const src = useThumbnail(img.file, img.name, !isScrolling);
 
-  useEffect(() => {
-    if (!file || !localRef.current) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          const url = URL.createObjectURL(file);
-          setSrc(url);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: '100px' }
-    );
-
-    observer.observe(localRef.current);
-
-    return () => {
-      observer.disconnect();
-      if (src) {
-        URL.revokeObjectURL(src);
-      }
-    };
-  }, [file]);
-
-  if (viewMode === 'list') {
-    return (
-      <div
-        ref={setRef}
-        onClick={onClick}
-        onDoubleClick={onDoubleClick}
-        onContextMenu={(e) => { e.preventDefault(); onContextMenu(); }}
-        className={`
-          flex items-start gap-2 px-2 py-1 rounded cursor-pointer group
-          border transition-colors
-          ${isSelected ? 'border-ds-frustum-selected bg-ds-tertiary' : 'border-transparent hover:bg-ds-tertiary'}
-        `}
-      >
-        {/* Thumbnail */}
-        <div className="w-14 h-14 flex-shrink-0 bg-ds-hover rounded overflow-hidden">
-          {src ? (
-            <img src={src} alt={name} className="w-full h-full object-cover" draggable={false} />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-ds-muted text-base">
-              {imageId}
-            </div>
-          )}
-        </div>
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <div className="text-ds-primary text-base truncate flex-1" title={name}>{name}</div>
-            {/* Expand button */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDoubleClick();
-              }}
-              className="flex-shrink-0 w-6 h-6 rounded bg-ds-hover hover:bg-ds-elevated text-ds-secondary hover:text-ds-primary flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-              data-tooltip="View details"
-              data-tooltip-pos="bottom"
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-              </svg>
-            </button>
-          </div>
-          <div className="text-ds-muted text-base leading-tight whitespace-nowrap">
-            #{imageId} · {cameraWidth}×{cameraHeight} · <span className="text-ds-success">{numPoints3D}</span>/<span className="text-ds-secondary">{numPoints2D}</span> · <span className="text-ds-warning">{covisibleCount}</span> img · <span className="text-ds-warning">{avgError.toFixed(2)}px</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Gallery view (default)
   return (
     <div
-      ref={setRef}
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
-      onContextMenu={(e) => { e.preventDefault(); onContextMenu(); }}
-      className={`
-        aspect-square bg-ds-tertiary rounded cursor-pointer overflow-hidden relative group
-        border-2 transition-colors
-        ${isSelected ? 'border-ds-frustum-selected' : 'border-transparent hover:border-ds-light'}
-      `}
-      title={`${name} (ID: ${imageId})`}
+      style={{ aspectRatio }}
+      onClick={() => onClick(img.imageId)}
+      onDoubleClick={() => onDoubleClick(img.imageId)}
+      onContextMenu={(e) => { e.preventDefault(); onContextMenu(img.imageId); }}
+      className={`${galleryStyles.item} ${isSelected ? galleryStyles.itemSelected : galleryStyles.itemHover}`}
+      title={`${img.name} (ID: ${img.imageId})\nDouble-click: image info`}
     >
       {src ? (
-        <img
-          src={src}
-          alt={name}
-          className="w-full h-full object-cover"
-          loading="lazy"
-          draggable={false}
-        />
+        <img src={src} alt={img.name} className="absolute inset-0 w-full h-full object-contain" draggable={false} />
       ) : (
-        <div className="w-full h-full flex items-center justify-center text-ds-muted text-base p-1 text-center">
-          {name}
+        <div className={galleryStyles.placeholder}>
+          {isScrolling ? '...' : img.name}
         </div>
       )}
-      {/* Expand button */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onDoubleClick();
-        }}
-        className="absolute top-1.5 right-1.5 z-10 w-6 h-6 rounded bg-ds-hover hover:bg-ds-elevated text-ds-secondary hover:text-ds-primary flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-        data-tooltip="View details"
-        data-tooltip-pos="left"
-      >
-        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-        </svg>
-      </button>
-      {/* Shadow gradient overlay */}
-      <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-black/70 via-black/30 to-transparent pointer-events-none" />
       {/* Info overlay */}
-      <div className="absolute bottom-0 left-0 right-0 px-1.5 py-1.5 overflow-hidden">
-        <div className="text-ds-primary text-base truncate" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8), 0 2px 8px rgba(0,0,0,0.6)' }}>{name}</div>
-        <div className="text-ds-secondary text-base truncate" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8), 0 2px 8px rgba(0,0,0,0.6)' }}>
-          {imageId} · <span className="text-ds-success">{numPoints3D}</span>/{numPoints2D}
-        </div>
+      <div className={galleryStyles.overlay}>
+        <div className="text-white text-sm truncate">{img.name}</div>
       </div>
     </div>
   );
+});
+
+type ListItemProps = Omit<GalleryItemProps, 'aspectRatio'>;
+
+const ListItem = memo(function ListItem({ img, isSelected, onClick, onDoubleClick, onContextMenu, isScrolling }: ListItemProps) {
+  const src = useThumbnail(img.file, img.name, !isScrolling);
+
+  return (
+    <div
+      onClick={() => onClick(img.imageId)}
+      onDoubleClick={() => onDoubleClick(img.imageId)}
+      onContextMenu={(e) => { e.preventDefault(); onContextMenu(img.imageId); }}
+      style={{ height: SIZE.listRowHeight }}
+      className={`${listStyles.item} px-3 ${isSelected ? listStyles.itemSelected : listStyles.itemHover}`}
+      title="Double-click: image info"
+    >
+      <div className={`${listStyles.thumbnail} w-14 h-14`}>
+        {src ? (
+          <img src={src} alt={img.name} className="w-full h-full object-cover" draggable={false} />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-ds-muted text-xs">{img.imageId}</div>
+        )}
+      </div>
+      <div className={listStyles.content}>
+        <div className={`${listStyles.title} font-medium`}>{img.name}</div>
+        <div className={listStyles.subtitle}>ID {img.imageId} · Camera {img.cameraId} ({img.cameraWidth}×{img.cameraHeight})</div>
+      </div>
+      <div className="flex-shrink-0 text-right">
+        <div className="text-ds-primary text-sm">{img.numPoints3D}<span className="text-ds-muted">/{img.numPoints2D}</span></div>
+        <div className="text-ds-muted text-xs">3D/2D pts</div>
+      </div>
+      <div className="flex-shrink-0 text-right w-16">
+        <div className="text-ds-primary text-sm">{img.covisibleCount}</div>
+        <div className="text-ds-muted text-xs">covisible</div>
+      </div>
+      <div className="flex-shrink-0 text-right w-16">
+        <div className="text-ds-primary text-sm">{img.avgError.toFixed(2)}</div>
+        <div className="text-ds-muted text-xs">avg err</div>
+      </div>
+    </div>
+  );
+});
+
+function chunkArray<T>(array: T[], chunkSize: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < array.length; i += chunkSize) {
+    result.push(array.slice(i, i + chunkSize));
+  }
+  return result;
 }
 
-const MIN_COLUMNS = 1;
-const MAX_COLUMNS = 10;
-const DEFAULT_LIST_MIN_WIDTH = 420;
+function getViewModeButtonClass(isActive: boolean): string {
+  const base = `${buttonStyles.base} ${buttonStyles.sizes.icon}`;
+  return isActive
+    ? `${base} ${buttonStyles.variants.toggleActive}`
+    : `${base} ${buttonStyles.variants.toggle}`;
+}
 
 export function ImageGallery() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
-  const selectedImageId = useViewerStore((s) => s.selectedImageId);
-  const setSelectedImageId = useViewerStore((s) => s.setSelectedImageId);
-  const openImageDetail = useViewerStore((s) => s.openImageDetail);
-  const flyToImage = useViewerStore((s) => s.flyToImage);
-  const itemRefs = useRef<Map<number, React.RefObject<HTMLDivElement>>>(new Map());
+  const { selectedImageId, handleClick, handleDoubleClick, handleContextMenu } = useImageSelection();
   const [viewMode, setViewMode] = useState<ViewMode>('gallery');
-  const [galleryColumns, setGalleryColumns] = useState(4);
+  const [galleryColumns, setGalleryColumns] = useState<number>(COLUMNS.default);
   const [cameraFilter, setCameraFilter] = useState<number | 'all'>('all');
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Clear refs and reset filter when reconstruction changes
+  // Reset camera filter when reconstruction changes
   useEffect(() => {
-    itemRefs.current.clear();
     setCameraFilter('all');
   }, [reconstruction]);
 
-  // Get list of available cameras
   const cameras = useMemo(() => {
     if (!reconstruction) return [];
     return Array.from(reconstruction.cameras.values()).sort((a, b) => a.cameraId - b.cameraId);
   }, [reconstruction]);
+
+  const imageFiles = loadedFiles?.imageFiles;
 
   const images = useMemo(() => {
     if (!reconstruction) return [];
@@ -222,88 +166,114 @@ export function ImageGallery() {
     return Array.from(reconstruction.images.values())
       .filter((img) => cameraFilter === 'all' || img.cameraId === cameraFilter)
       .map((img) => {
-        let numPoints3D = 0;
-        let totalError = 0;
-        let errorCount = 0;
-        const covisibleSet = new Set<number>();
-
-        for (const p of img.points2D) {
-          if (p.point3DId !== BigInt(-1)) {
-            numPoints3D++;
-            const point3D = reconstruction.points3D.get(p.point3DId);
-            if (point3D) {
-              if (point3D.error >= 0) {
-                totalError += point3D.error;
-                errorCount++;
-              }
-              // Count covisible images
-              for (const track of point3D.track) {
-                if (track.imageId !== img.imageId) {
-                  covisibleSet.add(track.imageId);
-                }
-              }
-            }
-          }
-        }
-
+        const stats = reconstruction.imageStats.get(img.imageId);
         const camera = reconstruction.cameras.get(img.cameraId);
+
         return {
           imageId: img.imageId,
           name: img.name,
-          file: getImageFile(loadedFiles?.imageFiles, img.name),
+          file: getImageFile(imageFiles, img.name),
           numPoints2D: img.points2D.length,
-          numPoints3D,
+          numPoints3D: stats?.numPoints3D ?? 0,
           cameraId: img.cameraId,
           cameraWidth: camera?.width ?? 0,
           cameraHeight: camera?.height ?? 0,
-          covisibleCount: covisibleSet.size,
-          avgError: errorCount > 0 ? totalError / errorCount : 0,
+          covisibleCount: stats?.covisibleCount ?? 0,
+          avgError: stats?.avgError ?? 0,
         };
       });
-  }, [reconstruction, loadedFiles, cameraFilter]);
+  }, [reconstruction, imageFiles, cameraFilter]);
 
-  // Create refs for each image
-  const getRef = (imageId: number) => {
-    if (!itemRefs.current.has(imageId)) {
-      itemRefs.current.set(imageId, { current: null } as unknown as React.RefObject<HTMLDivElement>);
-    }
-    return itemRefs.current.get(imageId)!;
-  };
+  // Handle shift+scroll to zoom with debouncing for performance
+  const pendingColumnChange = useRef<number | null>(null);
+  const wheelTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Scroll to selected image when it changes
-  useEffect(() => {
-    if (selectedImageId !== null) {
-      const ref = itemRefs.current.get(selectedImageId);
-      if (ref?.current) {
-        ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }
-  }, [selectedImageId]);
-
-  // Handle shift+scroll to zoom (gallery only)
-  // Note: reconstruction in deps ensures effect re-runs when container first mounts
   useEffect(() => {
     const container = containerRef.current;
     if (!container || viewMode !== 'gallery') return;
 
     const handleWheel = (e: WheelEvent) => {
-      if (e.shiftKey) {
-        e.preventDefault();
-        setGalleryColumns((prev) => {
-          if (e.deltaY > 0) {
-            // Scroll down = zoom out (more columns)
-            return Math.min(MAX_COLUMNS, prev + 1);
-          } else {
-            // Scroll up = zoom in (fewer columns)
-            return Math.max(MIN_COLUMNS, prev - 1);
-          }
-        });
+      // Only intercept shift+scroll, let regular scroll be handled normally
+      if (!e.shiftKey) return;
+      e.preventDefault();
+
+      // Calculate new column value
+      const delta = e.deltaY > 0 ? 1 : -1;
+      const currentColumns = pendingColumnChange.current ?? galleryColumns;
+      const newColumns = Math.max(COLUMNS.min, Math.min(COLUMNS.max, currentColumns + delta));
+      pendingColumnChange.current = newColumns;
+
+      // Debounce with setTimeout for better batching
+      if (wheelTimeoutRef.current !== null) {
+        clearTimeout(wheelTimeoutRef.current);
       }
+
+      wheelTimeoutRef.current = setTimeout(() => {
+        const finalColumns = pendingColumnChange.current;
+        pendingColumnChange.current = null;
+        wheelTimeoutRef.current = null;
+
+        if (finalColumns !== null && finalColumns !== galleryColumns) {
+          startTransition(() => {
+            setGalleryColumns(finalColumns);
+          });
+        }
+      }, TIMING.wheelDebounce);
     };
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
-  }, [viewMode, reconstruction]);
+    container.addEventListener('wheel', handleWheel, { passive: false, capture: true });
+    return () => {
+      container.removeEventListener('wheel', handleWheel, { capture: true });
+      if (wheelTimeoutRef.current !== null) {
+        clearTimeout(wheelTimeoutRef.current);
+      }
+    };
+  }, [viewMode, galleryColumns]);
+
+  // Aspect ratio from first image's camera (single source of truth for gallery item sizing)
+  const aspectRatio = useMemo(() => {
+    const firstImg = images[0];
+    return firstImg && firstImg.cameraWidth > 0 && firstImg.cameraHeight > 0
+      ? firstImg.cameraWidth / firstImg.cameraHeight
+      : ASPECT_RATIO.landscape;
+  }, [images]);
+
+  // Grid layout: organize images into rows
+  const rows = useMemo(() => chunkArray(images, galleryColumns), [images, galleryColumns]);
+  const listRows = useMemo(() => images.map(img => [img]), [images]); // 1 item per row for list view
+
+  // Row virtualizer for gallery grid - uses measureElement for actual row heights
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => containerRef.current,
+    estimateSize: () => SIZE.defaultCellHeight + GAP.gallery, // Estimate, actual size from measureElement
+    overscan: TIMING.galleryOverscan,
+  });
+
+  // List virtualizer - fixed row height
+  const listVirtualizer = useVirtualizer({
+    count: listRows.length,
+    getScrollElement: () => containerRef.current,
+    estimateSize: () => SIZE.listRowHeight + GAP.gallery,
+    overscan: TIMING.listOverscan,
+  });
+
+  // Scroll to selected image when selection changes (e.g., from 3D viewer frustum click)
+  useEffect(() => {
+    if (selectedImageId === null) return;
+
+    // Find the index of the selected image
+    const imageIndex = images.findIndex((img) => img.imageId === selectedImageId);
+    if (imageIndex === -1) return;
+
+    if (viewMode === 'gallery') {
+      const rowIndex = Math.floor(imageIndex / galleryColumns);
+      rowVirtualizer.scrollToIndex(rowIndex, { align: 'center', behavior: 'smooth' });
+    } else {
+      // List view: 1 item per row, so rowIndex === imageIndex
+      listVirtualizer.scrollToIndex(imageIndex, { align: 'center', behavior: 'smooth' });
+    }
+  }, [selectedImageId, images, viewMode, galleryColumns, rowVirtualizer, listVirtualizer]);
 
   if (!reconstruction) {
     return (
@@ -322,15 +292,14 @@ export function ImageGallery() {
   }
 
   return (
-    <div ref={containerRef} className="h-full flex flex-col bg-ds-secondary">
+    <div className="h-full flex flex-col bg-ds-secondary">
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2 p-2 border-b border-ds bg-ds-tertiary">
         <div className="flex items-center gap-2">
-          {/* Camera filter */}
           <select
             value={cameraFilter}
             onChange={(e) => setCameraFilter(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-            className="bg-ds-input text-ds-primary text-base rounded px-2 py-1.5 border border-ds"
+            className={`${inputStyles.select} ${inputStyles.sizes.md}`}
           >
             <option value="all">All Cameras ({cameras.length})</option>
             {cameras.map((cam) => (
@@ -342,23 +311,19 @@ export function ImageGallery() {
           <span className="text-ds-muted text-base">{images.length} images</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-ds-muted text-base">{viewMode === 'gallery' ? 'Shift+Scroll to zoom' : ''}</span>
+          {viewMode === 'gallery' && <span className="text-ds-muted text-base">Shift+Scroll to zoom</span>}
           <div className="flex items-center gap-1">
             <button
               onClick={() => setViewMode('gallery')}
-              className={`p-1.5 rounded transition-colors ${
-                viewMode === 'gallery' ? 'bg-ds-accent text-ds-void' : 'text-ds-secondary hover:text-ds-primary hover:bg-ds-hover'
-              }`}
-              title="Gallery view"
+              className={getViewModeButtonClass(viewMode === 'gallery')}
+              {...getTooltipProps('Gallery view', 'bottom')}
             >
               <GridIcon className="w-4 h-4" />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-1.5 rounded transition-colors ${
-                viewMode === 'list' ? 'bg-ds-accent text-ds-void' : 'text-ds-secondary hover:text-ds-primary hover:bg-ds-hover'
-              }`}
-              title="List view"
+              className={getViewModeButtonClass(viewMode === 'list')}
+              {...getTooltipProps('List view', 'bottom')}
             >
               <ListIcon className="w-4 h-4" />
             </button>
@@ -366,38 +331,91 @@ export function ImageGallery() {
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto p-2">
-        <div
-          className="grid gap-2"
-          style={{
-            gridTemplateColumns: viewMode === 'gallery'
-              ? `repeat(${galleryColumns}, 1fr)`
-              : `repeat(auto-fill, minmax(${DEFAULT_LIST_MIN_WIDTH}px, 1fr))`
-          }}
-        >
-          {images.map((img) => (
-            <ImageItem
-              key={img.imageId}
-              imageId={img.imageId}
-              name={img.name}
-              file={img.file}
-              numPoints2D={img.numPoints2D}
-              numPoints3D={img.numPoints3D}
-              cameraId={img.cameraId}
-              cameraWidth={img.cameraWidth}
-              cameraHeight={img.cameraHeight}
-              covisibleCount={img.covisibleCount}
-              avgError={img.avgError}
-              onClick={() => setSelectedImageId(img.imageId)}
-              onDoubleClick={() => openImageDetail(img.imageId)}
-              onContextMenu={() => flyToImage(img.imageId)}
-              isSelected={selectedImageId === img.imageId}
-              itemRef={getRef(img.imageId)}
-              viewMode={viewMode}
-            />
-          ))}
-        </div>
+      {/* Virtualized Content - flex-1 gets height from parent flex container */}
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-auto min-h-0 relative p-2"
+      >
+        {viewMode === 'gallery' ? (
+            // Gallery Grid View - virtualize rows
+            <div
+              style={{
+                height: rowVirtualizer.getTotalSize(),
+                width: '100%',
+                position: 'relative',
+              }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const rowImages = rows[virtualRow.index];
+                return (
+                  <div
+                    key={virtualRow.key}
+                    ref={rowVirtualizer.measureElement}
+                    data-index={virtualRow.index}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${virtualRow.start}px)`,
+                      display: 'grid',
+                      gridTemplateColumns: `repeat(${galleryColumns}, 1fr)`,
+                      gap: GAP.gallery,
+                      willChange: 'transform',
+                    }}
+                  >
+                    {rowImages.map((img) => (
+                      <GalleryItem
+                        key={img.imageId}
+                        img={img}
+                        isSelected={selectedImageId === img.imageId}
+                        onClick={handleClick}
+                        onDoubleClick={handleDoubleClick}
+                        onContextMenu={handleContextMenu}
+                        aspectRatio={aspectRatio}
+                        isScrolling={rowVirtualizer.isScrolling}
+                      />
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            // List View - 1 item per row
+            <div
+              style={{
+                height: listVirtualizer.getTotalSize(),
+                width: '100%',
+                position: 'relative',
+              }}
+            >
+              {listVirtualizer.getVirtualItems().map((virtualRow) => {
+                const img = listRows[virtualRow.index][0];
+                return (
+                  <div
+                    key={virtualRow.key}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${virtualRow.start}px)`,
+                      willChange: 'transform',
+                    }}
+                  >
+                    <ListItem
+                      img={img}
+                      isSelected={selectedImageId === img.imageId}
+                      onClick={handleClick}
+                      onDoubleClick={handleDoubleClick}
+                      onContextMenu={handleContextMenu}
+                      isScrolling={listVirtualizer.isScrolling}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
       </div>
     </div>
   );

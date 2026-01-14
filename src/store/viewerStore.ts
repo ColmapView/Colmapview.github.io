@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ColorMode } from '../types/colmap';
 
+export type CameraMode = 'orbit' | 'fly';
+
 interface ViewerState {
   pointSize: number;
   colorMode: ColorMode;
@@ -29,6 +31,8 @@ interface ViewerState {
   flyToImageId: number | null;
   showMaskOverlay: boolean;
   maskOpacity: number;
+  cameraMode: CameraMode;
+  flySpeed: number;
 
   setPointSize: (size: number) => void;
   setColorMode: (mode: ColorMode) => void;
@@ -36,6 +40,7 @@ interface ViewerState {
   setCameraScale: (scale: number) => void;
   setSelectedPointId: (id: bigint | null) => void;
   setSelectedImageId: (id: number | null) => void;
+  toggleSelectedImageId: (id: number) => void;
   setAutoRotate: (autoRotate: boolean) => void;
   setBackgroundColor: (color: string) => void;
   setMinTrackLength: (length: number) => void;
@@ -58,6 +63,8 @@ interface ViewerState {
   clearFlyTo: () => void;
   setShowMaskOverlay: (show: boolean) => void;
   setMaskOpacity: (opacity: number) => void;
+  setCameraMode: (mode: CameraMode) => void;
+  setFlySpeed: (speed: number) => void;
 }
 
 export const useViewerStore = create<ViewerState>()(
@@ -89,6 +96,8 @@ export const useViewerStore = create<ViewerState>()(
       flyToImageId: null,
       showMaskOverlay: false,
       maskOpacity: 0.7,
+      cameraMode: 'orbit',
+      flySpeed: 1,
 
       setPointSize: (pointSize) => set({ pointSize }),
       setColorMode: (colorMode) => set({ colorMode }),
@@ -96,6 +105,9 @@ export const useViewerStore = create<ViewerState>()(
       setCameraScale: (cameraScale) => set({ cameraScale }),
       setSelectedPointId: (selectedPointId) => set({ selectedPointId }),
       setSelectedImageId: (selectedImageId) => set({ selectedImageId }),
+      toggleSelectedImageId: (id) => set((state) => ({
+        selectedImageId: state.selectedImageId === id ? null : id
+      })),
       setAutoRotate: (autoRotate) => set({ autoRotate }),
       setBackgroundColor: (backgroundColor) => set({ backgroundColor }),
       setMinTrackLength: (minTrackLength) => set({ minTrackLength }),
@@ -118,6 +130,8 @@ export const useViewerStore = create<ViewerState>()(
       clearFlyTo: () => set({ flyToImageId: null }),
       setShowMaskOverlay: (showMaskOverlay) => set({ showMaskOverlay }),
       setMaskOpacity: (maskOpacity) => set({ maskOpacity }),
+      setCameraMode: (cameraMode) => set({ cameraMode }),
+      setFlySpeed: (flySpeed) => set({ flySpeed }),
     }),
     {
       name: 'colmap-viewer-settings',
@@ -142,6 +156,8 @@ export const useViewerStore = create<ViewerState>()(
         showPoints3D: state.showPoints3D,
         showMaskOverlay: state.showMaskOverlay,
         maskOpacity: state.maskOpacity,
+        cameraMode: state.cameraMode,
+        flySpeed: state.flySpeed,
       }),
     }
   )

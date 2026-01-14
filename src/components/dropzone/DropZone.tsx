@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { useReconstructionStore } from '../../store';
+import { TIMING, buttonStyles, loadingStyles, toastStyles, dragOverlayStyles } from '../../theme';
 
 interface DropZoneProps {
   children: React.ReactNode;
@@ -15,7 +16,7 @@ export function DropZone({ children }: DropZoneProps) {
     if (error) {
       const timer = setTimeout(() => {
         setError(null);
-      }, 5000);
+      }, TIMING.errorToastDuration);
       return () => clearTimeout(timer);
     }
   }, [error, setError]);
@@ -50,13 +51,13 @@ export function DropZone({ children }: DropZoneProps) {
       {children}
 
       {isDragOver && (
-        <div className="absolute inset-0 bg-ds-accent/10 border-4 border-dashed border-ds-accent z-[500] flex items-center justify-center backdrop-blur-sm">
-          <div className="text-center">
-            <div className="text-4xl mb-4">+</div>
-            <div className="text-xl font-semibold text-ds-primary">
+        <div className={dragOverlayStyles.container}>
+          <div className={dragOverlayStyles.content}>
+            <div className={dragOverlayStyles.icon}>+</div>
+            <div className={dragOverlayStyles.title}>
               Drop COLMAP folder here
             </div>
-            <div className="text-base text-ds-secondary mt-2">
+            <div className={dragOverlayStyles.subtitle}>
               Expected: sparse/0/cameras.bin, images.bin, points3D.bin
             </div>
           </div>
@@ -64,36 +65,34 @@ export function DropZone({ children }: DropZoneProps) {
       )}
 
       {loading && (
-        <div className="absolute inset-0 bg-ds-void/80 z-[500] flex items-center justify-center">
-          <div className="text-center">
-            <div className="flex justify-center mb-4">
-              <div className="flex space-x-2">
-                <div className="w-3 h-3 rounded-full bg-ds-accent animate-bounce" style={{ animationDelay: '0ms' }} />
-                <div className="w-3 h-3 rounded-full bg-ds-accent animate-bounce" style={{ animationDelay: '150ms' }} />
-                <div className="w-3 h-3 rounded-full bg-ds-accent animate-bounce" style={{ animationDelay: '300ms' }} />
-              </div>
+        <div className={loadingStyles.overlay}>
+          <div className={loadingStyles.container}>
+            <div className={loadingStyles.dots}>
+              <div className={loadingStyles.dot} style={{ animationDelay: `${TIMING.bounceDelays[0]}ms` }} />
+              <div className={loadingStyles.dot} style={{ animationDelay: `${TIMING.bounceDelays[1]}ms` }} />
+              <div className={loadingStyles.dot} style={{ animationDelay: `${TIMING.bounceDelays[2]}ms` }} />
             </div>
-            <div className="text-xl mb-4 text-ds-primary">Loading...</div>
-            <div className="w-64 h-2 bg-ds-tertiary rounded-full overflow-hidden">
+            <div className={loadingStyles.text}>Loading...</div>
+            <div className={loadingStyles.progressBar}>
               <div
-                className="h-full bg-ds-accent transition-all duration-300"
+                className={loadingStyles.progressFill}
                 style={{ width: `${progress}%` }}
               />
             </div>
-            <div className="text-base text-ds-secondary mt-2">{progress}%</div>
+            <div className={loadingStyles.percentage}>{progress}%</div>
           </div>
         </div>
       )}
 
       {error && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[500] bg-ds-tertiary border border-ds-error text-ds-primary px-6 py-3 rounded-lg shadow-ds-lg max-w-md flex items-start gap-3">
-          <div>
-            <div className="font-semibold mb-1 text-ds-error">Error loading data</div>
-            <div className="text-base text-ds-secondary">{error}</div>
+        <div className={`${toastStyles.container} ${toastStyles.error} max-w-md flex items-start gap-3`}>
+          <div className={toastStyles.content}>
+            <div className={`${toastStyles.title} text-ds-error`}>Error loading data</div>
+            <div className={toastStyles.message}>{error}</div>
           </div>
           <button
             onClick={() => setError(null)}
-            className="text-ds-muted hover:text-ds-primary text-xl leading-none"
+            className={buttonStyles.close}
           >
             ×
           </button>

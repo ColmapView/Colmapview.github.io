@@ -1,3 +1,12 @@
+// Type aliases for COLMAP IDs
+// These add semantic meaning and make code more self-documenting
+export type CameraId = number;
+export type ImageId = number;
+export type Point3DId = bigint;
+
+// Special value indicating an unmatched 2D point (no corresponding 3D point)
+export const UNMATCHED_POINT3D_ID = BigInt(-1);
+
 // Camera model constants matching COLMAP
 export const CameraModelId = {
   SIMPLE_PINHOLE: 0,
@@ -30,7 +39,7 @@ export const CAMERA_MODEL_NUM_PARAMS: Record<CameraModelId, number> = {
 };
 
 export interface Camera {
-  cameraId: number;
+  cameraId: CameraId;
   modelId: CameraModelId;
   width: number;
   height: number;
@@ -39,35 +48,49 @@ export interface Camera {
 
 export interface Point2D {
   xy: [number, number];
-  point3DId: bigint;
+  /** ID of corresponding 3D point, or UNMATCHED_POINT3D_ID if not triangulated */
+  point3DId: Point3DId;
 }
 
 export interface Image {
-  imageId: number;
+  imageId: ImageId;
   qvec: [number, number, number, number]; // qw, qx, qy, qz
   tvec: [number, number, number];          // tx, ty, tz
-  cameraId: number;
+  cameraId: CameraId;
   name: string;
   points2D: Point2D[];
 }
 
 export interface TrackElement {
-  imageId: number;
+  imageId: ImageId;
   point2DIdx: number;
 }
 
 export interface Point3D {
-  point3DId: bigint;
+  point3DId: Point3DId;
   xyz: [number, number, number];
   rgb: [number, number, number];
   error: number;
   track: TrackElement[];
 }
 
+// Pre-computed statistics for each image (computed once at load time)
+export interface ImageStats {
+  numPoints3D: number;
+  avgError: number;
+  covisibleCount: number;
+}
+
+// Pre-computed connected images index for fast modal lookups
+// Maps imageId -> Map<connectedImageId, matchCount>
+export type ConnectedImagesIndex = Map<ImageId, Map<ImageId, number>>;
+
 export interface Reconstruction {
-  cameras: Map<number, Camera>;
-  images: Map<number, Image>;
-  points3D: Map<bigint, Point3D>;
+  cameras: Map<CameraId, Camera>;
+  images: Map<ImageId, Image>;
+  points3D: Map<Point3DId, Point3D>;
+  imageStats: Map<ImageId, ImageStats>;
+  connectedImagesIndex: ConnectedImagesIndex;
 }
 
 // File structure for loaded data

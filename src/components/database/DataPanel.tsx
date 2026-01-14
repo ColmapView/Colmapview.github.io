@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useReconstructionStore } from '../../store';
+import { tabStyles, tableStyles, cardStyles } from '../../theme';
 
 type TabId = 'cameras' | 'images' | 'points';
 
@@ -17,18 +18,12 @@ export function DataPanel() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex border-b border-ds">
+      <div className={tabStyles.container}>
         {(['cameras', 'images', 'points'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`
-              px-4 py-2 text-base font-medium transition-colors
-              ${activeTab === tab
-                ? 'text-ds-accent border-b-2 border-ds-accent bg-ds-tertiary'
-                : 'text-ds-secondary hover:text-ds-primary hover:bg-ds-tertiary/50'
-              }
-            `}
+            className={activeTab === tab ? tabStyles.tabActive : tabStyles.tab}
           >
             {tab.charAt(0).toUpperCase() + tab.slice(1)}
           </button>
@@ -53,22 +48,22 @@ function CamerasTable() {
   }, [reconstruction]);
 
   return (
-    <table className="w-full text-base">
-      <thead className="bg-ds-tertiary sticky top-0">
+    <table className={tableStyles.table}>
+      <thead className={tableStyles.header}>
         <tr>
-          <th className="text-left px-3 py-2 text-ds-secondary">ID</th>
-          <th className="text-left px-3 py-2 text-ds-secondary">Model</th>
-          <th className="text-left px-3 py-2 text-ds-secondary">Size</th>
-          <th className="text-left px-3 py-2 text-ds-secondary">Focal</th>
+          <th className={tableStyles.headerCell}>ID</th>
+          <th className={tableStyles.headerCell}>Model</th>
+          <th className={tableStyles.headerCell}>Size</th>
+          <th className={tableStyles.headerCell}>Focal</th>
         </tr>
       </thead>
       <tbody>
         {cameras.map((cam) => (
-          <tr key={cam.cameraId} className="border-b border-ds-subtle hover:bg-ds-tertiary/50">
-            <td className="px-3 py-2 text-ds-primary">{cam.cameraId}</td>
-            <td className="px-3 py-2 text-ds-primary">{cam.modelId}</td>
-            <td className="px-3 py-2 text-ds-primary">{cam.width}x{cam.height}</td>
-            <td className="px-3 py-2 text-ds-primary">{cam.params[0]?.toFixed(2)}</td>
+          <tr key={cam.cameraId} className={tableStyles.row}>
+            <td className={tableStyles.cell}>{cam.cameraId}</td>
+            <td className={tableStyles.cell}>{cam.modelId}</td>
+            <td className={tableStyles.cell}>{cam.width}x{cam.height}</td>
+            <td className={tableStyles.cell}>{cam.params[0]?.toFixed(2)}</td>
           </tr>
         ))}
       </tbody>
@@ -86,24 +81,24 @@ function ImagesTable() {
 
   return (
     <div>
-      <table className="w-full text-base">
-        <thead className="bg-ds-tertiary sticky top-0">
+      <table className={tableStyles.table}>
+        <thead className={tableStyles.header}>
           <tr>
-            <th className="text-left px-3 py-2 text-ds-secondary">ID</th>
-            <th className="text-left px-3 py-2 text-ds-secondary">Name</th>
-            <th className="text-left px-3 py-2 text-ds-secondary">Camera</th>
-            <th className="text-left px-3 py-2 text-ds-secondary">Points</th>
+            <th className={tableStyles.headerCell}>ID</th>
+            <th className={tableStyles.headerCell}>Name</th>
+            <th className={tableStyles.headerCell}>Camera</th>
+            <th className={tableStyles.headerCell}>Points</th>
           </tr>
         </thead>
         <tbody>
           {images.map((img) => (
-            <tr key={img.imageId} className="border-b border-ds-subtle hover:bg-ds-tertiary/50">
-              <td className="px-3 py-2 text-ds-primary">{img.imageId}</td>
-              <td className="px-3 py-2 text-ds-primary truncate max-w-[200px]" title={img.name}>
+            <tr key={img.imageId} className={tableStyles.row}>
+              <td className={tableStyles.cell}>{img.imageId}</td>
+              <td className={`${tableStyles.cell} ${tableStyles.cellTruncate}`} title={img.name}>
                 {img.name}
               </td>
-              <td className="px-3 py-2 text-ds-primary">{img.cameraId}</td>
-              <td className="px-3 py-2 text-ds-primary">{img.points2D.length}</td>
+              <td className={tableStyles.cell}>{img.cameraId}</td>
+              <td className={tableStyles.cell}>{img.points2D.length}</td>
             </tr>
           ))}
         </tbody>
@@ -175,9 +170,9 @@ function PointsInfo() {
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-ds-tertiary rounded p-3">
-      <div className="text-ds-secondary text-base">{label}</div>
-      <div className="text-ds-primary text-lg font-semibold">{value}</div>
+    <div className={cardStyles.container}>
+      <div className={cardStyles.label}>{label}</div>
+      <div className={cardStyles.value}>{value}</div>
     </div>
   );
 }

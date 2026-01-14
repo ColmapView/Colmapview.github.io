@@ -1,15 +1,19 @@
 import { useState, memo, useCallback } from 'react';
 import { useViewerStore } from '../../store';
 import type { ColorMode } from '../../types/colmap';
+import type { CameraMode } from '../../store/viewerStore';
+import { BRIGHTNESS, getTooltipProps, controlPanelStyles, getControlButtonClass } from '../../theme';
 
 function PointIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <circle cx="12" cy="12" r="4" />
-      <circle cx="5" cy="5" r="2" />
-      <circle cx="19" cy="5" r="2" />
-      <circle cx="5" cy="19" r="2" />
-      <circle cx="19" cy="19" r="2" />
+      <circle cx="12" cy="8" r="2.5" opacity="0.9" />
+      <circle cx="7" cy="13" r="2" opacity="0.7" />
+      <circle cx="17" cy="12" r="2.2" opacity="0.8" />
+      <circle cx="10" cy="17" r="1.8" opacity="0.6" />
+      <circle cx="15" cy="17" r="1.5" opacity="0.5" />
+      <circle cx="5" cy="8" r="1.2" opacity="0.4" />
+      <circle cx="19" cy="7" r="1" opacity="0.35" />
     </svg>
   );
 }
@@ -45,11 +49,12 @@ function MatchIcon({ className }: { className?: string }) {
 
 function RainbowIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" strokeWidth="2">
-      <path d="M4 18a8 8 0 0 1 16 0" stroke="#ff0000" />
-      <path d="M6 18a6 6 0 0 1 12 0" stroke="#ffff00" />
-      <path d="M8 18a4 4 0 0 1 8 0" stroke="#00ff00" />
-      <path d="M10 18a2 2 0 0 1 4 0" stroke="#00ffff" />
+    <svg className={className} viewBox="0 0 24 24" fill="none" strokeWidth="2.5" strokeLinecap="round">
+      <path d="M3 17a9 9 0 0 1 18 0" stroke="#e74c3c" />
+      <path d="M5 17a7 7 0 0 1 14 0" stroke="#f39c12" />
+      <path d="M7 17a5 5 0 0 1 10 0" stroke="#2ecc71" />
+      <path d="M9 17a3 3 0 0 1 6 0" stroke="#3498db" />
+      <path d="M11 17a1 1 0 0 1 2 0" stroke="#9b59b6" />
     </svg>
   );
 }
@@ -65,11 +70,11 @@ function AxesIcon({ className }: { className?: string }) {
 
 function ColorIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="9" />
-      <circle cx="12" cy="8" r="2" fill="#ff6b6b" stroke="none" />
-      <circle cx="8" cy="14" r="2" fill="#51cf66" stroke="none" />
-      <circle cx="16" cy="14" r="2" fill="#339af0" stroke="none" />
+    <svg className={className} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 5.5a6.5 6.5 0 0 1 0 13" fill="#e74c3c" />
+      <path d="M12 5.5a6.5 6.5 0 0 0 0 13" fill="#3498db" />
+      <circle cx="12" cy="12" r="3" fill="currentColor" />
     </svg>
   );
 }
@@ -93,7 +98,28 @@ function ResetIcon({ className }: { className?: string }) {
   );
 }
 
-type PanelType = 'points' | 'color' | 'scale' | 'imagePlanes' | 'matches' | 'rainbow' | 'axes' | 'bg' | null;
+function OrbitIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <circle cx="12" cy="12" r="4" fill="currentColor" opacity="0.2" />
+      <circle cx="12" cy="12" r="4" />
+      <ellipse cx="12" cy="12" rx="9" ry="3.5" />
+      <circle cx="20" cy="10" r="2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function FlyIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 2L12 22M12 2L8 6M12 2L16 6" />
+      <path d="M5 12L19 12M5 12L9 8M5 12L9 16" />
+      <circle cx="12" cy="12" r="2" fill="currentColor" />
+    </svg>
+  );
+}
+
+type PanelType = 'points' | 'color' | 'scale' | 'imagePlanes' | 'matches' | 'rainbow' | 'axes' | 'bg' | 'camera' | null;
 
 interface SliderRowProps {
   label: string;
@@ -107,21 +133,46 @@ interface SliderRowProps {
 
 const SliderRow = memo(function SliderRow({ label, value, min, max, step, onChange, formatValue }: SliderRowProps) {
   const displayValue = formatValue ? formatValue(value) : String(value);
+  const progress = ((value - min) / (max - min)) * 100;
   return (
     <div className={styles.row}>
       <label className={styles.label}>{label}</label>
-      <div className="flex items-center gap-1">
-        <input
-          type="range"
-          min={min}
-          max={max}
-          step={step}
-          value={value}
-          onChange={(e) => onChange(parseFloat(e.target.value))}
-          className={styles.slider}
-        />
-        <span className={styles.value}>{displayValue}</span>
-      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className={styles.slider}
+        style={{ '--range-progress': `${progress}%` } as React.CSSProperties}
+      />
+      <span className={styles.value}>{displayValue}</span>
+    </div>
+  );
+});
+
+interface SelectRowProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}
+
+const SelectRow = memo(function SelectRow({ label, value, onChange, options }: SelectRowProps) {
+  return (
+    <div className={styles.row}>
+      <label className={styles.label}>{label}</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={styles.select}
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+      <span className={styles.value} />
     </div>
   );
 });
@@ -145,26 +196,8 @@ const PanelWrapper = memo(function PanelWrapper({ title, children }: PanelWrappe
   );
 });
 
-const styles = {
-  button: 'w-16 h-16 rounded-lg flex items-center justify-center transition-colors relative',
-  buttonActive: 'bg-ds-accent text-ds-void',
-  buttonHover: 'bg-ds-hover text-ds-primary',
-  buttonInactive: 'bg-ds-void/50 text-ds-secondary hover:bg-ds-void/70 hover:text-ds-primary',
-  panelWrapper: 'absolute right-[72px] top-0',
-  panelBridge: 'absolute right-16 top-0 w-2 h-16',
-  panel: 'bg-ds-tertiary border border-ds rounded-lg p-4 min-w-[220px] shadow-ds-lg',
-  panelTitle: 'text-ds-primary text-base font-medium mb-3',
-  label: 'text-ds-secondary text-base whitespace-nowrap w-20',
-  value: 'text-ds-primary text-base w-8 text-right',
-  slider: 'w-28 accent-ds-accent',
-  row: 'flex items-center justify-between gap-2',
-};
-
-function getButtonClass(isActive: boolean, isHovered: boolean): string {
-  if (isActive) return `${styles.button} ${styles.buttonActive}`;
-  if (isHovered) return `${styles.button} ${styles.buttonHover}`;
-  return `${styles.button} ${styles.buttonInactive}`;
-}
+// Use centralized styles from theme
+const styles = controlPanelStyles;
 
 interface ControlButtonProps {
   panelId: PanelType;
@@ -200,8 +233,8 @@ const ControlButton = memo(function ControlButton({
     >
       <button
         onClick={onClick}
-        className={getButtonClass(isActive, isHovered)}
-        {...(!hasPanel && { 'data-tooltip': tooltip, 'data-tooltip-pos': 'left' })}
+        className={getControlButtonClass(isActive, isHovered)}
+        {...(!hasPanel && getTooltipProps(tooltip, 'left'))}
       >
         {icon}
       </button>
@@ -246,10 +279,14 @@ export function ViewerControls() {
   const backgroundColor = useViewerStore((s) => s.backgroundColor);
   const setBackgroundColor = useViewerStore((s) => s.setBackgroundColor);
   const resetView = useViewerStore((s) => s.resetView);
+  const cameraMode = useViewerStore((s) => s.cameraMode);
+  const setCameraMode = useViewerStore((s) => s.setCameraMode);
+  const flySpeed = useViewerStore((s) => s.flySpeed);
+  const setFlySpeed = useViewerStore((s) => s.setFlySpeed);
 
   const toggleBackground = useCallback(() => {
     const current = parseInt(backgroundColor.slice(1, 3), 16);
-    const newVal = current < 128 ? 'ff' : '00';
+    const newVal = current < BRIGHTNESS.midpoint ? 'ff' : '00';
     setBackgroundColor(`#${newVal}${newVal}${newVal}`);
   }, [backgroundColor, setBackgroundColor]);
 
@@ -258,26 +295,66 @@ export function ViewerControls() {
     setBackgroundColor(`#${hex}${hex}${hex}`);
   }, [setBackgroundColor]);
 
+  const toggleCameraMode = useCallback(() => {
+    setCameraMode(cameraMode === 'orbit' ? 'fly' : 'orbit');
+  }, [cameraMode, setCameraMode]);
+
   return (
-    <div className="absolute top-3 right-3 flex flex-col gap-2 z-10">
+    <div className={styles.container}>
       <button
         onClick={resetView}
         className={`${styles.button} ${styles.buttonInactive}`}
-        data-tooltip="Reset view"
-        data-tooltip-pos="left"
+        {...getTooltipProps('Reset view', 'left')}
       >
-        <ResetIcon className="w-8 h-8" />
+        <ResetIcon className="w-6 h-6" />
       </button>
+
+      <ControlButton
+        panelId="camera"
+        activePanel={activePanel}
+        setActivePanel={setActivePanel}
+        icon={cameraMode === 'orbit' ? <OrbitIcon className="w-6 h-6" /> : <FlyIcon className="w-6 h-6" />}
+        tooltip={cameraMode === 'orbit' ? 'Switch to Fly mode' : 'Switch to Orbit mode'}
+        isActive={cameraMode === 'fly'}
+        onClick={toggleCameraMode}
+        panelTitle="Camera Mode"
+      >
+        <div className={styles.panelContent}>
+          <SelectRow
+            label="Mode"
+            value={cameraMode}
+            onChange={(v) => setCameraMode(v as CameraMode)}
+            options={[
+              { value: 'orbit', label: 'Orbit' },
+              { value: 'fly', label: 'Fly' },
+            ]}
+          />
+          <SliderRow label="Speed" value={flySpeed} min={0.1} max={5} step={0.1} onChange={setFlySpeed} formatValue={(v) => v.toFixed(1)} />
+          <div className="text-ds-secondary text-sm mt-3">
+            <div className="mb-1 font-medium">Keyboard:</div>
+            <div>WASD / Arrows: Move</div>
+            <div>Q: Down, E/Space: Up</div>
+            <div>Shift: Speed boost</div>
+            {cameraMode === 'fly' && (
+              <>
+                <div className="mt-1 font-medium">Mouse:</div>
+                <div>Drag: Look around</div>
+                <div>Scroll: Move forward/back</div>
+              </>
+            )}
+          </div>
+        </div>
+      </ControlButton>
 
       <ControlButton
         panelId="points"
         activePanel={activePanel}
         setActivePanel={setActivePanel}
-        icon={<PointIcon className="w-8 h-8" />}
+        icon={<PointIcon className="w-6 h-6" />}
         tooltip="Point settings"
-        panelTitle="Points"
+        panelTitle="Point Cloud"
       >
-        <div className="space-y-2">
+        <div className={styles.panelContent}>
           <SliderRow label="Size" value={pointSize} min={1} max={10} step={0.5} onChange={setPointSize} />
           <SliderRow label="Min Track" value={minTrackLength} min={0} max={20} step={1} onChange={(v) => setMinTrackLength(Math.round(v))} />
         </div>
@@ -287,33 +364,31 @@ export function ViewerControls() {
         panelId="color"
         activePanel={activePanel}
         setActivePanel={setActivePanel}
-        icon={<ColorIcon className="w-8 h-8" />}
+        icon={<ColorIcon className="w-6 h-6" />}
         tooltip="Color mode"
-        panelTitle="Color"
+        panelTitle="Color Mode"
       >
-        <div className={styles.row}>
-          <label className={styles.label}>Mode</label>
-          <select
-            value={colorMode}
-            onChange={(e) => setColorMode(e.target.value as ColorMode)}
-            className="bg-ds-input text-ds-primary text-base rounded px-2 py-1 border border-ds"
-          >
-            <option value="rgb">RGB</option>
-            <option value="error">Error</option>
-            <option value="trackLength">Track Length</option>
-          </select>
-        </div>
+        <SelectRow
+          label="Mode"
+          value={colorMode}
+          onChange={(v) => setColorMode(v as ColorMode)}
+          options={[
+            { value: 'rgb', label: 'RGB' },
+            { value: 'error', label: 'Error' },
+            { value: 'trackLength', label: 'Track Length' },
+          ]}
+        />
       </ControlButton>
 
       <ControlButton
         panelId="scale"
         activePanel={activePanel}
         setActivePanel={setActivePanel}
-        icon={<CameraIcon className="w-8 h-8" />}
-        tooltip="Cameras"
+        icon={<CameraIcon className="w-6 h-6" />}
+        tooltip="Camera Frustum"
         isActive={showCameras}
         onClick={() => setShowCameras(!showCameras)}
-        panelTitle="Cameras"
+        panelTitle="Camera Frustum"
       >
         <SliderRow label="Scale" value={cameraScale} min={0.05} max={1} step={0.05} onChange={setCameraScale} formatValue={(v) => v.toFixed(2)} />
       </ControlButton>
@@ -324,7 +399,7 @@ export function ViewerControls() {
             panelId="imagePlanes"
             activePanel={activePanel}
             setActivePanel={setActivePanel}
-            icon={<ImageIcon className="w-8 h-8" />}
+            icon={<ImageIcon className="w-6 h-6" />}
             tooltip="Image planes"
             isActive={showImagePlanes}
             onClick={() => setShowImagePlanes(!showImagePlanes)}
@@ -337,7 +412,7 @@ export function ViewerControls() {
             panelId="matches"
             activePanel={activePanel}
             setActivePanel={setActivePanel}
-            icon={<MatchIcon className="w-8 h-8" />}
+            icon={<MatchIcon className="w-6 h-6" />}
             tooltip="Matches"
             isActive={showMatches}
             onClick={() => setShowMatches(!showMatches)}
@@ -350,7 +425,7 @@ export function ViewerControls() {
             panelId="rainbow"
             activePanel={activePanel}
             setActivePanel={setActivePanel}
-            icon={<RainbowIcon className="w-8 h-8" />}
+            icon={<RainbowIcon className="w-6 h-6" />}
             tooltip="Rainbow mode"
             isActive={rainbowMode}
             onClick={() => setRainbowMode(!rainbowMode)}
@@ -365,11 +440,11 @@ export function ViewerControls() {
         panelId="axes"
         activePanel={activePanel}
         setActivePanel={setActivePanel}
-        icon={<AxesIcon className="w-8 h-8" />}
-        tooltip="Axes"
+        icon={<AxesIcon className="w-6 h-6" />}
+        tooltip="Global Axes"
         isActive={showAxes}
         onClick={() => setShowAxes(!showAxes)}
-        panelTitle="Axes"
+        panelTitle="Global Axes"
       >
         <SliderRow label="Opacity" value={axesOpacity} min={0} max={1} step={0.05} onChange={setAxesOpacity} formatValue={(v) => v.toFixed(2)} />
       </ControlButton>
@@ -378,16 +453,16 @@ export function ViewerControls() {
         panelId="bg"
         activePanel={activePanel}
         setActivePanel={setActivePanel}
-        icon={<BgIcon className="w-8 h-8" />}
-        tooltip="Background"
+        icon={<BgIcon className="w-6 h-6" />}
+        tooltip="Background color"
         onClick={toggleBackground}
-        panelTitle="Background"
+        panelTitle="Background Color"
       >
         <SliderRow
           label="Brightness"
           value={parseInt(backgroundColor.slice(1, 3), 16)}
           min={0}
-          max={255}
+          max={BRIGHTNESS.max}
           step={1}
           onChange={handleBrightnessChange}
         />

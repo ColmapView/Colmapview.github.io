@@ -58,18 +58,9 @@ export function StatusBar() {
           <span>{loading ? 'Loading...' : 'Drop COLMAP folder to load'}</span>
         )}
       </div>
-      <div className="flex items-center gap-2 text-ds-tertiary">
-        <a
-          href="https://opsiclear.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hover:text-ds-primary transition-colors underline"
-        >
-          opsiclear.com
-        </a>
-        <span className="text-ds-muted">|</span>
-        <span className="text-ds-muted">v0.1.2</span>
-      </div>
+      <span className="text-ds-muted">
+        ColmapView by OpsiClear | v{__APP_VERSION__}
+      </span>
     </footer>
   );
 }
