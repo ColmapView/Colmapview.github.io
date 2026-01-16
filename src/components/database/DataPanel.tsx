@@ -115,40 +115,10 @@ function ImagesTable() {
 function PointsInfo() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
 
-  const stats = useMemo(() => {
-    if (!reconstruction) return null;
+  // Use pre-computed global stats instead of computing on every render
+  const globalStats = reconstruction?.globalStats;
 
-    const points = Array.from(reconstruction.points3D.values());
-    if (points.length === 0) return null;
-
-    let minError = Infinity, maxError = -Infinity, sumError = 0;
-    let minTrack = Infinity, maxTrack = -Infinity, sumTrack = 0;
-    let errorCount = 0;
-
-    for (const p of points) {
-      if (p.error >= 0) {
-        minError = Math.min(minError, p.error);
-        maxError = Math.max(maxError, p.error);
-        sumError += p.error;
-        errorCount++;
-      }
-      minTrack = Math.min(minTrack, p.track.length);
-      maxTrack = Math.max(maxTrack, p.track.length);
-      sumTrack += p.track.length;
-    }
-
-    return {
-      count: points.length,
-      minError: errorCount > 0 ? minError : 0,
-      maxError: errorCount > 0 ? maxError : 0,
-      avgError: errorCount > 0 ? sumError / errorCount : 0,
-      minTrack,
-      maxTrack,
-      avgTrack: sumTrack / points.length,
-    };
-  }, [reconstruction]);
-
-  if (!stats) {
+  if (!globalStats || globalStats.totalPoints === 0) {
     return <div className="p-4 text-ds-muted">No points data</div>;
   }
 
@@ -157,12 +127,12 @@ function PointsInfo() {
       <h3 className="font-semibold text-ds-primary">Point Cloud Statistics</h3>
 
       <div className="grid grid-cols-2 gap-4">
-        <StatCard label="Total Points" value={stats.count.toLocaleString()} />
-        <StatCard label="Avg Track Length" value={stats.avgTrack.toFixed(2)} />
-        <StatCard label="Min Track Length" value={stats.minTrack.toString()} />
-        <StatCard label="Max Track Length" value={stats.maxTrack.toString()} />
-        <StatCard label="Avg Error (px)" value={stats.avgError.toFixed(3)} />
-        <StatCard label="Max Error (px)" value={stats.maxError.toFixed(3)} />
+        <StatCard label="Total Points" value={globalStats.totalPoints.toLocaleString()} />
+        <StatCard label="Avg Track Length" value={globalStats.avgTrackLength.toFixed(2)} />
+        <StatCard label="Min Track Length" value={globalStats.minTrackLength.toString()} />
+        <StatCard label="Max Track Length" value={globalStats.maxTrackLength.toString()} />
+        <StatCard label="Avg Error (px)" value={globalStats.avgError.toFixed(3)} />
+        <StatCard label="Max Error (px)" value={globalStats.maxError.toFixed(3)} />
       </div>
     </div>
   );

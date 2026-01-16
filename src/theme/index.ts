@@ -10,3 +10,6 @@ export * from './colors';
 export * from './zIndex';
 export * from './opacity';
 export * from './componentStyles';
+
+// Re-export hotkey config for convenience
+export * from '../config/hotkeys';

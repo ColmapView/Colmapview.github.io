@@ -15,13 +15,13 @@ export const TIMING = {
   transitionSmooth: 300,
 
   // Virtualization overscan (row/item counts, not ms)
-  galleryOverscan: 2,
-  listOverscan: 3,
+  galleryOverscan: 3,
+  listOverscan: 5,
 
   // Texture loading
-  textureUploadTimeout: 500,
-  textureUploadFallback: 16,
-  idleDeadlineBuffer: 2,
+  textureUploadTimeout: 150,   // Snappier idle processing (reduced from 500)
+  textureUploadFallback: 16,   // Single frame fallback for non-idle browsers
+  idleDeadlineBuffer: 5,       // Only process if >= 5ms remaining (avoid jank)
 
   // Toast
   errorToastDuration: 5000,

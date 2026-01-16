@@ -24,7 +24,10 @@ export function DropZone({ children }: DropZoneProps) {
   const onDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragOver(true);
+    // Only respond to file drags, not internal UI drags (e.g., dragging in popup panels)
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragOver(true);
+    }
   }, []);
 
   const onDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -85,9 +88,9 @@ export function DropZone({ children }: DropZoneProps) {
       )}
 
       {error && (
-        <div className={`${toastStyles.container} ${toastStyles.error} max-w-md flex items-start gap-3`}>
+        <div className={`${toastStyles.containerWithLayout} ${toastStyles.error}`}>
           <div className={toastStyles.content}>
-            <div className={`${toastStyles.title} text-ds-error`}>Error loading data</div>
+            <div className={toastStyles.titleError}>Error loading data</div>
             <div className={toastStyles.message}>{error}</div>
           </div>
           <button

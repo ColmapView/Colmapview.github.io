@@ -20,10 +20,11 @@ export const buttonStyles = {
     md: 'px-3 py-1.5 text-base gap-2',
     lg: 'px-4 py-2 text-base gap-2',
     xl: 'px-6 py-3 text-lg gap-3',
-    icon: 'p-1.5',       // Square icon button small
-    iconMd: 'p-2',       // Square icon button medium
-    iconLg: 'p-3',       // Square icon button large
-    iconXl: 'w-12 h-12', // Large square icon button (viewer controls)
+    toggle: 'px-4 py-1 text-sm gap-1.5', // Wide toggle button (matches hover panel style)
+    icon: 'p-1',         // Square icon button small
+    iconMd: 'p-1.5',     // Square icon button medium
+    iconLg: 'p-2',       // Square icon button large
+    iconXl: 'w-10 h-10', // Large square icon button (viewer controls)
   },
 
   // Color variants
@@ -53,6 +54,8 @@ export const buttonStyles = {
     // Toggle style - for toggle buttons (gallery view mode)
     toggle: 'bg-ds-hover text-ds-secondary hover-ds-text-primary hover-ds-elevated',
     toggleActive: 'bg-ds-accent text-ds-void',
+    toggleError: 'bg-ds-error/20 text-ds-error border border-ds-error',
+    toggleSuccess: 'bg-ds-success/20 text-ds-success border border-ds-success',
 
     // Control style - for viewer controls (solid background for visibility on any canvas color)
     control: 'bg-ds-tertiary text-ds-secondary hover-ds-hover hover-ds-text-primary rounded-lg border border-ds',
@@ -128,10 +131,15 @@ export const inputStyles = {
 // ============================================
 
 export const galleryStyles = {
-  item: 'bg-ds-tertiary rounded cursor-pointer overflow-hidden relative border-2 transition-all',
+  item: 'bg-ds-tertiary rounded cursor-pointer relative border-2 transition-all',
   itemSelected: 'border-ds-accent bg-ds-hover',
   itemHover: 'border-transparent hover-border-ds-light hover-brightness-110',
-  overlay: 'absolute bottom-0 left-0 right-0 px-1.5 py-1.5 bg-gradient-to-t from-ds-void/70 to-transparent',
+  itemAspect: 'aspect-square',
+  itemInner: 'absolute inset-0 overflow-hidden rounded-sm', // Inner wrapper to clip image without clipping tooltip
+  itemImage: 'absolute inset-0 w-full h-full object-cover',
+  itemInfoButton: 'z-10 w-6 h-6 rounded text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all',
+  overlay: 'absolute bottom-0 left-0 right-0 px-1.5 py-1.5',
+  overlayText: 'text-white text-sm truncate',
   placeholder: 'absolute inset-0 flex items-center justify-center text-ds-muted text-xs p-1 text-center',
 } as const;
 
@@ -144,8 +152,10 @@ export const listStyles = {
   itemSelected: 'border-ds-accent bg-ds-hover',
   itemHover: 'border-transparent hover-ds-hover hover-border-ds-light',
   thumbnail: 'flex-shrink-0 bg-ds-hover rounded overflow-hidden',
+  thumbnailSize: 'w-14 h-14',
+  thumbnailPlaceholder: 'w-full h-full flex items-center justify-center text-ds-muted text-xs',
   content: 'flex-1 min-w-0',
-  title: 'text-ds-primary text-sm truncate',
+  title: 'text-ds-primary text-sm truncate font-medium',
   subtitle: 'text-ds-muted text-xs',
 } as const;
 
@@ -183,9 +193,9 @@ export const panelStyles = {
 export const tableStyles = {
   table: 'w-full text-base',
   header: 'bg-ds-tertiary sticky top-0',
-  headerCell: 'text-left px-3 py-2 text-ds-secondary',
-  row: 'border-b border-ds-subtle hover-ds-tertiary-50',
-  cell: 'px-3 py-2 text-ds-primary',
+  headerCell: 'text-left px-3 py-0.5 text-ds-secondary',
+  row: 'hover-ds-tertiary-50',
+  cell: 'px-3 py-0.5 text-ds-primary',
   cellTruncate: 'truncate max-w-[200px]',
 } as const;
 
@@ -260,10 +270,12 @@ export const hoverCardStyles = {
 
 export const toastStyles = {
   container: 'absolute top-4 left-1/2 -translate-x-1/2 z-[500] bg-ds-tertiary rounded-lg shadow-ds-lg',
+  containerWithLayout: 'absolute top-4 left-1/2 -translate-x-1/2 z-[500] bg-ds-tertiary rounded-lg shadow-ds-lg max-w-md flex items-start gap-3',
   error: 'border border-ds-error',
   success: 'border border-ds-success',
   content: 'px-6 py-3 text-ds-primary',
   title: 'font-semibold mb-1',
+  titleError: 'font-semibold mb-1 text-ds-error',
   message: 'text-base text-ds-secondary',
 } as const;
 
@@ -290,26 +302,35 @@ export const controlPanelStyles = {
   // Container positioning
   container: 'absolute top-3 right-3 flex flex-col gap-2 z-10',
   // Button styles
-  button: 'w-12 h-12 rounded-lg flex items-center justify-center transition-colors relative border border-ds',
+  button: 'w-10 h-10 rounded-lg flex items-center justify-center transition-colors relative border border-ds',
   buttonActive: 'bg-ds-accent text-ds-void border-ds-accent',
   buttonHover: 'bg-ds-hover text-ds-primary',
   buttonInactive: 'bg-ds-tertiary text-ds-secondary hover-ds-hover hover-ds-text-primary',
-  // Panel positioning
-  panelWrapper: 'absolute right-[56px] top-0',
-  panelBridge: 'absolute right-12 top-0 w-2 h-12',
+  // Panel positioning - right-full positions at container's left edge, pr-2 creates gap inside hover area
+  panelWrapper: 'absolute right-full top-0 pr-2',
   // Panel content
   panel: 'bg-ds-tertiary border border-ds rounded-lg p-4 w-[240px] shadow-ds-lg',
-  panelTitle: 'text-ds-primary text-base font-medium mb-3',
+  panelTitle: 'text-ds-primary text-sm font-medium mb-3',
   panelContent: 'space-y-2',
   // Row layout
   row: 'flex items-center gap-2',
-  label: 'text-ds-secondary text-base whitespace-nowrap w-20 flex-shrink-0',
-  value: 'text-ds-primary text-base w-8 text-right flex-shrink-0',
+  label: 'text-ds-secondary text-sm whitespace-nowrap w-20 flex-shrink-0',
+  value: 'text-ds-primary text-sm w-8 text-right flex-shrink-0 cursor-pointer hover-ds-accent box-border',
+  valueInput: 'bg-transparent text-ds-primary text-sm w-8 text-right flex-shrink-0 border-none p-0 m-0 focus:outline-none box-border',
   slider: `${inputStyles.range.base} flex-1 min-w-0`,
-  select: `${inputStyles.selectPanel} py-1.5 text-base flex-1`,
+  select: `${inputStyles.selectPanel} py-0.5 pl-2 ml-1.5 text-sm flex-1`,
   // Hint text (keyboard shortcuts, etc.)
   hint: 'text-ds-secondary text-sm mt-3',
   hintTitle: 'mb-1 font-medium',
+  // Preset buttons (e.g., Transform presets) - uses toggle button design
+  presetGroup: 'flex flex-col gap-2 mt-3',
+  presetButton: `${buttonStyles.base} ${buttonStyles.sizes.toggle} ${buttonStyles.variants.toggle} w-full justify-start`,
+  // Action buttons (e.g., Reset, Apply) - uses toggle button design
+  actionGroup: 'flex justify-between mt-3',
+  actionButton: `${buttonStyles.base} ${buttonStyles.sizes.toggle} ${buttonStyles.variants.toggle}`,
+  actionButtonDisabled: `${buttonStyles.base} ${buttonStyles.sizes.toggle} ${buttonStyles.disabled} bg-ds-secondary text-ds-muted`,
+  actionButtonPrimary: `${buttonStyles.base} ${buttonStyles.sizes.toggle} ${buttonStyles.variants.toggleActive}`,
+  actionButtonPrimaryDisabled: `${buttonStyles.base} ${buttonStyles.sizes.toggle} ${buttonStyles.disabled} bg-ds-secondary text-ds-muted`,
 } as const;
 
 // Helper to get control button class
@@ -366,6 +387,76 @@ export const dragOverlayStyles = {
 
 export const footerStyles = {
   logo: 'absolute bottom-6 left-6',
+  logoImage: 'opacity-70 hover-opacity-100 transition-opacity',
   socialContainer: 'absolute bottom-6 right-6 flex items-center gap-4',
   socialLink: 'text-ds-secondary opacity-70 hover-opacity-100 transition-opacity',
+} as const;
+
+// ============================================
+// CONTEXT MENU STYLES
+// ============================================
+
+export const contextMenuStyles = {
+  container: 'bg-ds-tertiary rounded-lg shadow-ds-lg overflow-hidden border border-ds',
+  button: 'flex items-center gap-2 px-3 py-2 text-sm text-ds-primary hover-ds-hover cursor-pointer transition-colors w-full',
+  icon: 'w-4 h-4',
+} as const;
+
+// ============================================
+// TOOLBAR STYLES
+// ============================================
+
+export const toolbarStyles = {
+  container: 'h-10 border-b border-ds flex items-center px-4 bg-ds-tertiary',
+  group: 'flex items-center gap-2',
+} as const;
+
+// ============================================
+// STATUS BAR STYLES
+// ============================================
+
+export const statusBarStyles = {
+  container: 'h-10 border-t border-ds bg-ds-tertiary text-ds-secondary text-base px-4 flex items-center justify-between',
+  group: 'flex items-center gap-6',
+} as const;
+
+// ============================================
+// EMPTY STATE STYLES
+// ============================================
+
+export const emptyStateStyles = {
+  container: 'h-full flex items-center justify-center text-ds-muted bg-ds-secondary',
+  containerFull: 'flex flex-col items-center justify-center h-full p-8 text-center bg-ds-secondary',
+  icon: 'text-ds-error text-6xl mb-4',
+  title: 'text-xl font-semibold text-ds-primary mb-2',
+  message: 'text-ds-secondary mb-4 max-w-md',
+  button: 'px-4 py-2 bg-ds-accent text-ds-void rounded hover-bg-ds-accent-90 transition-colors',
+} as const;
+
+// ============================================
+// MOBILE MESSAGE STYLES
+// ============================================
+
+export const mobileMessageStyles = {
+  container: 'h-screen flex flex-col items-center justify-center bg-ds-primary p-6 text-center',
+  title: 'text-2xl font-semibold text-ds-primary mb-3',
+  message: 'text-ds-secondary mb-4',
+  badge: 'mt-6 px-4 py-2 bg-ds-tertiary rounded-lg text-sm text-ds-muted',
+} as const;
+
+// ============================================
+// RESIZE HANDLE STYLES (for modals)
+// ============================================
+
+export const resizeHandleStyles = {
+  corner: 'absolute w-3 h-3',
+  edge: 'absolute',
+  nw: 'top-0 left-0 cursor-nw-resize',
+  ne: 'top-0 right-0 cursor-ne-resize',
+  sw: 'bottom-0 left-0 cursor-sw-resize',
+  se: 'bottom-0 right-0 cursor-se-resize',
+  n: 'top-0 left-3 right-3 h-2 cursor-n-resize',
+  s: 'bottom-0 left-3 right-3 h-2 cursor-s-resize',
+  w: 'left-0 top-3 bottom-3 w-2 cursor-w-resize',
+  e: 'right-0 top-3 bottom-3 w-2 cursor-e-resize',
 } as const;

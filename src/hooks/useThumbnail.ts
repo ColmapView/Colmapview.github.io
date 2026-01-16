@@ -14,7 +14,7 @@ const THUMBNAIL_SIZE = 256;
 async function canvasToBlobUrl(canvas: HTMLCanvasElement | OffscreenCanvas): Promise<string | null> {
   return new Promise((resolve) => {
     if (canvas instanceof OffscreenCanvas) {
-      canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 }).then((blob) => {
+      canvas.convertToBlob({ type: 'image/jpeg', quality: 0.75 }).then((blob) => {
         resolve(URL.createObjectURL(blob));
       }).catch(() => {
         resolve(null);
@@ -26,7 +26,7 @@ async function canvasToBlobUrl(canvas: HTMLCanvasElement | OffscreenCanvas): Pro
         } else {
           resolve(null);
         }
-      }, 'image/jpeg', 0.85);
+      }, 'image/jpeg', 0.75);
     }
   });
 }
@@ -46,6 +46,20 @@ const thumbnailCache = createImageCache<string>({
  */
 export function clearThumbnailCache(): void {
   thumbnailCache.clear();
+}
+
+/**
+ * Pause thumbnail processing (e.g., during scroll).
+ */
+export function pauseThumbnailCache(): void {
+  thumbnailCache.pause();
+}
+
+/**
+ * Resume thumbnail processing after pause.
+ */
+export function resumeThumbnailCache(): void {
+  thumbnailCache.resume();
 }
 
 /**

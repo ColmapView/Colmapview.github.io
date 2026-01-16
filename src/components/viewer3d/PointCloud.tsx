@@ -1,74 +1,63 @@
 import { useMemo, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { useReconstructionStore, useViewerStore } from '../../store';
+import { useReconstructionStore, usePointCloudStore, useCameraStore } from '../../store';
 import type { Point3D } from '../../types/colmap';
-import { SRGB, RAINBOW, VIZ_COLORS, COLORMAP, BRIGHTNESS } from '../../theme';
-
-// Reusable Color object to avoid allocations in animation loop
-const tempColor = new THREE.Color();
-
-// Cycle through dark saturated colors (no white transition)
-function rainbowColor(t: number): THREE.Color {
-  const hue = t % 1;
-  return tempColor.setHSL(hue, RAINBOW.saturation, RAINBOW.lightness);
-}
-
-function jetColormap(t: number): [number, number, number] {
-  const { threshold1, threshold2, threshold3, multiplier } = COLORMAP.jet;
-  t = Math.max(0, Math.min(1, t));
-  if (t < threshold1) {
-    return [0, t * multiplier, 1];
-  } else if (t < threshold2) {
-    return [0, 1, 1 - (t - threshold1) * multiplier];
-  } else if (t < threshold3) {
-    return [(t - threshold2) * multiplier, 1, 0];
-  } else {
-    return [1, 1 - (t - threshold3) * multiplier, 0];
-  }
-}
-
-// Convert sRGB to linear color space (Three.js expects linear vertex colors)
-function sRGBToLinear(c: number): number {
-  return c <= SRGB.threshold
-    ? c / SRGB.linearScale
-    : Math.pow((c + SRGB.gammaOffset) / SRGB.gammaScale, SRGB.gamma);
-}
+import { VIZ_COLORS, BRIGHTNESS, RAINBOW, COLORMAP } from '../../theme';
+import { sRGBToLinear, rainbowColor, jetColormap } from '../../utils/colorUtils';
 
 export function PointCloud() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const colorMode = useViewerStore((s) => s.colorMode);
-  const pointSize = useViewerStore((s) => s.pointSize);
-  const minTrackLength = useViewerStore((s) => s.minTrackLength);
-  const selectedImageId = useViewerStore((s) => s.selectedImageId);
-  const rainbowMode = useViewerStore((s) => s.rainbowMode);
-  const rainbowSpeed = useViewerStore((s) => s.rainbowSpeed);
+  const colorMode = usePointCloudStore((s) => s.colorMode);
+  const pointSize = usePointCloudStore((s) => s.pointSize);
+  const minTrackLength = usePointCloudStore((s) => s.minTrackLength);
+  const maxReprojectionError = usePointCloudStore((s) => s.maxReprojectionError);
+  const selectedImageId = useCameraStore((s) => s.selectedImageId);
+  const selectionColorMode = useCameraStore((s) => s.selectionColorMode);
+  const selectionAnimationSpeed = useCameraStore((s) => s.selectionAnimationSpeed);
   const selectedMaterialRef = useRef<THREE.PointsMaterial>(null);
   // Use ref instead of state to avoid re-renders on every frame
   const rainbowHueRef = useRef(0);
+  const blinkPhaseRef = useRef(0);
 
-  // Update rainbow color directly in useFrame without triggering re-renders
+  // Update selection color directly in useFrame without triggering re-renders
   useFrame((_, delta) => {
-    if (rainbowMode && selectedImageId !== null && selectedMaterialRef.current) {
-      rainbowHueRef.current = (rainbowHueRef.current + delta * rainbowSpeed * RAINBOW.speedMultiplier) % 1;
-      selectedMaterialRef.current.color.copy(rainbowColor(rainbowHueRef.current));
+    if (selectedImageId !== null && selectedMaterialRef.current) {
+      if (selectionColorMode === 'rainbow') {
+        rainbowHueRef.current = (rainbowHueRef.current + delta * selectionAnimationSpeed * RAINBOW.speedMultiplier) % 1;
+        selectedMaterialRef.current.color.copy(rainbowColor(rainbowHueRef.current));
+      } else if (selectionColorMode === 'blink') {
+        // Blink: smooth sine wave pulse between dim (0.1) and full brightness
+        blinkPhaseRef.current += delta * selectionAnimationSpeed * 2; // radians for sine wave
+        const blinkFactor = (Math.sin(blinkPhaseRef.current) + 1) / 2; // 0 to 1
+        const intensity = 0.1 + 0.9 * blinkFactor;
+        selectedMaterialRef.current.color.setRGB(
+          VIZ_COLORS.highlight[0] * intensity,
+          VIZ_COLORS.highlight[1] * intensity,
+          VIZ_COLORS.highlight[2] * intensity
+        );
+      }
     }
   });
 
-  // Handle rainbow mode toggle (only runs when rainbowMode changes)
+  // Handle selection color mode change (only runs when selectionColorMode changes)
   useEffect(() => {
     if (!selectedMaterialRef.current) return;
-    if (rainbowMode) {
+    if (selectionColorMode === 'rainbow') {
       selectedMaterialRef.current.vertexColors = false;
       selectedMaterialRef.current.color.copy(rainbowColor(rainbowHueRef.current));
       selectedMaterialRef.current.needsUpdate = true;
+    } else if (selectionColorMode === 'blink') {
+      selectedMaterialRef.current.vertexColors = false;
+      selectedMaterialRef.current.color.setRGB(VIZ_COLORS.highlight[0], VIZ_COLORS.highlight[1], VIZ_COLORS.highlight[2]);
+      selectedMaterialRef.current.needsUpdate = true;
     } else {
-      // Reset to magenta when rainbow mode is disabled
+      // off or static: solid magenta
       selectedMaterialRef.current.vertexColors = false;
       selectedMaterialRef.current.color.setRGB(VIZ_COLORS.highlight[0], VIZ_COLORS.highlight[1], VIZ_COLORS.highlight[2]);
       selectedMaterialRef.current.needsUpdate = true;
     }
-  }, [rainbowMode]);
+  }, [selectionColorMode]);
 
   const { positions, colors, selectedPositions, selectedColors } = useMemo(() => {
     if (!reconstruction) return { positions: null, colors: null, selectedPositions: null, selectedColors: null };
@@ -95,6 +84,8 @@ export function PointCloud() {
     for (const point of reconstruction.points3D.values()) {
       // Filter by track length
       if (point.track.length < minTrackLength) continue;
+      // Filter by reprojection error
+      if (point.error > maxReprojectionError) continue;
 
       // Update stats
       if (point.error >= 0) {
@@ -104,8 +95,8 @@ export function PointCloud() {
       minTrack = Math.min(minTrack, point.track.length);
       maxTrack = Math.max(maxTrack, point.track.length);
 
-      // Categorize into regular vs highlighted
-      if (selectedImagePointIds.has(point.point3DId)) {
+      // Categorize into regular vs highlighted (only highlight when selectionColorMode is not 'off')
+      if (selectionColorMode !== 'off' && selectedImagePointIds.has(point.point3DId)) {
         highlightedPoints.push(point);
       } else {
         regularPoints.push(point);
@@ -168,7 +159,7 @@ export function PointCloud() {
     }
 
     return { positions, colors, selectedPositions, selectedColors };
-  }, [reconstruction, colorMode, minTrackLength, selectedImageId]);
+  }, [reconstruction, colorMode, minTrackLength, maxReprojectionError, selectedImageId, selectionColorMode]);
 
   // Create geometry objects in useMemo to ensure proper updates when reconstruction changes
   const geometry = useMemo(() => {

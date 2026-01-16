@@ -3,18 +3,26 @@
  *
  * Automatically creates the URL when file is provided and
  * revokes it on cleanup to prevent memory leaks.
+ *
+ * Uses deferred revocation to prevent ERR_FILE_NOT_FOUND errors
+ * when rapidly switching between files (e.g., during quick scrolling).
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 /**
  * Create a blob URL for a file with automatic cleanup.
+ *
+ * Uses deferred revocation via requestIdleCallback to ensure
+ * the URL is not revoked before React finishes committing DOM updates.
  *
  * @param file - The file to create a URL for, or null/undefined
  * @returns The blob URL or null
  */
 export function useFileUrl(file: File | null | undefined): string | null {
   const [url, setUrl] = useState<string | null>(null);
+  // Track pending URLs that need to be revoked
+  const pendingRevocationsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!file) {
@@ -26,9 +34,38 @@ export function useFileUrl(file: File | null | undefined): string | null {
     setUrl(blobUrl);
 
     return () => {
-      URL.revokeObjectURL(blobUrl);
+      // Defer revocation to allow React's commit phase to complete
+      // and any in-flight image loads to be properly canceled.
+      // This prevents ERR_FILE_NOT_FOUND errors during rapid scrolling.
+      pendingRevocationsRef.current.add(blobUrl);
+
+      // Use requestIdleCallback if available, otherwise use setTimeout
+      // to defer until after the current event loop tick
+      const revoke = () => {
+        if (pendingRevocationsRef.current.has(blobUrl)) {
+          pendingRevocationsRef.current.delete(blobUrl);
+          URL.revokeObjectURL(blobUrl);
+        }
+      };
+
+      if (typeof requestIdleCallback !== 'undefined') {
+        requestIdleCallback(revoke, { timeout: 1000 });
+      } else {
+        setTimeout(revoke, 100);
+      }
     };
   }, [file]);
+
+  // Cleanup any remaining URLs on unmount
+  useEffect(() => {
+    const pending = pendingRevocationsRef.current;
+    return () => {
+      pending.forEach((blobUrl) => {
+        URL.revokeObjectURL(blobUrl);
+      });
+      pending.clear();
+    };
+  }, []);
 
   return url;
 }

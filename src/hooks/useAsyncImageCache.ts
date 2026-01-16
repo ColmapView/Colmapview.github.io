@@ -19,6 +19,72 @@ import { SIZE, TIMING } from '../theme';
 
 const MAX_CONCURRENT_LOADS = SIZE.maxConcurrentLoads;
 
+// Track images that failed to decode - don't retry them
+const failedImages = new Set<string>();
+
+// Timeout for createImageBitmap (some images hang indefinitely)
+const DECODE_TIMEOUT = 3000; // 3 seconds - fail fast to avoid blocking other loads
+
+// Max pending items to prevent OOM from accumulating full-res bitmaps
+// Each high-res image can be 10-50MB uncompressed in memory
+const MAX_PENDING_ITEMS = 50;
+
+/**
+ * Placeholder for shared decode cache clear (no-op after simplification).
+ */
+export function clearSharedDecodeCache(): void {
+  // No-op - shared decode cache was removed for simplicity
+}
+
+/**
+ * createImageBitmap with timeout to prevent hanging.
+ */
+async function createImageBitmapWithTimeout(file: File, timeout: number): Promise<ImageBitmap> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        reject(new Error(`Image decode timed out after ${timeout}ms`));
+      }
+    }, timeout);
+
+    createImageBitmap(file)
+      .then((bitmap) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(bitmap);
+        } else {
+          // Timed out already, clean up the bitmap
+          bitmap.close();
+        }
+      })
+      .catch((err) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          reject(err);
+        }
+      });
+  });
+}
+
+/**
+ * Check if an image has previously failed to load.
+ */
+export function hasImageFailed(cacheKey: string): boolean {
+  return failedImages.has(cacheKey);
+}
+
+/**
+ * Get count of failed images for diagnostics.
+ */
+export function getFailedImageCount(): number {
+  return failedImages.size;
+}
+
 /**
  * Configuration for creating an image cache instance.
  */
@@ -46,6 +112,8 @@ interface CacheState<T> {
   activeLoads: number;
   cacheGeneration: number;
   idleCallbackScheduled: boolean;
+  paused: boolean;
+  bulkMode: boolean; // When true, process immediately without idle callbacks
 }
 
 interface PendingItem<T> {
@@ -70,16 +138,39 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
     activeLoads: 0,
     cacheGeneration: 0,
     idleCallbackScheduled: false,
+    paused: false,
+    bulkMode: false,
   };
 
   /**
    * Process pending items during browser idle time.
+   * Uses deadline-based processing to maximize throughput while avoiding jank.
+   * @param deadline - IdleDeadline from requestIdleCallback, or undefined for sync mode
+   * @param maxItems - Optional limit on items to process (for backpressure mode)
    */
-  function processPendingItems(deadline?: IdleDeadline): void {
+  function processPendingItems(deadline?: IdleDeadline, maxItems?: number): void {
+    // Skip processing if paused (e.g., during scroll)
+    if (state.paused) {
+      state.idleCallbackScheduled = false;
+      return;
+    }
+
+    // Process at least 1 item per callback, then check deadline
+    // Lower value = more responsive but more callback overhead
+    const MIN_ITEMS_PER_CALLBACK = 1;
+    let processedCount = 0;
+
     while (state.pendingItems.length > 0) {
-      if (deadline && deadline.timeRemaining() < TIMING.idleDeadlineBuffer) {
+      // Stop if we hit the max items limit (backpressure mode)
+      if (maxItems !== undefined && processedCount >= maxItems) {
         break;
       }
+      // Stop if we're running low on idle time, BUT only after processing minimum
+      if (processedCount >= MIN_ITEMS_PER_CALLBACK &&
+          deadline && deadline.timeRemaining() < TIMING.idleDeadlineBuffer) {
+        break;
+      }
+      processedCount++;
 
       const pending = state.pendingItems.shift()!;
 
@@ -143,17 +234,42 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
     }
   }
 
+  // Debug: track idle processing
+  let idleCallCount = 0;
+  let lastIdleLog = 0;
+
   /**
    * Schedule processing during idle time.
+   * In bulk mode, processes immediately without waiting for idle.
    */
   function scheduleIdleProcessing(): void {
-    if (state.idleCallbackScheduled) return;
+    if (state.idleCallbackScheduled || state.paused) return;
     state.idleCallbackScheduled = true;
 
+    // In bulk mode, process immediately on next microtask (no idle wait)
+    if (state.bulkMode) {
+      queueMicrotask(() => {
+        processPendingItems();
+      });
+      return;
+    }
+
     if ('requestIdleCallback' in window) {
-      requestIdleCallback(processPendingItems, { timeout: idleTimeout });
+      requestIdleCallback((deadline) => {
+        idleCallCount++;
+        // Log every 100 idle calls or every 10 seconds
+        const now = Date.now();
+        if (idleCallCount % 100 === 0 || (state.pendingItems.length > 0 && now - lastIdleLog > 10000)) {
+          lastIdleLog = now;
+          console.log(`Idle callback #${idleCallCount}: ${state.pendingItems.length} items to process, ${deadline?.timeRemaining()?.toFixed(0)}ms remaining`);
+        }
+        processPendingItems(deadline);
+      }, { timeout: idleTimeout });
     } else {
-      setTimeout(() => processPendingItems(), idleFallback);
+      setTimeout(() => {
+        idleCallCount++;
+        processPendingItems();
+      }, idleFallback);
     }
   }
 
@@ -161,6 +277,7 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
    * Process the next item in the queue if under concurrency limit.
    */
   function processQueue(): void {
+    if (state.paused) return;
     while (state.activeLoads < MAX_CONCURRENT_LOADS && state.pendingQueue.length > 0) {
       const next = state.pendingQueue.shift();
       if (next) {
@@ -178,33 +295,80 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
     cacheKey: string,
     generation: number
   ): Promise<T | null> {
+    // Helper to clean up load tracking.
+    // Only decrement activeLoads if we're still in the same generation.
+    // If clear() was called (generation changed), it already reset activeLoads to 0.
+    const cleanup = () => {
+      if (generation === state.cacheGeneration) {
+        state.activeLoads--;
+        state.loadingPromises.delete(cacheKey);
+        processQueue();
+      }
+    };
+
     try {
+      // Skip images that have previously failed to decode
+      if (failedImages.has(cacheKey)) {
+        cleanup();
+        return null;
+      }
+
       if (generation !== state.cacheGeneration) {
+        // Don't call cleanup - clear() already reset state
         return null;
       }
 
       const cached = state.cache.get(cacheKey);
       if (cached) {
+        cleanup();
         return cached;
       }
 
-      const bitmap = await createImageBitmap(imageFile);
-
-      if (generation !== state.cacheGeneration) {
-        bitmap.close();
+      let bitmap: ImageBitmap;
+      try {
+        bitmap = await createImageBitmapWithTimeout(imageFile, DECODE_TIMEOUT);
+      } catch (bitmapErr) {
+        // Mark as failed so we don't retry (causes OOM with many failures)
+        failedImages.add(cacheKey);
+        // Only log first 20 failures to avoid console spam
+        if (failedImages.size <= 20) {
+          console.warn(`[decode] Failed: "${cacheKey}" (${(imageFile.size / 1024).toFixed(0)} KB) -`, bitmapErr);
+        } else if (failedImages.size === 21) {
+          console.warn(`... suppressing further decode errors (${failedImages.size} images failed)`);
+        }
+        cleanup();
         return null;
       }
 
+      if (generation !== state.cacheGeneration) {
+        bitmap.close();
+        // Don't call cleanup - clear() already reset state
+        return null;
+      }
+
+      // Return promise that cleans up AFTER idle processing completes
       return new Promise((resolve) => {
-        state.pendingItems.push({ bitmap, cacheKey, resolve });
+        // Backpressure: if too many pending items, process some synchronously
+        // to prevent OOM from accumulating full-resolution bitmaps
+        if (state.pendingItems.length >= MAX_PENDING_ITEMS) {
+          // Process only 10 items to reduce memory without blocking too long
+          processPendingItems(undefined, 10);
+        }
+
+        state.pendingItems.push({
+          bitmap,
+          cacheKey,
+          resolve: (result: T | null) => {
+            cleanup();  // Clean up when idle processing actually finishes
+            resolve(result);
+          },
+        });
         scheduleIdleProcessing();
       });
-    } catch {
+    } catch (err) {
+      console.warn(`Failed to load image "${cacheKey}":`, err);
+      cleanup();
       return null;
-    } finally {
-      state.activeLoads--;
-      state.loadingPromises.delete(cacheKey);
-      processQueue();
     }
   }
 
@@ -217,8 +381,7 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
     return new Promise((resolve) => {
       const doLoad = () => {
         if (generation !== state.cacheGeneration) {
-          state.activeLoads--;
-          processQueue();
+          // clear() was called - it already reset activeLoads, don't decrement
           resolve(null);
           return;
         }
@@ -260,6 +423,41 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
     },
 
     /**
+     * Prioritize loading of a specific image.
+     * Moves the item to the front of processing queues so it loads sooner.
+     * Respects concurrency limits to avoid memory issues.
+     */
+    prioritize(imageFile: File, cacheKey: string): Promise<T | null> {
+      // Already cached - return immediately
+      const cached = state.cache.get(cacheKey);
+      if (cached) {
+        return Promise.resolve(cached);
+      }
+
+      // Check if already loading
+      const existingPromise = state.loadingPromises.get(cacheKey);
+
+      // Check if it's in pendingItems (waiting for idle processing) - move to front
+      const pendingIndex = state.pendingItems.findIndex(p => p.cacheKey === cacheKey);
+      if (pendingIndex > 0) {
+        // Move to front of the array so it processes first
+        const [pending] = state.pendingItems.splice(pendingIndex, 1);
+        state.pendingItems.unshift(pending);
+        // Trigger idle processing if not already scheduled
+        scheduleIdleProcessing();
+        return existingPromise ?? Promise.resolve(null);
+      }
+
+      // If already at front or loading, just return existing promise
+      if (existingPromise) {
+        return existingPromise;
+      }
+
+      // Not queued yet - use normal load (respects concurrency limits)
+      return this.load(imageFile, cacheKey);
+    },
+
+    /**
      * Clear all cached items.
      */
     clear(): void {
@@ -278,10 +476,39 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
       state.loadingPromises.clear();
       state.pendingQueue.length = 0;
       state.activeLoads = 0;
+      state.idleCallbackScheduled = false;
+      // Clear failed images to allow retry on new reconstruction
+      failedImages.clear();
+    },
+
+    /**
+     * Pause cache processing (e.g., during scroll).
+     * Queued items remain but won't be processed until resumed.
+     */
+    pause(): void {
+      state.paused = true;
+    },
+
+    /**
+     * Resume cache processing after pause.
+     * Re-triggers idle processing if there are pending items.
+     */
+    resume(): void {
+      if (!state.paused) return;
+      state.paused = false;
+      // Re-trigger processing for any pending items
+      if (state.pendingItems.length > 0) {
+        scheduleIdleProcessing();
+      }
+      if (state.pendingQueue.length > 0) {
+        processQueue();
+      }
     },
 
     /**
      * Prefetch items for a list of images.
+     * Uses bulk mode for faster initial loading (skips idle callbacks).
+     * Uses batched progress updates to avoid excessive re-renders.
      */
     async prefetch(
       images: Array<{ file: File; name: string }>,
@@ -292,28 +519,52 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
         return;
       }
 
+      // Enable bulk mode - process immediately without waiting for idle
+      state.bulkMode = true;
+
       let completed = 0;
       const total = images.length;
+      let lastReportedProgress = 0;
 
-      const promises = images.map(async ({ file, name }) => {
-        if (state.cache.has(name)) {
-          completed++;
-          onProgress?.(completed / total);
-          return;
+      // Batch progress updates - only report every 5% or 10 items minimum
+      const reportProgress = () => {
+        const progress = completed / total;
+        if (progress - lastReportedProgress >= 0.05 || completed === total) {
+          lastReportedProgress = progress;
+          onProgress?.(progress);
         }
+      };
 
-        let promise = state.loadingPromises.get(name);
-        if (!promise) {
-          promise = queueLoad(file, name);
-          state.loadingPromises.set(name, promise);
+      try {
+        // Larger chunks for faster throughput during prefetch
+        const chunkSize = MAX_CONCURRENT_LOADS * 4;
+        for (let i = 0; i < images.length; i += chunkSize) {
+          const chunk = images.slice(i, i + chunkSize);
+
+          const chunkPromises = chunk.map(async ({ file, name }) => {
+            if (state.cache.has(name)) {
+              completed++;
+              reportProgress();
+              return;
+            }
+
+            let promise = state.loadingPromises.get(name);
+            if (!promise) {
+              promise = queueLoad(file, name);
+              state.loadingPromises.set(name, promise);
+            }
+
+            await promise;
+            completed++;
+            reportProgress();
+          });
+
+          await Promise.all(chunkPromises);
         }
-
-        await promise;
-        completed++;
-        onProgress?.(completed / total);
-      });
-
-      await Promise.all(promises);
+      } finally {
+        // Always restore normal mode when done
+        state.bulkMode = false;
+      }
     },
 
     /**

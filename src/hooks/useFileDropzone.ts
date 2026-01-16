@@ -8,11 +8,12 @@ import {
   parseCamerasText,
   computeImageStats,
 } from '../parsers';
-import { useReconstructionStore, useViewerStore } from '../store';
+import { useReconstructionStore, useUIStore, useCameraStore } from '../store';
 import type { Reconstruction } from '../types/colmap';
-import { collectImageFiles, hasMaskFiles, getImageFile } from '../utils/imageFileUtils';
-import { prefetchThumbnails, clearThumbnailCache } from './useThumbnail';
-import { clearFrustumTextureCache } from './useFrustumTexture';
+import { collectImageFiles, hasMaskFiles, getImageFile, findMissingImageFiles } from '../utils/imageFileUtils';
+import { getFailedImageCount, clearSharedDecodeCache } from './useAsyncImageCache';
+import { clearThumbnailCache, prefetchThumbnails } from './useThumbnail';
+import { clearFrustumTextureCache, prefetchFrustumTextures } from './useFrustumTexture';
 
 export function useFileDropzone() {
   const {
@@ -22,10 +23,10 @@ export function useFileDropzone() {
     setLoading,
     setError,
     setProgress,
-    clear,
   } = useReconstructionStore();
-  const resetView = useViewerStore((s) => s.resetView);
-  const setSelectedImageId = useViewerStore((s) => s.setSelectedImageId);
+  const resetView = useUIStore((s) => s.resetView);
+  const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
+  const imageLoadMode = useUIStore((s) => s.imageLoadMode);
 
   const scanEntry = useCallback(async (
     entry: FileSystemEntry,
@@ -34,28 +35,36 @@ export function useFileDropzone() {
   ): Promise<void> => {
     const fullPath = path ? `${path}/${entry.name}` : entry.name;
 
-    if (entry.isFile) {
-      const file = await new Promise<File>((resolve, reject) => {
-        (entry as FileSystemFileEntry).file(resolve, reject);
-      });
-      files.set(fullPath, file);
-    } else if (entry.isDirectory) {
-      const dirReader = (entry as FileSystemDirectoryEntry).createReader();
-
-      // Read all entries (readEntries may need multiple calls for large directories)
-      let allEntries: FileSystemEntry[] = [];
-      let entries: FileSystemEntry[];
-
-      do {
-        entries = await new Promise<FileSystemEntry[]>((resolve, reject) => {
-          dirReader.readEntries(resolve, reject);
+    try {
+      if (entry.isFile) {
+        const file = await new Promise<File>((resolve, reject) => {
+          (entry as FileSystemFileEntry).file(resolve, reject);
         });
-        allEntries = allEntries.concat(entries);
-      } while (entries.length > 0);
+        files.set(fullPath, file);
+      } else if (entry.isDirectory) {
+        const dirReader = (entry as FileSystemDirectoryEntry).createReader();
 
-      for (const childEntry of allEntries) {
-        await scanEntry(childEntry, fullPath, files);
+        // Read all entries (readEntries may need multiple calls for large directories)
+        let allEntries: FileSystemEntry[] = [];
+        let entries: FileSystemEntry[];
+
+        do {
+          entries = await new Promise<FileSystemEntry[]>((resolve, reject) => {
+            dirReader.readEntries(resolve, reject);
+          });
+          allEntries = allEntries.concat(entries);
+        } while (entries.length > 0);
+
+        // Process entries in parallel batches for better performance with many files
+        const BATCH_SIZE = 50;
+        for (let i = 0; i < allEntries.length; i += BATCH_SIZE) {
+          const batch = allEntries.slice(i, i + BATCH_SIZE);
+          await Promise.all(batch.map(childEntry => scanEntry(childEntry, fullPath, files)));
+        }
       }
+    } catch (err) {
+      // Log but don't fail on individual file errors
+      console.warn(`Failed to scan entry: ${fullPath}`, err);
     }
   }, []);
 
@@ -130,10 +139,7 @@ export function useFileDropzone() {
   }, []);
 
   const processFiles = useCallback(async (files: Map<string, File>) => {
-    // Clear existing dataset and caches first
-    clear();
-    clearThumbnailCache();
-    clearFrustumTextureCache();
+    // Show loading state immediately so user gets feedback
     setLoading(true);
     setProgress(0);
 
@@ -150,9 +156,14 @@ export function useFileDropzone() {
         );
       }
 
+      setProgress(5);
+
       // Collect image files and check for masks folder
       const imageFiles = collectImageFiles(files);
       const hasMasks = hasMaskFiles(files);
+
+      // Log how many files were scanned
+      console.log(`Scanned ${files.size} total files, ${imageFiles.size} image lookup keys`);
 
       // Update loaded files reference
       setLoadedFiles({
@@ -166,48 +177,72 @@ export function useFileDropzone() {
 
       setProgress(10);
 
-      // Parse cameras
-      const cameras = camerasFile.name.endsWith('.bin')
-        ? parseCamerasBinary(await camerasFile.arrayBuffer())
-        : parseCamerasText(await camerasFile.text());
+      // Parse all COLMAP files in parallel for faster loading
+      const [cameras, images, points3D] = await Promise.all([
+        camerasFile.name.endsWith('.bin')
+          ? camerasFile.arrayBuffer().then(parseCamerasBinary)
+          : camerasFile.text().then(parseCamerasText),
+        imagesFile.name.endsWith('.bin')
+          ? imagesFile.arrayBuffer().then(parseImagesBinary)
+          : imagesFile.text().then(parseImagesText),
+        points3DFile.name.endsWith('.bin')
+          ? points3DFile.arrayBuffer().then(parsePoints3DBinary)
+          : points3DFile.text().then(parsePoints3DText),
+      ]);
 
-      setProgress(15);
+      setProgress(35);
 
-      // Parse images
-      const images = imagesFile.name.endsWith('.bin')
-        ? parseImagesBinary(await imagesFile.arrayBuffer())
-        : parseImagesText(await imagesFile.text());
-
-      setProgress(25);
-
-      // Parse points3D
-      const points3D = points3DFile.name.endsWith('.bin')
-        ? parsePoints3DBinary(await points3DFile.arrayBuffer())
-        : parsePoints3DText(await points3DFile.text());
+      // Pre-compute image statistics, connected images index, and global stats
+      const { imageStats, connectedImagesIndex, globalStats } = computeImageStats(images, points3D);
 
       setProgress(40);
 
-      // Pre-compute image statistics and connected images index
-      const { imageStats, connectedImagesIndex } = computeImageStats(images, points3D);
+      const reconstruction: Reconstruction = { cameras, images, points3D, imageStats, connectedImagesIndex, globalStats };
 
-      const reconstruction: Reconstruction = { cameras, images, points3D, imageStats, connectedImagesIndex };
+      // Clear caches AFTER parsing succeeds to prevent broken state on error
+      // This ensures old reconstruction remains functional if new data fails to load
+      clearThumbnailCache();
+      clearFrustumTextureCache();
+      clearSharedDecodeCache();
+
+      // Allow GPU memory to flush before loading new assets
+      // This prevents slowdown when replacing an existing reconstruction
+      await new Promise(r => setTimeout(r, 200));
 
       setProgress(45);
 
-      // Prefetch thumbnails for all images (progress 45-95%, ~50% of total)
-      const imagesToPrefetch: Array<{ file: File; name: string }> = [];
-      for (const image of images.values()) {
-        const file = getImageFile(imageFiles, image.name);
-        if (file) {
-          imagesToPrefetch.push({ file, name: image.name });
+      // Prefetch images if enabled (skip mode and lazy mode skip this)
+      if (imageLoadMode === 'prefetch') {
+        const imagesToPrefetch: Array<{ file: File; name: string }> = [];
+        for (const image of images.values()) {
+          const file = getImageFile(imageFiles, image.name);
+          if (file) {
+            imagesToPrefetch.push({ file, name: image.name });
+          }
         }
-      }
 
-      if (imagesToPrefetch.length > 0) {
-        await prefetchThumbnails(imagesToPrefetch, (thumbProgress) => {
-          // Scale thumbnail progress from 45% to 95% (50% of total progress)
-          setProgress(45 + Math.round(thumbProgress * 50));
-        });
+        if (imagesToPrefetch.length > 0) {
+          // Always prefetch both thumbnails and frustums in parallel for faster loading
+          const thumbProgress = { value: 0 };
+          const frustumProgress = { value: 0 };
+
+          const updateProgress = () => {
+            // Combined progress: thumbnails 45-70%, frustums 70-95%
+            const combined = (thumbProgress.value + frustumProgress.value) / 2;
+            setProgress(45 + Math.round(combined * 50));
+          };
+
+          await Promise.all([
+            prefetchThumbnails(imagesToPrefetch, (p) => {
+              thumbProgress.value = p;
+              updateProgress();
+            }),
+            prefetchFrustumTextures(imagesToPrefetch, (p) => {
+              frustumProgress.value = p;
+              updateProgress();
+            }),
+          ]);
+        }
       }
 
       setProgress(95);
@@ -220,8 +255,31 @@ export function useFileDropzone() {
       resetView();
 
       console.log(
-        `Loaded: ${cameras.size} cameras, ${images.size} images, ${points3D.size} points, ${imagesToPrefetch.length} thumbnails cached`
+        `Loaded: ${cameras.size} cameras, ${images.size} images, ${points3D.size} points`
       );
+
+      // Diagnostic: Report any images that couldn't find their files
+      const { missingImages, totalImages, totalFiles } = findMissingImageFiles(images, imageFiles);
+      if (missingImages.length > 0) {
+        console.warn(
+          `⚠️ ${missingImages.length}/${totalImages} images could not find their files (${totalFiles} image files in lookup map)`
+        );
+        // Log first few missing images for debugging
+        const samplesToShow = Math.min(10, missingImages.length);
+        console.warn('First missing images:', missingImages.slice(0, samplesToShow).map(img => `ID ${img.imageId}: "${img.name}"`));
+        if (missingImages.length > samplesToShow) {
+          console.warn(`... and ${missingImages.length - samplesToShow} more`);
+        }
+      }
+
+      // Report decode failures after prefetch
+      const failedCount = getFailedImageCount();
+      if (failedCount > 0) {
+        console.warn(
+          `⚠️ ${failedCount} images failed to decode (createImageBitmap error). These images may be corrupted or use unsupported encoding.`
+        );
+        console.warn('To fix: Re-export these images from your image editing software, or convert them using a tool like ImageMagick.');
+      }
 
     } catch (err) {
       console.error('Error processing files:', err);
@@ -230,7 +288,6 @@ export function useFileDropzone() {
       setLoading(false);
     }
   }, [
-    clear,
     setReconstruction,
     setLoadedFiles,
     setDroppedFiles,
@@ -240,11 +297,15 @@ export function useFileDropzone() {
     findColmapFiles,
     resetView,
     setSelectedImageId,
+    imageLoadMode,
   ]);
 
   const handleDrop = useCallback(async (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
     e.stopPropagation();
+
+    // Only process actual file drops, not internal UI drags
+    if (!e.dataTransfer?.types.includes('Files')) return;
 
     const items = e.dataTransfer?.items;
     if (!items) return;

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
-import { useReconstructionStore, useViewerStore } from '../../store';
+import { useHotkeys } from 'react-hotkeys-hook';
+import { useReconstructionStore, useUIStore } from '../../store';
 import type { Camera, Image } from '../../types/colmap';
 import { getImageFile, getMaskFile } from '../../utils/imageFileUtils';
 import { useFileUrl } from '../../hooks/useFileUrl';
-import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, buttonStyles, inputStyles, checkboxGroupStyles, tableStyles } from '../../theme';
+import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, MODAL, buttonStyles, inputStyles, tableStyles, resizeHandleStyles, controlPanelStyles } from '../../theme';
+import { HOTKEYS } from '../../config/hotkeys';
 
 const CAMERA_MODEL_NAMES: Record<number, string> = {
   0: 'SIMPLE_PINHOLE',
@@ -149,6 +151,7 @@ interface MatchCanvasProps {
   containerWidth: number;
   containerHeight: number;
   gap: number;
+  lineOpacity: number;
 }
 
 const MatchCanvas = memo(function MatchCanvas({
@@ -161,7 +164,8 @@ const MatchCanvas = memo(function MatchCanvas({
   image2Height,
   containerWidth,
   containerHeight,
-  gap
+  gap,
+  lineOpacity
 }: MatchCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -187,7 +191,7 @@ const MatchCanvas = memo(function MatchCanvas({
 
     ctx.strokeStyle = VIZ_COLORS.point.triangulated;
     ctx.lineWidth = 1;
-    ctx.globalAlpha = OPACITY.matchLines;
+    ctx.globalAlpha = lineOpacity;
 
     for (const { point1, point2 } of lines) {
       const x1 = offset1X + point1[0] * scale1X;
@@ -217,7 +221,7 @@ const MatchCanvas = memo(function MatchCanvas({
       ctx.arc(x2, y2, 2, 0, Math.PI * 2);
       ctx.fill();
     }
-  }, [lines, image1Camera, image2Camera, image1Width, image1Height, image2Width, image2Height, containerWidth, containerHeight, gap]);
+  }, [lines, image1Camera, image2Camera, image1Width, image1Height, image2Width, image2Height, containerWidth, containerHeight, gap, lineOpacity]);
 
   return (
     <canvas
@@ -236,21 +240,23 @@ const RESIZE_DEBOUNCE_MS = TIMING.resizeDebounce;
 export function ImageDetailModal() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
-  const imageDetailId = useViewerStore((s) => s.imageDetailId);
-  const closeImageDetail = useViewerStore((s) => s.closeImageDetail);
-  const openImageDetail = useViewerStore((s) => s.openImageDetail);
-  const showPoints2D = useViewerStore((s) => s.showPoints2D);
-  const showPoints3D = useViewerStore((s) => s.showPoints3D);
-  const setShowPoints2D = useViewerStore((s) => s.setShowPoints2D);
-  const setShowPoints3D = useViewerStore((s) => s.setShowPoints3D);
-  const showMatchesInModal = useViewerStore((s) => s.showMatchesInModal);
-  const setShowMatchesInModal = useViewerStore((s) => s.setShowMatchesInModal);
-  const matchedImageId = useViewerStore((s) => s.matchedImageId);
-  const setMatchedImageId = useViewerStore((s) => s.setMatchedImageId);
-  const showMaskOverlay = useViewerStore((s) => s.showMaskOverlay);
-  const setShowMaskOverlay = useViewerStore((s) => s.setShowMaskOverlay);
-  const maskOpacity = useViewerStore((s) => s.maskOpacity);
-  const setMaskOpacity = useViewerStore((s) => s.setMaskOpacity);
+  const imageDetailId = useUIStore((s) => s.imageDetailId);
+  const closeImageDetail = useUIStore((s) => s.closeImageDetail);
+  const openImageDetail = useUIStore((s) => s.openImageDetail);
+  const showPoints2D = useUIStore((s) => s.showPoints2D);
+  const showPoints3D = useUIStore((s) => s.showPoints3D);
+  const setShowPoints2D = useUIStore((s) => s.setShowPoints2D);
+  const setShowPoints3D = useUIStore((s) => s.setShowPoints3D);
+  const showMatchesInModal = useUIStore((s) => s.showMatchesInModal);
+  const setShowMatchesInModal = useUIStore((s) => s.setShowMatchesInModal);
+  const matchedImageId = useUIStore((s) => s.matchedImageId);
+  const setMatchedImageId = useUIStore((s) => s.setMatchedImageId);
+
+  // Match line opacity state (default from theme)
+  const [matchLineOpacity, setMatchLineOpacity] = useState<number>(OPACITY.matchLines);
+  const [isEditingOpacity, setIsEditingOpacity] = useState(false);
+  const [opacityInputValue, setOpacityInputValue] = useState('');
+  const opacityInputRef = useRef<HTMLInputElement>(null);
 
   // Get sorted list of image IDs for navigation
   const imageIds = useMemo(() => {
@@ -274,14 +280,53 @@ export function ImageDetailModal() {
     }
   }, [hasNext, imageIds, currentIndex, openImageDetail]);
 
+  // Opacity input focus effect
+  useEffect(() => {
+    if (isEditingOpacity && opacityInputRef.current) {
+      opacityInputRef.current.focus();
+      opacityInputRef.current.select();
+    }
+  }, [isEditingOpacity]);
+
+  const handleOpacityDoubleClick = useCallback(() => {
+    setOpacityInputValue(String(Math.round(matchLineOpacity * 100)));
+    setIsEditingOpacity(true);
+  }, [matchLineOpacity]);
+
+  const applyOpacityValue = useCallback(() => {
+    const parsed = parseFloat(opacityInputValue);
+    if (!isNaN(parsed)) {
+      const clamped = Math.min(100, Math.max(0, parsed)) / 100;
+      setMatchLineOpacity(clamped);
+    }
+    setIsEditingOpacity(false);
+  }, [opacityInputValue]);
+
+  const handleOpacityKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      applyOpacityValue();
+    } else if (e.key === 'Escape') {
+      setIsEditingOpacity(false);
+    }
+  }, [applyOpacityValue]);
+
+  const handleOpacityWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const step = 0.05;
+    const delta = e.deltaY > 0 ? -step : step;
+    const newValue = Math.min(1, Math.max(0, matchLineOpacity + delta));
+    setMatchLineOpacity(newValue);
+  }, [matchLineOpacity]);
+
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const imageContainerRef = useRef<HTMLDivElement>(null);
 
   // Position and size state for draggable/resizable
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [size, setSize] = useState(() => ({
-    width: Math.round(window.innerWidth * 0.8),
-    height: Math.round(window.innerHeight * 0.85),
+    width: Math.round(window.innerWidth * MODAL.defaultWidthPercent),
+    height: Math.round(window.innerHeight * MODAL.defaultHeightPercent),
   }));
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState<string | null>(null);
@@ -325,6 +370,74 @@ export function ImageDetailModal() {
         name: reconstruction.images.get(id)?.name || `Image ${id}`
       }));
   }, [reconstruction, imageDetailId]);
+
+  const handleMatchedImageWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (connectedImages.length === 0) return;
+    const currentIndex = matchedImageId !== null
+      ? connectedImages.findIndex(img => img.imageId === matchedImageId)
+      : -1;
+    if (e.deltaY > 0) {
+      const nextIndex = Math.min(currentIndex + 1, connectedImages.length - 1);
+      setMatchedImageId(connectedImages[nextIndex].imageId);
+    } else {
+      const prevIndex = Math.max(currentIndex - 1, 0);
+      setMatchedImageId(connectedImages[prevIndex].imageId);
+    }
+  }, [connectedImages, matchedImageId, setMatchedImageId]);
+
+  // Handle mouse wheel scrolling on image to navigate between images
+  // When showMatchesInModal is enabled, scroll through connected images instead
+  // Use native event listener with passive: false to allow preventDefault
+  // Throttled to prevent rapid image switching and blob URL race conditions
+  const lastWheelTime = useRef(0);
+  const WHEEL_THROTTLE_MS = 100;
+
+  useEffect(() => {
+    const container = imageContainerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+
+      // Throttle to prevent rapid switching
+      const now = Date.now();
+      if (now - lastWheelTime.current < WHEEL_THROTTLE_MS) return;
+      lastWheelTime.current = now;
+
+      if (showMatchesInModal && connectedImages.length > 0) {
+        // Scroll through connected/matched images
+        const currentMatchIndex = matchedImageId !== null
+          ? connectedImages.findIndex(img => img.imageId === matchedImageId)
+          : -1;
+
+        if (e.deltaY > 0) {
+          // Scroll down - next matched image
+          const nextIndex = currentMatchIndex + 1;
+          if (nextIndex < connectedImages.length) {
+            setMatchedImageId(connectedImages[nextIndex].imageId);
+          }
+        } else if (e.deltaY < 0) {
+          // Scroll up - previous matched image
+          const prevIndex = currentMatchIndex - 1;
+          if (prevIndex >= 0) {
+            setMatchedImageId(connectedImages[prevIndex].imageId);
+          }
+        }
+      } else {
+        // Normal mode - scroll through all images
+        if (e.deltaY > 0) {
+          goToNext();
+        } else if (e.deltaY < 0) {
+          goToPrev();
+        }
+      }
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, [goToNext, goToPrev, showMatchesInModal, connectedImages, matchedImageId, setMatchedImageId]);
 
   // Get matched image data
   const matchedImage = matchedImageId !== null ? reconstruction?.images.get(matchedImageId) : null;
@@ -424,27 +537,27 @@ export function ImageDetailModal() {
     }
   }, [imageDetailId]);
 
-  // Handle keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        closeImageDetail();
-      } else if (e.key === 'ArrowLeft') {
-        goToPrev();
-      } else if (e.key === 'ArrowRight') {
-        goToNext();
-      } else if (e.key === 'm' || e.key === 'M') {
-        if (hasMask) {
-          setShowMaskOverlay(!showMaskOverlay);
-        }
-      }
-    };
+  // Handle keyboard shortcuts using centralized hotkey system
+  useHotkeys(
+    HOTKEYS.closeModal.keys,
+    closeImageDetail,
+    { scopes: HOTKEYS.closeModal.scopes, enabled: imageDetailId !== null },
+    [closeImageDetail]
+  );
 
-    if (imageDetailId !== null) {
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-    }
-  }, [imageDetailId, closeImageDetail, goToPrev, goToNext, hasMask, showMaskOverlay, setShowMaskOverlay]);
+  useHotkeys(
+    HOTKEYS.prevImage.keys,
+    goToPrev,
+    { scopes: HOTKEYS.prevImage.scopes, enabled: imageDetailId !== null && hasPrev },
+    [hasPrev, goToPrev]
+  );
+
+  useHotkeys(
+    HOTKEYS.nextImage.keys,
+    goToNext,
+    { scopes: HOTKEYS.nextImage.scopes, enabled: imageDetailId !== null && hasNext },
+    [hasNext, goToNext]
+  );
 
   // Drag handlers
   const handleDragStart = useCallback((e: React.MouseEvent) => {
@@ -581,7 +694,7 @@ export function ImageDetailModal() {
         onClick={(e) => e.stopPropagation()}
       >
         <div
-          className="flex items-center justify-between px-3 py-1 border-b border-ds cursor-move select-none rounded-t-lg"
+          className="flex items-center justify-between px-3 cursor-move select-none rounded-t-lg bg-ds-secondary"
           onMouseDown={handleDragStart}
         >
           <h2 className="text-ds-primary font-semibold text-base">
@@ -598,9 +711,9 @@ export function ImageDetailModal() {
           </button>
         </div>
 
-        <div className="flex flex-col flex-1 overflow-hidden p-4 gap-4">
+        <div className="flex flex-col flex-1 overflow-hidden px-4 pt-1 pb-4 gap-2">
           <div className="flex-shrink-0 overflow-auto">
-            <table className="w-full text-base">
+            <table className="w-full text-sm">
               <tbody>
                 <InfoRow label="image_id" value={image.imageId} />
                 <InfoRow label="camera" value={formatCameraInfo(camera)} multiline />
@@ -613,7 +726,12 @@ export function ImageDetailModal() {
           </div>
 
           <div className="flex-1 min-h-0 flex flex-col">
-            <div ref={imageContainerRef} className="relative flex-1 min-h-0 bg-ds-secondary rounded overflow-hidden">
+            <div ref={imageContainerRef} className="group/scroll relative flex-1 min-h-0 bg-ds-secondary rounded overflow-hidden">
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 px-2 py-1 bg-ds-void/70 text-ds-secondary text-xs rounded opacity-0 group-hover/scroll:opacity-100 transition-opacity pointer-events-none">
+                {showMatchesInModal && connectedImages.length > 0
+                  ? 'Scroll to iterate through matched images'
+                  : 'Scroll to iterate through images'}
+              </div>
               {isMatchViewMode ? (
                 <>
                   <div className="absolute inset-0 flex" style={{ gap: MATCH_VIEW_GAP }}>
@@ -656,23 +774,23 @@ export function ImageDetailModal() {
                       containerWidth={containerSize.width}
                       containerHeight={containerSize.height}
                       gap={MATCH_VIEW_GAP}
+                      lineOpacity={matchLineOpacity}
                     />
                   )}
                 </>
               ) : imageSrc ? (
-                <>
+                <div className="group absolute inset-0">
                   <img
                     src={imageSrc}
                     alt={image.name}
                     className="absolute inset-0 w-full h-full object-contain"
                     draggable={false}
                   />
-                  {showMaskOverlay && maskSrc && (
+                  {hasMask && maskSrc && (
                     <img
                       src={maskSrc}
                       alt="mask"
-                      className="absolute inset-0 w-full h-full object-contain pointer-events-none"
-                      style={{ opacity: maskOpacity ?? 0.7 }}
+                      className="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-0 group-hover:opacity-50"
                       draggable={false}
                     />
                   )}
@@ -688,114 +806,110 @@ export function ImageDetailModal() {
                       showPoints3D={showPoints3D}
                     />
                   )}
-                </>
+                </div>
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-ds-muted">No image file loaded</div>
               )}
             </div>
 
-            <div className="mt-2 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                {!isMatchViewMode && (
+            <div className="mt-2 mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {!showMatchesInModal && (
                   <>
-                    <div className={checkboxGroupStyles.container}>
-                      <input
-                        type="checkbox"
-                        id="showPoints2D"
-                        checked={showPoints2D}
-                        onChange={(e) => setShowPoints2D(e.target.checked)}
-                        className={`${checkboxGroupStyles.checkbox} accent-ds-error`}
-                      />
-                      <label htmlFor="showPoints2D" className={checkboxGroupStyles.label}>
-                        Show Points2D <span className="text-ds-error">({numPoints2D - numPoints3D})</span>
-                      </label>
-                    </div>
-                    <div className={checkboxGroupStyles.container}>
-                      <input
-                        type="checkbox"
-                        id="showPoints3D"
-                        checked={showPoints3D}
-                        onChange={(e) => setShowPoints3D(e.target.checked)}
-                        className={`${checkboxGroupStyles.checkbox} accent-ds-success`}
-                      />
-                      <label htmlFor="showPoints3D" className={checkboxGroupStyles.label}>
-                        Show Points3D <span className="text-ds-success">({numPoints3D})</span>
-                      </label>
-                    </div>
-                    {hasMask && (
-                      <div className={checkboxGroupStyles.container}>
-                        <input
-                          type="checkbox"
-                          id="showMaskOverlay"
-                          checked={showMaskOverlay}
-                          onChange={(e) => setShowMaskOverlay(e.target.checked)}
-                          className={`${checkboxGroupStyles.checkbox} accent-ds-warning`}
-                        />
-                        <label htmlFor="showMaskOverlay" className={checkboxGroupStyles.label}>
-                          Show Mask
-                        </label>
-                        {showMaskOverlay && (
-                          <input
-                            type="range"
-                            min="0.1"
-                            max="1"
-                            step="0.1"
-                            value={maskOpacity}
-                            onChange={(e) => setMaskOpacity(parseFloat(e.target.value))}
-                            className={`${inputStyles.range.sm} ${inputStyles.range.base}`}
-                            title={`Mask opacity: ${Math.round(maskOpacity * 100)}%`}
-                          />
-                        )}
-                      </div>
-                    )}
+                    <button
+                      onClick={() => setShowPoints2D(!showPoints2D)}
+                      className={`${buttonStyles.base} ${buttonStyles.sizes.toggle} ${
+                        showPoints2D ? buttonStyles.variants.toggleActive : buttonStyles.variants.toggle
+                      }`}
+                    >
+                      Points2D <span className={showPoints2D ? '' : 'text-ds-error'}>({numPoints2D - numPoints3D})</span>
+                    </button>
+                    <button
+                      onClick={() => setShowPoints3D(!showPoints3D)}
+                      className={`${buttonStyles.base} ${buttonStyles.sizes.toggle} ${
+                        showPoints3D ? buttonStyles.variants.toggleActive : buttonStyles.variants.toggle
+                      }`}
+                    >
+                      Points3D <span className={showPoints3D ? '' : 'text-ds-success'}>({numPoints3D})</span>
+                    </button>
                   </>
                 )}
 
-                <div className={checkboxGroupStyles.container}>
-                  <input
-                    type="checkbox"
-                    id="showMatchesInModal"
-                    checked={showMatchesInModal}
-                    onChange={(e) => setShowMatchesInModal(e.target.checked)}
-                    className={`${checkboxGroupStyles.checkbox} accent-ds-success`}
-                  />
-                  <label htmlFor="showMatchesInModal" className={checkboxGroupStyles.label}>
-                    Show Matches
-                  </label>
-                </div>
+                <button
+                  onClick={() => setShowMatchesInModal(!showMatchesInModal)}
+                  className={`${buttonStyles.base} ${buttonStyles.sizes.toggle} ${
+                    showMatchesInModal ? buttonStyles.variants.toggleActive : buttonStyles.variants.toggle
+                  }`}
+                >
+                  Show Matches
+                </button>
 
                 {showMatchesInModal && (
-                  <select
-                    value={matchedImageId ?? ''}
-                    onChange={(e) => setMatchedImageId(e.target.value ? parseInt(e.target.value) : null)}
-                    className={`${inputStyles.select} ${inputStyles.sizes.md}`}
-                  >
-                    <option value="">Select connected image...</option>
-                    {connectedImages.map(({ imageId, matchCount, name }) => (
-                      <option key={imageId} value={imageId}>
-                        {name} ({matchCount} matches)
-                      </option>
-                    ))}
-                  </select>
+                  <>
+                    <select
+                      value={matchedImageId ?? ''}
+                      onChange={(e) => setMatchedImageId(e.target.value ? parseInt(e.target.value) : null)}
+                      onWheel={handleMatchedImageWheel}
+                      className={`${inputStyles.select} py-1 pl-2 text-sm`}
+                    >
+                      <option value="">Select connected image...</option>
+                      {connectedImages.map(({ imageId, matchCount, name }) => (
+                        <option key={imageId} value={imageId}>
+                          {name} ({matchCount} matches)
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex items-center gap-1.5" onWheel={handleOpacityWheel}>
+                      <label className="text-ds-secondary text-sm whitespace-nowrap">Opacity</label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={matchLineOpacity}
+                        onChange={(e) => setMatchLineOpacity(parseFloat(e.target.value))}
+                        className="w-16 accent-ds-success"
+                      />
+                      {isEditingOpacity ? (
+                        <input
+                          ref={opacityInputRef}
+                          type="text"
+                          value={opacityInputValue}
+                          onChange={(e) => setOpacityInputValue(e.target.value)}
+                          onBlur={applyOpacityValue}
+                          onKeyDown={handleOpacityKeyDown}
+                          className={controlPanelStyles.valueInput}
+                        />
+                      ) : (
+                        <span
+                          className={controlPanelStyles.value}
+                          onDoubleClick={handleOpacityDoubleClick}
+                          title="Double-click to edit"
+                        >
+                          {Math.round(matchLineOpacity * 100)}%
+                        </span>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   onClick={goToPrev}
                   disabled={!hasPrev}
-                  className={`${buttonStyles.base} ${buttonStyles.sizes.md} w-24 ${
-                    hasPrev ? buttonStyles.variants.secondary : buttonStyles.disabled + ' bg-ds-secondary text-ds-muted'
+                  className={`${buttonStyles.base} ${buttonStyles.sizes.toggle} ${
+                    hasPrev ? buttonStyles.variants.toggle : buttonStyles.disabled + ' bg-ds-secondary text-ds-muted'
                   }`}
                 >
-                  ← Prev
+                  (&lt;) Prev
                 </button>
-                <div className="flex items-center text-base">
+                <div className="flex items-center text-sm">
                   <input
                     type="text"
                     defaultValue={imageDetailId ?? ''}
                     key={imageDetailId}
-                    className={`${inputStyles.base} ${inputStyles.sizes.md} w-16 rounded-l rounded-r-none text-center`}
+                    className={`${inputStyles.base} py-1 w-14 text-sm rounded-l rounded-r-none text-center`}
                     onKeyDown={(e) => {
                       e.stopPropagation();
                       if (e.key === 'Enter') {
@@ -813,32 +927,32 @@ export function ImageDetailModal() {
                       e.target.value = String(imageDetailId ?? '');
                     }}
                   />
-                  <span className="w-16 px-2 py-1.5 text-center bg-ds-secondary text-ds-secondary border-y border-r border-ds rounded-r">
+                  <span className="w-14 px-2 py-1 text-sm text-center bg-ds-secondary text-ds-secondary border-y border-r border-ds rounded-r">
                     {imageIds.length}
                   </span>
                 </div>
                 <button
                   onClick={goToNext}
                   disabled={!hasNext}
-                  className={`${buttonStyles.base} ${buttonStyles.sizes.md} w-24 ${
-                    hasNext ? buttonStyles.variants.secondary : buttonStyles.disabled + ' bg-ds-secondary text-ds-muted'
+                  className={`${buttonStyles.base} ${buttonStyles.sizes.toggle} ${
+                    hasNext ? buttonStyles.variants.toggle : buttonStyles.disabled + ' bg-ds-secondary text-ds-muted'
                   }`}
                 >
-                  Next →
+                  Next (&gt;)
                 </button>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="absolute top-0 left-0 w-3 h-3 cursor-nw-resize" onMouseDown={(e) => handleResizeStart(e, 'nw')} />
-        <div className="absolute top-0 right-0 w-3 h-3 cursor-ne-resize" onMouseDown={(e) => handleResizeStart(e, 'ne')} />
-        <div className="absolute bottom-0 left-0 w-3 h-3 cursor-sw-resize" onMouseDown={(e) => handleResizeStart(e, 'sw')} />
-        <div className="absolute bottom-0 right-0 w-3 h-3 cursor-se-resize" onMouseDown={(e) => handleResizeStart(e, 'se')} />
-        <div className="absolute top-0 left-3 right-3 h-1 cursor-n-resize" onMouseDown={(e) => handleResizeStart(e, 'n')} />
-        <div className="absolute bottom-0 left-3 right-3 h-1 cursor-s-resize" onMouseDown={(e) => handleResizeStart(e, 's')} />
-        <div className="absolute left-0 top-3 bottom-3 w-1 cursor-w-resize" onMouseDown={(e) => handleResizeStart(e, 'w')} />
-        <div className="absolute right-0 top-3 bottom-3 w-1 cursor-e-resize" onMouseDown={(e) => handleResizeStart(e, 'e')} />
+        <div className={`${resizeHandleStyles.corner} ${resizeHandleStyles.nw}`} onMouseDown={(e) => handleResizeStart(e, 'nw')} />
+        <div className={`${resizeHandleStyles.corner} ${resizeHandleStyles.ne}`} onMouseDown={(e) => handleResizeStart(e, 'ne')} />
+        <div className={`${resizeHandleStyles.corner} ${resizeHandleStyles.sw}`} onMouseDown={(e) => handleResizeStart(e, 'sw')} />
+        <div className={`${resizeHandleStyles.corner} ${resizeHandleStyles.se}`} onMouseDown={(e) => handleResizeStart(e, 'se')} />
+        <div className={`${resizeHandleStyles.edge} ${resizeHandleStyles.n}`} onMouseDown={(e) => handleResizeStart(e, 'n')} />
+        <div className={`${resizeHandleStyles.edge} ${resizeHandleStyles.s}`} onMouseDown={(e) => handleResizeStart(e, 's')} />
+        <div className={`${resizeHandleStyles.edge} ${resizeHandleStyles.w}`} onMouseDown={(e) => handleResizeStart(e, 'w')} />
+        <div className={`${resizeHandleStyles.edge} ${resizeHandleStyles.e}`} onMouseDown={(e) => handleResizeStart(e, 'e')} />
       </div>
     </div>
   );

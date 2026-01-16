@@ -109,6 +109,34 @@ export function getImageFile(
 }
 
 /**
+ * Diagnostic function: Find images that don't have corresponding files.
+ * Returns information about missing images and potential causes.
+ */
+export function findMissingImageFiles(
+  images: Map<number, { imageId: number; name: string }>,
+  imageFiles: Map<string, File>
+): {
+  missingImages: Array<{ imageId: number; name: string }>;
+  totalImages: number;
+  totalFiles: number;
+} {
+  const missingImages: Array<{ imageId: number; name: string }> = [];
+
+  for (const image of images.values()) {
+    const file = getImageFile(imageFiles, image.name);
+    if (!file) {
+      missingImages.push({ imageId: image.imageId, name: image.name });
+    }
+  }
+
+  return {
+    missingImages,
+    totalImages: images.size,
+    totalFiles: imageFiles.size,
+  };
+}
+
+/**
  * Look up a mask file for an image.
  * Masks are stored in masks/ folder mirroring images/ structure.
  * Supports both exact match and .png suffix variants.

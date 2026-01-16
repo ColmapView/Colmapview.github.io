@@ -85,12 +85,29 @@ export interface ImageStats {
 // Maps imageId -> Map<connectedImageId, matchCount>
 export type ConnectedImagesIndex = Map<ImageId, Map<ImageId, number>>;
 
+// Pre-computed global statistics for the entire reconstruction (computed once at load time)
+export interface GlobalStats {
+  // Error statistics across all 3D points
+  minError: number;
+  maxError: number;
+  avgError: number;
+  // Track length statistics across all 3D points
+  minTrackLength: number;
+  maxTrackLength: number;
+  avgTrackLength: number;
+  // Total observation count (sum of all track lengths)
+  totalObservations: number;
+  // Total point count
+  totalPoints: number;
+}
+
 export interface Reconstruction {
   cameras: Map<CameraId, Camera>;
   images: Map<ImageId, Image>;
   points3D: Map<Point3DId, Point3D>;
   imageStats: Map<ImageId, ImageStats>;
   connectedImagesIndex: ConnectedImagesIndex;
+  globalStats: GlobalStats;
 }
 
 // File structure for loaded data

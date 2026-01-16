@@ -1,194 +1,239 @@
 import { assertEquals } from "jsr:@std/assert";
 import { beforeEach, describe, it } from "jsr:@std/testing/bdd";
-import { useViewerStore } from "./viewerStore.ts";
+import { usePointCloudStore } from "./stores/pointCloudStore";
+import { useCameraStore } from "./stores/cameraStore";
+import { useUIStore } from "./stores/uiStore";
 
-describe("viewerStore", () => {
+describe("pointCloudStore", () => {
   beforeEach(() => {
-    // Reset store to initial state before each test
-    useViewerStore.setState({
+    usePointCloudStore.setState({
       pointSize: 2,
       colorMode: "rgb",
-      showCameras: true,
-      cameraScale: 0.2,
-      selectedPointId: null,
-      selectedImageId: null,
-      autoRotate: false,
-      backgroundColor: "#ffffff",
-      viewResetTrigger: 0,
       minTrackLength: 2,
-      showAxes: true,
-      axesOpacity: 1,
+      selectedPointId: null,
+    });
+  });
+
+  it("should update point size", () => {
+    const { setPointSize } = usePointCloudStore.getState();
+    setPointSize(5);
+    assertEquals(usePointCloudStore.getState().pointSize, 5);
+  });
+
+  it("should update color mode", () => {
+    const { setColorMode } = usePointCloudStore.getState();
+    setColorMode("error");
+    assertEquals(usePointCloudStore.getState().colorMode, "error");
+  });
+
+  it("should update min track length", () => {
+    const { setMinTrackLength } = usePointCloudStore.getState();
+    setMinTrackLength(5);
+    assertEquals(usePointCloudStore.getState().minTrackLength, 5);
+  });
+
+  it("should select and deselect point", () => {
+    const { setSelectedPointId } = usePointCloudStore.getState();
+
+    setSelectedPointId(BigInt(123));
+    assertEquals(usePointCloudStore.getState().selectedPointId, BigInt(123));
+
+    setSelectedPointId(null);
+    assertEquals(usePointCloudStore.getState().selectedPointId, null);
+  });
+});
+
+describe("cameraStore", () => {
+  beforeEach(() => {
+    useCameraStore.setState({
+      cameraDisplayMode: "frustum",
+      cameraScale: 0.2,
+      cameraMode: "orbit",
+      flySpeed: 1,
+      frustumColorMode: "single",
+      unselectedCameraOpacity: 1,
+      selectedImageId: null,
+      selectionColorMode: "rainbow",
+      selectionAnimationSpeed: 2.5,
       showImagePlanes: false,
       imagePlaneOpacity: 0.9,
-      showMatches: false,
-      matchesOpacity: 1,
-      imageDetailId: null,
-      showPoints2D: false,
-      showPoints3D: false,
-      showMatchesInModal: false,
-      matchedImageId: null,
       flyToImageId: null,
     });
   });
 
-  describe("point settings", () => {
-    it("should update point size", () => {
-      const { setPointSize } = useViewerStore.getState();
-      setPointSize(5);
-      assertEquals(useViewerStore.getState().pointSize, 5);
-    });
-
-    it("should update color mode", () => {
-      const { setColorMode } = useViewerStore.getState();
-      setColorMode("error");
-      assertEquals(useViewerStore.getState().colorMode, "error");
-    });
-
-    it("should update min track length", () => {
-      const { setMinTrackLength } = useViewerStore.getState();
-      setMinTrackLength(5);
-      assertEquals(useViewerStore.getState().minTrackLength, 5);
-    });
-  });
-
-  describe("camera settings", () => {
-    it("should toggle camera visibility", () => {
-      const { setShowCameras } = useViewerStore.getState();
-      setShowCameras(false);
-      assertEquals(useViewerStore.getState().showCameras, false);
+  describe("camera display settings", () => {
+    it("should update camera display mode", () => {
+      const { setCameraDisplayMode } = useCameraStore.getState();
+      setCameraDisplayMode("off");
+      assertEquals(useCameraStore.getState().cameraDisplayMode, "off");
+      setCameraDisplayMode("arrow");
+      assertEquals(useCameraStore.getState().cameraDisplayMode, "arrow");
     });
 
     it("should update camera scale", () => {
-      const { setCameraScale } = useViewerStore.getState();
+      const { setCameraScale } = useCameraStore.getState();
       setCameraScale(0.5);
-      assertEquals(useViewerStore.getState().cameraScale, 0.5);
+      assertEquals(useCameraStore.getState().cameraScale, 0.5);
+    });
+
+    it("should toggle image planes and set opacity", () => {
+      const { setShowImagePlanes, setImagePlaneOpacity } =
+        useCameraStore.getState();
+
+      setShowImagePlanes(true);
+      assertEquals(useCameraStore.getState().showImagePlanes, true);
+
+      setImagePlaneOpacity(0.7);
+      assertEquals(useCameraStore.getState().imagePlaneOpacity, 0.7);
     });
   });
 
   describe("selection", () => {
     it("should select and deselect image", () => {
-      const { setSelectedImageId } = useViewerStore.getState();
+      const { setSelectedImageId } = useCameraStore.getState();
 
       setSelectedImageId(42);
-      assertEquals(useViewerStore.getState().selectedImageId, 42);
+      assertEquals(useCameraStore.getState().selectedImageId, 42);
 
       setSelectedImageId(null);
-      assertEquals(useViewerStore.getState().selectedImageId, null);
+      assertEquals(useCameraStore.getState().selectedImageId, null);
     });
 
-    it("should select and deselect point", () => {
-      const { setSelectedPointId } = useViewerStore.getState();
+    it("should set selection color mode and animation speed", () => {
+      const { setSelectionColorMode, setSelectionAnimationSpeed } =
+        useCameraStore.getState();
 
-      setSelectedPointId(BigInt(123));
-      assertEquals(useViewerStore.getState().selectedPointId, BigInt(123));
+      setSelectionColorMode("static");
+      assertEquals(useCameraStore.getState().selectionColorMode, "static");
 
-      setSelectedPointId(null);
-      assertEquals(useViewerStore.getState().selectedPointId, null);
-    });
-  });
+      setSelectionColorMode("blink");
+      assertEquals(useCameraStore.getState().selectionColorMode, "blink");
 
-  describe("image detail modal", () => {
-    it("should open image detail and reset matchedImageId", () => {
-      const { openImageDetail, setMatchedImageId } = useViewerStore.getState();
+      setSelectionColorMode("rainbow");
+      assertEquals(useCameraStore.getState().selectionColorMode, "rainbow");
 
-      setMatchedImageId(10);
-      assertEquals(useViewerStore.getState().matchedImageId, 10);
-
-      openImageDetail(5);
-      assertEquals(useViewerStore.getState().imageDetailId, 5);
-      assertEquals(useViewerStore.getState().matchedImageId, null);
-    });
-
-    it("should close image detail and reset matchedImageId", () => {
-      const { openImageDetail, setMatchedImageId, closeImageDetail } =
-        useViewerStore.getState();
-
-      openImageDetail(5);
-      setMatchedImageId(10);
-
-      closeImageDetail();
-      assertEquals(useViewerStore.getState().imageDetailId, null);
-      assertEquals(useViewerStore.getState().matchedImageId, null);
-    });
-
-    it("should toggle showMatchesInModal", () => {
-      const { setShowMatchesInModal } = useViewerStore.getState();
-
-      setShowMatchesInModal(true);
-      assertEquals(useViewerStore.getState().showMatchesInModal, true);
-
-      setShowMatchesInModal(false);
-      assertEquals(useViewerStore.getState().showMatchesInModal, false);
-    });
-  });
-
-  describe("view controls", () => {
-    it("should toggle auto rotate", () => {
-      const { setAutoRotate } = useViewerStore.getState();
-      setAutoRotate(true);
-      assertEquals(useViewerStore.getState().autoRotate, true);
-    });
-
-    it("should update background color", () => {
-      const { setBackgroundColor } = useViewerStore.getState();
-      setBackgroundColor("#000000");
-      assertEquals(useViewerStore.getState().backgroundColor, "#000000");
-    });
-
-    it("should increment view reset trigger", () => {
-      const { resetView } = useViewerStore.getState();
-      const initialTrigger = useViewerStore.getState().viewResetTrigger;
-
-      resetView();
-      assertEquals(
-        useViewerStore.getState().viewResetTrigger,
-        initialTrigger + 1
-      );
-    });
-  });
-
-  describe("helpers visibility", () => {
-    it("should toggle axes and set opacity", () => {
-      const { setShowAxes, setAxesOpacity } = useViewerStore.getState();
-
-      setShowAxes(false);
-      assertEquals(useViewerStore.getState().showAxes, false);
-
-      setAxesOpacity(0.5);
-      assertEquals(useViewerStore.getState().axesOpacity, 0.5);
-    });
-
-    it("should toggle image planes and set opacity", () => {
-      const { setShowImagePlanes, setImagePlaneOpacity } =
-        useViewerStore.getState();
-
-      setShowImagePlanes(true);
-      assertEquals(useViewerStore.getState().showImagePlanes, true);
-
-      setImagePlaneOpacity(0.7);
-      assertEquals(useViewerStore.getState().imagePlaneOpacity, 0.7);
-    });
-
-    it("should toggle matches and set opacity", () => {
-      const { setShowMatches, setMatchesOpacity } = useViewerStore.getState();
-
-      setShowMatches(true);
-      assertEquals(useViewerStore.getState().showMatches, true);
-
-      setMatchesOpacity(0.8);
-      assertEquals(useViewerStore.getState().matchesOpacity, 0.8);
+      setSelectionAnimationSpeed(3.0);
+      assertEquals(useCameraStore.getState().selectionAnimationSpeed, 3.0);
     });
   });
 
   describe("fly to image", () => {
     it("should set and clear fly to image", () => {
-      const { flyToImage, clearFlyTo } = useViewerStore.getState();
+      const { flyToImage, clearFlyTo } = useCameraStore.getState();
 
       flyToImage(42);
-      assertEquals(useViewerStore.getState().flyToImageId, 42);
+      assertEquals(useCameraStore.getState().flyToImageId, 42);
 
       clearFlyTo();
-      assertEquals(useViewerStore.getState().flyToImageId, null);
+      assertEquals(useCameraStore.getState().flyToImageId, null);
+    });
+  });
+});
+
+describe("uiStore", () => {
+  beforeEach(() => {
+    useUIStore.setState({
+      imageDetailId: null,
+      showPoints2D: false,
+      showPoints3D: false,
+      showMatchesInModal: false,
+      matchedImageId: null,
+      matchesDisplayMode: "off",
+      matchesOpacity: 1,
+      showMaskOverlay: false,
+      maskOpacity: 0.7,
+      axesDisplayMode: "axes",
+      axesOpacity: 1,
+      backgroundColor: "#ffffff",
+      autoRotate: false,
+      viewResetTrigger: 0,
+      imageLoadMode: "lazy",
+    });
+  });
+
+  describe("image detail modal", () => {
+    it("should open image detail and reset matchedImageId", () => {
+      const { openImageDetail, setMatchedImageId } = useUIStore.getState();
+
+      setMatchedImageId(10);
+      assertEquals(useUIStore.getState().matchedImageId, 10);
+
+      openImageDetail(5);
+      assertEquals(useUIStore.getState().imageDetailId, 5);
+      assertEquals(useUIStore.getState().matchedImageId, null);
+    });
+
+    it("should close image detail and reset matchedImageId", () => {
+      const { openImageDetail, setMatchedImageId, closeImageDetail } =
+        useUIStore.getState();
+
+      openImageDetail(5);
+      setMatchedImageId(10);
+
+      closeImageDetail();
+      assertEquals(useUIStore.getState().imageDetailId, null);
+      assertEquals(useUIStore.getState().matchedImageId, null);
+    });
+
+    it("should toggle showMatchesInModal", () => {
+      const { setShowMatchesInModal } = useUIStore.getState();
+
+      setShowMatchesInModal(true);
+      assertEquals(useUIStore.getState().showMatchesInModal, true);
+
+      setShowMatchesInModal(false);
+      assertEquals(useUIStore.getState().showMatchesInModal, false);
+    });
+  });
+
+  describe("view controls", () => {
+    it("should toggle auto rotate", () => {
+      const { setAutoRotate } = useUIStore.getState();
+      setAutoRotate(true);
+      assertEquals(useUIStore.getState().autoRotate, true);
+    });
+
+    it("should update background color", () => {
+      const { setBackgroundColor } = useUIStore.getState();
+      setBackgroundColor("#000000");
+      assertEquals(useUIStore.getState().backgroundColor, "#000000");
+    });
+
+    it("should increment view reset trigger", () => {
+      const { resetView } = useUIStore.getState();
+      const initialTrigger = useUIStore.getState().viewResetTrigger;
+
+      resetView();
+      assertEquals(useUIStore.getState().viewResetTrigger, initialTrigger + 1);
+    });
+  });
+
+  describe("helpers visibility", () => {
+    it("should set axes display mode and opacity", () => {
+      const { setAxesDisplayMode, setAxesOpacity } = useUIStore.getState();
+
+      setAxesDisplayMode("off");
+      assertEquals(useUIStore.getState().axesDisplayMode, "off");
+
+      setAxesDisplayMode("grid");
+      assertEquals(useUIStore.getState().axesDisplayMode, "grid");
+
+      setAxesOpacity(0.5);
+      assertEquals(useUIStore.getState().axesOpacity, 0.5);
+    });
+
+    it("should set matches display mode and opacity", () => {
+      const { setMatchesDisplayMode, setMatchesOpacity } =
+        useUIStore.getState();
+
+      setMatchesDisplayMode("on");
+      assertEquals(useUIStore.getState().matchesDisplayMode, "on");
+
+      setMatchesDisplayMode("blink");
+      assertEquals(useUIStore.getState().matchesDisplayMode, "blink");
+
+      setMatchesOpacity(0.8);
+      assertEquals(useUIStore.getState().matchesOpacity, 0.8);
     });
   });
 });

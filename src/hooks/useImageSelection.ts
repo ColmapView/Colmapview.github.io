@@ -8,7 +8,7 @@
  */
 
 import { useCallback } from 'react';
-import { useViewerStore } from '../store';
+import { useCameraStore, useUIStore } from '../store';
 
 interface ImageSelectionHandlers {
   /** Toggle selection of an image (click handler) */
@@ -40,10 +40,10 @@ interface ImageSelectionResult extends ImageSelectionHandlers {
  * ```
  */
 export function useImageSelection(): ImageSelectionResult {
-  const selectedImageId = useViewerStore((s) => s.selectedImageId);
-  const setSelectedImageId = useViewerStore((s) => s.setSelectedImageId);
-  const openImageDetail = useViewerStore((s) => s.openImageDetail);
-  const flyToImage = useViewerStore((s) => s.flyToImage);
+  const selectedImageId = useCameraStore((s) => s.selectedImageId);
+  const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
+  const openImageDetail = useUIStore((s) => s.openImageDetail);
+  const flyToImage = useCameraStore((s) => s.flyToImage);
 
   const handleClick = useCallback((imageId: number) => {
     setSelectedImageId(imageId);

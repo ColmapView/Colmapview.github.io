@@ -57,6 +57,16 @@ View point clouds, camera frustums, and image matches directly in your browser. 
 - [GitHub Repository](https://github.com/ColmapView/colmapview.github.io)
 - [Report Issues](https://github.com/ColmapView/colmapview.github.io/issues)
 
+## Acknowledgements
+
+This project is built to visualize reconstructions from [COLMAP](https://colmap.github.io/), a general-purpose Structure-from-Motion (SfM) and Multi-View Stereo (MVS) pipeline developed by Johannes L. Schönberger and contributors.
+
+If you use COLMAP in your research, please cite their papers:
+
+> Schönberger, J.L., and Frahm, J.M. (2016). Structure-from-Motion Revisited. *Conference on Computer Vision and Pattern Recognition (CVPR)*.
+
+> Schönberger, J.L., Zheng, E., Pollefeys, M., and Frahm, J.M. (2016). Pixelwise View Selection for Unstructured Multi-View Stereo. *European Conference on Computer Vision (ECCV)*.
+
 ## License
 
 [AGPL-3.0](LICENSE)

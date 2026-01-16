@@ -12,7 +12,7 @@ export const SIZE = {
   defaultCellHeight: 100,
 
   // Controls
-  controlButton: 64,        // w-16 h-16 (16 * 4px)
+  controlButton: 40,        // w-10 h-10 (10 * 4px)
   panelMinWidth: 220,
   labelWidth: 80,           // w-20 (20 * 4px)
   valueWidth: 32,           // w-8 (8 * 4px)
@@ -24,8 +24,10 @@ export const SIZE = {
   resizeHandle: 12,         // w-3 h-3 (3 * 4px)
 
   // 3D Camera/Texture
-  thumbnailMaxSize: 1280,   // Max dimension for frustum thumbnails
-  maxConcurrentLoads: 6,    // Concurrent texture loads
+  thumbnailMaxSize: 512,    // Max dimension for thumbnails (smaller = faster load)
+  frustumMaxSize: 128,      // Max dimension for frustum textures (small for memory, adequate for 3D view)
+  maxConcurrentLoads: 12,   // Concurrent texture loads (12 works well on modern browsers)
+  minImagePlanePixels: 50,  // Min screen height in pixels to show image plane texture
 
   // Data limits
   galleryImageLimit: 100,   // Max images to display in gallery (virtualized)
@@ -47,9 +49,48 @@ export const ICON_SIZES = {
 export const COLUMNS = {
   min: 1,
   max: 10,
-  default: 3,
+  default: 2,
 } as const;
 
 export const ASPECT_RATIO = {
   landscape: 1.5,           // 3:2 default for camera images
+} as const;
+
+/**
+ * Responsive breakpoints in pixels.
+ */
+export const BREAKPOINTS = {
+  mobile: 1080,             // Below this width, use mobile layout
+} as const;
+
+/**
+ * Modal default dimensions as viewport percentages.
+ */
+export const MODAL = {
+  defaultWidthPercent: 0.9,   // 90% of viewport width
+  defaultHeightPercent: 0.9,  // 90% of viewport height
+} as const;
+
+/**
+ * Layout panel sizes for react-resizable-panels.
+ * defaultSize is percentage, minSize is in pixels for reliable constraints.
+ */
+export const LAYOUT_PANELS = {
+  viewer: {
+    defaultSize: 70,        // 70% width
+    minSize: '400px',       // 400px minimum
+  },
+  gallery: {
+    defaultSize: 30,        // 30% width
+    minSize: '300px',       // 300px minimum
+  },
+} as const;
+
+/**
+ * Screenshot watermark rendering values.
+ */
+export const SCREENSHOT = {
+  logoHeightPercent: 0.05,  // 5% of canvas height
+  paddingPercent: 0.02,     // 2% padding from edges
+  logoAlpha: 0.7,           // Watermark opacity
 } as const;

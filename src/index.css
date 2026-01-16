@@ -106,6 +106,13 @@
 
   /* Component Sizes */
   --scrollbar-width: 12px;
+  --control-btn-size: 2.5rem;
+  --control-panel-gap: 0.5rem;
+
+  /* Range Slider */
+  --slider-thumb-size: 12px;
+  --slider-track-height: 4px;
+  --slider-container-height: 20px;
 
   /* Z-Index Scale */
   --z-base: 0;
@@ -280,7 +287,7 @@ input[type="range"] {
   appearance: none;
   -webkit-appearance: none;
   width: 100%;
-  height: 20px; /* Total height including thumb */
+  height: var(--slider-container-height);
   background: transparent;
   border: none;
   padding: 0;
@@ -289,7 +296,7 @@ input[type="range"] {
 
 /* WebKit track (Chrome, Safari, Edge) */
 input[type="range"]::-webkit-slider-runnable-track {
-  height: 4px;
+  height: var(--slider-track-height);
   background: linear-gradient(
     to right,
     var(--accent) 0%,
@@ -304,34 +311,34 @@ input[type="range"]::-webkit-slider-runnable-track {
 input[type="range"]::-webkit-slider-thumb {
   appearance: none;
   -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
   background: var(--accent);
   border: none;
   border-radius: 50%;
   cursor: pointer;
-  margin-top: -4px; /* Center thumb on track: (thumb-height - track-height) / 2 */
+  margin-top: calc((var(--slider-track-height) - var(--slider-thumb-size)) / 2);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 /* Firefox track */
 input[type="range"]::-moz-range-track {
-  height: 4px;
+  height: var(--slider-track-height);
   background: var(--bg-hover);
   border-radius: 2px;
 }
 
 /* Firefox progress (filled portion) */
 input[type="range"]::-moz-range-progress {
-  height: 4px;
+  height: var(--slider-track-height);
   background: var(--accent);
   border-radius: 2px 0 0 2px;
 }
 
 /* Firefox thumb */
 input[type="range"]::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
   background: var(--accent);
   border: none;
   border-radius: 50%;
@@ -447,7 +454,9 @@ legend {
 .right-2 { right: 0.5rem; }
 .right-3 { right: 0.75rem; }
 .right-6 { right: 1.5rem; }
+.right-10 { right: 2.5rem; }
 .right-12 { right: 3rem; }
+.right-full { right: 100%; }
 .\!right-\[56px\] { right: 56px !important; }
 .right-\[56px\] { right: 56px; }
 .bottom-1 { bottom: 0.25rem; }
@@ -729,6 +738,7 @@ legend {
 .font-mono { font-family: var(--font-mono); }
 
 /* Font Size */
+.text-2xs { font-size: 0.75rem; line-height: 1rem; }
 .text-xs { font-size: 0.75rem; line-height: 1rem; }
 .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
 .text-base { font-size: 1rem; line-height: 1.5rem; }
@@ -1096,6 +1106,18 @@ legend {
   color: var(--text-primary);
 }
 
+/* Group hover utilities - child elements respond to parent .group:hover */
+.group-hover\:opacity-0 { transition: opacity 150ms ease-out; }
+.group-hover\:opacity-50 { transition: opacity 150ms ease-out; }
+.group-hover\:opacity-100 { transition: opacity 150ms ease-out; }
+.group:hover .group-hover\:opacity-0 { opacity: 0; }
+.group:hover .group-hover\:opacity-50 { opacity: 0.5; }
+.group:hover .group-hover\:opacity-100 { opacity: 1; }
+
+/* Named group hover utilities - for group/scroll pattern */
+.group-hover\/scroll\:opacity-100 { transition: opacity 150ms ease-out; }
+.group\/scroll:hover .group-hover\/scroll\:opacity-100 { opacity: 1; }
+
 /* ============================================
    FOCUS STATE UTILITIES
    ============================================ */
@@ -1210,6 +1232,20 @@ legend {
 /* Will-change for performance */
 .will-change-transform { will-change: transform; }
 .will-change-opacity { will-change: opacity; }
+
+/* Text shadow for visibility on varying backgrounds */
+.text-shadow-outline {
+  text-shadow:
+    -1px -1px 0 rgba(0, 0, 0, 0.8),
+    1px -1px 0 rgba(0, 0, 0, 0.8),
+    -1px 1px 0 rgba(0, 0, 0, 0.8),
+    1px 1px 0 rgba(0, 0, 0, 0.8),
+    0 0 4px rgba(0, 0, 0, 0.5);
+}
+
+/* Drop shadow for SVG icons */
+.drop-shadow-md { filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)); }
+.drop-shadow-lg { filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.6)); }
 
 /* Visibility */
 .visible { visibility: visible; }
