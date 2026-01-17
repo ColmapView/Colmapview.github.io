@@ -1,26 +1,47 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useReconstructionStore, useCameraStore, useTransformStore } from '../../store';
+import { useReconstructionStore, useCameraStore, useTransformStore, useUIStore } from '../../store';
 import { getImageWorldPose } from '../../utils/colmapTransforms';
 import { createSim3dFromEuler } from '../../utils/sim3dTransforms';
+import { getWorldUp } from './OriginVisualization';
 import { CAMERA, CONTROLS } from '../../theme';
+import type { ViewDirection } from '../../store/stores/uiStore';
+
+// Camera offset and up vectors for each axis view
+const AXIS_VIEWS: Record<'x' | 'y' | 'z', { offset: THREE.Vector3; up: THREE.Vector3 }> = {
+  x: { offset: new THREE.Vector3(1, 0, 0), up: new THREE.Vector3(0, 1, 0) },
+  y: { offset: new THREE.Vector3(0, 1, 0), up: new THREE.Vector3(0, 0, -1) },
+  z: { offset: new THREE.Vector3(0, 0, 1), up: new THREE.Vector3(0, 1, 0) },
+};
 
 export interface TrackballControlsProps {
   target: [number, number, number];
   radius: number;
   resetTrigger: number;
+  viewDirection?: ViewDirection | null;
+  viewTrigger?: number;
 }
 
-export function TrackballControls({ target, radius, resetTrigger }: TrackballControlsProps) {
-  const { camera, gl, set } = useThree();
+export function TrackballControls({ target, radius, resetTrigger, viewDirection, viewTrigger = 0 }: TrackballControlsProps) {
+  const { camera, gl, set, size } = useThree();
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const flyToImageId = useCameraStore((s) => s.flyToImageId);
   const clearFlyTo = useCameraStore((s) => s.clearFlyTo);
   const cameraMode = useCameraStore((s) => s.cameraMode);
+  const cameraProjection = useCameraStore((s) => s.cameraProjection);
+  const cameraFov = useCameraStore((s) => s.cameraFov);
+  const horizonLock = useCameraStore((s) => s.horizonLock);
   const flySpeed = useCameraStore((s) => s.flySpeed);
   const pointerLock = useCameraStore((s) => s.pointerLock);
   const transform = useTransformStore((s) => s.transform);
+  const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
+
+  // Compute world up vector based on coordinate system
+  const worldUpVec = useMemo(() => {
+    const up = getWorldUp(axesCoordinateSystem);
+    return new THREE.Vector3(...up);
+  }, [axesCoordinateSystem]);
 
   const isDragging = useRef(false);
   const isPanning = useRef(false);
@@ -30,6 +51,9 @@ export function TrackballControls({ target, radius, resetTrigger }: TrackballCon
   const distance = useRef(5);
   const targetDistance = useRef(5);
   const lastResetTrigger = useRef(resetTrigger);
+  const lastViewTrigger = useRef(viewTrigger);
+  const lastProjection = useRef(cameraProjection);
+  const orthoZoom = useRef(1); // Zoom level for orthographic camera
   const angularVelocity = useRef({ x: 0, y: 0 });
   const smoothedVelocity = useRef({ x: 0, y: 0 });
   const lastMouse = useRef({ x: 0, y: 0 });
@@ -41,6 +65,17 @@ export function TrackballControls({ target, radius, resetTrigger }: TrackballCon
   // Fly mode state
   const keysPressed = useRef<Set<string>>(new Set());
   const flyVelocity = useRef(new THREE.Vector3());
+
+  // Ref to allow other components to signal that they handled a wheel event
+  const wheelHandled = useRef(false);
+
+  // Ref for horizonLock to avoid stale closure in event handlers
+  const horizonLockRef = useRef(horizonLock);
+  horizonLockRef.current = horizonLock; // Keep ref in sync
+
+  // Ref for worldUpVec to avoid stale closure in event handlers
+  const worldUpRef = useRef(worldUpVec);
+  worldUpRef.current = worldUpVec; // Keep ref in sync
 
   // Controls enabled state - can be disabled by external components (e.g., TransformGizmo)
   const enabled = useRef(true);
@@ -57,15 +92,41 @@ export function TrackballControls({ target, radius, resetTrigger }: TrackballCon
   const applyRotation = (deltaX: number, deltaY: number) => {
     if (Math.abs(deltaX) < 1e-10 && Math.abs(deltaY) < 1e-10) return;
 
-    const localX = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraQuat.current);
-    const localY = new THREE.Vector3(0, 1, 0).applyQuaternion(cameraQuat.current);
+    if (horizonLockRef.current) {
+      // Horizon lock: rotate around world up axis for horizontal, camera X for vertical
+      const worldUp = worldUpRef.current.clone();
+      const localX = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraQuat.current);
 
-    quatY.current.setFromAxisAngle(localY, -deltaX);
-    quatX.current.setFromAxisAngle(localX, -deltaY);
+      // Check current elevation to prevent flipping
+      // Project forward onto world up to get elevation
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraQuat.current);
+      const forwardDotUp = forward.dot(worldUp);
+      const currentElevation = Math.asin(Math.max(-1, Math.min(1, -forwardDotUp)));
 
-    cameraQuat.current.premultiply(quatX.current);
-    cameraQuat.current.premultiply(quatY.current);
-    cameraQuat.current.normalize();
+      // Clamp vertical rotation to prevent going past ±89 degrees
+      const maxElevation = Math.PI / 2 - 0.02; // ~89 degrees
+      const newElevation = currentElevation + deltaY;
+      const clampedDeltaY = newElevation > maxElevation ? maxElevation - currentElevation :
+                           newElevation < -maxElevation ? -maxElevation - currentElevation : deltaY;
+
+      quatY.current.setFromAxisAngle(worldUp, -deltaX);
+      quatX.current.setFromAxisAngle(localX, -clampedDeltaY);
+
+      cameraQuat.current.premultiply(quatX.current);
+      cameraQuat.current.premultiply(quatY.current);
+      cameraQuat.current.normalize();
+    } else {
+      // Free rotation: rotate around camera-local axes
+      const localX = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraQuat.current);
+      const localY = new THREE.Vector3(0, 1, 0).applyQuaternion(cameraQuat.current);
+
+      quatY.current.setFromAxisAngle(localY, -deltaX);
+      quatX.current.setFromAxisAngle(localX, -deltaY);
+
+      cameraQuat.current.premultiply(quatX.current);
+      cameraQuat.current.premultiply(quatY.current);
+      cameraQuat.current.normalize();
+    }
   };
 
   const updateCamera = () => {
@@ -90,19 +151,19 @@ export function TrackballControls({ target, radius, resetTrigger }: TrackballCon
     // Get camera direction vectors
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraQuat.current);
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraQuat.current);
-    const up = new THREE.Vector3(0, 1, 0);
+    const up = worldUpRef.current.clone();
 
     // WASD movement
-    if (keysPressed.current.has('w') || keysPressed.current.has('arrowup')) {
+    if (keysPressed.current.has('w')) {
       acceleration.add(forward.clone().multiplyScalar(moveSpeed));
     }
-    if (keysPressed.current.has('s') || keysPressed.current.has('arrowdown')) {
+    if (keysPressed.current.has('s')) {
       acceleration.add(forward.clone().multiplyScalar(-moveSpeed));
     }
-    if (keysPressed.current.has('a') || keysPressed.current.has('arrowleft')) {
+    if (keysPressed.current.has('a')) {
       acceleration.add(right.clone().multiplyScalar(-moveSpeed));
     }
-    if (keysPressed.current.has('d') || keysPressed.current.has('arrowright')) {
+    if (keysPressed.current.has('d')) {
       acceleration.add(right.clone().multiplyScalar(moveSpeed));
     }
     // Q/E for down/up, Space also for up
@@ -218,10 +279,26 @@ export function TrackballControls({ target, radius, resetTrigger }: TrackballCon
       targetDistance.current = distance.current;
 
       const sqrt2_2 = Math.SQRT1_2;
-      const camOffset = new THREE.Vector3(-0.5, -sqrt2_2, -0.5).normalize()
-        .multiplyScalar(distance.current);
+      let camOffset: THREE.Vector3;
+      let upDir: THREE.Vector3;
+
+      if (horizonLockRef.current) {
+        // Horizon lock mode: use world up from coordinate system
+        const worldUp = worldUpRef.current.clone();
+        camOffset = new THREE.Vector3(
+          -0.5,
+          -sqrt2_2 * worldUp.y,
+          -0.5
+        ).normalize().multiplyScalar(distance.current);
+        upDir = worldUp;
+      } else {
+        // Regular mode: use original isometric view
+        camOffset = new THREE.Vector3(-0.5, -sqrt2_2, -0.5).normalize()
+          .multiplyScalar(distance.current);
+        upDir = new THREE.Vector3(0.5, -sqrt2_2, 0.5).normalize();
+      }
+
       const camPos = targetVec.current.clone().add(camOffset);
-      const upDir = new THREE.Vector3(0.5, -sqrt2_2, 0.5).normalize();
       const lookMatrix = new THREE.Matrix4();
       lookMatrix.lookAt(camPos, targetVec.current, upDir);
       cameraQuat.current.setFromRotationMatrix(lookMatrix);
@@ -236,6 +313,174 @@ export function TrackballControls({ target, radius, resetTrigger }: TrackballCon
       flyVelocity.current.set(0, 0, 0);
     }
   }, [target[0], target[1], target[2], radius, resetTrigger, camera]);
+
+  // Handle view direction changes (X/Y/Z axis views and reset)
+  useEffect(() => {
+    const isTriggered = viewTrigger !== lastViewTrigger.current;
+    lastViewTrigger.current = viewTrigger;
+
+    if (!isTriggered || !viewDirection) return;
+
+    targetVec.current.set(...target);
+    distance.current = Math.max(CONTROLS.minDistance, radius * CAMERA.initialDistanceMultiplier);
+    targetDistance.current = distance.current;
+
+    let camOffset: THREE.Vector3;
+    let upDir: THREE.Vector3;
+
+    if (viewDirection !== 'reset' && AXIS_VIEWS[viewDirection]) {
+      // Axis view: position camera along axis looking at target
+      const view = AXIS_VIEWS[viewDirection];
+
+      if (horizonLockRef.current) {
+        // Horizon lock mode: use world up from coordinate system
+        const worldUp = worldUpRef.current.clone();
+        if (viewDirection === 'y') {
+          // Looking along Y axis - use world up direction
+          camOffset = worldUp.clone().multiplyScalar(distance.current);
+          upDir = new THREE.Vector3(0, 0, -1);
+        } else {
+          camOffset = view.offset.clone().multiplyScalar(distance.current);
+          upDir = worldUp.clone();
+        }
+      } else {
+        // Regular mode: use original axis views
+        camOffset = view.offset.clone().multiplyScalar(distance.current);
+        upDir = view.up.clone();
+      }
+    } else {
+      // Reset view
+      const sqrt2_2 = Math.SQRT1_2;
+
+      if (horizonLockRef.current) {
+        // Horizon lock mode: use world up from coordinate system
+        const worldUp = worldUpRef.current.clone();
+        camOffset = new THREE.Vector3(
+          -0.5,
+          -sqrt2_2 * worldUp.y,
+          -0.5
+        ).normalize().multiplyScalar(distance.current);
+        upDir = worldUp.clone();
+      } else {
+        // Regular mode: use original isometric view
+        camOffset = new THREE.Vector3(-0.5, -sqrt2_2, -0.5).normalize()
+          .multiplyScalar(distance.current);
+        upDir = new THREE.Vector3(0.5, -sqrt2_2, 0.5).normalize();
+      }
+    }
+
+    const camPos = targetVec.current.clone().add(camOffset);
+    const lookMatrix = new THREE.Matrix4();
+    lookMatrix.lookAt(camPos, targetVec.current, upDir);
+    cameraQuat.current.setFromRotationMatrix(lookMatrix);
+
+    camera.position.copy(camPos);
+    camera.quaternion.copy(cameraQuat.current);
+
+    // Clear any movement velocities
+    angularVelocity.current.x = 0;
+    angularVelocity.current.y = 0;
+    flyVelocity.current.set(0, 0, 0);
+  }, [target[0], target[1], target[2], radius, viewTrigger, viewDirection, camera]);
+
+  // Handle camera projection switching (perspective <-> orthographic)
+  useEffect(() => {
+    if (cameraProjection === lastProjection.current) return;
+    lastProjection.current = cameraProjection;
+
+    const aspect = size.width / size.height;
+    const currentPosition = camera.position.clone();
+    const currentQuaternion = camera.quaternion.clone();
+
+    if (cameraProjection === 'orthographic') {
+      // Calculate frustum size based on current distance
+      const frustumSize = distance.current;
+      orthoZoom.current = 1;
+      // Use larger far plane for orthographic (no perspective depth compression)
+      const orthoFar = CAMERA.farPlane * 10;
+      const newCamera = new THREE.OrthographicCamera(
+        -frustumSize * aspect,
+        frustumSize * aspect,
+        frustumSize,
+        -frustumSize,
+        -orthoFar, // Negative near plane to see things behind camera
+        orthoFar
+      );
+      newCamera.position.copy(currentPosition);
+      newCamera.quaternion.copy(currentQuaternion);
+      set({ camera: newCamera });
+    } else {
+      const newCamera = new THREE.PerspectiveCamera(
+        cameraFov,
+        aspect,
+        CAMERA.nearPlane,
+        CAMERA.farPlane
+      );
+      newCamera.position.copy(currentPosition);
+      newCamera.quaternion.copy(currentQuaternion);
+      set({ camera: newCamera });
+    }
+
+    // Update the cameraQuat ref to match
+    cameraQuat.current.copy(currentQuaternion);
+  }, [cameraProjection, camera, set, size.width, size.height]);
+
+  // Handle FOV changes for perspective camera
+  useEffect(() => {
+    if (camera instanceof THREE.PerspectiveCamera) {
+      camera.fov = cameraFov;
+      camera.updateProjectionMatrix();
+    }
+  }, [cameraFov, camera]);
+
+  // Track previous horizon lock state
+  const lastHorizonLock = useRef(horizonLock);
+
+  // Reset view when horizon lock mode changes
+  useEffect(() => {
+    const modeChanged = lastHorizonLock.current !== horizonLock;
+    lastHorizonLock.current = horizonLock;
+
+    // Skip on initial mount
+    if (!modeChanged) return;
+
+    // Reset view with appropriate mode
+    distance.current = Math.max(CONTROLS.minDistance, radius * CAMERA.initialDistanceMultiplier);
+    targetDistance.current = distance.current;
+
+    const sqrt2_2 = Math.SQRT1_2;
+    let camOffset: THREE.Vector3;
+    let upDir: THREE.Vector3;
+
+    if (horizonLock) {
+      // Horizon lock mode: use world up from coordinate system
+      const worldUp = worldUpVec.clone();
+      camOffset = new THREE.Vector3(
+        -0.5,
+        -sqrt2_2 * worldUp.y,
+        -0.5
+      ).normalize().multiplyScalar(distance.current);
+      upDir = worldUp;
+    } else {
+      // Regular mode: use original isometric view
+      camOffset = new THREE.Vector3(-0.5, -sqrt2_2, -0.5).normalize()
+        .multiplyScalar(distance.current);
+      upDir = new THREE.Vector3(0.5, -sqrt2_2, 0.5).normalize();
+    }
+
+    const camPos = targetVec.current.clone().add(camOffset);
+    const lookMatrix = new THREE.Matrix4();
+    lookMatrix.lookAt(camPos, targetVec.current, upDir);
+    cameraQuat.current.setFromRotationMatrix(lookMatrix);
+
+    camera.position.copy(camPos);
+    camera.quaternion.copy(cameraQuat.current);
+
+    // Clear any momentum
+    angularVelocity.current.x = 0;
+    angularVelocity.current.y = 0;
+    flyVelocity.current.set(0, 0, 0);
+  }, [horizonLock, camera, worldUpVec, radius]);
 
   useEffect(() => {
     if (flyToImageId === null || !reconstruction) return;
@@ -301,7 +546,7 @@ export function TrackballControls({ target, radius, resetTrigger }: TrackballCon
 
   // Register controls with R3F so other components (e.g., TransformGizmo) can access them
   useEffect(() => {
-    const controls = { enabled, dragging };
+    const controls = { enabled, dragging, wheelHandled };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (set as (state: any) => void)({ controls });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -471,6 +716,11 @@ export function TrackballControls({ target, radius, resetTrigger }: TrackballCon
     };
 
     const onWheel = (e: WheelEvent) => {
+      // Don't handle if already handled (e.g., FOV adjustment on selected image)
+      if (e.defaultPrevented || wheelHandled.current) {
+        wheelHandled.current = false;
+        return;
+      }
       e.preventDefault();
       // Don't zoom if controls are disabled
       if (!enabled.current) return;
@@ -480,6 +730,12 @@ export function TrackballControls({ target, radius, resetTrigger }: TrackballCon
         const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraQuat.current);
         const moveAmount = -e.deltaY * radius * CONTROLS.wheelMoveMultiplier * flySpeed;
         camera.position.add(forward.multiplyScalar(moveAmount));
+      } else if (camera instanceof THREE.OrthographicCamera) {
+        // For orthographic, adjust zoom level
+        const zoomFactor = 1 + e.deltaY * zoomSpeed;
+        orthoZoom.current = Math.max(0.1, Math.min(10, orthoZoom.current / zoomFactor));
+        camera.zoom = orthoZoom.current;
+        camera.updateProjectionMatrix();
       } else {
         const zoomFactor = 1 + e.deltaY * zoomSpeed;
         targetDistance.current = Math.max(CONTROLS.minDistance, targetDistance.current * zoomFactor);

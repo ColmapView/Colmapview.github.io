@@ -4,7 +4,7 @@ import { useReconstructionStore, useUIStore } from '../../store';
 import type { Camera, Image } from '../../types/colmap';
 import { getImageFile, getMaskFile } from '../../utils/imageFileUtils';
 import { useFileUrl } from '../../hooks/useFileUrl';
-import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, MODAL, buttonStyles, inputStyles, tableStyles, resizeHandleStyles, controlPanelStyles } from '../../theme';
+import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, MODAL, buttonStyles, inputStyles, resizeHandleStyles, controlPanelStyles } from '../../theme';
 import { HOTKEYS } from '../../config/hotkeys';
 
 const CAMERA_MODEL_NAMES: Record<number, string> = {
@@ -35,17 +35,59 @@ const CAMERA_PARAM_NAMES: Record<number, string> = {
   10: 'fx, fy, cx, cy, k1, k2, p1, p2, k3, k4, sx1, sy1',
 };
 
-function formatCameraInfo(camera: Camera): string {
+// Component to display camera info and pose in a single compact line
+function CameraPoseInfoDisplay({ camera, qvec, tvec }: { camera: Camera; qvec: number[]; tvec: number[] }) {
   const modelName = CAMERA_MODEL_NAMES[camera.modelId] || `MODEL_${camera.modelId}`;
-  const paramsStr = camera.params.map(p => p.toFixed(2)).join(', ');
-  const paramNames = CAMERA_PARAM_NAMES[camera.modelId] || '';
-  return `Camera(camera_id=${camera.cameraId}, model=${modelName}, width=${camera.width}, height=${camera.height}, params=[${paramsStr}] (${paramNames}))`;
-}
+  const paramNames = (CAMERA_PARAM_NAMES[camera.modelId] || '').split(', ');
+  // Convert to xyzw order for display (COLMAP uses wxyz internally)
+  const rotXyzw = [qvec[1], qvec[2], qvec[3], qvec[0]];
 
-function formatRigid3d(qvec: number[], tvec: number[]): string {
-  const rotStr = [qvec[1], qvec[2], qvec[3], qvec[0]].map(v => v.toFixed(6)).join(', ');
-  const transStr = tvec.map(v => v.toFixed(5)).join(', ');
-  return `Rigid3d(rotation_xyzw=[${rotStr}], translation=[${transStr}])`;
+  return (
+    <div className="flex items-center gap-3 text-sm flex-wrap">
+      {/* Camera Model */}
+      <span className="text-ds-accent font-mono">{modelName}</span>
+      <span className="text-ds-muted">|</span>
+
+      {/* Size */}
+      <span className="font-mono text-ds-primary">{camera.width}<span className="text-ds-muted">×</span>{camera.height}</span>
+      <span className="text-ds-muted">|</span>
+
+      {/* Intrinsics */}
+      <span className="font-mono">
+        {camera.params.map((p, i) => (
+          <span key={i}>
+            {i > 0 && <span className="text-ds-muted">, </span>}
+            <span className="text-ds-muted">{paramNames[i] || `p${i}`}=</span>
+            <span className="text-ds-primary">{p.toFixed(1)}</span>
+          </span>
+        ))}
+      </span>
+      <span className="text-ds-muted">|</span>
+
+      {/* Rotation */}
+      <span className="font-mono">
+        <span className="text-ds-muted">R=</span>
+        {rotXyzw.map((v, i) => (
+          <span key={i}>
+            {i > 0 && <span className="text-ds-muted">,</span>}
+            <span className={v < 0 ? 'text-ds-error' : 'text-ds-primary'}>{v.toFixed(3)}</span>
+          </span>
+        ))}
+      </span>
+      <span className="text-ds-muted">|</span>
+
+      {/* Translation */}
+      <span className="font-mono">
+        <span className="text-ds-muted">T=</span>
+        {tvec.map((v, i) => (
+          <span key={i}>
+            {i > 0 && <span className="text-ds-muted">,</span>}
+            <span className={v < 0 ? 'text-ds-error' : 'text-ds-primary'}>{v.toFixed(2)}</span>
+          </span>
+        ))}
+      </span>
+    </div>
+  );
 }
 
 interface KeypointCanvasProps {
@@ -86,11 +128,10 @@ const KeypointCanvas = memo(function KeypointCanvas({
     const triangulatedPoints: { x: number; y: number }[] = [];
     const untriangulatedPoints: { x: number; y: number }[] = [];
 
+    // showPoints2D: show all points in green
+    // showPoints3D: show triangulated points in red (independent)
     for (const point of image.points2D) {
       const isTriangulated = point.point3DId !== BigInt(-1);
-
-      if (isTriangulated && !showPoints3D) continue;
-      if (!isTriangulated && !showPoints2D) continue;
 
       const x = point.xy[0] * scaleX;
       const y = point.xy[1] * scaleY;
@@ -102,8 +143,9 @@ const KeypointCanvas = memo(function KeypointCanvas({
       }
     }
 
-    if (untriangulatedPoints.length > 0) {
-      ctx.fillStyle = VIZ_COLORS.point.untriangulated;
+    // Draw untriangulated points in green (only when showPoints2D is on)
+    if (showPoints2D && untriangulatedPoints.length > 0) {
+      ctx.fillStyle = VIZ_COLORS.point.triangulated;
       ctx.beginPath();
       for (const { x, y } of untriangulatedPoints) {
         ctx.moveTo(x + 2, y);
@@ -112,8 +154,11 @@ const KeypointCanvas = memo(function KeypointCanvas({
       ctx.fill();
     }
 
-    if (triangulatedPoints.length > 0) {
-      ctx.fillStyle = VIZ_COLORS.point.triangulated;
+    // Draw triangulated points
+    // - Green when only showPoints2D is on
+    // - Red when showPoints3D is on
+    if (triangulatedPoints.length > 0 && (showPoints2D || showPoints3D)) {
+      ctx.fillStyle = showPoints3D ? VIZ_COLORS.point.untriangulated : VIZ_COLORS.point.triangulated;
       ctx.beginPath();
       for (const { x, y } of triangulatedPoints) {
         ctx.moveTo(x + 2, y);
@@ -694,13 +739,13 @@ export function ImageDetailModal() {
         onClick={(e) => e.stopPropagation()}
       >
         <div
-          className="flex items-center justify-between px-3 cursor-move select-none rounded-t-lg bg-ds-secondary"
+          className="flex items-center justify-between px-3 py-1 cursor-move select-none rounded-t-lg bg-ds-secondary"
           onMouseDown={handleDragStart}
         >
-          <h2 className="text-ds-primary font-semibold text-base">
+          <h2 className="text-ds-primary font-semibold text-sm">
             {isMatchViewMode
               ? `Image Matches: ${image?.name} ↔ ${matchedImage?.name} (${matchLines.length} matches)`
-              : 'Image Information'}
+              : `Image #${imageDetailId}: ${image?.name}`}
           </h2>
           <button
             onClick={closeImageDetail}
@@ -712,17 +757,8 @@ export function ImageDetailModal() {
         </div>
 
         <div className="flex flex-col flex-1 overflow-hidden px-4 pt-1 pb-4 gap-2">
-          <div className="flex-shrink-0 overflow-auto">
-            <table className="w-full text-sm">
-              <tbody>
-                <InfoRow label="image_id" value={image.imageId} />
-                <InfoRow label="camera" value={formatCameraInfo(camera)} multiline />
-                <InfoRow label="cam_from_world" value={formatRigid3d(image.qvec, image.tvec)} multiline />
-                <InfoRow label="num_points2D" value={numPoints2D} valueColor="text-ds-error" />
-                <InfoRow label="num_points3D" value={numPoints3D} valueColor="text-ds-success" />
-                <InfoRow label="name" value={image.name} />
-              </tbody>
-            </table>
+          <div className="flex-shrink-0 overflow-x-auto py-1">
+            <CameraPoseInfoDisplay camera={camera} qvec={image.qvec} tvec={image.tvec} />
           </div>
 
           <div className="flex-1 min-h-0 flex flex-col">
@@ -822,7 +858,7 @@ export function ImageDetailModal() {
                         showPoints2D ? buttonStyles.variants.toggleActive : buttonStyles.variants.toggle
                       }`}
                     >
-                      Points2D <span className={showPoints2D ? '' : 'text-ds-error'}>({numPoints2D - numPoints3D})</span>
+                      Points2D <span className={showPoints2D ? '' : 'text-ds-success'}>({numPoints2D})</span>
                     </button>
                     <button
                       onClick={() => setShowPoints3D(!showPoints3D)}
@@ -830,7 +866,7 @@ export function ImageDetailModal() {
                         showPoints3D ? buttonStyles.variants.toggleActive : buttonStyles.variants.toggle
                       }`}
                     >
-                      Points3D <span className={showPoints3D ? '' : 'text-ds-success'}>({numPoints3D})</span>
+                      Points3D <span className={showPoints3D ? '' : 'text-ds-error'}>({numPoints3D})</span>
                     </button>
                   </>
                 )}
@@ -902,7 +938,7 @@ export function ImageDetailModal() {
                     hasPrev ? buttonStyles.variants.toggle : buttonStyles.disabled + ' bg-ds-secondary text-ds-muted'
                   }`}
                 >
-                  (&lt;) Prev
+                  ← Prev
                 </button>
                 <div className="flex items-center text-sm">
                   <input
@@ -938,7 +974,7 @@ export function ImageDetailModal() {
                     hasNext ? buttonStyles.variants.toggle : buttonStyles.disabled + ' bg-ds-secondary text-ds-muted'
                   }`}
                 >
-                  Next (&gt;)
+                  Next →
                 </button>
               </div>
             </div>
@@ -958,20 +994,3 @@ export function ImageDetailModal() {
   );
 }
 
-interface InfoRowProps {
-  label: string;
-  value: string | number;
-  valueColor?: string;
-  multiline?: boolean;
-}
-
-function InfoRow({ label, value, valueColor = 'text-ds-primary', multiline = false }: InfoRowProps) {
-  return (
-    <tr className={tableStyles.row}>
-      <td className={`${tableStyles.headerCell} align-top whitespace-nowrap`}>{label}</td>
-      <td className={`${tableStyles.cell} ${valueColor !== 'text-ds-primary' ? valueColor : ''} ${multiline ? 'break-all' : ''}`}>
-        {value}
-      </td>
-    </tr>
-  );
-}

@@ -87,8 +87,12 @@ function SceneContent() {
   const axesDisplayMode = useUIStore((s) => s.axesDisplayMode);
   const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
   const axesScale = useUIStore((s) => s.axesScale);
+  const gridScale = useUIStore((s) => s.gridScale);
+  const axisLabelMode = useUIStore((s) => s.axisLabelMode);
   const gizmoMode = useUIStore((s) => s.gizmoMode);
   const viewResetTrigger = useUIStore((s) => s.viewResetTrigger);
+  const viewDirection = useUIStore((s) => s.viewDirection);
+  const viewTrigger = useUIStore((s) => s.viewTrigger);
 
   // Transform preview state (always enabled)
   const transform = useTransformStore((s) => s.transform);
@@ -124,14 +128,16 @@ function SceneContent() {
         </>
       )}
 
-      {/* Axes/Grid stay in original coordinate system */}
-      {(axesDisplayMode === 'axes' || axesDisplayMode === 'both') && <OriginAxes size={bounds.radius * axesScale} scale={axesScale} coordinateSystem={axesCoordinateSystem} />}
-      {(axesDisplayMode === 'grid' || axesDisplayMode === 'both') && <OriginGrid size={bounds.radius} />}
+      {/* Axes/Grid stay in original coordinate system - wrapped in own Suspense to avoid showing loading box */}
+      <Suspense fallback={null}>
+        {(axesDisplayMode === 'axes' || axesDisplayMode === 'both') && <OriginAxes size={bounds.radius * axesScale} scale={axesScale} coordinateSystem={axesCoordinateSystem} labelMode={axisLabelMode} />}
+        {(axesDisplayMode === 'grid' || axesDisplayMode === 'both') && <OriginGrid size={bounds.radius} scale={gridScale} />}
+      </Suspense>
 
       {/* Transform gizmo follows the transformed data */}
-      {gizmoMode !== 'off' && <TransformGizmo center={transformedCenter} size={bounds.radius * transform.scale * axesScale} coordinateMode={gizmoMode} />}
+      {reconstruction && gizmoMode !== 'off' && <TransformGizmo center={transformedCenter} size={bounds.radius * transform.scale * axesScale} coordinateMode={gizmoMode} />}
 
-      <TrackballControls target={bounds.center} radius={bounds.radius} resetTrigger={viewResetTrigger} />
+      <TrackballControls target={bounds.center} radius={bounds.radius} resetTrigger={viewResetTrigger} viewDirection={viewDirection} viewTrigger={viewTrigger} />
     </>
   );
 }

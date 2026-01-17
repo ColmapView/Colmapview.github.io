@@ -1,11 +1,13 @@
 import { useState, useEffect, memo, useCallback, useRef, type ReactNode } from 'react';
 import { useReconstructionStore, usePointCloudStore, useCameraStore, useUIStore, useExportStore, useTransformStore } from '../../store';
 import type { ColorMode } from '../../types/colmap';
-import type { CameraMode, ImageLoadMode, FrustumColorMode, CameraDisplayMode, MatchesDisplayMode, SelectionColorMode, AxesDisplayMode, AxesCoordinateSystem, ScreenshotSize, ScreenshotFormat, ExportFormat, GizmoMode } from '../../store/types';
+import type { CameraMode, ImageLoadMode, CameraDisplayMode, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, ScreenshotSize, ScreenshotFormat, GizmoMode } from '../../store/types';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { getTooltipProps, controlPanelStyles, getControlButtonClass, HOTKEYS } from '../../theme';
 import { exportReconstructionText, exportReconstructionBinary, exportPointsPLY } from '../../parsers';
 import { isIdentityEuler } from '../../utils/sim3dTransforms';
+import { useFileDropzone } from '../../hooks/useFileDropzone';
+import { extractConfigurationFromStores, serializeConfigToYaml } from '../../config/configuration';
 
 // HSL to Hex conversion
 function hslToHex(h: number, s: number, l: number): string {
@@ -275,34 +277,6 @@ function SelectionBlinkIcon({ className }: { className?: string }) {
   );
 }
 
-// Icon for single frustum color (small cam top-left, big cam bottom-right, same color)
-function SingleColorIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="#e6194b" strokeWidth="2">
-      {/* Small camera top-left (1/3) */}
-      <rect x="1" y="1" width="7" height="5" rx="1" strokeWidth="1.5" />
-      <path d="M8 2.5l3-1.5v6l-3-1.5z" strokeWidth="1.5" />
-      {/* Big camera middle/bottom-right (2/3) */}
-      <rect x="8" y="10" width="10" height="7" rx="1" />
-      <path d="M18 12l4-2v9l-4-2z" />
-    </svg>
-  );
-}
-
-// Icon for multi-color frustum mode (small cam top-left, big cam bottom-right, different colors)
-function MultiColorIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" strokeWidth="2">
-      {/* Small camera top-left (1/3) - red */}
-      <rect x="1" y="1" width="7" height="5" rx="1" stroke="#e6194b" strokeWidth="1.5" />
-      <path d="M8 2.5l3-1.5v6l-3-1.5z" stroke="#e6194b" strokeWidth="1.5" />
-      {/* Big camera middle/bottom-right (2/3) - green */}
-      <rect x="8" y="10" width="10" height="7" rx="1" stroke="#3cb44b" />
-      <path d="M18 12l4-2v9l-4-2z" stroke="#3cb44b" />
-    </svg>
-  );
-}
-
 function AxesIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round">
@@ -409,11 +383,13 @@ function BgIcon({ className }: { className?: string }) {
   );
 }
 
-function ResetIcon({ className }: { className?: string }) {
+// View icon - 3D cube suggesting viewing angles
+function ViewIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-      <path d="M3 3v5h5" />
+      <path d="M12 2L2 7l10 5 10-5-10-5z" />
+      <path d="M2 17l10 5 10-5" />
+      <path d="M2 12l10 5 10-5" />
     </svg>
   );
 }
@@ -477,7 +453,7 @@ function FlyIcon({ className }: { className?: string }) {
   );
 }
 
-type PanelType = 'points' | 'color' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'export' | 'transform' | null;
+type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'export' | 'transform' | null;
 
 interface SliderRowProps {
   label: string;
@@ -494,11 +470,13 @@ const SliderRow = memo(function SliderRow({ label, value, min, max, step, onChan
   const [inputValue, setInputValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const displayValue = formatValue ? formatValue(value) : String(value);
-  const progress = ((value - min) / (max - min)) * 100;
+  // Defensive: ensure value is a valid number (handles null/undefined from corrupted localStorage)
+  const safeValue = value ?? min;
+  const displayValue = formatValue ? formatValue(safeValue) : String(safeValue);
+  const progress = ((safeValue - min) / (max - min)) * 100;
 
   const handleDoubleClick = () => {
-    setInputValue(String(value));
+    setInputValue(String(safeValue));
     setIsEditing(true);
   };
 
@@ -529,7 +507,7 @@ const SliderRow = memo(function SliderRow({ label, value, min, max, step, onChan
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -step : step;
-    const newValue = Math.min(max, Math.max(min, value + delta));
+    const newValue = Math.min(max, Math.max(min, safeValue + delta));
     onChange(newValue);
   };
 
@@ -541,7 +519,7 @@ const SliderRow = memo(function SliderRow({ label, value, min, max, step, onChan
         min={min}
         max={max}
         step={step}
-        value={value}
+        value={safeValue}
         onChange={(e) => onChange(parseFloat(e.target.value))}
         className={styles.slider}
         style={{ '--range-progress': `${progress}%` } as React.CSSProperties}
@@ -563,6 +541,106 @@ const SliderRow = memo(function SliderRow({ label, value, min, max, step, onChan
           title="Double-click to edit"
         >
           {displayValue}
+        </span>
+      )}
+    </div>
+  );
+});
+
+interface HueRowProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}
+
+const HueRow = memo(function HueRow({ label, value, onChange }: HueRowProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [inputValue, setInputValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const hsl = hexToHsl(value);
+  const hue = hsl.h;
+
+  const handleHueChange = (newHue: number) => {
+    // Use full saturation and 50% lightness for vibrant colors
+    onChange(hslToHex(newHue, 100, 50));
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -5 : 5;
+    const newHue = (hue + delta + 360) % 360;
+    handleHueChange(newHue);
+  };
+
+  const handleDoubleClick = () => {
+    setInputValue(String(hue));
+    setIsEditing(true);
+  };
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const applyValue = () => {
+    const parsed = parseInt(inputValue);
+    if (!isNaN(parsed)) {
+      const clamped = ((parsed % 360) + 360) % 360;
+      handleHueChange(clamped);
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      applyValue();
+    } else if (e.key === 'Escape') {
+      setIsEditing(false);
+    }
+  };
+
+  return (
+    <div className={styles.row} onWheel={handleWheel}>
+      <label className={styles.label}>{label}</label>
+      <div className="relative flex-1 min-w-0 h-4 flex items-center">
+        <div
+          className="absolute left-0 right-0 h-1.5 rounded-full z-0"
+          style={{
+            background: 'linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)',
+          }}
+        />
+        <input
+          type="range"
+          min={0}
+          max={360}
+          step={1}
+          value={hue}
+          onChange={(e) => handleHueChange(parseInt(e.target.value))}
+          className="w-full h-4 cursor-pointer appearance-none bg-transparent relative z-10 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-gray-400 [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-gray-400 [&::-moz-range-thumb]:cursor-pointer [&::-webkit-slider-runnable-track]:bg-transparent [&::-moz-range-track]:bg-transparent"
+        />
+      </div>
+      {isEditing ? (
+        <input
+          ref={inputRef}
+          type="text"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onBlur={applyValue}
+          onKeyDown={handleKeyDown}
+          className={styles.valueInput}
+          style={{ color: value }}
+        />
+      ) : (
+        <span
+          className={styles.value}
+          style={{ color: value }}
+          onDoubleClick={handleDoubleClick}
+          title="Double-click to edit"
+        >
+          {hue}°
         </span>
       )}
     </div>
@@ -657,7 +735,7 @@ const ControlButton = memo(function ControlButton({
 
   return (
     <div
-      className="relative w-10"
+      className="relative w-10 control-button-responsive"
       onMouseEnter={() => !disabled && setActivePanel(panelId)}
       onMouseLeave={() => setActivePanel(null)}
     >
@@ -688,6 +766,7 @@ interface TransformPanelProps {
 
 const TransformPanel = memo(function TransformPanel({ styles, activePanel, setActivePanel }: TransformPanelProps) {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
+  const droppedFiles = useReconstructionStore((s) => s.droppedFiles);
   const transform = useTransformStore((s) => s.transform);
   const setTransform = useTransformStore((s) => s.setTransform);
   const resetTransform = useTransformStore((s) => s.resetTransform);
@@ -695,6 +774,7 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
   const applyToData = useTransformStore((s) => s.applyToData);
   const gizmoMode = useUIStore((s) => s.gizmoMode);
   const setGizmoMode = useUIStore((s) => s.setGizmoMode);
+  const { processFiles } = useFileDropzone();
 
   const hasChanges = !isIdentityEuler(transform);
 
@@ -836,17 +916,24 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
             Reset
           </button>
           <button
+            onClick={() => { if (droppedFiles) { resetTransform(); processFiles(droppedFiles); } }}
+            disabled={!droppedFiles}
+            className={droppedFiles ? styles.actionButton : styles.actionButtonDisabled}
+          >
+            Reload
+          </button>
+          <button
             onClick={applyToData}
             disabled={!hasChanges}
             className={hasChanges ? styles.actionButtonPrimary : styles.actionButtonPrimaryDisabled}
           >
-            Apply to Data
+            Apply
           </button>
         </div>
 
         {hasChanges && (
           <div className={styles.hint}>
-            Transform will be applied to reconstruction data when you click "Apply to Data".
+            Transform will be applied to reconstruction data when you click "Apply".
           </div>
         )}
       </div>
@@ -876,6 +963,8 @@ export function ViewerControls() {
   const setImagePlaneOpacity = useCameraStore((s) => s.setImagePlaneOpacity);
   const selectionColorMode = useCameraStore((s) => s.selectionColorMode);
   const setSelectionColorMode = useCameraStore((s) => s.setSelectionColorMode);
+  const selectionColor = useCameraStore((s) => s.selectionColor);
+  const setSelectionColor = useCameraStore((s) => s.setSelectionColor);
   const selectionAnimationSpeed = useCameraStore((s) => s.selectionAnimationSpeed);
   const setSelectionAnimationSpeed = useCameraStore((s) => s.setSelectionAnimationSpeed);
   const cameraMode = useCameraStore((s) => s.cameraMode);
@@ -888,21 +977,33 @@ export function ViewerControls() {
   const setFrustumColorMode = useCameraStore((s) => s.setFrustumColorMode);
   const unselectedCameraOpacity = useCameraStore((s) => s.unselectedCameraOpacity);
   const setUnselectedCameraOpacity = useCameraStore((s) => s.setUnselectedCameraOpacity);
+  const cameraProjection = useCameraStore((s) => s.cameraProjection);
+  const setCameraProjection = useCameraStore((s) => s.setCameraProjection);
+  const cameraFov = useCameraStore((s) => s.cameraFov);
+  const setCameraFov = useCameraStore((s) => s.setCameraFov);
+  const horizonLock = useCameraStore((s) => s.horizonLock);
+  const setHorizonLock = useCameraStore((s) => s.setHorizonLock);
 
   // UI settings
   const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
   const setMatchesDisplayMode = useUIStore((s) => s.setMatchesDisplayMode);
   const matchesOpacity = useUIStore((s) => s.matchesOpacity);
   const setMatchesOpacity = useUIStore((s) => s.setMatchesOpacity);
+  const matchesColor = useUIStore((s) => s.matchesColor);
+  const setMatchesColor = useUIStore((s) => s.setMatchesColor);
   const axesDisplayMode = useUIStore((s) => s.axesDisplayMode);
   const setAxesDisplayMode = useUIStore((s) => s.setAxesDisplayMode);
   const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
   const setAxesCoordinateSystem = useUIStore((s) => s.setAxesCoordinateSystem);
   const axesScale = useUIStore((s) => s.axesScale);
   const setAxesScale = useUIStore((s) => s.setAxesScale);
+  const gridScale = useUIStore((s) => s.gridScale);
+  const setGridScale = useUIStore((s) => s.setGridScale);
+  const axisLabelMode = useUIStore((s) => s.axisLabelMode);
+  const setAxisLabelMode = useUIStore((s) => s.setAxisLabelMode);
   const backgroundColor = useUIStore((s) => s.backgroundColor);
   const setBackgroundColor = useUIStore((s) => s.setBackgroundColor);
-  const resetView = useUIStore((s) => s.resetView);
+  const setView = useUIStore((s) => s.setView);
   const imageLoadMode = useUIStore((s) => s.imageLoadMode);
   const setImageLoadMode = useUIStore((s) => s.setImageLoadMode);
 
@@ -920,6 +1021,22 @@ export function ViewerControls() {
 
   // Handle export action
   const handleExport = useCallback(() => {
+    if (exportFormat === 'config') {
+      // Config export doesn't need reconstruction
+      const config = extractConfigurationFromStores();
+      const yaml = serializeConfigToYaml(config);
+      const blob = new Blob([yaml], { type: 'text/yaml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'colmapview-config.yml';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return;
+    }
+
     if (!reconstruction) return;
     switch (exportFormat) {
       case 'text':
@@ -997,11 +1114,6 @@ export function ViewerControls() {
     setPointSize(sizes[nextIndex]);
   }, [pointSize, setPointSize]);
 
-  // Toggle frustum color mode: single ↔ byCamera
-  const toggleFrustumColorMode = useCallback(() => {
-    setFrustumColorMode(frustumColorMode === 'single' ? 'byCamera' : 'single');
-  }, [frustumColorMode, setFrustumColorMode]);
-
   // Cycle through camera display modes: off → frustum → arrow → imageplane → off
   const cycleCameraDisplayMode = useCallback(() => {
     const modes: CameraDisplayMode[] = ['off', 'frustum', 'arrow', 'imageplane'];
@@ -1034,12 +1146,38 @@ export function ViewerControls() {
     setAxesDisplayMode(modes[nextIndex]);
   }, [axesDisplayMode, setAxesDisplayMode]);
 
+  // Reset view including projection
+  const handleResetView = useCallback(() => {
+    setView('reset');
+    setCameraProjection('perspective');
+  }, [setView, setCameraProjection]);
+
   // Hotkey for reset view
   useHotkeys(
     HOTKEYS.resetView.keys,
-    resetView,
+    handleResetView,
     { scopes: HOTKEYS.resetView.scopes },
-    [resetView]
+    [handleResetView]
+  );
+
+  // Hotkeys for axis views
+  useHotkeys(
+    HOTKEYS.viewX.keys,
+    () => setView('x'),
+    { scopes: HOTKEYS.viewX.scopes },
+    [setView]
+  );
+  useHotkeys(
+    HOTKEYS.viewY.keys,
+    () => setView('y'),
+    { scopes: HOTKEYS.viewY.scopes },
+    [setView]
+  );
+  useHotkeys(
+    HOTKEYS.viewZ.keys,
+    () => setView('z'),
+    { scopes: HOTKEYS.viewZ.scopes },
+    [setView]
   );
 
   // Hotkey for cycling axes/grid
@@ -1066,27 +1204,11 @@ export function ViewerControls() {
     [toggleBackground]
   );
 
-  // Hotkey for cycling image load mode
-  useHotkeys(
-    HOTKEYS.cycleImageLoad.keys,
-    cycleImageLoadMode,
-    { scopes: HOTKEYS.cycleImageLoad.scopes },
-    [cycleImageLoadMode]
-  );
-
-  // Hotkey for cycling point size
+  // Hotkey for Point Cloud (P) - cycles color mode
   useHotkeys(
     HOTKEYS.cyclePointSize.keys,
-    cyclePointSize,
-    { scopes: HOTKEYS.cyclePointSize.scopes },
-    [cyclePointSize]
-  );
-
-  // Hotkey for cycling color mode
-  useHotkeys(
-    HOTKEYS.cycleColorMode.keys,
     cycleColorMode,
-    { scopes: HOTKEYS.cycleColorMode.scopes },
+    { scopes: HOTKEYS.cyclePointSize.scopes },
     [cycleColorMode]
   );
 
@@ -1098,15 +1220,92 @@ export function ViewerControls() {
     [cycleCameraDisplayMode]
   );
 
+  // Hotkey for cycling matches display
+  useHotkeys(
+    HOTKEYS.cycleMatchesDisplay.keys,
+    cycleMatchesDisplayMode,
+    { scopes: HOTKEYS.cycleMatchesDisplay.scopes },
+    [cycleMatchesDisplayMode]
+  );
+
   return (
     <div className={styles.container}>
-      <button
-        onClick={resetView}
-        className={`${styles.button} ${styles.buttonInactive}`}
-        {...getTooltipProps('Reset view (R)', 'left')}
+      <ControlButton
+        panelId="view"
+        activePanel={activePanel}
+        setActivePanel={setActivePanel}
+        icon={<ViewIcon className="w-6 h-6" />}
+        tooltip="View options (R)"
+        onClick={handleResetView}
+        panelTitle="View"
       >
-        <ResetIcon className="w-6 h-6" />
-      </button>
+        <div className={styles.panelContent}>
+          {/* Projection toggle */}
+          <div className="flex gap-1 mb-3">
+            <button
+              onClick={() => setCameraProjection('perspective')}
+              className={cameraProjection === 'perspective' ? styles.actionButtonPrimary : styles.actionButton}
+              style={{ flex: 1 }}
+            >
+              Persp
+            </button>
+            <button
+              onClick={() => setCameraProjection('orthographic')}
+              className={cameraProjection === 'orthographic' ? styles.actionButtonPrimary : styles.actionButton}
+              style={{ flex: 1 }}
+            >
+              Ortho
+            </button>
+          </div>
+
+          {/* FOV slider - only for perspective */}
+          {cameraProjection === 'perspective' && (
+            <SliderRow
+              label="FOV"
+              value={cameraFov}
+              min={10}
+              max={120}
+              step={1}
+              onChange={setCameraFov}
+              formatValue={(v) => `${v}°`}
+            />
+          )}
+
+          <div className="flex gap-1 mb-3">
+            <button
+              onClick={() => setView('x')}
+              className={styles.actionButton}
+              style={{ flex: 1 }}
+            >
+              X <span className="text-ds-muted text-xs">(1)</span>
+            </button>
+            <button
+              onClick={() => setView('y')}
+              className={styles.actionButton}
+              style={{ flex: 1 }}
+            >
+              Y <span className="text-ds-muted text-xs">(2)</span>
+            </button>
+            <button
+              onClick={() => setView('z')}
+              className={styles.actionButton}
+              style={{ flex: 1 }}
+            >
+              Z <span className="text-ds-muted text-xs">(3)</span>
+            </button>
+          </div>
+          <div className={styles.actionGroup}>
+            <button
+              onClick={handleResetView}
+              className={styles.actionButtonPrimary}
+              style={{ flex: 1 }}
+            >
+              Reset View
+              <span className="text-ds-void/70 ml-2 text-xs">(R)</span>
+            </button>
+          </div>
+        </div>
+      </ControlButton>
 
       <ControlButton
         panelId="axes"
@@ -1146,33 +1345,66 @@ export function ViewerControls() {
             ]}
           />
           {(axesDisplayMode === 'axes' || axesDisplayMode === 'both') && (
-            <SelectRow
-              label="System"
-              value={axesCoordinateSystem}
-              onChange={(v) => setAxesCoordinateSystem(v as AxesCoordinateSystem)}
-              options={[
-                { value: 'colmap', label: 'COLMAP' },
-                { value: 'opencv', label: 'OpenCV' },
-                { value: 'threejs', label: 'Three.js' },
-                { value: 'opengl', label: 'OpenGL' },
-                { value: 'vulkan', label: 'Vulkan' },
-                { value: 'blender', label: 'Blender' },
-                { value: 'houdini', label: 'Houdini' },
-                { value: 'unity', label: 'Unity' },
-                { value: 'unreal', label: 'Unreal' },
-              ]}
-            />
+            <>
+              <SelectRow
+                label="System"
+                value={axesCoordinateSystem}
+                onChange={(v) => setAxesCoordinateSystem(v as AxesCoordinateSystem)}
+                options={[
+                  { value: 'colmap', label: 'COLMAP' },
+                  { value: 'opencv', label: 'OpenCV' },
+                  { value: 'threejs', label: 'Three.js' },
+                  { value: 'opengl', label: 'OpenGL' },
+                  { value: 'vulkan', label: 'Vulkan' },
+                  { value: 'blender', label: 'Blender' },
+                  { value: 'houdini', label: 'Houdini' },
+                  { value: 'unity', label: 'Unity' },
+                  { value: 'unreal', label: 'Unreal' },
+                ]}
+              />
+            </>
           )}
           {(axesDisplayMode === 'axes' || axesDisplayMode === 'both') && (
+            <>
+              <SelectRow
+                label="Labels"
+                value={axisLabelMode}
+                onChange={(v) => setAxisLabelMode(v as AxisLabelMode)}
+                options={[
+                  { value: 'off', label: 'Off' },
+                  { value: 'xyz', label: 'XYZ' },
+                  { value: 'extra', label: 'Extra' },
+                ]}
+              />
+              <SliderRow
+                label="Axes Scale"
+                value={Math.log10(axesScale)}
+                min={-3}
+                max={3}
+                step={0.1}
+                onChange={(v) => setAxesScale(Math.pow(10, v))}
+                formatValue={(v) => `10^${v.toFixed(1)}`}
+              />
+            </>
+          )}
+          {(axesDisplayMode === 'grid' || axesDisplayMode === 'both') && (
             <SliderRow
-              label="Scale (10^)"
-              value={Math.log10(axesScale)}
+              label="Grid Scale"
+              value={Math.log10(gridScale)}
               min={-3}
               max={3}
               step={0.1}
-              onChange={(v) => setAxesScale(Math.pow(10, v))}
-              formatValue={(v) => v.toFixed(1)}
+              onChange={(v) => setGridScale(Math.pow(10, v))}
+              formatValue={(v) => `10^${v.toFixed(1)}`}
             />
+          )}
+          {(axesDisplayMode === 'axes' || axesDisplayMode === 'both') && (
+            <div className="text-ds-secondary text-sm mt-3">
+              <div className="mb-1 font-medium">Coordinate System:</div>
+              <div>Different systems have different</div>
+              <div>rest views and may affect</div>
+              <div>horizon lock behavior.</div>
+            </div>
           )}
         </div>
       </ControlButton>
@@ -1187,9 +1419,9 @@ export function ViewerControls() {
             label={cameraMode === 'orbit' ? 'ORB' : 'FLY'}
           />
         }
-        tooltip={cameraMode === 'orbit' ? 'Orbit mode (O)' : 'Fly mode (O)'}
+        tooltip={cameraMode === 'orbit' ? 'Orbit mode (C)' : 'Fly mode (C)'}
         onClick={toggleCameraMode}
-        panelTitle="Camera Mode (O)"
+        panelTitle="Camera Mode (C)"
       >
         <div className={styles.panelContent}>
           <SelectRow
@@ -1212,9 +1444,19 @@ export function ViewerControls() {
             />
             <span className={styles.value} />
           </div>
+          <div className={styles.row}>
+            <label className={styles.label}>Horizon Lock</label>
+            <input
+              type="checkbox"
+              checked={horizonLock}
+              onChange={(e) => setHorizonLock(e.target.checked)}
+              className="w-4 h-4 accent-blue-500"
+            />
+            <span className={styles.value} />
+          </div>
           <div className="text-ds-secondary text-sm mt-3">
             <div className="mb-1 font-medium">Keyboard:</div>
-            <div>WASD / Arrows: Move</div>
+            <div>WASD: Move</div>
             <div>Q: Down, E/Space: Up</div>
             <div>Shift: Speed boost</div>
             {cameraMode === 'fly' && (
@@ -1269,95 +1511,7 @@ export function ViewerControls() {
       </ControlButton>
 
       <ControlButton
-        panelId="prefetch"
-        activePanel={activePanel}
-        setActivePanel={setActivePanel}
-        icon={
-          <HoverIcon
-            icon={
-              imageLoadMode === 'prefetch' ? <PrefetchIcon className="w-6 h-6" /> :
-              imageLoadMode === 'lazy' ? <LazyIcon className="w-6 h-6" /> :
-              <SkipIcon className="w-6 h-6" />
-            }
-            label={imageLoadMode === 'prefetch' ? 'PRE' : imageLoadMode === 'lazy' ? 'LZY' : 'OFF'}
-          />
-        }
-        tooltip={
-          imageLoadMode === 'prefetch' ? 'Prefetch mode (I)' :
-          imageLoadMode === 'lazy' ? 'Lazy loading (I)' :
-          'Skip images (I)'
-        }
-        onClick={cycleImageLoadMode}
-        panelTitle="Image Loading (I)"
-      >
-        <div className={styles.panelContent}>
-          <SelectRow
-            label="Mode"
-            value={imageLoadMode}
-            onChange={(v) => setImageLoadMode(v as ImageLoadMode)}
-            options={[
-              { value: 'prefetch', label: 'Prefetch' },
-              { value: 'lazy', label: 'Lazy' },
-              { value: 'skip', label: 'Skip' },
-            ]}
-          />
-          <div className="text-ds-secondary text-sm mt-3">
-            {imageLoadMode === 'prefetch' ? (
-              <>
-                <div className="mb-1 font-medium">Prefetch:</div>
-                <div>Loads all images upfront.</div>
-                <div>Slower initial load, but</div>
-                <div>smoother interaction after.</div>
-              </>
-            ) : imageLoadMode === 'lazy' ? (
-              <>
-                <div className="mb-1 font-medium">Lazy Loading:</div>
-                <div>Loads images on demand.</div>
-                <div>Faster startup, may have</div>
-                <div>brief delays when viewing.</div>
-              </>
-            ) : (
-              <>
-                <div className="mb-1 font-medium">Skip Images:</div>
-                <div>No images loaded.</div>
-                <div>Fastest startup for</div>
-                <div>point cloud only viewing.</div>
-              </>
-            )}
-          </div>
-        </div>
-      </ControlButton>
-
-      <ControlButton
         panelId="points"
-        activePanel={activePanel}
-        setActivePanel={setActivePanel}
-        icon={
-          pointSize <= 1 ? <PointIconSmall className="w-6 h-6" /> :
-          pointSize <= 2 ? <PointIconMedium className="w-6 h-6" /> :
-          <PointIconLarge className="w-6 h-6" />
-        }
-        tooltip={`Point size: ${pointSize} (P)`}
-        onClick={cyclePointSize}
-        panelTitle="Point Cloud (P)"
-      >
-        <div className={styles.panelContent}>
-          <SliderRow label="Size" value={pointSize} min={1} max={10} step={0.5} onChange={setPointSize} />
-          <SliderRow label="Min Track" value={minTrackLength} min={0} max={20} step={1} onChange={(v) => setMinTrackLength(Math.round(v))} />
-          <SliderRow
-            label="Max Error"
-            value={maxReprojectionError === Infinity ? (reconstruction?.globalStats.maxError ?? 10) : maxReprojectionError}
-            min={0}
-            max={reconstruction?.globalStats.maxError ?? 10}
-            step={0.1}
-            onChange={(v) => setMaxReprojectionError(v >= (reconstruction?.globalStats.maxError ?? 10) ? Infinity : v)}
-            formatValue={(v) => maxReprojectionError === Infinity ? '∞' : v.toFixed(1)}
-          />
-        </div>
-      </ControlButton>
-
-      <ControlButton
-        panelId="color"
         activePanel={activePanel}
         setActivePanel={setActivePanel}
         icon={
@@ -1371,16 +1525,16 @@ export function ViewerControls() {
           />
         }
         tooltip={
-          colorMode === 'rgb' ? 'RGB colors (C)' :
-          colorMode === 'error' ? 'Error heatmap (C)' :
-          'Track length (C)'
+          colorMode === 'rgb' ? 'Point Cloud: RGB (P)' :
+          colorMode === 'error' ? 'Point Cloud: Error (P)' :
+          'Point Cloud: Track (P)'
         }
         onClick={cycleColorMode}
-        panelTitle="Color Mode (C)"
+        panelTitle="Point Cloud (P)"
       >
         <div className={styles.panelContent}>
           <SelectRow
-            label="Mode"
+            label="Color"
             value={colorMode}
             onChange={(v) => setColorMode(v as ColorMode)}
             options={[
@@ -1388,6 +1542,17 @@ export function ViewerControls() {
               { value: 'error', label: 'Error' },
               { value: 'trackLength', label: 'Track Length' },
             ]}
+          />
+          <SliderRow label="Size" value={pointSize} min={1} max={10} step={0.5} onChange={setPointSize} />
+          <SliderRow label="Min Track" value={minTrackLength} min={0} max={20} step={1} onChange={(v) => setMinTrackLength(Math.round(v))} />
+          <SliderRow
+            label="Max Error"
+            value={maxReprojectionError === Infinity ? (reconstruction?.globalStats.maxError ?? 10) : maxReprojectionError}
+            min={0}
+            max={reconstruction?.globalStats.maxError ?? 10}
+            step={0.1}
+            onChange={(v) => setMaxReprojectionError(v >= (reconstruction?.globalStats.maxError ?? 10) ? Infinity : v)}
+            formatValue={(v) => maxReprojectionError === Infinity ? '∞' : v.toFixed(1)}
           />
           <div className="text-ds-secondary text-sm mt-3">
             {colorMode === 'rgb' ? (
@@ -1451,7 +1616,27 @@ export function ViewerControls() {
             ]}
           />
           {cameraDisplayMode !== 'off' && (
-            <SliderRow label="Scale" value={cameraScale} min={0.05} max={1} step={0.05} onChange={setCameraScale} formatValue={(v) => v.toFixed(2)} />
+            <>
+              <SelectRow
+                label="Color"
+                value={frustumColorMode}
+                onChange={(v) => setFrustumColorMode(v as FrustumColorMode)}
+                options={[
+                  { value: 'single', label: 'Single' },
+                  { value: 'byCamera', label: 'By Cam' },
+                ]}
+              />
+              <SliderRow label="Scale" value={cameraScale} min={0.05} max={1} step={0.05} onChange={setCameraScale} formatValue={(v) => v.toFixed(2)} />
+              <SliderRow
+                label="Unselected"
+                value={unselectedCameraOpacity}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={setUnselectedCameraOpacity}
+                formatValue={(v) => v.toFixed(2)}
+              />
+            </>
           )}
           {cameraDisplayMode === 'imageplane' && (
             <SliderRow label="Opacity" value={imagePlaneOpacity} min={0} max={1} step={0.05} onChange={setImagePlaneOpacity} formatValue={(v) => v.toFixed(2)} />
@@ -1487,58 +1672,6 @@ export function ViewerControls() {
 
       {cameraDisplayMode !== 'off' && (
         <>
-          <ControlButton
-            panelId="frustumColor"
-            activePanel={activePanel}
-            setActivePanel={setActivePanel}
-            icon={
-              <HoverIcon
-                icon={frustumColorMode === 'single' ? <SingleColorIcon className="w-6 h-6" /> : <MultiColorIcon className="w-6 h-6" />}
-                label={frustumColorMode === 'single' ? 'SGL' : 'CAM'}
-              />
-            }
-            tooltip={frustumColorMode === 'single' ? 'Single color' : 'Color by camera'}
-            isActive={frustumColorMode === 'byCamera'}
-            onClick={toggleFrustumColorMode}
-            panelTitle="Frustum Color"
-          >
-            <div className={styles.panelContent}>
-              <SelectRow
-                label="Mode"
-                value={frustumColorMode}
-                onChange={(v) => setFrustumColorMode(v as FrustumColorMode)}
-                options={[
-                  { value: 'single', label: 'Single' },
-                  { value: 'byCamera', label: 'By Camera' },
-                ]}
-              />
-              <SliderRow
-                label="Unselected"
-                value={unselectedCameraOpacity}
-                min={0}
-                max={1}
-                step={0.05}
-                onChange={setUnselectedCameraOpacity}
-                formatValue={(v) => v.toFixed(2)}
-              />
-              <div className="text-ds-secondary text-sm mt-3">
-                {frustumColorMode === 'single' ? (
-                  <>
-                    <div className="mb-1 font-medium">Single Color:</div>
-                    <div>All cameras shown in</div>
-                    <div>the same default color.</div>
-                  </>
-                ) : (
-                  <>
-                    <div className="mb-1 font-medium">By Camera:</div>
-                    <div>Each camera model gets</div>
-                    <div>a distinct color.</div>
-                  </>
-                )}
-              </div>
-            </div>
-          </ControlButton>
-
           {cameraDisplayMode !== 'imageplane' && (
             <ControlButton
             panelId="matches"
@@ -1550,13 +1683,13 @@ export function ViewerControls() {
               <MatchBlinkIcon className="w-6 h-6" />
             }
             tooltip={
-              matchesDisplayMode === 'off' ? 'Show Matches off' :
-              matchesDisplayMode === 'on' ? 'Show Matches on' :
-              'Show Matches blink'
+              matchesDisplayMode === 'off' ? 'Matches off (M)' :
+              matchesDisplayMode === 'on' ? 'Matches on (M)' :
+              'Matches blink (M)'
             }
             isActive={matchesDisplayMode !== 'off'}
             onClick={cycleMatchesDisplayMode}
-            panelTitle="Show Matches"
+            panelTitle="Show Matches (M)"
           >
             <div className={styles.panelContent}>
               <SelectRow
@@ -1570,7 +1703,10 @@ export function ViewerControls() {
                 ]}
               />
               {matchesDisplayMode !== 'off' && (
-                <SliderRow label="Opacity" value={matchesOpacity} min={0.5} max={1} step={0.05} onChange={setMatchesOpacity} formatValue={(v) => v.toFixed(2)} />
+                <>
+                  <SliderRow label="Opacity" value={matchesOpacity} min={0.5} max={1} step={0.05} onChange={setMatchesOpacity} formatValue={(v) => v.toFixed(2)} />
+                  <HueRow label="Color" value={matchesColor} onChange={setMatchesColor} />
+                </>
               )}
               <div className="text-ds-secondary text-sm mt-3">
                 {matchesDisplayMode === 'off' ? (
@@ -1627,6 +1763,9 @@ export function ViewerControls() {
                   { value: 'rainbow', label: 'Rainbow' },
                 ]}
               />
+              {(selectionColorMode === 'static' || selectionColorMode === 'blink') && (
+                <HueRow label="Color" value={selectionColor} onChange={setSelectionColor} />
+              )}
               {(selectionColorMode === 'blink' || selectionColorMode === 'rainbow') && (
                 <SliderRow label="Speed" value={selectionAnimationSpeed} min={0.1} max={5} step={0.1} onChange={setSelectionAnimationSpeed} formatValue={(v) => v.toFixed(1)} />
               )}
@@ -1718,31 +1857,111 @@ export function ViewerControls() {
         activePanel={activePanel}
         setActivePanel={setActivePanel}
         icon={<ExportIcon className="w-6 h-6" />}
-        tooltip="Export COLMAP data"
+        tooltip="Export"
         onClick={handleExport}
-        panelTitle="Export Data"
-        disabled={!reconstruction}
+        panelTitle="Export"
+      >
+        <div className={styles.panelContent}>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => { setExportFormat('binary'); if (reconstruction) exportReconstructionBinary(reconstruction); }}
+              disabled={!reconstruction}
+              className={reconstruction ? styles.actionButton : styles.actionButtonDisabled}
+            >
+              Binary (.bin)
+            </button>
+            <button
+              onClick={() => { setExportFormat('text'); if (reconstruction) exportReconstructionText(reconstruction); }}
+              disabled={!reconstruction}
+              className={reconstruction ? styles.actionButton : styles.actionButtonDisabled}
+            >
+              Text (.txt)
+            </button>
+            <button
+              onClick={() => { setExportFormat('ply'); if (reconstruction) exportPointsPLY(reconstruction); }}
+              disabled={!reconstruction}
+              className={reconstruction ? styles.actionButton : styles.actionButtonDisabled}
+            >
+              Points (.ply)
+            </button>
+            <button
+              onClick={() => {
+                setExportFormat('config');
+                const config = extractConfigurationFromStores();
+                const yaml = serializeConfigToYaml(config);
+                const blob = new Blob([yaml], { type: 'text/yaml' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'colmapview-config.yml';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              }}
+              className={styles.actionButton}
+            >
+              Config (.yml)
+            </button>
+          </div>
+        </div>
+      </ControlButton>
+
+      <ControlButton
+        panelId="prefetch"
+        activePanel={activePanel}
+        setActivePanel={setActivePanel}
+        icon={
+          <HoverIcon
+            icon={
+              imageLoadMode === 'prefetch' ? <PrefetchIcon className="w-6 h-6" /> :
+              imageLoadMode === 'lazy' ? <LazyIcon className="w-6 h-6" /> :
+              <SkipIcon className="w-6 h-6" />
+            }
+            label={imageLoadMode === 'prefetch' ? 'PRE' : imageLoadMode === 'lazy' ? 'LZY' : 'OFF'}
+          />
+        }
+        tooltip={
+          imageLoadMode === 'prefetch' ? 'Prefetch mode' :
+          imageLoadMode === 'lazy' ? 'Lazy loading' :
+          'Skip images'
+        }
+        onClick={cycleImageLoadMode}
+        panelTitle="Image Loading"
       >
         <div className={styles.panelContent}>
           <SelectRow
-            label="Format"
-            value={exportFormat}
-            onChange={(v) => setExportFormat(v as ExportFormat)}
+            label="Mode"
+            value={imageLoadMode}
+            onChange={(v) => setImageLoadMode(v as ImageLoadMode)}
             options={[
-              { value: 'binary', label: 'Binary (.bin)' },
-              { value: 'text', label: 'Text (.txt)' },
-              { value: 'ply', label: 'PLY Point Cloud' },
+              { value: 'prefetch', label: 'Prefetch' },
+              { value: 'lazy', label: 'Lazy' },
+              { value: 'skip', label: 'Skip' },
             ]}
           />
-          <div className="text-ds-secondary text-xs mt-3">
-            {exportFormat === 'text' && (
-              <div>Exports cameras.txt, images.txt, points3D.txt</div>
-            )}
-            {exportFormat === 'binary' && (
-              <div>Exports cameras.bin, images.bin, points3D.bin</div>
-            )}
-            {exportFormat === 'ply' && (
-              <div>Exports points.ply (3D point cloud only)</div>
+          <div className="text-ds-secondary text-sm mt-3">
+            {imageLoadMode === 'prefetch' ? (
+              <>
+                <div className="mb-1 font-medium">Prefetch:</div>
+                <div>Loads all images upfront.</div>
+                <div>Slower initial load, but</div>
+                <div>smoother interaction after.</div>
+              </>
+            ) : imageLoadMode === 'lazy' ? (
+              <>
+                <div className="mb-1 font-medium">Lazy Loading:</div>
+                <div>Loads images on demand.</div>
+                <div>Faster startup, may have</div>
+                <div>brief delays when viewing.</div>
+              </>
+            ) : (
+              <>
+                <div className="mb-1 font-medium">Skip Images:</div>
+                <div>No images loaded.</div>
+                <div>Fastest startup for</div>
+                <div>point cloud only viewing.</div>
+              </>
             )}
           </div>
         </div>

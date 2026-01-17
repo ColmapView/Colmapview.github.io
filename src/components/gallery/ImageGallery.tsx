@@ -3,7 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useReconstructionStore, useUIStore, useCameraStore } from '../../store';
 import { getImageFile } from '../../utils/imageFileUtils';
 import { useThumbnail, pauseThumbnailCache, resumeThumbnailCache } from '../../hooks/useThumbnail';
-import { COLUMNS, GAP, SIZE, TIMING, SPACING, buttonStyles, getTooltipProps, galleryStyles, listStyles, inputStyles, emptyStateStyles, toolbarStyles, contextMenuStyles } from '../../theme';
+import { COLUMNS, GAP, SIZE, TIMING, buttonStyles, getTooltipProps, galleryStyles, listStyles, inputStyles, emptyStateStyles, toolbarStyles } from '../../theme';
 
 type ViewMode = 'gallery' | 'list';
 type SortField = 'name' | 'imageId' | 'avgError' | 'covisibleCount' | 'numPoints3D' | 'numPoints2D';
@@ -67,24 +67,32 @@ interface GalleryItemProps {
   isSelected: boolean;
   onClick: (id: number) => void;
   onDoubleClick: (id: number) => void;
-  onContextMenu: (id: number, e: React.MouseEvent) => void;
+  onRightClick: (id: number) => void;
   isScrolling: boolean;
   skipImages: boolean;
   isSettling: boolean;
 }
 
-const GalleryItem = memo(function GalleryItem({ img, isSelected, onClick, onDoubleClick, onContextMenu, isScrolling, skipImages, isSettling }: GalleryItemProps) {
+const GalleryItem = memo(function GalleryItem({ img, isSelected, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling }: GalleryItemProps) {
   // Load thumbnail lazily when visible and not scrolling/settling (disabled in skip mode)
   const src = useThumbnail(img.file, img.name, !isScrolling && !skipImages && !isSettling);
+
+  // Click to select, click again on selected to show info
+  const handleClick = () => {
+    if (isSelected) {
+      onDoubleClick(img.imageId);
+    } else {
+      onClick(img.imageId);
+    }
+  };
 
   return (
     <div
       className={`${galleryStyles.itemAspect} group ${galleryStyles.item} ${isSelected ? galleryStyles.itemSelected : galleryStyles.itemHover}`}
       style={{ position: 'relative' }}
-      onClick={() => onClick(img.imageId)}
-      onDoubleClick={() => onDoubleClick(img.imageId)}
-      onContextMenu={(e) => { e.preventDefault(); onContextMenu(img.imageId, e); }}
-      {...getTooltipProps(`ID: ${img.imageId} · Double-click for info`, 'bottom')}
+      onClick={handleClick}
+      onContextMenu={(e) => { e.preventDefault(); onRightClick(img.imageId); }}
+      {...getTooltipProps(`ID: ${img.imageId}${isSelected ? ' · Click for info' : ''}`, 'top')}
     >
       {/* Inner wrapper clips image content without clipping tooltip */}
       <div className={galleryStyles.itemInner}>
@@ -101,21 +109,6 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, onClick, onDoub
           style={{ background: 'radial-gradient(circle at center, transparent 50%, rgba(0,0,0,0.7) 100%)' }}
         />
       </div>
-      {/* Info button - shows on hover */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onDoubleClick(img.imageId);
-        }}
-        style={{ position: 'absolute', top: SPACING.md, right: SPACING.md, left: 'auto' }}
-        className={galleryStyles.itemInfoButton}
-        data-tooltip="View details"
-        data-tooltip-pos="left"
-      >
-        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-        </svg>
-      </button>
       {/* Image name overlay */}
       <div className={galleryStyles.overlay}>
         <div className={galleryStyles.overlayText}>{img.name}</div>
@@ -126,18 +119,26 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, onClick, onDoub
 
 type ListItemProps = GalleryItemProps;
 
-const ListItem = memo(function ListItem({ img, isSelected, onClick, onDoubleClick, onContextMenu, isScrolling, skipImages, isSettling }: ListItemProps) {
+const ListItem = memo(function ListItem({ img, isSelected, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling }: ListItemProps) {
   // Load thumbnail lazily when visible and not scrolling/settling (disabled in skip mode)
   const src = useThumbnail(img.file, img.name, !isScrolling && !skipImages && !isSettling);
 
+  // Click to select, click again on selected to show info
+  const handleClick = () => {
+    if (isSelected) {
+      onDoubleClick(img.imageId);
+    } else {
+      onClick(img.imageId);
+    }
+  };
+
   return (
     <div
-      onClick={() => onClick(img.imageId)}
-      onDoubleClick={() => onDoubleClick(img.imageId)}
-      onContextMenu={(e) => { e.preventDefault(); onContextMenu(img.imageId, e); }}
+      onClick={handleClick}
+      onContextMenu={(e) => { e.preventDefault(); onRightClick(img.imageId); }}
       style={{ height: SIZE.listRowHeight }}
-      className={`${listStyles.item} px-3 ${isSelected ? listStyles.itemSelected : listStyles.itemHover}`}
-      {...getTooltipProps('Double-click for info', 'bottom')}
+      className={`${listStyles.item} px-3 list-stats-container ${isSelected ? listStyles.itemSelected : listStyles.itemHover}`}
+      {...getTooltipProps(isSelected ? 'Click for info' : '', 'bottom')}
     >
       <div className={`${listStyles.thumbnail} ${listStyles.thumbnailSize}`}>
         {src ? (
@@ -150,91 +151,27 @@ const ListItem = memo(function ListItem({ img, isSelected, onClick, onDoubleClic
         <div className={listStyles.title}>{img.name}</div>
         <div className={listStyles.subtitle}>ID {img.imageId} · Camera {img.cameraId} ({img.cameraWidth}×{img.cameraHeight})</div>
       </div>
-      <div className="flex-shrink-0 text-right">
+      {/* Compact format for narrow panels - single column, 2 lines */}
+      <div className="flex-shrink-0 text-right list-stats-compact">
+        <div className="text-ds-primary text-xs whitespace-nowrap">{img.numPoints3D}<span className="text-ds-muted">/{img.numPoints2D}</span> · {img.covisibleCount} · {img.avgError.toFixed(2)}</div>
+        <div className="text-ds-muted text-xs whitespace-nowrap">pts · covis · err</div>
+      </div>
+      {/* Full format for wider panels */}
+      <div className="flex-shrink-0 text-right list-stats-full">
         <div className="text-ds-primary text-sm">{img.numPoints3D}<span className="text-ds-muted">/{img.numPoints2D}</span></div>
         <div className="text-ds-muted text-xs">3D/2D pts</div>
       </div>
-      <div className="flex-shrink-0 text-right w-16">
+      <div className="flex-shrink-0 text-right w-16 list-stats-full">
         <div className="text-ds-primary text-sm">{img.covisibleCount}</div>
         <div className="text-ds-muted text-xs">covisible</div>
       </div>
-      <div className="flex-shrink-0 text-right w-16">
+      <div className="flex-shrink-0 text-right w-16 list-stats-full">
         <div className="text-ds-primary text-sm">{img.avgError.toFixed(2)}</div>
         <div className="text-ds-muted text-xs">avg err</div>
       </div>
     </div>
   );
 });
-
-// Context menu for gallery/list right-click
-interface GalleryContextMenuProps {
-  x: number;
-  y: number;
-  onSelect: () => void;
-  onGoto: () => void;
-  onInfo: () => void;
-  onClose: () => void;
-}
-
-function GalleryContextMenu({ x, y, onSelect, onGoto, onInfo, onClose }: GalleryContextMenuProps) {
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [onClose]);
-
-  // Close on escape
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
-  return (
-    <div
-      ref={menuRef}
-      className={`${contextMenuStyles.container} fixed z-50`}
-      style={{ left: x, top: y }}
-    >
-      <button className={contextMenuStyles.button} onClick={onSelect}>
-        <svg className={contextMenuStyles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="12" cy="12" r="10"/>
-          <circle cx="12" cy="12" r="3" fill="currentColor"/>
-        </svg>
-        Select
-      </button>
-      <button className={contextMenuStyles.button} onClick={onGoto}>
-        <svg className={contextMenuStyles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M5 12h14M12 5l7 7-7 7"/>
-        </svg>
-        Go to
-      </button>
-      <button className={contextMenuStyles.button} onClick={onInfo}>
-        <svg className={contextMenuStyles.icon} viewBox="0 0 24 24" fill="currentColor">
-          <circle cx="12" cy="5" r="2.5"/>
-          <rect x="9.5" y="10" width="5" height="12" rx="1"/>
-        </svg>
-        Info
-      </button>
-    </div>
-  );
-}
-
-// Context menu state type
-interface ContextMenuState {
-  imageId: number;
-  x: number;
-  y: number;
-}
 
 function chunkArray<T>(array: T[], chunkSize: number): T[][] {
   const result: T[][] = [];
@@ -264,53 +201,22 @@ export function ImageGallery() {
   const [cameraFilter, setCameraFilter] = useState<number | 'all'>('all');
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Click handlers
   const handleClick = useCallback((imageId: number) => {
     setSelectedImageId(imageId);
-    setContextMenu(null);
   }, [setSelectedImageId]);
 
   const handleDoubleClick = useCallback((imageId: number) => {
     openImageDetail(imageId);
-    setContextMenu(null);
   }, [openImageDetail]);
 
-  const handleContextMenu = useCallback((imageId: number, e: React.MouseEvent) => {
-    setContextMenu({
-      imageId,
-      x: e.clientX,
-      y: e.clientY,
-    });
-  }, []);
-
-  // Context menu action handlers
-  const handleContextMenuSelect = useCallback(() => {
-    if (contextMenu) {
-      setSelectedImageId(contextMenu.imageId);
-      setContextMenu(null);
-    }
-  }, [contextMenu, setSelectedImageId]);
-
-  const handleContextMenuGoto = useCallback(() => {
-    if (contextMenu) {
-      flyToImage(contextMenu.imageId);
-      setContextMenu(null);
-    }
-  }, [contextMenu, flyToImage]);
-
-  const handleContextMenuInfo = useCallback(() => {
-    if (contextMenu) {
-      openImageDetail(contextMenu.imageId);
-      setContextMenu(null);
-    }
-  }, [contextMenu, openImageDetail]);
-
-  const handleContextMenuClose = useCallback(() => {
-    setContextMenu(null);
-  }, []);
+  // Right-click selects and goes to image in 3D viewer
+  const handleRightClick = useCallback((imageId: number) => {
+    setSelectedImageId(imageId);
+    flyToImage(imageId);
+  }, [setSelectedImageId, flyToImage]);
 
   // Reset camera filter when reconstruction changes
   useEffect(() => {
@@ -500,6 +406,81 @@ export function ImageGallery() {
     }
   }, [selectedImageId, images, viewMode, galleryColumns, rowVirtualizer, listVirtualizer]);
 
+  // Arrow key navigation for gallery/list
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't handle if typing in input/textarea or no images
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (images.length === 0) return;
+
+      const key = e.key;
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(key)) return;
+
+      e.preventDefault();
+
+      // Find current index, default to -1 if nothing selected
+      const currentIndex = selectedImageId !== null
+        ? images.findIndex((img) => img.imageId === selectedImageId)
+        : -1;
+
+      let newIndex: number;
+
+      if (viewMode === 'gallery') {
+        // Gallery mode: up/down move by row, left/right move by 1
+        switch (key) {
+          case 'ArrowLeft':
+            newIndex = currentIndex <= 0 ? images.length - 1 : currentIndex - 1;
+            break;
+          case 'ArrowRight':
+            newIndex = currentIndex >= images.length - 1 ? 0 : currentIndex + 1;
+            break;
+          case 'ArrowUp':
+            newIndex = currentIndex - galleryColumns;
+            if (newIndex < 0) newIndex = currentIndex; // Stay at current if can't go up
+            break;
+          case 'ArrowDown':
+            newIndex = currentIndex + galleryColumns;
+            if (newIndex >= images.length) newIndex = currentIndex; // Stay at current if can't go down
+            break;
+          default:
+            return;
+        }
+      } else {
+        // List mode: up/down and left/right both navigate sequentially
+        switch (key) {
+          case 'ArrowLeft':
+          case 'ArrowUp':
+            newIndex = currentIndex <= 0 ? images.length - 1 : currentIndex - 1;
+            break;
+          case 'ArrowRight':
+          case 'ArrowDown':
+            newIndex = currentIndex >= images.length - 1 ? 0 : currentIndex + 1;
+            break;
+          default:
+            return;
+        }
+      }
+
+      // Handle nothing selected - start from first or last
+      if (currentIndex === -1) {
+        newIndex = (key === 'ArrowLeft' || key === 'ArrowUp') ? images.length - 1 : 0;
+      }
+
+      const newImageId = images[newIndex].imageId;
+
+      if (e.shiftKey) {
+        // Shift + arrow = right-click behavior (select and fly to)
+        handleRightClick(newImageId);
+      } else {
+        // Arrow only = left-click behavior (just select)
+        handleClick(newImageId);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [images, selectedImageId, viewMode, galleryColumns, handleClick, handleRightClick]);
+
   if (!reconstruction) {
     return (
       <div className={emptyStateStyles.container}>
@@ -519,7 +500,7 @@ export function ImageGallery() {
   return (
     <div className="h-full flex flex-col bg-ds-secondary">
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2 p-2 bg-ds-tertiary">
+      <div className="flex flex-wrap items-center justify-between gap-1 p-1 bg-ds-tertiary">
         <div className={toolbarStyles.group}>
           <select
             value={cameraFilter}
@@ -533,6 +514,8 @@ export function ImageGallery() {
               </option>
             ))}
           </select>
+        </div>
+        <div className={`${toolbarStyles.group} flex-nowrap`}>
           <select
             value={sortField}
             onChange={(e) => setSortField(e.target.value as SortField)}
@@ -553,8 +536,7 @@ export function ImageGallery() {
             {sortDirection === 'asc' ? <SortAscIcon className="w-4 h-4" /> : <SortDescIcon className="w-4 h-4" />}
           </button>
         </div>
-        <div className={toolbarStyles.group}>
-          {viewMode === 'gallery' && <span className="text-ds-muted text-sm">Shift+Scroll to zoom</span>}
+        <div className={`${toolbarStyles.group} ml-auto`}>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setViewMode('gallery')}
@@ -615,7 +597,7 @@ export function ImageGallery() {
                         isSelected={selectedImageId === img.imageId}
                         onClick={handleClick}
                         onDoubleClick={handleDoubleClick}
-                        onContextMenu={handleContextMenu}
+                        onRightClick={handleRightClick}
                         isScrolling={debouncedIsScrolling}
                         skipImages={imageLoadMode === 'skip'}
                         isSettling={isSettling}
@@ -653,7 +635,7 @@ export function ImageGallery() {
                       isSelected={selectedImageId === img.imageId}
                       onClick={handleClick}
                       onDoubleClick={handleDoubleClick}
-                      onContextMenu={handleContextMenu}
+                      onRightClick={handleRightClick}
                       isScrolling={debouncedIsScrolling}
                       skipImages={imageLoadMode === 'skip'}
                       isSettling={isSettling}
@@ -664,18 +646,6 @@ export function ImageGallery() {
             </div>
           )}
       </div>
-
-      {/* Context menu */}
-      {contextMenu && (
-        <GalleryContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          onSelect={handleContextMenuSelect}
-          onGoto={handleContextMenuGoto}
-          onInfo={handleContextMenuInfo}
-          onClose={handleContextMenuClose}
-        />
-      )}
     </div>
   );
 }

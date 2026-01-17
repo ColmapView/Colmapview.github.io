@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { STORAGE_KEYS } from '../migration';
-import type { MatchesDisplayMode, AxesDisplayMode, AxesCoordinateSystem, ImageLoadMode, GizmoMode } from '../types';
+import type { MatchesDisplayMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, ImageLoadMode, GizmoMode } from '../types';
+
+export type ViewDirection = 'reset' | 'x' | 'y' | 'z';
 
 export interface UIState {
   // Modal
@@ -14,6 +16,7 @@ export interface UIState {
   // Match visualization
   matchesDisplayMode: MatchesDisplayMode;
   matchesOpacity: number;
+  matchesColor: string;
 
   // Mask overlay
   showMaskOverlay: boolean;
@@ -23,12 +26,16 @@ export interface UIState {
   axesDisplayMode: AxesDisplayMode;
   axesCoordinateSystem: AxesCoordinateSystem;
   axesScale: number;
+  gridScale: number;
+  axisLabelMode: AxisLabelMode;
   backgroundColor: string;
   autoRotate: boolean;
   gizmoMode: GizmoMode;
 
   // Transient
   viewResetTrigger: number;
+  viewDirection: ViewDirection | null;
+  viewTrigger: number;
   imageLoadMode: ImageLoadMode;
 
   // Actions
@@ -40,15 +47,19 @@ export interface UIState {
   setMatchedImageId: (id: number | null) => void;
   setMatchesDisplayMode: (mode: MatchesDisplayMode) => void;
   setMatchesOpacity: (opacity: number) => void;
+  setMatchesColor: (color: string) => void;
   setShowMaskOverlay: (show: boolean) => void;
   setMaskOpacity: (opacity: number) => void;
   setAxesDisplayMode: (mode: AxesDisplayMode) => void;
   setAxesCoordinateSystem: (system: AxesCoordinateSystem) => void;
   setAxesScale: (scale: number) => void;
+  setGridScale: (scale: number) => void;
+  setAxisLabelMode: (mode: AxisLabelMode) => void;
   setBackgroundColor: (color: string) => void;
   setAutoRotate: (autoRotate: boolean) => void;
   setGizmoMode: (mode: GizmoMode) => void;
   resetView: () => void;
+  setView: (direction: ViewDirection) => void;
   setImageLoadMode: (mode: ImageLoadMode) => void;
 }
 
@@ -62,15 +73,20 @@ export const useUIStore = create<UIState>()(
       matchedImageId: null,
       matchesDisplayMode: 'off',
       matchesOpacity: 0.75,
+      matchesColor: '#ff00ff',
       showMaskOverlay: false,
       maskOpacity: 0.7,
       axesDisplayMode: 'both',
       axesCoordinateSystem: 'colmap',
       axesScale: 1,
+      gridScale: 1,
+      axisLabelMode: 'extra',
       backgroundColor: '#ffffff',
       autoRotate: false,
       gizmoMode: 'off',
       viewResetTrigger: 0,
+      viewDirection: null,
+      viewTrigger: 0,
       imageLoadMode: 'lazy',
 
       openImageDetail: (imageDetailId) => set({ imageDetailId, matchedImageId: null }),
@@ -81,15 +97,22 @@ export const useUIStore = create<UIState>()(
       setMatchedImageId: (matchedImageId) => set({ matchedImageId }),
       setMatchesDisplayMode: (matchesDisplayMode) => set({ matchesDisplayMode }),
       setMatchesOpacity: (matchesOpacity) => set({ matchesOpacity }),
+      setMatchesColor: (matchesColor) => set({ matchesColor }),
       setShowMaskOverlay: (showMaskOverlay) => set({ showMaskOverlay }),
       setMaskOpacity: (maskOpacity) => set({ maskOpacity }),
       setAxesDisplayMode: (axesDisplayMode) => set({ axesDisplayMode }),
       setAxesCoordinateSystem: (axesCoordinateSystem) => set({ axesCoordinateSystem }),
       setAxesScale: (axesScale) => set({ axesScale }),
+      setGridScale: (gridScale) => set({ gridScale }),
+      setAxisLabelMode: (axisLabelMode) => set({ axisLabelMode }),
       setBackgroundColor: (backgroundColor) => set({ backgroundColor }),
       setAutoRotate: (autoRotate) => set({ autoRotate }),
       setGizmoMode: (gizmoMode) => set({ gizmoMode }),
       resetView: () => set((state) => ({ viewResetTrigger: state.viewResetTrigger + 1 })),
+      setView: (direction) => set((state) => ({
+        viewDirection: direction,
+        viewTrigger: state.viewTrigger + 1,
+      })),
       setImageLoadMode: (imageLoadMode) => set({ imageLoadMode }),
     }),
     {
@@ -100,11 +123,14 @@ export const useUIStore = create<UIState>()(
         showPoints3D: state.showPoints3D,
         matchesDisplayMode: state.matchesDisplayMode,
         matchesOpacity: state.matchesOpacity,
+        matchesColor: state.matchesColor,
         showMaskOverlay: state.showMaskOverlay,
         maskOpacity: state.maskOpacity,
         axesDisplayMode: state.axesDisplayMode,
         axesCoordinateSystem: state.axesCoordinateSystem,
         axesScale: state.axesScale,
+        gridScale: state.gridScale,
+        axisLabelMode: state.axisLabelMode,
         backgroundColor: state.backgroundColor,
         autoRotate: state.autoRotate,
         gizmoMode: state.gizmoMode,

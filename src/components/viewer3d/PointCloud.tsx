@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useReconstructionStore, usePointCloudStore, useCameraStore } from '../../store';
 import type { Point3D } from '../../types/colmap';
-import { VIZ_COLORS, BRIGHTNESS, RAINBOW, COLORMAP } from '../../theme';
+import { BRIGHTNESS, RAINBOW, COLORMAP } from '../../theme';
 import { sRGBToLinear, rainbowColor, jetColormap } from '../../utils/colorUtils';
 
 export function PointCloud() {
@@ -15,49 +15,60 @@ export function PointCloud() {
   const selectedImageId = useCameraStore((s) => s.selectedImageId);
   const selectionColorMode = useCameraStore((s) => s.selectionColorMode);
   const selectionAnimationSpeed = useCameraStore((s) => s.selectionAnimationSpeed);
+  const selectionColor = useCameraStore((s) => s.selectionColor);
   const selectedMaterialRef = useRef<THREE.PointsMaterial>(null);
   // Use ref instead of state to avoid re-renders on every frame
   const rainbowHueRef = useRef(0);
   const blinkPhaseRef = useRef(0);
+  const tempColorRef = useRef(new THREE.Color());
 
   // Update selection color directly in useFrame without triggering re-renders
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     if (selectedImageId !== null && selectedMaterialRef.current) {
       if (selectionColorMode === 'rainbow') {
         rainbowHueRef.current = (rainbowHueRef.current + delta * selectionAnimationSpeed * RAINBOW.speedMultiplier) % 1;
         selectedMaterialRef.current.color.copy(rainbowColor(rainbowHueRef.current));
+        selectedMaterialRef.current.opacity = 1;
       } else if (selectionColorMode === 'blink') {
-        // Blink: smooth sine wave pulse between dim (0.1) and full brightness
-        blinkPhaseRef.current += delta * selectionAnimationSpeed * 2; // radians for sine wave
-        const blinkFactor = (Math.sin(blinkPhaseRef.current) + 1) / 2; // 0 to 1
+        // Blink: smooth sine wave pulse using intensity (0.2 to 1.0) for strong effect
+        // Use clock.elapsedTime to stay in sync with frustum blink animation
+        const blinkFactor = (Math.sin(state.clock.elapsedTime * selectionAnimationSpeed * 2) + 1) / 2; // 0 to 1
         const intensity = 0.1 + 0.9 * blinkFactor;
+        tempColorRef.current.set(selectionColor);
         selectedMaterialRef.current.color.setRGB(
-          VIZ_COLORS.highlight[0] * intensity,
-          VIZ_COLORS.highlight[1] * intensity,
-          VIZ_COLORS.highlight[2] * intensity
+          tempColorRef.current.r * intensity,
+          tempColorRef.current.g * intensity,
+          tempColorRef.current.b * intensity
         );
+      } else if (selectionColorMode === 'static') {
+        tempColorRef.current.set(selectionColor);
+        selectedMaterialRef.current.color.copy(tempColorRef.current);
+        selectedMaterialRef.current.opacity = 1;
       }
     }
   });
 
-  // Handle selection color mode change (only runs when selectionColorMode changes)
+  // Handle selection color mode change (only runs when selectionColorMode or selectionColor changes)
   useEffect(() => {
     if (!selectedMaterialRef.current) return;
     if (selectionColorMode === 'rainbow') {
       selectedMaterialRef.current.vertexColors = false;
       selectedMaterialRef.current.color.copy(rainbowColor(rainbowHueRef.current));
+      selectedMaterialRef.current.opacity = 1;
       selectedMaterialRef.current.needsUpdate = true;
     } else if (selectionColorMode === 'blink') {
       selectedMaterialRef.current.vertexColors = false;
-      selectedMaterialRef.current.color.setRGB(VIZ_COLORS.highlight[0], VIZ_COLORS.highlight[1], VIZ_COLORS.highlight[2]);
+      selectedMaterialRef.current.color.set(selectionColor);
+      selectedMaterialRef.current.transparent = true;
       selectedMaterialRef.current.needsUpdate = true;
     } else {
-      // off or static: solid magenta
+      // off or static: solid selection color
       selectedMaterialRef.current.vertexColors = false;
-      selectedMaterialRef.current.color.setRGB(VIZ_COLORS.highlight[0], VIZ_COLORS.highlight[1], VIZ_COLORS.highlight[2]);
+      selectedMaterialRef.current.color.set(selectionColor);
+      selectedMaterialRef.current.opacity = 1;
       selectedMaterialRef.current.needsUpdate = true;
     }
-  }, [selectionColorMode]);
+  }, [selectionColorMode, selectionColor]);
 
   const { positions, colors, selectedPositions, selectedColors } = useMemo(() => {
     if (!reconstruction) return { positions: null, colors: null, selectedPositions: null, selectedColors: null };
@@ -110,7 +121,9 @@ export function PointCloud() {
     if (minError === maxError) maxError = minError + 1;
     if (minTrack === maxTrack) maxTrack = minTrack + 1;
 
-    const HIGHLIGHT_COLOR = VIZ_COLORS.highlight;
+    // Convert hex selection color to RGB values
+    const tempColor = new THREE.Color(selectionColor);
+    const HIGHLIGHT_COLOR: [number, number, number] = [tempColor.r, tempColor.g, tempColor.b];
 
     const computeColor = (point: Point3D, mode: string): [number, number, number] => {
       if (mode === 'error') {
@@ -159,7 +172,7 @@ export function PointCloud() {
     }
 
     return { positions, colors, selectedPositions, selectedColors };
-  }, [reconstruction, colorMode, minTrackLength, maxReprojectionError, selectedImageId, selectionColorMode]);
+  }, [reconstruction, colorMode, minTrackLength, maxReprojectionError, selectedImageId, selectionColorMode, selectionColor]);
 
   // Create geometry objects in useMemo to ensure proper updates when reconstruction changes
   const geometry = useMemo(() => {
@@ -206,7 +219,8 @@ export function PointCloud() {
             ref={selectedMaterialRef}
             size={pointSize + 1}
             vertexColors={false}
-            color={VIZ_COLORS.frustum.selected}
+            color={selectionColor}
+            transparent
             sizeAttenuation={false}
           />
         </points>

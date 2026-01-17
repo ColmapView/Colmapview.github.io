@@ -21,14 +21,14 @@ export function StatusBar() {
       <div className={statusBarStyles.group}>
         {reconstruction ? (
           <>
-            <span>Points: {pointCount.toLocaleString()}</span>
-            <span>Images: {imageCount.toLocaleString()}</span>
-            <span>Cameras: {cameraCount.toLocaleString()}</span>
+            <span>Points: <span className="text-ds-primary">{pointCount.toLocaleString()}</span></span>
+            <span>Images: <span className="text-ds-primary">{imageCount.toLocaleString()}</span></span>
+            <span>Cameras: <span className="text-ds-primary">{cameraCount.toLocaleString()}</span></span>
             {globalStats && (
               <>
-                <span>Observations: {globalStats.totalObservations.toLocaleString()}</span>
-                <span>Avg Track: {globalStats.avgTrackLength.toFixed(2)}</span>
-                <span>Avg Reproj Error: {globalStats.avgError.toFixed(3)}px</span>
+                <span>Observations: <span className="text-ds-primary">{globalStats.totalObservations.toLocaleString()}</span></span>
+                <span>Avg Track: <span className="text-ds-primary">{globalStats.avgTrackLength.toFixed(2)}</span></span>
+                <span>Avg Reproj Error: <span className="text-ds-primary">{globalStats.avgError.toFixed(3)}px</span></span>
               </>
             )}
           </>
@@ -36,9 +36,22 @@ export function StatusBar() {
           <span>{loading ? 'Loading...' : 'Drop COLMAP folder to load'}</span>
         )}
       </div>
-      <span className="text-ds-muted">
-        ColmapView by OpsiClear | v{__APP_VERSION__}
-      </span>
+      <div className="flex items-center gap-2 text-ds-secondary">
+        <a
+          href="https://github.com/ColmapView/colmapview.github.io"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="no-underline transition-colors"
+          style={{ color: 'inherit' }}
+          title="Star on GitHub"
+          onMouseEnter={(e) => e.currentTarget.style.color = '#facc15'}
+          onMouseLeave={(e) => e.currentTarget.style.color = 'inherit'}
+        >
+          &#9733; Star on GitHub
+        </a>
+        <span>|</span>
+        <span>ColmapView by OpsiClear | v{__APP_VERSION__}</span>
+      </div>
     </footer>
   );
 }

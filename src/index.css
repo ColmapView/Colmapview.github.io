@@ -42,7 +42,7 @@
   --match-line: #ff00ff;
 
   /* Typography */
-  --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
 
   /* Spacing Scale */
@@ -230,16 +230,23 @@ input[type="checkbox"],
 input[type="radio"] {
   appearance: none;
   -webkit-appearance: none;
-  width: 1rem;
-  height: 1rem;
+  width: 1.125rem;
+  height: 1.125rem;
   margin: 0;
   padding: 0;
   background-color: var(--bg-input);
-  border: 1px solid var(--border-light);
-  border-radius: 0.25rem;
+  border: 1.5px solid var(--border-light);
+  border-radius: 0.3rem;
   cursor: pointer;
   position: relative;
   flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+input[type="checkbox"]:hover,
+input[type="radio"]:hover {
+  border-color: var(--accent);
+  background-color: var(--bg-surface);
 }
 
 input[type="radio"] {
@@ -250,35 +257,71 @@ input[type="checkbox"]:checked,
 input[type="radio"]:checked {
   background-color: var(--accent);
   border-color: var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+input[type="checkbox"]:checked:hover,
+input[type="radio"]:checked:hover {
+  filter: brightness(1.1);
 }
 
 input[type="checkbox"]:checked::after {
   content: '';
   position: absolute;
-  left: 4px;
-  top: 1px;
+  left: 5px;
+  top: 2px;
   width: 5px;
   height: 9px;
   border: solid var(--bg-void);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
+  animation: checkmark 0.15s ease-out;
+}
+
+@keyframes checkmark {
+  from {
+    opacity: 0;
+    transform: rotate(45deg) scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(45deg) scale(1);
+  }
 }
 
 input[type="radio"]:checked::after {
   content: '';
   position: absolute;
-  left: 3px;
-  top: 3px;
+  left: 4px;
+  top: 4px;
   width: 8px;
   height: 8px;
   background-color: var(--bg-void);
   border-radius: 50%;
+  animation: radio-dot 0.15s ease-out;
+}
+
+@keyframes radio-dot {
+  from {
+    opacity: 0;
+    transform: scale(0);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 input[type="checkbox"]:focus,
 input[type="radio"]:focus {
+  outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(184, 184, 184, 0.2);
+  box-shadow: 0 0 0 3px rgba(100, 149, 237, 0.25);
+}
+
+input[type="checkbox"]:active,
+input[type="radio"]:active {
+  transform: scale(0.95);
 }
 
 /* Range slider base styles */
@@ -1266,3 +1309,77 @@ legend {
 
 /* Draggable */
 .draggable-false { -webkit-user-drag: none; user-drag: none; }
+
+/* Container queries for responsive list view */
+.list-stats-container {
+  container-type: inline-size;
+}
+
+.list-stats-compact {
+  display: block;
+}
+
+.list-stats-full {
+  display: none;
+}
+
+@container (min-width: 400px) {
+  .list-stats-compact {
+    display: none;
+  }
+  .list-stats-full {
+    display: block;
+  }
+}
+
+/* Responsive styles for small screens (laptops and smaller) */
+@media (max-width: 1520px) {
+  /* Smaller control buttons */
+  .control-button-responsive {
+    width: 2rem !important;
+    height: 2rem !important;
+  }
+
+  .control-button-responsive svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  /* Smaller gap between buttons */
+  .control-panel-responsive {
+    gap: 0.25rem !important;
+  }
+
+  /* Smaller footer branding */
+  .footer-logo-responsive {
+    bottom: 0.75rem !important;
+    left: 0.75rem !important;
+  }
+
+  .footer-logo-responsive img {
+    height: 3vh !important;
+  }
+
+  .footer-social-responsive {
+    bottom: 0.75rem !important;
+    right: 0.75rem !important;
+    gap: 0.5rem !important;
+  }
+
+  .footer-social-responsive svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  /* Smaller status bar */
+  .status-bar-responsive {
+    height: 2rem !important;
+    font-size: 0.75rem !important;
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+
+  .status-bar-responsive .status-bar-group {
+    gap: 1rem !important;
+  }
+}

@@ -23,6 +23,7 @@ export type {
   MatchesDisplayMode,
   SelectionColorMode,
   AxesDisplayMode,
+  AxisLabelMode,
   ScreenshotSize,
   ScreenshotFormat,
   ExportFormat,

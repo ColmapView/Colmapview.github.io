@@ -154,9 +154,9 @@ export const listStyles = {
   thumbnail: 'flex-shrink-0 bg-ds-hover rounded overflow-hidden',
   thumbnailSize: 'w-14 h-14',
   thumbnailPlaceholder: 'w-full h-full flex items-center justify-center text-ds-muted text-xs',
-  content: 'flex-1 min-w-0',
-  title: 'text-ds-primary text-sm truncate font-medium',
-  subtitle: 'text-ds-muted text-xs',
+  content: 'flex-1 min-w-0 overflow-hidden',
+  title: 'text-ds-primary text-sm truncate font-medium whitespace-nowrap',
+  subtitle: 'text-ds-muted text-xs truncate whitespace-nowrap',
 } as const;
 
 // ============================================
@@ -300,9 +300,9 @@ export const loadingStyles = {
 
 export const controlPanelStyles = {
   // Container positioning
-  container: 'absolute top-3 right-3 flex flex-col gap-2 z-10',
+  container: 'absolute top-3 right-3 flex flex-col gap-2 z-10 control-panel-responsive',
   // Button styles
-  button: 'w-10 h-10 rounded-lg flex items-center justify-center transition-colors relative border border-ds',
+  button: 'w-10 h-10 rounded-lg flex items-center justify-center transition-colors relative border border-ds control-button-responsive',
   buttonActive: 'bg-ds-accent text-ds-void border-ds-accent',
   buttonHover: 'bg-ds-hover text-ds-primary',
   buttonInactive: 'bg-ds-tertiary text-ds-secondary hover-ds-hover hover-ds-text-primary',
@@ -386,9 +386,9 @@ export const dragOverlayStyles = {
 // ============================================
 
 export const footerStyles = {
-  logo: 'absolute bottom-6 left-6',
+  logo: 'absolute bottom-6 left-6 footer-logo-responsive',
   logoImage: 'opacity-70 hover-opacity-100 transition-opacity',
-  socialContainer: 'absolute bottom-6 right-6 flex items-center gap-4',
+  socialContainer: 'absolute bottom-6 right-6 flex items-center gap-4 footer-social-responsive',
   socialLink: 'text-ds-secondary opacity-70 hover-opacity-100 transition-opacity',
 } as const;
 
@@ -416,8 +416,8 @@ export const toolbarStyles = {
 // ============================================
 
 export const statusBarStyles = {
-  container: 'h-10 border-t border-ds bg-ds-tertiary text-ds-secondary text-base px-4 flex items-center justify-between',
-  group: 'flex items-center gap-6',
+  container: 'h-10 border-t border-ds bg-ds-tertiary text-ds-secondary text-base px-4 flex items-center justify-between status-bar-responsive',
+  group: 'flex items-center gap-6 status-bar-group',
 } as const;
 
 // ============================================

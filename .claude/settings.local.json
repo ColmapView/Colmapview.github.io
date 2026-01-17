@@ -16,7 +16,13 @@
       "mcp__plugin_playwright_playwright__browser_snapshot",
       "mcp__plugin_playwright_playwright__browser_run_code",
       "WebSearch",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh release create:*)",
+      "Bash(gh run list:*)",
+      "Bash(git checkout:*)",
+      "Bash(git fsck:*)"
     ]
   }
 }

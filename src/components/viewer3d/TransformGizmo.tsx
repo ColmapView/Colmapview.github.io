@@ -1,8 +1,10 @@
 import { useRef, useMemo, useState, useCallback, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree, type ThreeEvent } from '@react-three/fiber';
-import { useTransformStore } from '../../store';
-import { VIZ_COLORS } from '../../theme';
+import { Html } from '@react-three/drei';
+import { useTransformStore, useReconstructionStore, useUIStore } from '../../store';
+import { useFileDropzone } from '../../hooks/useFileDropzone';
+import { VIZ_COLORS, contextMenuStyles } from '../../theme';
 
 // Type for controls registered by TrackballControls
 interface ControlsWithEnabled {
@@ -43,6 +45,7 @@ function RotationArc({
   onPointerDown,
   onPointerOver,
   onPointerOut,
+  onContextMenu,
 }: {
   axis: 'x' | 'y' | 'z';
   color: number;
@@ -51,6 +54,7 @@ function RotationArc({
   onPointerDown: (e: ThreeEvent<PointerEvent>) => void;
   onPointerOver: () => void;
   onPointerOut: () => void;
+  onContextMenu: (e: ThreeEvent<MouseEvent>) => void;
 }) {
   const rotation = useMemo(() => {
     switch (axis) {
@@ -63,7 +67,7 @@ function RotationArc({
     }
   }, [axis]);
 
-  const tubeRadius = radius * 0.04;
+  const tubeRadius = radius * 0.02;
   const displayColor = isHovered ? GIZMO_COLORS.hover : color;
   const opacity = isHovered ? OPACITY.arcHover : OPACITY.arc;
 
@@ -73,6 +77,7 @@ function RotationArc({
       onPointerDown={onPointerDown}
       onPointerOver={onPointerOver}
       onPointerOut={onPointerOut}
+      onContextMenu={onContextMenu}
     >
       <torusGeometry args={[radius, tubeRadius, 8, 64]} />
       <meshBasicMaterial
@@ -95,6 +100,7 @@ function TranslationArrow({
   onPointerDown,
   onPointerOver,
   onPointerOut,
+  onContextMenu,
 }: {
   axis: 'x' | 'y' | 'z';
   color: number;
@@ -103,6 +109,7 @@ function TranslationArrow({
   onPointerDown: (e: ThreeEvent<PointerEvent>) => void;
   onPointerOver: () => void;
   onPointerOut: () => void;
+  onContextMenu: (e: ThreeEvent<MouseEvent>) => void;
 }) {
   const direction = useMemo(() => {
     switch (axis) {
@@ -126,9 +133,9 @@ function TranslationArrow({
   }, [direction]);
 
   const shaftLength = length * 0.8;
-  const shaftRadius = length * 0.03;
+  const shaftRadius = length * 0.015;
   const coneLength = length * 0.2;
-  const coneRadius = length * 0.07;
+  const coneRadius = length * 0.035;
 
   const shaftPosition: [number, number, number] = [
     direction.x * shaftLength / 2,
@@ -154,6 +161,7 @@ function TranslationArrow({
         onPointerDown={onPointerDown}
         onPointerOver={onPointerOver}
         onPointerOut={onPointerOut}
+        onContextMenu={onContextMenu}
       >
         <cylinderGeometry args={[shaftRadius, shaftRadius, shaftLength, 8]} />
         <meshBasicMaterial color={displayColor} transparent opacity={opacity} depthTest={false} />
@@ -165,6 +173,7 @@ function TranslationArrow({
         onPointerDown={onPointerDown}
         onPointerOver={onPointerOver}
         onPointerOut={onPointerOut}
+        onContextMenu={onContextMenu}
       >
         <coneGeometry args={[coneRadius, coneLength, 12]} />
         <meshBasicMaterial color={displayColor} transparent opacity={opacity} depthTest={false} />
@@ -178,11 +187,19 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
   const controls = useThree((state) => state.controls) as unknown as ControlsWithEnabled | undefined;
   const transform = useTransformStore((s) => s.transform);
   const setTransform = useTransformStore((s) => s.setTransform);
+  const resetTransform = useTransformStore((s) => s.resetTransform);
+  const applyToData = useTransformStore((s) => s.applyToData);
+  const droppedFiles = useReconstructionStore((s) => s.droppedFiles);
+  const setGizmoMode = useUIStore((s) => s.setGizmoMode);
+  const { processFiles } = useFileDropzone();
 
   // Drag state
   const [hoveredAxis, setHoveredAxis] = useState<GizmoAxis>(null);
   const [hoveredMode, setHoveredMode] = useState<GizmoMode>(null);
   const [dragging, setDragging] = useState(false);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const dragRef = useRef<{
     axis: GizmoAxis;
     mode: GizmoMode;
@@ -467,6 +484,9 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
     (e: PointerEvent) => {
       if (dragging) {
         setDragging(false);
+        // Clear hover state since onPointerOut may not fire if pointer is still over the element
+        setHoveredAxis(null);
+        setHoveredMode(null);
         // Re-enable camera controls
         if (controls?.enabled) {
           controls.enabled.current = true;
@@ -493,8 +513,14 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
   }, [dragging, gl, handlePointerMove, handlePointerUp]);
 
 
-  const arrowLength = size * 0.4;
   const arcRadius = size * 0.35;
+  const arrowLength = arcRadius;  // Arrow tip touches the ring
+
+  // Common context menu handler for all gizmo elements
+  const handleContextMenu = useCallback((e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation();
+    setContextMenu({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
+  }, []);
 
   return (
     <group ref={groupRef} position={center} quaternion={coordinateMode === 'local' ? localRotation : undefined}>
@@ -503,28 +529,31 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
         axis="x"
         color={GIZMO_COLORS.x}
         length={arrowLength}
-        isHovered={hoveredAxis === 'x' && hoveredMode === 'translate'}
+        isHovered={(hoveredAxis === 'x' && hoveredMode === 'translate') || (dragging && dragRef.current?.axis === 'x' && dragRef.current?.mode === 'translate')}
         onPointerDown={handlePointerDown('x', 'translate')}
-        onPointerOver={() => { setHoveredAxis('x'); setHoveredMode('translate'); }}
-        onPointerOut={() => { setHoveredAxis(null); setHoveredMode(null); }}
+        onPointerOver={() => { if (!dragging && !hoveredAxis) { setHoveredAxis('x'); setHoveredMode('translate'); } }}
+        onPointerOut={() => { if (!dragging && hoveredAxis === 'x' && hoveredMode === 'translate') { setHoveredAxis(null); setHoveredMode(null); } }}
+        onContextMenu={handleContextMenu}
       />
       <TranslationArrow
         axis="y"
         color={GIZMO_COLORS.y}
         length={arrowLength}
-        isHovered={hoveredAxis === 'y' && hoveredMode === 'translate'}
+        isHovered={(hoveredAxis === 'y' && hoveredMode === 'translate') || (dragging && dragRef.current?.axis === 'y' && dragRef.current?.mode === 'translate')}
         onPointerDown={handlePointerDown('y', 'translate')}
-        onPointerOver={() => { setHoveredAxis('y'); setHoveredMode('translate'); }}
-        onPointerOut={() => { setHoveredAxis(null); setHoveredMode(null); }}
+        onPointerOver={() => { if (!dragging && !hoveredAxis) { setHoveredAxis('y'); setHoveredMode('translate'); } }}
+        onPointerOut={() => { if (!dragging && hoveredAxis === 'y' && hoveredMode === 'translate') { setHoveredAxis(null); setHoveredMode(null); } }}
+        onContextMenu={handleContextMenu}
       />
       <TranslationArrow
         axis="z"
         color={GIZMO_COLORS.z}
         length={arrowLength}
-        isHovered={hoveredAxis === 'z' && hoveredMode === 'translate'}
+        isHovered={(hoveredAxis === 'z' && hoveredMode === 'translate') || (dragging && dragRef.current?.axis === 'z' && dragRef.current?.mode === 'translate')}
         onPointerDown={handlePointerDown('z', 'translate')}
-        onPointerOver={() => { setHoveredAxis('z'); setHoveredMode('translate'); }}
-        onPointerOut={() => { setHoveredAxis(null); setHoveredMode(null); }}
+        onPointerOver={() => { if (!dragging && !hoveredAxis) { setHoveredAxis('z'); setHoveredMode('translate'); } }}
+        onPointerOut={() => { if (!dragging && hoveredAxis === 'z' && hoveredMode === 'translate') { setHoveredAxis(null); setHoveredMode(null); } }}
+        onContextMenu={handleContextMenu}
       />
 
       {/* Rotation arcs */}
@@ -532,35 +561,98 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
         axis="x"
         color={GIZMO_COLORS.x}
         radius={arcRadius}
-        isHovered={hoveredAxis === 'x' && hoveredMode === 'rotate'}
+        isHovered={(hoveredAxis === 'x' && hoveredMode === 'rotate') || (dragging && dragRef.current?.axis === 'x' && dragRef.current?.mode === 'rotate')}
         onPointerDown={handlePointerDown('x', 'rotate')}
-        onPointerOver={() => { setHoveredAxis('x'); setHoveredMode('rotate'); }}
-        onPointerOut={() => { setHoveredAxis(null); setHoveredMode(null); }}
+        onPointerOver={() => { if (!dragging && !hoveredAxis) { setHoveredAxis('x'); setHoveredMode('rotate'); } }}
+        onPointerOut={() => { if (!dragging && hoveredAxis === 'x' && hoveredMode === 'rotate') { setHoveredAxis(null); setHoveredMode(null); } }}
+        onContextMenu={handleContextMenu}
       />
       <RotationArc
         axis="y"
         color={GIZMO_COLORS.y}
         radius={arcRadius}
-        isHovered={hoveredAxis === 'y' && hoveredMode === 'rotate'}
+        isHovered={(hoveredAxis === 'y' && hoveredMode === 'rotate') || (dragging && dragRef.current?.axis === 'y' && dragRef.current?.mode === 'rotate')}
         onPointerDown={handlePointerDown('y', 'rotate')}
-        onPointerOver={() => { setHoveredAxis('y'); setHoveredMode('rotate'); }}
-        onPointerOut={() => { setHoveredAxis(null); setHoveredMode(null); }}
+        onPointerOver={() => { if (!dragging && !hoveredAxis) { setHoveredAxis('y'); setHoveredMode('rotate'); } }}
+        onPointerOut={() => { if (!dragging && hoveredAxis === 'y' && hoveredMode === 'rotate') { setHoveredAxis(null); setHoveredMode(null); } }}
+        onContextMenu={handleContextMenu}
       />
       <RotationArc
         axis="z"
         color={GIZMO_COLORS.z}
         radius={arcRadius}
-        isHovered={hoveredAxis === 'z' && hoveredMode === 'rotate'}
+        isHovered={(hoveredAxis === 'z' && hoveredMode === 'rotate') || (dragging && dragRef.current?.axis === 'z' && dragRef.current?.mode === 'rotate')}
         onPointerDown={handlePointerDown('z', 'rotate')}
-        onPointerOver={() => { setHoveredAxis('z'); setHoveredMode('rotate'); }}
-        onPointerOut={() => { setHoveredAxis(null); setHoveredMode(null); }}
+        onPointerOver={() => { if (!dragging && !hoveredAxis) { setHoveredAxis('z'); setHoveredMode('rotate'); } }}
+        onPointerOut={() => { if (!dragging && hoveredAxis === 'z' && hoveredMode === 'rotate') { setHoveredAxis(null); setHoveredMode(null); } }}
+        onContextMenu={handleContextMenu}
       />
 
-      {/* Center sphere */}
-      <mesh>
-        <sphereGeometry args={[size * 0.05, 16, 16]} />
-        <meshBasicMaterial color={0xffffff} transparent opacity={0.8} depthTest={false} />
+      {/* Center sphere - right-click for context menu */}
+      <mesh onContextMenu={handleContextMenu} renderOrder={999}>
+        <sphereGeometry args={[size * 0.02, 16, 16]} />
+        <meshBasicMaterial color={0xffffff} depthTest={false} transparent opacity={1} />
       </mesh>
+
+      {/* Context menu - rendered at cursor position */}
+      {contextMenu && (
+        <Html
+          style={{
+            position: 'fixed',
+            left: contextMenu.x,
+            top: contextMenu.y,
+            pointerEvents: 'auto',
+          }}
+          calculatePosition={() => [0, 0]}
+        >
+          <div
+            className={contextMenuStyles.container}
+            onMouseLeave={() => setContextMenu(null)}
+          >
+            <button
+              className={contextMenuStyles.button}
+              onClick={() => { resetTransform(); setContextMenu(null); }}
+            >
+              <svg className={contextMenuStyles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+              </svg>
+              Reset
+            </button>
+            <button
+              className={contextMenuStyles.button}
+              onClick={() => { if (droppedFiles) { resetTransform(); processFiles(droppedFiles); } setContextMenu(null); }}
+            >
+              <svg className={contextMenuStyles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 12a9 9 0 0 0-9-9M3 12a9 9 0 0 1 9-9"/>
+                <path d="M21 12a9 9 0 0 1-9 9M3 12a9 9 0 0 0 9 9"/>
+                <path d="M9 3l3 3-3 3"/>
+                <path d="M15 21l-3-3 3-3"/>
+              </svg>
+              Reload
+            </button>
+            <button
+              className={contextMenuStyles.button}
+              onClick={() => { applyToData(); setContextMenu(null); }}
+            >
+              <svg className={contextMenuStyles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M20 6L9 17l-5-5"/>
+              </svg>
+              Apply
+            </button>
+            <button
+              className={contextMenuStyles.button}
+              onClick={() => { setGizmoMode('off'); setContextMenu(null); }}
+            >
+              <svg className={contextMenuStyles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M4 4l16 16"/>
+              </svg>
+              Off
+            </button>
+          </div>
+        </Html>
+      )}
     </group>
   );
 }

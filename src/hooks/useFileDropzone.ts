@@ -14,6 +14,31 @@ import { collectImageFiles, hasMaskFiles, getImageFile, findMissingImageFiles } 
 import { getFailedImageCount, clearSharedDecodeCache } from './useAsyncImageCache';
 import { clearThumbnailCache, prefetchThumbnails } from './useThumbnail';
 import { clearFrustumTextureCache, prefetchFrustumTextures } from './useFrustumTexture';
+import { parseConfigYaml, applyConfigurationToStores } from '../config/configuration';
+
+function findConfigFile(files: Map<string, File>): File | null {
+  for (const [, file] of files) {
+    const name = file.name.toLowerCase();
+    if (name.endsWith('.yaml') || name.endsWith('.yml')) {
+      return file;
+    }
+  }
+  return null;
+}
+
+function hasColmapFiles(files: Map<string, File>): boolean {
+  for (const [, file] of files) {
+    const name = file.name.toLowerCase();
+    if (
+      name === 'cameras.bin' || name === 'cameras.txt' ||
+      name === 'images.bin' || name === 'images.txt' ||
+      name === 'points3d.bin' || name === 'points3d.txt'
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
 
 export function useFileDropzone() {
   const {
@@ -139,6 +164,32 @@ export function useFileDropzone() {
   }, []);
 
   const processFiles = useCallback(async (files: Map<string, File>) => {
+    // Check for configuration file first
+    const configFile = findConfigFile(files);
+    if (configFile) {
+      try {
+        const content = await configFile.text();
+        const result = parseConfigYaml(content);
+
+        if (result.valid && result.config) {
+          applyConfigurationToStores(result.config);
+          console.log(`[Config] Applied settings from ${configFile.name}`);
+        } else {
+          const errorMessages = result.errors.map(e => e.path ? `${e.path}: ${e.message}` : e.message).join(', ');
+          console.error(`[Config] Invalid configuration: ${errorMessages}`);
+          setError(`Config error: ${errorMessages}`);
+        }
+      } catch (err) {
+        console.error('[Config] Failed to load config file:', err);
+        setError(`Config error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
+
+      // If only config file was dropped, don't continue with COLMAP processing
+      if (!hasColmapFiles(files)) {
+        return;
+      }
+    }
+
     // Show loading state immediately so user gets feedback
     setLoading(true);
     setProgress(0);

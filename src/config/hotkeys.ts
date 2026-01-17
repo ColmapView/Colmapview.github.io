@@ -67,6 +67,24 @@ export const HOTKEYS: HotkeyRegistry = {
     category: 'camera',
     scopes: ['viewer'],
   },
+  viewX: {
+    keys: '1',
+    description: 'X-axis view',
+    category: 'camera',
+    scopes: ['viewer'],
+  },
+  viewY: {
+    keys: '2',
+    description: 'Y-axis view',
+    category: 'camera',
+    scopes: ['viewer'],
+  },
+  viewZ: {
+    keys: '3',
+    description: 'Z-axis view',
+    category: 'camera',
+    scopes: ['viewer'],
+  },
   toggleAxesGrid: {
     keys: 'g',
     description: 'Cycle axes/grid',
@@ -74,7 +92,7 @@ export const HOTKEYS: HotkeyRegistry = {
     scopes: ['viewer'],
   },
   toggleCameraMode: {
-    keys: 'o',
+    keys: 'c',
     description: 'Toggle orbit/fly mode',
     category: 'camera',
     scopes: ['viewer'],
@@ -93,19 +111,19 @@ export const HOTKEYS: HotkeyRegistry = {
   },
   cyclePointSize: {
     keys: 'p',
-    description: 'Cycle point size',
-    category: 'camera',
-    scopes: ['viewer'],
-  },
-  cycleColorMode: {
-    keys: 'c',
-    description: 'Cycle color mode',
+    description: 'Cycle point cloud color mode',
     category: 'camera',
     scopes: ['viewer'],
   },
   cycleCameraDisplay: {
     keys: 'f',
     description: 'Cycle frustum display',
+    category: 'camera',
+    scopes: ['viewer'],
+  },
+  cycleMatchesDisplay: {
+    keys: 'm',
+    description: 'Cycle matches display',
     category: 'camera',
     scopes: ['viewer'],
   },
