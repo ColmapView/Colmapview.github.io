@@ -1,5 +1,6 @@
 import { useState, useEffect, memo, useCallback, useRef, type ReactNode } from 'react';
-import { useReconstructionStore, usePointCloudStore, useCameraStore, useUIStore, useExportStore, useTransformStore } from '../../store';
+import { useReconstructionStore, usePointCloudStore, useCameraStore, useUIStore, useExportStore, useTransformStore, usePointPickingStore } from '../../store';
+import { computeNormalAlignment, sim3dToEuler, composeSim3d, createSim3dFromEuler } from '../../utils/sim3dTransforms';
 import type { ColorMode } from '../../types/colmap';
 import type { CameraMode, ImageLoadMode, CameraDisplayMode, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, ScreenshotSize, ScreenshotFormat, GizmoMode } from '../../store/types';
 import { useHotkeys } from 'react-hotkeys-hook';
@@ -53,42 +54,6 @@ function HoverIcon({ icon, label }: { icon: ReactNode; label: string }) {
         {label}
       </span>
     </span>
-  );
-}
-
-// Small points icon - 4 small dots randomly positioned
-function PointIconSmall({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <circle cx="7" cy="8" r="1.5" />
-      <circle cx="16" cy="6" r="1.5" />
-      <circle cx="11" cy="14" r="1.5" />
-      <circle cx="18" cy="16" r="1.5" />
-    </svg>
-  );
-}
-
-// Medium points icon - 4 medium dots randomly positioned
-function PointIconMedium({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <circle cx="7" cy="8" r="2.5" />
-      <circle cx="16" cy="6" r="2.5" />
-      <circle cx="11" cy="14" r="2.5" />
-      <circle cx="18" cy="16" r="2.5" />
-    </svg>
-  );
-}
-
-// Large points icon - 4 large dots randomly positioned
-function PointIconLarge({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <circle cx="7" cy="8" r="4" />
-      <circle cx="17" cy="6" r="4" />
-      <circle cx="10" cy="16" r="4" />
-      <circle cx="19" cy="17" r="4" />
-    </svg>
   );
 }
 
@@ -776,7 +741,29 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
   const setGizmoMode = useUIStore((s) => s.setGizmoMode);
   const { processFiles } = useFileDropzone();
 
+  // Point picking state
+  const pickingMode = usePointPickingStore((s) => s.pickingMode);
+  const setPickingMode = usePointPickingStore((s) => s.setPickingMode);
+  const selectedPoints = usePointPickingStore((s) => s.selectedPoints);
+  const resetPicking = usePointPickingStore((s) => s.reset);
+
   const hasChanges = !isIdentityEuler(transform);
+
+  // Auto-apply normal alignment when 3 points are selected
+  useEffect(() => {
+    if (pickingMode === 'normal-3pt' && selectedPoints.length === 3) {
+      const alignTransform = computeNormalAlignment(
+        selectedPoints[0].position,
+        selectedPoints[1].position,
+        selectedPoints[2].position
+      );
+      const currentSim3d = createSim3dFromEuler(transform);
+      const composed = composeSim3d(alignTransform, currentSim3d);
+      const composedEuler = sim3dToEuler(composed);
+      setTransform(composedEuler);
+      resetPicking();
+    }
+  }, [pickingMode, selectedPoints, transform, setTransform, resetPicking]);
 
   // Convert radians to degrees for display
   const radToDeg = (rad: number) => rad * (180 / Math.PI);
@@ -905,6 +892,27 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
             Normalize Scale
           </button>
         </div>
+
+        {/* Point picking tools */}
+        <div className={styles.presetGroup}>
+          <button
+            onClick={() => setPickingMode(pickingMode === 'distance-2pt' ? 'off' : 'distance-2pt')}
+            className={pickingMode === 'distance-2pt' ? styles.actionButtonPrimary : styles.presetButton}
+            data-tooltip="Click 2 points, set target distance"
+            data-tooltip-pos="bottom"
+          >
+            2-Point Scale
+          </button>
+          <button
+            onClick={() => setPickingMode(pickingMode === 'normal-3pt' ? 'off' : 'normal-3pt')}
+            className={pickingMode === 'normal-3pt' ? styles.actionButtonPrimary : styles.presetButton}
+            data-tooltip="Click 3 points clockwise to align plane with Y-up"
+            data-tooltip-pos="bottom"
+          >
+            3-Point Align
+          </button>
+        </div>
+
 
         {/* Action buttons */}
         <div className={styles.actionGroup}>
@@ -1106,14 +1114,6 @@ export function ViewerControls() {
     setColorMode(modes[nextIndex]);
   }, [colorMode, setColorMode]);
 
-  // Cycle through point sizes: 1 → 2 → 4 → 1
-  const cyclePointSize = useCallback(() => {
-    const sizes = [1, 2, 4];
-    const currentIndex = sizes.indexOf(pointSize);
-    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % sizes.length;
-    setPointSize(sizes[nextIndex]);
-  }, [pointSize, setPointSize]);
-
   // Cycle through camera display modes: off → frustum → arrow → imageplane → off
   const cycleCameraDisplayMode = useCallback(() => {
     const modes: CameraDisplayMode[] = ['off', 'frustum', 'arrow', 'imageplane'];
@@ -1226,6 +1226,18 @@ export function ViewerControls() {
     cycleMatchesDisplayMode,
     { scopes: HOTKEYS.cycleMatchesDisplay.scopes },
     [cycleMatchesDisplayMode]
+  );
+
+  // Point picking - get reset function for escape hotkey
+  const resetPicking = usePointPickingStore((s) => s.reset);
+  const pickingModeActive = usePointPickingStore((s) => s.pickingMode) !== 'off';
+
+  // Hotkey for canceling point picking (Escape)
+  useHotkeys(
+    'escape',
+    resetPicking,
+    { enabled: pickingModeActive },
+    [resetPicking, pickingModeActive]
   );
 
   return (

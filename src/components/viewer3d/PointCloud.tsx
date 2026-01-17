@@ -1,7 +1,7 @@
-import { useMemo, useRef, useEffect } from 'react';
+import { useMemo, useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
-import { useFrame } from '@react-three/fiber';
-import { useReconstructionStore, usePointCloudStore, useCameraStore } from '../../store';
+import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
+import { useReconstructionStore, usePointCloudStore, useCameraStore, usePointPickingStore } from '../../store';
 import type { Point3D } from '../../types/colmap';
 import { BRIGHTNESS, RAINBOW, COLORMAP } from '../../theme';
 import { sRGBToLinear, rainbowColor, jetColormap } from '../../utils/colorUtils';
@@ -19,8 +19,14 @@ export function PointCloud() {
   const selectedMaterialRef = useRef<THREE.PointsMaterial>(null);
   // Use ref instead of state to avoid re-renders on every frame
   const rainbowHueRef = useRef(0);
-  const blinkPhaseRef = useRef(0);
   const tempColorRef = useRef(new THREE.Color());
+
+  // Point picking state
+  const pickingMode = usePointPickingStore((s) => s.pickingMode);
+  const addSelectedPoint = usePointPickingStore((s) => s.addSelectedPoint);
+  const { raycaster } = useThree();
+  const pointsRef = useRef<THREE.Points>(null);
+  const indexToPoint3DIdRef = useRef<Map<number, bigint>>(new Map());
 
   // Update selection color directly in useFrame without triggering re-renders
   useFrame((state, delta) => {
@@ -71,7 +77,10 @@ export function PointCloud() {
   }, [selectionColorMode, selectionColor]);
 
   const { positions, colors, selectedPositions, selectedColors } = useMemo(() => {
-    if (!reconstruction) return { positions: null, colors: null, selectedPositions: null, selectedColors: null };
+    if (!reconstruction) {
+      indexToPoint3DIdRef.current = new Map();
+      return { positions: null, colors: null, selectedPositions: null, selectedColors: null };
+    }
 
     // Build set of selected image point IDs
     const selectedImagePointIds = new Set<bigint>();
@@ -115,6 +124,7 @@ export function PointCloud() {
     }
 
     if (regularPoints.length === 0 && highlightedPoints.length === 0) {
+      indexToPoint3DIdRef.current = new Map();
       return { positions: null, colors: null, selectedPositions: null, selectedColors: null };
     }
 
@@ -142,6 +152,9 @@ export function PointCloud() {
       ];
     };
 
+    // Build index-to-point3DId mapping for point picking
+    const indexToPoint3DId = new Map<number, bigint>();
+
     // Regular points - use direct indexing instead of .set() for small arrays
     const positions = new Float32Array(regularPoints.length * 3);
     const colors = new Float32Array(regularPoints.length * 3);
@@ -155,7 +168,12 @@ export function PointCloud() {
       colors[i3] = c[0];
       colors[i3 + 1] = c[1];
       colors[i3 + 2] = c[2];
+      // Store mapping for point picking
+      indexToPoint3DId.set(i, point.point3DId);
     }
+
+    // Update ref with new mapping
+    indexToPoint3DIdRef.current = indexToPoint3DId;
 
     // Selected/highlighted points
     const selectedPositions = new Float32Array(highlightedPoints.length * 3);
@@ -206,11 +224,52 @@ export function PointCloud() {
     };
   }, [selectedGeometry]);
 
+  // Handle point picking click
+  const handlePointClick = useCallback((event: ThreeEvent<MouseEvent>) => {
+    if (pickingMode === 'off') return;
+    if (!pointsRef.current) return;
+
+    event.stopPropagation();
+
+    // Get intersection index
+    const intersections = event.intersections;
+    if (intersections.length === 0) return;
+
+    // Find the first intersection with our points mesh
+    const intersection = intersections.find(i => i.object === pointsRef.current);
+    if (!intersection || intersection.index === undefined) return;
+
+    const point3DId = indexToPoint3DIdRef.current.get(intersection.index);
+    if (point3DId === undefined) return;
+
+    // Get screen position from native event
+    const nativeEvent = event.nativeEvent;
+    const screenPosition = { x: nativeEvent.clientX, y: nativeEvent.clientY };
+
+    // Add the selected point with screen position
+    addSelectedPoint({
+      position: intersection.point.clone(),
+      point3DId,
+    }, screenPosition);
+  }, [pickingMode, addSelectedPoint]);
+
+  // Set raycaster threshold based on point size for better picking
+  useEffect(() => {
+    if (pickingMode !== 'off') {
+      raycaster.params.Points.threshold = pointSize * 0.1;
+    }
+  }, [pickingMode, pointSize, raycaster]);
+
   if (!geometry) return null;
 
   return (
     <>
-      <points matrixAutoUpdate={false} geometry={geometry}>
+      <points
+        ref={pointsRef}
+        matrixAutoUpdate={false}
+        geometry={geometry}
+        onClick={pickingMode !== 'off' ? handlePointClick : undefined}
+      >
         <pointsMaterial size={pointSize} vertexColors sizeAttenuation={false} />
       </points>
       {selectedGeometry && (

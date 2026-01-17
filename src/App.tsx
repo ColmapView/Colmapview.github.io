@@ -3,6 +3,7 @@ import { DropZone } from './components/dropzone';
 import { AppLayout } from './components/layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { HotkeyHelpModal } from './components/modals/HotkeyHelpModal';
+import { MouseTooltip } from './components/ui/MouseTooltip';
 import { initStoreMigration } from './store';
 
 // Run store migration on app startup (migrates from old monolithic store to domain stores)
@@ -16,6 +17,7 @@ function App() {
           <AppLayout />
         </DropZone>
         <HotkeyHelpModal />
+        <MouseTooltip />
       </HotkeysProvider>
     </ErrorBoundary>
   );

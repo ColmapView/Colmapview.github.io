@@ -92,7 +92,7 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, onClick, onDoub
       style={{ position: 'relative' }}
       onClick={handleClick}
       onContextMenu={(e) => { e.preventDefault(); onRightClick(img.imageId); }}
-      {...getTooltipProps(`ID: ${img.imageId}${isSelected ? ' · Click for info' : ''}`, 'top')}
+      data-tooltip={isSelected ? 'L🖱: details · R🖱: fly to' : 'L🖱: select · R🖱: fly to'}
     >
       {/* Inner wrapper clips image content without clipping tooltip */}
       <div className={galleryStyles.itemInner}>
@@ -138,7 +138,7 @@ const ListItem = memo(function ListItem({ img, isSelected, onClick, onDoubleClic
       onContextMenu={(e) => { e.preventDefault(); onRightClick(img.imageId); }}
       style={{ height: SIZE.listRowHeight }}
       className={`${listStyles.item} px-3 list-stats-container ${isSelected ? listStyles.itemSelected : listStyles.itemHover}`}
-      {...getTooltipProps(isSelected ? 'Click for info' : '', 'bottom')}
+      data-tooltip={isSelected ? 'L🖱: details · R🖱: fly to' : 'L🖱: select · R🖱: fly to'}
     >
       <div className={`${listStyles.thumbnail} ${listStyles.thumbnailSize}`}>
         {src ? (
@@ -500,7 +500,7 @@ export function ImageGallery() {
   return (
     <div className="h-full flex flex-col bg-ds-secondary">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-1 p-1 bg-ds-tertiary">
+      <div className="flex flex-wrap items-center justify-between gap-1 py-1 pl-0.5 pr-1 bg-ds-tertiary">
         <div className={toolbarStyles.group}>
           <select
             value={cameraFilter}
@@ -541,14 +541,14 @@ export function ImageGallery() {
             <button
               onClick={() => setViewMode('gallery')}
               className={getViewModeButtonClass(viewMode === 'gallery')}
-              {...getTooltipProps('Gallery view', 'bottom')}
+              data-tooltip="Grid view (Shift+scroll to resize)"
             >
               <GridIcon className="w-4 h-4" />
             </button>
             <button
               onClick={() => setViewMode('list')}
               className={getViewModeButtonClass(viewMode === 'list')}
-              {...getTooltipProps('List view', 'bottom')}
+              data-tooltip="List view with stats"
             >
               <ListIcon className="w-4 h-4" />
             </button>

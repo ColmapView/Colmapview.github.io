@@ -506,7 +506,17 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
     const transformedQuat = sim3d.rotation.clone().multiply(worldFromCamQuat);
 
     const flipRotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
-    const threeJsCamQuat = transformedQuat.clone().multiply(flipRotation);
+    let threeJsCamQuat = transformedQuat.clone().multiply(flipRotation);
+
+    // When horizon lock is enabled, remove roll from the camera orientation
+    // This ensures the horizon stays level after flying to the camera
+    if (horizonLock) {
+      const lookDir = new THREE.Vector3(0, 0, -1).applyQuaternion(threeJsCamQuat);
+      const lookTarget = transformedPos.clone().add(lookDir);
+      const lookMatrix = new THREE.Matrix4();
+      lookMatrix.lookAt(transformedPos, lookTarget, worldUpVec);
+      threeJsCamQuat = new THREE.Quaternion().setFromRotationMatrix(lookMatrix);
+    }
 
     const lookDir = new THREE.Vector3(0, 0, -1).applyQuaternion(threeJsCamQuat);
     const newTarget = transformedPos.clone().add(lookDir.multiplyScalar(distance.current));
@@ -523,7 +533,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
     camera.quaternion.copy(threeJsCamQuat);
 
     clearFlyTo();
-  }, [flyToImageId, reconstruction, clearFlyTo, camera, transform]);
+  }, [flyToImageId, reconstruction, clearFlyTo, camera, transform, horizonLock, worldUpVec]);
 
   // Handle mode switching
   useEffect(() => {

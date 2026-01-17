@@ -1238,10 +1238,7 @@ legend {
   z-index: var(--z-tooltip);
 }
 
-[data-tooltip]:hover::after {
-  opacity: 1;
-  visibility: visible;
-}
+/* CSS tooltips disabled - using MouseTooltip component instead */
 
 [data-tooltip-pos="bottom"]::after {
   bottom: auto;

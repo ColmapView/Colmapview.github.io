@@ -56,269 +56,6 @@ const lineFragmentShader = `
   }
 `;
 
-// Arrow line width in pixels
-const ARROW_LINE_WIDTH = 2;
-
-// Batched arrow rendering for efficient display of many cameras (using thick lines)
-interface BatchedArrowLinesProps {
-  frustums: {
-    image: Image;
-    camera: Camera;
-    position: THREE.Vector3;
-    quaternion: THREE.Quaternion;
-    cameraIndex: number;
-  }[];
-  cameraScale: number;
-  selectedImageId: number | null;
-  hoveredImageId: number | null;
-  matchedImageIds: Set<number>;
-  matchesOpacity: number;
-  matchesDisplayMode: 'off' | 'on' | 'blink';
-  matchesColor: string;
-  frustumColorMode: 'single' | 'byCamera';
-  selectionColorMode: SelectionColorMode;
-  selectionColor: string;
-  selectionAnimationSpeed: number;
-  unselectedCameraOpacity: number;
-}
-
-function BatchedArrowLines({
-  frustums,
-  cameraScale,
-  selectedImageId,
-  hoveredImageId,
-  matchedImageIds,
-  matchesOpacity,
-  matchesDisplayMode,
-  matchesColor,
-  frustumColorMode,
-  selectionColorMode,
-  selectionColor,
-  selectionAnimationSpeed,
-  unselectedCameraOpacity,
-}: BatchedArrowLinesProps) {
-  const lineRef = useRef<LineSegments2>(null);
-  const materialRef = useRef<LineMaterial>(null);
-  const { size } = useThree();
-  const rainbowHueRef = useRef(0);
-  const blinkPhaseRef = useRef(0);
-  const matchesBlinkPhaseRef = useRef(0);
-  // Track previous state to avoid unnecessary GPU uploads
-  const prevStateRef = useRef<{
-    selectedImageId: number | null;
-    hoveredImageId: number | null;
-    matchedImageIds: Set<number>;
-    unselectedCameraOpacity: number;
-    matchesOpacity: number;
-  } | null>(null);
-
-  // Build geometry with all arrows (3 segments per arrow)
-  const { positions, baseColors } = useMemo(() => {
-    // 3 segments * 2 vertices * 3 components = 18 floats per arrow
-    const positions: number[] = [];
-    const baseColors: number[] = [];
-
-    frustums.forEach((f) => {
-      // Compute arrow geometry in local space
-      const depth = cameraScale;
-      const headLength = depth * 0.25;
-      const headWidth = headLength * 0.6;
-
-      // Local space vertices
-      const apex = new THREE.Vector3(0, 0, 0);
-      const tip = new THREE.Vector3(0, 0, depth);
-      const leftBack = new THREE.Vector3(-headWidth, 0, depth - headLength);
-      const rightBack = new THREE.Vector3(headWidth, 0, depth - headLength);
-
-      // Transform to world space
-      apex.applyQuaternion(f.quaternion).add(f.position);
-      tip.applyQuaternion(f.quaternion).add(f.position);
-      leftBack.applyQuaternion(f.quaternion).add(f.position);
-      rightBack.applyQuaternion(f.quaternion).add(f.position);
-
-      // Segment 1: apex to tip (shaft)
-      positions.push(apex.x, apex.y, apex.z, tip.x, tip.y, tip.z);
-      // Segment 2: tip to leftBack
-      positions.push(tip.x, tip.y, tip.z, leftBack.x, leftBack.y, leftBack.z);
-      // Segment 3: tip to rightBack
-      positions.push(tip.x, tip.y, tip.z, rightBack.x, rightBack.y, rightBack.z);
-
-      // Base color for this camera
-      const color = frustumColorMode === 'byCamera'
-        ? getCameraColor(f.cameraIndex)
-        : VIZ_COLORS.frustum.default;
-      tempColor.set(color);
-
-      // Set color for all 6 vertices (2 per segment, 3 segments)
-      for (let v = 0; v < 6; v++) {
-        baseColors.push(tempColor.r, tempColor.g, tempColor.b);
-      }
-    });
-
-    return { positions, baseColors };
-  }, [frustums, cameraScale, frustumColorMode]);
-
-  // Create and update geometry
-  const geometry = useMemo(() => {
-    const geo = new LineSegmentsGeometry();
-    geo.setPositions(positions);
-    geo.setColors(baseColors);
-    return geo;
-  }, [positions, baseColors]);
-
-  // Create material
-  const material = useMemo(() => {
-    return new LineMaterial({
-      color: 0xffffff,
-      linewidth: ARROW_LINE_WIDTH,
-      vertexColors: true,
-      transparent: true,
-      depthWrite: false,
-      resolution: new THREE.Vector2(size.width, size.height),
-    });
-  }, [size.width, size.height]);
-
-  // Update resolution when size changes
-  useEffect(() => {
-    if (materialRef.current) {
-      materialRef.current.resolution.set(size.width, size.height);
-    }
-  }, [size.width, size.height]);
-
-  // Update material opacity and colors based on selection, hover, etc.
-  useFrame((state, delta) => {
-    if (!lineRef.current) return;
-    const geo = lineRef.current.geometry as LineSegmentsGeometry;
-    const mat = lineRef.current.material as LineMaterial;
-    if (!geo || !mat) return;
-
-    // Check if animation is needed
-    const isSelectionAnimated = (selectionColorMode === 'blink' || selectionColorMode === 'rainbow') && selectedImageId !== null;
-    const isMatchesAnimated = matchesDisplayMode === 'blink' && matchedImageIds.size > 0;
-    const isAnimated = isSelectionAnimated || isMatchesAnimated;
-
-    // Check if state changed - skip update if static and unchanged
-    const prev = prevStateRef.current;
-    const stateChanged = !prev ||
-      prev.selectedImageId !== selectedImageId ||
-      prev.hoveredImageId !== hoveredImageId ||
-      prev.matchedImageIds !== matchedImageIds ||
-      prev.unselectedCameraOpacity !== unselectedCameraOpacity ||
-      prev.matchesOpacity !== matchesOpacity;
-
-    // Skip GPU update if nothing changed and no animation is running
-    if (!isAnimated && !stateChanged) return;
-
-    // Update tracked state
-    prevStateRef.current = { selectedImageId, hoveredImageId, matchedImageIds, unselectedCameraOpacity, matchesOpacity };
-
-    // Update material opacity based on unselectedCameraOpacity
-    mat.opacity = unselectedCameraOpacity;
-
-    // Update animation phases based on mode
-    if (isSelectionAnimated) {
-      if (selectionColorMode === 'rainbow') {
-        rainbowHueRef.current = (rainbowHueRef.current + delta * selectionAnimationSpeed * RAINBOW.speedMultiplier) % 1;
-      }
-      // blink uses clock.elapsedTime directly for sync across components
-    }
-    if (isMatchesAnimated) {
-      matchesBlinkPhaseRef.current = (matchesBlinkPhaseRef.current + delta) % 2; // 2 second cycle synced with match lines
-    }
-    // Use clock time for blink to stay in sync across all components
-    const blinkPhase = state.clock.elapsedTime * selectionAnimationSpeed * 2;
-
-    // Build new colors array
-    const newColors: number[] = [];
-
-    frustums.forEach((f, i) => {
-      const isSelected = f.image.imageId === selectedImageId;
-      const isHovered = f.image.imageId === hoveredImageId;
-      const isMatched = matchedImageIds.has(f.image.imageId);
-      const isDimmed = selectedImageId !== null && !isSelected && !isMatched;
-
-      // Determine color
-      if (isHovered) {
-        tempColor.set(VIZ_COLORS.frustum.hover);
-      } else if (isSelected) {
-        if (selectionColorMode === 'rainbow') {
-          const hue = rainbowHueRef.current;
-          const c = RAINBOW.chroma;
-          const x = c * (1 - Math.abs((hue * 6) % 2 - 1));
-          const m = RAINBOW.lightness - c / 2;
-          let r = 0, g = 0, b = 0;
-          const { hueSegments } = RAINBOW;
-          if (hue < hueSegments.redToYellow) { r = c; g = x; }
-          else if (hue < hueSegments.yellowToGreen) { r = x; g = c; }
-          else if (hue < hueSegments.greenToCyan) { g = c; b = x; }
-          else if (hue < hueSegments.cyanToBlue) { g = x; b = c; }
-          else if (hue < hueSegments.blueToMagenta) { r = x; b = c; }
-          else { r = c; b = x; }
-          tempColor.setRGB(r + m, g + m, b + m);
-        } else if (selectionColorMode === 'blink') {
-          // Blink uses opacity variation - keep color at full brightness
-          // Use slight dimming (0.5-1.0) since we can't do true transparency per-line
-          const blinkFactor = (Math.sin(blinkPhase) + 1) / 2;
-          const intensity = 0.5 + 0.5 * blinkFactor;
-          tempColor.set(selectionColor);
-          tempColor.multiplyScalar(intensity);
-        } else {
-          // static mode
-          tempColor.set(selectionColor);
-        }
-      } else if (isMatched) {
-        // Matched cameras use matchesColor
-        if (matchesDisplayMode === 'blink') {
-          // Use slight dimming (0.5-1.0) since we can't do true transparency per-line
-          const t = matchesBlinkPhaseRef.current;
-          let blinkFactor: number;
-          if (t < 0.3) {
-            blinkFactor = t / 0.3;
-          } else if (t < 0.6) {
-            blinkFactor = 1;
-          } else if (t < 1.0) {
-            blinkFactor = 1 - (t - 0.6) / 0.4;
-          } else {
-            blinkFactor = 0;
-          }
-          const intensity = 0.5 + 0.5 * blinkFactor;
-          tempColor.set(matchesColor);
-          tempColor.multiplyScalar(intensity);
-        } else {
-          tempColor.set(matchesColor);
-        }
-      } else {
-        // Use base color
-        const baseOffset = i * 18;
-        tempColor.setRGB(baseColors[baseOffset], baseColors[baseOffset + 1], baseColors[baseOffset + 2]);
-      }
-
-      // Apply dimming effect via color (this is additional to material opacity)
-      if (isDimmed && !isHovered) {
-        tempColor.multiplyScalar(OPACITY.dimmed);
-      }
-
-      // Set color for all 6 vertices
-      for (let v = 0; v < 6; v++) {
-        newColors.push(tempColor.r, tempColor.g, tempColor.b);
-      }
-    });
-
-    geo.setColors(newColors);
-  });
-
-  // Create the line object
-  const lineObject = useMemo(() => {
-    return new LineSegments2(geometry, material);
-  }, [geometry, material]);
-
-  if (frustums.length === 0) return null;
-
-  return (
-    <primitive object={lineObject} ref={lineRef} />
-  );
-}
-
 // Batched arrow rendering using instanced meshes (cylinder + cone)
 interface BatchedArrowMeshesProps {
   frustums: {
@@ -355,7 +92,7 @@ function BatchedArrowMeshes({
   selectedImageId,
   hoveredImageId,
   matchedImageIds,
-  matchesOpacity,
+  matchesOpacity: _matchesOpacity,
   matchesDisplayMode,
   matchesColor,
   frustumColorMode,
@@ -367,7 +104,6 @@ function BatchedArrowMeshes({
   const shaftRef = useRef<THREE.InstancedMesh>(null);
   const coneRef = useRef<THREE.InstancedMesh>(null);
   const rainbowHueRef = useRef(0);
-  const blinkPhaseRef = useRef(0);
   const matchesBlinkPhaseRef = useRef(0);
 
   // Arrow proportions (relative to cameraScale)
@@ -387,6 +123,8 @@ function BatchedArrowMeshes({
   // Update instance matrices and colors
   useFrame((state, delta) => {
     if (!shaftRef.current || !coneRef.current) return;
+    const shaft = shaftRef.current;
+    const cone = coneRef.current;
 
     // Check if animation is needed
     const isSelectionAnimated = (selectionColorMode === 'blink' || selectionColorMode === 'rainbow') && selectedImageId !== null;
@@ -491,8 +229,8 @@ function BatchedArrowMeshes({
       tempPosition.add(f.position);
 
       tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
-      shaftRef.current.setMatrixAt(i, tempMatrix);
-      shaftRef.current.setColorAt(i, tempColor);
+      shaft.setMatrixAt(i, tempMatrix);
+      shaft.setColorAt(i, tempColor);
 
       // Cone position: at the tip of the shaft
       tempPosition.set(0, 0, shaftLength + coneLength / 2);
@@ -500,14 +238,14 @@ function BatchedArrowMeshes({
       tempPosition.add(f.position);
 
       tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
-      coneRef.current.setMatrixAt(i, tempMatrix);
-      coneRef.current.setColorAt(i, tempColor);
+      cone.setMatrixAt(i, tempMatrix);
+      cone.setColorAt(i, tempColor);
     });
 
-    shaftRef.current.instanceMatrix.needsUpdate = true;
-    coneRef.current.instanceMatrix.needsUpdate = true;
-    if (shaftRef.current.instanceColor) shaftRef.current.instanceColor.needsUpdate = true;
-    if (coneRef.current.instanceColor) coneRef.current.instanceColor.needsUpdate = true;
+    shaft.instanceMatrix.needsUpdate = true;
+    cone.instanceMatrix.needsUpdate = true;
+    if (shaft.instanceColor) shaft.instanceColor.needsUpdate = true;
+    if (cone.instanceColor) cone.instanceColor.needsUpdate = true;
   });
 
   // Update material opacity - 0.9 when no selection, otherwise use unselectedCameraOpacity
@@ -569,7 +307,6 @@ function BatchedFrustumLines({
 }: BatchedFrustumLinesProps) {
   const geometryRef = useRef<THREE.BufferGeometry>(null);
   const rainbowHueRef = useRef(0);
-  const blinkPhaseRef = useRef(0);
   const matchesBlinkPhaseRef = useRef(0);
   // Track previous state to avoid unnecessary GPU uploads
   const prevStateRef = useRef<{
@@ -903,7 +640,6 @@ const FrustumPlane = memo(function FrustumPlane({
   const selectionColorMode = useCameraStore((s) => s.selectionColorMode);
   const selectionAnimationSpeed = useCameraStore((s) => s.selectionAnimationSpeed);
   const rainbowHueRef = useRef(0);
-  const blinkPhaseRef = useRef(0);
 
   // Handle wheel to adjust FOV when hovering selected image in perspective mode
   useEffect(() => {

@@ -7,6 +7,8 @@ import { ViewerControls } from './ViewerControls';
 import { TrackballControls } from './TrackballControls';
 import { OriginAxes, OriginGrid } from './OriginVisualization';
 import { TransformGizmo } from './TransformGizmo';
+import { SelectedPointMarkers } from './SelectedPointMarkers';
+import { PickingCursor } from './PickingCursor';
 import { ScreenshotCapture } from './ScreenshotCapture';
 import { FooterBranding } from './FooterBranding';
 import { useReconstructionStore, useUIStore, useCameraStore, useTransformStore } from '../../store';
@@ -137,6 +139,9 @@ function SceneContent() {
       {/* Transform gizmo follows the transformed data */}
       {reconstruction && gizmoMode !== 'off' && <TransformGizmo center={transformedCenter} size={bounds.radius * transform.scale * axesScale} coordinateMode={gizmoMode} />}
 
+      {/* Point picking markers - rendered outside transform group for stable display */}
+      <SelectedPointMarkers />
+
       <TrackballControls target={bounds.center} radius={bounds.radius} resetTrigger={viewResetTrigger} viewDirection={viewDirection} viewTrigger={viewTrigger} />
     </>
   );
@@ -207,6 +212,7 @@ export function Scene3D() {
       </Canvas>
       <ViewerControls />
       <FooterBranding />
+      <PickingCursor />
     </div>
   );
 }

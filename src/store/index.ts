@@ -12,6 +12,7 @@ export { useCameraStore, type CameraState } from './stores/cameraStore';
 export { useUIStore, type UIState } from './stores/uiStore';
 export { useExportStore, type ExportState } from './stores/exportStore';
 export { useTransformStore, type TransformState } from './stores/transformStore';
+export { usePointPickingStore, type PointPickingState, type PointPickingMode, type SelectedPoint, type ModalPosition } from './stores/pointPickingStore';
 
 // Types
 export type {

@@ -104,7 +104,7 @@ export const inputStyles = {
   },
 
   // Select specific
-  select: 'bg-ds-input text-ds-primary border border-ds rounded focus-ds cursor-pointer',
+  select: 'bg-ds-input text-ds-primary border border-ds-subtle rounded focus-ds cursor-pointer',
 
   // Select without border (for use in panels/hover menus)
   selectPanel: 'bg-ds-input text-ds-primary rounded focus-ds cursor-pointer',

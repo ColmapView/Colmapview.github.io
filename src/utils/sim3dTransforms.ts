@@ -377,3 +377,113 @@ export function isIdentityEuler(euler: Sim3dEuler): boolean {
     Math.abs(euler.translationZ) < epsilon
   );
 }
+
+// ============================================================================
+// Point-Based Transform Computations
+// ============================================================================
+
+/**
+ * Compute scale transform to set distance between two points to a target value.
+ * Scale is applied uniformly about the midpoint of the two points.
+ *
+ * @param point1 - First point position
+ * @param point2 - Second point position
+ * @param targetDistance - Desired distance between the points
+ * @returns Sim3d transform that scales the scene appropriately
+ */
+export function computeDistanceScale(
+  point1: THREE.Vector3,
+  point2: THREE.Vector3,
+  targetDistance: number
+): Sim3d {
+  const currentDistance = point1.distanceTo(point2);
+
+  // Handle degenerate case (points too close)
+  if (currentDistance < 1e-10) {
+    return createIdentitySim3d();
+  }
+
+  const scale = targetDistance / currentDistance;
+
+  // Scale about the midpoint of the two points
+  // Transform: p_new = scale * (p - midpoint) + midpoint
+  //          = scale * p + midpoint * (1 - scale)
+  const midpoint = new THREE.Vector3()
+    .addVectors(point1, point2)
+    .multiplyScalar(0.5);
+
+  const translation = midpoint.clone().multiplyScalar(1 - scale);
+
+  return {
+    scale,
+    rotation: new THREE.Quaternion(), // Identity rotation
+    translation,
+  };
+}
+
+/**
+ * Compute rotation transform to align a plane's normal with the Y-up axis.
+ * The plane is defined by three points, and rotation is about their centroid.
+ *
+ * @param point1 - First point of the triangle
+ * @param point2 - Second point of the triangle
+ * @param point3 - Third point of the triangle
+ * @returns Sim3d transform that rotates the scene to align the normal with Y-up
+ */
+export function computeNormalAlignment(
+  point1: THREE.Vector3,
+  point2: THREE.Vector3,
+  point3: THREE.Vector3
+): Sim3d {
+  // Compute plane normal using cross product
+  const v1 = new THREE.Vector3().subVectors(point2, point1);
+  const v2 = new THREE.Vector3().subVectors(point3, point1);
+  const normal = new THREE.Vector3().crossVectors(v1, v2);
+
+  // Handle degenerate case (collinear points)
+  if (normal.lengthSq() < 1e-10) {
+    return createIdentitySim3d();
+  }
+
+  normal.normalize();
+
+  // Target: align normal with Y-up (0, 1, 0)
+  const yUp = new THREE.Vector3(0, 1, 0);
+
+  // Check if already aligned
+  const dot = normal.dot(yUp);
+  if (Math.abs(dot - 1) < 1e-6) {
+    // Already aligned with Y-up
+    return createIdentitySim3d();
+  }
+
+  let rotation: THREE.Quaternion;
+
+  if (Math.abs(dot + 1) < 1e-6) {
+    // Opposite direction - rotate 180° around X axis
+    rotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
+  } else {
+    // General case: compute rotation quaternion from current normal to Y-up
+    rotation = new THREE.Quaternion().setFromUnitVectors(normal, yUp);
+  }
+
+  // Rotation center is centroid of three points
+  const centroid = new THREE.Vector3()
+    .add(point1)
+    .add(point2)
+    .add(point3)
+    .divideScalar(3);
+
+  // To rotate about centroid, we need:
+  // p_new = R * (p - centroid) + centroid
+  //       = R * p - R * centroid + centroid
+  // So translation = centroid - R * centroid
+  const rotatedCentroid = centroid.clone().applyQuaternion(rotation);
+  const translation = new THREE.Vector3().subVectors(centroid, rotatedCentroid);
+
+  return {
+    scale: 1,
+    rotation,
+    translation,
+  };
+}

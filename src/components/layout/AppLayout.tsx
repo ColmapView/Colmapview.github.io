@@ -4,6 +4,7 @@ import { StatusBar } from './StatusBar';
 import { Scene3D } from '../viewer3d';
 import { ImageGallery } from '../gallery/ImageGallery';
 import { ImageDetailModal } from '../modals/ImageDetailModal';
+import { DistanceInputModal } from '../modals/DistanceInputModal';
 import { useHotkeyScope } from '../../hooks/useHotkeyScope';
 import { separatorStyles, mobileMessageStyles, BREAKPOINTS, LAYOUT_PANELS } from '../../theme';
 
@@ -157,6 +158,7 @@ export function AppLayout() {
 
       <StatusBar />
       <ImageDetailModal />
+      <DistanceInputModal />
     </div>
   );
 }

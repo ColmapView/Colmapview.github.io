@@ -1,0 +1,52 @@
+# ptn configuration file
+# Docs: https://github.com/lyehe/porterminal
+
+buttons:
+- label: new
+  send:
+  - /new
+  - 100
+  - "\r"
+- label: init
+  send:
+  - /init
+  - 100
+  - "\r"
+- label: resume
+  send:
+  - /resume
+  - 100
+  - "\r"
+- label: compact
+  send:
+  - /compact
+  - 100
+  - "\r"
+- label: claude
+  send:
+  - claude
+  - 100
+  - "\r"
+- label: codex
+  send:
+  - codex
+  - 100
+  - "\r"
+- label: build
+  send: "npm run build\r"
+  row: 2
+- label: dev
+  send: "npm run dev\r"
+  row: 2
+- label: test
+  send: "npm run test\r"
+  row: 2
+- label: lint
+  send: "npm run lint\r"
+  row: 2
+- label: check
+  send: "deno task check\r"
+  row: 2
+- label: preview
+  send: "deno task preview\r"
+  row: 2
