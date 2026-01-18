@@ -1,9 +1,10 @@
 import { useMemo, useState, useEffect, useRef, memo, startTransition, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useReconstructionStore, useUIStore, useCameraStore } from '../../store';
 import { getImageFile } from '../../utils/imageFileUtils';
 import { useThumbnail, pauseThumbnailCache, resumeThumbnailCache } from '../../hooks/useThumbnail';
-import { COLUMNS, GAP, SIZE, TIMING, buttonStyles, getTooltipProps, galleryStyles, listStyles, inputStyles, emptyStateStyles, toolbarStyles } from '../../theme';
+import { COLUMNS, GAP, SIZE, TIMING, buttonStyles, getTooltipProps, galleryStyles, listStyles, inputStyles, emptyStateStyles, toolbarStyles, hoverCardStyles, ICON_SIZES } from '../../theme';
 
 type ViewMode = 'gallery' | 'list';
 type SortField = 'name' | 'imageId' | 'avgError' | 'covisibleCount' | 'numPoints3D' | 'numPoints2D';
@@ -71,11 +72,23 @@ interface GalleryItemProps {
   isScrolling: boolean;
   skipImages: boolean;
   isSettling: boolean;
+  isResizing: boolean;
 }
 
-const GalleryItem = memo(function GalleryItem({ img, isSelected, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling }: GalleryItemProps) {
-  // Load thumbnail lazily when visible and not scrolling/settling (disabled in skip mode)
-  const src = useThumbnail(img.file, img.name, !isScrolling && !skipImages && !isSettling);
+const GalleryItem = memo(function GalleryItem({ img, isSelected, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling, isResizing }: GalleryItemProps) {
+  // Load thumbnail lazily when visible and not scrolling/settling/resizing (disabled in skip mode)
+  const src = useThumbnail(img.file, img.name, !isScrolling && !skipImages && !isSettling && !isResizing);
+  const [hovered, setHovered] = useState(false);
+  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+
+  // Clear hover state when scrolling starts
+  useEffect(() => {
+    if (isScrolling && hovered) {
+      setHovered(false);
+      setMousePos(null);
+      document.body.style.cursor = '';
+    }
+  }, [isScrolling, hovered]);
 
   // Click to select, click again on selected to show info
   const handleClick = () => {
@@ -92,7 +105,19 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, onClick, onDoub
       style={{ position: 'relative' }}
       onClick={handleClick}
       onContextMenu={(e) => { e.preventDefault(); onRightClick(img.imageId); }}
-      data-tooltip={isSelected ? 'L🖱: details · R🖱: fly to' : 'L🖱: select · R🖱: fly to'}
+      onPointerOver={(e) => {
+        setHovered(true);
+        setMousePos({ x: e.clientX, y: e.clientY });
+        document.body.style.cursor = 'pointer';
+      }}
+      onPointerMove={(e) => {
+        if (hovered) setMousePos({ x: e.clientX, y: e.clientY });
+      }}
+      onPointerOut={() => {
+        setHovered(false);
+        setMousePos(null);
+        document.body.style.cursor = '';
+      }}
     >
       {/* Inner wrapper clips image content without clipping tooltip */}
       <div className={galleryStyles.itemInner}>
@@ -103,25 +128,89 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, onClick, onDoub
             {isScrolling ? '...' : img.name}
           </div>
         )}
-        {/* Circular vignette overlay */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{ background: 'radial-gradient(circle at center, transparent 50%, rgba(0,0,0,0.7) 100%)' }}
-        />
+        {/* Realistic lens vignette overlay - elliptical with smooth falloff (hidden when selected) */}
+        {!isSelected && (
+          <div
+            className="absolute inset-0 pointer-events-none z-10"
+            style={{
+              background: `
+                radial-gradient(
+                  ellipse 100% 100% at center,
+                  transparent 20%,
+                  rgba(0,0,0,0.15) 40%,
+                  rgba(0,0,0,0.4) 60%,
+                  rgba(0,0,0,0.7) 80%,
+                  rgba(0,0,0,0.9) 100%
+                )
+              `,
+            }}
+          />
+        )}
       </div>
       {/* Image name overlay */}
-      <div className={galleryStyles.overlay}>
+      <div className={`${galleryStyles.overlay} z-20`}>
         <div className={galleryStyles.overlayText}>{img.name}</div>
       </div>
+      {/* Hover card - rendered via portal to body */}
+      {hovered && mousePos && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            left: mousePos.x + 12,
+            top: mousePos.y + 12,
+            pointerEvents: 'none',
+            zIndex: 9999,
+          }}
+        >
+          <div className={hoverCardStyles.container}>
+            <div className={hoverCardStyles.title}>{img.name}</div>
+            <div className={hoverCardStyles.subtitle}>#{img.imageId}</div>
+            <div className={hoverCardStyles.subtitle}>{img.numPoints3D} 3D points</div>
+            <div className={hoverCardStyles.subtitle}>{img.numPoints2D} 2D points</div>
+            <div className={hoverCardStyles.subtitle}>{img.covisibleCount} covisible</div>
+            <div className={hoverCardStyles.subtitle}>{img.avgError.toFixed(2)} avg error</div>
+            <div className={hoverCardStyles.hint}>
+              <div className={hoverCardStyles.hintRow}>
+                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="6" y="2" width="12" height="20" rx="6"/>
+                  <path d="M12 2v8"/>
+                  <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
+                </svg>
+                {isSelected ? 'Left: details' : 'Left: select'}
+              </div>
+              <div className={hoverCardStyles.hintRow}>
+                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="6" y="2" width="12" height="20" rx="6"/>
+                  <path d="M12 2v8"/>
+                  <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
+                </svg>
+                Right: fly to
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 });
 
 type ListItemProps = GalleryItemProps;
 
-const ListItem = memo(function ListItem({ img, isSelected, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling }: ListItemProps) {
-  // Load thumbnail lazily when visible and not scrolling/settling (disabled in skip mode)
-  const src = useThumbnail(img.file, img.name, !isScrolling && !skipImages && !isSettling);
+const ListItem = memo(function ListItem({ img, isSelected, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling, isResizing }: ListItemProps) {
+  // Load thumbnail lazily when visible and not scrolling/settling/resizing (disabled in skip mode)
+  const src = useThumbnail(img.file, img.name, !isScrolling && !skipImages && !isSettling && !isResizing);
+  const [hovered, setHovered] = useState(false);
+  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+
+  // Clear hover state when scrolling starts
+  useEffect(() => {
+    if (isScrolling && hovered) {
+      setHovered(false);
+      setMousePos(null);
+      document.body.style.cursor = '';
+    }
+  }, [isScrolling, hovered]);
 
   // Click to select, click again on selected to show info
   const handleClick = () => {
@@ -136,9 +225,21 @@ const ListItem = memo(function ListItem({ img, isSelected, onClick, onDoubleClic
     <div
       onClick={handleClick}
       onContextMenu={(e) => { e.preventDefault(); onRightClick(img.imageId); }}
+      onPointerOver={(e) => {
+        setHovered(true);
+        setMousePos({ x: e.clientX, y: e.clientY });
+        document.body.style.cursor = 'pointer';
+      }}
+      onPointerMove={(e) => {
+        if (hovered) setMousePos({ x: e.clientX, y: e.clientY });
+      }}
+      onPointerOut={() => {
+        setHovered(false);
+        setMousePos(null);
+        document.body.style.cursor = '';
+      }}
       style={{ height: SIZE.listRowHeight }}
       className={`${listStyles.item} px-3 list-stats-container ${isSelected ? listStyles.itemSelected : listStyles.itemHover}`}
-      data-tooltip={isSelected ? 'L🖱: details · R🖱: fly to' : 'L🖱: select · R🖱: fly to'}
     >
       <div className={`${listStyles.thumbnail} ${listStyles.thumbnailSize}`}>
         {src ? (
@@ -169,6 +270,40 @@ const ListItem = memo(function ListItem({ img, isSelected, onClick, onDoubleClic
         <div className="text-ds-primary text-sm">{img.avgError.toFixed(2)}</div>
         <div className="text-ds-muted text-xs">avg err</div>
       </div>
+      {/* Hover card - simplified for list view (stats already visible in row) */}
+      {hovered && mousePos && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            left: mousePos.x + 12,
+            top: mousePos.y + 12,
+            pointerEvents: 'none',
+            zIndex: 9999,
+          }}
+        >
+          <div className={hoverCardStyles.container}>
+            <div className={hoverCardStyles.hint}>
+              <div className={hoverCardStyles.hintRow}>
+                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="6" y="2" width="12" height="20" rx="6"/>
+                  <path d="M12 2v8"/>
+                  <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
+                </svg>
+                {isSelected ? 'Left: details' : 'Left: select'}
+              </div>
+              <div className={hoverCardStyles.hintRow}>
+                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="6" y="2" width="12" height="20" rx="6"/>
+                  <path d="M12 2v8"/>
+                  <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
+                </svg>
+                Right: fly to
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 });
@@ -188,7 +323,11 @@ function getViewModeButtonClass(isActive: boolean): string {
     : `${base} ${buttonStyles.variants.toggle}`;
 }
 
-export function ImageGallery() {
+interface ImageGalleryProps {
+  isResizing?: boolean;
+}
+
+export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
   const imageLoadMode = useUIStore((s) => s.imageLoadMode);
@@ -601,6 +740,7 @@ export function ImageGallery() {
                         isScrolling={debouncedIsScrolling}
                         skipImages={imageLoadMode === 'skip'}
                         isSettling={isSettling}
+                        isResizing={isResizing}
                       />
                     ))}
                   </div>
@@ -639,6 +779,7 @@ export function ImageGallery() {
                       isScrolling={debouncedIsScrolling}
                       skipImages={imageLoadMode === 'skip'}
                       isSettling={isSettling}
+                      isResizing={isResizing}
                     />
                   </div>
                 );

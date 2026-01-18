@@ -5,6 +5,69 @@ import type { MatchesDisplayMode, AxesDisplayMode, AxesCoordinateSystem, AxisLab
 
 export type ViewDirection = 'reset' | 'x' | 'y' | 'z';
 
+// Context menu action types
+export type ContextMenuAction =
+  // View
+  | 'resetView'
+  | 'viewPosX'
+  | 'viewPosY'
+  | 'viewPosZ'
+  | 'toggleFullscreen'
+  | 'toggleProjection'
+  | 'toggleCameraMode'
+  | 'toggleHorizonLock'
+  | 'cycleAutoRotate'
+  // Display
+  | 'toggleBackground'
+  | 'toggleAxes'
+  | 'toggleGallery'
+  | 'cycleAxisLabels'
+  | 'cycleCoordinateSystem'
+  | 'cycleFrustumColor'
+  // Points
+  | 'cyclePointColor'
+  | 'pointSizeUp'
+  | 'pointSizeDown'
+  | 'togglePointFiltering'
+  // Cameras
+  | 'cycleCameraDisplay'
+  | 'cycleMatchesDisplay'
+  | 'cycleSelectionColor'
+  | 'deselectAll'
+  | 'flyToSelected'
+  | 'toggleImagePlanes'
+  // Transform
+  | 'toggleGizmo'
+  | 'onePointOrigin'
+  | 'twoPointScale'
+  | 'threePointAlign'
+  | 'resetTransform'
+  | 'applyTransform'
+  | 'reloadData'
+  // Export
+  | 'takeScreenshot'
+  | 'exportPLY'
+  | 'exportConfig'
+  // Navigation
+  | 'togglePointerLock'
+  | 'flySpeedUp'
+  | 'flySpeedDown'
+  // Menu
+  | 'editMenu';
+
+// Default context menu actions
+export const DEFAULT_CONTEXT_MENU_ACTIONS: ContextMenuAction[] = [
+  'resetView',
+  'cycleAutoRotate',
+  'toggleBackground',
+  'toggleAxes',
+  'toggleGizmo',
+  'onePointOrigin',
+  'twoPointScale',
+  'threePointAlign',
+  'takeScreenshot',
+];
+
 export interface UIState {
   // Modal
   imageDetailId: number | null;
@@ -29,8 +92,14 @@ export interface UIState {
   gridScale: number;
   axisLabelMode: AxisLabelMode;
   backgroundColor: string;
-  autoRotate: boolean;
   gizmoMode: GizmoMode;
+
+  // Layout
+  galleryCollapsed: boolean;
+
+  // Context menu (persisted config + transient state)
+  contextMenuActions: ContextMenuAction[];
+  contextMenuPosition: { x: number; y: number } | null;
 
   // Transient
   viewResetTrigger: number;
@@ -56,11 +125,19 @@ export interface UIState {
   setGridScale: (scale: number) => void;
   setAxisLabelMode: (mode: AxisLabelMode) => void;
   setBackgroundColor: (color: string) => void;
-  setAutoRotate: (autoRotate: boolean) => void;
   setGizmoMode: (mode: GizmoMode) => void;
   resetView: () => void;
   setView: (direction: ViewDirection) => void;
   setImageLoadMode: (mode: ImageLoadMode) => void;
+  setGalleryCollapsed: (collapsed: boolean) => void;
+  toggleGalleryCollapsed: () => void;
+
+  // Context menu actions
+  openContextMenu: (x: number, y: number) => void;
+  closeContextMenu: () => void;
+  setContextMenuActions: (actions: ContextMenuAction[]) => void;
+  addContextMenuAction: (action: ContextMenuAction) => void;
+  removeContextMenuAction: (action: ContextMenuAction) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -82,8 +159,10 @@ export const useUIStore = create<UIState>()(
       gridScale: 1,
       axisLabelMode: 'extra',
       backgroundColor: '#ffffff',
-      autoRotate: false,
       gizmoMode: 'off',
+      galleryCollapsed: false,
+      contextMenuActions: DEFAULT_CONTEXT_MENU_ACTIONS,
+      contextMenuPosition: null,
       viewResetTrigger: 0,
       viewDirection: null,
       viewTrigger: 0,
@@ -106,7 +185,6 @@ export const useUIStore = create<UIState>()(
       setGridScale: (gridScale) => set({ gridScale }),
       setAxisLabelMode: (axisLabelMode) => set({ axisLabelMode }),
       setBackgroundColor: (backgroundColor) => set({ backgroundColor }),
-      setAutoRotate: (autoRotate) => set({ autoRotate }),
       setGizmoMode: (gizmoMode) => set({ gizmoMode }),
       resetView: () => set((state) => ({ viewResetTrigger: state.viewResetTrigger + 1 })),
       setView: (direction) => set((state) => ({
@@ -114,10 +192,33 @@ export const useUIStore = create<UIState>()(
         viewTrigger: state.viewTrigger + 1,
       })),
       setImageLoadMode: (imageLoadMode) => set({ imageLoadMode }),
+      setGalleryCollapsed: (galleryCollapsed) => set({ galleryCollapsed }),
+      toggleGalleryCollapsed: () => set((state) => ({ galleryCollapsed: !state.galleryCollapsed })),
+
+      // Context menu actions
+      openContextMenu: (x, y) => set({ contextMenuPosition: { x, y } }),
+      closeContextMenu: () => set({ contextMenuPosition: null }),
+      setContextMenuActions: (contextMenuActions) => set({ contextMenuActions }),
+      addContextMenuAction: (action) => set((state) => ({
+        contextMenuActions: state.contextMenuActions.includes(action)
+          ? state.contextMenuActions
+          : [...state.contextMenuActions, action],
+      })),
+      removeContextMenuAction: (action) => set((state) => ({
+        contextMenuActions: state.contextMenuActions.filter((a) => a !== action),
+      })),
     }),
     {
       name: STORAGE_KEYS.ui,
-      version: 0,
+      version: 3,
+      migrate: (persistedState: unknown, version: number) => {
+        const state = persistedState as Record<string, unknown>;
+        if (version < 3) {
+          // Reset context menu actions to new defaults (added cycleAutoRotate)
+          state.contextMenuActions = DEFAULT_CONTEXT_MENU_ACTIONS;
+        }
+        return state;
+      },
       partialize: (state) => ({
         showPoints2D: state.showPoints2D,
         showPoints3D: state.showPoints3D,
@@ -132,9 +233,10 @@ export const useUIStore = create<UIState>()(
         gridScale: state.gridScale,
         axisLabelMode: state.axisLabelMode,
         backgroundColor: state.backgroundColor,
-        autoRotate: state.autoRotate,
         gizmoMode: state.gizmoMode,
         imageLoadMode: state.imageLoadMode,
+        galleryCollapsed: state.galleryCollapsed,
+        contextMenuActions: state.contextMenuActions,
       }),
     }
   )

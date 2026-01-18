@@ -37,6 +37,8 @@ export function StatusBar() {
         )}
       </div>
       <div className="flex items-center gap-2 text-ds-secondary">
+        <span>ColmapView by OpsiClear</span>
+        <span>|</span>
         <a
           href="https://github.com/ColmapView/colmapview.github.io"
           target="_blank"
@@ -47,10 +49,25 @@ export function StatusBar() {
           onMouseEnter={(e) => e.currentTarget.style.color = '#facc15'}
           onMouseLeave={(e) => e.currentTarget.style.color = 'inherit'}
         >
-          &#9733; Star on GitHub
+          ★ Star on GitHub
         </a>
         <span>|</span>
-        <span>ColmapView by OpsiClear | v{__APP_VERSION__}</span>
+        <a
+          href="https://github.com/ColmapView/colmapview.github.io/issues"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="no-underline transition-colors"
+          style={{ color: 'inherit' }}
+          title="Report Bugs"
+          onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+          onMouseLeave={(e) => e.currentTarget.style.color = 'inherit'}
+        >
+          Report Bugs
+        </a>
+        <span>|</span>
+        <span>AGPL 3.0</span>
+        <span>|</span>
+        <span>v{__APP_VERSION__}</span>
       </div>
     </footer>
   );

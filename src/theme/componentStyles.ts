@@ -300,14 +300,14 @@ export const loadingStyles = {
 
 export const controlPanelStyles = {
   // Container positioning
-  container: 'absolute top-3 right-3 flex flex-col gap-2 z-10 control-panel-responsive',
+  container: 'absolute top-3 right-3 flex flex-col gap-2 z-[1000] control-panel-responsive',
   // Button styles
   button: 'w-10 h-10 rounded-lg flex items-center justify-center transition-colors relative border border-ds control-button-responsive',
   buttonActive: 'bg-ds-accent text-ds-void border-ds-accent',
   buttonHover: 'bg-ds-hover text-ds-primary',
   buttonInactive: 'bg-ds-tertiary text-ds-secondary hover-ds-hover hover-ds-text-primary',
   // Panel positioning - right-full positions at container's left edge, pr-2 creates gap inside hover area
-  panelWrapper: 'absolute right-full top-0 pr-2',
+  panelWrapper: 'absolute right-full top-0 pr-2 z-[1100]',
   // Panel content
   panel: 'bg-ds-tertiary border border-ds rounded-lg p-4 w-[240px] shadow-ds-lg',
   panelTitle: 'text-ds-primary text-sm font-medium mb-3',
@@ -397,9 +397,10 @@ export const footerStyles = {
 // ============================================
 
 export const contextMenuStyles = {
-  container: 'bg-ds-tertiary rounded-lg shadow-ds-lg overflow-hidden border border-ds',
-  button: 'flex items-center gap-2 px-3 py-2 text-sm text-ds-primary hover-ds-hover cursor-pointer transition-colors w-full',
-  icon: 'w-4 h-4',
+  container: 'bg-ds-tertiary rounded-lg shadow-ds-lg overflow-hidden border border-ds py-1',
+  button: 'flex items-center gap-2 px-3 py-1.5 text-sm text-ds-primary hover-ds-hover cursor-pointer transition-colors w-full text-left',
+  icon: 'w-4 h-4 flex-shrink-0',
+  hotkey: 'text-xs font-mono text-gray-500 ml-auto uppercase tracking-wide',
 } as const;
 
 // ============================================

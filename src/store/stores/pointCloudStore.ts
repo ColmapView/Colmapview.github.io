@@ -22,7 +22,7 @@ export const usePointCloudStore = create<PointCloudState>()(
     (set) => ({
       pointSize: 2,
       colorMode: 'rgb',
-      minTrackLength: 2,
+      minTrackLength: 0,
       maxReprojectionError: Infinity,
       selectedPointId: null,
 

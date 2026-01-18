@@ -58,4 +58,7 @@ export const CONTROLS = {
 
   // Distance constraints
   minDistance: 0.1,
+
+  // Auto-rotate
+  autoRotateSpeed: 0.5, // radians per second
 } as const;

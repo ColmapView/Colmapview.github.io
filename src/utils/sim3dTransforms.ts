@@ -422,18 +422,37 @@ export function computeDistanceScale(
 }
 
 /**
- * Compute rotation transform to align a plane's normal with the Y-up axis.
+ * Compute translation transform to move a point to the world origin (0, 0, 0).
+ * This is a pure translation with no scale or rotation.
+ *
+ * @param point - The point to move to the origin
+ * @returns Sim3d transform that translates the scene so the point is at origin
+ */
+export function computeOriginTranslation(point: THREE.Vector3): Sim3d {
+  return {
+    scale: 1,
+    rotation: new THREE.Quaternion(), // Identity rotation
+    translation: new THREE.Vector3(-point.x, -point.y, -point.z),
+  };
+}
+
+/**
+ * Compute rotation transform to align a plane's normal with the target up axis.
  * The plane is defined by three points, and rotation is about their centroid.
  *
  * @param point1 - First point of the triangle
  * @param point2 - Second point of the triangle
  * @param point3 - Third point of the triangle
- * @returns Sim3d transform that rotates the scene to align the normal with Y-up
+ * @param flipNormal - If true, flip the computed normal direction
+ * @param targetUp - Target "up" direction to align the normal with (default: Y-up in Three.js)
+ * @returns Sim3d transform that rotates the scene to align the normal with target up
  */
 export function computeNormalAlignment(
   point1: THREE.Vector3,
   point2: THREE.Vector3,
-  point3: THREE.Vector3
+  point3: THREE.Vector3,
+  flipNormal: boolean = false,
+  targetUp: THREE.Vector3 = new THREE.Vector3(0, 1, 0)
 ): Sim3d {
   // Compute plane normal using cross product
   const v1 = new THREE.Vector3().subVectors(point2, point1);
@@ -447,24 +466,33 @@ export function computeNormalAlignment(
 
   normal.normalize();
 
-  // Target: align normal with Y-up (0, 1, 0)
-  const yUp = new THREE.Vector3(0, 1, 0);
+  // Flip normal if requested
+  if (flipNormal) {
+    normal.negate();
+  }
+
+  // Target: align normal with the specified up direction
+  const upNormalized = targetUp.clone().normalize();
 
   // Check if already aligned
-  const dot = normal.dot(yUp);
+  const dot = normal.dot(upNormalized);
   if (Math.abs(dot - 1) < 1e-6) {
-    // Already aligned with Y-up
+    // Already aligned with target up
     return createIdentitySim3d();
   }
 
   let rotation: THREE.Quaternion;
 
   if (Math.abs(dot + 1) < 1e-6) {
-    // Opposite direction - rotate 180° around X axis
-    rotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
+    // Opposite direction - rotate 180° around a perpendicular axis
+    const perpAxis = new THREE.Vector3(1, 0, 0);
+    if (Math.abs(upNormalized.dot(perpAxis)) > 0.9) {
+      perpAxis.set(0, 0, 1);
+    }
+    rotation = new THREE.Quaternion().setFromAxisAngle(perpAxis, Math.PI);
   } else {
-    // General case: compute rotation quaternion from current normal to Y-up
-    rotation = new THREE.Quaternion().setFromUnitVectors(normal, yUp);
+    // General case: compute rotation quaternion from current normal to target up
+    rotation = new THREE.Quaternion().setFromUnitVectors(normal, upNormalized);
   }
 
   // Rotation center is centroid of three points

@@ -1,11 +1,19 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import * as THREE from 'three';
 import { useHotkeys } from 'react-hotkeys-hook';
-import { usePointPickingStore, useTransformStore } from '../../store';
-import { computeDistanceScale, sim3dToEuler, composeSim3d, createSim3dFromEuler } from '../../utils/sim3dTransforms';
+import { usePointPickingStore, useTransformStore, useUIStore } from '../../store';
+import { computeDistanceScale, computeNormalAlignment, computeOriginTranslation, sim3dToEuler, composeSim3d, createSim3dFromEuler } from '../../utils/sim3dTransforms';
+import { getWorldUp } from '../viewer3d/OriginVisualization';
+import { controlPanelStyles } from '../../theme';
 
 /**
- * Compact popup for entering target distance when using the 2-point scale tool.
- * Appears near the mouse position where the second point was clicked.
+ * Confirmation popup for point picking tools.
+ * - 2-point scale: shows distance input + tick/retry/cancel
+ * - 3-point align: shows tick/retry/cancel (no input)
+ *
+ * tick = confirm (apply transform)
+ * X = retry (clear points, stay in picking mode)
+ * click outside = cancel (exit picking mode)
  */
 export function DistanceInputModal() {
   const showDistanceModal = usePointPickingStore((s) => s.showDistanceModal);
@@ -13,9 +21,22 @@ export function DistanceInputModal() {
   const setShowDistanceModal = usePointPickingStore((s) => s.setShowDistanceModal);
   const selectedPoints = usePointPickingStore((s) => s.selectedPoints);
   const setTargetDistance = usePointPickingStore((s) => s.setTargetDistance);
+  const pickingMode = usePointPickingStore((s) => s.pickingMode);
+  const clearSelectedPoints = usePointPickingStore((s) => s.clearSelectedPoints);
+  const normalFlipped = usePointPickingStore((s) => s.normalFlipped);
   const reset = usePointPickingStore((s) => s.reset);
   const transform = useTransformStore((s) => s.transform);
   const setTransform = useTransformStore((s) => s.setTransform);
+  const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
+
+  const is1PointMode = pickingMode === 'origin-1pt';
+  const is3PointMode = pickingMode === 'normal-3pt';
+
+  // Get target up direction based on selected coordinate system
+  const targetUp = useMemo(() => {
+    const up = getWorldUp(axesCoordinateSystem);
+    return new THREE.Vector3(up[0], up[1], up[2]);
+  }, [axesCoordinateSystem]);
 
   const [inputValue, setInputValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -75,7 +96,7 @@ export function DistanceInputModal() {
     }
   }, [showDistanceModal, currentDistance]);
 
-  // Close with Escape
+  // Close with Escape - cancels picking mode
   useHotkeys(
     'escape',
     () => handleCancel(),
@@ -83,31 +104,74 @@ export function DistanceInputModal() {
     [showDistanceModal]
   );
 
+  // Cancel: exit picking mode entirely
   const handleCancel = useCallback(() => {
     setShowDistanceModal(false);
     reset();
   }, [setShowDistanceModal, reset]);
 
-  const handleApply = useCallback(() => {
-    const value = parseFloat(inputValue);
-    if (isNaN(value) || value <= 0) return;
-    if (selectedPoints.length !== 2) return;
-
-    const scaleTransform = computeDistanceScale(
-      selectedPoints[0].position,
-      selectedPoints[1].position,
-      value
-    );
-
-    const currentSim3d = createSim3dFromEuler(transform);
-    const composed = composeSim3d(scaleTransform, currentSim3d);
-    const composedEuler = sim3dToEuler(composed);
-
-    setTransform(composedEuler);
-    setTargetDistance(value);
+  // Retry: clear points but stay in picking mode
+  const handleRetry = useCallback(() => {
     setShowDistanceModal(false);
-    reset();
-  }, [inputValue, selectedPoints, transform, setTransform, setTargetDistance, setShowDistanceModal, reset]);
+    clearSelectedPoints();
+  }, [setShowDistanceModal, clearSelectedPoints]);
+
+  // Apply: compute and apply the transform
+  const handleApply = useCallback(() => {
+    if (is1PointMode) {
+      // 1-point origin translation
+      if (selectedPoints.length !== 1) return;
+
+      const originTransform = computeOriginTranslation(selectedPoints[0].position);
+
+      const currentSim3d = createSim3dFromEuler(transform);
+      const composed = composeSim3d(originTransform, currentSim3d);
+      const composedEuler = sim3dToEuler(composed);
+
+      setTransform(composedEuler);
+      setShowDistanceModal(false);
+      reset();
+    } else if (is3PointMode) {
+      // 3-point normal alignment
+      if (selectedPoints.length !== 3) return;
+
+      const alignTransform = computeNormalAlignment(
+        selectedPoints[0].position,
+        selectedPoints[1].position,
+        selectedPoints[2].position,
+        normalFlipped,
+        targetUp
+      );
+
+      const currentSim3d = createSim3dFromEuler(transform);
+      const composed = composeSim3d(alignTransform, currentSim3d);
+      const composedEuler = sim3dToEuler(composed);
+
+      setTransform(composedEuler);
+      setShowDistanceModal(false);
+      reset();
+    } else {
+      // 2-point distance scale
+      const value = parseFloat(inputValue);
+      if (isNaN(value) || value <= 0) return;
+      if (selectedPoints.length !== 2) return;
+
+      const scaleTransform = computeDistanceScale(
+        selectedPoints[0].position,
+        selectedPoints[1].position,
+        value
+      );
+
+      const currentSim3d = createSim3dFromEuler(transform);
+      const composed = composeSim3d(scaleTransform, currentSim3d);
+      const composedEuler = sim3dToEuler(composed);
+
+      setTransform(composedEuler);
+      setTargetDistance(value);
+      setShowDistanceModal(false);
+      reset();
+    }
+  }, [is1PointMode, is3PointMode, inputValue, selectedPoints, normalFlipped, transform, setTransform, setTargetDistance, setShowDistanceModal, reset, targetUp]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -115,51 +179,59 @@ export function DistanceInputModal() {
     }
   }, [handleApply]);
 
-  const handleBackdropClick = useCallback((e: React.MouseEvent) => {
-    if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
-      handleCancel();
-    }
-  }, [handleCancel]);
-
   if (!showDistanceModal) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[1100]"
-      onClick={handleBackdropClick}
+      ref={modalRef}
+      className="fixed z-[1100] bg-ds-tertiary border border-ds rounded shadow-ds-lg p-1"
+      style={computedPosition}
     >
-      <div
-        ref={modalRef}
-        className="absolute bg-ds-tertiary border border-ds rounded shadow-ds-lg p-1"
-        style={computedPosition}
-      >
         <div className="flex items-center gap-0.5">
-          <input
-            ref={inputRef}
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="w-16 px-1 py-0.5 bg-ds-secondary border border-ds-subtle rounded text-ds-primary text-xs font-mono outline-none focus:outline-none focus:ring-0 focus:border-ds-subtle"
-          />
+          {/* Distance input only for 2-point mode (not for 1-point origin or 3-point align) */}
+          {!is1PointMode && !is3PointMode && (
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className={`${controlPanelStyles.valueInput} w-14 font-mono`}
+              title="Target distance"
+            />
+          )}
+          {/* Confirm button (tick) */}
           <button
             onClick={handleApply}
             className="p-0.5 text-green-400 hover:text-green-300 transition-colors flex items-center"
+            title="Confirm"
           >
             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M20 6L9 17l-5-5" />
             </svg>
           </button>
+          {/* Retry button - clear points but stay in mode */}
+          <button
+            onClick={handleRetry}
+            className="p-0.5 text-yellow-400 hover:text-yellow-300 transition-colors flex items-center"
+            title="Retry"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+            </svg>
+          </button>
+          {/* Cancel button (X) - exit picking mode */}
           <button
             onClick={handleCancel}
             className="p-0.5 text-red-400 hover:text-red-300 transition-colors flex items-center"
+            title="Cancel"
           >
             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
           </button>
         </div>
-      </div>
     </div>
   );
 }

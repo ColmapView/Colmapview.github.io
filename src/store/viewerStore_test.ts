@@ -51,7 +51,7 @@ describe("cameraStore", () => {
       cameraMode: "orbit",
       flySpeed: 1,
       frustumColorMode: "single",
-      unselectedCameraOpacity: 1,
+      unselectedCameraOpacity: 0.5,
       selectedImageId: null,
       selectionColorMode: "rainbow",
       selectionAnimationSpeed: 2.5,

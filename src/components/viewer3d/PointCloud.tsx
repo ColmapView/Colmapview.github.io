@@ -21,9 +21,11 @@ export function PointCloud() {
   const rainbowHueRef = useRef(0);
   const tempColorRef = useRef(new THREE.Color());
 
-  // Point picking state
+  // Point picking state - only subscribe to length to avoid re-renders when points change
   const pickingMode = usePointPickingStore((s) => s.pickingMode);
+  const selectedPointsLength = usePointPickingStore((s) => s.selectedPoints.length);
   const addSelectedPoint = usePointPickingStore((s) => s.addSelectedPoint);
+  const setHoveredPoint = usePointPickingStore((s) => s.setHoveredPoint);
   const { raycaster } = useThree();
   const pointsRef = useRef<THREE.Points>(null);
   const indexToPoint3DIdRef = useRef<Map<number, bigint>>(new Map());
@@ -224,41 +226,138 @@ export function PointCloud() {
     };
   }, [selectedGeometry]);
 
+  // Reusable vectors for screen-space calculations (avoid allocations in hot path)
+  const tempLocalRef = useRef(new THREE.Vector3());
+  const tempWorldRef = useRef(new THREE.Vector3());
+  const tempProjectedRef = useRef(new THREE.Vector3());
+  const resultWorldPosRef = useRef(new THREE.Vector3());
+  const lastHoverUpdateRef = useRef(0);
+
+  // Find screen-space nearest point among raycaster candidates
+  const findScreenSpaceNearest = useCallback((
+    intersections: THREE.Intersection[],
+    mouseNDC: { x: number; y: number },
+    camera: THREE.Camera
+  ): { index: number; worldPos: THREE.Vector3 } | null => {
+    if (!pointsRef.current) return null;
+
+    const geo = pointsRef.current.geometry;
+    const posAttr = geo.getAttribute('position');
+    if (!posAttr) return null;
+
+    // Filter to only our points mesh
+    const pointHits = intersections.filter(i => i.object === pointsRef.current && i.index !== undefined);
+    if (pointHits.length === 0) return null;
+
+    const matrixWorld = pointsRef.current.matrixWorld;
+    const tempLocal = tempLocalRef.current;
+    const tempWorld = tempWorldRef.current;
+    const tempProjected = tempProjectedRef.current;
+
+    let closestIdx = -1;
+    let closestDistSq = Infinity;
+
+    for (const hit of pointHits) {
+      const idx = hit.index!;
+
+      // Get local position and transform to world
+      tempLocal.set(posAttr.getX(idx), posAttr.getY(idx), posAttr.getZ(idx));
+      tempWorld.copy(tempLocal).applyMatrix4(matrixWorld);
+
+      // Project to NDC for screen-space comparison (reuse vector)
+      tempProjected.copy(tempWorld).project(camera);
+
+      const dx = tempProjected.x - mouseNDC.x;
+      const dy = tempProjected.y - mouseNDC.y;
+      const distSq = dx * dx + dy * dy;
+
+      if (distSq < closestDistSq) {
+        closestDistSq = distSq;
+        closestIdx = idx;
+        // Store result position (reuse vector)
+        resultWorldPosRef.current.copy(tempWorld);
+      }
+    }
+
+    if (closestIdx === -1) return null;
+    return { index: closestIdx, worldPos: resultWorldPosRef.current };
+  }, []);
+
   // Handle point picking click
   const handlePointClick = useCallback((event: ThreeEvent<MouseEvent>) => {
     if (pickingMode === 'off') return;
     if (!pointsRef.current) return;
 
+    // Check if we can add more points - don't intercept clicks if all points are selected
+    const maxPoints = pickingMode === 'origin-1pt' ? 1 : pickingMode === 'distance-2pt' ? 2 : pickingMode === 'normal-3pt' ? 3 : 0;
+    if (selectedPointsLength >= maxPoints) return;
+
     event.stopPropagation();
 
-    // Get intersection index
-    const intersections = event.intersections;
-    if (intersections.length === 0) return;
+    const result = findScreenSpaceNearest(
+      event.intersections,
+      { x: event.pointer.x, y: event.pointer.y },
+      event.camera
+    );
+    if (!result) return;
 
-    // Find the first intersection with our points mesh
-    const intersection = intersections.find(i => i.object === pointsRef.current);
-    if (!intersection || intersection.index === undefined) return;
-
-    const point3DId = indexToPoint3DIdRef.current.get(intersection.index);
+    const point3DId = indexToPoint3DIdRef.current.get(result.index);
     if (point3DId === undefined) return;
 
-    // Get screen position from native event
     const nativeEvent = event.nativeEvent;
     const screenPosition = { x: nativeEvent.clientX, y: nativeEvent.clientY };
 
-    // Add the selected point with screen position
+    // Clone the position since worldPos is a reused ref
     addSelectedPoint({
-      position: intersection.point.clone(),
+      position: result.worldPos.clone(),
       point3DId,
     }, screenPosition);
-  }, [pickingMode, addSelectedPoint]);
+  }, [pickingMode, selectedPointsLength, addSelectedPoint, findScreenSpaceNearest]);
 
-  // Set raycaster threshold based on point size for better picking
+  // Handle point hover for highlighting (throttled to 30fps)
+  const handlePointerMove = useCallback((event: ThreeEvent<PointerEvent>) => {
+    if (pickingMode === 'off') return;
+    if (!pointsRef.current) return;
+
+    // Throttle to ~30fps (33ms)
+    const now = performance.now();
+    if (now - lastHoverUpdateRef.current < 33) return;
+    lastHoverUpdateRef.current = now;
+
+    const result = findScreenSpaceNearest(
+      event.intersections,
+      { x: event.pointer.x, y: event.pointer.y },
+      event.camera
+    );
+
+    // Only update if position changed significantly
+    if (result) {
+      setHoveredPoint(result.worldPos.clone());
+    } else {
+      setHoveredPoint(null);
+    }
+  }, [pickingMode, setHoveredPoint, findScreenSpaceNearest]);
+
+  // Clear hover when pointer leaves the point cloud
+  const handlePointerLeave = useCallback(() => {
+    if (pickingMode !== 'off') {
+      setHoveredPoint(null);
+    }
+  }, [pickingMode, setHoveredPoint]);
+
+  // Set raycaster threshold - larger to capture candidates for screen-space comparison
   useEffect(() => {
     if (pickingMode !== 'off') {
-      raycaster.params.Points.threshold = pointSize * 0.1;
+      raycaster.params.Points.threshold = pointSize * 0.5;
     }
   }, [pickingMode, pointSize, raycaster]);
+
+  // Clear hovered point when picking mode turns off
+  useEffect(() => {
+    if (pickingMode === 'off') {
+      setHoveredPoint(null);
+    }
+  }, [pickingMode, setHoveredPoint]);
 
   if (!geometry) return null;
 
@@ -269,6 +368,8 @@ export function PointCloud() {
         matrixAutoUpdate={false}
         geometry={geometry}
         onClick={pickingMode !== 'off' ? handlePointClick : undefined}
+        onPointerMove={pickingMode !== 'off' ? handlePointerMove : undefined}
+        onPointerLeave={pickingMode !== 'off' ? handlePointerLeave : undefined}
       >
         <pointsMaterial size={pointSize} vertexColors sizeAttenuation={false} />
       </points>

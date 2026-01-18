@@ -121,4 +121,5 @@ export interface LoadedFiles {
 }
 
 // Color mode for point cloud visualization
-export type ColorMode = 'rgb' | 'error' | 'trackLength';
+export const COLOR_MODES = ['rgb', 'error', 'trackLength'] as const;
+export type ColorMode = (typeof COLOR_MODES)[number];

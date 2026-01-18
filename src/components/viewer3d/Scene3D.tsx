@@ -1,4 +1,4 @@
-import { Suspense, useMemo, useEffect } from 'react';
+import { Suspense, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PointCloud } from './PointCloud';
@@ -11,7 +11,9 @@ import { SelectedPointMarkers } from './SelectedPointMarkers';
 import { PickingCursor } from './PickingCursor';
 import { ScreenshotCapture } from './ScreenshotCapture';
 import { FooterBranding } from './FooterBranding';
-import { useReconstructionStore, useUIStore, useCameraStore, useTransformStore } from '../../store';
+import { GlobalContextMenu } from './GlobalContextMenu';
+import { DistanceInputModal } from '../modals/DistanceInputModal';
+import { useReconstructionStore, useUIStore, useCameraStore, useTransformStore, usePointPickingStore } from '../../store';
 import { getImageWorldPosition } from '../../utils/colmapTransforms';
 import { createSim3dFromEuler, sim3dToMatrix4, isIdentityEuler, transformPoint } from '../../utils/sim3dTransforms';
 import { percentile, median } from '../../utils/mathUtils';
@@ -132,7 +134,7 @@ function SceneContent() {
 
       {/* Axes/Grid stay in original coordinate system - wrapped in own Suspense to avoid showing loading box */}
       <Suspense fallback={null}>
-        {(axesDisplayMode === 'axes' || axesDisplayMode === 'both') && <OriginAxes size={bounds.radius * axesScale} scale={axesScale} coordinateSystem={axesCoordinateSystem} labelMode={axisLabelMode} />}
+        {(axesDisplayMode === 'axes' || axesDisplayMode === 'both') && <OriginAxes size={bounds.radius * axesScale} scale={axesScale} coordinateSystem={axesCoordinateSystem} labelMode={axisLabelMode} axesDisplayMode={axesDisplayMode} />}
         {(axesDisplayMode === 'grid' || axesDisplayMode === 'both') && <OriginGrid size={bounds.radius} scale={gridScale} />}
       </Suspense>
 
@@ -170,6 +172,20 @@ export function Scene3D() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const backgroundColor = useUIStore((s) => s.backgroundColor);
   const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
+  const openContextMenu = useUIStore((s) => s.openContextMenu);
+  const closeContextMenu = useUIStore((s) => s.closeContextMenu);
+
+  // Point picking state for right-click cancellation
+  // Only subscribe to length to avoid re-renders when point contents change
+  const pickingMode = usePointPickingStore((s) => s.pickingMode);
+  const selectedPointsLength = usePointPickingStore((s) => s.selectedPoints.length);
+  const removeLastPoint = usePointPickingStore((s) => s.removeLastPoint);
+  const reset = usePointPickingStore((s) => s.reset);
+  const markerRightClickHandled = usePointPickingStore((s) => s.markerRightClickHandled);
+
+  // Track mouse position for distinguishing click from drag
+  const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
+  const DRAG_THRESHOLD = 5; // pixels
 
   const cameraPosition = useMemo(() => {
     if (!reconstruction || reconstruction.points3D.size === 0) {
@@ -187,8 +203,65 @@ export function Scene3D() {
     return [0, 0, maxDist * 2] as [number, number, number];
   }, [reconstruction]);
 
+  // Handle right-click for context menu (only if not dragging/panning)
+  // In point picking mode, right-click cancels instead of opening menu
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    // Check if this was a click (not a drag)
+    if (mouseDownPos.current) {
+      const dx = Math.abs(e.clientX - mouseDownPos.current.x);
+      const dy = Math.abs(e.clientY - mouseDownPos.current.y);
+      if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) {
+        // This was a drag, don't show menu
+        return;
+      }
+    }
+    e.preventDefault();
+
+    // If in point picking mode, right-click cancels instead of opening context menu
+    if (pickingMode !== 'off') {
+      // Check if a marker was already right-clicked (handled by SelectedPointMarkers)
+      // If so, skip to avoid double-removal (Three.js and DOM events are separate)
+      if (markerRightClickHandled) {
+        // Clear the flag for next time
+        usePointPickingStore.setState({ markerRightClickHandled: false });
+        return;
+      }
+
+      if (selectedPointsLength > 0) {
+        // Remove the last selected point
+        removeLastPoint();
+      } else {
+        // No points selected, exit picking mode entirely
+        reset();
+      }
+      return;
+    }
+
+    openContextMenu(e.clientX, e.clientY);
+  }, [openContextMenu, pickingMode, selectedPointsLength, removeLastPoint, reset, markerRightClickHandled]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button === 2) {
+      mouseDownPos.current = { x: e.clientX, y: e.clientY };
+      closeContextMenu(); // Close any open menu when starting new interaction
+    }
+  }, [closeContextMenu]);
+
+  const handleMouseUp = useCallback(() => {
+    // Clear after a short delay to allow contextmenu event to check it
+    setTimeout(() => {
+      mouseDownPos.current = null;
+    }, 0);
+  }, []);
+
   return (
-    <div className="w-full h-full relative" style={{ backgroundColor }}>
+    <div
+      className="w-full h-full relative isolate"
+      style={{ backgroundColor }}
+      onContextMenu={handleContextMenu}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
+    >
       <Canvas
         camera={{
           position: cameraPosition,
@@ -198,8 +271,8 @@ export function Scene3D() {
         }}
         gl={{ antialias: true }}
         onPointerMissed={(e) => {
-          // Right-click on empty space deselects
-          if (e.button === 2) {
+          // Left-click or right-click on empty space deselects
+          if (e.button === 0 || e.button === 2) {
             setSelectedImageId(null);
           }
         }}
@@ -213,6 +286,8 @@ export function Scene3D() {
       <ViewerControls />
       <FooterBranding />
       <PickingCursor />
+      <GlobalContextMenu />
+      <DistanceInputModal />
     </div>
   );
 }

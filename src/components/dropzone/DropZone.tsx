@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
-import { useReconstructionStore } from '../../store';
-import { TIMING, buttonStyles, loadingStyles, toastStyles, dragOverlayStyles } from '../../theme';
+import { useReconstructionStore, useUIStore } from '../../store';
+import type { ImageLoadMode } from '../../store/types';
+import { TIMING, buttonStyles, loadingStyles, toastStyles, dragOverlayStyles, emptyStateStyles } from '../../theme';
 
 interface DropZoneProps {
   children: React.ReactNode;
@@ -9,8 +10,11 @@ interface DropZoneProps {
 
 export function DropZone({ children }: DropZoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
-  const { handleDrop, handleDragOver } = useFileDropzone();
-  const { loading, progress, error, setError } = useReconstructionStore();
+  const [isPanelDismissed, setIsPanelDismissed] = useState(false);
+  const { handleDrop, handleDragOver, handleBrowse } = useFileDropzone();
+  const { loading, progress, error, setError, reconstruction } = useReconstructionStore();
+  const imageLoadMode = useUIStore((s) => s.imageLoadMode);
+  const setImageLoadMode = useUIStore((s) => s.setImageLoadMode);
 
   useEffect(() => {
     if (error) {
@@ -62,6 +66,53 @@ export function DropZone({ children }: DropZoneProps) {
             </div>
             <div className={dragOverlayStyles.subtitle}>
               Expected: sparse/0/cameras.bin, images.bin, points3D.bin
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!reconstruction && !loading && !isDragOver && !isPanelDismissed && (
+        <div className="absolute inset-0 flex items-center justify-center z-10">
+          <div
+            className="relative flex flex-col items-center justify-center p-8 text-center bg-ds-secondary rounded-lg cursor-pointer border border-ds"
+            onClick={handleBrowse}
+          >
+            <button
+              className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center text-ds-muted hover:text-ds-primary hover:bg-white/10 rounded transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsPanelDismissed(true);
+              }}
+            >
+              ×
+            </button>
+            <div className="mb-6 text-ds-muted font-light leading-none" style={{ fontSize: '72px' }}>+</div>
+            <h2 className={emptyStateStyles.title}>Load COLMAP Data</h2>
+            <p className={emptyStateStyles.message}>
+              Drag and drop a COLMAP dataset folder here.<br />Or click to browse for a folder.
+            </p>
+            <style>{`.info-line:hover { color: rgba(255,255,255,0.9); }`}</style>
+            <div className="text-ds-muted text-sm text-left max-w-md">
+              <div className="info-line px-2 rounded"><strong>Drop the project root folder</strong> — subfolders are scanned automatically</div>
+              <div className="info-line px-2 rounded"><strong>Required:</strong> cameras, images, points3D (.bin or .txt preferred)</div>
+              <div className="info-line px-2 rounded"><strong>Auto-detected:</strong> sparse/0/, sparse/, or any subfolder</div>
+              <div className="info-line px-2 rounded"><strong>Optional:</strong> source images (jpg, png, webp, tiff), config (.yaml), masks/</div>
+              <div className="info-line px-2 rounded text-ds-muted/70">Without source images: point cloud and cameras only, no textures</div>
+            </div>
+            <div
+              className="mt-4 flex items-center gap-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <label className="text-ds-secondary text-sm">Image Loading:</label>
+              <select
+                value={imageLoadMode}
+                onChange={(e) => setImageLoadMode(e.target.value as ImageLoadMode)}
+                className="bg-ds-tertiary text-ds-primary text-sm px-3 py-1.5 rounded border border-ds cursor-pointer"
+              >
+                <option value="prefetch">Prefetch</option>
+                <option value="lazy">Lazy</option>
+                <option value="skip">Skip</option>
+              </select>
             </div>
           </div>
         </div>

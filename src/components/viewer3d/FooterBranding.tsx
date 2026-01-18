@@ -8,8 +8,9 @@ export function FooterBranding() {
         target="_blank"
         rel="noopener noreferrer"
         className={footerStyles.logo}
+        draggable={false}
       >
-        <img src="/LOGO.png" alt="Opsiclear" className={footerStyles.logoImage} style={{ height: SIZE.logoHeight }} />
+        <img src="/LOGO.png" alt="Opsiclear" className={footerStyles.logoImage} style={{ height: SIZE.logoHeight }} draggable={false} />
       </a>
       <div className={footerStyles.socialContainer}>
         <a

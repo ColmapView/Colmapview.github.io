@@ -2,12 +2,14 @@ import type { ColorMode } from '../../types/colmap';
 import type {
   CameraMode,
   CameraProjection,
+  AutoRotateMode,
   CameraDisplayMode,
   FrustumColorMode,
   SelectionColorMode,
   MatchesDisplayMode,
   AxesDisplayMode,
   AxesCoordinateSystem,
+  AxisLabelMode,
   ImageLoadMode,
   GizmoMode,
   ScreenshotSize,
@@ -33,9 +35,12 @@ export interface CameraConfig {
   projection: CameraProjection;
   fov: number;
   horizonLock: boolean;
+  autoRotateMode: AutoRotateMode;
+  autoRotateSpeed: number;
   flySpeed: number;
   pointerLock: boolean;
   selectionColorMode: SelectionColorMode;
+  selectionColor: string;
   selectionAnimationSpeed: number;
   imagePlaneOpacity: number;
 }
@@ -44,16 +49,19 @@ export interface UIConfig {
   showPoints2D: boolean;
   showPoints3D: boolean;
   backgroundColor: string;
-  autoRotate: boolean;
   matchesDisplayMode: MatchesDisplayMode;
   matchesOpacity: number;
+  matchesColor: string;
   maskOverlay: boolean;
   maskOpacity: number;
   axesDisplayMode: AxesDisplayMode;
   axesCoordinateSystem: AxesCoordinateSystem;
   axesScale: number;
+  gridScale: number;
+  axisLabelMode: AxisLabelMode;
   imageLoadMode: ImageLoadMode;
   gizmoMode: GizmoMode;
+  galleryCollapsed: boolean;
 }
 
 export interface ExportConfig {

@@ -7,6 +7,7 @@ import type {
   CameraDisplayMode,
   FrustumColorMode,
   SelectionColorMode,
+  AutoRotateMode,
 } from '../types';
 
 export interface CameraState {
@@ -14,6 +15,7 @@ export interface CameraState {
   cameraDisplayMode: CameraDisplayMode;
   cameraScale: number;
   frustumColorMode: FrustumColorMode;
+  selectedCameraOpacity: number;
   unselectedCameraOpacity: number;
 
   // Navigation
@@ -21,6 +23,8 @@ export interface CameraState {
   cameraProjection: CameraProjection;
   cameraFov: number;
   horizonLock: boolean;
+  autoRotateMode: AutoRotateMode;
+  autoRotateSpeed: number;
   flySpeed: number;
   flyToImageId: number | null;
   pointerLock: boolean;
@@ -38,11 +42,14 @@ export interface CameraState {
   setCameraDisplayMode: (mode: CameraDisplayMode) => void;
   setCameraScale: (scale: number) => void;
   setFrustumColorMode: (mode: FrustumColorMode) => void;
+  setSelectedCameraOpacity: (opacity: number) => void;
   setUnselectedCameraOpacity: (opacity: number) => void;
   setCameraMode: (mode: CameraMode) => void;
   setCameraProjection: (projection: CameraProjection) => void;
   setCameraFov: (fov: number) => void;
   setHorizonLock: (enabled: boolean) => void;
+  setAutoRotateMode: (mode: AutoRotateMode) => void;
+  setAutoRotateSpeed: (speed: number) => void;
   setFlySpeed: (speed: number) => void;
   setPointerLock: (enabled: boolean) => void;
   flyToImage: (id: number) => void;
@@ -61,11 +68,14 @@ export const useCameraStore = create<CameraState>()(
       cameraDisplayMode: 'frustum',
       cameraScale: 0.25,
       frustumColorMode: 'byCamera',
+      selectedCameraOpacity: 1.0,
       unselectedCameraOpacity: 0.5,
       cameraMode: 'orbit',
       cameraProjection: 'perspective',
       cameraFov: 60,
       horizonLock: false,
+      autoRotateMode: 'off',
+      autoRotateSpeed: 0.5,
       flySpeed: 2.5,
       flyToImageId: null,
       pointerLock: true,
@@ -78,11 +88,14 @@ export const useCameraStore = create<CameraState>()(
       setCameraDisplayMode: (cameraDisplayMode) => set({ cameraDisplayMode }),
       setCameraScale: (cameraScale) => set({ cameraScale }),
       setFrustumColorMode: (frustumColorMode) => set({ frustumColorMode }),
+      setSelectedCameraOpacity: (selectedCameraOpacity) => set({ selectedCameraOpacity }),
       setUnselectedCameraOpacity: (unselectedCameraOpacity) => set({ unselectedCameraOpacity }),
       setCameraMode: (cameraMode) => set({ cameraMode }),
       setCameraProjection: (cameraProjection) => set({ cameraProjection }),
       setCameraFov: (cameraFov) => set({ cameraFov }),
       setHorizonLock: (horizonLock) => set({ horizonLock }),
+      setAutoRotateMode: (autoRotateMode) => set({ autoRotateMode }),
+      setAutoRotateSpeed: (autoRotateSpeed) => set({ autoRotateSpeed }),
       setFlySpeed: (flySpeed) => set({ flySpeed }),
       setPointerLock: (pointerLock) => set({ pointerLock }),
       flyToImage: (flyToImageId) => set({ flyToImageId }),
@@ -104,11 +117,14 @@ export const useCameraStore = create<CameraState>()(
         cameraDisplayMode: state.cameraDisplayMode,
         cameraScale: state.cameraScale,
         frustumColorMode: state.frustumColorMode,
+        selectedCameraOpacity: state.selectedCameraOpacity,
         unselectedCameraOpacity: state.unselectedCameraOpacity,
         cameraMode: state.cameraMode,
         cameraProjection: state.cameraProjection,
         cameraFov: state.cameraFov,
         horizonLock: state.horizonLock,
+        autoRotateMode: state.autoRotateMode,
+        autoRotateSpeed: state.autoRotateSpeed,
         flySpeed: state.flySpeed,
         pointerLock: state.pointerLock,
         selectionColorMode: state.selectionColorMode,

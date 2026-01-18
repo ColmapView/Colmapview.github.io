@@ -34,6 +34,9 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
   const horizonLock = useCameraStore((s) => s.horizonLock);
   const flySpeed = useCameraStore((s) => s.flySpeed);
   const pointerLock = useCameraStore((s) => s.pointerLock);
+  const autoRotateMode = useCameraStore((s) => s.autoRotateMode);
+  const autoRotateSpeed = useCameraStore((s) => s.autoRotateSpeed);
+  const setAutoRotateMode = useCameraStore((s) => s.setAutoRotateMode);
   const transform = useTransformStore((s) => s.transform);
   const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
 
@@ -229,6 +232,15 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
 
           angularVelocity.current.x *= frameDamping;
           angularVelocity.current.y *= frameDamping;
+        } else if (autoRotateMode !== 'off') {
+          // Auto-rotate around world up axis when no user input
+          const direction = autoRotateMode === 'cw' ? 1 : -1;
+          const autoRotateDelta = direction * autoRotateSpeed * (dt / 1000); // Convert to per-frame
+          // Rotate around world up axis (horizontal rotation only)
+          quatY.current.setFromAxisAngle(worldUpRef.current, autoRotateDelta);
+          cameraQuat.current.premultiply(quatY.current);
+          cameraQuat.current.normalize();
+          needsUpdate = true;
         }
       }
 
@@ -590,6 +602,8 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
             smoothedVelocity.current.x = 0;
             smoothedVelocity.current.y = 0;
             pointerLockRequested.current = false;
+            // Turn off auto-rotate on manual interaction
+            if (autoRotateMode !== 'off') setAutoRotateMode('off');
           }
         } else {
           // Orbit mode
@@ -600,6 +614,8 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
             angularVelocity.current.y = 0;
             smoothedVelocity.current.x = 0;
             smoothedVelocity.current.y = 0;
+            // Turn off auto-rotate on manual interaction
+            if (autoRotateMode !== 'off') setAutoRotateMode('off');
             pointerLockRequested.current = false;
           } else if (button === 2 || button === 1) {
             isPanning.current = true;
@@ -801,7 +817,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [camera, gl, cameraMode, flySpeed, pointerLock, radius]);
+  }, [camera, gl, cameraMode, flySpeed, pointerLock, radius, autoRotateMode, setAutoRotateMode]);
 
   return null;
 }

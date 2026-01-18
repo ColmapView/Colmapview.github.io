@@ -1,8 +1,10 @@
-import { useMemo, useRef, useEffect } from 'react';
+import { useMemo, useRef, useEffect, useState, useCallback, memo } from 'react';
 import * as THREE from 'three';
-import { Text, Billboard } from '@react-three/drei';
-import { VIZ_COLORS } from '../../theme';
-import type { AxesCoordinateSystem, AxisLabelMode } from '../../store/types';
+import { Text, Billboard, Html } from '@react-three/drei';
+import { useThree, type ThreeEvent } from '@react-three/fiber';
+import { VIZ_COLORS, contextMenuStyles, hoverCardStyles, ICON_SIZES } from '../../theme';
+import { useUIStore } from '../../store';
+import type { AxesCoordinateSystem, AxisLabelMode, AxesDisplayMode } from '../../store/types';
 
 // Coordinate system axis directions (as unit vectors in Three.js world space)
 // In Three.js: +X=right, +Y=up, +Z=toward viewer (backward), -Z=into scene (forward)
@@ -116,12 +118,358 @@ const COORDINATE_SYSTEM_NAMES: Record<AxesCoordinateSystem, string> = {
   unreal: 'Unreal',
 };
 
-export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', labelMode = 'extra' }: OriginAxesProps) {
+// Screen position for context menus (like gizmo)
+interface MenuPosition {
+  x: number;
+  y: number;
+}
+
+// All coordinate systems for menu
+const ALL_COORDINATE_SYSTEMS: AxesCoordinateSystem[] = [
+  'colmap', 'opencv', 'threejs', 'opengl', 'vulkan', 'blender', 'houdini', 'unity', 'unreal'
+];
+
+// All label modes for menu
+const ALL_LABEL_MODES: { value: AxisLabelMode; label: string }[] = [
+  { value: 'off', label: 'Off' },
+  { value: 'xyz', label: 'XYZ' },
+  { value: 'extra', label: 'Extra' },
+];
+
+// Checkmark icon for selected items
+const CheckIcon = () => (
+  <svg className="w-4 h-4 text-ds-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+    <path d="M5 12l5 5L20 7" />
+  </svg>
+);
+
+// Labels menu (left-click) - shows label options and hide axes
+interface LabelsMenuProps {
+  position: MenuPosition;
+  currentLabelMode: AxisLabelMode;
+  axesDisplayMode: AxesDisplayMode;
+  onClose: () => void;
+}
+
+const LabelsMenu = memo(function LabelsMenu({
+  position,
+  currentLabelMode,
+  axesDisplayMode,
+  onClose,
+}: LabelsMenuProps) {
+  const setAxisLabelMode = useUIStore((s) => s.setAxisLabelMode);
+  const setAxesDisplayMode = useUIStore((s) => s.setAxesDisplayMode);
+
+  const handleLabelChange = useCallback((mode: AxisLabelMode) => {
+    setAxisLabelMode(mode);
+    onClose();
+  }, [setAxisLabelMode, onClose]);
+
+  const handleHideAxes = useCallback(() => {
+    if (axesDisplayMode === 'axes') {
+      setAxesDisplayMode('off');
+    } else if (axesDisplayMode === 'both') {
+      setAxesDisplayMode('grid');
+    }
+    onClose();
+  }, [axesDisplayMode, setAxesDisplayMode, onClose]);
+
+  return (
+    <Html
+      style={{ position: 'fixed', left: position.x, top: position.y, pointerEvents: 'auto' }}
+      calculatePosition={() => [0, 0]}
+    >
+      <div className={contextMenuStyles.container} onMouseLeave={onClose}>
+        {ALL_LABEL_MODES.map((mode) => (
+          <button
+            key={mode.value}
+            className={contextMenuStyles.button}
+            onClick={() => handleLabelChange(mode.value)}
+          >
+            {currentLabelMode === mode.value ? <CheckIcon /> : <span className="w-4" />}
+            {mode.label}
+          </button>
+        ))}
+        <div className="border-t border-ds my-1" />
+        <button className={contextMenuStyles.button} onClick={handleHideAxes}>
+          <svg className={contextMenuStyles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 3l18 18M10.5 10.5a3 3 0 004.5 4.5M6.5 6.5C4 8.5 2 12 2 12s4 6 10 6c1.5 0 3-.5 4.5-1.5M17 17c2-1.5 3.5-3.5 5-5-1-1.5-4-6-10-6-.5 0-1 0-1.5.1" />
+          </svg>
+          Hide
+        </button>
+      </div>
+    </Html>
+  );
+});
+
+// System menu (right-click) - shows coordinate system options
+interface SystemMenuProps {
+  position: MenuPosition;
+  currentSystem: AxesCoordinateSystem;
+  onClose: () => void;
+}
+
+const SystemMenu = memo(function SystemMenu({
+  position,
+  currentSystem,
+  onClose,
+}: SystemMenuProps) {
+  const setAxesCoordinateSystem = useUIStore((s) => s.setAxesCoordinateSystem);
+
+  const handleSystemChange = useCallback((system: AxesCoordinateSystem) => {
+    setAxesCoordinateSystem(system);
+    onClose();
+  }, [setAxesCoordinateSystem, onClose]);
+
+  return (
+    <Html
+      style={{ position: 'fixed', left: position.x, top: position.y, pointerEvents: 'auto' }}
+      calculatePosition={() => [0, 0]}
+    >
+      <div className={contextMenuStyles.container} onMouseLeave={onClose}>
+        {ALL_COORDINATE_SYSTEMS.map((sys) => (
+          <button
+            key={sys}
+            className={contextMenuStyles.button}
+            onClick={() => handleSystemChange(sys)}
+          >
+            {currentSystem === sys ? <CheckIcon /> : <span className="w-4" />}
+            {COORDINATE_SYSTEM_NAMES[sys]}
+          </button>
+        ))}
+      </div>
+    </Html>
+  );
+});
+
+// Extended props for OriginAxes with context menu support
+interface OriginAxesWithMenuProps extends OriginAxesProps {
+  axesDisplayMode?: AxesDisplayMode;
+}
+
+// Hover color matching TransformGizmo
+const AXIS_HOVER_COLOR = 0xffff00;
+
+// Interactive axis cylinder with hover highlight
+interface AxisCylinderProps {
+  position: [number, number, number];
+  rotation: THREE.Euler;
+  radius: number;
+  length: number;
+  color: number;
+  isHovered: boolean;
+  onPointerOver: (e: ThreeEvent<PointerEvent>) => void;
+  onPointerMove: (e: ThreeEvent<PointerEvent>) => void;
+  onPointerOut: () => void;
+  onClick: (e: ThreeEvent<MouseEvent>) => void;
+  onContextMenu: (e: ThreeEvent<MouseEvent>) => void;
+}
+
+const AxisCylinder = memo(function AxisCylinder({
+  position,
+  rotation,
+  radius,
+  length,
+  color,
+  isHovered,
+  onPointerOver,
+  onPointerMove,
+  onPointerOut,
+  onClick,
+  onContextMenu,
+}: AxisCylinderProps) {
+  // Scale up on hover for visual feedback (matching gizmo behavior)
+  const hoverScale = isHovered ? 1.5 : 1.0;
+
+  return (
+    <mesh
+      position={position}
+      rotation={rotation}
+      scale={[hoverScale, 1, hoverScale]}
+      onPointerOver={onPointerOver}
+      onPointerMove={onPointerMove}
+      onPointerOut={onPointerOut}
+      onClick={onClick}
+      onContextMenu={onContextMenu}
+    >
+      <cylinderGeometry args={[radius, radius, length, 8]} />
+      <meshBasicMaterial color={isHovered ? AXIS_HOVER_COLOR : color} />
+    </mesh>
+  );
+});
+
+// Interactive label group with hover and click
+interface AxisLabelProps {
+  position: [number, number, number];
+  label: string;
+  suffix?: string;
+  scaleStr: string;
+  showExtra: boolean;
+  isXAxis: boolean;
+  color: number;
+  fontSize: number;
+  isHovered: boolean;
+  onPointerOver: (e: ThreeEvent<PointerEvent>) => void;
+  onPointerMove: (e: ThreeEvent<PointerEvent>) => void;
+  onPointerOut: () => void;
+  onClick: (e: ThreeEvent<MouseEvent>) => void;
+  onContextMenu: (e: ThreeEvent<MouseEvent>) => void;
+}
+
+const AxisLabel = memo(function AxisLabel({
+  position,
+  label,
+  suffix,
+  scaleStr,
+  showExtra,
+  isXAxis,
+  color,
+  fontSize,
+  isHovered,
+  onPointerOver,
+  onPointerMove,
+  onPointerOut,
+  onClick,
+  onContextMenu,
+}: AxisLabelProps) {
+  const hasSuffix = showExtra && suffix;
+  const displayColor = isHovered ? AXIS_HOVER_COLOR : color;
+  const hoverScale = isHovered ? 1.2 : 1.0;
+
+  return (
+    <Billboard position={position} follow={true}>
+      <group
+        scale={[hoverScale, hoverScale, hoverScale]}
+        onPointerOver={onPointerOver}
+        onPointerMove={onPointerMove}
+        onPointerOut={onPointerOut}
+        onClick={onClick}
+        onContextMenu={onContextMenu}
+      >
+        <Text
+          fontSize={fontSize}
+          color={displayColor}
+          anchorX={((isXAxis && showExtra) || hasSuffix) ? 'right' : 'center'}
+          anchorY="middle"
+          outlineWidth={fontSize * 0.08}
+          outlineColor="#000000"
+          outlineOpacity={0.5}
+        >
+          {label}
+        </Text>
+        {isXAxis && showExtra && (
+          <Text
+            fontSize={fontSize * 0.6}
+            color={displayColor}
+            anchorX="left"
+            anchorY="middle"
+            position={[fontSize * 0.15, 0, 0]}
+            outlineWidth={fontSize * 0.05}
+            outlineColor="#000000"
+            outlineOpacity={0.5}
+          >
+            ({scaleStr})
+          </Text>
+        )}
+        {hasSuffix && (
+          <Text
+            fontSize={fontSize * 0.6}
+            color={displayColor}
+            anchorX="left"
+            anchorY="middle"
+            position={[fontSize * 0.15, 0, 0]}
+            outlineWidth={fontSize * 0.05}
+            outlineColor="#000000"
+            outlineOpacity={0.5}
+          >
+            {suffix}
+          </Text>
+        )}
+      </group>
+    </Billboard>
+  );
+});
+
+// Hovered element type: 'pos-0', 'pos-1', 'pos-2', 'neg-0', 'neg-1', 'neg-2', 'label-0', 'label-1', 'label-2'
+type HoveredElement = string | null;
+
+export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', labelMode = 'extra', axesDisplayMode = 'axes' }: OriginAxesWithMenuProps) {
   const axisLength = size * 0.5;
   const axisRadius = size * 0.005;
   const negativeAxisLength = axisLength * 0.4; // Shorter negative lines
 
   const system = COORDINATE_SYSTEMS[coordinateSystem];
+
+  // Access controls to check if camera is being dragged (like frustum)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { controls } = useThree() as any;
+
+  // Check if camera controls are dragging (orbit/pan in progress)
+  const isDragging = () => controls?.dragging?.current ?? false;
+
+  // Hover state (managed at parent level like TransformGizmo)
+  const [hoveredElement, setHoveredElement] = useState<HoveredElement>(null);
+  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+
+  // Menu state - separate for left-click (labels) and right-click (system)
+  const [labelsMenu, setLabelsMenu] = useState<MenuPosition | null>(null);
+  const [systemMenu, setSystemMenu] = useState<MenuPosition | null>(null);
+
+  // Pointer handlers for hover tracking (same pattern as frustum)
+  const handlePointerOver = useCallback((id: string) => (e: ThreeEvent<PointerEvent>) => {
+    // Ignore hover during camera orbit/pan
+    if (isDragging()) return;
+    if (!hoveredElement) {
+      setHoveredElement(id);
+      setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
+      document.body.style.cursor = 'pointer';
+    }
+  }, [hoveredElement]);
+
+  const handlePointerMove = useCallback((e: ThreeEvent<PointerEvent>) => {
+    // Clear hover state if dragging started while hovering
+    if (isDragging()) {
+      if (hoveredElement) {
+        setHoveredElement(null);
+        setMousePos(null);
+        document.body.style.cursor = '';
+      }
+      return;
+    }
+    if (hoveredElement) {
+      setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
+    }
+  }, [hoveredElement]);
+
+  const handlePointerOut = useCallback((id: string) => () => {
+    if (hoveredElement === id) {
+      setHoveredElement(null);
+      setMousePos(null);
+      document.body.style.cursor = '';
+    }
+  }, [hoveredElement]);
+
+  // Left-click: show labels menu
+  const handleClick = useCallback((e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation();
+    setSystemMenu(null);
+    setLabelsMenu({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
+  }, []);
+
+  // Right-click: show system menu
+  const handleContextMenu = useCallback((e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation();
+    setLabelsMenu(null);
+    setSystemMenu({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
+  }, []);
+
+  const handleCloseLabelsMenu = useCallback(() => {
+    setLabelsMenu(null);
+  }, []);
+
+  const handleCloseSystemMenu = useCallback(() => {
+    setSystemMenu(null);
+  }, []);
 
   // Derive display flags from labelMode
   const showLabels = labelMode !== 'off';
@@ -152,79 +500,130 @@ export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', label
     <group>
       {/* Positive axis lines (colored) */}
       {axes.map((axis, i) => {
+        const id = `pos-${i}`;
         const rotation = getAxisRotation(axis.direction);
         const position = getAxisPosition(axis.direction, axisLength);
         return (
-          <mesh key={`pos-${i}`} position={position} rotation={rotation}>
-            <cylinderGeometry args={[axisRadius, axisRadius, axisLength, 8]} />
-            <meshBasicMaterial color={axis.color} />
-          </mesh>
+          <AxisCylinder
+            key={id}
+            position={position}
+            rotation={rotation}
+            radius={axisRadius}
+            length={axisLength}
+            color={axis.color}
+            isHovered={hoveredElement === id}
+            onPointerOver={handlePointerOver(id)}
+            onPointerMove={handlePointerMove}
+            onPointerOut={handlePointerOut(id)}
+            onClick={handleClick}
+            onContextMenu={handleContextMenu}
+          />
         );
       })}
       {/* Negative axis lines (gray, opaque) */}
-      {negativeAxes.map((axis, i) => {
+      {negativeAxes.map((_, i) => {
+        const id = `neg-${i}`;
+        const axis = negativeAxes[i];
         const rotation = getAxisRotation(axis.direction);
         const position = getAxisPosition(axis.direction, negativeAxisLength);
         return (
-          <mesh key={`neg-${i}`} position={position} rotation={rotation}>
-            <cylinderGeometry args={[axisRadius * 0.7, axisRadius * 0.7, negativeAxisLength, 8]} />
-            <meshBasicMaterial color={NEGATIVE_AXIS_COLOR} />
-          </mesh>
+          <AxisCylinder
+            key={id}
+            position={position}
+            rotation={rotation}
+            radius={axisRadius * 0.7}
+            length={negativeAxisLength}
+            color={NEGATIVE_AXIS_COLOR}
+            isHovered={hoveredElement === id}
+            onPointerOver={handlePointerOver(id)}
+            onPointerMove={handlePointerMove}
+            onPointerOut={handlePointerOut(id)}
+            onClick={handleClick}
+            onContextMenu={handleContextMenu}
+          />
         );
       })}
       {/* Axis labels (billboard text) */}
       {showLabels && axes.map((axis, i) => {
+        const id = `label-${i}`;
         const labelPosition: [number, number, number] = [
           axis.direction[0] * labelOffset,
           axis.direction[1] * labelOffset,
           axis.direction[2] * labelOffset,
         ];
-        const isXAxis = i === 0;
-        const hasSuffix = showExtra && 'suffix' in axis && axis.suffix;
         return (
-          <Billboard key={`label-${i}`} position={labelPosition} follow={true}>
-            <Text
-              fontSize={fontSize}
-              color={axis.color}
-              anchorX={((isXAxis && showExtra) || hasSuffix) ? 'right' : 'center'}
-              anchorY="middle"
-              outlineWidth={fontSize * 0.08}
-              outlineColor="#000000"
-              outlineOpacity={0.5}
-            >
-              {axis.label}
-            </Text>
-            {isXAxis && showExtra && (
-              <Text
-                fontSize={fontSize * 0.6}
-                color={axis.color}
-                anchorX="left"
-                anchorY="middle"
-                position={[fontSize * 0.15, 0, 0]}
-                outlineWidth={fontSize * 0.05}
-                outlineColor="#000000"
-                outlineOpacity={0.5}
-              >
-                ({scaleStr})
-              </Text>
-            )}
-            {hasSuffix && (
-              <Text
-                fontSize={fontSize * 0.6}
-                color={axis.color}
-                anchorX="left"
-                anchorY="middle"
-                position={[fontSize * 0.15, 0, 0]}
-                outlineWidth={fontSize * 0.05}
-                outlineColor="#000000"
-                outlineOpacity={0.5}
-              >
-                {axis.suffix}
-              </Text>
-            )}
-          </Billboard>
+          <AxisLabel
+            key={id}
+            position={labelPosition}
+            label={axis.label}
+            suffix={'suffix' in axis ? axis.suffix : undefined}
+            scaleStr={scaleStr}
+            showExtra={showExtra}
+            isXAxis={i === 0}
+            color={axis.color}
+            fontSize={fontSize}
+            isHovered={hoveredElement === id}
+            onPointerOver={handlePointerOver(id)}
+            onPointerMove={handlePointerMove}
+            onPointerOut={handlePointerOut(id)}
+            onClick={handleClick}
+            onContextMenu={handleContextMenu}
+          />
         );
       })}
+      {/* Hover card popup */}
+      {hoveredElement && mousePos && !labelsMenu && !systemMenu && (
+        <Html
+          style={{
+            position: 'fixed',
+            left: mousePos.x + 12,
+            top: mousePos.y + 12,
+            pointerEvents: 'none',
+            transform: 'none',
+          }}
+          calculatePosition={() => [0, 0]}
+        >
+          <div className={hoverCardStyles.container}>
+            <div className={hoverCardStyles.title}>Origin Axes</div>
+            <div className={hoverCardStyles.subtitle}>{COORDINATE_SYSTEM_NAMES[coordinateSystem]}</div>
+            <div className={hoverCardStyles.hint}>
+              <div className={hoverCardStyles.hintRow}>
+                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="6" y="2" width="12" height="20" rx="6"/>
+                  <path d="M12 2v8"/>
+                  <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
+                </svg>
+                Left: labels
+              </div>
+              <div className={hoverCardStyles.hintRow}>
+                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="6" y="2" width="12" height="20" rx="6"/>
+                  <path d="M12 2v8"/>
+                  <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
+                </svg>
+                Right: coord system
+              </div>
+            </div>
+          </div>
+        </Html>
+      )}
+      {/* Labels menu (left-click) */}
+      {labelsMenu && (
+        <LabelsMenu
+          position={labelsMenu}
+          currentLabelMode={labelMode}
+          axesDisplayMode={axesDisplayMode}
+          onClose={handleCloseLabelsMenu}
+        />
+      )}
+      {/* System menu (right-click) */}
+      {systemMenu && (
+        <SystemMenu
+          position={systemMenu}
+          currentSystem={coordinateSystem}
+          onClose={handleCloseSystemMenu}
+        />
+      )}
     </group>
   );
 }

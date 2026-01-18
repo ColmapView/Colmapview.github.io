@@ -1,726 +1,63 @@
-import { useState, useEffect, memo, useCallback, useRef, type ReactNode } from 'react';
+import { useState, useEffect, memo, useCallback } from 'react';
 import { useReconstructionStore, usePointCloudStore, useCameraStore, useUIStore, useExportStore, useTransformStore, usePointPickingStore } from '../../store';
-import { computeNormalAlignment, sim3dToEuler, composeSim3d, createSim3dFromEuler } from '../../utils/sim3dTransforms';
+// sim3d transforms moved to DistanceInputModal for picking tool apply logic
 import type { ColorMode } from '../../types/colmap';
-import type { CameraMode, ImageLoadMode, CameraDisplayMode, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, ScreenshotSize, ScreenshotFormat, GizmoMode } from '../../store/types';
+import type { CameraMode, ImageLoadMode, CameraDisplayMode, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, ScreenshotSize, ScreenshotFormat, GizmoMode, AutoRotateMode } from '../../store/types';
 import { useHotkeys } from 'react-hotkeys-hook';
-import { getTooltipProps, controlPanelStyles, getControlButtonClass, HOTKEYS } from '../../theme';
+import { controlPanelStyles, HOTKEYS } from '../../theme';
 import { exportReconstructionText, exportReconstructionBinary, exportPointsPLY } from '../../parsers';
 import { isIdentityEuler } from '../../utils/sim3dTransforms';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { extractConfigurationFromStores, serializeConfigToYaml } from '../../config/configuration';
+import { hslToHex, hexToHsl } from '../../utils/colorUtils';
 
-// HSL to Hex conversion
-function hslToHex(h: number, s: number, l: number): string {
-  s /= 100;
-  l /= 100;
-  const a = s * Math.min(l, 1 - l);
-  const f = (n: number) => {
-    const k = (n + h / 30) % 12;
-    const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-    return Math.round(255 * color).toString(16).padStart(2, '0');
-  };
-  return `#${f(0)}${f(8)}${f(4)}`;
-}
+// Import icons from ViewerIcons
+import {
+  HoverIcon,
+  ScreenshotIcon,
+  ExportIcon,
+  TransformIcon,
+  FrustumIcon,
+  ArrowIcon,
+  CameraOffIcon,
+  ImageIcon,
+  MatchOffIcon,
+  MatchOnIcon,
+  MatchBlinkIcon,
+  RainbowIcon,
+  SelectionOffIcon,
+  SelectionStaticIcon,
+  SelectionBlinkIcon,
+  AxesIcon,
+  AxesOffIcon,
+  GridIcon,
+  AxesGridIcon,
+  ColorRgbIcon,
+  ColorErrorIcon,
+  ColorTrackIcon,
+  BgIcon,
+  ViewIcon,
+  PrefetchIcon,
+  LazyIcon,
+  SkipIcon,
+  OrbitIcon,
+  FlyIcon,
+  SidebarExpandIcon,
+  SidebarCollapseIcon,
+} from './ViewerIcons';
 
-// Hex to HSL conversion
-function hexToHsl(hex: string): { h: number; s: number; l: number } {
-  const r = parseInt(hex.slice(1, 3), 16) / 255;
-  const g = parseInt(hex.slice(3, 5), 16) / 255;
-  const b = parseInt(hex.slice(5, 7), 16) / 255;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  let h = 0;
-  let s = 0;
-  const l = (max + min) / 2;
-  if (max !== min) {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    switch (max) {
-      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
-      case g: h = ((b - r) / d + 2) / 6; break;
-      case b: h = ((r - g) / d + 4) / 6; break;
-    }
-  }
-  return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
-}
+// Import UI components from ControlComponents
+import {
+  SliderRow,
+  HueRow,
+  HueSliderRow,
+  SelectRow,
+  ControlButton,
+  type PanelType,
+} from './ControlComponents';
 
-// Icon wrapper that shows text abbreviation on hover (uses CSS group-hover from parent button)
-function HoverIcon({ icon, label }: { icon: ReactNode; label: string }) {
-  return (
-    <span className="relative w-6 h-6 flex items-center justify-center">
-      <span className="absolute inset-0 flex items-center justify-center opacity-100 group-hover:opacity-0">{icon}</span>
-      <span className="absolute inset-0 flex items-center justify-center text-2xs font-bold tracking-tight opacity-0 group-hover:opacity-100">
-        {label}
-      </span>
-    </span>
-  );
-}
-
-// Screenshot icon (camera)
-function ScreenshotIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
-      <circle cx="12" cy="13" r="4" />
-    </svg>
-  );
-}
-
-// Export/download icon
-function ExportIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-      <polyline points="7 10 12 15 17 10" />
-      <line x1="12" y1="15" x2="12" y2="3" />
-    </svg>
-  );
-}
-
-// Transform icon - bounding box with corner handles
-function TransformIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor">
-      {/* Bounding box */}
-      <rect x="5" y="5" width="14" height="14" strokeWidth="1.5" strokeDasharray="3 2" opacity="0.5" />
-      {/* Corner handles */}
-      <rect x="3" y="3" width="4" height="4" fill="currentColor" stroke="none" rx="0.5" />
-      <rect x="17" y="3" width="4" height="4" fill="currentColor" stroke="none" rx="0.5" />
-      <rect x="3" y="17" width="4" height="4" fill="currentColor" stroke="none" rx="0.5" />
-      <rect x="17" y="17" width="4" height="4" fill="currentColor" stroke="none" rx="0.5" />
-      {/* Center crosshair */}
-      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
-      <line x1="9" y1="12" x2="15" y2="12" strokeWidth="1.5" />
-      <line x1="12" y1="9" x2="12" y2="15" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
-// Camera frustum icon (video camera)
-function FrustumIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="2" y="6" width="13" height="12" rx="2" />
-      <path d="M15 10l7-4v12l-7-4z" />
-    </svg>
-  );
-}
-
-// Arrow icon for camera direction indicator
-function ArrowIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M5 12h14M19 12l-6-6M19 12l-6 6" />
-    </svg>
-  );
-}
-
-// Camera off icon
-function CameraOffIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="2" y="6" width="13" height="12" rx="2" />
-      <path d="M15 10l7-4v12l-7-4z" />
-      <path d="M3 21L21 3" strokeWidth="2.5" />
-    </svg>
-  );
-}
-
-function ImageIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      {/* Top-left camera (1/3) */}
-      <rect x="1" y="1" width="7" height="5" rx="1" strokeWidth="1.5" />
-      <path d="M8 2.5l3-1.5v6l-3-1.5z" strokeWidth="1.5" />
-      {/* Image frame (2/3) - middle and bottom right */}
-      <rect x="8" y="8" width="14" height="14" rx="1" />
-      <circle cx="12" cy="12" r="1.5" />
-      <path d="M22 18l-4-4-6 8" />
-    </svg>
-  );
-}
-
-// Matches off icon (two cameras, no line)
-function MatchOffIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-      {/* Top-left camera */}
-      <rect x="1" y="1" width="7" height="5" rx="1" />
-      <path d="M8 2.5l3-1.5v6l-3-1.5z" />
-      {/* Bottom-right camera */}
-      <rect x="13" y="17" width="7" height="5" rx="1" />
-      <path d="M20 18.5l3-1.5v6l-3-1.5z" />
-    </svg>
-  );
-}
-
-// Matches on icon (two cameras, solid line)
-function MatchOnIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-      {/* Top-left camera */}
-      <rect x="1" y="1" width="7" height="5" rx="1" />
-      <path d="M8 2.5l3-1.5v6l-3-1.5z" />
-      {/* Bottom-right camera */}
-      <rect x="13" y="17" width="7" height="5" rx="1" />
-      <path d="M20 18.5l3-1.5v6l-3-1.5z" />
-      {/* Solid connecting line */}
-      <path d="M9 6l6 12" strokeWidth="2" />
-    </svg>
-  );
-}
-
-// Matches blink icon (two cameras, dotted line)
-function MatchBlinkIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-      {/* Top-left camera */}
-      <rect x="1" y="1" width="7" height="5" rx="1" />
-      <path d="M8 2.5l3-1.5v6l-3-1.5z" />
-      {/* Bottom-right camera */}
-      <rect x="13" y="17" width="7" height="5" rx="1" />
-      <path d="M20 18.5l3-1.5v6l-3-1.5z" />
-      {/* Dotted connecting line */}
-      <path d="M9 6l6 12" strokeWidth="2" strokeDasharray="2 2" />
-    </svg>
-  );
-}
-
-function RainbowIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" strokeLinecap="round">
-      {/* Top-left camera (1/3) */}
-      <rect x="1" y="1" width="7" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M8 2.5l3-1.5v6l-3-1.5z" stroke="currentColor" strokeWidth="1.5" />
-      {/* Rainbow (2/3) - middle and bottom right, 3 MYC curves */}
-      <path d="M8 17a7 7 0 0 1 14 0" stroke="#FF00FF" strokeWidth="2.5" />
-      <path d="M10 17a5 5 0 0 1 10 0" stroke="#FFFF00" strokeWidth="2.5" />
-      <path d="M12 17a3 3 0 0 1 6 0" stroke="#00FFFF" strokeWidth="2.5" />
-    </svg>
-  );
-}
-
-// Selection color off icon (small camera top-left, empty circle bottom-right)
-function SelectionOffIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      {/* Top-left camera (1/3) */}
-      <rect x="1" y="1" width="7" height="5" rx="1" strokeWidth="1.5" />
-      <path d="M8 2.5l3-1.5v6l-3-1.5z" strokeWidth="1.5" />
-      {/* Empty circle middle/bottom-right (2/3) */}
-      <circle cx="15" cy="15" r="6" fill="none" />
-    </svg>
-  );
-}
-
-// Selection static icon (small camera top-left, solid magenta dot bottom-right)
-function SelectionStaticIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" strokeWidth="1.5">
-      {/* Top-left camera (1/3) */}
-      <rect x="1" y="1" width="7" height="5" rx="1" stroke="currentColor" />
-      <path d="M8 2.5l3-1.5v6l-3-1.5z" stroke="currentColor" />
-      {/* Solid magenta dot middle/bottom-right (2/3) */}
-      <circle cx="15" cy="15" r="6" fill="#FF00FF" />
-    </svg>
-  );
-}
-
-// Selection blink icon (small camera top-left, pulsing rings bottom-right)
-function SelectionBlinkIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" strokeWidth="1.5">
-      {/* Top-left camera (1/3) */}
-      <rect x="1" y="1" width="7" height="5" rx="1" stroke="currentColor" />
-      <path d="M8 2.5l3-1.5v6l-3-1.5z" stroke="currentColor" />
-      {/* Pulsing rings middle/bottom-right (2/3) */}
-      <circle cx="15" cy="15" r="2.5" fill="#FF00FF" />
-      <circle cx="15" cy="15" r="4.5" stroke="#FF00FF" strokeWidth="1.5" opacity="0.6" fill="none" />
-      <circle cx="15" cy="15" r="7" stroke="#FF00FF" strokeWidth="1" opacity="0.3" fill="none" />
-    </svg>
-  );
-}
-
-function AxesIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round">
-      {/* X axis - red */}
-      <path d="M12 12h9" stroke="#e74c3c" />
-      {/* Y axis - green */}
-      <path d="M12 12v-9" stroke="#2ecc71" />
-      {/* Z axis - blue */}
-      <path d="M12 12l-6 6" stroke="#3498db" />
-    </svg>
-  );
-}
-
-function AxesOffIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" strokeLinecap="round">
-      {/* Collapsed/short axes stubs - showing "off" state */}
-      <path d="M12 12h4" stroke="currentColor" strokeWidth="2" opacity="0.35" />
-      <path d="M12 12v-4" stroke="currentColor" strokeWidth="2" opacity="0.35" />
-      <path d="M12 12l-2.5 2.5" stroke="currentColor" strokeWidth="2" opacity="0.35" />
-      {/* Center dot */}
-      <circle cx="12" cy="12" r="1.5" fill="currentColor" opacity="0.4" />
-    </svg>
-  );
-}
-
-function GridIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M3 8h18M3 16h18M8 3v18M16 3v18" />
-    </svg>
-  );
-}
-
-// Combined Axes + Grid icon for "both" mode
-function AxesGridIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" strokeLinecap="round">
-      {/* Grid lines (subtle, in background) */}
-      <path d="M4 8h16M4 16h16M8 4v16M16 4v16" stroke="currentColor" strokeWidth="1" opacity="0.4" />
-      {/* X axis - red */}
-      <path d="M12 12h9" stroke="#e74c3c" strokeWidth="2.5" />
-      {/* Y axis - green */}
-      <path d="M12 12v-9" stroke="#2ecc71" strokeWidth="2.5" />
-      {/* Z axis - blue */}
-      <path d="M12 12l-6 6" stroke="#3498db" strokeWidth="2.5" />
-    </svg>
-  );
-}
-
-// Color mode icons - point cloud representations with mode-specific colors
-function ColorRgbIcon({ className }: { className?: string }) {
-  // RGB mode: show multicolored points (original colors)
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="7" r="2.5" fill="#e74c3c" />
-      <circle cx="7" cy="12" r="2.2" fill="#3498db" />
-      <circle cx="17" cy="11" r="2.3" fill="#2ecc71" />
-      <circle cx="9" cy="17" r="2" fill="#f39c12" />
-      <circle cx="15" cy="16" r="1.8" fill="#9b59b6" />
-      <circle cx="5" cy="7" r="1.5" fill="#1abc9c" />
-      <circle cx="19" cy="6" r="1.3" fill="#e91e63" />
-    </svg>
-  );
-}
-
-function ColorErrorIcon({ className }: { className?: string }) {
-  // Error mode: blue (low error) to red (high error) - jet colormap
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="7" r="2.5" fill="#e74c3c" />
-      <circle cx="7" cy="12" r="2.2" fill="#3498db" />
-      <circle cx="17" cy="11" r="2.3" fill="#f39c12" />
-      <circle cx="9" cy="17" r="2" fill="#2980b9" />
-      <circle cx="15" cy="16" r="1.8" fill="#c0392b" />
-      <circle cx="5" cy="7" r="1.5" fill="#1e90ff" />
-      <circle cx="19" cy="6" r="1.3" fill="#ff6347" />
-    </svg>
-  );
-}
-
-function ColorTrackIcon({ className }: { className?: string }) {
-  // Track length: dark green (few) to bright green (many observations)
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="7" r="2.5" fill="#2ecc71" />
-      <circle cx="7" cy="12" r="2.2" fill="#145a32" />
-      <circle cx="17" cy="11" r="2.3" fill="#27ae60" />
-      <circle cx="9" cy="17" r="2" fill="#1e8449" />
-      <circle cx="15" cy="16" r="1.8" fill="#0b5345" />
-      <circle cx="5" cy="7" r="1.5" fill="#58d68d" />
-      <circle cx="19" cy="6" r="1.3" fill="#196f3d" />
-    </svg>
-  );
-}
-
-function BgIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 3v18" />
-      <path d="M12 3a9 9 0 0 0 0 18" fill="currentColor" opacity="0.3" />
-    </svg>
-  );
-}
-
-// View icon - 3D cube suggesting viewing angles
-function ViewIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 2L2 7l10 5 10-5-10-5z" />
-      <path d="M2 17l10 5 10-5" />
-      <path d="M2 12l10 5 10-5" />
-    </svg>
-  );
-}
-
-// Image loading icons - 2 stacked rectangles top-left, modifier bottom-right
-function PrefetchIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      {/* 2 stacked rectangles top-left */}
-      <rect x="2" y="1" width="11" height="7" rx="1" strokeWidth="1.5" />
-      <rect x="0" y="4" width="11" height="7" rx="1" fill="currentColor" strokeWidth="1.5" />
-      {/* Download arrow bottom-right */}
-      <path d="M17 10v8M17 18l-3-3M17 18l3-3" />
-      <path d="M12 22h10" />
-    </svg>
-  );
-}
-
-function LazyIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      {/* 2 stacked rectangles top-left */}
-      <rect x="2" y="1" width="11" height="7" rx="1" strokeWidth="1.5" />
-      <rect x="0" y="4" width="11" height="7" rx="1" fill="currentColor" strokeWidth="1.5" />
-      {/* Clock bottom-right */}
-      <circle cx="17" cy="17" r="5.5" />
-      <path d="M17 14v3.5l2 1.5" />
-    </svg>
-  );
-}
-
-function SkipIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      {/* 2 stacked rectangles top-left */}
-      <rect x="2" y="1" width="11" height="7" rx="1" strokeWidth="1.5" />
-      <rect x="0" y="4" width="11" height="7" rx="1" fill="currentColor" strokeWidth="1.5" />
-      {/* X/cross bottom-right */}
-      <circle cx="17" cy="17" r="5.5" />
-      <path d="M14 14l6 6M20 14l-6 6" />
-    </svg>
-  );
-}
-
-function OrbitIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <circle cx="12" cy="12" r="9" />
-      <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
-      <circle cx="21" cy="12" r="3" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-function FlyIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M2.5 12 Q12 2 21.5 12 Q12 22 2.5 12" />
-      <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'export' | 'transform' | null;
-
-interface SliderRowProps {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (value: number) => void;
-  formatValue?: (value: number) => string;
-}
-
-const SliderRow = memo(function SliderRow({ label, value, min, max, step, onChange, formatValue }: SliderRowProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [inputValue, setInputValue] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // Defensive: ensure value is a valid number (handles null/undefined from corrupted localStorage)
-  const safeValue = value ?? min;
-  const displayValue = formatValue ? formatValue(safeValue) : String(safeValue);
-  const progress = ((safeValue - min) / (max - min)) * 100;
-
-  const handleDoubleClick = () => {
-    setInputValue(String(safeValue));
-    setIsEditing(true);
-  };
-
-  useEffect(() => {
-    if (isEditing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [isEditing]);
-
-  const applyValue = () => {
-    const parsed = parseFloat(inputValue);
-    if (!isNaN(parsed)) {
-      const clamped = Math.min(max, Math.max(min, parsed));
-      onChange(clamped);
-    }
-    setIsEditing(false);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      applyValue();
-    } else if (e.key === 'Escape') {
-      setIsEditing(false);
-    }
-  };
-
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -step : step;
-    const newValue = Math.min(max, Math.max(min, safeValue + delta));
-    onChange(newValue);
-  };
-
-  return (
-    <div className={styles.row} onWheel={handleWheel}>
-      <label className={styles.label}>{label}</label>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={safeValue}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className={styles.slider}
-        style={{ '--range-progress': `${progress}%` } as React.CSSProperties}
-      />
-      {isEditing ? (
-        <input
-          ref={inputRef}
-          type="text"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onBlur={applyValue}
-          onKeyDown={handleKeyDown}
-          className={styles.valueInput}
-        />
-      ) : (
-        <span
-          className={styles.value}
-          onDoubleClick={handleDoubleClick}
-          title="Double-click to edit"
-        >
-          {displayValue}
-        </span>
-      )}
-    </div>
-  );
-});
-
-interface HueRowProps {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}
-
-const HueRow = memo(function HueRow({ label, value, onChange }: HueRowProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [inputValue, setInputValue] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const hsl = hexToHsl(value);
-  const hue = hsl.h;
-
-  const handleHueChange = (newHue: number) => {
-    // Use full saturation and 50% lightness for vibrant colors
-    onChange(hslToHex(newHue, 100, 50));
-  };
-
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -5 : 5;
-    const newHue = (hue + delta + 360) % 360;
-    handleHueChange(newHue);
-  };
-
-  const handleDoubleClick = () => {
-    setInputValue(String(hue));
-    setIsEditing(true);
-  };
-
-  useEffect(() => {
-    if (isEditing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [isEditing]);
-
-  const applyValue = () => {
-    const parsed = parseInt(inputValue);
-    if (!isNaN(parsed)) {
-      const clamped = ((parsed % 360) + 360) % 360;
-      handleHueChange(clamped);
-    }
-    setIsEditing(false);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      applyValue();
-    } else if (e.key === 'Escape') {
-      setIsEditing(false);
-    }
-  };
-
-  return (
-    <div className={styles.row} onWheel={handleWheel}>
-      <label className={styles.label}>{label}</label>
-      <div className="relative flex-1 min-w-0 h-4 flex items-center">
-        <div
-          className="absolute left-0 right-0 h-1.5 rounded-full z-0"
-          style={{
-            background: 'linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)',
-          }}
-        />
-        <input
-          type="range"
-          min={0}
-          max={360}
-          step={1}
-          value={hue}
-          onChange={(e) => handleHueChange(parseInt(e.target.value))}
-          className="w-full h-4 cursor-pointer appearance-none bg-transparent relative z-10 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-gray-400 [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-gray-400 [&::-moz-range-thumb]:cursor-pointer [&::-webkit-slider-runnable-track]:bg-transparent [&::-moz-range-track]:bg-transparent"
-        />
-      </div>
-      {isEditing ? (
-        <input
-          ref={inputRef}
-          type="text"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onBlur={applyValue}
-          onKeyDown={handleKeyDown}
-          className={styles.valueInput}
-          style={{ color: value }}
-        />
-      ) : (
-        <span
-          className={styles.value}
-          style={{ color: value }}
-          onDoubleClick={handleDoubleClick}
-          title="Double-click to edit"
-        >
-          {hue}°
-        </span>
-      )}
-    </div>
-  );
-});
-
-interface SelectRowProps {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-}
-
-const SelectRow = memo(function SelectRow({ label, value, onChange, options }: SelectRowProps) {
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const currentIndex = options.findIndex(opt => opt.value === value);
-    if (e.deltaY > 0) {
-      const nextIndex = Math.min(currentIndex + 1, options.length - 1);
-      onChange(options[nextIndex].value);
-    } else {
-      const prevIndex = Math.max(currentIndex - 1, 0);
-      onChange(options[prevIndex].value);
-    }
-  };
-
-  return (
-    <div className={styles.row} onWheel={handleWheel}>
-      <label className={styles.label}>{label}</label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={styles.select}
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
-      <span className={styles.value} />
-    </div>
-  );
-});
-
-interface PanelWrapperProps {
-  title: string;
-  children: React.ReactNode;
-}
-
-const PanelWrapper = memo(function PanelWrapper({ title, children }: PanelWrapperProps) {
-  return (
-    <div className={styles.panelWrapper}>
-      <div className={styles.panel}>
-        <div className={styles.panelTitle}>{title}</div>
-        {children}
-      </div>
-    </div>
-  );
-});
-
-// Use centralized styles from theme
+// Use styles from theme
 const styles = controlPanelStyles;
-
-interface ControlButtonProps {
-  panelId: PanelType;
-  activePanel: PanelType;
-  setActivePanel: (panel: PanelType) => void;
-  icon: React.ReactNode;
-  tooltip: string;
-  isActive?: boolean;
-  onClick?: () => void;
-  onDoubleClick?: () => void;
-  panelTitle?: string;
-  children?: React.ReactNode;
-  disabled?: boolean;
-}
-
-const ControlButton = memo(function ControlButton({
-  panelId,
-  activePanel,
-  setActivePanel,
-  icon,
-  tooltip,
-  isActive = false,
-  onClick,
-  onDoubleClick,
-  panelTitle,
-  children,
-  disabled = false,
-}: ControlButtonProps) {
-  const isHovered = activePanel === panelId;
-  const hasPanel = panelTitle && children;
-
-  return (
-    <div
-      className="relative w-10 control-button-responsive"
-      onMouseEnter={() => !disabled && setActivePanel(panelId)}
-      onMouseLeave={() => setActivePanel(null)}
-    >
-      <button
-        onClick={disabled ? undefined : onClick}
-        onDoubleClick={disabled ? undefined : onDoubleClick}
-        disabled={disabled}
-        className={`group ${getControlButtonClass(isActive, isHovered)} ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
-        {...(!hasPanel && getTooltipProps(disabled ? `${tooltip} (no data loaded)` : tooltip, 'left'))}
-      >
-        {icon}
-      </button>
-      {hasPanel && isHovered && !disabled && (
-        <PanelWrapper title={panelTitle}>
-          {children}
-        </PanelWrapper>
-      )}
-    </div>
-  );
-});
 
 // Transform panel component
 interface TransformPanelProps {
@@ -744,26 +81,8 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
   // Point picking state
   const pickingMode = usePointPickingStore((s) => s.pickingMode);
   const setPickingMode = usePointPickingStore((s) => s.setPickingMode);
-  const selectedPoints = usePointPickingStore((s) => s.selectedPoints);
-  const resetPicking = usePointPickingStore((s) => s.reset);
 
   const hasChanges = !isIdentityEuler(transform);
-
-  // Auto-apply normal alignment when 3 points are selected
-  useEffect(() => {
-    if (pickingMode === 'normal-3pt' && selectedPoints.length === 3) {
-      const alignTransform = computeNormalAlignment(
-        selectedPoints[0].position,
-        selectedPoints[1].position,
-        selectedPoints[2].position
-      );
-      const currentSim3d = createSim3dFromEuler(transform);
-      const composed = composeSim3d(alignTransform, currentSim3d);
-      const composedEuler = sim3dToEuler(composed);
-      setTransform(composedEuler);
-      resetPicking();
-    }
-  }, [pickingMode, selectedPoints, transform, setTransform, resetPicking]);
 
   // Convert radians to degrees for display
   const radToDeg = (rad: number) => rad * (180 / Math.PI);
@@ -777,9 +96,17 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
     setGizmoMode(modes[nextIndex]);
   }, [gizmoMode, setGizmoMode]);
 
+  // Hotkey for toggling transform gizmo
+  useHotkeys(
+    HOTKEYS.toggleGizmo.keys,
+    cycleGizmoMode,
+    { scopes: HOTKEYS.toggleGizmo.scopes },
+    [cycleGizmoMode]
+  );
+
   const gizmoModeLabel = gizmoMode === 'off' ? 'Off' :
                          gizmoMode === 'local' ? 'Local' : 'Global';
-  const gizmoTooltip = `Gizmo: ${gizmoModeLabel}${hasChanges ? ' (dbl-click to apply)' : ''}`;
+  const gizmoTooltip = `Transform (T): ${gizmoModeLabel}${hasChanges ? ' (dbl-click to apply)' : ''}`;
 
   return (
     <ControlButton
@@ -883,18 +210,18 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
           >
             Center at Origin
           </button>
-          <button
-            onClick={() => applyPreset('normalizeScale')}
-            className={styles.presetButton}
-            data-tooltip="Center + scale to ~10 units"
-            data-tooltip-pos="bottom"
-          >
-            Normalize Scale
-          </button>
         </div>
 
         {/* Point picking tools */}
         <div className={styles.presetGroup}>
+          <button
+            onClick={() => setPickingMode(pickingMode === 'origin-1pt' ? 'off' : 'origin-1pt')}
+            className={pickingMode === 'origin-1pt' ? styles.actionButtonPrimary : styles.presetButton}
+            data-tooltip="Click 1 point to set as origin (0,0,0)"
+            data-tooltip-pos="bottom"
+          >
+            1-Point Origin
+          </button>
           <button
             onClick={() => setPickingMode(pickingMode === 'distance-2pt' ? 'off' : 'distance-2pt')}
             className={pickingMode === 'distance-2pt' ? styles.actionButtonPrimary : styles.presetButton}
@@ -949,6 +276,31 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
   );
 });
 
+// Gallery toggle button component
+interface GalleryToggleButtonProps {
+  activePanel: PanelType;
+  setActivePanel: (panel: PanelType) => void;
+}
+
+const GalleryToggleButton = memo(function GalleryToggleButton({ activePanel, setActivePanel }: GalleryToggleButtonProps) {
+  const galleryCollapsed = useUIStore((s) => s.galleryCollapsed);
+  const toggleGalleryCollapsed = useUIStore((s) => s.toggleGalleryCollapsed);
+
+  return (
+    <ControlButton
+      panelId="gallery"
+      activePanel={activePanel}
+      setActivePanel={setActivePanel}
+      icon={
+        galleryCollapsed ? <SidebarExpandIcon className="w-6 h-6" /> : <SidebarCollapseIcon className="w-6 h-6" />
+      }
+      tooltip={galleryCollapsed ? 'Show gallery' : 'Hide gallery'}
+      isActive={!galleryCollapsed}
+      onClick={toggleGalleryCollapsed}
+    />
+  );
+});
+
 export function ViewerControls() {
   const [activePanel, setActivePanel] = useState<PanelType>(null);
 
@@ -983,6 +335,8 @@ export function ViewerControls() {
   const setPointerLock = useCameraStore((s) => s.setPointerLock);
   const frustumColorMode = useCameraStore((s) => s.frustumColorMode);
   const setFrustumColorMode = useCameraStore((s) => s.setFrustumColorMode);
+  const selectedCameraOpacity = useCameraStore((s) => s.selectedCameraOpacity);
+  const setSelectedCameraOpacity = useCameraStore((s) => s.setSelectedCameraOpacity);
   const unselectedCameraOpacity = useCameraStore((s) => s.unselectedCameraOpacity);
   const setUnselectedCameraOpacity = useCameraStore((s) => s.setUnselectedCameraOpacity);
   const cameraProjection = useCameraStore((s) => s.cameraProjection);
@@ -991,6 +345,10 @@ export function ViewerControls() {
   const setCameraFov = useCameraStore((s) => s.setCameraFov);
   const horizonLock = useCameraStore((s) => s.horizonLock);
   const setHorizonLock = useCameraStore((s) => s.setHorizonLock);
+  const autoRotateMode = useCameraStore((s) => s.autoRotateMode);
+  const setAutoRotateMode = useCameraStore((s) => s.setAutoRotateMode);
+  const autoRotateSpeed = useCameraStore((s) => s.autoRotateSpeed);
+  const setAutoRotateSpeed = useCameraStore((s) => s.setAutoRotateSpeed);
 
   // UI settings
   const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
@@ -1356,26 +714,22 @@ export function ViewerControls() {
               { value: 'both', label: 'Axes + Grid' },
             ]}
           />
-          {(axesDisplayMode === 'axes' || axesDisplayMode === 'both') && (
-            <>
-              <SelectRow
-                label="System"
-                value={axesCoordinateSystem}
-                onChange={(v) => setAxesCoordinateSystem(v as AxesCoordinateSystem)}
-                options={[
-                  { value: 'colmap', label: 'COLMAP' },
-                  { value: 'opencv', label: 'OpenCV' },
-                  { value: 'threejs', label: 'Three.js' },
-                  { value: 'opengl', label: 'OpenGL' },
-                  { value: 'vulkan', label: 'Vulkan' },
-                  { value: 'blender', label: 'Blender' },
-                  { value: 'houdini', label: 'Houdini' },
-                  { value: 'unity', label: 'Unity' },
-                  { value: 'unreal', label: 'Unreal' },
-                ]}
-              />
-            </>
-          )}
+          <SelectRow
+            label="System"
+            value={axesCoordinateSystem}
+            onChange={(v) => setAxesCoordinateSystem(v as AxesCoordinateSystem)}
+            options={[
+              { value: 'colmap', label: 'COLMAP' },
+              { value: 'opencv', label: 'OpenCV' },
+              { value: 'threejs', label: 'Three.js' },
+              { value: 'opengl', label: 'OpenGL' },
+              { value: 'vulkan', label: 'Vulkan' },
+              { value: 'blender', label: 'Blender' },
+              { value: 'houdini', label: 'Houdini' },
+              { value: 'unity', label: 'Unity' },
+              { value: 'unreal', label: 'Unreal' },
+            ]}
+          />
           {(axesDisplayMode === 'axes' || axesDisplayMode === 'both') && (
             <>
               <SelectRow
@@ -1466,6 +820,25 @@ export function ViewerControls() {
             />
             <span className={styles.value} />
           </div>
+          <SelectRow
+            label="Auto Rotate"
+            value={autoRotateMode}
+            onChange={(v) => setAutoRotateMode(v as AutoRotateMode)}
+            options={[
+              { value: 'off', label: 'Off' },
+              { value: 'cw', label: 'Clockwise' },
+              { value: 'ccw', label: 'Counter-CW' },
+            ]}
+          />
+          <SliderRow
+            label="Rotate Speed"
+            value={autoRotateSpeed}
+            min={0.1}
+            max={2}
+            step={0.1}
+            onChange={setAutoRotateSpeed}
+            formatValue={(v) => v.toFixed(1)}
+          />
           <div className="text-ds-secondary text-sm mt-3">
             <div className="mb-1 font-medium">Keyboard:</div>
             <div>WASD: Move</div>
@@ -1492,14 +865,10 @@ export function ViewerControls() {
         panelTitle="Background Color (B)"
       >
         <div className={styles.panelContent}>
-          <SliderRow
+          <HueSliderRow
             label="Hue"
             value={hsl.h}
-            min={0}
-            max={360}
-            step={1}
             onChange={handleHueChange}
-            formatValue={(v) => `${Math.round(v)}°`}
           />
           <SliderRow
             label="Saturation"
@@ -1640,7 +1009,16 @@ export function ViewerControls() {
               />
               <SliderRow label="Scale" value={cameraScale} min={0.05} max={1} step={0.05} onChange={setCameraScale} formatValue={(v) => v.toFixed(2)} />
               <SliderRow
-                label="Unselected"
+                label="Selected α"
+                value={selectedCameraOpacity}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={setSelectedCameraOpacity}
+                formatValue={(v) => v.toFixed(2)}
+              />
+              <SliderRow
+                label="Unselected α"
                 value={unselectedCameraOpacity}
                 min={0}
                 max={1}
@@ -1916,6 +1294,15 @@ export function ViewerControls() {
               Config (.yml)
             </button>
           </div>
+          <div className="text-ds-secondary text-sm mt-3">
+            <div className="mb-1 font-medium">Export Options:</div>
+            <div><span className="text-ds-primary">Binary/Text:</span> COLMAP format</div>
+            <div><span className="text-ds-primary">Points:</span> PLY point cloud</div>
+            <div><span className="text-ds-primary">Config:</span> ColmapView settings</div>
+          </div>
+          <div className="text-ds-muted text-xs mt-3 italic">
+            Remember to apply transforms before exporting models.
+          </div>
         </div>
       </ControlButton>
 
@@ -1962,7 +1349,7 @@ export function ViewerControls() {
               </>
             ) : imageLoadMode === 'lazy' ? (
               <>
-                <div className="mb-1 font-medium">Lazy Loading:</div>
+                <div className="mb-1 font-medium">Lazy Loading (recommended):</div>
                 <div>Loads images on demand.</div>
                 <div>Faster startup, may have</div>
                 <div>brief delays when viewing.</div>
@@ -1978,6 +1365,8 @@ export function ViewerControls() {
           </div>
         </div>
       </ControlButton>
+
+      <GalleryToggleButton activePanel={activePanel} setActivePanel={setActivePanel} />
     </div>
   );
 }

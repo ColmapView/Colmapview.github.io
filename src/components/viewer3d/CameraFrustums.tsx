@@ -76,6 +76,7 @@ interface BatchedArrowMeshesProps {
   selectionColorMode: SelectionColorMode;
   selectionColor: string;
   selectionAnimationSpeed: number;
+  selectedCameraOpacity: number;
   unselectedCameraOpacity: number;
 }
 
@@ -92,13 +93,14 @@ function BatchedArrowMeshes({
   selectedImageId,
   hoveredImageId,
   matchedImageIds,
-  matchesOpacity: _matchesOpacity,
+  matchesOpacity,
   matchesDisplayMode,
   matchesColor,
   frustumColorMode,
   selectionColorMode,
   selectionColor,
   selectionAnimationSpeed,
+  selectedCameraOpacity: _selectedCameraOpacity,
   unselectedCameraOpacity,
 }: BatchedArrowMeshesProps) {
   const shaftRef = useRef<THREE.InstancedMesh>(null);
@@ -147,7 +149,6 @@ function BatchedArrowMeshes({
       const isSelected = f.image.imageId === selectedImageId;
       const isHovered = f.image.imageId === hoveredImageId;
       const isMatched = matchedImageIds.has(f.image.imageId);
-      const isDimmed = selectedImageId !== null && !isSelected && !isMatched;
 
       // Hide selected arrow (will show image plane instead)
       if (isSelected) {
@@ -185,9 +186,11 @@ function BatchedArrowMeshes({
           tempColor.set(selectionColor);
         }
       } else if (isMatched) {
-        // Matched cameras use matchesColor
+        // Matched cameras use matchesColor with matchesOpacity as color intensity
+        // (can't do true per-instance transparency with instanced meshes)
+        tempColor.set(matchesColor);
         if (matchesDisplayMode === 'blink') {
-          // Use slight dimming (0.5-1.0) since we can't do true transparency per-instance
+          // Apply blink animation on top of matchesOpacity
           const t = matchesBlinkPhaseRef.current;
           let blinkFactor: number;
           if (t < 0.3) {
@@ -199,11 +202,11 @@ function BatchedArrowMeshes({
           } else {
             blinkFactor = 0;
           }
-          const intensity = 0.5 + 0.5 * blinkFactor;
-          tempColor.set(matchesColor);
+          const intensity = matchesOpacity * (0.1 + 0.9 * blinkFactor);
           tempColor.multiplyScalar(intensity);
         } else {
-          tempColor.set(matchesColor);
+          // Apply matchesOpacity as color intensity
+          tempColor.multiplyScalar(matchesOpacity);
         }
       } else {
         const baseColor = frustumColorMode === 'byCamera'
@@ -212,10 +215,6 @@ function BatchedArrowMeshes({
         tempColor.set(baseColor);
       }
 
-      // Apply dimming
-      if (isDimmed && !isHovered) {
-        tempColor.multiplyScalar(OPACITY.dimmed);
-      }
 
       // Calculate shaft transform - cylinder is Y-aligned, we need to rotate to face camera direction (Z)
       // Camera looks along local +Z, so we rotate from Y to Z
@@ -285,6 +284,7 @@ interface BatchedFrustumLinesProps {
   selectionColorMode: SelectionColorMode;
   selectionColor: string;
   selectionAnimationSpeed: number;
+  selectedCameraOpacity: number;
   unselectedCameraOpacity: number;
   showImagePlanes: boolean;
 }
@@ -302,6 +302,7 @@ function BatchedFrustumLines({
   selectionColorMode,
   selectionColor,
   selectionAnimationSpeed,
+  selectedCameraOpacity,
   unselectedCameraOpacity,
   showImagePlanes,
 }: BatchedFrustumLinesProps) {
@@ -446,7 +447,6 @@ function BatchedFrustumLines({
       const isSelected = f.image.imageId === selectedImageId;
       const isHovered = f.image.imageId === hoveredImageId;
       const isMatched = matchedImageIds.has(f.image.imageId);
-      const isDimmed = selectedImageId !== null && !isSelected && !isMatched;
 
       // Determine color
       if (isHovered) {
@@ -484,9 +484,19 @@ function BatchedFrustumLines({
 
       // Calculate opacity (true alpha, not color darkening)
       // When no camera is selected, use 0.9 opacity for all
-      let opacity = selectedImageId === null ? 0.9 : 1;
-      if (selectedImageId !== null && !isSelected && !isHovered) opacity *= unselectedCameraOpacity;
-      if (isDimmed && !isHovered) opacity *= OPACITY.dimmed;
+      // When a camera is selected, use selectedCameraOpacity for selected, unselectedCameraOpacity for others
+      // Matched cameras use matchesOpacity directly (not affected by unselectedCameraOpacity)
+      let opacity: number;
+      if (selectedImageId === null) {
+        opacity = 0.9;
+      } else if (isSelected || isHovered) {
+        opacity = selectedCameraOpacity;
+      } else if (isMatched) {
+        // Use matches opacity directly, not affected by unselectedCameraOpacity
+        opacity = matchesOpacity;
+      } else {
+        opacity = unselectedCameraOpacity;
+      }
 
       // Apply blink effect via opacity for selected camera
       if (isSelected && selectionColorMode === 'blink') {
@@ -495,23 +505,19 @@ function BatchedFrustumLines({
       }
 
       // Apply blink effect via opacity for matched cameras
-      if (isMatched) {
-        if (matchesDisplayMode === 'blink') {
-          const t = matchesBlinkPhaseRef.current;
-          let blinkFactor: number;
-          if (t < 0.3) {
-            blinkFactor = t / 0.3;
-          } else if (t < 0.6) {
-            blinkFactor = 1;
-          } else if (t < 1.0) {
-            blinkFactor = 1 - (t - 0.6) / 0.4;
-          } else {
-            blinkFactor = 0;
-          }
-          opacity *= 0.1 + 0.9 * blinkFactor;
+      if (isMatched && matchesDisplayMode === 'blink') {
+        const t = matchesBlinkPhaseRef.current;
+        let blinkFactor: number;
+        if (t < 0.3) {
+          blinkFactor = t / 0.3;
+        } else if (t < 0.6) {
+          blinkFactor = 1;
+        } else if (t < 1.0) {
+          blinkFactor = 1 - (t - 0.6) / 0.4;
         } else {
-          opacity *= matchesOpacity;
+          blinkFactor = 0;
         }
+        opacity *= 0.1 + 0.9 * blinkFactor;
       }
 
       // Hide wireframe when image plane is showing for this frustum
@@ -665,6 +671,21 @@ const FrustumPlane = memo(function FrustumPlane({
   // Check if camera controls are dragging (orbit/pan in progress)
   const isDragging = () => controls?.dragging?.current ?? false;
 
+  // Track hover state in a ref for cleanup
+  const hoveredRef = useRef(false);
+  hoveredRef.current = hovered;
+
+  // Clear hover state on unmount to prevent stale hover when selection changes
+  useEffect(() => {
+    return () => {
+      // Only clear hover if this specific component was hovered when it unmounts
+      if (hoveredRef.current) {
+        onHover(null);
+        document.body.style.cursor = '';
+      }
+    };
+  }, [onHover]);
+
   // Load low-res texture for non-selected images (128px)
   const lowResTexture = useFrustumTexture(imageFile, image.name, showImagePlane && !isSelected);
 
@@ -781,7 +802,7 @@ const FrustumPlane = memo(function FrustumPlane({
         position={[0, 0, planeSize.depth]}
         onClick={(e) => { e.stopPropagation(); onClick(image.imageId); }}
         onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick(image.imageId); }}
-        onContextMenu={(e) => { e.stopPropagation(); onContextMenu(image.imageId); }}
+        onContextMenu={(e) => { e.stopPropagation(); e.nativeEvent.preventDefault(); e.nativeEvent.stopPropagation(); onContextMenu(image.imageId); }}
         onPointerOver={(e) => {
           // Ignore hover during camera orbit/pan
           if (isDragging()) return;
@@ -798,7 +819,7 @@ const FrustumPlane = memo(function FrustumPlane({
               setHovered(false);
               setMousePos(null);
               onHover(null);
-              document.body.style.cursor = 'auto';
+              document.body.style.cursor = '';
             }
             return;
           }
@@ -810,7 +831,7 @@ const FrustumPlane = memo(function FrustumPlane({
           setHovered(false);
           setMousePos(null);
           onHover(null);
-          document.body.style.cursor = 'auto';
+          document.body.style.cursor = '';
         }}
       >
         <planeGeometry args={[planeSize.width, planeSize.height]} />
@@ -858,7 +879,7 @@ const FrustumPlane = memo(function FrustumPlane({
                   <path d="M12 2v8"/>
                   <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
                 </svg>
-                {isSelected ? 'Left: info' : 'Left: select'}
+                {isSelected ? 'Left: details' : 'Left: select'}
               </div>
               <div className={hoverCardStyles.hintRow}>
                 <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -866,7 +887,7 @@ const FrustumPlane = memo(function FrustumPlane({
                   <path d="M12 2v8"/>
                   <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
                 </svg>
-                {isMatched ? 'Right: matches' : 'Right: goto'}
+                {isMatched ? 'Right: matches' : 'Right: fly to'}
               </div>
             </div>
           </div>
@@ -921,7 +942,7 @@ const ArrowHitTarget = memo(function ArrowHitTarget({
         rotation={[Math.PI / 2, 0, 0]}
         onClick={(e) => { e.stopPropagation(); onClick(image.imageId); }}
         onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick(image.imageId); }}
-        onContextMenu={(e) => { e.stopPropagation(); onContextMenu(image.imageId); }}
+        onContextMenu={(e) => { e.stopPropagation(); e.nativeEvent.preventDefault(); e.nativeEvent.stopPropagation(); onContextMenu(image.imageId); }}
         onPointerOver={(e) => {
           // Ignore hover during camera orbit/pan
           if (isDragging()) return;
@@ -938,7 +959,7 @@ const ArrowHitTarget = memo(function ArrowHitTarget({
               setHovered(false);
               setMousePos(null);
               onHover(null);
-              document.body.style.cursor = 'auto';
+              document.body.style.cursor = '';
             }
             return;
           }
@@ -950,7 +971,7 @@ const ArrowHitTarget = memo(function ArrowHitTarget({
           setHovered(false);
           setMousePos(null);
           onHover(null);
-          document.body.style.cursor = 'auto';
+          document.body.style.cursor = '';
         }}
       >
         <cylinderGeometry args={[0.025 * scale, 0.025 * scale, depth, 8]} />
@@ -987,7 +1008,7 @@ const ArrowHitTarget = memo(function ArrowHitTarget({
                   <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
                   <text x="18" y="18" fontSize="8" fill="currentColor" stroke="none">2</text>
                 </svg>
-                2xLeft: info
+                2xLeft: details
               </div>
               <div className={hoverCardStyles.hintRow}>
                 <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -995,7 +1016,7 @@ const ArrowHitTarget = memo(function ArrowHitTarget({
                   <path d="M12 2v8"/>
                   <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
                 </svg>
-                {isMatched ? 'Right: matches' : 'Right: goto'}
+                {isMatched ? 'Right: matches' : 'Right: fly to'}
               </div>
             </div>
           </div>
@@ -1095,6 +1116,7 @@ export function CameraFrustums() {
   const selectionAnimationSpeed = useCameraStore((s) => s.selectionAnimationSpeed);
   const imageLoadMode = useUIStore((s) => s.imageLoadMode);
   const frustumColorMode = useCameraStore((s) => s.frustumColorMode);
+  const selectedCameraOpacity = useCameraStore((s) => s.selectedCameraOpacity);
   const unselectedCameraOpacity = useCameraStore((s) => s.unselectedCameraOpacity);
   const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
   const matchesOpacity = useUIStore((s) => s.matchesOpacity);
@@ -1358,6 +1380,7 @@ export function CameraFrustums() {
           selectionColorMode={selectionColorMode}
           selectionColor={selectionColor}
           selectionAnimationSpeed={selectionAnimationSpeed}
+          selectedCameraOpacity={selectedCameraOpacity}
           unselectedCameraOpacity={unselectedCameraOpacity}
         />
         {/* Image plane for selected camera (replaces arrow) */}
@@ -1493,6 +1516,7 @@ export function CameraFrustums() {
         selectionColorMode={selectionColorMode}
         selectionColor={selectionColor}
         selectionAnimationSpeed={selectionAnimationSpeed}
+        selectedCameraOpacity={selectedCameraOpacity}
         unselectedCameraOpacity={unselectedCameraOpacity}
         showImagePlanes={showImagePlanes}
       />
@@ -1501,7 +1525,6 @@ export function CameraFrustums() {
           // Determine frustum color based on mode (for plane fallback color)
           const isSelected = f.image.imageId === selectedImageId;
           const isMatched = matchedImageIds.has(f.image.imageId);
-          const isDimmed = selectedImageId !== null && !isSelected && !isMatched;
           let frustumColor: string;
           if (isSelected) {
             frustumColor = selectionColorMode === 'rainbow' ? VIZ_COLORS.frustum.selected : selectionColor;
@@ -1512,10 +1535,15 @@ export function CameraFrustums() {
           } else {
             frustumColor = VIZ_COLORS.frustum.default;
           }
-          // Compute plane opacity - selected image uses fixed 0.8, others use unselectedCameraOpacity
-          let planeOpacity = isSelected ? 0.8 : imagePlaneOpacity * unselectedCameraOpacity;
-          if (isDimmed) planeOpacity *= OPACITY.dimmed;
-          if (isMatched) planeOpacity *= matchesOpacity;
+          // Compute plane opacity - selected uses selectedCameraOpacity, matched uses matchesOpacity, others use unselectedCameraOpacity
+          let planeOpacity: number;
+          if (isSelected) {
+            planeOpacity = imagePlaneOpacity * selectedCameraOpacity;
+          } else if (isMatched) {
+            planeOpacity = imagePlaneOpacity * matchesOpacity;
+          } else {
+            planeOpacity = imagePlaneOpacity * unselectedCameraOpacity;
+          }
           return (
             <FrustumPlane
               key={f.image.imageId}

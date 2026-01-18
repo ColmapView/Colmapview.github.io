@@ -396,9 +396,52 @@ export function useFileDropzone() {
     e.stopPropagation();
   }, []);
 
+  const scanDirectoryHandle = useCallback(async (
+    dirHandle: FileSystemDirectoryHandle,
+    path: string,
+    files: Map<string, File>
+  ): Promise<void> => {
+    try {
+      for await (const entry of dirHandle.values()) {
+        const fullPath = path ? `${path}/${entry.name}` : entry.name;
+        if (entry.kind === 'file') {
+          const file = await (entry as FileSystemFileHandle).getFile();
+          files.set(fullPath, file);
+        } else if (entry.kind === 'directory') {
+          await scanDirectoryHandle(entry as FileSystemDirectoryHandle, fullPath, files);
+        }
+      }
+    } catch (err) {
+      console.warn(`Failed to scan directory: ${path}`, err);
+    }
+  }, []);
+
+  const handleBrowse = useCallback(async () => {
+    // Check if the File System Access API is supported
+    if (!('showDirectoryPicker' in window)) {
+      setError('Your browser does not support folder selection. Please use drag and drop, or try Chrome/Edge.');
+      return;
+    }
+
+    try {
+      const dirHandle = await window.showDirectoryPicker();
+      const files = new Map<string, File>();
+      await scanDirectoryHandle(dirHandle, '', files);
+      await processFiles(files);
+    } catch (err) {
+      // User cancelled the picker - not an error
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      console.error('Error browsing for folder:', err);
+      setError(err instanceof Error ? err.message : 'Failed to open folder');
+    }
+  }, [scanDirectoryHandle, processFiles, setError]);
+
   return {
     handleDrop,
     handleDragOver,
     processFiles,
+    handleBrowse,
   };
 }

@@ -127,6 +127,12 @@ export const HOTKEYS: HotkeyRegistry = {
     category: 'camera',
     scopes: ['viewer'],
   },
+  toggleGizmo: {
+    keys: 't',
+    description: 'Toggle transform gizmo',
+    category: 'camera',
+    scopes: ['viewer'],
+  },
   moveForward: {
     keys: 'w',
     description: 'Move forward',

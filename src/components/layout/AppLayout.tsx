@@ -1,12 +1,14 @@
-import { Panel, Group, Separator } from 'react-resizable-panels';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { StatusBar } from './StatusBar';
 import { Scene3D } from '../viewer3d';
 import { ImageGallery } from '../gallery/ImageGallery';
 import { ImageDetailModal } from '../modals/ImageDetailModal';
-import { DistanceInputModal } from '../modals/DistanceInputModal';
 import { useHotkeyScope } from '../../hooks/useHotkeyScope';
-import { separatorStyles, mobileMessageStyles, BREAKPOINTS, LAYOUT_PANELS } from '../../theme';
+import { mobileMessageStyles, BREAKPOINTS, LAYOUT_PANELS } from '../../theme';
+import { useUIStore } from '../../store/stores/uiStore';
+
+const MIN_PANEL_WIDTH = 300;
+const MAX_PANEL_WIDTH_PERCENT = 0.6; // 60% of window width
 
 function useIsMobile(breakpoint = BREAKPOINTS.mobile) {
   const [isMobile, setIsMobile] = useState(false);
@@ -22,6 +24,62 @@ function useIsMobile(breakpoint = BREAKPOINTS.mobile) {
   }, [breakpoint]);
 
   return isMobile;
+}
+
+function useResizablePanel(defaultWidthPercent: number) {
+  const [panelWidth, setPanelWidth] = useState(() => {
+    return Math.round(window.innerWidth * (defaultWidthPercent / 100));
+  });
+  const [isResizing, setIsResizing] = useState(false);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+
+      const newWidth = window.innerWidth - e.clientX;
+      const maxWidth = window.innerWidth * MAX_PANEL_WIDTH_PERCENT;
+      const clampedWidth = Math.max(MIN_PANEL_WIDTH, Math.min(maxWidth, newWidth));
+      setPanelWidth(clampedWidth);
+    };
+
+    const handleMouseUp = () => {
+      if (isResizing) {
+        setIsResizing(false);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    };
+
+    if (isResizing) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+  // Adjust panel width when window resizes
+  useEffect(() => {
+    const handleResize = () => {
+      const maxWidth = window.innerWidth * MAX_PANEL_WIDTH_PERCENT;
+      setPanelWidth((prev) => Math.min(prev, maxWidth));
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return { panelWidth, handleMouseDown, isResizing };
 }
 
 function MobileMessage() {
@@ -138,27 +196,44 @@ export function AppLayout() {
   const isMobile = useIsMobile();
   useHotkeyScope(); // Manage hotkey scopes based on modal state
 
+  const galleryCollapsed = useUIStore((s) => s.galleryCollapsed);
+  const { panelWidth, handleMouseDown, isResizing } = useResizablePanel(LAYOUT_PANELS.gallery.defaultSize);
+
   if (isMobile) {
     return <MobileMessage />;
   }
 
   return (
     <div className="h-screen flex flex-col bg-ds-primary">
-      <Group orientation="horizontal" className="flex-1">
-        <Panel defaultSize={LAYOUT_PANELS.viewer.defaultSize} minSize={LAYOUT_PANELS.viewer.minSize}>
+      <div className="flex-1 flex overflow-hidden">
+        {/* 3D Viewer - takes remaining space */}
+        <div className="flex-1 min-w-0">
           <Scene3D />
-        </Panel>
+        </div>
 
-        <Separator className={separatorStyles.vertical} />
+        {/* Resize handle - hairline with hover highlight */}
+        {!galleryCollapsed && (
+          <div
+            className="resize-handle"
+            onMouseDown={handleMouseDown}
+          />
+        )}
 
-        <Panel defaultSize={LAYOUT_PANELS.gallery.defaultSize} minSize={LAYOUT_PANELS.gallery.minSize}>
-          <ImageGallery />
-        </Panel>
-      </Group>
+        {/* Gallery panel with smooth transition (disabled during resize) */}
+        <div
+          className={`overflow-hidden flex-shrink-0 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
+          style={{
+            width: galleryCollapsed ? 0 : panelWidth,
+          }}
+        >
+          <div className="h-full border-l border-ds" style={{ minWidth: `${MIN_PANEL_WIDTH}px` }}>
+            <ImageGallery isResizing={isResizing} />
+          </div>
+        </div>
+      </div>
 
       <StatusBar />
       <ImageDetailModal />
-      <DistanceInputModal />
     </div>
   );
 }
