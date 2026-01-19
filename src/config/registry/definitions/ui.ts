@@ -130,6 +130,16 @@ export const uiSection = defineSection({
       persist: true,
       description: 'prefetch | lazy | skip',
     },
+    // Memory optimization
+    {
+      key: 'liteParserThresholdMB',
+      type: 'number',
+      min: 0,
+      isInt: true,
+      default: 1000,
+      persist: true,
+      description: 'Skip loading 2D points for images.bin larger than this (MB). 0 = always load full data.',
+    },
     // Gizmo
     {
       key: 'gizmoMode',

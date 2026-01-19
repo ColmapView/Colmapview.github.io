@@ -110,6 +110,10 @@ export interface UIState {
   viewTrigger: number;
   imageLoadMode: ImageLoadMode;
 
+  // Memory optimization
+  /** Threshold in MB for using lite parser (0 = always use full parser) */
+  liteParserThresholdMB: number;
+
   // Actions
   openImageDetail: (id: number) => void;
   closeImageDetail: () => void;
@@ -134,6 +138,7 @@ export interface UIState {
   setImageLoadMode: (mode: ImageLoadMode) => void;
   setGalleryCollapsed: (collapsed: boolean) => void;
   toggleGalleryCollapsed: () => void;
+  setLiteParserThresholdMB: (threshold: number) => void;
 
   // Context menu actions
   openContextMenu: (x: number, y: number) => void;
@@ -173,6 +178,7 @@ export const useUIStore = create<UIState>()(
       viewDirection: null,
       viewTrigger: 0,
       imageLoadMode: 'lazy',
+      liteParserThresholdMB: 1000,
 
       openImageDetail: (imageDetailId) => set({ imageDetailId, matchedImageId: null }),
       closeImageDetail: () => set({ imageDetailId: null, matchedImageId: null }),
@@ -200,6 +206,7 @@ export const useUIStore = create<UIState>()(
       setImageLoadMode: (imageLoadMode) => set({ imageLoadMode }),
       setGalleryCollapsed: (galleryCollapsed) => set({ galleryCollapsed }),
       toggleGalleryCollapsed: () => set((state) => ({ galleryCollapsed: !state.galleryCollapsed })),
+      setLiteParserThresholdMB: (liteParserThresholdMB) => set({ liteParserThresholdMB }),
 
       // Context menu actions
       openContextMenu: (x, y) => set({ contextMenuPosition: { x, y } }),
@@ -245,6 +252,7 @@ export const useUIStore = create<UIState>()(
         imageLoadMode: state.imageLoadMode,
         galleryCollapsed: state.galleryCollapsed,
         contextMenuActions: state.contextMenuActions,
+        liteParserThresholdMB: state.liteParserThresholdMB,
       }),
     }
   )

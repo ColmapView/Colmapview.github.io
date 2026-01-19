@@ -407,37 +407,41 @@ export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', label
   const handlePointerOver = useCallback((id: string) => (e: ThreeEvent<PointerEvent>) => {
     // Ignore hover during camera orbit/pan
     if (isDragging()) return;
-    if (!hoveredElement) {
-      setHoveredElement(id);
-      setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
-      document.body.style.cursor = 'pointer';
-    }
+    // Always update hover state - don't block when moving between elements
+    setHoveredElement(id);
+    setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
+    document.body.style.cursor = 'pointer';
     // eslint-disable-next-line react-hooks/exhaustive-deps -- isDragging is called dynamically to get latest drag state
-  }, [hoveredElement]);
+  }, []);
 
   const handlePointerMove = useCallback((e: ThreeEvent<PointerEvent>) => {
     // Clear hover state if dragging started while hovering
     if (isDragging()) {
-      if (hoveredElement) {
-        setHoveredElement(null);
-        setMousePos(null);
-        document.body.style.cursor = '';
-      }
+      setHoveredElement((current) => {
+        if (current) {
+          setMousePos(null);
+          document.body.style.cursor = '';
+        }
+        return null;
+      });
       return;
     }
-    if (hoveredElement) {
-      setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
-    }
+    // Update mouse position if hovering
+    setHoveredElement((current) => {
+      if (current) {
+        setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
+      }
+      return current;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- isDragging is called dynamically to get latest drag state
-  }, [hoveredElement]);
+  }, []);
 
-  const handlePointerOut = useCallback((id: string) => () => {
-    if (hoveredElement === id) {
-      setHoveredElement(null);
-      setMousePos(null);
-      document.body.style.cursor = '';
-    }
-  }, [hoveredElement]);
+  // Unconditionally clear hover state on pointer out (like CameraFrustums)
+  const handlePointerOut = useCallback(() => {
+    setHoveredElement(null);
+    setMousePos(null);
+    document.body.style.cursor = '';
+  }, []);
 
   // Left-click: show labels menu
   const handleClick = useCallback((e: ThreeEvent<MouseEvent>) => {
@@ -508,7 +512,7 @@ export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', label
             isHovered={hoveredElement === id}
             onPointerOver={handlePointerOver(id)}
             onPointerMove={handlePointerMove}
-            onPointerOut={handlePointerOut(id)}
+            onPointerOut={handlePointerOut}
             onClick={handleClick}
             onContextMenu={handleContextMenu}
           />
@@ -531,7 +535,7 @@ export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', label
             isHovered={hoveredElement === id}
             onPointerOver={handlePointerOver(id)}
             onPointerMove={handlePointerMove}
-            onPointerOut={handlePointerOut(id)}
+            onPointerOut={handlePointerOut}
             onClick={handleClick}
             onContextMenu={handleContextMenu}
           />
@@ -559,7 +563,7 @@ export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', label
             isHovered={hoveredElement === id}
             onPointerOver={handlePointerOver(id)}
             onPointerMove={handlePointerMove}
-            onPointerOut={handlePointerOut(id)}
+            onPointerOut={handlePointerOut}
             onClick={handleClick}
             onContextMenu={handleContextMenu}
           />

@@ -540,26 +540,31 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
 
   // Hover handlers for gizmo elements (like OriginVisualization)
   const handleGizmoPointerOver = useCallback((axis: GizmoAxis, mode: GizmoMode) => (e: ThreeEvent<PointerEvent>) => {
-    if (!dragging && !hoveredAxis) {
+    if (!dragging) {
+      // Always update hover state - don't block when moving between elements
       setHoveredAxis(axis);
       setHoveredMode(mode);
       setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
     }
-  }, [dragging, hoveredAxis]);
+  }, [dragging]);
 
   const handleGizmoPointerMove = useCallback((e: ThreeEvent<PointerEvent>) => {
-    if (hoveredAxis) {
-      setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
-    }
-  }, [hoveredAxis]);
+    setHoveredAxis((current) => {
+      if (current) {
+        setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
+      }
+      return current;
+    });
+  }, []);
 
-  const handleGizmoPointerOut = useCallback((axis: GizmoAxis, mode: GizmoMode) => () => {
-    if (!dragging && hoveredAxis === axis && hoveredMode === mode) {
+  // Unconditionally clear hover state on pointer out
+  const handleGizmoPointerOut = useCallback(() => {
+    if (!dragging) {
       setHoveredAxis(null);
       setHoveredMode(null);
       setMousePos(null);
     }
-  }, [dragging, hoveredAxis, hoveredMode]);
+  }, [dragging]);
 
   return (
     <group ref={groupRef} position={center} quaternion={coordinateMode === 'local' ? localRotation : undefined}>
@@ -572,7 +577,7 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
         onPointerDown={handlePointerDown('x', 'translate')}
         onPointerOver={handleGizmoPointerOver('x', 'translate')}
         onPointerMove={handleGizmoPointerMove}
-        onPointerOut={handleGizmoPointerOut('x', 'translate')}
+        onPointerOut={handleGizmoPointerOut}
         onContextMenu={handleContextMenu}
       />
       <TranslationArrow
@@ -583,7 +588,7 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
         onPointerDown={handlePointerDown('y', 'translate')}
         onPointerOver={handleGizmoPointerOver('y', 'translate')}
         onPointerMove={handleGizmoPointerMove}
-        onPointerOut={handleGizmoPointerOut('y', 'translate')}
+        onPointerOut={handleGizmoPointerOut}
         onContextMenu={handleContextMenu}
       />
       <TranslationArrow
@@ -594,7 +599,7 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
         onPointerDown={handlePointerDown('z', 'translate')}
         onPointerOver={handleGizmoPointerOver('z', 'translate')}
         onPointerMove={handleGizmoPointerMove}
-        onPointerOut={handleGizmoPointerOut('z', 'translate')}
+        onPointerOut={handleGizmoPointerOut}
         onContextMenu={handleContextMenu}
       />
 
@@ -607,7 +612,7 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
         onPointerDown={handlePointerDown('x', 'rotate')}
         onPointerOver={handleGizmoPointerOver('x', 'rotate')}
         onPointerMove={handleGizmoPointerMove}
-        onPointerOut={handleGizmoPointerOut('x', 'rotate')}
+        onPointerOut={handleGizmoPointerOut}
         onContextMenu={handleContextMenu}
       />
       <RotationArc
@@ -618,7 +623,7 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
         onPointerDown={handlePointerDown('y', 'rotate')}
         onPointerOver={handleGizmoPointerOver('y', 'rotate')}
         onPointerMove={handleGizmoPointerMove}
-        onPointerOut={handleGizmoPointerOut('y', 'rotate')}
+        onPointerOut={handleGizmoPointerOut}
         onContextMenu={handleContextMenu}
       />
       <RotationArc
@@ -629,7 +634,7 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
         onPointerDown={handlePointerDown('z', 'rotate')}
         onPointerOver={handleGizmoPointerOver('z', 'rotate')}
         onPointerMove={handleGizmoPointerMove}
-        onPointerOut={handleGizmoPointerOut('z', 'rotate')}
+        onPointerOut={handleGizmoPointerOut}
         onContextMenu={handleContextMenu}
       />
 

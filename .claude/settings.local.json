@@ -38,7 +38,19 @@
       "Bash(Get-Content \"C:\\\\Users\\\\HEQ\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-HEQ-Projects-colmap-webview-colmap-webview\\\\tasks\\\\bf20852.output\" -Tail 20)",
       "Bash(ls:*)",
       "Bash(netstat:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(git tag:*)",
+      "Bash(powershell.exe -Command \"Get-ChildItem -Path ''C:\\\\Users\\\\HEQ\\\\Downloads\\\\test\\\\new\\\\large-test'' -Recurse | Measure-Object -Property Length -Sum | ForEach-Object { ''{0} files, {1:N2} MB'' -f $_Count, \\($_Sum/1MB\\) }\")",
+      "Bash(dir:*)",
+      "Bash(powershell.exe -NoProfile -Command \"\\(Get-ChildItem ''C:\\\\Users\\\\HEQ\\\\Downloads\\\\test\\\\new\\\\large-test'' -Recurse -File | Measure-Object -Property Length -Sum\\).Sum / 1MB\")",
+      "Bash(powershell.exe -NoProfile -Command \"\\(Get-ChildItem ''C:\\\\Users\\\\HEQ\\\\Downloads\\\\test\\\\new\\\\large-test'' -Recurse -File\\).Count\")",
+      "Bash(powershell.exe -NoProfile -Command \"Get-ChildItem ''C:\\\\Users\\\\HEQ\\\\Downloads\\\\test\\\\new\\\\large-test'' -Recurse -File | Where-Object {$_Name -match ''points3d|images\\\\.bin|cameras''} | Select-Object Name, @{N=''MB'';E={[math]::Round\\($_Length/1MB,2\\)}}\")",
+      "Bash(powershell.exe -NoProfile -Command \"Get-ChildItem ''C:\\\\Users\\\\HEQ\\\\Downloads\\\\test\\\\new\\\\large-test'' -Recurse -File | ForEach-Object { Write-Host $_Name ''='' \\([math]::Round\\($_Length/1MB,2\\)\\) ''MB'' }\")",
+      "Bash(gh run view:*)",
+      "Bash(curl:*)",
+      "Bash(gh workflow run:*)",
+      "Bash(gh run watch:*)",
+      "Bash(gh api:*)"
     ]
   }
 }

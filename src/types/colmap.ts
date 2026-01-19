@@ -87,6 +87,10 @@ export interface ImageStats {
 // Maps imageId -> Map<connectedImageId, matchCount>
 export type ConnectedImagesIndex = Map<ImageId, Map<ImageId, number>>;
 
+// Pre-computed reverse mapping from imageId to the 3D points it observes
+// Used for point highlighting without requiring points2D to be loaded
+export type ImageToPoint3DIdsMap = Map<ImageId, Set<Point3DId>>;
+
 // Pre-computed global statistics for the entire reconstruction (computed once at load time)
 export interface GlobalStats {
   // Error statistics across all 3D points
@@ -110,6 +114,8 @@ export interface Reconstruction {
   imageStats: Map<ImageId, ImageStats>;
   connectedImagesIndex: ConnectedImagesIndex;
   globalStats: GlobalStats;
+  /** Reverse mapping from imageId to observed 3D point IDs (for highlighting) */
+  imageToPoint3DIds: ImageToPoint3DIdsMap;
   rigData?: RigData;
 }
 

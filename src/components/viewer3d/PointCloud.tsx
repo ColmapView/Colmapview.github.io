@@ -89,17 +89,13 @@ export function PointCloud() {
       return { positions: null, colors: null, selectedPositions: null, selectedColors: null };
     }
 
-    // Build set of selected image point IDs
-    const selectedImagePointIds = new Set<bigint>();
+    // Build set of selected image point IDs (use pre-computed mapping for memory efficiency)
+    let selectedImagePointIds: Set<bigint>;
     if (selectedImageId !== null) {
-      const selectedImage = reconstruction.images.get(selectedImageId);
-      if (selectedImage) {
-        for (const p2d of selectedImage.points2D) {
-          if (p2d.point3DId !== BigInt(-1)) {
-            selectedImagePointIds.add(p2d.point3DId);
-          }
-        }
-      }
+      // Use pre-computed imageToPoint3DIds mapping (works with lite parser too)
+      selectedImagePointIds = reconstruction.imageToPoint3DIds.get(selectedImageId) ?? new Set();
+    } else {
+      selectedImagePointIds = new Set();
     }
 
     // SINGLE PASS: filter, compute stats, and categorize simultaneously

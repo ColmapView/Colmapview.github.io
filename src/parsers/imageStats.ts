@@ -1,4 +1,4 @@
-import type { Image, Point3D, ImageStats, ConnectedImagesIndex, GlobalStats } from '../types/colmap';
+import type { Image, Point3D, ImageStats, ConnectedImagesIndex, GlobalStats, Point3DId, ImageId } from '../types/colmap';
 
 interface InternalImageStats {
   numPoints3D: number;
@@ -6,6 +6,12 @@ interface InternalImageStats {
   errorCount: number;
   covisibleSet: Set<number>;
 }
+
+/**
+ * Maps each image to the set of 3D point IDs it observes.
+ * Computed from points3D tracks, used for highlighting when points2D is not available.
+ */
+export type ImageToPoint3DIdsMap = Map<ImageId, Set<Point3DId>>;
 
 /**
  * Computes pre-computed statistics for all images and global reconstruction stats
@@ -16,7 +22,12 @@ interface InternalImageStats {
 export function computeImageStats(
   images: Map<number, Image>,
   points3D: Map<bigint, Point3D>
-): { imageStats: Map<number, ImageStats>; connectedImagesIndex: ConnectedImagesIndex; globalStats: GlobalStats } {
+): {
+  imageStats: Map<number, ImageStats>;
+  connectedImagesIndex: ConnectedImagesIndex;
+  globalStats: GlobalStats;
+  imageToPoint3DIds: ImageToPoint3DIdsMap;
+} {
   // Initialize stats for all images
   const internalStats = new Map<number, InternalImageStats>();
   for (const imageId of images.keys()) {
@@ -32,6 +43,12 @@ export function computeImageStats(
   const connectedImagesIndex: ConnectedImagesIndex = new Map();
   for (const imageId of images.keys()) {
     connectedImagesIndex.set(imageId, new Map());
+  }
+
+  // Initialize image to point3D IDs mapping (for highlighting without points2D)
+  const imageToPoint3DIds: ImageToPoint3DIdsMap = new Map();
+  for (const imageId of images.keys()) {
+    imageToPoint3DIds.set(imageId, new Set());
   }
 
   // Initialize global stats accumulators
@@ -76,6 +93,12 @@ export function computeImageStats(
             stat.covisibleSet.add(otherId);
           }
         }
+      }
+
+      // Build reverse mapping: imageId -> set of point3D IDs it observes
+      const point3DSet = imageToPoint3DIds.get(trackElem.imageId);
+      if (point3DSet) {
+        point3DSet.add(point3D.point3DId);
       }
     }
 
@@ -122,5 +145,5 @@ export function computeImageStats(
     totalPoints,
   };
 
-  return { imageStats, connectedImagesIndex, globalStats };
+  return { imageStats, connectedImagesIndex, globalStats, imageToPoint3DIds };
 }

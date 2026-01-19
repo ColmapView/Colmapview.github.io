@@ -4,6 +4,7 @@ import {
   parsePoints3DText,
   parseImagesBinary,
   parseImagesText,
+  parseImagesBinaryLite,
   parseCamerasBinary,
   parseCamerasText,
   parseRigsBinary,
@@ -269,13 +270,31 @@ export function useFileDropzone() {
 
       setProgress(10);
 
+      // Check if we should use lite parsing for large images.bin files
+      const liteParserThresholdMB = useUIStore.getState().liteParserThresholdMB;
+      const fileSizeMB = imagesFile.size / 1024 / 1024;
+      const useLiteImages = imagesFile.name.endsWith('.bin') &&
+        liteParserThresholdMB > 0 &&
+        fileSizeMB >= liteParserThresholdMB;
+
+      if (useLiteImages) {
+        console.log(`[Memory] Using lite parser for large images.bin (${fileSizeMB.toFixed(0)}MB >= ${liteParserThresholdMB}MB threshold)`);
+        useNotificationStore.getState().addNotification(
+          'info',
+          `Memory optimization: Skipping 2D point data for large images.bin (${fileSizeMB.toFixed(0)}MB). Some features like keypoint overlay may be limited.`,
+          8000
+        );
+      }
+
       // Parse all COLMAP files in parallel for faster loading
       const [cameras, images, points3D] = await Promise.all([
         camerasFile.name.endsWith('.bin')
           ? camerasFile.arrayBuffer().then(parseCamerasBinary)
           : camerasFile.text().then(parseCamerasText),
         imagesFile.name.endsWith('.bin')
-          ? imagesFile.arrayBuffer().then(parseImagesBinary)
+          ? (useLiteImages
+            ? imagesFile.arrayBuffer().then(parseImagesBinaryLite)
+            : imagesFile.arrayBuffer().then(parseImagesBinary))
           : imagesFile.text().then(parseImagesText),
         points3DFile.name.endsWith('.bin')
           ? points3DFile.arrayBuffer().then(parsePoints3DBinary)
@@ -284,8 +303,8 @@ export function useFileDropzone() {
 
       setProgress(35);
 
-      // Pre-compute image statistics, connected images index, and global stats
-      const { imageStats, connectedImagesIndex, globalStats } = computeImageStats(images, points3D);
+      // Pre-compute image statistics, connected images index, global stats, and point mapping
+      const { imageStats, connectedImagesIndex, globalStats, imageToPoint3DIds } = computeImageStats(images, points3D);
 
       setProgress(40);
 
@@ -308,7 +327,7 @@ export function useFileDropzone() {
         }
       }
 
-      const reconstruction: Reconstruction = { cameras, images, points3D, imageStats, connectedImagesIndex, globalStats, rigData };
+      const reconstruction: Reconstruction = { cameras, images, points3D, imageStats, connectedImagesIndex, globalStats, imageToPoint3DIds, rigData };
 
       // Clear caches AFTER parsing succeeds to prevent broken state on error
       // This ensures old reconstruction remains functional if new data fails to load

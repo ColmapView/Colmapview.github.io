@@ -590,6 +590,8 @@ interface FrustumPlaneProps {
   cullAngleThreshold?: number; // Cosine of angle threshold for culling (default: COS_45_DEG)
   undistortionEnabled?: boolean;
   undistortionMode?: 'cropped' | 'fullFrame';
+  /** Pre-computed count of matched 3D points (from imageStats) */
+  numPoints3D: number;
   onHover: (id: number | null) => void;
   onClick: (imageId: number) => void;
   onDoubleClick: (imageId: number) => void;
@@ -611,6 +613,7 @@ const FrustumPlane = memo(function FrustumPlane({
   cullAngleThreshold = COS_45_DEG,
   undistortionEnabled = false,
   undistortionMode = 'fullFrame',
+  numPoints3D,
   onHover,
   onClick,
   onDoubleClick,
@@ -792,7 +795,6 @@ const FrustumPlane = memo(function FrustumPlane({
     }
   });
 
-  const numPoints = image.points2D.filter(p => p.point3DId !== BigInt(-1)).length;
   const displayColor = hovered ? VIZ_COLORS.frustum.hover : color;
 
   return (
@@ -912,7 +914,7 @@ const FrustumPlane = memo(function FrustumPlane({
           <div className={hoverCardStyles.container}>
             <div className={hoverCardStyles.title}>{image.name}</div>
             <div className={hoverCardStyles.subtitle}>#{image.imageId}</div>
-            <div className={hoverCardStyles.subtitle}>{numPoints} points</div>
+            <div className={hoverCardStyles.subtitle}>{numPoints3D} points</div>
             <div className={hoverCardStyles.hint}>
               {isSelected && cameraProjection === 'perspective' && (
                 <div className={hoverCardStyles.hintRow}>
@@ -954,6 +956,8 @@ interface ArrowHitTargetProps {
   image: Image;
   scale: number;
   isMatched?: boolean;
+  /** Pre-computed count of matched 3D points (from imageStats) */
+  numPoints3D: number;
   onHover: (id: number | null) => void;
   onClick: (imageId: number) => void;
   onDoubleClick: (imageId: number) => void;
@@ -966,6 +970,7 @@ const ArrowHitTarget = memo(function ArrowHitTarget({
   image,
   scale,
   isMatched = false,
+  numPoints3D,
   onHover,
   onClick,
   onDoubleClick,
@@ -980,8 +985,6 @@ const ArrowHitTarget = memo(function ArrowHitTarget({
   const isDragging = () => controls?.dragging?.current ?? false;
 
   const depth = scale;
-
-  const numPoints = image.points2D.filter(p => p.point3DId !== BigInt(-1)).length;
 
   return (
     <group position={position} quaternion={quaternion}>
@@ -1039,7 +1042,7 @@ const ArrowHitTarget = memo(function ArrowHitTarget({
           <div className={hoverCardStyles.container}>
             <div className={hoverCardStyles.title}>{image.name}</div>
             <div className={hoverCardStyles.subtitle}>#{image.imageId}</div>
-            <div className={hoverCardStyles.subtitle}>{numPoints} points</div>
+            <div className={hoverCardStyles.subtitle}>{numPoints3D} points</div>
             <div className={hoverCardStyles.hint}>
               <div className={hoverCardStyles.hintRow}>
                 <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1250,6 +1253,7 @@ export function CameraFrustums() {
       quaternion: THREE.Quaternion;
       imageFile?: File;
       cameraIndex: number;
+      numPoints3D: number;
     }[] = [];
 
     for (const image of reconstruction.images.values()) {
@@ -1263,6 +1267,7 @@ export function CameraFrustums() {
         quaternion: getImageWorldQuaternion(image),
         imageFile: getImageFile(imageFiles, image.name),
         cameraIndex: cameraIdToIndex.get(image.cameraId) ?? 0,
+        numPoints3D: reconstruction.imageStats.get(image.imageId)?.numPoints3D ?? 0,
       });
     }
 
@@ -1400,6 +1405,7 @@ export function CameraFrustums() {
             color={selectionColorMode === 'rainbow' ? VIZ_COLORS.frustum.selected : selectionColor}
             undistortionEnabled={undistortionEnabled}
             undistortionMode={undistortionMode}
+            numPoints3D={selectedFrustum.numPoints3D}
             onHover={setHoveredImageId}
             onClick={handleArrowClick}
             onDoubleClick={handleArrowDoubleClick}
@@ -1418,6 +1424,7 @@ export function CameraFrustums() {
               image={f.image}
               scale={cameraScale}
               isMatched={matchedImageIds.has(f.image.imageId)}
+              numPoints3D={f.numPoints3D}
               onHover={setHoveredImageId}
               onClick={handleArrowClick}
               onDoubleClick={handleArrowDoubleClick}
@@ -1489,6 +1496,7 @@ export function CameraFrustums() {
               cullAngleThreshold={COS_90_DEG}
               undistortionEnabled={undistortionEnabled}
               undistortionMode={undistortionMode}
+              numPoints3D={f.numPoints3D}
               onHover={setHoveredImageId}
               onClick={handleArrowClick}
               onDoubleClick={handleArrowDoubleClick}
@@ -1565,6 +1573,7 @@ export function CameraFrustums() {
               color={frustumColor}
               undistortionEnabled={undistortionEnabled}
               undistortionMode={undistortionMode}
+              numPoints3D={f.numPoints3D}
               onHover={setHoveredImageId}
               onClick={handleArrowClick}
               onDoubleClick={handleArrowDoubleClick}
@@ -1619,15 +1628,18 @@ export function CameraMatches() {
     const selectedPos = getImageWorldPosition(selectedImage);
     const matchedImageIds = new Set<number>();
 
-    for (const point2D of selectedImage.points2D) {
-      if (point2D.point3DId === BigInt(-1)) continue;
+    // Use pre-computed imageToPoint3DIds instead of iterating through points2D
+    // This works with lite parser that doesn't load points2D
+    const selectedPoint3DIds = reconstruction.imageToPoint3DIds.get(selectedImageId);
+    if (selectedPoint3DIds) {
+      for (const point3DId of selectedPoint3DIds) {
+        const point3D = reconstruction.points3D.get(point3DId);
+        if (!point3D) continue;
 
-      const point3D = reconstruction.points3D.get(point2D.point3DId);
-      if (!point3D) continue;
-
-      for (const trackElem of point3D.track) {
-        if (trackElem.imageId !== selectedImageId) {
-          matchedImageIds.add(trackElem.imageId);
+        for (const trackElem of point3D.track) {
+          if (trackElem.imageId !== selectedImageId) {
+            matchedImageIds.add(trackElem.imageId);
+          }
         }
       }
     }

@@ -386,6 +386,8 @@ export function ViewerControls() {
   const setView = useUIStore((s) => s.setView);
   const imageLoadMode = useUIStore((s) => s.imageLoadMode);
   const setImageLoadMode = useUIStore((s) => s.setImageLoadMode);
+  const liteParserThresholdMB = useUIStore((s) => s.liteParserThresholdMB);
+  const setLiteParserThresholdMB = useUIStore((s) => s.setLiteParserThresholdMB);
   const openContextMenuEditor = useUIStore((s) => s.openContextMenuEditor);
 
   // Export settings
@@ -1484,6 +1486,25 @@ export function ViewerControls() {
             {imageLoadMode === 'prefetch' ? 'Load all images upfront' :
              imageLoadMode === 'lazy' ? 'Load images on demand (recommended)' :
              'No images loaded'}
+          </div>
+          <div className={styles.row}>
+            <label className={styles.label}>Lite Parser</label>
+            <div className="flex items-center gap-1 flex-1">
+              <input
+                type="number"
+                min="0"
+                step="50"
+                value={liteParserThresholdMB}
+                onChange={(e) => setLiteParserThresholdMB(Math.max(0, parseInt(e.target.value) || 0))}
+                className="bg-ds-tertiary text-ds-primary text-sm px-2 py-0.5 rounded border border-ds w-14 text-right"
+              />
+              <span className="text-ds-muted text-sm">MB</span>
+            </div>
+          </div>
+          <div className="text-ds-secondary text-xs mt-1 mb-3">
+            {liteParserThresholdMB === 0
+              ? 'Always load full 2D keypoint data'
+              : `Skip 2D keypoints for images.bin > ${liteParserThresholdMB}MB`}
           </div>
           <div className={styles.actionGroup}>
             <button

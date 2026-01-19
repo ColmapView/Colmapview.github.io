@@ -15,6 +15,8 @@ export function DropZone({ children }: DropZoneProps) {
   const { loading, progress, error, setError, reconstruction } = useReconstructionStore();
   const imageLoadMode = useUIStore((s) => s.imageLoadMode);
   const setImageLoadMode = useUIStore((s) => s.setImageLoadMode);
+  const liteParserThresholdMB = useUIStore((s) => s.liteParserThresholdMB);
+  const setLiteParserThresholdMB = useUIStore((s) => s.setLiteParserThresholdMB);
 
   useEffect(() => {
     if (error) {
@@ -100,19 +102,33 @@ export function DropZone({ children }: DropZoneProps) {
               <div className="info-line px-2 rounded text-ds-muted/70">Without source images: point cloud and cameras only, no textures</div>
             </div>
             <div
-              className="mt-4 flex items-center gap-3"
+              className="mt-4 flex items-center gap-4 flex-wrap justify-center"
               onClick={(e) => e.stopPropagation()}
             >
-              <label className="text-ds-secondary text-sm">Image Loading:</label>
-              <select
-                value={imageLoadMode}
-                onChange={(e) => setImageLoadMode(e.target.value as ImageLoadMode)}
-                className="bg-ds-tertiary text-ds-primary text-sm px-3 py-1.5 rounded border border-ds cursor-pointer"
-              >
-                <option value="prefetch">Prefetch</option>
-                <option value="lazy">Lazy</option>
-                <option value="skip">Skip</option>
-              </select>
+              <div className="flex items-center gap-2">
+                <label className="text-ds-secondary text-sm">Images:</label>
+                <select
+                  value={imageLoadMode}
+                  onChange={(e) => setImageLoadMode(e.target.value as ImageLoadMode)}
+                  className="bg-ds-tertiary text-ds-primary text-sm px-2 py-1 rounded border border-ds cursor-pointer"
+                >
+                  <option value="prefetch">Prefetch</option>
+                  <option value="lazy">Lazy</option>
+                  <option value="skip">Skip</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2" title="Skip 2D keypoints for large images.bin to save memory. 0 = always load full data.">
+                <label className="text-ds-secondary text-sm">Lite Parser:</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="50"
+                  value={liteParserThresholdMB}
+                  onChange={(e) => setLiteParserThresholdMB(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="bg-ds-tertiary text-ds-primary text-sm px-2 py-1 rounded border border-ds w-16 text-right"
+                />
+                <span className="text-ds-muted text-sm">MB</span>
+              </div>
             </div>
           </div>
         </div>
