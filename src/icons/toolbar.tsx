@@ -390,3 +390,24 @@ export function RigOffIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+// Rig blink icon - 3 camera frustums with dotted connecting lines
+export function RigBlinkIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      {/* Top camera frustum */}
+      <rect x="8" y="1" width="5" height="4" rx="0.5" />
+      <path d="M13 2.5l2.5-1v4l-2.5-1z" />
+      {/* Bottom-left camera frustum */}
+      <rect x="1" y="16" width="5" height="4" rx="0.5" />
+      <path d="M6 17.5l2.5-1v4l-2.5-1z" />
+      {/* Bottom-right camera frustum */}
+      <rect x="15" y="16" width="5" height="4" rx="0.5" />
+      <path d="M20 17.5l2.5-1v4l-2.5-1z" />
+      {/* Dotted connecting lines forming triangle */}
+      <line x1="10" y1="5" x2="4" y2="16" strokeWidth="1.5" strokeDasharray="2 2" />
+      <line x1="11" y1="5" x2="17" y2="16" strokeWidth="1.5" strokeDasharray="2 2" />
+      <line x1="6" y1="18" x2="15" y2="18" strokeWidth="1.5" strokeDasharray="2 2" />
+    </svg>
+  );
+}

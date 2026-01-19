@@ -70,6 +70,7 @@ export {
   SidebarCollapseIcon,
   RigIcon,
   RigOffIcon,
+  RigBlinkIcon,
 } from './toolbar';
 
 // Context menu icons (ReactElement format for use in action definitions)

@@ -43,6 +43,7 @@ import {
   SidebarCollapseIcon,
   RigIcon,
   RigOffIcon,
+  RigBlinkIcon,
   SettingsIcon,
 } from '../../icons';
 
@@ -1315,7 +1316,7 @@ export function ViewerControls() {
         setActivePanel={setActivePanel}
         icon={
           <HoverIcon
-            icon={rigDisplayMode === 'off' || !hasRigData ? <RigOffIcon className="w-6 h-6" /> : <RigIcon className="w-6 h-6" />}
+            icon={rigDisplayMode === 'off' || !hasRigData ? <RigOffIcon className="w-6 h-6" /> : rigDisplayMode === 'blink' ? <RigBlinkIcon className="w-6 h-6" /> : <RigIcon className="w-6 h-6" />}
             label={!hasRigData ? 'N/A' : rigDisplayMode === 'off' ? 'OFF' : rigDisplayMode === 'blink' ? 'BLK' : 'RIG'}
           />
         }
