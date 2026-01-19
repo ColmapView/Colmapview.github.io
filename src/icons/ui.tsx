@@ -57,6 +57,16 @@ export function ReloadIcon({ className }: IconProps) {
   );
 }
 
+// Upload icon (arrow up into tray)
+export function UploadIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 15V3M12 3l-4 4M12 3l4 4" />
+      <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+    </svg>
+  );
+}
+
 // Off / Disabled icon (circle with slash)
 export function OffIcon({ className }: IconProps) {
   return (

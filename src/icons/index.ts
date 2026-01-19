@@ -21,6 +21,7 @@ export {
   CheckIcon,
   ResetIcon,
   ReloadIcon,
+  UploadIcon,
   OffIcon,
   HideIcon,
   SettingsIcon,

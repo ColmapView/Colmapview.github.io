@@ -1,8 +1,11 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { useReconstructionStore, useUIStore } from '../../store';
+import { STORAGE_KEYS } from '../../store/migration';
+import { parseConfigYaml, applyConfigurationToStores } from '../../config/configuration';
 import type { ImageLoadMode } from '../../store/types';
 import { TIMING, buttonStyles, loadingStyles, toastStyles, dragOverlayStyles, emptyStateStyles } from '../../theme';
+import { ResetIcon, UploadIcon } from '../../icons';
 
 interface DropZoneProps {
   children: React.ReactNode;
@@ -17,6 +20,45 @@ export function DropZone({ children }: DropZoneProps) {
   const setImageLoadMode = useUIStore((s) => s.setImageLoadMode);
   const liteParserThresholdMB = useUIStore((s) => s.liteParserThresholdMB);
   const setLiteParserThresholdMB = useUIStore((s) => s.setLiteParserThresholdMB);
+  const configInputRef = useRef<HTMLInputElement>(null);
+
+  // Reset all persisted configuration to defaults
+  const handleResetConfig = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm('Reset all settings to defaults? This will clear your saved preferences.')) {
+      Object.values(STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
+      window.location.reload();
+    }
+  }, []);
+
+  // Upload and apply configuration from YAML file
+  const handleConfigUpload = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    configInputRef.current?.click();
+  }, []);
+
+  const handleConfigFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const content = await file.text();
+      const result = parseConfigYaml(content);
+
+      if (result.valid && result.config) {
+        applyConfigurationToStores(result.config);
+        console.log(`[Config] Applied settings from ${file.name}`);
+      } else {
+        const errorMessages = result.errors.map(err => err.path ? `${err.path}: ${err.message}` : err.message).join(', ');
+        setError(`Config error: ${errorMessages}`);
+      }
+    } catch (err) {
+      setError(`Config error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+
+    // Reset input so same file can be selected again
+    e.target.value = '';
+  }, [setError]);
 
   useEffect(() => {
     if (error) {
@@ -79,12 +121,39 @@ export function DropZone({ children }: DropZoneProps) {
             className="relative flex flex-col items-center justify-center p-8 text-center bg-ds-secondary rounded-lg cursor-pointer border border-ds"
             onClick={handleBrowse}
           >
+            {/* Hidden file input for config upload */}
+            <input
+              ref={configInputRef}
+              type="file"
+              accept=".yaml,.yml"
+              className="hidden"
+              onChange={handleConfigFileChange}
+            />
+            {/* Top-left buttons: Reset and Upload Config */}
+            <div className="absolute top-2 left-2 flex gap-1">
+              <button
+                className="w-8 h-8 flex items-center justify-center text-ds-muted hover-ds-text-primary hover-bg-white-10 rounded transition-colors"
+                onClick={handleResetConfig}
+                title="Reset all settings to defaults"
+              >
+                <ResetIcon className="w-4 h-4" />
+              </button>
+              <button
+                className="w-8 h-8 flex items-center justify-center text-ds-muted hover-ds-text-primary hover-bg-white-10 rounded transition-colors"
+                onClick={handleConfigUpload}
+                title="Upload configuration file (.yaml)"
+              >
+                <UploadIcon className="w-4 h-4" />
+              </button>
+            </div>
+            {/* Top-right dismiss button */}
             <button
               className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center text-ds-muted hover-ds-text-primary hover-bg-white-10 rounded transition-colors"
               onClick={(e) => {
                 e.stopPropagation();
                 setIsPanelDismissed(true);
               }}
+              title="Dismiss this panel"
             >
               ×
             </button>
