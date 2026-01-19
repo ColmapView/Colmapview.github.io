@@ -8,6 +8,7 @@ import type {
   FrustumColorMode,
   SelectionColorMode,
   AutoRotateMode,
+  UndistortionMode,
 } from '../types';
 
 export interface CameraState {
@@ -15,7 +16,6 @@ export interface CameraState {
   cameraDisplayMode: CameraDisplayMode;
   cameraScale: number;
   frustumColorMode: FrustumColorMode;
-  selectedCameraOpacity: number;
   unselectedCameraOpacity: number;
 
   // Navigation
@@ -35,14 +35,17 @@ export interface CameraState {
   selectionColor: string;
   selectionAnimationSpeed: number;
 
-  // Image planes (used in 'imageplane' display mode)
-  imagePlaneOpacity: number;
+  // Selection planes (opacity of selected camera's image plane)
+  selectionPlaneOpacity: number;
+
+  // Undistortion
+  undistortionEnabled: boolean;
+  undistortionMode: UndistortionMode;
 
   // Actions
   setCameraDisplayMode: (mode: CameraDisplayMode) => void;
   setCameraScale: (scale: number) => void;
   setFrustumColorMode: (mode: FrustumColorMode) => void;
-  setSelectedCameraOpacity: (opacity: number) => void;
   setUnselectedCameraOpacity: (opacity: number) => void;
   setCameraMode: (mode: CameraMode) => void;
   setCameraProjection: (projection: CameraProjection) => void;
@@ -59,7 +62,9 @@ export interface CameraState {
   setSelectionColorMode: (mode: SelectionColorMode) => void;
   setSelectionColor: (color: string) => void;
   setSelectionAnimationSpeed: (speed: number) => void;
-  setImagePlaneOpacity: (opacity: number) => void;
+  setSelectionPlaneOpacity: (opacity: number) => void;
+  setUndistortionEnabled: (enabled: boolean) => void;
+  setUndistortionMode: (mode: UndistortionMode) => void;
 }
 
 export const useCameraStore = create<CameraState>()(
@@ -68,7 +73,6 @@ export const useCameraStore = create<CameraState>()(
       cameraDisplayMode: 'frustum',
       cameraScale: 0.25,
       frustumColorMode: 'byCamera',
-      selectedCameraOpacity: 1.0,
       unselectedCameraOpacity: 0.5,
       cameraMode: 'orbit',
       cameraProjection: 'perspective',
@@ -83,12 +87,13 @@ export const useCameraStore = create<CameraState>()(
       selectionColorMode: 'rainbow',
       selectionColor: '#00ff00',
       selectionAnimationSpeed: 2,
-      imagePlaneOpacity: 0.9,
+      selectionPlaneOpacity: 1.0,
+      undistortionEnabled: false,
+      undistortionMode: 'fullFrame',
 
       setCameraDisplayMode: (cameraDisplayMode) => set({ cameraDisplayMode }),
       setCameraScale: (cameraScale) => set({ cameraScale }),
       setFrustumColorMode: (frustumColorMode) => set({ frustumColorMode }),
-      setSelectedCameraOpacity: (selectedCameraOpacity) => set({ selectedCameraOpacity }),
       setUnselectedCameraOpacity: (unselectedCameraOpacity) => set({ unselectedCameraOpacity }),
       setCameraMode: (cameraMode) => set({ cameraMode }),
       setCameraProjection: (cameraProjection) => set({ cameraProjection }),
@@ -108,7 +113,9 @@ export const useCameraStore = create<CameraState>()(
       setSelectionColorMode: (selectionColorMode) => set({ selectionColorMode }),
       setSelectionColor: (selectionColor) => set({ selectionColor }),
       setSelectionAnimationSpeed: (selectionAnimationSpeed) => set({ selectionAnimationSpeed }),
-      setImagePlaneOpacity: (imagePlaneOpacity) => set({ imagePlaneOpacity }),
+      setSelectionPlaneOpacity: (selectionPlaneOpacity) => set({ selectionPlaneOpacity }),
+      setUndistortionEnabled: (undistortionEnabled) => set({ undistortionEnabled }),
+      setUndistortionMode: (undistortionMode) => set({ undistortionMode }),
     }),
     {
       name: STORAGE_KEYS.camera,
@@ -117,7 +124,6 @@ export const useCameraStore = create<CameraState>()(
         cameraDisplayMode: state.cameraDisplayMode,
         cameraScale: state.cameraScale,
         frustumColorMode: state.frustumColorMode,
-        selectedCameraOpacity: state.selectedCameraOpacity,
         unselectedCameraOpacity: state.unselectedCameraOpacity,
         cameraMode: state.cameraMode,
         cameraProjection: state.cameraProjection,
@@ -130,7 +136,9 @@ export const useCameraStore = create<CameraState>()(
         selectionColorMode: state.selectionColorMode,
         selectionColor: state.selectionColor,
         selectionAnimationSpeed: state.selectionAnimationSpeed,
-        imagePlaneOpacity: state.imagePlaneOpacity,
+        selectionPlaneOpacity: state.selectionPlaneOpacity,
+        undistortionEnabled: state.undistortionEnabled,
+        undistortionMode: state.undistortionMode,
       }),
     }
   )

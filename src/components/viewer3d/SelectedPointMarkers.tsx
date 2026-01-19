@@ -1,29 +1,21 @@
-import { useMemo, useCallback, useState } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
-import { Html, Line } from '@react-three/drei';
-import { type ThreeEvent } from '@react-three/fiber';
+import { Html } from '@react-three/drei';
 import { usePointPickingStore, usePointCloudStore, useUIStore } from '../../store';
-import { hoverCardStyles, ICON_SIZES } from '../../theme';
-import type { AxesCoordinateSystem } from '../../store/types';
-
-// Get the axis label for the "up" direction based on coordinate system
-function getUpAxisLabel(coordinateSystem: AxesCoordinateSystem): string {
-  // Z-up systems: Blender, Unreal
-  if (coordinateSystem === 'blender' || coordinateSystem === 'unreal') {
-    return 'Z';
-  }
-  // Y-vertical systems (most common)
-  return 'Y';
-}
+import { hoverCardStyles } from '../../theme';
+import { getDefaultUpAxis } from '../../store/stores/pointPickingStore';
 
 // Colors for markers: P1=red, P2=green, P3=blue
 const MARKER_COLORS = [0xff4444, 0x44ff44, 0x4444ff];
-const MARKER_COLOR_STRINGS = ['#ff4444', '#44ff44', '#4444ff']; // For Text component
 const HOVER_COLOR = 0xffff00; // Yellow highlight on hover (matches gizmo)
-const HOVER_COLOR_STRING = '#ffff00';
-const NORMAL_COLOR = 0x00ff00; // Green for normal arrow
-const NORMAL_COLOR_STRING = '#00ff00';
 const MARKER_SIZE = 0.012; // Relative to scene (smaller for cleaner look)
+
+// Axis colors: X=red, Y=green, Z=blue
+const AXIS_COLORS: Record<string, { hex: number; css: string }> = {
+  X: { hex: 0xff4444, css: '#ff4444' },
+  Y: { hex: 0x44ff44, css: '#44ff44' },
+  Z: { hex: 0x4444ff, css: '#4444ff' },
+};
 
 /** Single point highlight for hover preview - simple static marker */
 function HoverHighlight({ position, baseSize }: { position: THREE.Vector3; baseSize: number }) {
@@ -56,78 +48,52 @@ function HoverHighlight({ position, baseSize }: { position: THREE.Vector3; baseS
 export function SelectedPointMarkers() {
   const selectedPoints = usePointPickingStore((s) => s.selectedPoints);
   const pickingMode = usePointPickingStore((s) => s.pickingMode);
-  const hoveredPoint = usePointPickingStore((s) => s.hoveredPoint);
   const removePointAt = usePointPickingStore((s) => s.removePointAt);
   const normalFlipped = usePointPickingStore((s) => s.normalFlipped);
   const toggleNormalFlipped = usePointPickingStore((s) => s.toggleNormalFlipped);
+  const targetAxis = usePointPickingStore((s) => s.targetAxis);
+  const cycleTargetAxis = usePointPickingStore((s) => s.cycleTargetAxis);
+  const setTargetAxis = usePointPickingStore((s) => s.setTargetAxis);
   const pointSize = usePointCloudStore((s) => s.pointSize);
   const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
 
-  // Get axis label for the "up" direction based on selected coordinate system
-  const upAxisLabel = getUpAxisLabel(axesCoordinateSystem);
+  // Set default target axis when entering 3-point mode (based on coordinate system)
+  const prevPickingModeRef = useRef(pickingMode);
+  useEffect(() => {
+    // Only set default when first entering 3-point mode, not on coordinate system changes
+    if (pickingMode === 'normal-3pt' && prevPickingModeRef.current !== 'normal-3pt') {
+      const defaultAxis = getDefaultUpAxis(axesCoordinateSystem);
+      setTargetAxis(defaultAxis);
+    }
+    prevPickingModeRef.current = pickingMode;
+  }, [pickingMode, axesCoordinateSystem, setTargetAxis]);
+
+  // Get axis color
+  const axisColor = AXIS_COLORS[targetAxis];
+
+  // Calculate if we need more points before subscribing to hoveredPoint
+  const requiredPoints = pickingMode === 'origin-1pt' ? 1 : pickingMode === 'distance-2pt' ? 2 : pickingMode === 'normal-3pt' ? 3 : 0;
+  const needsMorePoints = selectedPoints.length < requiredPoints;
+
+  // Only subscribe to hoveredPoint when we actually need it (reduces re-renders)
+  const hoveredPoint = usePointPickingStore((s) => needsMorePoints ? s.hoveredPoint : null);
 
   // Hover state for tooltips
   const [hoveredMarker, setHoveredMarker] = useState<number | null>(null);
   const [hoveredNormal, setHoveredNormal] = useState(false);
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
 
-  // Right-click on a marker to remove that point
-  const handleMarkerRightClick = useCallback((index: number) => (e: ThreeEvent<MouseEvent>) => {
-    e.stopPropagation();
-    removePointAt(index);
-  }, [removePointAt]);
 
-  // Click on normal arrow to flip direction
-  const handleNormalClick = useCallback((e: ThreeEvent<MouseEvent>) => {
-    e.stopPropagation();
-    toggleNormalFlipped();
-  }, [toggleNormalFlipped]);
-
-  // Marker hover handlers
-  const handleMarkerPointerOver = useCallback((index: number) => (e: ThreeEvent<PointerEvent>) => {
-    setHoveredMarker(index);
-    setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
-  }, []);
-
-  const handleMarkerPointerMove = useCallback((e: ThreeEvent<PointerEvent>) => {
-    if (hoveredMarker !== null) {
-      setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
-    }
-  }, [hoveredMarker]);
-
-  const handleMarkerPointerOut = useCallback(() => {
-    setHoveredMarker(null);
-    setMousePos(null);
-  }, []);
-
-  // Normal arrow hover handlers
-  const handleNormalPointerOver = useCallback((e: ThreeEvent<PointerEvent>) => {
-    setHoveredNormal(true);
-    setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
-  }, []);
-
-  const handleNormalPointerMove = useCallback((e: ThreeEvent<PointerEvent>) => {
-    if (hoveredNormal) {
-      setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
-    }
-  }, [hoveredNormal]);
-
-  const handleNormalPointerOut = useCallback(() => {
-    setHoveredNormal(false);
-    setMousePos(null);
-  }, []);
-
-  // Compute marker size based on bounding box of selected points
+  // Compute marker size based on distance between points
   const markerSize = useMemo(() => {
     if (selectedPoints.length < 2) {
-      // For single point, use a larger visible size so P1 shows immediately
-      // Use 0.05 as a reasonable default that's visible in most scenes
-      return 0.05;
+      // For single point, use a small consistent size
+      return 0.015;
     }
 
     // Use distance between first two points to scale markers
     const dist = selectedPoints[0].position.distanceTo(selectedPoints[1].position);
-    return Math.max(MARKER_SIZE, dist * 0.02);
+    return Math.max(MARKER_SIZE, dist * 0.015);
   }, [selectedPoints]);
 
   // Compute triangle normal for 3-point mode visualization
@@ -181,213 +147,125 @@ export function SelectedPointMarkers() {
     return { start: centroid, end: arrowEnd, quaternion, coneHeight, coneRadius, normal, trianglePositions };
   }, [selectedPoints, pickingMode, normalFlipped]);
 
-  // Get index of the next point to be selected
-  const nextPointIndex = selectedPoints.length;
+  // Memoize line object for connecting points
+  const connectingLine = useMemo(() => {
+    if (selectedPoints.length < 2) return null;
 
-  // Check if we still need more points
-  const requiredPoints = pickingMode === 'origin-1pt' ? 1 : pickingMode === 'distance-2pt' ? 2 : pickingMode === 'normal-3pt' ? 3 : 0;
-  const needsMorePoints = nextPointIndex < requiredPoints;
+    const positions: number[] = [];
+    for (const p of selectedPoints) {
+      positions.push(p.position.x, p.position.y, p.position.z);
+    }
+    // Close triangle for 3-point mode
+    if (pickingMode === 'normal-3pt' && selectedPoints.length === 3) {
+      positions.push(selectedPoints[0].position.x, selectedPoints[0].position.y, selectedPoints[0].position.z);
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    const mat = new THREE.LineBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.8, depthTest: false });
+    return new THREE.Line(geo, mat);
+  }, [selectedPoints, pickingMode]);
+
+  // Memoize normal arrow line object (uses axis color)
+  const normalLine = useMemo(() => {
+    if (!normalArrow) return null;
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array([
+      normalArrow.start.x, normalArrow.start.y, normalArrow.start.z,
+      normalArrow.end.x, normalArrow.end.y, normalArrow.end.z,
+    ]);
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    const mat = new THREE.LineBasicMaterial({ color: axisColor.hex, depthTest: false });
+    return new THREE.Line(geo, mat);
+  }, [normalArrow, axisColor.hex]);
+
+  // Shared sphere geometry for markers (created once via useMemo to avoid impure render-time initialization)
+  const sphereGeometry = useMemo(() => new THREE.SphereGeometry(1, 8, 8), []);
 
   if (selectedPoints.length === 0 && !hoveredPoint) return null;
 
-  // Build line points for connecting selected points
-  const linePoints = selectedPoints.map(p => p.position);
-
-  // For 3-point mode, close the triangle
-  const trianglePoints = pickingMode === 'normal-3pt' && selectedPoints.length === 3
-    ? [...linePoints, linePoints[0]]
-    : linePoints;
-
   return (
     <group>
-      {/* Marker spheres at each selected point */}
+      {/* Marker spheres - using shared geometry */}
       {selectedPoints.map((point, index) => (
-        <group key={index} position={point.position}>
-          {/* Sphere marker - right-click to remove, hover for tooltip */}
-          <mesh
-            onContextMenu={handleMarkerRightClick(index)}
-            onPointerOver={handleMarkerPointerOver(index)}
-            onPointerMove={handleMarkerPointerMove}
-            onPointerOut={handleMarkerPointerOut}
-          >
-            <sphereGeometry args={[markerSize, 8, 8]} />
-            <meshBasicMaterial
-              color={hoveredMarker === index ? HOVER_COLOR : MARKER_COLORS[index]}
-              transparent
-              opacity={hoveredMarker === index ? 1 : 0.9}
-              depthTest={false}
-            />
-          </mesh>
-          {/* Simple Html label - much lighter than Text/Billboard */}
-          <Html
-            position={[0, markerSize * 1.5, 0]}
-            center
-            style={{ pointerEvents: 'none' }}
-          >
-            <div
-              className="text-xs font-bold select-none"
-              style={{
-                color: hoveredMarker === index ? HOVER_COLOR_STRING : MARKER_COLOR_STRINGS[index],
-                textShadow: '0 0 3px black, 0 0 3px black',
-              }}
-            >
-              P{index + 1}
-            </div>
-          </Html>
-        </group>
-      ))}
-
-      {/* Line connecting points */}
-      {selectedPoints.length >= 2 && (
-        <Line
-          points={trianglePoints}
-          color="#ffff00"
-          lineWidth={2}
-          transparent
-          opacity={0.8}
-          depthTest={false}
-        />
-      )}
-
-      {/* Normal arrow for 3-point mode - click to flip direction */}
-      {normalArrow && (
-        <>
-          {/* Invisible triangle hit area for the plane */}
-          <mesh
-            onClick={handleNormalClick}
-            onPointerOver={handleNormalPointerOver}
-            onPointerMove={handleNormalPointerMove}
-            onPointerOut={handleNormalPointerOut}
-          >
-            <bufferGeometry>
-              <bufferAttribute
-                attach="attributes-position"
-                args={[normalArrow.trianglePositions, 3]}
-              />
-            </bufferGeometry>
-            <meshBasicMaterial color={hoveredNormal ? HOVER_COLOR : NORMAL_COLOR} transparent opacity={0.2} side={THREE.DoubleSide} depthTest={false} />
-          </mesh>
-          <Line
-            points={[normalArrow.start, normalArrow.end]}
-            color={hoveredNormal ? HOVER_COLOR : NORMAL_COLOR}
-            lineWidth={hoveredNormal ? 4 : 3}
+        <mesh
+          key={index}
+          position={point.position}
+          scale={markerSize}
+          geometry={sphereGeometry}
+          onContextMenu={(e) => { e.stopPropagation(); e.nativeEvent.stopPropagation(); e.nativeEvent.preventDefault(); removePointAt(index); }}
+          onPointerOver={(e) => { setHoveredMarker(index); setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY }); }}
+          onPointerOut={() => { setHoveredMarker(null); setMousePos(null); }}
+        >
+          <meshBasicMaterial
+            color={hoveredMarker === index ? HOVER_COLOR : MARKER_COLORS[index]}
+            transparent
+            opacity={0.9}
             depthTest={false}
           />
-          {/* Arrowhead cone - visual only, click handled by invisible hit area */}
+        </mesh>
+      ))}
+
+      {/* Line connecting points - native Three.js line */}
+      {connectingLine && <primitive object={connectingLine} />}
+
+      {/* Normal arrow for 3-point mode */}
+      {normalArrow && normalLine && (
+        <>
+          {/* Triangle fill */}
+          <mesh
+            onClick={(e) => { e.stopPropagation(); toggleNormalFlipped(); }}
+            onContextMenu={(e) => { e.stopPropagation(); e.nativeEvent.preventDefault(); cycleTargetAxis(axesCoordinateSystem); }}
+            onPointerOver={(e) => { setHoveredNormal(true); setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY }); }}
+            onPointerOut={() => { setHoveredNormal(false); setMousePos(null); }}
+          >
+            <bufferGeometry>
+              <bufferAttribute attach="attributes-position" args={[normalArrow.trianglePositions, 3]} />
+            </bufferGeometry>
+            <meshBasicMaterial color={hoveredNormal ? HOVER_COLOR : axisColor.hex} transparent opacity={hoveredNormal ? 0.3 : 0.15} side={THREE.DoubleSide} depthTest={false} />
+          </mesh>
+
+          {/* Normal line */}
+          <primitive object={normalLine} />
+
+          {/* Arrowhead cone */}
           <mesh
             position={normalArrow.end}
             quaternion={normalArrow.quaternion}
+            onClick={(e) => { e.stopPropagation(); toggleNormalFlipped(); }}
+            onContextMenu={(e) => { e.stopPropagation(); e.nativeEvent.preventDefault(); cycleTargetAxis(axesCoordinateSystem); }}
           >
-            <coneGeometry args={[normalArrow.coneRadius, normalArrow.coneHeight, 12]} />
-            <meshBasicMaterial
-              color={hoveredNormal ? HOVER_COLOR : NORMAL_COLOR}
-              depthTest={false}
-            />
+            <coneGeometry args={[normalArrow.coneRadius, normalArrow.coneHeight, 8]} />
+            <meshBasicMaterial color={axisColor.hex} depthTest={false} />
           </mesh>
-          {/* Invisible hit area along the arrow shaft */}
-          <mesh
-            position={[
-              (normalArrow.start.x + normalArrow.end.x) / 2,
-              (normalArrow.start.y + normalArrow.end.y) / 2,
-              (normalArrow.start.z + normalArrow.end.z) / 2,
-            ]}
-            quaternion={normalArrow.quaternion}
-            onClick={handleNormalClick}
-            onPointerOver={handleNormalPointerOver}
-            onPointerMove={handleNormalPointerMove}
-            onPointerOut={handleNormalPointerOut}
-          >
-            <cylinderGeometry args={[normalArrow.coneRadius * 3, normalArrow.coneRadius * 3, normalArrow.start.distanceTo(normalArrow.end) * 1.2, 8]} />
-            <meshBasicMaterial transparent opacity={0} depthTest={false} />
-          </mesh>
-          {/* Axis label above arrowhead - simple Html label */}
-          <Html
-            position={[
-              normalArrow.end.x + normalArrow.normal.x * normalArrow.coneHeight * 1.5,
-              normalArrow.end.y + normalArrow.normal.y * normalArrow.coneHeight * 1.5,
-              normalArrow.end.z + normalArrow.normal.z * normalArrow.coneHeight * 1.5,
-            ]}
-            center
-            style={{ pointerEvents: 'none' }}
-          >
-            <div
-              className="text-sm font-bold select-none"
-              style={{
-                color: hoveredNormal ? HOVER_COLOR_STRING : NORMAL_COLOR_STRING,
-                textShadow: '0 0 3px black, 0 0 3px black',
-              }}
-            >
-              {upAxisLabel}
-            </div>
-          </Html>
         </>
       )}
 
-      {/* Hover highlight - shows preview of next point to be selected */}
+      {/* Hover highlight */}
       {hoveredPoint && needsMorePoints && (
-        <HoverHighlight
-          position={hoveredPoint}
-          baseSize={pointSize}
-        />
+        <HoverHighlight position={hoveredPoint} baseSize={pointSize} />
       )}
 
-      {/* Hover tooltip for markers */}
+      {/* Tooltip for marker hover */}
       {hoveredMarker !== null && mousePos && (
-        <Html
-          style={{
-            position: 'fixed',
-            left: mousePos.x + 12,
-            top: mousePos.y + 12,
-            pointerEvents: 'none',
-            transform: 'none',
-          }}
-          calculatePosition={() => [0, 0]}
-        >
+        <Html style={{ position: 'fixed', left: mousePos.x + 12, top: mousePos.y + 12, pointerEvents: 'none', transform: 'none' }} calculatePosition={() => [0, 0]}>
           <div className={hoverCardStyles.container}>
             <div className={hoverCardStyles.title}>P{hoveredMarker + 1}</div>
-            <div className={hoverCardStyles.hint}>
-              <div className={hoverCardStyles.hintRow}>
-                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="6" y="2" width="12" height="20" rx="6"/>
-                  <path d="M12 2v8"/>
-                  <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
-                </svg>
-                Right: remove
-              </div>
-            </div>
+            <div className={hoverCardStyles.subtitle}>Right-click to remove</div>
           </div>
         </Html>
       )}
 
-      {/* Hover tooltip for normal arrow */}
+      {/* Tooltip for triangle hover */}
       {hoveredNormal && mousePos && (
-        <Html
-          style={{
-            position: 'fixed',
-            left: mousePos.x + 12,
-            top: mousePos.y + 12,
-            pointerEvents: 'none',
-            transform: 'none',
-          }}
-          calculatePosition={() => [0, 0]}
-        >
+        <Html style={{ position: 'fixed', left: mousePos.x + 12, top: mousePos.y + 12, pointerEvents: 'none', transform: 'none' }} calculatePosition={() => [0, 0]}>
           <div className={hoverCardStyles.container}>
-            <div className={hoverCardStyles.title}>Normal (Y-axis)</div>
-            <div className={hoverCardStyles.hint}>
-              <div className={hoverCardStyles.hintRow}>
-                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="6" y="2" width="12" height="20" rx="6"/>
-                  <path d="M12 2v8"/>
-                  <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
-                </svg>
-                Left: flip direction
-              </div>
-            </div>
+            <div className={hoverCardStyles.title} style={{ color: axisColor.css }}>{targetAxis}-axis</div>
+            <div className={hoverCardStyles.subtitle}>Left: flip · Right: X/Y/Z</div>
           </div>
         </Html>
       )}
 
-      {/* Confirmation popup is rendered by DistanceInputModal outside the canvas for better performance */}
     </group>
   );
 }

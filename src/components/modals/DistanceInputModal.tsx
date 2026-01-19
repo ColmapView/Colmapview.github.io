@@ -3,8 +3,8 @@ import * as THREE from 'three';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { usePointPickingStore, useTransformStore, useUIStore } from '../../store';
 import { computeDistanceScale, computeNormalAlignment, computeOriginTranslation, sim3dToEuler, composeSim3d, createSim3dFromEuler } from '../../utils/sim3dTransforms';
-import { getWorldUp } from '../viewer3d/OriginVisualization';
-import { controlPanelStyles } from '../../theme';
+import { COORDINATE_SYSTEMS } from '../../utils/coordinateSystems';
+import { controlPanelStyles, modalStyles } from '../../theme';
 
 /**
  * Confirmation popup for point picking tools.
@@ -24,6 +24,7 @@ export function DistanceInputModal() {
   const pickingMode = usePointPickingStore((s) => s.pickingMode);
   const clearSelectedPoints = usePointPickingStore((s) => s.clearSelectedPoints);
   const normalFlipped = usePointPickingStore((s) => s.normalFlipped);
+  const targetAxis = usePointPickingStore((s) => s.targetAxis);
   const reset = usePointPickingStore((s) => s.reset);
   const transform = useTransformStore((s) => s.transform);
   const setTransform = useTransformStore((s) => s.setTransform);
@@ -32,11 +33,14 @@ export function DistanceInputModal() {
   const is1PointMode = pickingMode === 'origin-1pt';
   const is3PointMode = pickingMode === 'normal-3pt';
 
-  // Get target up direction based on selected coordinate system
+  // Get target direction based on selected axis and coordinate system
+  // Maps the axis name (X, Y, Z) to the actual direction vector in the coordinate system
   const targetUp = useMemo(() => {
-    const up = getWorldUp(axesCoordinateSystem);
-    return new THREE.Vector3(up[0], up[1], up[2]);
-  }, [axesCoordinateSystem]);
+    const system = COORDINATE_SYSTEMS[axesCoordinateSystem];
+    const axisKey = targetAxis.toLowerCase() as 'x' | 'y' | 'z';
+    const direction = system[axisKey];
+    return new THREE.Vector3(direction[0], direction[1], direction[2]);
+  }, [axesCoordinateSystem, targetAxis]);
 
   const [inputValue, setInputValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -89,26 +93,27 @@ export function DistanceInputModal() {
     }
   }, [showDistanceModal]);
 
-  // Initialize input with current distance
+  // Initialize input with current distance when modal opens
   useEffect(() => {
     if (showDistanceModal && currentDistance !== null) {
       setInputValue(currentDistance.toFixed(4));
     }
-  }, [showDistanceModal, currentDistance]);
-
-  // Close with Escape - cancels picking mode
-  useHotkeys(
-    'escape',
-    () => handleCancel(),
-    { enabled: showDistanceModal },
-    [showDistanceModal]
-  );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only initialize on modal open, not when currentDistance changes
+  }, [showDistanceModal]);
 
   // Cancel: exit picking mode entirely
   const handleCancel = useCallback(() => {
     setShowDistanceModal(false);
     reset();
   }, [setShowDistanceModal, reset]);
+
+  // Close with Escape - cancels picking mode
+  useHotkeys(
+    'escape',
+    () => handleCancel(),
+    { enabled: showDistanceModal },
+    [showDistanceModal, handleCancel]
+  );
 
   // Retry: clear points but stay in picking mode
   const handleRetry = useCallback(() => {
@@ -203,7 +208,7 @@ export function DistanceInputModal() {
           {/* Confirm button (tick) */}
           <button
             onClick={handleApply}
-            className="p-0.5 text-green-400 hover:text-green-300 transition-colors flex items-center"
+            className={modalStyles.iconButtonConfirm}
             title="Confirm"
           >
             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -213,7 +218,7 @@ export function DistanceInputModal() {
           {/* Retry button - clear points but stay in mode */}
           <button
             onClick={handleRetry}
-            className="p-0.5 text-yellow-400 hover:text-yellow-300 transition-colors flex items-center"
+            className={modalStyles.iconButtonRetry}
             title="Retry"
           >
             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -224,7 +229,7 @@ export function DistanceInputModal() {
           {/* Cancel button (X) - exit picking mode */}
           <button
             onClick={handleCancel}
-            className="p-0.5 text-red-400 hover:text-red-300 transition-colors flex items-center"
+            className={modalStyles.iconButtonCancel}
             title="Cancel"
           >
             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

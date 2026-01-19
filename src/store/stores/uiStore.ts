@@ -36,8 +36,10 @@ export type ContextMenuAction =
   | 'deselectAll'
   | 'flyToSelected'
   | 'toggleImagePlanes'
+  | 'toggleUndistort'
   // Transform
   | 'toggleGizmo'
+  | 'centerAtOrigin'
   | 'onePointOrigin'
   | 'twoPointScale'
   | 'threePointAlign'
@@ -100,6 +102,7 @@ export interface UIState {
   // Context menu (persisted config + transient state)
   contextMenuActions: ContextMenuAction[];
   contextMenuPosition: { x: number; y: number } | null;
+  showContextMenuEditor: boolean;
 
   // Transient
   viewResetTrigger: number;
@@ -138,6 +141,8 @@ export interface UIState {
   setContextMenuActions: (actions: ContextMenuAction[]) => void;
   addContextMenuAction: (action: ContextMenuAction) => void;
   removeContextMenuAction: (action: ContextMenuAction) => void;
+  openContextMenuEditor: () => void;
+  closeContextMenuEditor: () => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -163,6 +168,7 @@ export const useUIStore = create<UIState>()(
       galleryCollapsed: false,
       contextMenuActions: DEFAULT_CONTEXT_MENU_ACTIONS,
       contextMenuPosition: null,
+      showContextMenuEditor: false,
       viewResetTrigger: 0,
       viewDirection: null,
       viewTrigger: 0,
@@ -207,6 +213,8 @@ export const useUIStore = create<UIState>()(
       removeContextMenuAction: (action) => set((state) => ({
         contextMenuActions: state.contextMenuActions.filter((a) => a !== action),
       })),
+      openContextMenuEditor: () => set({ showContextMenuEditor: true }),
+      closeContextMenuEditor: () => set({ showContextMenuEditor: false }),
     }),
     {
       name: STORAGE_KEYS.ui,

@@ -37,6 +37,27 @@ export const HOTKEYS: HotkeyRegistry = {
     scopes: ['global'],
     preventDefault: true,
   },
+  showJoke: {
+    keys: 'shift+z',
+    description: 'Show random COLMAP joke',
+    category: 'general',
+    scopes: ['viewer'],
+    preventDefault: true,
+  },
+  showJokePersistent: {
+    keys: 'ctrl+shift+z',
+    description: 'Show random COLMAP joke (persistent)',
+    category: 'general',
+    scopes: ['viewer'],
+    preventDefault: true,
+  },
+  resetGuide: {
+    keys: 'shift+0',
+    description: 'Reset guide tips',
+    category: 'general',
+    scopes: ['viewer'],
+    preventDefault: true,
+  },
 
   // === MODAL ===
   closeModal: {
@@ -130,6 +151,12 @@ export const HOTKEYS: HotkeyRegistry = {
   toggleGizmo: {
     keys: 't',
     description: 'Toggle transform gizmo',
+    category: 'camera',
+    scopes: ['viewer'],
+  },
+  toggleUndistortion: {
+    keys: 'u',
+    description: 'Toggle image undistortion',
     category: 'camera',
     scopes: ['viewer'],
   },

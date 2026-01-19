@@ -236,6 +236,7 @@ export function useFrustumTexture(
 
   useEffect(() => {
     if (!enabled || !cachedUrl) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Async texture loading pattern with setState
       setTexture(null);
       return;
     }
@@ -244,6 +245,7 @@ export function useFrustumTexture(
     const tex = getOrCreateTexture(cachedUrl, imageName);
     if (tex) {
       urlRef.current = cachedUrl;
+       
       setTexture(tex);
       return;
     }
@@ -254,6 +256,7 @@ export function useFrustumTexture(
       if (cancelled || !bitmap) return;
       const newTex = createTextureFromBitmap(bitmap, imageName);
       urlRef.current = cachedUrl;
+       
       setTexture(newTex);
     });
 
@@ -297,12 +300,14 @@ export function useSelectedImageTexture(
 
   useEffect(() => {
     if (!isSelected || !imageFile) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Async texture loading pattern with setState
       setTexture(null);
       return;
     }
 
     // Check if we already have this image loaded at high-res
     if (selectedImageTexture?.name === imageName) {
+       
       setTexture(selectedImageTexture.texture);
       return;
     }
@@ -327,9 +332,11 @@ export function useSelectedImageTexture(
       tex.needsUpdate = true;
 
       selectedImageTexture = { name: imageName, texture: tex };
+       
       setTexture(tex);
     }).catch(() => {
       // Fall back to low-res on error
+       
       setTexture(null);
     });
 

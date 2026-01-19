@@ -13,6 +13,9 @@ export { useUIStore, type UIState, type ViewDirection, type ContextMenuAction, D
 export { useExportStore, type ExportState } from './stores/exportStore';
 export { useTransformStore, type TransformState } from './stores/transformStore';
 export { usePointPickingStore, type PointPickingState, type PointPickingMode, type SelectedPoint, type ModalPosition } from './stores/pointPickingStore';
+export { useRigStore, type RigState } from './stores/rigStore';
+export { useNotificationStore, type NotificationState, type NotificationType, type Notification } from './stores/notificationStore';
+export { useGuideStore, type GuideState } from './stores/guideStore';
 
 // Types and constants
 export type {
@@ -31,6 +34,7 @@ export type {
   ScreenshotSize,
   ScreenshotFormat,
   ExportFormat,
+  RigDisplayMode,
 } from './types';
 
 export {
@@ -41,6 +45,7 @@ export {
   CAMERA_DISPLAY_MODES,
   MATCHES_DISPLAY_MODES,
   SELECTION_COLOR_MODES,
+  RIG_DISPLAY_MODES,
 } from './types';
 
 // Migration utilities

@@ -1,10 +1,10 @@
 import { useRef, useEffect, useMemo } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useReconstructionStore, useCameraStore, useTransformStore, useUIStore } from '../../store';
+import { useReconstructionStore, useCameraStore, useTransformStore, useUIStore, usePointPickingStore } from '../../store';
 import { getImageWorldPose } from '../../utils/colmapTransforms';
 import { createSim3dFromEuler } from '../../utils/sim3dTransforms';
-import { getWorldUp } from './OriginVisualization';
+import { getWorldUp } from '../../utils/coordinateSystems';
 import { CAMERA, CONTROLS } from '../../theme';
 import type { ViewDirection } from '../../store/stores/uiStore';
 
@@ -34,6 +34,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
   const horizonLock = useCameraStore((s) => s.horizonLock);
   const flySpeed = useCameraStore((s) => s.flySpeed);
   const pointerLock = useCameraStore((s) => s.pointerLock);
+  const pickingMode = usePointPickingStore((s) => s.pickingMode);
   const autoRotateMode = useCameraStore((s) => s.autoRotateMode);
   const autoRotateSpeed = useCameraStore((s) => s.autoRotateSpeed);
   const setAutoRotateMode = useCameraStore((s) => s.setAutoRotateMode);
@@ -60,8 +61,9 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
   const angularVelocity = useRef({ x: 0, y: 0 });
   const smoothedVelocity = useRef({ x: 0, y: 0 });
   const lastMouse = useRef({ x: 0, y: 0 });
-  const lastTime = useRef(performance.now());
-  const lastFrameTime = useRef(performance.now());
+  // Initialize with 0, will be set on first frame/interaction
+  const lastTime = useRef(0);
+  const lastFrameTime = useRef(0);
   const quatX = useRef(new THREE.Quaternion());
   const quatY = useRef(new THREE.Quaternion());
 
@@ -324,6 +326,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       angularVelocity.current.y = 0;
       flyVelocity.current.set(0, 0, 0);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentionally using array elements to avoid object reference issues
   }, [target[0], target[1], target[2], radius, resetTrigger, camera]);
 
   // Handle view direction changes (X/Y/Z axis views and reset)
@@ -393,6 +396,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
     angularVelocity.current.x = 0;
     angularVelocity.current.y = 0;
     flyVelocity.current.set(0, 0, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentionally using array elements to avoid object reference issues
   }, [target[0], target[1], target[2], radius, viewTrigger, viewDirection, camera]);
 
   // Handle camera projection switching (perspective <-> orthographic)
@@ -435,6 +439,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
 
     // Update the cameraQuat ref to match
     cameraQuat.current.copy(currentQuaternion);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cameraFov intentionally omitted; FOV changes are handled by separate useEffect
   }, [cameraProjection, camera, set, size.width, size.height]);
 
   // Handle FOV changes for perspective camera
@@ -703,7 +708,8 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       if (isDragging.current) {
         // Request pointer lock on first movement, not on mousedown
         // This allows clicks to pass through to 3D objects
-        if (pointerLock && !pointerLockRequested.current && !isLocked) {
+        // Disable pointer lock during point picking mode
+        if (pointerLock && pickingMode === 'off' && !pointerLockRequested.current && !isLocked) {
           pointerLockRequested.current = true;
           canvas.requestPointerLock();
         }
@@ -777,6 +783,9 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       // Don't accept keyboard input if controls are disabled
       if (!enabled.current) return;
 
+      // Ignore movement keys when Ctrl/Meta is pressed (allow hotkey combos like Ctrl+Shift+E)
+      if (e.ctrlKey || e.metaKey) return;
+
       const key = e.key.toLowerCase();
       // Only capture movement keys, ignore when typing in inputs
       if (['w', 'a', 's', 'd', 'q', 'e', ' ', 'shift', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
@@ -817,7 +826,8 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [camera, gl, cameraMode, flySpeed, pointerLock, radius, autoRotateMode, setAutoRotateMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Control constants (rotateSpeed, panSpeed, etc.) are stable and don't need to be dependencies
+  }, [camera, gl, cameraMode, flySpeed, pointerLock, pickingMode, radius, autoRotateMode, setAutoRotateMode]);
 
   return null;
 }

@@ -84,7 +84,9 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, onClick, onDoub
   // Clear hover state when scrolling starts
   useEffect(() => {
     if (isScrolling && hovered) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional pattern to clear hover during scroll
       setHovered(false);
+       
       setMousePos(null);
       document.body.style.cursor = '';
     }
@@ -206,7 +208,9 @@ const ListItem = memo(function ListItem({ img, isSelected, onClick, onDoubleClic
   // Clear hover state when scrolling starts
   useEffect(() => {
     if (isScrolling && hovered) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional pattern to clear hover during scroll
       setHovered(false);
+       
       setMousePos(null);
       document.body.style.cursor = '';
     }
@@ -481,6 +485,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
   const listRows = useMemo(() => images.map(img => [img]), [images]); // 1 item per row for list view
 
   // Row virtualizer for gallery grid - uses measureElement for actual row heights
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual library is compatible despite compiler warning
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => containerRef.current,
@@ -489,6 +494,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
   });
 
   // List virtualizer - fixed row height
+   
   const listVirtualizer = useVirtualizer({
     count: listRows.length,
     getScrollElement: () => containerRef.current,

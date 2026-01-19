@@ -26,24 +26,28 @@ export function useFileUrl(file: File | null | undefined): string | null {
 
   useEffect(() => {
     if (!file) {
+       
       setUrl(null);
       return;
     }
 
     const blobUrl = URL.createObjectURL(file);
+     
     setUrl(blobUrl);
 
     return () => {
       // Defer revocation to allow React's commit phase to complete
       // and any in-flight image loads to be properly canceled.
       // This prevents ERR_FILE_NOT_FOUND errors during rapid scrolling.
-      pendingRevocationsRef.current.add(blobUrl);
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- Capture the Set reference once - it remains stable throughout the hook's lifetime
+      const pendingSet = pendingRevocationsRef.current;
+      pendingSet.add(blobUrl);
 
       // Use requestIdleCallback if available, otherwise use setTimeout
       // to defer until after the current event loop tick
       const revoke = () => {
-        if (pendingRevocationsRef.current.has(blobUrl)) {
-          pendingRevocationsRef.current.delete(blobUrl);
+        if (pendingSet.has(blobUrl)) {
+          pendingSet.delete(blobUrl);
           URL.revokeObjectURL(blobUrl);
         }
       };

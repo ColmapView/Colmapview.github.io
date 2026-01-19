@@ -5,6 +5,7 @@ import { Html } from '@react-three/drei';
 import { useTransformStore, useReconstructionStore, useUIStore } from '../../store';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { VIZ_COLORS, contextMenuStyles, hoverCardStyles, ICON_SIZES } from '../../theme';
+import { ResetIcon, ReloadIcon, CheckIcon, OffIcon } from '../../icons';
 
 // Type for controls registered by TrackballControls
 interface ControlsWithEnabled {
@@ -315,6 +316,7 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
 
       // Disable camera controls immediately to block orbit
       if (controls?.enabled) {
+         
         controls.enabled.current = false;
       }
 
@@ -324,6 +326,7 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
       if (!startPoint) {
         // Re-enable if we can't start drag
         if (controls?.enabled) {
+           
           controls.enabled.current = true;
         }
         return;
@@ -359,6 +362,7 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
       setDragging(true);
       gl.domElement.setPointerCapture(e.pointerId);
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- center is captured at drag start, shouldn't cause re-bind mid-drag
     [getDragPlane, getWorldPosition, transform, gl, controls, localRotation, coordinateMode]
   );
 
@@ -497,6 +501,7 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
         setHoveredMode(null);
         // Re-enable camera controls
         if (controls?.enabled) {
+           
           controls.enabled.current = true;
         }
         dragRef.current = null;
@@ -527,6 +532,9 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
   // Common context menu handler for all gizmo elements
   const handleContextMenu = useCallback((e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
+    // Also stop native DOM event to prevent global context menu from opening
+    e.nativeEvent.stopPropagation();
+    e.nativeEvent.preventDefault();
     setContextMenu({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
   }, []);
 
@@ -672,63 +680,90 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
 
       {/* Context menu - rendered at cursor position */}
       {contextMenu && (
-        <Html
-          style={{
-            position: 'fixed',
-            left: contextMenu.x,
-            top: contextMenu.y,
-            pointerEvents: 'auto',
-          }}
-          calculatePosition={() => [0, 0]}
-        >
-          <div
-            className={contextMenuStyles.container}
-            onMouseLeave={() => setContextMenu(null)}
-          >
-            <button
-              className={contextMenuStyles.button}
-              onClick={() => { resetTransform(); setContextMenu(null); }}
-            >
-              <svg className={contextMenuStyles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-                <path d="M3 3v5h5"/>
-              </svg>
-              Reset
-            </button>
-            <button
-              className={contextMenuStyles.button}
-              onClick={() => { if (droppedFiles) { resetTransform(); processFiles(droppedFiles); } setContextMenu(null); }}
-            >
-              <svg className={contextMenuStyles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 12a9 9 0 0 0-9-9M3 12a9 9 0 0 1 9-9"/>
-                <path d="M21 12a9 9 0 0 1-9 9M3 12a9 9 0 0 0 9 9"/>
-                <path d="M9 3l3 3-3 3"/>
-                <path d="M15 21l-3-3 3-3"/>
-              </svg>
-              Reload
-            </button>
-            <button
-              className={contextMenuStyles.button}
-              onClick={() => { applyToData(); setContextMenu(null); }}
-            >
-              <svg className={contextMenuStyles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M20 6L9 17l-5-5"/>
-              </svg>
-              Apply
-            </button>
-            <button
-              className={contextMenuStyles.button}
-              onClick={() => { setGizmoMode('off'); setContextMenu(null); }}
-            >
-              <svg className={contextMenuStyles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M4 4l16 16"/>
-              </svg>
-              Off
-            </button>
-          </div>
-        </Html>
+        <GizmoContextMenu
+          position={contextMenu}
+          onClose={() => setContextMenu(null)}
+          onReset={() => { resetTransform(); setContextMenu(null); }}
+          onReload={() => { if (droppedFiles) { resetTransform(); processFiles(droppedFiles); } setContextMenu(null); }}
+          onApply={() => { applyToData(); setContextMenu(null); }}
+          onOff={() => { setGizmoMode('off'); setContextMenu(null); }}
+        />
       )}
     </group>
+  );
+}
+
+// Extracted context menu component with click-outside behavior
+interface GizmoContextMenuProps {
+  position: { x: number; y: number };
+  onClose: () => void;
+  onReset: () => void;
+  onReload: () => void;
+  onApply: () => void;
+  onOff: () => void;
+}
+
+function GizmoContextMenu({ position, onClose, onReset, onReload, onApply, onOff }: GizmoContextMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close on click outside or escape
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    // Delay to avoid immediate close from triggering click
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
+    }, 0);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <Html
+      style={{
+        position: 'fixed',
+        left: position.x,
+        top: position.y,
+        pointerEvents: 'auto',
+      }}
+      calculatePosition={() => [0, 0]}
+    >
+      <div
+        ref={menuRef}
+        className={contextMenuStyles.container}
+      >
+        <button className={contextMenuStyles.button} onClick={onReset}>
+          <ResetIcon className={contextMenuStyles.icon} />
+          Reset
+        </button>
+        <button className={contextMenuStyles.button} onClick={onReload}>
+          <ReloadIcon className={contextMenuStyles.icon} />
+          Reload
+        </button>
+        <button className={contextMenuStyles.button} onClick={onApply}>
+          <CheckIcon className={contextMenuStyles.icon} />
+          Apply
+        </button>
+        <button className={contextMenuStyles.button} onClick={onOff}>
+          <OffIcon className={contextMenuStyles.icon} />
+          Off
+        </button>
+      </div>
+    </Html>
   );
 }

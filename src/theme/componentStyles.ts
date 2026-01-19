@@ -21,6 +21,7 @@ export const buttonStyles = {
     lg: 'px-4 py-2 text-base gap-2',
     xl: 'px-6 py-3 text-lg gap-3',
     toggle: 'px-4 py-1 text-sm gap-1.5', // Wide toggle button (matches hover panel style)
+    toggleResponsive: 'px-4 py-1 text-xs gap-1', // Compact toggle button for modals
     icon: 'p-1',         // Square icon button small
     iconMd: 'p-1.5',     // Square icon button medium
     iconLg: 'p-2',       // Square icon button large
@@ -87,6 +88,31 @@ export function getButtonClass(
   }
   return classes.join(' ');
 }
+
+// ============================================
+// SHARED ACTION BUTTON STYLES
+// ============================================
+// Single source of truth for action buttons used across modals, panels, and context menus
+
+export const actionButtonStyles = {
+  // Container for action button groups
+  group: 'flex gap-2 mt-3',
+
+  // Standard action buttons (equal width distribution, compact padding)
+  button: `${buttonStyles.base} px-1 py-1 text-sm ${buttonStyles.variants.toggle} flex-1`,
+  buttonDisabled: `${buttonStyles.base} px-1 py-1 text-sm ${buttonStyles.disabled} bg-ds-secondary text-ds-muted flex-1`,
+  buttonPrimary: `${buttonStyles.base} px-1 py-1 text-sm ${buttonStyles.variants.toggleActive} flex-1`,
+  buttonPrimaryDisabled: `${buttonStyles.base} px-1 py-1 text-sm ${buttonStyles.disabled} bg-ds-secondary text-ds-muted flex-1`,
+
+  // Full-width primary action button (for "Done", "Confirm" dialogs)
+  buttonFullWidth: 'w-full px-3 py-1.5 bg-ds-accent text-ds-void rounded text-sm hover:opacity-90 transition-opacity',
+
+  // Icon action buttons (for confirm/retry/cancel style buttons)
+  iconButton: 'p-0.5 transition-colors flex items-center',
+  iconButtonConfirm: 'p-0.5 text-green-400 hover:text-green-300 transition-colors flex items-center',
+  iconButtonRetry: 'p-0.5 text-yellow-400 hover:text-yellow-300 transition-colors flex items-center',
+  iconButtonCancel: 'p-0.5 text-red-400 hover:text-red-300 transition-colors flex items-center',
+} as const;
 
 // ============================================
 // FORM INPUT STYLES
@@ -170,6 +196,12 @@ export const modalStyles = {
   header: 'flex items-center justify-between px-4 py-2 border-b border-ds cursor-move select-none',
   headerTitle: 'text-ds-primary text-base font-medium truncate',
   closeButton: buttonStyles.closeLg,
+  // Reference shared action button styles
+  actionGroup: actionButtonStyles.group,
+  iconButtonConfirm: actionButtonStyles.iconButtonConfirm,
+  iconButtonRetry: actionButtonStyles.iconButtonRetry,
+  iconButtonCancel: actionButtonStyles.iconButtonCancel,
+  actionButtonPrimary: actionButtonStyles.buttonFullWidth,
 } as const;
 
 // ============================================
@@ -280,6 +312,39 @@ export const toastStyles = {
 } as const;
 
 // ============================================
+// NOTIFICATION STYLES
+// ============================================
+
+export const notificationStyles = {
+  // Container - fixed top-center, stacks vertically
+  container: 'fixed top-4 left-1/2 -translate-x-1/2 z-toast flex flex-col gap-3 pointer-events-none items-center',
+
+  // Individual notification toast
+  toast: 'pointer-events-auto bg-ds-tertiary/90 rounded-lg shadow-ds-lg min-w-[300px] max-w-[400px] flex items-stretch',
+
+  // Icon container (left side) - same style as close button
+  iconContainer: 'flex-shrink-0 px-3 flex items-center rounded-l-lg',
+  iconContainerInfo: 'text-ds-info',
+  iconContainerWarning: 'text-ds-warning',
+
+  // Icon
+  icon: 'w-5 h-5',
+
+  // Message content area
+  content: 'flex items-center py-4 px-4 flex-1',
+
+  // Message text
+  message: 'text-sm text-ds-primary break-words',
+
+  // Close button area (right side)
+  closeButton: 'flex-shrink-0 px-3 flex items-center text-ds-muted hover-ds-text-primary hover-ds-hover cursor-pointer transition-colors rounded-r-lg',
+
+  // Animation classes
+  entering: 'animate-slide-in-right',
+  exiting: 'animate-fade-out',
+} as const;
+
+// ============================================
 // LOADING STYLES
 // ============================================
 
@@ -325,12 +390,12 @@ export const controlPanelStyles = {
   // Preset buttons (e.g., Transform presets) - uses toggle button design
   presetGroup: 'flex flex-col gap-2 mt-3',
   presetButton: `${buttonStyles.base} ${buttonStyles.sizes.toggle} ${buttonStyles.variants.toggle} w-full justify-start`,
-  // Action buttons (e.g., Reset, Apply) - uses toggle button design
-  actionGroup: 'flex justify-between mt-3',
-  actionButton: `${buttonStyles.base} ${buttonStyles.sizes.toggle} ${buttonStyles.variants.toggle}`,
-  actionButtonDisabled: `${buttonStyles.base} ${buttonStyles.sizes.toggle} ${buttonStyles.disabled} bg-ds-secondary text-ds-muted`,
-  actionButtonPrimary: `${buttonStyles.base} ${buttonStyles.sizes.toggle} ${buttonStyles.variants.toggleActive}`,
-  actionButtonPrimaryDisabled: `${buttonStyles.base} ${buttonStyles.sizes.toggle} ${buttonStyles.disabled} bg-ds-secondary text-ds-muted`,
+  // Action buttons (e.g., Reset, Apply) - references shared action button styles
+  actionGroup: actionButtonStyles.group,
+  actionButton: actionButtonStyles.button,
+  actionButtonDisabled: actionButtonStyles.buttonDisabled,
+  actionButtonPrimary: actionButtonStyles.buttonPrimary,
+  actionButtonPrimaryDisabled: actionButtonStyles.buttonPrimaryDisabled,
 } as const;
 
 // Helper to get control button class
@@ -417,8 +482,8 @@ export const toolbarStyles = {
 // ============================================
 
 export const statusBarStyles = {
-  container: 'h-10 border-t border-ds bg-ds-tertiary text-ds-secondary text-base px-4 flex items-center justify-between status-bar-responsive',
-  group: 'flex items-center gap-6 status-bar-group',
+  container: 'h-10 border-t border-ds bg-ds-tertiary text-ds-secondary text-base px-4 flex items-center justify-between status-bar-responsive overflow-visible',
+  group: 'flex items-center gap-6 status-bar-group overflow-visible',
 } as const;
 
 // ============================================
@@ -460,4 +525,30 @@ export const resizeHandleStyles = {
   s: 'bottom-0 left-3 right-3 h-2 cursor-s-resize',
   w: 'left-0 top-3 bottom-3 w-2 cursor-w-resize',
   e: 'right-0 top-3 bottom-3 w-2 cursor-e-resize',
+} as const;
+
+// ============================================
+// HISTOGRAM TOOLTIP STYLES (for StatusBar stats)
+// ============================================
+
+export const histogramStyles = {
+  // Container positions above the stat, centered (using negative top to go upward)
+  container: `absolute left-1/2 -translate-x-1/2 z-[${Z_INDEX.tooltip}]`,
+  // Inline style needed for positioning above: style={{ bottom: '100%', marginBottom: '8px' }}
+  // Card styling
+  card: 'bg-ds-tertiary rounded-lg px-4 py-3 shadow-ds-lg text-sm border border-ds',
+  // Title text
+  title: 'text-ds-primary text-sm font-medium mb-1',
+  // Row for each histogram bin
+  row: 'flex items-center gap-2 h-5',
+  // Label (left side, right-aligned)
+  label: 'w-12 text-right text-ds-secondary text-xs',
+  // Bar background
+  barBg: 'flex-1 bg-ds-secondary/20 rounded-sm h-3 overflow-hidden',
+  // Bar fill (actual histogram bar)
+  barFill: 'h-full bg-ds-accent rounded-sm transition-all',
+  // Count text (right side)
+  count: 'w-16 text-ds-muted text-xs',
+  // Footer with mean and total
+  footer: 'text-ds-secondary text-xs mt-3 pt-2 border-t border-ds',
 } as const;

@@ -22,7 +22,23 @@
       "Bash(gh release create:*)",
       "Bash(gh run list:*)",
       "Bash(git checkout:*)",
-      "Bash(git fsck:*)"
+      "Bash(git fsck:*)",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs",
+      "mcp__plugin_playwright_playwright__browser_wait_for",
+      "Bash(taskkill:*)",
+      "Bash(npm run:*)",
+      "Bash(npx eslint:*)",
+      "Bash(npm test:*)",
+      "Bash(node --experimental-strip-types:*)",
+      "Bash(find:*)",
+      "Bash(wc:*)",
+      "Bash(cd:*)",
+      "Bash(grep:*)",
+      "Bash(Get-Content \"C:\\\\Users\\\\HEQ\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-HEQ-Projects-colmap-webview-colmap-webview\\\\tasks\\\\bf20852.output\" -Tail 20)",
+      "Bash(ls:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)"
     ]
   }
 }

@@ -56,7 +56,7 @@ describe("cameraStore", () => {
       selectionColorMode: "rainbow",
       selectionAnimationSpeed: 2.5,
       showImagePlanes: false,
-      imagePlaneOpacity: 0.9,
+      selectionPlaneOpacity: 0.9,
       flyToImageId: null,
     });
   });
@@ -77,14 +77,14 @@ describe("cameraStore", () => {
     });
 
     it("should toggle image planes and set opacity", () => {
-      const { setShowImagePlanes, setImagePlaneOpacity } =
+      const { setShowImagePlanes, setSelectionPlaneOpacity } =
         useCameraStore.getState();
 
       setShowImagePlanes(true);
       assertEquals(useCameraStore.getState().showImagePlanes, true);
 
-      setImagePlaneOpacity(0.7);
-      assertEquals(useCameraStore.getState().imagePlaneOpacity, 0.7);
+      setSelectionPlaneOpacity(0.7);
+      assertEquals(useCameraStore.getState().selectionPlaneOpacity, 0.7);
     });
   });
 

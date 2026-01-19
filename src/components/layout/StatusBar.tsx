@@ -5,6 +5,7 @@ import {
   selectCameraCount
 } from '../../store';
 import { statusBarStyles } from '../../theme';
+import { StatWithHistogram } from './StatWithHistogram';
 
 export function StatusBar() {
   const loading = useReconstructionStore((s) => s.loading);
@@ -27,8 +28,18 @@ export function StatusBar() {
             {globalStats && (
               <>
                 <span>Observations: <span className="text-ds-primary">{globalStats.totalObservations.toLocaleString()}</span></span>
-                <span>Avg Track: <span className="text-ds-primary">{globalStats.avgTrackLength.toFixed(2)}</span></span>
-                <span>Avg Reproj Error: <span className="text-ds-primary">{globalStats.avgError.toFixed(3)}px</span></span>
+                <StatWithHistogram
+                  label="Avg Track"
+                  value={globalStats.avgTrackLength.toFixed(2)}
+                  type="trackLength"
+                  points3D={reconstruction.points3D}
+                />
+                <StatWithHistogram
+                  label="Avg Reproj Error"
+                  value={`${globalStats.avgError.toFixed(3)}px`}
+                  type="error"
+                  points3D={reconstruction.points3D}
+                />
               </>
             )}
           </>

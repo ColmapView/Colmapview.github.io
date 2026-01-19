@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { StatusBar } from './StatusBar';
 import { Scene3D } from '../viewer3d';
 import { ImageGallery } from '../gallery/ImageGallery';
@@ -6,6 +6,8 @@ import { ImageDetailModal } from '../modals/ImageDetailModal';
 import { useHotkeyScope } from '../../hooks/useHotkeyScope';
 import { mobileMessageStyles, BREAKPOINTS, LAYOUT_PANELS } from '../../theme';
 import { useUIStore } from '../../store/stores/uiStore';
+import { useReconstructionStore } from '../../store/reconstructionStore';
+import { useGuideStore } from '../../store/stores/guideStore';
 
 const MIN_PANEL_WIDTH = 300;
 const MAX_PANEL_WIDTH_PERCENT = 0.6; // 60% of window width
@@ -198,6 +200,21 @@ export function AppLayout() {
 
   const galleryCollapsed = useUIStore((s) => s.galleryCollapsed);
   const { panelWidth, handleMouseDown, isResizing } = useResizablePanel(LAYOUT_PANELS.gallery.defaultSize);
+
+  // Show context menu tip when reconstruction is first loaded
+  const reconstruction = useReconstructionStore((s) => s.reconstruction);
+  const loading = useReconstructionStore((s) => s.loading);
+  const hasShownContextMenuTipRef = useRef(false);
+
+  useEffect(() => {
+    if (reconstruction && !loading && !hasShownContextMenuTipRef.current) {
+      hasShownContextMenuTipRef.current = true;
+      useGuideStore.getState().showTip(
+        'contextMenu',
+        'Right-click anywhere for quick actions'
+      );
+    }
+  }, [reconstruction, loading]);
 
   if (isMobile) {
     return <MobileMessage />;

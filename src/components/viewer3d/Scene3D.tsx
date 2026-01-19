@@ -3,6 +3,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PointCloud } from './PointCloud';
 import { CameraFrustums, CameraMatches } from './CameraFrustums';
+import { RigConnections } from './RigConnections';
 import { ViewerControls } from './ViewerControls';
 import { TrackballControls } from './TrackballControls';
 import { OriginAxes, OriginGrid } from './OriginVisualization';
@@ -21,6 +22,8 @@ import { CAMERA, VIZ_COLORS, OPACITY } from '../../theme';
 
 function SceneContent() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
+  const pickingMode = usePointPickingStore((s) => s.pickingMode);
+  const isPicking = pickingMode !== 'off';
 
   const bounds = useMemo(() => {
     if (!reconstruction) {
@@ -118,28 +121,31 @@ function SceneContent() {
       <directionalLight position={[10, 10, 5]} intensity={OPACITY.light.directional} />
 
       {/* Transformable content - wrapped in group when preview is active */}
+      {/* Hide frustums during point picking for cleaner selection */}
       {transformMatrix ? (
         <group matrixAutoUpdate={false} matrix={transformMatrix}>
           <PointCloud />
-          <CameraFrustums />
-          <CameraMatches />
+          {!isPicking && <CameraFrustums />}
+          {!isPicking && <CameraMatches />}
+          {!isPicking && <RigConnections />}
         </group>
       ) : (
         <>
           <PointCloud />
-          <CameraFrustums />
-          <CameraMatches />
+          {!isPicking && <CameraFrustums />}
+          {!isPicking && <CameraMatches />}
+          {!isPicking && <RigConnections />}
         </>
       )}
 
-      {/* Axes/Grid stay in original coordinate system - wrapped in own Suspense to avoid showing loading box */}
+      {/* Axes/Grid stay in original coordinate system */}
       <Suspense fallback={null}>
         {(axesDisplayMode === 'axes' || axesDisplayMode === 'both') && <OriginAxes size={bounds.radius * axesScale} scale={axesScale} coordinateSystem={axesCoordinateSystem} labelMode={axisLabelMode} axesDisplayMode={axesDisplayMode} />}
         {(axesDisplayMode === 'grid' || axesDisplayMode === 'both') && <OriginGrid size={bounds.radius} scale={gridScale} />}
       </Suspense>
 
-      {/* Transform gizmo follows the transformed data */}
-      {reconstruction && gizmoMode !== 'off' && <TransformGizmo center={transformedCenter} size={bounds.radius * transform.scale * axesScale} coordinateMode={gizmoMode} />}
+      {/* Transform gizmo follows the transformed data - hidden during picking */}
+      {!isPicking && reconstruction && gizmoMode !== 'off' && <TransformGizmo center={transformedCenter} size={bounds.radius * transform.scale * axesScale} coordinateMode={gizmoMode} />}
 
       {/* Point picking markers - rendered outside transform group for stable display */}
       <SelectedPointMarkers />
@@ -162,6 +168,7 @@ function BackgroundColor({ color }: { color: string }) {
   const { scene } = useThree();
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability -- THREE.js scene requires direct property assignment
     scene.background = new THREE.Color(color);
   }, [scene, color]);
 

@@ -11,14 +11,41 @@ import { Html } from '@react-three/drei';
 import { useReconstructionStore, useCameraStore, useUIStore } from '../../store';
 import type { SelectionColorMode } from '../../store/types';
 import type { Camera, Image } from '../../types/colmap';
+import { getCameraIntrinsics } from '../../types/colmap';
+import { useGuideStore } from '../../store/stores/guideStore';
 import { getImageFile } from '../../utils/imageFileUtils';
 import { getImageWorldPosition, getImageWorldQuaternion } from '../../utils/colmapTransforms';
 import { useFrustumTexture, useSelectedImageTexture, prioritizeFrustumTexture, pauseFrustumTextureCache, resumeFrustumTextureCache } from '../../hooks/useFrustumTexture';
-import { VIZ_COLORS, RAINBOW, OPACITY, TIMING, hoverCardStyles, ICON_SIZES, getCameraColor, contextMenuStyles } from '../../theme';
+import { VIZ_COLORS, RAINBOW, OPACITY, TIMING, hoverCardStyles, ICON_SIZES, getCameraColor, contextMenuStyles, getMaterialTransparency } from '../../theme';
 import { rainbowColor } from '../../utils/colorUtils';
+import { UndistortedImageMaterial } from './UndistortedImageMaterial';
 
 // Shared temp objects for color calculations
 const tempColor = new THREE.Color();
+
+// Helper to calculate rainbow color from hue (0-1)
+function setRainbowColor(color: THREE.Color, hue: number): void {
+  const c = RAINBOW.chroma;
+  const x = c * (1 - Math.abs((hue * 6) % 2 - 1));
+  const m = RAINBOW.lightness - c / 2;
+  let r = 0, g = 0, b = 0;
+  const { hueSegments } = RAINBOW;
+  if (hue < hueSegments.redToYellow) { r = c; g = x; }
+  else if (hue < hueSegments.yellowToGreen) { r = x; g = c; }
+  else if (hue < hueSegments.greenToCyan) { g = c; b = x; }
+  else if (hue < hueSegments.cyanToBlue) { g = x; b = c; }
+  else if (hue < hueSegments.blueToMagenta) { r = x; b = c; }
+  else { r = c; b = x; }
+  color.setRGB(r + m, g + m, b + m);
+}
+
+// Helper to calculate matches blink factor (0-1) from phase (0-2 seconds)
+function getMatchesBlinkFactor(phase: number): number {
+  if (phase < 0.3) return phase / 0.3;
+  if (phase < 0.6) return 1;
+  if (phase < 1.0) return 1 - (phase - 0.6) / 0.4;
+  return 0;
+}
 
 // Temp objects for image plane culling (angle check)
 const tempForward = new THREE.Vector3();
@@ -26,9 +53,6 @@ const tempViewDir = new THREE.Vector3();
 const tempWorldPos = new THREE.Vector3();
 const tempWorldQuat = new THREE.Quaternion();
 
-// Temp objects for view frustum culling
-const viewFrustum = new THREE.Frustum();
-const projScreenMatrix = new THREE.Matrix4();
 
 // Cosine thresholds for angle-based texture culling
 const COS_45_DEG = Math.cos(Math.PI / 4); // ≈ 0.707 (for frustum mode with image planes)
@@ -76,7 +100,6 @@ interface BatchedArrowMeshesProps {
   selectionColorMode: SelectionColorMode;
   selectionColor: string;
   selectionAnimationSpeed: number;
-  selectedCameraOpacity: number;
   unselectedCameraOpacity: number;
 }
 
@@ -100,7 +123,6 @@ function BatchedArrowMeshes({
   selectionColorMode,
   selectionColor,
   selectionAnimationSpeed,
-  selectedCameraOpacity: _selectedCameraOpacity,
   unselectedCameraOpacity,
 }: BatchedArrowMeshesProps) {
   const shaftRef = useRef<THREE.InstancedMesh>(null);
@@ -121,6 +143,21 @@ function BatchedArrowMeshes({
   // Create materials
   const shaftMaterial = useMemo(() => new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }), []);
   const coneMaterial = useMemo(() => new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }), []);
+
+  // Dispose geometries and materials when they change to prevent GPU memory leaks
+  useEffect(() => {
+    return () => {
+      shaftGeometry.dispose();
+      coneGeometry.dispose();
+    };
+  }, [shaftGeometry, coneGeometry]);
+
+  useEffect(() => {
+    return () => {
+      shaftMaterial.dispose();
+      coneMaterial.dispose();
+    };
+  }, [shaftMaterial, coneMaterial]);
 
   // Update instance matrices and colors
   useFrame((state, delta) => {
@@ -162,50 +199,21 @@ function BatchedArrowMeshes({
         tempColor.set(VIZ_COLORS.frustum.hover);
       } else if (isSelected) {
         if (selectionColorMode === 'rainbow') {
-          const hue = rainbowHueRef.current;
-          const c = RAINBOW.chroma;
-          const x = c * (1 - Math.abs((hue * 6) % 2 - 1));
-          const m = RAINBOW.lightness - c / 2;
-          let r = 0, g = 0, b = 0;
-          const { hueSegments } = RAINBOW;
-          if (hue < hueSegments.redToYellow) { r = c; g = x; }
-          else if (hue < hueSegments.yellowToGreen) { r = x; g = c; }
-          else if (hue < hueSegments.greenToCyan) { g = c; b = x; }
-          else if (hue < hueSegments.cyanToBlue) { g = x; b = c; }
-          else if (hue < hueSegments.blueToMagenta) { r = x; b = c; }
-          else { r = c; b = x; }
-          tempColor.setRGB(r + m, g + m, b + m);
+          setRainbowColor(tempColor, rainbowHueRef.current);
         } else if (selectionColorMode === 'blink') {
-          // Blink uses slight dimming (0.5-1.0) since we can't do true transparency per-instance
           const blinkFactor = (Math.sin(blinkPhase) + 1) / 2;
           const intensity = 0.5 + 0.5 * blinkFactor;
           tempColor.set(selectionColor);
           tempColor.multiplyScalar(intensity);
         } else {
-          // static mode
           tempColor.set(selectionColor);
         }
       } else if (isMatched) {
-        // Matched cameras use matchesColor with matchesOpacity as color intensity
-        // (can't do true per-instance transparency with instanced meshes)
         tempColor.set(matchesColor);
         if (matchesDisplayMode === 'blink') {
-          // Apply blink animation on top of matchesOpacity
-          const t = matchesBlinkPhaseRef.current;
-          let blinkFactor: number;
-          if (t < 0.3) {
-            blinkFactor = t / 0.3;
-          } else if (t < 0.6) {
-            blinkFactor = 1;
-          } else if (t < 1.0) {
-            blinkFactor = 1 - (t - 0.6) / 0.4;
-          } else {
-            blinkFactor = 0;
-          }
-          const intensity = matchesOpacity * (0.1 + 0.9 * blinkFactor);
+          const intensity = matchesOpacity * (0.1 + 0.9 * getMatchesBlinkFactor(matchesBlinkPhaseRef.current));
           tempColor.multiplyScalar(intensity);
         } else {
-          // Apply matchesOpacity as color intensity
           tempColor.multiplyScalar(matchesOpacity);
         }
       } else {
@@ -214,7 +222,6 @@ function BatchedArrowMeshes({
           : VIZ_COLORS.frustum.default;
         tempColor.set(baseColor);
       }
-
 
       // Calculate shaft transform - cylinder is Y-aligned, we need to rotate to face camera direction (Z)
       // Camera looks along local +Z, so we rotate from Y to Z
@@ -247,12 +254,14 @@ function BatchedArrowMeshes({
     if (cone.instanceColor) cone.instanceColor.needsUpdate = true;
   });
 
-  // Update material opacity - 0.9 when no selection, otherwise use unselectedCameraOpacity
+  // Update material opacity - 0.9 when no selection, unselectedCameraOpacity when a camera is selected
   useEffect(() => {
     const opacity = selectedImageId === null ? 0.9 : unselectedCameraOpacity;
+    // eslint-disable-next-line react-hooks/immutability -- THREE.js materials require direct mutation
     shaftMaterial.opacity = opacity;
+    // eslint-disable-next-line react-hooks/immutability -- THREE.js materials require direct mutation
     coneMaterial.opacity = opacity;
-  }, [unselectedCameraOpacity, shaftMaterial, coneMaterial, selectedImageId]);
+  }, [shaftMaterial, coneMaterial, selectedImageId, unselectedCameraOpacity]);
 
   if (frustums.length === 0) return null;
 
@@ -284,7 +293,6 @@ interface BatchedFrustumLinesProps {
   selectionColorMode: SelectionColorMode;
   selectionColor: string;
   selectionAnimationSpeed: number;
-  selectedCameraOpacity: number;
   unselectedCameraOpacity: number;
   showImagePlanes: boolean;
 }
@@ -302,7 +310,6 @@ function BatchedFrustumLines({
   selectionColorMode,
   selectionColor,
   selectionAnimationSpeed,
-  selectedCameraOpacity,
   unselectedCameraOpacity,
   showImagePlanes,
 }: BatchedFrustumLinesProps) {
@@ -453,46 +460,25 @@ function BatchedFrustumLines({
         tempColor.set(VIZ_COLORS.frustum.hover);
       } else if (isSelected) {
         if (selectionColorMode === 'rainbow') {
-          // Rainbow color calculation
-          const hue = rainbowHueRef.current;
-          const c = RAINBOW.chroma;
-          const x = c * (1 - Math.abs((hue * 6) % 2 - 1));
-          const m = RAINBOW.lightness - c / 2;
-          let r = 0, g = 0, b = 0;
-          const { hueSegments } = RAINBOW;
-          if (hue < hueSegments.redToYellow) { r = c; g = x; }
-          else if (hue < hueSegments.yellowToGreen) { r = x; g = c; }
-          else if (hue < hueSegments.greenToCyan) { g = c; b = x; }
-          else if (hue < hueSegments.cyanToBlue) { g = x; b = c; }
-          else if (hue < hueSegments.blueToMagenta) { r = x; b = c; }
-          else { r = c; b = x; }
-          tempColor.setRGB(r + m, g + m, b + m);
-        } else if (selectionColorMode === 'blink') {
-          // Blink: keep color at full brightness, will use opacity for blink effect
-          tempColor.set(selectionColor);
+          setRainbowColor(tempColor, rainbowHueRef.current);
         } else {
-          // off or static: solid selected color
           tempColor.set(selectionColor);
         }
       } else if (isMatched) {
-        // Matched cameras use matchesColor
         tempColor.set(matchesColor);
       } else {
-        // Use base color
         tempColor.setRGB(baseColors[offset], baseColors[offset + 1], baseColors[offset + 2]);
       }
 
       // Calculate opacity (true alpha, not color darkening)
       // When no camera is selected, use 0.9 opacity for all
-      // When a camera is selected, use selectedCameraOpacity for selected, unselectedCameraOpacity for others
-      // Matched cameras use matchesOpacity directly (not affected by unselectedCameraOpacity)
+      // When a camera is selected: selected/hovered = 1.0, matched = matchesOpacity, others = unselectedCameraOpacity
       let opacity: number;
       if (selectedImageId === null) {
         opacity = 0.9;
       } else if (isSelected || isHovered) {
-        opacity = selectedCameraOpacity;
+        opacity = 1.0;
       } else if (isMatched) {
-        // Use matches opacity directly, not affected by unselectedCameraOpacity
         opacity = matchesOpacity;
       } else {
         opacity = unselectedCameraOpacity;
@@ -506,18 +492,7 @@ function BatchedFrustumLines({
 
       // Apply blink effect via opacity for matched cameras
       if (isMatched && matchesDisplayMode === 'blink') {
-        const t = matchesBlinkPhaseRef.current;
-        let blinkFactor: number;
-        if (t < 0.3) {
-          blinkFactor = t / 0.3;
-        } else if (t < 0.6) {
-          blinkFactor = 1;
-        } else if (t < 1.0) {
-          blinkFactor = 1 - (t - 0.6) / 0.4;
-        } else {
-          blinkFactor = 0;
-        }
-        opacity *= 0.1 + 0.9 * blinkFactor;
+        opacity *= 0.1 + 0.9 * getMatchesBlinkFactor(matchesBlinkPhaseRef.current);
       }
 
       // Hide wireframe when image plane is showing for this frustum
@@ -543,7 +518,7 @@ function BatchedFrustumLines({
     return new Float32Array(baseColors);
   }, [baseColors]);
 
-  // Initial alphas array - 0.9 when no selection, otherwise use unselectedCameraOpacity
+  // Initial alphas array - 0.9 when no selection, unselectedCameraOpacity when a camera is selected
   const initialAlphas = useMemo(() => {
     const alphas = new Float32Array(baseAlphas.length);
     const opacity = selectedImageId === null ? 0.9 : unselectedCameraOpacity;
@@ -561,6 +536,11 @@ function BatchedFrustumLines({
       vertexColors: true,
       transparent: true,
       depthWrite: false,
+      depthTest: true, // Ensure wireframes are occluded by opaque objects
+      // Push wireframes slightly back in depth to avoid z-fighting with image planes
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1,
     });
   }, []);
 
@@ -588,8 +568,11 @@ function BatchedFrustumLines({
 
 // FOV adjustment constants
 const FOV_MIN = 10;
-const FOV_MAX = 120;
+const FOV_MAX = 179;
 const FOV_STEP = 2;
+
+// Number of segments for tessellated plane in fullFrame undistortion mode
+const TESSELLATION_SEGMENTS = 32;
 
 // Frustum plane with texture and interaction (per-frustum component)
 interface FrustumPlaneProps {
@@ -602,9 +585,11 @@ interface FrustumPlaneProps {
   showImagePlane: boolean;
   isSelected: boolean;
   isMatched?: boolean;
-  imagePlaneOpacity: number;
+  selectionPlaneOpacity: number;
   color: string;
   cullAngleThreshold?: number; // Cosine of angle threshold for culling (default: COS_45_DEG)
+  undistortionEnabled?: boolean;
+  undistortionMode?: 'cropped' | 'fullFrame';
   onHover: (id: number | null) => void;
   onClick: (imageId: number) => void;
   onDoubleClick: (imageId: number) => void;
@@ -621,9 +606,11 @@ const FrustumPlane = memo(function FrustumPlane({
   showImagePlane,
   isSelected,
   isMatched = false,
-  imagePlaneOpacity,
+  selectionPlaneOpacity,
   color,
   cullAngleThreshold = COS_45_DEG,
+  undistortionEnabled = false,
+  undistortionMode = 'fullFrame',
   onHover,
   onClick,
   onDoubleClick,
@@ -740,6 +727,16 @@ const FrustumPlane = memo(function FrustumPlane({
     return line;
   }, [planeSize.width, planeSize.height, planeSize.depth]);
 
+  // Dispose borderLine geometry and material when it changes to prevent GPU memory leaks
+  useEffect(() => {
+    return () => {
+      if (borderLine) {
+        borderLine.geometry.dispose();
+        (borderLine.material as THREE.Material).dispose();
+      }
+    };
+  }, [borderLine]);
+
   // Viewing angle based texture culling and border color animation
   // Uses world coordinates to account for active transform
   useFrame((state, delta) => {
@@ -754,10 +751,12 @@ const FrustumPlane = memo(function FrustumPlane({
         const blinkPhase = state.clock.elapsedTime * selectionAnimationSpeed * 2;
         const blinkFactor = (Math.sin(blinkPhase) + 1) / 2;
         // Use opacity variation instead of color darkening
+        // eslint-disable-next-line react-hooks/immutability -- THREE.js material animation requires direct mutation
         mat.opacity = 0.3 + 0.7 * blinkFactor;
         mat.color.set(color);
       } else {
         // static or off: solid color at full opacity
+         
         mat.opacity = 1;
         mat.color.set(color);
       }
@@ -800,12 +799,29 @@ const FrustumPlane = memo(function FrustumPlane({
     <group ref={groupRef} position={position} quaternion={quaternion}>
       <mesh
         position={[0, 0, planeSize.depth]}
+        // Selected image planes render on top of frustum wireframes
+        renderOrder={isSelected ? 100 : 0}
+        // Mark mesh with selection state for hover priority checking
+        userData={{ isSelectedPlane: isSelected }}
         onClick={(e) => { e.stopPropagation(); onClick(image.imageId); }}
         onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick(image.imageId); }}
         onContextMenu={(e) => { e.stopPropagation(); e.nativeEvent.preventDefault(); e.nativeEvent.stopPropagation(); onContextMenu(image.imageId); }}
         onPointerOver={(e) => {
           // Ignore hover during camera orbit/pan
           if (isDragging()) return;
+
+          // If this is not the selected plane, check if selected plane is also intersected
+          if (!isSelected) {
+            // Yield to selected plane if it's among the intersections
+            const selectedPlaneIntersected = e.intersections.some(
+              i => i.object.userData?.isSelectedPlane === true
+            );
+            if (selectedPlaneIntersected) return;
+
+            // Also only accept if this is the closest intersection
+            if (e.intersections[0]?.object !== e.object) return;
+          }
+
           e.stopPropagation();
           setHovered(true);
           setMousePos({ x: e.clientX, y: e.clientY });
@@ -834,18 +850,52 @@ const FrustumPlane = memo(function FrustumPlane({
           document.body.style.cursor = '';
         }}
       >
-        <planeGeometry args={[planeSize.width, planeSize.height]} />
-        <meshBasicMaterial
-          ref={materialRef}
-          map={shouldShowTexture ? displayTexture : null}
-          color={shouldShowTexture ? 0xffffff : displayColor}
-          side={THREE.DoubleSide}
-          transparent
-          depthWrite={false}
-          opacity={hovered
-            ? (shouldShowTexture ? OPACITY.frustum.default : OPACITY.frustum.hoveredNoTexture)
-            : (shouldShowTexture ? imagePlaneOpacity : imagePlaneOpacity * 0.2)}
-        />
+        {/* Use tessellated geometry for fullFrame undistortion (vertex shader moves vertices) */}
+        {undistortionEnabled && undistortionMode === 'fullFrame' ? (
+          <planeGeometry args={[planeSize.width, planeSize.height, TESSELLATION_SEGMENTS, TESSELLATION_SEGMENTS]} />
+        ) : (
+          <planeGeometry args={[planeSize.width, planeSize.height]} />
+        )}
+        {/* Use undistortion shader when enabled and texture is available */}
+        {undistortionEnabled && shouldShowTexture && displayTexture ? (
+          <UndistortedImageMaterial
+            map={displayTexture}
+            camera={camera}
+            undistortionEnabled={undistortionEnabled}
+            undistortionMode={undistortionMode}
+            planeWidth={planeSize.width}
+            planeHeight={planeSize.height}
+            opacity={hovered ? selectionPlaneOpacity * 0.5 : selectionPlaneOpacity}
+            color={0xffffff}
+            side={THREE.DoubleSide}
+            // Selected planes: force transparent pass (renders after wireframes) with no depth test/write
+            depthTest={!isSelected}
+            forceTransparent={isSelected}
+            forceDepthWrite={isSelected ? false : undefined}
+          />
+        ) : (
+          (() => {
+            const materialOpacity = hovered
+              ? (shouldShowTexture ? selectionPlaneOpacity * 0.5 : OPACITY.frustum.hoveredNoTexture)
+              : (shouldShowTexture ? selectionPlaneOpacity : selectionPlaneOpacity * 0.2);
+            const { transparent, depthWrite } = getMaterialTransparency(materialOpacity);
+            return (
+              <meshBasicMaterial
+                ref={materialRef}
+                map={shouldShowTexture ? displayTexture : null}
+                color={shouldShowTexture ? 0xffffff : displayColor}
+                side={THREE.DoubleSide}
+                // Selected planes: force transparent pass (renders after wireframes) with no depth test
+                // Non-selected: use normal transparency based on opacity
+                transparent={isSelected ? true : transparent}
+                depthWrite={isSelected ? false : depthWrite}
+                depthTest={!isSelected}
+                toneMapped={false}
+                opacity={materialOpacity}
+              />
+            );
+          })()
+        )}
       </mesh>
       {isSelected && <primitive object={borderLine} />}
       {hovered && mousePos && (
@@ -901,7 +951,6 @@ const FrustumPlane = memo(function FrustumPlane({
 interface ArrowHitTargetProps {
   position: THREE.Vector3;
   quaternion: THREE.Quaternion;
-  camera: Camera;
   image: Image;
   scale: number;
   isMatched?: boolean;
@@ -914,7 +963,6 @@ interface ArrowHitTargetProps {
 const ArrowHitTarget = memo(function ArrowHitTarget({
   position,
   quaternion,
-  camera: _camera,
   image,
   scale,
   isMatched = false,
@@ -1103,7 +1151,9 @@ export function CameraFrustums() {
   const cameraScale = useCameraStore((s) => s.cameraScale);
   const selectedImageId = useCameraStore((s) => s.selectedImageId);
   const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
-  const imagePlaneOpacity = useCameraStore((s) => s.imagePlaneOpacity);
+  const selectionPlaneOpacity = useCameraStore((s) => s.selectionPlaneOpacity);
+  const undistortionEnabled = useCameraStore((s) => s.undistortionEnabled);
+  const undistortionMode = useCameraStore((s) => s.undistortionMode);
 
   // Image planes are shown in 'imageplane' mode
   const showImagePlanes = cameraDisplayMode === 'imageplane';
@@ -1116,7 +1166,6 @@ export function CameraFrustums() {
   const selectionAnimationSpeed = useCameraStore((s) => s.selectionAnimationSpeed);
   const imageLoadMode = useUIStore((s) => s.imageLoadMode);
   const frustumColorMode = useCameraStore((s) => s.frustumColorMode);
-  const selectedCameraOpacity = useCameraStore((s) => s.selectedCameraOpacity);
   const unselectedCameraOpacity = useCameraStore((s) => s.unselectedCameraOpacity);
   const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
   const matchesOpacity = useUIStore((s) => s.matchesOpacity);
@@ -1152,13 +1201,8 @@ export function CameraFrustums() {
     } else if (isCameraMovingRef.current && now - lastMoveTimeRef.current > TIMING.transitionBase) {
       isCameraMovingRef.current = false;
       resumeFrustumTextureCache();
-      visibilityNeedsUpdate.current = true; // Trigger view frustum culling update
     }
   });
-
-  // View frustum culling state - only render frustums visible in the camera's view
-  const [visibleFrustumIds, setVisibleFrustumIds] = useState<Set<number>>(() => new Set());
-  const visibilityNeedsUpdate = useRef(true);
 
   // Extract imageFiles to avoid recalculating when other loadedFiles properties change
   const imageFiles = loadedFiles?.imageFiles;
@@ -1196,11 +1240,6 @@ export function CameraFrustums() {
     return matched;
   }, [reconstruction, selectedImageId, matchesDisplayMode]);
 
-  // Trigger visibility update when matched images change
-  useEffect(() => {
-    visibilityNeedsUpdate.current = true;
-  }, [matchedImageIds]);
-
   const frustums = useMemo(() => {
     if (!reconstruction || cameraDisplayMode === 'off') return [];
 
@@ -1229,54 +1268,6 @@ export function CameraFrustums() {
 
     return result;
   }, [reconstruction, cameraDisplayMode, imageFiles, cameraIdToIndex]);
-
-  // Compute visible frustums using view frustum culling
-  // Updates when camera stops moving to avoid per-frame computation
-  useFrame(({ camera }) => {
-    // Only update when camera has stopped moving and update is needed
-    if (isCameraMovingRef.current || !visibilityNeedsUpdate.current) return;
-    if (frustums.length === 0) return;
-
-    visibilityNeedsUpdate.current = false;
-
-    // Build the view frustum from the camera
-    projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-    viewFrustum.setFromProjectionMatrix(projScreenMatrix);
-
-    // Check each frustum position against the view frustum
-    const newVisible = new Set<number>();
-    for (const f of frustums) {
-      const imageId = f.image.imageId;
-      // Always include selected, hovered, and matched
-      if (imageId === selectedImageId || imageId === hoveredImageId || matchedImageIds.has(imageId)) {
-        newVisible.add(imageId);
-        continue;
-      }
-      // Check if position is within view frustum
-      if (viewFrustum.containsPoint(f.position)) {
-        newVisible.add(imageId);
-      }
-    }
-
-    // Only update state if the set changed
-    if (newVisible.size !== visibleFrustumIds.size ||
-        [...newVisible].some(id => !visibleFrustumIds.has(id))) {
-      setVisibleFrustumIds(newVisible);
-    }
-  });
-
-  // Filter frustums based on view frustum culling
-  // Show all if visibility hasn't been computed yet, otherwise only show visible ones
-  // Always include: selected, hovered, and matched images
-  const visibleFrustums = useMemo(() => {
-    if (visibleFrustumIds.size === 0) return frustums; // Show all until first computation
-    return frustums.filter(f =>
-      visibleFrustumIds.has(f.image.imageId) ||
-      f.image.imageId === selectedImageId ||
-      f.image.imageId === hoveredImageId ||
-      matchedImageIds.has(f.image.imageId)
-    );
-  }, [frustums, visibleFrustumIds, selectedImageId, hoveredImageId, matchedImageIds]);
 
   // Callbacks for arrow hit targets - use stable references to avoid breaking memo
   const handleArrowClick = useCallback((imageId: number) => {
@@ -1317,6 +1308,18 @@ export function CameraFrustums() {
     }
     setSelectedImageId(imageId);
     flyToImage(imageId);
+
+    // Show undistortion tip if camera has lens distortion
+    const intrinsics = getCameraIntrinsics(frustum.camera);
+    const hasDistortion = intrinsics.k1 !== 0 || intrinsics.k2 !== 0 ||
+                          intrinsics.k3 !== 0 || intrinsics.k4 !== 0 ||
+                          intrinsics.p1 !== 0 || intrinsics.p2 !== 0;
+    if (hasDistortion) {
+      useGuideStore.getState().showTip(
+        'undistortion',
+        'Press U to toggle lens undistortion'
+      );
+    }
   }, [frustums, flyToImage, setSelectedImageId, selectedImageId, matchedImageIds, openImageDetail, setMatchedImageId, setShowMatchesInModal]);
 
   // Helper to prioritize texture loading for an image
@@ -1380,7 +1383,6 @@ export function CameraFrustums() {
           selectionColorMode={selectionColorMode}
           selectionColor={selectionColor}
           selectionAnimationSpeed={selectionAnimationSpeed}
-          selectedCameraOpacity={selectedCameraOpacity}
           unselectedCameraOpacity={unselectedCameraOpacity}
         />
         {/* Image plane for selected camera (replaces arrow) */}
@@ -1394,8 +1396,10 @@ export function CameraFrustums() {
             imageFile={selectedFrustum.imageFile}
             showImagePlane={true}
             isSelected={true}
-            imagePlaneOpacity={0.8}
+            selectionPlaneOpacity={selectionPlaneOpacity}
             color={selectionColorMode === 'rainbow' ? VIZ_COLORS.frustum.selected : selectionColor}
+            undistortionEnabled={undistortionEnabled}
+            undistortionMode={undistortionMode}
             onHover={setHoveredImageId}
             onClick={handleArrowClick}
             onDoubleClick={handleArrowDoubleClick}
@@ -1404,14 +1408,13 @@ export function CameraFrustums() {
         )}
         {/* Individual invisible hit targets for interactions (view frustum culled) */}
         {/* Skip selected image - it uses FrustumPlane for interaction instead */}
-        {visibleFrustums
+        {frustums
           .filter(f => f.image.imageId !== selectedImageId)
           .map((f) => (
             <ArrowHitTarget
               key={f.image.imageId}
               position={f.position}
               quaternion={f.quaternion}
-              camera={f.camera}
               image={f.image}
               scale={cameraScale}
               isMatched={matchedImageIds.has(f.image.imageId)}
@@ -1444,7 +1447,7 @@ export function CameraFrustums() {
     return (
       <group>
         {/* Per-frustum planes for texture + interaction (view frustum culled) */}
-        {visibleFrustums.map((f) => {
+        {frustums.map((f) => {
           const isSelected = f.image.imageId === selectedImageId;
           const isMatched = matchedImageIds.has(f.image.imageId);
           let frustumColor: string;
@@ -1457,8 +1460,18 @@ export function CameraFrustums() {
           } else {
             frustumColor = VIZ_COLORS.frustum.default;
           }
-          // When no camera is selected, use 0.9 opacity for all
-          const planeOpacity = selectedImageId === null ? 0.9 : imagePlaneOpacity;
+          // When no camera is selected, all use selectionPlaneOpacity
+          // When selected, selected gets selectionPlaneOpacity, others get selectionPlaneOpacity * unselectedCameraOpacity
+          let planeOpacity: number;
+          if (selectedImageId === null) {
+            planeOpacity = selectionPlaneOpacity;
+          } else if (isSelected) {
+            planeOpacity = selectionPlaneOpacity;
+          } else if (isMatched) {
+            planeOpacity = selectionPlaneOpacity * matchesOpacity;
+          } else {
+            planeOpacity = selectionPlaneOpacity * unselectedCameraOpacity;
+          }
           return (
             <FrustumPlane
               key={f.image.imageId}
@@ -1471,9 +1484,11 @@ export function CameraFrustums() {
               showImagePlane={imageLoadMode !== 'skip' && (selectedImageId === null || isSelected)}
               isSelected={isSelected}
               isMatched={isMatched}
-              imagePlaneOpacity={planeOpacity}
+              selectionPlaneOpacity={planeOpacity}
               color={frustumColor}
               cullAngleThreshold={COS_90_DEG}
+              undistortionEnabled={undistortionEnabled}
+              undistortionMode={undistortionMode}
               onHover={setHoveredImageId}
               onClick={handleArrowClick}
               onDoubleClick={handleArrowDoubleClick}
@@ -1516,12 +1531,11 @@ export function CameraFrustums() {
         selectionColorMode={selectionColorMode}
         selectionColor={selectionColor}
         selectionAnimationSpeed={selectionAnimationSpeed}
-        selectedCameraOpacity={selectedCameraOpacity}
         unselectedCameraOpacity={unselectedCameraOpacity}
         showImagePlanes={showImagePlanes}
       />
       {/* Per-frustum planes for texture + interaction (view frustum culled) */}
-      {visibleFrustums.map((f) => {
+      {frustums.map((f) => {
           // Determine frustum color based on mode (for plane fallback color)
           const isSelected = f.image.imageId === selectedImageId;
           const isMatched = matchedImageIds.has(f.image.imageId);
@@ -1535,15 +1549,6 @@ export function CameraFrustums() {
           } else {
             frustumColor = VIZ_COLORS.frustum.default;
           }
-          // Compute plane opacity - selected uses selectedCameraOpacity, matched uses matchesOpacity, others use unselectedCameraOpacity
-          let planeOpacity: number;
-          if (isSelected) {
-            planeOpacity = imagePlaneOpacity * selectedCameraOpacity;
-          } else if (isMatched) {
-            planeOpacity = imagePlaneOpacity * matchesOpacity;
-          } else {
-            planeOpacity = imagePlaneOpacity * unselectedCameraOpacity;
-          }
           return (
             <FrustumPlane
               key={f.image.imageId}
@@ -1556,8 +1561,10 @@ export function CameraFrustums() {
               showImagePlane={imageLoadMode !== 'skip' && isSelected}
               isSelected={isSelected}
               isMatched={isMatched}
-              imagePlaneOpacity={planeOpacity}
+              selectionPlaneOpacity={selectionPlaneOpacity}
               color={frustumColor}
+              undistortionEnabled={undistortionEnabled}
+              undistortionMode={undistortionMode}
               onHover={setHoveredImageId}
               onClick={handleArrowClick}
               onDoubleClick={handleArrowDoubleClick}
@@ -1596,24 +1603,8 @@ export function CameraMatches() {
   // Animate blink effect
   useFrame((_, delta) => {
     if (matchesDisplayMode === 'blink' && materialRef.current) {
-      // Blink: quick flash on, longer off
-      blinkPhaseRef.current = (blinkPhaseRef.current + delta) % 2; // 2 second cycle
-      const t = blinkPhaseRef.current;
-      let blinkFactor: number;
-      if (t < 0.3) {
-        // Fade in (0 to 0.3s)
-        blinkFactor = t / 0.3;
-      } else if (t < 0.6) {
-        // Hold bright (0.3 to 0.6s)
-        blinkFactor = 1;
-      } else if (t < 1.0) {
-        // Fade out (0.6 to 1.0s)
-        blinkFactor = 1 - (t - 0.6) / 0.4;
-      } else {
-        // Stay off (1.0 to 3.0s)
-        blinkFactor = 0;
-      }
-      materialRef.current.opacity = matchesOpacity * (0.1 + 0.9 * blinkFactor);
+      blinkPhaseRef.current = (blinkPhaseRef.current + delta) % 2;
+      materialRef.current.opacity = matchesOpacity * (0.1 + 0.9 * getMatchesBlinkFactor(blinkPhaseRef.current));
     }
   });
 
@@ -1661,6 +1652,13 @@ export function CameraMatches() {
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     return geo;
   }, [reconstruction, selectedImageId, matchesDisplayMode, cameraDisplayMode]);
+
+  // Dispose geometry when it changes to prevent GPU memory leaks
+  useEffect(() => {
+    return () => {
+      geometry?.dispose();
+    };
+  }, [geometry]);
 
   if (matchesDisplayMode === 'off' || cameraDisplayMode === 'off' || cameraDisplayMode === 'imageplane' || !geometry) return null;
 

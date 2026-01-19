@@ -20,6 +20,9 @@ export type CameraDisplayMode = (typeof CAMERA_DISPLAY_MODES)[number];
 export const FRUSTUM_COLOR_MODES = ['single', 'byCamera'] as const;
 export type FrustumColorMode = (typeof FRUSTUM_COLOR_MODES)[number];
 
+export const UNDISTORTION_MODES = ['cropped', 'fullFrame'] as const;
+export type UndistortionMode = (typeof UNDISTORTION_MODES)[number];
+
 export const IMAGE_LOAD_MODES = ['prefetch', 'lazy', 'skip'] as const;
 export type ImageLoadMode = (typeof IMAGE_LOAD_MODES)[number];
 
@@ -51,6 +54,10 @@ export type AxisLabelMode = (typeof AXIS_LABEL_MODES)[number];
 
 export const GIZMO_MODES = ['off', 'local', 'global'] as const;
 export type GizmoMode = (typeof GIZMO_MODES)[number];
+
+// Rig visualization
+export const RIG_DISPLAY_MODES = ['off', 'lines', 'hull'] as const;
+export type RigDisplayMode = (typeof RIG_DISPLAY_MODES)[number];
 
 // Export
 export const SCREENSHOT_SIZES = [

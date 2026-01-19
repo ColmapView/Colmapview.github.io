@@ -42,7 +42,7 @@ export interface CameraConfig {
   selectionColorMode: SelectionColorMode;
   selectionColor: string;
   selectionAnimationSpeed: number;
-  imagePlaneOpacity: number;
+  selectionPlaneOpacity: number;
 }
 
 export interface UIConfig {

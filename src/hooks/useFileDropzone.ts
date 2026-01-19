@@ -6,15 +6,22 @@ import {
   parseImagesText,
   parseCamerasBinary,
   parseCamerasText,
+  parseRigsBinary,
+  parseRigsText,
+  parseFramesBinary,
+  parseFramesText,
   computeImageStats,
 } from '../parsers';
-import { useReconstructionStore, useUIStore, useCameraStore } from '../store';
+import type { RigData } from '../types/rig';
+import { useReconstructionStore, useUIStore, useCameraStore, usePointCloudStore, useNotificationStore } from '../store';
 import type { Reconstruction } from '../types/colmap';
 import { collectImageFiles, hasMaskFiles, getImageFile, findMissingImageFiles } from '../utils/imageFileUtils';
 import { getFailedImageCount, clearSharedDecodeCache } from './useAsyncImageCache';
 import { clearThumbnailCache, prefetchThumbnails } from './useThumbnail';
 import { clearFrustumTextureCache, prefetchFrustumTextures } from './useFrustumTexture';
 import { parseConfigYaml, applyConfigurationToStores } from '../config/configuration';
+import { getImageWorldPosition } from '../utils/colmapTransforms';
+import type { Image as ColmapImage } from '../types/colmap';
 
 function findConfigFile(files: Map<string, File>): File | null {
   for (const [, file] of files) {
@@ -24,6 +31,29 @@ function findConfigFile(files: Map<string, File>): File | null {
     }
   }
   return null;
+}
+
+/** Compute scene radius from camera positions for auto-scaling frustums */
+function computeSceneRadius(images: Map<number, ColmapImage>): number {
+  if (images.size === 0) return 1;
+
+  const positions: Array<{ x: number; y: number; z: number }> = [];
+  for (const image of images.values()) {
+    positions.push(getImageWorldPosition(image));
+  }
+
+  // Use simple bounding box approach
+  let minX = Infinity, maxX = -Infinity;
+  let minY = Infinity, maxY = -Infinity;
+  let minZ = Infinity, maxZ = -Infinity;
+
+  for (const pos of positions) {
+    minX = Math.min(minX, pos.x); maxX = Math.max(maxX, pos.x);
+    minY = Math.min(minY, pos.y); maxY = Math.max(maxY, pos.y);
+    minZ = Math.min(minZ, pos.z); maxZ = Math.max(maxZ, pos.z);
+  }
+
+  return Math.max(maxX - minX, maxY - minY, maxZ - minZ, 0.001) / 2;
 }
 
 function hasColmapFiles(files: Map<string, File>): boolean {
@@ -51,6 +81,7 @@ export function useFileDropzone() {
   } = useReconstructionStore();
   const resetView = useUIStore((s) => s.resetView);
   const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
+  const setCameraScale = useCameraStore((s) => s.setCameraScale);
   const imageLoadMode = useUIStore((s) => s.imageLoadMode);
 
   const scanEntry = useCallback(async (
@@ -98,6 +129,8 @@ export function useFileDropzone() {
     imagesFile?: File;
     points3DFile?: File;
     databaseFile?: File;
+    rigsFile?: File;
+    framesFile?: File;
   } => {
     // Group files by their parent directory
     const getParentDir = (path: string): string => {
@@ -106,7 +139,7 @@ export function useFileDropzone() {
     };
 
     // Find all directories containing COLMAP files
-    const colmapDirs = new Map<string, { cameras?: File; images?: File; points3D?: File; database?: File }>();
+    const colmapDirs = new Map<string, { cameras?: File; images?: File; points3D?: File; database?: File; rigs?: File; frames?: File }>();
 
     for (const [path, file] of files) {
       const name = file.name.toLowerCase();
@@ -126,6 +159,10 @@ export function useFileDropzone() {
         dirFiles.points3D = file;
       } else if (name === 'database.db' || name === 'colmap.db') {
         dirFiles.database = file;
+      } else if (name === 'rigs.bin' || (name === 'rigs.txt' && !dirFiles.rigs?.name.endsWith('.bin'))) {
+        dirFiles.rigs = file;
+      } else if (name === 'frames.bin' || (name === 'frames.txt' && !dirFiles.frames?.name.endsWith('.bin'))) {
+        dirFiles.frames = file;
       }
     }
 
@@ -160,6 +197,8 @@ export function useFileDropzone() {
       imagesFile: best.images,
       points3DFile: best.points3D,
       databaseFile: best.database,
+      rigsFile: best.rigs,
+      framesFile: best.frames,
     };
   }, []);
 
@@ -199,7 +238,7 @@ export function useFileDropzone() {
       setDroppedFiles(files);
 
       // Find COLMAP files
-      const { camerasFile, imagesFile, points3DFile, databaseFile } = findColmapFiles(files);
+      const { camerasFile, imagesFile, points3DFile, databaseFile, rigsFile, framesFile } = findColmapFiles(files);
 
       if (!camerasFile || !imagesFile || !points3DFile) {
         throw new Error(
@@ -222,6 +261,8 @@ export function useFileDropzone() {
         imagesFile,
         points3DFile,
         databaseFile,
+        rigsFile,
+        framesFile,
         imageFiles,
         hasMasks,
       });
@@ -248,7 +289,26 @@ export function useFileDropzone() {
 
       setProgress(40);
 
-      const reconstruction: Reconstruction = { cameras, images, points3D, imageStats, connectedImagesIndex, globalStats };
+      // Parse rig/frame files if both are present
+      let rigData: RigData | undefined;
+      if (rigsFile && framesFile) {
+        try {
+          const [rigs, frames] = await Promise.all([
+            rigsFile.name.endsWith('.bin')
+              ? rigsFile.arrayBuffer().then(parseRigsBinary)
+              : rigsFile.text().then(parseRigsText),
+            framesFile.name.endsWith('.bin')
+              ? framesFile.arrayBuffer().then(parseFramesBinary)
+              : framesFile.text().then(parseFramesText),
+          ]);
+          rigData = { rigs, frames };
+          console.log(`Loaded rig data: ${rigs.size} rigs, ${frames.size} frames`);
+        } catch (err) {
+          console.warn('Failed to parse rig/frame files:', err);
+        }
+      }
+
+      const reconstruction: Reconstruction = { cameras, images, points3D, imageStats, connectedImagesIndex, globalStats, rigData };
 
       // Clear caches AFTER parsing succeeds to prevent broken state on error
       // This ensures old reconstruction remains functional if new data fails to load
@@ -301,6 +361,11 @@ export function useFileDropzone() {
       // Set reconstruction (this will set progress to 100 and loading to false)
       setReconstruction(reconstruction);
 
+      // Auto-scale camera frustums based on scene size
+      const sceneRadius = computeSceneRadius(images);
+      const autoScale = sceneRadius * 0.05; // 5% of scene extent
+      setCameraScale(autoScale);
+
       // Reset viewer state for new reconstruction
       setSelectedImageId(null);
       resetView();
@@ -308,6 +373,24 @@ export function useFileDropzone() {
       console.log(
         `Loaded: ${cameras.size} cameras, ${images.size} images, ${points3D.size} points`
       );
+
+      // Check if there are points being filtered due to minTrackLength setting
+      const minTrackLength = usePointCloudStore.getState().minTrackLength;
+      if (minTrackLength >= 2) {
+        let filteredCount = 0;
+        for (const point of points3D.values()) {
+          if (point.track.length < minTrackLength) {
+            filteredCount++;
+          }
+        }
+        if (filteredCount > 0) {
+          const percentage = ((filteredCount / points3D.size) * 100).toFixed(1);
+          useNotificationStore.getState().addNotification(
+            'warning',
+            `${filteredCount.toLocaleString()} points (${percentage}%) hidden due to min track length filter (${minTrackLength}). Adjust in Point Cloud settings.`
+          );
+        }
+      }
 
       // Diagnostic: Report any images that couldn't find their files
       const { missingImages, totalImages, totalFiles } = findMissingImageFiles(images, imageFiles);
@@ -348,6 +431,7 @@ export function useFileDropzone() {
     findColmapFiles,
     resetView,
     setSelectedImageId,
+    setCameraScale,
     imageLoadMode,
   ]);
 

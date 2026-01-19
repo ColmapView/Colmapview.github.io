@@ -5,70 +5,8 @@ import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { VIZ_COLORS, contextMenuStyles, hoverCardStyles, ICON_SIZES } from '../../theme';
 import { useUIStore } from '../../store';
 import type { AxesCoordinateSystem, AxisLabelMode, AxesDisplayMode } from '../../store/types';
-
-// Coordinate system axis directions (as unit vectors in Three.js world space)
-// In Three.js: +X=right, +Y=up, +Z=toward viewer (backward), -Z=into scene (forward)
-// Each system defines where X, Y, Z axes point
-export const COORDINATE_SYSTEMS: Record<AxesCoordinateSystem, { x: [number, number, number]; y: [number, number, number]; z: [number, number, number] }> = {
-  colmap: {   // X-right, Y-down, Z-forward (same as OpenCV)
-    x: [1, 0, 0],     // Right
-    y: [0, -1, 0],    // Down
-    z: [0, 0, -1],    // Forward (into scene)
-  },
-  opencv: {   // X-right, Y-down, Z-forward (same as COLMAP)
-    x: [1, 0, 0],     // Right
-    y: [0, -1, 0],    // Down
-    z: [0, 0, -1],    // Forward (into scene)
-  },
-  threejs: {  // X-right, Y-up, Z-backward (same as OpenGL)
-    x: [1, 0, 0],     // Right
-    y: [0, 1, 0],     // Up
-    z: [0, 0, 1],     // Backward (toward viewer)
-  },
-  opengl: {   // X-right, Y-up, Z-backward (same as Three.js)
-    x: [1, 0, 0],     // Right
-    y: [0, 1, 0],     // Up
-    z: [0, 0, 1],     // Backward (toward viewer)
-  },
-  vulkan: {   // X-right, Y-up, Z-backward (same as OpenGL in world space)
-    x: [1, 0, 0],     // Right
-    y: [0, 1, 0],     // Up
-    z: [0, 0, 1],     // Backward (toward viewer)
-  },
-  blender: {  // X-right, Y-forward, Z-up (right-handed, Z-up convention)
-    x: [1, 0, 0],     // Right
-    y: [0, 0, -1],    // Forward (into scene) - Blender Y is depth axis
-    z: [0, 1, 0],     // Up
-  },
-  houdini: {  // X-right, Y-up, Z-backward (right-handed, same as OpenGL)
-    x: [1, 0, 0],     // Right
-    y: [0, 1, 0],     // Up
-    z: [0, 0, 1],     // Backward (toward viewer)
-  },
-  unity: {    // X-right, Y-up, Z-forward (LEFT-handed, Y-up)
-    x: [1, 0, 0],     // Right
-    y: [0, 1, 0],     // Up
-    z: [0, 0, -1],    // Forward (into scene)
-  },
-  unreal: {   // X-forward, Y-right, Z-up (LEFT-handed, Z-up)
-    x: [0, 0, -1],    // Forward (into scene) - Unreal X is forward axis
-    y: [1, 0, 0],     // Right
-    z: [0, 1, 0],     // Up
-  },
-};
-
-// Get the "world up" direction for a coordinate system (used for horizon lock)
-// For Y-vertical systems, this is the Y direction; for Z-up systems, this is the Z direction
-export function getWorldUp(coordinateSystem: AxesCoordinateSystem): [number, number, number] {
-  const system = COORDINATE_SYSTEMS[coordinateSystem];
-  // Z-up systems: Blender, Unreal
-  if (coordinateSystem === 'blender' || coordinateSystem === 'unreal') {
-    return system.z;
-  }
-  // Y-vertical systems (most common): use Y direction
-  // For COLMAP/OpenCV this is [0, -1, 0], for Three.js/OpenGL this is [0, 1, 0]
-  return system.y;
-}
+import { CheckIcon, HideIcon } from '../../icons';
+import { COORDINATE_SYSTEMS } from '../../utils/coordinateSystems';
 
 // Helper to calculate rotation quaternion from default cylinder (Y-axis) to target direction
 function getAxisRotation(direction: [number, number, number]): THREE.Euler {
@@ -136,12 +74,8 @@ const ALL_LABEL_MODES: { value: AxisLabelMode; label: string }[] = [
   { value: 'extra', label: 'Extra' },
 ];
 
-// Checkmark icon for selected items
-const CheckIcon = () => (
-  <svg className="w-4 h-4 text-ds-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-    <path d="M5 12l5 5L20 7" />
-  </svg>
-);
+// Style for checkmark icon in menus
+const checkIconClass = "w-4 h-4 text-ds-accent";
 
 // Labels menu (left-click) - shows label options and hide axes
 interface LabelsMenuProps {
@@ -157,8 +91,36 @@ const LabelsMenu = memo(function LabelsMenu({
   axesDisplayMode,
   onClose,
 }: LabelsMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
   const setAxisLabelMode = useUIStore((s) => s.setAxisLabelMode);
   const setAxesDisplayMode = useUIStore((s) => s.setAxesDisplayMode);
+
+  // Close on click outside or escape
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    // Delay to avoid immediate close from triggering click
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
+    }, 0);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
 
   const handleLabelChange = useCallback((mode: AxisLabelMode) => {
     setAxisLabelMode(mode);
@@ -179,22 +141,20 @@ const LabelsMenu = memo(function LabelsMenu({
       style={{ position: 'fixed', left: position.x, top: position.y, pointerEvents: 'auto' }}
       calculatePosition={() => [0, 0]}
     >
-      <div className={contextMenuStyles.container} onMouseLeave={onClose}>
+      <div ref={menuRef} className={contextMenuStyles.container}>
         {ALL_LABEL_MODES.map((mode) => (
           <button
             key={mode.value}
             className={contextMenuStyles.button}
             onClick={() => handleLabelChange(mode.value)}
           >
-            {currentLabelMode === mode.value ? <CheckIcon /> : <span className="w-4" />}
+            {currentLabelMode === mode.value ? <CheckIcon className={checkIconClass} /> : <span className="w-4" />}
             {mode.label}
           </button>
         ))}
         <div className="border-t border-ds my-1" />
         <button className={contextMenuStyles.button} onClick={handleHideAxes}>
-          <svg className={contextMenuStyles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M3 3l18 18M10.5 10.5a3 3 0 004.5 4.5M6.5 6.5C4 8.5 2 12 2 12s4 6 10 6c1.5 0 3-.5 4.5-1.5M17 17c2-1.5 3.5-3.5 5-5-1-1.5-4-6-10-6-.5 0-1 0-1.5.1" />
-          </svg>
+          <HideIcon className={contextMenuStyles.icon} />
           Hide
         </button>
       </div>
@@ -214,7 +174,35 @@ const SystemMenu = memo(function SystemMenu({
   currentSystem,
   onClose,
 }: SystemMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
   const setAxesCoordinateSystem = useUIStore((s) => s.setAxesCoordinateSystem);
+
+  // Close on click outside or escape
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    // Delay to avoid immediate close from triggering click
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
+    }, 0);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
 
   const handleSystemChange = useCallback((system: AxesCoordinateSystem) => {
     setAxesCoordinateSystem(system);
@@ -226,14 +214,14 @@ const SystemMenu = memo(function SystemMenu({
       style={{ position: 'fixed', left: position.x, top: position.y, pointerEvents: 'auto' }}
       calculatePosition={() => [0, 0]}
     >
-      <div className={contextMenuStyles.container} onMouseLeave={onClose}>
+      <div ref={menuRef} className={contextMenuStyles.container}>
         {ALL_COORDINATE_SYSTEMS.map((sys) => (
           <button
             key={sys}
             className={contextMenuStyles.button}
             onClick={() => handleSystemChange(sys)}
           >
-            {currentSystem === sys ? <CheckIcon /> : <span className="w-4" />}
+            {currentSystem === sys ? <CheckIcon className={checkIconClass} /> : <span className="w-4" />}
             {COORDINATE_SYSTEM_NAMES[sys]}
           </button>
         ))}
@@ -424,6 +412,7 @@ export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', label
       setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
       document.body.style.cursor = 'pointer';
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isDragging is called dynamically to get latest drag state
   }, [hoveredElement]);
 
   const handlePointerMove = useCallback((e: ThreeEvent<PointerEvent>) => {
@@ -439,6 +428,7 @@ export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', label
     if (hoveredElement) {
       setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isDragging is called dynamically to get latest drag state
   }, [hoveredElement]);
 
   const handlePointerOut = useCallback((id: string) => () => {
@@ -459,6 +449,9 @@ export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', label
   // Right-click: show system menu
   const handleContextMenu = useCallback((e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
+    // Also stop native DOM event to prevent global context menu from opening
+    e.nativeEvent.stopPropagation();
+    e.nativeEvent.preventDefault();
     setLabelsMenu(null);
     setSystemMenu({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
   }, []);
@@ -478,9 +471,10 @@ export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', label
   // Format scale for display (3 significant digits)
   const scaleStr = scale.toPrecision(3);
 
+  // Order axes Y, X, Z to match typical "up" axis priority
   const axes = useMemo(() => [
-    { direction: system.x, color: VIZ_COLORS.axis.x, label: 'X' },
     { direction: system.y, color: VIZ_COLORS.axis.y, label: 'Y', suffix: `(${COORDINATE_SYSTEM_NAMES[coordinateSystem]})` },
+    { direction: system.x, color: VIZ_COLORS.axis.x, label: 'X' },
     { direction: system.z, color: VIZ_COLORS.axis.z, label: 'Z' },
   ], [system, coordinateSystem]);
 
@@ -559,7 +553,7 @@ export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', label
             suffix={'suffix' in axis ? axis.suffix : undefined}
             scaleStr={scaleStr}
             showExtra={showExtra}
-            isXAxis={i === 0}
+            isXAxis={i === 1}
             color={axis.color}
             fontSize={fontSize}
             isHovered={hoveredElement === id}
@@ -697,6 +691,7 @@ export function OriginGrid({ size, scale = 1 }: OriginGridProps) {
   }, [gridScale]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability -- THREE.js shader uniform requires direct mutation
     material.uniforms.uGridScale.value = gridScale;
   }, [material, gridScale]);
 

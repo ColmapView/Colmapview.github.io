@@ -4,7 +4,7 @@ import { useReconstructionStore, useUIStore } from '../../store';
 import type { Camera, Image } from '../../types/colmap';
 import { getImageFile, getMaskFile } from '../../utils/imageFileUtils';
 import { useFileUrl } from '../../hooks/useFileUrl';
-import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, MODAL, buttonStyles, inputStyles, resizeHandleStyles, controlPanelStyles } from '../../theme';
+import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, MODAL, buttonStyles, inputStyles, resizeHandleStyles } from '../../theme';
 import { HOTKEYS } from '../../config/hotkeys';
 
 const CAMERA_MODEL_NAMES: Record<number, string> = {
@@ -35,6 +35,20 @@ const CAMERA_PARAM_NAMES: Record<number, string> = {
   10: 'fx, fy, cx, cy, k1, k2, p1, p2, k3, k4, sx1, sy1',
 };
 
+// Format camera parameter with appropriate precision
+// Large values (>=1): show 1 decimal place
+// Small values (<1): show 4 significant figures to capture distortion coefficients
+function formatParam(value: number): string {
+  const absVal = Math.abs(value);
+  if (absVal >= 1) {
+    return value.toFixed(1);
+  }
+  if (absVal === 0) {
+    return '0';
+  }
+  return value.toPrecision(4);
+}
+
 // Component to display camera info and pose in a single compact line
 function CameraPoseInfoDisplay({ camera, qvec, tvec }: { camera: Camera; qvec: number[]; tvec: number[] }) {
   const modelName = CAMERA_MODEL_NAMES[camera.modelId] || `MODEL_${camera.modelId}`;
@@ -43,7 +57,7 @@ function CameraPoseInfoDisplay({ camera, qvec, tvec }: { camera: Camera; qvec: n
   const rotXyzw = [qvec[1], qvec[2], qvec[3], qvec[0]];
 
   return (
-    <div className="flex items-center gap-3 text-sm flex-wrap">
+    <div className="flex items-center gap-2 text-xs flex-wrap">
       {/* Camera Model */}
       <span className="text-ds-accent font-mono">{modelName}</span>
       <span className="text-ds-muted">|</span>
@@ -58,7 +72,7 @@ function CameraPoseInfoDisplay({ camera, qvec, tvec }: { camera: Camera; qvec: n
           <span key={i}>
             {i > 0 && <span className="text-ds-muted">, </span>}
             <span className="text-ds-muted">{paramNames[i] || `p${i}`}=</span>
-            <span className="text-ds-primary">{p.toFixed(1)}</span>
+            <span className="text-ds-primary">{formatParam(p)}</span>
           </span>
         ))}
       </span>
@@ -571,15 +585,19 @@ export function ImageDetailModal() {
     const image2Height = aspect2 > containerAspect ? halfWidth / aspect2 : height;
 
     return { image1Width, image1Height, image2Width, image2Height };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- MATCH_VIEW_GAP is a constant, containerSize is intentionally destructured
   }, [camera, matchedCamera, containerSize.width, containerSize.height]);
 
-  // Center modal when it opens
+  // Center modal only when it first opens (not when navigating between images)
+  const wasOpenRef = useRef(false);
   useEffect(() => {
-    if (imageDetailId !== null) {
+    if (imageDetailId !== null && !wasOpenRef.current) {
       const centerX = (window.innerWidth - size.width) / 2;
       const centerY = (window.innerHeight - size.height) / 2;
       setPosition({ x: centerX, y: centerY });
     }
+    wasOpenRef.current = imageDetailId !== null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- size.width/height intentionally omitted to only center on initial open
   }, [imageDetailId]);
 
   // Handle keyboard shortcuts using centralized hotkey system
@@ -726,6 +744,7 @@ export function ImageDetailModal() {
       <div
         className="absolute inset-0 bg-ds-void/50 pointer-events-auto"
         onClick={closeImageDetail}
+        onContextMenu={(e) => { e.preventDefault(); closeImageDetail(); }}
       />
 
       <div
@@ -739,20 +758,20 @@ export function ImageDetailModal() {
         onClick={(e) => e.stopPropagation()}
       >
         <div
-          className="flex items-center justify-between px-3 py-1 cursor-move select-none rounded-t-lg bg-ds-secondary"
+          className="flex items-center justify-between px-4 py-2 cursor-move select-none rounded-t-lg bg-ds-secondary text-xs"
           onMouseDown={handleDragStart}
         >
-          <h2 className="text-ds-primary font-semibold text-sm">
+          <span className="text-ds-primary">
             {isMatchViewMode
               ? `Image Matches: ${image?.name} ↔ ${matchedImage?.name} (${matchLines.length} matches)`
               : `Image #${imageDetailId}: ${image?.name}`}
-          </h2>
+          </span>
           <button
             onClick={closeImageDetail}
             onMouseDown={(e) => e.stopPropagation()}
-            className={buttonStyles.close}
+            className="text-ds-muted hover-ds-text-primary leading-none cursor-pointer px-1"
           >
-            ×
+            ✕
           </button>
         </div>
 
@@ -781,7 +800,7 @@ export function ImageDetailModal() {
                           draggable={false}
                         />
                       ) : (
-                        <div className="text-ds-muted">No image</div>
+                        <div className="text-ds-muted text-xs">No image</div>
                       )}
                     </div>
                     <div className="flex-1 flex items-center justify-center">
@@ -794,7 +813,7 @@ export function ImageDetailModal() {
                           draggable={false}
                         />
                       ) : (
-                        <div className="text-ds-muted">No image</div>
+                        <div className="text-ds-muted text-xs">No image</div>
                       )}
                     </div>
                   </div>
@@ -844,17 +863,17 @@ export function ImageDetailModal() {
                   )}
                 </div>
               ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-ds-muted">No image file loaded</div>
+                <div className="absolute inset-0 flex items-center justify-center text-ds-muted text-xs">No image file loaded</div>
               )}
             </div>
 
-            <div className="mt-2 mb-2 flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <div className="mt-2 mb-2 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 flex-wrap">
                 {!showMatchesInModal && (
                   <>
                     <button
                       onClick={() => setShowPoints2D(!showPoints2D)}
-                      className={`${buttonStyles.base} ${buttonStyles.sizes.toggle} ${
+                      className={`${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${
                         showPoints2D ? buttonStyles.variants.toggleActive : buttonStyles.variants.toggle
                       }`}
                     >
@@ -862,7 +881,7 @@ export function ImageDetailModal() {
                     </button>
                     <button
                       onClick={() => setShowPoints3D(!showPoints3D)}
-                      className={`${buttonStyles.base} ${buttonStyles.sizes.toggle} ${
+                      className={`${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${
                         showPoints3D ? buttonStyles.variants.toggleActive : buttonStyles.variants.toggle
                       }`}
                     >
@@ -873,7 +892,7 @@ export function ImageDetailModal() {
 
                 <button
                   onClick={() => setShowMatchesInModal(!showMatchesInModal)}
-                  className={`${buttonStyles.base} ${buttonStyles.sizes.toggle} ${
+                  className={`${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${
                     showMatchesInModal ? buttonStyles.variants.toggleActive : buttonStyles.variants.toggle
                   }`}
                 >
@@ -886,7 +905,7 @@ export function ImageDetailModal() {
                       value={matchedImageId ?? ''}
                       onChange={(e) => setMatchedImageId(e.target.value ? parseInt(e.target.value) : null)}
                       onWheel={handleMatchedImageWheel}
-                      className={`${inputStyles.select} py-1 pl-2 text-sm`}
+                      className={`${inputStyles.select} py-1 pl-2 pr-1 text-xs`}
                     >
                       <option value="">Select connected image...</option>
                       {connectedImages.map(({ imageId, matchCount, name }) => (
@@ -895,8 +914,8 @@ export function ImageDetailModal() {
                         </option>
                       ))}
                     </select>
-                    <div className="flex items-center gap-1.5" onWheel={handleOpacityWheel}>
-                      <label className="text-ds-secondary text-sm whitespace-nowrap">Opacity</label>
+                    <div className="flex items-center gap-2" onWheel={handleOpacityWheel}>
+                      <label className="text-ds-secondary whitespace-nowrap text-xs pl-1">Opacity</label>
                       <input
                         type="range"
                         min="0"
@@ -904,7 +923,7 @@ export function ImageDetailModal() {
                         step="0.05"
                         value={matchLineOpacity}
                         onChange={(e) => setMatchLineOpacity(parseFloat(e.target.value))}
-                        className="w-16 accent-ds-success"
+                        className="w-14 accent-ds-success"
                       />
                       {isEditingOpacity ? (
                         <input
@@ -914,11 +933,11 @@ export function ImageDetailModal() {
                           onChange={(e) => setOpacityInputValue(e.target.value)}
                           onBlur={applyOpacityValue}
                           onKeyDown={handleOpacityKeyDown}
-                          className={controlPanelStyles.valueInput}
+                          className="bg-transparent text-ds-primary text-xs w-8 text-right flex-shrink-0 border-none p-0 m-0 focus:outline-none"
                         />
                       ) : (
                         <span
-                          className={controlPanelStyles.value}
+                          className="text-ds-primary text-xs w-8 text-right flex-shrink-0 cursor-pointer hover-ds-accent"
                           onDoubleClick={handleOpacityDoubleClick}
                           title="Double-click to edit"
                         >
@@ -930,22 +949,22 @@ export function ImageDetailModal() {
                 )}
               </div>
 
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={goToPrev}
                   disabled={!hasPrev}
-                  className={`${buttonStyles.base} ${buttonStyles.sizes.toggle} ${
+                  className={`${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${
                     hasPrev ? buttonStyles.variants.toggle : buttonStyles.disabled + ' bg-ds-secondary text-ds-muted'
                   }`}
                 >
                   ← Prev
                 </button>
-                <div className="flex items-center text-sm">
+                <div className="flex items-center text-xs">
                   <input
                     type="text"
                     defaultValue={imageDetailId ?? ''}
                     key={imageDetailId}
-                    className={`${inputStyles.base} py-1 w-14 text-sm rounded-l rounded-r-none text-center`}
+                    className={`${inputStyles.base} py-1 w-14 rounded-l rounded-r-none text-center text-xs`}
                     onKeyDown={(e) => {
                       e.stopPropagation();
                       if (e.key === 'Enter') {
@@ -963,14 +982,14 @@ export function ImageDetailModal() {
                       e.target.value = String(imageDetailId ?? '');
                     }}
                   />
-                  <span className="w-14 px-2 py-1 text-sm text-center bg-ds-secondary text-ds-secondary border-y border-r border-ds rounded-r">
+                  <span className="w-14 px-2 py-1 text-center bg-ds-secondary text-ds-muted border-y border-r border-ds rounded-r">
                     {imageIds.length}
                   </span>
                 </div>
                 <button
                   onClick={goToNext}
                   disabled={!hasNext}
-                  className={`${buttonStyles.base} ${buttonStyles.sizes.toggle} ${
+                  className={`${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${
                     hasNext ? buttonStyles.variants.toggle : buttonStyles.disabled + ' bg-ds-secondary text-ds-muted'
                   }`}
                 >

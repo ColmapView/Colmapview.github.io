@@ -1,8 +1,8 @@
 import { useState, useEffect, memo, useCallback } from 'react';
-import { useReconstructionStore, usePointCloudStore, useCameraStore, useUIStore, useExportStore, useTransformStore, usePointPickingStore } from '../../store';
+import { useReconstructionStore, usePointCloudStore, useCameraStore, useUIStore, useExportStore, useTransformStore, usePointPickingStore, useRigStore, useNotificationStore, useGuideStore } from '../../store';
 // sim3d transforms moved to DistanceInputModal for picking tool apply logic
 import type { ColorMode } from '../../types/colmap';
-import type { CameraMode, ImageLoadMode, CameraDisplayMode, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, ScreenshotSize, ScreenshotFormat, GizmoMode, AutoRotateMode } from '../../store/types';
+import type { CameraMode, ImageLoadMode, CameraDisplayMode, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, ScreenshotSize, ScreenshotFormat, GizmoMode, AutoRotateMode, RigDisplayMode } from '../../store/types';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { controlPanelStyles, HOTKEYS } from '../../theme';
 import { exportReconstructionText, exportReconstructionBinary, exportPointsPLY } from '../../parsers';
@@ -11,7 +11,7 @@ import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { extractConfigurationFromStores, serializeConfigToYaml } from '../../config/configuration';
 import { hslToHex, hexToHsl } from '../../utils/colorUtils';
 
-// Import icons from ViewerIcons
+// Import icons from centralized icons folder
 import {
   HoverIcon,
   ScreenshotIcon,
@@ -37,14 +37,14 @@ import {
   ColorTrackIcon,
   BgIcon,
   ViewIcon,
-  PrefetchIcon,
-  LazyIcon,
-  SkipIcon,
   OrbitIcon,
   FlyIcon,
   SidebarExpandIcon,
   SidebarCollapseIcon,
-} from './ViewerIcons';
+  RigIcon,
+  RigOffIcon,
+  SettingsIcon,
+} from '../../icons';
 
 // Import UI components from ControlComponents
 import {
@@ -58,6 +58,20 @@ import {
 
 // Use styles from theme
 const styles = controlPanelStyles;
+
+// COLMAP jokes for Shift+E easter egg
+const COLMAP_JOKES = [
+  "Why did COLMAP break up with the blurry photo? No future together.",
+  "COLMAP's dating profile: Looking for matches.",
+  "My COLMAP crashed. Guess it couldn't handle my good looks.",
+  "COLMAP walked into a bar. The bartender said, 'You look like you've seen some points.'",
+  "Why is COLMAP bad at poker? It always shows its hand... and tracks it.",
+  "COLMAP's favorite dance? The bundle adjustment shuffle.",
+  "I told COLMAP a joke. It took 3 hours to get the point.",
+  "COLMAP at therapy: 'I have too many issues... with my features.'",
+  "Why did the point cloud go to school? To get more depth.",
+  "COLMAP's life motto: When in doubt, RANSAC it out.",
+];
 
 // Transform panel component
 interface TransformPanelProps {
@@ -124,7 +138,7 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
       <div className={styles.panelContent}>
         {/* Gizmo mode */}
         <SelectRow
-          label="3D Gizmo"
+          label="Gizmo (T)"
           value={gizmoMode}
           onChange={(v) => setGizmoMode(v as GizmoMode)}
           options={[
@@ -319,8 +333,8 @@ export function ViewerControls() {
   const setCameraDisplayMode = useCameraStore((s) => s.setCameraDisplayMode);
   const cameraScale = useCameraStore((s) => s.cameraScale);
   const setCameraScale = useCameraStore((s) => s.setCameraScale);
-  const imagePlaneOpacity = useCameraStore((s) => s.imagePlaneOpacity);
-  const setImagePlaneOpacity = useCameraStore((s) => s.setImagePlaneOpacity);
+  const selectionPlaneOpacity = useCameraStore((s) => s.selectionPlaneOpacity);
+  const setSelectionPlaneOpacity = useCameraStore((s) => s.setSelectionPlaneOpacity);
   const selectionColorMode = useCameraStore((s) => s.selectionColorMode);
   const setSelectionColorMode = useCameraStore((s) => s.setSelectionColorMode);
   const selectionColor = useCameraStore((s) => s.selectionColor);
@@ -335,8 +349,6 @@ export function ViewerControls() {
   const setPointerLock = useCameraStore((s) => s.setPointerLock);
   const frustumColorMode = useCameraStore((s) => s.frustumColorMode);
   const setFrustumColorMode = useCameraStore((s) => s.setFrustumColorMode);
-  const selectedCameraOpacity = useCameraStore((s) => s.selectedCameraOpacity);
-  const setSelectedCameraOpacity = useCameraStore((s) => s.setSelectedCameraOpacity);
   const unselectedCameraOpacity = useCameraStore((s) => s.unselectedCameraOpacity);
   const setUnselectedCameraOpacity = useCameraStore((s) => s.setUnselectedCameraOpacity);
   const cameraProjection = useCameraStore((s) => s.cameraProjection);
@@ -349,6 +361,8 @@ export function ViewerControls() {
   const setAutoRotateMode = useCameraStore((s) => s.setAutoRotateMode);
   const autoRotateSpeed = useCameraStore((s) => s.autoRotateSpeed);
   const setAutoRotateSpeed = useCameraStore((s) => s.setAutoRotateSpeed);
+  const undistortionEnabled = useCameraStore((s) => s.undistortionEnabled);
+  const setUndistortionEnabled = useCameraStore((s) => s.setUndistortionEnabled);
 
   // UI settings
   const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
@@ -372,6 +386,7 @@ export function ViewerControls() {
   const setView = useUIStore((s) => s.setView);
   const imageLoadMode = useUIStore((s) => s.imageLoadMode);
   const setImageLoadMode = useUIStore((s) => s.setImageLoadMode);
+  const openContextMenuEditor = useUIStore((s) => s.openContextMenuEditor);
 
   // Export settings
   const screenshotSize = useExportStore((s) => s.screenshotSize);
@@ -384,6 +399,15 @@ export function ViewerControls() {
   const exportFormat = useExportStore((s) => s.exportFormat);
   const setExportFormat = useExportStore((s) => s.setExportFormat);
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
+
+  // Rig settings (only shown when rig data is available)
+  const rigDisplayMode = useRigStore((s) => s.rigDisplayMode);
+  const setRigDisplayMode = useRigStore((s) => s.setRigDisplayMode);
+  const rigLineOpacity = useRigStore((s) => s.rigLineOpacity);
+  const setRigLineOpacity = useRigStore((s) => s.setRigLineOpacity);
+  const hasRigData = Boolean(reconstruction?.rigData);
+  const rigCount = reconstruction?.rigData?.rigs.size ?? 0;
+  const frameCount = reconstruction?.rigData?.frames.size ?? 0;
 
   // Handle export action
   const handleExport = useCallback(() => {
@@ -422,11 +446,14 @@ export function ViewerControls() {
 
   // Sync local HSL state when backgroundColor changes externally
   useEffect(() => {
-    const newHsl = hexToHsl(backgroundColor);
-    // Only update if the color actually changed (not just from our own updates)
-    if (hslToHex(hsl.h, hsl.s, hsl.l) !== backgroundColor) {
-      setHsl(newHsl);
-    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional pattern for syncing derived state with external changes
+    setHsl((currentHsl) => {
+      // Only update if the color actually changed (not just from our own updates)
+      if (hslToHex(currentHsl.h, currentHsl.s, currentHsl.l) !== backgroundColor) {
+        return hexToHsl(backgroundColor);
+      }
+      return currentHsl;
+    });
   }, [backgroundColor]);
 
   // Update both local state and store
@@ -456,13 +483,9 @@ export function ViewerControls() {
     setCameraMode(cameraMode === 'orbit' ? 'fly' : 'orbit');
   }, [cameraMode, setCameraMode]);
 
-  // Cycle through image load modes: lazy → prefetch → skip → lazy
-  const cycleImageLoadMode = useCallback(() => {
-    const modes: ImageLoadMode[] = ['lazy', 'prefetch', 'skip'];
-    const currentIndex = modes.indexOf(imageLoadMode);
-    const nextIndex = (currentIndex + 1) % modes.length;
-    setImageLoadMode(modes[nextIndex]);
-  }, [imageLoadMode, setImageLoadMode]);
+  const toggleUndistortion = useCallback(() => {
+    setUndistortionEnabled(!undistortionEnabled);
+  }, [undistortionEnabled, setUndistortionEnabled]);
 
   // Cycle through color modes: rgb → error → trackLength → rgb
   const cycleColorMode = useCallback(() => {
@@ -503,6 +526,14 @@ export function ViewerControls() {
     const nextIndex = (currentIndex + 1) % modes.length;
     setAxesDisplayMode(modes[nextIndex]);
   }, [axesDisplayMode, setAxesDisplayMode]);
+
+  // Cycle through rig display modes: off → lines → off (hull not yet implemented)
+  const cycleRigDisplayMode = useCallback(() => {
+    const modes: RigDisplayMode[] = ['off', 'lines'];
+    const currentIndex = modes.indexOf(rigDisplayMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    setRigDisplayMode(modes[nextIndex]);
+  }, [rigDisplayMode, setRigDisplayMode]);
 
   // Reset view including projection
   const handleResetView = useCallback(() => {
@@ -584,6 +615,52 @@ export function ViewerControls() {
     cycleMatchesDisplayMode,
     { scopes: HOTKEYS.cycleMatchesDisplay.scopes },
     [cycleMatchesDisplayMode]
+  );
+
+  // Hotkey for toggling undistortion
+  useHotkeys(
+    HOTKEYS.toggleUndistortion.keys,
+    toggleUndistortion,
+    { scopes: HOTKEYS.toggleUndistortion.scopes },
+    [toggleUndistortion]
+  );
+
+  // Hotkey for showing random COLMAP joke (easter egg)
+  const showRandomJoke = useCallback(() => {
+    const joke = COLMAP_JOKES[Math.floor(Math.random() * COLMAP_JOKES.length)];
+    useNotificationStore.getState().addNotification('info', joke, 4000);
+  }, []);
+
+  const showRandomJokePersistent = useCallback(() => {
+    const joke = COLMAP_JOKES[Math.floor(Math.random() * COLMAP_JOKES.length)];
+    useNotificationStore.getState().addNotification('warning', joke);
+  }, []);
+
+  useHotkeys(
+    HOTKEYS.showJoke.keys,
+    showRandomJoke,
+    { scopes: HOTKEYS.showJoke.scopes, preventDefault: true },
+    [showRandomJoke]
+  );
+
+  useHotkeys(
+    HOTKEYS.showJokePersistent.keys,
+    showRandomJokePersistent,
+    { scopes: HOTKEYS.showJokePersistent.scopes, preventDefault: true },
+    [showRandomJokePersistent]
+  );
+
+  // Hotkey for resetting guide tips
+  const resetGuide = useCallback(() => {
+    useGuideStore.getState().resetGuide();
+    useNotificationStore.getState().addNotification('info', 'Guide tips reset', 3000);
+  }, []);
+
+  useHotkeys(
+    HOTKEYS.resetGuide.keys,
+    resetGuide,
+    { scopes: HOTKEYS.resetGuide.scopes, preventDefault: true },
+    [resetGuide]
   );
 
   // Point picking - get reset function for escape hotkey
@@ -1009,12 +1086,12 @@ export function ViewerControls() {
               />
               <SliderRow label="Scale" value={cameraScale} min={0.05} max={1} step={0.05} onChange={setCameraScale} formatValue={(v) => v.toFixed(2)} />
               <SliderRow
-                label="Selected α"
-                value={selectedCameraOpacity}
+                label="Selection α"
+                value={selectionPlaneOpacity}
                 min={0}
                 max={1}
                 step={0.05}
-                onChange={setSelectedCameraOpacity}
+                onChange={setSelectionPlaneOpacity}
                 formatValue={(v) => v.toFixed(2)}
               />
               <SliderRow
@@ -1026,10 +1103,17 @@ export function ViewerControls() {
                 onChange={setUnselectedCameraOpacity}
                 formatValue={(v) => v.toFixed(2)}
               />
+              <div className={styles.row}>
+                <label className={styles.label}>Undistort (U)</label>
+                <input
+                  type="checkbox"
+                  checked={undistortionEnabled}
+                  onChange={(e) => setUndistortionEnabled(e.target.checked)}
+                  className="w-4 h-4 accent-blue-500"
+                />
+                <span className={styles.value} />
+              </div>
             </>
-          )}
-          {cameraDisplayMode === 'imageplane' && (
-            <SliderRow label="Opacity" value={imagePlaneOpacity} min={0} max={1} step={0.05} onChange={setImagePlaneOpacity} formatValue={(v) => v.toFixed(2)} />
           )}
           <div className="text-ds-secondary text-sm mt-3">
             {cameraDisplayMode === 'off' ? (
@@ -1193,6 +1277,76 @@ export function ViewerControls() {
 
       <TransformPanel styles={styles} activePanel={activePanel} setActivePanel={setActivePanel} />
 
+      {/* Rig panel - disabled when no rig data is loaded */}
+      <ControlButton
+        panelId="rig"
+        activePanel={activePanel}
+        setActivePanel={setActivePanel}
+        icon={
+          <HoverIcon
+            icon={rigDisplayMode === 'off' || !hasRigData ? <RigOffIcon className="w-6 h-6" /> : <RigIcon className="w-6 h-6" />}
+            label={!hasRigData ? 'N/A' : rigDisplayMode === 'off' ? 'OFF' : 'RIG'}
+          />
+        }
+        tooltip={!hasRigData ? 'Rig not available' : rigDisplayMode === 'off' ? 'Rig connections off' : 'Show rig connections'}
+        isActive={hasRigData && rigDisplayMode !== 'off'}
+        onClick={hasRigData ? cycleRigDisplayMode : undefined}
+        panelTitle="Rig Connections"
+        disabled={!hasRigData}
+      >
+        <div className={styles.panelContent}>
+          {hasRigData ? (
+            <>
+              <SelectRow
+                label="Mode"
+                value={rigDisplayMode}
+                onChange={(v) => setRigDisplayMode(v as RigDisplayMode)}
+                options={[
+                  { value: 'off', label: 'Off' },
+                  { value: 'lines', label: 'Lines' },
+                ]}
+              />
+              {rigDisplayMode !== 'off' && (
+                <SliderRow
+                  label="Opacity"
+                  value={rigLineOpacity}
+                  min={0.1}
+                  max={1}
+                  step={0.05}
+                  onChange={setRigLineOpacity}
+                  formatValue={(v) => v.toFixed(2)}
+                />
+              )}
+              <div className="text-ds-secondary text-sm mt-3">
+                <div className="mb-1 font-medium">Rig Data:</div>
+                <div>{rigCount} rig{rigCount !== 1 ? 's' : ''}, {frameCount} frame{frameCount !== 1 ? 's' : ''}</div>
+                <div className="mt-2">
+                  {rigDisplayMode === 'off' ? (
+                    <div>Connection lines hidden.</div>
+                  ) : (
+                    <div>Cyan lines connect cameras</div>
+                  )}
+                </div>
+                <div>that captured together in</div>
+                <div>each rig frame.</div>
+              </div>
+            </>
+          ) : (
+            <div className="text-ds-secondary text-sm">
+              <div className="mb-2 font-medium">No Rig Data</div>
+              <div>To use this feature, load a</div>
+              <div>COLMAP reconstruction with:</div>
+              <div className="mt-2 font-mono text-xs">
+                <div>• rigs.bin / rigs.txt</div>
+                <div>• frames.bin / frames.txt</div>
+              </div>
+              <div className="mt-2">These files are created when</div>
+              <div>using multi-camera rigs.</div>
+            </div>
+          )}
+        </div>
+      </ControlButton>
+
       <ControlButton
         panelId="screenshot"
         activePanel={activePanel}
@@ -1306,31 +1460,18 @@ export function ViewerControls() {
         </div>
       </ControlButton>
 
+      {/* Settings Panel */}
       <ControlButton
-        panelId="prefetch"
+        panelId="settings"
         activePanel={activePanel}
         setActivePanel={setActivePanel}
-        icon={
-          <HoverIcon
-            icon={
-              imageLoadMode === 'prefetch' ? <PrefetchIcon className="w-6 h-6" /> :
-              imageLoadMode === 'lazy' ? <LazyIcon className="w-6 h-6" /> :
-              <SkipIcon className="w-6 h-6" />
-            }
-            label={imageLoadMode === 'prefetch' ? 'PRE' : imageLoadMode === 'lazy' ? 'LZY' : 'OFF'}
-          />
-        }
-        tooltip={
-          imageLoadMode === 'prefetch' ? 'Prefetch mode' :
-          imageLoadMode === 'lazy' ? 'Lazy loading' :
-          'Skip images'
-        }
-        onClick={cycleImageLoadMode}
-        panelTitle="Image Loading"
+        icon={<SettingsIcon className="w-6 h-6" />}
+        tooltip="Settings"
+        panelTitle="Settings"
       >
         <div className={styles.panelContent}>
           <SelectRow
-            label="Mode"
+            label="Img Load"
             value={imageLoadMode}
             onChange={(v) => setImageLoadMode(v as ImageLoadMode)}
             options={[
@@ -1339,29 +1480,34 @@ export function ViewerControls() {
               { value: 'skip', label: 'Skip' },
             ]}
           />
-          <div className="text-ds-secondary text-sm mt-3">
-            {imageLoadMode === 'prefetch' ? (
-              <>
-                <div className="mb-1 font-medium">Prefetch:</div>
-                <div>Loads all images upfront.</div>
-                <div>Slower initial load, but</div>
-                <div>smoother interaction after.</div>
-              </>
-            ) : imageLoadMode === 'lazy' ? (
-              <>
-                <div className="mb-1 font-medium">Lazy Loading (recommended):</div>
-                <div>Loads images on demand.</div>
-                <div>Faster startup, may have</div>
-                <div>brief delays when viewing.</div>
-              </>
-            ) : (
-              <>
-                <div className="mb-1 font-medium">Skip Images:</div>
-                <div>No images loaded.</div>
-                <div>Fastest startup for</div>
-                <div>point cloud only viewing.</div>
-              </>
-            )}
+          <div className="text-ds-secondary text-xs mt-1 mb-3">
+            {imageLoadMode === 'prefetch' ? 'Load all images upfront' :
+             imageLoadMode === 'lazy' ? 'Load images on demand (recommended)' :
+             'No images loaded'}
+          </div>
+          <div className={styles.actionGroup}>
+            <button
+              onClick={() => {
+                openContextMenuEditor();
+                setActivePanel(null);
+              }}
+              className={styles.actionButton}
+            >
+              Edit Context Menu
+            </button>
+          </div>
+          <div className={styles.actionGroup}>
+            <button
+              onClick={() => {
+                if (confirm('Clear all settings and reload? This cannot be undone.')) {
+                  localStorage.clear();
+                  window.location.reload();
+                }
+              }}
+              className={styles.actionButton}
+            >
+              Clear Settings
+            </button>
           </div>
         </div>
       </ControlButton>

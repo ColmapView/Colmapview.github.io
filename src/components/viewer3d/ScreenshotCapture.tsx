@@ -73,20 +73,15 @@ export function ScreenshotCapture() {
           type: THREE.UnsignedByteType,
         });
 
-        // Adjust camera aspect ratio
-        const cam = camera as THREE.PerspectiveCamera;
-        const originalAspect = cam.aspect;
-        cam.aspect = width / height;
-        cam.updateProjectionMatrix();
+        // Clone camera to avoid mutating the global camera's aspect ratio
+        const tempCamera = camera.clone() as THREE.PerspectiveCamera;
+        tempCamera.aspect = width / height;
+        tempCamera.updateProjectionMatrix();
 
-        // Render to target
+        // Render to target using cloned camera
         gl.setRenderTarget(renderTarget);
-        gl.render(scene, camera);
+        gl.render(scene, tempCamera);
         gl.setRenderTarget(null);
-
-        // Restore camera
-        cam.aspect = originalAspect;
-        cam.updateProjectionMatrix();
 
         // Read pixels
         const pixels = new Uint8Array(width * height * 4);

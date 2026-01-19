@@ -146,13 +146,14 @@ export const cameraSection = defineSection({
       default: 2,
       persist: true,
     },
-    // Image planes
+    // Selection planes (opacity of selected camera's image plane)
+    // Default 1.0 ensures depthWrite: true so image properly occludes frustums behind it
     {
-      key: 'imagePlaneOpacity',
+      key: 'selectionPlaneOpacity',
       type: 'number',
       min: 0,
       max: 1,
-      default: 0.9,
+      default: 1.0,
       persist: true,
     },
     // Transient properties (not persisted)

@@ -1,7 +1,24 @@
 import { create } from 'zustand';
 import * as THREE from 'three';
+import type { AxesCoordinateSystem } from '../types';
 
 export type PointPickingMode = 'off' | 'origin-1pt' | 'distance-2pt' | 'normal-3pt';
+export type TargetAxis = 'X' | 'Y' | 'Z';
+
+// Axis cycle order based on coordinate system's "up" axis
+// Y-up systems: Y → X → Z
+// Z-up systems: Z → Y → X
+export function getAxisCycleOrder(coordinateSystem: AxesCoordinateSystem): TargetAxis[] {
+  if (coordinateSystem === 'blender' || coordinateSystem === 'unreal') {
+    return ['Z', 'Y', 'X'];
+  }
+  return ['Y', 'X', 'Z'];
+}
+
+// Get the default "up" axis for a coordinate system (first in cycle order)
+export function getDefaultUpAxis(coordinateSystem: AxesCoordinateSystem): TargetAxis {
+  return getAxisCycleOrder(coordinateSystem)[0];
+}
 
 export interface SelectedPoint {
   position: THREE.Vector3;
@@ -35,6 +52,9 @@ export interface PointPickingState {
   // For 3-point mode - flip normal direction
   normalFlipped: boolean;
 
+  // For 3-point mode - target axis (X, Y, or Z)
+  targetAxis: TargetAxis;
+
   // Flag to prevent double-handling of right-click (Three.js + DOM events)
   markerRightClickHandled: boolean;
 
@@ -48,6 +68,8 @@ export interface PointPickingState {
   setTargetDistance: (distance: number | null) => void;
   setShowDistanceModal: (show: boolean) => void;
   toggleNormalFlipped: () => void;
+  cycleTargetAxis: (coordinateSystem: AxesCoordinateSystem) => void;
+  setTargetAxis: (axis: TargetAxis) => void;
   reset: () => void;
 }
 
@@ -59,6 +81,7 @@ export const usePointPickingStore = create<PointPickingState>()((set, get) => ({
   showDistanceModal: false,
   modalPosition: null,
   normalFlipped: false,
+  targetAxis: 'Y' as TargetAxis,
   markerRightClickHandled: false,
 
   setPickingMode: (pickingMode) => set({
@@ -69,6 +92,7 @@ export const usePointPickingStore = create<PointPickingState>()((set, get) => ({
     showDistanceModal: false,
     modalPosition: null,
     normalFlipped: false,
+    targetAxis: 'Y' as TargetAxis,
     markerRightClickHandled: false,
   }),
 
@@ -111,6 +135,7 @@ export const usePointPickingStore = create<PointPickingState>()((set, get) => ({
     showDistanceModal: false,
     modalPosition: null,
     normalFlipped: false,
+    targetAxis: 'Y' as TargetAxis,
   }),
 
   setHoveredPoint: (hoveredPoint) => set({ hoveredPoint }),
@@ -121,6 +146,16 @@ export const usePointPickingStore = create<PointPickingState>()((set, get) => ({
 
   toggleNormalFlipped: () => set((state) => ({ normalFlipped: !state.normalFlipped })),
 
+  cycleTargetAxis: (coordinateSystem: AxesCoordinateSystem) => set((state) => {
+    const axes = getAxisCycleOrder(coordinateSystem);
+    const currentIndex = axes.indexOf(state.targetAxis);
+    // If current axis not in cycle order (shouldn't happen), start from beginning
+    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % 3;
+    return { targetAxis: axes[nextIndex], markerRightClickHandled: true };
+  }),
+
+  setTargetAxis: (axis) => set({ targetAxis: axis }),
+
   reset: () => set({
     pickingMode: 'off',
     selectedPoints: [],
@@ -129,6 +164,7 @@ export const usePointPickingStore = create<PointPickingState>()((set, get) => ({
     showDistanceModal: false,
     modalPosition: null,
     normalFlipped: false,
+    targetAxis: 'Y' as TargetAxis,
     markerRightClickHandled: false,
   }),
 }));

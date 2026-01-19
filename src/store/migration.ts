@@ -5,6 +5,8 @@ export const STORAGE_KEYS = {
   camera: 'colmap-viewer-camera',
   ui: 'colmap-viewer-ui',
   export: 'colmap-viewer-export',
+  rig: 'colmap-viewer-rig',
+  guide: 'colmap-viewer-guide',
 } as const;
 
 // Property mappings for migration
@@ -24,7 +26,7 @@ const CAMERA_PROPERTIES = [
   'selectionColorMode',
   'selectionAnimationSpeed',
   'showImagePlanes',
-  'imagePlaneOpacity',
+  'selectionPlaneOpacity',
 ] as const;
 
 const UI_PROPERTIES = [
