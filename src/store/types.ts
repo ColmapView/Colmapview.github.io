@@ -59,7 +59,7 @@ export const GIZMO_MODES = ['off', 'local', 'global'] as const;
 export type GizmoMode = (typeof GIZMO_MODES)[number];
 
 // Rig visualization
-export const RIG_DISPLAY_MODES = ['off', 'lines', 'hull'] as const;
+export const RIG_DISPLAY_MODES = ['off', 'lines', 'blink'] as const;
 export type RigDisplayMode = (typeof RIG_DISPLAY_MODES)[number];
 
 // Export

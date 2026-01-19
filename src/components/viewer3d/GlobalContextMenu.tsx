@@ -560,7 +560,7 @@ export function GlobalContextMenu() {
     const renderAction = (action: ActionDef) => (
       <label
         key={action.id}
-        className="flex items-center gap-2 cursor-pointer hover:bg-ds-hover rounded px-2 py-1"
+        className="flex items-center gap-2 cursor-pointer hover-ds-hover rounded px-2 py-1"
         style={{ breakInside: 'avoid' }}
       >
         <input
@@ -628,7 +628,7 @@ export function GlobalContextMenu() {
             <h3 className="text-ds-primary font-medium text-sm">Edit Context Menu</h3>
             <button
               onClick={closeEditPopup}
-              className="text-ds-muted hover:text-ds-primary transition-colors"
+              className="text-ds-muted hover-ds-text-primary transition-colors"
             >
               <CloseIcon className="w-5 h-5" />
             </button>

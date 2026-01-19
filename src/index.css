@@ -886,6 +886,7 @@ legend {
 .bg-white { background-color: #fff; }
 .bg-black\/50 { background-color: rgba(0, 0, 0, 0.5); }
 .bg-black\/70 { background-color: rgba(0, 0, 0, 0.7); }
+.bg-black\/90 { background-color: rgba(0, 0, 0, 0.9); }
 
 /* Gradients */
 .bg-gradient-to-t { background-image: linear-gradient(to top, var(--tw-gradient-stops)); }
@@ -903,6 +904,8 @@ legend {
 .text-ds-primary { color: var(--text-primary); }
 .text-ds-secondary { color: var(--text-secondary); }
 .text-ds-muted { color: var(--text-muted); }
+.text-ds-muted\/70 { color: rgba(90, 90, 90, 0.7); }
+.text-ds-void\/70 { color: rgba(10, 10, 10, 0.7); }
 .text-ds-accent { color: var(--accent); }
 .text-ds-success { color: var(--success); }
 .text-ds-warning { color: var(--warning); }
@@ -914,6 +917,9 @@ legend {
 .text-white { color: #fff; }
 .text-black { color: #000; }
 .text-transparent { color: transparent; }
+.text-gray-300 { color: #d1d5db; }
+.text-gray-500 { color: #6b7280; }
+.text-blue-400 { color: #60a5fa; }
 
 /* 3D Visualization */
 .text-ds-frustum { color: var(--frustum-default); }
@@ -1174,18 +1180,28 @@ legend {
    HOVER STATE UTILITIES
    ============================================ */
 
+/* Background hover */
 .hover-ds-hover:hover { background-color: var(--bg-hover); }
 .hover-ds-elevated:hover { background-color: var(--bg-elevated); }
 .hover-ds-tertiary:hover { background-color: var(--bg-tertiary); }
 .hover-ds-tertiary-50:hover { background-color: rgba(30, 30, 30, 0.5); }
 .hover-ds-void-70:hover { background-color: rgba(10, 10, 10, 0.7); }
-.hover-ds-text-primary:hover { color: var(--text-primary); }
-.hover-border-ds-accent:hover { border-color: var(--accent); }
-.hover-border-ds-light:hover { border-color: var(--border-light); }
-.hover-brightness-110:hover { filter: brightness(1.1); }
-.hover-opacity-100:hover { opacity: 1; }
 .hover-bg-ds-accent:hover { background-color: var(--accent); }
 .hover-bg-ds-accent-90:hover { background-color: rgba(184, 184, 184, 0.9); }
+.hover-bg-white-10:hover { background-color: rgba(255, 255, 255, 0.1); }
+
+/* Text hover */
+.hover-ds-text-primary:hover { color: var(--text-primary); }
+.hover-ds-text-secondary:hover { color: var(--text-secondary); }
+
+/* Border hover */
+.hover-border-ds-accent:hover { border-color: var(--accent); }
+.hover-border-ds-light:hover { border-color: var(--border-light); }
+
+/* Filter/opacity hover */
+.hover-brightness-110:hover { filter: brightness(1.1); }
+.hover-opacity-90:hover { opacity: 0.9; }
+.hover-opacity-100:hover { opacity: 1; }
 
 /* Composite hover states */
 .hover-interactive:hover {
@@ -1193,7 +1209,18 @@ legend {
   color: var(--text-primary);
 }
 
-/* Group hover utilities - child elements respond to parent .group:hover */
+/* ============================================
+   FOCUS STATE UTILITIES
+   ============================================ */
+
+.focus-ds:focus { border-color: var(--accent); outline: none; }
+.focus-outline-none:focus { outline: none; }
+
+/* ============================================
+   GROUP HOVER UTILITIES
+   ============================================ */
+
+/* Opacity variants */
 .group-hover\:opacity-0 { transition: opacity 150ms ease-out; }
 .group-hover\:opacity-50 { transition: opacity 150ms ease-out; }
 .group-hover\:opacity-100 { transition: opacity 150ms ease-out; }
@@ -1201,15 +1228,13 @@ legend {
 .group:hover .group-hover\:opacity-50 { opacity: 0.5; }
 .group:hover .group-hover\:opacity-100 { opacity: 1; }
 
-/* Named group hover utilities - for group/scroll pattern */
+/* Text color variants */
+.group-hover\:text-gray-300 { transition: color 150ms ease-out; }
+.group:hover .group-hover\:text-gray-300 { color: #d1d5db; }
+
+/* Named group hover - for group/scroll pattern */
 .group-hover\/scroll\:opacity-100 { transition: opacity 150ms ease-out; }
 .group\/scroll:hover .group-hover\/scroll\:opacity-100 { opacity: 1; }
-
-/* ============================================
-   FOCUS STATE UTILITIES
-   ============================================ */
-
-.focus-ds:focus { border-color: var(--accent); outline: none; }
 
 /* ============================================
    SCROLLBAR STYLING

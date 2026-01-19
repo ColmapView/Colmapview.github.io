@@ -405,6 +405,8 @@ export function ViewerControls() {
   // Rig settings (only shown when rig data is available)
   const rigDisplayMode = useRigStore((s) => s.rigDisplayMode);
   const setRigDisplayMode = useRigStore((s) => s.setRigDisplayMode);
+  const rigLineColor = useRigStore((s) => s.rigLineColor);
+  const setRigLineColor = useRigStore((s) => s.setRigLineColor);
   const rigLineOpacity = useRigStore((s) => s.rigLineOpacity);
   const setRigLineOpacity = useRigStore((s) => s.setRigLineOpacity);
   // Compute rig info from image names (images with same filename in different directories form a rig group)
@@ -556,9 +558,9 @@ export function ViewerControls() {
     setAxesDisplayMode(modes[nextIndex]);
   }, [axesDisplayMode, setAxesDisplayMode]);
 
-  // Cycle through rig display modes: off → lines → off (hull not yet implemented)
+  // Cycle through rig display modes: off → lines → blink → off
   const cycleRigDisplayMode = useCallback(() => {
-    const modes: RigDisplayMode[] = ['off', 'lines'];
+    const modes: RigDisplayMode[] = ['off', 'lines', 'blink'];
     const currentIndex = modes.indexOf(rigDisplayMode);
     const nextIndex = (currentIndex + 1) % modes.length;
     setRigDisplayMode(modes[nextIndex]);
@@ -1314,10 +1316,10 @@ export function ViewerControls() {
         icon={
           <HoverIcon
             icon={rigDisplayMode === 'off' || !hasRigData ? <RigOffIcon className="w-6 h-6" /> : <RigIcon className="w-6 h-6" />}
-            label={!hasRigData ? 'N/A' : rigDisplayMode === 'off' ? 'OFF' : 'RIG'}
+            label={!hasRigData ? 'N/A' : rigDisplayMode === 'off' ? 'OFF' : rigDisplayMode === 'blink' ? 'BLK' : 'RIG'}
           />
         }
-        tooltip={!hasRigData ? 'Rig not available' : rigDisplayMode === 'off' ? 'Rig connections off' : 'Show rig connections'}
+        tooltip={!hasRigData ? 'Rig not available' : rigDisplayMode === 'off' ? 'Rig connections off' : rigDisplayMode === 'blink' ? 'Rig connections blink' : 'Show rig connections'}
         isActive={hasRigData && rigDisplayMode !== 'off'}
         onClick={hasRigData ? cycleRigDisplayMode : undefined}
         panelTitle="Rig Connections"
@@ -1333,18 +1335,22 @@ export function ViewerControls() {
                 options={[
                   { value: 'off', label: 'Off' },
                   { value: 'lines', label: 'Lines' },
+                  { value: 'blink', label: 'Blink' },
                 ]}
               />
               {rigDisplayMode !== 'off' && (
-                <SliderRow
-                  label="Opacity"
-                  value={rigLineOpacity}
-                  min={0.1}
-                  max={1}
-                  step={0.05}
-                  onChange={setRigLineOpacity}
-                  formatValue={(v) => v.toFixed(2)}
-                />
+                <>
+                  <HueRow label="Color" value={rigLineColor} onChange={setRigLineColor} />
+                  <SliderRow
+                    label="Opacity"
+                    value={rigLineOpacity}
+                    min={0.1}
+                    max={1}
+                    step={0.05}
+                    onChange={setRigLineOpacity}
+                    formatValue={(v) => v.toFixed(2)}
+                  />
+                </>
               )}
               <div className="text-ds-secondary text-sm mt-3">
                 <div className="mb-1 font-medium">Detected Rig:</div>

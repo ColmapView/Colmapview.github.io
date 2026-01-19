@@ -1,8 +1,20 @@
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { useFrame } from '@react-three/fiber';
 import { useReconstructionStore, useRigStore } from '../../store';
 import { getImageWorldPosition } from '../../utils/colmapTransforms';
 import type { Image } from '../../types/colmap';
+
+/**
+ * Helper to calculate blink factor (0-1) from phase (0-2 seconds)
+ * Matches the pattern used in CameraMatches for visual consistency
+ */
+function getBlinkFactor(phase: number): number {
+  if (phase < 0.3) return phase / 0.3;        // Fade in
+  if (phase < 0.6) return 1;                   // Full
+  if (phase < 1.0) return 1 - (phase - 0.6) / 0.4;  // Fade out
+  return 0;                                    // Hidden
+}
 
 /**
  * Extract frame identifier from image name.
@@ -36,10 +48,22 @@ export function RigConnections() {
   const rigLineColor = useRigStore((s) => s.rigLineColor);
   const rigLineOpacity = useRigStore((s) => s.rigLineOpacity);
 
+  // Refs for blink animation
+  const materialRef = useRef<THREE.LineBasicMaterial>(null);
+  const blinkPhaseRef = useRef(0);
+
+  // Animate blink effect
+  useFrame((_, delta) => {
+    if (rigDisplayMode === 'blink' && materialRef.current) {
+      blinkPhaseRef.current = (blinkPhaseRef.current + delta) % 2;
+      materialRef.current.opacity = rigLineOpacity * (0.1 + 0.9 * getBlinkFactor(blinkPhaseRef.current));
+    }
+  });
+
   // Build geometry with all line segments connecting cameras within frames
   const geometry = useMemo(() => {
-    // Only render when in lines mode
-    if (rigDisplayMode !== 'lines' || !reconstruction) return null;
+    // Render when in lines or blink mode
+    if ((rigDisplayMode !== 'lines' && rigDisplayMode !== 'blink') || !reconstruction) return null;
 
     // Group images by frame identifier (extracted from image name)
     const frameGroups = new Map<string, Image[]>();
@@ -88,12 +112,13 @@ export function RigConnections() {
     };
   }, [geometry]);
 
-  // Don't render when off, no geometry, or in hull mode (not implemented yet)
-  if (rigDisplayMode === 'off' || rigDisplayMode === 'hull' || !geometry) return null;
+  // Don't render when off or no geometry
+  if (rigDisplayMode === 'off' || !geometry) return null;
 
   return (
     <lineSegments geometry={geometry} renderOrder={998}>
       <lineBasicMaterial
+        ref={materialRef}
         color={rigLineColor}
         transparent
         opacity={rigLineOpacity}

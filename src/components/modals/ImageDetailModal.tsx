@@ -933,11 +933,11 @@ export function ImageDetailModal() {
                           onChange={(e) => setOpacityInputValue(e.target.value)}
                           onBlur={applyOpacityValue}
                           onKeyDown={handleOpacityKeyDown}
-                          className="bg-transparent text-ds-primary text-xs w-8 text-right flex-shrink-0 border-none p-0 m-0 focus:outline-none"
+                          className="bg-transparent text-ds-primary text-xs w-8 text-right flex-shrink-0 border-none p-0 m-0 focus-outline-none"
                         />
                       ) : (
                         <span
-                          className="text-ds-primary text-xs w-8 text-right flex-shrink-0 cursor-pointer hover-ds-accent"
+                          className="text-ds-primary text-xs w-8 text-right flex-shrink-0 cursor-pointer hover-bg-ds-accent"
                           onDoubleClick={handleOpacityDoubleClick}
                           title="Double-click to edit"
                         >

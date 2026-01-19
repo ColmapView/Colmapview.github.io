@@ -74,13 +74,13 @@ export function DropZone({ children }: DropZoneProps) {
       )}
 
       {!reconstruction && !loading && !isDragOver && !isPanelDismissed && (
-        <div className="absolute inset-0 hidden md:flex items-center justify-center z-10">
+        <div className="absolute inset-0 flex items-center justify-center z-10">
           <div
             className="relative flex flex-col items-center justify-center p-8 text-center bg-ds-secondary rounded-lg cursor-pointer border border-ds"
             onClick={handleBrowse}
           >
             <button
-              className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center text-ds-muted hover:text-ds-primary hover:bg-white/10 rounded transition-colors"
+              className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center text-ds-muted hover-ds-text-primary hover-bg-white-10 rounded transition-colors"
               onClick={(e) => {
                 e.stopPropagation();
                 setIsPanelDismissed(true);
