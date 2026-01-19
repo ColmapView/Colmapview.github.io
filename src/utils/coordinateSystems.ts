@@ -4,15 +4,15 @@ import type { AxesCoordinateSystem } from '../store/types';
 // In Three.js: +X=right, +Y=up, +Z=toward viewer (backward), -Z=into scene (forward)
 // Each system defines where X, Y, Z axes point
 export const COORDINATE_SYSTEMS: Record<AxesCoordinateSystem, { x: [number, number, number]; y: [number, number, number]; z: [number, number, number] }> = {
-  colmap: {   // X-right, Y-down, Z-forward (same as OpenCV)
-    x: [1, 0, 0],     // Right
-    y: [0, -1, 0],    // Down
-    z: [0, 0, -1],    // Forward (into scene)
+  colmap: {   // Raw COLMAP data rendered directly in Three.js (numerical ground truth)
+    x: [1, 0, 0],     // +X data at Three.js +X
+    y: [0, 1, 0],     // +Y data at Three.js +Y
+    z: [0, 0, 1],     // +Z data at Three.js +Z
   },
-  opencv: {   // X-right, Y-down, Z-forward (same as COLMAP)
-    x: [1, 0, 0],     // Right
-    y: [0, -1, 0],    // Down
-    z: [0, 0, -1],    // Forward (into scene)
+  opencv: {   // Same as COLMAP (data loaded without transform)
+    x: [1, 0, 0],     // +X data at Three.js +X
+    y: [0, 1, 0],     // +Y data at Three.js +Y
+    z: [0, 0, 1],     // +Z data at Three.js +Z
   },
   threejs: {  // X-right, Y-up, Z-backward (same as OpenGL)
     x: [1, 0, 0],     // Right
@@ -59,7 +59,6 @@ export function getWorldUp(coordinateSystem: AxesCoordinateSystem): [number, num
   if (coordinateSystem === 'blender' || coordinateSystem === 'unreal') {
     return system.z;
   }
-  // Y-vertical systems (most common): use Y direction
-  // For COLMAP/OpenCV this is [0, -1, 0], for Three.js/OpenGL this is [0, 1, 0]
+  // Y-vertical systems (most common): use Y direction [0, 1, 0]
   return system.y;
 }

@@ -41,11 +41,16 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
   const transform = useTransformStore((s) => s.transform);
   const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
 
-  // Compute world up vector based on coordinate system
+  // Compute world up vector based on coordinate system and horizon lock mode
   const worldUpVec = useMemo(() => {
     const up = getWorldUp(axesCoordinateSystem);
-    return new THREE.Vector3(...up);
-  }, [axesCoordinateSystem]);
+    const vec = new THREE.Vector3(...up);
+    // Flip the up vector when in 'flip' mode
+    if (horizonLock === 'flip') {
+      vec.negate();
+    }
+    return vec;
+  }, [axesCoordinateSystem, horizonLock]);
 
   const isDragging = useRef(false);
   const isPanning = useRef(false);
@@ -97,7 +102,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
   const applyRotation = (deltaX: number, deltaY: number) => {
     if (Math.abs(deltaX) < 1e-10 && Math.abs(deltaY) < 1e-10) return;
 
-    if (horizonLockRef.current) {
+    if (horizonLockRef.current !== 'off') {
       // Horizon lock: rotate around world up axis for horizontal, camera X for vertical
       const worldUp = worldUpRef.current.clone();
       const localX = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraQuat.current);
@@ -296,7 +301,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       let camOffset: THREE.Vector3;
       let upDir: THREE.Vector3;
 
-      if (horizonLockRef.current) {
+      if (horizonLockRef.current !== 'off') {
         // Horizon lock mode: use world up from coordinate system
         const worldUp = worldUpRef.current.clone();
         camOffset = new THREE.Vector3(
@@ -347,7 +352,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       // Axis view: position camera along axis looking at target
       const view = AXIS_VIEWS[viewDirection];
 
-      if (horizonLockRef.current) {
+      if (horizonLockRef.current !== 'off') {
         // Horizon lock mode: use world up from coordinate system
         const worldUp = worldUpRef.current.clone();
         if (viewDirection === 'y') {
@@ -367,7 +372,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       // Reset view
       const sqrt2_2 = Math.SQRT1_2;
 
-      if (horizonLockRef.current) {
+      if (horizonLockRef.current !== 'off') {
         // Horizon lock mode: use world up from coordinate system
         const worldUp = worldUpRef.current.clone();
         camOffset = new THREE.Vector3(
@@ -469,7 +474,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
     let camOffset: THREE.Vector3;
     let upDir: THREE.Vector3;
 
-    if (horizonLock) {
+    if (horizonLock !== 'off') {
       // Horizon lock mode: use world up from coordinate system
       const worldUp = worldUpVec.clone();
       camOffset = new THREE.Vector3(
@@ -527,7 +532,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
 
     // When horizon lock is enabled, remove roll from the camera orientation
     // This ensures the horizon stays level after flying to the camera
-    if (horizonLock) {
+    if (horizonLock !== 'off') {
       const lookDir = new THREE.Vector3(0, 0, -1).applyQuaternion(threeJsCamQuat);
       const lookTarget = transformedPos.clone().add(lookDir);
       const lookMatrix = new THREE.Matrix4();

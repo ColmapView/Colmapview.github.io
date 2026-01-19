@@ -14,6 +14,9 @@ export type CameraProjection = (typeof CAMERA_PROJECTIONS)[number];
 export const AUTO_ROTATE_MODES = ['off', 'cw', 'ccw'] as const;
 export type AutoRotateMode = (typeof AUTO_ROTATE_MODES)[number];
 
+export const HORIZON_LOCK_MODES = ['off', 'on', 'flip'] as const;
+export type HorizonLockMode = (typeof HORIZON_LOCK_MODES)[number];
+
 export const CAMERA_DISPLAY_MODES = ['off', 'frustum', 'arrow', 'imageplane'] as const;
 export type CameraDisplayMode = (typeof CAMERA_DISPLAY_MODES)[number];
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react';
 import { createPortal } from 'react-dom';
-import { useUIStore, useCameraStore, useTransformStore, useReconstructionStore, useExportStore, usePointPickingStore, usePointCloudStore, type ContextMenuAction, CAMERA_MODES, CAMERA_PROJECTIONS, AUTO_ROTATE_MODES, CAMERA_DISPLAY_MODES, SELECTION_COLOR_MODES, MATCHES_DISPLAY_MODES, COLOR_MODES, type AxesCoordinateSystem, type AxisLabelMode, type FrustumColorMode } from '../../store';
+import { useUIStore, useCameraStore, useTransformStore, useReconstructionStore, useExportStore, usePointPickingStore, usePointCloudStore, type ContextMenuAction, CAMERA_MODES, CAMERA_PROJECTIONS, AUTO_ROTATE_MODES, HORIZON_LOCK_MODES, CAMERA_DISPLAY_MODES, SELECTION_COLOR_MODES, MATCHES_DISPLAY_MODES, COLOR_MODES, type AxesCoordinateSystem, type AxisLabelMode, type FrustumColorMode } from '../../store';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { contextMenuStyles, actionButtonStyles, HOTKEYS } from '../../theme';
 import { formatKeyCombo } from '../../config/hotkeys';
@@ -242,9 +242,12 @@ export function GlobalContextMenu() {
         setCameraMode(CAMERA_MODES[nextIndex]);
         break;
       }
-      case 'toggleHorizonLock':
-        setHorizonLock(!horizonLock);
+      case 'toggleHorizonLock': {
+        const currentIndex = HORIZON_LOCK_MODES.indexOf(horizonLock);
+        const nextIndex = (currentIndex + 1) % HORIZON_LOCK_MODES.length;
+        setHorizonLock(HORIZON_LOCK_MODES[nextIndex]);
         break;
+      }
       case 'cycleAutoRotate': {
         const currentIndex = AUTO_ROTATE_MODES.indexOf(autoRotateMode);
         const nextIndex = (currentIndex + 1) % AUTO_ROTATE_MODES.length;

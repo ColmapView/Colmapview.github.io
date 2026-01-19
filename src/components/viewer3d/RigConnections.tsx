@@ -1,16 +1,34 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useReconstructionStore, useRigStore } from '../../store';
 import { getImageWorldPosition } from '../../utils/colmapTransforms';
-import { SensorType } from '../../types/rig';
-import type { ImageId } from '../../types/colmap';
+import type { Image } from '../../types/colmap';
+
+/**
+ * Extract frame identifier from image name.
+ * Supports patterns like:
+ * - "cam_1/00.png" → "00.png" (directory/filename)
+ * - "cam1_frame00.jpg" → "frame00.jpg" (prefix_frame)
+ * - "image_001.png" → "001.png" (fallback: filename only)
+ */
+function extractFrameId(imageName: string): string {
+  // Handle path separators (both / and \)
+  const parts = imageName.split(/[/\\]/);
+  if (parts.length >= 2) {
+    // Return the filename part (last component)
+    return parts[parts.length - 1];
+  }
+  // Fallback: return the whole name
+  return imageName;
+}
 
 /**
  * RigConnections component renders visual connections between cameras
  * that belong to the same frame in a multi-camera rig.
  *
- * For each frame, it draws lines connecting all cameras captured together,
- * making it easy to visualize which cameras form a rig.
+ * It infers rig connections from image names - images with the same
+ * frame identifier (e.g., "cam_1/00.png" and "cam_2/00.png" share frame "00.png")
+ * are connected with lines.
  */
 export function RigConnections() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
@@ -20,46 +38,39 @@ export function RigConnections() {
 
   // Build geometry with all line segments connecting cameras within frames
   const geometry = useMemo(() => {
-    // Only render when in lines mode and rig data exists
-    if (rigDisplayMode !== 'lines' || !reconstruction?.rigData) return null;
+    // Only render when in lines mode
+    if (rigDisplayMode !== 'lines' || !reconstruction) return null;
 
-    const { frames } = reconstruction.rigData;
-    if (frames.size === 0) return null;
+    // Group images by frame identifier (extracted from image name)
+    const frameGroups = new Map<string, Image[]>();
+    for (const image of reconstruction.images.values()) {
+      const frameId = extractFrameId(image.name);
+      const group = frameGroups.get(frameId);
+      if (group) {
+        group.push(image);
+      } else {
+        frameGroups.set(frameId, [image]);
+      }
+    }
 
     // Build flat array of positions: [start1, end1, start2, end2, ...]
     const positions: number[] = [];
 
-    for (const frame of frames.values()) {
-      // Get all image IDs for camera sensors in this frame
-      const imageIds: ImageId[] = [];
-      for (const mapping of frame.dataIds) {
-        if (mapping.sensorId.type === SensorType.CAMERA) {
-          imageIds.push(mapping.dataId);
-        }
-      }
-
+    for (const images of frameGroups.values()) {
       // Need at least 2 cameras to draw connections
-      if (imageIds.length < 2) continue;
+      if (images.length < 2) continue;
 
-      // Get positions of all cameras in this frame
-      const cameraPositions: THREE.Vector3[] = [];
-      for (const imageId of imageIds) {
-        const image = reconstruction.images.get(imageId);
-        if (image) {
-          cameraPositions.push(getImageWorldPosition(image));
-        }
-      }
+      // Get positions of all cameras in this frame group
+      const cameraPositions = images.map(img => getImageWorldPosition(img));
 
       // Draw lines connecting first camera to all others (star pattern)
-      if (cameraPositions.length >= 2) {
-        const firstPos = cameraPositions[0];
-        for (let i = 1; i < cameraPositions.length; i++) {
-          const pos = cameraPositions[i];
-          // Start point
-          positions.push(firstPos.x, firstPos.y, firstPos.z);
-          // End point
-          positions.push(pos.x, pos.y, pos.z);
-        }
+      const firstPos = cameraPositions[0];
+      for (let i = 1; i < cameraPositions.length; i++) {
+        const pos = cameraPositions[i];
+        // Start point
+        positions.push(firstPos.x, firstPos.y, firstPos.z);
+        // End point
+        positions.push(pos.x, pos.y, pos.z);
       }
     }
 
@@ -69,6 +80,13 @@ export function RigConnections() {
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     return geo;
   }, [reconstruction, rigDisplayMode]);
+
+  // Dispose geometry when it changes to prevent GPU memory leaks
+  useEffect(() => {
+    return () => {
+      geometry?.dispose();
+    };
+  }, [geometry]);
 
   // Don't render when off, no geometry, or in hull mode (not implemented yet)
   if (rigDisplayMode === 'off' || rigDisplayMode === 'hull' || !geometry) return null;

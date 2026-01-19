@@ -47,3 +47,6 @@ tmpclaude-*
 
 # Playwright
 .playwright-mcp/
+
+# WASM build source (private - only built assets in public/wasm/ are committed)
+colmap-wasm/

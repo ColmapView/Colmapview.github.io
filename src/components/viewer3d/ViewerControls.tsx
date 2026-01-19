@@ -1,8 +1,8 @@
-import { useState, useEffect, memo, useCallback } from 'react';
+import { useState, useEffect, memo, useCallback, useMemo } from 'react';
 import { useReconstructionStore, usePointCloudStore, useCameraStore, useUIStore, useExportStore, useTransformStore, usePointPickingStore, useRigStore, useNotificationStore, useGuideStore } from '../../store';
 // sim3d transforms moved to DistanceInputModal for picking tool apply logic
 import type { ColorMode } from '../../types/colmap';
-import type { CameraMode, ImageLoadMode, CameraDisplayMode, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, ScreenshotSize, ScreenshotFormat, GizmoMode, AutoRotateMode, RigDisplayMode } from '../../store/types';
+import type { CameraMode, ImageLoadMode, CameraDisplayMode, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, ScreenshotSize, ScreenshotFormat, GizmoMode, AutoRotateMode, HorizonLockMode, RigDisplayMode } from '../../store/types';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { controlPanelStyles, HOTKEYS } from '../../theme';
 import { exportReconstructionText, exportReconstructionBinary, exportPointsPLY } from '../../parsers';
@@ -407,9 +407,36 @@ export function ViewerControls() {
   const setRigDisplayMode = useRigStore((s) => s.setRigDisplayMode);
   const rigLineOpacity = useRigStore((s) => s.rigLineOpacity);
   const setRigLineOpacity = useRigStore((s) => s.setRigLineOpacity);
-  const hasRigData = Boolean(reconstruction?.rigData);
-  const rigCount = reconstruction?.rigData?.rigs.size ?? 0;
-  const frameCount = reconstruction?.rigData?.frames.size ?? 0;
+  // Compute rig info from image names (images with same filename in different directories form a rig group)
+  const rigInfo = useMemo(() => {
+    if (!reconstruction) return { hasRigData: false, cameraCount: 0, frameCount: 0 };
+
+    // Group images by frame identifier (filename without directory)
+    const frameGroups = new Map<string, number>();
+    for (const image of reconstruction.images.values()) {
+      const parts = image.name.split(/[/\\]/);
+      const frameId = parts.length >= 2 ? parts[parts.length - 1] : image.name;
+      frameGroups.set(frameId, (frameGroups.get(frameId) ?? 0) + 1);
+    }
+
+    // Count frames with multiple cameras
+    let multiCameraFrames = 0;
+    let maxCameras = 0;
+    for (const count of frameGroups.values()) {
+      if (count >= 2) {
+        multiCameraFrames++;
+        maxCameras = Math.max(maxCameras, count);
+      }
+    }
+
+    return {
+      hasRigData: multiCameraFrames > 0,
+      cameraCount: maxCameras,
+      frameCount: multiCameraFrames,
+    };
+  }, [reconstruction]);
+
+  const { hasRigData, cameraCount, frameCount } = rigInfo;
 
   // Handle export action
   const handleExport = useCallback(() => {
@@ -889,16 +916,16 @@ export function ViewerControls() {
             />
             <span className={styles.value} />
           </div>
-          <div className={styles.row}>
-            <label className={styles.label}>Horizon Lock</label>
-            <input
-              type="checkbox"
-              checked={horizonLock}
-              onChange={(e) => setHorizonLock(e.target.checked)}
-              className="w-4 h-4 accent-blue-500"
-            />
-            <span className={styles.value} />
-          </div>
+          <SelectRow
+            label="Horizon Lock"
+            value={horizonLock}
+            onChange={(v) => setHorizonLock(v as HorizonLockMode)}
+            options={[
+              { value: 'off', label: 'Off' },
+              { value: 'on', label: 'On' },
+              { value: 'flip', label: 'Flip' },
+            ]}
+          />
           <SelectRow
             label="Auto Rotate"
             value={autoRotateMode}
@@ -1320,30 +1347,30 @@ export function ViewerControls() {
                 />
               )}
               <div className="text-ds-secondary text-sm mt-3">
-                <div className="mb-1 font-medium">Rig Data:</div>
-                <div>{rigCount} rig{rigCount !== 1 ? 's' : ''}, {frameCount} frame{frameCount !== 1 ? 's' : ''}</div>
+                <div className="mb-1 font-medium">Detected Rig:</div>
+                <div>{cameraCount} camera{cameraCount !== 1 ? 's' : ''}, {frameCount} frame{frameCount !== 1 ? 's' : ''}</div>
                 <div className="mt-2">
                   {rigDisplayMode === 'off' ? (
                     <div>Connection lines hidden.</div>
                   ) : (
-                    <div>Cyan lines connect cameras</div>
+                    <div>Lines connect cameras with</div>
                   )}
                 </div>
-                <div>that captured together in</div>
-                <div>each rig frame.</div>
+                <div>matching frame names</div>
+                <div>(e.g. cam_1/00.png, cam_2/00.png)</div>
               </div>
             </>
           ) : (
             <div className="text-ds-secondary text-sm">
-              <div className="mb-2 font-medium">No Rig Data</div>
-              <div>To use this feature, load a</div>
-              <div>COLMAP reconstruction with:</div>
+              <div className="mb-2 font-medium">No Multi-Camera Data</div>
+              <div>To use this feature, images</div>
+              <div>need directory/filename format:</div>
               <div className="mt-2 font-mono text-xs">
-                <div>• rigs.bin / rigs.txt</div>
-                <div>• frames.bin / frames.txt</div>
+                <div>• cam_1/frame_00.png</div>
+                <div>• cam_2/frame_00.png</div>
               </div>
-              <div className="mt-2">These files are created when</div>
-              <div>using multi-camera rigs.</div>
+              <div className="mt-2">Images with same filename</div>
+              <div>are connected as a rig.</div>
             </div>
           )}
         </div>

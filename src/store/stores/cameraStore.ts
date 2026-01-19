@@ -8,6 +8,7 @@ import type {
   FrustumColorMode,
   SelectionColorMode,
   AutoRotateMode,
+  HorizonLockMode,
   UndistortionMode,
 } from '../types';
 
@@ -22,7 +23,7 @@ export interface CameraState {
   cameraMode: CameraMode;
   cameraProjection: CameraProjection;
   cameraFov: number;
-  horizonLock: boolean;
+  horizonLock: HorizonLockMode;
   autoRotateMode: AutoRotateMode;
   autoRotateSpeed: number;
   flySpeed: number;
@@ -50,7 +51,7 @@ export interface CameraState {
   setCameraMode: (mode: CameraMode) => void;
   setCameraProjection: (projection: CameraProjection) => void;
   setCameraFov: (fov: number) => void;
-  setHorizonLock: (enabled: boolean) => void;
+  setHorizonLock: (mode: HorizonLockMode) => void;
   setAutoRotateMode: (mode: AutoRotateMode) => void;
   setAutoRotateSpeed: (speed: number) => void;
   setFlySpeed: (speed: number) => void;
@@ -77,7 +78,7 @@ export const useCameraStore = create<CameraState>()(
       cameraMode: 'orbit',
       cameraProjection: 'perspective',
       cameraFov: 60,
-      horizonLock: false,
+      horizonLock: 'off',
       autoRotateMode: 'off',
       autoRotateSpeed: 0.5,
       flySpeed: 2.5,

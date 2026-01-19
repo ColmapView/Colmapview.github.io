@@ -8,6 +8,7 @@ import {
   CAMERA_MODES,
   CAMERA_PROJECTIONS,
   AUTO_ROTATE_MODES,
+  HORIZON_LOCK_MODES,
   SELECTION_COLOR_MODES,
 } from '../../../store/types';
 
@@ -84,9 +85,11 @@ export const cameraSection = defineSection({
     },
     {
       key: 'horizonLock',
-      type: 'boolean',
-      default: false,
+      type: 'enum',
+      enumValues: HORIZON_LOCK_MODES,
+      default: 'off',
       persist: true,
+      description: 'off | on | flip',
     },
     {
       key: 'autoRotateMode',

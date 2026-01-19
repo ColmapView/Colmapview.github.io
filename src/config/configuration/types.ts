@@ -3,6 +3,7 @@ import type {
   CameraMode,
   CameraProjection,
   AutoRotateMode,
+  HorizonLockMode,
   CameraDisplayMode,
   FrustumColorMode,
   SelectionColorMode,
@@ -34,7 +35,7 @@ export interface CameraConfig {
   mode: CameraMode;
   projection: CameraProjection;
   fov: number;
-  horizonLock: boolean;
+  horizonLock: HorizonLockMode;
   autoRotateMode: AutoRotateMode;
   autoRotateSpeed: number;
   flySpeed: number;

@@ -1,11 +1,13 @@
 {
   "name": "colmapview",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.2.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:wasm": "cd colmap-wasm && emcmake cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel && cp build/colmap_wasm.js build/colmap_wasm.wasm ../public/wasm/",
+    "build:all": "npm run build:wasm && npm run build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",

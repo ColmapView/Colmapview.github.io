@@ -56,6 +56,20 @@ const COORDINATE_SYSTEM_NAMES: Record<AxesCoordinateSystem, string> = {
   unreal: 'Unreal',
 };
 
+// Semantic meaning of Y axis in each coordinate system
+// Shows what direction +Y represents in that system's convention
+const Y_AXIS_SEMANTIC: Record<AxesCoordinateSystem, string> = {
+  colmap: 'Down',    // Camera image Y points down
+  opencv: 'Down',    // Same as COLMAP
+  threejs: 'Up',     // Standard Y-up convention
+  opengl: 'Up',      // Standard Y-up convention
+  vulkan: 'Up',      // World space Y-up (NDC differs)
+  blender: 'Fwd',    // Y is depth/forward axis in Z-up system
+  houdini: 'Up',     // Standard Y-up convention
+  unity: 'Up',       // Y-up (left-handed)
+  unreal: 'Right',   // Y is right axis in Z-up system
+};
+
 // Screen position for context menus (like gizmo)
 interface MenuPosition {
   x: number;
@@ -370,7 +384,7 @@ const AxisLabel = memo(function AxisLabel({
             outlineColor="#000000"
             outlineOpacity={0.5}
           >
-            {suffix}
+            ({suffix})
           </Text>
         )}
       </group>
@@ -477,9 +491,9 @@ export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', label
 
   // Order axes Y, X, Z to match typical "up" axis priority
   const axes = useMemo(() => [
-    { direction: system.y, color: VIZ_COLORS.axis.y, label: 'Y', suffix: `(${COORDINATE_SYSTEM_NAMES[coordinateSystem]})` },
+    { direction: system.y, color: VIZ_COLORS.axis.y, label: 'Y', suffix: Y_AXIS_SEMANTIC[coordinateSystem] },
     { direction: system.x, color: VIZ_COLORS.axis.x, label: 'X' },
-    { direction: system.z, color: VIZ_COLORS.axis.z, label: 'Z' },
+    { direction: system.z, color: VIZ_COLORS.axis.z, label: 'Z', suffix: COORDINATE_SYSTEM_NAMES[coordinateSystem] },
   ], [system, coordinateSystem]);
 
   // Calculate negative directions (opposite of positive)

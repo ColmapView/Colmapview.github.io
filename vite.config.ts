@@ -33,6 +33,11 @@ export default defineConfig({
   server: {
     port: 5173,
     open: true,
+    // Required for SharedArrayBuffer (optional but better WASM performance)
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
   },
 
   build: {
@@ -53,6 +58,9 @@ export default defineConfig({
 
   optimizeDeps: {
     exclude: ['sql.js'],
-    include: ['react', 'react-dom', 'three']
+    include: ['react', 'react-dom', 'three'],
   },
+
+  // Include WASM files as assets
+  assetsInclude: ['**/*.wasm'],
 });
