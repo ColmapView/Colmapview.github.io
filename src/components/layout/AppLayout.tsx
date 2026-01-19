@@ -146,7 +146,7 @@ function MobileMessage() {
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between p-5 border-t border-ds">
+      <div className="flex items-center justify-between p-5">
         {/* Logo on left */}
         <a
           href="https://opsiclear.com"
