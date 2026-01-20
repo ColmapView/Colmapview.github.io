@@ -44,6 +44,8 @@ uniform float k6;
 uniform float p1;
 uniform float p2;
 uniform float omega;
+uniform float sx1;
+uniform float sy1;
 
 varying vec2 vUv;
 
@@ -69,11 +71,91 @@ vec2 uvToDistortedNormalized(vec2 uv) {
 
 // Compute inverse distortion: distorted -> undistorted
 // Uses iterative approach for accurate inversion
+//
+// For fisheye models, follows COLMAP's two-step approach:
+// 1. Remove polynomial distortion in fisheye θ-space (iteratively)
+// 2. Convert from fisheye to pinhole via tan(θ)/θ scaling
 vec2 inverseDistort(vec2 distorted) {
   if (modelId == SIMPLE_PINHOLE || modelId == PINHOLE) {
     return distorted;
   }
 
+  // Handle fisheye models separately - they need special two-step inversion
+  if (modelId == OPENCV_FISHEYE || modelId == SIMPLE_RADIAL_FISHEYE || modelId == RADIAL_FISHEYE) {
+    // Input is already in fisheye normalized space: (x-cx)/fx, (y-cy)/fy
+    // Step 1: Iteratively remove polynomial distortion in fisheye space
+    // The distortion is: distorted = undistorted * (1 + k1*θ² + k2*θ⁴ + ...)
+    // where θ² = undistorted.x² + undistorted.y²
+    vec2 fisheyeUndist = distorted;
+
+    for (int i = 0; i < 10; i++) {
+      float theta2 = fisheyeUndist.x * fisheyeUndist.x + fisheyeUndist.y * fisheyeUndist.y;
+      float theta4 = theta2 * theta2;
+      float theta6 = theta4 * theta2;
+      float theta8 = theta4 * theta4;
+
+      float radial = 0.0;
+      if (modelId == OPENCV_FISHEYE) {
+        radial = k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8;
+      } else if (modelId == SIMPLE_RADIAL_FISHEYE) {
+        radial = k1 * theta2;
+      } else if (modelId == RADIAL_FISHEYE) {
+        radial = k1 * theta2 + k2 * theta4;
+      }
+
+      // Solve: distorted = fisheyeUndist * (1 + radial)
+      // So: fisheyeUndist = distorted / (1 + radial)
+      fisheyeUndist = distorted / (1.0 + radial);
+    }
+
+    // Step 2: Convert from fisheye to pinhole (NormalFromFisheye in COLMAP)
+    // In fisheye space, θ = length(fisheyeUndist) represents the angle from optical axis
+    // To convert to pinhole: scale by tan(θ)/θ
+    float theta = sqrt(fisheyeUndist.x * fisheyeUndist.x + fisheyeUndist.y * fisheyeUndist.y);
+    if (theta < 0.00001) {
+      return fisheyeUndist;
+    }
+    // scale = sin(θ)/(θ*cos(θ)) = tan(θ)/θ
+    float scale = tan(theta) / theta;
+    return fisheyeUndist * scale;
+  }
+
+  // THIN_PRISM_FISHEYE: fisheye + tangential + thin prism
+  // Distortion order: 1) fisheye radial, 2) tangential + thin prism on scaled coords
+  // Inverse order: 1) remove tangential + thin prism, 2) remove fisheye radial, 3) fisheye to pinhole
+  if (modelId == THIN_PRISM_FISHEYE) {
+    vec2 fisheyeUndist = distorted;
+
+    for (int i = 0; i < 10; i++) {
+      // First estimate what the fisheye-only point would be (before tangential/thin prism)
+      float theta2 = fisheyeUndist.x * fisheyeUndist.x + fisheyeUndist.y * fisheyeUndist.y;
+      float theta4 = theta2 * theta2;
+      float theta6 = theta4 * theta2;
+      float theta8 = theta4 * theta4;
+      float radial = k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8;
+
+      // Compute tangential + thin prism delta at current estimate
+      float x = fisheyeUndist.x;
+      float y = fisheyeUndist.y;
+      float r2d = x * x + y * y;
+      float dx = 2.0 * p1 * x * y + p2 * (r2d + 2.0 * x * x) + sx1 * r2d;
+      float dy = p1 * (r2d + 2.0 * y * y) + 2.0 * p2 * x * y + sy1 * r2d;
+
+      // Remove tangential/thin prism, then remove radial
+      vec2 withoutTangential = distorted - vec2(dx, dy);
+      fisheyeUndist = withoutTangential / (1.0 + radial);
+    }
+
+    // Convert from fisheye to pinhole
+    float theta = sqrt(fisheyeUndist.x * fisheyeUndist.x + fisheyeUndist.y * fisheyeUndist.y);
+    if (theta < 0.00001) {
+      return fisheyeUndist;
+    }
+    float scale = tan(theta) / theta;
+    return fisheyeUndist * scale;
+  }
+
+  // For non-fisheye models: standard iterative undistortion
   // Initial guess: the distorted point itself
   vec2 undistorted = distorted;
 
@@ -115,31 +197,6 @@ vec2 inverseDistort(vec2 distorted) {
         float rd = atan(r * 2.0 * tan(omega / 2.0)) / omega;
         float factor = rd / r - 1.0;
         delta = undistorted * factor;
-      }
-    } else if (modelId == OPENCV_FISHEYE) {
-      if (r > 0.00001) {
-        float theta = atan(r);
-        float theta2 = theta * theta;
-        float theta4 = theta2 * theta2;
-        float theta6 = theta4 * theta2;
-        float theta8 = theta4 * theta4;
-        float thetad = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8);
-        delta = undistorted * (thetad / r - 1.0);
-      }
-    } else if (modelId == SIMPLE_RADIAL_FISHEYE) {
-      if (r > 0.00001) {
-        float theta = atan(r);
-        float theta2 = theta * theta;
-        float thetad = theta * (1.0 + k1 * theta2);
-        delta = undistorted * (thetad / r - 1.0);
-      }
-    } else if (modelId == RADIAL_FISHEYE) {
-      if (r > 0.00001) {
-        float theta = atan(r);
-        float theta2 = theta * theta;
-        float theta4 = theta2 * theta2;
-        float thetad = theta * (1.0 + k1 * theta2 + k2 * theta4);
-        delta = undistorted * (thetad / r - 1.0);
       }
     }
 
