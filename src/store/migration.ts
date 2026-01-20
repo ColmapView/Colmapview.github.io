@@ -7,7 +7,11 @@ export const STORAGE_KEYS = {
   export: 'colmap-viewer-export',
   rig: 'colmap-viewer-rig',
   guide: 'colmap-viewer-guide',
+  settingsResetWarningShown: 'colmap-viewer-settings-reset-warning-shown',
 } as const;
+
+// Version for the settings reset warning - increment this to show the warning again
+const SETTINGS_RESET_WARNING_VERSION = 1;
 
 // Property mappings for migration
 const POINT_CLOUD_PROPERTIES = [
@@ -173,6 +177,44 @@ export function migrateFromLegacyStore(): boolean {
   }
 }
 
+/**
+ * Check if the settings reset warning should be shown and display it
+ */
+function showSettingsResetWarning(): void {
+  if (typeof window === 'undefined') return;
+
+  const shownVersion = localStorage.getItem(STORAGE_KEYS.settingsResetWarningShown);
+  const currentVersion = String(SETTINGS_RESET_WARNING_VERSION);
+
+  // Only show if user hasn't seen this version of the warning
+  if (shownVersion === currentVersion) return;
+
+  // Check if user has any existing settings (don't show for new users)
+  const hasExistingSettings = [
+    STORAGE_KEYS.pointCloud,
+    STORAGE_KEYS.camera,
+    STORAGE_KEYS.ui,
+    STORAGE_KEYS.export,
+    STORAGE_KEYS.rig,
+  ].some(key => localStorage.getItem(key) !== null);
+
+  if (!hasExistingSettings) {
+    // Mark as shown for new users too, so they don't see it later
+    localStorage.setItem(STORAGE_KEYS.settingsResetWarningShown, currentVersion);
+    return;
+  }
+
+  // Import notification store dynamically to avoid circular dependencies
+  import('./stores/notificationStore').then(({ useNotificationStore }) => {
+    useNotificationStore.getState().addNotification(
+      'warning',
+      'New features available! Consider resetting settings via the ⟳ button in the startup panel to enable them.'
+    );
+    localStorage.setItem(STORAGE_KEYS.settingsResetWarningShown, currentVersion);
+  });
+}
+
 export function initStoreMigration(): void {
   migrateFromLegacyStore();
+  showSettingsResetWarning();
 }
