@@ -8,6 +8,7 @@ import { sRGBToLinear, rainbowColor, jetColormap } from '../../utils/colorUtils'
 
 export function PointCloud() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
+  const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
   const colorMode = usePointCloudStore((s) => s.colorMode);
   const pointSize = usePointCloudStore((s) => s.pointSize);
   const minTrackLength = usePointCloudStore((s) => s.minTrackLength);
@@ -89,6 +90,113 @@ export function PointCloud() {
       return { positions: null, colors: null, selectedPositions: null, selectedColors: null };
     }
 
+    const startTime = performance.now();
+
+    // FAST PATH: Use WASM arrays directly when no filters are active
+    // This avoids iterating over the points3D Map for the common case
+    const noFilters = minTrackLength <= 1 &&
+                      maxReprojectionError >= 1000 &&
+                      selectedImageId === null;
+
+    if (wasmReconstruction?.hasPoints() && noFilters) {
+      const count = wasmReconstruction.pointCount;
+
+      // Build indexToPoint3DId mapping (still needed for picking)
+      const indexToPoint3DId = new Map<number, bigint>();
+      for (let i = 0; i < count; i++) {
+        indexToPoint3DId.set(i, BigInt(i + 1)); // COLMAP uses 1-based IDs
+      }
+      indexToPoint3DIdRef.current = indexToPoint3DId;
+
+      // Get WASM arrays directly (zero-copy views)
+      const wasmPositions = wasmReconstruction.getPositions();
+      if (!wasmPositions) {
+        console.warn('[PointCloud] WASM positions not available, falling back to slow path');
+      } else {
+        // Compute colors based on mode
+        let finalColors: Float32Array;
+
+        if (colorMode === 'rgb') {
+          // Use WASM colors directly - already in normalized 0-1 format
+          const wasmColors = wasmReconstruction.getColors();
+          if (wasmColors) {
+            // Convert from sRGB to linear for proper Three.js rendering
+            finalColors = new Float32Array(wasmColors.length);
+            for (let i = 0; i < wasmColors.length; i++) {
+              finalColors[i] = sRGBToLinear(wasmColors[i]);
+            }
+          } else {
+            // Fallback: white color
+            finalColors = new Float32Array(count * 3);
+            finalColors.fill(1);
+          }
+        } else if (colorMode === 'error') {
+          // Compute error-based colors from WASM error array
+          const errors = wasmReconstruction.getErrors();
+          finalColors = new Float32Array(count * 3);
+
+          if (errors) {
+            // Find min/max for normalization
+            let minError = Infinity, maxError = -Infinity;
+            for (let i = 0; i < count; i++) {
+              if (errors[i] >= 0) {
+                minError = Math.min(minError, errors[i]);
+                maxError = Math.max(maxError, errors[i]);
+              }
+            }
+            if (minError === maxError) maxError = minError + 1;
+
+            for (let i = 0; i < count; i++) {
+              const errorNorm = errors[i] >= 0 ? (errors[i] - minError) / (maxError - minError) : 0;
+              const [r, g, b] = jetColormap(errorNorm);
+              finalColors[i * 3] = r;
+              finalColors[i * 3 + 1] = g;
+              finalColors[i * 3 + 2] = b;
+            }
+          } else {
+            finalColors.fill(1);
+          }
+        } else {
+          // trackLength mode
+          const trackLengths = wasmReconstruction.getTrackLengths();
+          finalColors = new Float32Array(count * 3);
+
+          if (trackLengths) {
+            // Find min/max for normalization
+            let minTrack = Infinity, maxTrack = -Infinity;
+            for (let i = 0; i < count; i++) {
+              minTrack = Math.min(minTrack, trackLengths[i]);
+              maxTrack = Math.max(maxTrack, trackLengths[i]);
+            }
+            if (minTrack === maxTrack) maxTrack = minTrack + 1;
+
+            const { baseR, rangeR, baseG, rangeG, baseB, rangeB } = COLORMAP.trackLength;
+            for (let i = 0; i < count; i++) {
+              const trackNorm = (trackLengths[i] - minTrack) / (maxTrack - minTrack);
+              finalColors[i * 3] = baseR + trackNorm * rangeR;
+              finalColors[i * 3 + 1] = baseG + trackNorm * rangeG;
+              finalColors[i * 3 + 2] = baseB - trackNorm * rangeB;
+            }
+          } else {
+            finalColors.fill(1);
+          }
+        }
+
+        const elapsed = performance.now() - startTime;
+        console.log(`[PointCloud] Fast path: ${count.toLocaleString()} points in ${elapsed.toFixed(1)}ms`);
+        return {
+          positions: wasmPositions,
+          colors: finalColors,
+          selectedPositions: null,
+          selectedColors: null,
+        };
+      }
+    }
+
+    // SLOW PATH: Filtered iteration
+    // Prefer WASM arrays even for filtered case (avoids needing points3D Map)
+    const slowPathStart = performance.now();
+
     // Build set of selected image point IDs (use pre-computed mapping for memory efficiency)
     let selectedImagePointIds: Set<bigint>;
     if (selectedImageId !== null) {
@@ -96,6 +204,147 @@ export function PointCloud() {
       selectedImagePointIds = reconstruction.imageToPoint3DIds.get(selectedImageId) ?? new Set();
     } else {
       selectedImagePointIds = new Set();
+    }
+
+    // Convert hex selection color to RGB values
+    const tempColor = new THREE.Color(selectionColor);
+    const HIGHLIGHT_COLOR: [number, number, number] = [tempColor.r, tempColor.g, tempColor.b];
+
+    // Use WASM arrays if available (preferred path - doesn't need points3D Map)
+    if (wasmReconstruction?.hasPoints()) {
+      const count = wasmReconstruction.pointCount;
+      const wasmPositions = wasmReconstruction.getPositions();
+      const wasmColors = wasmReconstruction.getColors();
+      const wasmErrors = wasmReconstruction.getErrors();
+      const wasmTrackLengths = wasmReconstruction.getTrackLengths();
+      const point3DIds = wasmReconstruction.getPoint3DIds();
+
+      if (wasmPositions && wasmErrors && wasmTrackLengths) {
+        // First pass: find min/max and count filtered points
+        let minErrorVal = Infinity, maxErrorVal = -Infinity;
+        let minTrackVal = Infinity, maxTrackVal = -Infinity;
+        let regularCount = 0;
+        let highlightCount = 0;
+        const isRegular: boolean[] = [];
+        const isHighlighted: boolean[] = [];
+
+        for (let i = 0; i < count; i++) {
+          // Filter by track length
+          if (wasmTrackLengths[i] < minTrackLength) {
+            isRegular.push(false);
+            isHighlighted.push(false);
+            continue;
+          }
+          // Filter by reprojection error
+          if (wasmErrors[i] > maxReprojectionError) {
+            isRegular.push(false);
+            isHighlighted.push(false);
+            continue;
+          }
+
+          // Update stats
+          if (wasmErrors[i] >= 0) {
+            minErrorVal = Math.min(minErrorVal, wasmErrors[i]);
+            maxErrorVal = Math.max(maxErrorVal, wasmErrors[i]);
+          }
+          minTrackVal = Math.min(minTrackVal, wasmTrackLengths[i]);
+          maxTrackVal = Math.max(maxTrackVal, wasmTrackLengths[i]);
+
+          // Check if highlighted
+          const point3DId = point3DIds ? point3DIds[i] : BigInt(i + 1);
+          const isInSet = selectedImagePointIds.has(point3DId);
+          const shouldHighlight = selectionColorMode !== 'off' && isInSet;
+
+          if (shouldHighlight) {
+            isRegular.push(false);
+            isHighlighted.push(true);
+            highlightCount++;
+          } else {
+            isRegular.push(true);
+            isHighlighted.push(false);
+            regularCount++;
+          }
+        }
+
+        if (regularCount === 0 && highlightCount === 0) {
+          const elapsed = performance.now() - slowPathStart;
+          console.log(`[PointCloud] WASM slow path: 0 points after filtering in ${elapsed.toFixed(1)}ms`);
+          indexToPoint3DIdRef.current = new Map();
+          return { positions: null, colors: null, selectedPositions: null, selectedColors: null };
+        }
+
+        if (minErrorVal === maxErrorVal) maxErrorVal = minErrorVal + 1;
+        if (minTrackVal === maxTrackVal) maxTrackVal = minTrackVal + 1;
+
+        // Color computation helper
+        const computeColorWasm = (i: number, mode: string): [number, number, number] => {
+          if (mode === 'error') {
+            const errorNorm = wasmErrors[i] >= 0 ? (wasmErrors[i] - minErrorVal) / (maxErrorVal - minErrorVal) : 0;
+            return jetColormap(errorNorm);
+          } else if (mode === 'trackLength') {
+            const { baseR, rangeR, baseG, rangeG, baseB, rangeB } = COLORMAP.trackLength;
+            const trackNorm = (wasmTrackLengths[i] - minTrackVal) / (maxTrackVal - minTrackVal);
+            return [baseR + trackNorm * rangeR, baseG + trackNorm * rangeG, baseB - trackNorm * rangeB];
+          }
+          // RGB mode
+          if (wasmColors) {
+            return [
+              sRGBToLinear(wasmColors[i * 3]),
+              sRGBToLinear(wasmColors[i * 3 + 1]),
+              sRGBToLinear(wasmColors[i * 3 + 2]),
+            ];
+          }
+          return [1, 1, 1];
+        };
+
+        // Build output arrays
+        const positions = new Float32Array(regularCount * 3);
+        const colors = new Float32Array(regularCount * 3);
+        const selectedPositions = new Float32Array(highlightCount * 3);
+        const selectedColors = new Float32Array(highlightCount * 3);
+        const indexToPoint3DId = new Map<number, bigint>();
+
+        let regularIdx = 0;
+        let highlightIdx = 0;
+        for (let i = 0; i < count; i++) {
+          if (isRegular[i]) {
+            const i3 = regularIdx * 3;
+            positions[i3] = wasmPositions[i * 3];
+            positions[i3 + 1] = wasmPositions[i * 3 + 1];
+            positions[i3 + 2] = wasmPositions[i * 3 + 2];
+            const c = computeColorWasm(i, colorMode);
+            colors[i3] = c[0];
+            colors[i3 + 1] = c[1];
+            colors[i3 + 2] = c[2];
+            const point3DId = point3DIds ? point3DIds[i] : BigInt(i + 1);
+            indexToPoint3DId.set(regularIdx, point3DId);
+            regularIdx++;
+          } else if (isHighlighted[i]) {
+            const i3 = highlightIdx * 3;
+            selectedPositions[i3] = wasmPositions[i * 3];
+            selectedPositions[i3 + 1] = wasmPositions[i * 3 + 1];
+            selectedPositions[i3 + 2] = wasmPositions[i * 3 + 2];
+            selectedColors[i3] = HIGHLIGHT_COLOR[0];
+            selectedColors[i3 + 1] = HIGHLIGHT_COLOR[1];
+            selectedColors[i3 + 2] = HIGHLIGHT_COLOR[2];
+            highlightIdx++;
+          }
+        }
+
+        indexToPoint3DIdRef.current = indexToPoint3DId;
+
+        const elapsed = performance.now() - slowPathStart;
+        console.log(`[PointCloud] WASM slow path: ${(regularCount + highlightCount).toLocaleString()} points in ${elapsed.toFixed(1)}ms (${regularCount.toLocaleString()} regular, ${highlightCount.toLocaleString()} highlighted)`);
+
+        return { positions, colors, selectedPositions, selectedColors };
+      }
+    }
+
+    // FALLBACK: Iterate over points3D Map (only if Map is available)
+    if (!reconstruction.points3D || reconstruction.points3D.size === 0) {
+      console.warn('[PointCloud] No points3D Map and WASM not available');
+      indexToPoint3DIdRef.current = new Map();
+      return { positions: null, colors: null, selectedPositions: null, selectedColors: null };
     }
 
     // SINGLE PASS: filter, compute stats, and categorize simultaneously
@@ -119,7 +368,9 @@ export function PointCloud() {
       maxTrack = Math.max(maxTrack, point.track.length);
 
       // Categorize into regular vs highlighted (only highlight when selectionColorMode is not 'off')
-      if (selectionColorMode !== 'off' && selectedImagePointIds.has(point.point3DId)) {
+      const isInSet = selectedImagePointIds.has(point.point3DId);
+      const shouldHighlight = selectionColorMode !== 'off' && isInSet;
+      if (shouldHighlight) {
         highlightedPoints.push(point);
       } else {
         regularPoints.push(point);
@@ -127,16 +378,14 @@ export function PointCloud() {
     }
 
     if (regularPoints.length === 0 && highlightedPoints.length === 0) {
+      const elapsed = performance.now() - slowPathStart;
+      console.log(`[PointCloud] Map slow path: 0 points after filtering in ${elapsed.toFixed(1)}ms`);
       indexToPoint3DIdRef.current = new Map();
       return { positions: null, colors: null, selectedPositions: null, selectedColors: null };
     }
 
     if (minError === maxError) maxError = minError + 1;
     if (minTrack === maxTrack) maxTrack = minTrack + 1;
-
-    // Convert hex selection color to RGB values
-    const tempColor = new THREE.Color(selectionColor);
-    const HIGHLIGHT_COLOR: [number, number, number] = [tempColor.r, tempColor.g, tempColor.b];
 
     const computeColor = (point: Point3D, mode: string): [number, number, number] => {
       if (mode === 'error') {
@@ -192,8 +441,12 @@ export function PointCloud() {
       selectedColors[i3 + 2] = HIGHLIGHT_COLOR[2];
     }
 
+    const slowPathElapsed = performance.now() - slowPathStart;
+    const totalPoints = regularPoints.length + highlightedPoints.length;
+    console.log(`[PointCloud] Map slow path: ${totalPoints.toLocaleString()} points in ${slowPathElapsed.toFixed(1)}ms (${regularPoints.length.toLocaleString()} regular, ${highlightedPoints.length.toLocaleString()} highlighted)`);
+
     return { positions, colors, selectedPositions, selectedColors };
-  }, [reconstruction, colorMode, minTrackLength, maxReprojectionError, selectedImageId, selectionColorMode, selectionColor]);
+  }, [reconstruction, wasmReconstruction, colorMode, minTrackLength, maxReprojectionError, selectedImageId, selectionColorMode, selectionColor]);
 
   // Create geometry objects in useMemo to ensure proper updates when reconstruction changes
   const geometry = useMemo(() => {

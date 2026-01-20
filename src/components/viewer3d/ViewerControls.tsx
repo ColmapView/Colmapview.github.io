@@ -2,7 +2,7 @@ import { useState, useEffect, memo, useCallback, useMemo } from 'react';
 import { useReconstructionStore, usePointCloudStore, useCameraStore, useUIStore, useExportStore, useTransformStore, usePointPickingStore, useRigStore, useNotificationStore, useGuideStore } from '../../store';
 // sim3d transforms moved to DistanceInputModal for picking tool apply logic
 import type { ColorMode } from '../../types/colmap';
-import type { CameraMode, ImageLoadMode, CameraDisplayMode, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, ScreenshotSize, ScreenshotFormat, GizmoMode, AutoRotateMode, HorizonLockMode, RigDisplayMode } from '../../store/types';
+import type { CameraMode, CameraDisplayMode, CameraScaleFactor, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, ScreenshotSize, ScreenshotFormat, GizmoMode, AutoRotateMode, HorizonLockMode, RigDisplayMode } from '../../store/types';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { controlPanelStyles, HOTKEYS } from '../../theme';
 import { exportReconstructionText, exportReconstructionBinary, exportPointsPLY } from '../../parsers';
@@ -332,6 +332,8 @@ export function ViewerControls() {
   // Camera display settings
   const cameraDisplayMode = useCameraStore((s) => s.cameraDisplayMode);
   const setCameraDisplayMode = useCameraStore((s) => s.setCameraDisplayMode);
+  const cameraScaleFactor = useCameraStore((s) => s.cameraScaleFactor);
+  const setCameraScaleFactor = useCameraStore((s) => s.setCameraScaleFactor);
   const cameraScale = useCameraStore((s) => s.cameraScale);
   const setCameraScale = useCameraStore((s) => s.setCameraScale);
   const selectionPlaneOpacity = useCameraStore((s) => s.selectionPlaneOpacity);
@@ -346,6 +348,8 @@ export function ViewerControls() {
   const setCameraMode = useCameraStore((s) => s.setCameraMode);
   const flySpeed = useCameraStore((s) => s.flySpeed);
   const setFlySpeed = useCameraStore((s) => s.setFlySpeed);
+  const flyTransitionDuration = useCameraStore((s) => s.flyTransitionDuration);
+  const setFlyTransitionDuration = useCameraStore((s) => s.setFlyTransitionDuration);
   const pointerLock = useCameraStore((s) => s.pointerLock);
   const setPointerLock = useCameraStore((s) => s.setPointerLock);
   const frustumColorMode = useCameraStore((s) => s.frustumColorMode);
@@ -385,10 +389,6 @@ export function ViewerControls() {
   const backgroundColor = useUIStore((s) => s.backgroundColor);
   const setBackgroundColor = useUIStore((s) => s.setBackgroundColor);
   const setView = useUIStore((s) => s.setView);
-  const imageLoadMode = useUIStore((s) => s.imageLoadMode);
-  const setImageLoadMode = useUIStore((s) => s.setImageLoadMode);
-  const liteParserThresholdMB = useUIStore((s) => s.liteParserThresholdMB);
-  const setLiteParserThresholdMB = useUIStore((s) => s.setLiteParserThresholdMB);
   const openContextMenuEditor = useUIStore((s) => s.openContextMenuEditor);
 
   // Export settings
@@ -402,6 +402,7 @@ export function ViewerControls() {
   const exportFormat = useExportStore((s) => s.exportFormat);
   const setExportFormat = useExportStore((s) => s.setExportFormat);
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
+  const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
 
   // Rig settings (only shown when rig data is available)
   const rigDisplayMode = useRigStore((s) => s.rigDisplayMode);
@@ -462,16 +463,16 @@ export function ViewerControls() {
     if (!reconstruction) return;
     switch (exportFormat) {
       case 'text':
-        exportReconstructionText(reconstruction);
+        exportReconstructionText(reconstruction, wasmReconstruction);
         break;
       case 'binary':
-        exportReconstructionBinary(reconstruction);
+        exportReconstructionBinary(reconstruction, wasmReconstruction);
         break;
       case 'ply':
-        exportPointsPLY(reconstruction);
+        exportPointsPLY(reconstruction, wasmReconstruction);
         break;
     }
-  }, [reconstruction, exportFormat]);
+  }, [reconstruction, wasmReconstruction, exportFormat]);
 
   // Track HSL values in local state so they persist even when they don't affect the hex color
   const [hsl, setHsl] = useState(() => hexToHsl(backgroundColor));
@@ -909,6 +910,15 @@ export function ViewerControls() {
             ]}
           />
           <SliderRow label="Speed" value={flySpeed} min={0.1} max={5} step={0.1} onChange={setFlySpeed} formatValue={(v) => v.toFixed(1)} />
+          <SliderRow
+            label="Goto Anim"
+            value={flyTransitionDuration}
+            min={0}
+            max={2000}
+            step={100}
+            onChange={setFlyTransitionDuration}
+            formatValue={(v) => v === 0 ? 'Off' : `${(v / 1000).toFixed(1)}s`}
+          />
           <div className={styles.row}>
             <label className={styles.label}>Pointer Lock</label>
             <input
@@ -999,6 +1009,8 @@ export function ViewerControls() {
           />
         </div>
       </ControlButton>
+
+      <TransformPanel styles={styles} activePanel={activePanel} setActivePanel={setActivePanel} />
 
       <ControlButton
         panelId="points"
@@ -1114,6 +1126,16 @@ export function ViewerControls() {
                 options={[
                   { value: 'single', label: 'Single' },
                   { value: 'byCamera', label: 'By Cam' },
+                ]}
+              />
+              <SelectRow
+                label="Scale ×"
+                value={cameraScaleFactor}
+                onChange={(v) => setCameraScaleFactor(v as CameraScaleFactor)}
+                options={[
+                  { value: '0.1', label: '0.1×' },
+                  { value: '1', label: '1×' },
+                  { value: '10', label: '10×' },
                 ]}
               />
               <SliderRow label="Scale" value={cameraScale} min={0.05} max={1} step={0.05} onChange={setCameraScale} formatValue={(v) => v.toFixed(2)} />
@@ -1307,8 +1329,6 @@ export function ViewerControls() {
         </>
       )}
 
-      <TransformPanel styles={styles} activePanel={activePanel} setActivePanel={setActivePanel} />
-
       {/* Rig panel - disabled when no rig data is loaded */}
       <ControlButton
         panelId="rig"
@@ -1444,21 +1464,21 @@ export function ViewerControls() {
         <div className={styles.panelContent}>
           <div className="flex flex-col gap-2">
             <button
-              onClick={() => { setExportFormat('binary'); if (reconstruction) exportReconstructionBinary(reconstruction); }}
+              onClick={() => { setExportFormat('binary'); if (reconstruction) exportReconstructionBinary(reconstruction, wasmReconstruction); }}
               disabled={!reconstruction}
               className={reconstruction ? styles.actionButton : styles.actionButtonDisabled}
             >
               Binary (.bin)
             </button>
             <button
-              onClick={() => { setExportFormat('text'); if (reconstruction) exportReconstructionText(reconstruction); }}
+              onClick={() => { setExportFormat('text'); if (reconstruction) exportReconstructionText(reconstruction, wasmReconstruction); }}
               disabled={!reconstruction}
               className={reconstruction ? styles.actionButton : styles.actionButtonDisabled}
             >
               Text (.txt)
             </button>
             <button
-              onClick={() => { setExportFormat('ply'); if (reconstruction) exportPointsPLY(reconstruction); }}
+              onClick={() => { setExportFormat('ply'); if (reconstruction) exportPointsPLY(reconstruction, wasmReconstruction); }}
               disabled={!reconstruction}
               className={reconstruction ? styles.actionButton : styles.actionButtonDisabled}
             >
@@ -1506,40 +1526,6 @@ export function ViewerControls() {
         panelTitle="Settings"
       >
         <div className={styles.panelContent}>
-          <SelectRow
-            label="Img Load"
-            value={imageLoadMode}
-            onChange={(v) => setImageLoadMode(v as ImageLoadMode)}
-            options={[
-              { value: 'prefetch', label: 'Prefetch' },
-              { value: 'lazy', label: 'Lazy' },
-              { value: 'skip', label: 'Skip' },
-            ]}
-          />
-          <div className="text-ds-secondary text-xs mt-1 mb-3">
-            {imageLoadMode === 'prefetch' ? 'Load all images upfront' :
-             imageLoadMode === 'lazy' ? 'Load images on demand (recommended)' :
-             'No images loaded'}
-          </div>
-          <div className={styles.row}>
-            <label className={styles.label}>Lite Parser</label>
-            <div className="flex items-center gap-1 flex-1">
-              <input
-                type="number"
-                min="0"
-                step="50"
-                value={liteParserThresholdMB}
-                onChange={(e) => setLiteParserThresholdMB(Math.max(0, parseInt(e.target.value) || 0))}
-                className="bg-ds-tertiary text-ds-primary text-sm px-2 py-0.5 rounded border border-ds w-14 text-right"
-              />
-              <span className="text-ds-muted text-sm">MB</span>
-            </div>
-          </div>
-          <div className="text-ds-secondary text-xs mt-1 mb-3">
-            {liteParserThresholdMB === 0
-              ? 'Always load full 2D keypoint data'
-              : `Skip 2D keypoints for images.bin > ${liteParserThresholdMB}MB`}
-          </div>
           <div className={styles.actionGroup}>
             <button
               onClick={() => {

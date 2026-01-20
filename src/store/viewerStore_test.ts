@@ -147,7 +147,6 @@ describe("uiStore", () => {
       backgroundColor: "#ffffff",
       autoRotate: false,
       viewResetTrigger: 0,
-      imageLoadMode: "lazy",
     });
   });
 

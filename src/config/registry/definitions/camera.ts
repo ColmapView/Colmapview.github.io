@@ -5,6 +5,7 @@ import { defineSection } from '../types';
 import {
   CAMERA_DISPLAY_MODES,
   FRUSTUM_COLOR_MODES,
+  CAMERA_SCALE_FACTORS,
   CAMERA_MODES,
   CAMERA_PROJECTIONS,
   AUTO_ROTATE_MODES,
@@ -25,6 +26,15 @@ export const cameraSection = defineSection({
       default: 'frustum',
       persist: true,
       description: 'off | frustum | arrow | imageplane',
+    },
+    {
+      key: 'scaleFactor',
+      storeKey: 'cameraScaleFactor',
+      type: 'enum',
+      enumValues: CAMERA_SCALE_FACTORS,
+      default: '1',
+      persist: true,
+      description: '0.1 | 1 | 10',
     },
     {
       key: 'scale',
@@ -116,6 +126,15 @@ export const cameraSection = defineSection({
       default: 2.5,
       persist: true,
       description: 'Flying speed (0.1 - 50)',
+    },
+    {
+      key: 'flyTransitionDuration',
+      type: 'number',
+      min: 0,
+      max: 2000,
+      default: 600,
+      persist: true,
+      description: 'Fly-to animation duration in ms (0 = instant)',
     },
     {
       key: 'pointerLock',

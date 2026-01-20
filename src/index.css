@@ -1197,6 +1197,7 @@ legend {
 /* Border hover */
 .hover-border-ds-accent:hover { border-color: var(--accent); }
 .hover-border-ds-light:hover { border-color: var(--border-light); }
+.hover-border-ds-primary:hover { border-color: var(--text-primary); }
 
 /* Filter/opacity hover */
 .hover-brightness-110:hover { filter: brightness(1.1); }

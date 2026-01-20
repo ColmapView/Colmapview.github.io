@@ -11,7 +11,6 @@ import type {
   AxesDisplayMode,
   AxesCoordinateSystem,
   AxisLabelMode,
-  ImageLoadMode,
   GizmoMode,
   ScreenshotSize,
   ScreenshotFormat,
@@ -60,7 +59,6 @@ export interface UIConfig {
   axesScale: number;
   gridScale: number;
   axisLabelMode: AxisLabelMode;
-  imageLoadMode: ImageLoadMode;
   gizmoMode: GizmoMode;
   galleryCollapsed: boolean;
 }

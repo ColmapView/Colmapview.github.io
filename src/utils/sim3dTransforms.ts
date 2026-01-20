@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import type { Sim3d, Sim3dEuler } from '../types/sim3d';
 import type { Image, Point3D, Reconstruction } from '../types/colmap';
+import type { WasmReconstructionWrapper } from '../wasm/reconstruction';
 import { getImageWorldPosition } from './colmapTransforms';
 import { median } from './mathUtils';
 
@@ -197,8 +198,16 @@ export function transformCameraPose(
  * Returns a new reconstruction object (does not mutate input).
  *
  * Reference: colmap/scene/reconstruction.cc Reconstruction::Transform()
+ *
+ * @param sim3d - The similarity transform to apply
+ * @param reconstruction - The reconstruction to transform
+ * @param wasmReconstruction - Optional WASM wrapper (used to build points3D if not in reconstruction)
  */
-export function transformReconstruction(sim3d: Sim3d, reconstruction: Reconstruction): Reconstruction {
+export function transformReconstruction(
+  sim3d: Sim3d,
+  reconstruction: Reconstruction,
+  wasmReconstruction?: WasmReconstructionWrapper | null
+): Reconstruction {
   // Transform all images (camera poses)
   const transformedImages = new Map<number, Image>();
   for (const [imageId, image] of reconstruction.images) {
@@ -210,9 +219,23 @@ export function transformReconstruction(sim3d: Sim3d, reconstruction: Reconstruc
     });
   }
 
+  // Get points3D Map (build on-demand from WASM if needed)
+  let sourcePoints3D = reconstruction.points3D;
+  if (!sourcePoints3D || sourcePoints3D.size === 0) {
+    if (wasmReconstruction?.hasPoints()) {
+      console.log('[Transform] Building points3D Map on-demand from WASM...');
+      const startTime = performance.now();
+      sourcePoints3D = wasmReconstruction.buildPoints3DMap();
+      const elapsed = performance.now() - startTime;
+      console.log(`[Transform] Built ${sourcePoints3D.size.toLocaleString()} points in ${elapsed.toFixed(0)}ms`);
+    } else {
+      sourcePoints3D = new Map();
+    }
+  }
+
   // Transform all 3D points
   const transformedPoints3D = new Map<bigint, Point3D>();
-  for (const [point3DId, point3D] of reconstruction.points3D) {
+  for (const [point3DId, point3D] of sourcePoints3D) {
     const xyz = transformPoint(sim3d, point3D.xyz);
     transformedPoints3D.set(point3DId, {
       ...point3D,
@@ -289,7 +312,7 @@ export function computeNormalizeScale(
       coordsY.push(pos.y);
       coordsZ.push(pos.z);
     }
-  } else {
+  } else if (reconstruction.points3D) {
     for (const point3D of reconstruction.points3D.values()) {
       coordsX.push(point3D.xyz[0]);
       coordsY.push(point3D.xyz[1]);

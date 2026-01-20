@@ -16,6 +16,36 @@ import type {
   Point3DId,
 } from '../types/colmap';
 import { CameraModelId, UNMATCHED_POINT3D_ID } from '../types/colmap';
+import type { Rig, Frame, RigId, FrameId } from '../types/rig';
+import type { WasmReconstructionWrapper } from '../wasm/reconstruction';
+
+/**
+ * Get points3D Map, building it on-demand from WASM if needed.
+ * This allows export to work even when points3D was not stored in JS memory.
+ */
+function getPoints3DForExport(
+  reconstruction: Reconstruction,
+  wasmReconstruction?: WasmReconstructionWrapper | null
+): Map<Point3DId, Point3D> {
+  // Use existing Map if available
+  if (reconstruction.points3D && reconstruction.points3D.size > 0) {
+    return reconstruction.points3D;
+  }
+
+  // Build on-demand from WASM
+  if (wasmReconstruction?.hasPoints()) {
+    console.log('[Export] Building points3D Map on-demand from WASM...');
+    const startTime = performance.now();
+    const points3D = wasmReconstruction.buildPoints3DMap();
+    const elapsed = performance.now() - startTime;
+    console.log(`[Export] Built ${points3D.size.toLocaleString()} points in ${elapsed.toFixed(0)}ms`);
+    return points3D;
+  }
+
+  // No data available
+  console.warn('[Export] No points3D data available for export');
+  return new Map();
+}
 
 // ============================================================================
 // Constants
@@ -385,6 +415,216 @@ export function writePointsPLY(points3D: Map<Point3DId, Point3D>): string {
 }
 
 // ============================================================================
+// RIG WRITERS
+// ============================================================================
+
+/**
+ * Write rigs.txt
+ *
+ * Format (from COLMAP):
+ * # Rig list with one line per sensor
+ * # RIG_ID, NUM_SENSORS, REF_SENSOR_TYPE, REF_SENSOR_ID
+ * # SENSOR_TYPE, SENSOR_ID, HAS_POSE[, QW, QX, QY, QZ, TX, TY, TZ]
+ */
+export function writeRigsText(rigs: Map<RigId, Rig>): string {
+  const lines: string[] = [];
+
+  // Header comments
+  lines.push('# Rig list with one line per sensor');
+  lines.push('# RIG_ID, NUM_SENSORS, REF_SENSOR_TYPE, REF_SENSOR_ID');
+  lines.push('# SENSOR_TYPE, SENSOR_ID, HAS_POSE[, QW, QX, QY, QZ, TX, TY, TZ]');
+  lines.push(`# Number of rigs: ${rigs.size}`);
+
+  // Rig entries (sorted by ID)
+  for (const rigId of sortedKeys(rigs)) {
+    const rig = rigs.get(rigId)!;
+    const refSensorType = rig.refSensorId?.type ?? 0;
+    const refSensorId = rig.refSensorId?.id ?? 0;
+
+    // Rig header line: RIG_ID, NUM_SENSORS, REF_SENSOR_TYPE, REF_SENSOR_ID
+    lines.push(`${rigId} ${rig.sensors.length} ${refSensorType} ${refSensorId}`);
+
+    // Additional sensor lines (skip the first one which is the reference sensor)
+    for (let i = 1; i < rig.sensors.length; i++) {
+      const sensor = rig.sensors[i];
+      const hasPose = sensor.hasPose ? 1 : 0;
+
+      if (sensor.hasPose && sensor.pose) {
+        const [qw, qx, qy, qz] = sensor.pose.qvec;
+        const [tx, ty, tz] = sensor.pose.tvec;
+        lines.push(
+          `${sensor.sensorId.type} ${sensor.sensorId.id} ${hasPose} ${formatDouble(qw)} ${formatDouble(qx)} ${formatDouble(qy)} ${formatDouble(qz)} ${formatDouble(tx)} ${formatDouble(ty)} ${formatDouble(tz)}`
+        );
+      } else {
+        lines.push(`${sensor.sensorId.type} ${sensor.sensorId.id} ${hasPose}`);
+      }
+    }
+  }
+
+  return lines.join('\n') + '\n';
+}
+
+/**
+ * Write rigs.bin
+ *
+ * Binary format:
+ * - uint64: num_rigs
+ * - Per rig:
+ *   - uint32: rig_id
+ *   - uint32: num_sensors
+ *   - if num_sensors > 0:
+ *     - int32: ref_sensor_type
+ *     - uint32: ref_sensor_id (reference sensor with identity pose)
+ *   - for each additional sensor (num_sensors - 1):
+ *     - int32: type
+ *     - uint32: id
+ *     - uint8: has_pose
+ *     - if has_pose: double[7] (qw, qx, qy, qz, tx, ty, tz)
+ */
+export function writeRigsBinary(rigs: Map<RigId, Rig>): ArrayBuffer {
+  const writer = new BinaryWriter();
+
+  writer.writeUint64FromNumber(rigs.size);
+
+  for (const rigId of sortedKeys(rigs)) {
+    const rig = rigs.get(rigId)!;
+
+    writer.writeUint32(rigId);
+    writer.writeUint32(rig.sensors.length);
+
+    if (rig.sensors.length > 0) {
+      // Write reference sensor (first sensor)
+      const refSensorType = rig.refSensorId?.type ?? 0;
+      const refSensorId = rig.refSensorId?.id ?? 0;
+      writer.writeInt32(refSensorType);
+      writer.writeUint32(refSensorId);
+
+      // Write additional sensors
+      for (let i = 1; i < rig.sensors.length; i++) {
+        const sensor = rig.sensors[i];
+        writer.writeInt32(sensor.sensorId.type);
+        writer.writeUint32(sensor.sensorId.id);
+        writer.writeUint8(sensor.hasPose ? 1 : 0);
+
+        if (sensor.hasPose && sensor.pose) {
+          // Write sensor_from_rig pose: qw, qx, qy, qz, tx, ty, tz
+          writer.writeFloat64(sensor.pose.qvec[0]);
+          writer.writeFloat64(sensor.pose.qvec[1]);
+          writer.writeFloat64(sensor.pose.qvec[2]);
+          writer.writeFloat64(sensor.pose.qvec[3]);
+          writer.writeFloat64(sensor.pose.tvec[0]);
+          writer.writeFloat64(sensor.pose.tvec[1]);
+          writer.writeFloat64(sensor.pose.tvec[2]);
+        }
+      }
+    }
+  }
+
+  return writer.toArrayBuffer();
+}
+
+// ============================================================================
+// FRAME WRITERS
+// ============================================================================
+
+/**
+ * Write frames.txt
+ *
+ * Format (from COLMAP):
+ * # Frame list with one line of data per frame
+ * # FRAME_ID, RIG_ID, QW, QX, QY, QZ, TX, TY, TZ, NUM_DATA_IDS
+ * # SENSOR_TYPE, SENSOR_ID, DATA_ID
+ */
+export function writeFramesText(frames: Map<FrameId, Frame>): string {
+  const lines: string[] = [];
+
+  // Header comments
+  lines.push('# Frame list with one line of data per frame');
+  lines.push('# FRAME_ID, RIG_ID, QW, QX, QY, QZ, TX, TY, TZ, NUM_DATA_IDS');
+  lines.push('# SENSOR_TYPE, SENSOR_ID, DATA_ID');
+  lines.push(`# Number of frames: ${frames.size}`);
+
+  // Frame entries (sorted by ID)
+  for (const frameId of sortedKeys(frames)) {
+    const frame = frames.get(frameId)!;
+    const [qw, qx, qy, qz] = frame.rigFromWorld.qvec;
+    const [tx, ty, tz] = frame.rigFromWorld.tvec;
+
+    // Frame header line
+    lines.push(
+      [
+        frameId,
+        frame.rigId,
+        formatDouble(qw),
+        formatDouble(qx),
+        formatDouble(qy),
+        formatDouble(qz),
+        formatDouble(tx),
+        formatDouble(ty),
+        formatDouble(tz),
+        frame.dataIds.length,
+      ].join(' ')
+    );
+
+    // Data ID mapping lines
+    for (const dataMapping of frame.dataIds) {
+      lines.push(
+        `${dataMapping.sensorId.type} ${dataMapping.sensorId.id} ${dataMapping.dataId}`
+      );
+    }
+  }
+
+  return lines.join('\n') + '\n';
+}
+
+/**
+ * Write frames.bin
+ *
+ * Binary format:
+ * - uint64: num_frames
+ * - Per frame:
+ *   - uint32: frame_id
+ *   - uint32: rig_id
+ *   - double[7]: rig_from_world (qw, qx, qy, qz, tx, ty, tz)
+ *   - uint32: num_data_ids
+ *   - Per data_id:
+ *     - int32: sensor_type
+ *     - uint32: sensor_id
+ *     - uint64: data_id (image ID for camera sensors)
+ */
+export function writeFramesBinary(frames: Map<FrameId, Frame>): ArrayBuffer {
+  const writer = new BinaryWriter();
+
+  writer.writeUint64FromNumber(frames.size);
+
+  for (const frameId of sortedKeys(frames)) {
+    const frame = frames.get(frameId)!;
+
+    writer.writeUint32(frameId);
+    writer.writeUint32(frame.rigId);
+
+    // Write rig_from_world pose: qw, qx, qy, qz, tx, ty, tz
+    writer.writeFloat64(frame.rigFromWorld.qvec[0]);
+    writer.writeFloat64(frame.rigFromWorld.qvec[1]);
+    writer.writeFloat64(frame.rigFromWorld.qvec[2]);
+    writer.writeFloat64(frame.rigFromWorld.qvec[3]);
+    writer.writeFloat64(frame.rigFromWorld.tvec[0]);
+    writer.writeFloat64(frame.rigFromWorld.tvec[1]);
+    writer.writeFloat64(frame.rigFromWorld.tvec[2]);
+
+    writer.writeUint32(frame.dataIds.length);
+
+    for (const dataMapping of frame.dataIds) {
+      writer.writeInt32(dataMapping.sensorId.type);
+      writer.writeUint32(dataMapping.sensorId.id);
+      writer.writeUint64FromNumber(dataMapping.dataId);
+    }
+  }
+
+  return writer.toArrayBuffer();
+}
+
+// ============================================================================
 // DOWNLOAD HELPERS
 // ============================================================================
 
@@ -409,27 +649,72 @@ export function downloadFile(data: ArrayBuffer | string, filename: string): void
 
 /**
  * Export full reconstruction to COLMAP text format.
- * Downloads three files: cameras.txt, images.txt, points3D.txt
+ * Downloads cameras.txt, images.txt, points3D.txt, and optionally rigs.txt, frames.txt
+ *
+ * @param reconstruction - The reconstruction to export
+ * @param wasmReconstruction - Optional WASM wrapper (used to build points3D if not in reconstruction)
  */
-export function exportReconstructionText(reconstruction: Reconstruction): void {
+export function exportReconstructionText(
+  reconstruction: Reconstruction,
+  wasmReconstruction?: WasmReconstructionWrapper | null
+): void {
+  const points3D = getPoints3DForExport(reconstruction, wasmReconstruction);
+
   downloadFile(writeCamerasText(reconstruction.cameras), 'cameras.txt');
   downloadFile(writeImagesText(reconstruction.images), 'images.txt');
-  downloadFile(writePoints3DText(reconstruction.points3D), 'points3D.txt');
+  downloadFile(writePoints3DText(points3D), 'points3D.txt');
+
+  // Export rig data if available
+  if (reconstruction.rigData) {
+    const { rigs, frames } = reconstruction.rigData;
+    if (rigs.size > 0) {
+      downloadFile(writeRigsText(rigs), 'rigs.txt');
+    }
+    if (frames.size > 0) {
+      downloadFile(writeFramesText(frames), 'frames.txt');
+    }
+  }
 }
 
 /**
  * Export full reconstruction to COLMAP binary format.
- * Downloads three files: cameras.bin, images.bin, points3D.bin
+ * Downloads cameras.bin, images.bin, points3D.bin, and optionally rigs.bin, frames.bin
+ *
+ * @param reconstruction - The reconstruction to export
+ * @param wasmReconstruction - Optional WASM wrapper (used to build points3D if not in reconstruction)
  */
-export function exportReconstructionBinary(reconstruction: Reconstruction): void {
+export function exportReconstructionBinary(
+  reconstruction: Reconstruction,
+  wasmReconstruction?: WasmReconstructionWrapper | null
+): void {
+  const points3D = getPoints3DForExport(reconstruction, wasmReconstruction);
+
   downloadFile(writeCamerasBinary(reconstruction.cameras), 'cameras.bin');
   downloadFile(writeImagesBinary(reconstruction.images), 'images.bin');
-  downloadFile(writePoints3DBinary(reconstruction.points3D), 'points3D.bin');
+  downloadFile(writePoints3DBinary(points3D), 'points3D.bin');
+
+  // Export rig data if available
+  if (reconstruction.rigData) {
+    const { rigs, frames } = reconstruction.rigData;
+    if (rigs.size > 0) {
+      downloadFile(writeRigsBinary(rigs), 'rigs.bin');
+    }
+    if (frames.size > 0) {
+      downloadFile(writeFramesBinary(frames), 'frames.bin');
+    }
+  }
 }
 
 /**
  * Export point cloud as PLY file.
+ *
+ * @param reconstruction - The reconstruction to export
+ * @param wasmReconstruction - Optional WASM wrapper (used to build points3D if not in reconstruction)
  */
-export function exportPointsPLY(reconstruction: Reconstruction): void {
-  downloadFile(writePointsPLY(reconstruction.points3D), 'points.ply');
+export function exportPointsPLY(
+  reconstruction: Reconstruction,
+  wasmReconstruction?: WasmReconstructionWrapper | null
+): void {
+  const points3D = getPoints3DForExport(reconstruction, wasmReconstruction);
+  downloadFile(writePointsPLY(points3D), 'points.ply');
 }

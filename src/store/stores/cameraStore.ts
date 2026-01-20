@@ -6,15 +6,19 @@ import type {
   CameraProjection,
   CameraDisplayMode,
   FrustumColorMode,
+  CameraScaleFactor,
   SelectionColorMode,
   AutoRotateMode,
   HorizonLockMode,
   UndistortionMode,
+  CameraViewState,
+  NavigationHistoryEntry,
 } from '../types';
 
 export interface CameraState {
   // Display
   cameraDisplayMode: CameraDisplayMode;
+  cameraScaleFactor: CameraScaleFactor;
   cameraScale: number;
   frustumColorMode: FrustumColorMode;
   unselectedCameraOpacity: number;
@@ -27,6 +31,7 @@ export interface CameraState {
   autoRotateMode: AutoRotateMode;
   autoRotateSpeed: number;
   flySpeed: number;
+  flyTransitionDuration: number;
   flyToImageId: number | null;
   pointerLock: boolean;
 
@@ -43,8 +48,13 @@ export interface CameraState {
   undistortionEnabled: boolean;
   undistortionMode: UndistortionMode;
 
+  // Navigation history (not persisted)
+  navigationHistory: NavigationHistoryEntry[];
+  flyToViewState: CameraViewState | null;
+
   // Actions
   setCameraDisplayMode: (mode: CameraDisplayMode) => void;
+  setCameraScaleFactor: (factor: CameraScaleFactor) => void;
   setCameraScale: (scale: number) => void;
   setFrustumColorMode: (mode: FrustumColorMode) => void;
   setUnselectedCameraOpacity: (opacity: number) => void;
@@ -55,6 +65,7 @@ export interface CameraState {
   setAutoRotateMode: (mode: AutoRotateMode) => void;
   setAutoRotateSpeed: (speed: number) => void;
   setFlySpeed: (speed: number) => void;
+  setFlyTransitionDuration: (duration: number) => void;
   setPointerLock: (enabled: boolean) => void;
   flyToImage: (id: number) => void;
   clearFlyTo: () => void;
@@ -66,12 +77,21 @@ export interface CameraState {
   setSelectionPlaneOpacity: (opacity: number) => void;
   setUndistortionEnabled: (enabled: boolean) => void;
   setUndistortionMode: (mode: UndistortionMode) => void;
+
+  // Navigation history actions
+  pushNavigationHistory: (entry: NavigationHistoryEntry) => void;
+  popNavigationHistory: () => NavigationHistoryEntry | undefined;
+  peekNavigationHistory: () => NavigationHistoryEntry | undefined;
+  clearNavigationHistory: () => void;
+  flyToState: (state: CameraViewState) => void;
+  clearFlyToViewState: () => void;
 }
 
 export const useCameraStore = create<CameraState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       cameraDisplayMode: 'frustum',
+      cameraScaleFactor: '1',
       cameraScale: 0.25,
       frustumColorMode: 'byCamera',
       unselectedCameraOpacity: 0.5,
@@ -82,6 +102,7 @@ export const useCameraStore = create<CameraState>()(
       autoRotateMode: 'off',
       autoRotateSpeed: 0.5,
       flySpeed: 2.5,
+      flyTransitionDuration: 600,
       flyToImageId: null,
       pointerLock: true,
       selectedImageId: null,
@@ -91,8 +112,11 @@ export const useCameraStore = create<CameraState>()(
       selectionPlaneOpacity: 1.0,
       undistortionEnabled: false,
       undistortionMode: 'fullFrame',
+      navigationHistory: [],
+      flyToViewState: null,
 
       setCameraDisplayMode: (cameraDisplayMode) => set({ cameraDisplayMode }),
+      setCameraScaleFactor: (cameraScaleFactor) => set({ cameraScaleFactor }),
       setCameraScale: (cameraScale) => set({ cameraScale }),
       setFrustumColorMode: (frustumColorMode) => set({ frustumColorMode }),
       setUnselectedCameraOpacity: (unselectedCameraOpacity) => set({ unselectedCameraOpacity }),
@@ -103,6 +127,7 @@ export const useCameraStore = create<CameraState>()(
       setAutoRotateMode: (autoRotateMode) => set({ autoRotateMode }),
       setAutoRotateSpeed: (autoRotateSpeed) => set({ autoRotateSpeed }),
       setFlySpeed: (flySpeed) => set({ flySpeed }),
+      setFlyTransitionDuration: (flyTransitionDuration) => set({ flyTransitionDuration }),
       setPointerLock: (pointerLock) => set({ pointerLock }),
       flyToImage: (flyToImageId) => set({ flyToImageId }),
       clearFlyTo: () => set({ flyToImageId: null }),
@@ -117,12 +142,37 @@ export const useCameraStore = create<CameraState>()(
       setSelectionPlaneOpacity: (selectionPlaneOpacity) => set({ selectionPlaneOpacity }),
       setUndistortionEnabled: (undistortionEnabled) => set({ undistortionEnabled }),
       setUndistortionMode: (undistortionMode) => set({ undistortionMode }),
+
+      // Navigation history actions
+      pushNavigationHistory: (entry) =>
+        set((state) => ({
+          navigationHistory: [...state.navigationHistory, entry].slice(-50), // Limit to 50 entries
+        })),
+      popNavigationHistory: () => {
+        const state = get();
+        if (state.navigationHistory.length === 0) {
+          return undefined;
+        }
+        const popped = state.navigationHistory[state.navigationHistory.length - 1];
+        set({ navigationHistory: state.navigationHistory.slice(0, -1) });
+        return popped;
+      },
+      peekNavigationHistory: () => {
+        const state = get();
+        return state.navigationHistory.length > 0
+          ? state.navigationHistory[state.navigationHistory.length - 1]
+          : undefined;
+      },
+      clearNavigationHistory: () => set({ navigationHistory: [] }),
+      flyToState: (flyToViewState: CameraViewState) => set({ flyToViewState }),
+      clearFlyToViewState: () => set({ flyToViewState: null }),
     }),
     {
       name: STORAGE_KEYS.camera,
       version: 0,
       partialize: (state) => ({
         cameraDisplayMode: state.cameraDisplayMode,
+        cameraScaleFactor: state.cameraScaleFactor,
         cameraScale: state.cameraScale,
         frustumColorMode: state.frustumColorMode,
         unselectedCameraOpacity: state.unselectedCameraOpacity,
@@ -133,6 +183,7 @@ export const useCameraStore = create<CameraState>()(
         autoRotateMode: state.autoRotateMode,
         autoRotateSpeed: state.autoRotateSpeed,
         flySpeed: state.flySpeed,
+        flyTransitionDuration: state.flyTransitionDuration,
         pointerLock: state.pointerLock,
         selectionColorMode: state.selectionColorMode,
         selectionColor: state.selectionColor,

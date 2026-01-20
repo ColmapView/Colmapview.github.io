@@ -67,8 +67,11 @@ export const BREAKPOINTS = {
  * Modal default dimensions as viewport percentages.
  */
 export const MODAL = {
-  defaultWidthPercent: 0.9,   // 90% of viewport width
-  defaultHeightPercent: 0.9,  // 90% of viewport height
+  maxWidthPercent: 0.85,      // Max 85% of viewport width
+  maxHeightPercent: 0.85,     // Max 85% of viewport height
+  headerHeight: 40,           // Approx header height in px
+  footerHeight: 50,           // Approx footer/controls height in px
+  padding: 32,                // Modal internal padding (px-4 * 2)
 } as const;
 
 /**

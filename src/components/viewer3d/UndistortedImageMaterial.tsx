@@ -6,7 +6,8 @@ import {
   fullFrameVertexShader,
   fullFrameFragmentShader,
 } from '../../shaders/undistortion';
-import { getCameraIntrinsics, type Camera } from '../../types/colmap';
+import type { Camera } from '../../types/colmap';
+import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
 import { getMaterialTransparency, isMaterialVisible } from '../../theme/materials';
 import type { UndistortionMode } from '../../store/types';
 

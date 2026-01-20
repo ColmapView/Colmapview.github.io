@@ -98,7 +98,7 @@ function ImagesTable() {
                 {img.name}
               </td>
               <td className={tableStyles.cell}>{img.cameraId}</td>
-              <td className={tableStyles.cell}>{img.points2D.length}</td>
+              <td className={tableStyles.cell}>{img.numPoints2D ?? img.points2D.length}</td>
             </tr>
           ))}
         </tbody>

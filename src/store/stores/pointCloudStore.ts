@@ -41,6 +41,14 @@ export const usePointCloudStore = create<PointCloudState>()(
         minTrackLength: state.minTrackLength,
         maxReprojectionError: state.maxReprojectionError,
       }),
+      // Handle Infinity serialization: JSON.stringify(Infinity) becomes null,
+      // so we convert null back to Infinity on load
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...(persistedState as Partial<PointCloudState>),
+        maxReprojectionError:
+          (persistedState as Partial<PointCloudState>)?.maxReprojectionError ?? Infinity,
+      }),
     }
   )
 );

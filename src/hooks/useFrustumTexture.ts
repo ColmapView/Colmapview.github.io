@@ -15,23 +15,14 @@ import { SIZE, TIMING } from '../theme';
  * Process canvas to JPEG blob URL (same as thumbnails, but larger size).
  */
 async function canvasToJpegUrl(canvas: HTMLCanvasElement | OffscreenCanvas): Promise<string | null> {
-  return new Promise((resolve) => {
-    if (canvas instanceof OffscreenCanvas) {
-      canvas.convertToBlob({ type: 'image/jpeg', quality: 0.75 }).then((blob) => {
-        resolve(URL.createObjectURL(blob));
-      }).catch(() => {
-        resolve(null);
-      });
-    } else {
-      canvas.toBlob((blob) => {
-        if (blob) {
-          resolve(URL.createObjectURL(blob));
-        } else {
-          resolve(null);
-        }
-      }, 'image/jpeg', 0.75);
-    }
-  });
+  try {
+    const blob = canvas instanceof OffscreenCanvas
+      ? await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.75 })
+      : await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.75));
+    return blob ? URL.createObjectURL(blob) : null;
+  } catch {
+    return null;
+  }
 }
 
 // Cache stores JPEG blob URLs (compressed) instead of textures (uncompressed)
@@ -43,7 +34,8 @@ const frustumUrlCache = createImageCache<string>({
   idleFallback: TIMING.textureUploadFallback,
 });
 
-// Cache all decoded ImageBitmaps (small due to 128px max size, ~50KB each)
+// Cache all decoded ImageBitmaps (small due to 128px max size, ~65KB each)
+// No eviction needed - cleared when loading new reconstruction
 const bitmapCache = new Map<string, { bitmap: ImageBitmap; lastUsed: number }>();
 
 // Small LRU cache for active textures (only keep recently used ones in GPU memory)
@@ -68,7 +60,7 @@ async function getOrLoadBitmap(url: string, imageName: string): Promise<ImageBit
     const blob = await response.blob();
     const bitmap = await createImageBitmap(blob);
 
-    // Cache the bitmap (no eviction - small size due to downscaling)
+    // Cache the bitmap (no eviction - small size, cleared on new reconstruction)
     bitmapCache.set(imageName, { bitmap, lastUsed: Date.now() });
 
     return bitmap;
@@ -79,8 +71,15 @@ async function getOrLoadBitmap(url: string, imageName: string): Promise<ImageBit
 
 /**
  * Create texture from ImageBitmap (synchronous, no async load delay).
+ * Returns null if bitmap has invalid dimensions.
  */
-function createTextureFromBitmap(bitmap: ImageBitmap, imageName: string): THREE.Texture {
+function createTextureFromBitmap(bitmap: ImageBitmap, imageName: string): THREE.Texture | null {
+  // Guard against invalid bitmaps that would cause WebGL errors
+  if (!bitmap || bitmap.width <= 0 || bitmap.height <= 0) {
+    console.warn(`[useFrustumTexture] Invalid bitmap dimensions for ${imageName}: ${bitmap?.width}x${bitmap?.height}`);
+    return null;
+  }
+
   const texture = new THREE.Texture(bitmap);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.flipY = false;
@@ -142,23 +141,38 @@ export function clearFrustumTextureCache(): void {
   // Clear the JPEG URL cache
   frustumUrlCache.clear();
 
-  // Clear and close bitmap cache
-  for (const { bitmap } of bitmapCache.values()) {
-    bitmap.close();
-  }
-  bitmapCache.clear();
+  // IMPORTANT: Dispose textures BEFORE closing bitmaps to prevent WebGL errors
+  // When a texture has needsUpdate=true, Three.js will try to upload the bitmap data
+  // on the next render. If we close the bitmap first, we get "source data detached" errors.
 
-  // Dispose and clear active textures
+  // Dispose and clear active textures first
   for (const { texture } of activeTextures.values()) {
+    // Clear the image reference to prevent Three.js from trying to upload detached data
+    texture.image = null;
+    texture.needsUpdate = false;
     texture.dispose();
   }
   activeTextures.clear();
 
   // Clear high-res selected image texture
   if (selectedImageTexture) {
-    selectedImageTexture.texture.dispose();
+    const tex = selectedImageTexture.texture as THREE.Texture & { _bitmap?: ImageBitmap };
+    // Clear image reference first
+    tex.image = null;
+    tex.needsUpdate = false;
+    if (tex._bitmap) {
+      tex._bitmap.close();
+      tex._bitmap = undefined;
+    }
+    tex.dispose();
     selectedImageTexture = null;
   }
+
+  // NOW safe to close bitmap cache (textures no longer reference them)
+  for (const { bitmap } of bitmapCache.values()) {
+    bitmap.close();
+  }
+  bitmapCache.clear();
 }
 
 /**
@@ -255,8 +269,9 @@ export function useFrustumTexture(
     getOrLoadBitmap(cachedUrl, imageName).then((bitmap) => {
       if (cancelled || !bitmap) return;
       const newTex = createTextureFromBitmap(bitmap, imageName);
+      if (!newTex) return; // Skip if texture creation failed (invalid bitmap)
       urlRef.current = cachedUrl;
-       
+
       setTexture(newTex);
     });
 
@@ -312,9 +327,13 @@ export function useSelectedImageTexture(
       return;
     }
 
-    // Dispose previous high-res texture
+    // Dispose previous high-res texture and its bitmap
     if (selectedImageTexture) {
-      selectedImageTexture.texture.dispose();
+      const tex = selectedImageTexture.texture as THREE.Texture & { _bitmap?: ImageBitmap };
+      if (tex._bitmap) {
+        tex._bitmap.close();
+      }
+      tex.dispose();
       selectedImageTexture = null;
     }
 
@@ -330,13 +349,15 @@ export function useSelectedImageTexture(
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.flipY = false;
       tex.needsUpdate = true;
+      // Store bitmap reference so we can close it when disposing
+      (tex as THREE.Texture & { _bitmap?: ImageBitmap })._bitmap = bitmap;
 
       selectedImageTexture = { name: imageName, texture: tex };
-       
+
       setTexture(tex);
     }).catch(() => {
       // Fall back to low-res on error
-       
+
       setTexture(null);
     });
 
@@ -354,7 +375,11 @@ export function useSelectedImageTexture(
  */
 export function clearSelectedImageTexture(): void {
   if (selectedImageTexture) {
-    selectedImageTexture.texture.dispose();
+    const tex = selectedImageTexture.texture as THREE.Texture & { _bitmap?: ImageBitmap };
+    if (tex._bitmap) {
+      tex._bitmap.close();
+    }
+    tex.dispose();
     selectedImageTexture = null;
   }
 }

@@ -7,7 +7,6 @@ import {
   AXES_DISPLAY_MODES,
   AXES_COORDINATE_SYSTEMS,
   AXIS_LABEL_MODES,
-  IMAGE_LOAD_MODES,
   GIZMO_MODES,
 } from '../../../store/types';
 
@@ -120,25 +119,6 @@ export const uiSection = defineSection({
       default: 'extra',
       persist: true,
       description: 'off | xyz | extra',
-    },
-    // Image loading
-    {
-      key: 'imageLoadMode',
-      type: 'enum',
-      enumValues: IMAGE_LOAD_MODES,
-      default: 'lazy',
-      persist: true,
-      description: 'prefetch | lazy | skip',
-    },
-    // Memory optimization
-    {
-      key: 'liteParserThresholdMB',
-      type: 'number',
-      min: 0,
-      isInt: true,
-      default: 1000,
-      persist: true,
-      description: 'Skip loading 2D points for images.bin larger than this (MB). 0 = always load full data.',
     },
     // Gizmo
     {

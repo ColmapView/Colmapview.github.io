@@ -54,13 +54,29 @@ export async function loadColmapWasm(): Promise<ColmapWasmModule | null> {
   // Start loading
   modulePromise = (async () => {
     try {
-      // Dynamic import from public directory
-      // The WASM module is built by Emscripten and placed in public/wasm/
-      // @ts-expect-error Dynamic import path resolved at runtime
-      const wasmModule = await import('/wasm/colmap_wasm.js');
+      // Load WASM module from public directory
+      // Vite doesn't allow importing JS from public/, so we fetch and create a blob URL
+      const baseUrl = import.meta.env.BASE_URL || '/';
+      const wasmJsUrl = `${baseUrl}wasm/colmap_wasm.js`;
+
+      // Fetch the JS file and create a blob URL for dynamic import
+      const response = await fetch(wasmJsUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch WASM loader: ${response.status}`);
+      }
+      const jsText = await response.text();
+      const blob = new Blob([jsText], { type: 'application/javascript' });
+      const blobUrl = URL.createObjectURL(blob);
+
+      // Dynamic import from blob URL
+      const wasmModule = await import(/* @vite-ignore */ blobUrl);
+      URL.revokeObjectURL(blobUrl);
+
       const createColmapWasm = wasmModule.default as CreateColmapWasm;
 
-      const module = await createColmapWasm();
+      const module = await createColmapWasm({
+        locateFile: (path: string) => `${baseUrl}wasm/${path}`,
+      });
       cachedModule = module;
       console.log('colmap-wasm module loaded successfully');
       return module;

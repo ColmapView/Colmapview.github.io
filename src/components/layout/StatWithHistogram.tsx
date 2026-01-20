@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import type { Point3D, Point3DId } from '../../types/colmap';
+import type { WasmReconstructionWrapper } from '../../wasm/reconstruction';
 import { StatHistogramTooltip, type HistogramBin } from './StatHistogramTooltip';
 
 export type HistogramType = 'trackLength' | 'error';
@@ -8,7 +9,10 @@ interface StatWithHistogramProps {
   label: string;
   value: string;
   type: HistogramType;
-  points3D: Map<Point3DId, Point3D>;
+  /** Optional points3D Map (for JS parser fallback) */
+  points3D?: Map<Point3DId, Point3D>;
+  /** Optional WASM reconstruction (preferred, avoids iterating Map) */
+  wasmReconstruction?: WasmReconstructionWrapper | null;
 }
 
 // Bin definitions for track length histogram (higher resolution)
@@ -50,7 +54,70 @@ interface HistogramData {
   total: number;
 }
 
-function computeHistogram(
+interface BinDefinition {
+  label: string;
+  min: number;
+  max: number;
+}
+
+/**
+ * Find the bin index for a value using [min, max) ranges.
+ */
+function findBinIndex(value: number, binDefs: BinDefinition[]): number {
+  for (let i = 0; i < binDefs.length; i++) {
+    if (value >= binDefs[i].min && value < binDefs[i].max) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Convert bin counts to histogram bins with percentages.
+ */
+function countsToHistogramBins(counts: number[], binDefs: BinDefinition[], total: number): HistogramBin[] {
+  return binDefs.map((def, i) => ({
+    label: def.label,
+    count: counts[i],
+    percentage: total > 0 ? (counts[i] / total) * 100 : 0,
+  }));
+}
+
+/**
+ * Compute histogram from WASM typed arrays (preferred, avoids Map iteration)
+ */
+function computeHistogramFromWasm(
+  wasm: WasmReconstructionWrapper,
+  type: HistogramType
+): HistogramData {
+  const binDefs = type === 'trackLength' ? TRACK_LENGTH_BINS : ERROR_BINS;
+  const values = type === 'trackLength' ? wasm.getTrackLengths() : wasm.getErrors();
+
+  if (!values) {
+    return { bins: countsToHistogramBins(new Array(binDefs.length).fill(0), binDefs, 0), mean: 0, total: 0 };
+  }
+
+  const counts = new Array(binDefs.length).fill(0);
+  let sum = 0;
+
+  for (let i = 0; i < values.length; i++) {
+    sum += values[i];
+    const binIdx = findBinIndex(values[i], binDefs);
+    if (binIdx >= 0) counts[binIdx]++;
+  }
+
+  const total = values.length;
+  return {
+    bins: countsToHistogramBins(counts, binDefs, total),
+    mean: total > 0 ? sum / total : 0,
+    total,
+  };
+}
+
+/**
+ * Compute histogram from points3D Map (fallback for JS parser)
+ */
+function computeHistogramFromMap(
   points3D: Map<Point3DId, Point3D>,
   type: HistogramType
 ): HistogramData {
@@ -59,33 +126,19 @@ function computeHistogram(
   let sum = 0;
   let total = 0;
 
-  // Single O(n) pass through all points
   for (const point of points3D.values()) {
     const value = type === 'trackLength' ? point.track.length : point.error;
     sum += value;
     total++;
-
-    // Find the appropriate bin using [min, max) ranges
-    // Last bin uses Infinity so it catches everything >= min
-    for (let i = 0; i < binDefs.length; i++) {
-      const bin = binDefs[i];
-      if (value >= bin.min && value < bin.max) {
-        counts[i]++;
-        break;
-      }
-    }
+    const binIdx = findBinIndex(value, binDefs);
+    if (binIdx >= 0) counts[binIdx]++;
   }
 
-  const mean = total > 0 ? sum / total : 0;
-
-  // Convert counts to bins with percentages
-  const bins: HistogramBin[] = binDefs.map((def, i) => ({
-    label: def.label,
-    count: counts[i],
-    percentage: total > 0 ? (counts[i] / total) * 100 : 0,
-  }));
-
-  return { bins, mean, total };
+  return {
+    bins: countsToHistogramBins(counts, binDefs, total),
+    mean: total > 0 ? sum / total : 0,
+    total,
+  };
 }
 
 export function StatWithHistogram({
@@ -93,14 +146,27 @@ export function StatWithHistogram({
   value,
   type,
   points3D,
+  wasmReconstruction,
 }: StatWithHistogramProps) {
   const [isHovered, setIsHovered] = useState(false);
 
   // Lazily compute histogram only when hovered (and cache it)
+  // Prefer WASM arrays over points3D Map for better performance
   const histogramData = useMemo(() => {
-    if (!isHovered || points3D.size === 0) return null;
-    return computeHistogram(points3D, type);
-  }, [isHovered, points3D, type]);
+    if (!isHovered) return null;
+
+    // Prefer WASM arrays if available
+    if (wasmReconstruction?.hasPoints()) {
+      return computeHistogramFromWasm(wasmReconstruction, type);
+    }
+
+    // Fallback to points3D Map
+    if (points3D && points3D.size > 0) {
+      return computeHistogramFromMap(points3D, type);
+    }
+
+    return null;
+  }, [isHovered, points3D, wasmReconstruction, type]);
 
   const title =
     type === 'trackLength'

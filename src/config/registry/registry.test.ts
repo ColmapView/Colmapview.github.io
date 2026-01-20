@@ -45,7 +45,6 @@ describe('Property Registry', () => {
       const defaults = generateDefaultConfiguration();
       expect(defaults.ui.backgroundColor).toBe('#ffffff');
       expect(defaults.ui.axesDisplayMode).toBe('both');
-      expect(defaults.ui.imageLoadMode).toBe('lazy');
     });
 
     it('should generate correct export defaults', () => {

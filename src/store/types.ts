@@ -1,8 +1,10 @@
-export { COLOR_MODES, type ColorMode } from '../types/colmap';
-
 // ============================================================================
 // Enum Arrays (used by property registry for validation and type inference)
 // ============================================================================
+
+// Point cloud visualization
+export const COLOR_MODES = ['rgb', 'error', 'trackLength'] as const;
+export type ColorMode = (typeof COLOR_MODES)[number];
 
 // Camera and navigation
 export const CAMERA_MODES = ['orbit', 'fly'] as const;
@@ -23,11 +25,11 @@ export type CameraDisplayMode = (typeof CAMERA_DISPLAY_MODES)[number];
 export const FRUSTUM_COLOR_MODES = ['single', 'byCamera'] as const;
 export type FrustumColorMode = (typeof FRUSTUM_COLOR_MODES)[number];
 
+export const CAMERA_SCALE_FACTORS = ['0.1', '1', '10'] as const;
+export type CameraScaleFactor = (typeof CAMERA_SCALE_FACTORS)[number];
+
 export const UNDISTORTION_MODES = ['cropped', 'fullFrame'] as const;
 export type UndistortionMode = (typeof UNDISTORTION_MODES)[number];
-
-export const IMAGE_LOAD_MODES = ['prefetch', 'lazy', 'skip'] as const;
-export type ImageLoadMode = (typeof IMAGE_LOAD_MODES)[number];
 
 // Visualization
 export const MATCHES_DISPLAY_MODES = ['off', 'on', 'blink'] as const;
@@ -79,3 +81,18 @@ export type ScreenshotFormat = (typeof SCREENSHOT_FORMATS)[number];
 
 export const EXPORT_FORMATS = ['text', 'binary', 'ply', 'config'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+// Camera view state for navigation history
+export interface CameraViewState {
+  position: [number, number, number];
+  quaternion: [number, number, number, number];
+  target: [number, number, number];
+  distance: number;
+}
+
+// Navigation history entry tracks where we came from and what we flew to
+export interface NavigationHistoryEntry {
+  fromState: CameraViewState;
+  fromImageId: number | null; // The previously selected image (null if none)
+  toImageId: number;
+}

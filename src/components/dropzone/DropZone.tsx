@@ -1,9 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
-import { useReconstructionStore, useUIStore } from '../../store';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { useReconstructionStore } from '../../store';
 import { STORAGE_KEYS } from '../../store/migration';
 import { parseConfigYaml, applyConfigurationToStores } from '../../config/configuration';
-import type { ImageLoadMode } from '../../store/types';
 import { TIMING, buttonStyles, loadingStyles, toastStyles, dragOverlayStyles, emptyStateStyles } from '../../theme';
 import { ResetIcon, UploadIcon } from '../../icons';
 
@@ -16,15 +16,11 @@ export function DropZone({ children }: DropZoneProps) {
   const [isPanelDismissed, setIsPanelDismissed] = useState(false);
   const { handleDrop, handleDragOver, handleBrowse } = useFileDropzone();
   const { loading, progress, error, setError, reconstruction } = useReconstructionStore();
-  const imageLoadMode = useUIStore((s) => s.imageLoadMode);
-  const setImageLoadMode = useUIStore((s) => s.setImageLoadMode);
-  const liteParserThresholdMB = useUIStore((s) => s.liteParserThresholdMB);
-  const setLiteParserThresholdMB = useUIStore((s) => s.setLiteParserThresholdMB);
   const configInputRef = useRef<HTMLInputElement>(null);
+  const isMobile = useIsMobile();
 
   // Reset all persisted configuration to defaults
-  const handleResetConfig = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleResetConfig = useCallback(() => {
     if (confirm('Reset all settings to defaults? This will clear your saved preferences.')) {
       Object.values(STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
       window.location.reload();
@@ -32,8 +28,7 @@ export function DropZone({ children }: DropZoneProps) {
   }, []);
 
   // Upload and apply configuration from YAML file
-  const handleConfigUpload = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleConfigUpload = useCallback(() => {
     configInputRef.current?.click();
   }, []);
 
@@ -49,11 +44,14 @@ export function DropZone({ children }: DropZoneProps) {
         applyConfigurationToStores(result.config);
         console.log(`[Config] Applied settings from ${file.name}`);
       } else {
-        const errorMessages = result.errors.map(err => err.path ? `${err.path}: ${err.message}` : err.message).join(', ');
+        const errorMessages = result.errors
+          .map(err => err.path ? `${err.path}: ${err.message}` : err.message)
+          .join(', ');
         setError(`Config error: ${errorMessages}`);
       }
     } catch (err) {
-      setError(`Config error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(`Config error: ${message}`);
     }
 
     // Reset input so same file can be selected again
@@ -115,12 +113,39 @@ export function DropZone({ children }: DropZoneProps) {
         </div>
       )}
 
-      {!reconstruction && !loading && !isDragOver && !isPanelDismissed && (
+      {!reconstruction && !loading && !isDragOver && !isPanelDismissed && !isMobile && (
         <div className="absolute inset-0 flex items-center justify-center z-10">
-          <div
-            className="relative flex flex-col items-center justify-center p-8 text-center bg-ds-secondary rounded-lg cursor-pointer border border-ds"
-            onClick={handleBrowse}
-          >
+          <div className="flex flex-col bg-ds-secondary rounded-lg border border-ds p-6">
+            {/* Header row: action buttons */}
+            <div className="flex justify-between -mt-4 -mx-4 mb-2">
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  className="w-8 h-8 flex items-center justify-center text-ds-muted hover-ds-text-primary hover-bg-white-10 rounded transition-colors"
+                  onClick={handleResetConfig}
+                  title="Reset all settings to defaults"
+                >
+                  <ResetIcon className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  className="w-8 h-8 flex items-center justify-center text-ds-muted hover-ds-text-primary hover-bg-white-10 rounded transition-colors"
+                  onClick={handleConfigUpload}
+                  title="Upload configuration file (.yaml)"
+                >
+                  <UploadIcon className="w-4 h-4" />
+                </button>
+              </div>
+              <button
+                type="button"
+                className="w-8 h-8 flex items-center justify-center text-ds-muted hover-ds-text-primary hover-bg-white-10 rounded transition-colors"
+                onClick={() => setIsPanelDismissed(true)}
+                title="Dismiss this panel"
+              >
+                ×
+              </button>
+            </div>
+
             {/* Hidden file input for config upload */}
             <input
               ref={configInputRef}
@@ -129,76 +154,30 @@ export function DropZone({ children }: DropZoneProps) {
               className="hidden"
               onChange={handleConfigFileChange}
             />
-            {/* Top-left buttons: Reset and Upload Config */}
-            <div className="absolute top-2 left-2 flex gap-1">
-              <button
-                className="w-8 h-8 flex items-center justify-center text-ds-muted hover-ds-text-primary hover-bg-white-10 rounded transition-colors"
-                onClick={handleResetConfig}
-                title="Reset all settings to defaults"
+
+            {/* Content area */}
+            <div className="flex flex-col items-center">
+              {/* Drop zone button with dotted border */}
+              <div
+                className="w-32 h-32 mb-6 flex items-center justify-center border-2 border-dashed border-ds-muted rounded-lg cursor-pointer hover-border-ds-primary transition-colors"
+                onClick={handleBrowse}
               >
-                <ResetIcon className="w-4 h-4" />
-              </button>
-              <button
-                className="w-8 h-8 flex items-center justify-center text-ds-muted hover-ds-text-primary hover-bg-white-10 rounded transition-colors"
-                onClick={handleConfigUpload}
-                title="Upload configuration file (.yaml)"
-              >
-                <UploadIcon className="w-4 h-4" />
-              </button>
-            </div>
-            {/* Top-right dismiss button */}
-            <button
-              className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center text-ds-muted hover-ds-text-primary hover-bg-white-10 rounded transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsPanelDismissed(true);
-              }}
-              title="Dismiss this panel"
-            >
-              ×
-            </button>
-            <div className="mb-6 text-ds-muted font-light leading-none" style={{ fontSize: '72px' }}>+</div>
-            <h2 className={emptyStateStyles.title}>Load COLMAP Data</h2>
-            <p className={emptyStateStyles.message}>
-              Drag and drop a COLMAP dataset folder here.<br />Or click to browse for a folder.
-            </p>
-            <style>{`.info-line:hover { color: rgba(255,255,255,0.9); }`}</style>
-            <div className="text-ds-muted text-sm text-left max-w-md">
-              <div className="info-line px-2 rounded"><strong>Drop the project root folder</strong> — subfolders are scanned automatically</div>
-              <div className="info-line px-2 rounded"><strong>Required:</strong> cameras, images, points3D (.bin or .txt preferred)</div>
-              <div className="info-line px-2 rounded"><strong>Auto-detected:</strong> sparse/0/, sparse/, or any subfolder</div>
-              <div className="info-line px-2 rounded"><strong>Optional:</strong> source images (jpg, png, webp, tiff), config (.yaml), masks/</div>
-              <div className="info-line px-2 rounded text-ds-muted/70">Without source images: point cloud and cameras only, no textures</div>
-            </div>
-            <div
-              className="mt-4 flex items-center gap-4 flex-wrap justify-center"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center gap-2">
-                <label className="text-ds-secondary text-sm">Images:</label>
-                <select
-                  value={imageLoadMode}
-                  onChange={(e) => setImageLoadMode(e.target.value as ImageLoadMode)}
-                  className="bg-ds-tertiary text-ds-primary text-sm px-2 py-1 rounded border border-ds cursor-pointer"
-                >
-                  <option value="prefetch">Prefetch</option>
-                  <option value="lazy">Lazy</option>
-                  <option value="skip">Skip</option>
-                </select>
+                <span className="text-ds-muted font-light leading-none" style={{ fontSize: '72px' }}>+</span>
               </div>
-              <div className="flex items-center gap-2" title="Skip 2D keypoints for large images.bin to save memory. 0 = always load full data.">
-                <label className="text-ds-secondary text-sm">Lite Parser:</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="50"
-                  value={liteParserThresholdMB}
-                  onChange={(e) => setLiteParserThresholdMB(Math.max(0, parseInt(e.target.value) || 0))}
-                  className="bg-ds-tertiary text-ds-primary text-sm px-2 py-1 rounded border border-ds w-16 text-right"
-                />
-                <span className="text-ds-muted text-sm">MB</span>
+              <h2 className={emptyStateStyles.title}>Load COLMAP Data</h2>
+              <p className={emptyStateStyles.message}>
+                Drag and drop a COLMAP dataset folder here.<br />Or click the box above to browse.
+              </p>
+              <style>{`.info-line:hover { color: rgba(255,255,255,0.9); }`}</style>
+              <div className="text-ds-muted text-sm text-left max-w-md mt-6 mb-4">
+                <div className="info-line px-2 rounded"><strong>Drop the project root folder</strong> — subfolders are scanned automatically</div>
+                <div className="info-line px-2 rounded"><strong>Required:</strong> cameras, images, points3D (.bin or .txt preferred)</div>
+                <div className="info-line px-2 rounded"><strong>Auto-detected:</strong> sparse/0/, sparse/, or any subfolder</div>
+                <div className="info-line px-2 rounded"><strong>Optional:</strong> source images (jpg, png, webp, tiff), config (.yaml), masks/</div>
+                <div className="info-line px-2 rounded text-ds-muted/70">Without source images: point cloud and cameras only, no textures</div>
               </div>
             </div>
+
           </div>
         </div>
       )}

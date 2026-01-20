@@ -22,6 +22,7 @@ import { CAMERA, VIZ_COLORS, OPACITY } from '../../theme';
 
 function SceneContent() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
+  const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
   const pickingMode = usePointPickingStore((s) => s.pickingMode);
   const isPicking = pickingMode !== 'off';
 
@@ -63,7 +64,26 @@ function SceneContent() {
       return { center, radius };
     }
 
-    if (reconstruction.points3D.size > 0) {
+    // Use WASM bounding box if available (avoids iterating points3D Map)
+    if (wasmReconstruction?.hasPoints()) {
+      const bbox = wasmReconstruction.getBoundingBox();
+      if (bbox) {
+        const center: [number, number, number] = [
+          (bbox.minX + bbox.maxX) / 2,
+          (bbox.minY + bbox.maxY) / 2,
+          (bbox.minZ + bbox.maxZ) / 2,
+        ];
+        const radius = Math.max(
+          bbox.maxX - bbox.minX,
+          bbox.maxY - bbox.minY,
+          bbox.maxZ - bbox.minZ
+        ) / 2;
+        return { center, radius: Math.max(radius, 0.001) };
+      }
+    }
+
+    // Fallback: iterate points3D Map if available (JS parser path)
+    if (reconstruction.points3D && reconstruction.points3D.size > 0) {
       let minX = Infinity, maxX = -Infinity;
       let minY = Infinity, maxY = -Infinity;
       let minZ = Infinity, maxZ = -Infinity;
@@ -89,7 +109,7 @@ function SceneContent() {
     }
 
     return { center: [0, 0, 0] as [number, number, number], radius: 5 };
-  }, [reconstruction]);
+  }, [reconstruction, wasmReconstruction]);
 
   const axesDisplayMode = useUIStore((s) => s.axesDisplayMode);
   const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
@@ -194,8 +214,24 @@ export function Scene3D() {
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
   const DRAG_THRESHOLD = 5; // pixels
 
+  const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
+
   const cameraPosition = useMemo(() => {
-    if (!reconstruction || reconstruction.points3D.size === 0) {
+    // Use WASM bounding box if available
+    if (wasmReconstruction?.hasPoints()) {
+      const bbox = wasmReconstruction.getBoundingBox();
+      if (bbox) {
+        const maxDist = Math.max(
+          Math.abs(bbox.minX), Math.abs(bbox.maxX),
+          Math.abs(bbox.minY), Math.abs(bbox.maxY),
+          Math.abs(bbox.minZ), Math.abs(bbox.maxZ)
+        );
+        return [0, 0, maxDist * 2] as [number, number, number];
+      }
+    }
+
+    // Fallback: use points3D Map if available
+    if (!reconstruction || !reconstruction.points3D || reconstruction.points3D.size === 0) {
       return [0, 0, 5] as [number, number, number];
     }
 
@@ -208,7 +244,7 @@ export function Scene3D() {
     }
 
     return [0, 0, maxDist * 2] as [number, number, number];
-  }, [reconstruction]);
+  }, [reconstruction, wasmReconstruction]);
 
   // Handle right-click for context menu (only if not dragging/panning)
   // In point picking mode, right-click cancels instead of opening menu

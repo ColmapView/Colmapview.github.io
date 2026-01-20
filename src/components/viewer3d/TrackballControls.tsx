@@ -2,11 +2,31 @@ import { useRef, useEffect, useMemo } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useReconstructionStore, useCameraStore, useTransformStore, useUIStore, usePointPickingStore } from '../../store';
+import type { CameraViewState } from '../../store/types';
 import { getImageWorldPose } from '../../utils/colmapTransforms';
 import { createSim3dFromEuler } from '../../utils/sim3dTransforms';
 import { getWorldUp } from '../../utils/coordinateSystems';
 import { CAMERA, CONTROLS } from '../../theme';
 import type { ViewDirection } from '../../store/stores/uiStore';
+
+// Easing function for smooth camera transitions
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+// Animation target type for fly-to transitions
+interface AnimationTarget {
+  startPosition: THREE.Vector3;
+  startQuaternion: THREE.Quaternion;
+  startTarget: THREE.Vector3;
+  startDistance: number;
+  endPosition: THREE.Vector3;
+  endQuaternion: THREE.Quaternion;
+  endTarget: THREE.Vector3;
+  endDistance: number;
+  startTime: number;
+  duration: number;
+}
 
 // Camera offset and up vectors for each axis view
 const AXIS_VIEWS: Record<'x' | 'y' | 'z', { offset: THREE.Vector3; up: THREE.Vector3 }> = {
@@ -28,11 +48,13 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const flyToImageId = useCameraStore((s) => s.flyToImageId);
   const clearFlyTo = useCameraStore((s) => s.clearFlyTo);
+  const clearNavigationHistory = useCameraStore((s) => s.clearNavigationHistory);
   const cameraMode = useCameraStore((s) => s.cameraMode);
   const cameraProjection = useCameraStore((s) => s.cameraProjection);
   const cameraFov = useCameraStore((s) => s.cameraFov);
   const horizonLock = useCameraStore((s) => s.horizonLock);
   const flySpeed = useCameraStore((s) => s.flySpeed);
+  const flyTransitionDuration = useCameraStore((s) => s.flyTransitionDuration);
   const pointerLock = useCameraStore((s) => s.pointerLock);
   const pickingMode = usePointPickingStore((s) => s.pickingMode);
   const autoRotateMode = useCameraStore((s) => s.autoRotateMode);
@@ -78,6 +100,9 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
 
   // Ref to allow other components to signal that they handled a wheel event
   const wheelHandled = useRef(false);
+
+  // Animation target for smooth fly-to transitions
+  const animationTarget = useRef<AnimationTarget | null>(null);
 
   // Ref for horizonLock to avoid stale closure in event handlers
   const horizonLockRef = useRef(horizonLock);
@@ -209,6 +234,39 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       angularVelocity.current.x = 0;
       angularVelocity.current.y = 0;
       flyVelocity.current.set(0, 0, 0);
+      // Cancel any ongoing animation
+      animationTarget.current = null;
+      return;
+    }
+
+    // Handle smooth fly-to animation
+    if (animationTarget.current) {
+      const anim = animationTarget.current;
+      const now = performance.now();
+      const elapsed = now - anim.startTime;
+      const progress = Math.min(elapsed / anim.duration, 1);
+      const easedProgress = easeOutCubic(progress);
+
+      // Interpolate position
+      camera.position.lerpVectors(anim.startPosition, anim.endPosition, easedProgress);
+
+      // Slerp quaternion
+      camera.quaternion.slerpQuaternions(anim.startQuaternion, anim.endQuaternion, easedProgress);
+
+      // Interpolate target and distance
+      targetVec.current.lerpVectors(anim.startTarget, anim.endTarget, easedProgress);
+      distance.current = anim.startDistance + (anim.endDistance - anim.startDistance) * easedProgress;
+      targetDistance.current = distance.current;
+
+      // Update internal quaternion ref to match
+      cameraQuat.current.copy(camera.quaternion);
+
+      // Animation complete
+      if (progress >= 1) {
+        animationTarget.current = null;
+      }
+
+      // Skip normal momentum updates during animation
       return;
     }
 
@@ -543,19 +601,79 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
     const lookDir = new THREE.Vector3(0, 0, -1).applyQuaternion(threeJsCamQuat);
     const newTarget = transformedPos.clone().add(lookDir.multiplyScalar(distance.current));
 
-    targetVec.current.copy(newTarget);
-    cameraQuat.current.copy(threeJsCamQuat);
+    // Clear velocities
     angularVelocity.current.x = 0;
     angularVelocity.current.y = 0;
     flyVelocity.current.set(0, 0, 0);
-    targetDistance.current = distance.current;
 
-    // Set camera position and quaternion directly for both modes
-    camera.position.copy(transformedPos);
-    camera.quaternion.copy(threeJsCamQuat);
+    if (flyTransitionDuration > 0) {
+      // Animated transition
+      animationTarget.current = {
+        startPosition: camera.position.clone(),
+        startQuaternion: camera.quaternion.clone(),
+        startTarget: targetVec.current.clone(),
+        startDistance: distance.current,
+        endPosition: transformedPos.clone(),
+        endQuaternion: threeJsCamQuat.clone(),
+        endTarget: newTarget.clone(),
+        endDistance: distance.current,
+        startTime: performance.now(),
+        duration: flyTransitionDuration,
+      };
+    } else {
+      // Instant positioning (duration = 0)
+      targetVec.current.copy(newTarget);
+      cameraQuat.current.copy(threeJsCamQuat);
+      targetDistance.current = distance.current;
+      camera.position.copy(transformedPos);
+      camera.quaternion.copy(threeJsCamQuat);
+    }
 
     clearFlyTo();
-  }, [flyToImageId, reconstruction, clearFlyTo, camera, transform, horizonLock, worldUpVec]);
+  }, [flyToImageId, reconstruction, clearFlyTo, camera, transform, horizonLock, worldUpVec, flyTransitionDuration]);
+
+  // Handle flyToViewState for navigation history back
+  const flyToViewState = useCameraStore((s) => s.flyToViewState);
+  const clearFlyToViewState = useCameraStore((s) => s.clearFlyToViewState);
+
+  useEffect(() => {
+    if (!flyToViewState) return;
+
+    // Clear velocities
+    angularVelocity.current.x = 0;
+    angularVelocity.current.y = 0;
+    flyVelocity.current.set(0, 0, 0);
+
+    if (flyTransitionDuration > 0) {
+      // Animated transition
+      const endTarget = new THREE.Vector3(...flyToViewState.target);
+      const endPosition = new THREE.Vector3(...flyToViewState.position);
+      const endQuaternion = new THREE.Quaternion(...flyToViewState.quaternion);
+
+      animationTarget.current = {
+        startPosition: camera.position.clone(),
+        startQuaternion: camera.quaternion.clone(),
+        startTarget: targetVec.current.clone(),
+        startDistance: distance.current,
+        endPosition,
+        endQuaternion,
+        endTarget,
+        endDistance: flyToViewState.distance,
+        startTime: performance.now(),
+        duration: flyTransitionDuration,
+      };
+    } else {
+      // Instant positioning (duration = 0)
+      targetVec.current.set(...flyToViewState.target);
+      cameraQuat.current.set(...flyToViewState.quaternion);
+      distance.current = flyToViewState.distance;
+      targetDistance.current = flyToViewState.distance;
+      camera.position.set(...flyToViewState.position);
+      camera.quaternion.set(...flyToViewState.quaternion);
+    }
+
+    clearFlyToViewState();
+  }, [flyToViewState, clearFlyToViewState, camera, flyTransitionDuration]);
 
   // Handle mode switching
   useEffect(() => {
@@ -578,12 +696,22 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
 
   // Register controls with R3F so other components (e.g., TransformGizmo) can access them
   useEffect(() => {
-    const controls = { enabled, dragging, wheelHandled };
+    const controls = {
+      enabled,
+      dragging,
+      wheelHandled,
+      getCurrentViewState: (): CameraViewState => ({
+        position: [camera.position.x, camera.position.y, camera.position.z],
+        quaternion: [cameraQuat.current.x, cameraQuat.current.y, cameraQuat.current.z, cameraQuat.current.w],
+        target: [targetVec.current.x, targetVec.current.y, targetVec.current.z],
+        distance: distance.current,
+      }),
+    };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (set as (state: any) => void)({ controls });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return () => (set as (state: any) => void)({ controls: undefined });
-  }, [set]);
+  }, [set, camera]);
 
   useEffect(() => {
     const canvas = gl.domElement;
@@ -601,6 +729,9 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       Promise.resolve().then(() => {
         // Check if controls were disabled by gizmo or other component
         if (!enabled.current) return;
+
+        // Cancel any ongoing animation on user interaction
+        animationTarget.current = null;
 
         if (cameraMode === 'fly') {
           // In fly mode, left click rotates the view
@@ -711,6 +842,11 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       lastTime.current = now;
 
       if (isDragging.current) {
+        // Clear navigation history on first actual camera movement
+        if (deltaX !== 0 || deltaY !== 0) {
+          clearNavigationHistory();
+        }
+
         // Request pointer lock on first movement, not on mousedown
         // This allows clicks to pass through to 3D objects
         // Disable pointer lock during point picking mode
@@ -738,6 +874,11 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       }
 
       if (isPanning.current && cameraMode === 'orbit') {
+        // Clear navigation history on first actual camera movement
+        if (deltaX !== 0 || deltaY !== 0) {
+          clearNavigationHistory();
+        }
+
         const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraQuat.current);
         const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(cameraQuat.current);
 
@@ -761,6 +902,11 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       e.preventDefault();
       // Don't zoom if controls are disabled
       if (!enabled.current) return;
+
+      // Clear navigation history on manual camera movement
+      clearNavigationHistory();
+      // Cancel any ongoing animation on wheel
+      animationTarget.current = null;
 
       if (cameraMode === 'fly') {
         // In fly mode, wheel moves camera forward/backward
@@ -797,6 +943,12 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
         if ((e.target as HTMLElement)?.tagName !== 'INPUT' && (e.target as HTMLElement)?.tagName !== 'TEXTAREA') {
           e.preventDefault();
           keysPressed.current.add(key);
+          // Clear navigation history on movement keys (not shift alone)
+          if (key !== 'shift') {
+            clearNavigationHistory();
+            // Cancel any ongoing animation on movement key press
+            animationTarget.current = null;
+          }
         }
       }
     };
@@ -832,7 +984,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       window.removeEventListener('blur', onBlur);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Control constants (rotateSpeed, panSpeed, etc.) are stable and don't need to be dependencies
-  }, [camera, gl, cameraMode, flySpeed, pointerLock, pickingMode, radius, autoRotateMode, setAutoRotateMode]);
+  }, [camera, gl, cameraMode, flySpeed, pointerLock, pickingMode, radius, autoRotateMode, setAutoRotateMode, clearNavigationHistory]);
 
   return null;
 }

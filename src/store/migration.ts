@@ -40,7 +40,6 @@ const UI_PROPERTIES = [
   'axesOpacity',
   'backgroundColor',
   'autoRotate',
-  'imageLoadMode',
 ] as const;
 
 const EXPORT_PROPERTIES = [

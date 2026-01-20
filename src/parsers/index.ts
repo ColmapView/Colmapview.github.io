@@ -2,11 +2,10 @@ export { BinaryReader } from './BinaryReader';
 export { BinaryWriter } from './BinaryWriter';
 export { parseCamerasBinary, parseCamerasText } from './cameras';
 export { parseImagesBinary, parseImagesText } from './images';
-export { parseImagesBinaryLite } from './imagesLite';
 export { parsePoints3DBinary, parsePoints3DText } from './points3d';
 export { parseRigsBinary, parseRigsText } from './rigs';
 export { parseFramesBinary, parseFramesText } from './frames';
-export { computeImageStats } from './imageStats';
+export { computeImageStats, computeImageStatsFromWasm } from './imageStats';
 export type { ImageToPoint3DIdsMap } from './imageStats';
 export {
   // Text writers

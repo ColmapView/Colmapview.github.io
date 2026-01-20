@@ -24,7 +24,6 @@ export type {
   CameraProjection,
   AutoRotateMode,
   HorizonLockMode,
-  ImageLoadMode,
   FrustumColorMode,
   CameraDisplayMode,
   MatchesDisplayMode,

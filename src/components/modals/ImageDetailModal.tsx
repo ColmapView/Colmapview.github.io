@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useReconstructionStore, useUIStore } from '../../store';
-import type { Camera, Image } from '../../types/colmap';
+import type { Camera, Point2D } from '../../types/colmap';
 import { getImageFile, getMaskFile } from '../../utils/imageFileUtils';
 import { useFileUrl } from '../../hooks/useFileUrl';
 import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, MODAL, buttonStyles, inputStyles, resizeHandleStyles } from '../../theme';
@@ -105,7 +105,7 @@ function CameraPoseInfoDisplay({ camera, qvec, tvec }: { camera: Camera; qvec: n
 }
 
 interface KeypointCanvasProps {
-  image: Image;
+  points2D: Point2D[];
   camera: Camera;
   imageWidth: number;
   imageHeight: number;
@@ -116,7 +116,7 @@ interface KeypointCanvasProps {
 }
 
 const KeypointCanvas = memo(function KeypointCanvas({
-  image,
+  points2D,
   camera,
   imageWidth,
   imageHeight,
@@ -144,7 +144,7 @@ const KeypointCanvas = memo(function KeypointCanvas({
 
     // showPoints2D: show all points in green
     // showPoints3D: show triangulated points in red (independent)
-    for (const point of image.points2D) {
+    for (const point of points2D) {
       const isTriangulated = point.point3DId !== BigInt(-1);
 
       const x = point.xy[0] * scaleX;
@@ -180,7 +180,7 @@ const KeypointCanvas = memo(function KeypointCanvas({
       }
       ctx.fill();
     }
-  }, [image, camera, imageWidth, imageHeight, showPoints2D, showPoints3D]);
+  }, [points2D, camera, imageWidth, imageHeight, showPoints2D, showPoints3D]);
 
   const offsetX = (containerWidth - imageWidth) / 2;
   const offsetY = (containerHeight - imageHeight) / 2;
@@ -296,9 +296,52 @@ const MIN_WIDTH = SIZE.modalMinWidth;
 const MIN_HEIGHT = SIZE.modalMinHeight;
 const RESIZE_DEBOUNCE_MS = TIMING.resizeDebounce;
 
+// Placeholder component for when image is not loaded
+// Shows a checkerboard pattern at exact camera dimensions
+// No border to ensure pixel-perfect alignment with overlay canvases
+interface ImagePlaceholderProps {
+  width: number;
+  height: number;
+  cameraWidth: number;
+  cameraHeight: number;
+  label?: string;
+}
+
+function ImagePlaceholder({ width, height, cameraWidth, cameraHeight, label }: ImagePlaceholderProps) {
+  return (
+    <div
+      className="relative flex-shrink-0"
+      style={{
+        width,
+        height,
+        boxSizing: 'border-box',
+        backgroundColor: 'var(--color-ds-secondary)',
+        backgroundImage: `
+          linear-gradient(45deg, var(--color-ds-tertiary) 25%, transparent 25%),
+          linear-gradient(-45deg, var(--color-ds-tertiary) 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, var(--color-ds-tertiary) 75%),
+          linear-gradient(-45deg, transparent 75%, var(--color-ds-tertiary) 75%)
+        `,
+        backgroundSize: '20px 20px',
+        backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0px',
+        border: '1px dashed var(--color-ds-muted)',
+      }}
+    >
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-ds-muted text-xs pointer-events-none">
+        <span className="bg-ds-secondary/80 px-2 py-1 rounded">{cameraWidth} × {cameraHeight}</span>
+        {label && <span className="bg-ds-secondary/80 px-2 py-0.5 rounded mt-1 text-[10px] max-w-full truncate px-2">{label}</span>}
+      </div>
+    </div>
+  );
+}
+
+// Maximum number of images to cache lazy-loaded points for (LRU-style)
+const MAX_LAZY_CACHE_SIZE = 20;
+
 export function ImageDetailModal() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
+  const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
   const imageDetailId = useUIStore((s) => s.imageDetailId);
   const closeImageDetail = useUIStore((s) => s.closeImageDetail);
   const openImageDetail = useUIStore((s) => s.openImageDetail);
@@ -316,6 +359,77 @@ export function ImageDetailModal() {
   const [isEditingOpacity, setIsEditingOpacity] = useState(false);
   const [opacityInputValue, setOpacityInputValue] = useState('');
   const opacityInputRef = useRef<HTMLInputElement>(null);
+
+  // Lazy-loaded 2D points cache (for images where points2D is empty but WASM has data)
+  // Cache is keyed by imageId but must be cleared when wasmReconstruction changes
+  const [lazyPoints2D, setLazyPoints2D] = useState<Map<number, Point2D[]>>(new Map());
+  const lazyLoadOrder = useRef<number[]>([]);  // Track order for LRU eviction
+  const prevWasmRef = useRef<typeof wasmReconstruction>(null);
+
+  // Clear lazy cache when wasmReconstruction changes (new dataset loaded)
+  // This must run BEFORE the lazy loading effect to prevent stale data
+  useEffect(() => {
+    if (wasmReconstruction !== prevWasmRef.current) {
+      prevWasmRef.current = wasmReconstruction;
+      // Always clear on wasmReconstruction change, even if cache appears empty
+      setLazyPoints2D(new Map());
+      lazyLoadOrder.current = [];
+    }
+  }, [wasmReconstruction]);
+
+  // Lazy load 2D points when visualization is enabled
+  useEffect(() => {
+    if (!imageDetailId || (!showPoints2D && !showPoints3D && !showMatchesInModal)) return;
+    if (!wasmReconstruction) return;
+    // Skip if wasmReconstruction just changed (cache clearing effect will run)
+    if (wasmReconstruction !== prevWasmRef.current) return;
+
+    const idsToLoad: number[] = [];
+
+    // Check if current image needs 2D points loaded
+    // Also load when showMatchesInModal is enabled (need current image's 2D points for match computation)
+    if ((showPoints2D || showPoints3D || showMatchesInModal) && !lazyPoints2D.has(imageDetailId)) {
+      const img = reconstruction?.images.get(imageDetailId);
+      // Only lazy-load if points2D is empty (lite mode) but numPoints2D suggests data exists
+      if (img && img.points2D.length === 0 && (img.numPoints2D ?? 0) > 0) {
+        idsToLoad.push(imageDetailId);
+      }
+    }
+
+    // Check if matched image needs 2D points loaded
+    if (showMatchesInModal && matchedImageId !== null && !lazyPoints2D.has(matchedImageId)) {
+      const matchedImg = reconstruction?.images.get(matchedImageId);
+      if (matchedImg && matchedImg.points2D.length === 0 && (matchedImg.numPoints2D ?? 0) > 0) {
+        idsToLoad.push(matchedImageId);
+      }
+    }
+
+    if (idsToLoad.length === 0) return;
+
+    // Load points from WASM
+    const newPoints = new Map(lazyPoints2D);
+    const newOrder = [...lazyLoadOrder.current];
+
+    for (const id of idsToLoad) {
+      const points = wasmReconstruction.getImagePoints2DArray(id);
+      if (points.length > 0) {
+        newPoints.set(id, points);
+        // Update LRU order
+        const existingIdx = newOrder.indexOf(id);
+        if (existingIdx !== -1) newOrder.splice(existingIdx, 1);
+        newOrder.push(id);
+      }
+    }
+
+    // Evict oldest entries if cache is too large
+    while (newOrder.length > MAX_LAZY_CACHE_SIZE) {
+      const oldestId = newOrder.shift()!;
+      newPoints.delete(oldestId);
+    }
+
+    lazyLoadOrder.current = newOrder;
+    setLazyPoints2D(newPoints);
+  }, [imageDetailId, matchedImageId, showPoints2D, showPoints3D, showMatchesInModal, wasmReconstruction, reconstruction, lazyPoints2D]);
 
   // Get sorted list of image IDs for navigation
   const imageIds = useMemo(() => {
@@ -383,10 +497,7 @@ export function ImageDetailModal() {
 
   // Position and size state for draggable/resizable
   const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [size, setSize] = useState(() => ({
-    width: Math.round(window.innerWidth * MODAL.defaultWidthPercent),
-    height: Math.round(window.innerHeight * MODAL.defaultHeightPercent),
-  }));
+  const [size, setSize] = useState({ width: 800, height: 600 }); // Will be recalculated on open
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState<string | null>(null);
   const dragStart = useRef({ x: 0, y: 0, posX: 0, posY: 0 });
@@ -403,16 +514,16 @@ export function ImageDetailModal() {
   const imageSrc = useFileUrl(imageFile);
   const maskSrc = useFileUrl(maskFile);
 
-  // Memoize point counts
+  // Get point counts from pre-computed stats (works with lite mode)
   const { numPoints2D, numPoints3D } = useMemo(() => {
-    if (!image) return { numPoints2D: 0, numPoints3D: 0 };
-    const total = image.points2D.length;
-    let triangulated = 0;
-    for (const point of image.points2D) {
-      if (point.point3DId !== BigInt(-1)) triangulated++;
-    }
+    if (!image || !reconstruction) return { numPoints2D: 0, numPoints3D: 0 };
+    // Use numPoints2D field (from WASM/lite mode) or fall back to array length
+    const total = image.numPoints2D ?? image.points2D.length;
+    // Use pre-computed imageStats for triangulated count
+    const stats = imageDetailId !== null ? reconstruction.imageStats.get(imageDetailId) : null;
+    const triangulated = stats?.numPoints3D ?? 0;
     return { numPoints2D: total, numPoints3D: triangulated };
-  }, [image]);
+  }, [image, reconstruction, imageDetailId]);
 
   // Get connected images from pre-computed index (O(1) lookup instead of O(m*k))
   const connectedImages = useMemo(() => {
@@ -430,8 +541,36 @@ export function ImageDetailModal() {
       }));
   }, [reconstruction, imageDetailId]);
 
+  // Get match count for currently selected matched image (for consistent display)
+  const currentMatchCount = useMemo(() => {
+    if (matchedImageId === null) return 0;
+    const match = connectedImages.find(img => img.imageId === matchedImageId);
+    return match?.matchCount ?? 0;
+  }, [connectedImages, matchedImageId]);
+
+  // Get effective 2D points for current image (from JS memory or lazy-loaded from WASM)
+  const effectivePoints2D = useMemo((): Point2D[] => {
+    if (!image) return [];
+    // Prefer points already in JS memory
+    if (image.points2D.length > 0) return image.points2D;
+    // Fall back to lazy-loaded from WASM
+    return lazyPoints2D.get(image.imageId) ?? [];
+  }, [image, lazyPoints2D]);
+
+  // Get matched image data (declared before effectiveMatchedPoints2D which uses it)
+  const matchedImage = matchedImageId !== null ? reconstruction?.images.get(matchedImageId) : null;
+
+  // Get effective 2D points for matched image (from JS memory or lazy-loaded from WASM)
+  const effectiveMatchedPoints2D = useMemo((): Point2D[] => {
+    if (!matchedImage) return [];
+    // Prefer points already in JS memory
+    if (matchedImage.points2D.length > 0) return matchedImage.points2D;
+    // Fall back to lazy-loaded from WASM
+    return lazyPoints2D.get(matchedImage.imageId) ?? [];
+  }, [matchedImage, lazyPoints2D]);
+
   const handleMatchedImageWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
+    // Note: Cannot preventDefault on React wheel events (passive by default)
     e.stopPropagation();
     if (connectedImages.length === 0) return;
     const currentIndex = matchedImageId !== null
@@ -498,13 +637,14 @@ export function ImageDetailModal() {
     return () => container.removeEventListener('wheel', handleWheel);
   }, [goToNext, goToPrev, showMatchesInModal, connectedImages, matchedImageId, setMatchedImageId]);
 
-  // Get matched image data
-  const matchedImage = matchedImageId !== null ? reconstruction?.images.get(matchedImageId) : null;
+  // Get matched image related data (matchedImage is declared earlier, before effectiveMatchedPoints2D)
   const matchedCamera = matchedImage ? reconstruction?.cameras.get(matchedImage.cameraId) : null;
   const matchedImageFile = matchedImage ? getImageFile(loadedFiles?.imageFiles, matchedImage.name) : null;
   const matchedImageSrc = useFileUrl(matchedImageFile);
 
   // Compute match lines between current and matched image
+  // Uses effectivePoints2D (from JS memory or lazy-loaded from WASM)
+  // Matches points by shared point3DId (avoids needing points3D Map)
   const matchLines = useMemo(() => {
     if (!showMatchesInModal || matchedImageId === null || !reconstruction || !image || !matchedImage)
       return [];
@@ -514,27 +654,32 @@ export function ImageDetailModal() {
       point2: [number, number]; // Matched image 2D coords
     }[] = [];
 
-    for (const point2D of image.points2D) {
-      if (point2D.point3DId === BigInt(-1)) continue;
-
-      const point3D = reconstruction.points3D.get(point2D.point3DId);
-      if (!point3D) continue;
-
-      // Find matching point in the other image
-      const matchTrack = point3D.track.find(t => t.imageId === matchedImageId);
-      if (matchTrack) {
-        const matchedPoint2D = matchedImage.points2D[matchTrack.point2DIdx];
-        if (matchedPoint2D) {
-          lines.push({
-            point1: point2D.xy,
-            point2: matchedPoint2D.xy
-          });
-        }
+    // Build lookup map: point3DId -> Point2D for matched image
+    // This allows O(1) matching by shared point3DId without needing points3D.track
+    const matchedLookup = new Map<bigint, { xy: [number, number] }>();
+    for (const p2d of effectiveMatchedPoints2D) {
+      if (p2d.point3DId !== BigInt(-1)) {
+        matchedLookup.set(p2d.point3DId, p2d);
       }
     }
 
+    // Use effective points (lazy-loaded if needed)
+    // Match by shared point3DId
+    for (const point2D of effectivePoints2D) {
+      if (point2D.point3DId === BigInt(-1)) continue;
+
+      // Find matching point in the other image by shared point3DId
+      const matchedPoint2D = matchedLookup.get(point2D.point3DId);
+      if (!matchedPoint2D) continue;
+
+      lines.push({
+        point1: point2D.xy,
+        point2: matchedPoint2D.xy
+      });
+    }
+
     return lines;
-  }, [showMatchesInModal, matchedImageId, reconstruction, image, matchedImage]);
+  }, [showMatchesInModal, matchedImageId, reconstruction, image, matchedImage, effectivePoints2D, effectiveMatchedPoints2D]);
 
   // Check if we're in side-by-side match view mode
   const isMatchViewMode = showMatchesInModal && matchedImageId !== null && matchedImage && matchedCamera;
@@ -588,17 +733,52 @@ export function ImageDetailModal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- MATCH_VIEW_GAP is a constant, containerSize is intentionally destructured
   }, [camera, matchedCamera, containerSize.width, containerSize.height]);
 
-  // Center modal only when it first opens (not when navigating between images)
+  // Compute optimal modal size and center when it first opens
   const wasOpenRef = useRef(false);
   useEffect(() => {
-    if (imageDetailId !== null && !wasOpenRef.current) {
-      const centerX = (window.innerWidth - size.width) / 2;
-      const centerY = (window.innerHeight - size.height) / 2;
+    if (imageDetailId !== null && !wasOpenRef.current && camera) {
+      // Get available viewport space
+      const viewportW = window.innerWidth;
+      const viewportH = window.innerHeight;
+      const maxW = Math.round(viewportW * MODAL.maxWidthPercent);
+      const maxH = Math.round(viewportH * MODAL.maxHeightPercent);
+
+      // Account for modal chrome (header, footer, padding)
+      const chromeHeight = MODAL.headerHeight + MODAL.footerHeight + MODAL.padding;
+      const chromeWidth = MODAL.padding;
+
+      // Available space for the image itself
+      const availableW = maxW - chromeWidth;
+      const availableH = maxH - chromeHeight;
+
+      // Image aspect ratio
+      const imageAspect = camera.width / camera.height;
+
+      // Fit image within available space while preserving aspect ratio
+      let imageW: number, imageH: number;
+      if (imageAspect > availableW / availableH) {
+        // Image is wider - fit to width
+        imageW = availableW;
+        imageH = availableW / imageAspect;
+      } else {
+        // Image is taller - fit to height
+        imageH = availableH;
+        imageW = availableH * imageAspect;
+      }
+
+      // Final modal size = image size + chrome
+      const modalW = Math.max(MIN_WIDTH, Math.round(imageW + chromeWidth));
+      const modalH = Math.max(MIN_HEIGHT, Math.round(imageH + chromeHeight));
+
+      setSize({ width: modalW, height: modalH });
+
+      // Center the modal
+      const centerX = (viewportW - modalW) / 2;
+      const centerY = (viewportH - modalH) / 2;
       setPosition({ x: centerX, y: centerY });
     }
     wasOpenRef.current = imageDetailId !== null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- size.width/height intentionally omitted to only center on initial open
-  }, [imageDetailId]);
+  }, [imageDetailId, camera]);
 
   // Handle keyboard shortcuts using centralized hotkey system
   useHotkeys(
@@ -709,6 +889,21 @@ export function ImageDetailModal() {
     }
   }, [isDragging, isResizing]);
 
+  // Keep modal within viewport bounds when browser window is resized
+  useEffect(() => {
+    if (imageDetailId === null) return;
+
+    const handleWindowResize = () => {
+      setPosition(prev => ({
+        x: Math.max(0, Math.min(prev.x, window.innerWidth - size.width)),
+        y: Math.max(0, Math.min(prev.y, window.innerHeight - size.height)),
+      }));
+    };
+
+    window.addEventListener('resize', handleWindowResize);
+    return () => window.removeEventListener('resize', handleWindowResize);
+  }, [imageDetailId, size.width, size.height]);
+
   const resizeTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const updateContainerSize = useCallback(() => {
@@ -763,7 +958,7 @@ export function ImageDetailModal() {
         >
           <span className="text-ds-primary">
             {isMatchViewMode
-              ? `Image Matches: ${image?.name} ↔ ${matchedImage?.name} (${matchLines.length} matches)`
+              ? `Image Matches: ${image?.name} ↔ ${matchedImage?.name} (${currentMatchCount} matches)`
               : `Image #${imageDetailId}: ${image?.name}`}
           </span>
           <button
@@ -788,82 +983,168 @@ export function ImageDetailModal() {
                   : 'Scroll to iterate through images'}
               </div>
               {isMatchViewMode ? (
-                <>
-                  <div className="absolute inset-0 flex" style={{ gap: MATCH_VIEW_GAP }}>
-                    <div className="flex-1 flex items-center justify-center">
-                      {imageSrc ? (
+                (() => {
+                  // Calculate positions exactly as MatchCanvas does to ensure alignment
+                  const halfWidth = (containerSize.width - MATCH_VIEW_GAP) / 2;
+                  const offset1X = (halfWidth - sideBySideDimensions.image1Width) / 2;
+                  const offset1Y = (containerSize.height - sideBySideDimensions.image1Height) / 2;
+                  const offset2X = halfWidth + MATCH_VIEW_GAP + (halfWidth - sideBySideDimensions.image2Width) / 2;
+                  const offset2Y = (containerSize.height - sideBySideDimensions.image2Height) / 2;
+
+                  return (
+                    <>
+                      {/* Image 1 - absolutely positioned to match MatchCanvas calculations */}
+                      {sideBySideDimensions.image1Width > 0 && (imageSrc ? (
                         <img
                           src={imageSrc}
                           alt={image.name}
-                          style={{ width: sideBySideDimensions.image1Width, height: sideBySideDimensions.image1Height }}
-                          className="object-contain"
+                          className="absolute object-contain"
+                          style={{
+                            width: sideBySideDimensions.image1Width,
+                            height: sideBySideDimensions.image1Height,
+                            left: offset1X,
+                            top: offset1Y,
+                          }}
                           draggable={false}
                         />
                       ) : (
-                        <div className="text-ds-muted text-xs">No image</div>
-                      )}
-                    </div>
-                    <div className="flex-1 flex items-center justify-center">
-                      {matchedImageSrc ? (
+                        <div
+                          className="absolute"
+                          style={{
+                            left: offset1X,
+                            top: offset1Y,
+                          }}
+                        >
+                          <ImagePlaceholder
+                            width={sideBySideDimensions.image1Width}
+                            height={sideBySideDimensions.image1Height}
+                            cameraWidth={camera.width}
+                            cameraHeight={camera.height}
+                            label={image.name}
+                          />
+                        </div>
+                      ))}
+                      {/* Image 2 - absolutely positioned to match MatchCanvas calculations */}
+                      {sideBySideDimensions.image2Width > 0 && matchedCamera && (matchedImageSrc ? (
                         <img
                           src={matchedImageSrc}
                           alt={matchedImage?.name || ''}
-                          style={{ width: sideBySideDimensions.image2Width, height: sideBySideDimensions.image2Height }}
-                          className="object-contain"
+                          className="absolute object-contain"
+                          style={{
+                            width: sideBySideDimensions.image2Width,
+                            height: sideBySideDimensions.image2Height,
+                            left: offset2X,
+                            top: offset2Y,
+                          }}
                           draggable={false}
                         />
                       ) : (
-                        <div className="text-ds-muted text-xs">No image</div>
+                        <div
+                          className="absolute"
+                          style={{
+                            left: offset2X,
+                            top: offset2Y,
+                          }}
+                        >
+                          <ImagePlaceholder
+                            width={sideBySideDimensions.image2Width}
+                            height={sideBySideDimensions.image2Height}
+                            cameraWidth={matchedCamera.width}
+                            cameraHeight={matchedCamera.height}
+                            label={matchedImage?.name}
+                          />
+                        </div>
+                      ))}
+                      {/* Match lines - rendered even without images loaded */}
+                      {matchLines.length > 0 && sideBySideDimensions.image1Width > 0 && sideBySideDimensions.image2Width > 0 && (
+                        <MatchCanvas
+                          lines={matchLines}
+                          image1Camera={camera}
+                          image2Camera={matchedCamera}
+                          image1Width={sideBySideDimensions.image1Width}
+                          image1Height={sideBySideDimensions.image1Height}
+                          image2Width={sideBySideDimensions.image2Width}
+                          image2Height={sideBySideDimensions.image2Height}
+                          containerWidth={containerSize.width}
+                          containerHeight={containerSize.height}
+                          gap={MATCH_VIEW_GAP}
+                          lineOpacity={matchLineOpacity}
+                        />
+                      )}
+                    </>
+                  );
+                })()
+              ) : (
+                (() => {
+                  // Calculate position exactly as KeypointCanvas does to ensure alignment
+                  const offsetX = (containerSize.width - renderedImageWidth) / 2;
+                  const offsetY = (containerSize.height - renderedImageHeight) / 2;
+
+                  return (
+                    <div className="group absolute inset-0">
+                      {/* Image or placeholder - absolutely positioned to match KeypointCanvas */}
+                      {renderedImageWidth > 0 && (imageSrc ? (
+                        <>
+                          <img
+                            src={imageSrc}
+                            alt={image.name}
+                            className="absolute object-contain"
+                            style={{
+                              width: renderedImageWidth,
+                              height: renderedImageHeight,
+                              left: offsetX,
+                              top: offsetY,
+                            }}
+                            draggable={false}
+                          />
+                          {hasMask && maskSrc && (
+                            <img
+                              src={maskSrc}
+                              alt="mask"
+                              className="absolute object-contain pointer-events-none opacity-0 group-hover:opacity-50"
+                              style={{
+                                width: renderedImageWidth,
+                                height: renderedImageHeight,
+                                left: offsetX,
+                                top: offsetY,
+                              }}
+                              draggable={false}
+                            />
+                          )}
+                        </>
+                      ) : (
+                        <div
+                          className="absolute"
+                          style={{
+                            left: offsetX,
+                            top: offsetY,
+                          }}
+                        >
+                          <ImagePlaceholder
+                            width={renderedImageWidth}
+                            height={renderedImageHeight}
+                            cameraWidth={camera.width}
+                            cameraHeight={camera.height}
+                            label="No image loaded"
+                          />
+                        </div>
+                      ))}
+                      {/* Keypoint overlay - rendered even without image */}
+                      {(showPoints2D || showPoints3D) && renderedImageWidth > 0 && effectivePoints2D.length > 0 && (
+                        <KeypointCanvas
+                          points2D={effectivePoints2D}
+                          camera={camera}
+                          imageWidth={renderedImageWidth}
+                          imageHeight={renderedImageHeight}
+                          containerWidth={containerSize.width}
+                          containerHeight={containerSize.height}
+                          showPoints2D={showPoints2D}
+                          showPoints3D={showPoints3D}
+                        />
                       )}
                     </div>
-                  </div>
-                  {matchLines.length > 0 && sideBySideDimensions.image1Width > 0 && (
-                    <MatchCanvas
-                      lines={matchLines}
-                      image1Camera={camera}
-                      image2Camera={matchedCamera}
-                      image1Width={sideBySideDimensions.image1Width}
-                      image1Height={sideBySideDimensions.image1Height}
-                      image2Width={sideBySideDimensions.image2Width}
-                      image2Height={sideBySideDimensions.image2Height}
-                      containerWidth={containerSize.width}
-                      containerHeight={containerSize.height}
-                      gap={MATCH_VIEW_GAP}
-                      lineOpacity={matchLineOpacity}
-                    />
-                  )}
-                </>
-              ) : imageSrc ? (
-                <div className="group absolute inset-0">
-                  <img
-                    src={imageSrc}
-                    alt={image.name}
-                    className="absolute inset-0 w-full h-full object-contain"
-                    draggable={false}
-                  />
-                  {hasMask && maskSrc && (
-                    <img
-                      src={maskSrc}
-                      alt="mask"
-                      className="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-0 group-hover:opacity-50"
-                      draggable={false}
-                    />
-                  )}
-                  {(showPoints2D || showPoints3D) && renderedImageWidth > 0 && (
-                    <KeypointCanvas
-                      image={image}
-                      camera={camera}
-                      imageWidth={renderedImageWidth}
-                      imageHeight={renderedImageHeight}
-                      containerWidth={containerSize.width}
-                      containerHeight={containerSize.height}
-                      showPoints2D={showPoints2D}
-                      showPoints3D={showPoints3D}
-                    />
-                  )}
-                </div>
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-ds-muted text-xs">No image file loaded</div>
+                  );
+                })()
               )}
             </div>
 

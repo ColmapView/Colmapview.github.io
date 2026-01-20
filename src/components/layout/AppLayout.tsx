@@ -4,29 +4,14 @@ import { Scene3D } from '../viewer3d';
 import { ImageGallery } from '../gallery/ImageGallery';
 import { ImageDetailModal } from '../modals/ImageDetailModal';
 import { useHotkeyScope } from '../../hooks/useHotkeyScope';
-import { mobileMessageStyles, BREAKPOINTS, LAYOUT_PANELS } from '../../theme';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { mobileMessageStyles, LAYOUT_PANELS } from '../../theme';
 import { useUIStore } from '../../store/stores/uiStore';
 import { useReconstructionStore } from '../../store/reconstructionStore';
 import { useGuideStore } from '../../store/stores/guideStore';
 
 const MIN_PANEL_WIDTH = 300;
 const MAX_PANEL_WIDTH_PERCENT = 0.6; // 60% of window width
-
-function useIsMobile(breakpoint = BREAKPOINTS.mobile) {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < breakpoint);
-    };
-
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, [breakpoint]);
-
-  return isMobile;
-}
 
 function useResizablePanel(defaultWidthPercent: number) {
   const [panelWidth, setPanelWidth] = useState(() => {

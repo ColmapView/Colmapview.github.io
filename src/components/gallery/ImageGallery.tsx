@@ -334,7 +334,6 @@ interface ImageGalleryProps {
 export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
-  const imageLoadMode = useUIStore((s) => s.imageLoadMode);
   const openImageDetail = useUIStore((s) => s.openImageDetail);
   const selectedImageId = useCameraStore((s) => s.selectedImageId);
   const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
@@ -412,7 +411,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
           imageId: img.imageId,
           name: img.name,
           file: getImageFile(imageFiles, img.name),
-          numPoints2D: img.points2D.length,
+          numPoints2D: img.numPoints2D ?? img.points2D.length,
           numPoints3D: stats?.numPoints3D ?? 0,
           cameraId: img.cameraId,
           cameraWidth: camera?.width ?? 0,
@@ -744,7 +743,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
                         onDoubleClick={handleDoubleClick}
                         onRightClick={handleRightClick}
                         isScrolling={debouncedIsScrolling}
-                        skipImages={imageLoadMode === 'skip'}
+                        skipImages={false}
                         isSettling={isSettling}
                         isResizing={isResizing}
                       />
@@ -783,7 +782,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
                       onDoubleClick={handleDoubleClick}
                       onRightClick={handleRightClick}
                       isScrolling={debouncedIsScrolling}
-                      skipImages={imageLoadMode === 'skip'}
+                      skipImages={false}
                       isSettling={isSettling}
                       isResizing={isResizing}
                     />

@@ -10,6 +10,7 @@ import { StatWithHistogram } from './StatWithHistogram';
 export function StatusBar() {
   const loading = useReconstructionStore((s) => s.loading);
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
+  const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
   const pointCount = useReconstructionStore(selectPointCount);
   const imageCount = useReconstructionStore(selectImageCount);
   const cameraCount = useReconstructionStore(selectCameraCount);
@@ -33,12 +34,14 @@ export function StatusBar() {
                   value={globalStats.avgTrackLength.toFixed(2)}
                   type="trackLength"
                   points3D={reconstruction.points3D}
+                  wasmReconstruction={wasmReconstruction}
                 />
                 <StatWithHistogram
                   label="Avg Reproj Error"
                   value={`${globalStats.avgError.toFixed(3)}px`}
                   type="error"
                   points3D={reconstruction.points3D}
+                  wasmReconstruction={wasmReconstruction}
                 />
               </>
             )}

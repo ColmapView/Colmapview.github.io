@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { STORAGE_KEYS } from '../migration';
-import type { MatchesDisplayMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, ImageLoadMode, GizmoMode } from '../types';
+import type { MatchesDisplayMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, GizmoMode } from '../types';
 
 export type ViewDirection = 'reset' | 'x' | 'y' | 'z';
 
@@ -108,11 +108,6 @@ export interface UIState {
   viewResetTrigger: number;
   viewDirection: ViewDirection | null;
   viewTrigger: number;
-  imageLoadMode: ImageLoadMode;
-
-  // Memory optimization
-  /** Threshold in MB for using lite parser (0 = always use full parser) */
-  liteParserThresholdMB: number;
 
   // Actions
   openImageDetail: (id: number) => void;
@@ -135,10 +130,8 @@ export interface UIState {
   setGizmoMode: (mode: GizmoMode) => void;
   resetView: () => void;
   setView: (direction: ViewDirection) => void;
-  setImageLoadMode: (mode: ImageLoadMode) => void;
   setGalleryCollapsed: (collapsed: boolean) => void;
   toggleGalleryCollapsed: () => void;
-  setLiteParserThresholdMB: (threshold: number) => void;
 
   // Context menu actions
   openContextMenu: (x: number, y: number) => void;
@@ -177,8 +170,6 @@ export const useUIStore = create<UIState>()(
       viewResetTrigger: 0,
       viewDirection: null,
       viewTrigger: 0,
-      imageLoadMode: 'lazy',
-      liteParserThresholdMB: 1000,
 
       openImageDetail: (imageDetailId) => set({ imageDetailId, matchedImageId: null }),
       closeImageDetail: () => set({ imageDetailId: null, matchedImageId: null }),
@@ -203,10 +194,8 @@ export const useUIStore = create<UIState>()(
         viewDirection: direction,
         viewTrigger: state.viewTrigger + 1,
       })),
-      setImageLoadMode: (imageLoadMode) => set({ imageLoadMode }),
       setGalleryCollapsed: (galleryCollapsed) => set({ galleryCollapsed }),
       toggleGalleryCollapsed: () => set((state) => ({ galleryCollapsed: !state.galleryCollapsed })),
-      setLiteParserThresholdMB: (liteParserThresholdMB) => set({ liteParserThresholdMB }),
 
       // Context menu actions
       openContextMenu: (x, y) => set({ contextMenuPosition: { x, y } }),
@@ -225,12 +214,19 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: STORAGE_KEYS.ui,
-      version: 3,
+      version: 6,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Record<string, unknown>;
         if (version < 3) {
           // Reset context menu actions to new defaults (added cycleAutoRotate)
           state.contextMenuActions = DEFAULT_CONTEXT_MENU_ACTIONS;
+        }
+        if (version < 6) {
+          // Clean up old parsing-related properties (now always WASM with lazy loading)
+          delete state.useWasmParser;
+          delete state.liteParserThresholdMB;
+          delete state.memoryStrategy;
+          delete state.imageLoadMode;
         }
         return state;
       },
@@ -249,10 +245,8 @@ export const useUIStore = create<UIState>()(
         axisLabelMode: state.axisLabelMode,
         backgroundColor: state.backgroundColor,
         gizmoMode: state.gizmoMode,
-        imageLoadMode: state.imageLoadMode,
         galleryCollapsed: state.galleryCollapsed,
         contextMenuActions: state.contextMenuActions,
-        liteParserThresholdMB: state.liteParserThresholdMB,
       }),
     }
   )

@@ -33,7 +33,7 @@ export const useTransformStore = create<TransformState>()((set, get) => ({
 
   applyPreset: (preset) => {
     const { transform } = get();
-    const reconstruction = useReconstructionStore.getState().reconstruction;
+    const { reconstruction, wasmReconstruction } = useReconstructionStore.getState();
     if (!reconstruction) return;
 
     if (preset === 'identity') {
@@ -48,7 +48,7 @@ export const useTransformStore = create<TransformState>()((set, get) => ({
       // Transform the reconstruction with the current transform first
       // so the preset is computed based on the current scene state
       const currentSim3d = createSim3dFromEuler(transform);
-      const transformedReconstruction = transformReconstruction(currentSim3d, reconstruction);
+      const transformedReconstruction = transformReconstruction(currentSim3d, reconstruction, wasmReconstruction);
 
       // Compute the preset based on the transformed state
       const presetSim3d = preset === 'centerAtOrigin'
@@ -69,11 +69,18 @@ export const useTransformStore = create<TransformState>()((set, get) => ({
 
   applyToData: () => {
     const { transform } = get();
-    const { reconstruction, setReconstruction } = useReconstructionStore.getState();
+    const { reconstruction, wasmReconstruction, setReconstruction, setWasmReconstruction } = useReconstructionStore.getState();
     if (!reconstruction) return;
 
     const sim3d = createSim3dFromEuler(transform);
-    const transformed = transformReconstruction(sim3d, reconstruction);
+    const transformed = transformReconstruction(sim3d, reconstruction, wasmReconstruction);
+
+    // After applying transform, the WASM wrapper is stale (positions changed)
+    // Clear it so we don't use outdated data
+    if (wasmReconstruction) {
+      setWasmReconstruction(null);
+    }
+
     setReconstruction(transformed);
     set({ transform: createIdentityEuler() });
   },

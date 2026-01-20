@@ -11,7 +11,7 @@ import { Html } from '@react-three/drei';
 import { useReconstructionStore, useCameraStore, useUIStore } from '../../store';
 import type { SelectionColorMode } from '../../store/types';
 import type { Camera, Image } from '../../types/colmap';
-import { getCameraIntrinsics } from '../../types/colmap';
+import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
 import { useGuideStore } from '../../store/stores/guideStore';
 import { getImageFile } from '../../utils/imageFileUtils';
 import { getImageWorldPosition, getImageWorldQuaternion } from '../../utils/colmapTransforms';
@@ -585,6 +585,7 @@ interface FrustumPlaneProps {
   showImagePlane: boolean;
   isSelected: boolean;
   isMatched?: boolean;
+  wouldGoBack?: boolean; // Whether right-click would navigate back in history
   selectionPlaneOpacity: number;
   color: string;
   cullAngleThreshold?: number; // Cosine of angle threshold for culling (default: COS_45_DEG)
@@ -592,6 +593,8 @@ interface FrustumPlaneProps {
   undistortionMode?: 'cropped' | 'fullFrame';
   /** Pre-computed count of matched 3D points (from imageStats) */
   numPoints3D: number;
+  /** Current hovered image ID from parent - used to sync local hover state */
+  hoveredImageId: number | null;
   onHover: (id: number | null) => void;
   onClick: (imageId: number) => void;
   onDoubleClick: (imageId: number) => void;
@@ -608,12 +611,14 @@ const FrustumPlane = memo(function FrustumPlane({
   showImagePlane,
   isSelected,
   isMatched = false,
+  wouldGoBack = false,
   selectionPlaneOpacity,
   color,
   cullAngleThreshold = COS_45_DEG,
   undistortionEnabled = false,
   undistortionMode = 'fullFrame',
   numPoints3D,
+  hoveredImageId,
   onHover,
   onClick,
   onDoubleClick,
@@ -622,6 +627,15 @@ const FrustumPlane = memo(function FrustumPlane({
   const [hovered, setHovered] = useState(false);
   const [viewAngleOk, setViewAngleOk] = useState(true);
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+
+  // Sync local hover state with parent - clear when parent clears hover or hovers different image
+  useEffect(() => {
+    if (hovered && hoveredImageId !== image.imageId) {
+      setHovered(false);
+      setMousePos(null);
+      document.body.style.cursor = '';
+    }
+  }, [hovered, hoveredImageId, image.imageId]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { camera: threeCamera, controls } = useThree() as any;
   const materialRef = useRef<THREE.MeshBasicMaterial>(null);
@@ -939,7 +953,7 @@ const FrustumPlane = memo(function FrustumPlane({
                   <path d="M12 2v8"/>
                   <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
                 </svg>
-                {isMatched ? 'Right: matches' : 'Right: fly to'}
+                {isMatched ? 'Right: matches' : wouldGoBack ? 'Right: back' : 'Right: goto'}
               </div>
             </div>
           </div>
@@ -956,8 +970,11 @@ interface ArrowHitTargetProps {
   image: Image;
   scale: number;
   isMatched?: boolean;
+  wouldGoBack?: boolean; // Whether right-click would navigate back in history
   /** Pre-computed count of matched 3D points (from imageStats) */
   numPoints3D: number;
+  /** Current hovered image ID from parent - used to sync local hover state */
+  hoveredImageId: number | null;
   onHover: (id: number | null) => void;
   onClick: (imageId: number) => void;
   onDoubleClick: (imageId: number) => void;
@@ -970,7 +987,9 @@ const ArrowHitTarget = memo(function ArrowHitTarget({
   image,
   scale,
   isMatched = false,
+  wouldGoBack = false,
   numPoints3D,
+  hoveredImageId,
   onHover,
   onClick,
   onDoubleClick,
@@ -980,6 +999,16 @@ const ArrowHitTarget = memo(function ArrowHitTarget({
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { controls } = useThree() as any;
+
+  // Sync local hover state with parent - clear when parent clears hover or hovers different image
+  useEffect(() => {
+    if (hovered && hoveredImageId !== image.imageId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: sync derived state from parent
+      setHovered(false);
+      setMousePos(null);
+      document.body.style.cursor = '';
+    }
+  }, [hovered, hoveredImageId, image.imageId]);
 
   // Check if camera controls are dragging (orbit/pan in progress)
   const isDragging = () => controls?.dragging?.current ?? false;
@@ -1067,7 +1096,7 @@ const ArrowHitTarget = memo(function ArrowHitTarget({
                   <path d="M12 2v8"/>
                   <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
                 </svg>
-                {isMatched ? 'Right: matches' : 'Right: fly to'}
+                {isMatched ? 'Right: matches' : wouldGoBack ? 'Right: back' : 'Right: goto'}
               </div>
             </div>
           </div>
@@ -1151,7 +1180,9 @@ export function CameraFrustums() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
   const cameraDisplayMode = useCameraStore((s) => s.cameraDisplayMode);
-  const cameraScale = useCameraStore((s) => s.cameraScale);
+  const cameraScaleBase = useCameraStore((s) => s.cameraScale);
+  const cameraScaleFactor = useCameraStore((s) => s.cameraScaleFactor);
+  const cameraScale = cameraScaleBase * parseFloat(cameraScaleFactor);
   const selectedImageId = useCameraStore((s) => s.selectedImageId);
   const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
   const selectionPlaneOpacity = useCameraStore((s) => s.selectionPlaneOpacity);
@@ -1164,10 +1195,13 @@ export function CameraFrustums() {
   const setMatchedImageId = useUIStore((s) => s.setMatchedImageId);
   const setShowMatchesInModal = useUIStore((s) => s.setShowMatchesInModal);
   const flyToImage = useCameraStore((s) => s.flyToImage);
+  const pushNavigationHistory = useCameraStore((s) => s.pushNavigationHistory);
+  const popNavigationHistory = useCameraStore((s) => s.popNavigationHistory);
+  const peekNavigationHistory = useCameraStore((s) => s.peekNavigationHistory);
+  const flyToState = useCameraStore((s) => s.flyToState);
   const selectionColorMode = useCameraStore((s) => s.selectionColorMode);
   const selectionColor = useCameraStore((s) => s.selectionColor);
   const selectionAnimationSpeed = useCameraStore((s) => s.selectionAnimationSpeed);
-  const imageLoadMode = useUIStore((s) => s.imageLoadMode);
   const frustumColorMode = useCameraStore((s) => s.frustumColorMode);
   const unselectedCameraOpacity = useCameraStore((s) => s.unselectedCameraOpacity);
   const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
@@ -1181,11 +1215,25 @@ export function CameraFrustums() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
   // Camera movement detection - pauses texture loading during orbit/pan
-  const { camera: threeCamera } = useThree();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { camera: threeCamera, controls, gl } = useThree() as any;
   const lastCameraPosRef = useRef(new THREE.Vector3());
   const lastCameraQuatRef = useRef(new THREE.Quaternion());
   const lastMoveTimeRef = useRef(0);
   const isCameraMovingRef = useRef(false);
+
+  // Track pending hover refresh after fly-to and last mouse position
+  const pendingHoverRefreshRef = useRef(false);
+  const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Track mouse position at document level for hover refresh after fly-to
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    return () => document.removeEventListener('mousemove', handleMouseMove);
+  }, []);
 
   // Detect camera movement and debounce texture loading (no setTimeout, pure frame-based)
   useFrame(() => {
@@ -1204,6 +1252,22 @@ export function CameraFrustums() {
     } else if (isCameraMovingRef.current && now - lastMoveTimeRef.current > TIMING.transitionBase) {
       isCameraMovingRef.current = false;
       resumeFrustumTextureCache();
+
+      // After fly-to completes, dispatch synthetic pointer event to refresh hover
+      if (pendingHoverRefreshRef.current && lastMousePosRef.current && gl?.domElement) {
+        pendingHoverRefreshRef.current = false;
+        const canvas = gl.domElement as HTMLCanvasElement;
+        // Dispatch a synthetic pointermove to trigger R3F's hover detection
+        const event = new PointerEvent('pointermove', {
+          clientX: lastMousePosRef.current.x,
+          clientY: lastMousePosRef.current.y,
+          bubbles: true,
+          cancelable: true,
+          pointerType: 'mouse',
+          pointerId: 1,
+        });
+        canvas.dispatchEvent(event);
+      }
     }
   });
 
@@ -1222,26 +1286,29 @@ export function CameraFrustums() {
   }, [reconstruction]);
 
   // Compute matched image IDs when matches are shown
+  // Uses pre-computed connectedImagesIndex (avoids iterating points3D Map)
   const matchedImageIds = useMemo(() => {
     if (!reconstruction || selectedImageId === null || matchesDisplayMode === 'off') {
       return new Set<number>();
     }
-    const selectedImage = reconstruction.images.get(selectedImageId);
-    if (!selectedImage) return new Set<number>();
 
-    const matched = new Set<number>();
-    for (const point2D of selectedImage.points2D) {
-      if (point2D.point3DId === BigInt(-1)) continue;
-      const point3D = reconstruction.points3D.get(point2D.point3DId);
-      if (!point3D) continue;
-      for (const trackElem of point3D.track) {
-        if (trackElem.imageId !== selectedImageId) {
-          matched.add(trackElem.imageId);
-        }
-      }
+    // Use pre-computed connectedImagesIndex - O(1) lookup
+    const connections = reconstruction.connectedImagesIndex.get(selectedImageId);
+    if (!connections) {
+      return new Set<number>();
     }
-    return matched;
+
+    // Return all connected image IDs (the keys of the connections map)
+    return new Set(connections.keys());
   }, [reconstruction, selectedImageId, matchesDisplayMode]);
+
+  // Get the last navigation target for "back" hint display
+  // Subscribe to navigationHistory directly so we react to changes
+  const navigationHistory = useCameraStore((s) => s.navigationHistory);
+  const lastNavigationToImageId = useMemo(() => {
+    if (navigationHistory.length === 0) return null;
+    return navigationHistory[navigationHistory.length - 1].toImageId;
+  }, [navigationHistory]);
 
   const frustums = useMemo(() => {
     if (!reconstruction || cameraDisplayMode === 'off') return [];
@@ -1307,10 +1374,45 @@ export function CameraFrustums() {
       return;
     }
 
-    // Prioritize texture loading, select, and fly to the image
+    // Prioritize texture loading
     if (frustum.imageFile) {
       prioritizeFrustumTexture(frustum.imageFile, frustum.image.name);
     }
+
+    // Get current view state from controls for navigation history
+    const getCurrentViewState = controls?.getCurrentViewState;
+    const lastEntry = peekNavigationHistory();
+
+    // Check if we're clicking the same image we just flew to (trace back)
+    if (getCurrentViewState && lastEntry && lastEntry.toImageId === imageId) {
+      // User wants to go back - pop and return
+      const entry = popNavigationHistory();
+      if (entry) {
+        // Clear hover state before flying - hover won't auto-update during camera movement
+        setHoveredImageId(null);
+        document.body.style.cursor = '';
+        // Signal to refresh hover after fly-to completes
+        pendingHoverRefreshRef.current = true;
+        flyToState(entry.fromState);
+        setSelectedImageId(entry.fromImageId);
+      }
+      return;
+    }
+
+    // Push current state and fly to the image
+    if (getCurrentViewState) {
+      const currentViewState = getCurrentViewState();
+      pushNavigationHistory({
+        fromState: currentViewState,
+        fromImageId: selectedImageId,
+        toImageId: imageId,
+      });
+    }
+    // Clear hover state before flying - hover won't auto-update during camera movement
+    setHoveredImageId(null);
+    document.body.style.cursor = '';
+    // Signal to refresh hover after fly-to completes
+    pendingHoverRefreshRef.current = true;
     setSelectedImageId(imageId);
     flyToImage(imageId);
 
@@ -1325,7 +1427,7 @@ export function CameraFrustums() {
         'Press U to toggle lens undistortion'
       );
     }
-  }, [frustums, flyToImage, setSelectedImageId, selectedImageId, matchedImageIds, openImageDetail, setMatchedImageId, setShowMatchesInModal]);
+  }, [frustums, flyToImage, setSelectedImageId, selectedImageId, matchedImageIds, openImageDetail, setMatchedImageId, setShowMatchesInModal, controls, peekNavigationHistory, popNavigationHistory, pushNavigationHistory, flyToState]);
 
   // Helper to prioritize texture loading for an image
   const prioritizeTextureForImage = useCallback((imageId: number) => {
@@ -1345,12 +1447,50 @@ export function CameraFrustums() {
   }, [contextMenu, setSelectedImageId, prioritizeTextureForImage]);
 
   const handleContextMenuGoto = useCallback(() => {
-    if (contextMenu) {
-      prioritizeTextureForImage(contextMenu.imageId);
-      flyToImage(contextMenu.imageId);
+    if (!contextMenu) return;
+
+    const targetImageId = contextMenu.imageId;
+    prioritizeTextureForImage(targetImageId);
+
+    // Get current view state from controls
+    const getCurrentViewState = controls?.getCurrentViewState;
+
+    // Clear hover state before flying - hover won't auto-update during camera movement
+    setHoveredImageId(null);
+    document.body.style.cursor = '';
+    // Signal to refresh hover after fly-to completes
+    pendingHoverRefreshRef.current = true;
+
+    if (!getCurrentViewState) {
+      // Fallback: just fly without history
+      flyToImage(targetImageId);
       setContextMenu(null);
+      return;
     }
-  }, [contextMenu, flyToImage, prioritizeTextureForImage]);
+
+    const currentViewState = getCurrentViewState();
+    const lastEntry = peekNavigationHistory();
+
+    // Check if we're clicking the same image we just flew to
+    if (lastEntry && lastEntry.toImageId === targetImageId) {
+      // User wants to go back - pop and return
+      const entry = popNavigationHistory();
+      if (entry) {
+        flyToState(entry.fromState);
+        setSelectedImageId(entry.fromImageId);
+      }
+    } else {
+      // Different image - push current state and fly
+      pushNavigationHistory({
+        fromState: currentViewState,
+        fromImageId: selectedImageId,
+        toImageId: targetImageId,
+      });
+      flyToImage(targetImageId);
+    }
+
+    setContextMenu(null);
+  }, [contextMenu, flyToImage, prioritizeTextureForImage, peekNavigationHistory, popNavigationHistory, pushNavigationHistory, flyToState, controls, selectedImageId, setSelectedImageId]);
 
   const handleContextMenuInfo = useCallback(() => {
     if (contextMenu) {
@@ -1391,7 +1531,7 @@ export function CameraFrustums() {
           unselectedCameraOpacity={unselectedCameraOpacity}
         />
         {/* Image plane for selected camera (replaces arrow) */}
-        {selectedFrustum && imageLoadMode !== 'skip' && (
+        {selectedFrustum && (
           <FrustumPlane
             position={selectedFrustum.position}
             quaternion={selectedFrustum.quaternion}
@@ -1401,11 +1541,13 @@ export function CameraFrustums() {
             imageFile={selectedFrustum.imageFile}
             showImagePlane={true}
             isSelected={true}
+            wouldGoBack={selectedFrustum.image.imageId === lastNavigationToImageId}
             selectionPlaneOpacity={selectionPlaneOpacity}
             color={selectionColorMode === 'rainbow' ? VIZ_COLORS.frustum.selected : selectionColor}
             undistortionEnabled={undistortionEnabled}
             undistortionMode={undistortionMode}
             numPoints3D={selectedFrustum.numPoints3D}
+            hoveredImageId={hoveredImageId}
             onHover={setHoveredImageId}
             onClick={handleArrowClick}
             onDoubleClick={handleArrowDoubleClick}
@@ -1424,7 +1566,9 @@ export function CameraFrustums() {
               image={f.image}
               scale={cameraScale}
               isMatched={matchedImageIds.has(f.image.imageId)}
+              wouldGoBack={f.image.imageId === lastNavigationToImageId}
               numPoints3D={f.numPoints3D}
+              hoveredImageId={hoveredImageId}
               onHover={setHoveredImageId}
               onClick={handleArrowClick}
               onDoubleClick={handleArrowDoubleClick}
@@ -1488,15 +1632,17 @@ export function CameraFrustums() {
               image={f.image}
               scale={cameraScale}
               imageFile={f.imageFile}
-              showImagePlane={imageLoadMode !== 'skip' && (selectedImageId === null || isSelected)}
+              showImagePlane={selectedImageId === null || isSelected}
               isSelected={isSelected}
               isMatched={isMatched}
+              wouldGoBack={f.image.imageId === lastNavigationToImageId}
               selectionPlaneOpacity={planeOpacity}
               color={frustumColor}
               cullAngleThreshold={COS_90_DEG}
               undistortionEnabled={undistortionEnabled}
               undistortionMode={undistortionMode}
               numPoints3D={f.numPoints3D}
+              hoveredImageId={hoveredImageId}
               onHover={setHoveredImageId}
               onClick={handleArrowClick}
               onDoubleClick={handleArrowDoubleClick}
@@ -1566,14 +1712,16 @@ export function CameraFrustums() {
               image={f.image}
               scale={cameraScale}
               imageFile={f.imageFile}
-              showImagePlane={imageLoadMode !== 'skip' && isSelected}
+              showImagePlane={isSelected}
               isSelected={isSelected}
               isMatched={isMatched}
+              wouldGoBack={f.image.imageId === lastNavigationToImageId}
               selectionPlaneOpacity={selectionPlaneOpacity}
               color={frustumColor}
               undistortionEnabled={undistortionEnabled}
               undistortionMode={undistortionMode}
               numPoints3D={f.numPoints3D}
+              hoveredImageId={hoveredImageId}
               onHover={setHoveredImageId}
               onClick={handleArrowClick}
               onDoubleClick={handleArrowDoubleClick}
@@ -1626,25 +1774,12 @@ export function CameraMatches() {
     if (!selectedImage) return null;
 
     const selectedPos = getImageWorldPosition(selectedImage);
-    const matchedImageIds = new Set<number>();
 
-    // Use pre-computed imageToPoint3DIds instead of iterating through points2D
-    // This works with lite parser that doesn't load points2D
-    const selectedPoint3DIds = reconstruction.imageToPoint3DIds.get(selectedImageId);
-    if (selectedPoint3DIds) {
-      for (const point3DId of selectedPoint3DIds) {
-        const point3D = reconstruction.points3D.get(point3DId);
-        if (!point3D) continue;
+    // Use pre-computed connectedImagesIndex (avoids iterating points3D Map)
+    const connections = reconstruction.connectedImagesIndex.get(selectedImageId);
+    if (!connections || connections.size === 0) return null;
 
-        for (const trackElem of point3D.track) {
-          if (trackElem.imageId !== selectedImageId) {
-            matchedImageIds.add(trackElem.imageId);
-          }
-        }
-      }
-    }
-
-    if (matchedImageIds.size === 0) return null;
+    const matchedImageIds = new Set(connections.keys());
 
     // Build flat array of positions: [start1, end1, start2, end2, ...]
     const positions: number[] = [];

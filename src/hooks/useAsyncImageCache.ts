@@ -568,6 +568,13 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
     },
 
     /**
+     * Get current cache generation (for tracking cache clears).
+     */
+    getCacheGeneration(): number {
+      return state.cacheGeneration;
+    },
+
+    /**
      * React hook to use this cache.
      */
     useCache(
@@ -578,6 +585,8 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
       const [result, setResult] = useState<T | null>(() => {
         return enabled && imageName ? state.cache.get(imageName) ?? null : null;
       });
+      // Track cache generation to detect cache clears
+      const [generation, setGeneration] = useState(state.cacheGeneration);
 
       useEffect(() => {
         if (!enabled || !imageFile || !imageName) {
@@ -585,11 +594,21 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
           return;
         }
 
+        // Check if cache was cleared (generation changed)
+        // If so, reset result immediately to avoid showing stale data
+        if (generation !== state.cacheGeneration) {
+          setGeneration(state.cacheGeneration);
+          setResult(null);
+        }
+
         const cached = state.cache.get(imageName);
         if (cached) {
           setResult(cached);
           return;
         }
+
+        // Not cached - clear any stale result while loading
+        setResult(null);
 
         let promise = state.loadingPromises.get(imageName);
         if (!promise) {
@@ -607,7 +626,7 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
         return () => {
           cancelled = true;
         };
-      }, [imageFile, imageName, enabled]);
+      }, [imageFile, imageName, enabled, generation]);
 
       return result;
     },
