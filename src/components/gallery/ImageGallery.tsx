@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef, memo, startTransition, useCallbac
 import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useReconstructionStore, useUIStore, useCameraStore } from '../../store';
-import { getImageFile } from '../../utils/imageFileUtils';
+import { getImageFile, getUrlImageCached, fetchUrlImage } from '../../utils/imageFileUtils';
 import { useThumbnail, pauseThumbnailCache, resumeThumbnailCache } from '../../hooks/useThumbnail';
 import { COLUMNS, GAP, SIZE, TIMING, buttonStyles, getTooltipProps, galleryStyles, listStyles, inputStyles, emptyStateStyles, toolbarStyles, hoverCardStyles, ICON_SIZES } from '../../theme';
 
@@ -334,6 +334,7 @@ interface ImageGalleryProps {
 export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
+  const imageUrlBase = useReconstructionStore((s) => s.imageUrlBase);
   const openImageDetail = useUIStore((s) => s.openImageDetail);
   const selectedImageId = useCameraStore((s) => s.selectedImageId);
   const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
@@ -344,6 +345,8 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const containerRef = useRef<HTMLDivElement>(null);
+  // Track URL image cache version to trigger re-renders when images are fetched
+  const [urlImageCacheVersion, setUrlImageCacheVersion] = useState(0);
 
   // Click handlers
   const handleClick = useCallback((imageId: number) => {
@@ -407,10 +410,20 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
         const stats = reconstruction.imageStats.get(img.imageId);
         const camera = reconstruction.cameras.get(img.cameraId);
 
+        // Get image file - use URL cache if in URL mode, otherwise local files
+        let file: File | undefined;
+        if (imageUrlBase) {
+          // URL mode: check cache first (sync)
+          file = getUrlImageCached(img.name);
+        } else {
+          // Local mode: use local file lookup
+          file = getImageFile(imageFiles, img.name);
+        }
+
         return {
           imageId: img.imageId,
           name: img.name,
-          file: getImageFile(imageFiles, img.name),
+          file,
           numPoints2D: img.numPoints2D ?? img.points2D.length,
           numPoints3D: stats?.numPoints3D ?? 0,
           cameraId: img.cameraId,
@@ -431,7 +444,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
     });
 
     return mapped;
-  }, [reconstruction, imageFiles, cameraFilter, sortField, sortDirection]);
+  }, [reconstruction, imageFiles, imageUrlBase, cameraFilter, sortField, sortDirection, urlImageCacheVersion]);
 
   // Handle shift+scroll to zoom with debouncing for performance
   const pendingColumnChange = useRef<number | null>(null);
@@ -532,6 +545,54 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
       }
     };
   }, [currentIsScrolling]);
+
+  // Fetch visible images from URL when in URL mode
+  useEffect(() => {
+    if (!imageUrlBase || !reconstruction || debouncedIsScrolling || isSettling) return;
+
+    // Get visible rows from virtualizer
+    const visibleItems = viewMode === 'gallery'
+      ? rowVirtualizer.getVirtualItems()
+      : listVirtualizer.getVirtualItems();
+
+    // Collect image names that need fetching
+    const toFetch: string[] = [];
+    for (const virtualItem of visibleItems) {
+      const rowImages = viewMode === 'gallery'
+        ? rows[virtualItem.index] || []
+        : [images[virtualItem.index]].filter(Boolean);
+
+      for (const img of rowImages) {
+        if (img && !getUrlImageCached(img.name)) {
+          toFetch.push(img.name);
+        }
+      }
+    }
+
+    if (toFetch.length === 0) return;
+
+    // Fetch images in parallel (limit concurrency)
+    let cancelled = false;
+    const fetchBatch = async () => {
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < toFetch.length && !cancelled; i += BATCH_SIZE) {
+        const batch = toFetch.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(
+          batch.map(name => fetchUrlImage(imageUrlBase, name))
+        );
+        // Trigger re-render if any images were fetched
+        if (!cancelled && results.some(f => f !== null)) {
+          setUrlImageCacheVersion(v => v + 1);
+        }
+      }
+    };
+
+    fetchBatch();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUrlBase, reconstruction, viewMode, rows, images, debouncedIsScrolling, isSettling, rowVirtualizer, listVirtualizer]);
 
   // Scroll to selected image when selection changes (e.g., from 3D viewer frustum click)
   useEffect(() => {

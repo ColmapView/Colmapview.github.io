@@ -185,12 +185,14 @@ function LoadingFallback() {
 }
 
 function BackgroundColor({ color }: { color: string }) {
-  const { scene } = useThree();
+  const { scene, invalidate } = useThree();
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability -- THREE.js scene requires direct property assignment
     scene.background = new THREE.Color(color);
-  }, [scene, color]);
+    // Force frame invalidation to ensure render happens after background change
+    invalidate();
+  }, [scene, color, invalidate]);
 
   return null;
 }

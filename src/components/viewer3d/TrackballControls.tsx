@@ -2,6 +2,7 @@ import { useRef, useEffect, useMemo } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useReconstructionStore, useCameraStore, useTransformStore, useUIStore, usePointPickingStore } from '../../store';
+import { decodeCameraState } from '../../hooks/useUrlState';
 import type { CameraViewState } from '../../store/types';
 import { getImageWorldPose } from '../../utils/colmapTransforms';
 import { createSim3dFromEuler } from '../../utils/sim3dTransforms';
@@ -48,6 +49,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const flyToImageId = useCameraStore((s) => s.flyToImageId);
   const clearFlyTo = useCameraStore((s) => s.clearFlyTo);
+  const setCurrentViewState = useCameraStore((s) => s.setCurrentViewState);
   const clearNavigationHistory = useCameraStore((s) => s.clearNavigationHistory);
   const cameraMode = useCameraStore((s) => s.cameraMode);
   const cameraProjection = useCameraStore((s) => s.cameraProjection);
@@ -694,24 +696,81 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
     angularVelocity.current.y = 0;
   }, [cameraMode, camera]);
 
+  // Helper to get current view state
+  const getCurrentViewState = (): CameraViewState => ({
+    position: [camera.position.x, camera.position.y, camera.position.z],
+    quaternion: [cameraQuat.current.x, cameraQuat.current.y, cameraQuat.current.z, cameraQuat.current.w],
+    target: [targetVec.current.x, targetVec.current.y, targetVec.current.z],
+    distance: distance.current,
+  });
+
   // Register controls with R3F so other components (e.g., TransformGizmo) can access them
   useEffect(() => {
     const controls = {
       enabled,
       dragging,
       wheelHandled,
-      getCurrentViewState: (): CameraViewState => ({
-        position: [camera.position.x, camera.position.y, camera.position.z],
-        quaternion: [cameraQuat.current.x, cameraQuat.current.y, cameraQuat.current.z, cameraQuat.current.w],
-        target: [targetVec.current.x, targetVec.current.y, targetVec.current.z],
-        distance: distance.current,
-      }),
+      getCurrentViewState,
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (set as (state: any) => void)({ controls });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return () => (set as (state: any) => void)({ controls: undefined });
   }, [set, camera]);
+
+  // Restore camera state from URL hash on mount
+  const hasRestoredFromUrl = useRef(false);
+
+  useEffect(() => {
+    if (hasRestoredFromUrl.current || !reconstruction) return;
+
+    const hash = window.location.hash;
+    if (!hash) return;
+
+    const state = decodeCameraState(hash);
+    if (!state) return;
+
+    hasRestoredFromUrl.current = true;
+
+    // Use instant positioning (no animation) for initial URL restore
+    targetVec.current.set(...state.target);
+    cameraQuat.current.set(...state.quaternion);
+    distance.current = state.distance;
+    targetDistance.current = state.distance;
+    camera.position.set(...state.position);
+    camera.quaternion.set(...state.quaternion);
+
+    console.log('[URL State] Restored camera state from URL hash');
+  }, [reconstruction, camera]);
+
+  // Sync view state to store for components outside R3F context (e.g., ShareButtonStandalone)
+  const viewStateSyncTimeout = useRef<number | null>(null);
+  const lastSyncedState = useRef<string>('');
+
+  useEffect(() => {
+    const syncViewState = () => {
+      const state = getCurrentViewState();
+      // Simple hash to detect changes
+      const stateHash = `${state.position.join(',')},${state.target.join(',')},${state.quaternion.join(',')}`;
+      if (stateHash !== lastSyncedState.current) {
+        lastSyncedState.current = stateHash;
+        setCurrentViewState(state);
+      }
+    };
+
+    // Sync on mount
+    syncViewState();
+
+    // Sync periodically (debounced via interval)
+    const interval = setInterval(syncViewState, 500);
+
+    return () => {
+      clearInterval(interval);
+      if (viewStateSyncTimeout.current) {
+        clearTimeout(viewStateSyncTimeout.current);
+      }
+    };
+  }, [camera, setCurrentViewState]);
 
   useEffect(() => {
     const canvas = gl.domElement;

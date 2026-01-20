@@ -1,0 +1,54 @@
+ColmapView
+Copyright (C) 2024-2025 OpsiClear LLC
+
+This software is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
+See the LICENSE file for the full license text.
+
+================================================================================
+ATTRIBUTION REQUIREMENT (AGPL-3.0 Section 7(b))
+================================================================================
+
+Pursuant to Section 7(b) of the GNU Affero General Public License v3.0, the
+following attribution requirements apply to all deployments of this software:
+
+1. FRONTEND ATTRIBUTION
+   Any deployment of this software that provides a user interface MUST display
+   the following attribution in a location visible to users (e.g., footer,
+   about page, or splash screen):
+
+   "Built with ColmapView by OpsiClear"
+
+   This attribution must include a hyperlink to the project repository:
+   https://github.com/colmapview/colmapview
+
+2. SOURCE CODE LINK
+   As required by AGPL-3.0 Section 13, network deployments must provide users
+   access to the corresponding source code. This requirement is satisfied by
+   including a visible "Source Code" link in the user interface.
+
+3. MODIFICATION NOTICE
+   If you have modified this software, you must clearly indicate that your
+   version is a modified version. Suggested text:
+
+   "Based on ColmapView (modified)" with link to your source repository.
+
+================================================================================
+THIRD-PARTY NOTICES
+================================================================================
+
+This software includes or depends on the following third-party components:
+
+- Three.js (MIT License) - https://threejs.org/
+- React (MIT License) - https://reactjs.org/
+- React Three Fiber (MIT License) - https://github.com/pmndrs/react-three-fiber
+- Zustand (MIT License) - https://github.com/pmndrs/zustand
+- Mantine UI (MIT License) - https://mantine.dev/
+
+See package.json for a complete list of dependencies and their licenses.
+
+================================================================================
+CONTACT
+================================================================================
+
+For questions about licensing or attribution requirements, please open an issue
+at: https://github.com/colmapview/colmapview/issues

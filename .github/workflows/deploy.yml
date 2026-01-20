@@ -3,51 +3,104 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']  # Semver tags only
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: pages-deploy
+  cancel-in-progress: false  # Queue, don't cancel (prevents corruption)
+
+env:
+  NODE_VERSION: '22'
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Determine deployment target
+        id: target
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME}"
+            echo "is_release=true" >> $GITHUB_OUTPUT
+            echo "version=$TAG" >> $GITHUB_OUTPUT
+            echo "base_path=/$TAG/" >> $GITHUB_OUTPUT
+          else
+            echo "is_release=false" >> $GITHUB_OUTPUT
+            echo "version=dev" >> $GITHUB_OUTPUT
+            echo "base_path=/dev/" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
-      - name: Install dependencies
-        run: npm ci
+      - run: npm ci
 
+      # Build for version/dev directory
       - name: Build
         run: npm run build
+        env:
+          VITE_BASE: ${{ steps.target.outputs.base_path }}
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      # Deploy to version directory (v0.3.2 or dev)
+      - name: Deploy to version directory
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: ./dist
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          destination_dir: ${{ steps.target.outputs.version }}
+          keep_files: true
+          commit_message: "Deploy ${{ steps.target.outputs.version }}"
 
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      # For releases: also update /latest/
+      - name: Rebuild for latest
+        if: steps.target.outputs.is_release == 'true'
+        run: npm run build
+        env:
+          VITE_BASE: /latest/
+
+      - name: Deploy to latest
+        if: steps.target.outputs.is_release == 'true'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          destination_dir: latest
+          keep_files: true
+          commit_message: "Update latest to ${{ steps.target.outputs.version }}"
+
+      # Update root redirect (only on release)
+      - name: Create root redirect
+        if: steps.target.outputs.is_release == 'true'
+        run: |
+          mkdir -p root
+          cat > root/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta http-equiv="refresh" content="0; url=/latest/">
+            <link rel="canonical" href="/latest/">
+            <title>ColmapView</title>
+          </head>
+          <body>
+            <p>Redirecting to <a href="/latest/">latest version</a>...</p>
+          </body>
+          </html>
+          EOF
+          touch root/.nojekyll
+
+      - name: Deploy root
+        if: steps.target.outputs.is_release == 'true'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./root
+          keep_files: true
+          commit_message: "Update root redirect"

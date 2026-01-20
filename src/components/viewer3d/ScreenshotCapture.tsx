@@ -3,6 +3,7 @@ import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useExportStore } from '../../store';
 import { SCREENSHOT } from '../../theme';
+import { publicAsset } from '../../utils/paths';
 
 export function ScreenshotCapture() {
   const { gl, scene, camera, size } = useThree();
@@ -16,7 +17,7 @@ export function ScreenshotCapture() {
   // Preload logo
   useEffect(() => {
     const img = new Image();
-    img.src = '/LOGO.png';
+    img.src = publicAsset('LOGO.png');
     img.onload = () => { logoRef.current = img; };
   }, []);
 

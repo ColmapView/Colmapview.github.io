@@ -99,6 +99,9 @@ export interface UIState {
   // Layout
   galleryCollapsed: boolean;
 
+  // Embed mode (hides gallery panel and button, set from URL parameter)
+  embedMode: boolean;
+
   // Context menu (persisted config + transient state)
   contextMenuActions: ContextMenuAction[];
   contextMenuPosition: { x: number; y: number } | null;
@@ -132,6 +135,7 @@ export interface UIState {
   setView: (direction: ViewDirection) => void;
   setGalleryCollapsed: (collapsed: boolean) => void;
   toggleGalleryCollapsed: () => void;
+  setEmbedMode: (embed: boolean) => void;
 
   // Context menu actions
   openContextMenu: (x: number, y: number) => void;
@@ -164,6 +168,7 @@ export const useUIStore = create<UIState>()(
       backgroundColor: '#ffffff',
       gizmoMode: 'off',
       galleryCollapsed: false,
+      embedMode: false,
       contextMenuActions: DEFAULT_CONTEXT_MENU_ACTIONS,
       contextMenuPosition: null,
       showContextMenuEditor: false,
@@ -196,6 +201,7 @@ export const useUIStore = create<UIState>()(
       })),
       setGalleryCollapsed: (galleryCollapsed) => set({ galleryCollapsed }),
       toggleGalleryCollapsed: () => set((state) => ({ galleryCollapsed: !state.galleryCollapsed })),
+      setEmbedMode: (embedMode) => set({ embedMode }),
 
       // Context menu actions
       openContextMenu: (x, y) => set({ contextMenuPosition: { x, y } }),

@@ -17,7 +17,7 @@ import type { RigData, Rig, Frame, RigSensor, FrameDataMapping, SensorId } from 
 import { SensorType } from '../types/rig';
 import { useReconstructionStore, useUIStore, useCameraStore, usePointCloudStore, useNotificationStore } from '../store';
 import type { Reconstruction, Camera, Image as ColmapImage, Point3D } from '../types/colmap';
-import { collectImageFiles, hasMaskFiles, findMissingImageFiles } from '../utils/imageFileUtils';
+import { collectImageFiles, hasMaskFiles, findMissingImageFiles, clearUrlImageCache } from '../utils/imageFileUtils';
 import { getFailedImageCount, clearSharedDecodeCache } from './useAsyncImageCache';
 import { clearThumbnailCache } from './useThumbnail';
 import { clearFrustumTextureCache } from './useFrustumTexture';
@@ -333,6 +333,7 @@ export function useFileDropzone() {
     setLoading,
     setError,
     setProgress,
+    setSourceInfo,
   } = useReconstructionStore();
   const resetView = useUIStore((s) => s.resetView);
   const closeImageDetail = useUIStore((s) => s.closeImageDetail);
@@ -621,6 +622,7 @@ export function useFileDropzone() {
       clearThumbnailCache();
       clearFrustumTextureCache();
       clearSharedDecodeCache();
+      clearUrlImageCache();
 
       // Reset UI state BEFORE setting new reconstruction to prevent stale data display
       // This ensures no race condition where React renders with new reconstruction but old UI state
@@ -637,6 +639,13 @@ export function useFileDropzone() {
       // This allows PointCloud.tsx to use the fast rendering path
       if (wasmWrapper) {
         setWasmReconstruction(wasmWrapper);
+      }
+
+      // Set source info to 'local' for drag-drop loading (URL loading sets this before calling processFiles)
+      // Only set if not already set by URL loader
+      const currentSourceType = useReconstructionStore.getState().sourceType;
+      if (!currentSourceType) {
+        setSourceInfo('local', null);
       }
 
       // Set reconstruction (this will set progress to 100 and loading to false)
@@ -725,6 +734,7 @@ export function useFileDropzone() {
     setLoading,
     setError,
     setProgress,
+    setSourceInfo,
     findColmapFiles,
     resetView,
     closeImageDetail,

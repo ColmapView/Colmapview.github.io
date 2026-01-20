@@ -10,6 +10,8 @@ import { isIdentityEuler } from '../../utils/sim3dTransforms';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { extractConfigurationFromStores, serializeConfigToYaml } from '../../config/configuration';
 import { hslToHex, hexToHsl } from '../../utils/colorUtils';
+import { generateShareableUrl, generateEmbedUrl, generateIframeHtml, copyWithFeedback } from '../../hooks/useUrlState';
+import { CheckIcon } from '../../icons';
 
 // Import icons from centralized icons folder
 import {
@@ -300,6 +302,10 @@ interface GalleryToggleButtonProps {
 const GalleryToggleButton = memo(function GalleryToggleButton({ activePanel, setActivePanel }: GalleryToggleButtonProps) {
   const galleryCollapsed = useUIStore((s) => s.galleryCollapsed);
   const toggleGalleryCollapsed = useUIStore((s) => s.toggleGalleryCollapsed);
+  const embedMode = useUIStore((s) => s.embedMode);
+
+  // Hide gallery toggle button in embed mode
+  if (embedMode) return null;
 
   return (
     <ControlButton
@@ -318,6 +324,9 @@ const GalleryToggleButton = memo(function GalleryToggleButton({ activePanel, set
 
 export function ViewerControls() {
   const [activePanel, setActivePanel] = useState<PanelType>(null);
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
+  const [copiedEmbedUrl, setCopiedEmbedUrl] = useState(false);
+  const [copiedEmbedHtml, setCopiedEmbedHtml] = useState(false);
 
   // Point cloud settings
   const pointSize = usePointCloudStore((s) => s.pointSize);
@@ -403,6 +412,14 @@ export function ViewerControls() {
   const setExportFormat = useExportStore((s) => s.setExportFormat);
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
+  const sourceType = useReconstructionStore((s) => s.sourceType);
+  const sourceUrl = useReconstructionStore((s) => s.sourceUrl);
+  const sourceManifest = useReconstructionStore((s) => s.sourceManifest);
+  const currentViewState = useCameraStore((s) => s.currentViewState);
+
+  // Check if share buttons should be shown (loaded from URL or manifest)
+  const canShare = (sourceType === 'url' || sourceType === 'manifest') && reconstruction;
+  const shareSource = sourceUrl ?? sourceManifest;
 
   // Rig settings (only shown when rig data is available)
   const rigDisplayMode = useRigStore((s) => s.rigDisplayMode);
@@ -441,6 +458,28 @@ export function ViewerControls() {
   }, [reconstruction]);
 
   const { hasRigData, cameraCount, frameCount } = rigInfo;
+
+  // Handle share link copy
+  const handleCopyShareLink = useCallback(async () => {
+    if (!shareSource) return;
+    const url = generateShareableUrl(shareSource, currentViewState);
+    await copyWithFeedback(url, setCopiedShareLink);
+  }, [shareSource, currentViewState]);
+
+  // Handle embed URL copy
+  const handleCopyEmbedUrl = useCallback(async () => {
+    if (!shareSource) return;
+    const embedUrl = generateEmbedUrl(shareSource, currentViewState);
+    await copyWithFeedback(embedUrl, setCopiedEmbedUrl);
+  }, [shareSource, currentViewState]);
+
+  // Handle embed HTML copy
+  const handleCopyEmbedHtml = useCallback(async () => {
+    if (!shareSource) return;
+    const embedUrl = generateEmbedUrl(shareSource, currentViewState);
+    const iframeHtml = generateIframeHtml(embedUrl);
+    await copyWithFeedback(iframeHtml, setCopiedEmbedHtml);
+  }, [shareSource, currentViewState]);
 
   // Handle export action
   const handleExport = useCallback(() => {
@@ -1462,6 +1501,46 @@ export function ViewerControls() {
         panelTitle="Export"
       >
         <div className={styles.panelContent}>
+          {/* Share buttons - only shown when loaded from URL or manifest */}
+          {canShare && (
+            <>
+              <div className="text-ds-secondary text-sm mb-2 font-medium">Share:</div>
+              <div className="flex flex-col gap-2 mb-4">
+                <button
+                  onClick={handleCopyShareLink}
+                  className={copiedShareLink ? styles.actionButtonPrimary : styles.actionButton}
+                >
+                  {copiedShareLink ? (
+                    <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
+                  ) : (
+                    'Share Link'
+                  )}
+                </button>
+                <button
+                  onClick={handleCopyEmbedUrl}
+                  className={copiedEmbedUrl ? styles.actionButtonPrimary : styles.actionButton}
+                >
+                  {copiedEmbedUrl ? (
+                    <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
+                  ) : (
+                    'Embed'
+                  )}
+                </button>
+                <button
+                  onClick={handleCopyEmbedHtml}
+                  className={copiedEmbedHtml ? styles.actionButtonPrimary : styles.actionButton}
+                >
+                  {copiedEmbedHtml ? (
+                    <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
+                  ) : (
+                    '<Embed>'
+                  )}
+                </button>
+              </div>
+            </>
+          )}
+
+          <div className="text-ds-secondary text-sm mb-2 font-medium">Export:</div>
           <div className="flex flex-col gap-2">
             <button
               onClick={() => { setExportFormat('binary'); if (reconstruction) exportReconstructionBinary(reconstruction, wasmReconstruction); }}
@@ -1549,6 +1628,44 @@ export function ViewerControls() {
             >
               Clear Settings
             </button>
+          </div>
+          <div className={styles.actionGroup}>
+            <button
+              onClick={() => {
+                const exampleManifest = {
+                  version: 1,
+                  name: "NGS Lady Bug Toy",
+                  baseUrl: "https://huggingface.co/datasets/OpsiClear/NGS/resolve/main/objects/scan_20250714_170841_lady_bug_toy",
+                  files: {
+                    cameras: "sparse/0/cameras.bin",
+                    images: "sparse/0/images.bin",
+                    points3D: "sparse/0/points3D.bin",
+                    rigs: "sparse/0/rigs.bin",
+                    frames: "sparse/0/frames.bin"
+                  },
+                  imagesPath: "images/",
+                  masksPath: "masks/"
+                };
+                const json = JSON.stringify(exampleManifest, null, 2);
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'manifest.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              }}
+              className={styles.actionButton}
+            >
+              Example Manifest
+            </button>
+          </div>
+          <div className="text-ds-secondary text-sm mt-3">
+            <div className="mb-1 font-medium">Manifest Format:</div>
+            <div>JSON file for loading COLMAP</div>
+            <div>reconstructions from URLs.</div>
           </div>
         </div>
       </ControlButton>

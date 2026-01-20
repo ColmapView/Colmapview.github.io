@@ -13,7 +13,7 @@ import type { SelectionColorMode } from '../../store/types';
 import type { Camera, Image } from '../../types/colmap';
 import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
 import { useGuideStore } from '../../store/stores/guideStore';
-import { getImageFile } from '../../utils/imageFileUtils';
+import { getImageFile, getUrlImageCached, fetchUrlImage } from '../../utils/imageFileUtils';
 import { getImageWorldPosition, getImageWorldQuaternion } from '../../utils/colmapTransforms';
 import { useFrustumTexture, useSelectedImageTexture, prioritizeFrustumTexture, pauseFrustumTextureCache, resumeFrustumTextureCache } from '../../hooks/useFrustumTexture';
 import { VIZ_COLORS, RAINBOW, OPACITY, TIMING, hoverCardStyles, ICON_SIZES, getCameraColor, contextMenuStyles, getMaterialTransparency } from '../../theme';
@@ -955,6 +955,9 @@ const FrustumPlane = memo(function FrustumPlane({
                 </svg>
                 {isMatched ? 'Right: matches' : wouldGoBack ? 'Right: back' : 'Right: goto'}
               </div>
+              {isSelected && (
+                <div className={hoverCardStyles.hintRow}>(U) undistort</div>
+              )}
             </div>
           </div>
         </Html>
@@ -1179,6 +1182,7 @@ interface ContextMenuState {
 export function CameraFrustums() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
+  const imageUrlBase = useReconstructionStore((s) => s.imageUrlBase);
   const cameraDisplayMode = useCameraStore((s) => s.cameraDisplayMode);
   const cameraScaleBase = useCameraStore((s) => s.cameraScale);
   const cameraScaleFactor = useCameraStore((s) => s.cameraScaleFactor);
@@ -1310,6 +1314,9 @@ export function CameraFrustums() {
     return navigationHistory[navigationHistory.length - 1].toImageId;
   }, [navigationHistory]);
 
+  // Track URL image cache updates to trigger re-renders
+  const [urlImageCacheVersion, setUrlImageCacheVersion] = useState(0);
+
   const frustums = useMemo(() => {
     if (!reconstruction || cameraDisplayMode === 'off') return [];
 
@@ -1327,19 +1334,29 @@ export function CameraFrustums() {
       const camera = reconstruction.cameras.get(image.cameraId);
       if (!camera) continue;
 
+      // Get image file - use URL cache if in URL mode, otherwise local files
+      let imageFile: File | undefined;
+      if (imageUrlBase) {
+        // URL mode: check cache first (sync)
+        imageFile = getUrlImageCached(image.name);
+      } else {
+        // Local mode: use local file lookup
+        imageFile = getImageFile(imageFiles, image.name);
+      }
+
       result.push({
         image,
         camera,
         position: getImageWorldPosition(image),
         quaternion: getImageWorldQuaternion(image),
-        imageFile: getImageFile(imageFiles, image.name),
+        imageFile,
         cameraIndex: cameraIdToIndex.get(image.cameraId) ?? 0,
         numPoints3D: reconstruction.imageStats.get(image.imageId)?.numPoints3D ?? 0,
       });
     }
 
     return result;
-  }, [reconstruction, cameraDisplayMode, imageFiles, cameraIdToIndex]);
+  }, [reconstruction, cameraDisplayMode, imageFiles, imageUrlBase, cameraIdToIndex, urlImageCacheVersion]);
 
   // Callbacks for arrow hit targets - use stable references to avoid breaking memo
   const handleArrowClick = useCallback((imageId: number) => {
@@ -1436,6 +1453,27 @@ export function CameraFrustums() {
       prioritizeFrustumTexture(frustum.imageFile, frustum.image.name);
     }
   }, [frustums]);
+
+  // Fetch URL image only for selected camera (URL mode only)
+  // Image planes just display cached images - no auto-fetching for hover
+  useEffect(() => {
+    if (!imageUrlBase || !reconstruction || selectedImageId === null) {
+      return;
+    }
+
+    const selectedImage = reconstruction.images.get(selectedImageId);
+    if (!selectedImage) return;
+
+    const cached = getUrlImageCached(selectedImage.name);
+    if (!cached) {
+      fetchUrlImage(imageUrlBase, selectedImage.name).then((file) => {
+        if (file) {
+          // Trigger re-render when image is cached
+          setUrlImageCacheVersion(v => v + 1);
+        }
+      });
+    }
+  }, [imageUrlBase, reconstruction, selectedImageId]);
 
   // Context menu action handlers
   const handleContextMenuSelect = useCallback(() => {

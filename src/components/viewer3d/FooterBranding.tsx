@@ -1,4 +1,5 @@
 import { SIZE, ICON_SIZES, footerStyles } from '../../theme';
+import { publicAsset } from '../../utils/paths';
 
 export function FooterBranding() {
   return (
@@ -10,7 +11,7 @@ export function FooterBranding() {
         className={footerStyles.logo}
         draggable={false}
       >
-        <img src="/LOGO.png" alt="Opsiclear" className={footerStyles.logoImage} style={{ height: SIZE.logoHeight }} draggable={false} />
+        <img src={publicAsset('LOGO.png')} alt="Opsiclear" className={footerStyles.logoImage} style={{ height: SIZE.logoHeight }} draggable={false} />
       </a>
       <div className={footerStyles.socialContainer}>
         <a

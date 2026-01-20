@@ -52,6 +52,9 @@ export interface CameraState {
   navigationHistory: NavigationHistoryEntry[];
   flyToViewState: CameraViewState | null;
 
+  // Current view state (for sharing URL outside R3F context)
+  currentViewState: CameraViewState | null;
+
   // Actions
   setCameraDisplayMode: (mode: CameraDisplayMode) => void;
   setCameraScaleFactor: (factor: CameraScaleFactor) => void;
@@ -85,6 +88,7 @@ export interface CameraState {
   clearNavigationHistory: () => void;
   flyToState: (state: CameraViewState) => void;
   clearFlyToViewState: () => void;
+  setCurrentViewState: (state: CameraViewState) => void;
 }
 
 export const useCameraStore = create<CameraState>()(
@@ -114,6 +118,7 @@ export const useCameraStore = create<CameraState>()(
       undistortionMode: 'fullFrame',
       navigationHistory: [],
       flyToViewState: null,
+      currentViewState: null,
 
       setCameraDisplayMode: (cameraDisplayMode) => set({ cameraDisplayMode }),
       setCameraScaleFactor: (cameraScaleFactor) => set({ cameraScaleFactor }),
@@ -166,6 +171,7 @@ export const useCameraStore = create<CameraState>()(
       clearNavigationHistory: () => set({ navigationHistory: [] }),
       flyToState: (flyToViewState: CameraViewState) => set({ flyToViewState }),
       clearFlyToViewState: () => set({ flyToViewState: null }),
+      setCurrentViewState: (currentViewState: CameraViewState) => set({ currentViewState }),
     }),
     {
       name: STORAGE_KEYS.camera,

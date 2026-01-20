@@ -22,6 +22,7 @@ export const buttonStyles = {
     xl: 'px-6 py-3 text-lg gap-3',
     toggle: 'px-4 py-1 text-sm gap-1.5', // Wide toggle button (matches hover panel style)
     toggleResponsive: 'px-4 py-1 text-xs gap-1', // Compact toggle button for modals
+    action: 'px-4 py-1.5 text-sm gap-2 min-w-[120px]', // Equal-width action buttons (startup panel)
     icon: 'p-1',         // Square icon button small
     iconMd: 'p-1.5',     // Square icon button medium
     iconLg: 'p-2',       // Square icon button large

@@ -9,6 +9,7 @@ import { mobileMessageStyles, LAYOUT_PANELS } from '../../theme';
 import { useUIStore } from '../../store/stores/uiStore';
 import { useReconstructionStore } from '../../store/reconstructionStore';
 import { useGuideStore } from '../../store/stores/guideStore';
+import { publicAsset } from '../../utils/paths';
 
 const MIN_PANEL_WIDTH = 300;
 const MAX_PANEL_WIDTH_PERCENT = 0.6; // 60% of window width
@@ -138,7 +139,7 @@ function MobileMessage() {
           target="_blank"
           rel="noopener noreferrer"
         >
-          <img src="/LOGO.png" alt="OpsiClear" style={{ height: '32px' }} />
+          <img src={publicAsset('LOGO.png')} alt="OpsiClear" style={{ height: '32px' }} />
         </a>
 
         {/* Social links on right */}
@@ -184,11 +185,16 @@ export function AppLayout() {
   useHotkeyScope(); // Manage hotkey scopes based on modal state
 
   const galleryCollapsed = useUIStore((s) => s.galleryCollapsed);
+  const embedMode = useUIStore((s) => s.embedMode);
   const { panelWidth, handleMouseDown, isResizing } = useResizablePanel(LAYOUT_PANELS.gallery.defaultSize);
+
+  // In embed mode, always hide gallery
+  const hideGallery = embedMode || galleryCollapsed;
 
   // Show context menu tip when reconstruction is first loaded
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const loading = useReconstructionStore((s) => s.loading);
+  const urlLoading = useReconstructionStore((s) => s.urlLoading);
   const hasShownContextMenuTipRef = useRef(false);
 
   useEffect(() => {
@@ -205,6 +211,12 @@ export function AppLayout() {
     return <MobileMessage />;
   }
 
+  // Skip rendering heavy components during URL loading - just show empty background
+  // The loading overlay is rendered by DropZone
+  if (urlLoading) {
+    return <div className="h-screen bg-ds-primary" />;
+  }
+
   return (
     <div className="h-screen flex flex-col bg-ds-primary">
       <div className="flex-1 flex overflow-hidden">
@@ -213,28 +225,30 @@ export function AppLayout() {
           <Scene3D />
         </div>
 
-        {/* Resize handle - hairline with hover highlight */}
-        {!galleryCollapsed && (
+        {/* Resize handle - hairline with hover highlight (hidden in embed mode) */}
+        {!hideGallery && (
           <div
             className="resize-handle"
             onMouseDown={handleMouseDown}
           />
         )}
 
-        {/* Gallery panel with smooth transition (disabled during resize) */}
-        <div
-          className={`overflow-hidden flex-shrink-0 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
-          style={{
-            width: galleryCollapsed ? 0 : panelWidth,
-          }}
-        >
-          <div className="h-full border-l border-ds" style={{ minWidth: `${MIN_PANEL_WIDTH}px` }}>
-            <ImageGallery isResizing={isResizing} />
+        {/* Gallery panel with smooth transition (disabled during resize, hidden in embed mode) */}
+        {!embedMode && (
+          <div
+            className={`overflow-hidden flex-shrink-0 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
+            style={{
+              width: hideGallery ? 0 : panelWidth,
+            }}
+          >
+            <div className="h-full border-l border-ds" style={{ minWidth: `${MIN_PANEL_WIDTH}px` }}>
+              <ImageGallery isResizing={isResizing} />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      <StatusBar />
+      {!embedMode && <StatusBar />}
       <ImageDetailModal />
     </div>
   );

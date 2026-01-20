@@ -1,11 +1,16 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
+import { useUrlLoader } from '../../hooks/useUrlLoader';
 import { useIsMobile } from '../../hooks/useIsMobile';
-import { useReconstructionStore } from '../../store';
+import { useReconstructionStore, hasUrlToLoad } from '../../store';
 import { STORAGE_KEYS } from '../../store/migration';
 import { parseConfigYaml, applyConfigurationToStores } from '../../config/configuration';
+import { ColmapManifestSchema } from '../../types/manifest';
+import { getRandomDataset, getDatasetUrl } from '../../constants/exampleDatasets';
 import { TIMING, buttonStyles, loadingStyles, toastStyles, dragOverlayStyles, emptyStateStyles } from '../../theme';
-import { ResetIcon, UploadIcon } from '../../icons';
+import { ResetIcon, UploadIcon, LinkIcon, FileJsonIcon } from '../../icons';
+import { UrlInputModal } from '../modals/UrlInputModal';
+import { publicAsset } from '../../utils/paths';
 
 interface DropZoneProps {
   children: React.ReactNode;
@@ -14,10 +19,53 @@ interface DropZoneProps {
 export function DropZone({ children }: DropZoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isPanelDismissed, setIsPanelDismissed] = useState(false);
+  const [isUrlModalOpen, setIsUrlModalOpen] = useState(false);
   const { handleDrop, handleDragOver, handleBrowse } = useFileDropzone();
+  const { loadFromUrl, loadFromManifest, urlLoading, urlProgress } = useUrlLoader();
   const { loading, progress, error, setError, reconstruction } = useReconstructionStore();
   const configInputRef = useRef<HTMLInputElement>(null);
+  const manifestInputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
+
+  // Handle URL loading from modal
+  const handleUrlLoad = useCallback(async (url: string) => {
+    setIsUrlModalOpen(false);
+    await loadFromUrl(url);
+  }, [loadFromUrl]);
+
+  // Handle manifest JSON file selection
+  const handleManifestFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const content = await file.text();
+      const data = JSON.parse(content);
+
+      // Validate with Zod
+      const result = ColmapManifestSchema.safeParse(data);
+      if (!result.success) {
+        const errors = result.error.issues.map((err) => `${err.path.join('.')}: ${err.message}`).join('; ');
+        setError(`Invalid manifest: ${errors}`);
+        return;
+      }
+
+      await loadFromManifest(result.data);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(`Failed to load manifest: ${message}`);
+    }
+
+    // Reset input so same file can be selected again
+    e.target.value = '';
+  }, [loadFromManifest, setError]);
+
+  // Handle Try a Toy! button - load random example
+  const handleLucky = useCallback(async () => {
+    const dataset = getRandomDataset();
+    console.log(`[Try a Toy] Loading random dataset: ${dataset.name}`);
+    await loadFromUrl(getDatasetUrl(dataset.scanId));
+  }, [loadFromUrl]);
 
   // Reset all persisted configuration to defaults
   const handleResetConfig = useCallback(() => {
@@ -113,34 +161,34 @@ export function DropZone({ children }: DropZoneProps) {
         </div>
       )}
 
-      {!reconstruction && !loading && !isDragOver && !isPanelDismissed && !isMobile && (
+      {!reconstruction && !loading && !urlLoading && !hasUrlToLoad() && !isDragOver && !isPanelDismissed && !isMobile && (
         <div className="absolute inset-0 flex items-center justify-center z-10">
-          <div className="flex flex-col bg-ds-secondary rounded-lg border border-ds p-6">
+          <div className="flex flex-col bg-ds-secondary rounded-lg border border-ds p-6 min-w-[420px]">
             {/* Header row: action buttons */}
             <div className="flex justify-between -mt-4 -mx-4 mb-2">
               <div className="flex gap-1">
                 <button
                   type="button"
-                  className="w-8 h-8 flex items-center justify-center text-ds-muted hover-ds-text-primary hover-bg-white-10 rounded transition-colors"
+                  className={`${buttonStyles.base} w-8 h-8 ${buttonStyles.variants.ghost}`}
                   onClick={handleResetConfig}
-                  title="Reset all settings to defaults"
+                  data-tooltip="Reset all settings to defaults"
                 >
                   <ResetIcon className="w-4 h-4" />
                 </button>
                 <button
                   type="button"
-                  className="w-8 h-8 flex items-center justify-center text-ds-muted hover-ds-text-primary hover-bg-white-10 rounded transition-colors"
+                  className={`${buttonStyles.base} w-8 h-8 ${buttonStyles.variants.ghost}`}
                   onClick={handleConfigUpload}
-                  title="Upload configuration file (.yaml)"
+                  data-tooltip="Upload configuration file (.yaml)"
                 >
                   <UploadIcon className="w-4 h-4" />
                 </button>
               </div>
               <button
                 type="button"
-                className="w-8 h-8 flex items-center justify-center text-ds-muted hover-ds-text-primary hover-bg-white-10 rounded transition-colors"
+                className={`${buttonStyles.base} w-8 h-8 ${buttonStyles.variants.ghost}`}
                 onClick={() => setIsPanelDismissed(true)}
-                title="Dismiss this panel"
+                data-tooltip="Dismiss this panel"
               >
                 ×
               </button>
@@ -155,7 +203,16 @@ export function DropZone({ children }: DropZoneProps) {
               onChange={handleConfigFileChange}
             />
 
-            {/* Content area */}
+            {/* Hidden file input for manifest.json upload */}
+            <input
+              ref={manifestInputRef}
+              type="file"
+              accept=".json"
+              className="hidden"
+              onChange={handleManifestFileChange}
+            />
+
+            {/* Main content area */}
             <div className="flex flex-col items-center">
               {/* Drop zone button with dotted border */}
               <div
@@ -175,6 +232,40 @@ export function DropZone({ children }: DropZoneProps) {
                 <div className="info-line px-2 rounded"><strong>Auto-detected:</strong> sparse/0/, sparse/, or any subfolder</div>
                 <div className="info-line px-2 rounded"><strong>Optional:</strong> source images (jpg, png, webp, tiff), config (.yaml), masks/</div>
                 <div className="info-line px-2 rounded text-ds-muted/70">Without source images: point cloud and cameras only, no textures</div>
+              </div>
+
+              {/* Action buttons row */}
+              <div className="flex gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsUrlModalOpen(true)}
+                  disabled={urlLoading}
+                  className={`${buttonStyles.base} ${buttonStyles.sizes.action} ${buttonStyles.variants.secondary} ${urlLoading ? buttonStyles.disabled : ''}`}
+                  data-tooltip="Load from URL"
+                >
+                  <LinkIcon className="w-3.5 h-3.5" />
+                  Load URL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => manifestInputRef.current?.click()}
+                  disabled={urlLoading}
+                  className={`${buttonStyles.base} ${buttonStyles.sizes.action} ${buttonStyles.variants.secondary} ${urlLoading ? buttonStyles.disabled : ''}`}
+                  data-tooltip="Load from manifest.json file"
+                >
+                  <FileJsonIcon className="w-3.5 h-3.5" />
+                  Load JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLucky}
+                  disabled={urlLoading}
+                  className={`${buttonStyles.base} ${buttonStyles.sizes.action} ${buttonStyles.variants.secondary} ${urlLoading ? buttonStyles.disabled : ''}`}
+                  data-tooltip="Play a random toy from OpsiClear"
+                >
+                  <img src={publicAsset('LOGO.png')} alt="" className="w-3.5 h-3.5" />
+                  Try a Toy!
+                </button>
               </div>
             </div>
 
@@ -202,6 +293,36 @@ export function DropZone({ children }: DropZoneProps) {
         </div>
       )}
 
+      {urlLoading && urlProgress && (
+        <div className={loadingStyles.overlay}>
+          <div className={loadingStyles.container}>
+            <div className={loadingStyles.dots}>
+              <div className={loadingStyles.dot} style={{ animationDelay: `${TIMING.bounceDelays[0]}ms` }} />
+              <div className={loadingStyles.dot} style={{ animationDelay: `${TIMING.bounceDelays[1]}ms` }} />
+              <div className={loadingStyles.dot} style={{ animationDelay: `${TIMING.bounceDelays[2]}ms` }} />
+            </div>
+            <div className={loadingStyles.text}>{urlProgress.message}</div>
+            <div className={loadingStyles.progressBar}>
+              <div
+                className={loadingStyles.progressFill}
+                style={{ width: `${urlProgress.percent}%` }}
+              />
+            </div>
+            <div className={loadingStyles.percentage}>{urlProgress.percent}%</div>
+            {urlProgress.currentFile && (
+              <div className="text-ds-muted text-xs mt-2 max-w-xs truncate">
+                {urlProgress.currentFile}
+              </div>
+            )}
+            {urlProgress.filesDownloaded !== undefined && urlProgress.totalFiles !== undefined && (
+              <div className="text-ds-muted/70 text-xs mt-1">
+                {urlProgress.filesDownloaded} / {urlProgress.totalFiles} files
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className={`${toastStyles.containerWithLayout} ${toastStyles.error}`}>
           <div className={toastStyles.content}>
@@ -216,6 +337,14 @@ export function DropZone({ children }: DropZoneProps) {
           </button>
         </div>
       )}
+
+      {/* URL Input Modal */}
+      <UrlInputModal
+        isOpen={isUrlModalOpen}
+        onClose={() => setIsUrlModalOpen(false)}
+        onLoad={handleUrlLoad}
+        loading={urlLoading}
+      />
 
     </div>
   );

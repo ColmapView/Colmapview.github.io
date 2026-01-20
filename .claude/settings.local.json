@@ -91,7 +91,10 @@
       "Bash(xxd:*)",
       "Bash(python3:*)",
       "Bash(uv run python:*)",
-      "Bash(./cmake-3.31.4-windows-x86_64/bin/cmake.exe:*)"
+      "Bash(./cmake-3.31.4-windows-x86_64/bin/cmake.exe:*)",
+      "Bash(node -e:*)",
+      "Bash(VITE_BASE=/v0.3.2/ npm run build:*)",
+      "Bash(set \"VITE_BASE=/v0.3.2/\")"
     ]
   }
 }

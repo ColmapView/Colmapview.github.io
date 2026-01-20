@@ -2,9 +2,9 @@ import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useReconstructionStore, useUIStore } from '../../store';
 import type { Camera, Point2D } from '../../types/colmap';
-import { getImageFile, getMaskFile } from '../../utils/imageFileUtils';
+import { getImageFile, getMaskFile, getUrlImageCached, fetchUrlImage, fetchUrlMask } from '../../utils/imageFileUtils';
 import { useFileUrl } from '../../hooks/useFileUrl';
-import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, MODAL, buttonStyles, inputStyles, resizeHandleStyles } from '../../theme';
+import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, MODAL, buttonStyles, inputStyles, resizeHandleStyles, modalStyles } from '../../theme';
 import { HOTKEYS } from '../../config/hotkeys';
 
 const CAMERA_MODEL_NAMES: Record<number, string> = {
@@ -341,7 +341,13 @@ const MAX_LAZY_CACHE_SIZE = 20;
 export function ImageDetailModal() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
+  const imageUrlBase = useReconstructionStore((s) => s.imageUrlBase);
+  const maskUrlBase = useReconstructionStore((s) => s.maskUrlBase);
   const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
+  // Track URL image cache version to trigger re-renders when images are fetched
+  const [urlImageCacheVersion, setUrlImageCacheVersion] = useState(0);
+  // Track mask file fetched from URL (lazy loaded, no cache)
+  const [urlMaskFile, setUrlMaskFile] = useState<File | null>(null);
   const imageDetailId = useUIStore((s) => s.imageDetailId);
   const closeImageDetail = useUIStore((s) => s.closeImageDetail);
   const openImageDetail = useUIStore((s) => s.openImageDetail);
@@ -431,6 +437,65 @@ export function ImageDetailModal() {
     setLazyPoints2D(newPoints);
   }, [imageDetailId, matchedImageId, showPoints2D, showPoints3D, showMatchesInModal, wasmReconstruction, reconstruction, lazyPoints2D]);
 
+  // Fetch URL images for current and matched images (URL mode only)
+  useEffect(() => {
+    if (!imageUrlBase || !reconstruction) return;
+
+    const imagesToFetch: string[] = [];
+
+    // Check if current image needs fetching
+    if (imageDetailId !== null) {
+      const currentImage = reconstruction.images.get(imageDetailId);
+      if (currentImage && !getUrlImageCached(currentImage.name)) {
+        imagesToFetch.push(currentImage.name);
+      }
+    }
+
+    // Check if matched image needs fetching
+    if (matchedImageId !== null) {
+      const matchedImg = reconstruction.images.get(matchedImageId);
+      if (matchedImg && !getUrlImageCached(matchedImg.name)) {
+        imagesToFetch.push(matchedImg.name);
+      }
+    }
+
+    if (imagesToFetch.length === 0) return;
+
+    // Fetch images in parallel
+    let cancelled = false;
+    Promise.all(imagesToFetch.map(name => fetchUrlImage(imageUrlBase, name))).then((results) => {
+      if (!cancelled && results.some(f => f !== null)) {
+        setUrlImageCacheVersion(v => v + 1);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUrlBase, reconstruction, imageDetailId, matchedImageId]);
+
+  // Fetch URL mask for current image (URL mode only, lazy loaded, no cache)
+  useEffect(() => {
+    // Clear mask when image changes
+    setUrlMaskFile(null);
+
+    if (!maskUrlBase || !reconstruction || imageDetailId === null) return;
+
+    const currentImage = reconstruction.images.get(imageDetailId);
+    if (!currentImage) return;
+
+    let cancelled = false;
+    fetchUrlMask(maskUrlBase, currentImage.name).then((file) => {
+      if (!cancelled) {
+        setUrlMaskFile(file);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [maskUrlBase, reconstruction, imageDetailId]);
+
   // Get sorted list of image IDs for navigation
   const imageIds = useMemo(() => {
     if (!reconstruction) return [];
@@ -505,10 +570,64 @@ export function ImageDetailModal() {
 
   const image = imageDetailId !== null ? reconstruction?.images.get(imageDetailId) : null;
   const camera = image ? reconstruction?.cameras.get(image.cameraId) : null;
-  const imageFile = image ? getImageFile(loadedFiles?.imageFiles, image.name) : null;
-  // Only look for mask if masks folder exists
-  const maskFile = (image && loadedFiles?.hasMasks) ? getMaskFile(loadedFiles?.imageFiles, image.name) : null;
+  // Get image file - use URL cache if in URL mode, otherwise local files
+  const imageFile = useMemo(() => {
+    if (!image) return null;
+    if (imageUrlBase) {
+      return getUrlImageCached(image.name) ?? null;
+    }
+    return getImageFile(loadedFiles?.imageFiles, image.name) ?? null;
+  }, [image, imageUrlBase, loadedFiles?.imageFiles, urlImageCacheVersion]);
+  // Get mask file - use URL fetched mask if in URL mode, otherwise local files
+  const maskFile = useMemo(() => {
+    if (!image) return null;
+    // URL mode: use lazy-loaded mask from URL
+    if (maskUrlBase) {
+      return urlMaskFile;
+    }
+    // Local mode: look for mask if masks folder exists
+    if (loadedFiles?.hasMasks) {
+      return getMaskFile(loadedFiles?.imageFiles, image.name) ?? null;
+    }
+    return null;
+  }, [image, maskUrlBase, urlMaskFile, loadedFiles?.hasMasks, loadedFiles?.imageFiles]);
   const hasMask = !!maskFile;
+
+  // Mask display mode: 'hover' (default), 'mask', 'image', 'split'
+  // - hover: mask shows on hover with 50% opacity
+  // - mask: mask fully visible
+  // - image: mask hidden
+  // - split: half image, half mask (vertical split at mouse X)
+  type MaskMode = 'hover' | 'mask' | 'image' | 'split';
+  const [maskMode, setMaskMode] = useState<MaskMode>('hover');
+  const [splitX, setSplitX] = useState(0.5); // Split position as fraction (0-1)
+
+  // Cycle through mask modes on click
+  const cycleMaskMode = useCallback(() => {
+    setMaskMode(prev => {
+      const modes: MaskMode[] = ['hover', 'mask', 'split', 'image'];
+      const currentIndex = modes.indexOf(prev);
+      return modes[(currentIndex + 1) % modes.length];
+    });
+  }, []);
+
+  // Track mouse position for split view
+  const handleMaskMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    setSplitX(Math.max(0, Math.min(1, x)));
+  }, []);
+
+  // Reset to hover mode when mouse leaves the image area
+  const handleMaskMouseLeave = useCallback(() => {
+    setMaskMode('hover');
+  }, []);
+
+  // Reset mask mode when image changes
+  useEffect(() => {
+    setMaskMode('hover');
+    setSplitX(0.5);
+  }, [imageDetailId]);
 
   // Create blob URLs for images with automatic cleanup
   const imageSrc = useFileUrl(imageFile);
@@ -639,7 +758,14 @@ export function ImageDetailModal() {
 
   // Get matched image related data (matchedImage is declared earlier, before effectiveMatchedPoints2D)
   const matchedCamera = matchedImage ? reconstruction?.cameras.get(matchedImage.cameraId) : null;
-  const matchedImageFile = matchedImage ? getImageFile(loadedFiles?.imageFiles, matchedImage.name) : null;
+  // Get matched image file - use URL cache if in URL mode, otherwise local files
+  const matchedImageFile = useMemo(() => {
+    if (!matchedImage) return null;
+    if (imageUrlBase) {
+      return getUrlImageCached(matchedImage.name) ?? null;
+    }
+    return getImageFile(loadedFiles?.imageFiles, matchedImage.name) ?? null;
+  }, [matchedImage, imageUrlBase, loadedFiles?.imageFiles, urlImageCacheVersion]);
   const matchedImageSrc = useFileUrl(matchedImageFile);
 
   // Compute match lines between current and matched image
@@ -937,13 +1063,13 @@ export function ImageDetailModal() {
   return (
     <div className="fixed inset-0 z-[1000] pointer-events-none">
       <div
-        className="absolute inset-0 bg-ds-void/50 pointer-events-auto"
+        className={modalStyles.backdrop}
         onClick={closeImageDetail}
         onContextMenu={(e) => { e.preventDefault(); closeImageDetail(); }}
       />
 
       <div
-        className="absolute bg-ds-tertiary rounded-lg shadow-ds-lg flex flex-col pointer-events-auto"
+        className={modalStyles.panel}
         style={{
           left: position.x,
           top: position.y,
@@ -953,7 +1079,7 @@ export function ImageDetailModal() {
         onClick={(e) => e.stopPropagation()}
       >
         <div
-          className="flex items-center justify-between px-4 py-2 cursor-move select-none rounded-t-lg bg-ds-secondary text-xs"
+          className={`${modalStyles.header} rounded-t-lg bg-ds-secondary text-xs border-b-0`}
           onMouseDown={handleDragStart}
         >
           <span className="text-ds-primary">
@@ -964,9 +1090,9 @@ export function ImageDetailModal() {
           <button
             onClick={closeImageDetail}
             onMouseDown={(e) => e.stopPropagation()}
-            className="text-ds-muted hover-ds-text-primary leading-none cursor-pointer px-1"
+            className={modalStyles.closeButton}
           >
-            ✕
+            ×
           </button>
         </div>
 
@@ -977,10 +1103,15 @@ export function ImageDetailModal() {
 
           <div className="flex-1 min-h-0 flex flex-col">
             <div ref={imageContainerRef} className="group/scroll relative flex-1 min-h-0 bg-ds-secondary rounded overflow-hidden">
-              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 px-2 py-1 bg-ds-void/70 text-ds-secondary text-xs rounded opacity-0 group-hover/scroll:opacity-100 transition-opacity pointer-events-none">
-                {showMatchesInModal && connectedImages.length > 0
-                  ? 'Scroll to iterate through matched images'
-                  : 'Scroll to iterate through images'}
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 px-2 py-1 bg-ds-void/70 text-ds-secondary text-xs rounded opacity-0 group-hover/scroll:opacity-100 transition-opacity pointer-events-none whitespace-nowrap flex gap-3">
+                <span>
+                  Scroll: iterate through {showMatchesInModal && connectedImages.length > 0 ? 'matched images' : 'images'}
+                </span>
+                {hasMask && maskSrc && !showMatchesInModal && (
+                  <span>
+                    Click: <span className="text-ds-primary">{maskMode}</span> → {maskMode === 'hover' ? 'mask' : maskMode === 'mask' ? 'split' : maskMode === 'split' ? 'image' : 'hover'}
+                  </span>
+                )}
               </div>
               {isMatchViewMode ? (
                 (() => {
@@ -1081,19 +1212,29 @@ export function ImageDetailModal() {
                   const offsetY = (containerSize.height - renderedImageHeight) / 2;
 
                   return (
-                    <div className="group absolute inset-0">
+                    <div
+                      className="group absolute inset-0"
+                      onClick={hasMask && maskSrc ? cycleMaskMode : undefined}
+                      onMouseMove={hasMask && maskSrc ? handleMaskMouseMove : undefined}
+                      onMouseLeave={hasMask && maskSrc ? handleMaskMouseLeave : undefined}
+                      style={{ cursor: hasMask && maskSrc ? 'pointer' : undefined }}
+                    >
                       {/* Image or placeholder - absolutely positioned to match KeypointCanvas */}
                       {renderedImageWidth > 0 && (imageSrc ? (
                         <>
                           <img
                             src={imageSrc}
                             alt={image.name}
-                            className="absolute object-contain"
+                            className="absolute object-contain pointer-events-none"
                             style={{
                               width: renderedImageWidth,
                               height: renderedImageHeight,
                               left: offsetX,
                               top: offsetY,
+                              // Hide image in mask-only mode
+                              opacity: maskMode === 'mask' ? 0 : 1,
+                              // Clip image in split mode (show left portion)
+                              clipPath: maskMode === 'split' ? `inset(0 ${(1 - splitX) * 100}% 0 0)` : undefined,
                             }}
                             draggable={false}
                           />
@@ -1101,12 +1242,20 @@ export function ImageDetailModal() {
                             <img
                               src={maskSrc}
                               alt="mask"
-                              className="absolute object-contain pointer-events-none opacity-0 group-hover:opacity-50"
+                              className={`absolute object-contain pointer-events-none ${
+                                maskMode === 'hover' ? 'opacity-0 group-hover:opacity-50' : ''
+                              }`}
                               style={{
                                 width: renderedImageWidth,
                                 height: renderedImageHeight,
                                 left: offsetX,
                                 top: offsetY,
+                                // Opacity based on mode (not applied in hover mode - uses CSS)
+                                ...(maskMode !== 'hover' && {
+                                  opacity: maskMode === 'image' ? 0 : 1,
+                                }),
+                                // Clip mask in split mode (show right portion)
+                                clipPath: maskMode === 'split' ? `inset(0 0 0 ${splitX * 100}%)` : undefined,
                               }}
                               draggable={false}
                             />

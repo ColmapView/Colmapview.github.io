@@ -35,6 +35,11 @@ export {
   FlyToIcon,
   InfoIcon,
   WarningIcon,
+  LinkIcon,
+  ShareIcon,
+  DiceIcon,
+  FileJsonIcon,
+  EmbedIcon,
 } from './ui';
 
 // Toolbar icons

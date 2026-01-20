@@ -7,7 +7,7 @@ import {
   formatKeyCombo,
   type HotkeyCategory,
 } from '../../config/hotkeys';
-import { buttonStyles, tableStyles } from '../../theme';
+import { buttonStyles, tableStyles, modalStyles } from '../../theme';
 
 /**
  * Modal that displays all available keyboard shortcuts.
@@ -43,12 +43,12 @@ export function HotkeyHelpModal() {
     <div className="fixed inset-0 z-[1100] pointer-events-none">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-ds-void/50 pointer-events-auto"
+        className={modalStyles.backdrop}
         onClick={() => setIsOpen(false)}
       />
 
       {/* Panel */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-ds-tertiary rounded-lg shadow-ds-lg p-6 pointer-events-auto max-w-lg w-full max-h-[80vh] overflow-auto">
+      <div className={`${modalStyles.panel} top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 p-6 max-w-lg w-full max-h-[80vh] overflow-auto`}>
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-ds-primary text-lg font-semibold">Keyboard Shortcuts</h2>

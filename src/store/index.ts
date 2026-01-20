@@ -3,7 +3,8 @@ export {
   useReconstructionStore,
   selectPointCount,
   selectImageCount,
-  selectCameraCount
+  selectCameraCount,
+  hasUrlToLoad,
 } from './reconstructionStore';
 
 // Domain stores
