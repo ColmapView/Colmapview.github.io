@@ -18,6 +18,7 @@ import type {
 import { CameraModelId, UNMATCHED_POINT3D_ID } from '../types/colmap';
 import type { Rig, Frame, RigId, FrameId } from '../types/rig';
 import type { WasmReconstructionWrapper } from '../wasm/reconstruction';
+import type { Point2D } from '../types/colmap';
 
 /**
  * Get points3D Map, building it on-demand from WASM if needed.
@@ -155,14 +156,31 @@ export function writeCamerasText(cameras: Map<CameraId, Camera>): string {
  * #   IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME
  * #   POINTS2D[] as (X, Y, POINT3D_ID)
  * # Number of images: N, mean observations per image: M
+ *
+ * @param images - Map of images to write
+ * @param wasmReconstruction - Optional WASM wrapper to retrieve 2D points from when
+ *                             points2D array is empty (hybrid/lazy loading mode)
  */
-export function writeImagesText(images: Map<ImageId, Image>): string {
+export function writeImagesText(
+  images: Map<ImageId, Image>,
+  wasmReconstruction?: WasmReconstructionWrapper | null
+): string {
   const lines: string[] = [];
+
+  // Helper to get points2D for an image (from memory or WASM)
+  const getPoints2D = (img: Image): Point2D[] => {
+    if (img.points2D.length > 0) return img.points2D;
+    if (wasmReconstruction) {
+      return wasmReconstruction.getImagePoints2DArray(img.imageId);
+    }
+    return [];
+  };
 
   // Compute mean observations per image
   let totalObs = 0;
   for (const img of images.values()) {
-    totalObs += img.points2D.filter((p) => p.point3DId !== UNMATCHED_POINT3D_ID).length;
+    const points2D = getPoints2D(img);
+    totalObs += points2D.filter((p) => p.point3DId !== UNMATCHED_POINT3D_ID).length;
   }
   const meanObs = images.size > 0 ? (totalObs / images.size).toFixed(6) : '0';
 
@@ -195,7 +213,8 @@ export function writeImagesText(images: Map<ImageId, Image>): string {
     );
 
     // Line 2: 2D points (X Y POINT3D_ID triplets)
-    const points2DStr = img.points2D
+    const points2D = getPoints2D(img);
+    const points2DStr = points2D
       .map((p) => `${formatDouble(p.xy[0])} ${formatDouble(p.xy[1])} ${toTextPoint3DId(p.point3DId)}`)
       .join(' ');
     lines.push(points2DStr);
@@ -305,8 +324,15 @@ export function writeCamerasBinary(cameras: Map<CameraId, Camera>): ArrayBuffer 
  *     - double: x
  *     - double: y
  *     - uint64: point3D_id (UINT64_MAX if unmatched)
+ *
+ * @param images - Map of images to write
+ * @param wasmReconstruction - Optional WASM wrapper to retrieve 2D points from when
+ *                             points2D array is empty (hybrid/lazy loading mode)
  */
-export function writeImagesBinary(images: Map<ImageId, Image>): ArrayBuffer {
+export function writeImagesBinary(
+  images: Map<ImageId, Image>,
+  wasmReconstruction?: WasmReconstructionWrapper | null
+): ArrayBuffer {
   const writer = new BinaryWriter();
 
   writer.writeUint64FromNumber(images.size);
@@ -330,8 +356,16 @@ export function writeImagesBinary(images: Map<ImageId, Image>): ArrayBuffer {
     writer.writeUint32(img.cameraId);
     writer.writeString(img.name);
 
-    writer.writeUint64FromNumber(img.points2D.length);
-    for (const pt2D of img.points2D) {
+    // Get 2D points: prefer in-memory data, fall back to WASM if available
+    let points2D: Point2D[] = img.points2D;
+    if (points2D.length === 0 && wasmReconstruction) {
+      // In hybrid/lazy mode, 2D points are stored in WASM memory
+      // Load them on-demand for export
+      points2D = wasmReconstruction.getImagePoints2DArray(imageId);
+    }
+
+    writer.writeUint64FromNumber(points2D.length);
+    for (const pt2D of points2D) {
       writer.writeFloat64(pt2D.xy[0]);
       writer.writeFloat64(pt2D.xy[1]);
       // Convert to COLMAP's uint64 format (UINT64_MAX for unmatched)
@@ -661,7 +695,7 @@ export function exportReconstructionText(
   const points3D = getPoints3DForExport(reconstruction, wasmReconstruction);
 
   downloadFile(writeCamerasText(reconstruction.cameras), 'cameras.txt');
-  downloadFile(writeImagesText(reconstruction.images), 'images.txt');
+  downloadFile(writeImagesText(reconstruction.images, wasmReconstruction), 'images.txt');
   downloadFile(writePoints3DText(points3D), 'points3D.txt');
 
   // Export rig data if available
@@ -690,7 +724,7 @@ export function exportReconstructionBinary(
   const points3D = getPoints3DForExport(reconstruction, wasmReconstruction);
 
   downloadFile(writeCamerasBinary(reconstruction.cameras), 'cameras.bin');
-  downloadFile(writeImagesBinary(reconstruction.images), 'images.bin');
+  downloadFile(writeImagesBinary(reconstruction.images, wasmReconstruction), 'images.bin');
   downloadFile(writePoints3DBinary(points3D), 'points3D.bin');
 
   // Export rig data if available

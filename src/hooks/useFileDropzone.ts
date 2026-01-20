@@ -229,16 +229,27 @@ function findConfigFile(files: Map<string, File>): File | null {
   return null;
 }
 
-/** Compute scene radius from camera positions for auto-scaling frustums */
-function computeSceneRadius(images: Map<number, ColmapImage>): number {
-  if (images.size === 0) return 1;
+/**
+ * Compute optimal camera frustum scale based on camera spacing.
+ * Uses nearest-neighbor distances to prevent overcrowding in dense captures
+ * while keeping frustums visible in sparse reconstructions.
+ */
+function computeAutoFrustumScale(images: Map<number, ColmapImage>): number {
+  if (images.size === 0) return 0.25; // Default fallback
 
   const positions: Array<{ x: number; y: number; z: number }> = [];
   for (const image of images.values()) {
     positions.push(getImageWorldPosition(image));
   }
 
-  // Use simple bounding box approach
+  // Single camera: use a reasonable default based on origin distance
+  if (positions.length === 1) {
+    const pos = positions[0];
+    const distFromOrigin = Math.sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
+    return Math.max(distFromOrigin * 0.1, 0.1);
+  }
+
+  // Compute bounding box for fallback and upper limit
   let minX = Infinity, maxX = -Infinity;
   let minY = Infinity, maxY = -Infinity;
   let minZ = Infinity, maxZ = -Infinity;
@@ -249,7 +260,54 @@ function computeSceneRadius(images: Map<number, ColmapImage>): number {
     minZ = Math.min(minZ, pos.z); maxZ = Math.max(maxZ, pos.z);
   }
 
-  return Math.max(maxX - minX, maxY - minY, maxZ - minZ, 0.001) / 2;
+  const sceneExtent = Math.max(maxX - minX, maxY - minY, maxZ - minZ, 0.001);
+
+  // Compute nearest-neighbor distance for each camera
+  // This gives us a measure of camera density/spacing
+  const nearestDistances: number[] = [];
+
+  for (let i = 0; i < positions.length; i++) {
+    let minDist = Infinity;
+    const pi = positions[i];
+
+    for (let j = 0; j < positions.length; j++) {
+      if (i === j) continue;
+      const pj = positions[j];
+      const dx = pi.x - pj.x;
+      const dy = pi.y - pj.y;
+      const dz = pi.z - pj.z;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (dist < minDist) minDist = dist;
+    }
+
+    if (minDist !== Infinity) {
+      nearestDistances.push(minDist);
+    }
+  }
+
+  if (nearestDistances.length === 0) {
+    // Fallback to scene extent method
+    return sceneExtent * 0.05;
+  }
+
+  // Sort and take the 25th percentile of nearest-neighbor distances
+  // This avoids outliers (cameras far from the rest) from inflating the scale
+  nearestDistances.sort((a, b) => a - b);
+  const percentileIndex = Math.floor(nearestDistances.length * 0.25);
+  const typicalSpacing = nearestDistances[percentileIndex];
+
+  // Scale frustum to be a fraction of typical camera spacing
+  // Using 30% of spacing prevents overlap while keeping frustums visible
+  let autoScale = typicalSpacing * 0.3;
+
+  // Clamp to reasonable bounds relative to scene size
+  // Lower bound: 0.5% of scene extent (don't make frustums invisible)
+  // Upper bound: 10% of scene extent (don't make frustums huge)
+  const minScale = sceneExtent * 0.005;
+  const maxScale = sceneExtent * 0.1;
+  autoScale = Math.max(minScale, Math.min(maxScale, autoScale));
+
+  return autoScale;
 }
 
 function hasColmapFiles(files: Map<string, File>): boolean {
@@ -585,9 +643,8 @@ export function useFileDropzone() {
       // Note: setReconstruction will NOT dispose the wasmWrapper since we set it first
       setReconstruction(reconstruction);
 
-      // Auto-scale camera frustums based on scene size
-      const sceneRadius = computeSceneRadius(images);
-      const autoScale = sceneRadius * 0.05; // 5% of scene extent
+      // Auto-scale camera frustums based on camera spacing
+      const autoScale = computeAutoFrustumScale(images);
       setCameraScale(autoScale);
 
       // Reset view after reconstruction is set
