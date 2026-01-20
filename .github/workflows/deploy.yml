@@ -10,7 +10,9 @@ permissions:
   contents: write
 
 concurrency:
-  group: pages-deploy
+  # Separate queues for main (dev) and tags (releases) to prevent cancellation
+  # when pushing both at the same time
+  group: pages-deploy-${{ github.ref_type }}
   cancel-in-progress: false  # Queue, don't cancel (prevents corruption)
 
 env:
