@@ -8,12 +8,15 @@ View point clouds, camera frustums, and image matches directly in your browser. 
 
 ## Features
 
-- **3D Point Cloud Visualization** - View colored point clouds with adjustable point size and color modes (RGB, reprojection error, track length)
-- **Camera Frustums** - Display camera positions and orientations with optional image plane textures
-- **Image Gallery** - Browse reconstruction images in grid or list view with camera filtering
-- **Match Visualization** - Side-by-side view of matched images with green connecting lines
-- **Interactive Controls** - Smooth trackball navigation with zoom, pan, and fly-to-camera
-- **Rainbow Mode** - Animated color cycling for selected points and cameras
+- **3D Point Cloud Visualization** - Color modes: RGB, reprojection error, track length. Filter by track length and error.
+- **Camera Frustums** - Multiple display modes (frustum, arrow, image plane). Color by camera or rig frame.
+- **Multi-Camera Rig Support** - Visualize rig connections and color cameras by synchronized frame.
+- **Sim3D Transform Tools** - Scale, rotate, translate. 1-point origin, 2-point scale, 3-point plane alignment.
+- **Lens Undistortion** - Real-time undistortion preview for all COLMAP camera models.
+- **Image Gallery** - Grid/list view with camera filtering and thumbnail size control.
+- **Match Visualization** - Side-by-side matched images with feature point connections.
+- **URL Sharing & Embed** - Share reconstructions via URL. Embed viewer in external pages.
+- **Export** - COLMAP binary/text, PLY point clouds, configuration presets.
 
 ## Usage
 
@@ -47,9 +50,18 @@ View point clouds, camera frustums, and image matches directly in your browser. 
 ### Keyboard
 | Action | Key |
 |--------|-----|
+| Reset view | R |
+| Toggle axes/grid | G |
+| Toggle background | B |
+| Cycle camera mode | C |
+| Cycle frustum display | F |
+| Cycle point color mode | P |
+| Toggle matches | M |
+| Toggle undistortion | U |
+| Transform gizmo | T |
+| Axis views | 1, 2, 3 |
 | Close modal | Escape |
-| Previous image | Left Arrow |
-| Next image | Right Arrow |
+| Navigate images | ← → |
 
 ## Links
 
