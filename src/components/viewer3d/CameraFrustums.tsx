@@ -1378,6 +1378,15 @@ export function CameraFrustums() {
       const camera = reconstruction.cameras.get(image.cameraId);
       if (!camera) continue;
 
+      // Compute position and quaternion
+      const position = getImageWorldPosition(image);
+      const quaternion = getImageWorldQuaternion(image);
+
+      // Skip images with invalid pose data (NaN values cause THREE.js errors)
+      if (!Number.isFinite(position.x) || !Number.isFinite(position.y) || !Number.isFinite(position.z)) {
+        continue;
+      }
+
       // Get image file - use URL cache if in URL mode, otherwise local files
       let imageFile: File | undefined;
       if (imageUrlBase) {
@@ -1391,8 +1400,8 @@ export function CameraFrustums() {
       result.push({
         image,
         camera,
-        position: getImageWorldPosition(image),
-        quaternion: getImageWorldQuaternion(image),
+        position,
+        quaternion,
         imageFile,
         cameraIndex: cameraIdToIndex.get(image.cameraId) ?? 0,
         numPoints3D: reconstruction.imageStats.get(image.imageId)?.numPoints3D ?? 0,
