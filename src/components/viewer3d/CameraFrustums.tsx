@@ -47,6 +47,22 @@ function getMatchesBlinkFactor(phase: number): number {
   return 0;
 }
 
+// Helper to get frustum base color based on color mode
+function getFrustumBaseColor(
+  frustumColorMode: 'single' | 'byCamera' | 'byRigFrame',
+  cameraIndex: number,
+  imageId: number,
+  imageFrameIndexMap: Map<number, number>
+): string {
+  if (frustumColorMode === 'byCamera') {
+    return getCameraColor(cameraIndex);
+  } else if (frustumColorMode === 'byRigFrame') {
+    const frameIndex = imageFrameIndexMap.get(imageId);
+    return frameIndex !== undefined ? getCameraColor(frameIndex) : VIZ_COLORS.frustum.default;
+  }
+  return VIZ_COLORS.frustum.default;
+}
+
 // Temp objects for image plane culling (angle check)
 const tempForward = new THREE.Vector3();
 const tempViewDir = new THREE.Vector3();
@@ -96,11 +112,12 @@ interface BatchedArrowMeshesProps {
   matchesOpacity: number;
   matchesDisplayMode: 'off' | 'on' | 'blink';
   matchesColor: string;
-  frustumColorMode: 'single' | 'byCamera';
+  frustumColorMode: 'single' | 'byCamera' | 'byRigFrame';
   selectionColorMode: SelectionColorMode;
   selectionColor: string;
   selectionAnimationSpeed: number;
   unselectedCameraOpacity: number;
+  imageFrameIndexMap: Map<number, number>;
 }
 
 // Temp objects for instanced mesh updates
@@ -124,6 +141,7 @@ function BatchedArrowMeshes({
   selectionColor,
   selectionAnimationSpeed,
   unselectedCameraOpacity,
+  imageFrameIndexMap,
 }: BatchedArrowMeshesProps) {
   const shaftRef = useRef<THREE.InstancedMesh>(null);
   const coneRef = useRef<THREE.InstancedMesh>(null);
@@ -217,10 +235,7 @@ function BatchedArrowMeshes({
           tempColor.multiplyScalar(matchesOpacity);
         }
       } else {
-        const baseColor = frustumColorMode === 'byCamera'
-          ? getCameraColor(f.cameraIndex)
-          : VIZ_COLORS.frustum.default;
-        tempColor.set(baseColor);
+        tempColor.set(getFrustumBaseColor(frustumColorMode, f.cameraIndex, f.image.imageId, imageFrameIndexMap));
       }
 
       // Calculate shaft transform - cylinder is Y-aligned, we need to rotate to face camera direction (Z)
@@ -289,12 +304,13 @@ interface BatchedFrustumLinesProps {
   matchesOpacity: number;
   matchesDisplayMode: 'off' | 'on' | 'blink';
   matchesColor: string;
-  frustumColorMode: 'single' | 'byCamera';
+  frustumColorMode: 'single' | 'byCamera' | 'byRigFrame';
   selectionColorMode: SelectionColorMode;
   selectionColor: string;
   selectionAnimationSpeed: number;
   unselectedCameraOpacity: number;
   showImagePlanes: boolean;
+  imageFrameIndexMap: Map<number, number>;
 }
 
 function BatchedFrustumLines({
@@ -312,6 +328,7 @@ function BatchedFrustumLines({
   selectionAnimationSpeed,
   unselectedCameraOpacity,
   showImagePlanes,
+  imageFrameIndexMap,
 }: BatchedFrustumLinesProps) {
   const geometryRef = useRef<THREE.BufferGeometry>(null);
   const rainbowHueRef = useRef(0);
@@ -386,10 +403,7 @@ function BatchedFrustumLines({
       positions[offset + 45] = bl.x; positions[offset + 46] = bl.y; positions[offset + 47] = bl.z;
 
       // Base color for this camera
-      const color = frustumColorMode === 'byCamera'
-        ? getCameraColor(f.cameraIndex)
-        : VIZ_COLORS.frustum.default;
-      tempColor.set(color);
+      tempColor.set(getFrustumBaseColor(frustumColorMode, f.cameraIndex, f.image.imageId, imageFrameIndexMap));
 
       // Set color and alpha for all 16 vertices
       for (let v = 0; v < 16; v++) {
@@ -401,7 +415,7 @@ function BatchedFrustumLines({
     });
 
     return { positions, baseColors, baseAlphas };
-  }, [frustums, cameraScale, frustumColorMode]);
+  }, [frustums, cameraScale, frustumColorMode, imageFrameIndexMap]);
 
   // Update colors and alphas based on selection, hover, selection color mode, opacity
   useFrame((state, delta) => {
@@ -953,7 +967,7 @@ const FrustumPlane = memo(function FrustumPlane({
                   <path d="M12 2v8"/>
                   <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
                 </svg>
-                {isMatched ? 'Right: matches' : wouldGoBack ? 'Right: back' : 'Right: goto'}
+                {isMatched ? 'Right: matches' : wouldGoBack ? 'Right: back' : 'Right: fly to'}
               </div>
               {isSelected && (
                 <div className={hoverCardStyles.hintRow}>(U) undistort</div>
@@ -1099,7 +1113,7 @@ const ArrowHitTarget = memo(function ArrowHitTarget({
                   <path d="M12 2v8"/>
                   <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
                 </svg>
-                {isMatched ? 'Right: matches' : wouldGoBack ? 'Right: back' : 'Right: goto'}
+                {isMatched ? 'Right: matches' : wouldGoBack ? 'Right: back' : 'Right: fly to'}
               </div>
             </div>
           </div>
@@ -1286,6 +1300,36 @@ export function CameraFrustums() {
     for (const cameraId of reconstruction.cameras.keys()) {
       map.set(cameraId, index++);
     }
+    return map;
+  }, [reconstruction]);
+
+  // Build a map from imageId to frame index for rig-frame coloring
+  // Images with the same filename (different directories) belong to the same frame
+  const imageFrameIndexMap = useMemo(() => {
+    const map = new Map<number, number>();
+    if (!reconstruction) return map;
+
+    // Group images by frame identifier (filename without directory)
+    const frameGroups = new Map<string, number[]>();
+    for (const image of reconstruction.images.values()) {
+      const parts = image.name.split(/[/\\]/);
+      const frameId = parts.length >= 2 ? parts[parts.length - 1] : image.name;
+      const existing = frameGroups.get(frameId) ?? [];
+      existing.push(image.imageId);
+      frameGroups.set(frameId, existing);
+    }
+
+    // Assign frame index to each image (only for multi-camera frames)
+    let frameIndex = 0;
+    for (const imageIds of frameGroups.values()) {
+      if (imageIds.length >= 2) {
+        for (const imageId of imageIds) {
+          map.set(imageId, frameIndex);
+        }
+        frameIndex++;
+      }
+    }
+
     return map;
   }, [reconstruction]);
 
@@ -1567,6 +1611,7 @@ export function CameraFrustums() {
           selectionColor={selectionColor}
           selectionAnimationSpeed={selectionAnimationSpeed}
           unselectedCameraOpacity={unselectedCameraOpacity}
+          imageFrameIndexMap={imageFrameIndexMap}
         />
         {/* Image plane for selected camera (replaces arrow) */}
         {selectedFrustum && (
@@ -1644,10 +1689,8 @@ export function CameraFrustums() {
             frustumColor = selectionColorMode === 'rainbow' ? VIZ_COLORS.frustum.selected : selectionColor;
           } else if (isMatched) {
             frustumColor = matchesColor;
-          } else if (frustumColorMode === 'byCamera') {
-            frustumColor = getCameraColor(f.cameraIndex);
           } else {
-            frustumColor = VIZ_COLORS.frustum.default;
+            frustumColor = getFrustumBaseColor(frustumColorMode, f.cameraIndex, f.image.imageId, imageFrameIndexMap);
           }
           // When no camera is selected, all use selectionPlaneOpacity
           // When selected, selected gets selectionPlaneOpacity, others get selectionPlaneOpacity * unselectedCameraOpacity
@@ -1725,6 +1768,7 @@ export function CameraFrustums() {
         selectionAnimationSpeed={selectionAnimationSpeed}
         unselectedCameraOpacity={unselectedCameraOpacity}
         showImagePlanes={showImagePlanes}
+        imageFrameIndexMap={imageFrameIndexMap}
       />
       {/* Per-frustum planes for texture + interaction (view frustum culled) */}
       {frustums.map((f) => {
@@ -1736,10 +1780,8 @@ export function CameraFrustums() {
             frustumColor = selectionColorMode === 'rainbow' ? VIZ_COLORS.frustum.selected : selectionColor;
           } else if (isMatched) {
             frustumColor = matchesColor;
-          } else if (frustumColorMode === 'byCamera') {
-            frustumColor = getCameraColor(f.cameraIndex);
           } else {
-            frustumColor = VIZ_COLORS.frustum.default;
+            frustumColor = getFrustumBaseColor(frustumColorMode, f.cameraIndex, f.image.imageId, imageFrameIndexMap);
           }
           return (
             <FrustumPlane

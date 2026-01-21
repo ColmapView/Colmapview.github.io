@@ -104,3 +104,11 @@ export {
   ExportPLYIcon,
   ExportConfigIcon,
 } from './menu';
+
+// Mouse icons for click hints
+export {
+  MouseLeftIcon,
+  MouseRightIcon,
+  MouseScrollIcon,
+  MouseDoubleClickIcon,
+} from './mouse';

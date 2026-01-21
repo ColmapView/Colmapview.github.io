@@ -22,7 +22,7 @@ export type HorizonLockMode = (typeof HORIZON_LOCK_MODES)[number];
 export const CAMERA_DISPLAY_MODES = ['off', 'frustum', 'arrow', 'imageplane'] as const;
 export type CameraDisplayMode = (typeof CAMERA_DISPLAY_MODES)[number];
 
-export const FRUSTUM_COLOR_MODES = ['single', 'byCamera'] as const;
+export const FRUSTUM_COLOR_MODES = ['single', 'byCamera', 'byRigFrame'] as const;
 export type FrustumColorMode = (typeof FRUSTUM_COLOR_MODES)[number];
 
 export const CAMERA_SCALE_FACTORS = ['0.1', '1', '10'] as const;

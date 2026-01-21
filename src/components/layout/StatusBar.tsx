@@ -81,6 +81,21 @@ export function StatusBar() {
         <span>|</span>
         <span>AGPL 3.0</span>
         <span>|</span>
+        <span>Based on{' '}
+          <a
+            href="https://github.com/colmap/colmap"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="no-underline transition-colors"
+            style={{ color: 'inherit' }}
+            title="COLMAP - Structure-from-Motion and Multi-View Stereo"
+            onMouseEnter={(e) => e.currentTarget.style.color = '#60a5fa'}
+            onMouseLeave={(e) => e.currentTarget.style.color = 'inherit'}
+          >
+            COLMAP
+          </a>
+        </span>
+        <span>|</span>
         <span>v{__APP_VERSION__}</span>
       </div>
     </footer>

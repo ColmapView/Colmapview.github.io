@@ -1168,6 +1168,16 @@ legend {
 .animate-slide-in-right { animation: slide-in-right 0.3s ease-out forwards; }
 .animate-fade-out { animation: fade-out 0.2s ease-out forwards; }
 
+/* Matches blink animation for gallery/list items */
+@keyframes matches-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.matches-blink {
+  animation: matches-blink 2s ease-in-out infinite;
+}
+
 /* ============================================
    FORM UTILITIES
    ============================================ */

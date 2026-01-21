@@ -234,7 +234,7 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
           <button
             onClick={() => setPickingMode(pickingMode === 'origin-1pt' ? 'off' : 'origin-1pt')}
             className={pickingMode === 'origin-1pt' ? styles.actionButtonPrimary : styles.presetButton}
-            data-tooltip="Click 1 point to set as origin (0,0,0)"
+            data-tooltip="{LMB} Click 1 point to set as origin (0,0,0)"
             data-tooltip-pos="bottom"
           >
             1-Point Origin
@@ -242,7 +242,7 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
           <button
             onClick={() => setPickingMode(pickingMode === 'distance-2pt' ? 'off' : 'distance-2pt')}
             className={pickingMode === 'distance-2pt' ? styles.actionButtonPrimary : styles.presetButton}
-            data-tooltip="Click 2 points, set target distance"
+            data-tooltip="{LMB} Click 2 points, set target distance"
             data-tooltip-pos="bottom"
           >
             2-Point Scale
@@ -250,7 +250,7 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
           <button
             onClick={() => setPickingMode(pickingMode === 'normal-3pt' ? 'off' : 'normal-3pt')}
             className={pickingMode === 'normal-3pt' ? styles.actionButtonPrimary : styles.presetButton}
-            data-tooltip="Click 3 points clockwise to align plane with Y-up"
+            data-tooltip="{LMB} Click 3 points clockwise to align plane with Y-up"
             data-tooltip-pos="bottom"
           >
             3-Point Align
@@ -1165,6 +1165,7 @@ export function ViewerControls() {
                 options={[
                   { value: 'single', label: 'Single' },
                   { value: 'byCamera', label: 'By Cam' },
+                  ...(hasRigData ? [{ value: 'byRigFrame', label: 'By Frame' }] : []),
                 ]}
               />
               <SelectRow

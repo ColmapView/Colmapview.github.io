@@ -52,7 +52,7 @@ export const cameraSection = defineSection({
       enumValues: FRUSTUM_COLOR_MODES,
       default: 'byCamera',
       persist: true,
-      description: 'single | byCamera',
+      description: 'single | byCamera | byRigFrame',
     },
     {
       key: 'unselectedOpacity',

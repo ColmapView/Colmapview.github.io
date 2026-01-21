@@ -66,6 +66,9 @@ interface ImageData {
 interface GalleryItemProps {
   img: ImageData;
   isSelected: boolean;
+  isMatched: boolean;
+  matchesColor: string;
+  matchesBlink: boolean;
   onClick: (id: number) => void;
   onDoubleClick: (id: number) => void;
   onRightClick: (id: number) => void;
@@ -73,9 +76,10 @@ interface GalleryItemProps {
   skipImages: boolean;
   isSettling: boolean;
   isResizing: boolean;
+  wouldGoBack: boolean;
 }
 
-const GalleryItem = memo(function GalleryItem({ img, isSelected, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling, isResizing }: GalleryItemProps) {
+const GalleryItem = memo(function GalleryItem({ img, isSelected, isMatched, matchesColor, matchesBlink, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling, isResizing, wouldGoBack }: GalleryItemProps) {
   // Load thumbnail lazily when visible and not scrolling/settling/resizing (disabled in skip mode)
   const src = useThumbnail(img.file, img.name, !isScrolling && !skipImages && !isSettling && !isResizing);
   const [hovered, setHovered] = useState(false);
@@ -101,10 +105,20 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, onClick, onDoub
     }
   };
 
+  // Determine border class and style based on selection/match state
+  const borderClass = isSelected
+    ? galleryStyles.itemSelected
+    : isMatched
+      ? `${matchesBlink ? 'matches-blink' : ''}`
+      : galleryStyles.itemHover;
+  const borderStyle = isMatched && !isSelected
+    ? { borderColor: matchesColor }
+    : {};
+
   return (
     <div
-      className={`${galleryStyles.itemAspect} group ${galleryStyles.item} ${isSelected ? galleryStyles.itemSelected : galleryStyles.itemHover}`}
-      style={{ position: 'relative' }}
+      className={`${galleryStyles.itemAspect} group ${galleryStyles.item} ${borderClass}`}
+      style={{ position: 'relative', ...borderStyle }}
       onClick={handleClick}
       onContextMenu={(e) => { e.preventDefault(); onRightClick(img.imageId); }}
       onPointerOver={(e) => {
@@ -186,7 +200,7 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, onClick, onDoub
                   <path d="M12 2v8"/>
                   <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
                 </svg>
-                Right: fly to
+                {isMatched ? 'Right: matches' : wouldGoBack ? 'Right: back' : 'Right: fly to'}
               </div>
             </div>
           </div>
@@ -199,7 +213,7 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, onClick, onDoub
 
 type ListItemProps = GalleryItemProps;
 
-const ListItem = memo(function ListItem({ img, isSelected, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling, isResizing }: ListItemProps) {
+const ListItem = memo(function ListItem({ img, isSelected, isMatched, matchesColor, matchesBlink, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling, isResizing, wouldGoBack }: ListItemProps) {
   // Load thumbnail lazily when visible and not scrolling/settling/resizing (disabled in skip mode)
   const src = useThumbnail(img.file, img.name, !isScrolling && !skipImages && !isSettling && !isResizing);
   const [hovered, setHovered] = useState(false);
@@ -225,6 +239,16 @@ const ListItem = memo(function ListItem({ img, isSelected, onClick, onDoubleClic
     }
   };
 
+  // Determine border class and style based on selection/match state
+  const borderClass = isSelected
+    ? listStyles.itemSelected
+    : isMatched
+      ? `${matchesBlink ? 'matches-blink' : ''}`
+      : listStyles.itemHover;
+  const borderStyle = isMatched && !isSelected
+    ? { borderColor: matchesColor }
+    : {};
+
   return (
     <div
       onClick={handleClick}
@@ -242,8 +266,8 @@ const ListItem = memo(function ListItem({ img, isSelected, onClick, onDoubleClic
         setMousePos(null);
         document.body.style.cursor = '';
       }}
-      style={{ height: SIZE.listRowHeight }}
-      className={`${listStyles.item} px-3 list-stats-container ${isSelected ? listStyles.itemSelected : listStyles.itemHover}`}
+      style={{ height: SIZE.listRowHeight, ...borderStyle }}
+      className={`${listStyles.item} px-3 list-stats-container ${borderClass}`}
     >
       <div className={`${listStyles.thumbnail} ${listStyles.thumbnailSize}`}>
         {src ? (
@@ -301,7 +325,7 @@ const ListItem = memo(function ListItem({ img, isSelected, onClick, onDoubleClic
                   <path d="M12 2v8"/>
                   <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
                 </svg>
-                Right: fly to
+                {isMatched ? 'Right: matches' : wouldGoBack ? 'Right: back' : 'Right: fly to'}
               </div>
             </div>
           </div>
@@ -336,9 +360,19 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
   const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
   const imageUrlBase = useReconstructionStore((s) => s.imageUrlBase);
   const openImageDetail = useUIStore((s) => s.openImageDetail);
+  const setMatchedImageId = useUIStore((s) => s.setMatchedImageId);
+  const setShowMatchesInModal = useUIStore((s) => s.setShowMatchesInModal);
+  const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
+  const matchesColor = useUIStore((s) => s.matchesColor);
   const selectedImageId = useCameraStore((s) => s.selectedImageId);
   const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
   const flyToImage = useCameraStore((s) => s.flyToImage);
+  const currentViewState = useCameraStore((s) => s.currentViewState);
+  const pushNavigationHistory = useCameraStore((s) => s.pushNavigationHistory);
+  const popNavigationHistory = useCameraStore((s) => s.popNavigationHistory);
+  const peekNavigationHistory = useCameraStore((s) => s.peekNavigationHistory);
+  const flyToState = useCameraStore((s) => s.flyToState);
+  const navigationHistory = useCameraStore((s) => s.navigationHistory);
   const [viewMode, setViewMode] = useState<ViewMode>('gallery');
   const [galleryColumns, setGalleryColumns] = useState<number>(COLUMNS.default);
   const [cameraFilter, setCameraFilter] = useState<number | 'all'>('all');
@@ -347,6 +381,18 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   // Track URL image cache version to trigger re-renders when images are fetched
   const [urlImageCacheVersion, setUrlImageCacheVersion] = useState(0);
+
+  // Compute matched image IDs when matches are shown (uses pre-computed connectedImagesIndex)
+  const matchedImageIds = useMemo(() => {
+    if (!reconstruction || selectedImageId === null || matchesDisplayMode === 'off') {
+      return new Set<number>();
+    }
+    const connections = reconstruction.connectedImagesIndex.get(selectedImageId);
+    if (!connections) {
+      return new Set<number>();
+    }
+    return new Set(connections.keys());
+  }, [reconstruction, selectedImageId, matchesDisplayMode]);
 
   // Click handlers
   const handleClick = useCallback((imageId: number) => {
@@ -357,11 +403,49 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
     openImageDetail(imageId);
   }, [openImageDetail]);
 
-  // Right-click selects and goes to image in 3D viewer
+  // Right-click selects and goes to image in 3D viewer (with navigation history tracking)
   const handleRightClick = useCallback((imageId: number) => {
+    // Check if this is a matched camera (shares points with the selected camera)
+    if (selectedImageId !== null && matchedImageIds.has(imageId)) {
+      // Open image detail for the selected camera with this as the matched image
+      setShowMatchesInModal(true);
+      setMatchedImageId(imageId);
+      openImageDetail(selectedImageId);
+      // Need to set matchedImageId after openImageDetail since it resets it
+      setTimeout(() => setMatchedImageId(imageId), 0);
+      return;
+    }
+
+    const lastEntry = peekNavigationHistory();
+
+    // Check if we're clicking the same image we just flew to (trace back)
+    if (currentViewState && lastEntry && lastEntry.toImageId === imageId) {
+      // User wants to go back - pop and return
+      const entry = popNavigationHistory();
+      if (entry) {
+        flyToState(entry.fromState);
+        setSelectedImageId(entry.fromImageId);
+      }
+      return;
+    }
+
+    // Push current state to history and fly to the image
+    if (currentViewState) {
+      pushNavigationHistory({
+        fromState: currentViewState,
+        fromImageId: selectedImageId,
+        toImageId: imageId,
+      });
+    }
     setSelectedImageId(imageId);
     flyToImage(imageId);
-  }, [setSelectedImageId, flyToImage]);
+  }, [setSelectedImageId, flyToImage, currentViewState, peekNavigationHistory, popNavigationHistory, pushNavigationHistory, flyToState, selectedImageId, matchedImageIds, setShowMatchesInModal, setMatchedImageId, openImageDetail]);
+
+  // Get the last navigation target for "back" hint display
+  const lastNavigationToImageId = useMemo(() => {
+    if (navigationHistory.length === 0) return null;
+    return navigationHistory[navigationHistory.length - 1].toImageId;
+  }, [navigationHistory]);
 
   // Reset camera filter when reconstruction changes
   useEffect(() => {
@@ -746,7 +830,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
             <button
               onClick={() => setViewMode('gallery')}
               className={getViewModeButtonClass(viewMode === 'gallery')}
-              data-tooltip="Grid view (Shift+scroll to resize)"
+              data-tooltip="Grid view (Shift+{SCROLL} to resize)"
             >
               <GridIcon className="w-4 h-4" />
             </button>
@@ -800,6 +884,9 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
                         key={img.imageId}
                         img={img}
                         isSelected={selectedImageId === img.imageId}
+                        isMatched={matchedImageIds.has(img.imageId)}
+                        matchesColor={matchesColor}
+                        matchesBlink={matchesDisplayMode === 'blink'}
                         onClick={handleClick}
                         onDoubleClick={handleDoubleClick}
                         onRightClick={handleRightClick}
@@ -807,6 +894,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
                         skipImages={false}
                         isSettling={isSettling}
                         isResizing={isResizing}
+                        wouldGoBack={img.imageId === lastNavigationToImageId}
                       />
                     ))}
                   </div>
@@ -839,6 +927,9 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
                     <ListItem
                       img={img}
                       isSelected={selectedImageId === img.imageId}
+                      isMatched={matchedImageIds.has(img.imageId)}
+                      matchesColor={matchesColor}
+                      matchesBlink={matchesDisplayMode === 'blink'}
                       onClick={handleClick}
                       onDoubleClick={handleDoubleClick}
                       onRightClick={handleRightClick}
@@ -846,6 +937,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
                       skipImages={false}
                       isSettling={isSettling}
                       isResizing={isResizing}
+                      wouldGoBack={img.imageId === lastNavigationToImageId}
                     />
                   </div>
                 );

@@ -1,9 +1,52 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { hoverCardStyles } from '../../theme';
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
+import { hoverCardStyles, ICON_SIZES } from '../../theme';
+import { MouseLeftIcon, MouseRightIcon, MouseScrollIcon } from '../../icons';
+
+/**
+ * Parse tooltip text and replace {LMB}, {RMB}, {SCROLL} markers with mouse icons.
+ * Returns an array of ReactNodes for rendering.
+ */
+function parseTooltipContent(text: string): ReactNode[] {
+  const parts: ReactNode[] = [];
+  const regex = /\{(LMB|RMB|SCROLL)\}/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    // Add text before the marker
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+
+    // Add the icon
+    const iconType = match[1];
+    if (iconType === 'LMB') {
+      parts.push(<MouseLeftIcon key={`icon-${match.index}`} className={`${ICON_SIZES.hoverCard} inline-block align-text-bottom`} />);
+    } else if (iconType === 'RMB') {
+      parts.push(<MouseRightIcon key={`icon-${match.index}`} className={`${ICON_SIZES.hoverCard} inline-block align-text-bottom`} />);
+    } else if (iconType === 'SCROLL') {
+      parts.push(<MouseScrollIcon key={`icon-${match.index}`} className={`${ICON_SIZES.hoverCard} inline-block align-text-bottom`} />);
+    }
+
+    lastIndex = regex.lastIndex;
+  }
+
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : [text];
+}
 
 /**
  * Global mouse-following tooltip that displays content from data-tooltip attributes.
  * Replaces CSS-only tooltips with a dynamic mouse-tracking version.
+ *
+ * Supports inline mouse icons using markers:
+ * - {LMB} - Left mouse button icon
+ * - {RMB} - Right mouse button icon
+ * - {SCROLL} - Mouse scroll wheel icon
  */
 export function MouseTooltip() {
   const [tooltip, setTooltip] = useState<string | null>(null);
@@ -78,8 +121,8 @@ export function MouseTooltip() {
         top: mousePos.y + 12,
       }}
     >
-      <div className={`${hoverCardStyles.container} border border-ds rounded text-xs px-2 py-1`}>
-        {tooltip}
+      <div className={`${hoverCardStyles.container} border border-ds rounded text-xs px-2 py-1 whitespace-pre-line max-w-xs`}>
+        {parseTooltipContent(tooltip)}
       </div>
     </div>
   );

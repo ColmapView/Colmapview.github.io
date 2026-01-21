@@ -7,8 +7,8 @@ import { STORAGE_KEYS } from '../../store/migration';
 import { parseConfigYaml, applyConfigurationToStores } from '../../config/configuration';
 import { ColmapManifestSchema } from '../../types/manifest';
 import { getRandomDataset, getDatasetUrl } from '../../constants/exampleDatasets';
-import { TIMING, buttonStyles, loadingStyles, toastStyles, dragOverlayStyles, emptyStateStyles } from '../../theme';
-import { ResetIcon, UploadIcon, LinkIcon, FileJsonIcon } from '../../icons';
+import { TIMING, buttonStyles, loadingStyles, toastStyles, dragOverlayStyles, emptyStateStyles, hoverCardStyles, ICON_SIZES } from '../../theme';
+import { ResetIcon, UploadIcon, LinkIcon, FileJsonIcon, MouseLeftIcon, MouseRightIcon } from '../../icons';
 import { UrlInputModal } from '../modals/UrlInputModal';
 import { publicAsset } from '../../utils/paths';
 
@@ -20,6 +20,7 @@ export function DropZone({ children }: DropZoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isPanelDismissed, setIsPanelDismissed] = useState(false);
   const [isUrlModalOpen, setIsUrlModalOpen] = useState(false);
+  const [hoveredButton, setHoveredButton] = useState<'url' | 'json' | 'toy' | null>(null);
   const { handleDrop, handleDragOver, handleBrowse } = useFileDropzone();
   const { loadFromUrl, loadFromManifest, urlLoading, urlProgress } = useUrlLoader();
   const { loading, progress, error, setError, reconstruction } = useReconstructionStore();
@@ -66,6 +67,31 @@ export function DropZone({ children }: DropZoneProps) {
     console.log(`[Try a Toy] Loading random dataset: ${dataset.name}`);
     await loadFromUrl(getDatasetUrl(dataset.scanId));
   }, [loadFromUrl]);
+
+  // Download example manifest.json
+  const handleDownloadExampleJson = useCallback(() => {
+    const exampleManifest = {
+      version: 1,
+      name: "Example Dataset",
+      baseUrl: "https://example.com/colmap-data",
+      files: {
+        cameras: "sparse/0/cameras.bin",
+        images: "sparse/0/images.bin",
+        points3D: "sparse/0/points3D.bin"
+      },
+      imagesPath: "images/",
+      masksPath: "masks/"
+    };
+    const blob = new Blob([JSON.stringify(exampleManifest, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'manifest.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, []);
 
   // Reset all persisted configuration to defaults
   const handleResetConfig = useCallback(() => {
@@ -236,36 +262,121 @@ export function DropZone({ children }: DropZoneProps) {
 
               {/* Action buttons row */}
               <div className="flex gap-2 mt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsUrlModalOpen(true)}
-                  disabled={urlLoading}
-                  className={`${buttonStyles.base} ${buttonStyles.sizes.action} ${buttonStyles.variants.secondary} ${urlLoading ? buttonStyles.disabled : ''}`}
-                  data-tooltip="Load from URL"
-                >
-                  <LinkIcon className="w-3.5 h-3.5" />
-                  Load URL
-                </button>
-                <button
-                  type="button"
-                  onClick={() => manifestInputRef.current?.click()}
-                  disabled={urlLoading}
-                  className={`${buttonStyles.base} ${buttonStyles.sizes.action} ${buttonStyles.variants.secondary} ${urlLoading ? buttonStyles.disabled : ''}`}
-                  data-tooltip="Load from manifest.json file"
-                >
-                  <FileJsonIcon className="w-3.5 h-3.5" />
-                  Load JSON
-                </button>
-                <button
-                  type="button"
-                  onClick={handleLucky}
-                  disabled={urlLoading}
-                  className={`${buttonStyles.base} ${buttonStyles.sizes.action} ${buttonStyles.variants.secondary} ${urlLoading ? buttonStyles.disabled : ''}`}
-                  data-tooltip="Play a random toy from OpsiClear"
-                >
-                  <img src={publicAsset('LOGO.png')} alt="" className="w-3.5 h-3.5" />
-                  Try a Toy!
-                </button>
+                {/* Load URL button */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsUrlModalOpen(true)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      window.open('https://huggingface.co/datasets/OpsiClear/NGS', '_blank');
+                    }}
+                    onMouseEnter={() => setHoveredButton('url')}
+                    onMouseLeave={() => setHoveredButton(null)}
+                    disabled={urlLoading}
+                    className={`${buttonStyles.base} ${buttonStyles.sizes.action} ${buttonStyles.variants.secondary} ${urlLoading ? buttonStyles.disabled : ''}`}
+                  >
+                    <LinkIcon className="w-3.5 h-3.5" />
+                    Load URL
+                  </button>
+                  {hoveredButton === 'url' && (
+                    <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50 ${hoverCardStyles.container}`}>
+                      <div className={hoverCardStyles.title}>Load from URL</div>
+                      <div className={`${hoverCardStyles.subtitle} whitespace-pre mt-1`}>{`Direct URL expects:
+  <baseUrl>/sparse/0/cameras.bin
+  <baseUrl>/sparse/0/images.bin
+  <baseUrl>/sparse/0/points3D.bin
+  <baseUrl>/images/  (optional)
+  <baseUrl>/masks/   (optional)`}</div>
+                      <div className={`${hoverCardStyles.subtitle} mt-2`}>Or provide a manifest.json URL</div>
+                      <div className={`${hoverCardStyles.subtitle} mt-1 text-ds-muted/70`}>Git URLs auto-converted: HuggingFace, GitHub, GitLab, Bitbucket</div>
+                      <div className={hoverCardStyles.hint}>
+                        <div className={hoverCardStyles.hintRow}>
+                          <MouseLeftIcon className={ICON_SIZES.hoverCard} />
+                          Left: open URL dialog
+                        </div>
+                        <div className={hoverCardStyles.hintRow}>
+                          <MouseRightIcon className={ICON_SIZES.hoverCard} />
+                          Right: open NGS dataset
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Load JSON button */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => manifestInputRef.current?.click()}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      handleDownloadExampleJson();
+                    }}
+                    onMouseEnter={() => setHoveredButton('json')}
+                    onMouseLeave={() => setHoveredButton(null)}
+                    disabled={urlLoading}
+                    className={`${buttonStyles.base} ${buttonStyles.sizes.action} ${buttonStyles.variants.secondary} ${urlLoading ? buttonStyles.disabled : ''}`}
+                  >
+                    <FileJsonIcon className="w-3.5 h-3.5" />
+                    Load JSON
+                  </button>
+                  {hoveredButton === 'json' && (
+                    <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50 ${hoverCardStyles.container}`}>
+                      <div className={hoverCardStyles.title}>Load manifest.json</div>
+                      <div className={`${hoverCardStyles.subtitle} whitespace-pre mt-1 font-mono text-xs`}>{`{
+  "version": 1,
+  "baseUrl": "https://...",
+  "files": {
+    "cameras": "sparse/0/cameras.bin",
+    "images": "sparse/0/images.bin",
+    "points3D": "sparse/0/points3D.bin"
+  },
+  "imagesPath": "images/",
+  "masksPath": "masks/"
+}`}</div>
+                      <div className={hoverCardStyles.hint}>
+                        <div className={hoverCardStyles.hintRow}>
+                          <MouseLeftIcon className={ICON_SIZES.hoverCard} />
+                          Left: browse manifest file
+                        </div>
+                        <div className={hoverCardStyles.hintRow}>
+                          <MouseRightIcon className={ICON_SIZES.hoverCard} />
+                          Right: download example
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Try a Toy button */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={handleLucky}
+                    onMouseEnter={() => setHoveredButton('toy')}
+                    onMouseLeave={() => setHoveredButton(null)}
+                    disabled={urlLoading}
+                    className={`${buttonStyles.base} ${buttonStyles.sizes.action} ${buttonStyles.variants.secondary} ${urlLoading ? buttonStyles.disabled : ''}`}
+                  >
+                    <img src={publicAsset('LOGO.png')} alt="" className="w-3.5 h-3.5" />
+                    Try a Toy!
+                  </button>
+                  {hoveredButton === 'toy' && (
+                    <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50 ${hoverCardStyles.container}`}>
+                      <div className={hoverCardStyles.title}>Load random 3D scan</div>
+                      <div className={hoverCardStyles.subtitle}>Multiview data from OpsiClear NGS dataset</div>
+                      <div className={`${hoverCardStyles.subtitle} text-ds-muted/70`}>huggingface.co/datasets/OpsiClear/NGS</div>
+                      <div className={`${hoverCardStyles.subtitle} mt-1`}>Includes: images, masks, sparse reconstruction</div>
+                      <div className={hoverCardStyles.hint}>
+                        <div className={hoverCardStyles.hintRow}>
+                          <MouseLeftIcon className={ICON_SIZES.hoverCard} />
+                          Left: load random scan
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 

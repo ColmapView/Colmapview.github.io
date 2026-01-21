@@ -1079,7 +1079,7 @@ export function ImageDetailModal() {
         onClick={(e) => e.stopPropagation()}
       >
         <div
-          className={`${modalStyles.header} rounded-t-lg bg-ds-secondary text-xs border-b-0`}
+          className="flex items-center justify-between px-4 py-2 rounded-t-lg bg-ds-secondary text-xs cursor-move select-none"
           onMouseDown={handleDragStart}
         >
           <span className="text-ds-primary">
