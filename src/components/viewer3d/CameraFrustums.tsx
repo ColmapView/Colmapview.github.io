@@ -1419,10 +1419,16 @@ export function CameraFrustums() {
     openImageDetail(imageId);
   }, [openImageDetail]);
 
-  // Right-click callback - if matched camera, show matches; otherwise select and go to the image
+  // Right-click callback - if matched camera, show matches; if selected camera, deselect; otherwise fly to
   const handleArrowContextMenu = useCallback((imageId: number) => {
     const frustum = frustums.find(f => f.image.imageId === imageId);
     if (!frustum) return;
+
+    // If right-clicking the selected camera, deselect it
+    if (imageId === selectedImageId) {
+      setSelectedImageId(null);
+      return;
+    }
 
     // Check if this is a matched camera (shares points with the selected camera)
     if (selectedImageId !== null && matchedImageIds.has(imageId)) {
