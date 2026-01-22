@@ -727,20 +727,22 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
     const hash = window.location.hash;
     if (!hash) return;
 
-    const state = decodeCameraState(hash);
-    if (!state) return;
+    // Async restore from URL hash
+    decodeCameraState(hash).then((state) => {
+      if (!state || hasRestoredFromUrl.current) return;
 
-    hasRestoredFromUrl.current = true;
+      hasRestoredFromUrl.current = true;
 
-    // Use instant positioning (no animation) for initial URL restore
-    targetVec.current.set(...state.target);
-    cameraQuat.current.set(...state.quaternion);
-    distance.current = state.distance;
-    targetDistance.current = state.distance;
-    camera.position.set(...state.position);
-    camera.quaternion.set(...state.quaternion);
+      // Use instant positioning (no animation) for initial URL restore
+      targetVec.current.set(...state.target);
+      cameraQuat.current.set(...state.quaternion);
+      distance.current = state.distance;
+      targetDistance.current = state.distance;
+      camera.position.set(...state.position);
+      camera.quaternion.set(...state.quaternion);
 
-    console.log('[URL State] Restored camera state from URL hash');
+      console.log('[URL State] Restored camera state from URL hash');
+    });
   }, [reconstruction, camera]);
 
   // Sync view state to store for components outside R3F context (e.g., ShareButtonStandalone)

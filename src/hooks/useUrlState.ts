@@ -6,6 +6,21 @@ import type { Sim3dEuler } from '../types/sim3d';
 import type { ColmapManifest } from '../types/manifest';
 import { isIdentityEuler } from '../utils/sim3dTransforms';
 
+// Lazy-loaded fflate functions (loaded on first use)
+// Using 'any' for the options type to avoid fflate's strict literal types
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let deflateSync: ((data: Uint8Array, opts?: any) => Uint8Array) | null = null;
+let inflateSync: ((data: Uint8Array) => Uint8Array) | null = null;
+let fflateLoaded = false;
+
+async function loadFflate(): Promise<void> {
+  if (fflateLoaded) return;
+  const fflate = await import('fflate');
+  deflateSync = fflate.deflateSync;
+  inflateSync = fflate.inflateSync;
+  fflateLoaded = true;
+}
+
 /**
  * Shareable UI configuration that gets embedded in the URL.
  * Uses the same structure as the stores' persisted state for automatic compatibility.
@@ -249,7 +264,8 @@ function encodeCameraState(state: CameraViewState): string {
 /**
  * Encode combined share data (manifest URL or inline manifest + optional camera state + optional config) into a single blob
  * Format: d=<Base64URL([flags:1][url_or_manifest_length:2][url_or_manifest_bytes][camera:72 if bit0][config_length:2 + config_json if bit1])>
- * Flags: bit 0 = has camera, bit 1 = has config, bit 2 = inline manifest (instead of URL)
+ * Flags: bit 0 = has camera, bit 1 = has config, bit 2 = inline manifest (instead of URL), bit 3 = compressed
+ * When bit 3 is set, the entire payload (after flags byte) is DEFLATE compressed
  */
 function encodeShareData(
   manifestUrlOrManifest: string | ColmapManifest,
@@ -270,44 +286,68 @@ function encodeShareData(
   const configBytes = hasConfig ? new TextEncoder().encode(JSON.stringify(config)) : null;
   const configLength = configBytes?.length ?? 0;
 
-  // Calculate total length
-  // 1 byte flags + 2 bytes data length + data bytes + optional 72 bytes camera + optional (2 bytes config length + config bytes)
-  const totalLength = 1 + 2 + dataLength + (hasCamera ? 72 : 0) + (hasConfig ? 2 + configLength : 0);
+  // Build the uncompressed payload (without flags byte)
+  // 2 bytes data length + data bytes + optional 72 bytes camera + optional (2 bytes config length + config bytes)
+  const payloadLength = 2 + dataLength + (hasCamera ? 72 : 0) + (hasConfig ? 2 + configLength : 0);
 
-  const buffer = new ArrayBuffer(totalLength);
-  const view = new DataView(buffer);
-  const bytes = new Uint8Array(buffer);
+  const payloadBuffer = new ArrayBuffer(payloadLength);
+  const payloadView = new DataView(payloadBuffer);
+  const payloadBytes = new Uint8Array(payloadBuffer);
 
   let offset = 0;
 
-  // Write flags byte (bit 2 = inline manifest)
-  const flags = (hasCamera ? 1 : 0) | (hasConfig ? 2 : 0) | (isInlineManifest ? 4 : 0);
-  view.setUint8(offset, flags);
-  offset += 1;
-
   // Write data length (2 bytes, little-endian)
-  view.setUint16(offset, dataLength, true);
+  payloadView.setUint16(offset, dataLength, true);
   offset += 2;
 
   // Write data bytes (URL or manifest JSON)
-  bytes.set(dataBytes, offset);
+  payloadBytes.set(dataBytes, offset);
   offset += dataLength;
 
   // Write camera state if present (72 bytes)
   if (hasCamera && viewState) {
     const cameraBytes = encodeCameraStateBinary(viewState);
-    bytes.set(cameraBytes, offset);
+    payloadBytes.set(cameraBytes, offset);
     offset += 72;
   }
 
   // Write config if present
   if (hasConfig && configBytes) {
-    view.setUint16(offset, configLength, true);
+    payloadView.setUint16(offset, configLength, true);
     offset += 2;
-    bytes.set(configBytes, offset);
+    payloadBytes.set(configBytes, offset);
   }
 
-  return `d=${toBase64Url(bytes)}`;
+  // Try to compress the payload (if fflate is loaded)
+  let finalPayload: Uint8Array;
+  let isCompressed = false;
+
+  if (deflateSync) {
+    try {
+      const compressed = deflateSync(payloadBytes, { level: 9 });
+      // Only use compression if it actually reduces size
+      if (compressed.length < payloadBytes.length) {
+        finalPayload = compressed;
+        isCompressed = true;
+      } else {
+        finalPayload = payloadBytes;
+      }
+    } catch {
+      // Compression failed, use uncompressed
+      finalPayload = payloadBytes;
+    }
+  } else {
+    // fflate not loaded yet, use uncompressed
+    finalPayload = payloadBytes;
+  }
+
+  // Build final result with flags byte
+  const result = new Uint8Array(1 + finalPayload.length);
+  const flags = (hasCamera ? 1 : 0) | (hasConfig ? 2 : 0) | (isInlineManifest ? 4 : 0) | (isCompressed ? 8 : 0);
+  result[0] = flags;
+  result.set(finalPayload, 1);
+
+  return `d=${toBase64Url(result)}`;
 }
 
 /**
@@ -327,7 +367,7 @@ export interface DecodedShareData {
  * Returns { manifestUrl, manifest, viewState, config } or null if invalid
  * Either manifestUrl or manifest will be set (not both)
  */
-export function decodeShareData(hash: string): DecodedShareData | null {
+export async function decodeShareData(hash: string): Promise<DecodedShareData | null> {
   const hashContent = hash.startsWith('#') ? hash.slice(1) : hash;
   const params = new URLSearchParams(hashContent);
 
@@ -337,25 +377,47 @@ export function decodeShareData(hash: string): DecodedShareData | null {
   const bytes = fromBase64Url(data);
   if (!bytes || bytes.length < 3) return null; // Minimum: 1 flag + 2 data length
 
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let offset = 0;
-
-  // Read flags
-  const flags = view.getUint8(offset);
-  offset += 1;
-
+  // Read flags from first byte
+  const flags = bytes[0];
   const hasCamera = (flags & 1) !== 0;
   const hasConfig = (flags & 2) !== 0;
   const isInlineManifest = (flags & 4) !== 0;
+  const isCompressed = (flags & 8) !== 0;
+
+  // Get payload (everything after flags byte)
+  let payload: Uint8Array = bytes.slice(1);
+
+  // Decompress if needed
+  if (isCompressed) {
+    // Load fflate if not already loaded
+    if (!inflateSync) {
+      await loadFflate();
+    }
+    if (!inflateSync) {
+      // Failed to load fflate
+      return null;
+    }
+    try {
+      payload = new Uint8Array(inflateSync(payload));
+    } catch {
+      // Decompression failed
+      return null;
+    }
+  }
+
+  if (payload.length < 2) return null;
+
+  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  let offset = 0;
 
   // Read data length (URL or manifest JSON)
   const dataLength = view.getUint16(offset, true);
   offset += 2;
 
-  if (bytes.length < offset + dataLength) return null;
+  if (payload.length < offset + dataLength) return null;
 
   // Decode URL or manifest JSON
-  const dataBytes = bytes.slice(offset, offset + dataLength);
+  const dataBytes = payload.slice(offset, offset + dataLength);
   const dataString = new TextDecoder().decode(dataBytes);
   offset += dataLength;
 
@@ -378,8 +440,8 @@ export function decodeShareData(hash: string): DecodedShareData | null {
   // Decode camera state if present
   let viewState: CameraViewState | null = null;
   if (hasCamera) {
-    if (bytes.length < offset + 72) return null;
-    const cameraBytes = bytes.slice(offset, offset + 72);
+    if (payload.length < offset + 72) return null;
+    const cameraBytes = payload.slice(offset, offset + 72);
     viewState = decodeCameraFromBytes(cameraBytes);
     offset += 72;
   }
@@ -387,12 +449,12 @@ export function decodeShareData(hash: string): DecodedShareData | null {
   // Decode config if present
   let config: ShareConfig | null = null;
   if (hasConfig) {
-    if (bytes.length < offset + 2) return null;
+    if (payload.length < offset + 2) return null;
     const configLength = view.getUint16(offset, true);
     offset += 2;
 
-    if (bytes.length < offset + configLength) return null;
-    const configBytes = bytes.slice(offset, offset + configLength);
+    if (payload.length < offset + configLength) return null;
+    const configBytes = payload.slice(offset, offset + configLength);
     try {
       config = JSON.parse(new TextDecoder().decode(configBytes));
     } catch {
@@ -477,7 +539,7 @@ function decodeCameraStateLegacy(data: string): CameraViewState | null {
  * Decode camera state from URL hash string
  * Supports: combined format (d=...), binary format (c=...), legacy text format (camera=...)
  */
-export function decodeCameraState(hash: string): CameraViewState | null {
+export async function decodeCameraState(hash: string): Promise<CameraViewState | null> {
   // Remove leading # if present
   const hashContent = hash.startsWith('#') ? hash.slice(1) : hash;
 
@@ -486,7 +548,7 @@ export function decodeCameraState(hash: string): CameraViewState | null {
   // Try combined format first (d=...)
   const combinedParam = params.get('d');
   if (combinedParam) {
-    const shareData = decodeShareData(hash);
+    const shareData = await decodeShareData(hash);
     return shareData?.viewState ?? null;
   }
 
@@ -562,11 +624,11 @@ export function useUrlState() {
   /**
    * Restore camera state from URL hash
    */
-  const restoreFromHash = useCallback(() => {
+  const restoreFromHash = useCallback(async () => {
     const hash = window.location.hash;
     if (!hash) return false;
 
-    const state = decodeCameraState(hash);
+    const state = await decodeCameraState(hash);
     if (!state) return false;
 
     flyToState(state);
@@ -578,18 +640,18 @@ export function useUrlState() {
   useEffect(() => {
     if (!reconstruction || hasAppliedInitialState.current) return;
 
-    const applied = restoreFromHash();
-    hasAppliedInitialState.current = true;
-
-    if (applied) {
-      console.log('[URL State] Restored camera state from URL hash');
-    }
+    restoreFromHash().then((applied) => {
+      hasAppliedInitialState.current = true;
+      if (applied) {
+        console.log('[URL State] Restored camera state from URL hash');
+      }
+    });
   }, [reconstruction, restoreFromHash]);
 
   // Handle browser back/forward (popstate)
   useEffect(() => {
-    const handlePopState = () => {
-      const state = decodeCameraState(window.location.hash);
+    const handlePopState = async () => {
+      const state = await decodeCameraState(window.location.hash);
       if (state) {
         flyToState(state);
         lastEncodedState.current = encodeCameraState(state);

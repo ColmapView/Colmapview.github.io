@@ -31,37 +31,42 @@ function App() {
       useUIStore.getState().setEmbedMode(true);
     }
 
-    // First check for combined format in hash (d=...)
-    const shareData = decodeShareData(window.location.hash);
-    if (shareData) {
-      // Apply config if present (before loading data so UI is ready)
-      if (shareData.config) {
-        console.log('[App] Applying shared config');
-        applyShareConfig(shareData.config);
+    // Async function to handle URL loading
+    const checkUrlAndLoad = async () => {
+      // First check for combined format in hash (d=...)
+      const shareData = await decodeShareData(window.location.hash);
+      if (shareData) {
+        // Apply config if present (before loading data so UI is ready)
+        if (shareData.config) {
+          console.log('[App] Applying shared config');
+          applyShareConfig(shareData.config);
+        }
+
+        // Check for inline manifest first (takes priority)
+        if (shareData.manifest) {
+          console.log(`[App] Loading from inline manifest in URL hash: ${shareData.manifest.name || 'unnamed'}`);
+          loadFromManifest(shareData.manifest);
+          return;
+        }
+
+        // Otherwise use manifest URL
+        if (shareData.manifestUrl) {
+          console.log(`[App] Loading from combined URL hash: ${shareData.manifestUrl}`);
+          loadFromUrl(shareData.manifestUrl);
+          return;
+        }
       }
 
-      // Check for inline manifest first (takes priority)
-      if (shareData.manifest) {
-        console.log(`[App] Loading from inline manifest in URL hash: ${shareData.manifest.name || 'unnamed'}`);
-        loadFromManifest(shareData.manifest);
-        return;
+      // Fall back to legacy query parameter format (?url=...)
+      const manifestUrl = params.get('url');
+
+      if (manifestUrl) {
+        console.log(`[App] Loading from URL parameter: ${manifestUrl}`);
+        loadFromUrl(manifestUrl);
       }
+    };
 
-      // Otherwise use manifest URL
-      if (shareData.manifestUrl) {
-        console.log(`[App] Loading from combined URL hash: ${shareData.manifestUrl}`);
-        loadFromUrl(shareData.manifestUrl);
-        return;
-      }
-    }
-
-    // Fall back to legacy query parameter format (?url=...)
-    const manifestUrl = params.get('url');
-
-    if (manifestUrl) {
-      console.log(`[App] Loading from URL parameter: ${manifestUrl}`);
-      loadFromUrl(manifestUrl);
-    }
+    checkUrlAndLoad();
   }, [loadFromUrl, loadFromManifest]);
 
   return (
