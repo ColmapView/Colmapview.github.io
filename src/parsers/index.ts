@@ -23,4 +23,8 @@ export {
   exportReconstructionText,
   exportReconstructionBinary,
   exportPointsPLY,
+  // ZIP export
+  exportReconstructionZip,
+  downloadReconstructionZip,
 } from './writers';
+export type { ZipExportOptions, ZipExportProgressCallback } from './writers';

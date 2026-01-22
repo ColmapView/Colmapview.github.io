@@ -13,12 +13,13 @@ import type { SelectionColorMode } from '../../store/types';
 import type { Camera, Image } from '../../types/colmap';
 import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
 import { useGuideStore } from '../../store/stores/guideStore';
-import { getImageFile, getUrlImageCached, fetchUrlImage } from '../../utils/imageFileUtils';
+import { getImageFile, getUrlImageCached, fetchUrlImage, getZipImageCached, fetchZipImage, isZipLoadingAvailable } from '../../utils/imageFileUtils';
 import { getImageWorldPosition, getImageWorldQuaternion } from '../../utils/colmapTransforms';
 import { useFrustumTexture, useSelectedImageTexture, prioritizeFrustumTexture, pauseFrustumTextureCache, resumeFrustumTextureCache } from '../../hooks/useFrustumTexture';
 import { VIZ_COLORS, RAINBOW, OPACITY, TIMING, hoverCardStyles, ICON_SIZES, getCameraColor, contextMenuStyles, getMaterialTransparency } from '../../theme';
 import { rainbowColor } from '../../utils/colorUtils';
 import { UndistortedImageMaterial } from './UndistortedImageMaterial';
+import { useIsAlignmentMode } from '../../hooks/useAlignmentMode';
 
 // Shared temp objects for color calculations
 const tempColor = new THREE.Color();
@@ -704,8 +705,9 @@ const FrustumPlane = memo(function FrustumPlane({
     };
   }, [onHover]);
 
-  // Load low-res texture for non-selected images (128px)
-  const lowResTexture = useFrustumTexture(imageFile, image.name, showImagePlane && !isSelected);
+  // Load low-res texture for all images (128px) - keep enabled even when selected
+  // to serve as fallback while high-res loads (prevents blank planes during fast selection)
+  const lowResTexture = useFrustumTexture(imageFile, image.name, showImagePlane);
 
   // Load high-res texture for selected image (original resolution)
   const highResTexture = useSelectedImageTexture(imageFile, image.name, isSelected && showImagePlane);
@@ -1207,6 +1209,9 @@ export function CameraFrustums() {
   const undistortionEnabled = useCameraStore((s) => s.undistortionEnabled);
   const undistortionMode = useCameraStore((s) => s.undistortionMode);
 
+  // Hide frustums when in alignment mode (point picking or floor detection)
+  const isAlignmentMode = useIsAlignmentMode();
+
   // Image planes are shown in 'imageplane' mode
   const showImagePlanes = cameraDisplayMode === 'imageplane';
   const openImageDetail = useUIStore((s) => s.openImageDetail);
@@ -1358,8 +1363,9 @@ export function CameraFrustums() {
     return navigationHistory[navigationHistory.length - 1].toImageId;
   }, [navigationHistory]);
 
-  // Track URL image cache updates to trigger re-renders
+  // Track URL/ZIP image cache updates to trigger re-renders
   const [urlImageCacheVersion, setUrlImageCacheVersion] = useState(0);
+  const [zipImageCacheVersion, setZipImageCacheVersion] = useState(0);
 
   const frustums = useMemo(() => {
     if (!reconstruction || cameraDisplayMode === 'off') return [];
@@ -1387,11 +1393,14 @@ export function CameraFrustums() {
         continue;
       }
 
-      // Get image file - use URL cache if in URL mode, otherwise local files
+      // Get image file - use URL cache if in URL mode, ZIP cache if ZIP mode, otherwise local files
       let imageFile: File | undefined;
       if (imageUrlBase) {
         // URL mode: check cache first (sync)
         imageFile = getUrlImageCached(image.name);
+      } else if (isZipLoadingAvailable()) {
+        // ZIP mode: check ZIP cache (sync)
+        imageFile = getZipImageCached(image.name) ?? undefined;
       } else {
         // Local mode: use local file lookup
         imageFile = getImageFile(imageFiles, image.name);
@@ -1409,7 +1418,7 @@ export function CameraFrustums() {
     }
 
     return result;
-  }, [reconstruction, cameraDisplayMode, imageFiles, imageUrlBase, cameraIdToIndex, urlImageCacheVersion]);
+  }, [reconstruction, cameraDisplayMode, imageFiles, imageUrlBase, cameraIdToIndex, urlImageCacheVersion, zipImageCacheVersion]);
 
   // Callbacks for arrow hit targets - use stable references to avoid breaking memo
   const handleArrowClick = useCallback((imageId: number) => {
@@ -1534,6 +1543,27 @@ export function CameraFrustums() {
     }
   }, [imageUrlBase, reconstruction, selectedImageId]);
 
+  // Fetch ZIP image only for selected camera (ZIP mode only)
+  // Image planes just display cached images - no auto-fetching for hover
+  useEffect(() => {
+    if (imageUrlBase || !isZipLoadingAvailable() || !reconstruction || selectedImageId === null) {
+      return;
+    }
+
+    const selectedImage = reconstruction.images.get(selectedImageId);
+    if (!selectedImage) return;
+
+    const cached = getZipImageCached(selectedImage.name);
+    if (!cached) {
+      fetchZipImage(selectedImage.name).then((file) => {
+        if (file) {
+          // Trigger re-render when image is cached
+          setZipImageCacheVersion(v => v + 1);
+        }
+      });
+    }
+  }, [imageUrlBase, reconstruction, selectedImageId]);
+
   // Context menu action handlers
   const handleContextMenuSelect = useCallback(() => {
     if (contextMenu) {
@@ -1600,7 +1630,8 @@ export function CameraFrustums() {
     setContextMenu(null);
   }, []);
 
-  if (cameraDisplayMode === 'off' || frustums.length === 0) return null;
+  // Hide frustums when display mode is off, no frustums, or in alignment mode
+  if (cameraDisplayMode === 'off' || frustums.length === 0 || isAlignmentMode) return null;
 
   // Arrow mode: use batched rendering for efficiency
   if (cameraDisplayMode === 'arrow') {

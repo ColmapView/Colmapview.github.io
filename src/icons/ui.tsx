@@ -251,3 +251,21 @@ export function EmbedIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+// Chevron down icon (for collapsible sections)
+export function ChevronDownIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+// Chevron right icon (for collapsed sections)
+export function ChevronRightIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M9 18l6-6-6-6" />
+    </svg>
+  );
+}

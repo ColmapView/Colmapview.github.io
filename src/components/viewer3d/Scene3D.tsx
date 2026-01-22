@@ -9,12 +9,15 @@ import { TrackballControls } from './TrackballControls';
 import { OriginAxes, OriginGrid } from './OriginVisualization';
 import { TransformGizmo } from './TransformGizmo';
 import { SelectedPointMarkers } from './SelectedPointMarkers';
+import { FloorPlaneWidget } from './FloorPlaneWidget';
 import { PickingCursor } from './PickingCursor';
 import { ScreenshotCapture } from './ScreenshotCapture';
 import { FooterBranding } from './FooterBranding';
 import { GlobalContextMenu } from './GlobalContextMenu';
 import { DistanceInputModal } from '../modals/DistanceInputModal';
+import { FloorAlignModal } from '../modals/FloorAlignModal';
 import { useReconstructionStore, useUIStore, useCameraStore, useTransformStore, usePointPickingStore } from '../../store';
+import { useIsAlignmentMode } from '../../hooks/useAlignmentMode';
 import { getImageWorldPosition } from '../../utils/colmapTransforms';
 import { createSim3dFromEuler, sim3dToMatrix4, isIdentityEuler, transformPoint } from '../../utils/sim3dTransforms';
 import { percentile, median } from '../../utils/mathUtils';
@@ -23,8 +26,8 @@ import { CAMERA, VIZ_COLORS, OPACITY } from '../../theme';
 function SceneContent() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
-  const pickingMode = usePointPickingStore((s) => s.pickingMode);
-  const isPicking = pickingMode !== 'off';
+  // Use shared alignment mode (includes point picking AND floor detection)
+  const isAlignmentMode = useIsAlignmentMode();
 
   const bounds = useMemo(() => {
     if (!reconstruction) {
@@ -141,34 +144,38 @@ function SceneContent() {
       <directionalLight position={[10, 10, 5]} intensity={OPACITY.light.directional} />
 
       {/* Transformable content - wrapped in group when preview is active */}
-      {/* Hide frustums during point picking for cleaner selection */}
+      {/* Hide frustums during alignment modes (point picking or floor detection) for cleaner visualization */}
       {transformMatrix ? (
         <group matrixAutoUpdate={false} matrix={transformMatrix}>
           <PointCloud />
-          {!isPicking && <CameraFrustums />}
-          {!isPicking && <CameraMatches />}
-          {!isPicking && <RigConnections />}
+          {!isAlignmentMode && <CameraFrustums />}
+          {!isAlignmentMode && <CameraMatches />}
+          {!isAlignmentMode && <RigConnections />}
         </group>
       ) : (
         <>
           <PointCloud />
-          {!isPicking && <CameraFrustums />}
-          {!isPicking && <CameraMatches />}
-          {!isPicking && <RigConnections />}
+          {!isAlignmentMode && <CameraFrustums />}
+          {!isAlignmentMode && <CameraMatches />}
+          {!isAlignmentMode && <RigConnections />}
         </>
       )}
 
       {/* Axes/Grid stay in original coordinate system */}
+      {/* Show axes automatically when in alignment mode for orientation reference */}
       <Suspense fallback={null}>
-        {(axesDisplayMode === 'axes' || axesDisplayMode === 'both') && <OriginAxes size={bounds.radius * axesScale} scale={axesScale} coordinateSystem={axesCoordinateSystem} labelMode={axisLabelMode} axesDisplayMode={axesDisplayMode} />}
+        {(axesDisplayMode === 'axes' || axesDisplayMode === 'both' || isAlignmentMode) && <OriginAxes size={bounds.radius * axesScale} scale={axesScale} coordinateSystem={axesCoordinateSystem} labelMode={axisLabelMode} axesDisplayMode={axesDisplayMode} />}
         {(axesDisplayMode === 'grid' || axesDisplayMode === 'both') && <OriginGrid size={bounds.radius} scale={gridScale} />}
       </Suspense>
 
-      {/* Transform gizmo follows the transformed data - hidden during picking */}
-      {!isPicking && reconstruction && gizmoMode !== 'off' && <TransformGizmo center={transformedCenter} size={bounds.radius * transform.scale * axesScale} coordinateMode={gizmoMode} />}
+      {/* Transform gizmo follows the transformed data - hidden during alignment mode */}
+      {!isAlignmentMode && reconstruction && gizmoMode !== 'off' && <TransformGizmo center={transformedCenter} size={bounds.radius * transform.scale * axesScale} coordinateMode={gizmoMode} />}
 
       {/* Point picking markers - rendered outside transform group for stable display */}
       <SelectedPointMarkers />
+
+      {/* Floor plane widget - rendered outside transform group for stable display */}
+      <FloorPlaneWidget />
 
       <TrackballControls target={bounds.center} radius={bounds.radius} resetTrigger={viewResetTrigger} viewDirection={viewDirection} viewTrigger={viewTrigger} />
     </>
@@ -333,6 +340,7 @@ export function Scene3D() {
       <PickingCursor />
       <GlobalContextMenu />
       <DistanceInputModal />
+      <FloorAlignModal />
     </div>
   );
 }

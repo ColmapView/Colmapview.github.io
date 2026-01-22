@@ -15,6 +15,15 @@
  * Strategy: Store images under multiple lookup keys for O(1) retrieval.
  */
 
+import type { ArchiveEntry } from '../types/libarchive';
+import {
+  hasActiveZipArchive,
+  findZipEntry,
+  extractZipImage,
+  getActiveZipImageIndex,
+  clearActiveZipArchive,
+} from './zipLoader';
+
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'];
 
 function isImageFile(path: string): boolean {
@@ -484,4 +493,162 @@ export function getMaskFile(
   }
 
   return undefined;
+}
+
+// ============================================================================
+// ZIP-based image/mask loading (for ZIP archives)
+// ============================================================================
+
+/** Cache for images extracted from ZIP */
+const zipImageCache = new Map<string, File>();
+
+/** Cache for masks extracted from ZIP */
+const zipMaskCache = new Map<string, File>();
+
+/** Set of images currently being extracted (deduplication) */
+const pendingZipExtracts = new Set<string>();
+
+/** Callbacks waiting for extraction */
+const zipExtractCallbacks = new Map<string, Array<(file: File | null) => void>>();
+
+/**
+ * Get a cached ZIP image (synchronous).
+ * Returns undefined if not yet extracted.
+ */
+export function getZipImageCached(imageName: string): File | undefined {
+  return zipImageCache.get(imageName);
+}
+
+/**
+ * Check if ZIP loading is available.
+ */
+export function isZipLoadingAvailable(): boolean {
+  return hasActiveZipArchive();
+}
+
+/**
+ * Extract an image from ZIP and cache it.
+ * Returns the cached File if already extracted, otherwise extracts and caches.
+ * Follows same pattern as fetchUrlImage().
+ */
+export async function fetchZipImage(imageName: string): Promise<File | null> {
+  // Check cache first
+  const cached = zipImageCache.get(imageName);
+  if (cached) return cached;
+
+  if (!hasActiveZipArchive()) return null;
+
+  // Deduplication (same pattern as URL loading)
+  if (pendingZipExtracts.has(imageName)) {
+    return new Promise((resolve) => {
+      const callbacks = zipExtractCallbacks.get(imageName) || [];
+      callbacks.push(resolve);
+      zipExtractCallbacks.set(imageName, callbacks);
+    });
+  }
+
+  pendingZipExtracts.add(imageName);
+
+  try {
+    // Extract from WASM memory
+    const extractedFile = await extractZipImage(imageName);
+    if (!extractedFile) {
+      // Notify waiting callbacks
+      const callbacks = zipExtractCallbacks.get(imageName) || [];
+      for (const cb of callbacks) cb(null);
+      zipExtractCallbacks.delete(imageName);
+      return null;
+    }
+
+    // Compress to JPEG (same as URL images)
+    const filename = imageName.split('/').pop() || imageName;
+    const file = await compressAndResizeToJpeg(new Blob([await extractedFile.arrayBuffer()]), filename);
+    zipImageCache.set(imageName, file);
+
+    // Notify waiting callbacks
+    const callbacks = zipExtractCallbacks.get(imageName) || [];
+    for (const cb of callbacks) cb(file);
+    zipExtractCallbacks.delete(imageName);
+
+    return file;
+  } catch (err) {
+    console.warn(`[ZIP Image] Error extracting ${imageName}:`, err);
+    const callbacks = zipExtractCallbacks.get(imageName) || [];
+    for (const cb of callbacks) cb(null);
+    zipExtractCallbacks.delete(imageName);
+    return null;
+  } finally {
+    pendingZipExtracts.delete(imageName);
+  }
+}
+
+/**
+ * Get mask path variants for a given image name.
+ * Used for both URL and ZIP mask lookups.
+ */
+export function getMaskPathVariants(imageName: string): string[] {
+  const normalized = imageName.replace(/\\/g, '/');
+
+  // Strip images/ prefix if present
+  let basePath = normalized;
+  if (normalized.toLowerCase().startsWith('images/')) {
+    basePath = normalized.slice(7); // Remove "images/"
+  }
+
+  const variants: string[] = [
+    // Same name (for PNG images)
+    `masks/${basePath}`,
+    // COLMAP convention (image.jpg.png)
+    `masks/${basePath}.png`,
+    // Just filename
+    `masks/${basePath.split('/').pop() || basePath}`,
+    `masks/${basePath.split('/').pop() || basePath}.png`,
+  ];
+
+  return variants;
+}
+
+/**
+ * Extract a mask from ZIP (same naming conventions as fetchUrlMask).
+ */
+export async function fetchZipMask(imageName: string): Promise<File | null> {
+  // Check cache first
+  const cached = zipMaskCache.get(imageName);
+  if (cached) return cached;
+
+  if (!hasActiveZipArchive()) return null;
+
+  const imageIndex = getActiveZipImageIndex();
+  if (!imageIndex) return null;
+
+  // Try multiple mask naming conventions (same as URL)
+  const maskPaths = getMaskPathVariants(imageName);
+
+  for (const maskPath of maskPaths) {
+    const entry = findZipEntry(maskPath, imageIndex);
+    if (entry) {
+      try {
+        const file = await (entry as ArchiveEntry & { extract: () => Promise<File> }).extract();
+        zipMaskCache.set(imageName, file);
+        console.log(`[ZIP Mask] Found mask for ${imageName}`);
+        return file;
+      } catch (err) {
+        console.debug(`[ZIP Mask] Error extracting ${maskPath}:`, err);
+      }
+    }
+  }
+
+  console.debug(`[ZIP Mask] No mask found for ${imageName}`);
+  return null;
+}
+
+/**
+ * Clear ZIP caches and release WASM memory.
+ */
+export function clearZipCache(): void {
+  zipImageCache.clear();
+  zipMaskCache.clear();
+  pendingZipExtracts.clear();
+  zipExtractCallbacks.clear();
+  clearActiveZipArchive();
 }

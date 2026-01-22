@@ -3,7 +3,7 @@
 // ============================================================================
 
 // Point cloud visualization
-export const COLOR_MODES = ['rgb', 'error', 'trackLength'] as const;
+export const COLOR_MODES = ['rgb', 'error', 'trackLength', 'floor'] as const;
 export type ColorMode = (typeof COLOR_MODES)[number];
 
 // Camera and navigation

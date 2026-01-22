@@ -2,6 +2,7 @@ import { useMemo, useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { useReconstructionStore, usePointCloudStore, useCameraStore, usePointPickingStore } from '../../store';
+import { useFloorPlaneStore } from '../../store/stores/floorPlaneStore';
 import type { Point3D } from '../../types/colmap';
 import { BRIGHTNESS, RAINBOW, COLORMAP } from '../../theme';
 import { sRGBToLinear, rainbowColor, jetColormap } from '../../utils/colorUtils';
@@ -21,12 +22,20 @@ export function PointCloud() {
   // Use ref instead of state to avoid re-renders on every frame
   const rainbowHueRef = useRef(0);
   const tempColorRef = useRef(new THREE.Color());
+  // Memoized highlight color RGB tuple (avoids THREE.Color creation in useMemo)
+  const highlightColorRef = useRef<[number, number, number]>([1, 0.5, 0]);
 
   // Point picking state - only subscribe to length to avoid re-renders when points change
   const pickingMode = usePointPickingStore((s) => s.pickingMode);
   const selectedPointsLength = usePointPickingStore((s) => s.selectedPoints.length);
   const addSelectedPoint = usePointPickingStore((s) => s.addSelectedPoint);
   const setHoveredPoint = usePointPickingStore((s) => s.setHoveredPoint);
+
+  // Floor plane state for floor color mode
+  const pointDistances = useFloorPlaneStore((s) => s.pointDistances);
+  const distanceThreshold = useFloorPlaneStore((s) => s.distanceThreshold);
+  const floorColorMode = useFloorPlaneStore((s) => s.floorColorMode);
+
   const { camera, gl, raycaster } = useThree();
   const pointsRef = useRef<THREE.Points>(null);
   const indexToPoint3DIdRef = useRef<Map<number, bigint>>(new Map());
@@ -83,6 +92,12 @@ export function PointCloud() {
       selectedMaterialRef.current.needsUpdate = true;
     }
   }, [selectionColorMode, selectionColor]);
+
+  // Update highlight color ref when selectionColor changes (avoids THREE.Color allocation in useMemo)
+  useEffect(() => {
+    const c = new THREE.Color(selectionColor);
+    highlightColorRef.current = [c.r, c.g, c.b];
+  }, [selectionColor]);
 
   const { positions, colors, selectedPositions, selectedColors } = useMemo(() => {
     if (!reconstruction) {
@@ -156,7 +171,7 @@ export function PointCloud() {
           } else {
             finalColors.fill(1);
           }
-        } else {
+        } else if (colorMode === 'trackLength') {
           // trackLength mode
           const trackLengths = wasmReconstruction.getTrackLengths();
           finalColors = new Float32Array(count * 3);
@@ -179,6 +194,47 @@ export function PointCloud() {
             }
           } else {
             finalColors.fill(1);
+          }
+        } else {
+          // floor mode - color by distance to detected floor plane
+          finalColors = new Float32Array(count * 3);
+
+          if (pointDistances && pointDistances.length === count && floorColorMode !== 'off') {
+            if (floorColorMode === 'binary') {
+              // Binary: green for inliers, red for outliers
+              for (let i = 0; i < count; i++) {
+                const isInlier = Math.abs(pointDistances[i]) <= distanceThreshold;
+                finalColors[i * 3] = isInlier ? 0.2 : 0.9;      // R: low for inliers
+                finalColors[i * 3 + 1] = isInlier ? 0.9 : 0.2;  // G: high for inliers
+                finalColors[i * 3 + 2] = 0.2;                    // B: low for both
+              }
+            } else {
+              // distance mode: jet colormap by absolute distance
+              // Find max distance for normalization
+              let maxDist = 0;
+              for (let i = 0; i < count; i++) {
+                maxDist = Math.max(maxDist, Math.abs(pointDistances[i]));
+              }
+              if (maxDist === 0) maxDist = 1;
+
+              for (let i = 0; i < count; i++) {
+                const distNorm = Math.abs(pointDistances[i]) / maxDist;
+                const [r, g, b] = jetColormap(distNorm);
+                finalColors[i * 3] = r;
+                finalColors[i * 3 + 1] = g;
+                finalColors[i * 3 + 2] = b;
+              }
+            }
+          } else {
+            // Fallback to RGB if no floor data
+            const wasmColors = wasmReconstruction.getColors();
+            if (wasmColors) {
+              for (let i = 0; i < wasmColors.length; i++) {
+                finalColors[i] = sRGBToLinear(wasmColors[i]);
+              }
+            } else {
+              finalColors.fill(1);
+            }
           }
         }
 
@@ -206,9 +262,8 @@ export function PointCloud() {
       selectedImagePointIds = new Set();
     }
 
-    // Convert hex selection color to RGB values
-    const tempColor = new THREE.Color(selectionColor);
-    const HIGHLIGHT_COLOR: [number, number, number] = [tempColor.r, tempColor.g, tempColor.b];
+    // Use memoized highlight color (updated via useEffect when selectionColor changes)
+    const HIGHLIGHT_COLOR = highlightColorRef.current;
 
     // Use WASM arrays if available (preferred path - doesn't need points3D Map)
     if (wasmReconstruction?.hasPoints()) {
@@ -221,26 +276,19 @@ export function PointCloud() {
 
       if (wasmPositions && wasmErrors && wasmTrackLengths) {
         // First pass: find min/max and count filtered points
+        // Use Uint8Array instead of two boolean arrays for better memory efficiency
+        // 0=skip, 1=regular, 2=highlight
         let minErrorVal = Infinity, maxErrorVal = -Infinity;
         let minTrackVal = Infinity, maxTrackVal = -Infinity;
         let regularCount = 0;
         let highlightCount = 0;
-        const isRegular: boolean[] = [];
-        const isHighlighted: boolean[] = [];
+        const pointState = new Uint8Array(count);
 
         for (let i = 0; i < count; i++) {
           // Filter by track length
-          if (wasmTrackLengths[i] < minTrackLength) {
-            isRegular.push(false);
-            isHighlighted.push(false);
-            continue;
-          }
+          if (wasmTrackLengths[i] < minTrackLength) continue;
           // Filter by reprojection error
-          if (wasmErrors[i] > maxReprojectionError) {
-            isRegular.push(false);
-            isHighlighted.push(false);
-            continue;
-          }
+          if (wasmErrors[i] > maxReprojectionError) continue;
 
           // Update stats
           if (wasmErrors[i] >= 0) {
@@ -252,18 +300,10 @@ export function PointCloud() {
 
           // Check if highlighted
           const point3DId = point3DIds ? point3DIds[i] : BigInt(i + 1);
-          const isInSet = selectedImagePointIds.has(point3DId);
-          const shouldHighlight = selectionColorMode !== 'off' && isInSet;
+          const shouldHighlight = selectionColorMode !== 'off' && selectedImagePointIds.has(point3DId);
 
-          if (shouldHighlight) {
-            isRegular.push(false);
-            isHighlighted.push(true);
-            highlightCount++;
-          } else {
-            isRegular.push(true);
-            isHighlighted.push(false);
-            regularCount++;
-          }
+          pointState[i] = shouldHighlight ? 2 : 1;
+          if (shouldHighlight) highlightCount++; else regularCount++;
         }
 
         if (regularCount === 0 && highlightCount === 0) {
@@ -276,6 +316,17 @@ export function PointCloud() {
         if (minErrorVal === maxErrorVal) maxErrorVal = minErrorVal + 1;
         if (minTrackVal === maxTrackVal) maxTrackVal = minTrackVal + 1;
 
+        // Compute max distance for floor mode normalization
+        let maxFloorDist = 0;
+        if (colorMode === 'floor' && pointDistances && floorColorMode === 'distance') {
+          for (let i = 0; i < count; i++) {
+            if (pointState[i] > 0) {
+              maxFloorDist = Math.max(maxFloorDist, Math.abs(pointDistances[i]));
+            }
+          }
+          if (maxFloorDist === 0) maxFloorDist = 1;
+        }
+
         // Color computation helper
         const computeColorWasm = (i: number, mode: string): [number, number, number] => {
           if (mode === 'error') {
@@ -285,8 +336,17 @@ export function PointCloud() {
             const { baseR, rangeR, baseG, rangeG, baseB, rangeB } = COLORMAP.trackLength;
             const trackNorm = (wasmTrackLengths[i] - minTrackVal) / (maxTrackVal - minTrackVal);
             return [baseR + trackNorm * rangeR, baseG + trackNorm * rangeG, baseB - trackNorm * rangeB];
+          } else if (mode === 'floor' && pointDistances && floorColorMode !== 'off') {
+            if (floorColorMode === 'binary') {
+              const isInlier = Math.abs(pointDistances[i]) <= distanceThreshold;
+              return isInlier ? [0.2, 0.9, 0.2] : [0.9, 0.2, 0.2];
+            } else {
+              // distance mode
+              const distNorm = Math.abs(pointDistances[i]) / maxFloorDist;
+              return jetColormap(distNorm);
+            }
           }
-          // RGB mode
+          // RGB mode (default fallback)
           if (wasmColors) {
             return [
               sRGBToLinear(wasmColors[i * 3]),
@@ -297,17 +357,19 @@ export function PointCloud() {
           return [1, 1, 1];
         };
 
-        // Build output arrays
+        // Build output arrays (lazy allocate selected arrays only when needed)
         const positions = new Float32Array(regularCount * 3);
         const colors = new Float32Array(regularCount * 3);
-        const selectedPositions = new Float32Array(highlightCount * 3);
-        const selectedColors = new Float32Array(highlightCount * 3);
+        const selectedPositions = highlightCount > 0 ? new Float32Array(highlightCount * 3) : null;
+        const selectedColors = highlightCount > 0 ? new Float32Array(highlightCount * 3) : null;
         const indexToPoint3DId = new Map<number, bigint>();
 
         let regularIdx = 0;
         let highlightIdx = 0;
         for (let i = 0; i < count; i++) {
-          if (isRegular[i]) {
+          const state = pointState[i];
+          if (state === 1) {
+            // Regular point
             const i3 = regularIdx * 3;
             positions[i3] = wasmPositions[i * 3];
             positions[i3 + 1] = wasmPositions[i * 3 + 1];
@@ -319,7 +381,8 @@ export function PointCloud() {
             const point3DId = point3DIds ? point3DIds[i] : BigInt(i + 1);
             indexToPoint3DId.set(regularIdx, point3DId);
             regularIdx++;
-          } else if (isHighlighted[i]) {
+          } else if (state === 2 && selectedPositions && selectedColors) {
+            // Highlighted point
             const i3 = highlightIdx * 3;
             selectedPositions[i3] = wasmPositions[i * 3];
             selectedPositions[i3 + 1] = wasmPositions[i * 3 + 1];
@@ -396,6 +459,7 @@ export function PointCloud() {
         const trackNorm = (point.track.length - minTrack) / (maxTrack - minTrack);
         return [baseR + trackNorm * rangeR, baseG + trackNorm * rangeG, baseB - trackNorm * rangeB];
       }
+      // Floor mode falls back to RGB in Map path (WASM path handles floor coloring)
       // Convert sRGB colors from COLMAP to linear space for proper rendering
       return [
         sRGBToLinear(point.rgb[0] / BRIGHTNESS.max),
@@ -446,7 +510,7 @@ export function PointCloud() {
     console.log(`[PointCloud] Map slow path: ${totalPoints.toLocaleString()} points in ${slowPathElapsed.toFixed(1)}ms (${regularPoints.length.toLocaleString()} regular, ${highlightedPoints.length.toLocaleString()} highlighted)`);
 
     return { positions, colors, selectedPositions, selectedColors };
-  }, [reconstruction, wasmReconstruction, colorMode, minTrackLength, maxReprojectionError, selectedImageId, selectionColorMode, selectionColor]);
+  }, [reconstruction, wasmReconstruction, colorMode, minTrackLength, maxReprojectionError, selectedImageId, selectionColorMode, selectionColor, pointDistances, distanceThreshold, floorColorMode]);
 
   // Create geometry objects in useMemo to ensure proper updates when reconstruction changes
   const geometry = useMemo(() => {

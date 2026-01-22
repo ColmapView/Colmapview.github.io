@@ -1,7 +1,7 @@
 {
   "name": "colmapview",
   "private": true,
-  "version": "0.3.6",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -18,7 +18,9 @@
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
     "@tanstack/react-virtual": "^3.13.18",
+    "fflate": "^0.8.2",
     "js-yaml": "^4.1.1",
+    "libarchive.js": "^2.0.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-hotkeys-hook": "^5.2.3",

@@ -4,7 +4,7 @@ import type { WasmReconstructionWrapper } from '../wasm/reconstruction';
 import type { UrlLoadProgress, UrlLoadError, ColmapManifest } from '../types/manifest';
 
 /** Source type for loaded reconstruction */
-export type ReconstructionSourceType = 'local' | 'url' | 'manifest' | null;
+export type ReconstructionSourceType = 'local' | 'url' | 'manifest' | 'zip' | null;
 
 /**
  * Check if the current URL contains parameters that will trigger URL loading.

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useReconstructionStore, useUIStore } from '../../store';
 import type { Camera, Point2D } from '../../types/colmap';
-import { getImageFile, getMaskFile, getUrlImageCached, fetchUrlImage, fetchUrlMask } from '../../utils/imageFileUtils';
+import { getImageFile, getMaskFile, getUrlImageCached, fetchUrlImage, fetchUrlMask, getZipImageCached, fetchZipImage, fetchZipMask, isZipLoadingAvailable } from '../../utils/imageFileUtils';
 import { useFileUrl } from '../../hooks/useFileUrl';
 import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, MODAL, buttonStyles, inputStyles, resizeHandleStyles, modalStyles } from '../../theme';
 import { HOTKEYS } from '../../config/hotkeys';
@@ -344,10 +344,12 @@ export function ImageDetailModal() {
   const imageUrlBase = useReconstructionStore((s) => s.imageUrlBase);
   const maskUrlBase = useReconstructionStore((s) => s.maskUrlBase);
   const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
-  // Track URL image cache version to trigger re-renders when images are fetched
+  // Track URL/ZIP image cache version to trigger re-renders when images are fetched
   const [urlImageCacheVersion, setUrlImageCacheVersion] = useState(0);
-  // Track mask file fetched from URL (lazy loaded, no cache)
+  const [zipImageCacheVersion, setZipImageCacheVersion] = useState(0);
+  // Track mask file fetched from URL or ZIP (lazy loaded, no cache)
   const [urlMaskFile, setUrlMaskFile] = useState<File | null>(null);
+  const [zipMaskFile, setZipMaskFile] = useState<File | null>(null);
   const imageDetailId = useUIStore((s) => s.imageDetailId);
   const closeImageDetail = useUIStore((s) => s.closeImageDetail);
   const openImageDetail = useUIStore((s) => s.openImageDetail);
@@ -474,6 +476,43 @@ export function ImageDetailModal() {
     };
   }, [imageUrlBase, reconstruction, imageDetailId, matchedImageId]);
 
+  // Fetch ZIP images for current and matched images (ZIP mode only)
+  useEffect(() => {
+    if (imageUrlBase || !isZipLoadingAvailable() || !reconstruction) return;
+
+    const imagesToFetch: string[] = [];
+
+    // Check if current image needs fetching
+    if (imageDetailId !== null) {
+      const currentImage = reconstruction.images.get(imageDetailId);
+      if (currentImage && !getZipImageCached(currentImage.name)) {
+        imagesToFetch.push(currentImage.name);
+      }
+    }
+
+    // Check if matched image needs fetching
+    if (matchedImageId !== null) {
+      const matchedImg = reconstruction.images.get(matchedImageId);
+      if (matchedImg && !getZipImageCached(matchedImg.name)) {
+        imagesToFetch.push(matchedImg.name);
+      }
+    }
+
+    if (imagesToFetch.length === 0) return;
+
+    // Fetch images in parallel
+    let cancelled = false;
+    Promise.all(imagesToFetch.map(name => fetchZipImage(name))).then((results) => {
+      if (!cancelled && results.some(f => f !== null)) {
+        setZipImageCacheVersion(v => v + 1);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUrlBase, reconstruction, imageDetailId, matchedImageId]);
+
   // Fetch URL mask for current image (URL mode only, lazy loaded, no cache)
   useEffect(() => {
     // Clear mask when image changes
@@ -488,6 +527,28 @@ export function ImageDetailModal() {
     fetchUrlMask(maskUrlBase, currentImage.name).then((file) => {
       if (!cancelled) {
         setUrlMaskFile(file);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [maskUrlBase, reconstruction, imageDetailId]);
+
+  // Fetch ZIP mask for current image (ZIP mode only, lazy loaded, no cache)
+  useEffect(() => {
+    // Clear mask when image changes
+    setZipMaskFile(null);
+
+    if (maskUrlBase || !isZipLoadingAvailable() || !reconstruction || imageDetailId === null) return;
+
+    const currentImage = reconstruction.images.get(imageDetailId);
+    if (!currentImage) return;
+
+    let cancelled = false;
+    fetchZipMask(currentImage.name).then((file) => {
+      if (!cancelled) {
+        setZipMaskFile(file);
       }
     });
 
@@ -570,27 +631,34 @@ export function ImageDetailModal() {
 
   const image = imageDetailId !== null ? reconstruction?.images.get(imageDetailId) : null;
   const camera = image ? reconstruction?.cameras.get(image.cameraId) : null;
-  // Get image file - use URL cache if in URL mode, otherwise local files
+  // Get image file - use URL cache if in URL mode, ZIP cache if ZIP mode, otherwise local files
   const imageFile = useMemo(() => {
     if (!image) return null;
     if (imageUrlBase) {
       return getUrlImageCached(image.name) ?? null;
     }
+    if (isZipLoadingAvailable()) {
+      return getZipImageCached(image.name) ?? null;
+    }
     return getImageFile(loadedFiles?.imageFiles, image.name) ?? null;
-  }, [image, imageUrlBase, loadedFiles?.imageFiles, urlImageCacheVersion]);
-  // Get mask file - use URL fetched mask if in URL mode, otherwise local files
+  }, [image, imageUrlBase, loadedFiles?.imageFiles, urlImageCacheVersion, zipImageCacheVersion]);
+  // Get mask file - use URL fetched mask if in URL mode, ZIP fetched mask if ZIP mode, otherwise local files
   const maskFile = useMemo(() => {
     if (!image) return null;
     // URL mode: use lazy-loaded mask from URL
     if (maskUrlBase) {
       return urlMaskFile;
     }
+    // ZIP mode: use lazy-loaded mask from ZIP
+    if (isZipLoadingAvailable()) {
+      return zipMaskFile;
+    }
     // Local mode: look for mask if masks folder exists
     if (loadedFiles?.hasMasks) {
       return getMaskFile(loadedFiles?.imageFiles, image.name) ?? null;
     }
     return null;
-  }, [image, maskUrlBase, urlMaskFile, loadedFiles?.hasMasks, loadedFiles?.imageFiles]);
+  }, [image, maskUrlBase, urlMaskFile, zipMaskFile, loadedFiles?.hasMasks, loadedFiles?.imageFiles]);
   const hasMask = !!maskFile;
 
   // Mask display mode: 'hover' (default), 'mask', 'image', 'split'
@@ -758,14 +826,17 @@ export function ImageDetailModal() {
 
   // Get matched image related data (matchedImage is declared earlier, before effectiveMatchedPoints2D)
   const matchedCamera = matchedImage ? reconstruction?.cameras.get(matchedImage.cameraId) : null;
-  // Get matched image file - use URL cache if in URL mode, otherwise local files
+  // Get matched image file - use URL cache if in URL mode, ZIP cache if ZIP mode, otherwise local files
   const matchedImageFile = useMemo(() => {
     if (!matchedImage) return null;
     if (imageUrlBase) {
       return getUrlImageCached(matchedImage.name) ?? null;
     }
+    if (isZipLoadingAvailable()) {
+      return getZipImageCached(matchedImage.name) ?? null;
+    }
     return getImageFile(loadedFiles?.imageFiles, matchedImage.name) ?? null;
-  }, [matchedImage, imageUrlBase, loadedFiles?.imageFiles, urlImageCacheVersion]);
+  }, [matchedImage, imageUrlBase, loadedFiles?.imageFiles, urlImageCacheVersion, zipImageCacheVersion]);
   const matchedImageSrc = useFileUrl(matchedImageFile);
 
   // Compute match lines between current and matched image

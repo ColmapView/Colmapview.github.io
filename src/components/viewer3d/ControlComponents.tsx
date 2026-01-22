@@ -11,7 +11,7 @@ import { hslToHex, hexToHsl } from '../../utils/colorUtils';
 const styles = controlPanelStyles;
 
 // Panel type for control buttons
-export type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'export' | 'transform' | 'gallery' | 'rig' | 'settings' | null;
+export type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'export' | 'transform' | 'gallery' | 'rig' | 'settings' | 'floor' | null;
 
 export interface SliderRowProps {
   label: string;

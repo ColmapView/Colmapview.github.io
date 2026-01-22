@@ -178,10 +178,10 @@ export function DropZone({ children }: DropZoneProps) {
           <div className={dragOverlayStyles.content}>
             <div className={dragOverlayStyles.icon}>+</div>
             <div className={dragOverlayStyles.title}>
-              Drop COLMAP folder here
+              Drop COLMAP folder or ZIP here
             </div>
             <div className={dragOverlayStyles.subtitle}>
-              Expected: sparse/0/cameras.bin, images.bin, points3D.bin
+              Expected: cameras.bin, images.bin, points3D.bin (or .zip containing them)
             </div>
           </div>
         </div>
@@ -253,11 +253,11 @@ export function DropZone({ children }: DropZoneProps) {
               </p>
               <style>{`.info-line:hover { color: rgba(255,255,255,0.9); }`}</style>
               <div className="text-ds-muted text-sm text-left max-w-md mt-6 mb-4">
-                <div className="info-line px-2 rounded"><strong>Drop the project root folder</strong> — subfolders are scanned automatically</div>
+                <div className="info-line px-2 rounded"><strong>Drop folder or ZIP file</strong> — subfolders are scanned automatically</div>
                 <div className="info-line px-2 rounded"><strong>Required:</strong> cameras, images, points3D (.bin or .txt preferred)</div>
                 <div className="info-line px-2 rounded"><strong>Auto-detected:</strong> sparse/0/, sparse/, or any subfolder</div>
                 <div className="info-line px-2 rounded"><strong>Optional:</strong> source images (jpg, png, webp, tiff), config (.yaml), masks/</div>
-                <div className="info-line px-2 rounded text-ds-muted/70">Without source images: point cloud and cameras only, no textures</div>
+                <div className="info-line px-2 rounded text-ds-muted/70">ZIP: max 2GB, images loaded lazily on-demand</div>
               </div>
 
               {/* Action buttons row */}
@@ -288,8 +288,9 @@ export function DropZone({ children }: DropZoneProps) {
   <baseUrl>/sparse/0/points3D.bin
   <baseUrl>/images/  (optional)
   <baseUrl>/masks/   (optional)`}</div>
-                      <div className={`${hoverCardStyles.subtitle} mt-2`}>Or provide a manifest.json URL</div>
-                      <div className={`${hoverCardStyles.subtitle} mt-1 text-ds-muted/70`}>Git URLs auto-converted: HuggingFace, GitHub, GitLab, Bitbucket</div>
+                      <div className={`${hoverCardStyles.subtitle} mt-2`}>Or provide a .zip or manifest.json URL</div>
+                      <div className={`${hoverCardStyles.subtitle} mt-1 text-ds-muted/70`}>Supports: S3, GCS, R2, Dropbox, HuggingFace, GitHub</div>
+                      <div className={`${hoverCardStyles.subtitle} mt-1 text-ds-muted/70`}>Local server: npx http-server --cors -p 8080</div>
                       <div className={hoverCardStyles.hint}>
                         <div className={hoverCardStyles.hintRow}>
                           <MouseLeftIcon className={ICON_SIZES.hoverCard} />

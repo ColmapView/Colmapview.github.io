@@ -752,3 +752,175 @@ export function exportPointsPLY(
   const points3D = getPoints3DForExport(reconstruction, wasmReconstruction);
   downloadFile(writePointsPLY(points3D), 'points.ply');
 }
+
+// ============================================================================
+// ZIP EXPORT
+// ============================================================================
+
+/** Options for ZIP export */
+export interface ZipExportOptions {
+  /** Export format for COLMAP files */
+  format: 'binary' | 'text';
+  /** Include source images in ZIP */
+  includeImages?: boolean;
+  /** Include mask images in ZIP */
+  includeMasks?: boolean;
+  /** Compression level (0-9, default 6) */
+  compressionLevel?: number;
+}
+
+/** Progress callback for ZIP export */
+export type ZipExportProgressCallback = (percent: number, message: string) => void;
+
+/**
+ * Export reconstruction as a ZIP file.
+ * Uses fflate for compression (small bundle, fast).
+ *
+ * @param reconstruction - The reconstruction to export
+ * @param options - Export options (format, include images, compression level)
+ * @param imageFiles - Optional map of image files to include
+ * @param wasmReconstruction - Optional WASM wrapper (used to build points3D if not in reconstruction)
+ * @param onProgress - Optional progress callback
+ * @returns Blob containing the ZIP file
+ */
+export async function exportReconstructionZip(
+  reconstruction: Reconstruction,
+  options: ZipExportOptions,
+  imageFiles?: Map<string, File> | null,
+  wasmReconstruction?: WasmReconstructionWrapper | null,
+  onProgress?: ZipExportProgressCallback
+): Promise<Blob> {
+  // Dynamically import fflate to avoid bundling if not used
+  const { zipSync } = await import('fflate');
+
+  const files: { [path: string]: Uint8Array } = {};
+  const compressionLevel = options.compressionLevel ?? 6;
+
+  onProgress?.(5, 'Exporting cameras...');
+
+  // Get points3D for export
+  const points3D = getPoints3DForExport(reconstruction, wasmReconstruction);
+
+  // Add COLMAP files
+  if (options.format === 'binary') {
+    files['sparse/0/cameras.bin'] = new Uint8Array(writeCamerasBinary(reconstruction.cameras));
+    onProgress?.(10, 'Exporting images...');
+    files['sparse/0/images.bin'] = new Uint8Array(writeImagesBinary(reconstruction.images, wasmReconstruction));
+    onProgress?.(15, 'Exporting points3D...');
+    files['sparse/0/points3D.bin'] = new Uint8Array(writePoints3DBinary(points3D));
+  } else {
+    const encoder = new TextEncoder();
+    files['sparse/0/cameras.txt'] = encoder.encode(writeCamerasText(reconstruction.cameras));
+    onProgress?.(10, 'Exporting images...');
+    files['sparse/0/images.txt'] = encoder.encode(writeImagesText(reconstruction.images, wasmReconstruction));
+    onProgress?.(15, 'Exporting points3D...');
+    files['sparse/0/points3D.txt'] = encoder.encode(writePoints3DText(points3D));
+  }
+
+  onProgress?.(20, 'Exporting rig data...');
+
+  // Export rig data if available
+  if (reconstruction.rigData) {
+    const { rigs, frames } = reconstruction.rigData;
+    if (rigs.size > 0) {
+      if (options.format === 'binary') {
+        files['sparse/0/rigs.bin'] = new Uint8Array(writeRigsBinary(rigs));
+      } else {
+        files['sparse/0/rigs.txt'] = new TextEncoder().encode(writeRigsText(rigs));
+      }
+    }
+    if (frames.size > 0) {
+      if (options.format === 'binary') {
+        files['sparse/0/frames.bin'] = new Uint8Array(writeFramesBinary(frames));
+      } else {
+        files['sparse/0/frames.txt'] = new TextEncoder().encode(writeFramesText(frames));
+      }
+    }
+  }
+
+  // Optional: include images
+  if (options.includeImages && imageFiles && imageFiles.size > 0) {
+    onProgress?.(25, 'Adding images...');
+    let imageCount = 0;
+    const totalImages = imageFiles.size;
+
+    // Get unique files (imageFiles may have duplicate entries under different keys)
+    const uniqueFiles = new Map<File, string>();
+    for (const [path, file] of imageFiles) {
+      if (!uniqueFiles.has(file)) {
+        uniqueFiles.set(file, path);
+      }
+    }
+
+    for (const [file, path] of uniqueFiles) {
+      // Skip entries that are just lookup keys (not actual paths)
+      if (!path.includes('/') && path !== file.name) continue;
+
+      // Normalize path and ensure it's under images/
+      let imagePath = path.replace(/\\/g, '/');
+      if (!imagePath.startsWith('images/')) {
+        imagePath = `images/${imagePath}`;
+      }
+
+      try {
+        const buffer = await file.arrayBuffer();
+        files[imagePath] = new Uint8Array(buffer);
+        imageCount++;
+
+        if (imageCount % 10 === 0) {
+          const percent = 25 + Math.round((imageCount / totalImages) * 50);
+          onProgress?.(percent, `Adding images (${imageCount}/${totalImages})...`);
+        }
+      } catch (err) {
+        console.warn(`[ZIP Export] Failed to add image: ${path}`, err);
+      }
+    }
+  }
+
+  onProgress?.(85, 'Compressing...');
+
+  // Create ZIP with specified compression level
+  // fflate expects compression options per-file or globally via zipSync options
+  // Cast compression level to the expected type (0-9)
+  const zipped = zipSync(files, { level: compressionLevel as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 });
+
+  onProgress?.(100, 'Done');
+  // Create Blob from Uint8Array (cast to avoid TypeScript issue with ArrayBufferLike)
+  return new Blob([zipped as BlobPart], { type: 'application/zip' });
+}
+
+/**
+ * Export reconstruction as a ZIP file and download it.
+ *
+ * @param reconstruction - The reconstruction to export
+ * @param options - Export options (format, include images, compression level)
+ * @param imageFiles - Optional map of image files to include
+ * @param wasmReconstruction - Optional WASM wrapper (used to build points3D if not in reconstruction)
+ * @param onProgress - Optional progress callback
+ * @param filename - Output filename (default: 'reconstruction.zip')
+ */
+export async function downloadReconstructionZip(
+  reconstruction: Reconstruction,
+  options: ZipExportOptions,
+  imageFiles?: Map<string, File> | null,
+  wasmReconstruction?: WasmReconstructionWrapper | null,
+  onProgress?: ZipExportProgressCallback,
+  filename: string = 'reconstruction.zip'
+): Promise<void> {
+  const blob = await exportReconstructionZip(
+    reconstruction,
+    options,
+    imageFiles,
+    wasmReconstruction,
+    onProgress
+  );
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

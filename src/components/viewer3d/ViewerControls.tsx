@@ -1,12 +1,14 @@
 import { useState, useEffect, memo, useCallback, useMemo } from 'react';
 import { useReconstructionStore, usePointCloudStore, useCameraStore, useUIStore, useExportStore, useTransformStore, usePointPickingStore, useRigStore, useNotificationStore, useGuideStore } from '../../store';
+import { useFloorPlaneStore, type FloorColorMode } from '../../store/stores/floorPlaneStore';
+import { detectPlaneRANSAC, computeDistancesToPlane, transformPositions } from '../../utils/ransac';
+import { createSim3dFromEuler, isIdentityEuler } from '../../utils/sim3dTransforms';
 // sim3d transforms moved to DistanceInputModal for picking tool apply logic
 import type { ColorMode } from '../../types/colmap';
 import type { CameraMode, CameraDisplayMode, CameraScaleFactor, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, ScreenshotSize, ScreenshotFormat, GizmoMode, AutoRotateMode, HorizonLockMode, RigDisplayMode } from '../../store/types';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { controlPanelStyles, HOTKEYS } from '../../theme';
-import { exportReconstructionText, exportReconstructionBinary, exportPointsPLY } from '../../parsers';
-import { isIdentityEuler } from '../../utils/sim3dTransforms';
+import { exportReconstructionText, exportReconstructionBinary, exportPointsPLY, downloadReconstructionZip } from '../../parsers';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { extractConfigurationFromStores, serializeConfigToYaml } from '../../config/configuration';
 import { hslToHex, hexToHsl } from '../../utils/colorUtils';
@@ -34,6 +36,7 @@ import {
   AxesOffIcon,
   GridIcon,
   AxesGridIcon,
+  FloorDetectIcon,
   ColorRgbIcon,
   ColorErrorIcon,
   ColorTrackIcon,
@@ -293,6 +296,203 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
   );
 });
 
+// Floor Detection panel component
+interface FloorDetectionPanelProps {
+  styles: typeof controlPanelStyles;
+  activePanel: PanelType;
+  setActivePanel: (panel: PanelType) => void;
+}
+
+const FloorDetectionPanel = memo(function FloorDetectionPanel({ styles, activePanel, setActivePanel }: FloorDetectionPanelProps) {
+  const reconstruction = useReconstructionStore((s) => s.reconstruction);
+  const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
+  const colorMode = usePointCloudStore((s) => s.colorMode);
+  const setColorMode = usePointCloudStore((s) => s.setColorMode);
+
+  // Get current transform to apply before detection
+  const transform = useTransformStore((s) => s.transform);
+
+  const detectedPlane = useFloorPlaneStore((s) => s.detectedPlane);
+  const setDetectedPlane = useFloorPlaneStore((s) => s.setDetectedPlane);
+  const distanceThreshold = useFloorPlaneStore((s) => s.distanceThreshold);
+  const setDistanceThreshold = useFloorPlaneStore((s) => s.setDistanceThreshold);
+  const sampleCount = useFloorPlaneStore((s) => s.sampleCount);
+  const setSampleCount = useFloorPlaneStore((s) => s.setSampleCount);
+  const floorColorMode = useFloorPlaneStore((s) => s.floorColorMode);
+  const setFloorColorMode = useFloorPlaneStore((s) => s.setFloorColorMode);
+  const setPointDistances = useFloorPlaneStore((s) => s.setPointDistances);
+  const isDetecting = useFloorPlaneStore((s) => s.isDetecting);
+  const setIsDetecting = useFloorPlaneStore((s) => s.setIsDetecting);
+  const setNormalFlipped = useFloorPlaneStore((s) => s.setNormalFlipped);
+  const reset = useFloorPlaneStore((s) => s.reset);
+
+  const pointCount = wasmReconstruction?.pointCount ?? reconstruction?.points3D?.size ?? 0;
+
+  const handleDetectFloor = useCallback(() => {
+    if (!wasmReconstruction?.hasPoints()) return;
+
+    setIsDetecting(true);
+
+    // Use setTimeout to allow UI to update before potentially blocking operation
+    setTimeout(() => {
+      let positions = wasmReconstruction.getPositions();
+      if (!positions) {
+        setIsDetecting(false);
+        return;
+      }
+
+      // Apply current transform if not identity (so detection matches visual)
+      if (!isIdentityEuler(transform)) {
+        const sim3d = createSim3dFromEuler(transform);
+        positions = transformPositions(positions, sim3d);
+      }
+
+      const plane = detectPlaneRANSAC(positions, { distanceThreshold, sampleCount });
+      setDetectedPlane(plane);
+
+      if (plane) {
+        // Auto-orient normal to point towards the side with MORE points
+        // In typical scenes, cameras and objects are above the floor, so more points = "up"
+        const distances = computeDistancesToPlane(positions, plane);
+
+        // Count points on each side of the plane
+        let pointsAbove = 0;  // positive distance = in normal direction
+        let pointsBelow = 0;  // negative distance = opposite to normal
+        for (let i = 0; i < distances.length; i++) {
+          if (distances[i] > 0) pointsAbove++;
+          else if (distances[i] < 0) pointsBelow++;
+        }
+
+        // If more points are on the negative side, flip normal so it points towards them
+        // This makes the normal point "up" towards the bulk of the scene
+        setNormalFlipped(pointsBelow > pointsAbove);
+        setPointDistances(distances);
+        // Switch to floor color mode if not already
+        if (colorMode !== 'floor') {
+          setColorMode('floor');
+        }
+        if (floorColorMode === 'off') {
+          setFloorColorMode('binary');
+        }
+      } else {
+        setPointDistances(null);
+      }
+
+      setIsDetecting(false);
+    }, 10);
+  }, [wasmReconstruction, distanceThreshold, sampleCount, transform, setDetectedPlane, setPointDistances, setIsDetecting, setNormalFlipped, colorMode, setColorMode, floorColorMode, setFloorColorMode]);
+
+  const handleClear = useCallback(() => {
+    reset();
+    if (colorMode === 'floor') {
+      setColorMode('rgb');
+    }
+  }, [reset, colorMode, setColorMode]);
+
+  const inlierPercentage = detectedPlane && pointCount > 0
+    ? ((detectedPlane.inlierCount / pointCount) * 100).toFixed(1)
+    : null;
+
+  return (
+    <ControlButton
+      panelId="floor"
+      activePanel={activePanel}
+      setActivePanel={setActivePanel}
+      icon={<FloorDetectIcon className="w-6 h-6" />}
+      tooltip={detectedPlane ? `Floor detected (${inlierPercentage}% inliers)` : 'Floor Detection'}
+      isActive={detectedPlane !== null}
+      panelTitle="Floor Detection"
+      disabled={!reconstruction || !wasmReconstruction?.hasPoints()}
+    >
+      <div className={styles.panelContent}>
+        {/* Detect/Clear buttons */}
+        <div className={styles.presetGroup}>
+          <button
+            onClick={handleDetectFloor}
+            disabled={isDetecting || !wasmReconstruction?.hasPoints()}
+            className={isDetecting ? styles.actionButtonDisabled : styles.actionButtonPrimary}
+            data-tooltip="Run RANSAC to detect floor plane"
+            data-tooltip-pos="bottom"
+          >
+            {isDetecting ? 'Detecting...' : 'Detect Floor'}
+          </button>
+          <button
+            onClick={handleClear}
+            disabled={!detectedPlane}
+            className={detectedPlane ? styles.actionButton : styles.actionButtonDisabled}
+            data-tooltip="Clear floor detection"
+            data-tooltip-pos="bottom"
+          >
+            Clear
+          </button>
+        </div>
+
+        {/* Distance threshold slider */}
+        <SliderRow
+          label="Threshold"
+          value={distanceThreshold}
+          min={0.001}
+          max={0.5}
+          step={0.001}
+          onChange={setDistanceThreshold}
+          formatValue={(v) => v.toFixed(3)}
+        />
+
+        {/* Sample count slider */}
+        <SliderRow
+          label="Samples"
+          value={sampleCount}
+          min={1000}
+          max={100000}
+          step={1000}
+          onChange={setSampleCount}
+          formatValue={(v) => `${(v / 1000).toFixed(0)}k`}
+        />
+
+        {/* Floor color mode */}
+        <SelectRow
+          label="Color"
+          value={floorColorMode}
+          onChange={(v) => {
+            setFloorColorMode(v as FloorColorMode);
+            // Switch to floor color mode if selecting a non-off option
+            if (v !== 'off' && colorMode !== 'floor') {
+              setColorMode('floor');
+            }
+          }}
+          options={[
+            { value: 'off', label: 'Off' },
+            { value: 'binary', label: 'Binary (In/Out)' },
+            { value: 'distance', label: 'Distance' },
+          ]}
+        />
+
+        {/* Status info */}
+        {detectedPlane && (
+          <div className="text-ds-secondary text-sm mt-3">
+            <div className="mb-1 font-medium">Detection Result:</div>
+            <div>{inlierPercentage}% inliers ({detectedPlane.inlierCount.toLocaleString()} pts)</div>
+            <div className="text-xs text-ds-muted mt-1">
+              Left-click widget to flip normal
+            </div>
+            <div className="text-xs text-ds-muted">
+              Right-click widget to cycle axis
+            </div>
+          </div>
+        )}
+
+        {!detectedPlane && (
+          <div className="text-ds-secondary text-sm mt-3">
+            <div className="mb-1 font-medium">RANSAC Floor Detection:</div>
+            <div>Detect dominant plane in</div>
+            <div>the point cloud for alignment.</div>
+          </div>
+        )}
+      </div>
+    </ControlButton>
+  );
+});
+
 // Gallery toggle button component
 interface GalleryToggleButtonProps {
   activePanel: PanelType;
@@ -412,6 +612,7 @@ export function ViewerControls() {
   const setExportFormat = useExportStore((s) => s.setExportFormat);
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
+  const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
   const sourceType = useReconstructionStore((s) => s.sourceType);
   const sourceUrl = useReconstructionStore((s) => s.sourceUrl);
   const sourceManifest = useReconstructionStore((s) => s.sourceManifest);
@@ -1051,6 +1252,8 @@ export function ViewerControls() {
 
       <TransformPanel styles={styles} activePanel={activePanel} setActivePanel={setActivePanel} />
 
+      <FloorDetectionPanel styles={styles} activePanel={activePanel} setActivePanel={setActivePanel} />
+
       <ControlButton
         panelId="points"
         activePanel={activePanel}
@@ -1082,6 +1285,7 @@ export function ViewerControls() {
               { value: 'rgb', label: 'RGB' },
               { value: 'error', label: 'Error' },
               { value: 'trackLength', label: 'Track Length' },
+              { value: 'floor', label: 'Floor Distance' },
             ]}
           />
           <SliderRow label="Size" value={pointSize} min={1} max={10} step={0.5} onChange={setPointSize} />
@@ -1108,11 +1312,17 @@ export function ViewerControls() {
                 <div>Blue = low error (accurate)</div>
                 <div>Red = high error (outliers)</div>
               </>
-            ) : (
+            ) : colorMode === 'trackLength' ? (
               <>
                 <div className="mb-1 font-medium">Track Length:</div>
                 <div>Dark = few observations</div>
                 <div>Bright = many observations</div>
+              </>
+            ) : (
+              <>
+                <div className="mb-1 font-medium">Floor Distance:</div>
+                <div>Green = on floor plane</div>
+                <div>Red = away from floor</div>
               </>
             )}
           </div>
@@ -1583,12 +1793,32 @@ export function ViewerControls() {
             >
               Config (.yml)
             </button>
+            <button
+              onClick={async () => {
+                if (!reconstruction) return;
+                try {
+                  await downloadReconstructionZip(
+                    reconstruction,
+                    { format: 'binary' },
+                    loadedFiles?.imageFiles,
+                    wasmReconstruction
+                  );
+                } catch (err) {
+                  console.error('ZIP export failed:', err);
+                }
+              }}
+              disabled={!reconstruction}
+              className={reconstruction ? styles.actionButton : styles.actionButtonDisabled}
+            >
+              ZIP (.zip)
+            </button>
           </div>
           <div className="text-ds-secondary text-sm mt-3">
             <div className="mb-1 font-medium">Export Options:</div>
             <div><span className="text-ds-primary">Binary/Text:</span> COLMAP format</div>
             <div><span className="text-ds-primary">Points:</span> PLY point cloud</div>
             <div><span className="text-ds-primary">Config:</span> ColmapView settings</div>
+            <div><span className="text-ds-primary">ZIP:</span> All data in one archive</div>
           </div>
           <div className="text-ds-muted text-xs mt-3 italic">
             Remember to apply transforms before exporting models.

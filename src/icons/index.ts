@@ -40,6 +40,8 @@ export {
   DiceIcon,
   FileJsonIcon,
   EmbedIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
 } from './ui';
 
 // Toolbar icons
@@ -77,6 +79,7 @@ export {
   RigIcon,
   RigOffIcon,
   RigBlinkIcon,
+  FloorDetectIcon,
 } from './toolbar';
 
 // Context menu icons (ReactElement format for use in action definitions)

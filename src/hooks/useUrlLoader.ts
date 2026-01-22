@@ -5,11 +5,20 @@ import { useReconstructionStore } from '../store';
 import {
   fetchWithTimeout,
   classifyFetchError,
+  classifyFetchErrorWithCloudContext,
   blobToFile,
   getFilenameFromUrl,
   normalizeGitHostingUrl,
+  normalizeCloudStorageUrl,
   isManifestUrl,
 } from '../utils/urlUtils';
+import {
+  isZipUrl,
+  loadZipFromUrl,
+  setActiveZipArchive,
+  type ZipProgress,
+} from '../utils/zipLoader';
+import { clearZipCache } from '../utils/imageFileUtils';
 
 /**
  * Create a default manifest from a base URL.
@@ -254,8 +263,51 @@ export function useUrlLoader() {
   }, [fetchColmapFiles, processFiles, setSourceInfo, setUrlProgress]);
 
   /**
+   * Load reconstruction from a ZIP URL.
+   * Downloads the ZIP, extracts COLMAP files, and sets up lazy image extraction.
+   */
+  const loadFromZipUrl = useCallback(async (url: string): Promise<boolean> => {
+    console.log(`[URL Loader] Loading ZIP from URL: ${url}`);
+
+    // Clear any previous ZIP cache
+    clearZipCache();
+
+    // Progress adapter from ZipProgress to UrlLoadProgress
+    const onZipProgress = (progress: ZipProgress) => {
+      setUrlProgress({
+        percent: progress.percent,
+        message: progress.message,
+        filesDownloaded: progress.bytesLoaded,
+        totalFiles: progress.bytesTotal,
+      });
+    };
+
+    // Load the ZIP
+    const { colmapFiles, imageIndex, archive } = await loadZipFromUrl(url, onZipProgress);
+
+    // Set up lazy extraction for images
+    setActiveZipArchive(archive, imageIndex);
+
+    setUrlProgress({ percent: 80, message: 'Parsing reconstruction...' });
+
+    // Store source info - for ZIP loading, we set sourceType to 'zip'
+    setSourceInfo('zip', url);
+    console.log(`[URL Loader] ZIP contains ${colmapFiles.size} COLMAP files, ${imageIndex.size} indexed images`);
+
+    // Process COLMAP files using existing pipeline
+    console.log('[URL Loader] Calling processFiles...');
+    await processFiles(colmapFiles);
+
+    setUrlProgress({ percent: 100, message: 'Complete' });
+    console.log(`[URL Loader] Successfully loaded reconstruction from ZIP`);
+
+    return true;
+  }, [processFiles, setSourceInfo, setUrlProgress]);
+
+  /**
    * Main entry point: load reconstruction from URL
    * Accepts either:
+   * - A ZIP file URL (ends with .zip)
    * - A manifest JSON URL (ends with .json)
    * - A direct base URL (assumes standard COLMAP directory structure)
    */
@@ -264,13 +316,30 @@ export function useUrlLoader() {
     setUrlError(null);
     setUrlProgress({ percent: 0, message: 'Starting...' });
 
-    // Normalize Git hosting URLs to use raw file endpoints
-    const normalizedUrl = normalizeGitHostingUrl(url);
+    // Normalize cloud storage URLs (s3://, gs://, console URLs) to HTTPS
+    let normalizedUrl = normalizeCloudStorageUrl(url);
     if (normalizedUrl !== url) {
-      console.log(`[URL Loader] Normalized URL: ${url} -> ${normalizedUrl}`);
+      console.log(`[URL Loader] Normalized cloud URL: ${url} -> ${normalizedUrl}`);
+    }
+
+    // Normalize Git hosting URLs to use raw file endpoints
+    const gitNormalizedUrl = normalizeGitHostingUrl(normalizedUrl);
+    if (gitNormalizedUrl !== normalizedUrl) {
+      console.log(`[URL Loader] Normalized Git URL: ${normalizedUrl} -> ${gitNormalizedUrl}`);
+      normalizedUrl = gitNormalizedUrl;
     }
 
     try {
+      // Clear any previous ZIP/URL cache state before loading new data
+      // This ensures clean state regardless of previous load type
+      clearZipCache();
+
+      // Check if URL points to a ZIP file
+      if (isZipUrl(normalizedUrl)) {
+        console.log(`[URL Loader] Detected ZIP URL: ${normalizedUrl}`);
+        return await loadFromZipUrl(normalizedUrl);
+      }
+
       // Determine if URL is a manifest or direct base URL
       let manifest: ColmapManifest;
 
@@ -288,10 +357,14 @@ export function useUrlLoader() {
     } catch (err) {
       console.error('[URL Loader] Error:', err);
 
-      // Convert to UrlLoadError if not already
+      // Clean up any partial state from failed load
+      // This ensures ZIP archive references don't linger after errors
+      clearZipCache();
+
+      // Convert to UrlLoadError if not already, with cloud-specific CORS help
       const urlError = (err as UrlLoadError).type
         ? (err as UrlLoadError)
-        : classifyFetchError(err, url);
+        : classifyFetchErrorWithCloudContext(err, normalizedUrl);
 
       setUrlError(urlError);
 
@@ -302,7 +375,7 @@ export function useUrlLoader() {
     } finally {
       setUrlLoading(false);
     }
-  }, [fetchManifest, loadManifestCore, setError, setUrlLoading, setUrlProgress, setUrlError]);
+  }, [fetchManifest, loadFromZipUrl, loadManifestCore, setError, setUrlLoading, setUrlProgress, setUrlError]);
 
   /**
    * Load reconstruction from a pre-parsed manifest object.
@@ -316,6 +389,9 @@ export function useUrlLoader() {
     setUrlProgress({ percent: 0, message: 'Starting...' });
 
     try {
+      // Clear any previous ZIP cache state before loading manifest data
+      clearZipCache();
+
       console.log(`[URL Loader] Loading from manifest: ${manifest.name || 'unnamed'}`);
 
       // Fetch COLMAP binary files
@@ -355,10 +431,13 @@ export function useUrlLoader() {
     } catch (err) {
       console.error('[URL Loader] Error:', err);
 
-      // Convert to UrlLoadError if not already
+      // Clean up any partial state from failed load
+      clearZipCache();
+
+      // Convert to UrlLoadError if not already, with cloud-specific CORS help
       const urlError = (err as UrlLoadError).type
         ? (err as UrlLoadError)
-        : classifyFetchError(err, manifest.baseUrl);
+        : classifyFetchErrorWithCloudContext(err, manifest.baseUrl);
 
       setUrlError(urlError);
 

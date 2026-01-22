@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef, memo, startTransition, useCallbac
 import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useReconstructionStore, useUIStore, useCameraStore } from '../../store';
-import { getImageFile, getUrlImageCached, fetchUrlImage } from '../../utils/imageFileUtils';
+import { getImageFile, getUrlImageCached, fetchUrlImage, getZipImageCached, fetchZipImage, isZipLoadingAvailable } from '../../utils/imageFileUtils';
 import { useThumbnail, pauseThumbnailCache, resumeThumbnailCache } from '../../hooks/useThumbnail';
 import { COLUMNS, GAP, SIZE, TIMING, buttonStyles, getTooltipProps, galleryStyles, listStyles, inputStyles, emptyStateStyles, toolbarStyles, hoverCardStyles, ICON_SIZES } from '../../theme';
 
@@ -379,8 +379,9 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const containerRef = useRef<HTMLDivElement>(null);
-  // Track URL image cache version to trigger re-renders when images are fetched
+  // Track URL/ZIP image cache version to trigger re-renders when images are fetched
   const [urlImageCacheVersion, setUrlImageCacheVersion] = useState(0);
+  const [zipImageCacheVersion, setZipImageCacheVersion] = useState(0);
 
   // Compute matched image IDs when matches are shown (uses pre-computed connectedImagesIndex)
   const matchedImageIds = useMemo(() => {
@@ -494,11 +495,14 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
         const stats = reconstruction.imageStats.get(img.imageId);
         const camera = reconstruction.cameras.get(img.cameraId);
 
-        // Get image file - use URL cache if in URL mode, otherwise local files
+        // Get image file - use URL cache if in URL mode, ZIP cache if ZIP mode, otherwise local files
         let file: File | undefined;
         if (imageUrlBase) {
           // URL mode: check cache first (sync)
           file = getUrlImageCached(img.name);
+        } else if (isZipLoadingAvailable()) {
+          // ZIP mode: check ZIP cache (sync)
+          file = getZipImageCached(img.name) ?? undefined;
         } else {
           // Local mode: use local file lookup
           file = getImageFile(imageFiles, img.name);
@@ -528,7 +532,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
     });
 
     return mapped;
-  }, [reconstruction, imageFiles, imageUrlBase, cameraFilter, sortField, sortDirection, urlImageCacheVersion]);
+  }, [reconstruction, imageFiles, imageUrlBase, cameraFilter, sortField, sortDirection, urlImageCacheVersion, zipImageCacheVersion]);
 
   // Handle shift+scroll to zoom with debouncing for performance
   const pendingColumnChange = useRef<number | null>(null);
@@ -667,6 +671,54 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
         // Trigger re-render if any images were fetched
         if (!cancelled && results.some(f => f !== null)) {
           setUrlImageCacheVersion(v => v + 1);
+        }
+      }
+    };
+
+    fetchBatch();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUrlBase, reconstruction, viewMode, rows, images, debouncedIsScrolling, isSettling, rowVirtualizer, listVirtualizer]);
+
+  // Fetch visible images from ZIP when in ZIP mode
+  useEffect(() => {
+    if (imageUrlBase || !isZipLoadingAvailable() || !reconstruction || debouncedIsScrolling || isSettling) return;
+
+    // Get visible rows from virtualizer
+    const visibleItems = viewMode === 'gallery'
+      ? rowVirtualizer.getVirtualItems()
+      : listVirtualizer.getVirtualItems();
+
+    // Collect image names that need fetching
+    const toFetch: string[] = [];
+    for (const virtualItem of visibleItems) {
+      const rowImages = viewMode === 'gallery'
+        ? rows[virtualItem.index] || []
+        : [images[virtualItem.index]].filter(Boolean);
+
+      for (const img of rowImages) {
+        if (img && !getZipImageCached(img.name)) {
+          toFetch.push(img.name);
+        }
+      }
+    }
+
+    if (toFetch.length === 0) return;
+
+    // Fetch images in parallel (limit concurrency)
+    let cancelled = false;
+    const fetchBatch = async () => {
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < toFetch.length && !cancelled; i += BATCH_SIZE) {
+        const batch = toFetch.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(
+          batch.map(name => fetchZipImage(name))
+        );
+        // Trigger re-render if any images were fetched
+        if (!cancelled && results.some(f => f !== null)) {
+          setZipImageCacheVersion(v => v + 1);
         }
       }
     };

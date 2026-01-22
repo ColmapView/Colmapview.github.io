@@ -17,6 +17,7 @@ export { usePointPickingStore, type PointPickingState, type PointPickingMode, ty
 export { useRigStore, type RigState } from './stores/rigStore';
 export { useNotificationStore, type NotificationState, type NotificationType, type Notification } from './stores/notificationStore';
 export { useGuideStore, type GuideState } from './stores/guideStore';
+export { useFloorPlaneStore, type FloorPlaneState, type FloorColorMode, type FloorTargetAxis } from './stores/floorPlaneStore';
 
 // Types and constants
 export type {

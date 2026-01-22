@@ -17,7 +17,7 @@ import type { RigData, Rig, Frame, RigSensor, FrameDataMapping, SensorId } from 
 import { SensorType } from '../types/rig';
 import { useReconstructionStore, useUIStore, useCameraStore, usePointCloudStore, useNotificationStore } from '../store';
 import type { Reconstruction, Camera, Image as ColmapImage, Point3D } from '../types/colmap';
-import { collectImageFiles, hasMaskFiles, findMissingImageFiles, clearUrlImageCache } from '../utils/imageFileUtils';
+import { collectImageFiles, hasMaskFiles, findMissingImageFiles, clearUrlImageCache, clearZipCache } from '../utils/imageFileUtils';
 import { getFailedImageCount, clearSharedDecodeCache } from './useAsyncImageCache';
 import { clearThumbnailCache } from './useThumbnail';
 import { clearFrustumTextureCache } from './useFrustumTexture';
@@ -25,6 +25,7 @@ import { parseConfigYaml, applyConfigurationToStores } from '../config/configura
 import { getImageWorldPosition } from '../utils/colmapTransforms';
 import { createWasmReconstruction, WasmReconstructionWrapper } from '../wasm';
 import { CameraModelId } from '../types/colmap';
+import { isZipFile, loadZipFromFile, setActiveZipArchive, clearActiveZipArchive } from '../utils/zipLoader';
 
 /**
  * Parse COLMAP files using WASM module
@@ -623,6 +624,8 @@ export function useFileDropzone() {
       clearFrustumTextureCache();
       clearSharedDecodeCache();
       clearUrlImageCache();
+      clearZipCache();
+      clearActiveZipArchive();
 
       // Reset UI state BEFORE setting new reconstruction to prevent stale data display
       // This ensures no race condition where React renders with new reconstruction but old UI state
@@ -742,6 +745,51 @@ export function useFileDropzone() {
     setCameraScale,
   ]);
 
+  /**
+   * Process a ZIP file: extract COLMAP files and set up lazy image extraction.
+   */
+  const processZipFile = useCallback(async (zipFile: File) => {
+    // Show loading state immediately
+    setLoading(true);
+    setProgress(0);
+
+    try {
+      // Clear any previous ZIP cache
+      clearZipCache();
+
+      console.log(`[ZIP Loader] Processing local ZIP file: ${zipFile.name}`);
+
+      // Load the ZIP with progress tracking
+      const { colmapFiles, imageIndex, archive } = await loadZipFromFile(
+        zipFile,
+        (progress) => {
+          setProgress(progress.percent);
+        }
+      );
+
+      // Set up lazy extraction for images
+      setActiveZipArchive(archive, imageIndex);
+
+      // Store source info - for local ZIP loading
+      setSourceInfo('zip', null);
+      console.log(`[ZIP Loader] ZIP contains ${colmapFiles.size} COLMAP files, ${imageIndex.size} indexed images`);
+
+      // Process COLMAP files using existing pipeline
+      // Note: processFiles will reset sourceType to 'local' if not already set,
+      // but we set it to 'zip' above which takes precedence
+      await processFiles(colmapFiles);
+
+      console.log(`[ZIP Loader] Successfully loaded reconstruction from local ZIP`);
+    } catch (err) {
+      console.error('[ZIP Loader] Error processing ZIP file:', err);
+      // Clean up any partial state from failed load
+      clearZipCache();
+      setError(err instanceof Error ? err.message : 'Failed to process ZIP file');
+    } finally {
+      setLoading(false);
+    }
+  }, [processFiles, setLoading, setProgress, setError, setSourceInfo]);
+
   const handleDrop = useCallback(async (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -751,6 +799,16 @@ export function useFileDropzone() {
 
     const items = e.dataTransfer?.items;
     if (!items) return;
+
+    // Check if a single ZIP file was dropped
+    if (e.dataTransfer.files.length === 1) {
+      const singleFile = e.dataTransfer.files[0];
+      if (isZipFile(singleFile)) {
+        console.log(`[Drop] Detected ZIP file: ${singleFile.name}`);
+        await processZipFile(singleFile);
+        return;
+      }
+    }
 
     const files = new Map<string, File>();
 
@@ -780,7 +838,7 @@ export function useFileDropzone() {
     }
 
     await processFiles(files);
-  }, [scanEntry, processFiles]);
+  }, [scanEntry, processFiles, processZipFile]);
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
@@ -833,6 +891,7 @@ export function useFileDropzone() {
     handleDrop,
     handleDragOver,
     processFiles,
+    processZipFile,
     handleBrowse,
   };
 }

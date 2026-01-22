@@ -411,3 +411,16 @@ export function RigBlinkIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+// Floor detect icon - tilted square (floor plane) with arrow pointing up (normal)
+export function FloorDetectIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      {/* Tilted square representing the floor plane in perspective */}
+      <path d="M3 16 L12 20 L21 16 L12 12 Z" strokeLinejoin="round" />
+      {/* Arrow pointing up from center (the floor normal) */}
+      <line x1="12" y1="16" x2="12" y2="4" strokeWidth="2" />
+      <polyline points="8 8 12 4 16 8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}

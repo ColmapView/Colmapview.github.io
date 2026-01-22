@@ -98,3 +98,8 @@ export interface UrlLoadError {
   details?: string;
   failedFile?: string;
 }
+
+/**
+ * Supported cloud storage providers
+ */
+export type CloudProvider = 's3' | 'gcs' | 'r2' | 'dropbox';
