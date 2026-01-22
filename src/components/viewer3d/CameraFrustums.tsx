@@ -1437,13 +1437,29 @@ export function CameraFrustums() {
     openImageDetail(imageId);
   }, [openImageDetail]);
 
-  // Right-click callback - if matched camera, show matches; if selected camera, deselect; otherwise fly to
+  // Right-click callback - if selected camera, go back or deselect; if matched camera, show matches; otherwise fly to
   const handleArrowContextMenu = useCallback((imageId: number) => {
     const frustum = frustums.find(f => f.image.imageId === imageId);
     if (!frustum) return;
 
-    // If right-clicking the selected camera, deselect it
+    // If right-clicking the selected camera, try to go back in history first
     if (imageId === selectedImageId) {
+      // Check if we can go back in navigation history
+      const lastEntry = peekNavigationHistory();
+      if (lastEntry && lastEntry.toImageId === imageId) {
+        // User wants to go back - pop and return to previous position
+        const entry = popNavigationHistory();
+        if (entry) {
+          // Clear hover state before flying
+          setHoveredImageId(null);
+          document.body.style.cursor = '';
+          pendingHoverRefreshRef.current = true;
+          flyToState(entry.fromState);
+          setSelectedImageId(entry.fromImageId);
+        }
+        return;
+      }
+      // No back navigation possible, deselect
       setSelectedImageId(null);
       return;
     }

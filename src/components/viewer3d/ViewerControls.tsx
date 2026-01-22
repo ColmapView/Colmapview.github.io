@@ -1710,6 +1710,7 @@ export function ViewerControls() {
         tooltip="Export"
         onClick={handleExport}
         panelTitle="Export"
+        disabled={!reconstruction}
       >
         <div className={styles.panelContent}>
           {/* Share buttons - only shown when loaded from URL or manifest */}
