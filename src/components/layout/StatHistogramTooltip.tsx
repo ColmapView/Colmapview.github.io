@@ -1,3 +1,4 @@
+import { useRef, useLayoutEffect, useState } from 'react';
 import { histogramStyles } from '../../theme';
 
 export interface HistogramBin {
@@ -16,19 +17,58 @@ const CHART_HEIGHT = 100;
 const BAR_GAP = 2;
 const LABEL_HEIGHT = 18;
 const TOP_PADDING = 16; // Space for percentage labels above bars
+const VIEWPORT_PADDING = 8; // Minimum distance from viewport edge
 
 export function StatHistogramTooltip({
   title,
   bins,
 }: StatHistogramTooltipProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [adjustedLeft, setAdjustedLeft] = useState<number | null>(null);
+
+  // Adjust position to keep tooltip within viewport
+  useLayoutEffect(() => {
+    if (!containerRef.current) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+
+    // Check if tooltip overflows left edge
+    if (rect.left < VIEWPORT_PADDING) {
+      // Shift right to keep within bounds
+      const shift = VIEWPORT_PADDING - rect.left;
+      setAdjustedLeft(shift);
+    }
+    // Check if tooltip overflows right edge
+    else if (rect.right > viewportWidth - VIEWPORT_PADDING) {
+      // Shift left to keep within bounds
+      const shift = rect.right - (viewportWidth - VIEWPORT_PADDING);
+      setAdjustedLeft(-shift);
+    }
+    // No adjustment needed
+    else {
+      setAdjustedLeft(null);
+    }
+  }, []);
+
   // Find max percentage for scaling bars
   const maxPercentage = Math.max(...bins.map((b) => b.percentage), 1);
   const barWidth = (CHART_WIDTH - (bins.length - 1) * BAR_GAP) / bins.length;
 
+  // Compute transform style: center by default, adjust if needed
+  const transformStyle = adjustedLeft !== null
+    ? `translateX(calc(-50% + ${adjustedLeft}px))`
+    : 'translateX(-50%)';
+
   return (
     <div
+      ref={containerRef}
       className={histogramStyles.container}
-      style={{ bottom: '100%', marginBottom: '8px' }}
+      style={{
+        bottom: '100%',
+        marginBottom: '8px',
+        transform: transformStyle,
+      }}
     >
       <div className={histogramStyles.card}>
         <div className={histogramStyles.title}>{title}</div>

@@ -71,6 +71,13 @@ export function getCachedThumbnailUrl(imageName: string): string | null {
 }
 
 /**
+ * Get thumbnail cache statistics.
+ */
+export function getThumbnailCacheStats(): { count: number; loading: number; pending: number } {
+  return thumbnailCache.getStats();
+}
+
+/**
  * Prefetch thumbnails for a list of images.
  */
 export function prefetchThumbnails(

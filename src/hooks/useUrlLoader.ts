@@ -18,7 +18,10 @@ import {
   setActiveZipArchive,
   type ZipProgress,
 } from '../utils/zipLoader';
-import { clearZipCache } from '../utils/imageFileUtils';
+import { clearAllCaches } from '../cache';
+
+// Module-level flag for synchronous load guard (prevents race conditions)
+let isLoadInProgress = false;
 
 /**
  * Create a default manifest from a base URL.
@@ -265,12 +268,10 @@ export function useUrlLoader() {
   /**
    * Load reconstruction from a ZIP URL.
    * Downloads the ZIP, extracts COLMAP files, and sets up lazy image extraction.
+   * Note: Caller (loadFromUrl) is responsible for clearing caches before calling this.
    */
   const loadFromZipUrl = useCallback(async (url: string): Promise<boolean> => {
     console.log(`[URL Loader] Loading ZIP from URL: ${url}`);
-
-    // Clear any previous ZIP cache
-    clearZipCache();
 
     // Progress adapter from ZipProgress to UrlLoadProgress
     const onZipProgress = (progress: ZipProgress) => {
@@ -283,16 +284,16 @@ export function useUrlLoader() {
     };
 
     // Load the ZIP
-    const { colmapFiles, imageIndex, archive } = await loadZipFromUrl(url, onZipProgress);
+    const { colmapFiles, imageIndex, archive, fileSize, imageCount } = await loadZipFromUrl(url, onZipProgress);
 
     // Set up lazy extraction for images
-    setActiveZipArchive(archive, imageIndex);
+    setActiveZipArchive(archive, imageIndex, fileSize, imageCount);
 
     setUrlProgress({ percent: 80, message: 'Parsing reconstruction...' });
 
     // Store source info - for ZIP loading, we set sourceType to 'zip'
     setSourceInfo('zip', url);
-    console.log(`[URL Loader] ZIP contains ${colmapFiles.size} COLMAP files, ${imageIndex.size} indexed images`);
+    console.log(`[URL Loader] ZIP contains ${colmapFiles.size} COLMAP files, ${imageCount} indexed images`);
 
     // Process COLMAP files using existing pipeline
     console.log('[URL Loader] Calling processFiles...');
@@ -312,6 +313,13 @@ export function useUrlLoader() {
    * - A direct base URL (assumes standard COLMAP directory structure)
    */
   const loadFromUrl = useCallback(async (url: string): Promise<boolean> => {
+    // Prevent duplicate loads from rapid clicking (module-level flag for synchronous check)
+    if (isLoadInProgress) {
+      console.log('[URL Loader] Already loading (sync guard), ignoring duplicate request');
+      return false;
+    }
+    isLoadInProgress = true;
+
     setUrlLoading(true);
     setUrlError(null);
     setUrlProgress({ percent: 0, message: 'Starting...' });
@@ -332,7 +340,7 @@ export function useUrlLoader() {
     try {
       // Clear any previous ZIP/URL cache state before loading new data
       // This ensures clean state regardless of previous load type
-      clearZipCache();
+      clearAllCaches();
 
       // Check if URL points to a ZIP file
       if (isZipUrl(normalizedUrl)) {
@@ -359,7 +367,7 @@ export function useUrlLoader() {
 
       // Clean up any partial state from failed load
       // This ensures ZIP archive references don't linger after errors
-      clearZipCache();
+      clearAllCaches();
 
       // Convert to UrlLoadError if not already, with cloud-specific CORS help
       const urlError = (err as UrlLoadError).type
@@ -373,6 +381,7 @@ export function useUrlLoader() {
 
       return false;
     } finally {
+      isLoadInProgress = false;
       setUrlLoading(false);
     }
   }, [fetchManifest, loadFromZipUrl, loadManifestCore, setError, setUrlLoading, setUrlProgress, setUrlError]);
@@ -384,13 +393,20 @@ export function useUrlLoader() {
    * @param manifest The manifest object to load
    */
   const loadFromManifest = useCallback(async (manifest: ColmapManifest): Promise<boolean> => {
+    // Prevent duplicate loads from rapid clicking (module-level flag for synchronous check)
+    if (isLoadInProgress) {
+      console.log('[URL Loader] Already loading (sync guard), ignoring duplicate request');
+      return false;
+    }
+    isLoadInProgress = true;
+
     setUrlLoading(true);
     setUrlError(null);
     setUrlProgress({ percent: 0, message: 'Starting...' });
 
     try {
       // Clear any previous ZIP cache state before loading manifest data
-      clearZipCache();
+      clearAllCaches();
 
       console.log(`[URL Loader] Loading from manifest: ${manifest.name || 'unnamed'}`);
 
@@ -432,7 +448,7 @@ export function useUrlLoader() {
       console.error('[URL Loader] Error:', err);
 
       // Clean up any partial state from failed load
-      clearZipCache();
+      clearAllCaches();
 
       // Convert to UrlLoadError if not already, with cloud-specific CORS help
       const urlError = (err as UrlLoadError).type
@@ -446,6 +462,7 @@ export function useUrlLoader() {
 
       return false;
     } finally {
+      isLoadInProgress = false;
       setUrlLoading(false);
     }
   }, [fetchColmapFiles, processFiles, setError, setSourceInfo, setUrlLoading, setUrlProgress, setUrlError]);
@@ -464,5 +481,7 @@ export function useUrlLoader() {
     urlProgress,
     urlError,
     clearUrlError,
+    setUrlLoading,
+    setUrlProgress,
   };
 }

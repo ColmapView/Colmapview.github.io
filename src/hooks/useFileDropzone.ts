@@ -15,17 +15,15 @@ import {
 } from '../parsers';
 import type { RigData, Rig, Frame, RigSensor, FrameDataMapping, SensorId } from '../types/rig';
 import { SensorType } from '../types/rig';
-import { useReconstructionStore, useUIStore, useCameraStore, usePointCloudStore, useNotificationStore } from '../store';
+import { useReconstructionStore, useUIStore, usePointCloudStore, useNotificationStore } from '../store';
 import type { Reconstruction, Camera, Image as ColmapImage, Point3D } from '../types/colmap';
-import { collectImageFiles, hasMaskFiles, findMissingImageFiles, clearUrlImageCache, clearZipCache } from '../utils/imageFileUtils';
-import { getFailedImageCount, clearSharedDecodeCache } from './useAsyncImageCache';
-import { clearThumbnailCache } from './useThumbnail';
-import { clearFrustumTextureCache } from './useFrustumTexture';
+import { collectImageFiles, hasMaskFiles, findMissingImageFiles } from '../utils/imageFileUtils';
+import { getFailedImageCount } from './useAsyncImageCache';
+import { clearAllCaches } from '../cache';
 import { parseConfigYaml, applyConfigurationToStores } from '../config/configuration';
-import { getImageWorldPosition } from '../utils/colmapTransforms';
 import { createWasmReconstruction, WasmReconstructionWrapper } from '../wasm';
 import { CameraModelId } from '../types/colmap';
-import { isZipFile, loadZipFromFile, setActiveZipArchive, clearActiveZipArchive } from '../utils/zipLoader';
+import { isZipFile, loadZipFromFile, setActiveZipArchive } from '../utils/zipLoader';
 
 /**
  * Parse COLMAP files using WASM module
@@ -230,87 +228,6 @@ function findConfigFile(files: Map<string, File>): File | null {
   return null;
 }
 
-/**
- * Compute optimal camera frustum scale based on camera spacing.
- * Uses nearest-neighbor distances to prevent overcrowding in dense captures
- * while keeping frustums visible in sparse reconstructions.
- */
-function computeAutoFrustumScale(images: Map<number, ColmapImage>): number {
-  if (images.size === 0) return 0.25; // Default fallback
-
-  const positions: Array<{ x: number; y: number; z: number }> = [];
-  for (const image of images.values()) {
-    positions.push(getImageWorldPosition(image));
-  }
-
-  // Single camera: use a reasonable default based on origin distance
-  if (positions.length === 1) {
-    const pos = positions[0];
-    const distFromOrigin = Math.sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
-    return Math.max(distFromOrigin * 0.1, 0.1);
-  }
-
-  // Compute bounding box for fallback and upper limit
-  let minX = Infinity, maxX = -Infinity;
-  let minY = Infinity, maxY = -Infinity;
-  let minZ = Infinity, maxZ = -Infinity;
-
-  for (const pos of positions) {
-    minX = Math.min(minX, pos.x); maxX = Math.max(maxX, pos.x);
-    minY = Math.min(minY, pos.y); maxY = Math.max(maxY, pos.y);
-    minZ = Math.min(minZ, pos.z); maxZ = Math.max(maxZ, pos.z);
-  }
-
-  const sceneExtent = Math.max(maxX - minX, maxY - minY, maxZ - minZ, 0.001);
-
-  // Compute nearest-neighbor distance for each camera
-  // This gives us a measure of camera density/spacing
-  const nearestDistances: number[] = [];
-
-  for (let i = 0; i < positions.length; i++) {
-    let minDist = Infinity;
-    const pi = positions[i];
-
-    for (let j = 0; j < positions.length; j++) {
-      if (i === j) continue;
-      const pj = positions[j];
-      const dx = pi.x - pj.x;
-      const dy = pi.y - pj.y;
-      const dz = pi.z - pj.z;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (dist < minDist) minDist = dist;
-    }
-
-    if (minDist !== Infinity) {
-      nearestDistances.push(minDist);
-    }
-  }
-
-  if (nearestDistances.length === 0) {
-    // Fallback to scene extent method
-    return sceneExtent * 0.05;
-  }
-
-  // Sort and take the 25th percentile of nearest-neighbor distances
-  // This avoids outliers (cameras far from the rest) from inflating the scale
-  nearestDistances.sort((a, b) => a - b);
-  const percentileIndex = Math.floor(nearestDistances.length * 0.25);
-  const typicalSpacing = nearestDistances[percentileIndex];
-
-  // Scale frustum to be a fraction of typical camera spacing
-  // Using 30% of spacing prevents overlap while keeping frustums visible
-  let autoScale = typicalSpacing * 0.3;
-
-  // Clamp to reasonable bounds relative to scene size
-  // Lower bound: 0.5% of scene extent (don't make frustums invisible)
-  // Upper bound: 10% of scene extent (don't make frustums huge)
-  const minScale = sceneExtent * 0.005;
-  const maxScale = sceneExtent * 0.1;
-  autoScale = Math.max(minScale, Math.min(maxScale, autoScale));
-
-  return autoScale;
-}
-
 function hasColmapFiles(files: Map<string, File>): boolean {
   for (const [, file] of files) {
     const name = file.name.toLowerCase();
@@ -337,9 +254,6 @@ export function useFileDropzone() {
     setSourceInfo,
   } = useReconstructionStore();
   const resetView = useUIStore((s) => s.resetView);
-  const closeImageDetail = useUIStore((s) => s.closeImageDetail);
-  const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
-  const setCameraScale = useCameraStore((s) => s.setCameraScale);
 
   const scanEntry = useCallback(async (
     entry: FileSystemEntry,
@@ -460,6 +374,16 @@ export function useFileDropzone() {
   }, []);
 
   const processFiles = useCallback(async (files: Map<string, File>) => {
+    // Note: Guards are now in entry points (handleDrop, handleBrowse, processZipFile, URL loaders)
+    // This function may be called with loading already set by the entry point
+
+    // Ensure loading state is set (may already be true from entry point)
+    const state = useReconstructionStore.getState();
+    if (!state.loading && !state.urlLoading) {
+      setLoading(true);
+      setProgress(0);
+    }
+
     // Check for configuration file first
     const configFile = findConfigFile(files);
     if (configFile) {
@@ -483,13 +407,10 @@ export function useFileDropzone() {
 
       // If only config file was dropped, don't continue with COLMAP processing
       if (!hasColmapFiles(files)) {
+        setLoading(false);
         return;
       }
     }
-
-    // Show loading state immediately so user gets feedback
-    setLoading(true);
-    setProgress(0);
 
     try {
       // Store dropped files (always fresh, no merging)
@@ -618,19 +539,11 @@ export function useFileDropzone() {
         rigData,
       };
 
-      // Clear caches AFTER parsing succeeds to prevent broken state on error
+      // Clear all caches AFTER parsing succeeds to prevent broken state on error
       // This ensures old reconstruction remains functional if new data fails to load
-      clearThumbnailCache();
-      clearFrustumTextureCache();
-      clearSharedDecodeCache();
-      clearUrlImageCache();
-      clearZipCache();
-      clearActiveZipArchive();
-
-      // Reset UI state BEFORE setting new reconstruction to prevent stale data display
-      // This ensures no race condition where React renders with new reconstruction but old UI state
-      setSelectedImageId(null);
-      closeImageDetail();  // Clear imageDetailId and matchedImageId to prevent stale match data
+      // Note: preserveZip=true because ZIP archive is managed by entry points
+      // (handleDrop, handleBrowse, processZipFile, URL loaders)
+      clearAllCaches({ preserveZip: true });
 
       // Allow GPU memory to flush before loading new assets
       // This prevents slowdown when replacing an existing reconstruction
@@ -654,10 +567,6 @@ export function useFileDropzone() {
       // Set reconstruction (this will set progress to 100 and loading to false)
       // Note: setReconstruction will NOT dispose the wasmWrapper since we set it first
       setReconstruction(reconstruction);
-
-      // Auto-scale camera frustums based on camera spacing
-      const autoScale = computeAutoFrustumScale(images);
-      setCameraScale(autoScale);
 
       // Reset view after reconstruction is set
       resetView();
@@ -740,52 +649,57 @@ export function useFileDropzone() {
     setSourceInfo,
     findColmapFiles,
     resetView,
-    closeImageDetail,
-    setSelectedImageId,
-    setCameraScale,
   ]);
 
   /**
    * Process a ZIP file: extract COLMAP files and set up lazy image extraction.
    */
   const processZipFile = useCallback(async (zipFile: File) => {
-    // Show loading state immediately
+    // Prevent duplicate loads from rapid actions
+    const state = useReconstructionStore.getState();
+    if (state.loading || state.urlLoading) {
+      console.log('[ZIP Loader] Already loading, ignoring duplicate request');
+      return;
+    }
+
+    // Show loading state IMMEDIATELY so user gets feedback (before any async work)
     setLoading(true);
     setProgress(0);
+    // Yield to React to paint loading UI before starting heavy work
+    await new Promise(resolve => setTimeout(resolve, 0));
 
     try {
-      // Clear any previous ZIP cache
-      clearZipCache();
+      // Clear all caches including previous ZIP archive
+      clearAllCaches();
 
       console.log(`[ZIP Loader] Processing local ZIP file: ${zipFile.name}`);
 
       // Load the ZIP with progress tracking
-      const { colmapFiles, imageIndex, archive } = await loadZipFromFile(
+      const { colmapFiles, imageIndex, archive, fileSize, imageCount } = await loadZipFromFile(
         zipFile,
         (progress) => {
-          setProgress(progress.percent);
+          // Progress is shown during ZIP extraction (before processFiles takes over)
+          setProgress(progress.percent * 0.1); // Scale to 0-10% range
         }
       );
 
       // Set up lazy extraction for images
-      setActiveZipArchive(archive, imageIndex);
+      setActiveZipArchive(archive, imageIndex, fileSize, imageCount);
 
       // Store source info - for local ZIP loading
       setSourceInfo('zip', null);
-      console.log(`[ZIP Loader] ZIP contains ${colmapFiles.size} COLMAP files, ${imageIndex.size} indexed images`);
+      console.log(`[ZIP Loader] ZIP contains ${colmapFiles.size} COLMAP files, ${imageCount} indexed images`);
 
       // Process COLMAP files using existing pipeline
-      // Note: processFiles will reset sourceType to 'local' if not already set,
-      // but we set it to 'zip' above which takes precedence
+      // processFiles handles its own loading state
       await processFiles(colmapFiles);
 
       console.log(`[ZIP Loader] Successfully loaded reconstruction from local ZIP`);
     } catch (err) {
       console.error('[ZIP Loader] Error processing ZIP file:', err);
       // Clean up any partial state from failed load
-      clearZipCache();
+      clearAllCaches();
       setError(err instanceof Error ? err.message : 'Failed to process ZIP file');
-    } finally {
       setLoading(false);
     }
   }, [processFiles, setLoading, setProgress, setError, setSourceInfo]);
@@ -793,6 +707,13 @@ export function useFileDropzone() {
   const handleDrop = useCallback(async (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
     e.stopPropagation();
+
+    // Prevent file drops during active loading
+    const state = useReconstructionStore.getState();
+    if (state.loading || state.urlLoading) {
+      console.log('[File Dropzone] Ignoring drop during active loading');
+      return;
+    }
 
     // Only process actual file drops, not internal UI drags
     if (!e.dataTransfer?.types.includes('Files')) return;
@@ -810,35 +731,49 @@ export function useFileDropzone() {
       }
     }
 
-    const files = new Map<string, File>();
+    // Show loading state IMMEDIATELY so user gets feedback (before folder scanning)
+    setLoading(true);
+    setProgress(0);
+    // Yield to React to paint loading UI before starting heavy work
+    await new Promise(resolve => setTimeout(resolve, 0));
 
-    // Use webkitGetAsEntry for folder support
-    const entries: FileSystemEntry[] = [];
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.kind !== 'file') continue;
+    try {
+      const files = new Map<string, File>();
 
-      const entry = item.webkitGetAsEntry();
-      if (entry) {
-        entries.push(entry);
+      // Use webkitGetAsEntry for folder support
+      const entries: FileSystemEntry[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind !== 'file') continue;
+
+        const entry = item.webkitGetAsEntry();
+        if (entry) {
+          entries.push(entry);
+        }
       }
-    }
 
-    // Scan all entries
-    for (const entry of entries) {
-      await scanEntry(entry, '', files);
-    }
-
-    // If no entries found via webkitGetAsEntry, fall back to files list
-    if (files.size === 0 && e.dataTransfer.files.length > 0) {
-      for (let i = 0; i < e.dataTransfer.files.length; i++) {
-        const file = e.dataTransfer.files[i];
-        files.set(file.name, file);
+      // Scan all entries
+      for (const entry of entries) {
+        await scanEntry(entry, '', files);
       }
-    }
 
-    await processFiles(files);
-  }, [scanEntry, processFiles, processZipFile]);
+      // If no entries found via webkitGetAsEntry, fall back to files list
+      if (files.size === 0 && e.dataTransfer.files.length > 0) {
+        for (let i = 0; i < e.dataTransfer.files.length; i++) {
+          const file = e.dataTransfer.files[i];
+          files.set(file.name, file);
+        }
+      }
+
+      // Clear all caches before loading non-ZIP files
+      clearAllCaches();
+      await processFiles(files);
+    } catch (err) {
+      console.error('[File Dropzone] Error processing drop:', err);
+      setError(err instanceof Error ? err.message : 'Failed to process dropped files');
+      setLoading(false);
+    }
+  }, [scanEntry, processFiles, processZipFile, setLoading, setProgress, setError]);
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
@@ -866,6 +801,13 @@ export function useFileDropzone() {
   }, []);
 
   const handleBrowse = useCallback(async () => {
+    // Prevent browse during active loading
+    const state = useReconstructionStore.getState();
+    if (state.loading || state.urlLoading) {
+      console.log('[File Dropzone] Ignoring browse during active loading');
+      return;
+    }
+
     // Check if the File System Access API is supported
     if (!('showDirectoryPicker' in window)) {
       setError('Your browser does not support folder selection. Please use drag and drop, or try Chrome/Edge.');
@@ -874,8 +816,17 @@ export function useFileDropzone() {
 
     try {
       const dirHandle = await window.showDirectoryPicker();
+
+      // Show loading state IMMEDIATELY after user selects folder (before scanning)
+      setLoading(true);
+      setProgress(0);
+      // Yield to React to paint loading UI before starting heavy work
+      await new Promise(resolve => setTimeout(resolve, 0));
+
       const files = new Map<string, File>();
       await scanDirectoryHandle(dirHandle, '', files);
+      // Clear all caches before loading local files
+      clearAllCaches();
       await processFiles(files);
     } catch (err) {
       // User cancelled the picker - not an error
@@ -884,8 +835,9 @@ export function useFileDropzone() {
       }
       console.error('Error browsing for folder:', err);
       setError(err instanceof Error ? err.message : 'Failed to open folder');
+      setLoading(false);
     }
-  }, [scanDirectoryHandle, processFiles, setError]);
+  }, [scanDirectoryHandle, processFiles, setError, setLoading, setProgress]);
 
   return {
     handleDrop,

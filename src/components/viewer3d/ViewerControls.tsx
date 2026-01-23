@@ -5,7 +5,7 @@ import { detectPlaneRANSAC, computeDistancesToPlane, transformPositions } from '
 import { createSim3dFromEuler, isIdentityEuler } from '../../utils/sim3dTransforms';
 // sim3d transforms moved to DistanceInputModal for picking tool apply logic
 import type { ColorMode } from '../../types/colmap';
-import type { CameraMode, CameraDisplayMode, CameraScaleFactor, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, ScreenshotSize, ScreenshotFormat, GizmoMode, AutoRotateMode, HorizonLockMode, RigDisplayMode } from '../../store/types';
+import type { CameraMode, CameraDisplayMode, CameraScaleFactor, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, ScreenshotSize, ScreenshotFormat, GizmoMode, AutoRotateMode, HorizonLockMode, RigDisplayMode, RigColorMode } from '../../store/types';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { controlPanelStyles, HOTKEYS } from '../../theme';
 import { exportReconstructionText, exportReconstructionBinary, exportPointsPLY, downloadReconstructionZip } from '../../parsers';
@@ -625,6 +625,8 @@ export function ViewerControls() {
   // Rig settings (only shown when rig data is available)
   const rigDisplayMode = useRigStore((s) => s.rigDisplayMode);
   const setRigDisplayMode = useRigStore((s) => s.setRigDisplayMode);
+  const rigColorMode = useRigStore((s) => s.rigColorMode);
+  const setRigColorMode = useRigStore((s) => s.setRigColorMode);
   const rigLineColor = useRigStore((s) => s.rigLineColor);
   const setRigLineColor = useRigStore((s) => s.setRigLineColor);
   const rigLineOpacity = useRigStore((s) => s.rigLineOpacity);
@@ -1611,7 +1613,18 @@ export function ViewerControls() {
               />
               {rigDisplayMode !== 'off' && (
                 <>
-                  <HueRow label="Color" value={rigLineColor} onChange={setRigLineColor} />
+                  <SelectRow
+                    label="Color"
+                    value={rigColorMode}
+                    onChange={(v) => setRigColorMode(v as RigColorMode)}
+                    options={[
+                      { value: 'single', label: 'Single' },
+                      { value: 'perFrame', label: 'Per Frame' },
+                    ]}
+                  />
+                  {rigColorMode === 'single' && (
+                    <HueRow label="Hue" value={rigLineColor} onChange={setRigLineColor} />
+                  )}
                   <SliderRow
                     label="Opacity"
                     value={rigLineOpacity}

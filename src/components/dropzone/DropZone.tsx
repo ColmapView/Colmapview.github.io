@@ -22,7 +22,7 @@ export function DropZone({ children }: DropZoneProps) {
   const [isUrlModalOpen, setIsUrlModalOpen] = useState(false);
   const [hoveredButton, setHoveredButton] = useState<'url' | 'json' | 'toy' | null>(null);
   const { handleDrop, handleDragOver, handleBrowse } = useFileDropzone();
-  const { loadFromUrl, loadFromManifest, urlLoading, urlProgress } = useUrlLoader();
+  const { loadFromUrl, loadFromManifest, urlLoading, urlProgress, setUrlLoading, setUrlProgress } = useUrlLoader();
   const { loading, progress, error, setError, reconstruction } = useReconstructionStore();
   const configInputRef = useRef<HTMLInputElement>(null);
   const manifestInputRef = useRef<HTMLInputElement>(null);
@@ -30,14 +30,25 @@ export function DropZone({ children }: DropZoneProps) {
 
   // Handle URL loading from modal
   const handleUrlLoad = useCallback(async (url: string) => {
+    // Set loading state IMMEDIATELY so UI responds instantly
+    setUrlLoading(true);
+    setUrlProgress({ percent: 0, message: 'Starting...' });
     setIsUrlModalOpen(false);
+    // Yield to React to paint loading UI before starting heavy work
+    await new Promise(resolve => setTimeout(resolve, 0));
     await loadFromUrl(url);
-  }, [loadFromUrl]);
+  }, [loadFromUrl, setUrlLoading, setUrlProgress]);
 
   // Handle manifest JSON file selection
   const handleManifestFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Set loading state IMMEDIATELY so UI responds instantly
+    setUrlLoading(true);
+    setUrlProgress({ percent: 0, message: 'Loading manifest...' });
+    // Yield to React to paint loading UI before starting heavy work
+    await new Promise(resolve => setTimeout(resolve, 0));
 
     try {
       const content = await file.text();
@@ -48,6 +59,7 @@ export function DropZone({ children }: DropZoneProps) {
       if (!result.success) {
         const errors = result.error.issues.map((err) => `${err.path.join('.')}: ${err.message}`).join('; ');
         setError(`Invalid manifest: ${errors}`);
+        setUrlLoading(false);
         return;
       }
 
@@ -55,18 +67,28 @@ export function DropZone({ children }: DropZoneProps) {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setError(`Failed to load manifest: ${message}`);
+      setUrlLoading(false);
     }
 
     // Reset input so same file can be selected again
     e.target.value = '';
-  }, [loadFromManifest, setError]);
+  }, [loadFromManifest, setError, setUrlLoading, setUrlProgress]);
 
   // Handle Try a Toy! button - load random example
   const handleLucky = useCallback(async () => {
+    // Early return if already loading (urlLoading state may be stale due to React batching)
+    if (urlLoading) return;
+
+    // Set loading state IMMEDIATELY so UI responds instantly
+    setUrlLoading(true);
+    setUrlProgress({ percent: 0, message: 'Starting...' });
+    // Yield to React to paint loading UI before starting heavy work
+    await new Promise(resolve => setTimeout(resolve, 0));
+
     const dataset = getRandomDataset();
     console.log(`[Try a Toy] Loading random dataset: ${dataset.name}`);
     await loadFromUrl(getDatasetUrl(dataset.scanId));
-  }, [loadFromUrl]);
+  }, [loadFromUrl, urlLoading, setUrlLoading, setUrlProgress]);
 
   // Download example manifest.json
   const handleDownloadExampleJson = useCallback(() => {

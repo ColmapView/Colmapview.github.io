@@ -4,6 +4,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useReconstructionStore, useUIStore, useCameraStore } from '../../store';
 import { getImageFile, getUrlImageCached, fetchUrlImage, getZipImageCached, fetchZipImage, isZipLoadingAvailable } from '../../utils/imageFileUtils';
 import { useThumbnail, pauseThumbnailCache, resumeThumbnailCache } from '../../hooks/useThumbnail';
+import { prioritizeFrustumTexture } from '../../hooks/useFrustumTexture';
 import { COLUMNS, GAP, SIZE, TIMING, buttonStyles, getTooltipProps, galleryStyles, listStyles, inputStyles, emptyStateStyles, toolbarStyles, hoverCardStyles, ICON_SIZES } from '../../theme';
 
 type ViewMode = 'gallery' | 'list';
@@ -430,6 +431,24 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
       return;
     }
 
+    // Prioritize texture loading if image is already cached (consistent with frustum context menu)
+    if (reconstruction) {
+      const image = reconstruction.images.get(imageId);
+      if (image) {
+        let cachedFile: File | undefined;
+        if (imageUrlBase) {
+          cachedFile = getUrlImageCached(image.name);
+        } else if (isZipLoadingAvailable()) {
+          cachedFile = getZipImageCached(image.name) ?? undefined;
+        } else {
+          cachedFile = getImageFile(loadedFiles?.imageFiles, image.name);
+        }
+        if (cachedFile) {
+          prioritizeFrustumTexture(cachedFile, image.name);
+        }
+      }
+    }
+
     // Push current state to history and fly to the image
     if (currentViewState) {
       pushNavigationHistory({
@@ -440,7 +459,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
     }
     setSelectedImageId(imageId);
     flyToImage(imageId);
-  }, [setSelectedImageId, flyToImage, currentViewState, peekNavigationHistory, popNavigationHistory, pushNavigationHistory, flyToState, selectedImageId, matchedImageIds, setShowMatchesInModal, setMatchedImageId, openImageDetail]);
+  }, [setSelectedImageId, flyToImage, currentViewState, peekNavigationHistory, popNavigationHistory, pushNavigationHistory, flyToState, selectedImageId, matchedImageIds, setShowMatchesInModal, setMatchedImageId, openImageDetail, reconstruction, imageUrlBase, loadedFiles]);
 
   // Get the last navigation target for "back" hint display
   const lastNavigationToImageId = useMemo(() => {

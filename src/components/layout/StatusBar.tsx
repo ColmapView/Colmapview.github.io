@@ -1,19 +1,12 @@
-import {
-  useReconstructionStore,
-  selectPointCount,
-  selectImageCount,
-  selectCameraCount
-} from '../../store';
+import { useReconstructionStore } from '../../store';
 import { statusBarStyles } from '../../theme';
 import { StatWithHistogram } from './StatWithHistogram';
+import { CacheStatsIndicator } from './CacheStatsIndicator';
 
 export function StatusBar() {
   const loading = useReconstructionStore((s) => s.loading);
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
-  const pointCount = useReconstructionStore(selectPointCount);
-  const imageCount = useReconstructionStore(selectImageCount);
-  const cameraCount = useReconstructionStore(selectCameraCount);
 
   // Use pre-computed global stats instead of computing on every render
   const globalStats = reconstruction?.globalStats;
@@ -21,14 +14,9 @@ export function StatusBar() {
   return (
     <footer className={statusBarStyles.container}>
       <div className={statusBarStyles.group}>
-        {reconstruction ? (
-          <>
-            <span>Points: <span className="text-ds-primary">{pointCount.toLocaleString()}</span></span>
-            <span>Images: <span className="text-ds-primary">{imageCount.toLocaleString()}</span></span>
-            <span>Cameras: <span className="text-ds-primary">{cameraCount.toLocaleString()}</span></span>
-            {globalStats && (
+        <CacheStatsIndicator />
+        {reconstruction && globalStats && (
               <>
-                <span>Observations: <span className="text-ds-primary">{globalStats.totalObservations.toLocaleString()}</span></span>
                 <StatWithHistogram
                   label="Avg Track"
                   value={globalStats.avgTrackLength.toFixed(2)}
@@ -45,8 +33,7 @@ export function StatusBar() {
                 />
               </>
             )}
-          </>
-        ) : (
+        {!reconstruction && (
           <span>{loading ? 'Loading...' : 'Drop COLMAP folder to load'}</span>
         )}
       </div>

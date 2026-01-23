@@ -190,6 +190,22 @@ export function resumeFrustumTextureCache(): void {
 }
 
 /**
+ * Get frustum texture cache statistics.
+ * Returns counts for decoded images (in RAM) and active textures (in GPU).
+ */
+export function getFrustumTextureCacheStats(): {
+  urlCache: { count: number; loading: number; pending: number };
+  bitmaps: number;
+  textures: number;
+} {
+  return {
+    urlCache: frustumUrlCache.getStats(),
+    bitmaps: bitmapCache.size,
+    textures: activeTextures.size,
+  };
+}
+
+/**
  * Prefetch frustum textures for a list of images.
  * This caches JPEG blob URLs, not actual textures.
  */

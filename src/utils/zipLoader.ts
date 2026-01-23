@@ -45,6 +45,10 @@ export interface ZipLoadResult {
   imageIndex: Map<string, ArchiveEntry>;
   /** The archive reader instance (kept alive for lazy extraction) */
   archive: ArchiveReader;
+  /** Size of the ZIP file in bytes */
+  fileSize: number;
+  /** Number of unique images in the ZIP (imageIndex has duplicates for lookup) */
+  imageCount: number;
 }
 
 /** ZIP validation result */
@@ -266,7 +270,7 @@ async function downloadZip(
 async function processZipArchive(
   archive: ArchiveReader,
   onProgress: (progress: ZipProgress) => void
-): Promise<{ colmapFiles: Map<string, File>; imageIndex: Map<string, ArchiveEntry> }> {
+): Promise<{ colmapFiles: Map<string, File>; imageIndex: Map<string, ArchiveEntry>; imageCount: number }> {
   onProgress({ percent: 50, message: 'Reading archive contents...' });
 
   // Get list of files in archive
@@ -277,15 +281,25 @@ async function processZipArchive(
   // Separate COLMAP files and image files
   const colmapEntries: Array<{ file: ArchiveEntry; path: string }> = [];
   const imageIndex = new Map<string, ArchiveEntry>();
+  let imageCount = 0; // Track actual unique images (imageIndex has duplicates for lookup)
 
   for (const entry of filesArray) {
-    const fullPath = entry.path ? `${entry.path}${entry.file.name}` : entry.file.name;
+    // Build full path with proper separator
+    // entry.path may or may not have trailing slash depending on libarchive.js version
+    let fullPath: string;
+    if (entry.path) {
+      const dir = entry.path.endsWith('/') ? entry.path : `${entry.path}/`;
+      fullPath = `${dir}${entry.file.name}`;
+    } else {
+      fullPath = entry.file.name;
+    }
 
     if (isColmapFile(fullPath)) {
       colmapEntries.push({ file: entry.file as ArchiveEntry, path: fullPath });
     } else if (isImagePath(fullPath)) {
       // Store in index for lazy extraction
       imageIndex.set(fullPath, entry.file as ArchiveEntry);
+      imageCount++; // Count unique images (only the full path entry)
       // Also store under just the filename for easier lookup
       const filename = fullPath.split('/').pop() ?? fullPath;
       if (!imageIndex.has(filename)) {
@@ -326,9 +340,9 @@ async function processZipArchive(
     onProgress({ percent, message: `Extracting ${filename}...` });
   }
 
-  onProgress({ percent: 70, message: `Indexed ${imageIndex.size} images for lazy loading` });
+  onProgress({ percent: 70, message: `Indexed ${imageCount} images for lazy loading` });
 
-  return { colmapFiles, imageIndex };
+  return { colmapFiles, imageIndex, imageCount };
 }
 
 /**
@@ -366,7 +380,7 @@ export async function loadZipFromUrl(
   const archive = await Archive.open(file);
 
   // Process archive
-  const { colmapFiles, imageIndex } = await processZipArchive(archive, onProgress);
+  const { colmapFiles, imageIndex, imageCount } = await processZipArchive(archive, onProgress);
 
   // Verify we have required COLMAP files
   const hasRequiredFiles =
@@ -394,7 +408,7 @@ export async function loadZipFromUrl(
     }
   }
 
-  return { colmapFiles, imageIndex, archive };
+  return { colmapFiles, imageIndex, archive, fileSize: blob.size, imageCount };
 }
 
 /**
@@ -422,7 +436,7 @@ export async function loadZipFromFile(
   const archive = await Archive.open(zipFile);
 
   // Process archive
-  const { colmapFiles, imageIndex } = await processZipArchive(archive, onProgress);
+  const { colmapFiles, imageIndex, imageCount } = await processZipArchive(archive, onProgress);
 
   // Verify we have required COLMAP files
   let foundCameras = false;
@@ -442,7 +456,7 @@ export async function loadZipFromFile(
     );
   }
 
-  return { colmapFiles, imageIndex, archive };
+  return { colmapFiles, imageIndex, archive, fileSize: zipFile.size, imageCount };
 }
 
 // ============================================================================
@@ -455,15 +469,23 @@ let activeArchive: ArchiveReader | null = null;
 /** Index of images in the active archive */
 let activeImageIndex: Map<string, ArchiveEntry> | null = null;
 
+/** Size of the active ZIP file in bytes */
+let activeZipFileSize: number = 0;
+
+/** Actual count of unique images in the archive (imageIndex has duplicates for lookup) */
+let activeZipImageCount: number = 0;
+
 /**
  * Set the active ZIP archive for lazy image extraction.
  */
-export function setActiveZipArchive(archive: ArchiveReader, imageIndex: Map<string, ArchiveEntry>): void {
+export function setActiveZipArchive(archive: ArchiveReader, imageIndex: Map<string, ArchiveEntry>, fileSize: number = 0, imageCount: number = 0): void {
   // Close previous archive if any
   clearActiveZipArchive();
 
   activeArchive = archive;
   activeImageIndex = imageIndex;
+  activeZipFileSize = fileSize;
+  activeZipImageCount = imageCount;
 }
 
 /**
@@ -488,6 +510,18 @@ export function clearActiveZipArchive(): void {
   // but clearing references allows garbage collection
   activeArchive = null;
   activeImageIndex = null;
+  activeZipFileSize = 0;
+  activeZipImageCount = 0;
+}
+
+/**
+ * Get statistics about the active ZIP archive.
+ */
+export function getActiveZipStats(): { fileSize: number; imageCount: number } {
+  return {
+    fileSize: activeZipFileSize,
+    imageCount: activeZipImageCount,
+  };
 }
 
 /**

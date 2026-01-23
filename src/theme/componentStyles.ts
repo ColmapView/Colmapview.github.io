@@ -533,8 +533,8 @@ export const resizeHandleStyles = {
 // ============================================
 
 export const histogramStyles = {
-  // Container positions above the stat, centered (using negative top to go upward)
-  container: `absolute left-1/2 -translate-x-1/2 z-[${Z_INDEX.tooltip}]`,
+  // Container positions above the stat, centered (transform handled inline for viewport clamping)
+  container: `absolute left-1/2 z-[${Z_INDEX.tooltip}]`,
   // Inline style needed for positioning above: style={{ bottom: '100%', marginBottom: '8px' }}
   // Card styling
   card: 'bg-ds-tertiary rounded-lg px-4 py-3 shadow-ds-lg text-sm border border-ds',
@@ -552,4 +552,51 @@ export const histogramStyles = {
   count: 'w-16 text-ds-muted text-xs',
   // Footer with mean and total
   footer: 'text-ds-secondary text-xs mt-3 pt-2 border-t border-ds',
+} as const;
+
+// ============================================
+// CACHE STATS INDICATOR STYLES
+// ============================================
+
+export const cacheStatsStyles = {
+  // Wrapper for the indicator in status bar
+  wrapper: 'relative cursor-help overflow-visible',
+  // Indicator text in status bar
+  indicator: 'inline-flex items-center gap-1',
+  indicatorLabel: 'text-ds-secondary',
+  indicatorValue: 'text-ds-primary',
+  // Tooltip container (uses histogramStyles.container positioning)
+  tooltipContainer: `absolute z-[${Z_INDEX.tooltip}]`,
+  // Tooltip card - wider, no wrapping
+  card: 'bg-ds-tertiary rounded-lg px-4 py-3 shadow-ds-lg text-sm border border-ds whitespace-nowrap',
+  // Header row with title and legend
+  header: 'flex items-center justify-between gap-8 mb-2',
+  headerTitle: 'flex items-center gap-1.5 text-ds-primary text-sm font-medium whitespace-nowrap',
+  headerLegend: 'flex items-center gap-4 text-[10px]',
+  legendItem: 'flex items-center gap-1',
+  legendText: 'text-ds-muted',
+  // Status dots
+  dotMemoryJs: 'inline-block w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0',
+  dotMemoryWasm: 'inline-block w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0',
+  dotLazy: 'inline-block w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0',
+  dotUnavailable: 'inline-block w-1.5 h-1.5 rounded-full bg-neutral-600 flex-shrink-0',
+  // Table styles
+  table: 'w-full text-xs',
+  tableHeader: 'text-[10px] text-ds-muted border-b border-ds',
+  tableHeaderCell: 'py-1 font-normal whitespace-nowrap',
+  tableHeaderLeft: 'text-left',
+  tableHeaderRight: 'text-right',
+  // Table row
+  tableRow: 'py-0.5',
+  tableRowDimmed: 'opacity-40',
+  tableCellLabel: 'pr-6 whitespace-nowrap',
+  tableCellLabelInner: 'flex items-center gap-2',
+  tableCellLabelText: 'text-ds-secondary whitespace-nowrap',
+  tableCellCount: 'px-4 text-right tabular-nums text-ds-primary whitespace-nowrap',
+  tableCellSize: 'pl-4 text-right tabular-nums text-ds-muted whitespace-nowrap w-20',
+  // Footer row
+  tableFooter: 'border-t border-ds font-medium',
+  tableFooterCell: 'pt-1.5',
+  tableFooterLabel: 'text-ds-secondary',
+  tableFooterValue: 'text-ds-primary',
 } as const;

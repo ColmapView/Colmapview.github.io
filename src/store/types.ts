@@ -64,6 +64,9 @@ export type GizmoMode = (typeof GIZMO_MODES)[number];
 export const RIG_DISPLAY_MODES = ['off', 'lines', 'blink'] as const;
 export type RigDisplayMode = (typeof RIG_DISPLAY_MODES)[number];
 
+export const RIG_COLOR_MODES = ['single', 'perFrame'] as const;
+export type RigColorMode = (typeof RIG_COLOR_MODES)[number];
+
 // Export
 export const SCREENSHOT_SIZES = [
   'current',

@@ -127,7 +127,8 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
 
   setUrlProgress: (urlProgress) => set({ urlProgress }),
 
-  setUrlError: (urlError) => set({ urlError, urlLoading: false }),
+  // Only set urlLoading to false when there's an actual error, not when clearing
+  setUrlError: (urlError) => set(urlError ? { urlError, urlLoading: false } : { urlError }),
 
   clear: () => {
     // Dispose WASM wrapper on clear

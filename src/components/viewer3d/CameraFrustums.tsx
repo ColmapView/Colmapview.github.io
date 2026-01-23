@@ -20,6 +20,7 @@ import { VIZ_COLORS, RAINBOW, OPACITY, TIMING, hoverCardStyles, ICON_SIZES, getC
 import { rainbowColor } from '../../utils/colorUtils';
 import { UndistortedImageMaterial } from './UndistortedImageMaterial';
 import { useIsAlignmentMode } from '../../hooks/useAlignmentMode';
+import { lineVertexShader, lineFragmentShader } from './shaders';
 
 // Shared temp objects for color calculations
 const tempColor = new THREE.Color();
@@ -74,28 +75,6 @@ const tempWorldQuat = new THREE.Quaternion();
 // Cosine thresholds for angle-based texture culling
 const COS_45_DEG = Math.cos(Math.PI / 4); // ≈ 0.707 (for frustum mode with image planes)
 const COS_90_DEG = Math.cos(Math.PI / 2); // = 0 (for imageplane mode - only cull when facing away)
-
-// Custom shader material for lines with per-vertex alpha
-const lineVertexShader = `
-  attribute float alpha;
-  varying float vAlpha;
-  varying vec3 vColor;
-
-  void main() {
-    vColor = color;
-    vAlpha = alpha;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;
-
-const lineFragmentShader = `
-  varying float vAlpha;
-  varying vec3 vColor;
-
-  void main() {
-    gl_FragColor = vec4(vColor, vAlpha);
-  }
-`;
 
 // Batched arrow rendering using instanced meshes (cylinder + cone)
 interface BatchedArrowMeshesProps {
@@ -622,7 +601,7 @@ const FrustumPlane = memo(function FrustumPlane({
   camera,
   image,
   scale,
-  imageFile,
+  imageFile: imageFileProp,
   showImagePlane,
   isSelected,
   isMatched = false,
@@ -642,6 +621,45 @@ const FrustumPlane = memo(function FrustumPlane({
   const [hovered, setHovered] = useState(false);
   const [viewAngleOk, setViewAngleOk] = useState(true);
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+
+  // Direct fetch when selected but no imageFile - ensures texture loads even if parent memo is stale
+  // This fixes the issue where gallery "Fly to" doesn't load image in frustum because the
+  // parent's frustums memo might not pick up the cached image in time during animation
+  const imageUrlBase = useReconstructionStore((s) => s.imageUrlBase);
+  const [fetchedImageFile, setFetchedImageFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    // Only fetch if selected, showing image plane, and no imageFile available
+    if (!isSelected || !showImagePlane || imageFileProp) {
+      setFetchedImageFile(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const doFetch = async () => {
+      let file: File | null = null;
+
+      if (imageUrlBase) {
+        // URL mode
+        file = getUrlImageCached(image.name) ?? await fetchUrlImage(imageUrlBase, image.name);
+      } else if (isZipLoadingAvailable()) {
+        // ZIP mode
+        file = getZipImageCached(image.name) ?? await fetchZipImage(image.name);
+      }
+
+      if (!cancelled && file) {
+        setFetchedImageFile(file);
+      }
+    };
+
+    doFetch();
+
+    return () => { cancelled = true; };
+  }, [isSelected, showImagePlane, imageFileProp, image.name, imageUrlBase]);
+
+  // Use prop if available, otherwise use fetched file
+  const imageFile = imageFileProp ?? fetchedImageFile ?? undefined;
 
   // Sync local hover state with parent - clear when parent clears hover or hovers different image
   useEffect(() => {

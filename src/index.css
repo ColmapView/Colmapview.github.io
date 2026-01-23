@@ -920,6 +920,15 @@ legend {
 .text-gray-300 { color: #d1d5db; }
 .text-gray-500 { color: #6b7280; }
 .text-blue-400 { color: #60a5fa; }
+.text-green-400 { color: #4ade80; }
+.text-amber-400 { color: #fbbf24; }
+.text-purple-400 { color: #c084fc; }
+
+/* Background color utilities for status indicators */
+.bg-green-400 { background-color: #4ade80; }
+.bg-blue-400 { background-color: #60a5fa; }
+.bg-amber-400 { background-color: #fbbf24; }
+.bg-neutral-600 { background-color: #525252; }
 
 /* 3D Visualization */
 .text-ds-frustum { color: var(--frustum-default); }

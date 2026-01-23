@@ -652,3 +652,77 @@ export function clearZipCache(): void {
   zipExtractCallbacks.clear();
   clearActiveZipArchive();
 }
+
+// ============================================================================
+// Cache Statistics
+// ============================================================================
+
+/** Statistics for a cache */
+export interface CacheInfo {
+  count: number;
+  sizeBytes: number;
+}
+
+/**
+ * Calculate total size of files in a Map.
+ */
+function calculateMapSize(files: Map<string, File>): number {
+  let total = 0;
+  for (const file of files.values()) {
+    total += file.size;
+  }
+  return total;
+}
+
+/**
+ * Get URL image cache statistics.
+ */
+export function getUrlImageCacheStats(): CacheInfo {
+  return {
+    count: urlImageCache.size,
+    sizeBytes: calculateMapSize(urlImageCache),
+  };
+}
+
+/**
+ * Get ZIP image cache statistics.
+ */
+export function getZipImageCacheStats(): CacheInfo {
+  return {
+    count: zipImageCache.size,
+    sizeBytes: calculateMapSize(zipImageCache),
+  };
+}
+
+/**
+ * Get ZIP mask cache statistics.
+ */
+export function getZipMaskCacheStats(): CacheInfo {
+  return {
+    count: zipMaskCache.size,
+    sizeBytes: calculateMapSize(zipMaskCache),
+  };
+}
+
+/**
+ * Get statistics for local image files.
+ */
+export function getLocalImageStats(imageFiles: Map<string, File> | undefined): CacheInfo {
+  if (!imageFiles) {
+    return { count: 0, sizeBytes: 0 };
+  }
+  // Note: imageFiles contains duplicates (multiple keys per file for lookup)
+  // Count unique files by using a Set of file references
+  const uniqueFiles = new Set<File>();
+  for (const file of imageFiles.values()) {
+    uniqueFiles.add(file);
+  }
+  let totalSize = 0;
+  for (const file of uniqueFiles) {
+    totalSize += file.size;
+  }
+  return {
+    count: uniqueFiles.size,
+    sizeBytes: totalSize,
+  };
+}

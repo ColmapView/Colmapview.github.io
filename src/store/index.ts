@@ -37,6 +37,7 @@ export type {
   ScreenshotFormat,
   ExportFormat,
   RigDisplayMode,
+  RigColorMode,
 } from './types';
 
 export {
@@ -49,6 +50,7 @@ export {
   MATCHES_DISPLAY_MODES,
   SELECTION_COLOR_MODES,
   RIG_DISPLAY_MODES,
+  RIG_COLOR_MODES,
 } from './types';
 
 // Migration utilities

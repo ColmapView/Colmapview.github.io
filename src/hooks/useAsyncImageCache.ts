@@ -575,6 +575,17 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
     },
 
     /**
+     * Get cache statistics (count of loaded items).
+     */
+    getStats(): { count: number; loading: number; pending: number } {
+      return {
+        count: state.cache.size,
+        loading: state.loadingPromises.size,
+        pending: state.pendingItems.length,
+      };
+    },
+
+    /**
      * React hook to use this cache.
      */
     useCache(
@@ -588,17 +599,21 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
       // Track cache generation to detect cache clears
       const [generation, setGeneration] = useState(state.cacheGeneration);
 
+      // CRITICAL: Synchronously check if cache was cleared during render.
+      // This prevents showing stale blob URLs between cache clear and effect execution.
+      // When generation is stale, we return null immediately rather than the old result.
+      const isGenerationStale = generation !== state.cacheGeneration;
+
       useEffect(() => {
+        // Sync generation state if it changed
+        if (isGenerationStale) {
+          setGeneration(state.cacheGeneration);
+          setResult(null);
+        }
+
         if (!enabled || !imageFile || !imageName) {
           setResult(null);
           return;
-        }
-
-        // Check if cache was cleared (generation changed)
-        // If so, reset result immediately to avoid showing stale data
-        if (generation !== state.cacheGeneration) {
-          setGeneration(state.cacheGeneration);
-          setResult(null);
         }
 
         const cached = state.cache.get(imageName);
@@ -626,7 +641,12 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
         return () => {
           cancelled = true;
         };
-      }, [imageFile, imageName, enabled, generation]);
+      }, [imageFile, imageName, enabled, isGenerationStale]);
+
+      // Return null if generation is stale to prevent showing old thumbnails
+      if (isGenerationStale) {
+        return null;
+      }
 
       return result;
     },
