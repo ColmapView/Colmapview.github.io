@@ -6,7 +6,7 @@ import { VIZ_COLORS, contextMenuStyles, hoverCardStyles, ICON_SIZES } from '../.
 import { useUIStore } from '../../store';
 import type { AxesCoordinateSystem, AxisLabelMode, AxesDisplayMode } from '../../store/types';
 import { CheckIcon, HideIcon } from '../../icons';
-import { COORDINATE_SYSTEMS } from '../../utils/coordinateSystems';
+import { COORDINATE_SYSTEMS, AXIS_SEMANTIC } from '../../utils/coordinateSystems';
 
 // Helper to calculate rotation quaternion from default cylinder (Y-axis) to target direction
 function getAxisRotation(direction: [number, number, number]): THREE.Euler {
@@ -54,20 +54,6 @@ const COORDINATE_SYSTEM_NAMES: Record<AxesCoordinateSystem, string> = {
   houdini: 'Houdini',
   unity: 'Unity',
   unreal: 'Unreal',
-};
-
-// Semantic meaning of Y axis in each coordinate system
-// Shows what direction +Y represents in that system's convention
-const Y_AXIS_SEMANTIC: Record<AxesCoordinateSystem, string> = {
-  colmap: 'Down',    // Camera image Y points down
-  opencv: 'Down',    // Same as COLMAP
-  threejs: 'Up',     // Standard Y-up convention
-  opengl: 'Up',      // Standard Y-up convention
-  vulkan: 'Up',      // World space Y-up (NDC differs)
-  blender: 'Fwd',    // Y is depth/forward axis in Z-up system
-  houdini: 'Up',     // Standard Y-up convention
-  unity: 'Up',       // Y-up (left-handed)
-  unreal: 'Right',   // Y is right axis in Z-up system
 };
 
 // Screen position for context menus (like gizmo)
@@ -491,7 +477,7 @@ export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', label
 
   // Order axes Y, X, Z to match typical "up" axis priority
   const axes = useMemo(() => [
-    { direction: system.y, color: VIZ_COLORS.axis.y, label: 'Y', suffix: Y_AXIS_SEMANTIC[coordinateSystem] },
+    { direction: system.y, color: VIZ_COLORS.axis.y, label: 'Y', suffix: AXIS_SEMANTIC[coordinateSystem]['Y'] },
     { direction: system.x, color: VIZ_COLORS.axis.x, label: 'X' },
     { direction: system.z, color: VIZ_COLORS.axis.z, label: 'Z', suffix: COORDINATE_SYSTEM_NAMES[coordinateSystem] },
   ], [system, coordinateSystem]);

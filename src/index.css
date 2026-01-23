@@ -884,6 +884,7 @@ legend {
 .bg-transparent { background-color: transparent; }
 .bg-black { background-color: #000; }
 .bg-white { background-color: #fff; }
+.bg-black\/30 { background-color: rgba(0, 0, 0, 0.3); }
 .bg-black\/50 { background-color: rgba(0, 0, 0, 0.5); }
 .bg-black\/70 { background-color: rgba(0, 0, 0, 0.7); }
 .bg-black\/90 { background-color: rgba(0, 0, 0, 0.9); }
@@ -915,12 +916,18 @@ legend {
 
 /* Standard colors */
 .text-white { color: #fff; }
+.text-white\/70 { color: rgba(255, 255, 255, 0.7); }
 .text-black { color: #000; }
 .text-transparent { color: transparent; }
 .text-gray-300 { color: #d1d5db; }
 .text-gray-500 { color: #6b7280; }
 .text-blue-400 { color: #60a5fa; }
 .text-green-400 { color: #4ade80; }
+.text-green-300 { color: #86efac; }
+.text-yellow-400 { color: #facc15; }
+.text-yellow-300 { color: #fde047; }
+.text-red-400 { color: #f87171; }
+.text-red-300 { color: #fca5a5; }
 .text-amber-400 { color: #fbbf24; }
 .text-purple-400 { color: #c084fc; }
 
@@ -1222,6 +1229,11 @@ legend {
 .hover-brightness-110:hover { filter: brightness(1.1); }
 .hover-opacity-90:hover { opacity: 0.9; }
 .hover-opacity-100:hover { opacity: 1; }
+
+/* Color hover (Tailwind-style syntax) */
+.hover\:text-green-300:hover { color: #86efac; }
+.hover\:text-yellow-300:hover { color: #fde047; }
+.hover\:text-red-300:hover { color: #fca5a5; }
 
 /* Composite hover states */
 .hover-interactive:hover {

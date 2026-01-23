@@ -23,7 +23,7 @@ export function DropZone({ children }: DropZoneProps) {
   const [hoveredButton, setHoveredButton] = useState<'url' | 'json' | 'toy' | null>(null);
   const { handleDrop, handleDragOver, handleBrowse } = useFileDropzone();
   const { loadFromUrl, loadFromManifest, urlLoading, urlProgress, setUrlLoading, setUrlProgress } = useUrlLoader();
-  const { loading, progress, error, setError, reconstruction } = useReconstructionStore();
+  const { error, setError, reconstruction } = useReconstructionStore();
   const configInputRef = useRef<HTMLInputElement>(null);
   const manifestInputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
@@ -209,7 +209,7 @@ export function DropZone({ children }: DropZoneProps) {
         </div>
       )}
 
-      {!reconstruction && !loading && !urlLoading && !hasUrlToLoad() && !isDragOver && !isPanelDismissed && !isMobile && (
+      {!reconstruction && !urlLoading && !hasUrlToLoad() && !isDragOver && !isPanelDismissed && !isMobile && (
         <div className="absolute inset-0 flex items-center justify-center z-10">
           <div className="flex flex-col bg-ds-secondary rounded-lg border border-ds p-6 min-w-[420px]">
             {/* Header row: action buttons */}
@@ -407,33 +407,15 @@ export function DropZone({ children }: DropZoneProps) {
         </div>
       )}
 
-      {loading && (
-        <div className={loadingStyles.overlay}>
-          <div className={loadingStyles.container}>
-            <div className={loadingStyles.dots}>
-              <div className={loadingStyles.dot} style={{ animationDelay: `${TIMING.bounceDelays[0]}ms` }} />
-              <div className={loadingStyles.dot} style={{ animationDelay: `${TIMING.bounceDelays[1]}ms` }} />
-              <div className={loadingStyles.dot} style={{ animationDelay: `${TIMING.bounceDelays[2]}ms` }} />
-            </div>
-            <div className={loadingStyles.text}>Loading...</div>
-            <div className={loadingStyles.progressBar}>
-              <div
-                className={loadingStyles.progressFill}
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <div className={loadingStyles.percentage}>{progress}%</div>
-          </div>
-        </div>
-      )}
-
       {urlLoading && urlProgress && (
         <div className={loadingStyles.overlay}>
           <div className={loadingStyles.container}>
-            <div className={loadingStyles.dots}>
-              <div className={loadingStyles.dot} style={{ animationDelay: `${TIMING.bounceDelays[0]}ms` }} />
-              <div className={loadingStyles.dot} style={{ animationDelay: `${TIMING.bounceDelays[1]}ms` }} />
-              <div className={loadingStyles.dot} style={{ animationDelay: `${TIMING.bounceDelays[2]}ms` }} />
+            <div className="flex justify-center mb-4">
+              <img
+                src={publicAsset('LOGO.png')}
+                alt="Loading"
+                className="w-12 h-12 animate-bounce"
+              />
             </div>
             <div className={loadingStyles.text}>{urlProgress.message}</div>
             <div className={loadingStyles.progressBar}>
@@ -444,12 +426,12 @@ export function DropZone({ children }: DropZoneProps) {
             </div>
             <div className={loadingStyles.percentage}>{urlProgress.percent}%</div>
             {urlProgress.currentFile && (
-              <div className="text-ds-muted text-xs mt-2 max-w-xs truncate">
+              <div className="text-white/70 text-xs mt-2 max-w-xs truncate">
                 {urlProgress.currentFile}
               </div>
             )}
             {urlProgress.filesDownloaded !== undefined && urlProgress.totalFiles !== undefined && (
-              <div className="text-ds-muted/70 text-xs mt-1">
+              <div className="text-white/70 text-xs mt-1">
                 {urlProgress.filesDownloaded} / {urlProgress.totalFiles} files
               </div>
             )}

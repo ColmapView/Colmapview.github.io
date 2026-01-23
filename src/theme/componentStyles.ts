@@ -350,14 +350,14 @@ export const notificationStyles = {
 // ============================================
 
 export const loadingStyles = {
-  overlay: 'absolute inset-0 bg-ds-void/80 z-[500] flex items-center justify-center',
+  overlay: 'absolute inset-0 bg-black/50 backdrop-blur-sm z-[500] flex items-center justify-center',
   container: 'text-center',
   dots: 'flex justify-center mb-4 space-x-2',
-  dot: 'w-3 h-3 rounded-full bg-ds-accent animate-bounce',
+  dot: 'w-3 h-3 rounded-full bg-white animate-bounce',
   progressBar: 'w-64 h-2 bg-ds-tertiary rounded-full overflow-hidden',
-  progressFill: 'h-full bg-ds-accent transition-all duration-300',
-  text: 'text-xl mb-4 text-ds-primary',
-  percentage: 'text-base text-ds-secondary mt-2',
+  progressFill: 'h-full bg-white transition-all duration-300',
+  text: 'text-xl mb-4 text-white',
+  percentage: 'text-base text-white mt-2',
 } as const;
 
 // ============================================
@@ -380,11 +380,12 @@ export const controlPanelStyles = {
   panelContent: 'space-y-2',
   // Row layout
   row: 'flex items-center gap-2',
-  label: 'text-ds-secondary text-sm whitespace-nowrap w-20 flex-shrink-0',
+  label: 'text-ds-secondary text-sm whitespace-nowrap w-24 flex-shrink-0',
   value: 'text-ds-primary text-sm w-8 text-right flex-shrink-0 cursor-pointer hover-ds-accent box-border',
   valueInput: 'bg-transparent text-ds-primary text-sm w-8 text-right flex-shrink-0 border-none p-0 m-0 focus:outline-none box-border',
   slider: `${inputStyles.range.base} flex-1 min-w-0`,
   select: `${inputStyles.selectPanel} py-0.5 pl-2 ml-1.5 text-sm flex-1`,
+  selectRight: `${inputStyles.selectPanel} py-0.5 pl-2 pr-6 text-sm flex-1 min-w-0 w-full`,  // Same width as slider track
   // Hint text (keyboard shortcuts, etc.)
   hint: 'text-ds-secondary text-sm mt-3',
   hintTitle: 'mb-1 font-medium',
@@ -426,7 +427,74 @@ export const separatorStyles = {
 } as const;
 
 // ============================================
-// CHECKBOX GROUP STYLES
+// TOGGLE SWITCH STYLES (Single source of truth)
+// ============================================
+
+/**
+ * Toggle switch (oval with circle) - replaces checkboxes
+ * Usage: <ToggleSwitch checked={value} onChange={setValue} />
+ */
+export const toggleSwitchStyles = {
+  // Outer track (oval container)
+  track: 'relative inline-flex items-center cursor-pointer transition-colors duration-200 rounded-full',
+  trackSm: 'w-7 h-4',   // Small: 28x16px
+  trackMd: 'w-9 h-5',   // Medium: 36x20px (default)
+  trackLg: 'w-11 h-6',  // Large: 44x24px
+
+  // Track colors
+  trackOff: 'bg-ds-secondary border border-ds-light',
+  trackOn: 'bg-ds-accent border border-ds-accent',
+
+  // Inner circle (thumb) - base styles only, position via inline style
+  thumb: 'absolute bg-white rounded-full shadow-sm transition-all duration-200 ease-in-out',
+  thumbSm: 'w-2.5 h-2.5',   // 10x10px
+  thumbMd: 'w-3.5 h-3.5',   // 14x14px
+  thumbLg: 'w-4.5 h-4.5',   // 18x18px
+
+  // States
+  disabled: 'opacity-50 cursor-not-allowed',
+
+  // Container with label
+  container: 'flex items-center gap-2',
+  label: 'text-ds-secondary text-sm whitespace-nowrap cursor-pointer',
+} as const;
+
+// Thumb positions in pixels for each size
+const THUMB_POSITIONS = {
+  sm: { off: 3, on: 14 },   // 28px track, 10px thumb
+  md: { off: 3, on: 18 },   // 36px track, 14px thumb
+  lg: { off: 3, on: 22 },   // 44px track, 18px thumb
+} as const;
+
+// Helper to get toggle switch classes and thumb position
+export function getToggleSwitchClasses(
+  checked: boolean,
+  size: 'sm' | 'md' | 'lg' = 'md',
+  disabled = false
+): { track: string; thumb: string; thumbStyle: React.CSSProperties } {
+  const sizeClasses = {
+    sm: { track: toggleSwitchStyles.trackSm, thumb: toggleSwitchStyles.thumbSm },
+    md: { track: toggleSwitchStyles.trackMd, thumb: toggleSwitchStyles.thumbMd },
+    lg: { track: toggleSwitchStyles.trackLg, thumb: toggleSwitchStyles.thumbLg },
+  };
+
+  const s = sizeClasses[size];
+  const pos = THUMB_POSITIONS[size];
+  const trackColor = checked ? toggleSwitchStyles.trackOn : toggleSwitchStyles.trackOff;
+
+  return {
+    track: `${toggleSwitchStyles.track} ${s.track} ${trackColor}${disabled ? ` ${toggleSwitchStyles.disabled}` : ''}`,
+    thumb: `${toggleSwitchStyles.thumb} ${s.thumb}`,
+    thumbStyle: {
+      left: checked ? pos.on : pos.off,
+      top: '50%',
+      transform: 'translateY(-50%)',
+    },
+  };
+}
+
+// ============================================
+// CHECKBOX GROUP STYLES (Legacy - use ToggleSwitch instead)
 // ============================================
 
 export const checkboxGroupStyles = {

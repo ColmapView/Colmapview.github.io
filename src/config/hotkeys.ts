@@ -106,6 +106,24 @@ export const HOTKEYS: HotkeyRegistry = {
     category: 'camera',
     scopes: ['viewer'],
   },
+  viewNegX: {
+    keys: '4',
+    description: '-X axis view',
+    category: 'camera',
+    scopes: ['viewer'],
+  },
+  viewNegY: {
+    keys: '5',
+    description: '-Y axis view',
+    category: 'camera',
+    scopes: ['viewer'],
+  },
+  viewNegZ: {
+    keys: '6',
+    description: '-Z axis view',
+    category: 'camera',
+    scopes: ['viewer'],
+  },
   toggleAxesGrid: {
     keys: 'g',
     description: 'Cycle axes/grid',

@@ -30,10 +30,13 @@ interface AnimationTarget {
 }
 
 // Camera offset and up vectors for each axis view
-const AXIS_VIEWS: Record<'x' | 'y' | 'z', { offset: THREE.Vector3; up: THREE.Vector3 }> = {
-  x: { offset: new THREE.Vector3(1, 0, 0), up: new THREE.Vector3(0, 1, 0) },
-  y: { offset: new THREE.Vector3(0, 1, 0), up: new THREE.Vector3(0, 0, -1) },
-  z: { offset: new THREE.Vector3(0, 0, 1), up: new THREE.Vector3(0, 1, 0) },
+const AXIS_VIEWS: Record<'x' | 'y' | 'z' | '-x' | '-y' | '-z', { offset: THREE.Vector3; up: THREE.Vector3 }> = {
+  'x': { offset: new THREE.Vector3(1, 0, 0), up: new THREE.Vector3(0, 1, 0) },
+  'y': { offset: new THREE.Vector3(0, 1, 0), up: new THREE.Vector3(0, 0, -1) },
+  'z': { offset: new THREE.Vector3(0, 0, 1), up: new THREE.Vector3(0, 1, 0) },
+  '-x': { offset: new THREE.Vector3(-1, 0, 0), up: new THREE.Vector3(0, 1, 0) },
+  '-y': { offset: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1) },
+  '-z': { offset: new THREE.Vector3(0, 0, -1), up: new THREE.Vector3(0, 1, 0) },
 };
 
 export interface TrackballControlsProps {

@@ -4,7 +4,7 @@ import { StatWithHistogram } from './StatWithHistogram';
 import { CacheStatsIndicator } from './CacheStatsIndicator';
 
 export function StatusBar() {
-  const loading = useReconstructionStore((s) => s.loading);
+  const urlLoading = useReconstructionStore((s) => s.urlLoading);
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
 
@@ -34,7 +34,7 @@ export function StatusBar() {
               </>
             )}
         {!reconstruction && (
-          <span>{loading ? 'Loading...' : 'Drop COLMAP folder to load'}</span>
+          <span>{urlLoading ? 'Loading...' : 'Drop COLMAP folder to load'}</span>
         )}
       </div>
       <div className="flex items-center gap-2 text-ds-secondary">

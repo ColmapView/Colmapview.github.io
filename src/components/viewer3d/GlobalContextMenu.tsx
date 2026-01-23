@@ -4,6 +4,7 @@ import { useUIStore, useCameraStore, useTransformStore, useReconstructionStore, 
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { contextMenuStyles, actionButtonStyles, HOTKEYS } from '../../theme';
 import { formatKeyCombo } from '../../config/hotkeys';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 import {
   // UI icons
   ResetIcon, ReloadIcon, CheckIcon, CloseIcon, SettingsIcon, FullscreenIcon, FilterIcon, SpeedIcon, SpeedDimIcon,
@@ -563,19 +564,19 @@ export function GlobalContextMenu() {
         className="flex items-center gap-2 cursor-pointer hover-ds-hover rounded px-2 py-1"
         style={{ breakInside: 'avoid' }}
       >
-        <input
-          type="checkbox"
-          checked={contextMenuActions.includes(action.id)}
-          onChange={() => toggleActionConfig(action.id)}
-          className="w-4 h-4 accent-ds-accent flex-shrink-0"
-        />
         <span className="w-4 h-4 flex-shrink-0 opacity-60">{action.icon}</span>
         <span className="text-sm text-ds-primary whitespace-nowrap">{action.label}</span>
         {action.hotkey && (
-          <span className="text-xs font-mono text-gray-500 ml-auto uppercase tracking-wide">
+          <span className="text-xs font-mono text-gray-500 uppercase tracking-wide">
             ({formatKeyCombo(action.hotkey)})
           </span>
         )}
+        <span className="ml-auto">
+          <ToggleSwitch
+            checked={contextMenuActions.includes(action.id)}
+            onChange={() => toggleActionConfig(action.id)}
+          />
+        </span>
       </label>
     );
 

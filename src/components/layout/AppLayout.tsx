@@ -193,30 +193,24 @@ export function AppLayout() {
 
   // Show context menu tip when reconstruction is first loaded
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const loading = useReconstructionStore((s) => s.loading);
   const urlLoading = useReconstructionStore((s) => s.urlLoading);
   const hasShownContextMenuTipRef = useRef(false);
 
   useEffect(() => {
-    if (reconstruction && !loading && !hasShownContextMenuTipRef.current) {
+    if (reconstruction && !urlLoading && !hasShownContextMenuTipRef.current) {
       hasShownContextMenuTipRef.current = true;
       useGuideStore.getState().showTip(
         'contextMenu',
         'Right-click anywhere for quick actions'
       );
     }
-  }, [reconstruction, loading]);
+  }, [reconstruction, urlLoading]);
 
   if (isMobile) {
     return <MobileMessage />;
   }
 
-  // Skip rendering heavy components during URL loading - just show empty background
-  // The loading overlay is rendered by DropZone
-  if (urlLoading) {
-    return <div className="h-screen bg-ds-primary" />;
-  }
-
+  // Keep content visible during loading so translucent overlay shows through
   return (
     <div className="h-screen flex flex-col bg-ds-primary">
       <div className="flex-1 flex overflow-hidden">

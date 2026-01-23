@@ -175,7 +175,7 @@ function SceneContent() {
       <SelectedPointMarkers />
 
       {/* Floor plane widget - rendered outside transform group for stable display */}
-      <FloorPlaneWidget />
+      <FloorPlaneWidget boundsRadius={bounds.radius} />
 
       <TrackballControls target={bounds.center} radius={bounds.radius} resetTrigger={viewResetTrigger} viewDirection={viewDirection} viewTrigger={viewTrigger} />
     </>

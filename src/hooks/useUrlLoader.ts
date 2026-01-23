@@ -255,9 +255,9 @@ export function useUrlLoader() {
     console.log(`[URL Loader] Image URL base for lazy loading: ${imageUrlBase}`);
     console.log(`[URL Loader] Mask URL base for lazy loading: ${maskUrlBase}`);
 
-    // Process files using existing pipeline
+    // Process files using existing pipeline (scale progress from 80-100%)
     console.log('[URL Loader] Calling processFiles...');
-    await processFiles(files);
+    await processFiles(files, { start: 80, end: 100 });
 
     setUrlProgress({ percent: 100, message: 'Complete' });
     console.log(`[URL Loader] Successfully loaded ${files.size} files from URL`);
@@ -295,9 +295,9 @@ export function useUrlLoader() {
     setSourceInfo('zip', url);
     console.log(`[URL Loader] ZIP contains ${colmapFiles.size} COLMAP files, ${imageCount} indexed images`);
 
-    // Process COLMAP files using existing pipeline
+    // Process COLMAP files using existing pipeline (scale progress from 80-100%)
     console.log('[URL Loader] Calling processFiles...');
-    await processFiles(colmapFiles);
+    await processFiles(colmapFiles, { start: 80, end: 100 });
 
     setUrlProgress({ percent: 100, message: 'Complete' });
     console.log(`[URL Loader] Successfully loaded reconstruction from ZIP`);
@@ -436,9 +436,9 @@ export function useUrlLoader() {
       console.log(`[URL Loader] Image URL base for lazy loading: ${imageUrlBase}`);
       console.log(`[URL Loader] Mask URL base for lazy loading: ${maskUrlBase}`);
 
-      // Process files using existing pipeline
+      // Process files using existing pipeline (scale progress from 80-100%)
       console.log('[URL Loader] Calling processFiles...');
-      await processFiles(files);
+      await processFiles(files, { start: 80, end: 100 });
 
       setUrlProgress({ percent: 100, message: 'Complete' });
       console.log(`[URL Loader] Successfully loaded ${files.size} files from manifest`);

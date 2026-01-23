@@ -14,6 +14,7 @@ import { extractConfigurationFromStores, serializeConfigToYaml } from '../../con
 import { hslToHex, hexToHsl } from '../../utils/colorUtils';
 import { generateShareableUrl, generateEmbedUrl, generateIframeHtml, copyWithFeedback } from '../../hooks/useUrlState';
 import { CheckIcon } from '../../icons';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 
 // Import icons from centralized icons folder
 import {
@@ -64,6 +65,18 @@ import {
 
 // Use styles from theme
 const styles = controlPanelStyles;
+
+// Helper to format exponent as superscript using Unicode characters
+const SUPERSCRIPT_DIGITS: Record<string, string> = {
+  '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+  '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+  '-': '⁻', '.': '·',
+};
+
+function toSuperscript(n: number): string {
+  const str = n.toFixed(1);
+  return str.split('').map(c => SUPERSCRIPT_DIGITS[c] || c).join('');
+}
 
 // COLMAP jokes for Shift+E easter egg
 const COLMAP_JOKES = [
@@ -618,6 +631,11 @@ export function ViewerControls() {
   const sourceManifest = useReconstructionStore((s) => s.sourceManifest);
   const currentViewState = useCameraStore((s) => s.currentViewState);
 
+  // Transform state for export panel
+  const transform = useTransformStore((s) => s.transform);
+  const applyToData = useTransformStore((s) => s.applyToData);
+  const hasTransformChanges = !isIdentityEuler(transform);
+
   // Check if share buttons should be shown (loaded from URL or manifest)
   const canShare = (sourceType === 'url' || sourceType === 'manifest') && reconstruction;
   const shareSource = sourceUrl ?? sourceManifest;
@@ -843,6 +861,24 @@ export function ViewerControls() {
     { scopes: HOTKEYS.viewZ.scopes },
     [setView]
   );
+  useHotkeys(
+    HOTKEYS.viewNegX.keys,
+    () => setView('-x'),
+    { scopes: HOTKEYS.viewNegX.scopes },
+    [setView]
+  );
+  useHotkeys(
+    HOTKEYS.viewNegY.keys,
+    () => setView('-y'),
+    { scopes: HOTKEYS.viewNegY.scopes },
+    [setView]
+  );
+  useHotkeys(
+    HOTKEYS.viewNegZ.keys,
+    () => setView('-z'),
+    { scopes: HOTKEYS.viewNegZ.scopes },
+    [setView]
+  );
 
   // Hotkey for cycling axes/grid
   useHotkeys(
@@ -993,27 +1029,50 @@ export function ViewerControls() {
             />
           )}
 
-          <div className="flex gap-1 mb-3">
+          <div className="flex gap-1 mb-1">
             <button
               onClick={() => setView('x')}
               className={styles.actionButton}
               style={{ flex: 1 }}
             >
-              X <span className="text-ds-muted text-xs">(1)</span>
+              +X <span className="text-ds-muted text-xs">(1)</span>
             </button>
             <button
               onClick={() => setView('y')}
               className={styles.actionButton}
               style={{ flex: 1 }}
             >
-              Y <span className="text-ds-muted text-xs">(2)</span>
+              +Y <span className="text-ds-muted text-xs">(2)</span>
             </button>
             <button
               onClick={() => setView('z')}
               className={styles.actionButton}
               style={{ flex: 1 }}
             >
-              Z <span className="text-ds-muted text-xs">(3)</span>
+              +Z <span className="text-ds-muted text-xs">(3)</span>
+            </button>
+          </div>
+          <div className="flex gap-1 mb-3">
+            <button
+              onClick={() => setView('-x')}
+              className={styles.actionButton}
+              style={{ flex: 1 }}
+            >
+              -X <span className="text-ds-muted text-xs">(4)</span>
+            </button>
+            <button
+              onClick={() => setView('-y')}
+              className={styles.actionButton}
+              style={{ flex: 1 }}
+            >
+              -Y <span className="text-ds-muted text-xs">(5)</span>
+            </button>
+            <button
+              onClick={() => setView('-z')}
+              className={styles.actionButton}
+              style={{ flex: 1 }}
+            >
+              -Z <span className="text-ds-muted text-xs">(6)</span>
             </button>
           </div>
           <div className={styles.actionGroup}>
@@ -1101,7 +1160,7 @@ export function ViewerControls() {
                 max={3}
                 step={0.1}
                 onChange={(v) => setAxesScale(Math.pow(10, v))}
-                formatValue={(v) => `10^${v.toFixed(1)}`}
+                formatValue={(v) => `10${toSuperscript(v)}`}
               />
             </>
           )}
@@ -1113,7 +1172,7 @@ export function ViewerControls() {
               max={3}
               step={0.1}
               onChange={(v) => setGridScale(Math.pow(10, v))}
-              formatValue={(v) => `10^${v.toFixed(1)}`}
+              formatValue={(v) => `10${toSuperscript(v)}`}
             />
           )}
           {(axesDisplayMode === 'axes' || axesDisplayMode === 'both') && (
@@ -1163,13 +1222,11 @@ export function ViewerControls() {
           />
           <div className={styles.row}>
             <label className={styles.label}>Pointer Lock</label>
-            <input
-              type="checkbox"
+            <span className="flex-1" />
+            <ToggleSwitch
               checked={pointerLock}
-              onChange={(e) => setPointerLock(e.target.checked)}
-              className="w-4 h-4 accent-blue-500"
+              onChange={setPointerLock}
             />
-            <span className={styles.value} />
           </div>
           <SelectRow
             label="Horizon Lock"
@@ -1411,13 +1468,11 @@ export function ViewerControls() {
               />
               <div className={styles.row}>
                 <label className={styles.label}>Undistort (U)</label>
-                <input
-                  type="checkbox"
+                <span className="flex-1" />
+                <ToggleSwitch
                   checked={undistortionEnabled}
-                  onChange={(e) => setUndistortionEnabled(e.target.checked)}
-                  className="w-4 h-4 accent-blue-500"
+                  onChange={setUndistortionEnabled}
                 />
-                <span className={styles.value} />
               </div>
             </>
           )}
@@ -1765,7 +1820,6 @@ export function ViewerControls() {
             </>
           )}
 
-          <div className="text-ds-secondary text-sm mb-2 font-medium">Export:</div>
           <div className="flex flex-col gap-2">
             <button
               onClick={() => { setExportFormat('binary'); if (reconstruction) exportReconstructionBinary(reconstruction, wasmReconstruction); }}
@@ -1827,15 +1881,14 @@ export function ViewerControls() {
               ZIP (.zip)
             </button>
           </div>
-          <div className="text-ds-secondary text-sm mt-3">
-            <div className="mb-1 font-medium">Export Options:</div>
-            <div><span className="text-ds-primary">Binary/Text:</span> COLMAP format</div>
-            <div><span className="text-ds-primary">Points:</span> PLY point cloud</div>
-            <div><span className="text-ds-primary">Config:</span> ColmapView settings</div>
-            <div><span className="text-ds-primary">ZIP:</span> All data in one archive</div>
-          </div>
-          <div className="text-ds-muted text-xs mt-3 italic">
-            Remember to apply transforms before exporting models.
+          <div className="flex justify-center mt-2">
+            <button
+              onClick={applyToData}
+              disabled={!hasTransformChanges}
+              className={hasTransformChanges ? styles.actionButtonPrimary : styles.actionButtonPrimaryDisabled}
+            >
+              Apply Transform
+            </button>
           </div>
         </div>
       </ControlButton>

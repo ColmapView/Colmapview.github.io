@@ -3,7 +3,7 @@
  * Extracted from ViewerControls.tsx for better organization.
  */
 
-import { useState, useEffect, memo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, memo, useRef } from 'react';
 import { controlPanelStyles, getControlButtonClass, getTooltipProps } from '../../theme';
 import { hslToHex, hexToHsl } from '../../utils/colorUtils';
 
@@ -327,13 +327,12 @@ export const SelectRow = memo(function SelectRow({ label, value, onChange, optio
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={styles.select}
+        className={styles.selectRight}
       >
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>{opt.label}</option>
         ))}
       </select>
-      <span className={styles.value} />
     </div>
   );
 });
@@ -343,9 +342,37 @@ export interface PanelWrapperProps {
   children: React.ReactNode;
 }
 
+// Status bar height + padding to keep panel above it
+const STATUS_BAR_CLEARANCE = 48; // 40px status bar + 8px padding
+
 export const PanelWrapper = memo(function PanelWrapper({ title, children }: PanelWrapperProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [adjustedTop, setAdjustedTop] = useState<number | null>(null);
+
+  // Adjust position to keep panel above status bar
+  useLayoutEffect(() => {
+    if (!panelRef.current) return;
+
+    const rect = panelRef.current.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const maxBottom = viewportHeight - STATUS_BAR_CLEARANCE;
+
+    // Check if panel extends past the status bar
+    if (rect.bottom > maxBottom) {
+      // Shift up by the overflow amount
+      const overflow = rect.bottom - maxBottom;
+      setAdjustedTop(-overflow);
+    } else {
+      setAdjustedTop(null);
+    }
+  }, [children]); // Re-check when content changes
+
   return (
-    <div className={styles.panelWrapper}>
+    <div
+      ref={panelRef}
+      className={styles.panelWrapper}
+      style={adjustedTop !== null ? { top: adjustedTop } : undefined}
+    >
       <div className={styles.panel}>
         <div className={styles.panelTitle}>{title}</div>
         {children}

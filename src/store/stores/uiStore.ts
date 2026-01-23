@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import { STORAGE_KEYS } from '../migration';
 import type { MatchesDisplayMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, GizmoMode } from '../types';
 
-export type ViewDirection = 'reset' | 'x' | 'y' | 'z';
+export type ViewDirection = 'reset' | 'x' | 'y' | 'z' | '-x' | '-y' | '-z';
 
 // Context menu action types
 export type ContextMenuAction =

@@ -94,7 +94,12 @@
       "Bash(./cmake-3.31.4-windows-x86_64/bin/cmake.exe:*)",
       "Bash(node -e:*)",
       "Bash(VITE_BASE=/v0.3.2/ npm run build:*)",
-      "Bash(set \"VITE_BASE=/v0.3.2/\")"
+      "Bash(set \"VITE_BASE=/v0.3.2/\")",
+      "Bash(git fetch:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(git restore:*)",
+      "Bash(npm install:*)",
+      "Bash(git reset:*)"
     ]
   }
 }

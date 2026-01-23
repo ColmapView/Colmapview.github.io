@@ -62,3 +62,17 @@ export function getWorldUp(coordinateSystem: AxesCoordinateSystem): [number, num
   // Y-vertical systems (most common): use Y direction [0, 1, 0]
   return system.y;
 }
+
+// Semantic meaning of each axis per coordinate system
+// Shows what direction +X, +Y, +Z represent in that system's convention
+export const AXIS_SEMANTIC: Record<AxesCoordinateSystem, Record<string, string>> = {
+  colmap:  { X: 'Right', Y: 'Down', Z: 'Fwd' },
+  opencv:  { X: 'Right', Y: 'Down', Z: 'Fwd' },
+  threejs: { X: 'Right', Y: 'Up', Z: 'Back' },
+  opengl:  { X: 'Right', Y: 'Up', Z: 'Back' },
+  vulkan:  { X: 'Right', Y: 'Up', Z: 'Fwd' },
+  blender: { X: 'Right', Y: 'Fwd', Z: 'Up' },
+  houdini: { X: 'Right', Y: 'Up', Z: 'Fwd' },
+  unity:   { X: 'Right', Y: 'Up', Z: 'Fwd' },
+  unreal:  { X: 'Fwd', Y: 'Right', Z: 'Up' },
+};

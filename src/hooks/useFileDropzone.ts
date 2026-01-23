@@ -248,10 +248,10 @@ export function useFileDropzone() {
     setWasmReconstruction,
     setLoadedFiles,
     setDroppedFiles,
-    setLoading,
     setError,
-    setProgress,
     setSourceInfo,
+    setUrlLoading,
+    setUrlProgress,
   } = useReconstructionStore();
   const resetView = useUIStore((s) => s.resetView);
 
@@ -373,15 +373,26 @@ export function useFileDropzone() {
     };
   }, []);
 
-  const processFiles = useCallback(async (files: Map<string, File>) => {
+  /**
+   * Process COLMAP files and build reconstruction.
+   * @param files Map of file paths to File objects
+   * @param progressRange Optional range for progress reporting. Default is 0-100.
+   *                      When called from URL loader (files already downloaded), use { start: 80, end: 100 }
+   */
+  const processFiles = useCallback(async (files: Map<string, File>, progressRange?: { start: number; end: number }) => {
     // Note: Guards are now in entry points (handleDrop, handleBrowse, processZipFile, URL loaders)
     // This function may be called with loading already set by the entry point
 
+    // Progress range for this function (default: full 0-100%)
+    const pStart = progressRange?.start ?? 0;
+    const pEnd = progressRange?.end ?? 100;
+    const mapProgress = (localPercent: number) => pStart + (localPercent / 100) * (pEnd - pStart);
+
     // Ensure loading state is set (may already be true from entry point)
     const state = useReconstructionStore.getState();
-    if (!state.loading && !state.urlLoading) {
-      setLoading(true);
-      setProgress(0);
+    if (!state.urlLoading) {
+      setUrlLoading(true);
+      setUrlProgress({ percent: mapProgress(0), message: 'Starting...' });
     }
 
     // Check for configuration file first
@@ -407,7 +418,7 @@ export function useFileDropzone() {
 
       // If only config file was dropped, don't continue with COLMAP processing
       if (!hasColmapFiles(files)) {
-        setLoading(false);
+        setUrlLoading(false);
         return;
       }
     }
@@ -425,7 +436,7 @@ export function useFileDropzone() {
         );
       }
 
-      setProgress(5);
+      setUrlProgress({ percent: mapProgress(5), message: 'Scanning image files...' });
 
       // Collect image files and check for masks folder
       const imageFiles = collectImageFiles(files);
@@ -446,7 +457,7 @@ export function useFileDropzone() {
         hasMasks,
       });
 
-      setProgress(10);
+      setUrlProgress({ percent: mapProgress(10), message: 'Parsing COLMAP files...' });
 
       // Always try WASM parser first (memory-optimized: lazy 2D loading, no points3D Map)
       // Falls back to JS parser without 2D points if WASM fails
@@ -498,7 +509,7 @@ export function useFileDropzone() {
         }
       }
 
-      setProgress(35);
+      setUrlProgress({ percent: mapProgress(35), message: 'Computing statistics...' });
 
       // Pre-compute image statistics, connected images index, global stats, and point mapping
       // Use WASM-optimized version when WASM is available (avoids building points3D Map)
@@ -506,7 +517,7 @@ export function useFileDropzone() {
         ? computeImageStatsFromWasm(images, wasmWrapper)
         : computeImageStats(images, points3D!);
 
-      setProgress(40);
+      setUrlProgress({ percent: mapProgress(40), message: 'Processing rig data...' });
 
       // Parse rig/frame files if both are present (use WASM result if available)
       let rigData: RigData | undefined = wasmRigData;
@@ -549,7 +560,7 @@ export function useFileDropzone() {
       // This prevents slowdown when replacing an existing reconstruction
       await new Promise(r => setTimeout(r, 200));
 
-      setProgress(95);
+      setUrlProgress({ percent: mapProgress(95), message: 'Finalizing...' });
 
       // Store WASM wrapper BEFORE setReconstruction (which would dispose any existing wrapper)
       // This allows PointCloud.tsx to use the fast rendering path
@@ -636,17 +647,17 @@ export function useFileDropzone() {
       console.error('Error processing files:', err);
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
-      setLoading(false);
+      setUrlLoading(false);
     }
   }, [
     setReconstruction,
     setWasmReconstruction,
     setLoadedFiles,
     setDroppedFiles,
-    setLoading,
     setError,
-    setProgress,
     setSourceInfo,
+    setUrlLoading,
+    setUrlProgress,
     findColmapFiles,
     resetView,
   ]);
@@ -657,14 +668,14 @@ export function useFileDropzone() {
   const processZipFile = useCallback(async (zipFile: File) => {
     // Prevent duplicate loads from rapid actions
     const state = useReconstructionStore.getState();
-    if (state.loading || state.urlLoading) {
+    if (state.urlLoading) {
       console.log('[ZIP Loader] Already loading, ignoring duplicate request');
       return;
     }
 
     // Show loading state IMMEDIATELY so user gets feedback (before any async work)
-    setLoading(true);
-    setProgress(0);
+    setUrlLoading(true);
+    setUrlProgress({ percent: 0, message: 'Opening ZIP archive...' });
     // Yield to React to paint loading UI before starting heavy work
     await new Promise(resolve => setTimeout(resolve, 0));
 
@@ -679,7 +690,7 @@ export function useFileDropzone() {
         zipFile,
         (progress) => {
           // Progress is shown during ZIP extraction (before processFiles takes over)
-          setProgress(progress.percent * 0.1); // Scale to 0-10% range
+          setUrlProgress({ percent: progress.percent * 0.1, message: 'Extracting ZIP archive...' });
         }
       );
 
@@ -700,9 +711,9 @@ export function useFileDropzone() {
       // Clean up any partial state from failed load
       clearAllCaches();
       setError(err instanceof Error ? err.message : 'Failed to process ZIP file');
-      setLoading(false);
+      setUrlLoading(false);
     }
-  }, [processFiles, setLoading, setProgress, setError, setSourceInfo]);
+  }, [processFiles, setUrlLoading, setUrlProgress, setError, setSourceInfo]);
 
   const handleDrop = useCallback(async (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
@@ -710,7 +721,7 @@ export function useFileDropzone() {
 
     // Prevent file drops during active loading
     const state = useReconstructionStore.getState();
-    if (state.loading || state.urlLoading) {
+    if (state.urlLoading) {
       console.log('[File Dropzone] Ignoring drop during active loading');
       return;
     }
@@ -720,6 +731,9 @@ export function useFileDropzone() {
 
     const items = e.dataTransfer?.items;
     if (!items) return;
+
+    // IMPORTANT: Extract all data from dataTransfer SYNCHRONOUSLY before any await
+    // The browser clears dataTransfer after the event handler yields
 
     // Check if a single ZIP file was dropped
     if (e.dataTransfer.files.length === 1) {
@@ -731,39 +745,49 @@ export function useFileDropzone() {
       }
     }
 
+    // Extract entries SYNCHRONOUSLY before any await
+    const entries: FileSystemEntry[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind !== 'file') continue;
+      const entry = item.webkitGetAsEntry();
+      if (entry) {
+        entries.push(entry);
+      }
+    }
+
+    // Also capture files list as fallback (synchronously)
+    const fallbackFiles: File[] = [];
+    for (let i = 0; i < e.dataTransfer.files.length; i++) {
+      fallbackFiles.push(e.dataTransfer.files[i]);
+    }
+
+    // Now we can safely await - dataTransfer data has been extracted
     // Show loading state IMMEDIATELY so user gets feedback (before folder scanning)
-    setLoading(true);
-    setProgress(0);
+    setUrlLoading(true);
+    setUrlProgress({ percent: 0, message: 'Scanning files...' });
     // Yield to React to paint loading UI before starting heavy work
     await new Promise(resolve => setTimeout(resolve, 0));
 
     try {
       const files = new Map<string, File>();
 
-      // Use webkitGetAsEntry for folder support
-      const entries: FileSystemEntry[] = [];
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (item.kind !== 'file') continue;
+      console.log(`[Drop] Scanning ${entries.length} entries...`);
 
-        const entry = item.webkitGetAsEntry();
-        if (entry) {
-          entries.push(entry);
-        }
-      }
-
-      // Scan all entries
+      // Scan all entries (already extracted synchronously)
       for (const entry of entries) {
         await scanEntry(entry, '', files);
       }
 
       // If no entries found via webkitGetAsEntry, fall back to files list
-      if (files.size === 0 && e.dataTransfer.files.length > 0) {
-        for (let i = 0; i < e.dataTransfer.files.length; i++) {
-          const file = e.dataTransfer.files[i];
+      if (files.size === 0 && fallbackFiles.length > 0) {
+        console.log(`[Drop] Fallback: using ${fallbackFiles.length} files from dataTransfer.files`);
+        for (const file of fallbackFiles) {
           files.set(file.name, file);
         }
       }
+
+      console.log(`[Drop] Found ${files.size} files`);
 
       // Clear all caches before loading non-ZIP files
       clearAllCaches();
@@ -771,9 +795,9 @@ export function useFileDropzone() {
     } catch (err) {
       console.error('[File Dropzone] Error processing drop:', err);
       setError(err instanceof Error ? err.message : 'Failed to process dropped files');
-      setLoading(false);
+      setUrlLoading(false);
     }
-  }, [scanEntry, processFiles, processZipFile, setLoading, setProgress, setError]);
+  }, [scanEntry, processFiles, processZipFile, setUrlLoading, setUrlProgress, setError]);
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
@@ -803,7 +827,7 @@ export function useFileDropzone() {
   const handleBrowse = useCallback(async () => {
     // Prevent browse during active loading
     const state = useReconstructionStore.getState();
-    if (state.loading || state.urlLoading) {
+    if (state.urlLoading) {
       console.log('[File Dropzone] Ignoring browse during active loading');
       return;
     }
@@ -818,8 +842,8 @@ export function useFileDropzone() {
       const dirHandle = await window.showDirectoryPicker();
 
       // Show loading state IMMEDIATELY after user selects folder (before scanning)
-      setLoading(true);
-      setProgress(0);
+      setUrlLoading(true);
+      setUrlProgress({ percent: 0, message: 'Scanning folder...' });
       // Yield to React to paint loading UI before starting heavy work
       await new Promise(resolve => setTimeout(resolve, 0));
 
@@ -835,9 +859,9 @@ export function useFileDropzone() {
       }
       console.error('Error browsing for folder:', err);
       setError(err instanceof Error ? err.message : 'Failed to open folder');
-      setLoading(false);
+      setUrlLoading(false);
     }
-  }, [scanDirectoryHandle, processFiles, setError, setLoading, setProgress]);
+  }, [scanDirectoryHandle, processFiles, setError, setUrlLoading, setUrlProgress]);
 
   return {
     handleDrop,
