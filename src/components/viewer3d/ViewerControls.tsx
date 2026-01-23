@@ -319,8 +319,6 @@ interface FloorDetectionPanelProps {
 const FloorDetectionPanel = memo(function FloorDetectionPanel({ styles, activePanel, setActivePanel }: FloorDetectionPanelProps) {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
-  const colorMode = usePointCloudStore((s) => s.colorMode);
-  const setColorMode = usePointCloudStore((s) => s.setColorMode);
 
   // Get current transform to apply before detection
   const transform = useTransformStore((s) => s.transform);
@@ -380,10 +378,6 @@ const FloorDetectionPanel = memo(function FloorDetectionPanel({ styles, activePa
         // This makes the normal point "up" towards the bulk of the scene
         setNormalFlipped(pointsBelow > pointsAbove);
         setPointDistances(distances);
-        // Switch to floor color mode if not already
-        if (colorMode !== 'floor') {
-          setColorMode('floor');
-        }
         if (floorColorMode === 'off') {
           setFloorColorMode('binary');
         }
@@ -393,14 +387,11 @@ const FloorDetectionPanel = memo(function FloorDetectionPanel({ styles, activePa
 
       setIsDetecting(false);
     }, 10);
-  }, [wasmReconstruction, distanceThreshold, sampleCount, transform, setDetectedPlane, setPointDistances, setIsDetecting, setNormalFlipped, colorMode, setColorMode, floorColorMode, setFloorColorMode]);
+  }, [wasmReconstruction, distanceThreshold, sampleCount, transform, setDetectedPlane, setPointDistances, setIsDetecting, setNormalFlipped, floorColorMode, setFloorColorMode]);
 
   const handleClear = useCallback(() => {
     reset();
-    if (colorMode === 'floor') {
-      setColorMode('rgb');
-    }
-  }, [reset, colorMode, setColorMode]);
+  }, [reset]);
 
   const inlierPercentage = detectedPlane && pointCount > 0
     ? ((detectedPlane.inlierCount / pointCount) * 100).toFixed(1)
@@ -466,13 +457,7 @@ const FloorDetectionPanel = memo(function FloorDetectionPanel({ styles, activePa
         <SelectRow
           label="Color"
           value={floorColorMode}
-          onChange={(v) => {
-            setFloorColorMode(v as FloorColorMode);
-            // Switch to floor color mode if selecting a non-off option
-            if (v !== 'off' && colorMode !== 'floor') {
-              setColorMode('floor');
-            }
-          }}
+          onChange={(v) => setFloorColorMode(v as FloorColorMode)}
           options={[
             { value: 'off', label: 'Off' },
             { value: 'binary', label: 'Binary (In/Out)' },
@@ -1344,7 +1329,6 @@ export function ViewerControls() {
               { value: 'rgb', label: 'RGB' },
               { value: 'error', label: 'Error' },
               { value: 'trackLength', label: 'Track Length' },
-              { value: 'floor', label: 'Floor Distance' },
             ]}
           />
           <SliderRow label="Size" value={pointSize} min={1} max={10} step={0.5} onChange={setPointSize} />
@@ -1371,17 +1355,11 @@ export function ViewerControls() {
                 <div>Blue = low error (accurate)</div>
                 <div>Red = high error (outliers)</div>
               </>
-            ) : colorMode === 'trackLength' ? (
+            ) : (
               <>
                 <div className="mb-1 font-medium">Track Length:</div>
                 <div>Dark = few observations</div>
                 <div>Bright = many observations</div>
-              </>
-            ) : (
-              <>
-                <div className="mb-1 font-medium">Floor Distance:</div>
-                <div>Green = on floor plane</div>
-                <div>Red = away from floor</div>
               </>
             )}
           </div>

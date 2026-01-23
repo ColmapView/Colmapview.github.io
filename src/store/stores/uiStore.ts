@@ -112,6 +112,9 @@ export interface UIState {
   viewDirection: ViewDirection | null;
   viewTrigger: number;
 
+  // Performance monitoring (not persisted)
+  fps: number;
+
   // Actions
   openImageDetail: (id: number) => void;
   closeImageDetail: () => void;
@@ -145,6 +148,9 @@ export interface UIState {
   removeContextMenuAction: (action: ContextMenuAction) => void;
   openContextMenuEditor: () => void;
   closeContextMenuEditor: () => void;
+
+  // Performance monitoring
+  setFps: (fps: number) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -175,6 +181,7 @@ export const useUIStore = create<UIState>()(
       viewResetTrigger: 0,
       viewDirection: null,
       viewTrigger: 0,
+      fps: 0,
 
       openImageDetail: (imageDetailId) => set({ imageDetailId, matchedImageId: null }),
       closeImageDetail: () => set({ imageDetailId: null, matchedImageId: null }),
@@ -217,6 +224,9 @@ export const useUIStore = create<UIState>()(
       })),
       openContextMenuEditor: () => set({ showContextMenuEditor: true }),
       closeContextMenuEditor: () => set({ showContextMenuEditor: false }),
+
+      // Performance monitoring
+      setFps: (fps) => set({ fps }),
     }),
     {
       name: STORAGE_KEYS.ui,

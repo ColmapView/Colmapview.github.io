@@ -12,6 +12,7 @@ import { SelectedPointMarkers } from './SelectedPointMarkers';
 import { FloorPlaneWidget } from './FloorPlaneWidget';
 import { PickingCursor } from './PickingCursor';
 import { ScreenshotCapture } from './ScreenshotCapture';
+import { FpsTracker } from './FpsTracker';
 import { FooterBranding } from './FooterBranding';
 import { GlobalContextMenu } from './GlobalContextMenu';
 import { DistanceInputModal } from '../modals/DistanceInputModal';
@@ -330,6 +331,7 @@ export function Scene3D() {
         }}
       >
         <BackgroundColor color={backgroundColor} />
+        <FpsTracker />
         <ScreenshotCapture />
         <Suspense fallback={<LoadingFallback />}>
           <SceneContent />

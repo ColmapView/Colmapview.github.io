@@ -421,10 +421,10 @@ export function DropZone({ children }: DropZoneProps) {
             <div className={loadingStyles.progressBar}>
               <div
                 className={loadingStyles.progressFill}
-                style={{ width: `${urlProgress.percent}%` }}
+                style={{ width: `${Math.round(urlProgress.percent)}%` }}
               />
             </div>
-            <div className={loadingStyles.percentage}>{urlProgress.percent}%</div>
+            <div className={loadingStyles.percentage}>{Math.round(urlProgress.percent)}%</div>
             {urlProgress.currentFile && (
               <div className="text-white/70 text-xs mt-2 max-w-xs truncate">
                 {urlProgress.currentFile}

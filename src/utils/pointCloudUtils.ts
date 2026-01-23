@@ -26,11 +26,6 @@ export interface ColorComputeOptions {
   // For trackLength mode
   trackLengths?: Uint32Array;
   trackStats?: MinMaxStats;
-  // For floor mode
-  pointDistances?: Float32Array;
-  distanceThreshold?: number;
-  floorColorMode?: 'off' | 'binary' | 'distance';
-  maxFloorDist?: number;
 }
 
 /**
@@ -95,13 +90,13 @@ export function safeMinMax(stats: MinMaxStats): MinMaxStats {
 
 /**
  * Compute color array for a given mode.
- * @param mode - Color mode: 'rgb', 'error', 'trackLength', or 'floor'
+ * @param mode - Color mode: 'rgb', 'error', or 'trackLength'
  * @param count - Number of points
  * @param options - Mode-specific data arrays and settings
  * @returns Float32Array of RGB values (count * 3 length)
  */
 export function computePointColors(
-  mode: 'rgb' | 'error' | 'trackLength' | 'floor',
+  mode: 'rgb' | 'error' | 'trackLength',
   count: number,
   options: ColorComputeOptions
 ): Float32Array {
@@ -113,8 +108,6 @@ export function computePointColors(
     return computeErrorColors(count, options.errors, options.errorStats, colors);
   } else if (mode === 'trackLength') {
     return computeTrackLengthColors(count, options.trackLengths, options.trackStats, colors);
-  } else if (mode === 'floor') {
-    return computeFloorColors(count, options, colors);
   }
 
   // Fallback: white
@@ -197,61 +190,11 @@ function computeTrackLengthColors(
 }
 
 /**
- * Compute floor distance-based colors.
- */
-function computeFloorColors(
-  count: number,
-  options: ColorComputeOptions,
-  colors: Float32Array
-): Float32Array {
-  const { pointDistances, distanceThreshold, floorColorMode, maxFloorDist, wasmColors } = options;
-
-  if (!pointDistances || pointDistances.length < count || floorColorMode === 'off') {
-    // Fallback to RGB colors
-    return computeRGBColors(count, wasmColors, colors);
-  }
-
-  if (floorColorMode === 'binary') {
-    const threshold = distanceThreshold ?? 0.1;
-    for (let i = 0; i < count; i++) {
-      const isInlier = Math.abs(pointDistances[i]) <= threshold;
-      colors[i * 3] = isInlier ? 0.2 : 0.9;     // R: low for inliers
-      colors[i * 3 + 1] = isInlier ? 0.9 : 0.2; // G: high for inliers
-      colors[i * 3 + 2] = 0.2;                   // B: low for both
-    }
-  } else {
-    // 'distance' mode: jet colormap by absolute distance
-    const maxDist = maxFloorDist && maxFloorDist > 0 ? maxFloorDist : computeMaxDistance(pointDistances);
-    for (let i = 0; i < count; i++) {
-      const distNorm = Math.abs(pointDistances[i]) / maxDist;
-      const [r, g, b] = jetColormap(distNorm);
-      colors[i * 3] = r;
-      colors[i * 3 + 1] = g;
-      colors[i * 3 + 2] = b;
-    }
-  }
-
-  return colors;
-}
-
-/**
- * Compute maximum absolute distance from point distances array.
- */
-function computeMaxDistance(pointDistances: Float32Array): number {
-  let maxDist = 0;
-  for (let i = 0; i < pointDistances.length; i++) {
-    const absDist = Math.abs(pointDistances[i]);
-    if (absDist > maxDist) maxDist = absDist;
-  }
-  return maxDist === 0 ? 1 : maxDist;
-}
-
-/**
  * Compute color for a single point at index (for slow path with filtering).
  */
 export function computeSinglePointColor(
   index: number,
-  mode: 'rgb' | 'error' | 'trackLength' | 'floor',
+  mode: 'rgb' | 'error' | 'trackLength',
   options: ColorComputeOptions & {
     minError: number;
     maxError: number;
@@ -274,17 +217,6 @@ export function computeSinglePointColor(
       baseG + trackNorm * rangeG,
       baseB - trackNorm * rangeB,
     ];
-  }
-
-  if (mode === 'floor' && options.pointDistances && options.floorColorMode !== 'off') {
-    if (options.floorColorMode === 'binary') {
-      const isInlier = Math.abs(options.pointDistances[index]) <= (options.distanceThreshold ?? 0.1);
-      return isInlier ? [0.2, 0.9, 0.2] : [0.9, 0.2, 0.2];
-    } else {
-      const maxDist = options.maxFloorDist ?? 1;
-      const distNorm = Math.abs(options.pointDistances[index]) / maxDist;
-      return jetColormap(distNorm);
-    }
   }
 
   // RGB mode (default)

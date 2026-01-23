@@ -31,7 +31,7 @@ export function PointCloud() {
   const addSelectedPoint = usePointPickingStore((s) => s.addSelectedPoint);
   const setHoveredPoint = usePointPickingStore((s) => s.setHoveredPoint);
 
-  // Floor plane state for floor color mode
+  // Floor plane state for floor color visualization
   const pointDistances = useFloorPlaneStore((s) => s.pointDistances);
   const distanceThreshold = useFloorPlaneStore((s) => s.distanceThreshold);
   const floorColorMode = useFloorPlaneStore((s) => s.floorColorMode);
@@ -171,7 +171,7 @@ export function PointCloud() {
           } else {
             finalColors.fill(1);
           }
-        } else if (colorMode === 'trackLength') {
+        } else {
           // trackLength mode
           const trackLengths = wasmReconstruction.getTrackLengths();
           finalColors = new Float32Array(count * 3);
@@ -195,45 +195,32 @@ export function PointCloud() {
           } else {
             finalColors.fill(1);
           }
-        } else {
-          // floor mode - color by distance to detected floor plane
-          finalColors = new Float32Array(count * 3);
+        }
 
-          if (pointDistances && pointDistances.length === count && floorColorMode !== 'off') {
-            if (floorColorMode === 'binary') {
-              // Binary: green for inliers, red for outliers
-              for (let i = 0; i < count; i++) {
-                const isInlier = Math.abs(pointDistances[i]) <= distanceThreshold;
-                finalColors[i * 3] = isInlier ? 0.2 : 0.9;      // R: low for inliers
-                finalColors[i * 3 + 1] = isInlier ? 0.9 : 0.2;  // G: high for inliers
-                finalColors[i * 3 + 2] = 0.2;                    // B: low for both
-              }
-            } else {
-              // distance mode: jet colormap by absolute distance
-              // Find max distance for normalization
-              let maxDist = 0;
-              for (let i = 0; i < count; i++) {
-                maxDist = Math.max(maxDist, Math.abs(pointDistances[i]));
-              }
-              if (maxDist === 0) maxDist = 1;
-
-              for (let i = 0; i < count; i++) {
-                const distNorm = Math.abs(pointDistances[i]) / maxDist;
-                const [r, g, b] = jetColormap(distNorm);
-                finalColors[i * 3] = r;
-                finalColors[i * 3 + 1] = g;
-                finalColors[i * 3 + 2] = b;
-              }
+        // Apply floor coloring if active (overrides colorMode)
+        if (floorColorMode !== 'off' && pointDistances && pointDistances.length === count) {
+          if (floorColorMode === 'binary') {
+            // Binary: green for inliers, red for outliers
+            for (let i = 0; i < count; i++) {
+              const isInlier = Math.abs(pointDistances[i]) <= distanceThreshold;
+              finalColors[i * 3] = isInlier ? 0.2 : 0.9;      // R: low for inliers
+              finalColors[i * 3 + 1] = isInlier ? 0.9 : 0.2;  // G: high for inliers
+              finalColors[i * 3 + 2] = 0.2;                    // B: low for both
             }
           } else {
-            // Fallback to RGB if no floor data
-            const wasmColors = wasmReconstruction.getColors();
-            if (wasmColors) {
-              for (let i = 0; i < wasmColors.length; i++) {
-                finalColors[i] = sRGBToLinear(wasmColors[i]);
-              }
-            } else {
-              finalColors.fill(1);
+            // distance mode: jet colormap by absolute distance
+            let maxDist = 0;
+            for (let i = 0; i < count; i++) {
+              maxDist = Math.max(maxDist, Math.abs(pointDistances[i]));
+            }
+            if (maxDist === 0) maxDist = 1;
+
+            for (let i = 0; i < count; i++) {
+              const distNorm = Math.abs(pointDistances[i]) / maxDist;
+              const [r, g, b] = jetColormap(distNorm);
+              finalColors[i * 3] = r;
+              finalColors[i * 3 + 1] = g;
+              finalColors[i * 3 + 2] = b;
             }
           }
         }
@@ -318,7 +305,7 @@ export function PointCloud() {
 
         // Compute max distance for floor mode normalization
         let maxFloorDist = 0;
-        if (colorMode === 'floor' && pointDistances && floorColorMode === 'distance') {
+        if (floorColorMode === 'distance' && pointDistances) {
           for (let i = 0; i < count; i++) {
             if (pointState[i] > 0) {
               maxFloorDist = Math.max(maxFloorDist, Math.abs(pointDistances[i]));
@@ -329,14 +316,8 @@ export function PointCloud() {
 
         // Color computation helper
         const computeColorWasm = (i: number, mode: string): [number, number, number] => {
-          if (mode === 'error') {
-            const errorNorm = wasmErrors[i] >= 0 ? (wasmErrors[i] - minErrorVal) / (maxErrorVal - minErrorVal) : 0;
-            return jetColormap(errorNorm);
-          } else if (mode === 'trackLength') {
-            const { baseR, rangeR, baseG, rangeG, baseB, rangeB } = COLORMAP.trackLength;
-            const trackNorm = (wasmTrackLengths[i] - minTrackVal) / (maxTrackVal - minTrackVal);
-            return [baseR + trackNorm * rangeR, baseG + trackNorm * rangeG, baseB - trackNorm * rangeB];
-          } else if (mode === 'floor' && pointDistances && floorColorMode !== 'off') {
+          // Floor coloring overrides normal colorMode when active
+          if (floorColorMode !== 'off' && pointDistances) {
             if (floorColorMode === 'binary') {
               const isInlier = Math.abs(pointDistances[i]) <= distanceThreshold;
               return isInlier ? [0.2, 0.9, 0.2] : [0.9, 0.2, 0.2];
@@ -345,6 +326,14 @@ export function PointCloud() {
               const distNorm = Math.abs(pointDistances[i]) / maxFloorDist;
               return jetColormap(distNorm);
             }
+          }
+          if (mode === 'error') {
+            const errorNorm = wasmErrors[i] >= 0 ? (wasmErrors[i] - minErrorVal) / (maxErrorVal - minErrorVal) : 0;
+            return jetColormap(errorNorm);
+          } else if (mode === 'trackLength') {
+            const { baseR, rangeR, baseG, rangeG, baseB, rangeB } = COLORMAP.trackLength;
+            const trackNorm = (wasmTrackLengths[i] - minTrackVal) / (maxTrackVal - minTrackVal);
+            return [baseR + trackNorm * rangeR, baseG + trackNorm * rangeG, baseB - trackNorm * rangeB];
           }
           // RGB mode (default fallback)
           if (wasmColors) {
@@ -459,7 +448,7 @@ export function PointCloud() {
         const trackNorm = (point.track.length - minTrack) / (maxTrack - minTrack);
         return [baseR + trackNorm * rangeR, baseG + trackNorm * rangeG, baseB - trackNorm * rangeB];
       }
-      // Floor mode falls back to RGB in Map path (WASM path handles floor coloring)
+      // RGB mode (default fallback)
       // Convert sRGB colors from COLMAP to linear space for proper rendering
       return [
         sRGBToLinear(point.rgb[0] / BRIGHTNESS.max),

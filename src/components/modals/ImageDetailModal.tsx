@@ -235,6 +235,15 @@ const MatchCanvas = memo(function MatchCanvas({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Validate all dimensions are positive to avoid division by zero or invalid scaling
+    if (image1Width <= 0 || image1Height <= 0 || image2Width <= 0 || image2Height <= 0 ||
+        image1Camera.width <= 0 || image1Camera.height <= 0 ||
+        image2Camera.width <= 0 || image2Camera.height <= 0 ||
+        containerWidth <= 0 || containerHeight <= 0) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const halfWidth = (containerWidth - gap) / 2;
@@ -297,41 +306,106 @@ const MIN_HEIGHT = SIZE.modalMinHeight;
 const RESIZE_DEBOUNCE_MS = TIMING.resizeDebounce;
 
 // Placeholder component for when image is not loaded
-// Shows a checkerboard pattern at exact camera dimensions
-// No border to ensure pixel-perfect alignment with overlay canvases
+// Uses canvas to create a proper placeholder image with correct dimensions
 interface ImagePlaceholderProps {
   width: number;
   height: number;
   cameraWidth: number;
   cameraHeight: number;
   label?: string;
+  style?: React.CSSProperties;
 }
 
-function ImagePlaceholder({ width, height, cameraWidth, cameraHeight, label }: ImagePlaceholderProps) {
+// Design system colors (from CSS variables)
+const DS_COLORS = {
+  bgSecondary: '#161616',
+  bgTertiary: '#1e1e1e',
+  textPrimary: '#e8e8e8',
+  textSecondary: '#8a8a8a',
+  textMuted: '#5a5a5a',
+};
+
+function ImagePlaceholder({ width, height, cameraWidth, cameraHeight, label, style }: ImagePlaceholderProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || width <= 0 || height <= 0) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Draw checkerboard pattern using design system colors
+    const tileSize = Math.max(10, Math.min(30, width / 15));
+    const darkColor = DS_COLORS.bgSecondary;
+    const lightColor = DS_COLORS.bgTertiary;
+
+    for (let y = 0; y < height; y += tileSize) {
+      for (let x = 0; x < width; x += tileSize) {
+        const isLight = ((Math.floor(x / tileSize) + Math.floor(y / tileSize)) % 2) === 0;
+        ctx.fillStyle = isLight ? lightColor : darkColor;
+        ctx.fillRect(x, y, tileSize, tileSize);
+      }
+    }
+
+    // Draw border
+    ctx.strokeStyle = DS_COLORS.textMuted;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.strokeRect(0.5, 0.5, width - 1, height - 1);
+
+    // Draw text in center using monospace font
+    ctx.setLineDash([]);
+    const fontSize = Math.max(10, Math.min(16, width / 25));
+    ctx.font = `${fontSize}px "JetBrains Mono", "Fira Code", Consolas, monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Text content
+    const text1 = `${cameraWidth} × ${cameraHeight}`;
+    const text2 = label || 'No image loaded';
+    const textMetrics1 = ctx.measureText(text1);
+    const textMetrics2 = ctx.measureText(text2);
+    const maxTextWidth = Math.max(textMetrics1.width, textMetrics2.width);
+    const lineHeight = fontSize * 1.5;
+    const padding = 12;
+
+    // Background pill for text
+    const bgWidth = maxTextWidth + padding * 2;
+    const bgHeight = lineHeight * 2 + padding;
+    ctx.fillStyle = 'rgba(22, 22, 22, 0.85)';
+    ctx.beginPath();
+    ctx.roundRect(
+      width / 2 - bgWidth / 2,
+      height / 2 - bgHeight / 2,
+      bgWidth,
+      bgHeight,
+      4
+    );
+    ctx.fill();
+
+    // Draw dimension text (primary color)
+    ctx.fillStyle = DS_COLORS.textPrimary;
+    ctx.fillText(text1, width / 2, height / 2 - lineHeight * 0.35);
+
+    // Draw label text (muted color)
+    ctx.fillStyle = DS_COLORS.textMuted;
+    ctx.fillText(text2, width / 2, height / 2 + lineHeight * 0.5);
+  }, [width, height, cameraWidth, cameraHeight, label]);
+
+  if (width <= 0 || height <= 0) return null;
+
   return (
-    <div
-      className="relative flex-shrink-0"
+    <canvas
+      ref={canvasRef}
+      width={width}
+      height={height}
       style={{
+        ...style,
         width,
         height,
-        boxSizing: 'border-box',
-        backgroundColor: 'var(--color-ds-secondary)',
-        backgroundImage: `
-          linear-gradient(45deg, var(--color-ds-tertiary) 25%, transparent 25%),
-          linear-gradient(-45deg, var(--color-ds-tertiary) 25%, transparent 25%),
-          linear-gradient(45deg, transparent 75%, var(--color-ds-tertiary) 75%),
-          linear-gradient(-45deg, transparent 75%, var(--color-ds-tertiary) 75%)
-        `,
-        backgroundSize: '20px 20px',
-        backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0px',
-        border: '1px dashed var(--color-ds-muted)',
       }}
-    >
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-ds-muted text-xs pointer-events-none">
-        <span className="bg-ds-secondary/80 px-2 py-1 rounded">{cameraWidth} × {cameraHeight}</span>
-        {label && <span className="bg-ds-secondary/80 px-2 py-0.5 rounded mt-1 text-[10px] max-w-full truncate px-2">{label}</span>}
-      </div>
-    </div>
+    />
   );
 }
 
@@ -1210,21 +1284,18 @@ export function ImageDetailModal() {
                           draggable={false}
                         />
                       ) : (
-                        <div
-                          className="absolute"
+                        <ImagePlaceholder
+                          width={sideBySideDimensions.image1Width}
+                          height={sideBySideDimensions.image1Height}
+                          cameraWidth={camera.width}
+                          cameraHeight={camera.height}
+                          label={image.name}
                           style={{
+                            position: 'absolute',
                             left: offset1X,
                             top: offset1Y,
                           }}
-                        >
-                          <ImagePlaceholder
-                            width={sideBySideDimensions.image1Width}
-                            height={sideBySideDimensions.image1Height}
-                            cameraWidth={camera.width}
-                            cameraHeight={camera.height}
-                            label={image.name}
-                          />
-                        </div>
+                        />
                       ))}
                       {/* Image 2 - absolutely positioned to match MatchCanvas calculations */}
                       {sideBySideDimensions.image2Width > 0 && matchedCamera && (matchedImageSrc ? (
@@ -1241,21 +1312,18 @@ export function ImageDetailModal() {
                           draggable={false}
                         />
                       ) : (
-                        <div
-                          className="absolute"
+                        <ImagePlaceholder
+                          width={sideBySideDimensions.image2Width}
+                          height={sideBySideDimensions.image2Height}
+                          cameraWidth={matchedCamera.width}
+                          cameraHeight={matchedCamera.height}
+                          label={matchedImage?.name}
                           style={{
+                            position: 'absolute',
                             left: offset2X,
                             top: offset2Y,
                           }}
-                        >
-                          <ImagePlaceholder
-                            width={sideBySideDimensions.image2Width}
-                            height={sideBySideDimensions.image2Height}
-                            cameraWidth={matchedCamera.width}
-                            cameraHeight={matchedCamera.height}
-                            label={matchedImage?.name}
-                          />
-                        </div>
+                        />
                       ))}
                       {/* Match lines - rendered even without images loaded */}
                       {matchLines.length > 0 && sideBySideDimensions.image1Width > 0 && sideBySideDimensions.image2Width > 0 && (
@@ -1333,21 +1401,18 @@ export function ImageDetailModal() {
                           )}
                         </>
                       ) : (
-                        <div
-                          className="absolute"
+                        <ImagePlaceholder
+                          width={renderedImageWidth}
+                          height={renderedImageHeight}
+                          cameraWidth={camera.width}
+                          cameraHeight={camera.height}
+                          label="No image loaded"
                           style={{
+                            position: 'absolute',
                             left: offsetX,
                             top: offsetY,
                           }}
-                        >
-                          <ImagePlaceholder
-                            width={renderedImageWidth}
-                            height={renderedImageHeight}
-                            cameraWidth={camera.width}
-                            cameraHeight={camera.height}
-                            label="No image loaded"
-                          />
-                        </div>
+                        />
                       ))}
                       {/* Keypoint overlay - rendered even without image */}
                       {(showPoints2D || showPoints3D) && renderedImageWidth > 0 && effectivePoints2D.length > 0 && (

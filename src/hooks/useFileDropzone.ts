@@ -242,6 +242,96 @@ function hasColmapFiles(files: Map<string, File>): boolean {
   return false;
 }
 
+/**
+ * Check if the dropped files contain image files
+ */
+function hasImageFiles(files: Map<string, File>): boolean {
+  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'];
+  for (const [, file] of files) {
+    const name = file.name.toLowerCase();
+    if (imageExtensions.some(ext => name.endsWith(ext))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Create a minimal reconstruction from image files only (no COLMAP data)
+ * This allows users to view images in the gallery without poses or 3D points
+ */
+function createImagesOnlyReconstruction(imageFiles: Map<string, File>): Reconstruction {
+  // Create a single dummy camera with default dimensions
+  // We use 1920x1080 as reasonable defaults to avoid NaN issues in frustum calculations
+  const dummyCameraId = 1;
+  const defaultWidth = 1920;
+  const defaultHeight = 1080;
+  const dummyCamera: Camera = {
+    cameraId: dummyCameraId,
+    modelId: CameraModelId.PINHOLE,
+    width: defaultWidth,
+    height: defaultHeight,
+    params: [defaultWidth, defaultWidth, defaultWidth / 2, defaultHeight / 2], // fx, fy, cx, cy
+  };
+
+  const cameras = new Map<number, Camera>();
+  cameras.set(dummyCameraId, dummyCamera);
+
+  // Create Image entries for each image file
+  const images = new Map<number, ColmapImage>();
+  const imageStats = new Map<number, { numPoints3D: number; avgError: number; covisibleCount: number }>();
+
+  // Get unique image names (the lookup map may have multiple keys per file)
+  const uniqueFileNames = new Set<string>();
+  for (const [, file] of imageFiles) {
+    uniqueFileNames.add(file.name);
+  }
+
+  let imageId = 1;
+  for (const fileName of uniqueFileNames) {
+    const image: ColmapImage = {
+      imageId,
+      cameraId: dummyCameraId,
+      name: fileName,
+      qvec: [1, 0, 0, 0], // Identity quaternion (no rotation)
+      tvec: [0, 0, 0],     // No translation
+      points2D: [],
+      numPoints2D: 0,
+    };
+    images.set(imageId, image);
+
+    // Empty stats for images-only mode
+    imageStats.set(imageId, {
+      numPoints3D: 0,
+      avgError: 0,
+      covisibleCount: 0,
+    });
+
+    imageId++;
+  }
+
+  // Create minimal global stats
+  const globalStats = {
+    minError: 0,
+    maxError: 0,
+    avgError: 0,
+    minTrackLength: 0,
+    maxTrackLength: 0,
+    avgTrackLength: 0,
+    totalObservations: 0,
+    totalPoints: 0,
+  };
+
+  return {
+    cameras,
+    images,
+    imageStats,
+    connectedImagesIndex: new Map(),
+    globalStats,
+    imageToPoint3DIds: new Map(),
+  };
+}
+
 export function useFileDropzone() {
   const {
     setReconstruction,
@@ -386,7 +476,7 @@ export function useFileDropzone() {
     // Progress range for this function (default: full 0-100%)
     const pStart = progressRange?.start ?? 0;
     const pEnd = progressRange?.end ?? 100;
-    const mapProgress = (localPercent: number) => pStart + (localPercent / 100) * (pEnd - pStart);
+    const mapProgress = (localPercent: number) => Math.round(pStart + (localPercent / 100) * (pEnd - pStart));
 
     // Ensure loading state is set (may already be true from entry point)
     const state = useReconstructionStore.getState();
@@ -416,8 +506,8 @@ export function useFileDropzone() {
         setError(`Config error: ${message}`);
       }
 
-      // If only config file was dropped, don't continue with COLMAP processing
-      if (!hasColmapFiles(files)) {
+      // If only config file was dropped (no COLMAP files and no images), stop
+      if (!hasColmapFiles(files) && !hasImageFiles(files)) {
         setUrlLoading(false);
         return;
       }
@@ -430,17 +520,63 @@ export function useFileDropzone() {
       // Find COLMAP files
       const { camerasFile, imagesFile, points3DFile, databaseFile, rigsFile, framesFile } = findColmapFiles(files);
 
+      // Collect image files first (needed for both COLMAP and images-only modes)
+      setUrlProgress({ percent: mapProgress(5), message: 'Scanning image files...' });
+      const imageFiles = collectImageFiles(files);
+      const hasMasks = hasMaskFiles(files);
+
+      // Handle images-only mode: no COLMAP files but images are present
       if (!camerasFile || !imagesFile || !points3DFile) {
+        if (hasImageFiles(files)) {
+          console.log(`[Images-only] Creating gallery from ${imageFiles.size} image lookup keys`);
+
+          setUrlProgress({ percent: mapProgress(50), message: 'Creating image gallery...' });
+
+          // Create minimal reconstruction for images-only viewing
+          const reconstruction = createImagesOnlyReconstruction(imageFiles);
+
+          // Update loaded files reference (no COLMAP files)
+          setLoadedFiles({
+            camerasFile: undefined,
+            imagesFile: undefined,
+            points3DFile: undefined,
+            databaseFile: undefined,
+            rigsFile: undefined,
+            framesFile: undefined,
+            imageFiles,
+            hasMasks,
+          });
+
+          // Clear all caches
+          clearAllCaches({ preserveZip: true });
+
+          setUrlProgress({ percent: mapProgress(95), message: 'Finalizing...' });
+
+          // Set source info to 'local' for drag-drop loading
+          const currentSourceType = useReconstructionStore.getState().sourceType;
+          if (!currentSourceType) {
+            setSourceInfo('local', null);
+          }
+
+          // Set reconstruction (this will set progress to 100 and loading to false)
+          setReconstruction(reconstruction);
+          resetView();
+
+          // Notify user about images-only mode
+          useNotificationStore.getState().addNotification(
+            'info',
+            `Loaded ${reconstruction.images.size} images (gallery only, no 3D data)`,
+            5000
+          );
+
+          console.log(`[Images-only] Loaded ${reconstruction.images.size} images for gallery viewing`);
+          return;
+        }
+
         throw new Error(
           'Missing required COLMAP files. Expected cameras.bin/txt, images.bin/txt, and points3D.bin/txt'
         );
       }
-
-      setUrlProgress({ percent: mapProgress(5), message: 'Scanning image files...' });
-
-      // Collect image files and check for masks folder
-      const imageFiles = collectImageFiles(files);
-      const hasMasks = hasMaskFiles(files);
 
       // Log how many files were scanned
       console.log(`Scanned ${files.size} total files, ${imageFiles.size} image lookup keys`);
@@ -690,7 +826,7 @@ export function useFileDropzone() {
         zipFile,
         (progress) => {
           // Progress is shown during ZIP extraction (before processFiles takes over)
-          setUrlProgress({ percent: progress.percent * 0.1, message: 'Extracting ZIP archive...' });
+          setUrlProgress({ percent: Math.round(progress.percent * 0.1), message: 'Extracting ZIP archive...' });
         }
       );
 

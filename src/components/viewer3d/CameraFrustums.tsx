@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, memo, useCallback, useEffect } from 'react';
+import { useMemo, useState, useRef, memo, useCallback, useEffect, useLayoutEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree, extend } from '@react-three/fiber';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
@@ -84,6 +84,7 @@ interface BatchedArrowMeshesProps {
     position: THREE.Vector3;
     quaternion: THREE.Quaternion;
     cameraIndex: number;
+    numPoints3D: number;
   }[];
   cameraScale: number;
   selectedImageId: number | null;
@@ -98,6 +99,12 @@ interface BatchedArrowMeshesProps {
   selectionAnimationSpeed: number;
   unselectedCameraOpacity: number;
   imageFrameIndexMap: Map<number, number>;
+  // Interaction callbacks
+  onHover: (id: number | null) => void;
+  onClick: (imageId: number) => void;
+  onDoubleClick: (imageId: number) => void;
+  onContextMenu: (imageId: number) => void;
+  lastNavigationToImageId: number | null;
 }
 
 // Temp objects for instanced mesh updates
@@ -122,11 +129,35 @@ function BatchedArrowMeshes({
   selectionAnimationSpeed,
   unselectedCameraOpacity,
   imageFrameIndexMap,
+  onHover,
+  onClick,
+  onDoubleClick,
+  onContextMenu,
+  lastNavigationToImageId,
 }: BatchedArrowMeshesProps) {
   const shaftRef = useRef<THREE.InstancedMesh>(null);
   const coneRef = useRef<THREE.InstancedMesh>(null);
   const rainbowHueRef = useRef(0);
   const matchesBlinkPhaseRef = useRef(0);
+  const prevSelectedRef = useRef<number | null>(null);
+  const prevHoveredRef = useRef<number | null>(null);
+  const needsUpdateRef = useRef(true);
+
+  // Tooltip state - use useState for re-rendering
+  const [tooltipData, setTooltipData] = useState<{instanceId: number, x: number, y: number} | null>(null);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { controls } = useThree() as any;
+
+  // Check if camera controls are dragging (orbit/pan in progress)
+  const isDragging = useCallback(() => controls?.dragging?.current ?? false, [controls]);
+
+  // Reset cursor on unmount if component is unmounted while hovering
+  useEffect(() => {
+    return () => {
+      document.body.style.cursor = '';
+    };
+  }, []);
 
   // Arrow proportions (relative to cameraScale)
   const shaftLength = cameraScale * 0.8;
@@ -179,6 +210,21 @@ function BatchedArrowMeshes({
     }
     // Use clock time for blink to stay in sync across all components
     const blinkPhase = state.clock.elapsedTime * selectionAnimationSpeed * 2;
+
+    // Check if state changed
+    const stateChanged =
+      selectedImageId !== prevSelectedRef.current ||
+      hoveredImageId !== prevHoveredRef.current;
+
+    // Early out if nothing changed and no animation
+    if (!isSelectionAnimated && !isMatchesAnimated && !stateChanged && !needsUpdateRef.current) {
+      return;
+    }
+
+    // Update refs
+    prevSelectedRef.current = selectedImageId;
+    prevHoveredRef.current = hoveredImageId;
+    needsUpdateRef.current = false;
 
     frustums.forEach((f, i) => {
       const isSelected = f.image.imageId === selectedImageId;
@@ -249,6 +295,53 @@ function BatchedArrowMeshes({
     if (cone.instanceColor) cone.instanceColor.needsUpdate = true;
   });
 
+  // Reset needsUpdate when frustums change
+  useEffect(() => {
+    needsUpdateRef.current = true;
+  }, [frustums]);
+
+  // Initialize instance matrices immediately when frustums change (before first paint)
+  // This ensures raycasting works on first interaction, rather than waiting for useFrame
+  useLayoutEffect(() => {
+    if (!shaftRef.current || !coneRef.current) return;
+    const shaft = shaftRef.current;
+    const cone = coneRef.current;
+
+    frustums.forEach((f, i) => {
+      const isSelected = f.image.imageId === selectedImageId;
+
+      // Hide selected arrow
+      if (isSelected) {
+        tempScale.set(0, 0, 0);
+      } else {
+        tempScale.set(1, 1, 1);
+      }
+
+      // Set up shaft transform
+      tempEuler.set(Math.PI / 2, 0, 0);
+      tempQuaternion.setFromEuler(tempEuler);
+      tempQuaternion.premultiply(f.quaternion);
+
+      tempPosition.set(0, 0, shaftLength / 2);
+      tempPosition.applyQuaternion(f.quaternion);
+      tempPosition.add(f.position);
+
+      tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
+      shaft.setMatrixAt(i, tempMatrix);
+
+      // Set up cone transform
+      tempPosition.set(0, 0, shaftLength + coneLength / 2);
+      tempPosition.applyQuaternion(f.quaternion);
+      tempPosition.add(f.position);
+
+      tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
+      cone.setMatrixAt(i, tempMatrix);
+    });
+
+    shaft.instanceMatrix.needsUpdate = true;
+    cone.instanceMatrix.needsUpdate = true;
+  }, [frustums, selectedImageId, shaftLength, coneLength]);
+
   // Update material opacity - 0.9 when no selection, unselectedCameraOpacity when a camera is selected
   useEffect(() => {
     const opacity = selectedImageId === null ? 0.9 : unselectedCameraOpacity;
@@ -260,10 +353,129 @@ function BatchedArrowMeshes({
 
   if (frustums.length === 0) return null;
 
+  // Get tooltip frustum data
+  const tooltipFrustum = tooltipData !== null ? frustums[tooltipData.instanceId] : null;
+
   return (
     <>
-      <instancedMesh ref={shaftRef} args={[shaftGeometry, shaftMaterial, frustums.length]} />
+      <instancedMesh
+        ref={shaftRef}
+        args={[shaftGeometry, shaftMaterial, frustums.length]}
+        onPointerOver={(e) => {
+          if (e.instanceId === undefined) return;
+          // Ignore hover during camera orbit/pan
+          if (isDragging()) return;
+          const f = frustums[e.instanceId];
+          // Let selected camera's FrustumPlane handle its own hover (for half-opacity effect)
+          if (!f || f.image.imageId === selectedImageId) return;
+          e.stopPropagation();
+          setTooltipData({ instanceId: e.instanceId, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
+          onHover(f.image.imageId);
+          document.body.style.cursor = 'pointer';
+        }}
+        onPointerMove={(e) => {
+          // Clear hover state if dragging started while hovering
+          if (isDragging()) {
+            if (tooltipData !== null) {
+              setTooltipData(null);
+              onHover(null);
+              document.body.style.cursor = '';
+            }
+            return;
+          }
+          if (tooltipData !== null) {
+            // Update tooltip position
+            setTooltipData({ instanceId: tooltipData.instanceId, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
+          } else if (e.instanceId !== undefined) {
+            // Not currently hovering but pointer is over an instance - start hovering
+            // This handles the case where selection changed while cursor was over an arrow
+            const f = frustums[e.instanceId];
+            if (f && f.image.imageId !== selectedImageId) {
+              setTooltipData({ instanceId: e.instanceId, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
+              onHover(f.image.imageId);
+              document.body.style.cursor = 'pointer';
+            }
+          }
+        }}
+        onPointerOut={() => {
+          setTooltipData(null);
+          onHover(null);
+          document.body.style.cursor = '';
+        }}
+        onClick={(e) => {
+          if (e.instanceId === undefined) return;
+          const f = frustums[e.instanceId];
+          // Let selected camera's FrustumPlane handle its own click
+          if (!f || f.image.imageId === selectedImageId) return;
+          e.stopPropagation();
+          onClick(f.image.imageId);
+        }}
+        onDoubleClick={(e) => {
+          if (e.instanceId === undefined) return;
+          const f = frustums[e.instanceId];
+          // Let selected camera's FrustumPlane handle its own double-click
+          if (!f || f.image.imageId === selectedImageId) return;
+          e.stopPropagation();
+          onDoubleClick(f.image.imageId);
+        }}
+        onContextMenu={(e) => {
+          if (e.instanceId === undefined) return;
+          const f = frustums[e.instanceId];
+          // Let selected camera's FrustumPlane handle its own context menu
+          if (!f || f.image.imageId === selectedImageId) return;
+          e.stopPropagation();
+          e.nativeEvent.preventDefault();
+          e.nativeEvent.stopPropagation();
+          onContextMenu(f.image.imageId);
+        }}
+      />
       <instancedMesh ref={coneRef} args={[coneGeometry, coneMaterial, frustums.length]} />
+      {/* Batched tooltip - single Html component for all arrows */}
+      {tooltipData !== null && tooltipFrustum && (
+        <Html
+          style={{
+            position: 'fixed',
+            left: tooltipData.x + 12,
+            top: tooltipData.y + 12,
+            pointerEvents: 'none',
+            transform: 'none',
+          }}
+          calculatePosition={() => [0, 0]}
+        >
+          <div className={hoverCardStyles.container}>
+            <div className={hoverCardStyles.title}>{tooltipFrustum.image.name}</div>
+            <div className={hoverCardStyles.subtitle}>#{tooltipFrustum.image.imageId}</div>
+            <div className={hoverCardStyles.subtitle}>{tooltipFrustum.numPoints3D} points</div>
+            <div className={hoverCardStyles.hint}>
+              <div className={hoverCardStyles.hintRow}>
+                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="6" y="2" width="12" height="20" rx="6"/>
+                  <path d="M12 2v8"/>
+                  <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
+                </svg>
+                Left: select
+              </div>
+              <div className={hoverCardStyles.hintRow}>
+                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="6" y="2" width="12" height="20" rx="6"/>
+                  <path d="M12 2v8"/>
+                  <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
+                  <text x="18" y="18" fontSize="8" fill="currentColor" stroke="none">2</text>
+                </svg>
+                2xLeft: details
+              </div>
+              <div className={hoverCardStyles.hintRow}>
+                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="6" y="2" width="12" height="20" rx="6"/>
+                  <path d="M12 2v8"/>
+                  <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
+                </svg>
+                {matchedImageIds.has(tooltipFrustum.image.imageId) ? 'Right: matches' : tooltipFrustum.image.imageId === lastNavigationToImageId ? 'Right: back' : 'Right: fly to'}
+              </div>
+            </div>
+          </div>
+        </Html>
+      )}
     </>
   );
 }
@@ -560,6 +772,234 @@ function BatchedFrustumLines({
   );
 }
 
+// Batched invisible plane hit targets for efficient raycasting (frustum/imageplane modes)
+interface BatchedPlaneHitTargetsProps {
+  frustums: {
+    image: Image;
+    camera: Camera;
+    position: THREE.Vector3;
+    quaternion: THREE.Quaternion;
+    cameraIndex: number;
+    numPoints3D: number;
+  }[];
+  cameraScale: number;
+  selectedImageId: number | null;
+  matchedImageIds: Set<number>;
+  onHover: (id: number | null) => void;
+  onClick: (imageId: number) => void;
+  onDoubleClick: (imageId: number) => void;
+  onContextMenu: (imageId: number) => void;
+  lastNavigationToImageId: number | null;
+}
+
+function BatchedPlaneHitTargets({
+  frustums,
+  cameraScale,
+  selectedImageId,
+  matchedImageIds,
+  onHover,
+  onClick,
+  onDoubleClick,
+  onContextMenu,
+  lastNavigationToImageId,
+}: BatchedPlaneHitTargetsProps) {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const [tooltipData, setTooltipData] = useState<{instanceId: number, x: number, y: number} | null>(null);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { controls } = useThree() as any;
+  const isDragging = useCallback(() => controls?.dragging?.current ?? false, [controls]);
+
+  // Reset cursor on unmount if component is unmounted while hovering
+  useEffect(() => {
+    return () => {
+      document.body.style.cursor = '';
+    };
+  }, []);
+
+  // Shared plane geometry (unit plane, scaled per-instance)
+  const planeGeometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
+
+  // Invisible material for hit detection
+  const hitMaterial = useMemo(() => new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 0,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  }), []);
+
+  // Dispose geometry and material on unmount
+  useEffect(() => {
+    return () => {
+      planeGeometry.dispose();
+      hitMaterial.dispose();
+    };
+  }, [planeGeometry, hitMaterial]);
+
+  // Pre-compute plane sizes for each frustum
+  const planeSizes = useMemo(() => {
+    return frustums.map(f => {
+      const aspectRatio = f.camera.width / f.camera.height;
+      const focalLength = f.camera.params[0] || 1;
+      const halfWidth = cameraScale * f.camera.width / (2 * focalLength);
+      const halfHeight = halfWidth / aspectRatio;
+      return { width: halfWidth * 2, height: halfHeight * 2, depth: cameraScale };
+    });
+  }, [frustums, cameraScale]);
+
+  // Initialize instance matrices immediately (before first paint) for raycasting to work
+  useLayoutEffect(() => {
+    if (!meshRef.current) return;
+    const mesh = meshRef.current;
+
+    frustums.forEach((f, i) => {
+      const size = planeSizes[i];
+      const isSelected = f.image.imageId === selectedImageId;
+
+      // Position plane at frustum depth, scale to match camera aspect
+      tempPosition.copy(f.position);
+      tempForward.set(0, 0, size.depth);
+      tempForward.applyQuaternion(f.quaternion);
+      tempPosition.add(tempForward);
+
+      // Hide selected camera's hit target (FrustumPlane handles it separately)
+      if (isSelected) {
+        tempScale.set(0, 0, 0);
+      } else {
+        tempScale.set(size.width, size.height, 1);
+      }
+      tempMatrix.compose(tempPosition, f.quaternion, tempScale);
+      mesh.setMatrixAt(i, tempMatrix);
+    });
+
+    mesh.instanceMatrix.needsUpdate = true;
+  }, [frustums, planeSizes, selectedImageId]);
+
+  if (frustums.length === 0) return null;
+
+  const tooltipFrustum = tooltipData !== null ? frustums[tooltipData.instanceId] : null;
+
+  return (
+    <>
+      <instancedMesh
+        ref={meshRef}
+        args={[planeGeometry, hitMaterial, frustums.length]}
+        onPointerOver={(e) => {
+          if (e.instanceId === undefined) return;
+          if (isDragging()) return;
+          const f = frustums[e.instanceId];
+          // Let selected camera's FrustumPlane handle its own hover (for half-opacity effect)
+          if (!f || f.image.imageId === selectedImageId) return;
+          e.stopPropagation();
+          setTooltipData({ instanceId: e.instanceId, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
+          onHover(f.image.imageId);
+          document.body.style.cursor = 'pointer';
+        }}
+        onPointerMove={(e) => {
+          if (isDragging()) {
+            if (tooltipData !== null) {
+              setTooltipData(null);
+              onHover(null);
+              document.body.style.cursor = '';
+            }
+            return;
+          }
+          if (tooltipData !== null) {
+            // Update tooltip position
+            setTooltipData({ instanceId: tooltipData.instanceId, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
+          } else if (e.instanceId !== undefined) {
+            // Not currently hovering but pointer is over an instance - start hovering
+            // This handles the case where selection changed while cursor was over a frustum
+            const f = frustums[e.instanceId];
+            if (f && f.image.imageId !== selectedImageId) {
+              setTooltipData({ instanceId: e.instanceId, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
+              onHover(f.image.imageId);
+              document.body.style.cursor = 'pointer';
+            }
+          }
+        }}
+        onPointerOut={() => {
+          setTooltipData(null);
+          onHover(null);
+          document.body.style.cursor = '';
+        }}
+        onClick={(e) => {
+          if (e.instanceId === undefined) return;
+          const f = frustums[e.instanceId];
+          // Let selected camera's FrustumPlane handle its own click
+          if (!f || f.image.imageId === selectedImageId) return;
+          e.stopPropagation();
+          onClick(f.image.imageId);
+        }}
+        onDoubleClick={(e) => {
+          if (e.instanceId === undefined) return;
+          const f = frustums[e.instanceId];
+          // Let selected camera's FrustumPlane handle its own double-click
+          if (!f || f.image.imageId === selectedImageId) return;
+          e.stopPropagation();
+          onDoubleClick(f.image.imageId);
+        }}
+        onContextMenu={(e) => {
+          if (e.instanceId === undefined) return;
+          const f = frustums[e.instanceId];
+          // Let selected camera's FrustumPlane handle its own context menu
+          if (!f || f.image.imageId === selectedImageId) return;
+          e.stopPropagation();
+          e.nativeEvent.preventDefault();
+          e.nativeEvent.stopPropagation();
+          onContextMenu(f.image.imageId);
+        }}
+      />
+      {/* Batched tooltip */}
+      {tooltipData !== null && tooltipFrustum && (
+        <Html
+          style={{
+            position: 'fixed',
+            left: tooltipData.x + 12,
+            top: tooltipData.y + 12,
+            pointerEvents: 'none',
+            transform: 'none',
+          }}
+          calculatePosition={() => [0, 0]}
+        >
+          <div className={hoverCardStyles.container}>
+            <div className={hoverCardStyles.title}>{tooltipFrustum.image.name}</div>
+            <div className={hoverCardStyles.subtitle}>#{tooltipFrustum.image.imageId}</div>
+            <div className={hoverCardStyles.subtitle}>{tooltipFrustum.numPoints3D} points</div>
+            <div className={hoverCardStyles.hint}>
+              <div className={hoverCardStyles.hintRow}>
+                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="6" y="2" width="12" height="20" rx="6"/>
+                  <path d="M12 2v8"/>
+                  <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
+                </svg>
+                Left: select
+              </div>
+              <div className={hoverCardStyles.hintRow}>
+                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="6" y="2" width="12" height="20" rx="6"/>
+                  <path d="M12 2v8"/>
+                  <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
+                  <text x="18" y="18" fontSize="8" fill="currentColor" stroke="none">2</text>
+                </svg>
+                2xLeft: details
+              </div>
+              <div className={hoverCardStyles.hintRow}>
+                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="6" y="2" width="12" height="20" rx="6"/>
+                  <path d="M12 2v8"/>
+                  <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
+                </svg>
+                {matchedImageIds.has(tooltipFrustum.image.imageId) ? 'Right: matches' : tooltipFrustum.image.imageId === lastNavigationToImageId ? 'Right: back' : 'Right: fly to'}
+              </div>
+            </div>
+          </div>
+        </Html>
+      )}
+    </>
+  );
+}
+
 // FOV adjustment constants
 const FOV_MIN = 10;
 const FOV_MAX = 179;
@@ -593,6 +1033,8 @@ interface FrustumPlaneProps {
   onClick: (imageId: number) => void;
   onDoubleClick: (imageId: number) => void;
   onContextMenu: (imageId: number) => void;
+  /** When true, disables all interaction (hover, click) - use with BatchedPlaneHitTargets */
+  disableInteraction?: boolean;
 }
 
 const FrustumPlane = memo(function FrustumPlane({
@@ -617,7 +1059,9 @@ const FrustumPlane = memo(function FrustumPlane({
   onClick,
   onDoubleClick,
   onContextMenu,
+  disableInteraction = false,
 }: FrustumPlaneProps) {
+  // Skip hover state when interaction is disabled (using BatchedPlaneHitTargets)
   const [hovered, setHovered] = useState(false);
   const [viewAngleOk, setViewAngleOk] = useState(true);
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
@@ -683,6 +1127,10 @@ const FrustumPlane = memo(function FrustumPlane({
   const selectionColorMode = useCameraStore((s) => s.selectionColorMode);
   const selectionAnimationSpeed = useCameraStore((s) => s.selectionAnimationSpeed);
   const rainbowHueRef = useRef(0);
+
+  // Frame counter for throttled angle culling (only check every N frames)
+  const frameCountRef = useRef(0);
+  const CULL_CHECK_INTERVAL = 5;
 
   // Handle wheel to adjust FOV when hovering selected image in perspective mode
   useEffect(() => {
@@ -820,6 +1268,10 @@ const FrustumPlane = memo(function FrustumPlane({
         return;
       }
 
+      // Throttle angle culling - only check every N frames for non-selected cameras
+      frameCountRef.current = (frameCountRef.current + 1) % CULL_CHECK_INTERVAL;
+      if (frameCountRef.current !== 0) return;
+
       // Get world position and quaternion (includes parent transform)
       groupRef.current.getWorldPosition(tempWorldPos);
       groupRef.current.getWorldQuaternion(tempWorldQuat);
@@ -853,10 +1305,12 @@ const FrustumPlane = memo(function FrustumPlane({
         renderOrder={isSelected ? 100 : 0}
         // Mark mesh with selection state for hover priority checking
         userData={{ isSelectedPlane: isSelected }}
-        onClick={(e) => { e.stopPropagation(); onClick(image.imageId); }}
-        onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick(image.imageId); }}
-        onContextMenu={(e) => { e.stopPropagation(); e.nativeEvent.preventDefault(); e.nativeEvent.stopPropagation(); onContextMenu(image.imageId); }}
-        onPointerOver={(e) => {
+        // Disable raycasting when using BatchedPlaneHitTargets
+        raycast={disableInteraction ? () => {} : undefined}
+        onClick={disableInteraction ? undefined : (e) => { e.stopPropagation(); onClick(image.imageId); }}
+        onDoubleClick={disableInteraction ? undefined : (e) => { e.stopPropagation(); onDoubleClick(image.imageId); }}
+        onContextMenu={disableInteraction ? undefined : (e) => { e.stopPropagation(); e.nativeEvent.preventDefault(); e.nativeEvent.stopPropagation(); onContextMenu(image.imageId); }}
+        onPointerOver={disableInteraction ? undefined : (e) => {
           // Ignore hover during camera orbit/pan
           if (isDragging()) return;
 
@@ -878,7 +1332,7 @@ const FrustumPlane = memo(function FrustumPlane({
           onHover(image.imageId);
           document.body.style.cursor = 'pointer';
         }}
-        onPointerMove={(e) => {
+        onPointerMove={disableInteraction ? undefined : (e) => {
           // Clear hover state if dragging started while hovering
           if (isDragging()) {
             if (hovered) {
@@ -893,7 +1347,7 @@ const FrustumPlane = memo(function FrustumPlane({
             setMousePos({ x: e.clientX, y: e.clientY });
           }
         }}
-        onPointerOut={() => {
+        onPointerOut={disableInteraction ? undefined : () => {
           setHovered(false);
           setMousePos(null);
           onHover(null);
@@ -992,149 +1446,6 @@ const FrustumPlane = memo(function FrustumPlane({
               {isSelected && (
                 <div className={hoverCardStyles.hintRow}>(U) undistort</div>
               )}
-            </div>
-          </div>
-        </Html>
-      )}
-    </group>
-  );
-});
-
-// Invisible hit targets for arrow mode interactions
-interface ArrowHitTargetProps {
-  position: THREE.Vector3;
-  quaternion: THREE.Quaternion;
-  image: Image;
-  scale: number;
-  isMatched?: boolean;
-  wouldGoBack?: boolean; // Whether right-click would navigate back in history
-  /** Pre-computed count of matched 3D points (from imageStats) */
-  numPoints3D: number;
-  /** Current hovered image ID from parent - used to sync local hover state */
-  hoveredImageId: number | null;
-  onHover: (id: number | null) => void;
-  onClick: (imageId: number) => void;
-  onDoubleClick: (imageId: number) => void;
-  onContextMenu: (imageId: number) => void;
-}
-
-const ArrowHitTarget = memo(function ArrowHitTarget({
-  position,
-  quaternion,
-  image,
-  scale,
-  isMatched = false,
-  wouldGoBack = false,
-  numPoints3D,
-  hoveredImageId,
-  onHover,
-  onClick,
-  onDoubleClick,
-  onContextMenu,
-}: ArrowHitTargetProps) {
-  const [hovered, setHovered] = useState(false);
-  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { controls } = useThree() as any;
-
-  // Sync local hover state with parent - clear when parent clears hover or hovers different image
-  useEffect(() => {
-    if (hovered && hoveredImageId !== image.imageId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: sync derived state from parent
-      setHovered(false);
-      setMousePos(null);
-      document.body.style.cursor = '';
-    }
-  }, [hovered, hoveredImageId, image.imageId]);
-
-  // Check if camera controls are dragging (orbit/pan in progress)
-  const isDragging = () => controls?.dragging?.current ?? false;
-
-  const depth = scale;
-
-  return (
-    <group position={position} quaternion={quaternion}>
-      <mesh
-        position={[0, 0, depth / 2]}
-        rotation={[Math.PI / 2, 0, 0]}
-        onClick={(e) => { e.stopPropagation(); onClick(image.imageId); }}
-        onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick(image.imageId); }}
-        onContextMenu={(e) => { e.stopPropagation(); e.nativeEvent.preventDefault(); e.nativeEvent.stopPropagation(); onContextMenu(image.imageId); }}
-        onPointerOver={(e) => {
-          // Ignore hover during camera orbit/pan
-          if (isDragging()) return;
-          e.stopPropagation();
-          setHovered(true);
-          setMousePos({ x: e.clientX, y: e.clientY });
-          onHover(image.imageId);
-          document.body.style.cursor = 'pointer';
-        }}
-        onPointerMove={(e) => {
-          // Clear hover state if dragging started while hovering
-          if (isDragging()) {
-            if (hovered) {
-              setHovered(false);
-              setMousePos(null);
-              onHover(null);
-              document.body.style.cursor = '';
-            }
-            return;
-          }
-          if (hovered) {
-            setMousePos({ x: e.clientX, y: e.clientY });
-          }
-        }}
-        onPointerOut={() => {
-          setHovered(false);
-          setMousePos(null);
-          onHover(null);
-          document.body.style.cursor = '';
-        }}
-      >
-        <cylinderGeometry args={[0.025 * scale, 0.025 * scale, depth, 8]} />
-        <meshBasicMaterial transparent opacity={0} />
-      </mesh>
-      {hovered && mousePos && (
-        <Html
-          style={{
-            position: 'fixed',
-            left: mousePos.x + 12,
-            top: mousePos.y + 12,
-            pointerEvents: 'none',
-            transform: 'none',
-          }}
-          calculatePosition={() => [0, 0]}
-        >
-          <div className={hoverCardStyles.container}>
-            <div className={hoverCardStyles.title}>{image.name}</div>
-            <div className={hoverCardStyles.subtitle}>#{image.imageId}</div>
-            <div className={hoverCardStyles.subtitle}>{numPoints3D} points</div>
-            <div className={hoverCardStyles.hint}>
-              <div className={hoverCardStyles.hintRow}>
-                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="6" y="2" width="12" height="20" rx="6"/>
-                  <path d="M12 2v8"/>
-                  <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
-                </svg>
-                Left: select
-              </div>
-              <div className={hoverCardStyles.hintRow}>
-                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="6" y="2" width="12" height="20" rx="6"/>
-                  <path d="M12 2v8"/>
-                  <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
-                  <text x="18" y="18" fontSize="8" fill="currentColor" stroke="none">2</text>
-                </svg>
-                2xLeft: details
-              </div>
-              <div className={hoverCardStyles.hintRow}>
-                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="6" y="2" width="12" height="20" rx="6"/>
-                  <path d="M12 2v8"/>
-                  <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
-                </svg>
-                {isMatched ? 'Right: matches' : wouldGoBack ? 'Right: back' : 'Right: fly to'}
-              </div>
             </div>
           </div>
         </Html>
@@ -1667,16 +1978,45 @@ export function CameraFrustums() {
   // Hide frustums when display mode is off, no frustums, or in alignment mode
   if (cameraDisplayMode === 'off' || frustums.length === 0 || isAlignmentMode) return null;
 
+  // === Selected camera source of truth ===
+  // Compute selected frustum once for all display modes
+  const selectedFrustum = selectedImageId !== null
+    ? frustums.find(f => f.image.imageId === selectedImageId) ?? null
+    : null;
+  const selectedFrustumColor = selectionColorMode === 'rainbow' ? VIZ_COLORS.frustum.selected : selectionColor;
+
+  // Shared FrustumPlane render for selected camera (used by all modes)
+  const selectedCameraPlane = selectedFrustum && (
+    <FrustumPlane
+      key={`selected-${selectedFrustum.image.imageId}`}
+      position={selectedFrustum.position}
+      quaternion={selectedFrustum.quaternion}
+      camera={selectedFrustum.camera}
+      image={selectedFrustum.image}
+      scale={cameraScale}
+      imageFile={selectedFrustum.imageFile}
+      showImagePlane={true}
+      isSelected={true}
+      isMatched={false}
+      wouldGoBack={selectedFrustum.image.imageId === lastNavigationToImageId}
+      selectionPlaneOpacity={selectionPlaneOpacity}
+      color={selectedFrustumColor}
+      undistortionEnabled={undistortionEnabled}
+      undistortionMode={undistortionMode}
+      numPoints3D={selectedFrustum.numPoints3D}
+      hoveredImageId={hoveredImageId}
+      onHover={setHoveredImageId}
+      onClick={handleArrowClick}
+      onDoubleClick={handleArrowDoubleClick}
+      onContextMenu={handleArrowContextMenu}
+    />
+  );
+
   // Arrow mode: use batched rendering for efficiency
   if (cameraDisplayMode === 'arrow') {
-    // Find selected frustum for image plane display
-    const selectedFrustum = selectedImageId !== null
-      ? frustums.find(f => f.image.imageId === selectedImageId)
-      : null;
-
     return (
       <group>
-        {/* Instanced meshes for all cone arrows */}
+        {/* Instanced meshes for all cone arrows (with batched raycasting) */}
         <BatchedArrowMeshes
           frustums={frustums}
           cameraScale={cameraScale}
@@ -1692,52 +2032,14 @@ export function CameraFrustums() {
           selectionAnimationSpeed={selectionAnimationSpeed}
           unselectedCameraOpacity={unselectedCameraOpacity}
           imageFrameIndexMap={imageFrameIndexMap}
+          onHover={setHoveredImageId}
+          onClick={handleArrowClick}
+          onDoubleClick={handleArrowDoubleClick}
+          onContextMenu={handleArrowContextMenu}
+          lastNavigationToImageId={lastNavigationToImageId}
         />
         {/* Image plane for selected camera (replaces arrow) */}
-        {selectedFrustum && (
-          <FrustumPlane
-            position={selectedFrustum.position}
-            quaternion={selectedFrustum.quaternion}
-            camera={selectedFrustum.camera}
-            image={selectedFrustum.image}
-            scale={cameraScale}
-            imageFile={selectedFrustum.imageFile}
-            showImagePlane={true}
-            isSelected={true}
-            wouldGoBack={selectedFrustum.image.imageId === lastNavigationToImageId}
-            selectionPlaneOpacity={selectionPlaneOpacity}
-            color={selectionColorMode === 'rainbow' ? VIZ_COLORS.frustum.selected : selectionColor}
-            undistortionEnabled={undistortionEnabled}
-            undistortionMode={undistortionMode}
-            numPoints3D={selectedFrustum.numPoints3D}
-            hoveredImageId={hoveredImageId}
-            onHover={setHoveredImageId}
-            onClick={handleArrowClick}
-            onDoubleClick={handleArrowDoubleClick}
-            onContextMenu={handleArrowContextMenu}
-          />
-        )}
-        {/* Individual invisible hit targets for interactions (view frustum culled) */}
-        {/* Skip selected image - it uses FrustumPlane for interaction instead */}
-        {frustums
-          .filter(f => f.image.imageId !== selectedImageId)
-          .map((f) => (
-            <ArrowHitTarget
-              key={f.image.imageId}
-              position={f.position}
-              quaternion={f.quaternion}
-              image={f.image}
-              scale={cameraScale}
-              isMatched={matchedImageIds.has(f.image.imageId)}
-              wouldGoBack={f.image.imageId === lastNavigationToImageId}
-              numPoints3D={f.numPoints3D}
-              hoveredImageId={hoveredImageId}
-              onHover={setHoveredImageId}
-              onClick={handleArrowClick}
-              onDoubleClick={handleArrowDoubleClick}
-              onContextMenu={handleArrowContextMenu}
-            />
-          ))}
+        {selectedCameraPlane}
         {/* Context menu */}
         {contextMenu && (
           <FrustumContextMenu
@@ -1760,24 +2062,31 @@ export function CameraFrustums() {
   if (cameraDisplayMode === 'imageplane') {
     return (
       <group>
-        {/* Per-frustum planes for texture + interaction (view frustum culled) */}
+        {/* Batched invisible hit targets for efficient raycasting */}
+        <BatchedPlaneHitTargets
+          frustums={frustums}
+          cameraScale={cameraScale}
+          selectedImageId={selectedImageId}
+          matchedImageIds={matchedImageIds}
+          onHover={setHoveredImageId}
+          onClick={handleArrowClick}
+          onDoubleClick={handleArrowDoubleClick}
+          onContextMenu={handleArrowContextMenu}
+          lastNavigationToImageId={lastNavigationToImageId}
+        />
+        {/* Per-frustum planes for texture rendering (non-selected only, interaction handled by BatchedPlaneHitTargets) */}
         {frustums.map((f) => {
           const isSelected = f.image.imageId === selectedImageId;
+          // Skip selected camera - it's rendered via selectedCameraPlane
+          if (isSelected) return null;
           const isMatched = matchedImageIds.has(f.image.imageId);
-          let frustumColor: string;
-          if (isSelected) {
-            frustumColor = selectionColorMode === 'rainbow' ? VIZ_COLORS.frustum.selected : selectionColor;
-          } else if (isMatched) {
-            frustumColor = matchesColor;
-          } else {
-            frustumColor = getFrustumBaseColor(frustumColorMode, f.cameraIndex, f.image.imageId, imageFrameIndexMap);
-          }
+          const frustumColor = isMatched
+            ? matchesColor
+            : getFrustumBaseColor(frustumColorMode, f.cameraIndex, f.image.imageId, imageFrameIndexMap);
           // When no camera is selected, all use selectionPlaneOpacity
-          // When selected, selected gets selectionPlaneOpacity, others get selectionPlaneOpacity * unselectedCameraOpacity
+          // Otherwise, matched get matchesOpacity, others get unselectedCameraOpacity
           let planeOpacity: number;
           if (selectedImageId === null) {
-            planeOpacity = selectionPlaneOpacity;
-          } else if (isSelected) {
             planeOpacity = selectionPlaneOpacity;
           } else if (isMatched) {
             planeOpacity = selectionPlaneOpacity * matchesOpacity;
@@ -1793,8 +2102,8 @@ export function CameraFrustums() {
               image={f.image}
               scale={cameraScale}
               imageFile={f.imageFile}
-              showImagePlane={selectedImageId === null || isSelected}
-              isSelected={isSelected}
+              showImagePlane={selectedImageId === null}
+              isSelected={false}
               isMatched={isMatched}
               wouldGoBack={f.image.imageId === lastNavigationToImageId}
               selectionPlaneOpacity={planeOpacity}
@@ -1808,9 +2117,12 @@ export function CameraFrustums() {
               onClick={handleArrowClick}
               onDoubleClick={handleArrowDoubleClick}
               onContextMenu={handleArrowContextMenu}
+              disableInteraction={true}
             />
           );
         })}
+        {/* Selected camera image plane (source of truth) */}
+        {selectedCameraPlane}
         {/* Context menu */}
         {contextMenu && (
           <FrustumContextMenu
@@ -1850,45 +2162,20 @@ export function CameraFrustums() {
         showImagePlanes={showImagePlanes}
         imageFrameIndexMap={imageFrameIndexMap}
       />
-      {/* Per-frustum planes for texture + interaction (view frustum culled) */}
-      {frustums.map((f) => {
-          // Determine frustum color based on mode (for plane fallback color)
-          const isSelected = f.image.imageId === selectedImageId;
-          const isMatched = matchedImageIds.has(f.image.imageId);
-          let frustumColor: string;
-          if (isSelected) {
-            frustumColor = selectionColorMode === 'rainbow' ? VIZ_COLORS.frustum.selected : selectionColor;
-          } else if (isMatched) {
-            frustumColor = matchesColor;
-          } else {
-            frustumColor = getFrustumBaseColor(frustumColorMode, f.cameraIndex, f.image.imageId, imageFrameIndexMap);
-          }
-          return (
-            <FrustumPlane
-              key={f.image.imageId}
-              position={f.position}
-              quaternion={f.quaternion}
-              camera={f.camera}
-              image={f.image}
-              scale={cameraScale}
-              imageFile={f.imageFile}
-              showImagePlane={isSelected}
-              isSelected={isSelected}
-              isMatched={isMatched}
-              wouldGoBack={f.image.imageId === lastNavigationToImageId}
-              selectionPlaneOpacity={selectionPlaneOpacity}
-              color={frustumColor}
-              undistortionEnabled={undistortionEnabled}
-              undistortionMode={undistortionMode}
-              numPoints3D={f.numPoints3D}
-              hoveredImageId={hoveredImageId}
-              onHover={setHoveredImageId}
-              onClick={handleArrowClick}
-              onDoubleClick={handleArrowDoubleClick}
-              onContextMenu={handleArrowContextMenu}
-            />
-          );
-        })}
+      {/* Batched invisible hit targets for frustum selection */}
+      <BatchedPlaneHitTargets
+        frustums={frustums}
+        cameraScale={cameraScale}
+        selectedImageId={selectedImageId}
+        matchedImageIds={matchedImageIds}
+        onHover={setHoveredImageId}
+        onClick={handleArrowClick}
+        onDoubleClick={handleArrowDoubleClick}
+        onContextMenu={handleArrowContextMenu}
+        lastNavigationToImageId={lastNavigationToImageId}
+      />
+      {/* Selected camera image plane (source of truth) */}
+      {selectedCameraPlane}
       {/* Context menu */}
       {contextMenu && (
         <FrustumContextMenu

@@ -1,4 +1,4 @@
-import { useReconstructionStore } from '../../store';
+import { useReconstructionStore, useUIStore } from '../../store';
 import { statusBarStyles } from '../../theme';
 import { StatWithHistogram } from './StatWithHistogram';
 import { CacheStatsIndicator } from './CacheStatsIndicator';
@@ -7,6 +7,7 @@ export function StatusBar() {
   const urlLoading = useReconstructionStore((s) => s.urlLoading);
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
+  const fps = useUIStore((s) => s.fps);
 
   // Use pre-computed global stats instead of computing on every render
   const globalStats = reconstruction?.globalStats;
@@ -14,6 +15,7 @@ export function StatusBar() {
   return (
     <footer className={statusBarStyles.container}>
       <div className={statusBarStyles.group}>
+        <span className="text-ds-tertiary">{fps} FPS</span>
         <CacheStatsIndicator />
         {reconstruction && globalStats && (
               <>

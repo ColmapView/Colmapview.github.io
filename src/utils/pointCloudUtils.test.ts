@@ -210,40 +210,6 @@ describe('computePointColors', () => {
     });
   });
 
-  describe('floor mode', () => {
-    it('falls back to RGB when no pointDistances', () => {
-      const colors = computePointColors('floor', 2, { floorColorMode: 'binary' });
-      // Should be white (fallback)
-      expect(colors[0]).toBe(1);
-    });
-
-    it('uses binary coloring for inliers/outliers', () => {
-      const pointDistances = new Float32Array([0.01, 0.5]); // first inlier, second outlier
-      const colors = computePointColors('floor', 2, {
-        pointDistances,
-        distanceThreshold: 0.1,
-        floorColorMode: 'binary',
-      });
-
-      // Inlier (first point): green-ish (high G)
-      expect(colors[1]).toBeGreaterThan(colors[0]); // G > R
-
-      // Outlier (second point): red-ish (high R)
-      expect(colors[3]).toBeGreaterThan(colors[4]); // R > G
-    });
-
-    it('uses jet colormap for distance mode', () => {
-      const pointDistances = new Float32Array([0, 0.5, 1.0]);
-      const colors = computePointColors('floor', 3, {
-        pointDistances,
-        floorColorMode: 'distance',
-        maxFloorDist: 1.0,
-      });
-
-      // Should vary from blue (dist=0) to red (dist=1)
-      expect(colors.length).toBe(9);
-    });
-  });
 });
 
 describe('computeSinglePointColor', () => {
