@@ -144,7 +144,11 @@ export function RigConnections() {
       vertexColors: true,
       transparent: true,
       depthWrite: false,
-      depthTest: false,
+      depthTest: true,
+      // Push lines slightly back in depth to avoid rendering in front of image planes
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1,
     });
   }, []);
 
@@ -217,7 +221,7 @@ export function RigConnections() {
   if (!showRig || !geometryData) return null;
 
   return (
-    <lineSegments material={shaderMaterial} renderOrder={998}>
+    <lineSegments material={shaderMaterial}>
       <bufferGeometry ref={geometryRef}>
         <bufferAttribute
           attach="attributes-position"

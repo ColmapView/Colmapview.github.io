@@ -55,7 +55,7 @@ export const useExportStore = create<ExportState>()(
       exportTrigger: 0,
       isRecordingGif: false,
       gifBlobUrl: null,
-      gifDuration: 2,
+      gifDuration: 5,
       gifDownsample: 2,
       gifSpeed: 1,
       recordingQuality: 'high',

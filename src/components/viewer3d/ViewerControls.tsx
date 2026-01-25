@@ -714,9 +714,46 @@ export function ViewerControls() {
   }, [shareSource, currentViewState]);
 
   // Get reconstruction stats for social sharing
-  const getShareText = useCallback(() => {
-    return 'Made with https://colmapview.github.io/ by @opsiclear';
-  }, []);
+  const getShareText = useCallback((withShareLink: boolean) => {
+    const parts: string[] = [];
+
+    // Add stats if reconstruction is loaded
+    if (reconstruction) {
+      const numPoints = reconstruction.globalStats?.totalPoints ?? 0;
+      const numImages = reconstruction.images.size;
+      const numCameras = reconstruction.cameras.size;
+
+      // Format numbers with K/M suffixes
+      const formatNum = (n: number) => {
+        if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+        if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+        return n.toString();
+      };
+
+      if (numPoints > 0) {
+        parts.push(`📍 ${formatNum(numPoints)} points`);
+      }
+      if (numImages > 0) {
+        parts.push(`🖼️ ${numImages} images`);
+      }
+      if (numCameras > 1) {
+        parts.push(`📷 ${numCameras} cameras`);
+      }
+    }
+
+    // Add hashtags and attribution
+    // If share link is included separately, don't duplicate the URL in text
+    const hashtags = '#3DReconstruction #Photogrammetry #COLMAP';
+    const attribution = withShareLink
+      ? 'Made with ColmapView by @opsiclear'
+      : 'Made with https://colmapview.github.io/ by @opsiclear';
+
+    const placeholder = '[type something here ...]';
+    if (parts.length > 0) {
+      return `${placeholder}\n\n${parts.join(' | ')}\n\n${hashtags}\n${attribution}`;
+    }
+    return `${placeholder}\n\n${hashtags}\n${attribution}`;
+  }, [reconstruction]);
 
   // Copy screenshot to clipboard
   const copyScreenshotToClipboard = useCallback(async () => {
@@ -772,9 +809,9 @@ export function ViewerControls() {
 
   // Handle share to X (Twitter)
   const handleShareToX = useCallback(async () => {
-    if (!shareSource) return;
-    const url = generateShareableUrl(shareSource, currentViewState);
-    const text = getShareText();
+    const url = shareSource ? generateShareableUrl(shareSource, currentViewState) : null;
+    const willIncludeLink = includeShareLink && !!url;
+    const text = getShareText(willIncludeLink);
 
     // Copy screenshot to clipboard for easy pasting (if enabled)
     if (includeScreenshot) {
@@ -782,21 +819,21 @@ export function ViewerControls() {
     }
 
     // Open X share dialog
-    const xUrl = includeShareLink
+    const xUrl = willIncludeLink
       ? `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`
       : `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
-    window.open(xUrl, '_blank', 'width=550,height=420');
+    window.open(xUrl, '_blank', 'width=700,height=600');
   }, [shareSource, currentViewState, getShareText, copyScreenshotToClipboard, includeShareLink, includeScreenshot]);
 
   // Handle share to LinkedIn
   const handleShareToLinkedIn = useCallback(async () => {
-    if (!shareSource) return;
-    const url = generateShareableUrl(shareSource, currentViewState);
-    const text = getShareText();
+    const url = shareSource ? generateShareableUrl(shareSource, currentViewState) : null;
+    const willIncludeLink = includeShareLink && !!url;
+    const text = getShareText(willIncludeLink);
 
     // Copy text to clipboard (LinkedIn doesn't support pre-filled text)
     try {
-      const shareContent = includeShareLink ? `${text}\n${url}` : text;
+      const shareContent = willIncludeLink ? `${text}\n${url}` : text;
       await navigator.clipboard.writeText(shareContent);
       useNotificationStore.getState().addNotification('info', 'Message copied! Paste in LinkedIn post', 4000);
     } catch {
@@ -809,7 +846,7 @@ export function ViewerControls() {
     }
 
     // Open LinkedIn - go to feed to create new post
-    window.open('https://www.linkedin.com/feed/', '_blank', 'width=550,height=420');
+    window.open('https://www.linkedin.com/feed/', '_blank', 'width=700,height=600');
   }, [shareSource, currentViewState, getShareText, copyScreenshotToClipboard, includeShareLink, includeScreenshot]);
 
   // Handle export action
@@ -1931,9 +1968,9 @@ export function ViewerControls() {
           <SliderRow
             label="Duration"
             value={gifDuration}
-            min={2}
-            max={15}
-            step={1}
+            min={5}
+            max={120}
+            step={5}
             onChange={setGifDuration}
             formatValue={(v) => `${v}s`}
           />

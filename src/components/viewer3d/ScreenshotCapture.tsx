@@ -164,8 +164,10 @@ export function ScreenshotCapture() {
       canvas.height = height;
       webmCanvasRef.current = canvas;
 
-      // Get canvas stream
-      const stream = canvas.captureStream(RECORDING_FPS);
+      // Get canvas stream - adjust framerate for speed (lower fps = faster playback)
+      // e.g., 2x speed: capture at 15fps, video plays at 30fps = 2x speedup
+      const effectiveFps = RECORDING_FPS / gifSpeed;
+      const stream = canvas.captureStream(effectiveFps);
 
       // Determine MIME type based on format and browser support
       let mimeType: string;
@@ -281,7 +283,8 @@ export function ScreenshotCapture() {
       }
     }
 
-    // WebM/MP4 recording - always capture every frame for best quality
+    // WebM/MP4 recording - capture every frame for smooth video
+    // Speed is applied by adjusting the recording duration (same final duration as GIF)
     if (isRecordingWebm.current && webmCanvasRef.current && webmRecorderRef.current) {
       const now = performance.now();
       const elapsed = now - webmStartTime.current;
@@ -297,7 +300,7 @@ export function ScreenshotCapture() {
       // Add logo
       addLogoToCanvas(webmCanvasRef.current, screenshotHideLogo);
 
-      // Check if recording is complete
+      // Check if recording is complete (duration adjusted by speed factor)
       if (elapsed >= webmDurationMs.current) {
         webmRecorderRef.current.stop();
       }
