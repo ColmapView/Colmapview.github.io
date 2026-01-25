@@ -165,9 +165,17 @@ function BatchedArrowMeshes({
   const coneLength = cameraScale * 0.2;
   const coneRadius = cameraScale * 0.08;
 
-  // Create geometries once
-  const shaftGeometry = useMemo(() => new THREE.CylinderGeometry(shaftRadius, shaftRadius, shaftLength, 8), [shaftRadius, shaftLength]);
-  const coneGeometry = useMemo(() => new THREE.ConeGeometry(coneRadius, coneLength, 12), [coneRadius, coneLength]);
+  // Create geometries once (compute bounding sphere for raycasting)
+  const shaftGeometry = useMemo(() => {
+    const geo = new THREE.CylinderGeometry(shaftRadius, shaftRadius, shaftLength, 8);
+    geo.computeBoundingSphere();
+    return geo;
+  }, [shaftRadius, shaftLength]);
+  const coneGeometry = useMemo(() => {
+    const geo = new THREE.ConeGeometry(coneRadius, coneLength, 12);
+    geo.computeBoundingSphere();
+    return geo;
+  }, [coneRadius, coneLength]);
 
   // Create materials
   const shaftMaterial = useMemo(() => new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }), []);
@@ -295,10 +303,10 @@ function BatchedArrowMeshes({
     if (cone.instanceColor) cone.instanceColor.needsUpdate = true;
   });
 
-  // Reset needsUpdate when frustums change
+  // Reset needsUpdate when frustums or cameraScale change
   useEffect(() => {
     needsUpdateRef.current = true;
-  }, [frustums]);
+  }, [frustums, cameraScale]);
 
   // Initialize instance matrices immediately when frustums change (before first paint)
   // This ensures raycasting works on first interaction, rather than waiting for useFrame
@@ -356,9 +364,13 @@ function BatchedArrowMeshes({
   // Get tooltip frustum data
   const tooltipFrustum = tooltipData !== null ? frustums[tooltipData.instanceId] : null;
 
+  // Key for forcing mesh recreation when scale changes (ensures raycasting works immediately)
+  const meshKey = `arrows-${cameraScale.toFixed(4)}`;
+
   return (
     <>
       <instancedMesh
+        key={meshKey}
         ref={shaftRef}
         args={[shaftGeometry, shaftMaterial, frustums.length]}
         onPointerOver={(e) => {
@@ -429,7 +441,7 @@ function BatchedArrowMeshes({
           onContextMenu(f.image.imageId);
         }}
       />
-      <instancedMesh ref={coneRef} args={[coneGeometry, coneMaterial, frustums.length]} />
+      <instancedMesh key={`${meshKey}-cone`} ref={coneRef} args={[coneGeometry, coneMaterial, frustums.length]} />
       {/* Batched tooltip - single Html component for all arrows */}
       {tooltipData !== null && tooltipFrustum && (
         <Html
@@ -1556,6 +1568,7 @@ export function CameraFrustums() {
   const selectionAnimationSpeed = useCameraStore((s) => s.selectionAnimationSpeed);
   const frustumColorMode = useCameraStore((s) => s.frustumColorMode);
   const unselectedCameraOpacity = useCameraStore((s) => s.unselectedCameraOpacity);
+  const showMatches = useUIStore((s) => s.showMatches);
   const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
   const matchesOpacity = useUIStore((s) => s.matchesOpacity);
   const matchesColor = useUIStore((s) => s.matchesColor);
@@ -1670,7 +1683,7 @@ export function CameraFrustums() {
   // Compute matched image IDs when matches are shown
   // Uses pre-computed connectedImagesIndex (avoids iterating points3D Map)
   const matchedImageIds = useMemo(() => {
-    if (!reconstruction || selectedImageId === null || matchesDisplayMode === 'off') {
+    if (!reconstruction || selectedImageId === null || !showMatches) {
       return new Set<number>();
     }
 
@@ -1682,7 +1695,7 @@ export function CameraFrustums() {
 
     // Return all connected image IDs (the keys of the connections map)
     return new Set(connections.keys());
-  }, [reconstruction, selectedImageId, matchesDisplayMode]);
+  }, [reconstruction, selectedImageId, showMatches]);
 
   // Get the last navigation target for "back" hint display
   // Subscribe to navigationHistory directly so we react to changes
@@ -1697,7 +1710,7 @@ export function CameraFrustums() {
   const [zipImageCacheVersion, setZipImageCacheVersion] = useState(0);
 
   const frustums = useMemo(() => {
-    if (!reconstruction || cameraDisplayMode === 'off') return [];
+    if (!reconstruction) return [];
 
     const result: {
       image: Image;
@@ -1975,8 +1988,8 @@ export function CameraFrustums() {
     setContextMenu(null);
   }, []);
 
-  // Hide frustums when display mode is off, no frustums, or in alignment mode
-  if (cameraDisplayMode === 'off' || frustums.length === 0 || isAlignmentMode) return null;
+  // Hide frustums when no frustums or in alignment mode
+  if (frustums.length === 0 || isAlignmentMode) return null;
 
   // === Selected camera source of truth ===
   // Compute selected frustum once for all display modes
@@ -2198,6 +2211,7 @@ export function CameraMatches() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const selectedImageId = useCameraStore((s) => s.selectedImageId);
   const cameraDisplayMode = useCameraStore((s) => s.cameraDisplayMode);
+  const showMatches = useUIStore((s) => s.showMatches);
   const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
   const matchesOpacity = useUIStore((s) => s.matchesOpacity);
   const matchesColor = useUIStore((s) => s.matchesColor);
@@ -2206,7 +2220,7 @@ export function CameraMatches() {
 
   // Animate blink effect
   useFrame((_, delta) => {
-    if (matchesDisplayMode === 'blink' && materialRef.current) {
+    if (showMatches && matchesDisplayMode === 'blink' && materialRef.current) {
       blinkPhaseRef.current = (blinkPhaseRef.current + delta) % 2;
       materialRef.current.opacity = matchesOpacity * (0.1 + 0.9 * getMatchesBlinkFactor(blinkPhaseRef.current));
     }
@@ -2214,8 +2228,8 @@ export function CameraMatches() {
 
   // Build geometry with all line segments in a single buffer
   const geometry = useMemo(() => {
-    // Hide match lines when cameras are hidden or in imageplane mode
-    if (!reconstruction || selectedImageId === null || matchesDisplayMode === 'off' || cameraDisplayMode === 'off' || cameraDisplayMode === 'imageplane') return null;
+    // Hide match lines when in imageplane mode
+    if (!reconstruction || selectedImageId === null || !showMatches || cameraDisplayMode === 'imageplane') return null;
 
     const selectedImage = reconstruction.images.get(selectedImageId);
     if (!selectedImage) return null;
@@ -2245,7 +2259,7 @@ export function CameraMatches() {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     return geo;
-  }, [reconstruction, selectedImageId, matchesDisplayMode, cameraDisplayMode]);
+  }, [reconstruction, selectedImageId, showMatches, cameraDisplayMode]);
 
   // Dispose geometry when it changes to prevent GPU memory leaks
   useEffect(() => {
@@ -2254,7 +2268,7 @@ export function CameraMatches() {
     };
   }, [geometry]);
 
-  if (matchesDisplayMode === 'off' || cameraDisplayMode === 'off' || cameraDisplayMode === 'imageplane' || !geometry) return null;
+  if (!showMatches || cameraDisplayMode === 'imageplane' || !geometry) return null;
 
   return (
     <lineSegments geometry={geometry} renderOrder={999}>

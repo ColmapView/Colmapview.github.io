@@ -6,12 +6,13 @@
 import { useState, useEffect, useLayoutEffect, memo, useRef } from 'react';
 import { controlPanelStyles, getControlButtonClass, getTooltipProps } from '../../theme';
 import { hslToHex, hexToHsl } from '../../utils/colorUtils';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 
 // Use centralized styles from theme
 const styles = controlPanelStyles;
 
 // Panel type for control buttons
-export type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'export' | 'transform' | 'gallery' | 'rig' | 'settings' | 'floor' | null;
+export type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'share' | 'export' | 'transform' | 'gallery' | 'rig' | 'settings' | 'floor' | null;
 
 export interface SliderRowProps {
   label: string;
@@ -23,6 +24,21 @@ export interface SliderRowProps {
   formatValue?: (value: number) => string;
 }
 
+// Calculate decimal places from step value (e.g., 0.1 -> 1, 0.05 -> 2, 1 -> 0)
+function getDecimalPlaces(step: number): number {
+  if (step >= 1) return 0;
+  const str = step.toString();
+  const decimalIndex = str.indexOf('.');
+  return decimalIndex === -1 ? 0 : str.length - decimalIndex - 1;
+}
+
+// Round value to the precision implied by the step
+function roundToStep(value: number, step: number): number {
+  const decimals = getDecimalPlaces(step);
+  const factor = Math.pow(10, decimals);
+  return Math.round(value * factor) / factor;
+}
+
 export const SliderRow = memo(function SliderRow({ label, value, min, max, step, onChange, formatValue }: SliderRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
@@ -30,7 +46,9 @@ export const SliderRow = memo(function SliderRow({ label, value, min, max, step,
 
   // Defensive: ensure value is a valid number (handles null/undefined from corrupted localStorage)
   const safeValue = value ?? min;
-  const displayValue = formatValue ? formatValue(safeValue) : String(safeValue);
+  // Default format: show appropriate decimal places based on step
+  const decimals = getDecimalPlaces(step);
+  const displayValue = formatValue ? formatValue(safeValue) : safeValue.toFixed(decimals);
   const progress = ((safeValue - min) / (max - min)) * 100;
 
   const handleDoubleClick = () => {
@@ -65,7 +83,8 @@ export const SliderRow = memo(function SliderRow({ label, value, min, max, step,
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -step : step;
-    const newValue = Math.min(max, Math.max(min, safeValue + delta));
+    // Round to step precision to avoid floating point errors like 2.1000000001
+    const newValue = roundToStep(Math.min(max, Math.max(min, safeValue + delta)), step);
     onChange(newValue);
   };
 
@@ -297,6 +316,22 @@ export const HueSliderRow = memo(function HueSliderRow({ label, value, onChange 
           {value}°
         </span>
       )}
+    </div>
+  );
+});
+
+export interface ToggleRowProps {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}
+
+export const ToggleRow = memo(function ToggleRow({ label, checked, onChange }: ToggleRowProps) {
+  return (
+    <div className={styles.row}>
+      <label className={styles.label}>{label}</label>
+      <div className="flex-1" />
+      <ToggleSwitch checked={checked} onChange={() => onChange(!checked)} size="sm" />
     </div>
   );
 });

@@ -203,7 +203,7 @@ export function useUrlLoader() {
             const file = await fetchFile(baseUrl, path);
             console.log(`[URL Loader] Optional file loaded: ${path}`);
             return { key, file };
-          } catch (err) {
+          } catch {
             // Silently ignore optional file failures
             console.log(`[URL Loader] Optional file not found: ${path}`);
             return null;

@@ -1,11 +1,25 @@
 import { useState, useEffect, memo, useCallback, useMemo } from 'react';
-import { useReconstructionStore, usePointCloudStore, useCameraStore, useUIStore, useExportStore, useTransformStore, usePointPickingStore, useRigStore, useNotificationStore, useGuideStore } from '../../store';
+import {
+  useReconstructionStore,
+  usePointCloudStore,
+  useCameraStore,
+  useUIStore,
+  useExportStore,
+  useTransformStore,
+  usePointPickingStore,
+  useRigStore,
+  useNotificationStore,
+  useGuideStore,
+  applyTransformPreset,
+  applyTransformToData,
+} from '../../store';
 import { useFloorPlaneStore, type FloorColorMode } from '../../store/stores/floorPlaneStore';
+import { markSettingsResetWarningShown } from '../../store/migration';
 import { detectPlaneRANSAC, computeDistancesToPlane, transformPositions } from '../../utils/ransac';
 import { createSim3dFromEuler, isIdentityEuler } from '../../utils/sim3dTransforms';
 // sim3d transforms moved to DistanceInputModal for picking tool apply logic
 import type { ColorMode } from '../../types/colmap';
-import type { CameraMode, CameraDisplayMode, CameraScaleFactor, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, ScreenshotSize, ScreenshotFormat, GizmoMode, AutoRotateMode, HorizonLockMode, RigDisplayMode, RigColorMode } from '../../store/types';
+import type { CameraMode, CameraDisplayMode, CameraScaleFactor, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesCoordinateSystem, AxisLabelMode, ScreenshotSize, ScreenshotFormat, AutoRotateMode, HorizonLockMode, RigDisplayMode, RigColorMode } from '../../store/types';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { controlPanelStyles, HOTKEYS } from '../../theme';
 import { exportReconstructionText, exportReconstructionBinary, exportPointsPLY, downloadReconstructionZip } from '../../parsers';
@@ -35,9 +49,10 @@ import {
   SelectionBlinkIcon,
   AxesIcon,
   AxesOffIcon,
-  GridIcon,
   AxesGridIcon,
+  GridIcon,
   FloorDetectIcon,
+  ColorOffIcon,
   ColorRgbIcon,
   ColorErrorIcon,
   ColorTrackIcon,
@@ -51,6 +66,7 @@ import {
   RigOffIcon,
   RigBlinkIcon,
   SettingsIcon,
+  ShareIcon,
 } from '../../icons';
 
 // Import UI components from ControlComponents
@@ -59,6 +75,7 @@ import {
   HueRow,
   HueSliderRow,
   SelectRow,
+  ToggleRow,
   ControlButton,
   type PanelType,
 } from './ControlComponents';
@@ -105,10 +122,8 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
   const transform = useTransformStore((s) => s.transform);
   const setTransform = useTransformStore((s) => s.setTransform);
   const resetTransform = useTransformStore((s) => s.resetTransform);
-  const applyPreset = useTransformStore((s) => s.applyPreset);
-  const applyToData = useTransformStore((s) => s.applyToData);
-  const gizmoMode = useUIStore((s) => s.gizmoMode);
-  const setGizmoMode = useUIStore((s) => s.setGizmoMode);
+  const showGizmo = useUIStore((s) => s.showGizmo);
+  const toggleGizmo = useUIStore((s) => s.toggleGizmo);
   const { processFiles } = useFileDropzone();
 
   // Point picking state
@@ -121,25 +136,15 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
   const radToDeg = (rad: number) => rad * (180 / Math.PI);
   const degToRad = (deg: number) => deg * (Math.PI / 180);
 
-  // Cycle through gizmo modes: off → global → local → off
-  const cycleGizmoMode = useCallback(() => {
-    const modes: GizmoMode[] = ['off', 'global', 'local'];
-    const currentIndex = modes.indexOf(gizmoMode);
-    const nextIndex = (currentIndex + 1) % modes.length;
-    setGizmoMode(modes[nextIndex]);
-  }, [gizmoMode, setGizmoMode]);
-
   // Hotkey for toggling transform gizmo
   useHotkeys(
     HOTKEYS.toggleGizmo.keys,
-    cycleGizmoMode,
+    toggleGizmo,
     { scopes: HOTKEYS.toggleGizmo.scopes },
-    [cycleGizmoMode]
+    [toggleGizmo]
   );
 
-  const gizmoModeLabel = gizmoMode === 'off' ? 'Off' :
-                         gizmoMode === 'local' ? 'Local' : 'Global';
-  const gizmoTooltip = `Transform (T): ${gizmoModeLabel}${hasChanges ? ' (dbl-click to apply)' : ''}`;
+  const gizmoTooltip = `Transform (T): ${showGizmo ? 'On' : 'Off'}${hasChanges ? ' (dbl-click to apply)' : ''}`;
 
   return (
     <ControlButton
@@ -148,24 +153,15 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
       setActivePanel={setActivePanel}
       icon={<TransformIcon className="w-6 h-6" />}
       tooltip={gizmoTooltip}
-      isActive={gizmoMode !== 'off'}
-      onClick={cycleGizmoMode}
-      onDoubleClick={hasChanges ? applyToData : undefined}
+      isActive={showGizmo}
+      onClick={toggleGizmo}
+      onDoubleClick={hasChanges ? applyTransformToData : undefined}
       panelTitle="Transform"
       disabled={!reconstruction}
     >
       <div className={styles.panelContent}>
-        {/* Gizmo mode */}
-        <SelectRow
-          label="Gizmo (T)"
-          value={gizmoMode}
-          onChange={(v) => setGizmoMode(v as GizmoMode)}
-          options={[
-            { value: 'off', label: 'Off' },
-            { value: 'global', label: 'Global (World)' },
-            { value: 'local', label: 'Local (Object)' },
-          ]}
-        />
+        {/* Gizmo toggle */}
+        <ToggleRow label="Gizmo (T)" checked={showGizmo} onChange={toggleGizmo} />
 
         {/* Scale */}
         <SliderRow
@@ -236,7 +232,7 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
         {/* Presets */}
         <div className={styles.presetGroup}>
           <button
-            onClick={() => applyPreset('centerAtOrigin')}
+            onClick={() => applyTransformPreset('centerAtOrigin')}
             className={styles.presetButton}
             data-tooltip="Move scene center to (0,0,0)"
             data-tooltip-pos="bottom"
@@ -291,7 +287,7 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
             Reload
           </button>
           <button
-            onClick={applyToData}
+            onClick={applyTransformToData}
             disabled={!hasChanges}
             className={hasChanges ? styles.actionButtonPrimary : styles.actionButtonPrimaryDisabled}
           >
@@ -362,21 +358,18 @@ const FloorDetectionPanel = memo(function FloorDetectionPanel({ styles, activePa
       setDetectedPlane(plane);
 
       if (plane) {
-        // Auto-orient normal to point towards the side with MORE points
-        // In typical scenes, cameras and objects are above the floor, so more points = "up"
         const distances = computeDistancesToPlane(positions, plane);
 
         // Count points on each side of the plane
-        let pointsAbove = 0;  // positive distance = in normal direction
-        let pointsBelow = 0;  // negative distance = opposite to normal
+        let countOnNormalSide = 0;
+        let countOnOppositeSide = 0;
         for (let i = 0; i < distances.length; i++) {
-          if (distances[i] > 0) pointsAbove++;
-          else if (distances[i] < 0) pointsBelow++;
+          if (distances[i] > 0) countOnNormalSide++;
+          else if (distances[i] < 0) countOnOppositeSide++;
         }
 
-        // If more points are on the negative side, flip normal so it points towards them
-        // This makes the normal point "up" towards the bulk of the scene
-        setNormalFlipped(pointsBelow > pointsAbove);
+        // Flip so normal points toward more points (down toward fewer)
+        setNormalFlipped(countOnNormalSide < countOnOppositeSide);
         setPointDistances(distances);
         if (floorColorMode === 'off') {
           setFloorColorMode('binary');
@@ -525,10 +518,17 @@ export function ViewerControls() {
   const [copiedShareLink, setCopiedShareLink] = useState(false);
   const [copiedEmbedUrl, setCopiedEmbedUrl] = useState(false);
   const [copiedEmbedHtml, setCopiedEmbedHtml] = useState(false);
+  const [includeShareLink, setIncludeShareLink] = useState(true);
+  const [includeScreenshot, setIncludeScreenshot] = useState(true);
+  const [recordCountdown, setRecordCountdown] = useState<number | null>(null);
 
   // Point cloud settings
+  const showPointCloud = usePointCloudStore((s) => s.showPointCloud);
+  const togglePointCloud = usePointCloudStore((s) => s.togglePointCloud);
   const pointSize = usePointCloudStore((s) => s.pointSize);
   const setPointSize = usePointCloudStore((s) => s.setPointSize);
+  const pointOpacity = usePointCloudStore((s) => s.pointOpacity);
+  const setPointOpacity = usePointCloudStore((s) => s.setPointOpacity);
   const colorMode = usePointCloudStore((s) => s.colorMode);
   const setColorMode = usePointCloudStore((s) => s.setColorMode);
   const minTrackLength = usePointCloudStore((s) => s.minTrackLength);
@@ -537,6 +537,8 @@ export function ViewerControls() {
   const setMaxReprojectionError = usePointCloudStore((s) => s.setMaxReprojectionError);
 
   // Camera display settings
+  const showCameras = useCameraStore((s) => s.showCameras);
+  const setShowCameras = useCameraStore((s) => s.setShowCameras);
   const cameraDisplayMode = useCameraStore((s) => s.cameraDisplayMode);
   const setCameraDisplayMode = useCameraStore((s) => s.setCameraDisplayMode);
   const cameraScaleFactor = useCameraStore((s) => s.cameraScaleFactor);
@@ -545,6 +547,8 @@ export function ViewerControls() {
   const setCameraScale = useCameraStore((s) => s.setCameraScale);
   const selectionPlaneOpacity = useCameraStore((s) => s.selectionPlaneOpacity);
   const setSelectionPlaneOpacity = useCameraStore((s) => s.setSelectionPlaneOpacity);
+  const showSelectionHighlight = useCameraStore((s) => s.showSelectionHighlight);
+  const setShowSelectionHighlight = useCameraStore((s) => s.setShowSelectionHighlight);
   const selectionColorMode = useCameraStore((s) => s.selectionColorMode);
   const setSelectionColorMode = useCameraStore((s) => s.setSelectionColorMode);
   const selectionColor = useCameraStore((s) => s.selectionColor);
@@ -577,14 +581,20 @@ export function ViewerControls() {
   const setUndistortionEnabled = useCameraStore((s) => s.setUndistortionEnabled);
 
   // UI settings
+  const showMatches = useUIStore((s) => s.showMatches);
+  const setShowMatches = useUIStore((s) => s.setShowMatches);
   const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
   const setMatchesDisplayMode = useUIStore((s) => s.setMatchesDisplayMode);
   const matchesOpacity = useUIStore((s) => s.matchesOpacity);
   const setMatchesOpacity = useUIStore((s) => s.setMatchesOpacity);
   const matchesColor = useUIStore((s) => s.matchesColor);
   const setMatchesColor = useUIStore((s) => s.setMatchesColor);
-  const axesDisplayMode = useUIStore((s) => s.axesDisplayMode);
-  const setAxesDisplayMode = useUIStore((s) => s.setAxesDisplayMode);
+  const showAxes = useUIStore((s) => s.showAxes);
+  const showGrid = useUIStore((s) => s.showGrid);
+  const setShowAxes = useUIStore((s) => s.setShowAxes);
+  const setShowGrid = useUIStore((s) => s.setShowGrid);
+  const toggleAxes = useUIStore((s) => s.toggleAxes);
+  const toggleGrid = useUIStore((s) => s.toggleGrid);
   const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
   const setAxesCoordinateSystem = useUIStore((s) => s.setAxesCoordinateSystem);
   const axesScale = useUIStore((s) => s.axesScale);
@@ -606,6 +616,21 @@ export function ViewerControls() {
   const screenshotHideLogo = useExportStore((s) => s.screenshotHideLogo);
   const setScreenshotHideLogo = useExportStore((s) => s.setScreenshotHideLogo);
   const takeScreenshot = useExportStore((s) => s.takeScreenshot);
+  const getScreenshotBlob = useExportStore((s) => s.getScreenshotBlob);
+  const recordGif = useExportStore((s) => s.recordGif);
+  const isRecordingGif = useExportStore((s) => s.isRecordingGif);
+  const gifBlobUrl = useExportStore((s) => s.gifBlobUrl);
+  const gifDuration = useExportStore((s) => s.gifDuration);
+  const setGifDuration = useExportStore((s) => s.setGifDuration);
+  const gifDownsample = useExportStore((s) => s.gifDownsample);
+  const setGifDownsample = useExportStore((s) => s.setGifDownsample);
+  const downloadGif = useExportStore((s) => s.downloadGif);
+  const recordingFormat = useExportStore((s) => s.recordingFormat);
+  const setRecordingFormat = useExportStore((s) => s.setRecordingFormat);
+  const recordingQuality = useExportStore((s) => s.recordingQuality);
+  const setRecordingQuality = useExportStore((s) => s.setRecordingQuality);
+  const gifSpeed = useExportStore((s) => s.gifSpeed);
+  const setGifSpeed = useExportStore((s) => s.setGifSpeed);
   const exportFormat = useExportStore((s) => s.exportFormat);
   const setExportFormat = useExportStore((s) => s.setExportFormat);
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
@@ -618,7 +643,6 @@ export function ViewerControls() {
 
   // Transform state for export panel
   const transform = useTransformStore((s) => s.transform);
-  const applyToData = useTransformStore((s) => s.applyToData);
   const hasTransformChanges = !isIdentityEuler(transform);
 
   // Check if share buttons should be shown (loaded from URL or manifest)
@@ -626,6 +650,8 @@ export function ViewerControls() {
   const shareSource = sourceUrl ?? sourceManifest;
 
   // Rig settings (only shown when rig data is available)
+  const showRig = useRigStore((s) => s.showRig);
+  const setShowRig = useRigStore((s) => s.setShowRig);
   const rigDisplayMode = useRigStore((s) => s.rigDisplayMode);
   const setRigDisplayMode = useRigStore((s) => s.setRigDisplayMode);
   const rigColorMode = useRigStore((s) => s.rigColorMode);
@@ -686,6 +712,105 @@ export function ViewerControls() {
     const iframeHtml = generateIframeHtml(embedUrl);
     await copyWithFeedback(iframeHtml, setCopiedEmbedHtml);
   }, [shareSource, currentViewState]);
+
+  // Get reconstruction stats for social sharing
+  const getShareText = useCallback(() => {
+    return 'Made with https://colmapview.github.io/ by @opsiclear';
+  }, []);
+
+  // Copy screenshot to clipboard
+  const copyScreenshotToClipboard = useCallback(async () => {
+    if (!getScreenshotBlob) return false;
+    try {
+      const blob = await getScreenshotBlob();
+      if (blob) {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]);
+        useNotificationStore.getState().addNotification(
+          'info',
+          'Screenshot copied! Press Ctrl+V to paste',
+          4000
+        );
+        return true;
+      }
+    } catch (err) {
+      console.error('Failed to copy screenshot to clipboard:', err);
+    }
+    return false;
+  }, [getScreenshotBlob]);
+
+  // Start recording with countdown
+  const startRecordingWithCountdown = useCallback(() => {
+    if (!recordGif || isRecordingGif || recordCountdown !== null) return;
+
+    setRecordCountdown(3);
+    useNotificationStore.getState().addNotification('info', 'Countdown (3)', 900);
+
+    const countdown = (count: number) => {
+      if (count > 0) {
+        setRecordCountdown(count);
+        if (count < 3) {
+          useNotificationStore.getState().addNotification('info', `Countdown (${count})`, 900);
+        }
+        setTimeout(() => countdown(count - 1), 1000);
+      } else {
+        setRecordCountdown(null);
+        useNotificationStore.getState().addNotification('info', 'Recording started!', 2000);
+        recordGif().then(() => {
+          useNotificationStore.getState().addNotification('info', 'Recording complete! Downloading...', 3000);
+          // Auto download after a short delay to ensure blob URL is set
+          setTimeout(() => {
+            downloadGif();
+          }, 100);
+        });
+      }
+    };
+
+    countdown(3);
+  }, [recordGif, isRecordingGif, recordCountdown, downloadGif]);
+
+  // Handle share to X (Twitter)
+  const handleShareToX = useCallback(async () => {
+    if (!shareSource) return;
+    const url = generateShareableUrl(shareSource, currentViewState);
+    const text = getShareText();
+
+    // Copy screenshot to clipboard for easy pasting (if enabled)
+    if (includeScreenshot) {
+      await copyScreenshotToClipboard();
+    }
+
+    // Open X share dialog
+    const xUrl = includeShareLink
+      ? `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`
+      : `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
+    window.open(xUrl, '_blank', 'width=550,height=420');
+  }, [shareSource, currentViewState, getShareText, copyScreenshotToClipboard, includeShareLink, includeScreenshot]);
+
+  // Handle share to LinkedIn
+  const handleShareToLinkedIn = useCallback(async () => {
+    if (!shareSource) return;
+    const url = generateShareableUrl(shareSource, currentViewState);
+    const text = getShareText();
+
+    // Copy text to clipboard (LinkedIn doesn't support pre-filled text)
+    try {
+      const shareContent = includeShareLink ? `${text}\n${url}` : text;
+      await navigator.clipboard.writeText(shareContent);
+      useNotificationStore.getState().addNotification('info', 'Message copied! Paste in LinkedIn post', 4000);
+    } catch {
+      // Fallback - just notify
+    }
+
+    // Copy screenshot to clipboard for easy pasting (if enabled)
+    if (includeScreenshot) {
+      await copyScreenshotToClipboard();
+    }
+
+    // Open LinkedIn - go to feed to create new post
+    window.open('https://www.linkedin.com/feed/', '_blank', 'width=550,height=420');
+  }, [shareSource, currentViewState, getShareText, copyScreenshotToClipboard, includeShareLink, includeScreenshot]);
 
   // Handle export action
   const handleExport = useCallback(() => {
@@ -765,53 +890,88 @@ export function ViewerControls() {
     setUndistortionEnabled(!undistortionEnabled);
   }, [undistortionEnabled, setUndistortionEnabled]);
 
-  // Cycle through color modes: rgb → error → trackLength → rgb
+  // Cycle through color modes: rgb → error → trackLength → off → rgb
+  const setShowPointCloud = usePointCloudStore((s) => s.setShowPointCloud);
   const cycleColorMode = useCallback(() => {
-    const modes: ColorMode[] = ['rgb', 'error', 'trackLength'];
-    const currentIndex = modes.indexOf(colorMode);
-    const nextIndex = (currentIndex + 1) % modes.length;
-    setColorMode(modes[nextIndex]);
-  }, [colorMode, setColorMode]);
+    if (!showPointCloud) {
+      // off → rgb
+      setShowPointCloud(true);
+      setColorMode('rgb');
+    } else if (colorMode === 'rgb') {
+      // rgb → error
+      setColorMode('error');
+    } else if (colorMode === 'error') {
+      // error → trackLength
+      setColorMode('trackLength');
+    } else {
+      // trackLength → off
+      setShowPointCloud(false);
+    }
+  }, [showPointCloud, colorMode, setShowPointCloud, setColorMode]);
 
   // Cycle through camera display modes: off → frustum → arrow → imageplane → off
+  // Uses showCameras for off state, cameraDisplayMode for the display type
   const cycleCameraDisplayMode = useCallback(() => {
-    const modes: CameraDisplayMode[] = ['off', 'frustum', 'arrow', 'imageplane'];
-    const currentIndex = modes.indexOf(cameraDisplayMode);
-    const nextIndex = (currentIndex + 1) % modes.length;
-    setCameraDisplayMode(modes[nextIndex]);
-  }, [cameraDisplayMode, setCameraDisplayMode]);
+    if (!showCameras) {
+      // off → frustum
+      setShowCameras(true);
+      setCameraDisplayMode('frustum');
+    } else if (cameraDisplayMode === 'frustum') {
+      // frustum → arrow
+      setCameraDisplayMode('arrow');
+    } else if (cameraDisplayMode === 'arrow') {
+      // arrow → imageplane
+      setCameraDisplayMode('imageplane');
+    } else {
+      // imageplane → off
+      setShowCameras(false);
+    }
+  }, [showCameras, cameraDisplayMode, setShowCameras, setCameraDisplayMode]);
 
   // Cycle through matches display modes: off → on → blink → off
   const cycleMatchesDisplayMode = useCallback(() => {
-    const modes: MatchesDisplayMode[] = ['off', 'on', 'blink'];
-    const currentIndex = modes.indexOf(matchesDisplayMode);
-    const nextIndex = (currentIndex + 1) % modes.length;
-    setMatchesDisplayMode(modes[nextIndex]);
-  }, [matchesDisplayMode, setMatchesDisplayMode]);
+    if (!showMatches) {
+      // off → on
+      setShowMatches(true);
+      setMatchesDisplayMode('on');
+    } else if (matchesDisplayMode === 'on') {
+      // on → blink
+      setMatchesDisplayMode('blink');
+    } else {
+      // blink → off
+      setShowMatches(false);
+    }
+  }, [showMatches, matchesDisplayMode, setShowMatches, setMatchesDisplayMode]);
 
   // Cycle through selection color modes: off → static → blink → rainbow → off
   const cycleSelectionColorMode = useCallback(() => {
-    const modes: SelectionColorMode[] = ['off', 'static', 'blink', 'rainbow'];
-    const currentIndex = modes.indexOf(selectionColorMode);
-    const nextIndex = (currentIndex + 1) % modes.length;
-    setSelectionColorMode(modes[nextIndex]);
-  }, [selectionColorMode, setSelectionColorMode]);
+    if (!showSelectionHighlight) {
+      setShowSelectionHighlight(true);
+      setSelectionColorMode('static');
+    } else if (selectionColorMode === 'static') {
+      setSelectionColorMode('blink');
+    } else if (selectionColorMode === 'blink') {
+      setSelectionColorMode('rainbow');
+    } else {
+      setShowSelectionHighlight(false);
+    }
+  }, [showSelectionHighlight, selectionColorMode, setShowSelectionHighlight, setSelectionColorMode]);
 
-  // Cycle through axes display modes: off → axes → grid → both → off
-  const cycleAxesDisplayMode = useCallback(() => {
-    const modes: AxesDisplayMode[] = ['off', 'axes', 'grid', 'both'];
-    const currentIndex = modes.indexOf(axesDisplayMode);
-    const nextIndex = (currentIndex + 1) % modes.length;
-    setAxesDisplayMode(modes[nextIndex]);
-  }, [axesDisplayMode, setAxesDisplayMode]);
 
   // Cycle through rig display modes: off → lines → blink → off
   const cycleRigDisplayMode = useCallback(() => {
-    const modes: RigDisplayMode[] = ['off', 'lines', 'blink'];
-    const currentIndex = modes.indexOf(rigDisplayMode);
-    const nextIndex = (currentIndex + 1) % modes.length;
-    setRigDisplayMode(modes[nextIndex]);
-  }, [rigDisplayMode, setRigDisplayMode]);
+    if (!showRig) {
+      // off → lines
+      setShowRig(true);
+      setRigDisplayMode('lines');
+    } else if (rigDisplayMode === 'lines') {
+      // lines → blink
+      setRigDisplayMode('blink');
+    } else {
+      // blink → off
+      setShowRig(false);
+    }
+  }, [showRig, rigDisplayMode, setShowRig, setRigDisplayMode]);
 
   // Reset view including projection
   const handleResetView = useCallback(() => {
@@ -865,12 +1025,31 @@ export function ViewerControls() {
     [setView]
   );
 
-  // Hotkey for cycling axes/grid
+  // Hotkey for cycling axes & grid states (G)
+  // Cycle: both on → axes only → grid only → both off → both on
+  const cycleAxesGrid = useCallback(() => {
+    if (showAxes && showGrid) {
+      // both on → axes only
+      setShowGrid(false);
+    } else if (showAxes && !showGrid) {
+      // axes only → grid only
+      setShowAxes(false);
+      setShowGrid(true);
+    } else if (!showAxes && showGrid) {
+      // grid only → both off
+      setShowGrid(false);
+    } else {
+      // both off → both on
+      setShowAxes(true);
+      setShowGrid(true);
+    }
+  }, [showAxes, showGrid, setShowAxes, setShowGrid]);
+
   useHotkeys(
-    HOTKEYS.toggleAxesGrid.keys,
-    cycleAxesDisplayMode,
-    { scopes: HOTKEYS.toggleAxesGrid.scopes },
-    [cycleAxesDisplayMode]
+    HOTKEYS.toggleGrid.keys,
+    cycleAxesGrid,
+    { scopes: HOTKEYS.toggleGrid.scopes },
+    [cycleAxesGrid]
   );
 
   // Hotkey for toggling camera mode
@@ -1080,36 +1259,21 @@ export function ViewerControls() {
         icon={
           <HoverIcon
             icon={
-              axesDisplayMode === 'off' ? <AxesOffIcon className="w-6 h-6" /> :
-              axesDisplayMode === 'axes' ? <AxesIcon className="w-6 h-6" /> :
-              axesDisplayMode === 'grid' ? <GridIcon className="w-6 h-6" /> :
-              <AxesGridIcon className="w-6 h-6" />
+              showAxes && showGrid ? <AxesGridIcon className="w-6 h-6" /> :
+              showAxes ? <AxesIcon className="w-6 h-6" /> :
+              showGrid ? <GridIcon className="w-6 h-6" /> :
+              <AxesOffIcon className="w-6 h-6" />
             }
-            label={axesDisplayMode === 'off' ? 'OFF' : axesDisplayMode === 'axes' ? 'AXS' : axesDisplayMode === 'grid' ? 'GRD' : 'A+G'}
+            label={showAxes && showGrid ? 'A+G' : showAxes ? 'AXS' : showGrid ? 'GRD' : 'OFF'}
           />
         }
-        tooltip={
-          axesDisplayMode === 'off' ? 'Axes off (G)' :
-          axesDisplayMode === 'axes' ? 'Show axes (G)' :
-          axesDisplayMode === 'grid' ? 'Show grid (G)' :
-          'Axes + Grid (G)'
-        }
-        isActive={axesDisplayMode !== 'off'}
-        onClick={cycleAxesDisplayMode}
-        panelTitle="Axes / Grid (G)"
+        tooltip="Axes & Grid (G)"
+        isActive={showAxes || showGrid}
+        panelTitle="Axes & Grid (G)"
       >
         <div className={styles.panelContent}>
-          <SelectRow
-            label="Mode"
-            value={axesDisplayMode}
-            onChange={(v) => setAxesDisplayMode(v as AxesDisplayMode)}
-            options={[
-              { value: 'off', label: 'Off' },
-              { value: 'axes', label: 'Axes' },
-              { value: 'grid', label: 'Grid' },
-              { value: 'both', label: 'Axes + Grid' },
-            ]}
-          />
+          <ToggleRow label="Show Axes" checked={showAxes} onChange={toggleAxes} />
+          <ToggleRow label="Show Grid" checked={showGrid} onChange={toggleGrid} />
           <SelectRow
             label="System"
             value={axesCoordinateSystem}
@@ -1126,48 +1290,34 @@ export function ViewerControls() {
               { value: 'unreal', label: 'Unreal' },
             ]}
           />
-          {(axesDisplayMode === 'axes' || axesDisplayMode === 'both') && (
-            <>
-              <SelectRow
-                label="Labels"
-                value={axisLabelMode}
-                onChange={(v) => setAxisLabelMode(v as AxisLabelMode)}
-                options={[
-                  { value: 'off', label: 'Off' },
-                  { value: 'xyz', label: 'XYZ' },
-                  { value: 'extra', label: 'Extra' },
-                ]}
-              />
-              <SliderRow
-                label="Axes Scale"
-                value={Math.log10(axesScale)}
-                min={-3}
-                max={3}
-                step={0.1}
-                onChange={(v) => setAxesScale(Math.pow(10, v))}
-                formatValue={(v) => `10${toSuperscript(v)}`}
-              />
-            </>
-          )}
-          {(axesDisplayMode === 'grid' || axesDisplayMode === 'both') && (
-            <SliderRow
-              label="Grid Scale"
-              value={Math.log10(gridScale)}
-              min={-3}
-              max={3}
-              step={0.1}
-              onChange={(v) => setGridScale(Math.pow(10, v))}
-              formatValue={(v) => `10${toSuperscript(v)}`}
-            />
-          )}
-          {(axesDisplayMode === 'axes' || axesDisplayMode === 'both') && (
-            <div className="text-ds-secondary text-sm mt-3">
-              <div className="mb-1 font-medium">Coordinate System:</div>
-              <div>Different systems have different</div>
-              <div>rest views and may affect</div>
-              <div>horizon lock behavior.</div>
-            </div>
-          )}
+          <SelectRow
+            label="Labels"
+            value={axisLabelMode}
+            onChange={(v) => setAxisLabelMode(v as AxisLabelMode)}
+            options={[
+              { value: 'off', label: 'Off' },
+              { value: 'xyz', label: 'XYZ' },
+              { value: 'extra', label: 'Extra' },
+            ]}
+          />
+          <SliderRow
+            label="Axes Scale"
+            value={Math.log10(axesScale)}
+            min={-3}
+            max={3}
+            step={0.1}
+            onChange={(v) => setAxesScale(Math.pow(10, v))}
+            formatValue={(v) => `10${toSuperscript(v)}`}
+          />
+          <SliderRow
+            label="Grid Scale"
+            value={Math.log10(gridScale)}
+            min={-3}
+            max={3}
+            step={0.1}
+            onChange={(v) => setGridScale(Math.pow(10, v))}
+            formatValue={(v) => `10${toSuperscript(v)}`}
+          />
         </div>
       </ControlButton>
 
@@ -1305,22 +1455,26 @@ export function ViewerControls() {
         icon={
           <HoverIcon
             icon={
+              !showPointCloud ? <ColorOffIcon className="w-6 h-6" /> :
               colorMode === 'rgb' ? <ColorRgbIcon className="w-6 h-6" /> :
               colorMode === 'error' ? <ColorErrorIcon className="w-6 h-6" /> :
               <ColorTrackIcon className="w-6 h-6" />
             }
-            label={colorMode === 'rgb' ? 'RGB' : colorMode === 'error' ? 'ERR' : 'TRK'}
+            label={!showPointCloud ? 'OFF' : colorMode === 'rgb' ? 'RGB' : colorMode === 'error' ? 'ERR' : 'TRK'}
           />
         }
         tooltip={
+          !showPointCloud ? 'Point Cloud: Off (P)' :
           colorMode === 'rgb' ? 'Point Cloud: RGB (P)' :
           colorMode === 'error' ? 'Point Cloud: Error (P)' :
           'Point Cloud: Track (P)'
         }
+        isActive={showPointCloud}
         onClick={cycleColorMode}
         panelTitle="Point Cloud (P)"
       >
         <div className={styles.panelContent}>
+          <ToggleRow label="Show Points" checked={showPointCloud} onChange={togglePointCloud} />
           <SelectRow
             label="Color"
             value={colorMode}
@@ -1332,6 +1486,7 @@ export function ViewerControls() {
             ]}
           />
           <SliderRow label="Size" value={pointSize} min={1} max={10} step={0.5} onChange={setPointSize} />
+          <SliderRow label="Opacity" value={pointOpacity} min={0} max={1} step={0.05} onChange={setPointOpacity} formatValue={(v) => `${Math.round(v * 100)}%`} />
           <SliderRow label="Min Track" value={minTrackLength} min={0} max={20} step={1} onChange={(v) => setMinTrackLength(Math.round(v))} />
           <SliderRow
             label="Max Error"
@@ -1373,37 +1528,37 @@ export function ViewerControls() {
         icon={
           <HoverIcon
             icon={
-              cameraDisplayMode === 'off' ? <CameraOffIcon className="w-6 h-6" /> :
+              !showCameras ? <CameraOffIcon className="w-6 h-6" /> :
               cameraDisplayMode === 'frustum' ? <FrustumIcon className="w-6 h-6" /> :
               cameraDisplayMode === 'arrow' ? <ArrowIcon className="w-6 h-6" /> :
               <ImageIcon className="w-6 h-6" />
             }
-            label={cameraDisplayMode === 'off' ? 'OFF' : cameraDisplayMode === 'frustum' ? 'FRM' : cameraDisplayMode === 'arrow' ? 'ARW' : 'IMG'}
+            label={!showCameras ? 'OFF' : cameraDisplayMode === 'frustum' ? 'FRM' : cameraDisplayMode === 'arrow' ? 'ARW' : 'IMG'}
           />
         }
         tooltip={
-          cameraDisplayMode === 'off' ? 'Cameras hidden (F)' :
+          !showCameras ? 'Cameras hidden (F)' :
           cameraDisplayMode === 'frustum' ? 'Frustum mode (F)' :
           cameraDisplayMode === 'arrow' ? 'Arrow mode (F)' :
           'Image plane mode (F)'
         }
-        isActive={cameraDisplayMode !== 'off'}
+        isActive={showCameras}
         onClick={cycleCameraDisplayMode}
         panelTitle="Camera Display (F)"
       >
         <div className={styles.panelContent}>
+          <ToggleRow label="Show Cameras" checked={showCameras} onChange={setShowCameras} />
           <SelectRow
             label="Mode"
             value={cameraDisplayMode}
             onChange={(v) => setCameraDisplayMode(v as CameraDisplayMode)}
             options={[
-              { value: 'off', label: 'Off' },
               { value: 'frustum', label: 'Frustum' },
               { value: 'arrow', label: 'Arrow' },
               { value: 'imageplane', label: 'Image Plane' },
             ]}
           />
-          {cameraDisplayMode !== 'off' && (
+          {showCameras && (
             <>
               <SelectRow
                 label="Color"
@@ -1455,12 +1610,7 @@ export function ViewerControls() {
             </>
           )}
           <div className="text-ds-secondary text-sm mt-3">
-            {cameraDisplayMode === 'off' ? (
-              <>
-                <div className="mb-1 font-medium">Off:</div>
-                <div>Camera visualizations hidden.</div>
-              </>
-            ) : cameraDisplayMode === 'frustum' ? (
+            {cameraDisplayMode === 'frustum' ? (
               <>
                 <div className="mb-1 font-medium">Frustum:</div>
                 <div>Full camera frustum</div>
@@ -1483,7 +1633,7 @@ export function ViewerControls() {
         </div>
       </ControlButton>
 
-      {cameraDisplayMode !== 'off' && (
+      {showCameras && (
         <>
           {cameraDisplayMode !== 'imageplane' && (
             <ControlButton
@@ -1491,38 +1641,40 @@ export function ViewerControls() {
             activePanel={activePanel}
             setActivePanel={setActivePanel}
             icon={
-              matchesDisplayMode === 'off' ? <MatchOffIcon className="w-6 h-6" /> :
+              !showMatches ? <MatchOffIcon className="w-6 h-6" /> :
               matchesDisplayMode === 'on' ? <MatchOnIcon className="w-6 h-6" /> :
               <MatchBlinkIcon className="w-6 h-6" />
             }
             tooltip={
-              matchesDisplayMode === 'off' ? 'Matches off (M)' :
+              !showMatches ? 'Matches off (M)' :
               matchesDisplayMode === 'on' ? 'Matches on (M)' :
               'Matches blink (M)'
             }
-            isActive={matchesDisplayMode !== 'off'}
+            isActive={showMatches}
             onClick={cycleMatchesDisplayMode}
             panelTitle="Show Matches (M)"
           >
             <div className={styles.panelContent}>
-              <SelectRow
-                label="Mode"
-                value={matchesDisplayMode}
-                onChange={(v) => setMatchesDisplayMode(v as MatchesDisplayMode)}
-                options={[
-                  { value: 'off', label: 'Off' },
-                  { value: 'on', label: 'On' },
-                  { value: 'blink', label: 'Blink' },
-                ]}
-              />
-              {matchesDisplayMode !== 'off' && (
+              <ToggleRow label="Show Matches" checked={showMatches} onChange={setShowMatches} />
+              {showMatches && (
+                <SelectRow
+                  label="Mode"
+                  value={matchesDisplayMode}
+                  onChange={(v) => setMatchesDisplayMode(v as MatchesDisplayMode)}
+                  options={[
+                    { value: 'on', label: 'On' },
+                    { value: 'blink', label: 'Blink' },
+                  ]}
+                />
+              )}
+              {showMatches && (
                 <>
                   <SliderRow label="Opacity" value={matchesOpacity} min={0.5} max={1} step={0.05} onChange={setMatchesOpacity} formatValue={(v) => v.toFixed(2)} />
                   <HueRow label="Color" value={matchesColor} onChange={setMatchesColor} />
                 </>
               )}
               <div className="text-ds-secondary text-sm mt-3">
-                {matchesDisplayMode === 'off' ? (
+                {!showMatches ? (
                   <>
                     <div className="mb-1 font-medium">Off:</div>
                     <div>Match lines hidden.</div>
@@ -1550,46 +1702,48 @@ export function ViewerControls() {
             activePanel={activePanel}
             setActivePanel={setActivePanel}
             icon={
-              selectionColorMode === 'off' ? <SelectionOffIcon className="w-6 h-6" /> :
+              !showSelectionHighlight ? <SelectionOffIcon className="w-6 h-6" /> :
               selectionColorMode === 'static' ? <SelectionStaticIcon className="w-6 h-6" /> :
               selectionColorMode === 'blink' ? <SelectionBlinkIcon className="w-6 h-6" /> :
               <RainbowIcon className="w-6 h-6" />
             }
             tooltip={
-              selectionColorMode === 'off' ? 'Camera only' :
+              !showSelectionHighlight ? 'Selection off' :
               selectionColorMode === 'static' ? 'Static color' :
               selectionColorMode === 'blink' ? 'Blink' : 'Rainbow'
             }
-            isActive={selectionColorMode !== 'off'}
+            isActive={showSelectionHighlight}
             onClick={cycleSelectionColorMode}
-            panelTitle="Selection Color"
+            panelTitle="Selection Highlight"
           >
             <div className={styles.panelContent}>
-              <SelectRow
-                label="Mode"
-                value={selectionColorMode}
-                onChange={(v) => setSelectionColorMode(v as SelectionColorMode)}
-                options={[
-                  { value: 'off', label: 'Camera Only' },
-                  { value: 'static', label: 'Static' },
-                  { value: 'blink', label: 'Blink' },
-                  { value: 'rainbow', label: 'Rainbow' },
-                ]}
+              <ToggleRow
+                label="Show Highlight"
+                checked={showSelectionHighlight}
+                onChange={setShowSelectionHighlight}
               />
-              {(selectionColorMode === 'static' || selectionColorMode === 'blink') && (
-                <HueRow label="Color" value={selectionColor} onChange={setSelectionColor} />
-              )}
-              {(selectionColorMode === 'blink' || selectionColorMode === 'rainbow') && (
-                <SliderRow label="Speed" value={selectionAnimationSpeed} min={0.1} max={5} step={0.1} onChange={setSelectionAnimationSpeed} formatValue={(v) => v.toFixed(1)} />
+              {showSelectionHighlight && (
+                <>
+                  <SelectRow
+                    label="Mode"
+                    value={selectionColorMode}
+                    onChange={(v) => setSelectionColorMode(v as SelectionColorMode)}
+                    options={[
+                      { value: 'static', label: 'Static' },
+                      { value: 'blink', label: 'Blink' },
+                      { value: 'rainbow', label: 'Rainbow' },
+                    ]}
+                  />
+                  {(selectionColorMode === 'static' || selectionColorMode === 'blink') && (
+                    <HueRow label="Color" value={selectionColor} onChange={setSelectionColor} />
+                  )}
+                  {(selectionColorMode === 'blink' || selectionColorMode === 'rainbow') && (
+                    <SliderRow label="Speed" value={selectionAnimationSpeed} min={0.1} max={5} step={0.1} onChange={setSelectionAnimationSpeed} formatValue={(v) => v.toFixed(1)} />
+                  )}
+                </>
               )}
               <div className="text-ds-secondary text-sm mt-3">
-                {selectionColorMode === 'off' ? (
-                  <>
-                    <div className="mb-1 font-medium">Camera Only:</div>
-                    <div>No highlighting for</div>
-                    <div>selected camera points.</div>
-                  </>
-                ) : selectionColorMode === 'static' ? (
+                {selectionColorMode === 'static' ? (
                   <>
                     <div className="mb-1 font-medium">Static:</div>
                     <div>Solid color highlight</div>
@@ -1621,12 +1775,12 @@ export function ViewerControls() {
         setActivePanel={setActivePanel}
         icon={
           <HoverIcon
-            icon={rigDisplayMode === 'off' || !hasRigData ? <RigOffIcon className="w-6 h-6" /> : rigDisplayMode === 'blink' ? <RigBlinkIcon className="w-6 h-6" /> : <RigIcon className="w-6 h-6" />}
-            label={!hasRigData ? 'N/A' : rigDisplayMode === 'off' ? 'OFF' : rigDisplayMode === 'blink' ? 'BLK' : 'RIG'}
+            icon={!showRig || !hasRigData ? <RigOffIcon className="w-6 h-6" /> : rigDisplayMode === 'blink' ? <RigBlinkIcon className="w-6 h-6" /> : <RigIcon className="w-6 h-6" />}
+            label={!hasRigData ? 'N/A' : !showRig ? 'OFF' : rigDisplayMode === 'blink' ? 'BLK' : 'RIG'}
           />
         }
-        tooltip={!hasRigData ? 'Rig not available' : rigDisplayMode === 'off' ? 'Rig connections off' : rigDisplayMode === 'blink' ? 'Rig connections blink' : 'Show rig connections'}
-        isActive={hasRigData && rigDisplayMode !== 'off'}
+        tooltip={!hasRigData ? 'Rig not available' : !showRig ? 'Rig connections off' : rigDisplayMode === 'blink' ? 'Rig connections blink' : 'Show rig connections'}
+        isActive={hasRigData && showRig}
         onClick={hasRigData ? cycleRigDisplayMode : undefined}
         panelTitle="Rig Connections"
         disabled={!hasRigData}
@@ -1634,17 +1788,19 @@ export function ViewerControls() {
         <div className={styles.panelContent}>
           {hasRigData ? (
             <>
-              <SelectRow
-                label="Mode"
-                value={rigDisplayMode}
-                onChange={(v) => setRigDisplayMode(v as RigDisplayMode)}
-                options={[
-                  { value: 'off', label: 'Off' },
-                  { value: 'lines', label: 'Lines' },
-                  { value: 'blink', label: 'Blink' },
-                ]}
-              />
-              {rigDisplayMode !== 'off' && (
+              <ToggleRow label="Show Rig" checked={showRig} onChange={setShowRig} />
+              {showRig && (
+                <SelectRow
+                  label="Mode"
+                  value={rigDisplayMode}
+                  onChange={(v) => setRigDisplayMode(v as RigDisplayMode)}
+                  options={[
+                    { value: 'lines', label: 'Lines' },
+                    { value: 'blink', label: 'Blink' },
+                  ]}
+                />
+              )}
+              {showRig && (
                 <>
                   <SelectRow
                     label="Color"
@@ -1673,7 +1829,7 @@ export function ViewerControls() {
                 <div className="mb-1 font-medium">Detected Rig:</div>
                 <div>{cameraCount} camera{cameraCount !== 1 ? 's' : ''}, {frameCount} frame{frameCount !== 1 ? 's' : ''}</div>
                 <div className="mt-2">
-                  {rigDisplayMode === 'off' ? (
+                  {!showRig ? (
                     <div>Connection lines hidden.</div>
                   ) : (
                     <div>Lines connect cameras with</div>
@@ -1709,6 +1865,7 @@ export function ViewerControls() {
         panelTitle="Screenshot"
       >
         <div className={styles.panelContent}>
+          <div className="text-ds-primary text-sm mb-1">Static:</div>
           <SelectRow
             label="Size"
             value={screenshotSize}
@@ -1733,6 +1890,92 @@ export function ViewerControls() {
               { value: 'webp', label: 'WebP' },
             ]}
           />
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={takeScreenshot}
+              className={styles.actionButton}
+              style={{ flex: 1 }}
+            >
+              Save
+            </button>
+            <button
+              onClick={copyScreenshotToClipboard}
+              className={styles.actionButton}
+              style={{ flex: 1 }}
+            >
+              Copy
+            </button>
+          </div>
+          <div className="text-ds-primary text-sm mt-3 mb-1">Dynamic:</div>
+          <SelectRow
+            label="Format"
+            value={recordingFormat}
+            onChange={(v) => setRecordingFormat(v as 'gif' | 'webm' | 'mp4')}
+            options={[
+              { value: 'gif', label: 'GIF' },
+              { value: 'webm', label: 'WebM' },
+              { value: 'mp4', label: 'MP4' },
+            ]}
+          />
+          <SelectRow
+            label="Quality"
+            value={recordingQuality}
+            onChange={(v) => setRecordingQuality(v as 'low' | 'medium' | 'high' | 'ultra')}
+            options={[
+              { value: 'low', label: 'Low' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'high', label: 'High' },
+              { value: 'ultra', label: 'Ultra' },
+            ]}
+          />
+          <SliderRow
+            label="Duration"
+            value={gifDuration}
+            min={2}
+            max={15}
+            step={1}
+            onChange={setGifDuration}
+            formatValue={(v) => `${v}s`}
+          />
+          <SelectRow
+            label="Scale"
+            value={String(gifDownsample)}
+            onChange={(v) => setGifDownsample(Number(v))}
+            options={[
+              { value: '1', label: '1× (Full)' },
+              { value: '2', label: '½' },
+              { value: '4', label: '¼' },
+              { value: '8', label: '⅛' },
+            ]}
+          />
+          <SelectRow
+            label="Speed"
+            value={String(gifSpeed)}
+            onChange={(v) => setGifSpeed(Number(v))}
+            options={[
+              { value: '1', label: '1×' },
+              { value: '2', label: '2×' },
+              { value: '3', label: '3×' },
+              { value: '4', label: '4×' },
+            ]}
+          />
+          <button
+            onClick={startRecordingWithCountdown}
+            disabled={isRecordingGif || !recordGif || recordCountdown !== null}
+            className={isRecordingGif || recordCountdown !== null ? styles.actionButtonPrimary : styles.actionButton}
+            style={{ width: '100%', marginTop: '8px' }}
+          >
+            {recordCountdown !== null ? `Countdown (${recordCountdown})` : isRecordingGif ? 'Recording...' : 'Record'}
+          </button>
+          {gifBlobUrl && !isRecordingGif && recordCountdown === null && (
+            <button
+              onClick={downloadGif}
+              className={styles.actionButton}
+              style={{ width: '100%', marginTop: '8px' }}
+            >
+              Save
+            </button>
+          )}
           <div
             onClick={() => setScreenshotHideLogo(!screenshotHideLogo)}
             className={`group text-sm mt-3 cursor-pointer ${screenshotHideLogo ? 'text-blue-400' : ''}`}
@@ -1748,6 +1991,83 @@ export function ViewerControls() {
         </div>
       </ControlButton>
 
+      {/* Share button */}
+      <ControlButton
+        panelId="share"
+        activePanel={activePanel}
+        setActivePanel={setActivePanel}
+        icon={<ShareIcon className="w-6 h-6" />}
+        tooltip="Share"
+        panelTitle="Share"
+      >
+        <div className={styles.panelContent}>
+          {canShare && (
+            <>
+              <div className="text-ds-primary text-sm mb-1">Links:</div>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={handleCopyShareLink}
+                  className={copiedShareLink ? styles.actionButtonPrimary : styles.actionButton}
+                >
+                  {copiedShareLink ? (
+                    <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
+                  ) : (
+                    'Copy Link'
+                  )}
+                </button>
+                <button
+                  onClick={handleCopyEmbedUrl}
+                  className={copiedEmbedUrl ? styles.actionButtonPrimary : styles.actionButton}
+                >
+                  {copiedEmbedUrl ? (
+                    <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
+                  ) : (
+                    'Embed URL'
+                  )}
+                </button>
+                <button
+                  onClick={handleCopyEmbedHtml}
+                  className={copiedEmbedHtml ? styles.actionButtonPrimary : styles.actionButton}
+                >
+                  {copiedEmbedHtml ? (
+                    <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
+                  ) : (
+                    'Embed HTML'
+                  )}
+                </button>
+              </div>
+            </>
+          )}
+          <div className={`text-ds-primary text-sm mb-1 ${canShare ? 'mt-3' : ''}`}>Social Media:</div>
+          {canShare && <ToggleRow label="Include Link" checked={includeShareLink} onChange={setIncludeShareLink} />}
+          <ToggleRow label="Screen to Clipboard" checked={includeScreenshot} onChange={setIncludeScreenshot} />
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={handleShareToX}
+                className={styles.actionButton}
+                style={{ flex: 1, padding: '8px' }}
+                data-tooltip="Share to X"
+                data-tooltip-pos="bottom"
+              >
+                <svg viewBox="0 0 24 24" className="w-5 h-5 mx-auto" fill="currentColor">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+              </button>
+              <button
+                onClick={handleShareToLinkedIn}
+                className={styles.actionButton}
+                style={{ flex: 1, padding: '8px' }}
+                data-tooltip="Share to LinkedIn"
+                data-tooltip-pos="bottom"
+              >
+                <svg viewBox="0 0 24 24" className="w-5 h-5 mx-auto" fill="currentColor">
+                  <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </ControlButton>
+
       <ControlButton
         panelId="export"
         activePanel={activePanel}
@@ -1759,45 +2079,6 @@ export function ViewerControls() {
         disabled={!reconstruction}
       >
         <div className={styles.panelContent}>
-          {/* Share buttons - only shown when loaded from URL or manifest */}
-          {canShare && (
-            <>
-              <div className="text-ds-secondary text-sm mb-2 font-medium">Share:</div>
-              <div className="flex flex-col gap-2 mb-4">
-                <button
-                  onClick={handleCopyShareLink}
-                  className={copiedShareLink ? styles.actionButtonPrimary : styles.actionButton}
-                >
-                  {copiedShareLink ? (
-                    <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
-                  ) : (
-                    'Share Link'
-                  )}
-                </button>
-                <button
-                  onClick={handleCopyEmbedUrl}
-                  className={copiedEmbedUrl ? styles.actionButtonPrimary : styles.actionButton}
-                >
-                  {copiedEmbedUrl ? (
-                    <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
-                  ) : (
-                    'Embed'
-                  )}
-                </button>
-                <button
-                  onClick={handleCopyEmbedHtml}
-                  className={copiedEmbedHtml ? styles.actionButtonPrimary : styles.actionButton}
-                >
-                  {copiedEmbedHtml ? (
-                    <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
-                  ) : (
-                    '<Embed>'
-                  )}
-                </button>
-              </div>
-            </>
-          )}
-
           <div className="flex flex-col gap-2">
             <button
               onClick={() => { setExportFormat('binary'); if (reconstruction) exportReconstructionBinary(reconstruction, wasmReconstruction); }}
@@ -1861,7 +2142,7 @@ export function ViewerControls() {
           </div>
           <div className="flex justify-center mt-2">
             <button
-              onClick={applyToData}
+              onClick={applyTransformToData}
               disabled={!hasTransformChanges}
               className={hasTransformChanges ? styles.actionButtonPrimary : styles.actionButtonPrimaryDisabled}
             >
@@ -1897,6 +2178,8 @@ export function ViewerControls() {
               onClick={() => {
                 if (confirm('Clear all settings and reload? This cannot be undone.')) {
                   localStorage.clear();
+                  // Mark warning as shown so it doesn't reappear after reset
+                  markSettingsResetWarningShown();
                   window.location.reload();
                 }
               }}

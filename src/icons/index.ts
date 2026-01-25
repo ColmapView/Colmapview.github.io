@@ -64,6 +64,7 @@ export {
   AxesOffIcon,
   GridIcon,
   AxesGridIcon,
+  ColorOffIcon,
   ColorRgbIcon,
   ColorErrorIcon,
   ColorTrackIcon,

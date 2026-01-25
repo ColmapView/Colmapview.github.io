@@ -17,6 +17,7 @@ import type {
 
 export interface CameraState {
   // Display
+  showCameras: boolean;
   cameraDisplayMode: CameraDisplayMode;
   cameraScaleFactor: CameraScaleFactor;
   cameraScale: number;
@@ -37,6 +38,7 @@ export interface CameraState {
 
   // Selection
   selectedImageId: number | null;
+  showSelectionHighlight: boolean;
   selectionColorMode: SelectionColorMode;
   selectionColor: string;
   selectionAnimationSpeed: number;
@@ -56,6 +58,8 @@ export interface CameraState {
   currentViewState: CameraViewState | null;
 
   // Actions
+  setShowCameras: (show: boolean) => void;
+  toggleCameras: () => void;
   setCameraDisplayMode: (mode: CameraDisplayMode) => void;
   setCameraScaleFactor: (factor: CameraScaleFactor) => void;
   setCameraScale: (scale: number) => void;
@@ -74,6 +78,8 @@ export interface CameraState {
   clearFlyTo: () => void;
   setSelectedImageId: (id: number | null) => void;
   toggleSelectedImageId: (id: number) => void;
+  setShowSelectionHighlight: (show: boolean) => void;
+  toggleSelectionHighlight: () => void;
   setSelectionColorMode: (mode: SelectionColorMode) => void;
   setSelectionColor: (color: string) => void;
   setSelectionAnimationSpeed: (speed: number) => void;
@@ -94,6 +100,7 @@ export interface CameraState {
 export const useCameraStore = create<CameraState>()(
   persist(
     (set, get) => ({
+      showCameras: true,
       cameraDisplayMode: 'frustum',
       cameraScaleFactor: '1',
       cameraScale: 0.25,
@@ -110,6 +117,7 @@ export const useCameraStore = create<CameraState>()(
       flyToImageId: null,
       pointerLock: true,
       selectedImageId: null,
+      showSelectionHighlight: true,
       selectionColorMode: 'rainbow',
       selectionColor: '#00ff00',
       selectionAnimationSpeed: 2,
@@ -120,6 +128,8 @@ export const useCameraStore = create<CameraState>()(
       flyToViewState: null,
       currentViewState: null,
 
+      setShowCameras: (showCameras) => set({ showCameras }),
+      toggleCameras: () => set((state) => ({ showCameras: !state.showCameras })),
       setCameraDisplayMode: (cameraDisplayMode) => set({ cameraDisplayMode }),
       setCameraScaleFactor: (cameraScaleFactor) => set({ cameraScaleFactor }),
       setCameraScale: (cameraScale) => set({ cameraScale }),
@@ -141,6 +151,8 @@ export const useCameraStore = create<CameraState>()(
         set((state) => ({
           selectedImageId: state.selectedImageId === id ? null : id,
         })),
+      setShowSelectionHighlight: (showSelectionHighlight) => set({ showSelectionHighlight }),
+      toggleSelectionHighlight: () => set((state) => ({ showSelectionHighlight: !state.showSelectionHighlight })),
       setSelectionColorMode: (selectionColorMode) => set({ selectionColorMode }),
       setSelectionColor: (selectionColor) => set({ selectionColor }),
       setSelectionAnimationSpeed: (selectionAnimationSpeed) => set({ selectionAnimationSpeed }),
@@ -175,8 +187,31 @@ export const useCameraStore = create<CameraState>()(
     }),
     {
       name: STORAGE_KEYS.camera,
-      version: 0,
+      version: 2,
+      migrate: (persistedState: unknown, version: number) => {
+        const state = persistedState as Record<string, unknown>;
+        if (version < 1) {
+          // Convert old 'off' display mode to showCameras boolean
+          if (state.cameraDisplayMode === 'off') {
+            state.showCameras = false;
+            state.cameraDisplayMode = 'frustum';
+          } else {
+            state.showCameras = true;
+          }
+        }
+        if (version < 2) {
+          // Convert old 'off' selection color mode to showSelectionHighlight boolean
+          if (state.selectionColorMode === 'off') {
+            state.showSelectionHighlight = false;
+            state.selectionColorMode = 'rainbow';
+          } else {
+            state.showSelectionHighlight = true;
+          }
+        }
+        return state;
+      },
       partialize: (state) => ({
+        showCameras: state.showCameras,
         cameraDisplayMode: state.cameraDisplayMode,
         cameraScaleFactor: state.cameraScaleFactor,
         cameraScale: state.cameraScale,
@@ -191,6 +226,7 @@ export const useCameraStore = create<CameraState>()(
         flySpeed: state.flySpeed,
         flyTransitionDuration: state.flyTransitionDuration,
         pointerLock: state.pointerLock,
+        showSelectionHighlight: state.showSelectionHighlight,
         selectionColorMode: state.selectionColorMode,
         selectionColor: state.selectionColor,
         selectionAnimationSpeed: state.selectionAnimationSpeed,

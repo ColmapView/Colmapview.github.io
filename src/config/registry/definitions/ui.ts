@@ -4,10 +4,8 @@
 import { defineSection } from '../types';
 import {
   MATCHES_DISPLAY_MODES,
-  AXES_DISPLAY_MODES,
   AXES_COORDINATE_SYSTEMS,
   AXIS_LABEL_MODES,
-  GIZMO_MODES,
 } from '../../../store/types';
 
 export const uiSection = defineSection({
@@ -38,12 +36,19 @@ export const uiSection = defineSection({
     },
     // Match visualization
     {
+      key: 'showMatches',
+      type: 'boolean',
+      default: false,
+      persist: true,
+      description: 'Show/hide match lines',
+    },
+    {
       key: 'matchesDisplayMode',
       type: 'enum',
       enumValues: MATCHES_DISPLAY_MODES,
-      default: 'off',
+      default: 'on',
       persist: true,
-      description: 'off | on | blink',
+      description: 'on | blink',
     },
     {
       key: 'matchesOpacity',
@@ -80,12 +85,18 @@ export const uiSection = defineSection({
     },
     // Axes and grid
     {
-      key: 'axesDisplayMode',
-      type: 'enum',
-      enumValues: AXES_DISPLAY_MODES,
-      default: 'both',
+      key: 'showAxes',
+      type: 'boolean',
+      default: true,
       persist: true,
-      description: 'off | axes | grid | both',
+      description: 'Show origin axes',
+    },
+    {
+      key: 'showGrid',
+      type: 'boolean',
+      default: true,
+      persist: true,
+      description: 'Show grid plane',
     },
     {
       key: 'axesCoordinateSystem',
@@ -122,12 +133,11 @@ export const uiSection = defineSection({
     },
     // Gizmo
     {
-      key: 'gizmoMode',
-      type: 'enum',
-      enumValues: GIZMO_MODES,
-      default: 'off',
+      key: 'showGizmo',
+      type: 'boolean',
+      default: false,
       persist: true,
-      description: 'off | local | global',
+      description: 'Show transform gizmo',
     },
     // Layout
     {

@@ -8,10 +8,8 @@ import type {
   FrustumColorMode,
   SelectionColorMode,
   MatchesDisplayMode,
-  AxesDisplayMode,
   AxesCoordinateSystem,
   AxisLabelMode,
-  GizmoMode,
   ScreenshotSize,
   ScreenshotFormat,
   ExportFormat,
@@ -20,7 +18,9 @@ import type {
 export const CONFIG_VERSION = 1;
 
 export interface PointCloudConfig {
+  showPointCloud: boolean;
   pointSize: number;
+  pointOpacity: number;
   colorMode: ColorMode;
   minTrackLength: number;
   maxReprojectionError: number | null; // null = Infinity
@@ -54,12 +54,13 @@ export interface UIConfig {
   matchesColor: string;
   maskOverlay: boolean;
   maskOpacity: number;
-  axesDisplayMode: AxesDisplayMode;
+  showAxes: boolean;
+  showGrid: boolean;
   axesCoordinateSystem: AxesCoordinateSystem;
   axesScale: number;
   gridScale: number;
   axisLabelMode: AxisLabelMode;
-  gizmoMode: GizmoMode;
+  showGizmo: boolean;
   galleryCollapsed: boolean;
 }
 

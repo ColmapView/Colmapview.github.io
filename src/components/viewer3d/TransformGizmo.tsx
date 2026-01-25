@@ -2,7 +2,7 @@ import { useRef, useMemo, useState, useCallback, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
-import { useTransformStore, useReconstructionStore, useUIStore } from '../../store';
+import { useTransformStore, useReconstructionStore, useUIStore, applyTransformToData } from '../../store';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { VIZ_COLORS, contextMenuStyles, hoverCardStyles, ICON_SIZES } from '../../theme';
 import { ResetIcon, ReloadIcon, CheckIcon, OffIcon } from '../../icons';
@@ -31,7 +31,6 @@ const OPACITY = {
 interface TransformGizmoProps {
   center: [number, number, number];
   size: number;
-  coordinateMode: 'local' | 'global';
 }
 
 type GizmoAxis = 'x' | 'y' | 'z' | null;
@@ -190,15 +189,14 @@ function TranslationArrow({
   );
 }
 
-export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoProps) {
+export function TransformGizmo({ center, size }: TransformGizmoProps) {
   const { camera, gl } = useThree();
   const controls = useThree((state) => state.controls) as unknown as ControlsWithEnabled | undefined;
   const transform = useTransformStore((s) => s.transform);
   const setTransform = useTransformStore((s) => s.setTransform);
   const resetTransform = useTransformStore((s) => s.resetTransform);
-  const applyToData = useTransformStore((s) => s.applyToData);
   const droppedFiles = useReconstructionStore((s) => s.droppedFiles);
-  const setGizmoMode = useUIStore((s) => s.setGizmoMode);
+  const setShowGizmo = useUIStore((s) => s.setShowGizmo);
   const { processFiles } = useFileDropzone();
 
   // Drag state
@@ -224,7 +222,6 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
     };
     startRotation: THREE.Quaternion;  // Rotation at drag start for axis alignment
     plane: THREE.Plane;
-    coordinateMode: 'local' | 'global';  // Coordinate mode at drag start
   } | null>(null);
 
   const groupRef = useRef<THREE.Group>(null);
@@ -235,9 +232,9 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
     return new THREE.Quaternion().setFromEuler(euler);
   }, [transform.rotationX, transform.rotationY, transform.rotationZ]);
 
-  // Get drag plane for the axis
+  // Get drag plane for the axis (always uses global/world coordinates)
   const getDragPlane = useCallback(
-    (axis: GizmoAxis, mode: GizmoMode, coordMode: 'local' | 'global'): THREE.Plane => {
+    (axis: GizmoAxis, mode: GizmoMode): THREE.Plane => {
       const gizmoCenter = new THREE.Vector3(...center);
 
       if (mode === 'translate') {
@@ -250,11 +247,6 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
         const axisDir = axis === 'x' ? new THREE.Vector3(1, 0, 0)
                      : axis === 'y' ? new THREE.Vector3(0, 1, 0)
                      : new THREE.Vector3(0, 0, 1);
-
-        // Apply local rotation to axis only in local mode
-        if (coordMode === 'local') {
-          axisDir.applyQuaternion(localRotation);
-        }
 
         // Find the plane that contains the axis and is most perpendicular to camera
         planeNormal = axisDir.clone().cross(cameraDir).cross(axisDir).normalize();
@@ -280,14 +272,10 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
             planeNormal = new THREE.Vector3(0, 0, 1);
             break;
         }
-        // Apply local rotation only in local mode
-        if (coordMode === 'local') {
-          planeNormal.applyQuaternion(localRotation);
-        }
         return new THREE.Plane().setFromNormalAndCoplanarPoint(planeNormal, gizmoCenter);
       }
     },
-    [camera, center, localRotation]
+    [camera, center]
   );
 
   // Get world position from pointer (accepts clientX/clientY directly)
@@ -316,17 +304,17 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
 
       // Disable camera controls immediately to block orbit
       if (controls?.enabled) {
-         
+
         controls.enabled.current = false;
       }
 
-      const plane = getDragPlane(axis, mode, coordinateMode);
+      const plane = getDragPlane(axis, mode);
       const startPoint = getWorldPosition(e.nativeEvent.clientX, e.nativeEvent.clientY, plane);
 
       if (!startPoint) {
         // Re-enable if we can't start drag
         if (controls?.enabled) {
-           
+
           controls.enabled.current = true;
         }
         return;
@@ -356,14 +344,13 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
         startTransform,
         startRotation,
         plane,
-        coordinateMode,
       };
 
       setDragging(true);
       gl.domElement.setPointerCapture(e.pointerId);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- center is captured at drag start, shouldn't cause re-bind mid-drag
-    [getDragPlane, getWorldPosition, transform, gl, controls, localRotation, coordinateMode]
+    [getDragPlane, getWorldPosition, transform, gl, controls, localRotation]
   );
 
   // Add global pointer event listeners for dragging
@@ -371,31 +358,16 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
     (e: PointerEvent) => {
       if (!dragging || !dragRef.current) return;
 
-      const { axis, mode, startPoint, startTransform, startRotation, plane, coordinateMode: coordMode } = dragRef.current;
+      const { axis, mode, startPoint, startTransform, startRotation, plane } = dragRef.current;
       const currentPoint = getWorldPosition(e.clientX, e.clientY, plane);
 
       if (!currentPoint || !axis) return;
 
       if (mode === 'translate') {
-        // Get axis direction
-        let axisDir: THREE.Vector3;
-        switch (axis) {
-          case 'x':
-            axisDir = new THREE.Vector3(1, 0, 0);
-            break;
-          case 'y':
-            axisDir = new THREE.Vector3(0, 1, 0);
-            break;
-          case 'z':
-          default:
-            axisDir = new THREE.Vector3(0, 0, 1);
-            break;
-        }
-        // In local mode, transform to world space using rotation at drag start
-        // In global mode, use world axis directly
-        if (coordMode === 'local') {
-          axisDir.applyQuaternion(startRotation);
-        }
+        // Get axis direction (always world/global)
+        const axisDir = axis === 'x' ? new THREE.Vector3(1, 0, 0)
+                      : axis === 'y' ? new THREE.Vector3(0, 1, 0)
+                      : new THREE.Vector3(0, 0, 1);
 
         // Project movement onto axis (in world space)
         const delta = currentPoint.clone().sub(startPoint);
@@ -418,25 +390,10 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
         const startDir = startPoint.clone().sub(pivotPoint).normalize();
         const currentDir = currentPoint.clone().sub(pivotPoint).normalize();
 
-        // Get rotation axis
-        let worldAxis: THREE.Vector3;
-        switch (axis) {
-          case 'x':
-            worldAxis = new THREE.Vector3(1, 0, 0);
-            break;
-          case 'y':
-            worldAxis = new THREE.Vector3(0, 1, 0);
-            break;
-          case 'z':
-          default:
-            worldAxis = new THREE.Vector3(0, 0, 1);
-            break;
-        }
-        // In local mode, transform to world space using rotation at drag start
-        // In global mode, use world axis directly
-        if (coordMode === 'local') {
-          worldAxis.applyQuaternion(startRotation);
-        }
+        // Get rotation axis (always world/global)
+        const worldAxis = axis === 'x' ? new THREE.Vector3(1, 0, 0)
+                        : axis === 'y' ? new THREE.Vector3(0, 1, 0)
+                        : new THREE.Vector3(0, 0, 1);
 
         // Calculate signed angle
         const cross = startDir.clone().cross(currentDir);
@@ -567,7 +524,7 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
   }, [dragging]);
 
   return (
-    <group ref={groupRef} position={center} quaternion={coordinateMode === 'local' ? localRotation : undefined}>
+    <group ref={groupRef} position={center}>
       {/* Translation arrows */}
       <TranslationArrow
         axis="x"
@@ -659,7 +616,7 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
           <div className={hoverCardStyles.container}>
             <div className={hoverCardStyles.title}>Transform Gizmo</div>
             <div className={hoverCardStyles.subtitle}>
-              {coordinateMode === 'local' ? 'Local' : 'Global'} • {hoveredAxis.toUpperCase()}-axis • {hoveredMode}
+              {hoveredAxis.toUpperCase()}-axis • {hoveredMode}
             </div>
             <div className={hoverCardStyles.hint}>
               <div className={hoverCardStyles.hintRow}>
@@ -690,8 +647,8 @@ export function TransformGizmo({ center, size, coordinateMode }: TransformGizmoP
           onClose={() => setContextMenu(null)}
           onReset={() => { resetTransform(); setContextMenu(null); }}
           onReload={() => { if (droppedFiles) { resetTransform(); processFiles(droppedFiles); } setContextMenu(null); }}
-          onApply={() => { applyToData(); setContextMenu(null); }}
-          onOff={() => { setGizmoMode('off'); setContextMenu(null); }}
+          onApply={() => { applyTransformToData(); setContextMenu(null); }}
+          onOff={() => { setShowGizmo(false); setContextMenu(null); }}
         />
       )}
     </group>

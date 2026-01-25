@@ -64,10 +64,12 @@ describe("cameraStore", () => {
   describe("camera display settings", () => {
     it("should update camera display mode", () => {
       const { setCameraDisplayMode } = useCameraStore.getState();
-      setCameraDisplayMode("off");
-      assertEquals(useCameraStore.getState().cameraDisplayMode, "off");
+      setCameraDisplayMode("frustum");
+      assertEquals(useCameraStore.getState().cameraDisplayMode, "frustum");
       setCameraDisplayMode("arrow");
       assertEquals(useCameraStore.getState().cameraDisplayMode, "arrow");
+      setCameraDisplayMode("imageplane");
+      assertEquals(useCameraStore.getState().cameraDisplayMode, "imageplane");
     });
 
     it("should update camera scale", () => {
@@ -138,14 +140,14 @@ describe("uiStore", () => {
       showPoints3D: false,
       showMatchesInModal: false,
       matchedImageId: null,
-      matchesDisplayMode: "off",
+      showMatches: false,
+      matchesDisplayMode: "on",
       matchesOpacity: 1,
       showMaskOverlay: false,
       maskOpacity: 0.7,
-      axesDisplayMode: "axes",
-      axesOpacity: 1,
+      showAxes: true,
+      showGrid: true,
       backgroundColor: "#ffffff",
-      autoRotate: false,
       viewResetTrigger: 0,
     });
   });
@@ -186,12 +188,6 @@ describe("uiStore", () => {
   });
 
   describe("view controls", () => {
-    it("should toggle auto rotate", () => {
-      const { setAutoRotate } = useUIStore.getState();
-      setAutoRotate(true);
-      assertEquals(useUIStore.getState().autoRotate, true);
-    });
-
     it("should update background color", () => {
       const { setBackgroundColor } = useUIStore.getState();
       setBackgroundColor("#000000");
@@ -208,23 +204,44 @@ describe("uiStore", () => {
   });
 
   describe("helpers visibility", () => {
-    it("should set axes display mode and opacity", () => {
-      const { setAxesDisplayMode, setAxesOpacity } = useUIStore.getState();
+    it("should toggle axes and grid visibility", () => {
+      const { setShowAxes, setShowGrid, toggleAxes, toggleGrid } = useUIStore.getState();
 
-      setAxesDisplayMode("off");
-      assertEquals(useUIStore.getState().axesDisplayMode, "off");
+      // Test setShowAxes
+      setShowAxes(false);
+      assertEquals(useUIStore.getState().showAxes, false);
 
-      setAxesDisplayMode("grid");
-      assertEquals(useUIStore.getState().axesDisplayMode, "grid");
+      setShowAxes(true);
+      assertEquals(useUIStore.getState().showAxes, true);
 
-      setAxesOpacity(0.5);
-      assertEquals(useUIStore.getState().axesOpacity, 0.5);
+      // Test toggleAxes
+      toggleAxes();
+      assertEquals(useUIStore.getState().showAxes, false);
+
+      // Test setShowGrid
+      setShowGrid(false);
+      assertEquals(useUIStore.getState().showGrid, false);
+
+      setShowGrid(true);
+      assertEquals(useUIStore.getState().showGrid, true);
+
+      // Test toggleGrid
+      toggleGrid();
+      assertEquals(useUIStore.getState().showGrid, false);
     });
 
-    it("should set matches display mode and opacity", () => {
-      const { setMatchesDisplayMode, setMatchesOpacity } =
+    it("should set matches visibility, display mode and opacity", () => {
+      const { setShowMatches, setMatchesDisplayMode, setMatchesOpacity } =
         useUIStore.getState();
 
+      // Test showMatches toggle
+      setShowMatches(true);
+      assertEquals(useUIStore.getState().showMatches, true);
+
+      setShowMatches(false);
+      assertEquals(useUIStore.getState().showMatches, false);
+
+      // Test matchesDisplayMode
       setMatchesDisplayMode("on");
       assertEquals(useUIStore.getState().matchesDisplayMode, "on");
 

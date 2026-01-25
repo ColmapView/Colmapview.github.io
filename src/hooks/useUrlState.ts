@@ -74,31 +74,42 @@ function fromBase64Url(str: string): Uint8Array | null {
  */
 const SHAREABLE_FIELDS = {
   pointCloud: new Set([
+    'showPointCloud',
     'pointSize',
+    'pointOpacity',
     'colorMode',
     'minTrackLength',
     'maxReprojectionError',
   ]),
 
   ui: new Set([
+    // Point visualization
+    'showPoints2D',
+    'showPoints3D',
     // Scene display
-    'axesDisplayMode',
+    'showAxes',
+    'showGrid',
     'axesCoordinateSystem',
     'axesScale',
     'gridScale',
     'axisLabelMode',
     'backgroundColor',
-    'gizmoMode',
+    'showGizmo',
     // Layout
     'galleryCollapsed',
     // Match visualization (important for showing camera relationships)
+    'showMatches',
     'matchesDisplayMode',
     'matchesOpacity',
     'matchesColor',
+    // Mask overlay
+    'showMaskOverlay',
+    'maskOpacity',
   ]),
 
   camera: new Set([
     // Frustum display
+    'showCameras',
     'cameraDisplayMode',
     'cameraScaleFactor',
     'cameraScale',
@@ -107,7 +118,8 @@ const SHAREABLE_FIELDS = {
     // Projection
     'cameraProjection',
     'cameraFov',
-    // Image planes
+    // Selection
+    'showSelectionHighlight',
     'selectionPlaneOpacity',
     // Undistortion (affects image display on frustums)
     'undistortionEnabled',
@@ -115,7 +127,9 @@ const SHAREABLE_FIELDS = {
   ]),
 
   rig: new Set([
+    'showRig',
     'rigDisplayMode',
+    'rigColorMode',
     'rigLineColor',
     'rigLineOpacity',
   ]),
@@ -232,14 +246,12 @@ function encodeCameraStateBinary(state: CameraViewState): Uint8Array {
 
   const [px, py, pz] = state.position;
   const [tx, ty, tz] = state.target;
-  let [qx, qy, qz, qw] = state.quaternion;
+  const [origQx, origQy, origQz, qw] = state.quaternion;
 
   // Normalize quaternion to have qw >= 0 (q and -q represent the same rotation)
-  if (qw < 0) {
-    qx = -qx;
-    qy = -qy;
-    qz = -qz;
-  }
+  const qx = qw < 0 ? -origQx : origQx;
+  const qy = qw < 0 ? -origQy : origQy;
+  const qz = qw < 0 ? -origQz : origQz;
 
   view.setFloat64(0, px, true);  // little-endian
   view.setFloat64(8, py, true);

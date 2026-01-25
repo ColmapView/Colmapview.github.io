@@ -6,6 +6,7 @@ import { getImageFile, getMaskFile, getUrlImageCached, fetchUrlImage, fetchUrlMa
 import { useFileUrl } from '../../hooks/useFileUrl';
 import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, MODAL, buttonStyles, inputStyles, resizeHandleStyles, modalStyles } from '../../theme';
 import { HOTKEYS } from '../../config/hotkeys';
+import { ModalErrorBoundary } from './ModalErrorBoundary';
 
 const CAMERA_MODEL_NAMES: Record<number, string> = {
   0: 'SIMPLE_PINHOLE',
@@ -1223,25 +1224,26 @@ export function ImageDetailModal() {
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div
-          className="flex items-center justify-between px-4 py-2 rounded-t-lg bg-ds-secondary text-xs cursor-move select-none"
-          onMouseDown={handleDragStart}
-        >
-          <span className="text-ds-primary">
-            {isMatchViewMode
-              ? `Image Matches: ${image?.name} ↔ ${matchedImage?.name} (${currentMatchCount} matches)`
-              : `Image #${imageDetailId}: ${image?.name}`}
-          </span>
-          <button
-            onClick={closeImageDetail}
-            onMouseDown={(e) => e.stopPropagation()}
-            className={modalStyles.closeButton}
+        <ModalErrorBoundary onClose={closeImageDetail}>
+          <div
+            className="flex items-center justify-between px-4 py-2 rounded-t-lg bg-ds-secondary text-xs cursor-move select-none"
+            onMouseDown={handleDragStart}
           >
-            ×
-          </button>
-        </div>
+            <span className="text-ds-primary">
+              {isMatchViewMode
+                ? `Image Matches: ${image?.name} ↔ ${matchedImage?.name} (${currentMatchCount} matches)`
+                : `Image #${imageDetailId}: ${image?.name}`}
+            </span>
+            <button
+              onClick={closeImageDetail}
+              onMouseDown={(e) => e.stopPropagation()}
+              className={modalStyles.closeButton}
+            >
+              ×
+            </button>
+          </div>
 
-        <div className="flex flex-col flex-1 overflow-hidden px-4 pt-1 pb-4 gap-2">
+          <div className="flex flex-col flex-1 overflow-hidden px-4 pt-1 pb-4 gap-2">
           <div className="flex-shrink-0 overflow-x-auto py-1">
             <CameraPoseInfoDisplay camera={camera} qvec={image.qvec} tvec={image.tvec} />
           </div>
@@ -1565,6 +1567,7 @@ export function ImageDetailModal() {
             </div>
           </div>
         </div>
+        </ModalErrorBoundary>
 
         <div className={`${resizeHandleStyles.corner} ${resizeHandleStyles.nw}`} onMouseDown={(e) => handleResizeStart(e, 'nw')} />
         <div className={`${resizeHandleStyles.corner} ${resizeHandleStyles.ne}`} onMouseDown={(e) => handleResizeStart(e, 'ne')} />

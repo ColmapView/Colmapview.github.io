@@ -363,6 +363,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
   const openImageDetail = useUIStore((s) => s.openImageDetail);
   const setMatchedImageId = useUIStore((s) => s.setMatchedImageId);
   const setShowMatchesInModal = useUIStore((s) => s.setShowMatchesInModal);
+  const showMatches = useUIStore((s) => s.showMatches);
   const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
   const matchesColor = useUIStore((s) => s.matchesColor);
   const selectedImageId = useCameraStore((s) => s.selectedImageId);
@@ -386,7 +387,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
 
   // Compute matched image IDs when matches are shown (uses pre-computed connectedImagesIndex)
   const matchedImageIds = useMemo(() => {
-    if (!reconstruction || selectedImageId === null || matchesDisplayMode === 'off') {
+    if (!reconstruction || selectedImageId === null || !showMatches) {
       return new Set<number>();
     }
     const connections = reconstruction.connectedImagesIndex.get(selectedImageId);
@@ -394,7 +395,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
       return new Set<number>();
     }
     return new Set(connections.keys());
-  }, [reconstruction, selectedImageId, matchesDisplayMode]);
+  }, [reconstruction, selectedImageId, showMatches]);
 
   // Click handlers
   const handleClick = useCallback((imageId: number) => {
@@ -957,7 +958,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
                         isSelected={selectedImageId === img.imageId}
                         isMatched={matchedImageIds.has(img.imageId)}
                         matchesColor={matchesColor}
-                        matchesBlink={matchesDisplayMode === 'blink'}
+                        matchesBlink={showMatches && matchesDisplayMode === 'blink'}
                         onClick={handleClick}
                         onDoubleClick={handleDoubleClick}
                         onRightClick={handleRightClick}
@@ -1000,7 +1001,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
                       isSelected={selectedImageId === img.imageId}
                       isMatched={matchedImageIds.has(img.imageId)}
                       matchesColor={matchesColor}
-                      matchesBlink={matchesDisplayMode === 'blink'}
+                      matchesBlink={showMatches && matchesDisplayMode === 'blink'}
                       onClick={handleClick}
                       onDoubleClick={handleDoubleClick}
                       onRightClick={handleRightClick}

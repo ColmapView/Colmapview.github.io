@@ -19,7 +19,7 @@ export type AutoRotateMode = (typeof AUTO_ROTATE_MODES)[number];
 export const HORIZON_LOCK_MODES = ['off', 'on', 'flip'] as const;
 export type HorizonLockMode = (typeof HORIZON_LOCK_MODES)[number];
 
-export const CAMERA_DISPLAY_MODES = ['off', 'frustum', 'arrow', 'imageplane'] as const;
+export const CAMERA_DISPLAY_MODES = ['frustum', 'arrow', 'imageplane'] as const;
 export type CameraDisplayMode = (typeof CAMERA_DISPLAY_MODES)[number];
 
 export const FRUSTUM_COLOR_MODES = ['single', 'byCamera', 'byRigFrame'] as const;
@@ -32,14 +32,11 @@ export const UNDISTORTION_MODES = ['cropped', 'fullFrame'] as const;
 export type UndistortionMode = (typeof UNDISTORTION_MODES)[number];
 
 // Visualization
-export const MATCHES_DISPLAY_MODES = ['off', 'on', 'blink'] as const;
+export const MATCHES_DISPLAY_MODES = ['on', 'blink'] as const;
 export type MatchesDisplayMode = (typeof MATCHES_DISPLAY_MODES)[number];
 
-export const SELECTION_COLOR_MODES = ['off', 'static', 'blink', 'rainbow'] as const;
+export const SELECTION_COLOR_MODES = ['static', 'blink', 'rainbow'] as const;
 export type SelectionColorMode = (typeof SELECTION_COLOR_MODES)[number];
-
-export const AXES_DISPLAY_MODES = ['off', 'axes', 'grid', 'both'] as const;
-export type AxesDisplayMode = (typeof AXES_DISPLAY_MODES)[number];
 
 export const AXES_COORDINATE_SYSTEMS = [
   'colmap',
@@ -57,11 +54,8 @@ export type AxesCoordinateSystem = (typeof AXES_COORDINATE_SYSTEMS)[number];
 export const AXIS_LABEL_MODES = ['off', 'xyz', 'extra'] as const;
 export type AxisLabelMode = (typeof AXIS_LABEL_MODES)[number];
 
-export const GIZMO_MODES = ['off', 'local', 'global'] as const;
-export type GizmoMode = (typeof GIZMO_MODES)[number];
-
 // Rig visualization
-export const RIG_DISPLAY_MODES = ['off', 'lines', 'blink'] as const;
+export const RIG_DISPLAY_MODES = ['lines', 'blink'] as const;
 export type RigDisplayMode = (typeof RIG_DISPLAY_MODES)[number];
 
 export const RIG_COLOR_MODES = ['single', 'perFrame'] as const;

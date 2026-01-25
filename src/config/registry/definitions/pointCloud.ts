@@ -9,6 +9,13 @@ export const pointCloudSection = defineSection({
   storeHook: 'usePointCloudStore',
   properties: [
     {
+      key: 'showPointCloud',
+      type: 'boolean',
+      default: true,
+      persist: true,
+      description: 'Show point cloud',
+    },
+    {
       key: 'pointSize',
       type: 'number',
       min: 0.1,
@@ -16,6 +23,15 @@ export const pointCloudSection = defineSection({
       default: 2,
       persist: true,
       description: 'Point size (0.1 - 50)',
+    },
+    {
+      key: 'pointOpacity',
+      type: 'number',
+      min: 0,
+      max: 1,
+      default: 1,
+      persist: true,
+      description: 'Point opacity (0 - 1)',
     },
     {
       key: 'colorMode',

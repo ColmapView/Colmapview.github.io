@@ -49,11 +49,11 @@ function extractFrameId(imageName: string): string {
  */
 export function RigConnections() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
+  const showRig = useRigStore((s) => s.showRig);
   const rigDisplayMode = useRigStore((s) => s.rigDisplayMode);
   const rigColorMode = useRigStore((s) => s.rigColorMode);
   const rigLineColor = useRigStore((s) => s.rigLineColor);
   const rigLineOpacity = useRigStore((s) => s.rigLineOpacity);
-  const cameraDisplayMode = useCameraStore((s) => s.cameraDisplayMode);
   const selectedImageId = useCameraStore((s) => s.selectedImageId);
   const unselectedCameraOpacity = useCameraStore((s) => s.unselectedCameraOpacity);
 
@@ -70,8 +70,8 @@ export function RigConnections() {
 
   // Build geometry data with positions, colors, and frame membership for selection
   const geometryData = useMemo(() => {
-    // Render when in lines or blink mode
-    if ((rigDisplayMode !== 'lines' && rigDisplayMode !== 'blink') || !reconstruction) return null;
+    // Render when rig is shown
+    if (!showRig || !reconstruction) return null;
 
     // Group images by frame identifier (extracted from image name)
     const frameGroups = new Map<string, Image[]>();
@@ -134,7 +134,7 @@ export function RigConnections() {
       alphas: new Float32Array(alphas),
       lineFrameImageIds,
     };
-  }, [reconstruction, rigDisplayMode, rigColorMode]);
+  }, [reconstruction, showRig, rigColorMode]);
 
   // Create shader material for per-vertex alpha support
   const shaderMaterial = useMemo(() => {
@@ -213,8 +213,8 @@ export function RigConnections() {
     };
   });
 
-  // Don't render when off, camera frustums hidden, or no geometry data
-  if (rigDisplayMode === 'off' || cameraDisplayMode === 'off' || !geometryData) return null;
+  // Don't render when off or no geometry data
+  if (!showRig || !geometryData) return null;
 
   return (
     <lineSegments material={shaderMaterial} renderOrder={998}>

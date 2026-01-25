@@ -124,9 +124,9 @@ export const HOTKEYS: HotkeyRegistry = {
     category: 'camera',
     scopes: ['viewer'],
   },
-  toggleAxesGrid: {
+  toggleGrid: {
     keys: 'g',
-    description: 'Cycle axes/grid',
+    description: 'Toggle grid',
     category: 'camera',
     scopes: ['viewer'],
   },
@@ -217,6 +217,18 @@ export const HOTKEYS: HotkeyRegistry = {
   speedBoost: {
     keys: 'shift',
     description: 'Speed boost (hold)',
+    category: 'camera',
+    scopes: ['viewer'],
+  },
+  adjustFrustumSize: {
+    keys: 'alt+scroll',
+    description: 'Adjust camera frustum size',
+    category: 'camera',
+    scopes: ['viewer'],
+  },
+  adjustPointSize: {
+    keys: 'ctrl+scroll',
+    description: 'Adjust point cloud size',
     category: 'camera',
     scopes: ['viewer'],
   },

@@ -1,7 +1,7 @@
 import { Suspense, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { PointCloud } from './PointCloud';
+import { PointCloud } from './PointCloud/index';
 import { CameraFrustums, CameraMatches } from './CameraFrustums';
 import { RigConnections } from './RigConnections';
 import { ViewerControls } from './ViewerControls';
@@ -15,9 +15,11 @@ import { ScreenshotCapture } from './ScreenshotCapture';
 import { FpsTracker } from './FpsTracker';
 import { FooterBranding } from './FooterBranding';
 import { GlobalContextMenu } from './GlobalContextMenu';
+import { Scene3DErrorBoundary } from './Scene3DErrorBoundary';
 import { DistanceInputModal } from '../modals/DistanceInputModal';
 import { FloorAlignModal } from '../modals/FloorAlignModal';
 import { useReconstructionStore, useUIStore, useCameraStore, useTransformStore, usePointPickingStore } from '../../store';
+
 import { useIsAlignmentMode } from '../../hooks/useAlignmentMode';
 import { getImageWorldPosition } from '../../utils/colmapTransforms';
 import { createSim3dFromEuler, sim3dToMatrix4, isIdentityEuler, transformPoint } from '../../utils/sim3dTransforms';
@@ -115,12 +117,14 @@ function SceneContent() {
     return { center: [0, 0, 0] as [number, number, number], radius: 5 };
   }, [reconstruction, wasmReconstruction]);
 
-  const axesDisplayMode = useUIStore((s) => s.axesDisplayMode);
+  const showCameras = useCameraStore((s) => s.showCameras);
+  const showAxes = useUIStore((s) => s.showAxes);
+  const showGrid = useUIStore((s) => s.showGrid);
   const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
   const axesScale = useUIStore((s) => s.axesScale);
   const gridScale = useUIStore((s) => s.gridScale);
   const axisLabelMode = useUIStore((s) => s.axisLabelMode);
-  const gizmoMode = useUIStore((s) => s.gizmoMode);
+  const showGizmo = useUIStore((s) => s.showGizmo);
   const viewResetTrigger = useUIStore((s) => s.viewResetTrigger);
   const viewDirection = useUIStore((s) => s.viewDirection);
   const viewTrigger = useUIStore((s) => s.viewTrigger);
@@ -146,31 +150,33 @@ function SceneContent() {
 
       {/* Transformable content - wrapped in group when preview is active */}
       {/* Hide frustums during alignment modes (point picking or floor detection) for cleaner visualization */}
+      {/* PointCloud always rendered - it handles showPointCloud internally for main points,
+          but selection overlay is always visible when a camera is selected */}
       {transformMatrix ? (
         <group matrixAutoUpdate={false} matrix={transformMatrix}>
           <PointCloud />
-          {!isAlignmentMode && <CameraFrustums />}
-          {!isAlignmentMode && <CameraMatches />}
-          {!isAlignmentMode && <RigConnections />}
+          {!isAlignmentMode && showCameras && <CameraFrustums />}
+          {!isAlignmentMode && showCameras && <CameraMatches />}
+          {!isAlignmentMode && showCameras && <RigConnections />}
         </group>
       ) : (
         <>
           <PointCloud />
-          {!isAlignmentMode && <CameraFrustums />}
-          {!isAlignmentMode && <CameraMatches />}
-          {!isAlignmentMode && <RigConnections />}
+          {!isAlignmentMode && showCameras && <CameraFrustums />}
+          {!isAlignmentMode && showCameras && <CameraMatches />}
+          {!isAlignmentMode && showCameras && <RigConnections />}
         </>
       )}
 
       {/* Axes/Grid stay in original coordinate system */}
       {/* Show axes automatically when in alignment mode for orientation reference */}
       <Suspense fallback={null}>
-        {(axesDisplayMode === 'axes' || axesDisplayMode === 'both' || isAlignmentMode) && <OriginAxes size={bounds.radius * axesScale} scale={axesScale} coordinateSystem={axesCoordinateSystem} labelMode={axisLabelMode} axesDisplayMode={axesDisplayMode} />}
-        {(axesDisplayMode === 'grid' || axesDisplayMode === 'both') && <OriginGrid size={bounds.radius} scale={gridScale} />}
+        {(showAxes || isAlignmentMode) && <OriginAxes size={bounds.radius * axesScale} scale={axesScale} coordinateSystem={axesCoordinateSystem} labelMode={axisLabelMode} />}
+        {showGrid && <OriginGrid size={bounds.radius} scale={gridScale} />}
       </Suspense>
 
       {/* Transform gizmo follows the transformed data - hidden during alignment mode */}
-      {!isAlignmentMode && reconstruction && gizmoMode !== 'off' && <TransformGizmo center={transformedCenter} size={bounds.radius * transform.scale * axesScale} coordinateMode={gizmoMode} />}
+      {!isAlignmentMode && reconstruction && showGizmo && <TransformGizmo center={transformedCenter} size={bounds.radius * transform.scale * axesScale} />}
 
       {/* Point picking markers - rendered outside transform group for stable display */}
       <SelectedPointMarkers />
@@ -315,28 +321,30 @@ export function Scene3D() {
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
     >
-      <Canvas
-        camera={{
-          position: cameraPosition,
-          fov: CAMERA.fov,
-          near: CAMERA.nearPlane,
-          far: CAMERA.farPlane,
-        }}
-        gl={{ antialias: true }}
-        onPointerMissed={(e) => {
-          // Left-click or right-click on empty space deselects
-          if (e.button === 0 || e.button === 2) {
-            setSelectedImageId(null);
-          }
-        }}
-      >
-        <BackgroundColor color={backgroundColor} />
-        <FpsTracker />
-        <ScreenshotCapture />
-        <Suspense fallback={<LoadingFallback />}>
-          <SceneContent />
-        </Suspense>
-      </Canvas>
+      <Scene3DErrorBoundary backgroundColor={backgroundColor}>
+        <Canvas
+          camera={{
+            position: cameraPosition,
+            fov: CAMERA.fov,
+            near: CAMERA.nearPlane,
+            far: CAMERA.farPlane,
+          }}
+          gl={{ antialias: true }}
+          onPointerMissed={(e) => {
+            // Left-click or right-click on empty space deselects
+            if (e.button === 0 || e.button === 2) {
+              setSelectedImageId(null);
+            }
+          }}
+        >
+          <BackgroundColor color={backgroundColor} />
+          <FpsTracker />
+          <ScreenshotCapture />
+          <Suspense fallback={<LoadingFallback />}>
+            <SceneContent />
+          </Suspense>
+        </Canvas>
+      </Scene3DErrorBoundary>
       <ViewerControls />
       <FooterBranding />
       <PickingCursor />

@@ -11,6 +11,7 @@ import {
   AUTO_ROTATE_MODES,
   HORIZON_LOCK_MODES,
   SELECTION_COLOR_MODES,
+  UNDISTORTION_MODES,
 } from '../../../store/types';
 
 export const cameraSection = defineSection({
@@ -19,13 +20,21 @@ export const cameraSection = defineSection({
   properties: [
     // Display
     {
+      key: 'show',
+      storeKey: 'showCameras',
+      type: 'boolean',
+      default: true,
+      persist: true,
+      description: 'Show/hide camera frustums',
+    },
+    {
       key: 'displayMode',
       storeKey: 'cameraDisplayMode',
       type: 'enum',
       enumValues: CAMERA_DISPLAY_MODES,
       default: 'frustum',
       persist: true,
-      description: 'off | frustum | arrow | imageplane',
+      description: 'frustum | arrow | imageplane',
     },
     {
       key: 'scaleFactor',
@@ -144,12 +153,19 @@ export const cameraSection = defineSection({
     },
     // Selection
     {
+      key: 'showSelectionHighlight',
+      type: 'boolean',
+      default: true,
+      persist: true,
+      description: 'Show/hide selection point highlighting',
+    },
+    {
       key: 'selectionColorMode',
       type: 'enum',
       enumValues: SELECTION_COLOR_MODES,
       default: 'rainbow',
       persist: true,
-      description: 'off | static | blink | rainbow',
+      description: 'static | blink | rainbow',
     },
     {
       key: 'selectionColor',
@@ -177,6 +193,22 @@ export const cameraSection = defineSection({
       max: 1,
       default: 1.0,
       persist: true,
+    },
+    // Undistortion
+    {
+      key: 'undistortionEnabled',
+      type: 'boolean',
+      default: false,
+      persist: true,
+      description: 'Apply lens undistortion to frustum images',
+    },
+    {
+      key: 'undistortionMode',
+      type: 'enum',
+      enumValues: UNDISTORTION_MODES,
+      default: 'fullFrame',
+      persist: true,
+      description: 'cropped | fullFrame',
     },
     // Transient properties (not persisted)
     {

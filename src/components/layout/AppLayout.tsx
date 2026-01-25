@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { StatusBar } from './StatusBar';
 import { Scene3D } from '../viewer3d';
 import { ImageGallery } from '../gallery/ImageGallery';
+import { GalleryErrorBoundary } from '../gallery/GalleryErrorBoundary';
 import { ImageDetailModal } from '../modals/ImageDetailModal';
 import { useHotkeyScope } from '../../hooks/useHotkeyScope';
 import { useIsMobile } from '../../hooks/useIsMobile';
@@ -236,7 +237,9 @@ export function AppLayout() {
             }}
           >
             <div className="h-full border-l border-ds" style={{ minWidth: `${MIN_PANEL_WIDTH}px` }}>
-              <ImageGallery isResizing={isResizing} />
+              <GalleryErrorBoundary>
+                <ImageGallery isResizing={isResizing} />
+              </GalleryErrorBoundary>
             </div>
           </div>
         )}

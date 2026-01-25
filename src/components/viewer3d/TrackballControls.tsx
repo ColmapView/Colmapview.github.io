@@ -1,7 +1,7 @@
 import { useRef, useEffect, useMemo } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useReconstructionStore, useCameraStore, useTransformStore, useUIStore, usePointPickingStore } from '../../store';
+import { useReconstructionStore, useCameraStore, useTransformStore, useUIStore, usePointPickingStore, usePointCloudStore } from '../../store';
 import { decodeCameraState } from '../../hooks/useUrlState';
 import type { CameraViewState } from '../../store/types';
 import { getImageWorldPose } from '../../utils/colmapTransforms';
@@ -67,6 +67,8 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
   const setAutoRotateMode = useCameraStore((s) => s.setAutoRotateMode);
   const transform = useTransformStore((s) => s.transform);
   const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
+  const setCameraScale = useCameraStore((s) => s.setCameraScale);
+  const setPointSize = usePointCloudStore((s) => s.setPointSize);
 
   // Compute world up vector based on coordinate system and horizon lock mode
   const worldUpVec = useMemo(() => {
@@ -967,6 +969,24 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       // Don't zoom if controls are disabled
       if (!enabled.current) return;
 
+      // Alt + scroll: adjust camera frustum size (COLMAP-style)
+      if (e.altKey) {
+        const currentScale = useCameraStore.getState().cameraScale;
+        const scaleFactor = e.deltaY > 0 ? 0.9 : 1.1;
+        const newScale = Math.max(0.01, Math.min(10, currentScale * scaleFactor));
+        setCameraScale(newScale);
+        return;
+      }
+
+      // Ctrl + scroll: adjust point cloud size (COLMAP-style)
+      if (e.ctrlKey) {
+        const currentSize = usePointCloudStore.getState().pointSize;
+        const sizeFactor = e.deltaY > 0 ? 0.9 : 1.1;
+        const newSize = Math.max(0.1, Math.min(50, currentSize * sizeFactor));
+        setPointSize(newSize);
+        return;
+      }
+
       // Clear navigation history on manual camera movement
       clearNavigationHistory();
       // Cancel any ongoing animation on wheel
@@ -1047,8 +1067,8 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- Control constants (rotateSpeed, panSpeed, etc.) are stable and don't need to be dependencies
-  }, [camera, gl, cameraMode, flySpeed, pointerLock, pickingMode, radius, autoRotateMode, setAutoRotateMode, clearNavigationHistory]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Control constants (rotateSpeed, panSpeed, etc.) are stable and don't need to be dependencies. setCameraScale/setPointSize are stable store actions.
+  }, [camera, gl, cameraMode, flySpeed, pointerLock, pickingMode, radius, autoRotateMode, setAutoRotateMode, clearNavigationHistory, setCameraScale, setPointSize]);
 
   return null;
 }

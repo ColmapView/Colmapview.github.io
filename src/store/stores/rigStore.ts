@@ -5,12 +5,15 @@ import type { RigDisplayMode, RigColorMode } from '../types';
 
 export interface RigState {
   // Display settings
+  showRig: boolean;
   rigDisplayMode: RigDisplayMode;
   rigColorMode: RigColorMode;
   rigLineColor: string;
   rigLineOpacity: number;
 
   // Actions
+  setShowRig: (show: boolean) => void;
+  toggleRig: () => void;
   setRigDisplayMode: (mode: RigDisplayMode) => void;
   setRigColorMode: (mode: RigColorMode) => void;
   setRigLineColor: (color: string) => void;
@@ -20,11 +23,14 @@ export interface RigState {
 export const useRigStore = create<RigState>()(
   persist(
     (set) => ({
+      showRig: true,
       rigDisplayMode: 'lines',
       rigColorMode: 'single',
       rigLineColor: '#00ffff', // Cyan
       rigLineOpacity: 0.7,
 
+      setShowRig: (showRig) => set({ showRig }),
+      toggleRig: () => set((state) => ({ showRig: !state.showRig })),
       setRigDisplayMode: (rigDisplayMode) => set({ rigDisplayMode }),
       setRigColorMode: (rigColorMode) => set({ rigColorMode }),
       setRigLineColor: (rigLineColor) => set({ rigLineColor }),
@@ -32,8 +38,23 @@ export const useRigStore = create<RigState>()(
     }),
     {
       name: STORAGE_KEYS.rig,
-      version: 0,
+      version: 1,
+      migrate: (persistedState: unknown, version: number) => {
+        const state = persistedState as Record<string, unknown>;
+        if (version < 1) {
+          // Convert old rigDisplayMode 'off' to separate showRig boolean
+          const mode = state.rigDisplayMode as string | undefined;
+          if (mode === 'off') {
+            state.showRig = false;
+            state.rigDisplayMode = 'lines';
+          } else {
+            state.showRig = true;
+          }
+        }
+        return state;
+      },
       partialize: (state) => ({
+        showRig: state.showRig,
         rigDisplayMode: state.rigDisplayMode,
         rigColorMode: state.rigColorMode,
         rigLineColor: state.rigLineColor,

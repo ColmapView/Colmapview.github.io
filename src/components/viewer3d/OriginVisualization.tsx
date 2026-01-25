@@ -4,7 +4,7 @@ import { Text, Billboard, Html } from '@react-three/drei';
 import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { VIZ_COLORS, contextMenuStyles, hoverCardStyles, ICON_SIZES } from '../../theme';
 import { useUIStore } from '../../store';
-import type { AxesCoordinateSystem, AxisLabelMode, AxesDisplayMode } from '../../store/types';
+import type { AxesCoordinateSystem, AxisLabelMode } from '../../store/types';
 import { CheckIcon, HideIcon } from '../../icons';
 import { COORDINATE_SYSTEMS, AXIS_SEMANTIC } from '../../utils/coordinateSystems';
 
@@ -81,19 +81,17 @@ const checkIconClass = "w-4 h-4 text-ds-accent";
 interface LabelsMenuProps {
   position: MenuPosition;
   currentLabelMode: AxisLabelMode;
-  axesDisplayMode: AxesDisplayMode;
   onClose: () => void;
 }
 
 const LabelsMenu = memo(function LabelsMenu({
   position,
   currentLabelMode,
-  axesDisplayMode,
   onClose,
 }: LabelsMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const setAxisLabelMode = useUIStore((s) => s.setAxisLabelMode);
-  const setAxesDisplayMode = useUIStore((s) => s.setAxesDisplayMode);
+  const setShowAxes = useUIStore((s) => s.setShowAxes);
 
   // Close on click outside or escape
   useEffect(() => {
@@ -128,13 +126,9 @@ const LabelsMenu = memo(function LabelsMenu({
   }, [setAxisLabelMode, onClose]);
 
   const handleHideAxes = useCallback(() => {
-    if (axesDisplayMode === 'axes') {
-      setAxesDisplayMode('off');
-    } else if (axesDisplayMode === 'both') {
-      setAxesDisplayMode('grid');
-    }
+    setShowAxes(false);
     onClose();
-  }, [axesDisplayMode, setAxesDisplayMode, onClose]);
+  }, [setShowAxes, onClose]);
 
   return (
     <Html
@@ -230,10 +224,6 @@ const SystemMenu = memo(function SystemMenu({
   );
 });
 
-// Extended props for OriginAxes with context menu support
-interface OriginAxesWithMenuProps extends OriginAxesProps {
-  axesDisplayMode?: AxesDisplayMode;
-}
 
 // Hover color matching TransformGizmo
 const AXIS_HOVER_COLOR = 0xffff00;
@@ -381,7 +371,7 @@ const AxisLabel = memo(function AxisLabel({
 // Hovered element type: 'pos-0', 'pos-1', 'pos-2', 'neg-0', 'neg-1', 'neg-2', 'label-0', 'label-1', 'label-2'
 type HoveredElement = string | null;
 
-export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', labelMode = 'extra', axesDisplayMode = 'axes' }: OriginAxesWithMenuProps) {
+export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', labelMode = 'extra' }: OriginAxesProps) {
   const axisLength = size * 0.5;
   const axisRadius = size * 0.005;
   const negativeAxisLength = axisLength * 0.4; // Shorter negative lines
@@ -610,7 +600,6 @@ export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', label
         <LabelsMenu
           position={labelsMenu}
           currentLabelMode={labelMode}
-          axesDisplayMode={axesDisplayMode}
           onClose={handleCloseLabelsMenu}
         />
       )}

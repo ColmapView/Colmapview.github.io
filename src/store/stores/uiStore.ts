@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { STORAGE_KEYS } from '../migration';
-import type { MatchesDisplayMode, AxesDisplayMode, AxesCoordinateSystem, AxisLabelMode, GizmoMode } from '../types';
+import type { MatchesDisplayMode, AxesCoordinateSystem, AxisLabelMode } from '../types';
 
 export type ViewDirection = 'reset' | 'x' | 'y' | 'z' | '-x' | '-y' | '-z';
 
@@ -79,6 +79,7 @@ export interface UIState {
   matchedImageId: number | null;
 
   // Match visualization
+  showMatches: boolean;
   matchesDisplayMode: MatchesDisplayMode;
   matchesOpacity: number;
   matchesColor: string;
@@ -88,13 +89,14 @@ export interface UIState {
   maskOpacity: number;
 
   // Scene display
-  axesDisplayMode: AxesDisplayMode;
+  showAxes: boolean;
+  showGrid: boolean;
   axesCoordinateSystem: AxesCoordinateSystem;
   axesScale: number;
   gridScale: number;
   axisLabelMode: AxisLabelMode;
   backgroundColor: string;
-  gizmoMode: GizmoMode;
+  showGizmo: boolean;
 
   // Layout
   galleryCollapsed: boolean;
@@ -122,18 +124,24 @@ export interface UIState {
   setShowPoints3D: (show: boolean) => void;
   setShowMatchesInModal: (show: boolean) => void;
   setMatchedImageId: (id: number | null) => void;
+  setShowMatches: (show: boolean) => void;
+  toggleMatches: () => void;
   setMatchesDisplayMode: (mode: MatchesDisplayMode) => void;
   setMatchesOpacity: (opacity: number) => void;
   setMatchesColor: (color: string) => void;
   setShowMaskOverlay: (show: boolean) => void;
   setMaskOpacity: (opacity: number) => void;
-  setAxesDisplayMode: (mode: AxesDisplayMode) => void;
+  setShowAxes: (show: boolean) => void;
+  setShowGrid: (show: boolean) => void;
+  toggleAxes: () => void;
+  toggleGrid: () => void;
   setAxesCoordinateSystem: (system: AxesCoordinateSystem) => void;
   setAxesScale: (scale: number) => void;
   setGridScale: (scale: number) => void;
   setAxisLabelMode: (mode: AxisLabelMode) => void;
   setBackgroundColor: (color: string) => void;
-  setGizmoMode: (mode: GizmoMode) => void;
+  setShowGizmo: (show: boolean) => void;
+  toggleGizmo: () => void;
   resetView: () => void;
   setView: (direction: ViewDirection) => void;
   setGalleryCollapsed: (collapsed: boolean) => void;
@@ -161,18 +169,20 @@ export const useUIStore = create<UIState>()(
       showPoints3D: false,
       showMatchesInModal: false,
       matchedImageId: null,
-      matchesDisplayMode: 'off',
+      showMatches: false,
+      matchesDisplayMode: 'on',
       matchesOpacity: 0.75,
       matchesColor: '#ff00ff',
       showMaskOverlay: false,
       maskOpacity: 0.7,
-      axesDisplayMode: 'both',
+      showAxes: true,
+      showGrid: true,
       axesCoordinateSystem: 'colmap',
       axesScale: 1,
       gridScale: 1,
       axisLabelMode: 'extra',
       backgroundColor: '#ffffff',
-      gizmoMode: 'off',
+      showGizmo: false,
       galleryCollapsed: false,
       embedMode: false,
       contextMenuActions: DEFAULT_CONTEXT_MENU_ACTIONS,
@@ -189,18 +199,24 @@ export const useUIStore = create<UIState>()(
       setShowPoints3D: (showPoints3D) => set({ showPoints3D }),
       setShowMatchesInModal: (showMatchesInModal) => set({ showMatchesInModal, matchedImageId: null }),
       setMatchedImageId: (matchedImageId) => set({ matchedImageId }),
+      setShowMatches: (showMatches) => set({ showMatches }),
+      toggleMatches: () => set((state) => ({ showMatches: !state.showMatches })),
       setMatchesDisplayMode: (matchesDisplayMode) => set({ matchesDisplayMode }),
       setMatchesOpacity: (matchesOpacity) => set({ matchesOpacity }),
       setMatchesColor: (matchesColor) => set({ matchesColor }),
       setShowMaskOverlay: (showMaskOverlay) => set({ showMaskOverlay }),
       setMaskOpacity: (maskOpacity) => set({ maskOpacity }),
-      setAxesDisplayMode: (axesDisplayMode) => set({ axesDisplayMode }),
+      setShowAxes: (showAxes) => set({ showAxes }),
+      setShowGrid: (showGrid) => set({ showGrid }),
+      toggleAxes: () => set((state) => ({ showAxes: !state.showAxes })),
+      toggleGrid: () => set((state) => ({ showGrid: !state.showGrid })),
       setAxesCoordinateSystem: (axesCoordinateSystem) => set({ axesCoordinateSystem }),
       setAxesScale: (axesScale) => set({ axesScale }),
       setGridScale: (gridScale) => set({ gridScale }),
       setAxisLabelMode: (axisLabelMode) => set({ axisLabelMode }),
       setBackgroundColor: (backgroundColor) => set({ backgroundColor }),
-      setGizmoMode: (gizmoMode) => set({ gizmoMode }),
+      setShowGizmo: (showGizmo) => set({ showGizmo }),
+      toggleGizmo: () => set((state) => ({ showGizmo: !state.showGizmo })),
       resetView: () => set((state) => ({ viewResetTrigger: state.viewResetTrigger + 1 })),
       setView: (direction) => set((state) => ({
         viewDirection: direction,
@@ -230,7 +246,7 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: STORAGE_KEYS.ui,
-      version: 6,
+      version: 9,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Record<string, unknown>;
         if (version < 3) {
@@ -244,23 +260,49 @@ export const useUIStore = create<UIState>()(
           delete state.memoryStrategy;
           delete state.imageLoadMode;
         }
+        if (version < 7) {
+          // Convert old axesDisplayMode to new booleans
+          const mode = state.axesDisplayMode as string | undefined;
+          state.showAxes = mode === 'axes' || mode === 'both' || mode === undefined;
+          state.showGrid = mode === 'grid' || mode === 'both' || mode === undefined;
+          delete state.axesDisplayMode;
+        }
+        if (version < 8) {
+          // Convert old gizmoMode enum to boolean (remove local mode, keep only global)
+          const gizmoMode = state.gizmoMode as string | undefined;
+          state.showGizmo = gizmoMode === 'local' || gizmoMode === 'global';
+          delete state.gizmoMode;
+        }
+        if (version < 9) {
+          // Convert old matchesDisplayMode 'off' to separate showMatches boolean
+          const matchesMode = state.matchesDisplayMode as string | undefined;
+          if (matchesMode === 'off') {
+            state.showMatches = false;
+            state.matchesDisplayMode = 'on';
+          } else {
+            state.showMatches = matchesMode !== undefined;
+            // Keep current mode if it's valid
+          }
+        }
         return state;
       },
       partialize: (state) => ({
         showPoints2D: state.showPoints2D,
         showPoints3D: state.showPoints3D,
+        showMatches: state.showMatches,
         matchesDisplayMode: state.matchesDisplayMode,
         matchesOpacity: state.matchesOpacity,
         matchesColor: state.matchesColor,
         showMaskOverlay: state.showMaskOverlay,
         maskOpacity: state.maskOpacity,
-        axesDisplayMode: state.axesDisplayMode,
+        showAxes: state.showAxes,
+        showGrid: state.showGrid,
         axesCoordinateSystem: state.axesCoordinateSystem,
         axesScale: state.axesScale,
         gridScale: state.gridScale,
         axisLabelMode: state.axisLabelMode,
         backgroundColor: state.backgroundColor,
-        gizmoMode: state.gizmoMode,
+        showGizmo: state.showGizmo,
         galleryCollapsed: state.galleryCollapsed,
         contextMenuActions: state.contextMenuActions,
       }),

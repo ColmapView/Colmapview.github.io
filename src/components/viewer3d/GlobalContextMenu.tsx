@@ -1,6 +1,26 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react';
 import { createPortal } from 'react-dom';
-import { useUIStore, useCameraStore, useTransformStore, useReconstructionStore, useExportStore, usePointPickingStore, usePointCloudStore, type ContextMenuAction, CAMERA_MODES, CAMERA_PROJECTIONS, AUTO_ROTATE_MODES, HORIZON_LOCK_MODES, CAMERA_DISPLAY_MODES, SELECTION_COLOR_MODES, MATCHES_DISPLAY_MODES, COLOR_MODES, type AxesCoordinateSystem, type AxisLabelMode, type FrustumColorMode } from '../../store';
+import {
+  useUIStore,
+  useCameraStore,
+  useTransformStore,
+  useReconstructionStore,
+  useExportStore,
+  usePointPickingStore,
+  usePointCloudStore,
+  applyTransformPreset,
+  applyTransformToData,
+  type ContextMenuAction,
+  CAMERA_MODES,
+  CAMERA_PROJECTIONS,
+  AUTO_ROTATE_MODES,
+  HORIZON_LOCK_MODES,
+  CAMERA_DISPLAY_MODES,
+  SELECTION_COLOR_MODES,
+  type AxesCoordinateSystem,
+  type AxisLabelMode,
+  type FrustumColorMode,
+} from '../../store';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { contextMenuStyles, actionButtonStyles, HOTKEYS } from '../../theme';
 import { formatKeyCombo } from '../../config/hotkeys';
@@ -52,7 +72,7 @@ const ACTIONS: ActionDef[] = [
   { id: 'cycleAutoRotate', label: 'Auto Rotate', section: 'view', icon: AutoRotateIcon },
   // Display section
   { id: 'toggleBackground', label: 'Background', section: 'display', hotkey: HOTKEYS.toggleBackground.keys, icon: <BgIcon /> },
-  { id: 'toggleAxes', label: 'Axes/Grid', section: 'display', hotkey: HOTKEYS.toggleAxesGrid.keys, icon: <AxesIcon /> },
+  { id: 'toggleAxes', label: 'Toggle Axes', section: 'display', icon: <AxesIcon /> },
   { id: 'toggleGallery', label: 'Gallery Panel', section: 'display', icon: GalleryPanelIcon },
   { id: 'cycleCoordinateSystem', label: 'Coord System', section: 'display', icon: CoordSystemIcon },
   { id: 'cycleFrustumColor', label: 'Frustum Color', section: 'display', icon: FrustumColorIcon },
@@ -117,16 +137,16 @@ export function GlobalContextMenu() {
   const resetView = useUIStore((s) => s.resetView);
   const backgroundColor = useUIStore((s) => s.backgroundColor);
   const setBackgroundColor = useUIStore((s) => s.setBackgroundColor);
-  const axesDisplayMode = useUIStore((s) => s.axesDisplayMode);
-  const setAxesDisplayMode = useUIStore((s) => s.setAxesDisplayMode);
+  const toggleAxes = useUIStore((s) => s.toggleAxes);
   const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
   const setAxesCoordinateSystem = useUIStore((s) => s.setAxesCoordinateSystem);
   const axisLabelMode = useUIStore((s) => s.axisLabelMode);
   const setAxisLabelMode = useUIStore((s) => s.setAxisLabelMode);
   const toggleGalleryCollapsed = useUIStore((s) => s.toggleGalleryCollapsed);
   const galleryCollapsed = useUIStore((s) => s.galleryCollapsed);
-  const gizmoMode = useUIStore((s) => s.gizmoMode);
-  const setGizmoMode = useUIStore((s) => s.setGizmoMode);
+  const toggleGizmo = useUIStore((s) => s.toggleGizmo);
+  const showMatches = useUIStore((s) => s.showMatches);
+  const setShowMatches = useUIStore((s) => s.setShowMatches);
   const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
   const setMatchesDisplayMode = useUIStore((s) => s.setMatchesDisplayMode);
 
@@ -139,8 +159,12 @@ export function GlobalContextMenu() {
   const setHorizonLock = useCameraStore((s) => s.setHorizonLock);
   const autoRotateMode = useCameraStore((s) => s.autoRotateMode);
   const setAutoRotateMode = useCameraStore((s) => s.setAutoRotateMode);
+  const showCameras = useCameraStore((s) => s.showCameras);
+  const setShowCameras = useCameraStore((s) => s.setShowCameras);
   const cameraDisplayMode = useCameraStore((s) => s.cameraDisplayMode);
   const setCameraDisplayMode = useCameraStore((s) => s.setCameraDisplayMode);
+  const showSelectionHighlight = useCameraStore((s) => s.showSelectionHighlight);
+  const setShowSelectionHighlight = useCameraStore((s) => s.setShowSelectionHighlight);
   const selectionColorMode = useCameraStore((s) => s.selectionColorMode);
   const setSelectionColorMode = useCameraStore((s) => s.setSelectionColorMode);
   const frustumColorMode = useCameraStore((s) => s.frustumColorMode);
@@ -156,6 +180,8 @@ export function GlobalContextMenu() {
   const setUndistortionEnabled = useCameraStore((s) => s.setUndistortionEnabled);
 
   // Point cloud store
+  const showPointCloud = usePointCloudStore((s) => s.showPointCloud);
+  const setShowPointCloud = usePointCloudStore((s) => s.setShowPointCloud);
   const colorMode = usePointCloudStore((s) => s.colorMode);
   const setColorMode = usePointCloudStore((s) => s.setColorMode);
   const pointSize = usePointCloudStore((s) => s.pointSize);
@@ -164,8 +190,6 @@ export function GlobalContextMenu() {
   const setMinTrackLength = usePointCloudStore((s) => s.setMinTrackLength);
 
   const resetTransform = useTransformStore((s) => s.resetTransform);
-  const applyToData = useTransformStore((s) => s.applyToData);
-  const applyPreset = useTransformStore((s) => s.applyPreset);
   const droppedFiles = useReconstructionStore((s) => s.droppedFiles);
   const { processFiles } = useFileDropzone();
 
@@ -260,13 +284,9 @@ export function GlobalContextMenu() {
         setBackgroundColor(isLight ? '#000000' : '#ffffff');
         break;
       }
-      case 'toggleAxes': {
-        const modes = ['off', 'axes', 'grid', 'both'] as const;
-        const currentIndex = modes.indexOf(axesDisplayMode);
-        const nextIndex = (currentIndex + 1) % modes.length;
-        setAxesDisplayMode(modes[nextIndex]);
+      case 'toggleAxes':
+        toggleAxes();
         break;
-      }
       case 'toggleGallery':
         toggleGalleryCollapsed();
         break;
@@ -289,9 +309,17 @@ export function GlobalContextMenu() {
         break;
       }
       case 'cyclePointColor': {
-        const currentIndex = COLOR_MODES.indexOf(colorMode);
-        const nextIndex = (currentIndex + 1) % COLOR_MODES.length;
-        setColorMode(COLOR_MODES[nextIndex]);
+        // Cycle: off -> rgb -> error -> trackLength -> off
+        if (!showPointCloud) {
+          setShowPointCloud(true);
+          setColorMode('rgb');
+        } else if (colorMode === 'rgb') {
+          setColorMode('error');
+        } else if (colorMode === 'error') {
+          setColorMode('trackLength');
+        } else {
+          setShowPointCloud(false);
+        }
         break;
       }
       case 'pointSizeUp':
@@ -310,15 +338,31 @@ export function GlobalContextMenu() {
         break;
       }
       case 'cycleMatchesDisplay': {
-        const currentIndex = MATCHES_DISPLAY_MODES.indexOf(matchesDisplayMode);
-        const nextIndex = (currentIndex + 1) % MATCHES_DISPLAY_MODES.length;
-        setMatchesDisplayMode(MATCHES_DISPLAY_MODES[nextIndex]);
+        // Cycle: off -> on -> blink -> off
+        if (!showMatches) {
+          setShowMatches(true);
+          setMatchesDisplayMode('on');
+        } else if (matchesDisplayMode === 'on') {
+          setMatchesDisplayMode('blink');
+        } else {
+          setShowMatches(false);
+        }
         break;
       }
       case 'cycleSelectionColor': {
-        const currentIndex = SELECTION_COLOR_MODES.indexOf(selectionColorMode);
-        const nextIndex = (currentIndex + 1) % SELECTION_COLOR_MODES.length;
-        setSelectionColorMode(SELECTION_COLOR_MODES[nextIndex]);
+        // Cycle: off -> static -> blink -> rainbow -> off
+        if (!showSelectionHighlight) {
+          setShowSelectionHighlight(true);
+          setSelectionColorMode('static');
+        } else {
+          const currentIndex = SELECTION_COLOR_MODES.indexOf(selectionColorMode);
+          if (currentIndex === SELECTION_COLOR_MODES.length - 1) {
+            // At end of modes, turn off
+            setShowSelectionHighlight(false);
+          } else {
+            setSelectionColorMode(SELECTION_COLOR_MODES[currentIndex + 1]);
+          }
+        }
         break;
       }
       case 'deselectAll':
@@ -330,28 +374,25 @@ export function GlobalContextMenu() {
         }
         break;
       case 'toggleImagePlanes': {
-        const modes = ['off', 'frustum', 'imageplane'] as const;
-        const currentIndex = modes.indexOf(cameraDisplayMode as typeof modes[number]);
-        if (currentIndex >= 0) {
-          const nextIndex = (currentIndex + 1) % modes.length;
-          setCameraDisplayMode(modes[nextIndex]);
-        } else {
+        // Cycle: off -> frustum -> imageplane -> off
+        if (!showCameras) {
+          setShowCameras(true);
+          setCameraDisplayMode('frustum');
+        } else if (cameraDisplayMode === 'frustum') {
           setCameraDisplayMode('imageplane');
+        } else {
+          setShowCameras(false);
         }
         break;
       }
       case 'toggleUndistort':
         setUndistortionEnabled(!undistortionEnabled);
         break;
-      case 'toggleGizmo': {
-        const modes = ['off', 'global', 'local'] as const;
-        const currentIndex = modes.indexOf(gizmoMode);
-        const nextIndex = (currentIndex + 1) % modes.length;
-        setGizmoMode(modes[nextIndex]);
+      case 'toggleGizmo':
+        toggleGizmo();
         break;
-      }
       case 'centerAtOrigin':
-        applyPreset('centerAtOrigin');
+        applyTransformPreset('centerAtOrigin');
         break;
       case 'onePointOrigin':
         setPickingMode(pickingMode === 'origin-1pt' ? 'off' : 'origin-1pt');
@@ -366,7 +407,7 @@ export function GlobalContextMenu() {
         resetTransform();
         break;
       case 'applyTransform':
-        applyToData();
+        applyTransformToData();
         break;
       case 'reloadData':
         if (droppedFiles) {
@@ -406,14 +447,16 @@ export function GlobalContextMenu() {
   }, [
     resetView, setView, cameraProjection, setCameraProjection, cameraMode, setCameraMode,
     horizonLock, setHorizonLock, autoRotateMode, setAutoRotateMode,
-    backgroundColor, setBackgroundColor, axesDisplayMode, setAxesDisplayMode,
+    backgroundColor, setBackgroundColor, toggleAxes,
     axesCoordinateSystem, setAxesCoordinateSystem, axisLabelMode, setAxisLabelMode,
-    frustumColorMode, setFrustumColorMode, toggleGalleryCollapsed, colorMode, setColorMode,
+    frustumColorMode, setFrustumColorMode, toggleGalleryCollapsed,
+    showPointCloud, setShowPointCloud, colorMode, setColorMode,
     pointSize, setPointSize, minTrackLength, setMinTrackLength,
-    cameraDisplayMode, setCameraDisplayMode, matchesDisplayMode, setMatchesDisplayMode,
-    selectionColorMode, setSelectionColorMode, selectedImageId, setSelectedImageId, flyToImage,
+    cameraDisplayMode, setCameraDisplayMode,
+    showMatches, setShowMatches, matchesDisplayMode, setMatchesDisplayMode,
+    showSelectionHighlight, setShowSelectionHighlight, selectionColorMode, setSelectionColorMode, selectedImageId, setSelectedImageId, flyToImage,
     undistortionEnabled, setUndistortionEnabled,
-    gizmoMode, setGizmoMode, pickingMode, setPickingMode, resetTransform, applyToData, applyPreset,
+    toggleGizmo, pickingMode, setPickingMode, resetTransform,
     droppedFiles, processFiles, takeScreenshot, setExportFormat, triggerExport,
     pointerLock, setPointerLock, flySpeed, setFlySpeed, closeContextMenu
   ]);

@@ -40,7 +40,8 @@ const UI_PROPERTIES = [
   'matchesOpacity',
   'showMaskOverlay',
   'maskOpacity',
-  'axesDisplayMode',
+  'showAxes',
+  'showGrid',
   'axesOpacity',
   'backgroundColor',
   'autoRotate',
@@ -86,11 +87,8 @@ function applyLegacyMigrations(state: Record<string, unknown>): Record<string, u
     delete migrated.rainbowSpeed;
   }
 
-  // Migrate old showAxes boolean to new axesDisplayMode
-  if ('showAxes' in migrated && typeof migrated.showAxes === 'boolean') {
-    migrated.axesDisplayMode = migrated.showAxes ? 'axes' : 'off';
-    delete migrated.showAxes;
-  }
+  // Legacy showAxes boolean is now directly used (no migration needed)
+  // Old axesDisplayMode enum is handled in uiStore migration version 7
 
   return migrated;
 }
@@ -217,4 +215,12 @@ function showSettingsResetWarning(): void {
 export function initStoreMigration(): void {
   migrateFromLegacyStore();
   showSettingsResetWarning();
+}
+
+/**
+ * Mark the settings reset warning as shown (used when user explicitly resets settings)
+ */
+export function markSettingsResetWarningShown(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(STORAGE_KEYS.settingsResetWarningShown, String(SETTINGS_RESET_WARNING_VERSION));
 }
