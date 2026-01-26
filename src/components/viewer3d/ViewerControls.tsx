@@ -77,6 +77,8 @@ import {
   SelectRow,
   ToggleRow,
   ControlButton,
+  MouseScrollIcon,
+  ColorPickerRow,
   type PanelType,
 } from './ControlComponents';
 
@@ -535,6 +537,8 @@ export function ViewerControls() {
   const setMinTrackLength = usePointCloudStore((s) => s.setMinTrackLength);
   const maxReprojectionError = usePointCloudStore((s) => s.maxReprojectionError);
   const setMaxReprojectionError = usePointCloudStore((s) => s.setMaxReprojectionError);
+  const thinning = usePointCloudStore((s) => s.thinning);
+  const setThinning = usePointCloudStore((s) => s.setThinning);
 
   // Camera display settings
   const showCameras = useCameraStore((s) => s.showCameras);
@@ -619,12 +623,14 @@ export function ViewerControls() {
   const getScreenshotBlob = useExportStore((s) => s.getScreenshotBlob);
   const recordGif = useExportStore((s) => s.recordGif);
   const isRecordingGif = useExportStore((s) => s.isRecordingGif);
+  const gifRenderProgress = useExportStore((s) => s.gifRenderProgress);
   const gifBlobUrl = useExportStore((s) => s.gifBlobUrl);
   const gifDuration = useExportStore((s) => s.gifDuration);
   const setGifDuration = useExportStore((s) => s.setGifDuration);
   const gifDownsample = useExportStore((s) => s.gifDownsample);
   const setGifDownsample = useExportStore((s) => s.setGifDownsample);
   const downloadGif = useExportStore((s) => s.downloadGif);
+  const stopRecording = useExportStore((s) => s.stopRecording);
   const recordingFormat = useExportStore((s) => s.recordingFormat);
   const setRecordingFormat = useExportStore((s) => s.setRecordingFormat);
   const recordingQuality = useExportStore((s) => s.recordingQuality);
@@ -918,6 +924,10 @@ export function ViewerControls() {
   const handleLightnessChange = useCallback((l: number) => {
     updateHsl({ ...hsl, l });
   }, [hsl, updateHsl]);
+
+  const handleColorPickerChange = useCallback((hex: string) => {
+    updateHsl(hexToHsl(hex));
+  }, [updateHsl]);
 
   const toggleCameraMode = useCallback(() => {
     setCameraMode(cameraMode === 'orbit' ? 'fly' : 'orbit');
@@ -1455,6 +1465,11 @@ export function ViewerControls() {
         panelTitle="Background Color (B)"
       >
         <div className={styles.panelContent}>
+          <ColorPickerRow
+            label="Color"
+            value={backgroundColor}
+            onChange={handleColorPickerChange}
+          />
           <HueSliderRow
             label="Hue"
             value={hsl.h}
@@ -1522,9 +1537,10 @@ export function ViewerControls() {
               { value: 'trackLength', label: 'Track Length' },
             ]}
           />
-          <SliderRow label="Size" value={pointSize} min={1} max={10} step={0.5} onChange={setPointSize} />
+          <SliderRow label={<>Size <span className="text-ds-muted text-xs inline-flex items-center gap-0.5">(Ctrl+<MouseScrollIcon className="w-3 h-3 inline" />)</span></>} value={pointSize} min={1} max={10} step={0.5} onChange={setPointSize} />
           <SliderRow label="Opacity" value={pointOpacity} min={0} max={1} step={0.05} onChange={setPointOpacity} formatValue={(v) => `${Math.round(v * 100)}%`} />
           <SliderRow label="Min Track" value={minTrackLength} min={0} max={20} step={1} onChange={(v) => setMinTrackLength(Math.round(v))} />
+          <SliderRow label="Thinning" value={thinning} min={0} max={99} step={1} onChange={(v) => setThinning(Math.round(v))} />
           <SliderRow
             label="Max Error"
             value={maxReprojectionError === Infinity ? (reconstruction?.globalStats.maxError ?? 10) : maxReprojectionError}
@@ -1617,7 +1633,7 @@ export function ViewerControls() {
                   { value: '10', label: '10×' },
                 ]}
               />
-              <SliderRow label="Scale" value={cameraScale} min={0.05} max={1} step={0.05} onChange={setCameraScale} formatValue={(v) => v.toFixed(2)} />
+              <SliderRow label={<>Scale <span className="text-ds-muted text-xs inline-flex items-center gap-0.5">(Alt+<MouseScrollIcon className="w-3 h-3 inline" />)</span></>} value={cameraScale} min={0.05} max={1} step={0.05} onChange={setCameraScale} formatValue={(v) => v.toFixed(2)} />
               <SliderRow
                 label="Selection α"
                 value={selectionPlaneOpacity}
@@ -1973,6 +1989,7 @@ export function ViewerControls() {
             step={5}
             onChange={setGifDuration}
             formatValue={(v) => `${v}s`}
+            inputMax={3600}
           />
           <SelectRow
             label="Scale"
@@ -1996,23 +2013,36 @@ export function ViewerControls() {
               { value: '4', label: '4×' },
             ]}
           />
-          <button
-            onClick={startRecordingWithCountdown}
-            disabled={isRecordingGif || !recordGif || recordCountdown !== null}
-            className={isRecordingGif || recordCountdown !== null ? styles.actionButtonPrimary : styles.actionButton}
-            style={{ width: '100%', marginTop: '8px' }}
-          >
-            {recordCountdown !== null ? `Countdown (${recordCountdown})` : isRecordingGif ? 'Recording...' : 'Record'}
-          </button>
-          {gifBlobUrl && !isRecordingGif && recordCountdown === null && (
+          <div className="flex gap-2 mt-2">
             <button
-              onClick={downloadGif}
-              className={styles.actionButton}
-              style={{ width: '100%', marginTop: '8px' }}
+              onClick={startRecordingWithCountdown}
+              disabled={isRecordingGif || gifRenderProgress !== null || !recordGif || recordCountdown !== null}
+              className={isRecordingGif || gifRenderProgress !== null || recordCountdown !== null ? styles.actionButtonPrimary : styles.actionButton}
+              style={{ flex: 1, minWidth: 0 }}
             >
-              Save
+              {recordCountdown !== null
+                ? `(${recordCountdown})`
+                : gifRenderProgress !== null
+                  ? `Render ${gifRenderProgress}%`
+                  : isRecordingGif
+                    ? 'Recording...'
+                    : 'Record'}
             </button>
-          )}
+            <button
+              onClick={isRecordingGif ? stopRecording ?? undefined : downloadGif}
+              disabled={recordCountdown !== null || gifRenderProgress !== null || (!isRecordingGif && !gifBlobUrl)}
+              className={
+                recordCountdown !== null || gifRenderProgress !== null || (!isRecordingGif && !gifBlobUrl)
+                  ? styles.actionButtonDisabled
+                  : isRecordingGif
+                    ? styles.actionButtonPrimary
+                    : styles.actionButton
+              }
+              style={{ flex: 1, minWidth: 0 }}
+            >
+              {isRecordingGif ? 'Stop' : 'Save'}
+            </button>
+          </div>
           <div
             onClick={() => setScreenshotHideLogo(!screenshotHideLogo)}
             className={`group text-sm mt-3 cursor-pointer ${screenshotHideLogo ? 'text-blue-400' : ''}`}

@@ -42,6 +42,22 @@ export function SelectionOverlay(props: SelectionOverlayProps): React.JSX.Elemen
 
   const geometry = useMemo(() => {
     if (!selectedPositions || !selectedColors || selectedPositions.length === 0) return null;
+
+    // Validate positions for NaN values before creating geometry
+    // NaN positions cause computeBoundingSphere to fail and points to disappear
+    let hasNaN = false;
+    for (let i = 0; i < selectedPositions.length; i++) {
+      if (!Number.isFinite(selectedPositions[i])) {
+        hasNaN = true;
+        break;
+      }
+    }
+
+    if (hasNaN) {
+      console.warn('[SelectionOverlay] Positions contain NaN/Infinity values, skipping geometry creation');
+      return null;
+    }
+
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(selectedPositions, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(selectedColors, 3));

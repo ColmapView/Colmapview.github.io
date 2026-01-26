@@ -1,7 +1,7 @@
 {
   "name": "colmapview",
   "private": true,
-  "version": "0.4.7",
+  "version": "0.4.8",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -22,6 +22,7 @@
     "gif.js": "^0.2.0",
     "js-yaml": "^4.1.1",
     "libarchive.js": "^2.0.2",
+    "mp4-muxer": "^5.2.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-hotkeys-hook": "^5.2.3",

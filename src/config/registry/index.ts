@@ -10,6 +10,7 @@ import { pointCloudSection } from './definitions/pointCloud';
 import { cameraSection } from './definitions/camera';
 import { uiSection } from './definitions/ui';
 import { exportSection } from './definitions/export';
+import { rigSection } from './definitions/rig';
 
 // All registered sections
 export const sections: readonly SectionDef[] = [
@@ -17,6 +18,7 @@ export const sections: readonly SectionDef[] = [
   cameraSection,
   uiSection,
   exportSection,
+  rigSection,
 ] as const;
 
 /**
@@ -33,6 +35,22 @@ export function getStoreKey(prop: PropertyDef): string {
   return prop.storeKey ?? prop.key;
 }
 
+/**
+ * Build shareable fields map from registry.
+ * Returns a map of section key -> Set of property keys that should be included in URL sharing.
+ * Uses persist flag to determine which properties are shareable.
+ */
+export function buildShareableFieldsFromRegistry(): Record<string, Set<string>> {
+  const result: Record<string, Set<string>> = {};
+  for (const section of sections) {
+    const persistedProps = getPersistedProperties(section);
+    if (persistedProps.length > 0) {
+      result[section.key] = new Set(persistedProps.map((p) => getStoreKey(p)));
+    }
+  }
+  return result;
+}
+
 // Re-export types
 export * from './types';
 
@@ -41,3 +59,4 @@ export { pointCloudSection } from './definitions/pointCloud';
 export { cameraSection } from './definitions/camera';
 export { uiSection } from './definitions/ui';
 export { exportSection } from './definitions/export';
+export { rigSection } from './definitions/rig';

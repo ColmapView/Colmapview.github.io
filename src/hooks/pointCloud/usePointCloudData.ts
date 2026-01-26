@@ -25,6 +25,7 @@ export interface UsePointCloudDataParams {
   colorMode: ColorMode;
   minTrackLength: number;
   maxReprojectionError: number;
+  thinning: number;
   selectedImageId: number | null;
   showSelectionHighlight: boolean;
   selectionColor: string;
@@ -54,6 +55,7 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
     colorMode,
     minTrackLength,
     maxReprojectionError,
+    thinning,
     selectedImageId,
     showSelectionHighlight,
     selectionColor,
@@ -86,7 +88,7 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
     const startTime = performance.now();
 
     // FAST PATH: Use WASM arrays directly when no filters are active
-    const noFilters = minTrackLength <= 1 && maxReprojectionError >= 1000;
+    const noFilters = minTrackLength <= 1 && maxReprojectionError >= 1000 && thinning === 0;
 
     if (wasmReconstruction?.hasPoints() && noFilters) {
       const result = computeFastPath(
@@ -106,12 +108,13 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
     }
 
     // SLOW PATH: Filtered iteration
-    return computeSlowPath(
+    const result = computeSlowPath(
       reconstruction,
       wasmReconstruction,
       colorMode,
       minTrackLength,
       maxReprojectionError,
+      thinning,
       selectedImageId,
       showSelectionHighlight,
       highlightColor,
@@ -120,12 +123,27 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
       distanceThreshold,
       indexToPoint3DIdRef
     );
+
+    // Debug: warn if positions are null with valid reconstruction
+    if (!result.positions && reconstruction.points3D && reconstruction.points3D.size > 0) {
+      console.warn('[PointCloud] Positions null despite having points3D:', {
+        points3DSize: reconstruction.points3D.size,
+        hasWasm: !!wasmReconstruction?.hasPoints(),
+        minTrackLength,
+        maxReprojectionError,
+        thinning,
+        selectedImageId,
+      });
+    }
+
+    return result;
   }, [
     reconstruction,
     wasmReconstruction,
     colorMode,
     minTrackLength,
     maxReprojectionError,
+    thinning,
     selectedImageId,
     showSelectionHighlight,
     highlightColor,
@@ -223,8 +241,12 @@ function computeFastPath(
     `[PointCloud] Fast path: ${count.toLocaleString()} points in ${elapsed.toFixed(1)}ms${highlightInfo}`
   );
 
+  // Copy WASM positions to prevent view invalidation when WASM memory is reallocated
+  // The wasmPositions view can become detached (length 0) if WASM memory changes
+  const positionsCopy = new Float32Array(wasmPositions);
+
   return {
-    positions: wasmPositions,
+    positions: positionsCopy,
     colors: finalColors,
     selectedPositions,
     selectedColors,
@@ -254,12 +276,18 @@ function computeSelectionOverlay(
   const count = wasmReconstruction.pointCount;
   const point3DIds = wasmReconstruction.getPoint3DIds();
 
-  // Count matching points
+  // Count matching points with valid positions (skip NaN/Infinity)
   let highlightCount = 0;
   for (let i = 0; i < count; i++) {
     const point3DId = point3DIds ? point3DIds[i] : BigInt(i + 1);
     if (selectedImagePointIds.has(point3DId)) {
-      highlightCount++;
+      // Validate position values to avoid NaN in geometry
+      const x = wasmPositions[i * 3];
+      const y = wasmPositions[i * 3 + 1];
+      const z = wasmPositions[i * 3 + 2];
+      if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
+        highlightCount++;
+      }
     }
   }
 
@@ -274,14 +302,20 @@ function computeSelectionOverlay(
   for (let i = 0; i < count; i++) {
     const point3DId = point3DIds ? point3DIds[i] : BigInt(i + 1);
     if (selectedImagePointIds.has(point3DId)) {
-      const i3 = idx * 3;
-      selectedPositions[i3] = wasmPositions[i * 3];
-      selectedPositions[i3 + 1] = wasmPositions[i * 3 + 1];
-      selectedPositions[i3 + 2] = wasmPositions[i * 3 + 2];
-      selectedColors[i3] = highlightColor[0];
-      selectedColors[i3 + 1] = highlightColor[1];
-      selectedColors[i3 + 2] = highlightColor[2];
-      idx++;
+      const x = wasmPositions[i * 3];
+      const y = wasmPositions[i * 3 + 1];
+      const z = wasmPositions[i * 3 + 2];
+      // Only include points with valid positions
+      if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
+        const i3 = idx * 3;
+        selectedPositions[i3] = x;
+        selectedPositions[i3 + 1] = y;
+        selectedPositions[i3 + 2] = z;
+        selectedColors[i3] = highlightColor[0];
+        selectedColors[i3 + 1] = highlightColor[1];
+        selectedColors[i3 + 2] = highlightColor[2];
+        idx++;
+      }
     }
   }
 
@@ -297,6 +331,7 @@ function computeSlowPath(
   colorMode: ColorMode,
   minTrackLength: number,
   maxReprojectionError: number,
+  thinning: number,
   selectedImageId: number | null,
   showSelectionHighlight: boolean,
   highlightColor: [number, number, number],
@@ -325,6 +360,7 @@ function computeSlowPath(
       colorMode,
       minTrackLength,
       maxReprojectionError,
+      thinning,
       selectedImagePointIds,
       showSelectionHighlight,
       highlightColor,
@@ -343,6 +379,7 @@ function computeSlowPath(
     colorMode,
     minTrackLength,
     maxReprojectionError,
+    thinning,
     selectedImagePointIds,
     showSelectionHighlight,
     highlightColor,
@@ -359,6 +396,7 @@ function computeSlowPathWasm(
   colorMode: ColorMode,
   minTrackLength: number,
   maxReprojectionError: number,
+  thinning: number,
   selectedImagePointIds: Set<bigint>,
   showSelectionHighlight: boolean,
   highlightColor: [number, number, number],
@@ -395,6 +433,8 @@ function computeSlowPathWasm(
   const pointState = new Uint8Array(count);
 
   for (let i = 0; i < count; i++) {
+    // Thinning: skip points based on index
+    if (thinning > 0 && i % (thinning + 1) !== 0) continue;
     // Filter by track length
     if (wasmTrackLengths[i] < minTrackLength) continue;
     // Filter by reprojection error
@@ -408,13 +448,19 @@ function computeSlowPathWasm(
     minTrackVal = Math.min(minTrackVal, wasmTrackLengths[i]);
     maxTrackVal = Math.max(maxTrackVal, wasmTrackLengths[i]);
 
-    // Check if highlighted
+    // Check if highlighted (only count if position is valid)
     const point3DId = point3DIds ? point3DIds[i] : BigInt(i + 1);
     const shouldHighlight = showSelectionHighlight && selectedImagePointIds.has(point3DId);
 
-    pointState[i] = shouldHighlight ? 2 : 1;
+    // Validate position for overlay counting
+    const posValid =
+      Number.isFinite(wasmPositions[i * 3]) &&
+      Number.isFinite(wasmPositions[i * 3 + 1]) &&
+      Number.isFinite(wasmPositions[i * 3 + 2]);
+
+    pointState[i] = shouldHighlight && posValid ? 2 : 1;
     totalCount++;
-    if (shouldHighlight) highlightCount++;
+    if (shouldHighlight && posValid) highlightCount++;
   }
 
   if (totalCount === 0) {
@@ -481,16 +527,21 @@ function computeSlowPathWasm(
     indexToPoint3DId.set(mainIdx, point3DId);
     mainIdx++;
 
-    // Highlighted points also go in overlay
+    // Highlighted points also go in overlay (only if position is valid)
     if (state === 2 && selectedPositions && selectedColors) {
-      const h3 = highlightIdx * 3;
-      selectedPositions[h3] = wasmPositions[i * 3];
-      selectedPositions[h3 + 1] = wasmPositions[i * 3 + 1];
-      selectedPositions[h3 + 2] = wasmPositions[i * 3 + 2];
-      selectedColors[h3] = highlightColor[0];
-      selectedColors[h3 + 1] = highlightColor[1];
-      selectedColors[h3 + 2] = highlightColor[2];
-      highlightIdx++;
+      const px = wasmPositions[i * 3];
+      const py = wasmPositions[i * 3 + 1];
+      const pz = wasmPositions[i * 3 + 2];
+      if (Number.isFinite(px) && Number.isFinite(py) && Number.isFinite(pz)) {
+        const h3 = highlightIdx * 3;
+        selectedPositions[h3] = px;
+        selectedPositions[h3 + 1] = py;
+        selectedPositions[h3 + 2] = pz;
+        selectedColors[h3] = highlightColor[0];
+        selectedColors[h3 + 1] = highlightColor[1];
+        selectedColors[h3 + 2] = highlightColor[2];
+        highlightIdx++;
+      }
     }
   }
 
@@ -515,6 +566,7 @@ function computeSlowPathMap(
   colorMode: ColorMode,
   minTrackLength: number,
   maxReprojectionError: number,
+  thinning: number,
   selectedImagePointIds: Set<bigint>,
   showSelectionHighlight: boolean,
   highlightColor: [number, number, number],
@@ -542,7 +594,14 @@ function computeSlowPathMap(
   const allPoints: Point3D[] = [];
   const highlightedPoints: Point3D[] = [];
 
+  let iterIndex = 0;
   for (const point of reconstruction.points3D.values()) {
+    // Thinning: skip points based on iteration index
+    if (thinning > 0 && iterIndex % (thinning + 1) !== 0) {
+      iterIndex++;
+      continue;
+    }
+    iterIndex++;
     // Filter by track length
     if (point.track.length < minTrackLength) continue;
     // Filter by reprojection error

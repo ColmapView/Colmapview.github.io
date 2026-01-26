@@ -10,6 +10,7 @@ export interface PointCloudState {
   colorMode: ColorMode;
   minTrackLength: number;
   maxReprojectionError: number;
+  thinning: number;
   selectedPointId: bigint | null;
 
   setShowPointCloud: (show: boolean) => void;
@@ -19,6 +20,7 @@ export interface PointCloudState {
   setColorMode: (mode: ColorMode) => void;
   setMinTrackLength: (length: number) => void;
   setMaxReprojectionError: (error: number) => void;
+  setThinning: (n: number) => void;
   setSelectedPointId: (id: bigint | null) => void;
 }
 
@@ -31,6 +33,7 @@ export const usePointCloudStore = create<PointCloudState>()(
       colorMode: 'rgb',
       minTrackLength: 0,
       maxReprojectionError: Infinity,
+      thinning: 0,
       selectedPointId: null,
 
       setShowPointCloud: (showPointCloud) => set({ showPointCloud }),
@@ -40,6 +43,7 @@ export const usePointCloudStore = create<PointCloudState>()(
       setColorMode: (colorMode) => set({ colorMode }),
       setMinTrackLength: (minTrackLength) => set({ minTrackLength }),
       setMaxReprojectionError: (maxReprojectionError) => set({ maxReprojectionError }),
+      setThinning: (thinning) => set({ thinning }),
       setSelectedPointId: (selectedPointId) => set({ selectedPointId }),
     }),
     {
@@ -52,6 +56,7 @@ export const usePointCloudStore = create<PointCloudState>()(
         colorMode: state.colorMode,
         minTrackLength: state.minTrackLength,
         maxReprojectionError: state.maxReprojectionError,
+        thinning: state.thinning,
       }),
       // Handle Infinity serialization: JSON.stringify(Infinity) becomes null,
       // so we convert null back to Infinity on load

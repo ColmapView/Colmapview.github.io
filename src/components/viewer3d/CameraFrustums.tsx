@@ -102,7 +102,6 @@ interface BatchedArrowMeshesProps {
   // Interaction callbacks
   onHover: (id: number | null) => void;
   onClick: (imageId: number) => void;
-  onDoubleClick: (imageId: number) => void;
   onContextMenu: (imageId: number) => void;
   lastNavigationToImageId: number | null;
 }
@@ -131,7 +130,6 @@ function BatchedArrowMeshes({
   imageFrameIndexMap,
   onHover,
   onClick,
-  onDoubleClick,
   onContextMenu,
   lastNavigationToImageId,
 }: BatchedArrowMeshesProps) {
@@ -422,14 +420,6 @@ function BatchedArrowMeshes({
           e.stopPropagation();
           onClick(f.image.imageId);
         }}
-        onDoubleClick={(e) => {
-          if (e.instanceId === undefined) return;
-          const f = frustums[e.instanceId];
-          // Let selected camera's FrustumPlane handle its own double-click
-          if (!f || f.image.imageId === selectedImageId) return;
-          e.stopPropagation();
-          onDoubleClick(f.image.imageId);
-        }}
         onContextMenu={(e) => {
           if (e.instanceId === undefined) return;
           const f = frustums[e.instanceId];
@@ -466,15 +456,6 @@ function BatchedArrowMeshes({
                   <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
                 </svg>
                 Left: select
-              </div>
-              <div className={hoverCardStyles.hintRow}>
-                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="6" y="2" width="12" height="20" rx="6"/>
-                  <path d="M12 2v8"/>
-                  <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
-                  <text x="18" y="18" fontSize="8" fill="currentColor" stroke="none">2</text>
-                </svg>
-                2xLeft: details
               </div>
               <div className={hoverCardStyles.hintRow}>
                 <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -765,7 +746,7 @@ function BatchedFrustumLines({
   if (frustums.length === 0) return null;
 
   return (
-    <lineSegments material={shaderMaterial}>
+    <lineSegments material={shaderMaterial} renderOrder={2}>
       <bufferGeometry ref={geometryRef}>
         <bufferAttribute
           attach="attributes-position"
@@ -799,7 +780,6 @@ interface BatchedPlaneHitTargetsProps {
   matchedImageIds: Set<number>;
   onHover: (id: number | null) => void;
   onClick: (imageId: number) => void;
-  onDoubleClick: (imageId: number) => void;
   onContextMenu: (imageId: number) => void;
   lastNavigationToImageId: number | null;
 }
@@ -811,7 +791,6 @@ function BatchedPlaneHitTargets({
   matchedImageIds,
   onHover,
   onClick,
-  onDoubleClick,
   onContextMenu,
   lastNavigationToImageId,
 }: BatchedPlaneHitTargetsProps) {
@@ -943,14 +922,6 @@ function BatchedPlaneHitTargets({
           e.stopPropagation();
           onClick(f.image.imageId);
         }}
-        onDoubleClick={(e) => {
-          if (e.instanceId === undefined) return;
-          const f = frustums[e.instanceId];
-          // Let selected camera's FrustumPlane handle its own double-click
-          if (!f || f.image.imageId === selectedImageId) return;
-          e.stopPropagation();
-          onDoubleClick(f.image.imageId);
-        }}
         onContextMenu={(e) => {
           if (e.instanceId === undefined) return;
           const f = frustums[e.instanceId];
@@ -986,15 +957,6 @@ function BatchedPlaneHitTargets({
                   <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
                 </svg>
                 Left: select
-              </div>
-              <div className={hoverCardStyles.hintRow}>
-                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="6" y="2" width="12" height="20" rx="6"/>
-                  <path d="M12 2v8"/>
-                  <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
-                  <text x="18" y="18" fontSize="8" fill="currentColor" stroke="none">2</text>
-                </svg>
-                2xLeft: details
               </div>
               <div className={hoverCardStyles.hintRow}>
                 <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1043,7 +1005,6 @@ interface FrustumPlaneProps {
   hoveredImageId: number | null;
   onHover: (id: number | null) => void;
   onClick: (imageId: number) => void;
-  onDoubleClick: (imageId: number) => void;
   onContextMenu: (imageId: number) => void;
   /** When true, disables all interaction (hover, click) - use with BatchedPlaneHitTargets */
   disableInteraction?: boolean;
@@ -1069,7 +1030,6 @@ const FrustumPlane = memo(function FrustumPlane({
   hoveredImageId,
   onHover,
   onClick,
-  onDoubleClick,
   onContextMenu,
   disableInteraction = false,
 }: FrustumPlaneProps) {
@@ -1320,7 +1280,6 @@ const FrustumPlane = memo(function FrustumPlane({
         // Disable raycasting when using BatchedPlaneHitTargets
         raycast={disableInteraction ? () => {} : undefined}
         onClick={disableInteraction ? undefined : (e) => { e.stopPropagation(); onClick(image.imageId); }}
-        onDoubleClick={disableInteraction ? undefined : (e) => { e.stopPropagation(); onDoubleClick(image.imageId); }}
         onContextMenu={disableInteraction ? undefined : (e) => { e.stopPropagation(); e.nativeEvent.preventDefault(); e.nativeEvent.stopPropagation(); onContextMenu(image.imageId); }}
         onPointerOver={disableInteraction ? undefined : (e) => {
           // Ignore hover during camera orbit/pan
@@ -1774,11 +1733,6 @@ export function CameraFrustums() {
     }
   }, [selectedImageId, setSelectedImageId, openImageDetail]);
 
-  const handleArrowDoubleClick = useCallback((imageId: number) => {
-    setContextMenu(null);
-    openImageDetail(imageId);
-  }, [openImageDetail]);
-
   // Right-click callback - if selected camera, go back or deselect; if matched camera, show matches; otherwise fly to
   const handleArrowContextMenu = useCallback((imageId: number) => {
     const frustum = frustums.find(f => f.image.imageId === imageId);
@@ -2020,7 +1974,6 @@ export function CameraFrustums() {
       hoveredImageId={hoveredImageId}
       onHover={setHoveredImageId}
       onClick={handleArrowClick}
-      onDoubleClick={handleArrowDoubleClick}
       onContextMenu={handleArrowContextMenu}
     />
   );
@@ -2047,7 +2000,6 @@ export function CameraFrustums() {
           imageFrameIndexMap={imageFrameIndexMap}
           onHover={setHoveredImageId}
           onClick={handleArrowClick}
-          onDoubleClick={handleArrowDoubleClick}
           onContextMenu={handleArrowContextMenu}
           lastNavigationToImageId={lastNavigationToImageId}
         />
@@ -2083,7 +2035,6 @@ export function CameraFrustums() {
           matchedImageIds={matchedImageIds}
           onHover={setHoveredImageId}
           onClick={handleArrowClick}
-          onDoubleClick={handleArrowDoubleClick}
           onContextMenu={handleArrowContextMenu}
           lastNavigationToImageId={lastNavigationToImageId}
         />
@@ -2128,7 +2079,6 @@ export function CameraFrustums() {
               hoveredImageId={hoveredImageId}
               onHover={setHoveredImageId}
               onClick={handleArrowClick}
-              onDoubleClick={handleArrowDoubleClick}
               onContextMenu={handleArrowContextMenu}
               disableInteraction={true}
             />
@@ -2183,7 +2133,6 @@ export function CameraFrustums() {
         matchedImageIds={matchedImageIds}
         onHover={setHoveredImageId}
         onClick={handleArrowClick}
-        onDoubleClick={handleArrowDoubleClick}
         onContextMenu={handleArrowContextMenu}
         lastNavigationToImageId={lastNavigationToImageId}
       />

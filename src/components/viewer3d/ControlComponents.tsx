@@ -3,6 +3,7 @@
  * Extracted from ViewerControls.tsx for better organization.
  */
 
+import type { ReactNode } from 'react';
 import { useState, useEffect, useLayoutEffect, memo, useRef } from 'react';
 import { controlPanelStyles, getControlButtonClass, getTooltipProps } from '../../theme';
 import { hslToHex, hexToHsl } from '../../utils/colorUtils';
@@ -15,14 +16,26 @@ const styles = controlPanelStyles;
 export type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'share' | 'export' | 'transform' | 'gallery' | 'rig' | 'settings' | 'floor' | null;
 
 export interface SliderRowProps {
-  label: string;
+  label: ReactNode;
   value: number;
   min: number;
   max: number;
   step: number;
   onChange: (value: number) => void;
   formatValue?: (value: number) => string;
+  /** Maximum value allowed when typing directly (defaults to max) */
+  inputMax?: number;
 }
+
+// Mouse scroll wheel icon for keyboard shortcut hints
+export const MouseScrollIcon = ({ className = "w-3 h-3" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    {/* Mouse body */}
+    <rect x="6" y="2" width="12" height="20" rx="6" />
+    {/* Scroll wheel */}
+    <line x1="12" y1="6" x2="12" y2="10" />
+  </svg>
+);
 
 // Calculate decimal places from step value (e.g., 0.1 -> 1, 0.05 -> 2, 1 -> 0)
 function getDecimalPlaces(step: number): number {
@@ -39,7 +52,7 @@ function roundToStep(value: number, step: number): number {
   return Math.round(value * factor) / factor;
 }
 
-export const SliderRow = memo(function SliderRow({ label, value, min, max, step, onChange, formatValue }: SliderRowProps) {
+export const SliderRow = memo(function SliderRow({ label, value, min, max, step, onChange, formatValue, inputMax }: SliderRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -66,7 +79,9 @@ export const SliderRow = memo(function SliderRow({ label, value, min, max, step,
   const applyValue = () => {
     const parsed = parseFloat(inputValue);
     if (!isNaN(parsed)) {
-      const clamped = Math.min(max, Math.max(min, parsed));
+      // Use inputMax for text input (allows values beyond slider range)
+      const effectiveMax = inputMax ?? max;
+      const clamped = Math.min(effectiveMax, Math.max(min, parsed));
       onChange(clamped);
     }
     setIsEditing(false);
@@ -120,6 +135,88 @@ export const SliderRow = memo(function SliderRow({ label, value, min, max, step,
           {displayValue}
         </span>
       )}
+    </div>
+  );
+});
+
+export interface ColorPickerRowProps {
+  label: ReactNode;
+  value: string; // hex color
+  onChange: (hex: string) => void;
+}
+
+export const ColorPickerRow = memo(function ColorPickerRow({ label, value, onChange }: ColorPickerRowProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [inputValue, setInputValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleDoubleClick = () => {
+    setInputValue(value);
+    setIsEditing(true);
+  };
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const applyValue = () => {
+    // Validate hex color
+    const hex = inputValue.startsWith('#') ? inputValue : `#${inputValue}`;
+    if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
+      onChange(hex.toLowerCase());
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      applyValue();
+    } else if (e.key === 'Escape') {
+      setIsEditing(false);
+    }
+  };
+
+  return (
+    <div className={styles.row}>
+      <label className={styles.label}>{label}</label>
+      <div className="flex items-center gap-2 flex-1">
+        {/* Color picker swatch */}
+        <label
+          className="relative w-8 h-6 rounded overflow-hidden border border-ds-border hover:border-ds-border-hover transition-colors cursor-pointer block shrink-0"
+          style={{ backgroundColor: value }}
+        >
+          <input
+            type="color"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="sr-only"
+          />
+        </label>
+        {/* Hex value display/edit */}
+        {isEditing ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onBlur={applyValue}
+            onKeyDown={handleKeyDown}
+            className="bg-ds-bg-secondary text-ds-primary text-sm font-mono px-1 py-0.5 rounded border border-ds-border w-16"
+            maxLength={7}
+          />
+        ) : (
+          <span
+            className="text-ds-secondary text-sm font-mono cursor-pointer hover:text-ds-primary transition-colors"
+            onDoubleClick={handleDoubleClick}
+            title="Double-click to edit"
+          >
+            {value.toUpperCase()}
+          </span>
+        )}
+      </div>
     </div>
   );
 });
@@ -383,12 +480,22 @@ const STATUS_BAR_CLEARANCE = 48; // 40px status bar + 8px padding
 export const PanelWrapper = memo(function PanelWrapper({ title, children }: PanelWrapperProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [adjustedTop, setAdjustedTop] = useState<number | null>(null);
+  const lastHeightRef = useRef<number>(0);
 
   // Adjust position to keep panel above status bar
+  // Only recalculate when panel height changes significantly (>5px) to avoid jitter
   useLayoutEffect(() => {
     if (!panelRef.current) return;
 
     const rect = panelRef.current.getBoundingClientRect();
+    const heightDiff = Math.abs(rect.height - lastHeightRef.current);
+
+    // Skip recalculation if height hasn't changed significantly
+    if (lastHeightRef.current > 0 && heightDiff < 5) {
+      return;
+    }
+    lastHeightRef.current = rect.height;
+
     const viewportHeight = window.innerHeight;
     const maxBottom = viewportHeight - STATUS_BAR_CLEARANCE;
 

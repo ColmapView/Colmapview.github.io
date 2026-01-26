@@ -5,6 +5,7 @@ import type { CameraViewState } from '../store/types';
 import type { Sim3dEuler } from '../types/sim3d';
 import type { ColmapManifest } from '../types/manifest';
 import { isIdentityEuler } from '../utils/sim3dTransforms';
+import { buildShareableFieldsFromRegistry } from '../config/registry';
 
 // Lazy-loaded fflate functions (loaded on first use)
 // Using 'any' for the options type to avoid fflate's strict literal types
@@ -68,72 +69,12 @@ function fromBase64Url(str: string): Uint8Array | null {
 }
 
 /**
- * Explicit lists of fields to INCLUDE in URL sharing for each store.
- * These define the visual state that should be shared when copying a URL.
- * Add new visual settings here when they are added to stores.
+ * Shareable fields are auto-derived from the config registry.
+ * Fields with `persist: true` in the registry are automatically included in URL sharing.
+ * To add a new shareable field, add it to the corresponding registry definition file
+ * in src/config/registry/definitions/ with `persist: true`.
  */
-const SHAREABLE_FIELDS = {
-  pointCloud: new Set([
-    'showPointCloud',
-    'pointSize',
-    'pointOpacity',
-    'colorMode',
-    'minTrackLength',
-    'maxReprojectionError',
-  ]),
-
-  ui: new Set([
-    // Point visualization
-    'showPoints2D',
-    'showPoints3D',
-    // Scene display
-    'showAxes',
-    'showGrid',
-    'axesCoordinateSystem',
-    'axesScale',
-    'gridScale',
-    'axisLabelMode',
-    'backgroundColor',
-    'showGizmo',
-    // Layout
-    'galleryCollapsed',
-    // Match visualization (important for showing camera relationships)
-    'showMatches',
-    'matchesDisplayMode',
-    'matchesOpacity',
-    'matchesColor',
-    // Mask overlay
-    'showMaskOverlay',
-    'maskOpacity',
-  ]),
-
-  camera: new Set([
-    // Frustum display
-    'showCameras',
-    'cameraDisplayMode',
-    'cameraScaleFactor',
-    'cameraScale',
-    'frustumColorMode',
-    'unselectedCameraOpacity',
-    // Projection
-    'cameraProjection',
-    'cameraFov',
-    // Selection
-    'showSelectionHighlight',
-    'selectionPlaneOpacity',
-    // Undistortion (affects image display on frustums)
-    'undistortionEnabled',
-    'undistortionMode',
-  ]),
-
-  rig: new Set([
-    'showRig',
-    'rigDisplayMode',
-    'rigColorMode',
-    'rigLineColor',
-    'rigLineOpacity',
-  ]),
-};
+const SHAREABLE_FIELDS = buildShareableFieldsFromRegistry();
 
 /**
  * Extract shareable fields from a store state object using explicit include list

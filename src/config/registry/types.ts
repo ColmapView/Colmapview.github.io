@@ -77,7 +77,8 @@ export type StoreHook =
   | 'usePointCloudStore'
   | 'useCameraStore'
   | 'useUIStore'
-  | 'useExportStore';
+  | 'useExportStore'
+  | 'useRigStore';
 
 // Section definition
 export interface SectionDef {

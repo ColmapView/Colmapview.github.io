@@ -14,6 +14,7 @@ import { usePointCloudStore } from '../../../store/stores/pointCloudStore';
 import { useCameraStore } from '../../../store/stores/cameraStore';
 import { useUIStore } from '../../../store/stores/uiStore';
 import { useExportStore } from '../../../store/stores/exportStore';
+import { useRigStore } from '../../../store/stores/rigStore';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyStore = { getState: () => any };
@@ -23,6 +24,7 @@ const stores: Record<StoreHook, AnyStore> = {
   useCameraStore,
   useUIStore,
   useExportStore,
+  useRigStore,
 };
 
 function getStoreState(hookName: StoreHook): Record<string, unknown> {

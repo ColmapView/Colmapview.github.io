@@ -59,6 +59,16 @@ export const pointCloudSection = defineSection({
       persist: true,
       description: 'null = show all points',
     },
+    {
+      key: 'thinning',
+      type: 'number',
+      min: 0,
+      max: 99,
+      isInt: true,
+      default: 0,
+      persist: true,
+      description: 'Skip every N points (0 = show all)',
+    },
     // Note: selectedPointId is a transient bigint property managed directly by the store
     // It's not included here as it doesn't participate in config persistence
   ],

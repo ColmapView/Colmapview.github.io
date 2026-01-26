@@ -99,7 +99,8 @@
       "Bash(git ls-tree:*)",
       "Bash(git restore:*)",
       "Bash(npm install:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Skill(code-review:code-review)"
     ]
   }
 }

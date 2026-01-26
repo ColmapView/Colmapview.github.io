@@ -35,6 +35,7 @@ export function PointCloud(): React.JSX.Element | null {
   const pointOpacity = usePointCloudStore((s) => s.pointOpacity);
   const minTrackLength = usePointCloudStore((s) => s.minTrackLength);
   const maxReprojectionError = usePointCloudStore((s) => s.maxReprojectionError);
+  const thinning = usePointCloudStore((s) => s.thinning);
   const selectedImageId = useCameraStore((s) => s.selectedImageId);
   const showSelectionHighlight = useCameraStore((s) => s.showSelectionHighlight);
   const selectionColorMode = useCameraStore((s) => s.selectionColorMode);
@@ -60,6 +61,7 @@ export function PointCloud(): React.JSX.Element | null {
       colorMode,
       minTrackLength,
       maxReprojectionError,
+      thinning,
       selectedImageId,
       showSelectionHighlight,
       selectionColor,
@@ -81,10 +83,18 @@ export function PointCloud(): React.JSX.Element | null {
   // Create geometry for main point cloud
   const geometry = useMemo(() => {
     if (!positions || !colors) return null;
+    if (positions.length === 0) {
+      console.warn('[PointCloud] Empty positions array');
+      return null;
+    }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.computeBoundingSphere();
+    // Validate bounding sphere
+    if (!geo.boundingSphere || !Number.isFinite(geo.boundingSphere.radius)) {
+      console.warn('[PointCloud] Invalid bounding sphere:', geo.boundingSphere);
+    }
     return geo;
   }, [positions, colors]);
 

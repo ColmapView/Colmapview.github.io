@@ -6,6 +6,7 @@ import type { ScreenshotSize, ScreenshotFormat, ExportFormat } from '../types';
 // Callback type for getting screenshot blob
 export type ScreenshotCallback = () => Promise<Blob | null>;
 export type GifRecordCallback = () => Promise<Blob | null>;
+export type StopRecordingCallback = () => void;
 
 export interface ExportState {
   screenshotSize: ScreenshotSize;
@@ -15,6 +16,7 @@ export interface ExportState {
   exportFormat: ExportFormat;
   exportTrigger: number;
   isRecordingGif: boolean;
+  gifRenderProgress: number | null; // null when not rendering, 0-100 during render
   gifBlobUrl: string | null;
   gifDuration: number; // in seconds
   gifDownsample: number; // 1, 2, 4, or 8
@@ -25,6 +27,7 @@ export interface ExportState {
   // Callback for getting screenshot blob (set by ScreenshotCapture component)
   getScreenshotBlob: ScreenshotCallback | null;
   recordGif: GifRecordCallback | null;
+  stopRecording: StopRecordingCallback | null;
 
   setScreenshotSize: (size: ScreenshotSize) => void;
   setScreenshotFormat: (format: ScreenshotFormat) => void;
@@ -34,7 +37,9 @@ export interface ExportState {
   triggerExport: () => void;
   setGetScreenshotBlob: (callback: ScreenshotCallback | null) => void;
   setRecordGif: (callback: GifRecordCallback | null) => void;
+  setStopRecording: (callback: StopRecordingCallback | null) => void;
   setIsRecordingGif: (recording: boolean) => void;
+  setGifRenderProgress: (progress: number | null) => void;
   setGifBlobUrl: (url: string | null) => void;
   setGifDuration: (duration: number) => void;
   setGifDownsample: (downsample: number) => void;
@@ -54,6 +59,7 @@ export const useExportStore = create<ExportState>()(
       exportFormat: 'binary',
       exportTrigger: 0,
       isRecordingGif: false,
+      gifRenderProgress: null,
       gifBlobUrl: null,
       gifDuration: 5,
       gifDownsample: 2,
@@ -62,6 +68,7 @@ export const useExportStore = create<ExportState>()(
       recordingFormat: 'webm',
       getScreenshotBlob: null,
       recordGif: null,
+      stopRecording: null,
 
       setScreenshotSize: (screenshotSize) => set({ screenshotSize }),
       setScreenshotFormat: (screenshotFormat) => set({ screenshotFormat }),
@@ -71,7 +78,9 @@ export const useExportStore = create<ExportState>()(
       triggerExport: () => set((state) => ({ exportTrigger: state.exportTrigger + 1 })),
       setGetScreenshotBlob: (callback) => set({ getScreenshotBlob: callback }),
       setRecordGif: (callback) => set({ recordGif: callback }),
+      setStopRecording: (callback) => set({ stopRecording: callback }),
       setIsRecordingGif: (isRecordingGif) => set({ isRecordingGif }),
+      setGifRenderProgress: (gifRenderProgress) => set({ gifRenderProgress }),
       setGifBlobUrl: (gifBlobUrl) => {
         // Revoke old URL if exists
         const oldUrl = get().gifBlobUrl;
