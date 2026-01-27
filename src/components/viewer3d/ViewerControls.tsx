@@ -1,40 +1,47 @@
 import { useState, useEffect, memo, useCallback, useMemo } from 'react';
 import {
   useReconstructionStore,
-  usePointCloudStore,
-  useCameraStore,
   useUIStore,
-  useExportStore,
   useTransformStore,
   usePointPickingStore,
-  useRigStore,
   useNotificationStore,
   useGuideStore,
   applyTransformPreset,
   applyTransformToData,
 } from '../../store';
+import {
+  usePointsNode,
+  useCamerasNode,
+  useSelectionNode,
+  useNavigationNode,
+  useMatchesNode,
+  useAxesNode,
+  useGridNode,
+  useRigNode,
+  usePointsNodeActions,
+  useCamerasNodeActions,
+  useSelectionNodeActions,
+  useNavigationNodeActions,
+  useMatchesNodeActions,
+  useAxesNodeActions,
+  useGridNodeActions,
+  useRigNodeActions,
+} from '../../nodes';
 import { useFloorPlaneStore, type FloorColorMode } from '../../store/stores/floorPlaneStore';
 import { markSettingsResetWarningShown } from '../../store/migration';
 import { detectPlaneRANSAC, computeDistancesToPlane, transformPositions } from '../../utils/ransac';
 import { createSim3dFromEuler, isIdentityEuler } from '../../utils/sim3dTransforms';
-// sim3d transforms moved to DistanceInputModal for picking tool apply logic
 import type { ColorMode } from '../../types/colmap';
-import type { CameraMode, CameraDisplayMode, CameraScaleFactor, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesCoordinateSystem, AxisLabelMode, ScreenshotSize, ScreenshotFormat, AutoRotateMode, HorizonLockMode, RigDisplayMode, RigColorMode } from '../../store/types';
+import type { CameraMode, CameraDisplayMode, CameraScaleFactor, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesCoordinateSystem, AxisLabelMode, AutoRotateMode, HorizonLockMode, RigDisplayMode, RigColorMode } from '../../store/types';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { controlPanelStyles, HOTKEYS } from '../../theme';
-import { exportReconstructionText, exportReconstructionBinary, exportPointsPLY, downloadReconstructionZip } from '../../parsers';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
-import { extractConfigurationFromStores, serializeConfigToYaml } from '../../config/configuration';
 import { hslToHex, hexToHsl } from '../../utils/colorUtils';
-import { generateShareableUrl, generateEmbedUrl, generateIframeHtml, copyWithFeedback } from '../../hooks/useUrlState';
-import { CheckIcon } from '../../icons';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 
 // Import icons from centralized icons folder
 import {
   HoverIcon,
-  ScreenshotIcon,
-  ExportIcon,
   TransformIcon,
   FrustumIcon,
   ArrowIcon,
@@ -66,7 +73,6 @@ import {
   RigOffIcon,
   RigBlinkIcon,
   SettingsIcon,
-  ShareIcon,
 } from '../../icons';
 
 // Import UI components from ControlComponents
@@ -81,6 +87,10 @@ import {
   ColorPickerRow,
   type PanelType,
 } from './ControlComponents';
+
+// Import extracted panels
+import { ScreenshotPanel, SharePanel, ExportPanel } from './panels';
+import { ProfileSelector } from '../dropzone/ProfileSelector';
 
 // Use styles from theme
 const styles = controlPanelStyles;
@@ -517,155 +527,147 @@ const GalleryToggleButton = memo(function GalleryToggleButton({ activePanel, set
 
 export function ViewerControls() {
   const [activePanel, setActivePanel] = useState<PanelType>(null);
-  const [copiedShareLink, setCopiedShareLink] = useState(false);
-  const [copiedEmbedUrl, setCopiedEmbedUrl] = useState(false);
-  const [copiedEmbedHtml, setCopiedEmbedHtml] = useState(false);
-  const [includeShareLink, setIncludeShareLink] = useState(true);
-  const [includeScreenshot, setIncludeScreenshot] = useState(true);
-  const [recordCountdown, setRecordCountdown] = useState<number | null>(null);
 
-  // Point cloud settings
-  const showPointCloud = usePointCloudStore((s) => s.showPointCloud);
-  const togglePointCloud = usePointCloudStore((s) => s.togglePointCloud);
-  const pointSize = usePointCloudStore((s) => s.pointSize);
-  const setPointSize = usePointCloudStore((s) => s.setPointSize);
-  const pointOpacity = usePointCloudStore((s) => s.pointOpacity);
-  const setPointOpacity = usePointCloudStore((s) => s.setPointOpacity);
-  const colorMode = usePointCloudStore((s) => s.colorMode);
-  const setColorMode = usePointCloudStore((s) => s.setColorMode);
-  const minTrackLength = usePointCloudStore((s) => s.minTrackLength);
-  const setMinTrackLength = usePointCloudStore((s) => s.setMinTrackLength);
-  const maxReprojectionError = usePointCloudStore((s) => s.maxReprojectionError);
-  const setMaxReprojectionError = usePointCloudStore((s) => s.setMaxReprojectionError);
-  const thinning = usePointCloudStore((s) => s.thinning);
-  const setThinning = usePointCloudStore((s) => s.setThinning);
+  // Node hooks for reading state
+  const pointsNode = usePointsNode();
+  const camerasNode = useCamerasNode();
+  const selectionNode = useSelectionNode();
+  const navNode = useNavigationNode();
+  const matchesNode = useMatchesNode();
+  const axesNode = useAxesNode();
+  const gridNode = useGridNode();
+  const rigNode = useRigNode();
 
-  // Camera display settings
-  const showCameras = useCameraStore((s) => s.showCameras);
-  const setShowCameras = useCameraStore((s) => s.setShowCameras);
-  const cameraDisplayMode = useCameraStore((s) => s.cameraDisplayMode);
-  const setCameraDisplayMode = useCameraStore((s) => s.setCameraDisplayMode);
-  const cameraScaleFactor = useCameraStore((s) => s.cameraScaleFactor);
-  const setCameraScaleFactor = useCameraStore((s) => s.setCameraScaleFactor);
-  const cameraScale = useCameraStore((s) => s.cameraScale);
-  const setCameraScale = useCameraStore((s) => s.setCameraScale);
-  const selectionPlaneOpacity = useCameraStore((s) => s.selectionPlaneOpacity);
-  const setSelectionPlaneOpacity = useCameraStore((s) => s.setSelectionPlaneOpacity);
-  const showSelectionHighlight = useCameraStore((s) => s.showSelectionHighlight);
-  const setShowSelectionHighlight = useCameraStore((s) => s.setShowSelectionHighlight);
-  const selectionColorMode = useCameraStore((s) => s.selectionColorMode);
-  const setSelectionColorMode = useCameraStore((s) => s.setSelectionColorMode);
-  const selectionColor = useCameraStore((s) => s.selectionColor);
-  const setSelectionColor = useCameraStore((s) => s.setSelectionColor);
-  const selectionAnimationSpeed = useCameraStore((s) => s.selectionAnimationSpeed);
-  const setSelectionAnimationSpeed = useCameraStore((s) => s.setSelectionAnimationSpeed);
-  const cameraMode = useCameraStore((s) => s.cameraMode);
-  const setCameraMode = useCameraStore((s) => s.setCameraMode);
-  const flySpeed = useCameraStore((s) => s.flySpeed);
-  const setFlySpeed = useCameraStore((s) => s.setFlySpeed);
-  const flyTransitionDuration = useCameraStore((s) => s.flyTransitionDuration);
-  const setFlyTransitionDuration = useCameraStore((s) => s.setFlyTransitionDuration);
-  const pointerLock = useCameraStore((s) => s.pointerLock);
-  const setPointerLock = useCameraStore((s) => s.setPointerLock);
-  const frustumColorMode = useCameraStore((s) => s.frustumColorMode);
-  const setFrustumColorMode = useCameraStore((s) => s.setFrustumColorMode);
-  const unselectedCameraOpacity = useCameraStore((s) => s.unselectedCameraOpacity);
-  const setUnselectedCameraOpacity = useCameraStore((s) => s.setUnselectedCameraOpacity);
-  const cameraProjection = useCameraStore((s) => s.cameraProjection);
-  const setCameraProjection = useCameraStore((s) => s.setCameraProjection);
-  const cameraFov = useCameraStore((s) => s.cameraFov);
-  const setCameraFov = useCameraStore((s) => s.setCameraFov);
-  const horizonLock = useCameraStore((s) => s.horizonLock);
-  const setHorizonLock = useCameraStore((s) => s.setHorizonLock);
-  const autoRotateMode = useCameraStore((s) => s.autoRotateMode);
-  const setAutoRotateMode = useCameraStore((s) => s.setAutoRotateMode);
-  const autoRotateSpeed = useCameraStore((s) => s.autoRotateSpeed);
-  const setAutoRotateSpeed = useCameraStore((s) => s.setAutoRotateSpeed);
-  const undistortionEnabled = useCameraStore((s) => s.undistortionEnabled);
-  const setUndistortionEnabled = useCameraStore((s) => s.setUndistortionEnabled);
+  // Action hooks for mutations
+  const pointsActions = usePointsNodeActions();
+  const camerasActions = useCamerasNodeActions();
+  const selectionActions = useSelectionNodeActions();
+  const navActions = useNavigationNodeActions();
+  const matchesActions = useMatchesNodeActions();
+  const axesActions = useAxesNodeActions();
+  const gridActions = useGridNodeActions();
+  const rigActions = useRigNodeActions();
 
-  // UI settings
-  const showMatches = useUIStore((s) => s.showMatches);
-  const setShowMatches = useUIStore((s) => s.setShowMatches);
-  const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
-  const setMatchesDisplayMode = useUIStore((s) => s.setMatchesDisplayMode);
-  const matchesOpacity = useUIStore((s) => s.matchesOpacity);
-  const setMatchesOpacity = useUIStore((s) => s.setMatchesOpacity);
-  const matchesColor = useUIStore((s) => s.matchesColor);
-  const setMatchesColor = useUIStore((s) => s.setMatchesColor);
-  const showAxes = useUIStore((s) => s.showAxes);
-  const showGrid = useUIStore((s) => s.showGrid);
-  const setShowAxes = useUIStore((s) => s.setShowAxes);
-  const setShowGrid = useUIStore((s) => s.setShowGrid);
-  const toggleAxes = useUIStore((s) => s.toggleAxes);
-  const toggleGrid = useUIStore((s) => s.toggleGrid);
-  const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
-  const setAxesCoordinateSystem = useUIStore((s) => s.setAxesCoordinateSystem);
-  const axesScale = useUIStore((s) => s.axesScale);
-  const setAxesScale = useUIStore((s) => s.setAxesScale);
-  const gridScale = useUIStore((s) => s.gridScale);
-  const setGridScale = useUIStore((s) => s.setGridScale);
-  const axisLabelMode = useUIStore((s) => s.axisLabelMode);
-  const setAxisLabelMode = useUIStore((s) => s.setAxisLabelMode);
+  // Extract point cloud settings from node
+  const showPointCloud = pointsNode.visible;
+  const setShowPointCloud = pointsActions.setVisible;
+  const togglePointCloud = pointsActions.toggleVisible;
+  const pointSize = pointsNode.size;
+  const setPointSize = pointsActions.setSize;
+  const pointOpacity = pointsNode.opacity;
+  const setPointOpacity = pointsActions.setOpacity;
+  const colorMode = pointsNode.colorMode;
+  const setColorMode = pointsActions.setColorMode;
+  const minTrackLength = pointsNode.minTrackLength;
+  const setMinTrackLength = pointsActions.setMinTrackLength;
+  const maxReprojectionError = pointsNode.maxReprojectionError;
+  const setMaxReprojectionError = pointsActions.setMaxReprojectionError;
+  const thinning = pointsNode.thinning;
+  const setThinning = pointsActions.setThinning;
+
+  // Extract camera display settings from nodes
+  const showCameras = camerasNode.visible;
+  const setShowCameras = camerasActions.setVisible;
+  const cameraDisplayMode = camerasNode.displayMode;
+  const setCameraDisplayMode = camerasActions.setDisplayMode;
+  const cameraScaleFactor = camerasNode.scaleFactor;
+  const setCameraScaleFactor = camerasActions.setScaleFactor;
+  const cameraScale = camerasNode.scale;
+  const setCameraScale = camerasActions.setScale;
+  const frustumColorMode = camerasNode.colorMode;
+  const setFrustumColorMode = camerasActions.setColorMode;
+  const frustumSingleColor = camerasNode.singleColor;
+  const setFrustumSingleColor = camerasActions.setSingleColor;
+  const frustumStandbyOpacity = camerasNode.standbyOpacity;
+  const setFrustumStandbyOpacity = camerasActions.setStandbyOpacity;
+  const undistortionEnabled = camerasNode.undistortionEnabled;
+  const setUndistortionEnabled = camerasActions.setUndistortionEnabled;
+
+  // Extract selection settings from node
+  const selectionPlaneOpacity = selectionNode.planeOpacity;
+  const setSelectionPlaneOpacity = selectionActions.setPlaneOpacity;
+  const showSelectionHighlight = selectionNode.visible;
+  const setShowSelectionHighlight = selectionActions.setVisible;
+  const selectionColorMode = selectionNode.colorMode;
+  const setSelectionColorMode = selectionActions.setColorMode;
+  const selectionColor = selectionNode.color;
+  const setSelectionColor = selectionActions.setColor;
+  const selectionAnimationSpeed = selectionNode.animationSpeed;
+  const setSelectionAnimationSpeed = selectionActions.setAnimationSpeed;
+  const unselectedCameraOpacity = selectionNode.unselectedOpacity;
+  const setUnselectedCameraOpacity = selectionActions.setUnselectedOpacity;
+
+  // Extract navigation settings from node
+  const cameraMode = navNode.mode;
+  const setCameraMode = navActions.setMode;
+  const flySpeed = navNode.flySpeed;
+  const setFlySpeed = navActions.setFlySpeed;
+  const flyTransitionDuration = navNode.flyTransitionDuration;
+  const setFlyTransitionDuration = navActions.setFlyTransitionDuration;
+  const pointerLock = navNode.pointerLock;
+  const setPointerLock = navActions.setPointerLock;
+  const cameraProjection = navNode.projection;
+  const setCameraProjection = navActions.setProjection;
+  const cameraFov = navNode.fov;
+  const setCameraFov = navActions.setFov;
+  const horizonLock = navNode.horizonLock;
+  const setHorizonLock = navActions.setHorizonLock;
+  const autoRotateMode = navNode.autoRotateMode;
+  const setAutoRotateMode = navActions.setAutoRotateMode;
+  const autoRotateSpeed = navNode.autoRotateSpeed;
+  const setAutoRotateSpeed = navActions.setAutoRotateSpeed;
+  const autoFovEnabled = navNode.autoFovEnabled;
+  const setAutoFovEnabled = navActions.setAutoFovEnabled;
+
+  // Extract matches settings from node
+  const showMatches = matchesNode.visible;
+  const setShowMatches = matchesActions.setVisible;
+  const matchesDisplayMode = matchesNode.displayMode;
+  const setMatchesDisplayMode = matchesActions.setDisplayMode;
+  const matchesOpacity = matchesNode.opacity;
+  const setMatchesOpacity = matchesActions.setOpacity;
+  const matchesColor = matchesNode.color;
+  const setMatchesColor = matchesActions.setColor;
+
+  // Extract axes settings from node
+  const showAxes = axesNode.visible;
+  const setShowAxes = axesActions.setVisible;
+  const toggleAxes = axesActions.toggleVisible;
+  const axesCoordinateSystem = axesNode.coordinateSystem;
+  const setAxesCoordinateSystem = axesActions.setCoordinateSystem;
+  const axesScale = axesNode.scale;
+  const setAxesScale = axesActions.setScale;
+  const axisLabelMode = axesNode.labelMode;
+  const setAxisLabelMode = axesActions.setLabelMode;
+
+  // Extract grid settings from node
+  const showGrid = gridNode.visible;
+  const setShowGrid = gridActions.setVisible;
+  const toggleGrid = gridActions.toggleVisible;
+  const gridScale = gridNode.scale;
+  const setGridScale = gridActions.setScale;
+
+  // UI settings (remaining from UIStore)
   const backgroundColor = useUIStore((s) => s.backgroundColor);
   const setBackgroundColor = useUIStore((s) => s.setBackgroundColor);
   const setView = useUIStore((s) => s.setView);
   const openContextMenuEditor = useUIStore((s) => s.openContextMenuEditor);
 
-  // Export settings
-  const screenshotSize = useExportStore((s) => s.screenshotSize);
-  const setScreenshotSize = useExportStore((s) => s.setScreenshotSize);
-  const screenshotFormat = useExportStore((s) => s.screenshotFormat);
-  const setScreenshotFormat = useExportStore((s) => s.setScreenshotFormat);
-  const screenshotHideLogo = useExportStore((s) => s.screenshotHideLogo);
-  const setScreenshotHideLogo = useExportStore((s) => s.setScreenshotHideLogo);
-  const takeScreenshot = useExportStore((s) => s.takeScreenshot);
-  const getScreenshotBlob = useExportStore((s) => s.getScreenshotBlob);
-  const recordGif = useExportStore((s) => s.recordGif);
-  const isRecordingGif = useExportStore((s) => s.isRecordingGif);
-  const gifRenderProgress = useExportStore((s) => s.gifRenderProgress);
-  const gifBlobUrl = useExportStore((s) => s.gifBlobUrl);
-  const gifDuration = useExportStore((s) => s.gifDuration);
-  const setGifDuration = useExportStore((s) => s.setGifDuration);
-  const gifDownsample = useExportStore((s) => s.gifDownsample);
-  const setGifDownsample = useExportStore((s) => s.setGifDownsample);
-  const downloadGif = useExportStore((s) => s.downloadGif);
-  const stopRecording = useExportStore((s) => s.stopRecording);
-  const recordingFormat = useExportStore((s) => s.recordingFormat);
-  const setRecordingFormat = useExportStore((s) => s.setRecordingFormat);
-  const recordingQuality = useExportStore((s) => s.recordingQuality);
-  const setRecordingQuality = useExportStore((s) => s.setRecordingQuality);
-  const gifSpeed = useExportStore((s) => s.gifSpeed);
-  const setGifSpeed = useExportStore((s) => s.setGifSpeed);
-  const exportFormat = useExportStore((s) => s.exportFormat);
-  const setExportFormat = useExportStore((s) => s.setExportFormat);
+
+  // Reconstruction data (needed for various panels)
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
-  const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
-  const sourceType = useReconstructionStore((s) => s.sourceType);
-  const sourceUrl = useReconstructionStore((s) => s.sourceUrl);
-  const sourceManifest = useReconstructionStore((s) => s.sourceManifest);
-  const currentViewState = useCameraStore((s) => s.currentViewState);
 
-  // Transform state for export panel
-  const transform = useTransformStore((s) => s.transform);
-  const hasTransformChanges = !isIdentityEuler(transform);
-
-  // Check if share buttons should be shown (loaded from URL or manifest)
-  const canShare = (sourceType === 'url' || sourceType === 'manifest') && reconstruction;
-  const shareSource = sourceUrl ?? sourceManifest;
-
-  // Rig settings (only shown when rig data is available)
-  const showRig = useRigStore((s) => s.showRig);
-  const setShowRig = useRigStore((s) => s.setShowRig);
-  const rigDisplayMode = useRigStore((s) => s.rigDisplayMode);
-  const setRigDisplayMode = useRigStore((s) => s.setRigDisplayMode);
-  const rigColorMode = useRigStore((s) => s.rigColorMode);
-  const setRigColorMode = useRigStore((s) => s.setRigColorMode);
-  const rigLineColor = useRigStore((s) => s.rigLineColor);
-  const setRigLineColor = useRigStore((s) => s.setRigLineColor);
-  const rigLineOpacity = useRigStore((s) => s.rigLineOpacity);
-  const setRigLineOpacity = useRigStore((s) => s.setRigLineOpacity);
+  // Extract rig settings from node
+  const showRig = rigNode.visible;
+  const setShowRig = rigActions.setVisible;
+  const rigDisplayMode = rigNode.displayMode;
+  const setRigDisplayMode = rigActions.setDisplayMode;
+  const rigColorMode = rigNode.colorMode;
+  const setRigColorMode = rigActions.setColorMode;
+  const rigLineColor = rigNode.color;
+  const setRigLineColor = rigActions.setColor;
+  const rigLineOpacity = rigNode.opacity;
+  const setRigLineOpacity = rigActions.setOpacity;
   // Compute rig info from image names (images with same filename in different directories form a rig group)
   const rigInfo = useMemo(() => {
     if (!reconstruction) return { hasRigData: false, cameraCount: 0, frameCount: 0 };
@@ -696,196 +698,6 @@ export function ViewerControls() {
   }, [reconstruction]);
 
   const { hasRigData, cameraCount, frameCount } = rigInfo;
-
-  // Handle share link copy
-  const handleCopyShareLink = useCallback(async () => {
-    if (!shareSource) return;
-    const url = generateShareableUrl(shareSource, currentViewState);
-    await copyWithFeedback(url, setCopiedShareLink);
-  }, [shareSource, currentViewState]);
-
-  // Handle embed URL copy
-  const handleCopyEmbedUrl = useCallback(async () => {
-    if (!shareSource) return;
-    const embedUrl = generateEmbedUrl(shareSource, currentViewState);
-    await copyWithFeedback(embedUrl, setCopiedEmbedUrl);
-  }, [shareSource, currentViewState]);
-
-  // Handle embed HTML copy
-  const handleCopyEmbedHtml = useCallback(async () => {
-    if (!shareSource) return;
-    const embedUrl = generateEmbedUrl(shareSource, currentViewState);
-    const iframeHtml = generateIframeHtml(embedUrl);
-    await copyWithFeedback(iframeHtml, setCopiedEmbedHtml);
-  }, [shareSource, currentViewState]);
-
-  // Get reconstruction stats for social sharing
-  const getShareText = useCallback((withShareLink: boolean) => {
-    const parts: string[] = [];
-
-    // Add stats if reconstruction is loaded
-    if (reconstruction) {
-      const numPoints = reconstruction.globalStats?.totalPoints ?? 0;
-      const numImages = reconstruction.images.size;
-      const numCameras = reconstruction.cameras.size;
-
-      // Format numbers with K/M suffixes
-      const formatNum = (n: number) => {
-        if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
-        if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-        return n.toString();
-      };
-
-      if (numPoints > 0) {
-        parts.push(`📍 ${formatNum(numPoints)} points`);
-      }
-      if (numImages > 0) {
-        parts.push(`🖼️ ${numImages} images`);
-      }
-      if (numCameras > 1) {
-        parts.push(`📷 ${numCameras} cameras`);
-      }
-    }
-
-    // Add hashtags and attribution
-    // If share link is included separately, don't duplicate the URL in text
-    const hashtags = '#3DReconstruction #Photogrammetry #COLMAP';
-    const attribution = withShareLink
-      ? 'Made with ColmapView by @opsiclear'
-      : 'Made with https://colmapview.github.io/ by @opsiclear';
-
-    const placeholder = '[type something here ...]';
-    if (parts.length > 0) {
-      return `${placeholder}\n\n${parts.join(' | ')}\n\n${hashtags}\n${attribution}`;
-    }
-    return `${placeholder}\n\n${hashtags}\n${attribution}`;
-  }, [reconstruction]);
-
-  // Copy screenshot to clipboard
-  const copyScreenshotToClipboard = useCallback(async () => {
-    if (!getScreenshotBlob) return false;
-    try {
-      const blob = await getScreenshotBlob();
-      if (blob) {
-        await navigator.clipboard.write([
-          new ClipboardItem({ 'image/png': blob })
-        ]);
-        useNotificationStore.getState().addNotification(
-          'info',
-          'Screenshot copied! Press Ctrl+V to paste',
-          4000
-        );
-        return true;
-      }
-    } catch (err) {
-      console.error('Failed to copy screenshot to clipboard:', err);
-    }
-    return false;
-  }, [getScreenshotBlob]);
-
-  // Start recording with countdown
-  const startRecordingWithCountdown = useCallback(() => {
-    if (!recordGif || isRecordingGif || recordCountdown !== null) return;
-
-    setRecordCountdown(3);
-    useNotificationStore.getState().addNotification('info', 'Countdown (3)', 900);
-
-    const countdown = (count: number) => {
-      if (count > 0) {
-        setRecordCountdown(count);
-        if (count < 3) {
-          useNotificationStore.getState().addNotification('info', `Countdown (${count})`, 900);
-        }
-        setTimeout(() => countdown(count - 1), 1000);
-      } else {
-        setRecordCountdown(null);
-        useNotificationStore.getState().addNotification('info', 'Recording started!', 2000);
-        recordGif().then(() => {
-          useNotificationStore.getState().addNotification('info', 'Recording complete! Downloading...', 3000);
-          // Auto download after a short delay to ensure blob URL is set
-          setTimeout(() => {
-            downloadGif();
-          }, 100);
-        });
-      }
-    };
-
-    countdown(3);
-  }, [recordGif, isRecordingGif, recordCountdown, downloadGif]);
-
-  // Handle share to X (Twitter)
-  const handleShareToX = useCallback(async () => {
-    const url = shareSource ? generateShareableUrl(shareSource, currentViewState) : null;
-    const willIncludeLink = includeShareLink && !!url;
-    const text = getShareText(willIncludeLink);
-
-    // Copy screenshot to clipboard for easy pasting (if enabled)
-    if (includeScreenshot) {
-      await copyScreenshotToClipboard();
-    }
-
-    // Open X share dialog
-    const xUrl = willIncludeLink
-      ? `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`
-      : `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
-    window.open(xUrl, '_blank', 'width=700,height=600');
-  }, [shareSource, currentViewState, getShareText, copyScreenshotToClipboard, includeShareLink, includeScreenshot]);
-
-  // Handle share to LinkedIn
-  const handleShareToLinkedIn = useCallback(async () => {
-    const url = shareSource ? generateShareableUrl(shareSource, currentViewState) : null;
-    const willIncludeLink = includeShareLink && !!url;
-    const text = getShareText(willIncludeLink);
-
-    // Copy text to clipboard (LinkedIn doesn't support pre-filled text)
-    try {
-      const shareContent = willIncludeLink ? `${text}\n${url}` : text;
-      await navigator.clipboard.writeText(shareContent);
-      useNotificationStore.getState().addNotification('info', 'Message copied! Paste in LinkedIn post', 4000);
-    } catch {
-      // Fallback - just notify
-    }
-
-    // Copy screenshot to clipboard for easy pasting (if enabled)
-    if (includeScreenshot) {
-      await copyScreenshotToClipboard();
-    }
-
-    // Open LinkedIn - go to feed to create new post
-    window.open('https://www.linkedin.com/feed/', '_blank', 'width=700,height=600');
-  }, [shareSource, currentViewState, getShareText, copyScreenshotToClipboard, includeShareLink, includeScreenshot]);
-
-  // Handle export action
-  const handleExport = useCallback(() => {
-    if (exportFormat === 'config') {
-      // Config export doesn't need reconstruction
-      const config = extractConfigurationFromStores();
-      const yaml = serializeConfigToYaml(config);
-      const blob = new Blob([yaml], { type: 'text/yaml' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'colmapview-config.yml';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      return;
-    }
-
-    if (!reconstruction) return;
-    switch (exportFormat) {
-      case 'text':
-        exportReconstructionText(reconstruction, wasmReconstruction);
-        break;
-      case 'binary':
-        exportReconstructionBinary(reconstruction, wasmReconstruction);
-        break;
-      case 'ply':
-        exportPointsPLY(reconstruction, wasmReconstruction);
-        break;
-    }
-  }, [reconstruction, wasmReconstruction, exportFormat]);
 
   // Track HSL values in local state so they persist even when they don't affect the hex color
   const [hsl, setHsl] = useState(() => hexToHsl(backgroundColor));
@@ -929,6 +741,41 @@ export function ViewerControls() {
     updateHsl(hexToHsl(hex));
   }, [updateHsl]);
 
+  // Track HSL values for frustum single color
+  const [frustumHsl, setFrustumHsl] = useState(() => hexToHsl(frustumSingleColor));
+
+  // Sync frustum HSL state when frustumSingleColor changes externally
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional pattern for syncing derived state with external changes
+    setFrustumHsl((currentHsl) => {
+      if (hslToHex(currentHsl.h, currentHsl.s, currentHsl.l) !== frustumSingleColor) {
+        return hexToHsl(frustumSingleColor);
+      }
+      return currentHsl;
+    });
+  }, [frustumSingleColor]);
+
+  const updateFrustumHsl = useCallback((newHsl: { h: number; s: number; l: number }) => {
+    setFrustumHsl(newHsl);
+    setFrustumSingleColor(hslToHex(newHsl.h, newHsl.s, newHsl.l));
+  }, [setFrustumSingleColor]);
+
+  const handleFrustumHueChange = useCallback((h: number) => {
+    updateFrustumHsl({ ...frustumHsl, h });
+  }, [frustumHsl, updateFrustumHsl]);
+
+  const handleFrustumSaturationChange = useCallback((s: number) => {
+    updateFrustumHsl({ ...frustumHsl, s });
+  }, [frustumHsl, updateFrustumHsl]);
+
+  const handleFrustumLightnessChange = useCallback((l: number) => {
+    updateFrustumHsl({ ...frustumHsl, l });
+  }, [frustumHsl, updateFrustumHsl]);
+
+  const handleFrustumColorPickerChange = useCallback((hex: string) => {
+    updateFrustumHsl(hexToHsl(hex));
+  }, [updateFrustumHsl]);
+
   const toggleCameraMode = useCallback(() => {
     setCameraMode(cameraMode === 'orbit' ? 'fly' : 'orbit');
   }, [cameraMode, setCameraMode]);
@@ -938,7 +785,6 @@ export function ViewerControls() {
   }, [undistortionEnabled, setUndistortionEnabled]);
 
   // Cycle through color modes: rgb → error → trackLength → off → rgb
-  const setShowPointCloud = usePointCloudStore((s) => s.setShowPointCloud);
   const cycleColorMode = useCallback(() => {
     if (!showPointCloud) {
       // off → rgb
@@ -975,14 +821,14 @@ export function ViewerControls() {
     }
   }, [showCameras, cameraDisplayMode, setShowCameras, setCameraDisplayMode]);
 
-  // Cycle through matches display modes: off → on → blink → off
+  // Cycle through matches display modes: off → static → blink → off
   const cycleMatchesDisplayMode = useCallback(() => {
     if (!showMatches) {
-      // off → on
+      // off → static
       setShowMatches(true);
-      setMatchesDisplayMode('on');
-    } else if (matchesDisplayMode === 'on') {
-      // on → blink
+      setMatchesDisplayMode('static');
+    } else if (matchesDisplayMode === 'static') {
+      // static → blink
       setMatchesDisplayMode('blink');
     } else {
       // blink → off
@@ -1005,14 +851,14 @@ export function ViewerControls() {
   }, [showSelectionHighlight, selectionColorMode, setShowSelectionHighlight, setSelectionColorMode]);
 
 
-  // Cycle through rig display modes: off → lines → blink → off
+  // Cycle through rig display modes: off → static → blink → off
   const cycleRigDisplayMode = useCallback(() => {
     if (!showRig) {
-      // off → lines
+      // off → static
       setShowRig(true);
-      setRigDisplayMode('lines');
-    } else if (rigDisplayMode === 'lines') {
-      // lines → blink
+      setRigDisplayMode('static');
+    } else if (rigDisplayMode === 'static') {
+      // static → blink
       setRigDisplayMode('blink');
     } else {
       // blink → off
@@ -1198,7 +1044,7 @@ export function ViewerControls() {
   );
 
   return (
-    <div className={styles.container}>
+    <div className={styles.container} data-testid="viewer-controls">
       <ControlButton
         panelId="view"
         activePanel={activePanel}
@@ -1234,9 +1080,9 @@ export function ViewerControls() {
               value={cameraFov}
               min={10}
               max={120}
-              step={1}
+              step={0.1}
               onChange={setCameraFov}
-              formatValue={(v) => `${v}°`}
+              formatValue={(v) => `${v.toFixed(1)}°`}
             />
           )}
 
@@ -1420,37 +1266,52 @@ export function ViewerControls() {
               { value: 'flip', label: 'Flip' },
             ]}
           />
-          <SelectRow
-            label="Auto Rotate"
-            value={autoRotateMode}
-            onChange={(v) => setAutoRotateMode(v as AutoRotateMode)}
-            options={[
-              { value: 'off', label: 'Off' },
-              { value: 'cw', label: 'Clockwise' },
-              { value: 'ccw', label: 'Counter-CW' },
-            ]}
-          />
-          <SliderRow
-            label="Rotate Speed"
-            value={autoRotateSpeed}
-            min={0.1}
-            max={2}
-            step={0.1}
-            onChange={setAutoRotateSpeed}
-            formatValue={(v) => v.toFixed(1)}
-          />
+          {cameraMode === 'orbit' && (
+            <>
+              <SelectRow
+                label="Auto Rotate"
+                value={autoRotateMode}
+                onChange={(v) => setAutoRotateMode(v as AutoRotateMode)}
+                options={[
+                  { value: 'off', label: 'Off' },
+                  { value: 'cw', label: 'Clockwise' },
+                  { value: 'ccw', label: 'Counter-CW' },
+                ]}
+              />
+              <SliderRow
+                label="Rotate Speed"
+                value={autoRotateSpeed}
+                min={0.1}
+                max={2}
+                step={0.1}
+                onChange={setAutoRotateSpeed}
+                formatValue={(v) => v.toFixed(1)}
+              />
+            </>
+          )}
           <div className="text-ds-secondary text-sm mt-3">
-            <div className="mb-1 font-medium">Keyboard:</div>
+            <div className="mb-1 font-medium">Mouse:</div>
+            {cameraMode === 'orbit' ? (
+              <>
+                <div>Left drag: Rotate</div>
+                <div>Right/Mid drag: Pan</div>
+                <div>Scroll: Zoom</div>
+              </>
+            ) : (
+              <>
+                <div>Left drag: Look around</div>
+                <div>Right/Mid drag: Strafe</div>
+                <div>Scroll: Move fwd/back</div>
+                <div>Shift+drag: Faster</div>
+              </>
+            )}
+            <div className="mt-2 font-medium">Keyboard:</div>
             <div>WASD: Move</div>
             <div>Q: Down, E/Space: Up</div>
             <div>Shift: Speed boost</div>
-            {cameraMode === 'fly' && (
-              <>
-                <div className="mt-1 font-medium">Mouse:</div>
-                <div>Drag: Look around</div>
-                <div>Scroll: Move forward/back</div>
-              </>
-            )}
+            <div className="mt-2 font-medium">Modifiers:</div>
+            <div>Alt+Scroll: Camera size</div>
+            <div>Ctrl+Scroll: Point size</div>
           </div>
         </div>
       </ControlButton>
@@ -1543,13 +1404,15 @@ export function ViewerControls() {
           <SliderRow label="Thinning" value={thinning} min={0} max={99} step={1} onChange={(v) => setThinning(Math.round(v))} />
           <SliderRow
             label="Max Error"
-            value={maxReprojectionError === Infinity ? (reconstruction?.globalStats.maxError ?? 10) : maxReprojectionError}
+            value={maxReprojectionError === null ? (reconstruction?.globalStats.maxError ?? 10) : maxReprojectionError}
             min={0}
             max={reconstruction?.globalStats.maxError ?? 10}
             step={0.1}
-            onChange={(v) => setMaxReprojectionError(v >= (reconstruction?.globalStats.maxError ?? 10) ? Infinity : v)}
-            formatValue={(v) => maxReprojectionError === Infinity ? '∞' : v.toFixed(1)}
+            onChange={(v) => setMaxReprojectionError(v >= (reconstruction?.globalStats.maxError ?? 10) ? null : v)}
+            formatValue={(v) => maxReprojectionError === null ? '∞' : v.toFixed(1)}
           />
+
+
           <div className="text-ds-secondary text-sm mt-3">
             {colorMode === 'rgb' ? (
               <>
@@ -1623,6 +1486,38 @@ export function ViewerControls() {
                   ...(hasRigData ? [{ value: 'byRigFrame', label: 'By Frame' }] : []),
                 ]}
               />
+              {frustumColorMode === 'single' && (
+                <>
+                  <ColorPickerRow
+                    label="Frustum"
+                    value={frustumSingleColor}
+                    onChange={handleFrustumColorPickerChange}
+                  />
+                  <HueSliderRow
+                    label="Hue"
+                    value={frustumHsl.h}
+                    onChange={handleFrustumHueChange}
+                  />
+                  <SliderRow
+                    label="Saturation"
+                    value={frustumHsl.s}
+                    min={0}
+                    max={100}
+                    step={1}
+                    onChange={handleFrustumSaturationChange}
+                    formatValue={(v) => `${Math.round(v)}%`}
+                  />
+                  <SliderRow
+                    label="Lightness"
+                    value={frustumHsl.l}
+                    min={0}
+                    max={100}
+                    step={1}
+                    onChange={handleFrustumLightnessChange}
+                    formatValue={(v) => `${Math.round(v)}%`}
+                  />
+                </>
+              )}
               <SelectRow
                 label="Scale ×"
                 value={cameraScaleFactor}
@@ -1634,6 +1529,15 @@ export function ViewerControls() {
                 ]}
               />
               <SliderRow label={<>Scale <span className="text-ds-muted text-xs inline-flex items-center gap-0.5">(Alt+<MouseScrollIcon className="w-3 h-3 inline" />)</span></>} value={cameraScale} min={0.05} max={1} step={0.05} onChange={setCameraScale} formatValue={(v) => v.toFixed(2)} />
+              <SliderRow
+                label="Standby α"
+                value={frustumStandbyOpacity}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={setFrustumStandbyOpacity}
+                formatValue={(v) => v.toFixed(2)}
+              />
               <SliderRow
                 label="Selection α"
                 value={selectionPlaneOpacity}
@@ -1658,6 +1562,14 @@ export function ViewerControls() {
                 <ToggleSwitch
                   checked={undistortionEnabled}
                   onChange={setUndistortionEnabled}
+                />
+              </div>
+              <div className={styles.row}>
+                <label className={styles.label}>Auto FOV</label>
+                <span className="flex-1" />
+                <ToggleSwitch
+                  checked={autoFovEnabled}
+                  onChange={setAutoFovEnabled}
                 />
               </div>
             </>
@@ -1695,12 +1607,12 @@ export function ViewerControls() {
             setActivePanel={setActivePanel}
             icon={
               !showMatches ? <MatchOffIcon className="w-6 h-6" /> :
-              matchesDisplayMode === 'on' ? <MatchOnIcon className="w-6 h-6" /> :
+              matchesDisplayMode === 'static' ? <MatchOnIcon className="w-6 h-6" /> :
               <MatchBlinkIcon className="w-6 h-6" />
             }
             tooltip={
               !showMatches ? 'Matches off (M)' :
-              matchesDisplayMode === 'on' ? 'Matches on (M)' :
+              matchesDisplayMode === 'static' ? 'Matches static (M)' :
               'Matches blink (M)'
             }
             isActive={showMatches}
@@ -1715,7 +1627,7 @@ export function ViewerControls() {
                   value={matchesDisplayMode}
                   onChange={(v) => setMatchesDisplayMode(v as MatchesDisplayMode)}
                   options={[
-                    { value: 'on', label: 'On' },
+                    { value: 'static', label: 'Static' },
                     { value: 'blink', label: 'Blink' },
                   ]}
                 />
@@ -1732,9 +1644,9 @@ export function ViewerControls() {
                     <div className="mb-1 font-medium">Off:</div>
                     <div>Match lines hidden.</div>
                   </>
-                ) : matchesDisplayMode === 'on' ? (
+                ) : matchesDisplayMode === 'static' ? (
                   <>
-                    <div className="mb-1 font-medium">On:</div>
+                    <div className="mb-1 font-medium">Static:</div>
                     <div>Show match lines between</div>
                     <div>selected camera and points.</div>
                   </>
@@ -1832,7 +1744,7 @@ export function ViewerControls() {
             label={!hasRigData ? 'N/A' : !showRig ? 'OFF' : rigDisplayMode === 'blink' ? 'BLK' : 'RIG'}
           />
         }
-        tooltip={!hasRigData ? 'Rig not available' : !showRig ? 'Rig connections off' : rigDisplayMode === 'blink' ? 'Rig connections blink' : 'Show rig connections'}
+        tooltip={!hasRigData ? 'Rig not available' : !showRig ? 'Rig connections off' : rigDisplayMode === 'blink' ? 'Rig blink' : 'Rig static'}
         isActive={hasRigData && showRig}
         onClick={hasRigData ? cycleRigDisplayMode : undefined}
         panelTitle="Rig Connections"
@@ -1848,7 +1760,7 @@ export function ViewerControls() {
                   value={rigDisplayMode}
                   onChange={(v) => setRigDisplayMode(v as RigDisplayMode)}
                   options={[
-                    { value: 'lines', label: 'Lines' },
+                    { value: 'static', label: 'Static' },
                     { value: 'blink', label: 'Blink' },
                   ]}
                 />
@@ -1908,316 +1820,11 @@ export function ViewerControls() {
         </div>
       </ControlButton>
 
-      <ControlButton
-        panelId="screenshot"
-        activePanel={activePanel}
-        setActivePanel={setActivePanel}
-        icon={<ScreenshotIcon className="w-6 h-6" />}
-        tooltip="Save screenshot"
-        onClick={takeScreenshot}
-        panelTitle="Screenshot"
-      >
-        <div className={styles.panelContent}>
-          <div className="text-ds-primary text-sm mb-1">Static:</div>
-          <SelectRow
-            label="Size"
-            value={screenshotSize}
-            onChange={(v) => setScreenshotSize(v as ScreenshotSize)}
-            options={[
-              { value: 'current', label: 'Current' },
-              { value: '1280x720', label: '1280×720' },
-              { value: '1920x1080', label: '1920×1080' },
-              { value: '3840x2160', label: '3840×2160' },
-              { value: '512x512', label: '512×512' },
-              { value: '1024x1024', label: '1024×1024' },
-              { value: '2048x2048', label: '2048×2048' },
-            ]}
-          />
-          <SelectRow
-            label="Format"
-            value={screenshotFormat}
-            onChange={(v) => setScreenshotFormat(v as ScreenshotFormat)}
-            options={[
-              { value: 'jpeg', label: 'JPEG' },
-              { value: 'png', label: 'PNG' },
-              { value: 'webp', label: 'WebP' },
-            ]}
-          />
-          <div className="flex gap-2 mt-2">
-            <button
-              onClick={takeScreenshot}
-              className={styles.actionButton}
-              style={{ flex: 1 }}
-            >
-              Save
-            </button>
-            <button
-              onClick={copyScreenshotToClipboard}
-              className={styles.actionButton}
-              style={{ flex: 1 }}
-            >
-              Copy
-            </button>
-          </div>
-          <div className="text-ds-primary text-sm mt-3 mb-1">Dynamic:</div>
-          <SelectRow
-            label="Format"
-            value={recordingFormat}
-            onChange={(v) => setRecordingFormat(v as 'gif' | 'webm' | 'mp4')}
-            options={[
-              { value: 'gif', label: 'GIF' },
-              { value: 'webm', label: 'WebM' },
-              { value: 'mp4', label: 'MP4' },
-            ]}
-          />
-          <SelectRow
-            label="Quality"
-            value={recordingQuality}
-            onChange={(v) => setRecordingQuality(v as 'low' | 'medium' | 'high' | 'ultra')}
-            options={[
-              { value: 'low', label: 'Low' },
-              { value: 'medium', label: 'Medium' },
-              { value: 'high', label: 'High' },
-              { value: 'ultra', label: 'Ultra' },
-            ]}
-          />
-          <SliderRow
-            label="Duration"
-            value={gifDuration}
-            min={5}
-            max={120}
-            step={5}
-            onChange={setGifDuration}
-            formatValue={(v) => `${v}s`}
-            inputMax={3600}
-          />
-          <SelectRow
-            label="Scale"
-            value={String(gifDownsample)}
-            onChange={(v) => setGifDownsample(Number(v))}
-            options={[
-              { value: '1', label: '1× (Full)' },
-              { value: '2', label: '½' },
-              { value: '4', label: '¼' },
-              { value: '8', label: '⅛' },
-            ]}
-          />
-          <SelectRow
-            label="Speed"
-            value={String(gifSpeed)}
-            onChange={(v) => setGifSpeed(Number(v))}
-            options={[
-              { value: '1', label: '1×' },
-              { value: '2', label: '2×' },
-              { value: '3', label: '3×' },
-              { value: '4', label: '4×' },
-            ]}
-          />
-          <div className="flex gap-2 mt-2">
-            <button
-              onClick={startRecordingWithCountdown}
-              disabled={isRecordingGif || gifRenderProgress !== null || !recordGif || recordCountdown !== null}
-              className={isRecordingGif || gifRenderProgress !== null || recordCountdown !== null ? styles.actionButtonPrimary : styles.actionButton}
-              style={{ flex: 1, minWidth: 0 }}
-            >
-              {recordCountdown !== null
-                ? `(${recordCountdown})`
-                : gifRenderProgress !== null
-                  ? `Render ${gifRenderProgress}%`
-                  : isRecordingGif
-                    ? 'Recording...'
-                    : 'Record'}
-            </button>
-            <button
-              onClick={isRecordingGif ? stopRecording ?? undefined : downloadGif}
-              disabled={recordCountdown !== null || gifRenderProgress !== null || (!isRecordingGif && !gifBlobUrl)}
-              className={
-                recordCountdown !== null || gifRenderProgress !== null || (!isRecordingGif && !gifBlobUrl)
-                  ? styles.actionButtonDisabled
-                  : isRecordingGif
-                    ? styles.actionButtonPrimary
-                    : styles.actionButton
-              }
-              style={{ flex: 1, minWidth: 0 }}
-            >
-              {isRecordingGif ? 'Stop' : 'Save'}
-            </button>
-          </div>
-          <div
-            onClick={() => setScreenshotHideLogo(!screenshotHideLogo)}
-            className={`group text-sm mt-3 cursor-pointer ${screenshotHideLogo ? 'text-blue-400' : ''}`}
-          >
-            <div className="mb-1 font-medium">
-              {screenshotHideLogo ? '✓ Watermark Removed!' : <span className="underline">Remove watermark:</span>}
-            </div>
-            <div className={screenshotHideLogo ? '' : 'text-ds-secondary group-hover:text-gray-300 transition-colors'}>By removing watermark, I agree</div>
-            <div className={screenshotHideLogo ? '' : 'text-ds-secondary group-hover:text-gray-300 transition-colors'}>to provide proper attribution to</div>
-            <div className={screenshotHideLogo ? '' : 'text-ds-secondary group-hover:text-gray-300 transition-colors'}>"ColmapView by OpsiClear"</div>
-            <div className={screenshotHideLogo ? '' : 'text-ds-secondary group-hover:text-gray-300 transition-colors'}>when sharing the image.</div>
-          </div>
-        </div>
-      </ControlButton>
+      <ScreenshotPanel activePanel={activePanel} setActivePanel={setActivePanel} />
 
-      {/* Share button */}
-      <ControlButton
-        panelId="share"
-        activePanel={activePanel}
-        setActivePanel={setActivePanel}
-        icon={<ShareIcon className="w-6 h-6" />}
-        tooltip="Share"
-        panelTitle="Share"
-      >
-        <div className={styles.panelContent}>
-          {canShare && (
-            <>
-              <div className="text-ds-primary text-sm mb-1">Links:</div>
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={handleCopyShareLink}
-                  className={copiedShareLink ? styles.actionButtonPrimary : styles.actionButton}
-                >
-                  {copiedShareLink ? (
-                    <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
-                  ) : (
-                    'Copy Link'
-                  )}
-                </button>
-                <button
-                  onClick={handleCopyEmbedUrl}
-                  className={copiedEmbedUrl ? styles.actionButtonPrimary : styles.actionButton}
-                >
-                  {copiedEmbedUrl ? (
-                    <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
-                  ) : (
-                    'Embed URL'
-                  )}
-                </button>
-                <button
-                  onClick={handleCopyEmbedHtml}
-                  className={copiedEmbedHtml ? styles.actionButtonPrimary : styles.actionButton}
-                >
-                  {copiedEmbedHtml ? (
-                    <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
-                  ) : (
-                    'Embed HTML'
-                  )}
-                </button>
-              </div>
-            </>
-          )}
-          <div className={`text-ds-primary text-sm mb-1 ${canShare ? 'mt-3' : ''}`}>Social Media:</div>
-          {canShare && <ToggleRow label="Include Link" checked={includeShareLink} onChange={setIncludeShareLink} />}
-          <ToggleRow label="Screen to Clipboard" checked={includeScreenshot} onChange={setIncludeScreenshot} />
-            <div className="flex gap-2 mt-2">
-              <button
-                onClick={handleShareToX}
-                className={styles.actionButton}
-                style={{ flex: 1, padding: '8px' }}
-                data-tooltip="Share to X"
-                data-tooltip-pos="bottom"
-              >
-                <svg viewBox="0 0 24 24" className="w-5 h-5 mx-auto" fill="currentColor">
-                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                </svg>
-              </button>
-              <button
-                onClick={handleShareToLinkedIn}
-                className={styles.actionButton}
-                style={{ flex: 1, padding: '8px' }}
-                data-tooltip="Share to LinkedIn"
-                data-tooltip-pos="bottom"
-              >
-                <svg viewBox="0 0 24 24" className="w-5 h-5 mx-auto" fill="currentColor">
-                  <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-        </ControlButton>
+      <SharePanel activePanel={activePanel} setActivePanel={setActivePanel} />
 
-      <ControlButton
-        panelId="export"
-        activePanel={activePanel}
-        setActivePanel={setActivePanel}
-        icon={<ExportIcon className="w-6 h-6" />}
-        tooltip="Export"
-        onClick={handleExport}
-        panelTitle="Export"
-        disabled={!reconstruction}
-      >
-        <div className={styles.panelContent}>
-          <div className="flex flex-col gap-2">
-            <button
-              onClick={() => { setExportFormat('binary'); if (reconstruction) exportReconstructionBinary(reconstruction, wasmReconstruction); }}
-              disabled={!reconstruction}
-              className={reconstruction ? styles.actionButton : styles.actionButtonDisabled}
-            >
-              Binary (.bin)
-            </button>
-            <button
-              onClick={() => { setExportFormat('text'); if (reconstruction) exportReconstructionText(reconstruction, wasmReconstruction); }}
-              disabled={!reconstruction}
-              className={reconstruction ? styles.actionButton : styles.actionButtonDisabled}
-            >
-              Text (.txt)
-            </button>
-            <button
-              onClick={() => { setExportFormat('ply'); if (reconstruction) exportPointsPLY(reconstruction, wasmReconstruction); }}
-              disabled={!reconstruction}
-              className={reconstruction ? styles.actionButton : styles.actionButtonDisabled}
-            >
-              Points (.ply)
-            </button>
-            <button
-              onClick={() => {
-                setExportFormat('config');
-                const config = extractConfigurationFromStores();
-                const yaml = serializeConfigToYaml(config);
-                const blob = new Blob([yaml], { type: 'text/yaml' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'colmapview-config.yml';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-              }}
-              className={styles.actionButton}
-            >
-              Config (.yml)
-            </button>
-            <button
-              onClick={async () => {
-                if (!reconstruction) return;
-                try {
-                  await downloadReconstructionZip(
-                    reconstruction,
-                    { format: 'binary' },
-                    loadedFiles?.imageFiles,
-                    wasmReconstruction
-                  );
-                } catch (err) {
-                  console.error('ZIP export failed:', err);
-                }
-              }}
-              disabled={!reconstruction}
-              className={reconstruction ? styles.actionButton : styles.actionButtonDisabled}
-            >
-              ZIP (.zip)
-            </button>
-          </div>
-          <div className="flex justify-center mt-2">
-            <button
-              onClick={applyTransformToData}
-              disabled={!hasTransformChanges}
-              className={hasTransformChanges ? styles.actionButtonPrimary : styles.actionButtonPrimaryDisabled}
-            >
-              Apply Transform
-            </button>
-          </div>
-        </div>
-      </ControlButton>
+      <ExportPanel activePanel={activePanel} setActivePanel={setActivePanel} />
 
       {/* Settings Panel */}
       <ControlButton
@@ -2229,6 +1836,9 @@ export function ViewerControls() {
         panelTitle="Settings"
       >
         <div className={styles.panelContent}>
+          {/* Profiles Section */}
+          <ProfileSelector />
+
           <div className={styles.actionGroup}>
             <button
               onClick={() => {

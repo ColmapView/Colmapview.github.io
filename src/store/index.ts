@@ -28,6 +28,8 @@ export type {
   HorizonLockMode,
   FrustumColorMode,
   CameraDisplayMode,
+  CameraScaleFactor,
+  UndistortionMode,
   MatchesDisplayMode,
   SelectionColorMode,
   AxesCoordinateSystem,
@@ -37,6 +39,8 @@ export type {
   ExportFormat,
   RigDisplayMode,
   RigColorMode,
+  CameraViewState,
+  NavigationHistoryEntry,
 } from './types';
 
 export {

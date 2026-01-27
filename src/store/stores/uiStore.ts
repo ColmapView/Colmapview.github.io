@@ -98,6 +98,7 @@ export interface UIState {
   backgroundColor: string;
   showGizmo: boolean;
 
+
   // Layout
   galleryCollapsed: boolean;
 
@@ -159,6 +160,7 @@ export interface UIState {
 
   // Performance monitoring
   setFps: (fps: number) => void;
+
 }
 
 export const useUIStore = create<UIState>()(
@@ -170,7 +172,7 @@ export const useUIStore = create<UIState>()(
       showMatchesInModal: false,
       matchedImageId: null,
       showMatches: false,
-      matchesDisplayMode: 'on',
+      matchesDisplayMode: 'static',
       matchesOpacity: 0.75,
       matchesColor: '#ff00ff',
       showMaskOverlay: false,
@@ -243,6 +245,7 @@ export const useUIStore = create<UIState>()(
 
       // Performance monitoring
       setFps: (fps) => set({ fps }),
+
     }),
     {
       name: STORAGE_KEYS.ui,
@@ -278,7 +281,7 @@ export const useUIStore = create<UIState>()(
           const matchesMode = state.matchesDisplayMode as string | undefined;
           if (matchesMode === 'off') {
             state.showMatches = false;
-            state.matchesDisplayMode = 'on';
+            state.matchesDisplayMode = 'static';
           } else {
             state.showMatches = matchesMode !== undefined;
             // Keep current mode if it's valid

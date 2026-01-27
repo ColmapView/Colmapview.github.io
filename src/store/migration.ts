@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
   export: 'colmap-viewer-export',
   rig: 'colmap-viewer-rig',
   guide: 'colmap-viewer-guide',
+  profiles: 'colmap-viewer-profiles',
   settingsResetWarningShown: 'colmap-viewer-settings-reset-warning-shown',
 } as const;
 
@@ -71,7 +72,7 @@ function applyLegacyMigrations(state: Record<string, unknown>): Record<string, u
 
   // Migrate old showMatches boolean to new matchesDisplayMode
   if ('showMatches' in migrated && typeof migrated.showMatches === 'boolean') {
-    migrated.matchesDisplayMode = migrated.showMatches ? 'on' : 'off';
+    migrated.matchesDisplayMode = migrated.showMatches ? 'static' : 'off';
     delete migrated.showMatches;
   }
 
@@ -181,13 +182,11 @@ export function migrateFromLegacyStore(): boolean {
 function showSettingsResetWarning(): void {
   if (typeof window === 'undefined') return;
 
-  const shownVersion = localStorage.getItem(STORAGE_KEYS.settingsResetWarningShown);
   const currentVersion = String(SETTINGS_RESET_WARNING_VERSION);
 
-  // Only show if user hasn't seen this version of the warning
-  if (shownVersion === currentVersion) return;
-
-  // Check if user has any existing settings (don't show for new users)
+  // Check if user has any existing settings FIRST (before checking version)
+  // This ensures reset users (no settings) don't see the notification,
+  // even if Zustand persist middleware writes defaults later
   const hasExistingSettings = [
     STORAGE_KEYS.pointCloud,
     STORAGE_KEYS.camera,
@@ -197,12 +196,16 @@ function showSettingsResetWarning(): void {
   ].some(key => localStorage.getItem(key) !== null);
 
   if (!hasExistingSettings) {
-    // Mark as shown for new users too, so they don't see it later
+    // Mark as shown for new users / reset users
     localStorage.setItem(STORAGE_KEYS.settingsResetWarningShown, currentVersion);
     return;
   }
 
-  // Import notification store dynamically to avoid circular dependencies
+  // For users WITH settings, check if they've seen this version
+  const shownVersion = localStorage.getItem(STORAGE_KEYS.settingsResetWarningShown);
+  if (shownVersion === currentVersion) return;
+
+  // Show notification for existing users who haven't seen this version
   import('./stores/notificationStore').then(({ useNotificationStore }) => {
     useNotificationStore.getState().addNotification(
       'warning',

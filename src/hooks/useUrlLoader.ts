@@ -249,9 +249,7 @@ export function useUrlLoader() {
       : `${manifest.baseUrl}/${masksPath}`;
 
     // Store source info before processing (includes imageUrlBase and maskUrlBase for lazy loading)
-    if (setSourceInfo) {
-      setSourceInfo('url', sourceUrl || manifest.baseUrl, imageUrlBase, maskUrlBase);
-    }
+    setSourceInfo('url', sourceUrl || manifest.baseUrl, imageUrlBase, maskUrlBase);
     console.log(`[URL Loader] Image URL base for lazy loading: ${imageUrlBase}`);
     console.log(`[URL Loader] Mask URL base for lazy loading: ${maskUrlBase}`);
 

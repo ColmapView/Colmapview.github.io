@@ -32,7 +32,7 @@ export const UNDISTORTION_MODES = ['cropped', 'fullFrame'] as const;
 export type UndistortionMode = (typeof UNDISTORTION_MODES)[number];
 
 // Visualization
-export const MATCHES_DISPLAY_MODES = ['on', 'blink'] as const;
+export const MATCHES_DISPLAY_MODES = ['static', 'blink'] as const;
 export type MatchesDisplayMode = (typeof MATCHES_DISPLAY_MODES)[number];
 
 export const SELECTION_COLOR_MODES = ['static', 'blink', 'rainbow'] as const;
@@ -55,7 +55,7 @@ export const AXIS_LABEL_MODES = ['off', 'xyz', 'extra'] as const;
 export type AxisLabelMode = (typeof AXIS_LABEL_MODES)[number];
 
 // Rig visualization
-export const RIG_DISPLAY_MODES = ['lines', 'blink'] as const;
+export const RIG_DISPLAY_MODES = ['static', 'blink'] as const;
 export type RigDisplayMode = (typeof RIG_DISPLAY_MODES)[number];
 
 export const RIG_COLOR_MODES = ['single', 'perFrame'] as const;

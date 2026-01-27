@@ -141,7 +141,7 @@ describe("uiStore", () => {
       showMatchesInModal: false,
       matchedImageId: null,
       showMatches: false,
-      matchesDisplayMode: "on",
+      matchesDisplayMode: "static",
       matchesOpacity: 1,
       showMaskOverlay: false,
       maskOpacity: 0.7,
@@ -242,8 +242,8 @@ describe("uiStore", () => {
       assertEquals(useUIStore.getState().showMatches, false);
 
       // Test matchesDisplayMode
-      setMatchesDisplayMode("on");
-      assertEquals(useUIStore.getState().matchesDisplayMode, "on");
+      setMatchesDisplayMode("static");
+      assertEquals(useUIStore.getState().matchesDisplayMode, "static");
 
       setMatchesDisplayMode("blink");
       assertEquals(useUIStore.getState().matchesDisplayMode, "blink");

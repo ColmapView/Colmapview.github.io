@@ -3,8 +3,8 @@ import * as THREE from 'three';
 import { Text, Billboard, Html } from '@react-three/drei';
 import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { VIZ_COLORS, contextMenuStyles, hoverCardStyles, ICON_SIZES } from '../../theme';
-import { useUIStore } from '../../store';
 import type { AxesCoordinateSystem, AxisLabelMode } from '../../store/types';
+import { useAxesNodeActions } from '../../nodes';
 import { CheckIcon, HideIcon } from '../../icons';
 import { COORDINATE_SYSTEMS, AXIS_SEMANTIC } from '../../utils/coordinateSystems';
 
@@ -90,8 +90,9 @@ const LabelsMenu = memo(function LabelsMenu({
   onClose,
 }: LabelsMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
-  const setAxisLabelMode = useUIStore((s) => s.setAxisLabelMode);
-  const setShowAxes = useUIStore((s) => s.setShowAxes);
+  const axesActions = useAxesNodeActions();
+  const setAxisLabelMode = axesActions.setLabelMode;
+  const setShowAxes = axesActions.setVisible;
 
   // Close on click outside or escape
   useEffect(() => {
@@ -169,7 +170,8 @@ const SystemMenu = memo(function SystemMenu({
   onClose,
 }: SystemMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
-  const setAxesCoordinateSystem = useUIStore((s) => s.setAxesCoordinateSystem);
+  const axesActions = useAxesNodeActions();
+  const setAxesCoordinateSystem = axesActions.setCoordinateSystem;
 
   // Close on click outside or escape
   useEffect(() => {
@@ -648,14 +650,14 @@ export function OriginGrid({ size, scale = 1 }: OriginGridProps) {
         uniform vec3 uColor2;
         varying vec3 vWorldPos;
 
-        // Robust grid line calculation that avoids fwidth discontinuities
+        // Robust grid line calculation - compute derivative on raw position for stability
         float getGrid(vec2 pos, float scale, float lineWidth) {
           vec2 coord = pos / scale;
           vec2 grid = abs(fract(coord - 0.5) - 0.5);
-          // Use analytical derivative based on scale for stability
-          vec2 deriv = fwidth(coord);
+          // Compute derivative on raw world position, then scale
+          // This avoids precision issues from fwidth on large scaled coordinates
+          vec2 deriv = fwidth(pos) / scale;
           // Clamp derivatives to avoid precision issues at grazing angles and orthographic view
-          // Higher minimum prevents grid from becoming solid in ortho view
           deriv = clamp(deriv, vec2(0.001), vec2(0.5));
           vec2 lines = smoothstep(deriv * lineWidth, vec2(0.0), grid);
           return max(lines.x, lines.y);

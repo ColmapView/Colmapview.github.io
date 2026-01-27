@@ -9,6 +9,8 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 extend({ LineSegments2, LineSegmentsGeometry, LineMaterial });
 import { Html } from '@react-three/drei';
 import { useReconstructionStore, useCameraStore, useUIStore } from '../../store';
+import { useCamerasNode, useSelectionNode, useMatchesNode, useNavigationNode } from '../../nodes';
+import { useSelectionNodeActions, useNavigationNodeActions } from '../../nodes';
 import type { SelectionColorMode } from '../../store/types';
 import type { Camera, Image } from '../../types/colmap';
 import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
@@ -54,15 +56,16 @@ function getFrustumBaseColor(
   frustumColorMode: 'single' | 'byCamera' | 'byRigFrame',
   cameraIndex: number,
   imageId: number,
-  imageFrameIndexMap: Map<number, number>
+  imageFrameIndexMap: Map<number, number>,
+  frustumSingleColor: string
 ): string {
   if (frustumColorMode === 'byCamera') {
     return getCameraColor(cameraIndex);
   } else if (frustumColorMode === 'byRigFrame') {
     const frameIndex = imageFrameIndexMap.get(imageId);
-    return frameIndex !== undefined ? getCameraColor(frameIndex) : VIZ_COLORS.frustum.default;
+    return frameIndex !== undefined ? getCameraColor(frameIndex) : frustumSingleColor;
   }
-  return VIZ_COLORS.frustum.default;
+  return frustumSingleColor;
 }
 
 // Temp objects for image plane culling (angle check)
@@ -91,9 +94,11 @@ interface BatchedArrowMeshesProps {
   hoveredImageId: number | null;
   matchedImageIds: Set<number>;
   matchesOpacity: number;
-  matchesDisplayMode: 'off' | 'on' | 'blink';
+  matchesDisplayMode: 'off' | 'static' | 'blink';
   matchesColor: string;
   frustumColorMode: 'single' | 'byCamera' | 'byRigFrame';
+  frustumSingleColor: string;
+  frustumStandbyOpacity: number;
   selectionColorMode: SelectionColorMode;
   selectionColor: string;
   selectionAnimationSpeed: number;
@@ -123,6 +128,8 @@ function BatchedArrowMeshes({
   matchesDisplayMode,
   matchesColor,
   frustumColorMode,
+  frustumSingleColor,
+  frustumStandbyOpacity,
   selectionColorMode,
   selectionColor,
   selectionAnimationSpeed,
@@ -267,7 +274,7 @@ function BatchedArrowMeshes({
           tempColor.multiplyScalar(matchesOpacity);
         }
       } else {
-        tempColor.set(getFrustumBaseColor(frustumColorMode, f.cameraIndex, f.image.imageId, imageFrameIndexMap));
+        tempColor.set(getFrustumBaseColor(frustumColorMode, f.cameraIndex, f.image.imageId, imageFrameIndexMap, frustumSingleColor));
       }
 
       // Calculate shaft transform - cylinder is Y-aligned, we need to rotate to face camera direction (Z)
@@ -348,22 +355,22 @@ function BatchedArrowMeshes({
     cone.instanceMatrix.needsUpdate = true;
   }, [frustums, selectedImageId, shaftLength, coneLength]);
 
-  // Update material opacity - 0.9 when no selection, unselectedCameraOpacity when a camera is selected
+  // Update material opacity - frustumStandbyOpacity when no selection, unselectedCameraOpacity when a camera is selected
   useEffect(() => {
-    const opacity = selectedImageId === null ? 0.9 : unselectedCameraOpacity;
+    const opacity = selectedImageId === null ? frustumStandbyOpacity : unselectedCameraOpacity;
     // eslint-disable-next-line react-hooks/immutability -- THREE.js materials require direct mutation
     shaftMaterial.opacity = opacity;
     // eslint-disable-next-line react-hooks/immutability -- THREE.js materials require direct mutation
     coneMaterial.opacity = opacity;
-  }, [shaftMaterial, coneMaterial, selectedImageId, unselectedCameraOpacity]);
+  }, [shaftMaterial, coneMaterial, selectedImageId, frustumStandbyOpacity, unselectedCameraOpacity]);
 
   if (frustums.length === 0) return null;
 
   // Get tooltip frustum data
   const tooltipFrustum = tooltipData !== null ? frustums[tooltipData.instanceId] : null;
 
-  // Key for forcing mesh recreation when scale changes (ensures raycasting works immediately)
-  const meshKey = `arrows-${cameraScale.toFixed(4)}`;
+  // Key for forcing mesh recreation when reconstruction or scale changes (ensures raycasting works immediately)
+  const meshKey = `arrows-${frustums.length}-${frustums[0]?.image.imageId ?? 0}-${cameraScale.toFixed(4)}`;
 
   return (
     <>
@@ -487,9 +494,11 @@ interface BatchedFrustumLinesProps {
   hoveredImageId: number | null;
   matchedImageIds: Set<number>;
   matchesOpacity: number;
-  matchesDisplayMode: 'off' | 'on' | 'blink';
+  matchesDisplayMode: 'off' | 'static' | 'blink';
   matchesColor: string;
   frustumColorMode: 'single' | 'byCamera' | 'byRigFrame';
+  frustumSingleColor: string;
+  frustumStandbyOpacity: number;
   selectionColorMode: SelectionColorMode;
   selectionColor: string;
   selectionAnimationSpeed: number;
@@ -508,6 +517,8 @@ function BatchedFrustumLines({
   matchesDisplayMode,
   matchesColor,
   frustumColorMode,
+  frustumSingleColor,
+  frustumStandbyOpacity,
   selectionColorMode,
   selectionColor,
   selectionAnimationSpeed,
@@ -588,7 +599,7 @@ function BatchedFrustumLines({
       positions[offset + 45] = bl.x; positions[offset + 46] = bl.y; positions[offset + 47] = bl.z;
 
       // Base color for this camera
-      tempColor.set(getFrustumBaseColor(frustumColorMode, f.cameraIndex, f.image.imageId, imageFrameIndexMap));
+      tempColor.set(getFrustumBaseColor(frustumColorMode, f.cameraIndex, f.image.imageId, imageFrameIndexMap, frustumSingleColor));
 
       // Set color and alpha for all 16 vertices
       for (let v = 0; v < 16; v++) {
@@ -600,7 +611,7 @@ function BatchedFrustumLines({
     });
 
     return { positions, baseColors, baseAlphas };
-  }, [frustums, cameraScale, frustumColorMode, imageFrameIndexMap]);
+  }, [frustums, cameraScale, frustumColorMode, frustumSingleColor, imageFrameIndexMap]);
 
   // Update colors and alphas based on selection, hover, selection color mode, opacity
   useFrame((state, delta) => {
@@ -670,11 +681,11 @@ function BatchedFrustumLines({
       }
 
       // Calculate opacity (true alpha, not color darkening)
-      // When no camera is selected, use 0.9 opacity for all
+      // When no camera is selected, use frustumStandbyOpacity for all
       // When a camera is selected: selected/hovered = 1.0, matched = matchesOpacity, others = unselectedCameraOpacity
       let opacity: number;
       if (selectedImageId === null) {
-        opacity = 0.9;
+        opacity = frustumStandbyOpacity;
       } else if (isSelected || isHovered) {
         opacity = 1.0;
       } else if (isMatched) {
@@ -717,15 +728,15 @@ function BatchedFrustumLines({
     return new Float32Array(baseColors);
   }, [baseColors]);
 
-  // Initial alphas array - 0.9 when no selection, unselectedCameraOpacity when a camera is selected
+  // Initial alphas array - frustumStandbyOpacity when no selection, unselectedCameraOpacity when a camera is selected
   const initialAlphas = useMemo(() => {
     const alphas = new Float32Array(baseAlphas.length);
-    const opacity = selectedImageId === null ? 0.9 : unselectedCameraOpacity;
+    const opacity = selectedImageId === null ? frustumStandbyOpacity : unselectedCameraOpacity;
     for (let i = 0; i < baseAlphas.length; i++) {
       alphas[i] = opacity;
     }
     return alphas;
-  }, [baseAlphas.length, unselectedCameraOpacity, selectedImageId]);
+  }, [baseAlphas.length, frustumStandbyOpacity, unselectedCameraOpacity, selectedImageId]);
 
   // Create shader material
   const shaderMaterial = useMemo(() => {
@@ -870,9 +881,13 @@ function BatchedPlaneHitTargets({
 
   const tooltipFrustum = tooltipData !== null ? frustums[tooltipData.instanceId] : null;
 
+  // Key to force remount when reconstruction changes (InstancedMesh args only apply on mount)
+  const meshKey = `${frustums.length}-${frustums[0]?.image.imageId ?? 0}`;
+
   return (
     <>
       <instancedMesh
+        key={meshKey}
         ref={meshRef}
         args={[planeGeometry, hitMaterial, frustums.length]}
         onPointerOver={(e) => {
@@ -1499,15 +1514,45 @@ export function CameraFrustums() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
   const imageUrlBase = useReconstructionStore((s) => s.imageUrlBase);
-  const cameraDisplayMode = useCameraStore((s) => s.cameraDisplayMode);
-  const cameraScaleBase = useCameraStore((s) => s.cameraScale);
-  const cameraScaleFactor = useCameraStore((s) => s.cameraScaleFactor);
+
+  // Node hooks for cameras, selection, matches, and navigation
+  const cameras = useCamerasNode();
+  const selection = useSelectionNode();
+  const matches = useMatchesNode();
+  const nav = useNavigationNode();
+  const selectionActions = useSelectionNodeActions();
+  const navActions = useNavigationNodeActions();
+
+  // Extract cameras state
+  const {
+    displayMode: cameraDisplayMode,
+    scale: cameraScaleBase,
+    scaleFactor: cameraScaleFactor,
+    colorMode: frustumColorMode,
+    singleColor: frustumSingleColor,
+    standbyOpacity: frustumStandbyOpacity,
+    undistortionEnabled,
+    undistortionMode,
+  } = cameras;
   const cameraScale = cameraScaleBase * parseFloat(cameraScaleFactor);
-  const selectedImageId = useCameraStore((s) => s.selectedImageId);
-  const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
-  const selectionPlaneOpacity = useCameraStore((s) => s.selectionPlaneOpacity);
-  const undistortionEnabled = useCameraStore((s) => s.undistortionEnabled);
-  const undistortionMode = useCameraStore((s) => s.undistortionMode);
+
+  // Extract selection state
+  const {
+    selectedImageId,
+    planeOpacity: selectionPlaneOpacity,
+    colorMode: selectionColorMode,
+    color: selectionColor,
+    animationSpeed: selectionAnimationSpeed,
+    unselectedOpacity: unselectedCameraOpacity,
+  } = selection;
+
+  // Extract matches state
+  const {
+    visible: showMatches,
+    displayMode: matchesDisplayMode,
+    opacity: matchesOpacity,
+    color: matchesColor,
+  } = matches;
 
   // Hide frustums when in alignment mode (point picking or floor detection)
   const isAlignmentMode = useIsAlignmentMode();
@@ -1517,20 +1562,6 @@ export function CameraFrustums() {
   const openImageDetail = useUIStore((s) => s.openImageDetail);
   const setMatchedImageId = useUIStore((s) => s.setMatchedImageId);
   const setShowMatchesInModal = useUIStore((s) => s.setShowMatchesInModal);
-  const flyToImage = useCameraStore((s) => s.flyToImage);
-  const pushNavigationHistory = useCameraStore((s) => s.pushNavigationHistory);
-  const popNavigationHistory = useCameraStore((s) => s.popNavigationHistory);
-  const peekNavigationHistory = useCameraStore((s) => s.peekNavigationHistory);
-  const flyToState = useCameraStore((s) => s.flyToState);
-  const selectionColorMode = useCameraStore((s) => s.selectionColorMode);
-  const selectionColor = useCameraStore((s) => s.selectionColor);
-  const selectionAnimationSpeed = useCameraStore((s) => s.selectionAnimationSpeed);
-  const frustumColorMode = useCameraStore((s) => s.frustumColorMode);
-  const unselectedCameraOpacity = useCameraStore((s) => s.unselectedCameraOpacity);
-  const showMatches = useUIStore((s) => s.showMatches);
-  const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
-  const matchesOpacity = useUIStore((s) => s.matchesOpacity);
-  const matchesColor = useUIStore((s) => s.matchesColor);
 
   // Hovered image ID for arrow mode (batched rendering needs this at parent level)
   const [hoveredImageId, setHoveredImageId] = useState<number | null>(null);
@@ -1540,7 +1571,11 @@ export function CameraFrustums() {
 
   // Camera movement detection - pauses texture loading during orbit/pan
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { camera: threeCamera, controls, gl } = useThree() as any;
+  const { camera: threeCamera, controls, gl, size } = useThree() as any;
+
+  // Extract navigation values for FOV auto-adjustment
+  const { fov: cameraFov, autoFovEnabled } = nav;
+
   const lastCameraPosRef = useRef(new THREE.Vector3());
   const lastCameraQuatRef = useRef(new THREE.Quaternion());
   const lastMoveTimeRef = useRef(0);
@@ -1729,9 +1764,9 @@ export function CameraFrustums() {
       openImageDetail(imageId);
     } else {
       // Clicking unselected image selects it
-      setSelectedImageId(imageId);
+      selectionActions.setSelectedImageId(imageId);
     }
-  }, [selectedImageId, setSelectedImageId, openImageDetail]);
+  }, [selectedImageId, selectionActions, openImageDetail]);
 
   // Right-click callback - if selected camera, go back or deselect; if matched camera, show matches; otherwise fly to
   const handleArrowContextMenu = useCallback((imageId: number) => {
@@ -1741,22 +1776,22 @@ export function CameraFrustums() {
     // If right-clicking the selected camera, try to go back in history first
     if (imageId === selectedImageId) {
       // Check if we can go back in navigation history
-      const lastEntry = peekNavigationHistory();
+      const lastEntry = navActions.peekNavigationHistory();
       if (lastEntry && lastEntry.toImageId === imageId) {
         // User wants to go back - pop and return to previous position
-        const entry = popNavigationHistory();
+        const entry = navActions.popNavigationHistory();
         if (entry) {
           // Clear hover state before flying
           setHoveredImageId(null);
           document.body.style.cursor = '';
           pendingHoverRefreshRef.current = true;
-          flyToState(entry.fromState);
-          setSelectedImageId(entry.fromImageId);
+          navActions.flyToState(entry.fromState);
+          selectionActions.setSelectedImageId(entry.fromImageId);
         }
         return;
       }
       // No back navigation possible, deselect
-      setSelectedImageId(null);
+      selectionActions.setSelectedImageId(null);
       return;
     }
 
@@ -1778,20 +1813,20 @@ export function CameraFrustums() {
 
     // Get current view state from controls for navigation history
     const getCurrentViewState = controls?.getCurrentViewState;
-    const lastEntry = peekNavigationHistory();
+    const lastEntry = navActions.peekNavigationHistory();
 
     // Check if we're clicking the same image we just flew to (trace back)
     if (getCurrentViewState && lastEntry && lastEntry.toImageId === imageId) {
       // User wants to go back - pop and return
-      const entry = popNavigationHistory();
+      const entry = navActions.popNavigationHistory();
       if (entry) {
         // Clear hover state before flying - hover won't auto-update during camera movement
         setHoveredImageId(null);
         document.body.style.cursor = '';
         // Signal to refresh hover after fly-to completes
         pendingHoverRefreshRef.current = true;
-        flyToState(entry.fromState);
-        setSelectedImageId(entry.fromImageId);
+        navActions.flyToState(entry.fromState);
+        selectionActions.setSelectedImageId(entry.fromImageId);
       }
       return;
     }
@@ -1799,7 +1834,7 @@ export function CameraFrustums() {
     // Push current state and fly to the image
     if (getCurrentViewState) {
       const currentViewState = getCurrentViewState();
-      pushNavigationHistory({
+      navActions.pushNavigationHistory({
         fromState: currentViewState,
         fromImageId: selectedImageId,
         toImageId: imageId,
@@ -1810,8 +1845,49 @@ export function CameraFrustums() {
     document.body.style.cursor = '';
     // Signal to refresh hover after fly-to completes
     pendingHoverRefreshRef.current = true;
-    setSelectedImageId(imageId);
-    flyToImage(imageId);
+
+    // Auto-adjust FOV if enabled and image plane would be too big (>100%) or too small (<50%)
+    if (autoFovEnabled) {
+      const focalLength = frustum.camera.params[0] || 1;
+      const planeWidth = cameraScale * frustum.camera.width / focalLength;
+      const planeHeight = cameraScale * frustum.camera.height / focalLength;
+      const planeDistance = cameraScale;
+
+      const viewportAspect = size.width / size.height;
+
+      // Calculate current visible area at plane distance with current FOV
+      const currentFovRad = cameraFov * Math.PI / 180;
+      const currentVisibleHeight = 2 * planeDistance * Math.tan(currentFovRad / 2);
+      const currentVisibleWidth = currentVisibleHeight * viewportAspect;
+
+      // Determine how much of viewport the plane would fill (for the constraining dimension)
+      const heightRatio = planeHeight / currentVisibleHeight;
+      const widthRatio = planeWidth / currentVisibleWidth;
+      const maxRatio = Math.max(heightRatio, widthRatio);
+
+      // Only adjust if plane is too big (>100%) or too small (<50%)
+      if (maxRatio > 1.0 || maxRatio < 0.5) {
+        // Calculate FOV to make plane fill 80% of the lesser viewport dimension
+        const planeAspect = planeWidth / planeHeight;
+        let targetFov: number;
+        if (planeAspect < viewportAspect) {
+          // Height is the constraining dimension
+          const targetVisibleHeight = planeHeight / 0.8;
+          targetFov = 2 * Math.atan(targetVisibleHeight / (2 * planeDistance)) * 180 / Math.PI;
+        } else {
+          // Width is the constraining dimension
+          const targetVisibleWidth = planeWidth / 0.8;
+          const targetVisibleHeight = targetVisibleWidth / viewportAspect;
+          targetFov = 2 * Math.atan(targetVisibleHeight / (2 * planeDistance)) * 180 / Math.PI;
+        }
+        // Clamp FOV to reasonable range
+        const clampedFov = Math.max(5, Math.min(120, targetFov));
+        navActions.setFov(clampedFov);
+      }
+    }
+
+    selectionActions.setSelectedImageId(imageId);
+    navActions.flyToImage(imageId);
 
     // Show undistortion tip if camera has lens distortion
     const intrinsics = getCameraIntrinsics(frustum.camera);
@@ -1824,7 +1900,7 @@ export function CameraFrustums() {
         'Press U to toggle lens undistortion'
       );
     }
-  }, [frustums, flyToImage, setSelectedImageId, selectedImageId, matchedImageIds, openImageDetail, setMatchedImageId, setShowMatchesInModal, controls, peekNavigationHistory, popNavigationHistory, pushNavigationHistory, flyToState]);
+  }, [frustums, navActions, selectionActions, selectedImageId, matchedImageIds, openImageDetail, setMatchedImageId, setShowMatchesInModal, controls, size, cameraFov, cameraScale, autoFovEnabled]);
 
   // Helper to prioritize texture loading for an image
   const prioritizeTextureForImage = useCallback((imageId: number) => {
@@ -1880,10 +1956,10 @@ export function CameraFrustums() {
   const handleContextMenuSelect = useCallback(() => {
     if (contextMenu) {
       prioritizeTextureForImage(contextMenu.imageId);
-      setSelectedImageId(contextMenu.imageId);
+      selectionActions.setSelectedImageId(contextMenu.imageId);
       setContextMenu(null);
     }
-  }, [contextMenu, setSelectedImageId, prioritizeTextureForImage]);
+  }, [contextMenu, selectionActions, prioritizeTextureForImage]);
 
   const handleContextMenuGoto = useCallback(() => {
     if (!contextMenu) return;
@@ -1902,34 +1978,34 @@ export function CameraFrustums() {
 
     if (!getCurrentViewState) {
       // Fallback: just fly without history
-      flyToImage(targetImageId);
+      navActions.flyToImage(targetImageId);
       setContextMenu(null);
       return;
     }
 
     const currentViewState = getCurrentViewState();
-    const lastEntry = peekNavigationHistory();
+    const lastEntry = navActions.peekNavigationHistory();
 
     // Check if we're clicking the same image we just flew to
     if (lastEntry && lastEntry.toImageId === targetImageId) {
       // User wants to go back - pop and return
-      const entry = popNavigationHistory();
+      const entry = navActions.popNavigationHistory();
       if (entry) {
-        flyToState(entry.fromState);
-        setSelectedImageId(entry.fromImageId);
+        navActions.flyToState(entry.fromState);
+        selectionActions.setSelectedImageId(entry.fromImageId);
       }
     } else {
       // Different image - push current state and fly
-      pushNavigationHistory({
+      navActions.pushNavigationHistory({
         fromState: currentViewState,
         fromImageId: selectedImageId,
         toImageId: targetImageId,
       });
-      flyToImage(targetImageId);
+      navActions.flyToImage(targetImageId);
     }
 
     setContextMenu(null);
-  }, [contextMenu, flyToImage, prioritizeTextureForImage, peekNavigationHistory, popNavigationHistory, pushNavigationHistory, flyToState, controls, selectedImageId, setSelectedImageId]);
+  }, [contextMenu, navActions, selectionActions, prioritizeTextureForImage, controls, selectedImageId]);
 
   const handleContextMenuInfo = useCallback(() => {
     if (contextMenu) {
@@ -1993,6 +2069,8 @@ export function CameraFrustums() {
           matchesDisplayMode={matchesDisplayMode}
           matchesColor={matchesColor}
           frustumColorMode={frustumColorMode}
+          frustumSingleColor={frustumSingleColor}
+          frustumStandbyOpacity={frustumStandbyOpacity}
           selectionColorMode={selectionColorMode}
           selectionColor={selectionColor}
           selectionAnimationSpeed={selectionAnimationSpeed}
@@ -2046,7 +2124,7 @@ export function CameraFrustums() {
           const isMatched = matchedImageIds.has(f.image.imageId);
           const frustumColor = isMatched
             ? matchesColor
-            : getFrustumBaseColor(frustumColorMode, f.cameraIndex, f.image.imageId, imageFrameIndexMap);
+            : getFrustumBaseColor(frustumColorMode, f.cameraIndex, f.image.imageId, imageFrameIndexMap, frustumSingleColor);
           // When no camera is selected, all use selectionPlaneOpacity
           // Otherwise, matched get matchesOpacity, others get unselectedCameraOpacity
           let planeOpacity: number;
@@ -2118,6 +2196,8 @@ export function CameraFrustums() {
         matchesDisplayMode={matchesDisplayMode}
         matchesColor={matchesColor}
         frustumColorMode={frustumColorMode}
+        frustumSingleColor={frustumSingleColor}
+        frustumStandbyOpacity={frustumStandbyOpacity}
         selectionColorMode={selectionColorMode}
         selectionColor={selectionColor}
         selectionAnimationSpeed={selectionAnimationSpeed}
@@ -2158,12 +2238,22 @@ export function CameraFrustums() {
 
 export function CameraMatches() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const selectedImageId = useCameraStore((s) => s.selectedImageId);
-  const cameraDisplayMode = useCameraStore((s) => s.cameraDisplayMode);
-  const showMatches = useUIStore((s) => s.showMatches);
-  const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
-  const matchesOpacity = useUIStore((s) => s.matchesOpacity);
-  const matchesColor = useUIStore((s) => s.matchesColor);
+
+  // Node hooks for cameras, selection, and matches
+  const cameras = useCamerasNode();
+  const selection = useSelectionNode();
+  const matches = useMatchesNode();
+
+  // Extract state from nodes
+  const { selectedImageId } = selection;
+  const { displayMode: cameraDisplayMode } = cameras;
+  const {
+    visible: showMatches,
+    displayMode: matchesDisplayMode,
+    opacity: matchesOpacity,
+    color: matchesColor,
+  } = matches;
+
   const materialRef = useRef<THREE.LineBasicMaterial>(null);
   const blinkPhaseRef = useRef(0);
 

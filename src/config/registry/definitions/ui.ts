@@ -46,9 +46,9 @@ export const uiSection = defineSection({
       key: 'matchesDisplayMode',
       type: 'enum',
       enumValues: MATCHES_DISPLAY_MODES,
-      default: 'on',
+      default: 'static',
       persist: true,
-      description: 'on | blink',
+      description: 'static | blink',
     },
     {
       key: 'matchesOpacity',

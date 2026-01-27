@@ -24,8 +24,8 @@ export const useRigStore = create<RigState>()(
   persist(
     (set) => ({
       showRig: true,
-      rigDisplayMode: 'lines',
-      rigColorMode: 'single',
+      rigDisplayMode: 'static',
+      rigColorMode: 'perFrame',
       rigLineColor: '#00ffff', // Cyan
       rigLineOpacity: 0.7,
 
@@ -46,7 +46,7 @@ export const useRigStore = create<RigState>()(
           const mode = state.rigDisplayMode as string | undefined;
           if (mode === 'off') {
             state.showRig = false;
-            state.rigDisplayMode = 'lines';
+            state.rigDisplayMode = 'static';
           } else {
             state.showRig = true;
           }

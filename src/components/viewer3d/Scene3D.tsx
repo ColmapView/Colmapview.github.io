@@ -19,6 +19,7 @@ import { Scene3DErrorBoundary } from './Scene3DErrorBoundary';
 import { DistanceInputModal } from '../modals/DistanceInputModal';
 import { FloorAlignModal } from '../modals/FloorAlignModal';
 import { useReconstructionStore, useUIStore, useCameraStore, useTransformStore, usePointPickingStore } from '../../store';
+import { useAxesNode, useGridNode, useGizmoNode, useCamerasNode } from '../../nodes';
 
 import { useIsAlignmentMode } from '../../hooks/useAlignmentMode';
 import { getImageWorldPosition } from '../../utils/colmapTransforms';
@@ -117,14 +118,10 @@ function SceneContent() {
     return { center: [0, 0, 0] as [number, number, number], radius: 5 };
   }, [reconstruction, wasmReconstruction]);
 
-  const showCameras = useCameraStore((s) => s.showCameras);
-  const showAxes = useUIStore((s) => s.showAxes);
-  const showGrid = useUIStore((s) => s.showGrid);
-  const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
-  const axesScale = useUIStore((s) => s.axesScale);
-  const gridScale = useUIStore((s) => s.gridScale);
-  const axisLabelMode = useUIStore((s) => s.axisLabelMode);
-  const showGizmo = useUIStore((s) => s.showGizmo);
+  const cameras = useCamerasNode();
+  const axes = useAxesNode();
+  const grid = useGridNode();
+  const gizmo = useGizmoNode();
   const viewResetTrigger = useUIStore((s) => s.viewResetTrigger);
   const viewDirection = useUIStore((s) => s.viewDirection);
   const viewTrigger = useUIStore((s) => s.viewTrigger);
@@ -155,28 +152,28 @@ function SceneContent() {
       {transformMatrix ? (
         <group matrixAutoUpdate={false} matrix={transformMatrix}>
           <PointCloud />
-          {!isAlignmentMode && showCameras && <CameraFrustums />}
-          {!isAlignmentMode && showCameras && <CameraMatches />}
-          {!isAlignmentMode && showCameras && <RigConnections />}
+          {!isAlignmentMode && cameras.visible && <CameraFrustums />}
+          {!isAlignmentMode && cameras.visible && <CameraMatches />}
+          {!isAlignmentMode && cameras.visible && <RigConnections />}
         </group>
       ) : (
         <>
           <PointCloud />
-          {!isAlignmentMode && showCameras && <CameraFrustums />}
-          {!isAlignmentMode && showCameras && <CameraMatches />}
-          {!isAlignmentMode && showCameras && <RigConnections />}
+          {!isAlignmentMode && cameras.visible && <CameraFrustums />}
+          {!isAlignmentMode && cameras.visible && <CameraMatches />}
+          {!isAlignmentMode && cameras.visible && <RigConnections />}
         </>
       )}
 
       {/* Axes/Grid stay in original coordinate system */}
       {/* Show axes automatically when in alignment mode for orientation reference */}
       <Suspense fallback={null}>
-        {(showAxes || isAlignmentMode) && <OriginAxes size={bounds.radius * axesScale} scale={axesScale} coordinateSystem={axesCoordinateSystem} labelMode={axisLabelMode} />}
-        {showGrid && <OriginGrid size={bounds.radius} scale={gridScale} />}
+        {(axes.visible || isAlignmentMode) && <OriginAxes size={bounds.radius * axes.scale} scale={axes.scale} coordinateSystem={axes.coordinateSystem} labelMode={axes.labelMode} />}
+        {grid.visible && <OriginGrid size={bounds.radius} scale={grid.scale} />}
       </Suspense>
 
       {/* Transform gizmo follows the transformed data - hidden during alignment mode */}
-      {!isAlignmentMode && reconstruction && showGizmo && <TransformGizmo center={transformedCenter} size={bounds.radius * transform.scale * axesScale} />}
+      {!isAlignmentMode && reconstruction && gizmo.visible && <TransformGizmo center={transformedCenter} size={bounds.radius * transform.scale * axes.scale} />}
 
       {/* Point picking markers - rendered outside transform group for stable display */}
       <SelectedPointMarkers />
@@ -316,6 +313,7 @@ export function Scene3D() {
   return (
     <div
       className="w-full h-full relative isolate"
+      data-testid="scene-3d"
       style={{ backgroundColor }}
       onContextMenu={handleContextMenu}
       onMouseDown={handleMouseDown}

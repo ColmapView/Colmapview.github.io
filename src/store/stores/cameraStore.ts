@@ -22,6 +22,8 @@ export interface CameraState {
   cameraScaleFactor: CameraScaleFactor;
   cameraScale: number;
   frustumColorMode: FrustumColorMode;
+  frustumSingleColor: string;
+  frustumStandbyOpacity: number;
   unselectedCameraOpacity: number;
 
   // Navigation
@@ -50,6 +52,9 @@ export interface CameraState {
   undistortionEnabled: boolean;
   undistortionMode: UndistortionMode;
 
+  // Auto FOV adjustment when flying to cameras
+  autoFovEnabled: boolean;
+
   // Navigation history (not persisted)
   navigationHistory: NavigationHistoryEntry[];
   flyToViewState: CameraViewState | null;
@@ -64,6 +69,8 @@ export interface CameraState {
   setCameraScaleFactor: (factor: CameraScaleFactor) => void;
   setCameraScale: (scale: number) => void;
   setFrustumColorMode: (mode: FrustumColorMode) => void;
+  setFrustumSingleColor: (color: string) => void;
+  setFrustumStandbyOpacity: (opacity: number) => void;
   setUnselectedCameraOpacity: (opacity: number) => void;
   setCameraMode: (mode: CameraMode) => void;
   setCameraProjection: (projection: CameraProjection) => void;
@@ -86,6 +93,7 @@ export interface CameraState {
   setSelectionPlaneOpacity: (opacity: number) => void;
   setUndistortionEnabled: (enabled: boolean) => void;
   setUndistortionMode: (mode: UndistortionMode) => void;
+  setAutoFovEnabled: (enabled: boolean) => void;
 
   // Navigation history actions
   pushNavigationHistory: (entry: NavigationHistoryEntry) => void;
@@ -105,6 +113,8 @@ export const useCameraStore = create<CameraState>()(
       cameraScaleFactor: '1',
       cameraScale: 0.25,
       frustumColorMode: 'byCamera',
+      frustumSingleColor: '#ff0000',
+      frustumStandbyOpacity: 0.9,
       unselectedCameraOpacity: 0.5,
       cameraMode: 'orbit',
       cameraProjection: 'perspective',
@@ -124,6 +134,7 @@ export const useCameraStore = create<CameraState>()(
       selectionPlaneOpacity: 1.0,
       undistortionEnabled: false,
       undistortionMode: 'fullFrame',
+      autoFovEnabled: true,
       navigationHistory: [],
       flyToViewState: null,
       currentViewState: null,
@@ -134,6 +145,8 @@ export const useCameraStore = create<CameraState>()(
       setCameraScaleFactor: (cameraScaleFactor) => set({ cameraScaleFactor }),
       setCameraScale: (cameraScale) => set({ cameraScale }),
       setFrustumColorMode: (frustumColorMode) => set({ frustumColorMode }),
+      setFrustumSingleColor: (frustumSingleColor) => set({ frustumSingleColor }),
+      setFrustumStandbyOpacity: (frustumStandbyOpacity) => set({ frustumStandbyOpacity }),
       setUnselectedCameraOpacity: (unselectedCameraOpacity) => set({ unselectedCameraOpacity }),
       setCameraMode: (cameraMode) => set({ cameraMode }),
       setCameraProjection: (cameraProjection) => set({ cameraProjection }),
@@ -159,6 +172,7 @@ export const useCameraStore = create<CameraState>()(
       setSelectionPlaneOpacity: (selectionPlaneOpacity) => set({ selectionPlaneOpacity }),
       setUndistortionEnabled: (undistortionEnabled) => set({ undistortionEnabled }),
       setUndistortionMode: (undistortionMode) => set({ undistortionMode }),
+      setAutoFovEnabled: (autoFovEnabled) => set({ autoFovEnabled }),
 
       // Navigation history actions
       pushNavigationHistory: (entry) =>
@@ -216,6 +230,8 @@ export const useCameraStore = create<CameraState>()(
         cameraScaleFactor: state.cameraScaleFactor,
         cameraScale: state.cameraScale,
         frustumColorMode: state.frustumColorMode,
+        frustumSingleColor: state.frustumSingleColor,
+        frustumStandbyOpacity: state.frustumStandbyOpacity,
         unselectedCameraOpacity: state.unselectedCameraOpacity,
         cameraMode: state.cameraMode,
         cameraProjection: state.cameraProjection,
@@ -233,6 +249,7 @@ export const useCameraStore = create<CameraState>()(
         selectionPlaneOpacity: state.selectionPlaneOpacity,
         undistortionEnabled: state.undistortionEnabled,
         undistortionMode: state.undistortionMode,
+        autoFovEnabled: state.autoFovEnabled,
       }),
     }
   )

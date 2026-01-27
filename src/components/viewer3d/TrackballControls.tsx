@@ -1,7 +1,9 @@
 import { useRef, useEffect, useMemo } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useReconstructionStore, useCameraStore, useTransformStore, useUIStore, usePointPickingStore, usePointCloudStore } from '../../store';
+import { useReconstructionStore, useTransformStore, usePointPickingStore, useCameraStore, usePointCloudStore } from '../../store';
+import { useNavigationNode, useAxesNode } from '../../nodes';
+import { useNavigationNodeActions, useCamerasNodeActions, usePointsNodeActions } from '../../nodes';
 import { decodeCameraState } from '../../hooks/useUrlState';
 import type { CameraViewState } from '../../store/types';
 import { getImageWorldPose } from '../../utils/colmapTransforms';
@@ -50,25 +52,33 @@ export interface TrackballControlsProps {
 export function TrackballControls({ target, radius, resetTrigger, viewDirection, viewTrigger = 0 }: TrackballControlsProps) {
   const { camera, gl, set, size } = useThree();
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const flyToImageId = useCameraStore((s) => s.flyToImageId);
-  const clearFlyTo = useCameraStore((s) => s.clearFlyTo);
-  const setCurrentViewState = useCameraStore((s) => s.setCurrentViewState);
-  const clearNavigationHistory = useCameraStore((s) => s.clearNavigationHistory);
-  const cameraMode = useCameraStore((s) => s.cameraMode);
-  const cameraProjection = useCameraStore((s) => s.cameraProjection);
-  const cameraFov = useCameraStore((s) => s.cameraFov);
-  const horizonLock = useCameraStore((s) => s.horizonLock);
-  const flySpeed = useCameraStore((s) => s.flySpeed);
-  const flyTransitionDuration = useCameraStore((s) => s.flyTransitionDuration);
-  const pointerLock = useCameraStore((s) => s.pointerLock);
   const pickingMode = usePointPickingStore((s) => s.pickingMode);
-  const autoRotateMode = useCameraStore((s) => s.autoRotateMode);
-  const autoRotateSpeed = useCameraStore((s) => s.autoRotateSpeed);
-  const setAutoRotateMode = useCameraStore((s) => s.setAutoRotateMode);
   const transform = useTransformStore((s) => s.transform);
-  const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
-  const setCameraScale = useCameraStore((s) => s.setCameraScale);
-  const setPointSize = usePointCloudStore((s) => s.setPointSize);
+
+  // Node hooks for reading state
+  const nav = useNavigationNode();
+  const axesNode = useAxesNode();
+  const navActions = useNavigationNodeActions();
+  const camerasActions = useCamerasNodeActions();
+  const pointsActions = usePointsNodeActions();
+
+  // Extract navigation state for convenience
+  const {
+    mode: cameraMode,
+    projection: cameraProjection,
+    fov: cameraFov,
+    horizonLock,
+    flySpeed,
+    flyTransitionDuration,
+    pointerLock,
+    autoRotateMode,
+    autoRotateSpeed,
+    flyToImageId,
+    flyToViewState,
+  } = nav;
+
+  // Coordinate system from axes node
+  const axesCoordinateSystem = axesNode.coordinateSystem;
 
   // Compute world up vector based on coordinate system and horizon lock mode
   const worldUpVec = useMemo(() => {
@@ -184,6 +194,12 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
     }
   };
 
+  // Get the absolute (unflipped) world up for movement controls
+  const absoluteWorldUp = useMemo(() => {
+    const up = getWorldUp(axesCoordinateSystem);
+    return new THREE.Vector3(...up);
+  }, [axesCoordinateSystem]);
+
   const updateKeyboardMovement = (frameFlyDamping?: number) => {
     // Shift = speed boost
     const shiftMultiplier = keysPressed.current.has('shift') ? CONTROLS.shiftSpeedBoost : 1;
@@ -193,7 +209,8 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
     // Get camera direction vectors
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraQuat.current);
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraQuat.current);
-    const up = worldUpRef.current.clone();
+    // Use absolute world up for movement (not affected by horizon lock flip)
+    const up = absoluteWorldUp.clone();
 
     // WASD movement
     if (keysPressed.current.has('w')) {
@@ -574,7 +591,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
 
     const image = reconstruction.images.get(flyToImageId);
     if (!image) {
-      clearFlyTo();
+      navActions.clearFlyTo();
       return;
     }
 
@@ -636,13 +653,10 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       camera.quaternion.copy(threeJsCamQuat);
     }
 
-    clearFlyTo();
-  }, [flyToImageId, reconstruction, clearFlyTo, camera, transform, horizonLock, worldUpVec, flyTransitionDuration]);
+    navActions.clearFlyTo();
+  }, [flyToImageId, reconstruction, navActions, camera, transform, horizonLock, worldUpVec, flyTransitionDuration]);
 
   // Handle flyToViewState for navigation history back
-  const flyToViewState = useCameraStore((s) => s.flyToViewState);
-  const clearFlyToViewState = useCameraStore((s) => s.clearFlyToViewState);
-
   useEffect(() => {
     if (!flyToViewState) return;
 
@@ -679,8 +693,8 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       camera.quaternion.set(...flyToViewState.quaternion);
     }
 
-    clearFlyToViewState();
-  }, [flyToViewState, clearFlyToViewState, camera, flyTransitionDuration]);
+    navActions.clearFlyToViewState();
+  }, [flyToViewState, navActions, camera, flyTransitionDuration]);
 
   // Handle mode switching
   useEffect(() => {
@@ -761,7 +775,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       const stateHash = `${state.position.join(',')},${state.target.join(',')},${state.quaternion.join(',')}`;
       if (stateHash !== lastSyncedState.current) {
         lastSyncedState.current = stateHash;
-        setCurrentViewState(state);
+        navActions.setCurrentViewState(state);
       }
     };
 
@@ -777,7 +791,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
         clearTimeout(viewStateSyncTimeout.current);
       }
     };
-  }, [camera, setCurrentViewState]);
+  }, [camera, navActions]);
 
   useEffect(() => {
     const canvas = gl.domElement;
@@ -800,7 +814,9 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
         animationTarget.current = null;
 
         if (cameraMode === 'fly') {
-          // In fly mode, left click rotates the view
+          // In fly mode:
+          // - Left click (button 0): rotate/look around
+          // - Right click (button 2) or Middle click (button 1): pan/strafe
           if (button === 0) {
             isDragging.current = true;
             dragging.current = true;
@@ -810,7 +826,11 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
             smoothedVelocity.current.y = 0;
             pointerLockRequested.current = false;
             // Turn off auto-rotate on manual interaction
-            if (autoRotateMode !== 'off') setAutoRotateMode('off');
+            if (autoRotateMode !== 'off') navActions.setAutoRotateMode('off');
+          } else if (button === 2 || button === 1) {
+            // Right click or middle click: pan (strafe)
+            isPanning.current = true;
+            dragging.current = true;
           }
         } else {
           // Orbit mode
@@ -822,7 +842,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
             smoothedVelocity.current.x = 0;
             smoothedVelocity.current.y = 0;
             // Turn off auto-rotate on manual interaction
-            if (autoRotateMode !== 'off') setAutoRotateMode('off');
+            if (autoRotateMode !== 'off') navActions.setAutoRotateMode('off');
             pointerLockRequested.current = false;
           } else if (button === 2 || button === 1) {
             isPanning.current = true;
@@ -910,7 +930,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       if (isDragging.current) {
         // Clear navigation history on first actual camera movement
         if (deltaX !== 0 || deltaY !== 0) {
-          clearNavigationHistory();
+          navActions.clearNavigationHistory();
         }
 
         // Request pointer lock on first movement, not on mousedown
@@ -939,23 +959,37 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
         angularVelocity.current.y = smoothedVelocity.current.y;
       }
 
-      if (isPanning.current && cameraMode === 'orbit') {
+      if (isPanning.current) {
         // Clear navigation history on first actual camera movement
         if (deltaX !== 0 || deltaY !== 0) {
-          clearNavigationHistory();
+          navActions.clearNavigationHistory();
         }
 
         const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraQuat.current);
         const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(cameraQuat.current);
 
-        const panMultiplier = distance.current * panSpeed;
+        if (cameraMode === 'orbit') {
+          // Orbit mode: pan moves the target
+          const panMultiplier = distance.current * panSpeed;
 
-        const panOffset = new THREE.Vector3()
-          .addScaledVector(cameraRight, -deltaX * panMultiplier)
-          .addScaledVector(cameraUp, deltaY * panMultiplier);
+          const panOffset = new THREE.Vector3()
+            .addScaledVector(cameraRight, -deltaX * panMultiplier)
+            .addScaledVector(cameraUp, deltaY * panMultiplier);
 
-        targetVec.current.add(panOffset);
-        updateCamera();
+          targetVec.current.add(panOffset);
+          updateCamera();
+        } else {
+          // Fly mode: pan strafes the camera position directly
+          // Shift = speed boost (same as keyboard movement)
+          const shiftMultiplier = e.shiftKey ? CONTROLS.shiftSpeedBoost : 1;
+          const panMultiplier = radius * panSpeed * flySpeed * shiftMultiplier;
+
+          const panOffset = new THREE.Vector3()
+            .addScaledVector(cameraRight, -deltaX * panMultiplier)
+            .addScaledVector(cameraUp, deltaY * panMultiplier);
+
+          camera.position.add(panOffset);
+        }
       }
     };
 
@@ -974,7 +1008,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
         const currentScale = useCameraStore.getState().cameraScale;
         const scaleFactor = e.deltaY > 0 ? 0.9 : 1.1;
         const newScale = Math.max(0.01, Math.min(10, currentScale * scaleFactor));
-        setCameraScale(newScale);
+        camerasActions.setScale(newScale);
         return;
       }
 
@@ -983,12 +1017,12 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
         const currentSize = usePointCloudStore.getState().pointSize;
         const sizeFactor = e.deltaY > 0 ? 0.9 : 1.1;
         const newSize = Math.max(0.1, Math.min(50, currentSize * sizeFactor));
-        setPointSize(newSize);
+        pointsActions.setSize(newSize);
         return;
       }
 
       // Clear navigation history on manual camera movement
-      clearNavigationHistory();
+      navActions.clearNavigationHistory();
       // Cancel any ongoing animation on wheel
       animationTarget.current = null;
 
@@ -1029,7 +1063,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
           keysPressed.current.add(key);
           // Clear navigation history on movement keys (not shift alone)
           if (key !== 'shift') {
-            clearNavigationHistory();
+            navActions.clearNavigationHistory();
             // Cancel any ongoing animation on movement key press
             animationTarget.current = null;
           }
@@ -1067,8 +1101,8 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- Control constants (rotateSpeed, panSpeed, etc.) are stable and don't need to be dependencies. setCameraScale/setPointSize are stable store actions.
-  }, [camera, gl, cameraMode, flySpeed, pointerLock, pickingMode, radius, autoRotateMode, setAutoRotateMode, clearNavigationHistory, setCameraScale, setPointSize]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Control constants (rotateSpeed, panSpeed, etc.) are stable and don't need to be dependencies. Action hooks are stable.
+  }, [camera, gl, cameraMode, flySpeed, pointerLock, pickingMode, radius, autoRotateMode, navActions, camerasActions, pointsActions]);
 
   return null;
 }

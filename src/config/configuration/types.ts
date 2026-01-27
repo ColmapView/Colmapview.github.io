@@ -43,6 +43,7 @@ export interface CameraConfig {
   selectionColor: string;
   selectionAnimationSpeed: number;
   selectionPlaneOpacity: number;
+  autoFovEnabled: boolean;
 }
 
 export interface UIConfig {

@@ -42,6 +42,8 @@ export {
   EmbedIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  SaveIcon,
+  TrashIcon,
 } from './ui';
 
 // Toolbar icons

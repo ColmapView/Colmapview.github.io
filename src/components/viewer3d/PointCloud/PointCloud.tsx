@@ -7,10 +7,9 @@ import React, { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import {
   useReconstructionStore,
-  usePointCloudStore,
-  useCameraStore,
   usePointPickingStore,
 } from '../../../store';
+import { usePointsNode, useSelectionNode } from '../../../nodes';
 import { useFloorPlaneStore } from '../../../store/stores/floorPlaneStore';
 import { usePointCloudData } from '../../../hooks/pointCloud/usePointCloudData';
 import { usePointPicking } from '../../../hooks/pointCloud/usePointPicking';
@@ -29,18 +28,33 @@ export function PointCloud(): React.JSX.Element | null {
   // Store subscriptions
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
-  const showPointCloud = usePointCloudStore((s) => s.showPointCloud);
-  const colorMode = usePointCloudStore((s) => s.colorMode);
-  const pointSize = usePointCloudStore((s) => s.pointSize);
-  const pointOpacity = usePointCloudStore((s) => s.pointOpacity);
-  const minTrackLength = usePointCloudStore((s) => s.minTrackLength);
-  const maxReprojectionError = usePointCloudStore((s) => s.maxReprojectionError);
-  const thinning = usePointCloudStore((s) => s.thinning);
-  const selectedImageId = useCameraStore((s) => s.selectedImageId);
-  const showSelectionHighlight = useCameraStore((s) => s.showSelectionHighlight);
-  const selectionColorMode = useCameraStore((s) => s.selectionColorMode);
-  const selectionAnimationSpeed = useCameraStore((s) => s.selectionAnimationSpeed);
-  const selectionColor = useCameraStore((s) => s.selectionColor);
+
+  // Node hooks for points and selection state
+  const points = usePointsNode();
+  const selection = useSelectionNode();
+
+  // Extract points state
+  const {
+    visible: showPointCloud,
+    colorMode,
+    size: pointSize,
+    opacity: pointOpacity,
+    minTrackLength,
+    maxReprojectionError: maxReprojectionErrorRaw,
+    thinning,
+  } = points;
+
+  // Convert null back to Infinity for usePointCloudData hook
+  const maxReprojectionError = maxReprojectionErrorRaw ?? Infinity;
+
+  // Extract selection state
+  const {
+    selectedImageId,
+    visible: showSelectionHighlight,
+    colorMode: selectionColorMode,
+    animationSpeed: selectionAnimationSpeed,
+    color: selectionColor,
+  } = selection;
 
   // Point picking state
   const pickingMode = usePointPickingStore((s) => s.pickingMode);

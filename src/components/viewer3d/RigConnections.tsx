@@ -1,7 +1,8 @@
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { useReconstructionStore, useRigStore, useCameraStore } from '../../store';
+import { useReconstructionStore } from '../../store';
+import { useRigNode, useSelectionNode } from '../../nodes';
 import { getImageWorldPosition } from '../../utils/colmapTransforms';
 import { getCameraColor } from '../../theme';
 import { lineVertexShader, lineFragmentShader } from './shaders';
@@ -49,13 +50,8 @@ function extractFrameId(imageName: string): string {
  */
 export function RigConnections() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const showRig = useRigStore((s) => s.showRig);
-  const rigDisplayMode = useRigStore((s) => s.rigDisplayMode);
-  const rigColorMode = useRigStore((s) => s.rigColorMode);
-  const rigLineColor = useRigStore((s) => s.rigLineColor);
-  const rigLineOpacity = useRigStore((s) => s.rigLineOpacity);
-  const selectedImageId = useCameraStore((s) => s.selectedImageId);
-  const unselectedCameraOpacity = useCameraStore((s) => s.unselectedCameraOpacity);
+  const rig = useRigNode();
+  const selection = useSelectionNode();
 
   // Refs for geometry and animation
   const geometryRef = useRef<THREE.BufferGeometry>(null);
@@ -64,14 +60,14 @@ export function RigConnections() {
   // Track previous state to avoid unnecessary GPU uploads
   const prevStateRef = useRef<{
     selectedImageId: number | null;
-    rigLineOpacity: number;
-    unselectedCameraOpacity: number;
+    rigOpacity: number;
+    unselectedOpacity: number;
   } | null>(null);
 
   // Build geometry data with positions, colors, and frame membership for selection
   const geometryData = useMemo(() => {
     // Render when rig is shown
-    if (!showRig || !reconstruction) return null;
+    if (!rig.visible || !reconstruction) return null;
 
     // Group images by frame identifier (extracted from image name)
     const frameGroups = new Map<string, Image[]>();
@@ -134,7 +130,7 @@ export function RigConnections() {
       alphas: new Float32Array(alphas),
       lineFrameImageIds,
     };
-  }, [reconstruction, showRig, rigColorMode]);
+  }, [reconstruction, rig.visible, rig.colorMode]);
 
   // Create shader material for per-vertex alpha support
   const shaderMaterial = useMemo(() => {
@@ -161,7 +157,7 @@ export function RigConnections() {
     if (!colorAttr || !alphaAttr) return;
 
     // Check if blink animation is active
-    const isBlinkAnimated = rigDisplayMode === 'blink';
+    const isBlinkAnimated = rig.displayMode === 'blink';
     if (isBlinkAnimated) {
       blinkPhaseRef.current = (blinkPhaseRef.current + delta) % 2;
     }
@@ -169,9 +165,9 @@ export function RigConnections() {
     // Check if state changed - skip update if static and unchanged
     const prev = prevStateRef.current;
     const stateChanged = !prev ||
-      prev.selectedImageId !== selectedImageId ||
-      prev.rigLineOpacity !== rigLineOpacity ||
-      prev.unselectedCameraOpacity !== unselectedCameraOpacity;
+      prev.selectedImageId !== selection.selectedImageId ||
+      prev.rigOpacity !== rig.opacity ||
+      prev.unselectedOpacity !== selection.unselectedOpacity;
 
     // Skip update if static and unchanged
     if (!isBlinkAnimated && !stateChanged) return;
@@ -182,25 +178,25 @@ export function RigConnections() {
 
     for (let i = 0; i < alphaAttr.count; i++) {
       const frameImageIds = lineFrameImageIds[i];
-      const isInSelectedFrame = selectedImageId !== null && frameImageIds.has(selectedImageId);
+      const isInSelectedFrame = selection.selectedImageId !== null && frameImageIds.has(selection.selectedImageId);
 
       // When a camera is selected: selected frame gets full opacity, others get dimmed
       // When no camera is selected: all lines get full opacity
       let alpha: number;
-      if (selectedImageId === null) {
-        alpha = rigLineOpacity * blinkFactor;
+      if (selection.selectedImageId === null) {
+        alpha = rig.opacity * blinkFactor;
       } else if (isInSelectedFrame) {
-        alpha = rigLineOpacity * blinkFactor;
+        alpha = rig.opacity * blinkFactor;
       } else {
-        alpha = rigLineOpacity * unselectedCameraOpacity * blinkFactor;
+        alpha = rig.opacity * selection.unselectedOpacity * blinkFactor;
       }
 
       alphaAttr.setX(i, alpha);
     }
 
     // Update colors based on color mode
-    if (rigColorMode === 'single') {
-      tempColor.set(rigLineColor);
+    if (rig.colorMode === 'single') {
+      tempColor.set(rig.color);
       for (let i = 0; i < colorAttr.count; i++) {
         colorAttr.setXYZ(i, tempColor.r, tempColor.g, tempColor.b);
       }
@@ -211,17 +207,17 @@ export function RigConnections() {
 
     // Update previous state
     prevStateRef.current = {
-      selectedImageId,
-      rigLineOpacity,
-      unselectedCameraOpacity,
+      selectedImageId: selection.selectedImageId,
+      rigOpacity: rig.opacity,
+      unselectedOpacity: selection.unselectedOpacity,
     };
   });
 
   // Don't render when off or no geometry data
-  if (!showRig || !geometryData) return null;
+  if (!rig.visible || !geometryData) return null;
 
   return (
-    <lineSegments material={shaderMaterial}>
+    <lineSegments material={shaderMaterial} renderOrder={2}>
       <bufferGeometry ref={geometryRef}>
         <bufferAttribute
           attach="attributes-position"

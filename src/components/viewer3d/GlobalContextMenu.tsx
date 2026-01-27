@@ -2,12 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactEl
 import { createPortal } from 'react-dom';
 import {
   useUIStore,
-  useCameraStore,
   useTransformStore,
   useReconstructionStore,
   useExportStore,
   usePointPickingStore,
-  usePointCloudStore,
   applyTransformPreset,
   applyTransformToData,
   type ContextMenuAction,
@@ -21,6 +19,21 @@ import {
   type AxisLabelMode,
   type FrustumColorMode,
 } from '../../store';
+import {
+  usePointsNode,
+  useCamerasNode,
+  useSelectionNode,
+  useNavigationNode,
+  useMatchesNode,
+  useAxesNode,
+  usePointsNodeActions,
+  useCamerasNodeActions,
+  useSelectionNodeActions,
+  useNavigationNodeActions,
+  useMatchesNodeActions,
+  useAxesNodeActions,
+  useGizmoNodeActions,
+} from '../../nodes';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { contextMenuStyles, actionButtonStyles, HOTKEYS } from '../../theme';
 import { formatKeyCombo } from '../../config/hotkeys';
@@ -132,62 +145,90 @@ export function GlobalContextMenu() {
   const openEditPopup = useUIStore((s) => s.openContextMenuEditor);
   const closeContextMenuEditor = useUIStore((s) => s.closeContextMenuEditor);
 
-  // Actions from various stores
+  // Node hooks for reading state
+  const pointsNode = usePointsNode();
+  const camerasNode = useCamerasNode();
+  const selectionNode = useSelectionNode();
+  const navNode = useNavigationNode();
+  const matchesNode = useMatchesNode();
+  const axesNode = useAxesNode();
+  // gizmoNode not needed - only using actions
+
+  // Action hooks for mutations
+  const pointsActions = usePointsNodeActions();
+  const camerasActions = useCamerasNodeActions();
+  const selectionActions = useSelectionNodeActions();
+  const navActions = useNavigationNodeActions();
+  const matchesActions = useMatchesNodeActions();
+  const axesActions = useAxesNodeActions();
+  const gizmoActions = useGizmoNodeActions();
+
+  // UI store (non-node settings)
   const setView = useUIStore((s) => s.setView);
   const resetView = useUIStore((s) => s.resetView);
   const backgroundColor = useUIStore((s) => s.backgroundColor);
   const setBackgroundColor = useUIStore((s) => s.setBackgroundColor);
-  const toggleAxes = useUIStore((s) => s.toggleAxes);
-  const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
-  const setAxesCoordinateSystem = useUIStore((s) => s.setAxesCoordinateSystem);
-  const axisLabelMode = useUIStore((s) => s.axisLabelMode);
-  const setAxisLabelMode = useUIStore((s) => s.setAxisLabelMode);
   const toggleGalleryCollapsed = useUIStore((s) => s.toggleGalleryCollapsed);
   const galleryCollapsed = useUIStore((s) => s.galleryCollapsed);
-  const toggleGizmo = useUIStore((s) => s.toggleGizmo);
-  const showMatches = useUIStore((s) => s.showMatches);
-  const setShowMatches = useUIStore((s) => s.setShowMatches);
-  const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
-  const setMatchesDisplayMode = useUIStore((s) => s.setMatchesDisplayMode);
 
-  // Camera store
-  const cameraProjection = useCameraStore((s) => s.cameraProjection);
-  const setCameraProjection = useCameraStore((s) => s.setCameraProjection);
-  const cameraMode = useCameraStore((s) => s.cameraMode);
-  const setCameraMode = useCameraStore((s) => s.setCameraMode);
-  const horizonLock = useCameraStore((s) => s.horizonLock);
-  const setHorizonLock = useCameraStore((s) => s.setHorizonLock);
-  const autoRotateMode = useCameraStore((s) => s.autoRotateMode);
-  const setAutoRotateMode = useCameraStore((s) => s.setAutoRotateMode);
-  const showCameras = useCameraStore((s) => s.showCameras);
-  const setShowCameras = useCameraStore((s) => s.setShowCameras);
-  const cameraDisplayMode = useCameraStore((s) => s.cameraDisplayMode);
-  const setCameraDisplayMode = useCameraStore((s) => s.setCameraDisplayMode);
-  const showSelectionHighlight = useCameraStore((s) => s.showSelectionHighlight);
-  const setShowSelectionHighlight = useCameraStore((s) => s.setShowSelectionHighlight);
-  const selectionColorMode = useCameraStore((s) => s.selectionColorMode);
-  const setSelectionColorMode = useCameraStore((s) => s.setSelectionColorMode);
-  const frustumColorMode = useCameraStore((s) => s.frustumColorMode);
-  const setFrustumColorMode = useCameraStore((s) => s.setFrustumColorMode);
-  const selectedImageId = useCameraStore((s) => s.selectedImageId);
-  const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
-  const flyToImage = useCameraStore((s) => s.flyToImage);
-  const pointerLock = useCameraStore((s) => s.pointerLock);
-  const setPointerLock = useCameraStore((s) => s.setPointerLock);
-  const flySpeed = useCameraStore((s) => s.flySpeed);
-  const setFlySpeed = useCameraStore((s) => s.setFlySpeed);
-  const undistortionEnabled = useCameraStore((s) => s.undistortionEnabled);
-  const setUndistortionEnabled = useCameraStore((s) => s.setUndistortionEnabled);
+  // Extract axes state from node
+  const toggleAxes = axesActions.toggleVisible;
+  const axesCoordinateSystem = axesNode.coordinateSystem;
+  const setAxesCoordinateSystem = axesActions.setCoordinateSystem;
+  const axisLabelMode = axesNode.labelMode;
+  const setAxisLabelMode = axesActions.setLabelMode;
 
-  // Point cloud store
-  const showPointCloud = usePointCloudStore((s) => s.showPointCloud);
-  const setShowPointCloud = usePointCloudStore((s) => s.setShowPointCloud);
-  const colorMode = usePointCloudStore((s) => s.colorMode);
-  const setColorMode = usePointCloudStore((s) => s.setColorMode);
-  const pointSize = usePointCloudStore((s) => s.pointSize);
-  const setPointSize = usePointCloudStore((s) => s.setPointSize);
-  const minTrackLength = usePointCloudStore((s) => s.minTrackLength);
-  const setMinTrackLength = usePointCloudStore((s) => s.setMinTrackLength);
+  // Extract gizmo state from node
+  const toggleGizmo = gizmoActions.toggleVisible;
+
+  // Extract matches state from node
+  const showMatches = matchesNode.visible;
+  const setShowMatches = matchesActions.setVisible;
+  const matchesDisplayMode = matchesNode.displayMode;
+  const setMatchesDisplayMode = matchesActions.setDisplayMode;
+
+  // Extract navigation state from node
+  const cameraProjection = navNode.projection;
+  const setCameraProjection = navActions.setProjection;
+  const cameraMode = navNode.mode;
+  const setCameraMode = navActions.setMode;
+  const horizonLock = navNode.horizonLock;
+  const setHorizonLock = navActions.setHorizonLock;
+  const autoRotateMode = navNode.autoRotateMode;
+  const setAutoRotateMode = navActions.setAutoRotateMode;
+  const pointerLock = navNode.pointerLock;
+  const setPointerLock = navActions.setPointerLock;
+  const flySpeed = navNode.flySpeed;
+  const setFlySpeed = navActions.setFlySpeed;
+  const flyToImage = navActions.flyToImage;
+
+  // Extract cameras state from node
+  const showCameras = camerasNode.visible;
+  const setShowCameras = camerasActions.setVisible;
+  const cameraDisplayMode = camerasNode.displayMode;
+  const setCameraDisplayMode = camerasActions.setDisplayMode;
+  const frustumColorMode = camerasNode.colorMode;
+  const setFrustumColorMode = camerasActions.setColorMode;
+  const undistortionEnabled = camerasNode.undistortionEnabled;
+  const setUndistortionEnabled = camerasActions.setUndistortionEnabled;
+
+  // Extract selection state from node
+  const showSelectionHighlight = selectionNode.visible;
+  const setShowSelectionHighlight = selectionActions.setVisible;
+  const selectionColorMode = selectionNode.colorMode;
+  const setSelectionColorMode = selectionActions.setColorMode;
+  const selectedImageId = selectionNode.selectedImageId;
+  const setSelectedImageId = selectionActions.setSelectedImageId;
+
+  // Extract point cloud state from node
+  const showPointCloud = pointsNode.visible;
+  const setShowPointCloud = pointsActions.setVisible;
+  const colorMode = pointsNode.colorMode;
+  const setColorMode = pointsActions.setColorMode;
+  const pointSize = pointsNode.size;
+  const setPointSize = pointsActions.setSize;
+  const minTrackLength = pointsNode.minTrackLength;
+  const setMinTrackLength = pointsActions.setMinTrackLength;
 
   const resetTransform = useTransformStore((s) => s.resetTransform);
   const droppedFiles = useReconstructionStore((s) => s.droppedFiles);
@@ -338,11 +379,11 @@ export function GlobalContextMenu() {
         break;
       }
       case 'cycleMatchesDisplay': {
-        // Cycle: off -> on -> blink -> off
+        // Cycle: off -> static -> blink -> off
         if (!showMatches) {
           setShowMatches(true);
-          setMatchesDisplayMode('on');
-        } else if (matchesDisplayMode === 'on') {
+          setMatchesDisplayMode('static');
+        } else if (matchesDisplayMode === 'static') {
           setMatchesDisplayMode('blink');
         } else {
           setShowMatches(false);
@@ -711,6 +752,7 @@ export function GlobalContextMenu() {
     <div
       ref={menuRef}
       className={contextMenuStyles.container}
+      data-testid="context-menu"
       style={{
         position: 'fixed',
         left: displayPosition?.x ?? 0,

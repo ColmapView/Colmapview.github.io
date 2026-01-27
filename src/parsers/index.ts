@@ -7,6 +7,7 @@ export { parseRigsBinary, parseRigsText } from './rigs';
 export { parseFramesBinary, parseFramesText } from './frames';
 export { computeImageStats, computeImageStatsFromWasm } from './imageStats';
 export type { ImageToPoint3DIdsMap } from './imageStats';
+export { parseWithWasm } from './wasmParser';
 export {
   // Text writers
   writeCamerasText,

@@ -100,7 +100,9 @@
       "Bash(git restore:*)",
       "Bash(npm install:*)",
       "Bash(git reset:*)",
-      "Skill(code-review:code-review)"
+      "Skill(code-review:code-review)",
+      "Bash(npx playwright install chromium firefox)",
+      "Bash(npm uninstall:*)"
     ]
   }
 }

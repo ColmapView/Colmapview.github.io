@@ -6,17 +6,56 @@ View point clouds, camera frustums, and image matches directly in your browser. 
 
 **[Live Demo](https://colmapview.github.io/)** | **[Releases](https://github.com/ColmapView/colmapview.github.io/releases)**
 
-## Features
+## Highlight Features
 
-- **3D Point Cloud Visualization** - Color modes: RGB, reprojection error, track length. Filter by track length and error.
-- **Camera Frustums** - Multiple display modes (frustum, arrow, image plane). Color by camera or rig frame.
-- **Multi-Camera Rig Support** - Visualize rig connections and color cameras by synchronized frame.
-- **Sim3D Transform Tools** - Scale, rotate, translate. 1-point origin, 2-point scale, 3-point plane alignment.
-- **Lens Undistortion** - Real-time undistortion preview for all COLMAP camera models.
-- **Image Gallery** - Grid/list view with camera filtering and thumbnail size control.
-- **Match Visualization** - Side-by-side matched images with feature point connections.
-- **URL Sharing & Embed** - Share reconstructions via URL. Embed viewer in external pages.
-- **Export** - COLMAP binary/text, PLY point clouds, configuration presets.
+### 3D Visualization
+- **Point Cloud Rendering** - GPU-accelerated with WASM. Color by RGB, reprojection error, or track length. Adjustable size, opacity, and thinning.
+- **Camera Frustums** - Display as frustum pyramids, arrows, or textured image planes. Color by camera ID or rig frame.
+- **Multi-Camera Rig Support** - Visualize synchronized camera connections with animated highlighting.
+- **9 Coordinate Systems** - COLMAP, OpenCV, Three.js, OpenGL, Vulkan, Blender, Houdini, Unity, Unreal.
+
+### Transform & Alignment Tools
+- **1-Point Origin** - Set world origin at any selected 3D point.
+- **2-Point Scale** - Define real-world scale between two points with distance input.
+- **3-Point Plane Alignment** - RANSAC floor detection with normal alignment to any axis.
+- **Interactive Gizmo** - Visual rotation/translation/scale controls.
+
+### Image Viewing
+- **Gallery View** - Grid or list layout with virtual scrolling for large datasets.
+- **Image Detail Modal** - Full camera intrinsics, pose data, and matched image browsing.
+- **Match Visualization** - Animated feature connections between images.
+- **Lens Undistortion** - Real-time preview for all 11 COLMAP camera models.
+
+### Export & Sharing
+- **Multiple Export Formats** - COLMAP binary/text, PLY point clouds, config YAML, ZIP archives.
+- **Screenshot & Recording** - PNG/JPEG/WebP screenshots, GIF/WebM/MP4 video export with quality controls.
+- **URL Sharing** - Share reconstructions with encoded camera view state. Embeddable iframes.
+- **Social Sharing** - One-click share to X/LinkedIn with auto-generated stats.
+
+### Data Loading
+- **Drag & Drop** - COLMAP folders, ZIP archives, or image-only galleries.
+- **URL Loading** - Load remote reconstructions via URL or JSON manifest.
+- **Images-Only Mode** - View image galleries without COLMAP reconstruction data.
+- **Profile System** - Save and switch between different configuration presets.
+
+### Point Filtering & Analysis
+- **Track Length Filter** - Hide points with few observations.
+- **Reprojection Error Filter** - Remove high-error outliers.
+- **Statistics Display** - Point count, error distribution, co-visibility metrics.
+- **Floor Plane Detection** - Automatic ground plane identification with RANSAC.
+
+### Navigation & Controls
+- **Orbit & Fly Modes** - Trackball rotation or first-person flight navigation.
+- **Perspective/Orthographic** - Toggle projection modes with FOV control.
+- **Fly-to-Camera** - Click any frustum to animate camera view.
+- **Auto-Rotate** - Continuous rotation for presentations.
+- **Keyboard Shortcuts** - Full hotkey support for all major actions.
+
+### Performance
+- **WASM Acceleration** - Memory-efficient parsing for large reconstructions (1M+ points).
+- **Lazy Loading** - 2D points loaded on-demand to handle 1.9GB+ images.bin files.
+- **GPU Instancing** - Efficient rendering of thousands of cameras.
+- **Virtual Scrolling** - Smooth gallery navigation with 10,000+ images.
 
 ## Usage
 
@@ -38,6 +77,8 @@ View point clouds, camera frustums, and image matches directly in your browser. 
 | Zoom | Scroll wheel |
 | Fly to camera | Right-click on camera |
 | Open image details | Double-click on camera |
+| Point size | Ctrl + Scroll |
+| Frustum size | Alt + Scroll |
 
 ### Image Gallery
 | Action | Control |
@@ -47,10 +88,11 @@ View point clouds, camera frustums, and image matches directly in your browser. 
 | Fly to camera | Right-click |
 | Adjust thumbnail size | Shift + Scroll |
 
-### Keyboard
+### Keyboard Shortcuts
 | Action | Key |
 |--------|-----|
 | Reset view | R |
+| Axis views | 1-6 |
 | Toggle axes/grid | G |
 | Toggle background | B |
 | Cycle camera mode | C |
@@ -59,9 +101,19 @@ View point clouds, camera frustums, and image matches directly in your browser. 
 | Toggle matches | M |
 | Toggle undistortion | U |
 | Transform gizmo | T |
-| Axis views | 1, 2, 3 |
 | Close modal | Escape |
 | Navigate images | ← → |
+
+## Supported Camera Models
+
+ColmapView supports all 11 COLMAP camera models with real-time undistortion:
+
+- SIMPLE_PINHOLE, PINHOLE
+- SIMPLE_RADIAL, RADIAL
+- OPENCV, OPENCV_FISHEYE, FULL_OPENCV
+- FOV
+- SIMPLE_RADIAL_FISHEYE, RADIAL_FISHEYE
+- THIN_PRISM_FISHEYE
 
 ## Links
 

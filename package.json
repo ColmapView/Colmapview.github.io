@@ -1,7 +1,7 @@
 {
   "name": "colmapview",
   "private": true,
-  "version": "0.4.8",
+  "version": "0.4.9",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,11 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",
@@ -36,6 +40,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.58.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
     "@types/gif.js": "^0.2.5",

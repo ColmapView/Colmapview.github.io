@@ -72,7 +72,7 @@ export function UrlInputModal({ isOpen, onClose, onLoad, loading = false }: UrlI
         }
       }}
     >
-      <div className="bg-ds-tertiary border border-ds rounded-lg shadow-ds-lg p-5 min-w-[400px] max-w-[520px]" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-ds-tertiary border border-ds rounded-lg shadow-ds-lg p-5 min-w-[400px] max-w-[520px]" data-testid="url-modal" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-ds-primary font-medium mb-3">Load from URL</h3>
         <p className="text-ds-muted text-sm mb-4">
           Enter a manifest URL (.json), a ZIP file URL (.zip), or a direct path to a COLMAP folder

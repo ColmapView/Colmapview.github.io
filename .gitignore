@@ -47,6 +47,9 @@ tmpclaude-*
 
 # Playwright
 .playwright-mcp/
+playwright-report/
+test-results/
+playwright/.cache/
 
 # WASM build source (private - only built assets in public/wasm/ are committed)
 colmap-wasm/

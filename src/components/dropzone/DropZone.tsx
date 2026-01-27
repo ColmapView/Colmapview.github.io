@@ -10,6 +10,7 @@ import { getRandomDataset, getDatasetUrl } from '../../constants/exampleDatasets
 import { TIMING, buttonStyles, loadingStyles, toastStyles, dragOverlayStyles, emptyStateStyles, hoverCardStyles, ICON_SIZES } from '../../theme';
 import { ResetIcon, UploadIcon, LinkIcon, FileJsonIcon, MouseLeftIcon, MouseRightIcon } from '../../icons';
 import { UrlInputModal } from '../modals/UrlInputModal';
+import { ProfileDropdown } from './ProfileDropdown';
 import { publicAsset } from '../../utils/paths';
 
 interface DropZoneProps {
@@ -188,6 +189,7 @@ export function DropZone({ children }: DropZoneProps) {
   return (
     <div
       className="relative w-full h-full"
+      data-testid="drop-zone"
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
       onDragOver={handleDragOver}
@@ -213,16 +215,10 @@ export function DropZone({ children }: DropZoneProps) {
         <div className="absolute inset-0 flex items-center justify-center z-10">
           <div className="flex flex-col bg-ds-secondary rounded-lg border border-ds p-6 min-w-[420px]">
             {/* Header row: action buttons */}
-            <div className="flex justify-between -mt-4 -mx-4 mb-2">
-              <div className="flex gap-1">
-                <button
-                  type="button"
-                  className={`${buttonStyles.base} w-8 h-8 ${buttonStyles.variants.ghost}`}
-                  onClick={handleResetConfig}
-                  data-tooltip="Reset all settings to defaults"
-                >
-                  <ResetIcon className="w-4 h-4" />
-                </button>
+            <div className="flex justify-between -mt-4 -mx-4 mb-6">
+              <div className="flex items-center gap-1">
+                <ProfileDropdown />
+                <div className="w-px h-5 bg-ds-muted/30 mx-1" />
                 <button
                   type="button"
                   className={`${buttonStyles.base} w-8 h-8 ${buttonStyles.variants.ghost}`}
@@ -230,6 +226,14 @@ export function DropZone({ children }: DropZoneProps) {
                   data-tooltip="Upload configuration file (.yaml)"
                 >
                   <UploadIcon className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  className={`${buttonStyles.base} w-8 h-8 ${buttonStyles.variants.ghost}`}
+                  onClick={handleResetConfig}
+                  data-tooltip="Reset all settings to defaults"
+                >
+                  <ResetIcon className="w-4 h-4" />
                 </button>
               </div>
               <button
@@ -264,7 +268,7 @@ export function DropZone({ children }: DropZoneProps) {
             <div className="flex flex-col items-center">
               {/* Drop zone button with dotted border */}
               <div
-                className="w-32 h-32 mb-6 flex items-center justify-center border-2 border-dashed border-ds-muted rounded-lg cursor-pointer hover-border-ds-primary transition-colors"
+                className="w-32 h-32 mt-6 mb-6 flex items-center justify-center border-2 border-dashed border-ds-muted rounded-lg cursor-pointer hover-border-ds-primary transition-colors"
                 onClick={handleBrowse}
               >
                 <span className="text-ds-muted font-light leading-none" style={{ fontSize: '72px' }}>+</span>

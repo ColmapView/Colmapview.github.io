@@ -64,6 +64,24 @@ export const cameraSection = defineSection({
       description: 'single | byCamera | byRigFrame',
     },
     {
+      key: 'frustumSingleColor',
+      type: 'string',
+      pattern: /^#[0-9A-Fa-f]{6}$/,
+      patternDesc: 'hex color (#RRGGBB)',
+      default: '#ff0000',
+      persist: true,
+      description: 'Hex color for single frustum color mode',
+    },
+    {
+      key: 'frustumStandbyOpacity',
+      type: 'number',
+      min: 0,
+      max: 1,
+      default: 0.9,
+      persist: true,
+      description: 'Frustum opacity when no camera is selected (0 - 1)',
+    },
+    {
       key: 'unselectedOpacity',
       storeKey: 'unselectedCameraOpacity',
       type: 'number',
@@ -209,6 +227,14 @@ export const cameraSection = defineSection({
       default: 'fullFrame',
       persist: true,
       description: 'cropped | fullFrame',
+    },
+    // Auto FOV
+    {
+      key: 'autoFovEnabled',
+      type: 'boolean',
+      default: true,
+      persist: true,
+      description: 'Auto-adjust FOV when flying to cameras',
     },
     // Transient properties (not persisted)
     {
