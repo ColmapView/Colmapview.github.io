@@ -5,6 +5,7 @@ import { useReconstructionStore, useUIStore, useCameraStore } from '../../store'
 import { getImageFile, getUrlImageCached, fetchUrlImage, getZipImageCached, fetchZipImage, isZipLoadingAvailable } from '../../utils/imageFileUtils';
 import { useThumbnail, pauseThumbnailCache, resumeThumbnailCache } from '../../hooks/useThumbnail';
 import { prioritizeFrustumTexture } from '../../hooks/useFrustumTexture';
+import { useLongPress } from '../../hooks/useLongPress';
 import { COLUMNS, GAP, SIZE, TIMING, buttonStyles, getTooltipProps, galleryStyles, listStyles, inputStyles, emptyStateStyles, toolbarStyles, hoverCardStyles, ICON_SIZES } from '../../theme';
 
 type ViewMode = 'gallery' | 'list';
@@ -78,9 +79,10 @@ interface GalleryItemProps {
   isSettling: boolean;
   isResizing: boolean;
   wouldGoBack: boolean;
+  touchMode?: boolean;
 }
 
-const GalleryItem = memo(function GalleryItem({ img, isSelected, isMatched, matchesColor, matchesBlink, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling, isResizing, wouldGoBack }: GalleryItemProps) {
+const GalleryItem = memo(function GalleryItem({ img, isSelected, isMatched, matchesColor, matchesBlink, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling, isResizing, wouldGoBack, touchMode = false }: GalleryItemProps) {
   // Load thumbnail lazily when visible and not scrolling/settling/resizing (disabled in skip mode)
   const src = useThumbnail(img.file, img.name, !isScrolling && !skipImages && !isSettling && !isResizing);
   const [hovered, setHovered] = useState(false);
@@ -91,7 +93,7 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, isMatched, matc
     if (isScrolling && hovered) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional pattern to clear hover during scroll
       setHovered(false);
-       
+
       setMousePos(null);
       document.body.style.cursor = '';
     }
@@ -105,6 +107,12 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, isMatched, matc
       onClick(img.imageId);
     }
   };
+
+  // Long-press support for touch mode (triggers context menu)
+  const longPressHandlers = useLongPress({
+    onLongPress: () => onRightClick(img.imageId),
+    onClick: () => handleClick(),
+  });
 
   // Determine border class and style based on selection/match state
   const borderClass = isSelected
@@ -120,21 +128,25 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, isMatched, matc
     <div
       className={`${galleryStyles.itemAspect} group ${galleryStyles.item} ${borderClass}`}
       style={{ position: 'relative', ...borderStyle }}
-      onClick={handleClick}
+      onClick={touchMode ? undefined : handleClick}
       onContextMenu={(e) => { e.preventDefault(); onRightClick(img.imageId); }}
       onPointerOver={(e) => {
+        if (touchMode) return;
         setHovered(true);
         setMousePos({ x: e.clientX, y: e.clientY });
         document.body.style.cursor = 'pointer';
       }}
       onPointerMove={(e) => {
+        if (touchMode) return;
         if (hovered) setMousePos({ x: e.clientX, y: e.clientY });
       }}
       onPointerOut={() => {
+        if (touchMode) return;
         setHovered(false);
         setMousePos(null);
         document.body.style.cursor = '';
       }}
+      {...(touchMode ? longPressHandlers : {})}
     >
       {/* Inner wrapper clips image content without clipping tooltip */}
       <div className={galleryStyles.itemInner}>
@@ -168,8 +180,8 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, isMatched, matc
       <div className={`${galleryStyles.overlay} z-20`}>
         <div className={galleryStyles.overlayText}>{img.name}</div>
       </div>
-      {/* Hover card - rendered via portal to body */}
-      {hovered && mousePos && createPortal(
+      {/* Hover card - rendered via portal to body (disabled in touch mode) */}
+      {!touchMode && hovered && mousePos && createPortal(
         <div
           style={{
             position: 'fixed',
@@ -214,7 +226,7 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, isMatched, matc
 
 type ListItemProps = GalleryItemProps;
 
-const ListItem = memo(function ListItem({ img, isSelected, isMatched, matchesColor, matchesBlink, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling, isResizing, wouldGoBack }: ListItemProps) {
+const ListItem = memo(function ListItem({ img, isSelected, isMatched, matchesColor, matchesBlink, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling, isResizing, wouldGoBack, touchMode = false }: ListItemProps) {
   // Load thumbnail lazily when visible and not scrolling/settling/resizing (disabled in skip mode)
   const src = useThumbnail(img.file, img.name, !isScrolling && !skipImages && !isSettling && !isResizing);
   const [hovered, setHovered] = useState(false);
@@ -225,7 +237,7 @@ const ListItem = memo(function ListItem({ img, isSelected, isMatched, matchesCol
     if (isScrolling && hovered) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional pattern to clear hover during scroll
       setHovered(false);
-       
+
       setMousePos(null);
       document.body.style.cursor = '';
     }
@@ -240,6 +252,12 @@ const ListItem = memo(function ListItem({ img, isSelected, isMatched, matchesCol
     }
   };
 
+  // Long-press support for touch mode (triggers context menu)
+  const longPressHandlers = useLongPress({
+    onLongPress: () => onRightClick(img.imageId),
+    onClick: () => handleClick(),
+  });
+
   // Determine border class and style based on selection/match state
   const borderClass = isSelected
     ? listStyles.itemSelected
@@ -252,23 +270,27 @@ const ListItem = memo(function ListItem({ img, isSelected, isMatched, matchesCol
 
   return (
     <div
-      onClick={handleClick}
+      onClick={touchMode ? undefined : handleClick}
       onContextMenu={(e) => { e.preventDefault(); onRightClick(img.imageId); }}
       onPointerOver={(e) => {
+        if (touchMode) return;
         setHovered(true);
         setMousePos({ x: e.clientX, y: e.clientY });
         document.body.style.cursor = 'pointer';
       }}
       onPointerMove={(e) => {
+        if (touchMode) return;
         if (hovered) setMousePos({ x: e.clientX, y: e.clientY });
       }}
       onPointerOut={() => {
+        if (touchMode) return;
         setHovered(false);
         setMousePos(null);
         document.body.style.cursor = '';
       }}
       style={{ height: SIZE.listRowHeight, ...borderStyle }}
       className={`${listStyles.item} px-3 list-stats-container ${borderClass}`}
+      {...(touchMode ? longPressHandlers : {})}
     >
       <div className={`${listStyles.thumbnail} ${listStyles.thumbnailSize}`}>
         {src ? (
@@ -299,8 +321,8 @@ const ListItem = memo(function ListItem({ img, isSelected, isMatched, matchesCol
         <div className="text-ds-primary text-sm">{img.avgError.toFixed(2)}</div>
         <div className="text-ds-muted text-xs">avg err</div>
       </div>
-      {/* Hover card - simplified for list view (stats already visible in row) */}
-      {hovered && mousePos && createPortal(
+      {/* Hover card - simplified for list view (stats already visible in row, disabled in touch mode) */}
+      {!touchMode && hovered && mousePos && createPortal(
         <div
           style={{
             position: 'fixed',
@@ -366,6 +388,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
   const showMatches = useUIStore((s) => s.showMatches);
   const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
   const matchesColor = useUIStore((s) => s.matchesColor);
+  const touchMode = useUIStore((s) => s.touchMode);
   const selectedImageId = useCameraStore((s) => s.selectedImageId);
   const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
   const flyToImage = useCameraStore((s) => s.flyToImage);
@@ -967,6 +990,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
                         isSettling={isSettling}
                         isResizing={isResizing}
                         wouldGoBack={img.imageId === lastNavigationToImageId}
+                        touchMode={touchMode}
                       />
                     ))}
                   </div>
@@ -1010,6 +1034,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
                       isSettling={isSettling}
                       isResizing={isResizing}
                       wouldGoBack={img.imageId === lastNavigationToImageId}
+                      touchMode={touchMode}
                     />
                   </div>
                 );

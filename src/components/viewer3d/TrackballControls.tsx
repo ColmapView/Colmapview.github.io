@@ -1,7 +1,7 @@
 import { useRef, useEffect, useMemo } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useReconstructionStore, useTransformStore, usePointPickingStore, useCameraStore, usePointCloudStore } from '../../store';
+import { useReconstructionStore, useTransformStore, usePointPickingStore, useCameraStore, usePointCloudStore, useUIStore } from '../../store';
 import { useNavigationNode, useAxesNode } from '../../nodes';
 import { useNavigationNodeActions, useCamerasNodeActions, usePointsNodeActions } from '../../nodes';
 import { decodeCameraState } from '../../hooks/useUrlState';
@@ -9,8 +9,34 @@ import type { CameraViewState } from '../../store/types';
 import { getImageWorldPose } from '../../utils/colmapTransforms';
 import { createSim3dFromEuler } from '../../utils/sim3dTransforms';
 import { getWorldUp } from '../../utils/coordinateSystems';
-import { CAMERA, CONTROLS } from '../../theme';
+import { CAMERA, CONTROLS, TOUCH } from '../../theme';
 import type { ViewDirection } from '../../store/stores/uiStore';
+
+// Touch gesture state for multi-touch handling
+interface TouchPointer {
+  id: number;
+  x: number;
+  y: number;
+  startX: number;
+  startY: number;
+}
+
+type TouchGesture = 'none' | 'drag' | 'pinch' | 'pan';
+
+// Calculate distance between two touch points
+function getTouchDistance(p1: TouchPointer, p2: TouchPointer): number {
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+// Calculate center point between two touches
+function getTouchCenter(p1: TouchPointer, p2: TouchPointer): { x: number; y: number } {
+  return {
+    x: (p1.x + p2.x) / 2,
+    y: (p1.y + p2.y) / 2,
+  };
+}
 
 // Easing function for smooth camera transitions
 function easeOutCubic(t: number): number {
@@ -120,6 +146,18 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
 
   // Animation target for smooth fly-to transitions
   const animationTarget = useRef<AnimationTarget | null>(null);
+
+  // Touch gesture state for multi-touch handling
+  const touchMode = useUIStore((s) => s.touchMode);
+  const touchPointers = useRef<Map<number, TouchPointer>>(new Map());
+  const touchGesture = useRef<TouchGesture>('none');
+  const initialPinchDistance = useRef(0);
+  const initialPinchZoom = useRef(1);
+  const lastTouchCenter = useRef({ x: 0, y: 0 });
+  const lastDoubleTapTime = useRef(0);
+  const lastTapPosition = useRef({ x: 0, y: 0 });
+  const dragStartPosition = useRef({ x: 0, y: 0 });
+  const hasDragThresholdPassed = useRef(false);
 
   // Ref for horizonLock to avoid stale closure in event handlers
   const horizonLockRef = useRef(horizonLock);
@@ -797,6 +835,9 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
     const canvas = gl.domElement;
 
     const onMouseDown = (e: PointerEvent) => {
+      // In touch mode, ignore touch pointer events - let touch handlers handle them
+      if (touchMode && e.pointerType === 'touch') return;
+
       // Store mouse state immediately for accurate tracking
       const button = e.button;
       lastMouse.current = { x: e.clientX, y: e.clientY };
@@ -1080,6 +1121,241 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       keysPressed.current.clear();
     };
 
+    // Touch event handlers for multi-touch gestures
+    const onTouchStart = (e: TouchEvent) => {
+      if (!touchMode || !enabled.current) return;
+
+      // Track all active touches
+      for (const touch of Array.from(e.changedTouches)) {
+        touchPointers.current.set(touch.identifier, {
+          id: touch.identifier,
+          x: touch.clientX,
+          y: touch.clientY,
+          startX: touch.clientX,
+          startY: touch.clientY,
+        });
+      }
+
+      const pointerCount = touchPointers.current.size;
+
+      if (pointerCount === 1) {
+        const touch = Array.from(touchPointers.current.values())[0];
+        const now = performance.now();
+
+        // Check for double tap with position validation
+        const tapDeltaX = touch.x - lastTapPosition.current.x;
+        const tapDeltaY = touch.y - lastTapPosition.current.y;
+        const tapDistance = Math.sqrt(tapDeltaX * tapDeltaX + tapDeltaY * tapDeltaY);
+        const withinDoubleTapDistance = tapDistance < 30; // Max 30px between taps
+
+        if (now - lastDoubleTapTime.current < TOUCH.doubleTapDelay && withinDoubleTapDistance) {
+          // Double tap detected - reset view
+          useUIStore.getState().resetView();
+          lastDoubleTapTime.current = 0;
+          lastTapPosition.current = { x: 0, y: 0 };
+          touchPointers.current.clear();
+          touchGesture.current = 'none';
+          return;
+        }
+        lastDoubleTapTime.current = now;
+        lastTapPosition.current = { x: touch.x, y: touch.y };
+
+        // Start drag gesture (orbit) - but don't apply rotation until threshold passed
+        touchGesture.current = 'drag';
+        isDragging.current = true;
+        dragging.current = true;
+        hasDragThresholdPassed.current = false;
+        angularVelocity.current.x = 0;
+        angularVelocity.current.y = 0;
+        smoothedVelocity.current.x = 0;
+        smoothedVelocity.current.y = 0;
+
+        dragStartPosition.current = { x: touch.x, y: touch.y };
+        lastMouse.current = { x: touch.x, y: touch.y };
+        lastTime.current = performance.now();
+
+        // Turn off auto-rotate on manual interaction
+        if (autoRotateMode !== 'off') navActions.setAutoRotateMode('off');
+        // Cancel any ongoing animation
+        animationTarget.current = null;
+      } else if (pointerCount === 2) {
+        // Two touches - start pinch/pan gesture
+        const touches = Array.from(touchPointers.current.values());
+        initialPinchDistance.current = getTouchDistance(touches[0], touches[1]);
+        initialPinchZoom.current = camera instanceof THREE.OrthographicCamera
+          ? orthoZoom.current
+          : targetDistance.current;
+        lastTouchCenter.current = getTouchCenter(touches[0], touches[1]);
+
+        // Switch from drag to pinch/pan
+        touchGesture.current = 'pinch';
+        isDragging.current = false;
+        isPanning.current = true;
+        dragging.current = true;
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!touchMode || !enabled.current) return;
+
+      // Update tracked touches
+      for (const touch of Array.from(e.changedTouches)) {
+        const tracked = touchPointers.current.get(touch.identifier);
+        if (tracked) {
+          tracked.x = touch.clientX;
+          tracked.y = touch.clientY;
+        }
+      }
+
+      const pointerCount = touchPointers.current.size;
+
+      if (pointerCount === 1 && touchGesture.current === 'drag') {
+        // Single finger drag - orbit
+        const touch = Array.from(touchPointers.current.values())[0];
+
+        // Check if drag threshold has been passed
+        if (!hasDragThresholdPassed.current) {
+          const totalDragX = touch.x - dragStartPosition.current.x;
+          const totalDragY = touch.y - dragStartPosition.current.y;
+          const totalDragDistance = Math.sqrt(totalDragX * totalDragX + totalDragY * totalDragY);
+
+          if (totalDragDistance < TOUCH.dragThreshold) {
+            // Still within threshold - don't start orbiting yet
+            return;
+          }
+          // Threshold passed - start applying rotation
+          hasDragThresholdPassed.current = true;
+          // Reset lastMouse to current position to avoid jump
+          lastMouse.current = { x: touch.x, y: touch.y };
+        }
+
+        const deltaX = touch.x - lastMouse.current.x;
+        const deltaY = touch.y - lastMouse.current.y;
+
+        if (deltaX !== 0 || deltaY !== 0) {
+          navActions.clearNavigationHistory();
+        }
+
+        // Apply orbit rotation with touch sensitivity
+        const rotX = deltaX * rotateSpeed * TOUCH.orbitSensitivity;
+        const rotY = deltaY * rotateSpeed * TOUCH.orbitSensitivity;
+        applyRotation(rotX, rotY);
+        updateCamera();
+
+        // Update velocity for momentum
+        const smoothing = CAMERA.velocitySmoothingFactor;
+        smoothedVelocity.current.x = smoothedVelocity.current.x * smoothing + rotX * (1 - smoothing);
+        smoothedVelocity.current.y = smoothedVelocity.current.y * smoothing + rotY * (1 - smoothing);
+        angularVelocity.current.x = smoothedVelocity.current.x;
+        angularVelocity.current.y = smoothedVelocity.current.y;
+
+        lastMouse.current = { x: touch.x, y: touch.y };
+        lastTime.current = performance.now();
+      } else if (pointerCount === 2 && (touchGesture.current === 'pinch' || touchGesture.current === 'pan')) {
+        // Two finger gesture - pinch to zoom + pan
+        const touches = Array.from(touchPointers.current.values());
+        const currentDistance = getTouchDistance(touches[0], touches[1]);
+        const currentCenter = getTouchCenter(touches[0], touches[1]);
+
+        // Pinch zoom - only apply if change exceeds threshold
+        if (initialPinchDistance.current > 0) {
+          const scale = initialPinchDistance.current / currentDistance;
+          const scaleChange = Math.abs(1 - scale);
+
+          // Only apply zoom if pinch change exceeds threshold
+          if (scaleChange > TOUCH.pinchThreshold) {
+            if (camera instanceof THREE.OrthographicCamera) {
+              orthoZoom.current = Math.max(0.1, Math.min(10, initialPinchZoom.current * scale));
+              camera.zoom = orthoZoom.current;
+              camera.updateProjectionMatrix();
+            } else {
+              // Simplified zoom formula for better linearity
+              targetDistance.current = Math.max(
+                CONTROLS.minDistance,
+                initialPinchZoom.current * scale
+              );
+            }
+          }
+        }
+
+        // Two-finger pan
+        const panDeltaX = currentCenter.x - lastTouchCenter.current.x;
+        const panDeltaY = currentCenter.y - lastTouchCenter.current.y;
+
+        if (panDeltaX !== 0 || panDeltaY !== 0) {
+          navActions.clearNavigationHistory();
+
+          const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraQuat.current);
+          const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(cameraQuat.current);
+
+          if (cameraMode === 'orbit') {
+            const panMultiplier = distance.current * panSpeed * TOUCH.panSensitivity;
+            const panOffset = new THREE.Vector3()
+              .addScaledVector(cameraRight, -panDeltaX * panMultiplier)
+              .addScaledVector(cameraUp, panDeltaY * panMultiplier);
+            targetVec.current.add(panOffset);
+            updateCamera();
+          } else {
+            // Fly mode
+            const panMultiplier = radius * panSpeed * flySpeed * TOUCH.panSensitivity;
+            const panOffset = new THREE.Vector3()
+              .addScaledVector(cameraRight, -panDeltaX * panMultiplier)
+              .addScaledVector(cameraUp, panDeltaY * panMultiplier);
+            camera.position.add(panOffset);
+          }
+        }
+
+        lastTouchCenter.current = currentCenter;
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!touchMode) return;
+
+      // Remove ended touches
+      for (const touch of Array.from(e.changedTouches)) {
+        touchPointers.current.delete(touch.identifier);
+      }
+
+      const remainingCount = touchPointers.current.size;
+
+      if (remainingCount === 0) {
+        // All touches ended
+        dragging.current = false;
+
+        // Apply momentum for single finger drag
+        if (touchGesture.current === 'drag') {
+          const timeSinceLastMove = performance.now() - lastTime.current;
+          if (timeSinceLastMove > 50) {
+            angularVelocity.current.x = 0;
+            angularVelocity.current.y = 0;
+          }
+        }
+
+        isDragging.current = false;
+        isPanning.current = false;
+        touchGesture.current = 'none';
+        initialPinchDistance.current = 0;
+      } else if (remainingCount === 1) {
+        // Went from 2 touches to 1 - switch back to drag
+        touchGesture.current = 'drag';
+        isDragging.current = true;
+        isPanning.current = false;
+
+        const touch = Array.from(touchPointers.current.values())[0];
+        lastMouse.current = { x: touch.x, y: touch.y };
+        angularVelocity.current.x = 0;
+        angularVelocity.current.y = 0;
+        smoothedVelocity.current.x = 0;
+        smoothedVelocity.current.y = 0;
+      }
+    };
+
+    const onTouchCancel = (e: TouchEvent) => {
+      // Treat cancel same as end
+      onTouchEnd(e);
+    };
+
     canvas.addEventListener('pointerdown', onMouseDown);
     document.addEventListener('pointerup', onMouseUp);
     document.addEventListener('pointermove', onMouseMove);
@@ -1089,6 +1365,14 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', onBlur);
+
+    // Touch event listeners (only when touch mode is active)
+    if (touchMode) {
+      canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+      canvas.addEventListener('touchmove', onTouchMove, { passive: true });
+      canvas.addEventListener('touchend', onTouchEnd, { passive: true });
+      canvas.addEventListener('touchcancel', onTouchCancel, { passive: true });
+    }
 
     return () => {
       canvas.removeEventListener('pointerdown', onMouseDown);
@@ -1100,9 +1384,15 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
+
+      // Remove touch listeners
+      canvas.removeEventListener('touchstart', onTouchStart);
+      canvas.removeEventListener('touchmove', onTouchMove);
+      canvas.removeEventListener('touchend', onTouchEnd);
+      canvas.removeEventListener('touchcancel', onTouchCancel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Control constants (rotateSpeed, panSpeed, etc.) are stable and don't need to be dependencies. Action hooks are stable.
-  }, [camera, gl, cameraMode, flySpeed, pointerLock, pickingMode, radius, autoRotateMode, navActions, camerasActions, pointsActions]);
+  }, [camera, gl, cameraMode, flySpeed, pointerLock, pickingMode, radius, autoRotateMode, navActions, camerasActions, pointsActions, touchMode]);
 
   return null;
 }

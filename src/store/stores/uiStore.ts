@@ -70,6 +70,14 @@ export const DEFAULT_CONTEXT_MENU_ACTIONS: ContextMenuAction[] = [
   'takeScreenshot',
 ];
 
+// Touch UI visibility state (centralized control for all touch UI elements)
+export interface TouchUIVisibility {
+  statusBar: boolean;      // TouchStatusBar visibility
+  galleryFAB: boolean;     // Gallery floating action button
+  galleryDrawer: boolean;  // Gallery slide-out drawer
+  modalControls: boolean;  // Modal bottom controls (toggles, match controls, navigation)
+}
+
 export interface UIState {
   // Modal
   imageDetailId: number | null;
@@ -102,8 +110,16 @@ export interface UIState {
   // Layout
   galleryCollapsed: boolean;
 
+  // Touch UI visibility (not persisted - transient UI state)
+  touchUI: TouchUIVisibility;
+
   // Embed mode (hides gallery panel and button, set from URL parameter)
   embedMode: boolean;
+
+  // Touch mode (optimized UI for touch devices)
+  // Not persisted - auto-detected each session or set via URL parameter
+  touchMode: boolean;
+  touchModeSource: 'url' | 'auto';
 
   // Context menu (persisted config + transient state)
   contextMenuActions: ContextMenuAction[];
@@ -147,7 +163,11 @@ export interface UIState {
   setView: (direction: ViewDirection) => void;
   setGalleryCollapsed: (collapsed: boolean) => void;
   toggleGalleryCollapsed: () => void;
+  setTouchUIVisible: (element: keyof TouchUIVisibility, visible: boolean) => void;
+  toggleTouchUI: (element: keyof TouchUIVisibility) => void;
+  setTouchUI: (visibility: Partial<TouchUIVisibility>) => void;
   setEmbedMode: (embed: boolean) => void;
+  setTouchMode: (enabled: boolean, source?: 'url' | 'auto') => void;
 
   // Context menu actions
   openContextMenu: (x: number, y: number) => void;
@@ -186,7 +206,15 @@ export const useUIStore = create<UIState>()(
       backgroundColor: '#ffffff',
       showGizmo: false,
       galleryCollapsed: false,
+      touchUI: {
+        statusBar: true,
+        galleryFAB: true,
+        galleryDrawer: false,
+        modalControls: true,
+      },
       embedMode: false,
+      touchMode: false,
+      touchModeSource: 'auto',
       contextMenuActions: DEFAULT_CONTEXT_MENU_ACTIONS,
       contextMenuPosition: null,
       showContextMenuEditor: false,
@@ -226,7 +254,17 @@ export const useUIStore = create<UIState>()(
       })),
       setGalleryCollapsed: (galleryCollapsed) => set({ galleryCollapsed }),
       toggleGalleryCollapsed: () => set((state) => ({ galleryCollapsed: !state.galleryCollapsed })),
+      setTouchUIVisible: (element, visible) => set((state) => ({
+        touchUI: { ...state.touchUI, [element]: visible },
+      })),
+      toggleTouchUI: (element) => set((state) => ({
+        touchUI: { ...state.touchUI, [element]: !state.touchUI[element] },
+      })),
+      setTouchUI: (visibility) => set((state) => ({
+        touchUI: { ...state.touchUI, ...visibility },
+      })),
       setEmbedMode: (embedMode) => set({ embedMode }),
+      setTouchMode: (touchMode, source = 'auto') => set({ touchMode, touchModeSource: source }),
 
       // Context menu actions
       openContextMenu: (x, y) => set({ contextMenuPosition: { x, y } }),

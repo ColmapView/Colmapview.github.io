@@ -6,7 +6,7 @@ import { BREAKPOINTS } from '../theme';
  * @param breakpoint - The width threshold below which is considered mobile (default: BREAKPOINTS.mobile)
  * @returns true if viewport width is below the breakpoint
  */
-export function useIsMobile(breakpoint = BREAKPOINTS.mobile): boolean {
+export function useIsMobile(breakpoint: number = BREAKPOINTS.mobile): boolean {
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < breakpoint
   );

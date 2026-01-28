@@ -623,6 +623,49 @@ export const histogramStyles = {
 } as const;
 
 // ============================================
+// TOUCH MODE STYLES
+// ============================================
+
+/**
+ * Touch-specific UI styles for tablets and touch devices.
+ * Used when touchMode is active.
+ */
+export const touchStyles = {
+  // FAB (Floating Action Button)
+  fab: 'fixed rounded-full shadow-lg flex items-center justify-center transition-all duration-200 active:scale-95',
+  fabPrimary: 'bg-ds-accent text-ds-void hover:bg-ds-accent/90',
+  fabSecondary: 'bg-ds-tertiary text-ds-primary border border-ds hover:bg-ds-hover',
+
+  // Bottom sheet
+  bottomSheet: 'fixed inset-x-0 bottom-0 bg-ds-tertiary rounded-t-2xl shadow-ds-lg z-[996]',
+  bottomSheetHandle: 'w-12 h-1 bg-ds-secondary rounded-full mx-auto my-3',
+  bottomSheetContent: 'max-h-[80vh] overflow-y-auto overscroll-contain px-4 pb-6',
+  bottomSheetSection: 'py-3 border-b border-ds last:border-0',
+  bottomSheetSectionTitle: 'text-ds-muted text-xs uppercase tracking-wide mb-2',
+
+  // Drawer (slide-out panel)
+  drawer: 'fixed inset-y-0 right-0 bg-ds-secondary shadow-ds-lg z-[998]',
+  drawerBackdrop: 'fixed inset-0 bg-ds-void/50 backdrop-blur-sm z-[997]',
+  drawerHeader: 'h-12 flex items-center justify-between px-4 border-b border-ds bg-ds-tertiary',
+  drawerTitle: 'text-ds-primary text-base font-medium',
+
+  // Touch rows (for control panels)
+  touchRow: 'min-h-[48px] flex items-center gap-3 px-4 active:bg-ds-hover',
+  touchRowLabel: 'flex-1 text-ds-primary text-sm',
+  touchRowValue: 'text-ds-secondary text-sm',
+
+  // Touch buttons (larger tap targets)
+  touchButton: 'min-h-[44px] px-4 flex items-center justify-center gap-2 rounded-lg',
+
+  // Selection toast (brief feedback)
+  selectionToast: 'fixed top-4 left-1/2 -translate-x-1/2 bg-ds-tertiary/95 px-4 py-2 rounded-lg shadow-ds z-[999]',
+  selectionToastText: 'text-ds-primary text-sm whitespace-nowrap',
+
+  // Touch status bar
+  touchStatusBar: 'h-6 border-t border-ds bg-ds-tertiary text-ds-secondary text-xs px-3 flex items-center justify-between',
+} as const;
+
+// ============================================
 // CACHE STATS INDICATOR STYLES
 // ============================================
 

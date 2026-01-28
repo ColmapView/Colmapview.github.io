@@ -109,6 +109,8 @@ interface BatchedArrowMeshesProps {
   onClick: (imageId: number) => void;
   onContextMenu: (imageId: number) => void;
   lastNavigationToImageId: number | null;
+  // Touch mode - hides hover cards
+  touchMode?: boolean;
 }
 
 // Temp objects for instanced mesh updates
@@ -139,6 +141,7 @@ function BatchedArrowMeshes({
   onClick,
   onContextMenu,
   lastNavigationToImageId,
+  touchMode = false,
 }: BatchedArrowMeshesProps) {
   const shaftRef = useRef<THREE.InstancedMesh>(null);
   const coneRef = useRef<THREE.InstancedMesh>(null);
@@ -439,8 +442,8 @@ function BatchedArrowMeshes({
         }}
       />
       <instancedMesh key={`${meshKey}-cone`} ref={coneRef} args={[coneGeometry, coneMaterial, frustums.length]} />
-      {/* Batched tooltip - single Html component for all arrows */}
-      {tooltipData !== null && tooltipFrustum && (
+      {/* Batched tooltip - single Html component for all arrows (hidden in touch mode) */}
+      {!touchMode && tooltipData !== null && tooltipFrustum && (
         <Html
           style={{
             position: 'fixed',
@@ -793,6 +796,7 @@ interface BatchedPlaneHitTargetsProps {
   onClick: (imageId: number) => void;
   onContextMenu: (imageId: number) => void;
   lastNavigationToImageId: number | null;
+  touchMode?: boolean;
 }
 
 function BatchedPlaneHitTargets({
@@ -804,6 +808,7 @@ function BatchedPlaneHitTargets({
   onClick,
   onContextMenu,
   lastNavigationToImageId,
+  touchMode = false,
 }: BatchedPlaneHitTargetsProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const [tooltipData, setTooltipData] = useState<{instanceId: number, x: number, y: number} | null>(null);
@@ -948,8 +953,8 @@ function BatchedPlaneHitTargets({
           onContextMenu(f.image.imageId);
         }}
       />
-      {/* Batched tooltip */}
-      {tooltipData !== null && tooltipFrustum && (
+      {/* Batched tooltip (hidden in touch mode) */}
+      {!touchMode && tooltipData !== null && tooltipFrustum && (
         <Html
           style={{
             position: 'fixed',
@@ -1023,6 +1028,8 @@ interface FrustumPlaneProps {
   onContextMenu: (imageId: number) => void;
   /** When true, disables all interaction (hover, click) - use with BatchedPlaneHitTargets */
   disableInteraction?: boolean;
+  /** Touch mode - hides hover cards */
+  touchMode?: boolean;
 }
 
 const FrustumPlane = memo(function FrustumPlane({
@@ -1047,6 +1054,7 @@ const FrustumPlane = memo(function FrustumPlane({
   onClick,
   onContextMenu,
   disableInteraction = false,
+  touchMode = false,
 }: FrustumPlaneProps) {
   // Skip hover state when interaction is disabled (using BatchedPlaneHitTargets)
   const [hovered, setHovered] = useState(false);
@@ -1388,7 +1396,7 @@ const FrustumPlane = memo(function FrustumPlane({
         )}
       </mesh>
       {isSelected && <primitive object={borderLine} />}
-      {hovered && mousePos && (
+      {!touchMode && hovered && mousePos && (
         <Html
           style={{
             position: 'fixed',
@@ -1562,6 +1570,7 @@ export function CameraFrustums() {
   const openImageDetail = useUIStore((s) => s.openImageDetail);
   const setMatchedImageId = useUIStore((s) => s.setMatchedImageId);
   const setShowMatchesInModal = useUIStore((s) => s.setShowMatchesInModal);
+  const touchMode = useUIStore((s) => s.touchMode);
 
   // Hovered image ID for arrow mode (batched rendering needs this at parent level)
   const [hoveredImageId, setHoveredImageId] = useState<number | null>(null);
@@ -2051,6 +2060,7 @@ export function CameraFrustums() {
       onHover={setHoveredImageId}
       onClick={handleArrowClick}
       onContextMenu={handleArrowContextMenu}
+      touchMode={touchMode}
     />
   );
 
@@ -2080,6 +2090,7 @@ export function CameraFrustums() {
           onClick={handleArrowClick}
           onContextMenu={handleArrowContextMenu}
           lastNavigationToImageId={lastNavigationToImageId}
+          touchMode={touchMode}
         />
         {/* Image plane for selected camera (replaces arrow) */}
         {selectedCameraPlane}
@@ -2115,6 +2126,7 @@ export function CameraFrustums() {
           onClick={handleArrowClick}
           onContextMenu={handleArrowContextMenu}
           lastNavigationToImageId={lastNavigationToImageId}
+          touchMode={touchMode}
         />
         {/* Per-frustum planes for texture rendering (non-selected only, interaction handled by BatchedPlaneHitTargets) */}
         {frustums.map((f) => {
@@ -2159,6 +2171,7 @@ export function CameraFrustums() {
               onClick={handleArrowClick}
               onContextMenu={handleArrowContextMenu}
               disableInteraction={true}
+              touchMode={touchMode}
             />
           );
         })}
@@ -2215,6 +2228,7 @@ export function CameraFrustums() {
         onClick={handleArrowClick}
         onContextMenu={handleArrowContextMenu}
         lastNavigationToImageId={lastNavigationToImageId}
+        touchMode={touchMode}
       />
       {/* Selected camera image plane (source of truth) */}
       {selectedCameraPlane}

@@ -4,7 +4,7 @@ import { useReconstructionStore, useUIStore } from '../../store';
 import type { Camera, Point2D } from '../../types/colmap';
 import { getImageFile, getMaskFile, getUrlImageCached, fetchUrlImage, fetchUrlMask, getZipImageCached, fetchZipImage, fetchZipMask, isZipLoadingAvailable } from '../../utils/imageFileUtils';
 import { useFileUrl } from '../../hooks/useFileUrl';
-import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, MODAL, buttonStyles, inputStyles, resizeHandleStyles, modalStyles } from '../../theme';
+import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, MODAL, TOUCH, buttonStyles, inputStyles, resizeHandleStyles, modalStyles, touchStyles } from '../../theme';
 import { HOTKEYS } from '../../config/hotkeys';
 import { ModalErrorBoundary } from './ModalErrorBoundary';
 
@@ -302,6 +302,110 @@ const MatchCanvas = memo(function MatchCanvas({
   );
 });
 
+// Vertical match canvas for touch mode (images stacked top-bottom)
+interface VerticalMatchCanvasProps {
+  lines: { point1: [number, number]; point2: [number, number] }[];
+  image1Camera: Camera;
+  image2Camera: Camera;
+  image1Width: number;
+  image1Height: number;
+  image2Width: number;
+  image2Height: number;
+  containerWidth: number;
+  containerHeight: number;
+  gap: number;
+  lineOpacity: number;
+}
+
+const VerticalMatchCanvas = memo(function VerticalMatchCanvas({
+  lines,
+  image1Camera,
+  image2Camera,
+  image1Width,
+  image1Height,
+  image2Width,
+  image2Height,
+  containerWidth,
+  containerHeight,
+  gap,
+  lineOpacity
+}: VerticalMatchCanvasProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Validate all dimensions are positive
+    if (image1Width <= 0 || image1Height <= 0 || image2Width <= 0 || image2Height <= 0 ||
+        image1Camera.width <= 0 || image1Camera.height <= 0 ||
+        image2Camera.width <= 0 || image2Camera.height <= 0 ||
+        containerWidth <= 0 || containerHeight <= 0) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Vertical layout: images stacked top-bottom
+    const halfHeight = (containerHeight - gap) / 2;
+    const offset1X = (containerWidth - image1Width) / 2;
+    const offset1Y = (halfHeight - image1Height) / 2;
+    const offset2X = (containerWidth - image2Width) / 2;
+    const offset2Y = halfHeight + gap + (halfHeight - image2Height) / 2;
+
+    const scale1X = image1Width / image1Camera.width;
+    const scale1Y = image1Height / image1Camera.height;
+    const scale2X = image2Width / image2Camera.width;
+    const scale2Y = image2Height / image2Camera.height;
+
+    ctx.strokeStyle = VIZ_COLORS.point.triangulated;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = lineOpacity;
+
+    for (const { point1, point2 } of lines) {
+      const x1 = offset1X + point1[0] * scale1X;
+      const y1 = offset1Y + point1[1] * scale1Y;
+      const x2 = offset2X + point2[0] * scale2X;
+      const y2 = offset2Y + point2[1] * scale2Y;
+
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = VIZ_COLORS.point.triangulated;
+    for (const { point1, point2 } of lines) {
+      const x1 = offset1X + point1[0] * scale1X;
+      const y1 = offset1Y + point1[1] * scale1Y;
+      const x2 = offset2X + point2[0] * scale2X;
+      const y2 = offset2Y + point2[1] * scale2Y;
+
+      ctx.beginPath();
+      ctx.arc(x1, y1, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(x2, y2, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }, [lines, image1Camera, image2Camera, image1Width, image1Height, image2Width, image2Height, containerWidth, containerHeight, gap, lineOpacity]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={containerWidth}
+      height={containerHeight}
+      className="absolute inset-0 pointer-events-none"
+    />
+  );
+});
+
 const MIN_WIDTH = SIZE.modalMinWidth;
 const MIN_HEIGHT = SIZE.modalMinHeight;
 const RESIZE_DEBOUNCE_MS = TIMING.resizeDebounce;
@@ -436,6 +540,8 @@ export function ImageDetailModal() {
   const setShowMatchesInModal = useUIStore((s) => s.setShowMatchesInModal);
   const matchedImageId = useUIStore((s) => s.matchedImageId);
   const setMatchedImageId = useUIStore((s) => s.setMatchedImageId);
+  const touchMode = useUIStore((s) => s.touchMode);
+  const showModalControls = useUIStore((s) => s.touchUI.modalControls);
 
   // Match line opacity state (default from theme)
   const [matchLineOpacity, setMatchLineOpacity] = useState<number>(OPACITY.matchLines);
@@ -1005,6 +1111,30 @@ export function ImageDetailModal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- MATCH_VIEW_GAP is a constant, containerSize is intentionally destructured
   }, [camera, matchedCamera, containerSize.width, containerSize.height]);
 
+  // Memoize rendered dimensions for vertical stacked view (touch mode)
+  const verticalStackedDimensions = useMemo(() => {
+    if (!camera || !matchedCamera || containerSize.width <= 0 || containerSize.height <= 0) {
+      return { image1Width: 0, image1Height: 0, image2Width: 0, image2Height: 0 };
+    }
+
+    const halfHeight = (containerSize.height - MATCH_VIEW_GAP) / 2;
+    const width = containerSize.width;
+    const containerAspect = width / halfHeight;
+
+    // Calculate dimensions for image 1 (top)
+    const aspect1 = camera.width / camera.height;
+    const image1Width = aspect1 > containerAspect ? width : halfHeight * aspect1;
+    const image1Height = aspect1 > containerAspect ? width / aspect1 : halfHeight;
+
+    // Calculate dimensions for image 2 (bottom)
+    const aspect2 = matchedCamera.width / matchedCamera.height;
+    const image2Width = aspect2 > containerAspect ? width : halfHeight * aspect2;
+    const image2Height = aspect2 > containerAspect ? width / aspect2 : halfHeight;
+
+    return { image1Width, image1Height, image2Width, image2Height };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- MATCH_VIEW_GAP is a constant
+  }, [camera, matchedCamera, containerSize.width, containerSize.height]);
+
   // Compute optimal modal size and center when it first opens
   const wasOpenRef = useRef(false);
   useEffect(() => {
@@ -1206,6 +1336,262 @@ export function ImageDetailModal() {
 
   if (imageDetailId === null || !image || !camera) return null;
 
+  // Touch mode: full-screen modal with vertical match layout
+  if (touchMode) {
+    return (
+      <div className="fixed inset-0 z-[1000] bg-ds-primary flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 h-12 bg-ds-secondary border-b border-ds flex-shrink-0">
+          <span className="text-ds-primary text-sm truncate flex-1 mr-2">
+            {isMatchViewMode
+              ? `${image?.name} ↔ ${matchedImage?.name}`
+              : image?.name}
+          </span>
+          <button
+            onClick={closeImageDetail}
+            className="w-10 h-10 flex items-center justify-center text-ds-muted hover:text-ds-primary text-2xl"
+            style={{ minWidth: TOUCH.minTapTarget, minHeight: TOUCH.minTapTarget }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Image container */}
+        <div ref={imageContainerRef} className="flex-1 min-h-0 bg-ds-secondary relative overflow-hidden">
+          {isMatchViewMode ? (
+            (() => {
+              // Vertical layout: images stacked top-bottom
+              const dims = verticalStackedDimensions;
+              const halfHeight = (containerSize.height - MATCH_VIEW_GAP) / 2;
+              const offset1X = (containerSize.width - dims.image1Width) / 2;
+              const offset1Y = (halfHeight - dims.image1Height) / 2;
+              const offset2X = (containerSize.width - dims.image2Width) / 2;
+              const offset2Y = halfHeight + MATCH_VIEW_GAP + (halfHeight - dims.image2Height) / 2;
+
+              return (
+                <>
+                  {/* Image 1 - top */}
+                  {dims.image1Width > 0 && (imageSrc ? (
+                    <img
+                      src={imageSrc}
+                      alt={image.name}
+                      className="absolute object-contain"
+                      style={{
+                        width: dims.image1Width,
+                        height: dims.image1Height,
+                        left: offset1X,
+                        top: offset1Y,
+                      }}
+                      draggable={false}
+                    />
+                  ) : (
+                    <ImagePlaceholder
+                      width={dims.image1Width}
+                      height={dims.image1Height}
+                      cameraWidth={camera.width}
+                      cameraHeight={camera.height}
+                      label={image.name}
+                      style={{ position: 'absolute', left: offset1X, top: offset1Y }}
+                    />
+                  ))}
+                  {/* Image 2 - bottom */}
+                  {dims.image2Width > 0 && matchedCamera && (matchedImageSrc ? (
+                    <img
+                      src={matchedImageSrc}
+                      alt={matchedImage?.name || ''}
+                      className="absolute object-contain"
+                      style={{
+                        width: dims.image2Width,
+                        height: dims.image2Height,
+                        left: offset2X,
+                        top: offset2Y,
+                      }}
+                      draggable={false}
+                    />
+                  ) : (
+                    <ImagePlaceholder
+                      width={dims.image2Width}
+                      height={dims.image2Height}
+                      cameraWidth={matchedCamera.width}
+                      cameraHeight={matchedCamera.height}
+                      label={matchedImage?.name}
+                      style={{ position: 'absolute', left: offset2X, top: offset2Y }}
+                    />
+                  ))}
+                  {/* Vertical match lines */}
+                  {matchLines.length > 0 && dims.image1Width > 0 && dims.image2Width > 0 && (
+                    <VerticalMatchCanvas
+                      lines={matchLines}
+                      image1Camera={camera}
+                      image2Camera={matchedCamera}
+                      image1Width={dims.image1Width}
+                      image1Height={dims.image1Height}
+                      image2Width={dims.image2Width}
+                      image2Height={dims.image2Height}
+                      containerWidth={containerSize.width}
+                      containerHeight={containerSize.height}
+                      gap={MATCH_VIEW_GAP}
+                      lineOpacity={matchLineOpacity}
+                    />
+                  )}
+                </>
+              );
+            })()
+          ) : (
+            (() => {
+              const offsetX = (containerSize.width - renderedImageWidth) / 2;
+              const offsetY = (containerSize.height - renderedImageHeight) / 2;
+
+              return (
+                <>
+                  {renderedImageWidth > 0 && (imageSrc ? (
+                    <img
+                      src={imageSrc}
+                      alt={image.name}
+                      className="absolute object-contain"
+                      style={{
+                        width: renderedImageWidth,
+                        height: renderedImageHeight,
+                        left: offsetX,
+                        top: offsetY,
+                      }}
+                      draggable={false}
+                    />
+                  ) : (
+                    <ImagePlaceholder
+                      width={renderedImageWidth}
+                      height={renderedImageHeight}
+                      cameraWidth={camera.width}
+                      cameraHeight={camera.height}
+                      label="No image loaded"
+                      style={{ position: 'absolute', left: offsetX, top: offsetY }}
+                    />
+                  ))}
+                  {(showPoints2D || showPoints3D) && renderedImageWidth > 0 && effectivePoints2D.length > 0 && (
+                    <KeypointCanvas
+                      points2D={effectivePoints2D}
+                      camera={camera}
+                      imageWidth={renderedImageWidth}
+                      imageHeight={renderedImageHeight}
+                      containerWidth={containerSize.width}
+                      containerHeight={containerSize.height}
+                      showPoints2D={showPoints2D}
+                      showPoints3D={showPoints3D}
+                    />
+                  )}
+                </>
+              );
+            })()
+          )}
+        </div>
+
+        {/* Touch controls - bottom section */}
+        {showModalControls && (
+          <div className="flex-shrink-0 bg-ds-tertiary border-t border-ds">
+            {/* Toggle buttons row */}
+            <div className="flex gap-2 p-3 overflow-x-auto">
+              {!showMatchesInModal && (
+                <>
+                  <button
+                    onClick={() => setShowPoints2D(!showPoints2D)}
+                    className={`${touchStyles.touchButton} flex-1 text-sm ${
+                      showPoints2D ? 'bg-ds-accent text-ds-void' : 'bg-ds-hover text-ds-primary'
+                    }`}
+                    style={{ minHeight: TOUCH.minTapTarget }}
+                  >
+                    2D <span className={showPoints2D ? '' : 'text-ds-success'}>({numPoints2D})</span>
+                  </button>
+                  <button
+                    onClick={() => setShowPoints3D(!showPoints3D)}
+                    className={`${touchStyles.touchButton} flex-1 text-sm ${
+                      showPoints3D ? 'bg-ds-accent text-ds-void' : 'bg-ds-hover text-ds-primary'
+                    }`}
+                    style={{ minHeight: TOUCH.minTapTarget }}
+                  >
+                    3D <span className={showPoints3D ? '' : 'text-ds-error'}>({numPoints3D})</span>
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => setShowMatchesInModal(!showMatchesInModal)}
+                className={`${touchStyles.touchButton} flex-1 text-sm ${
+                  showMatchesInModal ? 'bg-ds-accent text-ds-void' : 'bg-ds-hover text-ds-primary'
+                }`}
+                style={{ minHeight: TOUCH.minTapTarget }}
+              >
+                Matches
+              </button>
+            </div>
+
+            {/* Match controls (if showing matches) */}
+            {showMatchesInModal && (
+              <div className="px-3 pb-3">
+                <select
+                  value={matchedImageId ?? ''}
+                  onChange={(e) => setMatchedImageId(e.target.value ? parseInt(e.target.value) : null)}
+                  className={`${inputStyles.select} w-full py-2 text-sm`}
+                  style={{ minHeight: TOUCH.minTapTarget }}
+                >
+                  <option value="">Select connected image...</option>
+                  {connectedImages.map(({ imageId, matchCount, name }) => (
+                    <option key={imageId} value={imageId}>
+                      {name} ({matchCount})
+                    </option>
+                  ))}
+                </select>
+                {matchedImageId !== null && (
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className="text-ds-secondary text-sm">Opacity</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value={matchLineOpacity}
+                      onChange={(e) => setMatchLineOpacity(parseFloat(e.target.value))}
+                      className="flex-1 accent-ds-success h-8"
+                    />
+                    <span className="text-ds-primary text-sm w-10 text-right">
+                      {Math.round(matchLineOpacity * 100)}%
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Navigation row */}
+            <div className="flex items-center gap-2 p-3 border-t border-ds">
+              <button
+                onClick={goToPrev}
+                disabled={!hasPrev}
+                className={`${touchStyles.touchButton} flex-1 text-sm ${
+                  hasPrev ? 'bg-ds-hover text-ds-primary' : 'bg-ds-secondary text-ds-muted'
+                }`}
+                style={{ minHeight: TOUCH.minTapTarget }}
+              >
+                ← Prev
+              </button>
+              <span className="text-ds-primary text-sm px-2">
+                {currentIndex + 1} / {imageIds.length}
+              </span>
+              <button
+                onClick={goToNext}
+                disabled={!hasNext}
+                className={`${touchStyles.touchButton} flex-1 text-sm ${
+                  hasNext ? 'bg-ds-hover text-ds-primary' : 'bg-ds-secondary text-ds-muted'
+                }`}
+                style={{ minHeight: TOUCH.minTapTarget }}
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Desktop mode: draggable/resizable modal
   return (
     <div className="fixed inset-0 z-[1000] pointer-events-none">
       <div

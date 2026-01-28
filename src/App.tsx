@@ -9,6 +9,7 @@ import { NotificationContainer } from './components/ui/NotificationContainer';
 import { initStoreMigration, useUIStore } from './store';
 import { useUrlLoader } from './hooks/useUrlLoader';
 import { decodeShareData, applyShareConfig } from './hooks/useUrlState';
+import { detectTouchDevice } from './hooks/useIsTouchDevice';
 
 // Run store migration on app startup (migrates from old monolithic store to domain stores)
 initStoreMigration();
@@ -29,6 +30,22 @@ function App() {
     if (embedParam === '1' || embedParam === 'true') {
       console.log('[App] Embed mode enabled');
       useUIStore.getState().setEmbedMode(true);
+    }
+
+    // Check for touch mode parameter (?touch=1, ?touch=true, ?touch=0, ?touch=false)
+    // If not specified, auto-detect based on device capabilities
+    const touchParam = params.get('touch');
+    if (touchParam !== null) {
+      const enabled = touchParam === '1' || touchParam === 'true';
+      console.log(`[App] Touch mode ${enabled ? 'enabled' : 'disabled'} (URL override)`);
+      useUIStore.getState().setTouchMode(enabled, 'url');
+    } else {
+      // Auto-detect touch capability
+      const isTouchDevice = detectTouchDevice();
+      if (isTouchDevice) {
+        console.log('[App] Touch mode enabled (auto-detected)');
+        useUIStore.getState().setTouchMode(true, 'auto');
+      }
     }
 
     // Async function to handle URL loading

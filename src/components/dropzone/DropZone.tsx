@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { useUrlLoader } from '../../hooks/useUrlLoader';
 import { useIsMobile } from '../../hooks/useIsMobile';
-import { useReconstructionStore, hasUrlToLoad } from '../../store';
+import { useReconstructionStore, useUIStore, hasUrlToLoad } from '../../store';
 import { STORAGE_KEYS } from '../../store/migration';
 import { parseConfigYaml, applyConfigurationToStores } from '../../config/configuration';
 import { ColmapManifestSchema } from '../../types/manifest';
@@ -28,6 +28,7 @@ export function DropZone({ children }: DropZoneProps) {
   const configInputRef = useRef<HTMLInputElement>(null);
   const manifestInputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
+  const touchMode = useUIStore((s) => s.touchMode);
 
   // Handle URL loading from modal
   const handleUrlLoad = useCallback(async (url: string) => {
@@ -211,7 +212,7 @@ export function DropZone({ children }: DropZoneProps) {
         </div>
       )}
 
-      {!reconstruction && !urlLoading && !hasUrlToLoad() && !isDragOver && !isPanelDismissed && !isMobile && (
+      {!reconstruction && !urlLoading && !hasUrlToLoad() && !isDragOver && !isPanelDismissed && !isMobile && !touchMode && (
         <div className="absolute inset-0 flex items-center justify-center z-10">
           <div className="flex flex-col bg-ds-secondary rounded-lg border border-ds p-6 min-w-[420px]">
             {/* Header row: action buttons */}
@@ -407,6 +408,68 @@ export function DropZone({ children }: DropZoneProps) {
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Simplified Touch Mode Panel - URL and Try a Toy only */}
+      {!reconstruction && !urlLoading && !hasUrlToLoad() && !isPanelDismissed && touchMode && (
+        <div className="absolute inset-0 flex items-center justify-center z-10 px-4">
+          <div className="flex flex-col bg-ds-secondary rounded-lg border border-ds p-6 w-full max-w-sm">
+            {/* Header with dismiss button */}
+            <div className="flex justify-end -mt-2 -mr-2 mb-4">
+              <button
+                type="button"
+                className={`${buttonStyles.base} w-12 h-12 ${buttonStyles.variants.ghost} text-xl`}
+                onClick={() => setIsPanelDismissed(true)}
+                aria-label="Dismiss"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Logo and title */}
+            <div className="flex flex-col items-center mb-6">
+              <img
+                src={publicAsset('LOGO.png')}
+                alt="ColmapView"
+                className="w-16 h-16 mb-4"
+              />
+              <h2 className={emptyStateStyles.title}>ColmapView</h2>
+              <p className="text-ds-secondary text-sm text-center mt-2">
+                View COLMAP 3D reconstructions
+              </p>
+            </div>
+
+            {/* Action buttons - stacked for touch */}
+            <div className="flex flex-col gap-3">
+              {/* Load URL button */}
+              <button
+                type="button"
+                onClick={() => setIsUrlModalOpen(true)}
+                disabled={urlLoading}
+                className={`${buttonStyles.base} h-14 text-base ${buttonStyles.variants.secondary} ${urlLoading ? buttonStyles.disabled : ''} active:scale-98`}
+              >
+                <LinkIcon className="w-5 h-5 mr-2" />
+                Load from URL
+              </button>
+
+              {/* Try a Toy button */}
+              <button
+                type="button"
+                onClick={handleLucky}
+                disabled={urlLoading}
+                className={`${buttonStyles.base} h-14 text-base ${buttonStyles.variants.primary} ${urlLoading ? buttonStyles.disabled : ''} active:scale-98`}
+              >
+                <img src={publicAsset('LOGO.png')} alt="" className="w-5 h-5 mr-2" />
+                Try a Toy!
+              </button>
+            </div>
+
+            {/* Info text */}
+            <p className="text-ds-muted text-xs text-center mt-6">
+              For file upload, use a desktop browser
+            </p>
           </div>
         </div>
       )}

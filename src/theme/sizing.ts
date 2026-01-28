@@ -97,3 +97,45 @@ export const SCREENSHOT = {
   paddingPercent: 0.02,     // 2% padding from edges
   logoAlpha: 0.7,           // Watermark opacity
 } as const;
+
+/**
+ * Touch mode constants for touch-optimized UI.
+ * Used when touchMode is active (tablets, touch laptops).
+ */
+export const TOUCH = {
+  // Tap targets (Apple HIG / Material Design guidelines)
+  minTapTarget: 44,         // Minimum touch target in px
+  preferredTapTarget: 48,   // Preferred touch target in px
+
+  // UI component sizes
+  statusBarHeight: 24,      // Simplified status bar height
+  fabSize: 56,              // Primary FAB diameter
+  fabSecondarySize: 48,     // Secondary FAB diameter (meets preferred tap target)
+
+  // Panel dimensions
+  drawerWidth: 320,         // Gallery drawer width (max)
+  bottomSheetMinHeight: 160, // Minimum bottom sheet peek height
+  gestureZone: 20,          // Edge swipe detection zone in px
+
+  // Gesture thresholds
+  longPressDelay: 500,      // Long press detection in ms
+  doubleTapDelay: 300,      // Double tap detection in ms
+  dragThreshold: 10,        // Pixels before recognizing drag
+  pinchThreshold: 0.02,     // Scale delta before recognizing pinch
+
+  // 3D interaction
+  hitTargetScale: 2.5,      // Multiplier for frustum hit targets on touch
+  orbitSensitivity: 1.5,    // Touch orbit sensitivity multiplier
+  panSensitivity: 1.0,      // Touch pan sensitivity multiplier
+  zoomSensitivity: 0.5,     // Touch zoom sensitivity multiplier
+} as const;
+
+/**
+ * Phone vs tablet breakpoint.
+ * Phones (<640px) show "Desktop Only" message.
+ * Tablets (640-1080px) get touch mode UI.
+ */
+export const TOUCH_BREAKPOINTS = {
+  phone: 640,               // Below this = phone (blocked)
+  tablet: 1080,             // Below this = tablet (touch mode)
+} as const;
