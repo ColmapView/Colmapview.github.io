@@ -468,7 +468,7 @@ export function DropZone({ children }: DropZoneProps) {
 
             {/* Info text */}
             <p className="text-ds-muted text-xs text-center mt-6">
-              For file upload, use a desktop browser
+              Load a URL or try a sample dataset
             </p>
           </div>
         </div>
