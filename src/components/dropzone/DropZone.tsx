@@ -412,8 +412,8 @@ export function DropZone({ children }: DropZoneProps) {
         </div>
       )}
 
-      {/* Simplified Touch Mode Panel - URL and Try a Toy only */}
-      {!reconstruction && !urlLoading && !hasUrlToLoad() && !isPanelDismissed && touchMode && (
+      {/* Simplified Touch/Mobile Panel - URL and Try a Toy only */}
+      {!reconstruction && !urlLoading && !hasUrlToLoad() && !isPanelDismissed && (touchMode || isMobile) && (
         <div className="absolute inset-0 flex items-center justify-center z-10 px-4">
           <div className="flex flex-col bg-ds-secondary rounded-lg border border-ds p-6 w-full max-w-sm">
             {/* Header with dismiss button */}
