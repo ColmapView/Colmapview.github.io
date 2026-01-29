@@ -21,7 +21,8 @@ export const CameraModelId = {
   FOV: 7,
   SIMPLE_RADIAL_FISHEYE: 8,
   RADIAL_FISHEYE: 9,
-  THIN_PRISM_FISHEYE: 10
+  THIN_PRISM_FISHEYE: 10,
+  RAD_TAN_THIN_PRISM_FISHEYE: 11,
 } as const;
 
 export type CameraModelId = (typeof CameraModelId)[keyof typeof CameraModelId];
@@ -37,7 +38,8 @@ export const CAMERA_MODEL_NUM_PARAMS: Record<CameraModelId, number> = {
   [CameraModelId.FOV]: 5,
   [CameraModelId.SIMPLE_RADIAL_FISHEYE]: 4,
   [CameraModelId.RADIAL_FISHEYE]: 5,
-  [CameraModelId.THIN_PRISM_FISHEYE]: 12
+  [CameraModelId.THIN_PRISM_FISHEYE]: 12,
+  [CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE]: 16,
 };
 
 export interface Camera {

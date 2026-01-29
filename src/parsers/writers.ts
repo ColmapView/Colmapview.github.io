@@ -924,3 +924,151 @@ export async function downloadReconstructionZip(
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+// ============================================================================
+// IMAGE ZIP EXPORT (JPEG conversion)
+// ============================================================================
+
+/** Options for image ZIP export */
+export interface ImageZipExportOptions {
+  /** JPEG quality (0-1, e.g., 0.85 for 85%) */
+  jpegQuality: number;
+}
+
+/** Progress callback for image ZIP export */
+export type ImageZipProgressCallback = (percent: number, message?: string) => void;
+
+/** Function to fetch an image by name */
+export type ImageFetchFunction = (imageName: string) => Promise<File | null>;
+
+/**
+ * Check if a file is a JPEG based on MIME type or extension.
+ */
+function isJpegFile(file: File): boolean {
+  const type = file.type.toLowerCase();
+  if (type === 'image/jpeg' || type === 'image/jpg') return true;
+  const name = file.name.toLowerCase();
+  return name.endsWith('.jpg') || name.endsWith('.jpeg');
+}
+
+/**
+ * Convert an image file to JPEG using Canvas API.
+ * If the source is already JPEG, caps quality to avoid pointless re-encoding
+ * at higher quality (which can't recover lost data and wastes space).
+ */
+async function convertToJpeg(file: File, quality: number): Promise<Blob> {
+  // If source is already JPEG, cap quality to avoid re-encoding at higher quality
+  // than the original (we assume ~85% as typical JPEG quality)
+  const effectiveQuality = isJpegFile(file) ? Math.min(quality, 0.85) : quality;
+
+  // Create image bitmap from file
+  const bitmap = await createImageBitmap(file);
+
+  // Create canvas and draw image
+  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close();
+
+  // Convert to JPEG
+  return canvas.convertToBlob({ type: 'image/jpeg', quality: effectiveQuality });
+}
+
+/**
+ * Normalize image path for ZIP archive.
+ * Ensures forward slashes and images/ prefix.
+ */
+function normalizeImagePath(path: string): string {
+  let normalized = path.replace(/\\/g, '/');
+  if (!normalized.startsWith('images/')) {
+    normalized = 'images/' + normalized;
+  }
+  return normalized;
+}
+
+/**
+ * Export images as a ZIP file of JPEGs.
+ * Fetches and converts each image to JPEG format frame-by-frame to avoid memory issues.
+ *
+ * @param imageNames - Array of image names to export (from reconstruction)
+ * @param fetchImage - Function to fetch an image by name
+ * @param options - Export options (JPEG quality)
+ * @param onProgress - Optional progress callback (percent 0-100)
+ * @returns Blob containing the ZIP file
+ */
+export async function exportImagesZip(
+  imageNames: string[],
+  fetchImage: ImageFetchFunction,
+  options: ImageZipExportOptions,
+  onProgress?: ImageZipProgressCallback
+): Promise<Blob> {
+  const { zipSync } = await import('fflate');
+
+  const totalImages = imageNames.length;
+  const zipData: Record<string, Uint8Array> = {};
+  let processed = 0;
+  let failed = 0;
+
+  for (const imageName of imageNames) {
+    try {
+      // Fetch the image (from cache or remote)
+      const file = await fetchImage(imageName);
+      if (!file) {
+        failed++;
+        processed++;
+        onProgress?.(Math.round((processed / totalImages) * 100), `Skipped: ${imageName}`);
+        continue;
+      }
+
+      // Convert to JPEG
+      const jpegBlob = await convertToJpeg(file, options.jpegQuality);
+      const arrayBuffer = await jpegBlob.arrayBuffer();
+
+      // Normalize path and change extension to .jpg
+      const normalizedPath = normalizeImagePath(imageName);
+      const jpegPath = normalizedPath.replace(/\.[^.]+$/, '.jpg');
+
+      zipData[jpegPath] = new Uint8Array(arrayBuffer);
+    } catch (err) {
+      console.warn(`[Image Export] Failed to process ${imageName}:`, err);
+      failed++;
+    }
+
+    processed++;
+    onProgress?.(Math.round((processed / totalImages) * 100));
+  }
+
+  if (failed > 0) {
+    console.warn(`[Image Export] ${failed}/${totalImages} images failed to export`);
+  }
+
+  const zipped = zipSync(zipData, { level: 6 });
+  // Cast to avoid TypeScript issue with ArrayBufferLike
+  return new Blob([zipped as BlobPart], { type: 'application/zip' });
+}
+
+/**
+ * Export images as a ZIP file and download it.
+ *
+ * @param imageNames - Array of image names to export (from reconstruction)
+ * @param fetchImage - Function to fetch an image by name
+ * @param options - Export options (JPEG quality)
+ * @param onProgress - Optional progress callback (percent 0-100)
+ */
+export async function downloadImagesZip(
+  imageNames: string[],
+  fetchImage: ImageFetchFunction,
+  options: ImageZipExportOptions,
+  onProgress?: ImageZipProgressCallback
+): Promise<void> {
+  const blob = await exportImagesZip(imageNames, fetchImage, options, onProgress);
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'images.zip';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

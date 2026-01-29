@@ -38,6 +38,7 @@ import { controlPanelStyles, HOTKEYS } from '../../theme';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { hslToHex, hexToHsl } from '../../utils/colorUtils';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
+import { extractConfigurationFromStores, serializeConfigToYaml } from '../../config/configuration';
 
 // Import icons from centralized icons folder
 import {
@@ -1837,17 +1838,29 @@ export function ViewerControls() {
       >
         <div className={styles.panelContent}>
           {/* Profiles Section */}
+          <div className="text-ds-muted text-xs uppercase tracking-wide mb-2">Profiles</div>
           <ProfileSelector />
 
+          {/* Configuration Section */}
+          <div className="text-ds-muted text-xs uppercase tracking-wide mt-4 mb-2">Configuration</div>
           <div className={styles.actionGroup}>
             <button
               onClick={() => {
-                openContextMenuEditor();
-                setActivePanel(null);
+                const config = extractConfigurationFromStores();
+                const yaml = serializeConfigToYaml(config);
+                const blob = new Blob([yaml], { type: 'text/yaml' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'colmapview-config.yml';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
               }}
               className={styles.actionButton}
             >
-              Edit Context Menu
+              Export Config
             </button>
           </div>
           <div className={styles.actionGroup}>
@@ -1865,6 +1878,23 @@ export function ViewerControls() {
               Clear Settings
             </button>
           </div>
+
+          {/* Customization Section */}
+          <div className="text-ds-muted text-xs uppercase tracking-wide mt-4 mb-2">Customization</div>
+          <div className={styles.actionGroup}>
+            <button
+              onClick={() => {
+                openContextMenuEditor();
+                setActivePanel(null);
+              }}
+              className={styles.actionButton}
+            >
+              Edit Context Menu
+            </button>
+          </div>
+
+          {/* Developer Section */}
+          <div className="text-ds-muted text-xs uppercase tracking-wide mt-4 mb-2">Developer</div>
           <div className={styles.actionGroup}>
             <button
               onClick={() => {
@@ -1895,13 +1925,11 @@ export function ViewerControls() {
               }}
               className={styles.actionButton}
             >
-              Example Manifest
+              Example manifest.json
             </button>
           </div>
-          <div className="text-ds-secondary text-sm mt-3">
-            <div className="mb-1 font-medium">Manifest Format:</div>
-            <div>JSON file for loading COLMAP</div>
-            <div>reconstructions from URLs.</div>
+          <div className="text-ds-secondary text-sm mt-1">
+            JSON file for loading COLMAP reconstructions from URLs.
           </div>
         </div>
       </ControlButton>

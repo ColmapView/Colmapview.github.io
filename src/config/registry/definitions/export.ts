@@ -5,7 +5,7 @@ import { defineSection } from '../types';
 import { SCREENSHOT_SIZES, SCREENSHOT_FORMATS } from '../../../store/types';
 
 // Model export formats (excluding 'config' which is a special action)
-const MODEL_EXPORT_FORMATS = ['text', 'binary', 'ply'] as const;
+const MODEL_EXPORT_FORMATS = ['text', 'binary', 'ply', 'zip'] as const;
 
 export const exportSection = defineSection({
   key: 'export',
@@ -40,7 +40,7 @@ export const exportSection = defineSection({
       enumValues: MODEL_EXPORT_FORMATS,
       default: 'binary',
       persist: true,
-      description: 'text | binary | ply',
+      description: 'text | binary | ply | zip',
     },
     // Transient properties (not persisted)
     {

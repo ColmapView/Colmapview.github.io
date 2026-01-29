@@ -27,5 +27,8 @@ export {
   // ZIP export
   exportReconstructionZip,
   downloadReconstructionZip,
+  // Image ZIP export
+  exportImagesZip,
+  downloadImagesZip,
 } from './writers';
-export type { ZipExportOptions, ZipExportProgressCallback } from './writers';
+export type { ZipExportOptions, ZipExportProgressCallback, ImageZipExportOptions, ImageZipProgressCallback, ImageFetchFunction } from './writers';

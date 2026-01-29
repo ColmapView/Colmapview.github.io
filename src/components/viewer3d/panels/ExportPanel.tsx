@@ -3,25 +3,46 @@
  * Handles exporting reconstruction data in various formats.
  */
 
-import { memo } from 'react';
+import { memo, useState, useMemo, useCallback } from 'react';
 import {
   useReconstructionStore,
   useTransformStore,
-  applyTransformToData,
+  useNotificationStore,
 } from '../../../store';
+import { useFileDropzone } from '../../../hooks/useFileDropzone';
 import { controlPanelStyles } from '../../../theme';
 import { ExportIcon } from '../../../icons';
-import { ControlButton, type PanelType } from '../ControlComponents';
-import { exportReconstructionText, exportReconstructionBinary, exportPointsPLY, downloadReconstructionZip } from '../../../parsers';
-import { extractConfigurationFromStores, serializeConfigToYaml } from '../../../config/configuration';
-import { isIdentityEuler } from '../../../utils/sim3dTransforms';
+import { ControlButton, SelectRow, SliderRow, type PanelType } from '../ControlComponents';
+import { exportReconstructionText, exportReconstructionBinary, exportPointsPLY, downloadReconstructionZip, downloadImagesZip } from '../../../parsers';
+import { useDataset } from '../../../dataset';
+import { CameraConversionModal } from '../../modals/CameraConversionModal';
+import { CameraModelId } from '../../../types/colmap';
 
 const styles = controlPanelStyles;
+
+/** Export format options */
+type ExportFormat = 'binary' | 'text' | 'ply' | 'zip';
 
 export interface ExportPanelProps {
   activePanel: PanelType;
   setActivePanel: (panel: PanelType) => void;
 }
+
+/** Human-readable names for camera models */
+const MODEL_NAMES: Record<CameraModelId, string> = {
+  [CameraModelId.SIMPLE_PINHOLE]: 'Simple Pinhole',
+  [CameraModelId.PINHOLE]: 'Pinhole',
+  [CameraModelId.SIMPLE_RADIAL]: 'Simple Radial',
+  [CameraModelId.RADIAL]: 'Radial',
+  [CameraModelId.OPENCV]: 'OpenCV',
+  [CameraModelId.OPENCV_FISHEYE]: 'OpenCV Fisheye',
+  [CameraModelId.FULL_OPENCV]: 'Full OpenCV',
+  [CameraModelId.FOV]: 'FOV',
+  [CameraModelId.SIMPLE_RADIAL_FISHEYE]: 'Simple Radial Fisheye',
+  [CameraModelId.RADIAL_FISHEYE]: 'Radial Fisheye',
+  [CameraModelId.THIN_PRISM_FISHEYE]: 'Thin Prism Fisheye',
+  [CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE]: 'Rad Tan Thin Prism',
+};
 
 export const ExportPanel = memo(function ExportPanel({
   activePanel,
@@ -31,40 +52,118 @@ export const ExportPanel = memo(function ExportPanel({
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
   const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
+  const droppedFiles = useReconstructionStore((s) => s.droppedFiles);
+  const addNotification = useNotificationStore((s) => s.addNotification);
+  const resetTransform = useTransformStore((s) => s.resetTransform);
+  const dataset = useDataset();
+  const { processFiles } = useFileDropzone();
 
-  // Transform state
-  const transform = useTransformStore((s) => s.transform);
-  const hasTransformChanges = !isIdentityEuler(transform);
+  // Modal state
+  const [showConversionModal, setShowConversionModal] = useState(false);
 
-  // Export config YAML
-  const handleExportConfig = () => {
-    const config = extractConfigurationFromStores();
-    const yaml = serializeConfigToYaml(config);
-    const blob = new Blob([yaml], { type: 'text/yaml' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'colmapview-config.yml';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  // Image export state
+  const [jpegQuality, setJpegQuality] = useState(85);
+  const [imageExportProgress, setImageExportProgress] = useState<number | null>(null);
 
-  // Export ZIP archive
-  const handleExportZip = async () => {
-    if (!reconstruction) return;
-    try {
-      await downloadReconstructionZip(
-        reconstruction,
-        { format: 'binary' },
-        loadedFiles?.imageFiles,
-        wasmReconstruction
-      );
-    } catch (err) {
-      console.error('ZIP export failed:', err);
+  // Format export state
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('binary');
+
+  // Get cameras from reconstruction
+  const cameras = useMemo(() => {
+    if (!reconstruction) return [];
+    return Array.from(reconstruction.cameras.entries());
+  }, [reconstruction]);
+
+  // Get camera model summary for display
+  const cameraModelSummary = useMemo(() => {
+    if (cameras.length === 0) return null;
+    const modelCounts = new Map<CameraModelId, number>();
+    for (const [, camera] of cameras) {
+      modelCounts.set(camera.modelId, (modelCounts.get(camera.modelId) ?? 0) + 1);
     }
+    if (modelCounts.size === 1) {
+      const entries = Array.from(modelCounts.entries());
+      const [modelId, count] = entries[0];
+      const name = MODEL_NAMES[modelId] ?? `Unknown`;
+      return count > 1 ? `${count}x ${name}` : name;
+    }
+    return `${cameras.length} cameras (mixed)`;
+  }, [cameras]);
+
+  // Format export options
+  const formatOptions = useMemo(() => [
+    { value: 'binary', label: 'Binary (.bin)' },
+    { value: 'text', label: 'Text (.txt)' },
+    { value: 'ply', label: 'Points (.ply)' },
+    { value: 'zip', label: 'ZIP (.zip)' },
+  ], []);
+
+  // Format descriptions
+  const formatDescriptions: Record<ExportFormat, string> = {
+    binary: 'COLMAP binary format. Compact and fast to load.',
+    text: 'COLMAP text format. Human-readable, useful for debugging.',
+    ply: 'Point cloud only. Compatible with MeshLab, CloudCompare.',
+    zip: 'Binary files (.bin) in a single archive.',
   };
+
+  // Handle format export
+  const handleExportFormat = useCallback(async () => {
+    if (!reconstruction) return;
+
+    try {
+      switch (exportFormat) {
+        case 'binary':
+          exportReconstructionBinary(reconstruction, wasmReconstruction);
+          break;
+        case 'text':
+          exportReconstructionText(reconstruction, wasmReconstruction);
+          break;
+        case 'ply':
+          exportPointsPLY(reconstruction, wasmReconstruction);
+          break;
+        case 'zip':
+          await downloadReconstructionZip(
+            reconstruction,
+            { format: 'binary' },
+            loadedFiles?.imageFiles,
+            wasmReconstruction
+          );
+          break;
+      }
+    } catch (err) {
+      console.error('Export failed:', err);
+      addNotification('warning', 'Export failed');
+    }
+  }, [reconstruction, wasmReconstruction, loadedFiles, exportFormat, addNotification]);
+
+  // Get list of all image names from reconstruction
+  const imageNames = useMemo(() => {
+    if (!reconstruction) return [];
+    return Array.from(reconstruction.images.values()).map(img => img.name);
+  }, [reconstruction]);
+
+  // Export images as JPEG ZIP
+  const handleExportImages = useCallback(async () => {
+    if (imageNames.length === 0) return;
+
+    setImageExportProgress(0);
+    try {
+      const fetchImage = async (name: string) => dataset.getImage(name);
+
+      await downloadImagesZip(
+        imageNames,
+        fetchImage,
+        { jpegQuality: jpegQuality / 100 },
+        (percent) => setImageExportProgress(percent)
+      );
+      addNotification('info', 'Images exported successfully');
+    } catch (err) {
+      console.error('Image export failed:', err);
+      addNotification('warning', 'Image export failed');
+    } finally {
+      setImageExportProgress(null);
+    }
+  }, [imageNames, dataset, jpegQuality, addNotification]);
 
   // Default export action (binary)
   const handleDefaultExport = () => {
@@ -73,64 +172,121 @@ export const ExportPanel = memo(function ExportPanel({
     }
   };
 
+  // Reload data from original files
+  const handleReload = useCallback(() => {
+    if (droppedFiles) {
+      resetTransform();
+      processFiles(droppedFiles);
+    }
+  }, [droppedFiles, resetTransform, processFiles]);
+
+  const hasCameras = cameras.length > 0;
+  const isExportingImages = imageExportProgress !== null;
+  const hasImages = imageNames.length > 0 && dataset.hasImages();
+
   return (
-    <ControlButton
-      panelId="export"
-      activePanel={activePanel}
-      setActivePanel={setActivePanel}
-      icon={<ExportIcon className="w-6 h-6" />}
-      tooltip="Export"
-      onClick={handleDefaultExport}
-      panelTitle="Export"
-      disabled={!reconstruction}
-    >
-      <div className={styles.panelContent}>
-        <div className="flex flex-col gap-2">
-          <button
-            onClick={() => { if (reconstruction) exportReconstructionBinary(reconstruction, wasmReconstruction); }}
-            disabled={!reconstruction}
-            className={reconstruction ? styles.actionButton : styles.actionButtonDisabled}
-          >
-            Binary (.bin)
-          </button>
-          <button
-            onClick={() => { if (reconstruction) exportReconstructionText(reconstruction, wasmReconstruction); }}
-            disabled={!reconstruction}
-            className={reconstruction ? styles.actionButton : styles.actionButtonDisabled}
-          >
-            Text (.txt)
-          </button>
-          <button
-            onClick={() => { if (reconstruction) exportPointsPLY(reconstruction, wasmReconstruction); }}
-            disabled={!reconstruction}
-            className={reconstruction ? styles.actionButton : styles.actionButtonDisabled}
-          >
-            Points (.ply)
-          </button>
-          <button
-            onClick={handleExportConfig}
-            className={styles.actionButton}
-          >
-            Config (.yml)
-          </button>
-          <button
-            onClick={handleExportZip}
-            disabled={!reconstruction}
-            className={reconstruction ? styles.actionButton : styles.actionButtonDisabled}
-          >
-            ZIP (.zip)
-          </button>
+    <>
+      <ControlButton
+        panelId="export"
+        activePanel={activePanel}
+        setActivePanel={setActivePanel}
+        icon={<ExportIcon className="w-6 h-6" />}
+        tooltip="Export"
+        onClick={handleDefaultExport}
+        panelTitle="Export"
+        disabled={!reconstruction}
+      >
+        <div className={styles.panelContent}>
+          {/* Export formats */}
+          <div className="text-ds-primary text-sm mb-1">Reconstruction:</div>
+          <SelectRow
+            label="Format"
+            value={exportFormat}
+            onChange={(value) => setExportFormat(value as ExportFormat)}
+            options={formatOptions}
+          />
+          <div className="text-ds-tertiary text-xs mb-2">
+            {formatDescriptions[exportFormat]}
+          </div>
+          <div className="flex flex-col gap-2">
+            {hasCameras && (
+              <button
+                onClick={() => setShowConversionModal(true)}
+                className={styles.actionButton}
+                title={cameraModelSummary ?? undefined}
+              >
+                Convert Camera Model
+              </button>
+            )}
+            <button
+              onClick={handleExportFormat}
+              disabled={!reconstruction}
+              className={reconstruction ? styles.actionButton : styles.actionButtonDisabled}
+            >
+              Download
+            </button>
+          </div>
+
+          {/* Images export */}
+          <div className="text-ds-primary text-sm mb-1 mt-3">Images:</div>
+          {hasImages ? (
+            <>
+              <SliderRow
+                label="JPEG Quality"
+                value={jpegQuality}
+                min={10}
+                max={100}
+                step={5}
+                onChange={setJpegQuality}
+                formatValue={(v) => `${v}%`}
+              />
+              <div className="flex flex-col gap-2">
+                {isExportingImages ? (
+                  <div>
+                    <div className="h-2 bg-ds-tertiary rounded overflow-hidden">
+                      <div
+                        className="h-full bg-ds-accent transition-all"
+                        style={{ width: `${imageExportProgress}%` }}
+                      />
+                    </div>
+                    <div className="text-ds-secondary text-xs mt-1 text-center">
+                      {imageExportProgress}%
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleExportImages}
+                    className={styles.actionButton}
+                  >
+                    Download
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="text-ds-tertiary text-xs">
+              No images available
+            </div>
+          )}
+
+          {/* Reload */}
+          <div className="flex flex-col gap-2 mt-3">
+            <button
+              onClick={handleReload}
+              disabled={!droppedFiles}
+              className={droppedFiles ? styles.actionButton : styles.actionButtonDisabled}
+            >
+              Reload
+            </button>
+          </div>
         </div>
-        <div className="flex justify-center mt-2">
-          <button
-            onClick={applyTransformToData}
-            disabled={!hasTransformChanges}
-            className={hasTransformChanges ? styles.actionButtonPrimary : styles.actionButtonPrimaryDisabled}
-          >
-            Apply Transform
-          </button>
-        </div>
-      </div>
-    </ControlButton>
+      </ControlButton>
+
+      {/* Camera Conversion Modal */}
+      <CameraConversionModal
+        isOpen={showConversionModal}
+        onClose={() => setShowConversionModal(false)}
+      />
+    </>
   );
 });
