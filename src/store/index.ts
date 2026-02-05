@@ -18,6 +18,7 @@ export { useRigStore, type RigState } from './stores/rigStore';
 export { useNotificationStore, type NotificationState, type NotificationType, type Notification } from './stores/notificationStore';
 export { useGuideStore, type GuideState } from './stores/guideStore';
 export { useFloorPlaneStore, type FloorPlaneState, type FloorColorMode, type FloorTargetAxis } from './stores/floorPlaneStore';
+export { useDeletionStore, type DeletionState } from './stores/deletionStore';
 
 // Types and constants
 export type {
@@ -82,4 +83,10 @@ export {
   deselectAll,
   clearTransientState,
   closeAllModals,
+  // Deletion actions
+  applyDeletionsToData,
+  resetDeletionsWithCleanup,
+  hasPendingDeletions,
+  getPendingDeletionCount,
+  getPendingDeletions,
 } from './actions';

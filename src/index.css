@@ -1607,4 +1607,18 @@ legend {
     width: 0.75rem !important;
     height: 0.75rem !important;
   }
+
+  /* Scale down tool modals and hover panels uniformly */
+  .tool-modal-responsive,
+  .hover-panel-responsive {
+    transform: scale(0.85);
+  }
+
+  .tool-modal-responsive {
+    transform-origin: center center;
+  }
+
+  .hover-panel-responsive {
+    transform-origin: top right;
+  }
 }

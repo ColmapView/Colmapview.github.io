@@ -17,7 +17,6 @@ import { FooterBranding } from './FooterBranding';
 import { GlobalContextMenu } from './GlobalContextMenu';
 import { Scene3DErrorBoundary } from './Scene3DErrorBoundary';
 import { DistanceInputModal } from '../modals/DistanceInputModal';
-import { FloorAlignModal } from '../modals/FloorAlignModal';
 import { useReconstructionStore, useUIStore, useCameraStore, useTransformStore, usePointPickingStore } from '../../store';
 import { useAxesNode, useGridNode, useGizmoNode, useCamerasNode } from '../../nodes';
 
@@ -348,7 +347,6 @@ export function Scene3D() {
       <PickingCursor />
       <GlobalContextMenu />
       <DistanceInputModal />
-      <FloorAlignModal />
     </div>
   );
 }

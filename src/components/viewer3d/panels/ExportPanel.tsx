@@ -8,6 +8,7 @@ import {
   useReconstructionStore,
   useTransformStore,
   useNotificationStore,
+  useDeletionStore,
 } from '../../../store';
 import { useFileDropzone } from '../../../hooks/useFileDropzone';
 import { controlPanelStyles } from '../../../theme';
@@ -15,7 +16,6 @@ import { ExportIcon } from '../../../icons';
 import { ControlButton, SelectRow, SliderRow, type PanelType } from '../ControlComponents';
 import { exportReconstructionText, exportReconstructionBinary, exportPointsPLY, downloadReconstructionZip, downloadImagesZip } from '../../../parsers';
 import { useDataset } from '../../../dataset';
-import { CameraConversionModal } from '../../modals/CameraConversionModal';
 import { CameraModelId } from '../../../types/colmap';
 
 const styles = controlPanelStyles;
@@ -26,6 +26,8 @@ type ExportFormat = 'binary' | 'text' | 'ply' | 'zip';
 export interface ExportPanelProps {
   activePanel: PanelType;
   setActivePanel: (panel: PanelType) => void;
+  onOpenDeletionModal: () => void;
+  onOpenConversionModal: () => void;
 }
 
 /** Human-readable names for camera models */
@@ -47,6 +49,8 @@ const MODEL_NAMES: Record<CameraModelId, string> = {
 export const ExportPanel = memo(function ExportPanel({
   activePanel,
   setActivePanel,
+  onOpenDeletionModal,
+  onOpenConversionModal,
 }: ExportPanelProps) {
   // Store values
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
@@ -55,11 +59,11 @@ export const ExportPanel = memo(function ExportPanel({
   const droppedFiles = useReconstructionStore((s) => s.droppedFiles);
   const addNotification = useNotificationStore((s) => s.addNotification);
   const resetTransform = useTransformStore((s) => s.resetTransform);
+  const pendingDeletions = useDeletionStore((s) => s.pendingDeletions);
   const dataset = useDataset();
   const { processFiles } = useFileDropzone();
 
-  // Modal state
-  const [showConversionModal, setShowConversionModal] = useState(false);
+  const hasPendingDeletions = pendingDeletions.size > 0;
 
   // Image export state
   const [jpegQuality, setJpegQuality] = useState(85);
@@ -211,13 +215,19 @@ export const ExportPanel = memo(function ExportPanel({
           <div className="flex flex-col gap-2">
             {hasCameras && (
               <button
-                onClick={() => setShowConversionModal(true)}
+                onClick={onOpenConversionModal}
                 className={styles.actionButton}
                 title={cameraModelSummary ?? undefined}
               >
                 Convert Camera Model
               </button>
             )}
+            <button
+              onClick={onOpenDeletionModal}
+              className={styles.actionButton}
+            >
+              Delete Images{hasPendingDeletions ? ` (${pendingDeletions.size})` : ''}
+            </button>
             <button
               onClick={handleExportFormat}
               disabled={!reconstruction}
@@ -281,12 +291,6 @@ export const ExportPanel = memo(function ExportPanel({
           </div>
         </div>
       </ControlButton>
-
-      {/* Camera Conversion Modal */}
-      <CameraConversionModal
-        isOpen={showConversionModal}
-        onClose={() => setShowConversionModal(false)}
-      />
     </>
   );
 });

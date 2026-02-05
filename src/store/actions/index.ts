@@ -48,3 +48,13 @@ export {
   clearTransientState,
   closeAllModals,
 } from './sessionActions.js';
+
+// Deletion actions
+export {
+  applyDeletionsToData,
+  resetDeletionsWithCleanup,
+  hasPendingDeletions,
+  getPendingDeletionCount,
+  getPendingDeletions,
+  filterReconstructionByImageIds,
+} from './deletionActions.js';

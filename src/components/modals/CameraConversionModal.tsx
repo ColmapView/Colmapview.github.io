@@ -9,6 +9,7 @@ import {
   useReconstructionStore,
   useNotificationStore,
 } from '../../store';
+import { useModalZIndex } from '../../hooks/useModalZIndex';
 import {
   convertCameraModel,
   getValidTargetModels,
@@ -17,7 +18,7 @@ import {
   type ConversionPreview,
 } from '../../utils/cameraModelConversions';
 import { CameraModelId, type Camera, type CameraId } from '../../types/colmap';
-import { modalStyles, inputStyles, buttonStyles } from '../../theme';
+import { modalStyles, inputStyles, controlPanelStyles } from '../../theme';
 
 /** Human-readable names for camera models */
 const MODEL_NAMES: Record<CameraModelId, string> = {
@@ -80,6 +81,9 @@ export const CameraConversionModal = memo(function CameraConversionModal({
   const dragStart = useRef({ x: 0, y: 0, posX: 0, posY: 0 });
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Z-index management for stacking multiple modals
+  const { zIndex, bringToFront } = useModalZIndex(isOpen);
+
   // Center modal function
   const centerModal = useCallback(() => {
     if (panelRef.current) {
@@ -98,6 +102,7 @@ export const CameraConversionModal = memo(function CameraConversionModal({
     if (isOpen) {
       const viewportW = window.innerWidth;
       const viewportH = window.innerHeight;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPosition({
         x: (viewportW - 360) / 2,
         y: Math.max(20, (viewportH - 160) / 2),
@@ -337,48 +342,52 @@ export const CameraConversionModal = memo(function CameraConversionModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[1000] pointer-events-none">
+    <div className="fixed inset-0 pointer-events-none" style={{ zIndex }}>
       <div className={modalStyles.backdrop} onClick={onClose} />
 
       <div
         ref={panelRef}
-        className={modalStyles.panel}
+        className={modalStyles.toolPanel}
         style={{ left: position.x, top: position.y }}
+        onMouseDown={bringToFront}
       >
-        {/* Header - same pattern as ImageDetailModal */}
+        {/* Header */}
         <div
-          className="flex items-center justify-between px-4 py-2 rounded-t-lg bg-ds-secondary text-xs cursor-move select-none"
+          className={modalStyles.toolHeader}
           onMouseDown={handleDragStart}
         >
-          <span className="text-ds-primary">Convert Camera Model</span>
+          <span className={modalStyles.toolHeaderTitle}>Convert Camera Model</span>
           <button
             onClick={onClose}
             onMouseDown={(e) => e.stopPropagation()}
-            className={modalStyles.closeButton}
+            className={modalStyles.toolHeaderClose}
+            title="Close"
           >
-            ×
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
         {/* Content */}
         <div className="px-4 py-3 space-y-3">
           {/* Selectors */}
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex items-center gap-2">
             <select
               value={selectedCameraId === 'all' ? 'all' : String(selectedCameraId)}
               onChange={handleCameraChange}
-              className={`${inputStyles.select} flex-1 py-1 text-xs`}
+              className={`${inputStyles.select} ${inputStyles.selectSizes.xs} flex-1`}
             >
               {cameraOptions.map(opt => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
-            <span className="text-ds-muted">→</span>
+            <span className="text-ds-muted text-xs">→</span>
             {validTargetModels.length > 0 ? (
               <select
                 value={effectiveTargetModelId !== null ? String(effectiveTargetModelId) : ''}
                 onChange={handleTargetChange}
-                className={`${inputStyles.select} flex-1 py-1 text-xs`}
+                className={`${inputStyles.select} ${inputStyles.selectSizes.xs} flex-1`}
               >
                 <option value="">Select...</option>
                 {validTargetModels.map(({ modelId, compatibility }) => (
@@ -435,16 +444,19 @@ export const CameraConversionModal = memo(function CameraConversionModal({
           )}
 
           {/* Actions */}
-          <div className="flex justify-end gap-2">
-            <button onClick={onClose} className={`${buttonStyles.base} ${buttonStyles.sizes.xs} ${buttonStyles.variants.ghost}`}>
-              Cancel
-            </button>
+          <div className={controlPanelStyles.actionGroup}>
             <button
               onClick={applyConversion}
               disabled={!canConvert}
-              className={`${buttonStyles.base} ${buttonStyles.sizes.xs} ${canConvert ? buttonStyles.variants.primary : buttonStyles.disabled}`}
+              className={canConvert ? controlPanelStyles.actionButtonPrimary : controlPanelStyles.actionButtonPrimaryDisabled}
             >
               Convert{selectedCameras.length > 1 ? ` (${selectedCameras.length})` : ''}
+            </button>
+            <button
+              onClick={onClose}
+              className={controlPanelStyles.actionButton}
+            >
+              Cancel
             </button>
           </div>
         </div>

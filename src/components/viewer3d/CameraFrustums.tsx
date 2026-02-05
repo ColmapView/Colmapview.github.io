@@ -8,7 +8,7 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 // Extend R3F to recognize Line2 components
 extend({ LineSegments2, LineSegmentsGeometry, LineMaterial });
 import { Html } from '@react-three/drei';
-import { useReconstructionStore, useCameraStore, useUIStore } from '../../store';
+import { useReconstructionStore, useCameraStore, useUIStore, useDeletionStore } from '../../store';
 import { useCamerasNode, useSelectionNode, useMatchesNode, useNavigationNode } from '../../nodes';
 import { useSelectionNodeActions, useNavigationNodeActions } from '../../nodes';
 import type { SelectionColorMode } from '../../store/types';
@@ -111,6 +111,8 @@ interface BatchedArrowMeshesProps {
   lastNavigationToImageId: number | null;
   // Touch mode - hides hover cards
   touchMode?: boolean;
+  // Pending deletions for visual indicator
+  pendingDeletions?: Set<number>;
 }
 
 // Temp objects for instanced mesh updates
@@ -142,6 +144,7 @@ function BatchedArrowMeshes({
   onContextMenu,
   lastNavigationToImageId,
   touchMode = false,
+  pendingDeletions,
 }: BatchedArrowMeshesProps) {
   const shaftRef = useRef<THREE.InstancedMesh>(null);
   const coneRef = useRef<THREE.InstancedMesh>(null);
@@ -246,6 +249,7 @@ function BatchedArrowMeshes({
       const isSelected = f.image.imageId === selectedImageId;
       const isHovered = f.image.imageId === hoveredImageId;
       const isMatched = matchedImageIds.has(f.image.imageId);
+      const isPendingDeletion = pendingDeletions?.has(f.image.imageId) ?? false;
 
       // Hide selected arrow (will show image plane instead)
       if (isSelected) {
@@ -255,7 +259,10 @@ function BatchedArrowMeshes({
       }
 
       // Determine color
-      if (isHovered) {
+      if (isPendingDeletion) {
+        // Pending deletion: red/orange color with low opacity
+        tempColor.set(VIZ_COLORS.frustum.deleted ?? '#ff4444');
+      } else if (isHovered) {
         tempColor.set(VIZ_COLORS.frustum.hover);
       } else if (isSelected) {
         if (selectionColorMode === 'rainbow') {
@@ -356,6 +363,9 @@ function BatchedArrowMeshes({
 
     shaft.instanceMatrix.needsUpdate = true;
     cone.instanceMatrix.needsUpdate = true;
+    // Recompute bounding sphere so raycasting works immediately after remount
+    shaft.computeBoundingSphere();
+    cone.computeBoundingSphere();
   }, [frustums, selectedImageId, shaftLength, coneLength]);
 
   // Update material opacity - frustumStandbyOpacity when no selection, unselectedCameraOpacity when a camera is selected
@@ -380,6 +390,7 @@ function BatchedArrowMeshes({
       <instancedMesh
         key={meshKey}
         ref={shaftRef}
+        dispose={null}
         args={[shaftGeometry, shaftMaterial, frustums.length]}
         onPointerOver={(e) => {
           if (e.instanceId === undefined) return;
@@ -441,7 +452,7 @@ function BatchedArrowMeshes({
           onContextMenu(f.image.imageId);
         }}
       />
-      <instancedMesh key={`${meshKey}-cone`} ref={coneRef} args={[coneGeometry, coneMaterial, frustums.length]} />
+      <instancedMesh key={`${meshKey}-cone`} ref={coneRef} dispose={null} args={[coneGeometry, coneMaterial, frustums.length]} />
       {/* Batched tooltip - single Html component for all arrows (hidden in touch mode) */}
       {!touchMode && tooltipData !== null && tooltipFrustum && (
         <Html
@@ -508,6 +519,8 @@ interface BatchedFrustumLinesProps {
   unselectedCameraOpacity: number;
   showImagePlanes: boolean;
   imageFrameIndexMap: Map<number, number>;
+  // Pending deletions for visual indicator
+  pendingDeletions?: Set<number>;
 }
 
 function BatchedFrustumLines({
@@ -528,6 +541,7 @@ function BatchedFrustumLines({
   unselectedCameraOpacity,
   showImagePlanes,
   imageFrameIndexMap,
+  pendingDeletions,
 }: BatchedFrustumLinesProps) {
   const geometryRef = useRef<THREE.BufferGeometry>(null);
   const rainbowHueRef = useRef(0);
@@ -667,9 +681,13 @@ function BatchedFrustumLines({
       const isSelected = f.image.imageId === selectedImageId;
       const isHovered = f.image.imageId === hoveredImageId;
       const isMatched = matchedImageIds.has(f.image.imageId);
+      const isPendingDeletion = pendingDeletions?.has(f.image.imageId) ?? false;
 
       // Determine color
-      if (isHovered) {
+      if (isPendingDeletion) {
+        // Pending deletion: red color
+        tempColor.set(VIZ_COLORS.frustum.deleted ?? '#ff4444');
+      } else if (isHovered) {
         tempColor.set(VIZ_COLORS.frustum.hover);
       } else if (isSelected) {
         if (selectionColorMode === 'rainbow') {
@@ -686,8 +704,11 @@ function BatchedFrustumLines({
       // Calculate opacity (true alpha, not color darkening)
       // When no camera is selected, use frustumStandbyOpacity for all
       // When a camera is selected: selected/hovered = 1.0, matched = matchesOpacity, others = unselectedCameraOpacity
+      // Pending deletion: reduced opacity (0.3)
       let opacity: number;
-      if (selectedImageId === null) {
+      if (isPendingDeletion) {
+        opacity = 0.3;
+      } else if (selectedImageId === null) {
         opacity = frustumStandbyOpacity;
       } else if (isSelected || isHovered) {
         opacity = 1.0;
@@ -880,6 +901,8 @@ function BatchedPlaneHitTargets({
     });
 
     mesh.instanceMatrix.needsUpdate = true;
+    // Recompute bounding sphere so raycasting works immediately after remount
+    mesh.computeBoundingSphere();
   }, [frustums, planeSizes, selectedImageId]);
 
   if (frustums.length === 0) return null;
@@ -894,6 +917,7 @@ function BatchedPlaneHitTargets({
       <instancedMesh
         key={meshKey}
         ref={meshRef}
+        dispose={null}
         args={[planeGeometry, hitMaterial, frustums.length]}
         onPointerOver={(e) => {
           if (e.instanceId === undefined) return;
@@ -1572,6 +1596,9 @@ export function CameraFrustums() {
   const setShowMatchesInModal = useUIStore((s) => s.setShowMatchesInModal);
   const touchMode = useUIStore((s) => s.touchMode);
 
+  // Pending deletions for visual indicator
+  const pendingDeletions = useDeletionStore((s) => s.pendingDeletions);
+
   // Hovered image ID for arrow mode (batched rendering needs this at parent level)
   const [hoveredImageId, setHoveredImageId] = useState<number | null>(null);
 
@@ -1726,6 +1753,9 @@ export function CameraFrustums() {
     }[] = [];
 
     for (const image of reconstruction.images.values()) {
+      // Skip images marked for deletion
+      if (pendingDeletions.has(image.imageId)) continue;
+
       const camera = reconstruction.cameras.get(image.cameraId);
       if (!camera) continue;
 
@@ -1763,7 +1793,7 @@ export function CameraFrustums() {
     }
 
     return result;
-  }, [reconstruction, cameraDisplayMode, imageFiles, imageUrlBase, cameraIdToIndex, urlImageCacheVersion, zipImageCacheVersion]);
+  }, [reconstruction, cameraDisplayMode, imageFiles, imageUrlBase, cameraIdToIndex, urlImageCacheVersion, zipImageCacheVersion, pendingDeletions]);
 
   // Callbacks for arrow hit targets - use stable references to avoid breaking memo
   const handleArrowClick = useCallback((imageId: number) => {
@@ -2091,6 +2121,7 @@ export function CameraFrustums() {
           onContextMenu={handleArrowContextMenu}
           lastNavigationToImageId={lastNavigationToImageId}
           touchMode={touchMode}
+          pendingDeletions={pendingDeletions}
         />
         {/* Image plane for selected camera (replaces arrow) */}
         {selectedCameraPlane}
@@ -2134,13 +2165,20 @@ export function CameraFrustums() {
           // Skip selected camera - it's rendered via selectedCameraPlane
           if (isSelected) return null;
           const isMatched = matchedImageIds.has(f.image.imageId);
-          const frustumColor = isMatched
-            ? matchesColor
-            : getFrustumBaseColor(frustumColorMode, f.cameraIndex, f.image.imageId, imageFrameIndexMap, frustumSingleColor);
+          const isPendingDeletion = pendingDeletions.has(f.image.imageId);
+          // Color: pending deletion overrides other colors
+          const frustumColor = isPendingDeletion
+            ? (VIZ_COLORS.frustum.deleted ?? '#ff4444')
+            : isMatched
+              ? matchesColor
+              : getFrustumBaseColor(frustumColorMode, f.cameraIndex, f.image.imageId, imageFrameIndexMap, frustumSingleColor);
           // When no camera is selected, all use selectionPlaneOpacity
           // Otherwise, matched get matchesOpacity, others get unselectedCameraOpacity
+          // Pending deletions get reduced opacity
           let planeOpacity: number;
-          if (selectedImageId === null) {
+          if (isPendingDeletion) {
+            planeOpacity = 0.3;
+          } else if (selectedImageId === null) {
             planeOpacity = selectionPlaneOpacity;
           } else if (isMatched) {
             planeOpacity = selectionPlaneOpacity * matchesOpacity;
@@ -2217,6 +2255,7 @@ export function CameraFrustums() {
         unselectedCameraOpacity={unselectedCameraOpacity}
         showImagePlanes={showImagePlanes}
         imageFrameIndexMap={imageFrameIndexMap}
+        pendingDeletions={pendingDeletions}
       />
       {/* Batched invisible hit targets for frustum selection */}
       <BatchedPlaneHitTargets

@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef, memo, startTransition, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useReconstructionStore, useUIStore, useCameraStore } from '../../store';
+import { useReconstructionStore, useUIStore, useCameraStore, useDeletionStore } from '../../store';
 import { getImageFile, getUrlImageCached, fetchUrlImage, getZipImageCached, fetchZipImage, isZipLoadingAvailable } from '../../utils/imageFileUtils';
 import { useThumbnail, pauseThumbnailCache, resumeThumbnailCache } from '../../hooks/useThumbnail';
 import { prioritizeFrustumTexture } from '../../hooks/useFrustumTexture';
@@ -69,6 +69,7 @@ interface GalleryItemProps {
   img: ImageData;
   isSelected: boolean;
   isMatched: boolean;
+  isMarkedForDeletion: boolean;
   matchesColor: string;
   matchesBlink: boolean;
   onClick: (id: number) => void;
@@ -82,7 +83,7 @@ interface GalleryItemProps {
   touchMode?: boolean;
 }
 
-const GalleryItem = memo(function GalleryItem({ img, isSelected, isMatched, matchesColor, matchesBlink, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling, isResizing, wouldGoBack, touchMode = false }: GalleryItemProps) {
+const GalleryItem = memo(function GalleryItem({ img, isSelected, isMatched, isMarkedForDeletion, matchesColor, matchesBlink, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling, isResizing, wouldGoBack, touchMode = false }: GalleryItemProps) {
   // Load thumbnail lazily when visible and not scrolling/settling/resizing (disabled in skip mode)
   const src = useThumbnail(img.file, img.name, !isScrolling && !skipImages && !isSettling && !isResizing);
   const [hovered, setHovered] = useState(false);
@@ -151,14 +152,32 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, isMatched, matc
       {/* Inner wrapper clips image content without clipping tooltip */}
       <div className={galleryStyles.itemInner}>
         {src ? (
-          <img src={src} alt={img.name} className={galleryStyles.itemImage} draggable={false} />
+          <img
+            src={src}
+            alt={img.name}
+            className={galleryStyles.itemImage}
+            style={isMarkedForDeletion ? { filter: 'grayscale(100%) opacity(0.5)' } : undefined}
+            draggable={false}
+          />
         ) : (
-          <div className={galleryStyles.placeholder}>
+          <div
+            className={galleryStyles.placeholder}
+            style={isMarkedForDeletion ? { opacity: 0.5 } : undefined}
+          >
             {isScrolling ? '...' : img.name}
           </div>
         )}
-        {/* Realistic lens vignette overlay - elliptical with smooth falloff (hidden when selected) */}
-        {!isSelected && (
+        {/* Diagonal X overlay for deleted images */}
+        {isMarkedForDeletion && (
+          <div className="absolute inset-0 pointer-events-none z-20">
+            <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <line x1="0" y1="0" x2="100" y2="100" stroke="var(--bg-primary)" strokeWidth="1.5" />
+              <line x1="100" y1="0" x2="0" y2="100" stroke="var(--bg-primary)" strokeWidth="1.5" />
+            </svg>
+          </div>
+        )}
+        {/* Realistic lens vignette overlay - elliptical with smooth falloff (hidden when selected or deleted) */}
+        {!isSelected && !isMarkedForDeletion && (
           <div
             className="absolute inset-0 pointer-events-none z-10"
             style={{
@@ -226,7 +245,7 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, isMatched, matc
 
 type ListItemProps = GalleryItemProps;
 
-const ListItem = memo(function ListItem({ img, isSelected, isMatched, matchesColor, matchesBlink, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling, isResizing, wouldGoBack, touchMode = false }: ListItemProps) {
+const ListItem = memo(function ListItem({ img, isSelected, isMatched, isMarkedForDeletion, matchesColor, matchesBlink, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling, isResizing, wouldGoBack, touchMode = false }: ListItemProps) {
   // Load thumbnail lazily when visible and not scrolling/settling/resizing (disabled in skip mode)
   const src = useThumbnail(img.file, img.name, !isScrolling && !skipImages && !isSettling && !isResizing);
   const [hovered, setHovered] = useState(false);
@@ -292,11 +311,31 @@ const ListItem = memo(function ListItem({ img, isSelected, isMatched, matchesCol
       className={`${listStyles.item} px-3 list-stats-container ${borderClass}`}
       {...(touchMode ? longPressHandlers : {})}
     >
-      <div className={`${listStyles.thumbnail} ${listStyles.thumbnailSize}`}>
+      <div className={`${listStyles.thumbnail} ${listStyles.thumbnailSize} relative`}>
         {src ? (
-          <img src={src} alt={img.name} className="w-full h-full object-cover" draggable={false} />
+          <img
+            src={src}
+            alt={img.name}
+            className="w-full h-full object-cover"
+            style={isMarkedForDeletion ? { filter: 'grayscale(100%) opacity(0.5)' } : undefined}
+            draggable={false}
+          />
         ) : (
-          <div className={listStyles.thumbnailPlaceholder}>{img.imageId}</div>
+          <div
+            className={listStyles.thumbnailPlaceholder}
+            style={isMarkedForDeletion ? { opacity: 0.5 } : undefined}
+          >
+            {img.imageId}
+          </div>
+        )}
+        {/* Diagonal X overlay for deleted images */}
+        {isMarkedForDeletion && (
+          <div className="absolute inset-0 pointer-events-none">
+            <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <line x1="0" y1="0" x2="100" y2="100" stroke="var(--bg-primary)" strokeWidth="2" />
+              <line x1="100" y1="0" x2="0" y2="100" stroke="var(--bg-primary)" strokeWidth="2" />
+            </svg>
+          </div>
         )}
       </div>
       <div className={listStyles.content}>
@@ -389,6 +428,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
   const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
   const matchesColor = useUIStore((s) => s.matchesColor);
   const touchMode = useUIStore((s) => s.touchMode);
+  const pendingDeletions = useDeletionStore((s) => s.pendingDeletions);
   const selectedImageId = useCameraStore((s) => s.selectedImageId);
   const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
   const flyToImage = useCameraStore((s) => s.flyToImage);
@@ -980,6 +1020,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
                         img={img}
                         isSelected={selectedImageId === img.imageId}
                         isMatched={matchedImageIds.has(img.imageId)}
+                        isMarkedForDeletion={pendingDeletions.has(img.imageId)}
                         matchesColor={matchesColor}
                         matchesBlink={showMatches && matchesDisplayMode === 'blink'}
                         onClick={handleClick}
@@ -1024,6 +1065,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
                       img={img}
                       isSelected={selectedImageId === img.imageId}
                       isMatched={matchedImageIds.has(img.imageId)}
+                      isMarkedForDeletion={pendingDeletions.has(img.imageId)}
                       matchesColor={matchesColor}
                       matchesBlink={showMatches && matchesDisplayMode === 'blink'}
                       onClick={handleClick}

@@ -9,6 +9,7 @@ export const VIZ_COLORS = {
     default: '#ff0000',
     selected: '#ff00ff',
     hover: '#6699aa',
+    deleted: '#ff4444',  // Red for pending deletion
   },
   point: {
     triangulated: '#00ff00',

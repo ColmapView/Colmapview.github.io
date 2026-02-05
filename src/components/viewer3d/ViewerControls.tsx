@@ -27,10 +27,8 @@ import {
   useGridNodeActions,
   useRigNodeActions,
 } from '../../nodes';
-import { useFloorPlaneStore, type FloorColorMode } from '../../store/stores/floorPlaneStore';
 import { markSettingsResetWarningShown } from '../../store/migration';
-import { detectPlaneRANSAC, computeDistancesToPlane, transformPositions } from '../../utils/ransac';
-import { createSim3dFromEuler, isIdentityEuler } from '../../utils/sim3dTransforms';
+import { isIdentityEuler } from '../../utils/sim3dTransforms';
 import type { ColorMode } from '../../types/colmap';
 import type { CameraMode, CameraDisplayMode, CameraScaleFactor, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesCoordinateSystem, AxisLabelMode, AutoRotateMode, HorizonLockMode, RigDisplayMode, RigColorMode } from '../../store/types';
 import { useHotkeys } from 'react-hotkeys-hook';
@@ -59,7 +57,6 @@ import {
   AxesOffIcon,
   AxesGridIcon,
   GridIcon,
-  FloorDetectIcon,
   ColorOffIcon,
   ColorRgbIcon,
   ColorErrorIcon,
@@ -92,6 +89,9 @@ import {
 // Import extracted panels
 import { ScreenshotPanel, SharePanel, ExportPanel } from './panels';
 import { ProfileSelector } from '../dropzone/ProfileSelector';
+import { FloorDetectionModal } from '../modals/FloorDetectionModal';
+import { CameraConversionModal } from '../modals/CameraConversionModal';
+import { DeletionModal } from '../modals/DeletionModal';
 
 // Use styles from theme
 const styles = controlPanelStyles;
@@ -127,10 +127,12 @@ interface TransformPanelProps {
   styles: typeof controlPanelStyles;
   activePanel: PanelType;
   setActivePanel: (panel: PanelType) => void;
+  onOpenFloorModal: () => void;
 }
 
-const TransformPanel = memo(function TransformPanel({ styles, activePanel, setActivePanel }: TransformPanelProps) {
+const TransformPanel = memo(function TransformPanel({ styles, activePanel, setActivePanel, onOpenFloorModal }: TransformPanelProps) {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
+  const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
   const droppedFiles = useReconstructionStore((s) => s.droppedFiles);
   const transform = useTransformStore((s) => s.transform);
   const setTransform = useTransformStore((s) => s.setTransform);
@@ -144,6 +146,7 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
   const setPickingMode = usePointPickingStore((s) => s.setPickingMode);
 
   const hasChanges = !isIdentityEuler(transform);
+  const hasPoints = wasmReconstruction?.hasPoints() ?? false;
 
   // Convert radians to degrees for display
   const radToDeg = (rad: number) => rad * (180 / Math.PI);
@@ -280,8 +283,16 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
           >
             3-Point Align
           </button>
+          <button
+            onClick={onOpenFloorModal}
+            disabled={!hasPoints}
+            className={hasPoints ? styles.presetButton : styles.actionButtonDisabled}
+            data-tooltip="RANSAC floor plane detection"
+            data-tooltip-pos="bottom"
+          >
+            Floor Detection
+          </button>
         </div>
-
 
         {/* Action buttons */}
         <div className={styles.actionGroup}>
@@ -311,185 +322,6 @@ const TransformPanel = memo(function TransformPanel({ styles, activePanel, setAc
         {hasChanges && (
           <div className={styles.hint}>
             Transform will be applied to reconstruction data when you click "Apply".
-          </div>
-        )}
-      </div>
-    </ControlButton>
-  );
-});
-
-// Floor Detection panel component
-interface FloorDetectionPanelProps {
-  styles: typeof controlPanelStyles;
-  activePanel: PanelType;
-  setActivePanel: (panel: PanelType) => void;
-}
-
-const FloorDetectionPanel = memo(function FloorDetectionPanel({ styles, activePanel, setActivePanel }: FloorDetectionPanelProps) {
-  const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
-
-  // Get current transform to apply before detection
-  const transform = useTransformStore((s) => s.transform);
-
-  const detectedPlane = useFloorPlaneStore((s) => s.detectedPlane);
-  const setDetectedPlane = useFloorPlaneStore((s) => s.setDetectedPlane);
-  const distanceThreshold = useFloorPlaneStore((s) => s.distanceThreshold);
-  const setDistanceThreshold = useFloorPlaneStore((s) => s.setDistanceThreshold);
-  const sampleCount = useFloorPlaneStore((s) => s.sampleCount);
-  const setSampleCount = useFloorPlaneStore((s) => s.setSampleCount);
-  const floorColorMode = useFloorPlaneStore((s) => s.floorColorMode);
-  const setFloorColorMode = useFloorPlaneStore((s) => s.setFloorColorMode);
-  const setPointDistances = useFloorPlaneStore((s) => s.setPointDistances);
-  const isDetecting = useFloorPlaneStore((s) => s.isDetecting);
-  const setIsDetecting = useFloorPlaneStore((s) => s.setIsDetecting);
-  const setNormalFlipped = useFloorPlaneStore((s) => s.setNormalFlipped);
-  const reset = useFloorPlaneStore((s) => s.reset);
-
-  const pointCount = wasmReconstruction?.pointCount ?? reconstruction?.points3D?.size ?? 0;
-
-  const handleDetectFloor = useCallback(() => {
-    if (!wasmReconstruction?.hasPoints()) return;
-
-    setIsDetecting(true);
-
-    // Use setTimeout to allow UI to update before potentially blocking operation
-    setTimeout(() => {
-      let positions = wasmReconstruction.getPositions();
-      if (!positions) {
-        setIsDetecting(false);
-        return;
-      }
-
-      // Apply current transform if not identity (so detection matches visual)
-      if (!isIdentityEuler(transform)) {
-        const sim3d = createSim3dFromEuler(transform);
-        positions = transformPositions(positions, sim3d);
-      }
-
-      const plane = detectPlaneRANSAC(positions, { distanceThreshold, sampleCount });
-      setDetectedPlane(plane);
-
-      if (plane) {
-        const distances = computeDistancesToPlane(positions, plane);
-
-        // Count points on each side of the plane
-        let countOnNormalSide = 0;
-        let countOnOppositeSide = 0;
-        for (let i = 0; i < distances.length; i++) {
-          if (distances[i] > 0) countOnNormalSide++;
-          else if (distances[i] < 0) countOnOppositeSide++;
-        }
-
-        // Flip so normal points toward more points (down toward fewer)
-        setNormalFlipped(countOnNormalSide < countOnOppositeSide);
-        setPointDistances(distances);
-        if (floorColorMode === 'off') {
-          setFloorColorMode('binary');
-        }
-      } else {
-        setPointDistances(null);
-      }
-
-      setIsDetecting(false);
-    }, 10);
-  }, [wasmReconstruction, distanceThreshold, sampleCount, transform, setDetectedPlane, setPointDistances, setIsDetecting, setNormalFlipped, floorColorMode, setFloorColorMode]);
-
-  const handleClear = useCallback(() => {
-    reset();
-  }, [reset]);
-
-  const inlierPercentage = detectedPlane && pointCount > 0
-    ? ((detectedPlane.inlierCount / pointCount) * 100).toFixed(1)
-    : null;
-
-  return (
-    <ControlButton
-      panelId="floor"
-      activePanel={activePanel}
-      setActivePanel={setActivePanel}
-      icon={<FloorDetectIcon className="w-6 h-6" />}
-      tooltip={detectedPlane ? `Floor detected (${inlierPercentage}% inliers)` : 'Floor Detection'}
-      isActive={detectedPlane !== null}
-      panelTitle="Floor Detection"
-      disabled={!reconstruction || !wasmReconstruction?.hasPoints()}
-    >
-      <div className={styles.panelContent}>
-        {/* Detect/Clear buttons */}
-        <div className={styles.presetGroup}>
-          <button
-            onClick={handleDetectFloor}
-            disabled={isDetecting || !wasmReconstruction?.hasPoints()}
-            className={isDetecting ? styles.actionButtonDisabled : styles.actionButtonPrimary}
-            data-tooltip="Run RANSAC to detect floor plane"
-            data-tooltip-pos="bottom"
-          >
-            {isDetecting ? 'Detecting...' : 'Detect Floor'}
-          </button>
-          <button
-            onClick={handleClear}
-            disabled={!detectedPlane}
-            className={detectedPlane ? styles.actionButton : styles.actionButtonDisabled}
-            data-tooltip="Clear floor detection"
-            data-tooltip-pos="bottom"
-          >
-            Clear
-          </button>
-        </div>
-
-        {/* Distance threshold slider */}
-        <SliderRow
-          label="Threshold"
-          value={distanceThreshold}
-          min={0.001}
-          max={0.5}
-          step={0.001}
-          onChange={setDistanceThreshold}
-          formatValue={(v) => v.toFixed(3)}
-        />
-
-        {/* Sample count slider */}
-        <SliderRow
-          label="Samples"
-          value={sampleCount}
-          min={1000}
-          max={100000}
-          step={1000}
-          onChange={setSampleCount}
-          formatValue={(v) => `${(v / 1000).toFixed(0)}k`}
-        />
-
-        {/* Floor color mode */}
-        <SelectRow
-          label="Color"
-          value={floorColorMode}
-          onChange={(v) => setFloorColorMode(v as FloorColorMode)}
-          options={[
-            { value: 'off', label: 'Off' },
-            { value: 'binary', label: 'Binary (In/Out)' },
-            { value: 'distance', label: 'Distance' },
-          ]}
-        />
-
-        {/* Status info */}
-        {detectedPlane && (
-          <div className="text-ds-secondary text-sm mt-3">
-            <div className="mb-1 font-medium">Detection Result:</div>
-            <div>{inlierPercentage}% inliers ({detectedPlane.inlierCount.toLocaleString()} pts)</div>
-            <div className="text-xs text-ds-muted mt-1">
-              Left-click widget to flip normal
-            </div>
-            <div className="text-xs text-ds-muted">
-              Right-click widget to cycle axis
-            </div>
-          </div>
-        )}
-
-        {!detectedPlane && (
-          <div className="text-ds-secondary text-sm mt-3">
-            <div className="mb-1 font-medium">RANSAC Floor Detection:</div>
-            <div>Detect dominant plane in</div>
-            <div>the point cloud for alignment.</div>
           </div>
         )}
       </div>
@@ -528,6 +360,9 @@ const GalleryToggleButton = memo(function GalleryToggleButton({ activePanel, set
 
 export function ViewerControls() {
   const [activePanel, setActivePanel] = useState<PanelType>(null);
+  const [showFloorModal, setShowFloorModal] = useState(false);
+  const [showDeletionModal, setShowDeletionModal] = useState(false);
+  const [showConversionModal, setShowConversionModal] = useState(false);
 
   // Node hooks for reading state
   const pointsNode = usePointsNode();
@@ -1045,6 +880,7 @@ export function ViewerControls() {
   );
 
   return (
+    <>
     <div className={styles.container} data-testid="viewer-controls">
       <ControlButton
         panelId="view"
@@ -1358,9 +1194,7 @@ export function ViewerControls() {
         </div>
       </ControlButton>
 
-      <TransformPanel styles={styles} activePanel={activePanel} setActivePanel={setActivePanel} />
-
-      <FloorDetectionPanel styles={styles} activePanel={activePanel} setActivePanel={setActivePanel} />
+      <TransformPanel styles={styles} activePanel={activePanel} setActivePanel={setActivePanel} onOpenFloorModal={() => setShowFloorModal(true)} />
 
       <ControlButton
         panelId="points"
@@ -1825,7 +1659,7 @@ export function ViewerControls() {
 
       <SharePanel activePanel={activePanel} setActivePanel={setActivePanel} />
 
-      <ExportPanel activePanel={activePanel} setActivePanel={setActivePanel} />
+      <ExportPanel activePanel={activePanel} setActivePanel={setActivePanel} onOpenDeletionModal={() => setShowDeletionModal(true)} onOpenConversionModal={() => setShowConversionModal(true)} />
 
       {/* Settings Panel */}
       <ControlButton
@@ -1936,5 +1770,20 @@ export function ViewerControls() {
 
       <GalleryToggleButton activePanel={activePanel} setActivePanel={setActivePanel} />
     </div>
+
+    {/* Tool Modals - rendered outside container for independence */}
+    <FloorDetectionModal
+      isOpen={showFloorModal}
+      onClose={() => setShowFloorModal(false)}
+    />
+    <DeletionModal
+      isOpen={showDeletionModal}
+      onClose={() => setShowDeletionModal(false)}
+    />
+    <CameraConversionModal
+      isOpen={showConversionModal}
+      onClose={() => setShowConversionModal(false)}
+    />
+    </>
   );
 }

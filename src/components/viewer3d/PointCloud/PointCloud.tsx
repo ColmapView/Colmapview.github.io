@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import {
   useReconstructionStore,
   usePointPickingStore,
+  useDeletionStore,
 } from '../../../store';
 import { usePointsNode, useSelectionNode } from '../../../nodes';
 import { useFloorPlaneStore } from '../../../store/stores/floorPlaneStore';
@@ -67,6 +68,12 @@ export function PointCloud(): React.JSX.Element | null {
   const distanceThreshold = useFloorPlaneStore((s) => s.distanceThreshold);
   const floorColorMode = useFloorPlaneStore((s) => s.floorColorMode);
 
+  // Pending deletions - filter selection if selected image is pending deletion
+  const pendingDeletions = useDeletionStore((s) => s.pendingDeletions);
+  const effectiveSelectedImageId = selectedImageId !== null && pendingDeletions.has(selectedImageId)
+    ? null
+    : selectedImageId;
+
   // Compute point cloud data (positions, colors, selection)
   const { positions, colors, selectedPositions, selectedColors, indexToPoint3DIdRef } =
     usePointCloudData({
@@ -76,7 +83,7 @@ export function PointCloud(): React.JSX.Element | null {
       minTrackLength,
       maxReprojectionError,
       thinning,
-      selectedImageId,
+      selectedImageId: effectiveSelectedImageId,
       showSelectionHighlight,
       selectionColor,
       floorColorMode,
@@ -96,19 +103,11 @@ export function PointCloud(): React.JSX.Element | null {
 
   // Create geometry for main point cloud
   const geometry = useMemo(() => {
-    if (!positions || !colors) return null;
-    if (positions.length === 0) {
-      console.warn('[PointCloud] Empty positions array');
-      return null;
-    }
+    if (!positions || !colors || positions.length === 0) return null;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.computeBoundingSphere();
-    // Validate bounding sphere
-    if (!geo.boundingSphere || !Number.isFinite(geo.boundingSphere.radius)) {
-      console.warn('[PointCloud] Invalid bounding sphere:', geo.boundingSphere);
-    }
     return geo;
   }, [positions, colors]);
 

@@ -131,10 +131,17 @@ export const inputStyles = {
   },
 
   // Select specific
-  select: 'bg-ds-input text-ds-primary border border-ds-subtle rounded focus-ds cursor-pointer',
+  select: 'bg-ds-input text-ds-primary border border-ds-subtle rounded focus-ds cursor-pointer px-2 py-1',
 
   // Select without border (for use in panels/hover menus)
-  selectPanel: 'bg-ds-input text-ds-primary rounded focus-ds cursor-pointer',
+  selectPanel: 'bg-ds-input text-ds-primary rounded focus-ds cursor-pointer px-2 py-1',
+
+  // Select sizes (use with select or selectPanel)
+  selectSizes: {
+    xs: 'px-2 py-0.5 text-xs',
+    sm: 'px-2 py-1 text-sm',
+    md: 'px-3 py-1.5 text-sm',
+  },
 
   // Checkbox/Radio
   checkbox: 'w-5 h-5 accent-ds-accent cursor-pointer',
@@ -196,6 +203,12 @@ export const modalStyles = {
   panel: 'absolute bg-ds-tertiary rounded-lg shadow-ds-lg flex flex-col pointer-events-auto',
   header: 'flex items-center justify-between px-4 py-2 border-b border-ds cursor-move select-none',
   headerTitle: 'text-ds-primary text-base font-medium truncate',
+  // Tool modal panel (includes responsive class)
+  toolPanel: 'absolute bg-ds-tertiary rounded-lg shadow-ds-lg flex flex-col pointer-events-auto tool-modal-responsive',
+  // Tool modal header (rounded top with secondary background)
+  toolHeader: 'flex items-center justify-between px-4 py-2 rounded-t-lg bg-ds-secondary cursor-move select-none',
+  toolHeaderTitle: 'text-ds-primary text-sm font-medium',
+  toolHeaderClose: 'w-6 h-6 flex items-center justify-center rounded text-ds-muted hover:text-ds-primary hover:bg-ds-tertiary transition-colors tool-header-close',
   closeButton: buttonStyles.closeLg,
   // Reference shared action button styles
   actionGroup: actionButtonStyles.group,
@@ -365,17 +378,18 @@ export const loadingStyles = {
 // ============================================
 
 export const controlPanelStyles = {
-  // Container positioning
-  container: 'absolute top-3 right-3 flex flex-col gap-2 z-[1000] control-panel-responsive',
+  // Container positioning - z-index 2000 ensures hover panels appear above tool modals
+  container: 'absolute top-3 right-3 flex flex-col gap-2 z-[2000] control-panel-responsive',
   // Button styles
   button: 'w-10 h-10 rounded-lg flex items-center justify-center transition-colors relative border border-ds control-button-responsive',
   buttonActive: 'bg-ds-accent text-ds-void border-ds-accent',
   buttonHover: 'bg-ds-hover text-ds-primary',
   buttonInactive: 'bg-ds-tertiary text-ds-secondary hover-ds-hover hover-ds-text-primary',
   // Panel positioning - right-full positions at container's left edge, pr-2 creates gap inside hover area
-  panelWrapper: 'absolute right-full top-0 pr-2 z-[1100]',
+  // z-index 2000 ensures hover panels always appear above tool modals (which start at 1000 and increment)
+  panelWrapper: 'absolute right-full top-0 pr-2 z-[2000]',
   // Panel content
-  panel: 'bg-ds-tertiary border border-ds rounded-lg p-4 w-[240px] shadow-ds-lg',
+  panel: 'bg-ds-tertiary border border-ds rounded-lg p-4 w-[240px] shadow-ds-lg hover-panel-responsive',
   panelTitle: 'text-ds-primary text-sm font-medium mb-3',
   panelContent: 'space-y-2',
   // Row layout

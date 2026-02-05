@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
-import { useReconstructionStore, useUIStore } from '../../store';
+import { useReconstructionStore, useUIStore, useDeletionStore } from '../../store';
+import { TrashIcon, ResetIcon } from '../../icons';
 import type { Camera, Point2D } from '../../types/colmap';
 import { getImageFile, getMaskFile, getUrlImageCached, fetchUrlImage, fetchUrlMask, getZipImageCached, fetchZipImage, fetchZipMask, isZipLoadingAvailable } from '../../utils/imageFileUtils';
 import { useFileUrl } from '../../hooks/useFileUrl';
@@ -514,6 +515,61 @@ function ImagePlaceholder({ width, height, cameraWidth, cameraHeight, label, sty
   );
 }
 
+// Cross overlay for deleted images - uses background color
+interface DeletedCrossOverlayProps {
+  width: number;
+  height: number;
+  style?: React.CSSProperties;
+}
+
+function DeletedCrossOverlay({ width, height, style }: DeletedCrossOverlayProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || width <= 0 || height <= 0) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+
+    // Draw cross using background color - extends to borders
+    const strokeWidth = Math.max(3, Math.min(width, height) * 0.025);
+
+    ctx.strokeStyle = '#0a0a0a'; // bg-ds-primary (dark background)
+    ctx.lineWidth = strokeWidth;
+    ctx.lineCap = 'square';
+
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(width, height);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(width, 0);
+    ctx.lineTo(0, height);
+    ctx.stroke();
+  }, [width, height]);
+
+  if (width <= 0 || height <= 0) return null;
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={width}
+      height={height}
+      className="pointer-events-none"
+      style={{
+        ...style,
+        width,
+        height,
+      }}
+    />
+  );
+}
+
 // Maximum number of images to cache lazy-loaded points for (LRU-style)
 const MAX_LAZY_CACHE_SIZE = 20;
 
@@ -542,6 +598,28 @@ export function ImageDetailModal() {
   const setMatchedImageId = useUIStore((s) => s.setMatchedImageId);
   const touchMode = useUIStore((s) => s.touchMode);
   const showModalControls = useUIStore((s) => s.touchUI.modalControls);
+
+  // Deletion state
+  const pendingDeletions = useDeletionStore((s) => s.pendingDeletions);
+  const toggleDeletion = useDeletionStore((s) => s.toggleDeletion);
+
+  // Check if current image is marked for deletion
+  const isMarkedForDeletion = imageDetailId !== null && pendingDeletions.has(imageDetailId);
+
+  // Handle delete/restore button click
+  const handleDeleteToggle = useCallback(() => {
+    if (imageDetailId === null) return;
+
+    if (isMarkedForDeletion) {
+      // Restore - no confirmation needed
+      toggleDeletion(imageDetailId);
+    } else {
+      // Mark for deletion - confirm with user
+      if (window.confirm('Mark this image for deletion? You can restore it or apply the deletion later.')) {
+        toggleDeletion(imageDetailId);
+      }
+    }
+  }, [imageDetailId, isMarkedForDeletion, toggleDeletion]);
 
   // Match line opacity state (default from theme)
   const [matchLineOpacity, setMatchLineOpacity] = useState<number>(OPACITY.matchLines);
@@ -894,6 +972,7 @@ export function ImageDetailModal() {
   }, [image, reconstruction, imageDetailId]);
 
   // Get connected images from pre-computed index (O(1) lookup instead of O(m*k))
+  // Exclude images marked for deletion
   const connectedImages = useMemo(() => {
     if (!reconstruction || imageDetailId === null) return [];
 
@@ -901,13 +980,14 @@ export function ImageDetailModal() {
     if (!connections) return [];
 
     return Array.from(connections.entries())
+      .filter(([id]) => !pendingDeletions.has(id)) // Exclude deleted images
       .sort((a, b) => b[1] - a[1]) // Sort by match count descending
       .map(([id, count]) => ({
         imageId: id,
         matchCount: count,
         name: reconstruction.images.get(id)?.name || `Image ${id}`
       }));
-  }, [reconstruction, imageDetailId]);
+  }, [reconstruction, imageDetailId, pendingDeletions]);
 
   // Get match count for currently selected matched image (for consistent display)
   const currentMatchCount = useMemo(() => {
@@ -1342,18 +1422,32 @@ export function ImageDetailModal() {
       <div className="fixed inset-0 z-[1000] bg-ds-primary flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-4 h-12 bg-ds-secondary border-b border-ds flex-shrink-0">
-          <span className="text-ds-primary text-sm truncate flex-1 mr-2">
+          <span className={`text-ds-primary text-sm truncate flex-1 mr-2 ${isMarkedForDeletion ? 'line-through text-ds-error' : ''}`}>
             {isMatchViewMode
               ? `${image?.name} ↔ ${matchedImage?.name}`
               : image?.name}
           </span>
-          <button
-            onClick={closeImageDetail}
-            className="w-10 h-10 flex items-center justify-center text-ds-muted hover:text-ds-primary text-2xl"
-            style={{ minWidth: TOUCH.minTapTarget, minHeight: TOUCH.minTapTarget }}
-          >
-            ×
-          </button>
+          <div className="flex items-center gap-1">
+            {/* Delete/Restore button */}
+            <button
+              onClick={handleDeleteToggle}
+              className={`w-10 h-10 flex items-center justify-center rounded transition-colors ${
+                isMarkedForDeletion
+                  ? 'text-ds-success'
+                  : 'text-ds-muted'
+              }`}
+              style={{ minWidth: TOUCH.minTapTarget, minHeight: TOUCH.minTapTarget }}
+            >
+              {isMarkedForDeletion ? <ResetIcon className="w-5 h-5" /> : <TrashIcon className="w-5 h-5" />}
+            </button>
+            <button
+              onClick={closeImageDetail}
+              className="w-10 h-10 flex items-center justify-center text-ds-muted hover:text-ds-primary text-2xl"
+              style={{ minWidth: TOUCH.minTapTarget, minHeight: TOUCH.minTapTarget }}
+            >
+              ×
+            </button>
+          </div>
         </div>
 
         {/* Image container */}
@@ -1445,18 +1539,28 @@ export function ImageDetailModal() {
               return (
                 <>
                   {renderedImageWidth > 0 && (imageSrc ? (
-                    <img
-                      src={imageSrc}
-                      alt={image.name}
-                      className="absolute object-contain"
-                      style={{
-                        width: renderedImageWidth,
-                        height: renderedImageHeight,
-                        left: offsetX,
-                        top: offsetY,
-                      }}
-                      draggable={false}
-                    />
+                    <>
+                      <img
+                        src={imageSrc}
+                        alt={image.name}
+                        className="absolute object-contain"
+                        style={{
+                          width: renderedImageWidth,
+                          height: renderedImageHeight,
+                          left: offsetX,
+                          top: offsetY,
+                          filter: isMarkedForDeletion ? 'grayscale(100%)' : undefined,
+                        }}
+                        draggable={false}
+                      />
+                      {isMarkedForDeletion && (
+                        <DeletedCrossOverlay
+                          width={renderedImageWidth}
+                          height={renderedImageHeight}
+                          style={{ position: 'absolute', left: offsetX, top: offsetY }}
+                        />
+                      )}
+                    </>
                   ) : (
                     <ImagePlaceholder
                       width={renderedImageWidth}
@@ -1467,7 +1571,7 @@ export function ImageDetailModal() {
                       style={{ position: 'absolute', left: offsetX, top: offsetY }}
                     />
                   ))}
-                  {(showPoints2D || showPoints3D) && renderedImageWidth > 0 && effectivePoints2D.length > 0 && (
+                  {!isMarkedForDeletion && (showPoints2D || showPoints3D) && renderedImageWidth > 0 && effectivePoints2D.length > 0 && (
                     <KeypointCanvas
                       points2D={effectivePoints2D}
                       camera={camera}
@@ -1493,29 +1597,38 @@ export function ImageDetailModal() {
               {!showMatchesInModal && (
                 <>
                   <button
-                    onClick={() => setShowPoints2D(!showPoints2D)}
+                    onClick={() => !isMarkedForDeletion && setShowPoints2D(!showPoints2D)}
+                    disabled={isMarkedForDeletion}
                     className={`${touchStyles.touchButton} flex-1 text-sm ${
-                      showPoints2D ? 'bg-ds-accent text-ds-void' : 'bg-ds-hover text-ds-primary'
+                      isMarkedForDeletion
+                        ? 'bg-ds-secondary text-ds-muted opacity-50'
+                        : showPoints2D ? 'bg-ds-accent text-ds-void' : 'bg-ds-hover text-ds-primary'
                     }`}
                     style={{ minHeight: TOUCH.minTapTarget }}
                   >
-                    2D <span className={showPoints2D ? '' : 'text-ds-success'}>({numPoints2D})</span>
+                    2D <span className={isMarkedForDeletion ? '' : showPoints2D ? '' : 'text-ds-success'}>({numPoints2D})</span>
                   </button>
                   <button
-                    onClick={() => setShowPoints3D(!showPoints3D)}
+                    onClick={() => !isMarkedForDeletion && setShowPoints3D(!showPoints3D)}
+                    disabled={isMarkedForDeletion}
                     className={`${touchStyles.touchButton} flex-1 text-sm ${
-                      showPoints3D ? 'bg-ds-accent text-ds-void' : 'bg-ds-hover text-ds-primary'
+                      isMarkedForDeletion
+                        ? 'bg-ds-secondary text-ds-muted opacity-50'
+                        : showPoints3D ? 'bg-ds-accent text-ds-void' : 'bg-ds-hover text-ds-primary'
                     }`}
                     style={{ minHeight: TOUCH.minTapTarget }}
                   >
-                    3D <span className={showPoints3D ? '' : 'text-ds-error'}>({numPoints3D})</span>
+                    3D <span className={isMarkedForDeletion ? '' : showPoints3D ? '' : 'text-ds-error'}>({numPoints3D})</span>
                   </button>
                 </>
               )}
               <button
-                onClick={() => setShowMatchesInModal(!showMatchesInModal)}
+                onClick={() => !isMarkedForDeletion && setShowMatchesInModal(!showMatchesInModal)}
+                disabled={isMarkedForDeletion}
                 className={`${touchStyles.touchButton} flex-1 text-sm ${
-                  showMatchesInModal ? 'bg-ds-accent text-ds-void' : 'bg-ds-hover text-ds-primary'
+                  isMarkedForDeletion
+                    ? 'bg-ds-secondary text-ds-muted opacity-50'
+                    : showMatchesInModal ? 'bg-ds-accent text-ds-void' : 'bg-ds-hover text-ds-primary'
                 }`}
                 style={{ minHeight: TOUCH.minTapTarget }}
               >
@@ -1524,7 +1637,7 @@ export function ImageDetailModal() {
             </div>
 
             {/* Match controls (if showing matches) */}
-            {showMatchesInModal && (
+            {showMatchesInModal && !isMarkedForDeletion && (
               <div className="px-3 pb-3">
                 <select
                   value={matchedImageId ?? ''}
@@ -1615,21 +1728,39 @@ export function ImageDetailModal() {
             className="flex items-center justify-between px-4 py-2 rounded-t-lg bg-ds-secondary text-xs cursor-move select-none"
             onMouseDown={handleDragStart}
           >
-            <span className="text-ds-primary">
+            <span className={`text-ds-primary ${isMarkedForDeletion ? 'line-through text-ds-error' : ''}`}>
               {isMatchViewMode
                 ? `Image Matches: ${image?.name} ↔ ${matchedImage?.name} (${currentMatchCount} matches)`
                 : `Image #${imageDetailId}: ${image?.name}`}
             </span>
-            <button
-              onClick={closeImageDetail}
-              onMouseDown={(e) => e.stopPropagation()}
-              className={modalStyles.closeButton}
-            >
-              ×
-            </button>
+            <div className="flex items-center gap-1">
+              {/* Delete/Restore button */}
+              <button
+                onClick={handleDeleteToggle}
+                onMouseDown={(e) => e.stopPropagation()}
+                className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
+                  isMarkedForDeletion
+                    ? 'text-ds-success hover:bg-ds-success/20'
+                    : 'text-ds-muted hover:text-ds-error hover:bg-ds-error/20'
+                }`}
+                title={isMarkedForDeletion ? 'Restore image' : 'Mark for deletion'}
+              >
+                {isMarkedForDeletion ? <ResetIcon className="w-4 h-4" /> : <TrashIcon className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={closeImageDetail}
+                onMouseDown={(e) => e.stopPropagation()}
+                className="w-6 h-6 flex items-center justify-center rounded text-ds-muted hover:text-ds-primary hover:bg-ds-tertiary transition-colors"
+                title="Close"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-col flex-1 overflow-hidden px-4 pt-1 pb-4 gap-2">
+          <div className="flex flex-col flex-1 overflow-hidden px-4 pt-1 pb-3 gap-2">
           <div className="flex-shrink-0 overflow-x-auto py-1">
             <CameraPoseInfoDisplay camera={camera} qvec={image.qvec} tvec={image.tvec} />
           </div>
@@ -1741,12 +1872,12 @@ export function ImageDetailModal() {
                   return (
                     <div
                       className="group absolute inset-0"
-                      onClick={hasMask && maskSrc ? cycleMaskMode : undefined}
-                      onMouseMove={hasMask && maskSrc ? handleMaskMouseMove : undefined}
-                      onMouseLeave={hasMask && maskSrc ? handleMaskMouseLeave : undefined}
-                      style={{ cursor: hasMask && maskSrc ? 'pointer' : undefined }}
+                      onClick={hasMask && maskSrc && !isMarkedForDeletion ? cycleMaskMode : undefined}
+                      onMouseMove={hasMask && maskSrc && !isMarkedForDeletion ? handleMaskMouseMove : undefined}
+                      onMouseLeave={hasMask && maskSrc && !isMarkedForDeletion ? handleMaskMouseLeave : undefined}
+                      style={{ cursor: hasMask && maskSrc && !isMarkedForDeletion ? 'pointer' : undefined }}
                     >
-                      {/* Image or placeholder - absolutely positioned to match KeypointCanvas */}
+                      {/* Image with optional grayscale for deleted, or placeholder */}
                       {renderedImageWidth > 0 && (imageSrc ? (
                         <>
                           <img
@@ -1762,10 +1893,24 @@ export function ImageDetailModal() {
                               opacity: maskMode === 'mask' ? 0 : 1,
                               // Clip image in split mode (show left portion)
                               clipPath: maskMode === 'split' ? `inset(0 ${(1 - splitX) * 100}% 0 0)` : undefined,
+                              // Grayscale for deleted images
+                              filter: isMarkedForDeletion ? 'grayscale(100%)' : undefined,
                             }}
                             draggable={false}
                           />
-                          {hasMask && maskSrc && (
+                          {/* Cross overlay for deleted images */}
+                          {isMarkedForDeletion && (
+                            <DeletedCrossOverlay
+                              width={renderedImageWidth}
+                              height={renderedImageHeight}
+                              style={{
+                                position: 'absolute',
+                                left: offsetX,
+                                top: offsetY,
+                              }}
+                            />
+                          )}
+                          {hasMask && maskSrc && !isMarkedForDeletion && (
                             <img
                               src={maskSrc}
                               alt="mask"
@@ -1802,8 +1947,8 @@ export function ImageDetailModal() {
                           }}
                         />
                       ))}
-                      {/* Keypoint overlay - rendered even without image */}
-                      {(showPoints2D || showPoints3D) && renderedImageWidth > 0 && effectivePoints2D.length > 0 && (
+                      {/* Keypoint overlay - not shown for deleted images */}
+                      {!isMarkedForDeletion && (showPoints2D || showPoints3D) && renderedImageWidth > 0 && effectivePoints2D.length > 0 && (
                         <KeypointCanvas
                           points2D={effectivePoints2D}
                           camera={camera}
@@ -1821,39 +1966,48 @@ export function ImageDetailModal() {
               )}
             </div>
 
-            <div className="mt-2 mb-2 flex items-center justify-between text-xs">
+            <div className="mt-2 flex items-center justify-between text-xs">
               <div className="flex items-center gap-2 flex-wrap">
                 {!showMatchesInModal && (
                   <>
                     <button
-                      onClick={() => setShowPoints2D(!showPoints2D)}
+                      onClick={() => !isMarkedForDeletion && setShowPoints2D(!showPoints2D)}
+                      disabled={isMarkedForDeletion}
                       className={`${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${
-                        showPoints2D ? buttonStyles.variants.toggleActive : buttonStyles.variants.toggle
+                        isMarkedForDeletion
+                          ? buttonStyles.disabled + ' bg-ds-secondary text-ds-muted'
+                          : showPoints2D ? buttonStyles.variants.toggleActive : buttonStyles.variants.toggle
                       }`}
                     >
-                      Points2D <span className={showPoints2D ? '' : 'text-ds-success'}>({numPoints2D})</span>
+                      Points2D <span className={isMarkedForDeletion ? '' : showPoints2D ? '' : 'text-ds-success'}>({numPoints2D})</span>
                     </button>
                     <button
-                      onClick={() => setShowPoints3D(!showPoints3D)}
+                      onClick={() => !isMarkedForDeletion && setShowPoints3D(!showPoints3D)}
+                      disabled={isMarkedForDeletion}
                       className={`${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${
-                        showPoints3D ? buttonStyles.variants.toggleActive : buttonStyles.variants.toggle
+                        isMarkedForDeletion
+                          ? buttonStyles.disabled + ' bg-ds-secondary text-ds-muted'
+                          : showPoints3D ? buttonStyles.variants.toggleActive : buttonStyles.variants.toggle
                       }`}
                     >
-                      Points3D <span className={showPoints3D ? '' : 'text-ds-error'}>({numPoints3D})</span>
+                      Points3D <span className={isMarkedForDeletion ? '' : showPoints3D ? '' : 'text-ds-error'}>({numPoints3D})</span>
                     </button>
                   </>
                 )}
 
                 <button
-                  onClick={() => setShowMatchesInModal(!showMatchesInModal)}
+                  onClick={() => !isMarkedForDeletion && setShowMatchesInModal(!showMatchesInModal)}
+                  disabled={isMarkedForDeletion}
                   className={`${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${
-                    showMatchesInModal ? buttonStyles.variants.toggleActive : buttonStyles.variants.toggle
+                    isMarkedForDeletion
+                      ? buttonStyles.disabled + ' bg-ds-secondary text-ds-muted'
+                      : showMatchesInModal ? buttonStyles.variants.toggleActive : buttonStyles.variants.toggle
                   }`}
                 >
                   Show Matches
                 </button>
 
-                {showMatchesInModal && (
+                {showMatchesInModal && !isMarkedForDeletion && (
                   <>
                     <select
                       value={matchedImageId ?? ''}

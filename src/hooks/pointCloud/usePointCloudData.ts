@@ -84,9 +84,6 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
       };
     }
 
-    // eslint-disable-next-line react-hooks/purity -- timing is for debug logging only
-    const startTime = performance.now();
-
     // FAST PATH: Use WASM arrays directly when no filters are active
     const noFilters = minTrackLength <= 1 && maxReprojectionError >= 1000 && thinning === 0;
 
@@ -101,8 +98,7 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
         floorColorMode,
         pointDistances,
         distanceThreshold,
-        indexToPoint3DIdRef,
-        startTime
+        indexToPoint3DIdRef
       );
       if (result) return result;
     }
@@ -123,18 +119,6 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
       distanceThreshold,
       indexToPoint3DIdRef
     );
-
-    // Debug: warn if positions are null with valid reconstruction
-    if (!result.positions && reconstruction.points3D && reconstruction.points3D.size > 0) {
-      console.warn('[PointCloud] Positions null despite having points3D:', {
-        points3DSize: reconstruction.points3D.size,
-        hasWasm: !!wasmReconstruction?.hasPoints(),
-        minTrackLength,
-        maxReprojectionError,
-        thinning,
-        selectedImageId,
-      });
-    }
 
     return result;
   }, [
@@ -175,8 +159,7 @@ function computeFastPath(
   floorColorMode: FloorColorMode,
   pointDistances: Float32Array | null,
   distanceThreshold: number,
-  indexToPoint3DIdRef: React.RefObject<Map<number, bigint>>,
-  startTime: number
+  indexToPoint3DIdRef: React.RefObject<Map<number, bigint>>
 ): {
   positions: Float32Array;
   colors: Float32Array;
@@ -196,8 +179,13 @@ function computeFastPath(
 
   // Get WASM arrays directly (zero-copy views)
   const wasmPositions = wasmReconstruction.getPositions();
-  if (!wasmPositions) {
-    console.warn('[PointCloud] WASM positions not available, falling back to slow path');
+  if (!wasmPositions || wasmPositions.length === 0) {
+    console.warn('[PointCloud] WASM positions not available or empty, falling back to slow path');
+    return null;
+  }
+  // Check for detached/invalid array (first value would be NaN)
+  if (!Number.isFinite(wasmPositions[0])) {
+    console.warn('[PointCloud] WASM positions array is invalid (NaN), falling back to slow path');
     return null;
   }
 
@@ -235,12 +223,6 @@ function computeFastPath(
     selectedColors = result.selectedColors;
   }
 
-  const elapsed = performance.now() - startTime;
-  const highlightInfo = selectedPositions ? `, ${selectedPositions.length / 3} highlighted` : '';
-  console.log(
-    `[PointCloud] Fast path: ${count.toLocaleString()} points in ${elapsed.toFixed(1)}ms${highlightInfo}`
-  );
-
   // Copy WASM positions to prevent view invalidation when WASM memory is reallocated
   // The wasmPositions view can become detached (length 0) if WASM memory changes
   const positionsCopy = new Float32Array(wasmPositions);
@@ -276,18 +258,12 @@ function computeSelectionOverlay(
   const count = wasmReconstruction.pointCount;
   const point3DIds = wasmReconstruction.getPoint3DIds();
 
-  // Count matching points with valid positions (skip NaN/Infinity)
+  // Count matching points
   let highlightCount = 0;
   for (let i = 0; i < count; i++) {
     const point3DId = point3DIds ? point3DIds[i] : BigInt(i + 1);
     if (selectedImagePointIds.has(point3DId)) {
-      // Validate position values to avoid NaN in geometry
-      const x = wasmPositions[i * 3];
-      const y = wasmPositions[i * 3 + 1];
-      const z = wasmPositions[i * 3 + 2];
-      if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
-        highlightCount++;
-      }
+      highlightCount++;
     }
   }
 
@@ -302,20 +278,14 @@ function computeSelectionOverlay(
   for (let i = 0; i < count; i++) {
     const point3DId = point3DIds ? point3DIds[i] : BigInt(i + 1);
     if (selectedImagePointIds.has(point3DId)) {
-      const x = wasmPositions[i * 3];
-      const y = wasmPositions[i * 3 + 1];
-      const z = wasmPositions[i * 3 + 2];
-      // Only include points with valid positions
-      if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
-        const i3 = idx * 3;
-        selectedPositions[i3] = x;
-        selectedPositions[i3 + 1] = y;
-        selectedPositions[i3 + 2] = z;
-        selectedColors[i3] = highlightColor[0];
-        selectedColors[i3 + 1] = highlightColor[1];
-        selectedColors[i3 + 2] = highlightColor[2];
-        idx++;
-      }
+      const i3 = idx * 3;
+      selectedPositions[i3] = wasmPositions[i * 3];
+      selectedPositions[i3 + 1] = wasmPositions[i * 3 + 1];
+      selectedPositions[i3 + 2] = wasmPositions[i * 3 + 2];
+      selectedColors[i3] = highlightColor[0];
+      selectedColors[i3 + 1] = highlightColor[1];
+      selectedColors[i3 + 2] = highlightColor[2];
+      idx++;
     }
   }
 
@@ -345,8 +315,6 @@ function computeSlowPath(
   selectedPositions: Float32Array | null;
   selectedColors: Float32Array | null;
 } {
-  const slowPathStart = performance.now();
-
   // Build set of selected image point IDs
   const selectedImagePointIds =
     selectedImageId !== null
@@ -367,8 +335,7 @@ function computeSlowPath(
       floorColorMode,
       pointDistances,
       distanceThreshold,
-      indexToPoint3DIdRef,
-      slowPathStart
+      indexToPoint3DIdRef
     );
     if (result) return result;
   }
@@ -383,8 +350,7 @@ function computeSlowPath(
     selectedImagePointIds,
     showSelectionHighlight,
     highlightColor,
-    indexToPoint3DIdRef,
-    slowPathStart
+    indexToPoint3DIdRef
   );
 }
 
@@ -403,8 +369,7 @@ function computeSlowPathWasm(
   floorColorMode: FloorColorMode,
   pointDistances: Float32Array | null,
   distanceThreshold: number,
-  indexToPoint3DIdRef: React.RefObject<Map<number, bigint>>,
-  startTime: number
+  indexToPoint3DIdRef: React.RefObject<Map<number, bigint>>
 ): {
   positions: Float32Array | null;
   colors: Float32Array | null;
@@ -419,6 +384,12 @@ function computeSlowPathWasm(
   const point3DIds = wasmReconstruction.getPoint3DIds();
 
   if (!wasmPositions || !wasmErrors || !wasmTrackLengths) {
+    return null;
+  }
+
+  // Check for detached/invalid array (WASM memory may have been freed)
+  if (wasmPositions.length === 0 || !Number.isFinite(wasmPositions[0])) {
+    console.warn('[PointCloud] WASM slow path: positions array is invalid');
     return null;
   }
 
@@ -448,24 +419,16 @@ function computeSlowPathWasm(
     minTrackVal = Math.min(minTrackVal, wasmTrackLengths[i]);
     maxTrackVal = Math.max(maxTrackVal, wasmTrackLengths[i]);
 
-    // Check if highlighted (only count if position is valid)
+    // Check if highlighted
     const point3DId = point3DIds ? point3DIds[i] : BigInt(i + 1);
     const shouldHighlight = showSelectionHighlight && selectedImagePointIds.has(point3DId);
 
-    // Validate position for overlay counting
-    const posValid =
-      Number.isFinite(wasmPositions[i * 3]) &&
-      Number.isFinite(wasmPositions[i * 3 + 1]) &&
-      Number.isFinite(wasmPositions[i * 3 + 2]);
-
-    pointState[i] = shouldHighlight && posValid ? 2 : 1;
+    pointState[i] = shouldHighlight ? 2 : 1;
     totalCount++;
-    if (shouldHighlight && posValid) highlightCount++;
+    if (shouldHighlight) highlightCount++;
   }
 
   if (totalCount === 0) {
-    const elapsed = performance.now() - startTime;
-    console.log(`[PointCloud] WASM slow path: 0 points after filtering in ${elapsed.toFixed(1)}ms`);
     if (indexToPoint3DIdRef.current) {
       indexToPoint3DIdRef.current = new Map();
     }
@@ -527,33 +490,22 @@ function computeSlowPathWasm(
     indexToPoint3DId.set(mainIdx, point3DId);
     mainIdx++;
 
-    // Highlighted points also go in overlay (only if position is valid)
+    // Highlighted points also go in overlay
     if (state === 2 && selectedPositions && selectedColors) {
-      const px = wasmPositions[i * 3];
-      const py = wasmPositions[i * 3 + 1];
-      const pz = wasmPositions[i * 3 + 2];
-      if (Number.isFinite(px) && Number.isFinite(py) && Number.isFinite(pz)) {
-        const h3 = highlightIdx * 3;
-        selectedPositions[h3] = px;
-        selectedPositions[h3 + 1] = py;
-        selectedPositions[h3 + 2] = pz;
-        selectedColors[h3] = highlightColor[0];
-        selectedColors[h3 + 1] = highlightColor[1];
-        selectedColors[h3 + 2] = highlightColor[2];
-        highlightIdx++;
-      }
+      const h3 = highlightIdx * 3;
+      selectedPositions[h3] = wasmPositions[i * 3];
+      selectedPositions[h3 + 1] = wasmPositions[i * 3 + 1];
+      selectedPositions[h3 + 2] = wasmPositions[i * 3 + 2];
+      selectedColors[h3] = highlightColor[0];
+      selectedColors[h3 + 1] = highlightColor[1];
+      selectedColors[h3 + 2] = highlightColor[2];
+      highlightIdx++;
     }
   }
 
   if (indexToPoint3DIdRef.current) {
     indexToPoint3DIdRef.current = indexToPoint3DId;
   }
-
-  const elapsed = performance.now() - startTime;
-  const highlightInfo = highlightCount > 0 ? `, ${highlightCount.toLocaleString()} highlighted` : '';
-  console.log(
-    `[PointCloud] WASM slow path: ${totalCount.toLocaleString()} points in ${elapsed.toFixed(1)}ms${highlightInfo}`
-  );
 
   return { positions, colors, selectedPositions, selectedColors };
 }
@@ -570,8 +522,7 @@ function computeSlowPathMap(
   selectedImagePointIds: Set<bigint>,
   showSelectionHighlight: boolean,
   highlightColor: [number, number, number],
-  indexToPoint3DIdRef: React.RefObject<Map<number, bigint>>,
-  startTime: number
+  indexToPoint3DIdRef: React.RefObject<Map<number, bigint>>
 ): {
   positions: Float32Array | null;
   colors: Float32Array | null;
@@ -627,8 +578,6 @@ function computeSlowPathMap(
   }
 
   if (allPoints.length === 0) {
-    const elapsed = performance.now() - startTime;
-    console.log(`[PointCloud] Map slow path: 0 points after filtering in ${elapsed.toFixed(1)}ms`);
     if (indexToPoint3DIdRef.current) {
       indexToPoint3DIdRef.current = new Map();
     }
@@ -687,15 +636,6 @@ function computeSlowPathMap(
       selectedColors[i3 + 2] = highlightColor[2];
     }
   }
-
-  const slowPathElapsed = performance.now() - startTime;
-  const highlightInfo =
-    highlightedPoints.length > 0
-      ? `, ${highlightedPoints.length.toLocaleString()} highlighted`
-      : '';
-  console.log(
-    `[PointCloud] Map slow path: ${allPoints.length.toLocaleString()} points in ${slowPathElapsed.toFixed(1)}ms${highlightInfo}`
-  );
 
   return { positions, colors, selectedPositions, selectedColors };
 }

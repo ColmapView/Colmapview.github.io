@@ -26,6 +26,9 @@ export class WasmReconstructionWrapper {
   private reconstruction: WasmReconstruction | null = null;
   private memoryVersion = 0;
 
+  // Disposal flag - set BEFORE freeing memory to prevent race conditions
+  private _disposed = false;
+
   // Cached views - invalidated when memory version changes
   private cachedPositions: Float32Array | null = null;
   private cachedColors: Float32Array | null = null;
@@ -238,10 +241,10 @@ export class WasmReconstructionWrapper {
   }
 
   /**
-   * Check if points are loaded
+   * Check if points are loaded and wrapper is not disposed
    */
   hasPoints(): boolean {
-    return this.pointCount > 0;
+    return !this._disposed && this.pointCount > 0;
   }
 
   /**
@@ -252,7 +255,7 @@ export class WasmReconstructionWrapper {
    * Use getPositionsCopy() if you need to keep the data.
    */
   getPositions(): Float32Array | null {
-    if (!this.reconstruction) return null;
+    if (this._disposed || !this.reconstruction) return null;
     if (!this.cachedPositions) {
       this.cachedPositions = this.reconstruction.getPositions();
     }
@@ -271,7 +274,7 @@ export class WasmReconstructionWrapper {
    * Get colors as Float32Array view (normalized 0-1)
    */
   getColors(): Float32Array | null {
-    if (!this.reconstruction) return null;
+    if (this._disposed || !this.reconstruction) return null;
     if (!this.cachedColors) {
       this.cachedColors = this.reconstruction.getColors();
     }
@@ -290,7 +293,7 @@ export class WasmReconstructionWrapper {
    * Get reprojection errors
    */
   getErrors(): Float32Array | null {
-    if (!this.reconstruction) return null;
+    if (this._disposed || !this.reconstruction) return null;
     if (!this.cachedErrors) {
       this.cachedErrors = this.reconstruction.getErrors();
     }
@@ -301,7 +304,7 @@ export class WasmReconstructionWrapper {
    * Get track lengths per point
    */
   getTrackLengths(): Uint32Array | null {
-    if (!this.reconstruction) return null;
+    if (this._disposed || !this.reconstruction) return null;
     if (!this.cachedTrackLengths) {
       this.cachedTrackLengths = this.reconstruction.getTrackLengths();
     }
@@ -347,6 +350,7 @@ export class WasmReconstructionWrapper {
    * Get actual COLMAP point3D_id values (for consistent 2D point lookups)
    */
   getPoint3DIds(): BigUint64Array | null {
+    if (this._disposed) return null;
     return this.reconstruction?.getPoint3DIds() ?? null;
   }
 
@@ -569,11 +573,14 @@ export class WasmReconstructionWrapper {
    * Dispose of WASM resources
    */
   dispose(): void {
+    // Set disposed flag FIRST to prevent any concurrent access
+    // This ensures hasPoints() returns false immediately
+    this._disposed = true;
+    this.invalidateCaches();
     if (this.reconstruction) {
       this.reconstruction.delete();
       this.reconstruction = null;
     }
-    this.invalidateCaches();
     this.module = null;
     this.imagesBuffer = null;
   }

@@ -7,7 +7,7 @@ import {
   formatKeyCombo,
   type HotkeyCategory,
 } from '../../config/hotkeys';
-import { buttonStyles, tableStyles, modalStyles } from '../../theme';
+import { tableStyles, modalStyles } from '../../theme';
 
 /**
  * Modal that displays all available keyboard shortcuts.
@@ -52,8 +52,14 @@ export function HotkeyHelpModal() {
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-ds-primary text-lg font-semibold">Keyboard Shortcuts</h2>
-          <button onClick={() => setIsOpen(false)} className={buttonStyles.close}>
-            ×
+          <button
+            onClick={() => setIsOpen(false)}
+            className="w-6 h-6 flex items-center justify-center rounded text-ds-muted hover:text-ds-primary hover:bg-ds-tertiary transition-colors"
+            title="Close"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
           </button>
         </div>
 

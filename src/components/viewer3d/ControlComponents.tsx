@@ -13,7 +13,7 @@ import { ToggleSwitch } from '../ui/ToggleSwitch';
 const styles = controlPanelStyles;
 
 // Panel type for control buttons
-export type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'share' | 'export' | 'transform' | 'gallery' | 'rig' | 'settings' | 'floor' | null;
+export type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'share' | 'export' | 'transform' | 'gallery' | 'rig' | 'settings' | null;
 
 export interface SliderRowProps {
   label: ReactNode;
