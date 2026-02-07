@@ -414,13 +414,13 @@ export function DropZone({ children }: DropZoneProps) {
 
       {/* Simplified Touch/Mobile Panel - URL and Try a Toy only */}
       {!reconstruction && !urlLoading && !hasUrlToLoad() && !isPanelDismissed && (touchMode || isMobile) && (
-        <div className="absolute inset-0 flex items-center justify-center z-10 px-4">
-          <div className="flex flex-col bg-ds-secondary rounded-lg border border-ds p-6 w-full max-w-sm">
+        <div className="absolute inset-0 flex items-center justify-center z-10 px-3">
+          <div className="flex flex-col bg-ds-secondary rounded-lg border border-ds p-4 w-full max-w-xs">
             {/* Header with dismiss button */}
-            <div className="flex justify-end -mt-2 -mr-2 mb-4">
+            <div className="flex justify-end -mt-1 -mr-1">
               <button
                 type="button"
-                className={`${buttonStyles.base} w-12 h-12 ${buttonStyles.variants.ghost} text-xl`}
+                className={`${buttonStyles.base} w-11 h-11 ${buttonStyles.variants.ghost} text-xl`}
                 onClick={() => setIsPanelDismissed(true)}
                 aria-label="Dismiss"
               >
@@ -429,26 +429,26 @@ export function DropZone({ children }: DropZoneProps) {
             </div>
 
             {/* Logo and title */}
-            <div className="flex flex-col items-center mb-6">
+            <div className="flex flex-col items-center mb-3">
               <img
                 src={publicAsset('LOGO.png')}
                 alt="ColmapView"
-                className="w-16 h-16 mb-4"
+                className="w-12 h-12 mb-2"
               />
               <h2 className={emptyStateStyles.title}>ColmapView</h2>
-              <p className="text-ds-secondary text-sm text-center mt-2">
+              <p className="text-ds-secondary text-xs text-center mt-1">
                 View COLMAP 3D reconstructions
               </p>
             </div>
 
             {/* Action buttons - stacked for touch */}
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2">
               {/* Load URL button */}
               <button
                 type="button"
                 onClick={() => setIsUrlModalOpen(true)}
                 disabled={urlLoading}
-                className={`${buttonStyles.base} h-14 text-base ${buttonStyles.variants.secondary} ${urlLoading ? buttonStyles.disabled : ''} active:scale-98`}
+                className={`${buttonStyles.base} h-12 text-sm ${buttonStyles.variants.secondary} ${urlLoading ? buttonStyles.disabled : ''} active:scale-98`}
               >
                 <LinkIcon className="w-5 h-5 mr-2" />
                 Load from URL
@@ -459,7 +459,7 @@ export function DropZone({ children }: DropZoneProps) {
                 type="button"
                 onClick={handleLucky}
                 disabled={urlLoading}
-                className={`${buttonStyles.base} h-14 text-base ${buttonStyles.variants.primary} ${urlLoading ? buttonStyles.disabled : ''} active:scale-98`}
+                className={`${buttonStyles.base} h-12 text-sm ${buttonStyles.variants.primary} ${urlLoading ? buttonStyles.disabled : ''} active:scale-98`}
               >
                 <img src={publicAsset('LOGO.png')} alt="" className="w-5 h-5 mr-2" />
                 Try a Toy!
@@ -467,7 +467,7 @@ export function DropZone({ children }: DropZoneProps) {
             </div>
 
             {/* Info text */}
-            <p className="text-ds-muted text-xs text-center mt-6">
+            <p className="text-ds-muted text-xs text-center mt-3">
               Load a URL or try a sample dataset
             </p>
           </div>

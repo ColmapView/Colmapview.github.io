@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { hoverCardStyles, ICON_SIZES } from '../../theme';
 import { MouseLeftIcon, MouseRightIcon, MouseScrollIcon } from '../../icons';
+import { useUIStore } from '../../store/stores/uiStore';
 
 /**
  * Parse tooltip text and replace {LMB}, {RMB}, {SCROLL} markers with mouse icons.
@@ -49,6 +50,7 @@ function parseTooltipContent(text: string): ReactNode[] {
  * - {SCROLL} - Mouse scroll wheel icon
  */
 export function MouseTooltip() {
+  const touchMode = useUIStore((s) => s.touchMode);
   const [tooltip, setTooltip] = useState<string | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const currentElementRef = useRef<HTMLElement | null>(null);
@@ -100,6 +102,7 @@ export function MouseTooltip() {
   }, []);
 
   useEffect(() => {
+    if (touchMode) return;
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseover', handleMouseOver);
     document.addEventListener('mouseout', handleMouseOut);
@@ -109,9 +112,9 @@ export function MouseTooltip() {
       document.removeEventListener('mouseover', handleMouseOver);
       document.removeEventListener('mouseout', handleMouseOut);
     };
-  }, [handleMouseMove, handleMouseOver, handleMouseOut]);
+  }, [touchMode, handleMouseMove, handleMouseOver, handleMouseOut]);
 
-  if (!tooltip) return null;
+  if (touchMode || !tooltip) return null;
 
   return (
     <div

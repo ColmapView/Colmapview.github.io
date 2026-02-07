@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useReconstructionStore, selectCameraCount, useUIStore, useDeletionStore } from '../../store';
-import { TrashIcon, ResetIcon } from '../../icons';
 import type { Camera, Point2D } from '../../types/colmap';
 import { getImageFile, getMaskFile, getUrlImageCached, fetchUrlImage, fetchUrlMask, getZipImageCached, fetchZipImage, fetchZipMask, isZipLoadingAvailable } from '../../utils/imageFileUtils';
 import { useFileUrl } from '../../hooks/useFileUrl';
@@ -1473,25 +1472,13 @@ export function ImageDetailModal() {
     return (
       <div className="fixed inset-0 z-[1000] bg-ds-primary flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 h-12 bg-ds-secondary border-b border-ds flex-shrink-0">
-          <span className={`text-ds-primary text-sm truncate flex-1 mr-2 ${isMarkedForDeletion ? 'line-through text-ds-error' : ''}`}>
-            {isMatchViewMode
-              ? `${image?.name} ↔ ${matchedImage?.name}`
-              : image?.name}
-          </span>
-          <div className="flex items-center gap-1">
-            {/* Delete/Restore button */}
-            <button
-              onClick={handleDeleteToggle}
-              className={`w-10 h-10 flex items-center justify-center rounded transition-colors ${
-                isMarkedForDeletion
-                  ? 'text-ds-success'
-                  : 'text-ds-muted'
-              }`}
-              style={{ minWidth: TOUCH.minTapTarget, minHeight: TOUCH.minTapTarget }}
-            >
-              {isMarkedForDeletion ? <ResetIcon className="w-5 h-5" /> : <TrashIcon className="w-5 h-5" />}
-            </button>
+        <div className="flex flex-col bg-ds-secondary border-b border-ds flex-shrink-0">
+          <div className="flex items-center justify-between px-3 h-11">
+            <span className={`text-ds-primary text-sm truncate flex-1 mr-2 ${isMarkedForDeletion ? 'line-through text-ds-error' : ''}`}>
+              {isMatchViewMode
+                ? `${image?.name} ↔ ${matchedImage?.name}`
+                : image?.name}
+            </span>
             <button
               onClick={closeImageDetail}
               className="w-10 h-10 flex items-center justify-center text-ds-muted hover:text-ds-primary text-2xl"
@@ -1499,6 +1486,10 @@ export function ImageDetailModal() {
             >
               ×
             </button>
+          </div>
+          {/* Camera parameters */}
+          <div className="px-3 pb-1.5 overflow-x-auto">
+            <CameraPoseInfoDisplay camera={camera} qvec={image.qvec} tvec={image.tvec} />
           </div>
         </div>
 
@@ -1645,7 +1636,7 @@ export function ImageDetailModal() {
         {showModalControls && (
           <div className="flex-shrink-0 bg-ds-tertiary border-t border-ds">
             {/* Toggle buttons row */}
-            <div className="flex gap-2 p-3 overflow-x-auto">
+            <div className="flex gap-2 px-3 py-2 overflow-x-auto">
               {!showMatchesInModal && (
                 <>
                   <button
@@ -1690,7 +1681,7 @@ export function ImageDetailModal() {
 
             {/* Match controls (if showing matches) */}
             {showMatchesInModal && !isMarkedForDeletion && (
-              <div className="px-3 pb-3">
+              <div className="px-3 pb-2">
                 <select
                   value={matchedImageId ?? ''}
                   onChange={(e) => setMatchedImageId(e.target.value ? parseInt(e.target.value) : null)}
@@ -1725,7 +1716,7 @@ export function ImageDetailModal() {
             )}
 
             {/* Navigation row */}
-            <div className="flex items-center gap-2 p-3 border-t border-ds">
+            <div className="flex items-center gap-2 px-3 py-2 border-t border-ds">
               <button
                 onClick={goToPrev}
                 disabled={!hasPrev}

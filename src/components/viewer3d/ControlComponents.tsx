@@ -565,9 +565,8 @@ export const ControlButton = memo(function ControlButton({
       return;
     }
     if (isHovered) {
-      // Panel already showing — execute the action and close
+      // Panel already showing — execute the action (keep panel open)
       onClick?.();
-      setActivePanel(null);
     } else {
       // Panel not showing — open it (like hover)
       setActivePanel(panelId);

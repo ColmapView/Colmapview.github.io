@@ -1268,6 +1268,11 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
               orthoZoom.current = Math.max(0.1, Math.min(10, initialPinchZoom.current * scale));
               camera.zoom = orthoZoom.current;
               camera.updateProjectionMatrix();
+            } else if (cameraMode === 'fly') {
+              // In fly mode, pinch moves camera forward/backward along look direction
+              const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraQuat.current);
+              const moveAmount = (1 - scale) * radius * flySpeed * TOUCH.zoomSensitivity;
+              camera.position.add(forward.multiplyScalar(moveAmount));
             } else {
               // Simplified zoom formula for better linearity
               targetDistance.current = Math.max(
