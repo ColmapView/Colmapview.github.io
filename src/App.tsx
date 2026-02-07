@@ -6,7 +6,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { HotkeyHelpModal } from './components/modals/HotkeyHelpModal';
 import { MouseTooltip } from './components/ui/MouseTooltip';
 import { NotificationContainer } from './components/ui/NotificationContainer';
-import { initStoreMigration, useUIStore } from './store';
+import { initStoreMigration, useUIStore, useCameraStore } from './store';
 import { useUrlLoader } from './hooks/useUrlLoader';
 import { decodeShareData, applyShareConfig } from './hooks/useUrlState';
 import { detectTouchDevice } from './hooks/useIsTouchDevice';
@@ -62,14 +62,21 @@ function App() {
         // Check for inline manifest first (takes priority)
         if (shareData.manifest) {
           console.log(`[App] Loading from inline manifest in URL hash: ${shareData.manifest.name || 'unnamed'}`);
-          loadFromManifest(shareData.manifest);
+          const loaded = await loadFromManifest(shareData.manifest);
+          // Re-apply selectedImageId after load (clearAllCaches resets it during loading)
+          if (loaded && shareData.config?.camera?.selectedImageId != null) {
+            useCameraStore.getState().setSelectedImageId(shareData.config.camera.selectedImageId as number);
+          }
           return;
         }
 
         // Otherwise use manifest URL
         if (shareData.manifestUrl) {
           console.log(`[App] Loading from combined URL hash: ${shareData.manifestUrl}`);
-          loadFromUrl(shareData.manifestUrl);
+          const loaded = await loadFromUrl(shareData.manifestUrl);
+          if (loaded && shareData.config?.camera?.selectedImageId != null) {
+            useCameraStore.getState().setSelectedImageId(shareData.config.camera.selectedImageId as number);
+          }
           return;
         }
       }

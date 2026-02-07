@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
-import { useReconstructionStore, useUIStore, useDeletionStore } from '../../store';
+import { useReconstructionStore, selectCameraCount, useUIStore, useDeletionStore } from '../../store';
 import { TrashIcon, ResetIcon } from '../../icons';
 import type { Camera, Point2D } from '../../types/colmap';
 import { getImageFile, getMaskFile, getUrlImageCached, fetchUrlImage, fetchUrlMask, getZipImageCached, fetchZipImage, fetchZipMask, isZipLoadingAvailable } from '../../utils/imageFileUtils';
@@ -602,6 +602,9 @@ export function ImageDetailModal() {
   // Deletion state
   const pendingDeletions = useDeletionStore((s) => s.pendingDeletions);
   const toggleDeletion = useDeletionStore((s) => s.toggleDeletion);
+  const markBulkForDeletion = useDeletionStore((s) => s.markBulkForDeletion);
+  const unmarkBulkDeletion = useDeletionStore((s) => s.unmarkBulkDeletion);
+  const multiCamera = useReconstructionStore(selectCameraCount) > 1;
 
   // Check if current image is marked for deletion
   const isMarkedForDeletion = imageDetailId !== null && pendingDeletions.has(imageDetailId);
@@ -620,6 +623,55 @@ export function ImageDetailModal() {
       }
     }
   }, [imageDetailId, isMarkedForDeletion, toggleDeletion]);
+
+  // Image IDs sharing the same camera as the current image
+  const cameraImageIds = useMemo(() => {
+    if (!reconstruction || imageDetailId === null) return [];
+    const currentImage = reconstruction.images.get(imageDetailId);
+    if (!currentImage) return [];
+    const ids: number[] = [];
+    for (const [id, img] of reconstruction.images) {
+      if (img.cameraId === currentImage.cameraId) ids.push(id);
+    }
+    return ids;
+  }, [reconstruction, imageDetailId]);
+
+  // Image IDs in the same frame as the current image
+  const frameImageIds = useMemo(() => {
+    if (!reconstruction?.rigData || imageDetailId === null) return [];
+    for (const [, frame] of reconstruction.rigData.frames) {
+      if (frame.dataIds.some((d) => d.dataId === imageDetailId)) {
+        return frame.dataIds
+          .filter((d) => reconstruction.images.has(d.dataId))
+          .map((d) => d.dataId);
+      }
+    }
+    return [];
+  }, [reconstruction, imageDetailId]);
+
+  // Whether all camera/frame images are already marked for deletion
+  const cameraAllMarked = cameraImageIds.length > 0 && cameraImageIds.every((id) => pendingDeletions.has(id));
+  const frameAllMarked = frameImageIds.length > 0 && frameImageIds.every((id) => pendingDeletions.has(id));
+
+  // Toggle camera images deletion
+  const handleToggleCamera = useCallback(() => {
+    if (cameraImageIds.length === 0) return;
+    if (cameraAllMarked) {
+      unmarkBulkDeletion(cameraImageIds);
+    } else {
+      markBulkForDeletion(cameraImageIds);
+    }
+  }, [cameraImageIds, cameraAllMarked, markBulkForDeletion, unmarkBulkDeletion]);
+
+  // Toggle frame images deletion
+  const handleToggleFrame = useCallback(() => {
+    if (frameImageIds.length === 0) return;
+    if (frameAllMarked) {
+      unmarkBulkDeletion(frameImageIds);
+    } else {
+      markBulkForDeletion(frameImageIds);
+    }
+  }, [frameImageIds, frameAllMarked, markBulkForDeletion, unmarkBulkDeletion]);
 
   // Match line opacity state (default from theme)
   const [matchLineOpacity, setMatchLineOpacity] = useState<number>(OPACITY.matchLines);
@@ -1734,7 +1786,7 @@ export function ImageDetailModal() {
                 : `Image #${imageDetailId}: ${image?.name}`}
             </span>
             <div className="flex items-center gap-1">
-              {/* Delete/Restore button */}
+              {/* Delete/Restore image button */}
               <button
                 onClick={handleDeleteToggle}
                 onMouseDown={(e) => e.stopPropagation()}
@@ -1743,10 +1795,55 @@ export function ImageDetailModal() {
                     ? 'text-ds-success hover:bg-ds-success/20'
                     : 'text-ds-muted hover:text-ds-error hover:bg-ds-error/20'
                 }`}
-                title={isMarkedForDeletion ? 'Restore image' : 'Mark for deletion'}
+                title={isMarkedForDeletion ? 'Restore image' : 'Delete image'}
               >
-                {isMarkedForDeletion ? <ResetIcon className="w-4 h-4" /> : <TrashIcon className="w-4 h-4" />}
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 6h18" />
+                  <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" />
+                  <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                  <text x="12" y="18" textAnchor="middle" fontSize="11" fill="currentColor" stroke="none" fontWeight="bold">I</text>
+                </svg>
               </button>
+              {/* Toggle camera deletion (only when >1 cameras) */}
+              {multiCamera && (
+                <button
+                  onClick={handleToggleCamera}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
+                    cameraAllMarked
+                      ? 'text-ds-success hover:bg-ds-success/20'
+                      : 'text-ds-muted hover:text-ds-error hover:bg-ds-error/20'
+                  }`}
+                  title={cameraAllMarked ? `Restore camera ${image?.cameraId}` : `Delete camera ${image?.cameraId}`}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 6h18" />
+                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" />
+                    <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                    <text x="12" y="18" textAnchor="middle" fontSize="11" fill="currentColor" stroke="none" fontWeight="bold">C</text>
+                  </svg>
+                </button>
+              )}
+              {/* Toggle frame deletion (only when rig data exists) */}
+              {frameImageIds.length > 0 && (
+                <button
+                  onClick={handleToggleFrame}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
+                    frameAllMarked
+                      ? 'text-ds-success hover:bg-ds-success/20'
+                      : 'text-ds-muted hover:text-ds-error hover:bg-ds-error/20'
+                  }`}
+                  title={frameAllMarked ? 'Restore frame' : 'Delete frame'}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 6h18" />
+                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" />
+                    <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                    <text x="12" y="18" textAnchor="middle" fontSize="11" fill="currentColor" stroke="none" fontWeight="bold">F</text>
+                  </svg>
+                </button>
+              )}
               <button
                 onClick={closeImageDetail}
                 onMouseDown={(e) => e.stopPropagation()}

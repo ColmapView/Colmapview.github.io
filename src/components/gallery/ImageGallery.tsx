@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef, memo, startTransition, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useReconstructionStore, useUIStore, useCameraStore, useDeletionStore } from '../../store';
+import { useReconstructionStore, selectCameraCount, useUIStore, useCameraStore, useDeletionStore } from '../../store';
 import { getImageFile, getUrlImageCached, fetchUrlImage, getZipImageCached, fetchZipImage, isZipLoadingAvailable } from '../../utils/imageFileUtils';
 import { useThumbnail, pauseThumbnailCache, resumeThumbnailCache } from '../../hooks/useThumbnail';
 import { prioritizeFrustumTexture } from '../../hooks/useFrustumTexture';
@@ -84,6 +84,7 @@ interface GalleryItemProps {
 }
 
 const GalleryItem = memo(function GalleryItem({ img, isSelected, isMatched, isMarkedForDeletion, matchesColor, matchesBlink, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling, isResizing, wouldGoBack, touchMode = false }: GalleryItemProps) {
+  const multiCamera = useReconstructionStore(selectCameraCount) > 1;
   // Load thumbnail lazily when visible and not scrolling/settling/resizing (disabled in skip mode)
   const src = useThumbnail(img.file, img.name, !isScrolling && !skipImages && !isSettling && !isResizing);
   const [hovered, setHovered] = useState(false);
@@ -212,7 +213,7 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, isMatched, isMa
         >
           <div className={hoverCardStyles.container}>
             <div className={hoverCardStyles.title}>{img.name}</div>
-            <div className={hoverCardStyles.subtitle}>#{img.imageId}</div>
+            <div className={hoverCardStyles.subtitle}>{multiCamera ? `#${img.cameraId}:${img.imageId}` : `#${img.imageId}`}</div>
             <div className={hoverCardStyles.subtitle}>{img.numPoints3D} 3D points</div>
             <div className={hoverCardStyles.subtitle}>{img.numPoints2D} 2D points</div>
             <div className={hoverCardStyles.subtitle}>{img.covisibleCount} covisible</div>
@@ -246,6 +247,7 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, isMatched, isMa
 type ListItemProps = GalleryItemProps;
 
 const ListItem = memo(function ListItem({ img, isSelected, isMatched, isMarkedForDeletion, matchesColor, matchesBlink, onClick, onDoubleClick, onRightClick, isScrolling, skipImages, isSettling, isResizing, wouldGoBack, touchMode = false }: ListItemProps) {
+  const multiCamera = useReconstructionStore(selectCameraCount) > 1;
   // Load thumbnail lazily when visible and not scrolling/settling/resizing (disabled in skip mode)
   const src = useThumbnail(img.file, img.name, !isScrolling && !skipImages && !isSettling && !isResizing);
   const [hovered, setHovered] = useState(false);
@@ -340,7 +342,7 @@ const ListItem = memo(function ListItem({ img, isSelected, isMatched, isMarkedFo
       </div>
       <div className={listStyles.content}>
         <div className={listStyles.title}>{img.name}</div>
-        <div className={listStyles.subtitle}>ID {img.imageId} · Camera {img.cameraId} ({img.cameraWidth}×{img.cameraHeight})</div>
+        <div className={listStyles.subtitle}>{multiCamera ? `#${img.cameraId}:${img.imageId}` : `#${img.imageId}`} · {img.cameraWidth}×{img.cameraHeight}</div>
       </div>
       {/* Compact format for narrow panels - single column, 2 lines */}
       <div className="flex-shrink-0 text-right list-stats-compact">

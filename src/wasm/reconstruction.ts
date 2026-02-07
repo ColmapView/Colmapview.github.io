@@ -248,15 +248,24 @@ export class WasmReconstructionWrapper {
   }
 
   /**
+   * Check if a cached typed array view has been detached due to WASM memory growth.
+   * When WASM memory grows, all existing TypedArray views into the old buffer
+   * become detached (byteLength drops to 0).
+   */
+  private isDetached(view: ArrayBufferView | null): boolean {
+    return view !== null && view.buffer.byteLength === 0;
+  }
+
+  /**
    * Get positions as Float32Array view
    *
    * WARNING: This is a zero-copy view into WASM memory.
-   * The view becomes invalid if more data is parsed.
+   * The view becomes invalid if more data is parsed or WASM memory grows.
    * Use getPositionsCopy() if you need to keep the data.
    */
   getPositions(): Float32Array | null {
     if (this._disposed || !this.reconstruction) return null;
-    if (!this.cachedPositions) {
+    if (!this.cachedPositions || this.isDetached(this.cachedPositions)) {
       this.cachedPositions = this.reconstruction.getPositions();
     }
     return this.cachedPositions;
@@ -275,7 +284,7 @@ export class WasmReconstructionWrapper {
    */
   getColors(): Float32Array | null {
     if (this._disposed || !this.reconstruction) return null;
-    if (!this.cachedColors) {
+    if (!this.cachedColors || this.isDetached(this.cachedColors)) {
       this.cachedColors = this.reconstruction.getColors();
     }
     return this.cachedColors;
@@ -294,7 +303,7 @@ export class WasmReconstructionWrapper {
    */
   getErrors(): Float32Array | null {
     if (this._disposed || !this.reconstruction) return null;
-    if (!this.cachedErrors) {
+    if (!this.cachedErrors || this.isDetached(this.cachedErrors)) {
       this.cachedErrors = this.reconstruction.getErrors();
     }
     return this.cachedErrors;
@@ -305,7 +314,7 @@ export class WasmReconstructionWrapper {
    */
   getTrackLengths(): Uint32Array | null {
     if (this._disposed || !this.reconstruction) return null;
-    if (!this.cachedTrackLengths) {
+    if (!this.cachedTrackLengths || this.isDetached(this.cachedTrackLengths)) {
       this.cachedTrackLengths = this.reconstruction.getTrackLengths();
     }
     return this.cachedTrackLengths;

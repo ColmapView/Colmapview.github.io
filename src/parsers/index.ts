@@ -30,5 +30,8 @@ export {
   // Image ZIP export
   exportImagesZip,
   downloadImagesZip,
+  // Mask ZIP export
+  exportMasksZip,
+  downloadMasksZip,
 } from './writers';
-export type { ZipExportOptions, ZipExportProgressCallback, ImageZipExportOptions, ImageZipProgressCallback, ImageFetchFunction } from './writers';
+export type { ZipExportOptions, ZipExportProgressCallback, ImageZipExportOptions, ImageZipProgressCallback, ImageFetchFunction, MaskFetchFunction } from './writers';

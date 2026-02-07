@@ -35,6 +35,12 @@ export interface DeletionState {
   /** Check if an image is marked for deletion */
   isMarkedForDeletion: (imageId: number) => boolean;
 
+  /** Mark multiple images for deletion at once */
+  markBulkForDeletion: (imageIds: number[]) => void;
+
+  /** Remove deletion mark from multiple images at once */
+  unmarkBulkDeletion: (imageIds: number[]) => void;
+
   /** Clear all pending deletions */
   clearPendingDeletions: () => void;
 }
@@ -68,6 +74,20 @@ export const useDeletionStore = create<DeletionState>()((set, get) => ({
     }),
 
   isMarkedForDeletion: (imageId) => get().pendingDeletions.has(imageId),
+
+  markBulkForDeletion: (imageIds) =>
+    set((state) => {
+      const newSet = new Set(state.pendingDeletions);
+      for (const id of imageIds) newSet.add(id);
+      return { pendingDeletions: newSet };
+    }),
+
+  unmarkBulkDeletion: (imageIds) =>
+    set((state) => {
+      const newSet = new Set(state.pendingDeletions);
+      for (const id of imageIds) newSet.delete(id);
+      return { pendingDeletions: newSet };
+    }),
 
   clearPendingDeletions: () => set({ pendingDeletions: new Set() }),
 }));

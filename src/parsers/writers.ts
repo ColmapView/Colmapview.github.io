@@ -1072,3 +1072,103 @@ export async function downloadImagesZip(
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+// ============================================================================
+// Mask ZIP Export
+// ============================================================================
+
+/** Function to fetch a mask by image name */
+export type MaskFetchFunction = (imageName: string) => Promise<File | null>;
+
+/**
+ * Normalize mask path for ZIP archive.
+ * Converts image name to mask path following COLMAP convention:
+ *   "images/cam1/photo.jpg" → "masks/cam1/photo.jpg.png"
+ *   "cam1/photo.jpg" → "masks/cam1/photo.jpg.png"
+ */
+function normalizeMaskPath(imageName: string): string {
+  let normalized = imageName.replace(/\\/g, '/');
+  // Strip images/ prefix if present
+  if (normalized.startsWith('images/')) {
+    normalized = normalized.slice(7);
+  }
+  // Prepend masks/ and append .png (COLMAP convention)
+  return `masks/${normalized}.png`;
+}
+
+/**
+ * Export masks as a ZIP file (lossless PNG, no re-encoding).
+ * Fetches each mask by image name and stores it in the ZIP under masks/ structure.
+ *
+ * @param imageNames - Array of image names to export masks for
+ * @param fetchMask - Function to fetch a mask by image name
+ * @param onProgress - Optional progress callback (percent 0-100)
+ * @returns Blob containing the ZIP file
+ */
+export async function exportMasksZip(
+  imageNames: string[],
+  fetchMask: MaskFetchFunction,
+  onProgress?: ImageZipProgressCallback
+): Promise<Blob> {
+  const { zipSync } = await import('fflate');
+
+  const totalImages = imageNames.length;
+  const zipData: Record<string, Uint8Array> = {};
+  let processed = 0;
+  let failed = 0;
+
+  for (const imageName of imageNames) {
+    try {
+      const file = await fetchMask(imageName);
+      if (!file) {
+        failed++;
+        processed++;
+        onProgress?.(Math.round((processed / totalImages) * 100), `Skipped: ${imageName}`);
+        continue;
+      }
+
+      // Store raw bytes (no re-encoding — masks must stay lossless PNG)
+      const arrayBuffer = await file.arrayBuffer();
+      const maskPath = normalizeMaskPath(imageName);
+
+      zipData[maskPath] = new Uint8Array(arrayBuffer);
+    } catch (err) {
+      console.warn(`[Mask Export] Failed to process ${imageName}:`, err);
+      failed++;
+    }
+
+    processed++;
+    onProgress?.(Math.round((processed / totalImages) * 100));
+  }
+
+  if (failed > 0) {
+    console.warn(`[Mask Export] ${failed}/${totalImages} masks failed to export`);
+  }
+
+  const zipped = zipSync(zipData, { level: 6 });
+  return new Blob([zipped as BlobPart], { type: 'application/zip' });
+}
+
+/**
+ * Export masks as a ZIP file and download it.
+ *
+ * @param imageNames - Array of image names to export masks for
+ * @param fetchMask - Function to fetch a mask by image name
+ * @param onProgress - Optional progress callback (percent 0-100)
+ */
+export async function downloadMasksZip(
+  imageNames: string[],
+  fetchMask: MaskFetchFunction,
+  onProgress?: ImageZipProgressCallback
+): Promise<void> {
+  const blob = await exportMasksZip(imageNames, fetchMask, onProgress);
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'masks.zip';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

@@ -270,7 +270,7 @@ export async function fetchUrlImage(
     ? `${imageUrlBase}${normalizedName}`
     : `${imageUrlBase}/${normalizedName}`;
 
-  console.log(`[URL Image] Fetching: ${imageUrl}`);
+  // Intentionally no log here — this fires per-image and spams the console
 
   // Check if already fetching
   if (pendingFetches.has(imageUrl)) {
@@ -366,14 +366,14 @@ export async function fetchUrlMask(
 
   for (const maskName of maskNames) {
     const maskUrl = `${baseUrl}${maskName}`;
-    console.log(`[URL Mask] Trying: ${maskUrl}`);
+    // console.debug for mask probing — silent by default
 
     try {
       const response = await fetch(maskUrl);
       if (response.ok) {
         const blob = await response.blob();
         const filename = maskName.split('/').pop() || maskName;
-        console.log(`[URL Mask] Found mask for ${imageName}`);
+        console.debug(`[URL Mask] Found mask for ${imageName}`);
         return new File([blob], filename, { type: blob.type || 'image/png' });
       }
       // Continue to next naming convention on 404
@@ -640,6 +640,16 @@ export async function fetchZipMask(imageName: string): Promise<File | null> {
 
   console.debug(`[ZIP Mask] No mask found for ${imageName}`);
   return null;
+}
+
+/**
+ * Remove specific entries from the ZIP mask cache.
+ * Called when images are deleted to prevent stale mask data.
+ */
+export function removeZipMaskCacheEntries(imageNames: string[]): void {
+  for (const name of imageNames) {
+    zipMaskCache.delete(name);
+  }
 }
 
 /**

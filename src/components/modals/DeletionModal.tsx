@@ -15,21 +15,39 @@ import {
 import { useModalZIndex } from '../../hooks/useModalZIndex';
 import { useThumbnail } from '../../hooks/useThumbnail';
 import { getImageFile, getUrlImageCached, getZipImageCached, isZipLoadingAvailable } from '../../utils/imageFileUtils';
-import { modalStyles, controlPanelStyles } from '../../theme';
+import { modalStyles, controlPanelStyles, inputStyles } from '../../theme';
 import { ResetIcon } from '../../icons';
+import { CameraModelId } from '../../types/colmap';
+import { SensorType } from '../../types/rig';
+
+const CAMERA_MODEL_NAMES: Record<number, string> = {
+  [CameraModelId.SIMPLE_PINHOLE]: 'Simple Pinhole',
+  [CameraModelId.PINHOLE]: 'Pinhole',
+  [CameraModelId.SIMPLE_RADIAL]: 'Simple Radial',
+  [CameraModelId.RADIAL]: 'Radial',
+  [CameraModelId.OPENCV]: 'OpenCV',
+  [CameraModelId.OPENCV_FISHEYE]: 'OpenCV Fisheye',
+  [CameraModelId.FULL_OPENCV]: 'Full OpenCV',
+  [CameraModelId.FOV]: 'FOV',
+  [CameraModelId.SIMPLE_RADIAL_FISHEYE]: 'Simple Radial Fisheye',
+  [CameraModelId.RADIAL_FISHEYE]: 'Radial Fisheye',
+  [CameraModelId.THIN_PRISM_FISHEYE]: 'Thin Prism Fisheye',
+  [CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE]: 'Rad-Tan Thin Prism',
+};
 
 const styles = controlPanelStyles;
 
 // Thumbnail component for deletion list items
 interface DeletionListItemProps {
   id: number;
+  label: string;
   name: string;
   file: File | undefined;
   onView: (id: number) => void;
   onRestore: (id: number) => void;
 }
 
-const DeletionListItem = memo(function DeletionListItem({ id, name, file, onView, onRestore }: DeletionListItemProps) {
+const DeletionListItem = memo(function DeletionListItem({ id, label, name, file, onView, onRestore }: DeletionListItemProps) {
   const src = useThumbnail(file, name, true);
 
   return (
@@ -62,7 +80,7 @@ const DeletionListItem = memo(function DeletionListItem({ id, name, file, onView
         className="flex-1 text-left text-ds-primary hover:text-ds-accent truncate"
         title={`View ${name}`}
       >
-        #{id}: {name}
+        {label}: {name}
       </button>
       <button
         onClick={() => onRestore(id)}
@@ -89,9 +107,80 @@ export const DeletionModal = memo(function DeletionModal({
   const imageUrlBase = useReconstructionStore((s) => s.imageUrlBase);
   const pendingDeletions = useDeletionStore((s) => s.pendingDeletions);
   const unmarkDeletion = useDeletionStore((s) => s.unmarkDeletion);
+  const markBulkForDeletion = useDeletionStore((s) => s.markBulkForDeletion);
   const openImageDetail = useUIStore((s) => s.openImageDetail);
 
   const hasPendingDeletions = pendingDeletions.size > 0;
+
+  // Bulk selection state
+  const [selectedCameraId, setSelectedCameraId] = useState<string>('');
+  const [selectedFrameId, setSelectedFrameId] = useState<string>('');
+
+  // Camera groups: cameraId -> { label, imageIds[] }
+  const cameraGroups = useMemo(() => {
+    if (!reconstruction) return [];
+    const groups = new Map<number, { label: string; imageIds: number[] }>();
+    for (const [imageId, image] of reconstruction.images) {
+      let group = groups.get(image.cameraId);
+      if (!group) {
+        const camera = reconstruction.cameras.get(image.cameraId);
+        const modelName = camera ? (CAMERA_MODEL_NAMES[camera.modelId] ?? 'Unknown') : 'Unknown';
+        const res = camera ? `${camera.width}x${camera.height}` : '';
+        group = { label: `Camera ${image.cameraId}: ${modelName} ${res}`, imageIds: [] };
+        groups.set(image.cameraId, group);
+      }
+      group.imageIds.push(imageId);
+    }
+    return Array.from(groups.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([cameraId, { label, imageIds }]) => ({
+        cameraId,
+        label: `${label} (${imageIds.length} img${imageIds.length !== 1 ? 's' : ''})`,
+        imageIds,
+      }));
+  }, [reconstruction]);
+
+  // Frame groups: only when rigData exists
+  const frameGroups = useMemo(() => {
+    if (!reconstruction?.rigData) return null;
+    return Array.from(reconstruction.rigData.frames.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([frameId, frame]) => {
+        const cameraDataIds = frame.dataIds
+          .filter((d) => d.sensorId.type === SensorType.CAMERA && reconstruction.images.has(d.dataId))
+          .map((d) => d.dataId);
+        return {
+          frameId,
+          label: `Frame ${frameId} (${cameraDataIds.length} img${cameraDataIds.length !== 1 ? 's' : ''})`,
+          imageIds: cameraDataIds,
+        };
+      })
+      .filter((g) => g.imageIds.length > 0);
+  }, [reconstruction]);
+
+  const handleAddByCamera = useCallback(() => {
+    const id = Number(selectedCameraId);
+    const group = cameraGroups.find((g) => g.cameraId === id);
+    if (group) markBulkForDeletion(group.imageIds);
+    setSelectedCameraId('');
+  }, [selectedCameraId, cameraGroups, markBulkForDeletion]);
+
+  const handleAddByFrame = useCallback(() => {
+    const id = Number(selectedFrameId);
+    const group = frameGroups?.find((g) => g.frameId === id);
+    if (group) markBulkForDeletion(group.imageIds);
+    setSelectedFrameId('');
+  }, [selectedFrameId, frameGroups, markBulkForDeletion]);
+
+  // Pagination state (derived values computed after pendingDeletionsList)
+  const PAGE_SIZE = 5;
+  const [page, setPage] = useState(0);
+
+  // Reset page when list changes (items added/removed) or modal closes
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(0);
+  }, [pendingDeletions, isOpen]);
 
   // Inline confirmation state (replaces window.confirm which blocks R3F pointer events)
   const [confirming, setConfirming] = useState(false);
@@ -202,10 +291,17 @@ export const DeletionModal = memo(function DeletionModal({
           file = getImageFile(imageFiles, name);
         }
 
-        return { id, name, file };
+        return { id, name, file, cameraId: image?.cameraId };
       })
       .sort((a, b) => a.id - b.id);
   }, [reconstruction, pendingDeletions, loadedFiles, imageUrlBase]);
+
+  const multiCamera = reconstruction ? reconstruction.cameras.size > 1 : false;
+
+  // Pagination derived values
+  const totalPages = Math.max(1, Math.ceil(pendingDeletionsList.length / PAGE_SIZE));
+  const clampedPage = Math.min(page, totalPages - 1);
+  const pagedList = pendingDeletionsList.slice(clampedPage * PAGE_SIZE, (clampedPage + 1) * PAGE_SIZE);
 
   const handleApply = useCallback(() => {
     if (!hasPendingDeletions) return;
@@ -257,17 +353,80 @@ export const DeletionModal = memo(function DeletionModal({
 
         {/* Content */}
         <div className="px-4 py-3 space-y-3">
+          {/* Bulk select by camera */}
+          {cameraGroups.length > 0 && (
+            <div>
+              <div className="text-ds-secondary text-xs mb-1">Select by camera:</div>
+              <div className="flex gap-1 items-center">
+                <select
+                  value={selectedCameraId}
+                  onChange={(e) => setSelectedCameraId(e.target.value)}
+                  className={`${inputStyles.select} ${inputStyles.selectSizes.xs} flex-1`}
+                >
+                  <option value="">Choose camera...</option>
+                  {cameraGroups.map((g) => (
+                    <option key={g.cameraId} value={g.cameraId}>
+                      {g.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleAddByCamera}
+                  disabled={!selectedCameraId}
+                  className={`p-1 rounded transition-colors ${selectedCameraId ? 'text-ds-accent hover:bg-ds-hover' : 'text-ds-muted cursor-default'}`}
+                  title="Add all images from this camera"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Bulk select by frame (only when rig data exists) */}
+          {frameGroups && frameGroups.length > 0 && (
+            <div>
+              <div className="text-ds-secondary text-xs mb-1">Select by frame:</div>
+              <div className="flex gap-1 items-center">
+                <select
+                  value={selectedFrameId}
+                  onChange={(e) => setSelectedFrameId(e.target.value)}
+                  className={`${inputStyles.select} ${inputStyles.selectSizes.xs} flex-1`}
+                >
+                  <option value="">Choose frame...</option>
+                  {frameGroups.map((g) => (
+                    <option key={g.frameId} value={g.frameId}>
+                      {g.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleAddByFrame}
+                  disabled={!selectedFrameId}
+                  className={`p-1 rounded transition-colors ${selectedFrameId ? 'text-ds-accent hover:bg-ds-hover' : 'text-ds-muted cursor-default'}`}
+                  title="Add all images from this frame"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+
           {hasPendingDeletions ? (
             <>
               {/* List of pending deletions */}
               <div className="text-ds-secondary text-sm">
                 {pendingDeletions.size} image{pendingDeletions.size !== 1 ? 's' : ''} marked for deletion:
               </div>
-              <div className="max-h-48 overflow-y-auto space-y-1">
-                {pendingDeletionsList.map(({ id, name, file }) => (
+              <div className="space-y-1">
+                {pagedList.map(({ id, name, file, cameraId }) => (
                   <DeletionListItem
                     key={id}
                     id={id}
+                    label={multiCamera && cameraId != null ? `#${cameraId}:${id}` : `#${id}`}
                     name={name}
                     file={file}
                     onView={handleViewImage}
@@ -275,6 +434,26 @@ export const DeletionModal = memo(function DeletionModal({
                   />
                 ))}
               </div>
+              {/* Pagination controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between text-xs text-ds-secondary">
+                  <button
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    disabled={clampedPage === 0}
+                    className={clampedPage === 0 ? 'text-ds-muted cursor-default' : 'text-ds-accent hover:underline'}
+                  >
+                    Prev
+                  </button>
+                  <span>{clampedPage + 1} / {totalPages}</span>
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                    disabled={clampedPage >= totalPages - 1}
+                    className={clampedPage >= totalPages - 1 ? 'text-ds-muted cursor-default' : 'text-ds-accent hover:underline'}
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
 
               {/* Action buttons */}
               <div className={styles.actionGroup}>
@@ -294,15 +473,14 @@ export const DeletionModal = memo(function DeletionModal({
               </div>
 
               <div className="text-ds-warning text-xs">
-                ⚠ Click "Apply" to permanently remove images from the reconstruction.
+                Click "Apply" to permanently remove images from the reconstruction.
               </div>
             </>
           ) : (
-            <div className="text-ds-secondary text-sm py-4">
-              <div className="mb-2 font-medium">No images marked for deletion</div>
-              <div>Open an image detail modal and</div>
-              <div>click the trash icon to mark</div>
-              <div>images for deletion.</div>
+            <div className="text-ds-secondary text-sm py-2">
+              <div className="text-ds-muted text-xs">
+                Or open an image detail modal and click the trash icon to mark individual images.
+              </div>
             </div>
           )}
         </div>

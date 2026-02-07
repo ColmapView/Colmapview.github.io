@@ -14,7 +14,7 @@ import { useFileDropzone } from '../../../hooks/useFileDropzone';
 import { controlPanelStyles } from '../../../theme';
 import { ExportIcon } from '../../../icons';
 import { ControlButton, SelectRow, SliderRow, type PanelType } from '../ControlComponents';
-import { exportReconstructionText, exportReconstructionBinary, exportPointsPLY, downloadReconstructionZip, downloadImagesZip } from '../../../parsers';
+import { exportReconstructionText, exportReconstructionBinary, exportPointsPLY, downloadReconstructionZip, downloadImagesZip, downloadMasksZip } from '../../../parsers';
 import { useDataset } from '../../../dataset';
 import { CameraModelId } from '../../../types/colmap';
 
@@ -68,6 +68,9 @@ export const ExportPanel = memo(function ExportPanel({
   // Image export state
   const [jpegQuality, setJpegQuality] = useState(85);
   const [imageExportProgress, setImageExportProgress] = useState<number | null>(null);
+
+  // Mask export state
+  const [maskExportProgress, setMaskExportProgress] = useState<number | null>(null);
 
   // Format export state
   const [exportFormat, setExportFormat] = useState<ExportFormat>('binary');
@@ -169,6 +172,28 @@ export const ExportPanel = memo(function ExportPanel({
     }
   }, [imageNames, dataset, jpegQuality, addNotification]);
 
+  // Export masks as PNG ZIP
+  const handleExportMasks = useCallback(async () => {
+    if (imageNames.length === 0) return;
+
+    setMaskExportProgress(0);
+    try {
+      const fetchMask = async (name: string) => dataset.getMask(name);
+
+      await downloadMasksZip(
+        imageNames,
+        fetchMask,
+        (percent) => setMaskExportProgress(percent)
+      );
+      addNotification('info', 'Masks exported successfully');
+    } catch (err) {
+      console.error('Mask export failed:', err);
+      addNotification('warning', 'Mask export failed');
+    } finally {
+      setMaskExportProgress(null);
+    }
+  }, [imageNames, dataset, addNotification]);
+
   // Default export action (binary)
   const handleDefaultExport = () => {
     if (reconstruction) {
@@ -186,7 +211,9 @@ export const ExportPanel = memo(function ExportPanel({
 
   const hasCameras = cameras.length > 0;
   const isExportingImages = imageExportProgress !== null;
+  const isExportingMasks = maskExportProgress !== null;
   const hasImages = imageNames.length > 0 && dataset.hasImages();
+  const hasMasks = dataset.hasMasks();
 
   return (
     <>
@@ -260,7 +287,7 @@ export const ExportPanel = memo(function ExportPanel({
                       />
                     </div>
                     <div className="text-ds-secondary text-xs mt-1 text-center">
-                      {imageExportProgress}%
+                      Exporting images... {imageExportProgress}%
                     </div>
                   </div>
                 ) : (
@@ -268,8 +295,30 @@ export const ExportPanel = memo(function ExportPanel({
                     onClick={handleExportImages}
                     className={styles.actionButton}
                   >
-                    Download
+                    Download Images
                   </button>
+                )}
+                {hasMasks && (
+                  isExportingMasks ? (
+                    <div>
+                      <div className="h-2 bg-ds-tertiary rounded overflow-hidden">
+                        <div
+                          className="h-full bg-ds-accent transition-all"
+                          style={{ width: `${maskExportProgress}%` }}
+                        />
+                      </div>
+                      <div className="text-ds-secondary text-xs mt-1 text-center">
+                        Exporting masks... {maskExportProgress}%
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleExportMasks}
+                      className={styles.actionButton}
+                    >
+                      Download Masks
+                    </button>
+                  )
                 )}
               </div>
             </>

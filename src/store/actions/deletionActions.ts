@@ -15,6 +15,7 @@ import { useUIStore } from '../stores/uiStore.js';
 import { useCameraStore } from '../stores/cameraStore.js';
 import { useDeletionStore } from '../stores/deletionStore.js';
 import { useFloorPlaneStore } from '../stores/floorPlaneStore.js';
+import { removeZipMaskCacheEntries } from '../../utils/imageFileUtils.js';
 
 /**
  * Pure function: Filter a reconstruction to remove specified images.
@@ -150,6 +151,12 @@ export function applyDeletionsToData(): boolean {
 
   // Clear floor plane distances (stale after index changes)
   useFloorPlaneStore.getState().setPointDistances(null);
+
+  // Clean up mask cache entries for deleted images
+  const deletedImageNames = Array.from(pendingDeletions)
+    .map(id => reconstruction.images.get(id)?.name)
+    .filter((name): name is string => name !== undefined);
+  removeZipMaskCacheEntries(deletedImageNames);
 
   // Update reconstruction
   reconstructionStore.setReconstruction(newReconstruction);

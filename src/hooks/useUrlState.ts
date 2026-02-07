@@ -124,6 +124,11 @@ export function collectShareConfig(): ShareConfig {
     useCameraStore.getState() as unknown as Record<string, unknown>,
     SHAREABLE_FIELDS.camera
   );
+  // Include selectedImageId in URL shares (transient — not persisted to localStorage)
+  const { selectedImageId } = useCameraStore.getState();
+  if (selectedImageId !== null) {
+    cameraState.selectedImageId = selectedImageId;
+  }
   if (Object.keys(cameraState).length > 0) {
     config.camera = cameraState;
   }

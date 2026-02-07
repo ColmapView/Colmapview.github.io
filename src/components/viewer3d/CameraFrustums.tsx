@@ -8,7 +8,7 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 // Extend R3F to recognize Line2 components
 extend({ LineSegments2, LineSegmentsGeometry, LineMaterial });
 import { Html } from '@react-three/drei';
-import { useReconstructionStore, useCameraStore, useUIStore, useDeletionStore } from '../../store';
+import { useReconstructionStore, selectCameraCount, useCameraStore, useUIStore, useDeletionStore } from '../../store';
 import { useCamerasNode, useSelectionNode, useMatchesNode, useNavigationNode } from '../../nodes';
 import { useSelectionNodeActions, useNavigationNodeActions } from '../../nodes';
 import type { SelectionColorMode } from '../../store/types';
@@ -23,6 +23,11 @@ import { rainbowColor } from '../../utils/colorUtils';
 import { UndistortedImageMaterial } from './UndistortedImageMaterial';
 import { useIsAlignmentMode } from '../../hooks/useAlignmentMode';
 import { lineVertexShader, lineFragmentShader } from './shaders';
+
+/** Format image ID label: #{camId}:{imageId} when multiple cameras, #{imageId} otherwise */
+function formatImageId(imageId: number, cameraId: number, multiCamera: boolean): string {
+  return multiCamera ? `#${cameraId}:${imageId}` : `#${imageId}`;
+}
 
 // Shared temp objects for color calculations
 const tempColor = new THREE.Color();
@@ -146,6 +151,7 @@ function BatchedArrowMeshes({
   touchMode = false,
   pendingDeletions,
 }: BatchedArrowMeshesProps) {
+  const multiCamera = useReconstructionStore(selectCameraCount) > 1;
   const shaftRef = useRef<THREE.InstancedMesh>(null);
   const coneRef = useRef<THREE.InstancedMesh>(null);
   const rainbowHueRef = useRef(0);
@@ -467,7 +473,7 @@ function BatchedArrowMeshes({
         >
           <div className={hoverCardStyles.container}>
             <div className={hoverCardStyles.title}>{tooltipFrustum.image.name}</div>
-            <div className={hoverCardStyles.subtitle}>#{tooltipFrustum.image.imageId}</div>
+            <div className={hoverCardStyles.subtitle}>{formatImageId(tooltipFrustum.image.imageId, tooltipFrustum.image.cameraId, multiCamera)}</div>
             <div className={hoverCardStyles.subtitle}>{tooltipFrustum.numPoints3D} points</div>
             <div className={hoverCardStyles.hint}>
               <div className={hoverCardStyles.hintRow}>
@@ -831,6 +837,7 @@ function BatchedPlaneHitTargets({
   lastNavigationToImageId,
   touchMode = false,
 }: BatchedPlaneHitTargetsProps) {
+  const multiCamera = useReconstructionStore(selectCameraCount) > 1;
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const [tooltipData, setTooltipData] = useState<{instanceId: number, x: number, y: number} | null>(null);
 
@@ -991,7 +998,7 @@ function BatchedPlaneHitTargets({
         >
           <div className={hoverCardStyles.container}>
             <div className={hoverCardStyles.title}>{tooltipFrustum.image.name}</div>
-            <div className={hoverCardStyles.subtitle}>#{tooltipFrustum.image.imageId}</div>
+            <div className={hoverCardStyles.subtitle}>{formatImageId(tooltipFrustum.image.imageId, tooltipFrustum.image.cameraId, multiCamera)}</div>
             <div className={hoverCardStyles.subtitle}>{tooltipFrustum.numPoints3D} points</div>
             <div className={hoverCardStyles.hint}>
               <div className={hoverCardStyles.hintRow}>
@@ -1080,6 +1087,7 @@ const FrustumPlane = memo(function FrustumPlane({
   disableInteraction = false,
   touchMode = false,
 }: FrustumPlaneProps) {
+  const multiCamera = useReconstructionStore(selectCameraCount) > 1;
   // Skip hover state when interaction is disabled (using BatchedPlaneHitTargets)
   const [hovered, setHovered] = useState(false);
   const [viewAngleOk, setViewAngleOk] = useState(true);
@@ -1433,7 +1441,7 @@ const FrustumPlane = memo(function FrustumPlane({
         >
           <div className={hoverCardStyles.container}>
             <div className={hoverCardStyles.title}>{image.name}</div>
-            <div className={hoverCardStyles.subtitle}>#{image.imageId}</div>
+            <div className={hoverCardStyles.subtitle}>{formatImageId(image.imageId, image.cameraId, multiCamera)}</div>
             <div className={hoverCardStyles.subtitle}>{numPoints3D} points</div>
             <div className={hoverCardStyles.hint}>
               {isSelected && cameraProjection === 'perspective' && (
