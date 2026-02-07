@@ -35,13 +35,14 @@ import {
   useGizmoNodeActions,
 } from '../../nodes';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
-import { contextMenuStyles, actionButtonStyles, HOTKEYS } from '../../theme';
+import { contextMenuStyles, modalStyles, HOTKEYS } from '../../theme';
+import { useModalZIndex } from '../../hooks/useModalZIndex';
 import { formatKeyCombo } from '../../config/hotkeys';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import {
   // UI icons
-  ResetIcon, ReloadIcon, CheckIcon, CloseIcon, SettingsIcon, FullscreenIcon, FilterIcon, SpeedIcon, SpeedDimIcon,
-  PlusCircleIcon, MinusCircleIcon, CrosshairIcon, FlyToIcon,
+  ResetIcon, ReloadIcon, CheckIcon, SettingsIcon, FullscreenIcon, FilterIcon, SpeedIcon, SpeedDimIcon,
+  PlusCircleIcon, MinusCircleIcon, CrosshairIcon,
   // Toolbar icons
   ScreenshotIcon, TransformIcon, FrustumIcon, AxesIcon, BgIcon,
   // Menu-specific icons
@@ -49,6 +50,7 @@ import {
   AutoRotateIcon, GalleryPanelIcon, CoordSystemIcon, FrustumColorIcon, PointColorIcon,
   MatchesIcon, SelectionColorIcon, DeselectAllIcon, ImagePlanesIcon, UndistortIcon,
   CenterOriginIcon, OnePointOriginIcon, TwoPointScaleIcon, ThreePointAlignIcon, ExportPLYIcon, ExportConfigIcon,
+  DeleteImagesIcon, FloorDetectionIcon, CameraConvertIcon,
 } from '../../icons';
 
 // Section definitions for grouping
@@ -98,9 +100,8 @@ const ACTIONS: ActionDef[] = [
   { id: 'cycleMatchesDisplay', label: 'Matches', section: 'cameras', hotkey: HOTKEYS.cycleMatchesDisplay.keys, icon: MatchesIcon },
   { id: 'cycleSelectionColor', label: 'Selection Color', section: 'cameras', icon: SelectionColorIcon },
   { id: 'deselectAll', label: 'Deselect All', section: 'cameras', icon: DeselectAllIcon },
-  { id: 'flyToSelected', label: 'Fly to Selected', section: 'cameras', icon: <FlyToIcon /> },
   { id: 'toggleImagePlanes', label: 'Image Planes', section: 'cameras', icon: ImagePlanesIcon },
-  { id: 'toggleUndistort', label: 'Undistort', section: 'cameras', icon: UndistortIcon },
+  { id: 'toggleUndistort', label: 'Undistort (U)', section: 'cameras', icon: UndistortIcon },
   // Transform section
   { id: 'toggleGizmo', label: 'Transform Gizmo', section: 'transform', hotkey: HOTKEYS.toggleGizmo.keys, icon: <TransformIcon /> },
   { id: 'centerAtOrigin', label: 'Center at Origin', section: 'transform', icon: CenterOriginIcon },
@@ -110,10 +111,13 @@ const ACTIONS: ActionDef[] = [
   { id: 'resetTransform', label: 'Reset Transform', section: 'transform', icon: <ResetIcon /> },
   { id: 'applyTransform', label: 'Apply Transform', section: 'transform', icon: <CheckIcon /> },
   { id: 'reloadData', label: 'Reload Data', section: 'transform', icon: <ReloadIcon /> },
+  { id: 'openFloorDetection', label: 'Floor Detection', section: 'transform', icon: FloorDetectionIcon },
   // Export section
   { id: 'takeScreenshot', label: 'Screenshot', section: 'export', icon: <ScreenshotIcon /> },
   { id: 'exportPLY', label: 'Export PLY', section: 'export', icon: ExportPLYIcon },
   { id: 'exportConfig', label: 'Export Config', section: 'export', icon: ExportConfigIcon },
+  { id: 'openDeletion', label: 'Delete Images', section: 'export', icon: DeleteImagesIcon },
+  { id: 'openCameraConversion', label: 'Camera Convert', section: 'export', icon: CameraConvertIcon },
   // Navigation section
   { id: 'togglePointerLock', label: 'Pointer Lock', section: 'view', icon: <CrosshairIcon /> },
   { id: 'flySpeedUp', label: 'Fly Speed +', section: 'view', icon: <SpeedIcon /> },
@@ -135,6 +139,11 @@ export function GlobalContextMenu() {
   const popupRef = useRef<HTMLDivElement>(null);
   const [adjustedPosition, setAdjustedPosition] = useState<{ x: number; y: number } | null>(null);
 
+  // Edit popup drag state
+  const [editPosition, setEditPosition] = useState({ x: 0, y: 0 });
+  const [isEditDragging, setIsEditDragging] = useState(false);
+  const editDragStart = useRef({ x: 0, y: 0, posX: 0, posY: 0 });
+
   // Context menu state
   const contextMenuPosition = useUIStore((s) => s.contextMenuPosition);
   const contextMenuActions = useUIStore((s) => s.contextMenuActions);
@@ -144,6 +153,9 @@ export function GlobalContextMenu() {
   const showEditPopup = useUIStore((s) => s.showContextMenuEditor);
   const openEditPopup = useUIStore((s) => s.openContextMenuEditor);
   const closeContextMenuEditor = useUIStore((s) => s.closeContextMenuEditor);
+
+  // Z-index for edit popup
+  const { zIndex: editZIndex, bringToFront: bringEditToFront } = useModalZIndex(showEditPopup);
 
   // Node hooks for reading state
   const pointsNode = usePointsNode();
@@ -409,11 +421,6 @@ export function GlobalContextMenu() {
       case 'deselectAll':
         setSelectedImageId(null);
         break;
-      case 'flyToSelected':
-        if (selectedImageId !== null) {
-          flyToImage(selectedImageId);
-        }
-        break;
       case 'toggleImagePlanes': {
         // Cycle: off -> frustum -> imageplane -> off
         if (!showCameras) {
@@ -476,6 +483,15 @@ export function GlobalContextMenu() {
       case 'flySpeedDown':
         setFlySpeed(Math.max(flySpeed / 1.5, 0.5));
         break;
+      case 'openDeletion':
+        useUIStore.getState().setShowDeletionModal(true);
+        break;
+      case 'openFloorDetection':
+        useUIStore.getState().setShowFloorModal(true);
+        break;
+      case 'openCameraConversion':
+        useUIStore.getState().setShowConversionModal(true);
+        break;
       case 'editMenu':
         openEditPopup();
         break;
@@ -516,6 +532,57 @@ export function GlobalContextMenu() {
     closeContextMenuEditor();
     closeContextMenu();
   }, [closeContextMenu, closeContextMenuEditor]);
+
+  // Center edit popup when opened
+  useEffect(() => {
+    if (showEditPopup) {
+      const viewportW = window.innerWidth;
+      const viewportH = window.innerHeight;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEditPosition({
+        x: Math.max(20, (viewportW - 600) / 2),
+        y: Math.max(20, (viewportH - 500) / 2),
+      });
+      requestAnimationFrame(() => {
+        if (popupRef.current) {
+          const rect = popupRef.current.getBoundingClientRect();
+          setEditPosition({
+            x: Math.max(20, (viewportW - rect.width) / 2),
+            y: Math.max(20, (viewportH - rect.height) / 2),
+          });
+        }
+      });
+    }
+  }, [showEditPopup]);
+
+  // Edit popup drag handlers
+  const handleEditDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsEditDragging(true);
+    editDragStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      posX: editPosition.x,
+      posY: editPosition.y,
+    };
+  }, [editPosition]);
+
+  useEffect(() => {
+    if (!isEditDragging) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      setEditPosition({
+        x: editDragStart.current.posX + e.clientX - editDragStart.current.x,
+        y: editDragStart.current.posY + e.clientY - editDragStart.current.y,
+      });
+    };
+    const handleMouseUp = () => setIsEditDragging(false);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isEditDragging]);
 
   // Close on click outside
   useEffect(() => {
@@ -700,44 +767,54 @@ export function GlobalContextMenu() {
     const exportSection = groupedConfigActions.find(g => g.section === 'export');
 
     return createPortal(
-      <div
-        className="fixed inset-0 flex items-center justify-center"
-        style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 10000 }}
-      >
+      <div className="fixed inset-0 pointer-events-none" style={{ zIndex: editZIndex }}>
         <div
           ref={popupRef}
-          className="bg-ds-tertiary rounded-lg shadow-ds-lg border border-ds context-menu-edit-responsive"
-          style={{ padding: '16px 24px' }}
+          className={modalStyles.toolPanel + ' context-menu-edit-responsive'}
+          style={{ left: editPosition.x, top: editPosition.y }}
+          onMouseDown={bringEditToFront}
         >
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-ds-primary font-medium text-sm">Edit Context Menu</h3>
+          {/* Header */}
+          <div
+            className={modalStyles.toolHeader}
+            onMouseDown={handleEditDragStart}
+          >
+            <span className={modalStyles.toolHeaderTitle}>Edit Context Menu</span>
             <button
               onClick={closeEditPopup}
-              className="text-ds-muted hover-ds-text-primary transition-colors"
+              onMouseDown={(e) => e.stopPropagation()}
+              className={modalStyles.toolHeaderClose}
+              title="Close"
             >
-              <CloseIcon className="w-5 h-5" />
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
             </button>
           </div>
-          <div className="text-ds-secondary text-xs mb-3">
-            Select which actions appear in the right-click menu.
-          </div>
 
-          {/* 3-column grid layout - items within sections flow into 3 cols */}
-          <div className="grid grid-cols-3 gap-x-5 gap-y-3">
-            {viewSection && renderSection(viewSection, 3)}
-            {displaySection && renderSection(displaySection, 3)}
-            {camerasSection && renderSection(camerasSection, 3)}
-            {transformSection && renderSection(transformSection, 3)}
-            {exportSection && renderSection(exportSection, 3)}
-          </div>
+          {/* Body */}
+          <div className="p-4 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 120px)' }}>
+            <div className="text-ds-secondary text-xs mb-3">
+              Select which actions appear in the right-click menu.
+            </div>
 
-          <div className="mt-4 pt-3 border-t border-ds">
-            <button
-              onClick={closeEditPopup}
-              className={actionButtonStyles.buttonFullWidth}
-            >
-              Done
-            </button>
+            {/* 3-column grid layout - items within sections flow into 3 cols */}
+            <div className="grid grid-cols-3 gap-x-5 gap-y-3">
+              {viewSection && renderSection(viewSection, 3)}
+              {displaySection && renderSection(displaySection, 3)}
+              {camerasSection && renderSection(camerasSection, 3)}
+              {transformSection && renderSection(transformSection, 3)}
+              {exportSection && renderSection(exportSection, 3)}
+            </div>
+
+            <div className="mt-4 pt-3">
+              <button
+                onClick={closeEditPopup}
+                className={modalStyles.actionButtonPrimary}
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       </div>,

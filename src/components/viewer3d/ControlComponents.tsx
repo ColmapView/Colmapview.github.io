@@ -4,10 +4,11 @@
  */
 
 import type { ReactNode } from 'react';
-import { useState, useEffect, useLayoutEffect, memo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, memo, useRef, useCallback } from 'react';
 import { controlPanelStyles, getControlButtonClass, getTooltipProps } from '../../theme';
 import { hslToHex, hexToHsl } from '../../utils/colorUtils';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
+import { useUIStore } from '../../store/stores/uiStore';
 
 // Use centralized styles from theme
 const styles = controlPanelStyles;
@@ -552,15 +553,50 @@ export const ControlButton = memo(function ControlButton({
 }: ControlButtonProps) {
   const isHovered = activePanel === panelId;
   const hasPanel = panelTitle && children;
+  const touchMode = useUIStore((s) => s.touchMode);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // In touch mode: first tap shows panel, second tap executes action
+  const handleTouchClick = useCallback(() => {
+    if (disabled) return;
+    if (!hasPanel) {
+      // No panel — execute action directly
+      onClick?.();
+      return;
+    }
+    if (isHovered) {
+      // Panel already showing — execute the action and close
+      onClick?.();
+      setActivePanel(null);
+    } else {
+      // Panel not showing — open it (like hover)
+      setActivePanel(panelId);
+    }
+  }, [disabled, hasPanel, isHovered, onClick, setActivePanel, panelId]);
+
+  // Close panel when tapping outside in touch mode
+  useEffect(() => {
+    if (!touchMode || !isHovered || !hasPanel) return;
+
+    const handleOutsideTouch = (e: TouchEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setActivePanel(null);
+      }
+    };
+
+    document.addEventListener('touchstart', handleOutsideTouch, { passive: true });
+    return () => document.removeEventListener('touchstart', handleOutsideTouch);
+  }, [touchMode, isHovered, hasPanel, setActivePanel]);
 
   return (
     <div
+      ref={containerRef}
       className="relative w-10 control-button-responsive"
-      onMouseEnter={() => !disabled && setActivePanel(panelId)}
-      onMouseLeave={() => setActivePanel(null)}
+      onMouseEnter={touchMode ? undefined : () => !disabled && setActivePanel(panelId)}
+      onMouseLeave={touchMode ? undefined : () => setActivePanel(null)}
     >
       <button
-        onClick={disabled ? undefined : onClick}
+        onClick={disabled ? undefined : (touchMode ? handleTouchClick : onClick)}
         onDoubleClick={disabled ? undefined : onDoubleClick}
         disabled={disabled}
         className={`group ${getControlButtonClass(isActive, isHovered)} ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}

@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { ImageGallery } from '../gallery/ImageGallery';
 import { GalleryErrorBoundary } from '../gallery/GalleryErrorBoundary';
-import { CloseIcon } from '../../icons/ui';
 import { TOUCH } from '../../theme/sizing';
 
 interface TouchGalleryDrawerProps {
@@ -19,8 +18,7 @@ export function TouchGalleryDrawer({ onClose }: TouchGalleryDrawerProps) {
   const startXRef = useRef<number | null>(null);
   const currentXRef = useRef<number>(0);
 
-  // Swipe progress indicator (0-1)
-  const [swipeProgress, setSwipeProgress] = useState(0);
+  const swipeProgressRef = useRef(0);
 
   // Handle swipe-to-close gesture
   const handleTouchStart = useCallback((e: TouchEvent) => {
@@ -41,7 +39,7 @@ export function TouchGalleryDrawer({ onClose }: TouchGalleryDrawerProps) {
       // Calculate swipe progress (0-1) based on close threshold
       const threshold = Math.min(100, TOUCH.drawerWidth * 0.3);
       const progress = Math.min(1, deltaX / threshold);
-      setSwipeProgress(progress);
+      swipeProgressRef.current = progress;
     }
   }, []);
 
@@ -61,7 +59,7 @@ export function TouchGalleryDrawer({ onClose }: TouchGalleryDrawerProps) {
 
     startXRef.current = null;
     currentXRef.current = 0;
-    setSwipeProgress(0);
+    swipeProgressRef.current = 0;
   }, [onClose]);
 
   // Attach touch listeners for swipe-to-close
@@ -108,30 +106,6 @@ export function TouchGalleryDrawer({ onClose }: TouchGalleryDrawerProps) {
         aria-modal="true"
         aria-label="Image gallery"
       >
-        {/* Header with close button */}
-        <div className="h-12 flex items-center justify-between px-4 border-b border-ds bg-ds-tertiary flex-shrink-0">
-          <h2 className="text-ds-primary text-base font-medium">Gallery</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-12 h-12 flex items-center justify-center text-ds-secondary hover:text-ds-primary active:bg-ds-hover transition-colors rounded-lg"
-            aria-label="Close gallery"
-          >
-            <CloseIcon className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Swipe indicator - grows and brightens as user swipes to close */}
-        <div className="h-1 flex items-center justify-center py-2 bg-ds-tertiary border-b border-ds">
-          <div
-            className="h-1 bg-ds-secondary rounded-full transition-all duration-100"
-            style={{
-              width: 12 + swipeProgress * 24, // 12px to 36px
-              opacity: 0.5 + swipeProgress * 0.5, // 0.5 to 1.0
-            }}
-          />
-        </div>
-
         {/* Gallery content */}
         <div className="flex-1 overflow-hidden">
           <GalleryErrorBoundary>

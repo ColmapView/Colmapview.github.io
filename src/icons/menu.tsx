@@ -190,3 +190,29 @@ export const ExportConfigIcon: MenuIcon = (
     <path d="M9 15l3 3 3-3" />
   </svg>
 );
+
+// Delete images (trash can)
+export const DeleteImagesIcon: MenuIcon = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M3 6h18" />
+    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" />
+    <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+  </svg>
+);
+
+// Floor detection (horizontal plane with arrow)
+export const FloorDetectionIcon: MenuIcon = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M2 20l10-6 10 6" />
+    <path d="M12 14V4" />
+    <path d="M9 7l3-3 3 3" />
+  </svg>
+);
+
+// Camera conversion (camera with arrows)
+export const CameraConvertIcon: MenuIcon = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+    <circle cx="12" cy="13" r="4" />
+  </svg>
+);

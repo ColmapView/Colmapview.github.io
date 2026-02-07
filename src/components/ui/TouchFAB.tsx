@@ -32,8 +32,8 @@ const positionClasses: Record<FABPosition, string> = {
 
 /**
  * Floating Action Button for touch mode.
- * Primary size: 56px diameter
- * Secondary size: 48px diameter (meets preferred tap target)
+ * Primary size: 44px diameter (min tap target)
+ * Secondary size: 40px diameter (matches desktop control buttons)
  */
 export function TouchFAB({
   icon,
@@ -44,7 +44,7 @@ export function TouchFAB({
   className = '',
 }: TouchFABProps) {
   const isPrimary = size === 'primary';
-  const diameter = isPrimary ? TOUCH.fabSize : TOUCH.fabSecondarySize;
+  const diameter = isPrimary ? TOUCH.minTapTarget : TOUCH.fabSecondarySize;
 
   const baseClasses = `
     fixed z-[999]
@@ -59,7 +59,7 @@ export function TouchFAB({
     ? 'bg-ds-accent text-ds-void hover:bg-ds-accent/90'
     : 'bg-ds-tertiary text-ds-primary border border-ds hover:bg-ds-hover';
 
-  const iconSize = isPrimary ? 'w-7 h-7' : 'w-5 h-5';
+  const iconSize = isPrimary ? 'w-5 h-5' : 'w-4 h-4';
 
   const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
     triggerHaptic();
@@ -76,42 +76,6 @@ export function TouchFAB({
     >
       <span className={iconSize}>{icon}</span>
     </button>
-  );
-}
-
-/**
- * Gallery FAB - opens/closes the gallery drawer.
- */
-export function GalleryFAB({
-  isOpen,
-  onToggle,
-}: {
-  isOpen: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <TouchFAB
-      icon={
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-full h-full">
-          {isOpen ? (
-            // Close icon when drawer is open
-            <path d="M18 6L6 18M6 6l12 12" />
-          ) : (
-            // Grid/gallery icon when drawer is closed
-            <>
-              <rect x="3" y="3" width="7" height="7" rx="1" />
-              <rect x="14" y="3" width="7" height="7" rx="1" />
-              <rect x="3" y="14" width="7" height="7" rx="1" />
-              <rect x="14" y="14" width="7" height="7" rx="1" />
-            </>
-          )}
-        </svg>
-      }
-      onClick={onToggle}
-      position="bottom-right"
-      size="primary"
-      label={isOpen ? 'Close gallery' : 'Open gallery'}
-    />
   );
 }
 

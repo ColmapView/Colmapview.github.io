@@ -34,7 +34,6 @@ export type ContextMenuAction =
   | 'cycleMatchesDisplay'
   | 'cycleSelectionColor'
   | 'deselectAll'
-  | 'flyToSelected'
   | 'toggleImagePlanes'
   | 'toggleUndistort'
   // Transform
@@ -50,6 +49,10 @@ export type ContextMenuAction =
   | 'takeScreenshot'
   | 'exportPLY'
   | 'exportConfig'
+  // Tools
+  | 'openDeletion'
+  | 'openFloorDetection'
+  | 'openCameraConversion'
   // Navigation
   | 'togglePointerLock'
   | 'flySpeedUp'
@@ -121,6 +124,11 @@ export interface UIState {
   touchMode: boolean;
   touchModeSource: 'url' | 'auto';
 
+  // Tool modals (transient, not persisted)
+  showDeletionModal: boolean;
+  showFloorModal: boolean;
+  showConversionModal: boolean;
+
   // Context menu (persisted config + transient state)
   contextMenuActions: ContextMenuAction[];
   contextMenuPosition: { x: number; y: number } | null;
@@ -169,6 +177,11 @@ export interface UIState {
   setEmbedMode: (embed: boolean) => void;
   setTouchMode: (enabled: boolean, source?: 'url' | 'auto') => void;
 
+  // Tool modal actions
+  setShowDeletionModal: (show: boolean) => void;
+  setShowFloorModal: (show: boolean) => void;
+  setShowConversionModal: (show: boolean) => void;
+
   // Context menu actions
   openContextMenu: (x: number, y: number) => void;
   closeContextMenu: () => void;
@@ -215,6 +228,9 @@ export const useUIStore = create<UIState>()(
       embedMode: false,
       touchMode: false,
       touchModeSource: 'auto',
+      showDeletionModal: false,
+      showFloorModal: false,
+      showConversionModal: false,
       contextMenuActions: DEFAULT_CONTEXT_MENU_ACTIONS,
       contextMenuPosition: null,
       showContextMenuEditor: false,
@@ -265,6 +281,11 @@ export const useUIStore = create<UIState>()(
       })),
       setEmbedMode: (embedMode) => set({ embedMode }),
       setTouchMode: (touchMode, source = 'auto') => set({ touchMode, touchModeSource: source }),
+
+      // Tool modal actions
+      setShowDeletionModal: (show) => set({ showDeletionModal: show }),
+      setShowFloorModal: (show) => set({ showFloorModal: show }),
+      setShowConversionModal: (show) => set({ showConversionModal: show }),
 
       // Context menu actions
       openContextMenu: (x, y) => set({ contextMenuPosition: { x, y } }),

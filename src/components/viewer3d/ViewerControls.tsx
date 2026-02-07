@@ -339,9 +339,16 @@ const GalleryToggleButton = memo(function GalleryToggleButton({ activePanel, set
   const galleryCollapsed = useUIStore((s) => s.galleryCollapsed);
   const toggleGalleryCollapsed = useUIStore((s) => s.toggleGalleryCollapsed);
   const embedMode = useUIStore((s) => s.embedMode);
+  const touchMode = useUIStore((s) => s.touchMode);
+  const touchGalleryDrawer = useUIStore((s) => s.touchUI.galleryDrawer);
+  const toggleTouchUI = useUIStore((s) => s.toggleTouchUI);
 
   // Hide gallery toggle button in embed mode
   if (embedMode) return null;
+
+  // In touch mode, toggle the slide-out drawer instead of the sidebar
+  const isOpen = touchMode ? touchGalleryDrawer : !galleryCollapsed;
+  const handleClick = touchMode ? () => toggleTouchUI('galleryDrawer') : toggleGalleryCollapsed;
 
   return (
     <ControlButton
@@ -349,20 +356,23 @@ const GalleryToggleButton = memo(function GalleryToggleButton({ activePanel, set
       activePanel={activePanel}
       setActivePanel={setActivePanel}
       icon={
-        galleryCollapsed ? <SidebarExpandIcon className="w-6 h-6" /> : <SidebarCollapseIcon className="w-6 h-6" />
+        isOpen ? <SidebarCollapseIcon className="w-6 h-6" /> : <SidebarExpandIcon className="w-6 h-6" />
       }
-      tooltip={galleryCollapsed ? 'Show gallery' : 'Hide gallery'}
-      isActive={!galleryCollapsed}
-      onClick={toggleGalleryCollapsed}
+      tooltip={isOpen ? 'Hide gallery' : 'Show gallery'}
+      isActive={isOpen}
+      onClick={handleClick}
     />
   );
 });
 
 export function ViewerControls() {
   const [activePanel, setActivePanel] = useState<PanelType>(null);
-  const [showFloorModal, setShowFloorModal] = useState(false);
-  const [showDeletionModal, setShowDeletionModal] = useState(false);
-  const [showConversionModal, setShowConversionModal] = useState(false);
+  const showFloorModal = useUIStore((s) => s.showFloorModal);
+  const setShowFloorModal = useUIStore((s) => s.setShowFloorModal);
+  const showDeletionModal = useUIStore((s) => s.showDeletionModal);
+  const setShowDeletionModal = useUIStore((s) => s.setShowDeletionModal);
+  const showConversionModal = useUIStore((s) => s.showConversionModal);
+  const setShowConversionModal = useUIStore((s) => s.setShowConversionModal);
 
   // Node hooks for reading state
   const pointsNode = usePointsNode();
@@ -999,6 +1009,7 @@ export function ViewerControls() {
         }
         tooltip="Axes & Grid (G)"
         isActive={showAxes || showGrid}
+        onClick={cycleAxesGrid}
         panelTitle="Axes & Grid (G)"
       >
         <div className={styles.panelContent}>

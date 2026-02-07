@@ -19,6 +19,7 @@ import { getImageFile, getUrlImageCached, fetchUrlImage, getZipImageCached, fetc
 import { getImageWorldPosition, getImageWorldQuaternion } from '../../utils/colmapTransforms';
 import { useFrustumTexture, useSelectedImageTexture, prioritizeFrustumTexture, pauseFrustumTextureCache, resumeFrustumTextureCache } from '../../hooks/useFrustumTexture';
 import { VIZ_COLORS, RAINBOW, OPACITY, TIMING, hoverCardStyles, ICON_SIZES, getCameraColor, contextMenuStyles, getMaterialTransparency } from '../../theme';
+import { TOUCH } from '../../theme/sizing';
 import { rainbowColor } from '../../utils/colorUtils';
 import { UndistortedImageMaterial } from './UndistortedImageMaterial';
 import { useIsAlignmentMode } from '../../hooks/useAlignmentMode';
@@ -169,10 +170,14 @@ function BatchedArrowMeshes({
   // Check if camera controls are dragging (orbit/pan in progress)
   const isDragging = useCallback(() => controls?.dragging?.current ?? false, [controls]);
 
-  // Reset cursor on unmount if component is unmounted while hovering
+  // Touch: tap = select, long-press = fly-to (context menu)
+  const touchDownRef = useRef<{ instanceId: number; x: number; y: number; timer: ReturnType<typeof setTimeout> | null; fired: boolean } | null>(null);
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       document.body.style.cursor = '';
+      if (touchDownRef.current?.timer) clearTimeout(touchDownRef.current.timer);
     };
   }, []);
 
@@ -439,10 +444,36 @@ function BatchedArrowMeshes({
           onHover(null);
           document.body.style.cursor = '';
         }}
-        onClick={(e) => {
+        onPointerDown={touchMode ? (e) => {
+          if (e.instanceId === undefined) return;
+          const iid = e.instanceId;
+          const x = e.nativeEvent.clientX, y = e.nativeEvent.clientY;
+          // Start long-press timer for fly-to
+          const timer = setTimeout(() => {
+            if (!touchDownRef.current || touchDownRef.current.instanceId !== iid) return;
+            touchDownRef.current.fired = true;
+            const f = frustums[iid];
+            if (f && f.image.imageId !== selectedImageId) onContextMenu(f.image.imageId);
+          }, TOUCH.longPressDelay);
+          touchDownRef.current = { instanceId: iid, x, y, timer, fired: false };
+        } : undefined}
+        onPointerUp={touchMode ? (e) => {
+          const down = touchDownRef.current;
+          touchDownRef.current = null;
+          if (!down) return;
+          if (down.timer) clearTimeout(down.timer);
+          if (down.fired) return; // Long-press already handled
+          const dx = e.nativeEvent.clientX - down.x;
+          const dy = e.nativeEvent.clientY - down.y;
+          if (dx * dx + dy * dy > 225) return;
+          const f = frustums[down.instanceId];
+          if (!f || f.image.imageId === selectedImageId) return;
+          e.stopPropagation();
+          onClick(f.image.imageId);
+        } : undefined}
+        onClick={touchMode ? undefined : (e) => {
           if (e.instanceId === undefined) return;
           const f = frustums[e.instanceId];
-          // Let selected camera's FrustumPlane handle its own click
           if (!f || f.image.imageId === selectedImageId) return;
           e.stopPropagation();
           onClick(f.image.imageId);
@@ -450,7 +481,6 @@ function BatchedArrowMeshes({
         onContextMenu={(e) => {
           if (e.instanceId === undefined) return;
           const f = frustums[e.instanceId];
-          // Let selected camera's FrustumPlane handle its own context menu
           if (!f || f.image.imageId === selectedImageId) return;
           e.stopPropagation();
           e.nativeEvent.preventDefault();
@@ -845,10 +875,14 @@ function BatchedPlaneHitTargets({
   const { controls } = useThree() as any;
   const isDragging = useCallback(() => controls?.dragging?.current ?? false, [controls]);
 
-  // Reset cursor on unmount if component is unmounted while hovering
+  // Touch: tap = select, long-press = fly-to (context menu)
+  const touchDownRef = useRef<{ instanceId: number; x: number; y: number; timer: ReturnType<typeof setTimeout> | null; fired: boolean } | null>(null);
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       document.body.style.cursor = '';
+      if (touchDownRef.current?.timer) clearTimeout(touchDownRef.current.timer);
     };
   }, []);
 
@@ -965,10 +999,35 @@ function BatchedPlaneHitTargets({
           onHover(null);
           document.body.style.cursor = '';
         }}
-        onClick={(e) => {
+        onPointerDown={touchMode ? (e) => {
+          if (e.instanceId === undefined) return;
+          const iid = e.instanceId;
+          const x = e.nativeEvent.clientX, y = e.nativeEvent.clientY;
+          const timer = setTimeout(() => {
+            if (!touchDownRef.current || touchDownRef.current.instanceId !== iid) return;
+            touchDownRef.current.fired = true;
+            const f = frustums[iid];
+            if (f && f.image.imageId !== selectedImageId) onContextMenu(f.image.imageId);
+          }, TOUCH.longPressDelay);
+          touchDownRef.current = { instanceId: iid, x, y, timer, fired: false };
+        } : undefined}
+        onPointerUp={touchMode ? (e) => {
+          const down = touchDownRef.current;
+          touchDownRef.current = null;
+          if (!down) return;
+          if (down.timer) clearTimeout(down.timer);
+          if (down.fired) return;
+          const dx = e.nativeEvent.clientX - down.x;
+          const dy = e.nativeEvent.clientY - down.y;
+          if (dx * dx + dy * dy > 225) return;
+          const f = frustums[down.instanceId];
+          if (!f || f.image.imageId === selectedImageId) return;
+          e.stopPropagation();
+          onClick(f.image.imageId);
+        } : undefined}
+        onClick={touchMode ? undefined : (e) => {
           if (e.instanceId === undefined) return;
           const f = frustums[e.instanceId];
-          // Let selected camera's FrustumPlane handle its own click
           if (!f || f.image.imageId === selectedImageId) return;
           e.stopPropagation();
           onClick(f.image.imageId);
@@ -976,7 +1035,6 @@ function BatchedPlaneHitTargets({
         onContextMenu={(e) => {
           if (e.instanceId === undefined) return;
           const f = frustums[e.instanceId];
-          // Let selected camera's FrustumPlane handle its own context menu
           if (!f || f.image.imageId === selectedImageId) return;
           e.stopPropagation();
           e.nativeEvent.preventDefault();

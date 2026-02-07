@@ -6,7 +6,6 @@ import { Scene3D } from '../viewer3d';
 import { ImageGallery } from '../gallery/ImageGallery';
 import { GalleryErrorBoundary } from '../gallery/GalleryErrorBoundary';
 import { ImageDetailModal } from '../modals/ImageDetailModal';
-import { GalleryFAB } from '../ui/TouchFAB';
 import { useHotkeyScope } from '../../hooks/useHotkeyScope';
 import { LAYOUT_PANELS } from '../../theme';
 import { useUIStore } from '../../store/stores/uiStore';
@@ -80,11 +79,34 @@ export function AppLayout() {
   const touchMode = useUIStore((s) => s.touchMode);
   const touchUI = useUIStore((s) => s.touchUI);
   const setTouchUIVisible = useUIStore((s) => s.setTouchUIVisible);
-  const toggleTouchUI = useUIStore((s) => s.toggleTouchUI);
   const { panelWidth, handleMouseDown, isResizing } = useResizablePanel(LAYOUT_PANELS.gallery.defaultSize);
 
   // In embed mode or touch mode, always hide inline gallery
   const hideGallery = embedMode || touchMode || galleryCollapsed;
+
+  // Prevent browser-level pinch-to-zoom and two-finger scroll in touch mode
+  // so gestures are handled exclusively by the 3D canvas
+  useEffect(() => {
+    if (!touchMode) return;
+
+    // Prevent multi-touch zoom/pan on the page (lets Three.js handle it)
+    const preventTouch = (e: TouchEvent) => {
+      if (e.touches.length > 1) e.preventDefault();
+    };
+
+    // Prevent Safari gesture zoom
+    const preventGesture = (e: Event) => { e.preventDefault(); };
+
+    document.addEventListener('touchmove', preventTouch, { passive: false });
+    document.addEventListener('gesturestart', preventGesture);
+    document.addEventListener('gesturechange', preventGesture);
+
+    return () => {
+      document.removeEventListener('touchmove', preventTouch);
+      document.removeEventListener('gesturestart', preventGesture);
+      document.removeEventListener('gesturechange', preventGesture);
+    };
+  }, [touchMode]);
 
   // Show context menu tip when reconstruction is first loaded (only on desktop)
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
@@ -115,7 +137,7 @@ export function AppLayout() {
   // Touch mode layout - simplified like embed mode, no gallery
   if (touchMode && !embedMode) {
     return (
-      <div className="h-screen flex flex-col bg-ds-primary" data-touch-mode="true">
+      <div className="h-screen flex flex-col bg-ds-primary touch-none" data-touch-mode="true">
         {/* Full-screen 3D Viewer */}
         <div className="flex-1 overflow-hidden">
           <Scene3D />
@@ -124,13 +146,7 @@ export function AppLayout() {
         {/* Simplified status bar */}
         <TouchStatusBar />
 
-        {/* Gallery FAB and drawer */}
-        {touchUI.galleryFAB && (
-          <GalleryFAB
-            isOpen={touchUI.galleryDrawer}
-            onToggle={() => toggleTouchUI('galleryDrawer')}
-          />
-        )}
+        {/* Gallery drawer (toggled by gallery button in ViewerControls) */}
         {touchUI.galleryDrawer && (
           <TouchGalleryDrawer
             onClose={() => setTouchUIVisible('galleryDrawer', false)}

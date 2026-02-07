@@ -109,6 +109,9 @@ export {
   ThreePointAlignIcon,
   ExportPLYIcon,
   ExportConfigIcon,
+  DeleteImagesIcon,
+  FloorDetectionIcon,
+  CameraConvertIcon,
 } from './menu';
 
 // Mouse icons for click hints

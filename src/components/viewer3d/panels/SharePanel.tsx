@@ -148,24 +148,30 @@ export const SharePanel = memo(function SharePanel({
     const url = shareSource ? generateShareableUrl(shareSource, currentViewState) : null;
     const willIncludeLink = includeShareLink && !!url;
     const text = getShareText(willIncludeLink);
+    const shareContent = willIncludeLink ? `${text}\n${url}` : text;
 
-    // Copy text to clipboard (LinkedIn doesn't support pre-filled text)
+    // Copy text + screenshot together so a single paste provides both
     try {
-      const shareContent = willIncludeLink ? `${text}\n${url}` : text;
-      await navigator.clipboard.writeText(shareContent);
-      useNotificationStore.getState().addNotification('info', 'Message copied! Paste in LinkedIn post', 4000);
+      const items: Record<string, Blob> = {
+        'text/plain': new Blob([shareContent], { type: 'text/plain' }),
+      };
+      if (includeScreenshot && getScreenshotBlob) {
+        const blob = await getScreenshotBlob();
+        if (blob) items['image/png'] = blob;
+      }
+      await navigator.clipboard.write([new ClipboardItem(items)]);
+      const msg = items['image/png']
+        ? 'Text + screenshot copied! Paste in LinkedIn post'
+        : 'Message copied! Paste in LinkedIn post';
+      useNotificationStore.getState().addNotification('info', msg, 4000);
     } catch {
-      // Fallback - just notify
-    }
-
-    // Copy screenshot to clipboard for easy pasting (if enabled)
-    if (includeScreenshot) {
-      await copyScreenshotToClipboard();
+      // Fallback - try text only
+      try { await navigator.clipboard.writeText(shareContent); } catch { /* noop */ }
     }
 
     // Open LinkedIn - go to feed to create new post
     window.open('https://www.linkedin.com/feed/', '_blank', 'width=700,height=600');
-  }, [shareSource, currentViewState, getShareText, copyScreenshotToClipboard, includeShareLink, includeScreenshot]);
+  }, [shareSource, currentViewState, getShareText, getScreenshotBlob, includeShareLink, includeScreenshot]);
 
   return (
     <ControlButton
