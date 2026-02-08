@@ -18,7 +18,7 @@ import {
   type ConversionPreview,
 } from '../../utils/cameraModelConversions';
 import { CameraModelId, type Camera, type CameraId } from '../../types/colmap';
-import { modalStyles, inputStyles, controlPanelStyles } from '../../theme';
+import { modalStyles, inputStyles, controlPanelStyles, MODAL_POSITION } from '../../theme';
 
 /** Human-readable names for camera models */
 const MODEL_NAMES: Record<CameraModelId, string> = {
@@ -92,7 +92,7 @@ export const CameraConversionModal = memo(function CameraConversionModal({
       const viewportH = window.innerHeight;
       setPosition({
         x: (viewportW - rect.width) / 2,
-        y: Math.max(20, (viewportH - rect.height) / 2),
+        y: Math.max(MODAL_POSITION.minTop, (viewportH - rect.height) / 2),
       });
     }
   }, []);
@@ -105,7 +105,7 @@ export const CameraConversionModal = memo(function CameraConversionModal({
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPosition({
         x: (viewportW - 360) / 2,
-        y: Math.max(20, (viewportH - 160) / 2),
+        y: Math.max(MODAL_POSITION.minTop, (viewportH - 160) / 2),
       });
       requestAnimationFrame(centerModal);
     }

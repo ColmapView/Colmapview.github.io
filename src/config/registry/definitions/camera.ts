@@ -2,6 +2,7 @@
  * Camera Property Definitions
  */
 import { defineSection } from '../types';
+import { VIZ_COLORS } from '../../../theme/colors';
 import {
   CAMERA_DISPLAY_MODES,
   FRUSTUM_COLOR_MODES,
@@ -68,7 +69,7 @@ export const cameraSection = defineSection({
       type: 'string',
       pattern: /^#[0-9A-Fa-f]{6}$/,
       patternDesc: 'hex color (#RRGGBB)',
-      default: '#ff0000',
+      default: VIZ_COLORS.frustum.default,
       persist: true,
       description: 'Hex color for single frustum color mode',
     },

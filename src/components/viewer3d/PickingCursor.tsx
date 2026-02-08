@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { usePointPickingStore } from '../../store';
+import { MARKER_COLORS_CSS, Z_INDEX } from '../../theme';
 
-// Colors for point indicators: P1=red, P2=green, P3=blue (matching SelectedPointMarkers)
-const POINT_COLORS = ['#ff4444', '#44ff44', '#4444ff'];
 const POINT_LABELS = ['P1', 'P2', 'P3'];
 
 /**
@@ -35,12 +34,12 @@ export function PickingCursor() {
   // Don't show cursor when not active or when all points are selected
   if (!isActive || isComplete) return null;
 
-  const nextColor = POINT_COLORS[nextPointIndex] || POINT_COLORS[0];
+  const nextColor = MARKER_COLORS_CSS[nextPointIndex] || MARKER_COLORS_CSS[0];
   const nextLabel = POINT_LABELS[nextPointIndex] || 'P1';
 
   return (
     <div
-      className="fixed pointer-events-none z-[1000]"
+      className={`fixed pointer-events-none z-[${Z_INDEX.modal}]`}
       style={{
         left: mousePos.x + 16,
         top: mousePos.y + 16,

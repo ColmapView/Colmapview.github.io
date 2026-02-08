@@ -23,6 +23,7 @@ import {
   getActiveZipImageIndex,
   clearActiveZipArchive,
 } from './zipLoader';
+import { VIEWPORT_FALLBACK } from '../theme/sizing';
 
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'];
 
@@ -142,8 +143,8 @@ const fetchCallbacks = new Map<string, Array<(file: File | null) => void>>();
  */
 function getMaxCacheDimensions(): { maxWidth: number; maxHeight: number } {
   const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1;
-  const screenWidth = typeof screen !== 'undefined' ? screen.width : 1920;
-  const screenHeight = typeof screen !== 'undefined' ? screen.height : 1080;
+  const screenWidth = typeof screen !== 'undefined' ? screen.width : VIEWPORT_FALLBACK.width;
+  const screenHeight = typeof screen !== 'undefined' ? screen.height : VIEWPORT_FALLBACK.height;
   // Cap dimensions to prevent excessive memory usage
   return {
     maxWidth: Math.min(Math.round(screenWidth * dpr), URL_IMAGE_MAX_DIMENSION),

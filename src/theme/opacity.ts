@@ -14,6 +14,17 @@ export const OPACITY = {
     withTexture: 0.9,
   },
 
+  interaction: {
+    markerHighlight: 0.8,
+    marker: 0.9,
+    triangleHovered: 0.3,
+    triangleDefault: 0.15,
+    circleHovered: 0.5,
+    circleDefault: 0.3,
+    ringHovered: 0.4,
+    ringDefault: 0.2,
+  },
+
   light: {
     ambient: 0.5,
     directional: 0.5,

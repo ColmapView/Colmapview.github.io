@@ -2,20 +2,10 @@ import { useMemo, useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { Html } from '@react-three/drei';
 import { usePointPickingStore, usePointCloudStore, useUIStore } from '../../store';
-import { hoverCardStyles } from '../../theme';
+import { hoverCardStyles, INTERACTION_AXIS_COLORS, INTERACTION_HOVER_COLOR, MARKER_COLORS_INT, VIZ_COLORS, OPACITY, MODAL_POSITION } from '../../theme';
 import { getDefaultUpAxis } from '../../store/stores/pointPickingStore';
 
-// Colors for markers: P1=red, P2=green, P3=blue
-const MARKER_COLORS = [0xff4444, 0x44ff44, 0x4444ff];
-const HOVER_COLOR = 0xffff00; // Yellow highlight on hover (matches gizmo)
 const MARKER_SIZE = 0.012; // Relative to scene (smaller for cleaner look)
-
-// Axis colors: X=red, Y=green, Z=blue
-const AXIS_COLORS: Record<string, { hex: number; css: string }> = {
-  X: { hex: 0xff4444, css: '#ff4444' },
-  Y: { hex: 0x44ff44, css: '#44ff44' },
-  Z: { hex: 0x4444ff, css: '#4444ff' },
-};
 
 /** Single point highlight for hover preview - simple static marker */
 function HoverHighlight({ position, baseSize }: { position: THREE.Vector3; baseSize: number }) {
@@ -34,12 +24,12 @@ function HoverHighlight({ position, baseSize }: { position: THREE.Vector3; baseS
         />
       </bufferGeometry>
       <pointsMaterial
-        color="#ffff00"
+        color={VIZ_COLORS.interaction.hover}
         size={baseSize + 3}
         sizeAttenuation={false}
         depthTest={false}
         transparent
-        opacity={0.8}
+        opacity={OPACITY.interaction.markerHighlight}
       />
     </points>
   );
@@ -69,7 +59,7 @@ export function SelectedPointMarkers() {
   }, [pickingMode, axesCoordinateSystem, setTargetAxis]);
 
   // Get axis color
-  const axisColor = AXIS_COLORS[targetAxis];
+  const axisColor = INTERACTION_AXIS_COLORS[targetAxis];
 
   // Calculate if we need more points before subscribing to hoveredPoint
   const requiredPoints = pickingMode === 'origin-1pt' ? 1 : pickingMode === 'distance-2pt' ? 2 : pickingMode === 'normal-3pt' ? 3 : 0;
@@ -162,7 +152,7 @@ export function SelectedPointMarkers() {
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    const mat = new THREE.LineBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.8, depthTest: false });
+    const mat = new THREE.LineBasicMaterial({ color: INTERACTION_HOVER_COLOR, transparent: true, opacity: OPACITY.interaction.markerHighlight, depthTest: false });
     return new THREE.Line(geo, mat);
   }, [selectedPoints, pickingMode]);
 
@@ -198,9 +188,9 @@ export function SelectedPointMarkers() {
           onPointerOut={() => { setHoveredMarker(null); setMousePos(null); }}
         >
           <meshBasicMaterial
-            color={hoveredMarker === index ? HOVER_COLOR : MARKER_COLORS[index]}
+            color={hoveredMarker === index ? INTERACTION_HOVER_COLOR : MARKER_COLORS_INT[index]}
             transparent
-            opacity={0.9}
+            opacity={OPACITY.interaction.marker}
             depthTest={false}
           />
         </mesh>
@@ -222,7 +212,7 @@ export function SelectedPointMarkers() {
             <bufferGeometry>
               <bufferAttribute attach="attributes-position" args={[normalArrow.trianglePositions, 3]} />
             </bufferGeometry>
-            <meshBasicMaterial color={hoveredNormal ? HOVER_COLOR : axisColor.hex} transparent opacity={hoveredNormal ? 0.3 : 0.15} side={THREE.DoubleSide} depthTest={false} />
+            <meshBasicMaterial color={hoveredNormal ? INTERACTION_HOVER_COLOR : axisColor.hex} transparent opacity={hoveredNormal ? OPACITY.interaction.triangleHovered : OPACITY.interaction.triangleDefault} side={THREE.DoubleSide} depthTest={false} />
           </mesh>
 
           {/* Normal line */}
@@ -248,7 +238,7 @@ export function SelectedPointMarkers() {
 
       {/* Tooltip for marker hover */}
       {hoveredMarker !== null && mousePos && (
-        <Html style={{ position: 'fixed', left: mousePos.x + 12, top: mousePos.y + 12, pointerEvents: 'none', transform: 'none' }} calculatePosition={() => [0, 0]}>
+        <Html style={{ position: 'fixed', left: mousePos.x + MODAL_POSITION.cursorOffset, top: mousePos.y + MODAL_POSITION.cursorOffset, pointerEvents: 'none', transform: 'none' }} calculatePosition={() => [0, 0]}>
           <div className={hoverCardStyles.container}>
             <div className={hoverCardStyles.title}>P{hoveredMarker + 1}</div>
             <div className={hoverCardStyles.subtitle}>Right-click to remove</div>
@@ -258,7 +248,7 @@ export function SelectedPointMarkers() {
 
       {/* Tooltip for triangle hover */}
       {hoveredNormal && mousePos && (
-        <Html style={{ position: 'fixed', left: mousePos.x + 12, top: mousePos.y + 12, pointerEvents: 'none', transform: 'none' }} calculatePosition={() => [0, 0]}>
+        <Html style={{ position: 'fixed', left: mousePos.x + MODAL_POSITION.cursorOffset, top: mousePos.y + MODAL_POSITION.cursorOffset, pointerEvents: 'none', transform: 'none' }} calculatePosition={() => [0, 0]}>
           <div className={hoverCardStyles.container}>
             <div className={hoverCardStyles.title} style={{ color: axisColor.css }}>{targetAxis}-axis</div>
             <div className={hoverCardStyles.subtitle}>Left: flip · Right: X/Y/Z</div>

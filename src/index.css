@@ -27,6 +27,7 @@
   --accent: #b8b8b8;
   --accent-hover: #d0d0d0;
   --accent-dim: rgba(184, 184, 184, 0.12);
+  --accent-focus: rgba(184, 184, 184, 0.25);
 
   /* Semantic Colors */
   --success: #6b9b6b;
@@ -318,7 +319,7 @@ input[type="checkbox"]:focus,
 input[type="radio"]:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(100, 149, 237, 0.25);
+  box-shadow: 0 0 0 3px var(--accent-focus);
 }
 
 input[type="checkbox"]:active,

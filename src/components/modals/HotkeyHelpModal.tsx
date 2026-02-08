@@ -7,7 +7,7 @@ import {
   formatKeyCombo,
   type HotkeyCategory,
 } from '../../config/hotkeys';
-import { tableStyles, modalStyles } from '../../theme';
+import { tableStyles, modalStyles, Z_INDEX } from '../../theme';
 
 /**
  * Modal that displays all available keyboard shortcuts.
@@ -40,7 +40,7 @@ export function HotkeyHelpModal() {
   const categories = Object.keys(HOTKEY_CATEGORIES) as HotkeyCategory[];
 
   return (
-    <div className="fixed inset-0 z-[1100] pointer-events-none">
+    <div className="fixed inset-0 pointer-events-none" style={{ zIndex: Z_INDEX.modalOverlay }}>
       {/* Backdrop */}
       <div
         className={modalStyles.backdrop}

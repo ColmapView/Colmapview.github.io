@@ -1,5 +1,5 @@
 import { useReconstructionStore, useUIStore } from '../../store';
-import { statusBarStyles } from '../../theme';
+import { statusBarStyles, LINK_COLORS } from '../../theme';
 import { StatWithHistogram } from './StatWithHistogram';
 import { CacheStatsIndicator } from './CacheStatsIndicator';
 
@@ -49,7 +49,7 @@ export function StatusBar() {
           className="no-underline transition-colors"
           style={{ color: 'inherit' }}
           title="Star on GitHub"
-          onMouseEnter={(e) => e.currentTarget.style.color = '#facc15'}
+          onMouseEnter={(e) => e.currentTarget.style.color = LINK_COLORS.github}
           onMouseLeave={(e) => e.currentTarget.style.color = 'inherit'}
         >
           ★ Star on GitHub
@@ -62,7 +62,7 @@ export function StatusBar() {
           className="no-underline transition-colors"
           style={{ color: 'inherit' }}
           title="Report Bugs"
-          onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+          onMouseEnter={(e) => e.currentTarget.style.color = LINK_COLORS.bugs}
           onMouseLeave={(e) => e.currentTarget.style.color = 'inherit'}
         >
           Report Bugs
@@ -78,7 +78,7 @@ export function StatusBar() {
             className="no-underline transition-colors"
             style={{ color: 'inherit' }}
             title="COLMAP - Structure-from-Motion and Multi-View Stereo"
-            onMouseEnter={(e) => e.currentTarget.style.color = '#60a5fa'}
+            onMouseEnter={(e) => e.currentTarget.style.color = LINK_COLORS.colmap}
             onMouseLeave={(e) => e.currentTarget.style.color = 'inherit'}
           >
             COLMAP

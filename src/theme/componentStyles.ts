@@ -378,16 +378,16 @@ export const loadingStyles = {
 // ============================================
 
 export const controlPanelStyles = {
-  // Container positioning - z-index 2000 ensures hover panels appear above tool modals
-  container: 'absolute top-3 right-3 flex flex-col gap-2 z-[2000] control-panel-responsive',
+  // Container positioning - z-index tooltip ensures hover panels appear above tool modals
+  container: `absolute top-3 right-3 flex flex-col gap-2 z-[${Z_INDEX.tooltip}] control-panel-responsive`,
   // Button styles
   button: 'w-10 h-10 rounded-lg flex items-center justify-center transition-colors relative border border-ds control-button-responsive',
   buttonActive: 'bg-ds-accent text-ds-void border-ds-accent',
   buttonHover: 'bg-ds-hover text-ds-primary',
   buttonInactive: 'bg-ds-tertiary text-ds-secondary hover-ds-hover hover-ds-text-primary',
   // Panel positioning - right-full positions at container's left edge, pr-2 creates gap inside hover area
-  // z-index 2000 ensures hover panels always appear above tool modals (which start at 1000 and increment)
-  panelWrapper: 'absolute right-full top-0 pr-2 z-[2000]',
+  // z-index tooltip ensures hover panels always appear above tool modals (which start at 1000 and increment)
+  panelWrapper: `absolute right-full top-0 pr-2 z-[${Z_INDEX.tooltip}]`,
   // Panel content
   panel: 'bg-ds-tertiary border border-ds rounded-lg p-4 w-[240px] shadow-ds-lg hover-panel-responsive',
   panelTitle: 'text-ds-primary text-sm font-medium mb-3',
@@ -672,11 +672,20 @@ export const touchStyles = {
   touchButton: 'min-h-[44px] px-4 flex items-center justify-center gap-2 rounded-lg',
 
   // Selection toast (brief feedback)
-  selectionToast: 'fixed top-4 left-1/2 -translate-x-1/2 bg-ds-tertiary/95 px-4 py-2 rounded-lg shadow-ds z-[999]',
+  selectionToast: `fixed top-4 left-1/2 -translate-x-1/2 bg-ds-tertiary/95 px-4 py-2 rounded-lg shadow-ds z-[${Z_INDEX.fab}]`,
   selectionToastText: 'text-ds-primary text-sm whitespace-nowrap',
 
   // Touch status bar
   touchStatusBar: 'h-6 border-t border-ds bg-ds-tertiary text-ds-secondary text-xs px-3 flex items-center justify-between',
+} as const;
+
+// ============================================
+// COLOR PICKER STYLES
+// ============================================
+
+export const colorPickerStyles = {
+  hueGradient: 'linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)',
+  hueSlider: 'w-full h-4 cursor-pointer appearance-none bg-transparent relative z-10 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-gray-400 [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-gray-400 [&::-moz-range-thumb]:cursor-pointer [&::-webkit-slider-runnable-track]:bg-transparent [&::-moz-range-track]:bg-transparent',
 } as const;
 
 // ============================================

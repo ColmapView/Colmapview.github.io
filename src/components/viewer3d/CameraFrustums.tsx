@@ -18,7 +18,7 @@ import { useGuideStore } from '../../store/stores/guideStore';
 import { getImageFile, getUrlImageCached, fetchUrlImage, getZipImageCached, fetchZipImage, isZipLoadingAvailable } from '../../utils/imageFileUtils';
 import { getImageWorldPosition, getImageWorldQuaternion } from '../../utils/colmapTransforms';
 import { useFrustumTexture, useSelectedImageTexture, prioritizeFrustumTexture, pauseFrustumTextureCache, resumeFrustumTextureCache } from '../../hooks/useFrustumTexture';
-import { VIZ_COLORS, RAINBOW, OPACITY, TIMING, hoverCardStyles, ICON_SIZES, getCameraColor, contextMenuStyles, getMaterialTransparency } from '../../theme';
+import { VIZ_COLORS, RAINBOW, OPACITY, TIMING, hoverCardStyles, ICON_SIZES, getCameraColor, contextMenuStyles, getMaterialTransparency, MODAL_POSITION } from '../../theme';
 import { TOUCH } from '../../theme/sizing';
 import { rainbowColor } from '../../utils/colorUtils';
 import { UndistortedImageMaterial } from './UndistortedImageMaterial';
@@ -500,8 +500,8 @@ function BatchedArrowMeshes({
         <Html
           style={{
             position: 'fixed',
-            left: tooltipData.x + 12,
-            top: tooltipData.y + 12,
+            left: tooltipData.x + MODAL_POSITION.cursorOffset,
+            top: tooltipData.y + MODAL_POSITION.cursorOffset,
             pointerEvents: 'none',
             transform: 'none',
           }}
@@ -1061,8 +1061,8 @@ function BatchedPlaneHitTargets({
         <Html
           style={{
             position: 'fixed',
-            left: tooltipData.x + 12,
-            top: tooltipData.y + 12,
+            left: tooltipData.x + MODAL_POSITION.cursorOffset,
+            top: tooltipData.y + MODAL_POSITION.cursorOffset,
             pointerEvents: 'none',
             transform: 'none',
           }}
@@ -1512,7 +1512,7 @@ const FrustumPlane = memo(function FrustumPlane({
             planeWidth={planeSize.width}
             planeHeight={planeSize.height}
             opacity={isTransparent ? selectionPlaneOpacity * 0.5 : selectionPlaneOpacity}
-            color={0xffffff}
+            color={VIZ_COLORS.material.white}
             side={THREE.DoubleSide}
             // Selected planes: force transparent pass (renders after wireframes) with no depth test/write
             depthTest={!isSelected}
@@ -1529,7 +1529,7 @@ const FrustumPlane = memo(function FrustumPlane({
               <meshBasicMaterial
                 ref={materialRef}
                 map={shouldShowTexture ? displayTexture : null}
-                color={shouldShowTexture ? 0xffffff : displayColor}
+                color={shouldShowTexture ? VIZ_COLORS.material.white : displayColor}
                 side={THREE.DoubleSide}
                 // Selected planes: force transparent pass (renders after wireframes) with no depth test
                 // Non-selected: use normal transparency based on opacity
@@ -1548,8 +1548,8 @@ const FrustumPlane = memo(function FrustumPlane({
         <Html
           style={{
             position: 'fixed',
-            left: mousePos.x + 12,
-            top: mousePos.y + 12,
+            left: mousePos.x + MODAL_POSITION.cursorOffset,
+            top: mousePos.y + MODAL_POSITION.cursorOffset,
             pointerEvents: 'none',
             transform: 'none',
           }}

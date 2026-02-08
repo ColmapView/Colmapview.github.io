@@ -6,7 +6,7 @@ import { getImageFile, getUrlImageCached, fetchUrlImage, getZipImageCached, fetc
 import { useThumbnail, pauseThumbnailCache, resumeThumbnailCache } from '../../hooks/useThumbnail';
 import { prioritizeFrustumTexture } from '../../hooks/useFrustumTexture';
 import { useLongPress } from '../../hooks/useLongPress';
-import { COLUMNS, GAP, SIZE, TIMING, buttonStyles, getTooltipProps, galleryStyles, listStyles, inputStyles, emptyStateStyles, toolbarStyles, hoverCardStyles, ICON_SIZES } from '../../theme';
+import { COLUMNS, GAP, SIZE, TIMING, buttonStyles, getTooltipProps, galleryStyles, listStyles, inputStyles, emptyStateStyles, toolbarStyles, hoverCardStyles, ICON_SIZES, DELETED_FILTER, MODAL_POSITION, Z_INDEX } from '../../theme';
 
 type ViewMode = 'gallery' | 'list';
 type SortField = 'name' | 'imageId' | 'avgError' | 'covisibleCount' | 'numPoints3D' | 'numPoints2D';
@@ -157,7 +157,7 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, isMatched, isMa
             src={src}
             alt={img.name}
             className={galleryStyles.itemImage}
-            style={isMarkedForDeletion ? { filter: 'grayscale(100%) opacity(0.5)' } : undefined}
+            style={isMarkedForDeletion ? { filter: DELETED_FILTER } : undefined}
             draggable={false}
           />
         ) : (
@@ -205,10 +205,10 @@ const GalleryItem = memo(function GalleryItem({ img, isSelected, isMatched, isMa
         <div
           style={{
             position: 'fixed',
-            left: mousePos.x + 12,
-            top: mousePos.y + 12,
+            left: mousePos.x + MODAL_POSITION.cursorOffset,
+            top: mousePos.y + MODAL_POSITION.cursorOffset,
             pointerEvents: 'none',
-            zIndex: 9999,
+            zIndex: Z_INDEX.mouseTooltip,
           }}
         >
           <div className={hoverCardStyles.container}>
@@ -319,7 +319,7 @@ const ListItem = memo(function ListItem({ img, isSelected, isMatched, isMarkedFo
             src={src}
             alt={img.name}
             className="w-full h-full object-cover"
-            style={isMarkedForDeletion ? { filter: 'grayscale(100%) opacity(0.5)' } : undefined}
+            style={isMarkedForDeletion ? { filter: DELETED_FILTER } : undefined}
             draggable={false}
           />
         ) : (
@@ -367,10 +367,10 @@ const ListItem = memo(function ListItem({ img, isSelected, isMatched, isMarkedFo
         <div
           style={{
             position: 'fixed',
-            left: mousePos.x + 12,
-            top: mousePos.y + 12,
+            left: mousePos.x + MODAL_POSITION.cursorOffset,
+            top: mousePos.y + MODAL_POSITION.cursorOffset,
             pointerEvents: 'none',
-            zIndex: 9999,
+            zIndex: Z_INDEX.mouseTooltip,
           }}
         >
           <div className={hoverCardStyles.container}>

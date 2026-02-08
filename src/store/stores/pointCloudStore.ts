@@ -31,7 +31,7 @@ export const usePointCloudStore = create<PointCloudState>()(
       pointSize: 2,
       pointOpacity: 1,
       colorMode: 'rgb',
-      minTrackLength: 0,
+      minTrackLength: 2,
       maxReprojectionError: Infinity,
       thinning: 0,
       selectedPointId: null,

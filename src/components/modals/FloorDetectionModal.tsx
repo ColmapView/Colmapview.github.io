@@ -16,7 +16,7 @@ import { useFloorPlaneStore, type FloorColorMode } from '../../store/stores/floo
 import { detectPlaneRANSAC, computeDistancesToPlane, transformPositions, flipPlaneNormal } from '../../utils/ransac';
 import { createSim3dFromEuler, isIdentityEuler, sim3dToEuler, composeSim3d } from '../../utils/sim3dTransforms';
 import { COORDINATE_SYSTEMS } from '../../utils/coordinateSystems';
-import { modalStyles, controlPanelStyles } from '../../theme';
+import { modalStyles, controlPanelStyles, MODAL_POSITION } from '../../theme';
 import type { Sim3d } from '../../types/sim3d';
 
 const styles = controlPanelStyles;
@@ -174,7 +174,7 @@ export const FloorDetectionModal = memo(function FloorDetectionModal({
       const viewportH = window.innerHeight;
       setPosition({
         x: (viewportW - rect.width) / 2,
-        y: Math.max(20, (viewportH - rect.height) / 2),
+        y: Math.max(MODAL_POSITION.minTop, (viewportH - rect.height) / 2),
       });
     }
   }, []);
@@ -187,7 +187,7 @@ export const FloorDetectionModal = memo(function FloorDetectionModal({
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPosition({
         x: (viewportW - 280) / 2,
-        y: Math.max(20, (viewportH - 300) / 2),
+        y: Math.max(MODAL_POSITION.minTop, (viewportH - 300) / 2),
       });
       requestAnimationFrame(centerModal);
     }

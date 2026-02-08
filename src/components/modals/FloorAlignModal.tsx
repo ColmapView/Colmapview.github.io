@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useFloorPlaneStore } from '../../store/stores/floorPlaneStore';
 import { useTransformStore, useUIStore, useReconstructionStore } from '../../store';
-import { modalStyles } from '../../theme';
+import { modalStyles, Z_INDEX, MODAL_POSITION, VIEWPORT_FALLBACK } from '../../theme';
 import { flipPlaneNormal, detectPlaneRANSAC, computeDistancesToPlane, transformPositions } from '../../utils/ransac';
 import { sim3dToEuler, composeSim3d, createSim3dFromEuler, isIdentityEuler } from '../../utils/sim3dTransforms';
 import { COORDINATE_SYSTEMS } from '../../utils/coordinateSystems';
@@ -85,13 +85,13 @@ export function FloorAlignModal() {
 
     const modalWidth = 120;
     const modalHeight = 40;
-    const padding = 16;
+    const { viewportPadding: padding, cursorOffset } = MODAL_POSITION;
 
-    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
-    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 1080;
+    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : VIEWPORT_FALLBACK.width;
+    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : VIEWPORT_FALLBACK.height;
 
-    let x = modalPosition.x + 8;
-    let y = modalPosition.y - 8;
+    let x = modalPosition.x + cursorOffset;
+    let y = modalPosition.y - cursorOffset;
 
     if (x + modalWidth + padding > viewportWidth) {
       x = modalPosition.x - modalWidth - 20;
@@ -181,8 +181,8 @@ export function FloorAlignModal() {
 
   return (
     <div
-      className="fixed z-[1100] bg-ds-tertiary border border-ds rounded shadow-ds-lg p-1"
-      style={computedPosition}
+      className="fixed bg-ds-tertiary border border-ds rounded shadow-ds-lg p-1"
+      style={{ ...computedPosition, zIndex: Z_INDEX.modalOverlay }}
     >
       <div className="flex items-center gap-0.5">
         {/* Confirm button (tick) */}

@@ -4,7 +4,7 @@ import { useReconstructionStore, selectCameraCount, useUIStore, useDeletionStore
 import type { Camera, Point2D } from '../../types/colmap';
 import { getImageFile, getMaskFile, getUrlImageCached, fetchUrlImage, fetchUrlMask, getZipImageCached, fetchZipImage, fetchZipMask, isZipLoadingAvailable } from '../../utils/imageFileUtils';
 import { useFileUrl } from '../../hooks/useFileUrl';
-import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, MODAL, TOUCH, buttonStyles, inputStyles, resizeHandleStyles, modalStyles } from '../../theme';
+import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, MODAL, TOUCH, buttonStyles, inputStyles, resizeHandleStyles, modalStyles, CANVAS_COLORS } from '../../theme';
 import { HOTKEYS } from '../../config/hotkeys';
 import { ModalErrorBoundary } from './ModalErrorBoundary';
 
@@ -421,14 +421,7 @@ interface ImagePlaceholderProps {
   style?: React.CSSProperties;
 }
 
-// Design system colors (from CSS variables)
-const DS_COLORS = {
-  bgSecondary: '#161616',
-  bgTertiary: '#1e1e1e',
-  textPrimary: '#e8e8e8',
-  textSecondary: '#8a8a8a',
-  textMuted: '#5a5a5a',
-};
+const DS_COLORS = CANVAS_COLORS;
 
 function ImagePlaceholder({ width, height, cameraWidth, cameraHeight, label, style }: ImagePlaceholderProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1696,7 +1689,7 @@ export function ImageDetailModal() {
                         ? 'bg-ds-secondary text-ds-muted opacity-50'
                         : showPoints2D ? 'bg-ds-accent text-ds-void' : 'bg-ds-hover text-ds-primary'
                     }`}
-                    style={{ minHeight: 36 }}
+                    style={{ minHeight: TOUCH.compactButtonHeight }}
                   >
                     2D <span className={isMarkedForDeletion ? '' : showPoints2D ? '' : 'text-ds-success'}>({numPoints2D})</span>
                   </button>
@@ -1708,7 +1701,7 @@ export function ImageDetailModal() {
                         ? 'bg-ds-secondary text-ds-muted opacity-50'
                         : showPoints3D ? 'bg-ds-accent text-ds-void' : 'bg-ds-hover text-ds-primary'
                     }`}
-                    style={{ minHeight: 36 }}
+                    style={{ minHeight: TOUCH.compactButtonHeight }}
                   >
                     3D <span className={isMarkedForDeletion ? '' : showPoints3D ? '' : 'text-ds-error'}>({numPoints3D})</span>
                   </button>
@@ -1722,7 +1715,7 @@ export function ImageDetailModal() {
                     ? 'bg-ds-secondary text-ds-muted opacity-50'
                     : showMatchesInModal ? 'bg-ds-accent text-ds-void' : 'bg-ds-hover text-ds-primary'
                 }`}
-                style={{ minHeight: 36 }}
+                style={{ minHeight: TOUCH.compactButtonHeight }}
               >
                 Matches
               </button>
@@ -1732,7 +1725,7 @@ export function ImageDetailModal() {
                   value={matchedImageId ?? ''}
                   onChange={(e) => setMatchedImageId(e.target.value ? parseInt(e.target.value) : null)}
                   className={`${inputStyles.select} flex-1 min-w-0 py-1.5 text-xs`}
-                  style={{ minHeight: 36 }}
+                  style={{ minHeight: TOUCH.compactButtonHeight }}
                 >
                   <option value="">Select image...</option>
                   {connectedImages.map(({ imageId, matchCount, name }) => (
@@ -1771,7 +1764,7 @@ export function ImageDetailModal() {
                 className={`flex-1 px-2 flex items-center justify-center rounded-md text-xs ${
                   hasPrev ? 'bg-ds-hover text-ds-primary' : 'bg-ds-secondary text-ds-muted'
                 }`}
-                style={{ minHeight: 36 }}
+                style={{ minHeight: TOUCH.compactButtonHeight }}
               >
                 ← Prev
               </button>
@@ -1784,7 +1777,7 @@ export function ImageDetailModal() {
                 className={`flex-1 px-2 flex items-center justify-center rounded-md text-xs ${
                   hasNext ? 'bg-ds-hover text-ds-primary' : 'bg-ds-secondary text-ds-muted'
                 }`}
-                style={{ minHeight: 36 }}
+                style={{ minHeight: TOUCH.compactButtonHeight }}
               >
                 Next →
               </button>

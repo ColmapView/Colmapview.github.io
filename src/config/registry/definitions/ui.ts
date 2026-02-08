@@ -7,6 +7,8 @@ import {
   AXES_COORDINATE_SYSTEMS,
   AXIS_LABEL_MODES,
 } from '../../../store/types';
+import { OPACITY } from '../../../theme/opacity';
+import { VIZ_COLORS } from '../../../theme/colors';
 
 export const uiSection = defineSection({
   key: 'ui',
@@ -55,7 +57,7 @@ export const uiSection = defineSection({
       type: 'number',
       min: 0,
       max: 1,
-      default: 0.75,
+      default: OPACITY.matchLines,
       persist: true,
     },
     {
@@ -63,7 +65,7 @@ export const uiSection = defineSection({
       type: 'string',
       pattern: /^#[0-9A-Fa-f]{6}$/,
       patternDesc: 'hex color (#RRGGBB)',
-      default: '#ff00ff',
+      default: VIZ_COLORS.match,
       persist: true,
       description: 'Hex color for matches visualization',
     },

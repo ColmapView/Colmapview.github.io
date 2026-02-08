@@ -5,7 +5,7 @@
 
 import type { ReactNode } from 'react';
 import { useState, useEffect, useLayoutEffect, memo, useRef, useCallback } from 'react';
-import { controlPanelStyles, getControlButtonClass, getTooltipProps } from '../../theme';
+import { controlPanelStyles, getControlButtonClass, getTooltipProps, colorPickerStyles } from '../../theme';
 import { hslToHex, hexToHsl } from '../../utils/colorUtils';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { useUIStore } from '../../store/stores/uiStore';
@@ -284,7 +284,7 @@ export const HueRow = memo(function HueRow({ label, value, onChange }: HueRowPro
         <div
           className="absolute left-0 right-0 h-1.5 rounded-full z-0"
           style={{
-            background: 'linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)',
+            background: colorPickerStyles.hueGradient,
           }}
         />
         <input
@@ -294,7 +294,7 @@ export const HueRow = memo(function HueRow({ label, value, onChange }: HueRowPro
           step={1}
           value={hue}
           onChange={(e) => handleHueChange(parseInt(e.target.value))}
-          className="w-full h-4 cursor-pointer appearance-none bg-transparent relative z-10 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-gray-400 [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-gray-400 [&::-moz-range-thumb]:cursor-pointer [&::-webkit-slider-runnable-track]:bg-transparent [&::-moz-range-track]:bg-transparent"
+          className={colorPickerStyles.hueSlider}
         />
       </div>
       {isEditing ? (
@@ -380,7 +380,7 @@ export const HueSliderRow = memo(function HueSliderRow({ label, value, onChange 
         <div
           className="absolute left-0 right-0 h-1.5 rounded-full z-0"
           style={{
-            background: 'linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)',
+            background: colorPickerStyles.hueGradient,
           }}
         />
         <input
@@ -390,7 +390,7 @@ export const HueSliderRow = memo(function HueSliderRow({ label, value, onChange 
           step={1}
           value={value}
           onChange={(e) => onChange(parseInt(e.target.value))}
-          className="w-full h-4 cursor-pointer appearance-none bg-transparent relative z-10 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-gray-400 [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-gray-400 [&::-moz-range-thumb]:cursor-pointer [&::-webkit-slider-runnable-track]:bg-transparent [&::-moz-range-track]:bg-transparent"
+          className={colorPickerStyles.hueSlider}
         />
       </div>
       {isEditing ? (

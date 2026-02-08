@@ -7,7 +7,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useProfiles } from '../../hooks/useProfiles';
 import { useNotificationStore } from '../../store/stores/notificationStore';
 import { TrashIcon } from '../../icons';
-import { controlPanelStyles } from '../../theme';
+import { controlPanelStyles, Z_INDEX } from '../../theme';
 
 const styles = controlPanelStyles;
 
@@ -121,7 +121,7 @@ export function ProfileSelector() {
           </button>
 
           {isDropdownOpen && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-ds-tertiary border border-ds rounded shadow-lg z-50 py-1">
+            <div className={`absolute top-full left-0 right-0 mt-1 bg-ds-tertiary border border-ds rounded shadow-lg z-[${Z_INDEX.dropdown}] py-1`}>
               {profileNames.map((name) => {
                 const isDefault = name === 'Default';
                 return (

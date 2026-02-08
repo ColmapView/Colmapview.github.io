@@ -15,7 +15,7 @@ import {
 import { useModalZIndex } from '../../hooks/useModalZIndex';
 import { useThumbnail } from '../../hooks/useThumbnail';
 import { getImageFile, getUrlImageCached, getZipImageCached, isZipLoadingAvailable } from '../../utils/imageFileUtils';
-import { modalStyles, controlPanelStyles, inputStyles } from '../../theme';
+import { modalStyles, controlPanelStyles, inputStyles, MODAL_POSITION, DELETED_FILTER } from '../../theme';
 import { ResetIcon } from '../../icons';
 import { CameraModelId } from '../../types/colmap';
 import { SensorType } from '../../types/rig';
@@ -59,7 +59,7 @@ const DeletionListItem = memo(function DeletionListItem({ id, label, name, file,
             src={src}
             alt={name}
             className="w-full h-full object-cover"
-            style={{ filter: 'grayscale(100%) opacity(0.5)' }}
+            style={{ filter: DELETED_FILTER }}
             draggable={false}
           />
         ) : (
@@ -217,7 +217,7 @@ export const DeletionModal = memo(function DeletionModal({
       const viewportH = window.innerHeight;
       setPosition({
         x: (viewportW - rect.width) / 2,
-        y: Math.max(20, (viewportH - rect.height) / 2),
+        y: Math.max(MODAL_POSITION.minTop, (viewportH - rect.height) / 2),
       });
     }
   }, []);
@@ -230,7 +230,7 @@ export const DeletionModal = memo(function DeletionModal({
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPosition({
         x: (viewportW - 300) / 2,
-        y: Math.max(20, (viewportH - 400) / 2),
+        y: Math.max(MODAL_POSITION.minTop, (viewportH - 400) / 2),
       });
       requestAnimationFrame(centerModal);
     }

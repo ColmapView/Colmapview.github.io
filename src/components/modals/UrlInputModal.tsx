@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
-import { inputStyles, getButtonClass } from '../../theme';
+import { inputStyles, getButtonClass, Z_INDEX } from '../../theme';
 import { ChevronDownIcon, ChevronRightIcon } from '../../icons';
 
 interface UrlInputModalProps {
@@ -64,7 +64,8 @@ export function UrlInputModal({ isOpen, onClose, onLoad, loading = false }: UrlI
 
   return (
     <div
-      className="fixed inset-0 z-[1100] flex items-center justify-center bg-ds-void/50"
+      className="fixed inset-0 flex items-center justify-center bg-ds-void/50"
+      style={{ zIndex: Z_INDEX.modalOverlay }}
       onClick={(e) => {
         // Close when clicking backdrop (not when clicking modal content)
         if (e.target === e.currentTarget && !loading) {

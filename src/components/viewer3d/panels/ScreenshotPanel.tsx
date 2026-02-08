@@ -140,15 +140,13 @@ export const ScreenshotPanel = memo(function ScreenshotPanel({
         <div className="flex gap-2 mt-2">
           <button
             onClick={takeScreenshot}
-            className={styles.actionButton}
-            style={{ flex: 1 }}
+            className={`${styles.actionButton} flex-1`}
           >
             Save
           </button>
           <button
             onClick={copyScreenshotToClipboard}
-            className={styles.actionButton}
-            style={{ flex: 1 }}
+            className={`${styles.actionButton} flex-1`}
           >
             Copy
           </button>

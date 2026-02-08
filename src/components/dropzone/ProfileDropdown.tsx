@@ -6,7 +6,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useProfiles } from '../../hooks/useProfiles';
 import { ChevronDownIcon } from '../../icons';
-import { buttonStyles } from '../../theme';
+import { buttonStyles, Z_INDEX } from '../../theme';
 
 export function ProfileDropdown() {
   const {
@@ -50,7 +50,7 @@ export function ProfileDropdown() {
       </button>
 
       {isOpen && (
-        <div className="absolute top-full right-0 mt-1 bg-ds-tertiary border border-ds rounded shadow-lg z-50 min-w-[120px] py-1">
+        <div className={`absolute top-full right-0 mt-1 bg-ds-tertiary border border-ds rounded shadow-lg z-[${Z_INDEX.dropdown}] min-w-[120px] py-1`}>
           {profileNames.map((name) => (
             <div
               key={name}

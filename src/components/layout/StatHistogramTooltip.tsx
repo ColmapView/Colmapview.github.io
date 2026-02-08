@@ -1,5 +1,5 @@
 import { useRef, useLayoutEffect, useState } from 'react';
-import { histogramStyles } from '../../theme';
+import { histogramStyles, CHART_COLORS } from '../../theme';
 
 export interface HistogramBin {
   label: string;
@@ -93,7 +93,7 @@ export function StatHistogramTooltip({
                   y={TOP_PADDING}
                   width={barWidth}
                   height={CHART_HEIGHT}
-                  fill="rgba(255,255,255,0.05)"
+                  fill={CHART_COLORS.barBackground}
                   rx={3}
                 />
                 {/* Bar */}
@@ -102,7 +102,7 @@ export function StatHistogramTooltip({
                   y={y}
                   width={barWidth}
                   height={barHeight || 1}
-                  fill="#f59e0b"
+                  fill={CHART_COLORS.bar}
                   rx={3}
                 />
                 {/* Label */}
@@ -112,7 +112,7 @@ export function StatHistogramTooltip({
                   textAnchor="middle"
                   fontSize={8}
                   fontWeight={500}
-                  fill="#e5e7eb"
+                  fill={CHART_COLORS.label}
                 >
                   {bin.label}
                 </text>
@@ -124,7 +124,7 @@ export function StatHistogramTooltip({
                     textAnchor="middle"
                     fontSize={8}
                     fontWeight={600}
-                    fill="#fbbf24"
+                    fill={CHART_COLORS.percentage}
                   >
                     {bin.percentage.toFixed(0)}%
                   </text>

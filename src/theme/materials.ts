@@ -29,6 +29,9 @@ export function getMaterialTransparency(opacity: number): {
  * Check if material should be visible based on opacity.
  * Materials with very low opacity are hidden to avoid rendering artifacts.
  */
+/** CSS filter for images marked for deletion (grayscale + dimmed) */
+export const DELETED_FILTER = 'grayscale(100%) opacity(0.5)';
+
 export const VISIBILITY_THRESHOLD = 0.001;
 
 export function isMaterialVisible(opacity: number, visible = true): boolean {

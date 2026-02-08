@@ -4,18 +4,9 @@ import { Html, Text, Billboard } from '@react-three/drei';
 import { type ThreeEvent } from '@react-three/fiber';
 import { useFloorPlaneStore } from '../../store/stores/floorPlaneStore';
 import { useUIStore } from '../../store';
-import { hoverCardStyles, ICON_SIZES } from '../../theme';
+import { hoverCardStyles, ICON_SIZES, INTERACTION_AXIS_COLORS, INTERACTION_HOVER_COLOR, OPACITY, MODAL_POSITION } from '../../theme';
 import { flipPlaneNormal } from '../../utils/ransac';
 import { AXIS_SEMANTIC } from '../../utils/coordinateSystems';
-
-// Axis colors: X=red, Y=green, Z=blue (same as SelectedPointMarkers)
-const AXIS_COLORS: Record<string, { hex: number; css: string }> = {
-  X: { hex: 0xff4444, css: '#ff4444' },
-  Y: { hex: 0x44ff44, css: '#44ff44' },
-  Z: { hex: 0x4444ff, css: '#4444ff' },
-};
-
-const HOVER_COLOR = 0xffff00; // Yellow highlight on hover
 
 /**
  * 3D widget showing the detected floor plane.
@@ -46,7 +37,7 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
 
   // Get axis color
-  const axisColor = AXIS_COLORS[targetAxis];
+  const axisColor = INTERACTION_AXIS_COLORS[targetAxis];
 
   // Compute plane geometry data
   const planeData = useMemo(() => {
@@ -168,9 +159,9 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
       >
         <ringGeometry args={[planeData.radius * 0.95, planeData.radius, 64]} />
         <meshBasicMaterial
-          color={hovered ? HOVER_COLOR : axisColor.hex}
+          color={hovered ? INTERACTION_HOVER_COLOR : axisColor.hex}
           transparent
-          opacity={hovered ? 0.4 : 0.2}
+          opacity={hovered ? OPACITY.interaction.ringHovered : OPACITY.interaction.ringDefault}
           side={THREE.DoubleSide}
           depthTest={false}
         />
@@ -188,9 +179,9 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
       >
         <circleGeometry args={[planeData.radius * 0.3, 32]} />
         <meshBasicMaterial
-          color={hovered ? HOVER_COLOR : axisColor.hex}
+          color={hovered ? INTERACTION_HOVER_COLOR : axisColor.hex}
           transparent
-          opacity={hovered ? 0.5 : 0.3}
+          opacity={hovered ? OPACITY.interaction.circleHovered : OPACITY.interaction.circleDefault}
           side={THREE.DoubleSide}
           depthTest={false}
         />
@@ -252,8 +243,8 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
         <Html
           style={{
             position: 'fixed',
-            left: mousePos.x + 12,
-            top: mousePos.y + 12,
+            left: mousePos.x + MODAL_POSITION.cursorOffset,
+            top: mousePos.y + MODAL_POSITION.cursorOffset,
             pointerEvents: 'none',
             transform: 'none',
           }}

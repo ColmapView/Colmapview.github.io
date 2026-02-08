@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
-import { hoverCardStyles, ICON_SIZES } from '../../theme';
+import { hoverCardStyles, ICON_SIZES, Z_INDEX, MODAL_POSITION } from '../../theme';
 import { MouseLeftIcon, MouseRightIcon, MouseScrollIcon } from '../../icons';
 import { useUIStore } from '../../store/stores/uiStore';
 
@@ -118,10 +118,11 @@ export function MouseTooltip() {
 
   return (
     <div
-      className="fixed pointer-events-none z-[9999]"
+      className="fixed pointer-events-none"
       style={{
-        right: `calc(100vw - ${mousePos.x}px + 12px)`,
-        top: mousePos.y + 12,
+        zIndex: Z_INDEX.mouseTooltip,
+        right: `calc(100vw - ${mousePos.x}px + ${MODAL_POSITION.cursorOffset}px)`,
+        top: mousePos.y + MODAL_POSITION.cursorOffset,
       }}
     >
       <div className={`${hoverCardStyles.container} border border-ds rounded text-xs px-2 py-1 whitespace-pre-line max-w-xs`}>

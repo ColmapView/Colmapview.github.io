@@ -906,15 +906,13 @@ export function ViewerControls() {
           <div className="flex gap-1 mb-3">
             <button
               onClick={() => setCameraProjection('perspective')}
-              className={cameraProjection === 'perspective' ? styles.actionButtonPrimary : styles.actionButton}
-              style={{ flex: 1 }}
+              className={`${cameraProjection === 'perspective' ? styles.actionButtonPrimary : styles.actionButton} flex-1`}
             >
               Persp
             </button>
             <button
               onClick={() => setCameraProjection('orthographic')}
-              className={cameraProjection === 'orthographic' ? styles.actionButtonPrimary : styles.actionButton}
-              style={{ flex: 1 }}
+              className={`${cameraProjection === 'orthographic' ? styles.actionButtonPrimary : styles.actionButton} flex-1`}
             >
               Ortho
             </button>
@@ -936,22 +934,19 @@ export function ViewerControls() {
           <div className="flex gap-1 mb-1">
             <button
               onClick={() => setView('x')}
-              className={styles.actionButton}
-              style={{ flex: 1 }}
+              className={`${styles.actionButton} flex-1`}
             >
               +X <span className="text-ds-muted text-xs">(1)</span>
             </button>
             <button
               onClick={() => setView('y')}
-              className={styles.actionButton}
-              style={{ flex: 1 }}
+              className={`${styles.actionButton} flex-1`}
             >
               +Y <span className="text-ds-muted text-xs">(2)</span>
             </button>
             <button
               onClick={() => setView('z')}
-              className={styles.actionButton}
-              style={{ flex: 1 }}
+              className={`${styles.actionButton} flex-1`}
             >
               +Z <span className="text-ds-muted text-xs">(3)</span>
             </button>
@@ -959,22 +954,19 @@ export function ViewerControls() {
           <div className="flex gap-1 mb-3">
             <button
               onClick={() => setView('-x')}
-              className={styles.actionButton}
-              style={{ flex: 1 }}
+              className={`${styles.actionButton} flex-1`}
             >
               -X <span className="text-ds-muted text-xs">(4)</span>
             </button>
             <button
               onClick={() => setView('-y')}
-              className={styles.actionButton}
-              style={{ flex: 1 }}
+              className={`${styles.actionButton} flex-1`}
             >
               -Y <span className="text-ds-muted text-xs">(5)</span>
             </button>
             <button
               onClick={() => setView('-z')}
-              className={styles.actionButton}
-              style={{ flex: 1 }}
+              className={`${styles.actionButton} flex-1`}
             >
               -Z <span className="text-ds-muted text-xs">(6)</span>
             </button>
@@ -982,8 +974,7 @@ export function ViewerControls() {
           <div className={styles.actionGroup}>
             <button
               onClick={handleResetView}
-              className={styles.actionButtonPrimary}
-              style={{ flex: 1 }}
+              className={`${styles.actionButtonPrimary} flex-1`}
             >
               Reset View
               <span className="text-ds-void/70 ml-2 text-xs">(R)</span>

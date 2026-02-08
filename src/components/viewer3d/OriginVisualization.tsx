@@ -2,7 +2,7 @@ import { useMemo, useRef, useEffect, useState, useCallback, memo } from 'react';
 import * as THREE from 'three';
 import { Text, Billboard, Html } from '@react-three/drei';
 import { useThree, type ThreeEvent } from '@react-three/fiber';
-import { VIZ_COLORS, contextMenuStyles, hoverCardStyles, ICON_SIZES } from '../../theme';
+import { VIZ_COLORS, contextMenuStyles, hoverCardStyles, ICON_SIZES, INTERACTION_HOVER_COLOR, MODAL_POSITION, GRID_COLORS } from '../../theme';
 import type { AxesCoordinateSystem, AxisLabelMode } from '../../store/types';
 import { useAxesNodeActions } from '../../nodes';
 import { CheckIcon, HideIcon } from '../../icons';
@@ -41,7 +41,7 @@ interface OriginAxesProps {
 }
 
 // Gray color for negative axis lines
-const NEGATIVE_AXIS_COLOR = 0x666666;
+const NEGATIVE_AXIS_COLOR = GRID_COLORS.negativeAxis;
 
 // Display names for coordinate systems
 const COORDINATE_SYSTEM_NAMES: Record<AxesCoordinateSystem, string> = {
@@ -227,8 +227,6 @@ const SystemMenu = memo(function SystemMenu({
 });
 
 
-// Hover color matching TransformGizmo
-const AXIS_HOVER_COLOR = 0xffff00;
 
 // Interactive axis cylinder with hover highlight
 interface AxisCylinderProps {
@@ -273,7 +271,7 @@ const AxisCylinder = memo(function AxisCylinder({
       onContextMenu={onContextMenu}
     >
       <cylinderGeometry args={[radius, radius, length, 8]} />
-      <meshBasicMaterial color={isHovered ? AXIS_HOVER_COLOR : color} />
+      <meshBasicMaterial color={isHovered ? INTERACTION_HOVER_COLOR : color} />
     </mesh>
   );
 });
@@ -313,7 +311,7 @@ const AxisLabel = memo(function AxisLabel({
   onContextMenu,
 }: AxisLabelProps) {
   const hasSuffix = showExtra && suffix;
-  const displayColor = isHovered ? AXIS_HOVER_COLOR : color;
+  const displayColor = isHovered ? INTERACTION_HOVER_COLOR : color;
   const hoverScale = isHovered ? 1.2 : 1.0;
 
   return (
@@ -566,8 +564,8 @@ export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', label
         <Html
           style={{
             position: 'fixed',
-            left: mousePos.x + 12,
-            top: mousePos.y + 12,
+            left: mousePos.x + MODAL_POSITION.cursorOffset,
+            top: mousePos.y + MODAL_POSITION.cursorOffset,
             pointerEvents: 'none',
             transform: 'none',
           }}
@@ -633,8 +631,8 @@ export function OriginGrid({ size, scale = 1 }: OriginGridProps) {
       depthWrite: false, // Prevent z-fighting with background
       uniforms: {
         uGridScale: { value: gridScale },
-        uColor1: { value: new THREE.Color(0xffcc88) }, // Light orange for major grid lines
-        uColor2: { value: new THREE.Color(0x888888) },
+        uColor1: { value: new THREE.Color(GRID_COLORS.majorLines) }, // Light orange for major grid lines
+        uColor2: { value: new THREE.Color(GRID_COLORS.minorLines) },
       },
       vertexShader: `
         varying vec3 vWorldPos;

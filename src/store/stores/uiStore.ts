@@ -206,7 +206,7 @@ export const useUIStore = create<UIState>()(
       matchedImageId: null,
       showMatches: false,
       matchesDisplayMode: 'static',
-      matchesOpacity: 0.75,
+      matchesOpacity: 0.7,
       matchesColor: '#ff00ff',
       showMaskOverlay: false,
       maskOpacity: 0.7,

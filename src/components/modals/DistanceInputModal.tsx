@@ -4,7 +4,7 @@ import { useHotkeys } from 'react-hotkeys-hook';
 import { usePointPickingStore, useTransformStore, useUIStore } from '../../store';
 import { computeDistanceScale, computeNormalAlignment, computeOriginTranslation, sim3dToEuler, composeSim3d, createSim3dFromEuler } from '../../utils/sim3dTransforms';
 import { COORDINATE_SYSTEMS } from '../../utils/coordinateSystems';
-import { controlPanelStyles, modalStyles } from '../../theme';
+import { controlPanelStyles, modalStyles, Z_INDEX, MODAL_POSITION, VIEWPORT_FALLBACK } from '../../theme';
 
 /**
  * Confirmation popup for point picking tools.
@@ -59,13 +59,13 @@ export function DistanceInputModal() {
 
     const modalWidth = 200;
     const modalHeight = 80;
-    const padding = 16;
+    const { viewportPadding: padding, cursorOffset } = MODAL_POSITION;
 
-    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
-    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 1080;
+    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : VIEWPORT_FALLBACK.width;
+    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : VIEWPORT_FALLBACK.height;
 
-    let x = modalPosition.x + 8;
-    let y = modalPosition.y - 8;
+    let x = modalPosition.x + cursorOffset;
+    let y = modalPosition.y - cursorOffset;
 
     if (x + modalWidth + padding > viewportWidth) {
       x = modalPosition.x - modalWidth - 20;
@@ -189,8 +189,8 @@ export function DistanceInputModal() {
   return (
     <div
       ref={modalRef}
-      className="fixed z-[1100] bg-ds-tertiary border border-ds rounded shadow-ds-lg p-1"
-      style={computedPosition}
+      className="fixed bg-ds-tertiary border border-ds rounded shadow-ds-lg p-1"
+      style={{ ...computedPosition, zIndex: Z_INDEX.modalOverlay }}
     >
         <div className="flex items-center gap-0.5">
           {/* Distance input only for 2-point mode (not for 1-point origin or 3-point align) */}

@@ -64,6 +64,20 @@ export const BREAKPOINTS = {
 } as const;
 
 /**
+ * Fallback viewport/screen dimensions when window/screen APIs are unavailable (e.g., SSR).
+ */
+export const VIEWPORT_FALLBACK = { width: 1920, height: 1080 } as const;
+
+/**
+ * Constants for positioning tool modals near the cursor with viewport clamping.
+ */
+export const MODAL_POSITION = {
+  viewportPadding: 16,   // Min distance from viewport edges
+  cursorOffset: 12,      // Offset from cursor position
+  minTop: 20,            // Minimum top position for centered modals
+} as const;
+
+/**
  * Modal default dimensions as viewport percentages.
  */
 export const MODAL = {
@@ -116,6 +130,9 @@ export const TOUCH = {
   drawerWidth: 320,         // Gallery drawer width (max)
   bottomSheetMinHeight: 160, // Minimum bottom sheet peek height
   gestureZone: 20,          // Edge swipe detection zone in px
+
+  // Touch button sizes
+  compactButtonHeight: 36,   // Compact touch button (vs minTapTarget: 44 for primary targets)
 
   // Gesture thresholds
   longPressDelay: 500,      // Long press detection in ms

@@ -1,5 +1,6 @@
 import type { ReactNode, MouseEvent } from 'react';
 import { TOUCH } from '../../theme/sizing';
+import { Z_INDEX } from '../../theme/zIndex';
 
 /**
  * Trigger haptic feedback on touch devices.
@@ -47,7 +48,7 @@ export function TouchFAB({
   const diameter = isPrimary ? TOUCH.minTapTarget : TOUCH.fabSecondarySize;
 
   const baseClasses = `
-    fixed z-[999]
+    fixed
     rounded-full shadow-lg
     flex items-center justify-center
     transition-all duration-200
@@ -71,7 +72,7 @@ export function TouchFAB({
       type="button"
       onClick={handleClick}
       className={`${baseClasses} ${sizeClasses} ${className}`}
-      style={{ width: diameter, height: diameter }}
+      style={{ width: diameter, height: diameter, zIndex: Z_INDEX.fab }}
       aria-label={label}
     >
       <span className={iconSize}>{icon}</span>

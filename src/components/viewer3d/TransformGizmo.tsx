@@ -4,7 +4,7 @@ import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import { useTransformStore, useReconstructionStore, useUIStore, applyTransformToData } from '../../store';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
-import { VIZ_COLORS, contextMenuStyles, hoverCardStyles, ICON_SIZES } from '../../theme';
+import { VIZ_COLORS, contextMenuStyles, hoverCardStyles, ICON_SIZES, INTERACTION_HOVER_COLOR, MODAL_POSITION } from '../../theme';
 import { ResetIcon, ReloadIcon, CheckIcon, OffIcon } from '../../icons';
 
 // Type for controls registered by TrackballControls
@@ -17,7 +17,7 @@ const GIZMO_COLORS = {
   x: VIZ_COLORS.axis.x,
   y: VIZ_COLORS.axis.y,
   z: VIZ_COLORS.axis.z,
-  hover: 0xffff00,
+  hover: INTERACTION_HOVER_COLOR,
 };
 
 // Opacity values
@@ -598,7 +598,7 @@ export function TransformGizmo({ center, size }: TransformGizmoProps) {
       {/* Center sphere - right-click for context menu */}
       <mesh onContextMenu={handleContextMenu} renderOrder={999}>
         <sphereGeometry args={[size * 0.02, 16, 16]} />
-        <meshBasicMaterial color={0xffffff} depthTest={false} transparent opacity={1} />
+        <meshBasicMaterial color={VIZ_COLORS.material.white} depthTest={false} transparent opacity={1} />
       </mesh>
 
       {/* Hover hint - shown when hovering over gizmo elements */}
@@ -606,8 +606,8 @@ export function TransformGizmo({ center, size }: TransformGizmoProps) {
         <Html
           style={{
             position: 'fixed',
-            left: mousePos.x + 12,
-            top: mousePos.y + 12,
+            left: mousePos.x + MODAL_POSITION.cursorOffset,
+            top: mousePos.y + MODAL_POSITION.cursorOffset,
             pointerEvents: 'none',
             transform: 'none',
           }}

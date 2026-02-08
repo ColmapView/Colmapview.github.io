@@ -35,7 +35,7 @@ import {
   useGizmoNodeActions,
 } from '../../nodes';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
-import { contextMenuStyles, modalStyles, HOTKEYS } from '../../theme';
+import { contextMenuStyles, modalStyles, HOTKEYS, Z_INDEX } from '../../theme';
 import { useModalZIndex } from '../../hooks/useModalZIndex';
 import { formatKeyCombo } from '../../config/hotkeys';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
@@ -834,7 +834,7 @@ export function GlobalContextMenu() {
         position: 'fixed',
         left: displayPosition?.x ?? 0,
         top: displayPosition?.y ?? 0,
-        zIndex: 1050,
+        zIndex: Z_INDEX.contextMenu,
         minWidth: '160px',
         // Hide during initial measurement to prevent flash at original position
         visibility: adjustedPosition ? 'visible' : 'hidden',

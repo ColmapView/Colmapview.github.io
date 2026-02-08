@@ -7,7 +7,7 @@ import { STORAGE_KEYS } from '../../store/migration';
 import { parseConfigYaml, applyConfigurationToStores } from '../../config/configuration';
 import { ColmapManifestSchema } from '../../types/manifest';
 import { getRandomDataset, getDatasetUrl } from '../../constants/exampleDatasets';
-import { TIMING, buttonStyles, loadingStyles, toastStyles, dragOverlayStyles, emptyStateStyles, hoverCardStyles, ICON_SIZES } from '../../theme';
+import { TIMING, buttonStyles, loadingStyles, toastStyles, dragOverlayStyles, emptyStateStyles, hoverCardStyles, ICON_SIZES, Z_INDEX } from '../../theme';
 import { ResetIcon, UploadIcon, LinkIcon, FileJsonIcon, MouseLeftIcon, MouseRightIcon } from '../../icons';
 import { UrlInputModal } from '../modals/UrlInputModal';
 import { ProfileDropdown } from './ProfileDropdown';
@@ -213,7 +213,7 @@ export function DropZone({ children }: DropZoneProps) {
       )}
 
       {!reconstruction && !urlLoading && !hasUrlToLoad() && !isDragOver && !isPanelDismissed && !isMobile && !touchMode && (
-        <div className="absolute inset-0 flex items-center justify-center z-10">
+        <div className={`absolute inset-0 flex items-center justify-center z-[${Z_INDEX.controls}]`}>
           <div className="flex flex-col bg-ds-secondary rounded-lg border border-ds p-6 min-w-[420px]">
             {/* Header row: action buttons */}
             <div className="flex justify-between -mt-4 -mx-4 mb-6">
@@ -307,7 +307,7 @@ export function DropZone({ children }: DropZoneProps) {
                     Load URL
                   </button>
                   {hoveredButton === 'url' && (
-                    <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50 ${hoverCardStyles.container}`}>
+                    <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-[${Z_INDEX.dropdown}] ${hoverCardStyles.container}`}>
                       <div className={hoverCardStyles.title}>Load from URL</div>
                       <div className={`${hoverCardStyles.subtitle} whitespace-pre mt-1`}>{`Direct URL expects:
   <baseUrl>/sparse/0/cameras.bin
@@ -350,7 +350,7 @@ export function DropZone({ children }: DropZoneProps) {
                     Load JSON
                   </button>
                   {hoveredButton === 'json' && (
-                    <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50 ${hoverCardStyles.container}`}>
+                    <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-[${Z_INDEX.dropdown}] ${hoverCardStyles.container}`}>
                       <div className={hoverCardStyles.title}>Load manifest.json</div>
                       <div className={`${hoverCardStyles.subtitle} whitespace-pre mt-1 font-mono text-xs`}>{`{
   "version": 1,
@@ -391,7 +391,7 @@ export function DropZone({ children }: DropZoneProps) {
                     Try a Toy!
                   </button>
                   {hoveredButton === 'toy' && (
-                    <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50 ${hoverCardStyles.container}`}>
+                    <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-[${Z_INDEX.dropdown}] ${hoverCardStyles.container}`}>
                       <div className={hoverCardStyles.title}>Load random 3D scan</div>
                       <div className={hoverCardStyles.subtitle}>Multiview data from OpsiClear NGS dataset</div>
                       <div className={`${hoverCardStyles.subtitle} text-ds-muted/70`}>huggingface.co/datasets/OpsiClear/NGS</div>
@@ -414,7 +414,7 @@ export function DropZone({ children }: DropZoneProps) {
 
       {/* Simplified Touch/Mobile Panel - URL and Try a Toy only */}
       {!reconstruction && !urlLoading && !hasUrlToLoad() && !isPanelDismissed && (touchMode || isMobile) && (
-        <div className="absolute inset-0 flex items-center justify-center z-10 px-3">
+        <div className={`absolute inset-0 flex items-center justify-center z-[${Z_INDEX.controls}] px-3`}>
           <div className="flex flex-col bg-ds-secondary rounded-lg border border-ds p-4 w-full max-w-xs">
             {/* Header with dismiss button */}
             <div className="flex justify-end -mt-1 -mr-1">
