@@ -114,6 +114,7 @@ interface BatchedArrowMeshesProps {
   onHover: (id: number | null) => void;
   onClick: (imageId: number) => void;
   onContextMenu: (imageId: number) => void;
+  onLongPress: (imageId: number) => void;
   lastNavigationToImageId: number | null;
   // Touch mode - hides hover cards
   touchMode?: boolean;
@@ -148,6 +149,7 @@ function BatchedArrowMeshes({
   onHover,
   onClick,
   onContextMenu,
+  onLongPress,
   lastNavigationToImageId,
   touchMode = false,
   pendingDeletions,
@@ -448,12 +450,12 @@ function BatchedArrowMeshes({
           if (e.instanceId === undefined) return;
           const iid = e.instanceId;
           const x = e.nativeEvent.clientX, y = e.nativeEvent.clientY;
-          // Start long-press timer for fly-to
+          // Start long-press timer for image detail modal
           const timer = setTimeout(() => {
             if (!touchDownRef.current || touchDownRef.current.instanceId !== iid) return;
             touchDownRef.current.fired = true;
             const f = frustums[iid];
-            if (f && f.image.imageId !== selectedImageId) onContextMenu(f.image.imageId);
+            if (f) onLongPress(f.image.imageId);
           }, TOUCH.longPressDelay);
           touchDownRef.current = { instanceId: iid, x, y, timer, fired: false };
         } : undefined}
@@ -469,15 +471,19 @@ function BatchedArrowMeshes({
           const f = frustums[down.instanceId];
           if (!f || f.image.imageId === selectedImageId) return;
           e.stopPropagation();
-          onClick(f.image.imageId);
+          // Tap flies to image (like desktop right-click)
+          onContextMenu(f.image.imageId);
         } : undefined}
-        onClick={touchMode ? undefined : (e) => {
-          if (e.instanceId === undefined) return;
-          const f = frustums[e.instanceId];
-          if (!f || f.image.imageId === selectedImageId) return;
-          e.stopPropagation();
-          onClick(f.image.imageId);
-        }}
+        onClick={touchMode
+          ? (e) => { e.stopPropagation(); } // Prevent onPointerMissed from clearing selection
+          : (e) => {
+            if (e.instanceId === undefined) return;
+            const f = frustums[e.instanceId];
+            if (!f || f.image.imageId === selectedImageId) return;
+            e.stopPropagation();
+            onClick(f.image.imageId);
+          }
+        }
         onContextMenu={(e) => {
           if (e.instanceId === undefined) return;
           const f = frustums[e.instanceId];
@@ -852,6 +858,7 @@ interface BatchedPlaneHitTargetsProps {
   onHover: (id: number | null) => void;
   onClick: (imageId: number) => void;
   onContextMenu: (imageId: number) => void;
+  onLongPress: (imageId: number) => void;
   lastNavigationToImageId: number | null;
   touchMode?: boolean;
 }
@@ -864,6 +871,7 @@ function BatchedPlaneHitTargets({
   onHover,
   onClick,
   onContextMenu,
+  onLongPress,
   lastNavigationToImageId,
   touchMode = false,
 }: BatchedPlaneHitTargetsProps) {
@@ -935,7 +943,8 @@ function BatchedPlaneHitTargets({
       if (isSelected) {
         tempScale.set(0, 0, 0);
       } else {
-        tempScale.set(size.width, size.height, 1);
+        const hitScale = touchMode ? TOUCH.hitTargetScale : 1;
+        tempScale.set(size.width * hitScale, size.height * hitScale, 1);
       }
       tempMatrix.compose(tempPosition, f.quaternion, tempScale);
       mesh.setMatrixAt(i, tempMatrix);
@@ -944,7 +953,7 @@ function BatchedPlaneHitTargets({
     mesh.instanceMatrix.needsUpdate = true;
     // Recompute bounding sphere so raycasting works immediately after remount
     mesh.computeBoundingSphere();
-  }, [frustums, planeSizes, selectedImageId]);
+  }, [frustums, planeSizes, selectedImageId, touchMode]);
 
   if (frustums.length === 0) return null;
 
@@ -1003,11 +1012,12 @@ function BatchedPlaneHitTargets({
           if (e.instanceId === undefined) return;
           const iid = e.instanceId;
           const x = e.nativeEvent.clientX, y = e.nativeEvent.clientY;
+          // Start long-press timer for image detail modal
           const timer = setTimeout(() => {
             if (!touchDownRef.current || touchDownRef.current.instanceId !== iid) return;
             touchDownRef.current.fired = true;
             const f = frustums[iid];
-            if (f && f.image.imageId !== selectedImageId) onContextMenu(f.image.imageId);
+            if (f) onLongPress(f.image.imageId);
           }, TOUCH.longPressDelay);
           touchDownRef.current = { instanceId: iid, x, y, timer, fired: false };
         } : undefined}
@@ -1023,15 +1033,19 @@ function BatchedPlaneHitTargets({
           const f = frustums[down.instanceId];
           if (!f || f.image.imageId === selectedImageId) return;
           e.stopPropagation();
-          onClick(f.image.imageId);
+          // Tap flies to image (like desktop right-click)
+          onContextMenu(f.image.imageId);
         } : undefined}
-        onClick={touchMode ? undefined : (e) => {
-          if (e.instanceId === undefined) return;
-          const f = frustums[e.instanceId];
-          if (!f || f.image.imageId === selectedImageId) return;
-          e.stopPropagation();
-          onClick(f.image.imageId);
-        }}
+        onClick={touchMode
+          ? (e) => { e.stopPropagation(); } // Prevent onPointerMissed from clearing selection
+          : (e) => {
+            if (e.instanceId === undefined) return;
+            const f = frustums[e.instanceId];
+            if (!f || f.image.imageId === selectedImageId) return;
+            e.stopPropagation();
+            onClick(f.image.imageId);
+          }
+        }
         onContextMenu={(e) => {
           if (e.instanceId === undefined) return;
           const f = frustums[e.instanceId];
@@ -1115,6 +1129,7 @@ interface FrustumPlaneProps {
   onHover: (id: number | null) => void;
   onClick: (imageId: number) => void;
   onContextMenu: (imageId: number) => void;
+  onLongPress?: (imageId: number) => void;
   /** When true, disables all interaction (hover, click) - use with BatchedPlaneHitTargets */
   disableInteraction?: boolean;
   /** Touch mode - hides hover cards */
@@ -1142,6 +1157,7 @@ const FrustumPlane = memo(function FrustumPlane({
   onHover,
   onClick,
   onContextMenu,
+  onLongPress,
   disableInteraction = false,
   touchMode = false,
 }: FrustumPlaneProps) {
@@ -1150,6 +1166,17 @@ const FrustumPlane = memo(function FrustumPlane({
   const [hovered, setHovered] = useState(false);
   const [viewAngleOk, setViewAngleOk] = useState(true);
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+  // Touch: toggle transparency on selected frustum tap
+  const [touchTransparent, setTouchTransparent] = useState(false);
+  // Touch: long-press / tap detection
+  const touchDownRef = useRef<{ x: number; y: number; timer: ReturnType<typeof setTimeout> | null; fired: boolean } | null>(null);
+
+  // Cleanup touch timer on unmount
+  useEffect(() => {
+    return () => {
+      if (touchDownRef.current?.timer) clearTimeout(touchDownRef.current.timer);
+    };
+  }, []);
 
   // Direct fetch when selected but no imageFile - ensures texture loads even if parent memo is stale
   // This fixes the issue where gallery "Fly to" doesn't load image in frustum because the
@@ -1381,6 +1408,7 @@ const FrustumPlane = memo(function FrustumPlane({
   });
 
   const displayColor = hovered ? VIZ_COLORS.frustum.hover : color;
+  const isTransparent = hovered || touchTransparent;
 
   return (
     <group ref={groupRef} position={position} quaternion={quaternion}>
@@ -1392,8 +1420,38 @@ const FrustumPlane = memo(function FrustumPlane({
         userData={{ isSelectedPlane: isSelected }}
         // Disable raycasting when using BatchedPlaneHitTargets
         raycast={disableInteraction ? () => {} : undefined}
-        onClick={disableInteraction ? undefined : (e) => { e.stopPropagation(); onClick(image.imageId); }}
-        onContextMenu={disableInteraction ? undefined : (e) => { e.stopPropagation(); e.nativeEvent.preventDefault(); e.nativeEvent.stopPropagation(); onContextMenu(image.imageId); }}
+        onPointerDown={touchMode && !disableInteraction ? (e) => {
+          const x = e.nativeEvent.clientX, y = e.nativeEvent.clientY;
+          const timer = setTimeout(() => {
+            if (!touchDownRef.current) return;
+            touchDownRef.current.fired = true;
+            onLongPress?.(image.imageId);
+          }, TOUCH.longPressDelay);
+          touchDownRef.current = { x, y, timer, fired: false };
+        } : undefined}
+        onPointerUp={touchMode && !disableInteraction ? (e) => {
+          const down = touchDownRef.current;
+          touchDownRef.current = null;
+          if (!down) return;
+          if (down.timer) clearTimeout(down.timer);
+          if (down.fired) return;
+          const dx = e.nativeEvent.clientX - down.x;
+          const dy = e.nativeEvent.clientY - down.y;
+          if (dx * dx + dy * dy > 225) return;
+          e.stopPropagation();
+          if (isSelected) {
+            setTouchTransparent(prev => !prev);
+          } else {
+            onContextMenu(image.imageId);
+          }
+        } : undefined}
+        onClick={disableInteraction
+          ? undefined
+          : touchMode
+            ? (e) => { e.stopPropagation(); } // Prevent onPointerMissed from clearing selection
+            : (e) => { e.stopPropagation(); onClick(image.imageId); }
+        }
+        onContextMenu={disableInteraction || touchMode ? undefined : (e) => { e.stopPropagation(); e.nativeEvent.preventDefault(); e.nativeEvent.stopPropagation(); onContextMenu(image.imageId); }}
         onPointerOver={disableInteraction ? undefined : (e) => {
           // Ignore hover during camera orbit/pan
           if (isDragging()) return;
@@ -1453,7 +1511,7 @@ const FrustumPlane = memo(function FrustumPlane({
             undistortionMode={undistortionMode}
             planeWidth={planeSize.width}
             planeHeight={planeSize.height}
-            opacity={hovered ? selectionPlaneOpacity * 0.5 : selectionPlaneOpacity}
+            opacity={isTransparent ? selectionPlaneOpacity * 0.5 : selectionPlaneOpacity}
             color={0xffffff}
             side={THREE.DoubleSide}
             // Selected planes: force transparent pass (renders after wireframes) with no depth test/write
@@ -1463,7 +1521,7 @@ const FrustumPlane = memo(function FrustumPlane({
           />
         ) : (
           (() => {
-            const materialOpacity = hovered
+            const materialOpacity = isTransparent
               ? (shouldShowTexture ? selectionPlaneOpacity * 0.5 : OPACITY.frustum.hoveredNoTexture)
               : (shouldShowTexture ? selectionPlaneOpacity : selectionPlaneOpacity * 0.2);
             const { transparent, depthWrite } = getMaterialTransparency(materialOpacity);
@@ -2156,6 +2214,7 @@ export function CameraFrustums() {
       onHover={setHoveredImageId}
       onClick={handleArrowClick}
       onContextMenu={handleArrowContextMenu}
+      onLongPress={openImageDetail}
       touchMode={touchMode}
     />
   );
@@ -2185,6 +2244,7 @@ export function CameraFrustums() {
           onHover={setHoveredImageId}
           onClick={handleArrowClick}
           onContextMenu={handleArrowContextMenu}
+          onLongPress={openImageDetail}
           lastNavigationToImageId={lastNavigationToImageId}
           touchMode={touchMode}
           pendingDeletions={pendingDeletions}
@@ -2222,6 +2282,7 @@ export function CameraFrustums() {
           onHover={setHoveredImageId}
           onClick={handleArrowClick}
           onContextMenu={handleArrowContextMenu}
+          onLongPress={openImageDetail}
           lastNavigationToImageId={lastNavigationToImageId}
           touchMode={touchMode}
         />
@@ -2332,6 +2393,7 @@ export function CameraFrustums() {
         onHover={setHoveredImageId}
         onClick={handleArrowClick}
         onContextMenu={handleArrowContextMenu}
+        onLongPress={openImageDetail}
         lastNavigationToImageId={lastNavigationToImageId}
         touchMode={touchMode}
       />

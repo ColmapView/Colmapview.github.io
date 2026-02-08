@@ -440,7 +440,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
   const peekNavigationHistory = useCameraStore((s) => s.peekNavigationHistory);
   const flyToState = useCameraStore((s) => s.flyToState);
   const navigationHistory = useCameraStore((s) => s.navigationHistory);
-  const [viewMode, setViewMode] = useState<ViewMode>('gallery');
+  const [viewMode, setViewMode] = useState<ViewMode>(touchMode ? 'list' : 'gallery');
   const [galleryColumns, setGalleryColumns] = useState<number>(COLUMNS.default);
   const [cameraFilter, setCameraFilter] = useState<number | 'all'>('all');
   const [sortField, setSortField] = useState<SortField>('name');
@@ -962,24 +962,26 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
             {sortDirection === 'asc' ? <SortAscIcon className="w-4 h-4" /> : <SortDescIcon className="w-4 h-4" />}
           </button>
         </div>
-        <div className={`${toolbarStyles.group} ml-auto`}>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setViewMode('gallery')}
-              className={getViewModeButtonClass(viewMode === 'gallery')}
-              data-tooltip="Grid view (Shift+{SCROLL} to resize)"
-            >
-              <GridIcon className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={getViewModeButtonClass(viewMode === 'list')}
-              data-tooltip="List view with stats"
-            >
-              <ListIcon className="w-4 h-4" />
-            </button>
+        {!touchMode && (
+          <div className={`${toolbarStyles.group} ml-auto`}>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setViewMode('gallery')}
+                className={getViewModeButtonClass(viewMode === 'gallery')}
+                data-tooltip="Grid view (Shift+{SCROLL} to resize)"
+              >
+                <GridIcon className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={getViewModeButtonClass(viewMode === 'list')}
+                data-tooltip="List view with stats"
+              >
+                <ListIcon className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Virtualized Content - flex-1 gets height from parent flex container */}

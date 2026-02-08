@@ -4,7 +4,7 @@ import { useReconstructionStore, selectCameraCount, useUIStore, useDeletionStore
 import type { Camera, Point2D } from '../../types/colmap';
 import { getImageFile, getMaskFile, getUrlImageCached, fetchUrlImage, fetchUrlMask, getZipImageCached, fetchZipImage, fetchZipMask, isZipLoadingAvailable } from '../../utils/imageFileUtils';
 import { useFileUrl } from '../../hooks/useFileUrl';
-import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, MODAL, TOUCH, buttonStyles, inputStyles, resizeHandleStyles, modalStyles, touchStyles } from '../../theme';
+import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, MODAL, TOUCH, buttonStyles, inputStyles, resizeHandleStyles, modalStyles } from '../../theme';
 import { HOTKEYS } from '../../config/hotkeys';
 import { ModalErrorBoundary } from './ModalErrorBoundary';
 
@@ -1068,21 +1068,79 @@ export function ImageDetailModal() {
     return lazyPoints2D.get(matchedImage.imageId) ?? [];
   }, [matchedImage, lazyPoints2D]);
 
+  // Cycle through matched images by direction (+1 = next, -1 = prev)
+  const cycleMatchedImage = useCallback((direction: 1 | -1) => {
+    if (connectedImages.length === 0) return;
+    const idx = matchedImageId !== null
+      ? connectedImages.findIndex(img => img.imageId === matchedImageId)
+      : -1;
+    const next = direction > 0
+      ? Math.min(idx + 1, connectedImages.length - 1)
+      : Math.max(idx - 1, 0);
+    setMatchedImageId(connectedImages[next].imageId);
+  }, [connectedImages, matchedImageId, setMatchedImageId]);
+
   const handleMatchedImageWheel = useCallback((e: React.WheelEvent) => {
     // Note: Cannot preventDefault on React wheel events (passive by default)
     e.stopPropagation();
-    if (connectedImages.length === 0) return;
-    const currentIndex = matchedImageId !== null
-      ? connectedImages.findIndex(img => img.imageId === matchedImageId)
-      : -1;
-    if (e.deltaY > 0) {
-      const nextIndex = Math.min(currentIndex + 1, connectedImages.length - 1);
-      setMatchedImageId(connectedImages[nextIndex].imageId);
-    } else {
-      const prevIndex = Math.max(currentIndex - 1, 0);
-      setMatchedImageId(connectedImages[prevIndex].imageId);
+    cycleMatchedImage(e.deltaY > 0 ? 1 : -1);
+  }, [cycleMatchedImage]);
+
+  // Touch swipe gestures for mobile image navigation
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    // Prevent page scroll when swiping on the image area
+    if (touchStartRef.current && e.touches.length === 1) {
+      const dx = Math.abs(e.touches[0].clientX - touchStartRef.current.x);
+      const dy = Math.abs(e.touches[0].clientY - touchStartRef.current.y);
+      if (dx > 10 || dy > 10) {
+        e.preventDefault();
+      }
     }
-  }, [connectedImages, matchedImageId, setMatchedImageId]);
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (!touchStartRef.current || e.changedTouches.length !== 1) {
+      touchStartRef.current = null;
+      return;
+    }
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - touchStartRef.current.x;
+    const dy = touch.clientY - touchStartRef.current.y;
+    const elapsed = Date.now() - touchStartRef.current.time;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    touchStartRef.current = null;
+
+    // Tap: short distance, short time
+    if (dist < 15 && elapsed < 300) {
+      if (hasMask && maskSrc && !isMarkedForDeletion && !showMatchesInModal) {
+        cycleMaskMode();
+      }
+      return;
+    }
+
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+
+    // Horizontal swipe: navigate images
+    if (absDx > 50 && absDx > absDy * 1.5) {
+      if (dx < 0) goToNext();
+      else goToPrev();
+      return;
+    }
+
+    // Vertical swipe: cycle matched images (only in match mode)
+    if (showMatchesInModal && absDy > 50 && absDy > absDx * 1.5) {
+      cycleMatchedImage(dy < 0 ? 1 : -1);
+    }
+  }, [hasMask, maskSrc, isMarkedForDeletion, showMatchesInModal, cycleMaskMode, goToNext, goToPrev, cycleMatchedImage]);
 
   // Handle mouse wheel scrolling on image to navigate between images
   // When showMatchesInModal is enabled, scroll through connected images instead
@@ -1104,24 +1162,7 @@ export function ImageDetailModal() {
       lastWheelTime.current = now;
 
       if (showMatchesInModal && connectedImages.length > 0) {
-        // Scroll through connected/matched images
-        const currentMatchIndex = matchedImageId !== null
-          ? connectedImages.findIndex(img => img.imageId === matchedImageId)
-          : -1;
-
-        if (e.deltaY > 0) {
-          // Scroll down - next matched image
-          const nextIndex = currentMatchIndex + 1;
-          if (nextIndex < connectedImages.length) {
-            setMatchedImageId(connectedImages[nextIndex].imageId);
-          }
-        } else if (e.deltaY < 0) {
-          // Scroll up - previous matched image
-          const prevIndex = currentMatchIndex - 1;
-          if (prevIndex >= 0) {
-            setMatchedImageId(connectedImages[prevIndex].imageId);
-          }
-        }
+        cycleMatchedImage(e.deltaY > 0 ? 1 : -1);
       } else {
         // Normal mode - scroll through all images
         if (e.deltaY > 0) {
@@ -1134,7 +1175,7 @@ export function ImageDetailModal() {
 
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
-  }, [goToNext, goToPrev, showMatchesInModal, connectedImages, matchedImageId, setMatchedImageId]);
+  }, [goToNext, goToPrev, showMatchesInModal, connectedImages, cycleMatchedImage]);
 
   // Get matched image related data (matchedImage is declared earlier, before effectiveMatchedPoints2D)
   const matchedCamera = matchedImage ? reconstruction?.cameras.get(matchedImage.cameraId) : null;
@@ -1487,14 +1528,22 @@ export function ImageDetailModal() {
               ×
             </button>
           </div>
-          {/* Camera parameters */}
-          <div className="px-3 pb-1.5 overflow-x-auto">
-            <CameraPoseInfoDisplay camera={camera} qvec={image.qvec} tvec={image.tvec} />
-          </div>
+          {/* Camera parameters (hidden in match view to save screen space) */}
+          {!isMatchViewMode && (
+            <div className="px-3 pb-1.5 overflow-x-auto">
+              <CameraPoseInfoDisplay camera={camera} qvec={image.qvec} tvec={image.tvec} />
+            </div>
+          )}
         </div>
 
         {/* Image container */}
-        <div ref={imageContainerRef} className="flex-1 min-h-0 bg-ds-secondary relative overflow-hidden">
+        <div
+          ref={imageContainerRef}
+          className="flex-1 min-h-0 bg-ds-secondary relative overflow-hidden"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
           {isMatchViewMode ? (
             (() => {
               // Vertical layout: images stacked top-bottom
@@ -1636,30 +1685,30 @@ export function ImageDetailModal() {
         {showModalControls && (
           <div className="flex-shrink-0 bg-ds-tertiary border-t border-ds">
             {/* Toggle buttons row */}
-            <div className="flex gap-2 px-3 py-2 overflow-x-auto">
+            <div className="flex gap-1.5 px-2 py-1.5 overflow-x-auto">
               {!showMatchesInModal && (
                 <>
                   <button
                     onClick={() => !isMarkedForDeletion && setShowPoints2D(!showPoints2D)}
                     disabled={isMarkedForDeletion}
-                    className={`${touchStyles.touchButton} flex-1 text-sm ${
+                    className={`flex-1 px-2 flex items-center justify-center rounded-md text-xs ${
                       isMarkedForDeletion
                         ? 'bg-ds-secondary text-ds-muted opacity-50'
                         : showPoints2D ? 'bg-ds-accent text-ds-void' : 'bg-ds-hover text-ds-primary'
                     }`}
-                    style={{ minHeight: TOUCH.minTapTarget }}
+                    style={{ minHeight: 36 }}
                   >
                     2D <span className={isMarkedForDeletion ? '' : showPoints2D ? '' : 'text-ds-success'}>({numPoints2D})</span>
                   </button>
                   <button
                     onClick={() => !isMarkedForDeletion && setShowPoints3D(!showPoints3D)}
                     disabled={isMarkedForDeletion}
-                    className={`${touchStyles.touchButton} flex-1 text-sm ${
+                    className={`flex-1 px-2 flex items-center justify-center rounded-md text-xs ${
                       isMarkedForDeletion
                         ? 'bg-ds-secondary text-ds-muted opacity-50'
                         : showPoints3D ? 'bg-ds-accent text-ds-void' : 'bg-ds-hover text-ds-primary'
                     }`}
-                    style={{ minHeight: TOUCH.minTapTarget }}
+                    style={{ minHeight: 36 }}
                   >
                     3D <span className={isMarkedForDeletion ? '' : showPoints3D ? '' : 'text-ds-error'}>({numPoints3D})</span>
                   </button>
@@ -1668,75 +1717,74 @@ export function ImageDetailModal() {
               <button
                 onClick={() => !isMarkedForDeletion && setShowMatchesInModal(!showMatchesInModal)}
                 disabled={isMarkedForDeletion}
-                className={`${touchStyles.touchButton} flex-1 text-sm ${
+                className={`${showMatchesInModal ? '' : 'flex-1'} px-3 flex items-center justify-center rounded-md text-xs whitespace-nowrap ${
                   isMarkedForDeletion
                     ? 'bg-ds-secondary text-ds-muted opacity-50'
                     : showMatchesInModal ? 'bg-ds-accent text-ds-void' : 'bg-ds-hover text-ds-primary'
                 }`}
-                style={{ minHeight: TOUCH.minTapTarget }}
+                style={{ minHeight: 36 }}
               >
                 Matches
               </button>
-            </div>
-
-            {/* Match controls (if showing matches) */}
-            {showMatchesInModal && !isMarkedForDeletion && (
-              <div className="px-3 pb-2">
+              {/* Match dropdown inline when matches active */}
+              {showMatchesInModal && !isMarkedForDeletion && (
                 <select
                   value={matchedImageId ?? ''}
                   onChange={(e) => setMatchedImageId(e.target.value ? parseInt(e.target.value) : null)}
-                  className={`${inputStyles.select} w-full py-2 text-sm`}
-                  style={{ minHeight: TOUCH.minTapTarget }}
+                  className={`${inputStyles.select} flex-1 min-w-0 py-1.5 text-xs`}
+                  style={{ minHeight: 36 }}
                 >
-                  <option value="">Select connected image...</option>
+                  <option value="">Select image...</option>
                   {connectedImages.map(({ imageId, matchCount, name }) => (
                     <option key={imageId} value={imageId}>
                       {name} ({matchCount})
                     </option>
                   ))}
                 </select>
-                {matchedImageId !== null && (
-                  <div className="flex items-center gap-3 mt-2">
-                    <span className="text-ds-secondary text-sm">Opacity</span>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.1"
-                      value={matchLineOpacity}
-                      onChange={(e) => setMatchLineOpacity(parseFloat(e.target.value))}
-                      className="flex-1 accent-ds-success h-8"
-                    />
-                    <span className="text-ds-primary text-sm w-10 text-right">
-                      {Math.round(matchLineOpacity * 100)}%
-                    </span>
-                  </div>
-                )}
+              )}
+            </div>
+
+            {/* Opacity slider (if match image selected) */}
+            {showMatchesInModal && !isMarkedForDeletion && matchedImageId !== null && (
+              <div className="flex items-center gap-2 px-2 pb-1.5">
+                <span className="text-ds-secondary text-xs">Opacity</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={matchLineOpacity}
+                  onChange={(e) => setMatchLineOpacity(parseFloat(e.target.value))}
+                  className="flex-1 accent-ds-success h-6"
+                />
+                <span className="text-ds-primary text-xs w-8 text-right">
+                  {Math.round(matchLineOpacity * 100)}%
+                </span>
               </div>
             )}
 
             {/* Navigation row */}
-            <div className="flex items-center gap-2 px-3 py-2 border-t border-ds">
+            <div className="flex items-center gap-1.5 px-2 py-1.5 border-t border-ds">
               <button
                 onClick={goToPrev}
                 disabled={!hasPrev}
-                className={`${touchStyles.touchButton} flex-1 text-sm ${
+                className={`flex-1 px-2 flex items-center justify-center rounded-md text-xs ${
                   hasPrev ? 'bg-ds-hover text-ds-primary' : 'bg-ds-secondary text-ds-muted'
                 }`}
-                style={{ minHeight: TOUCH.minTapTarget }}
+                style={{ minHeight: 36 }}
               >
                 ← Prev
               </button>
-              <span className="text-ds-primary text-sm px-2">
+              <span className="text-ds-primary text-xs px-1">
                 {currentIndex + 1} / {imageIds.length}
               </span>
               <button
                 onClick={goToNext}
                 disabled={!hasNext}
-                className={`${touchStyles.touchButton} flex-1 text-sm ${
+                className={`flex-1 px-2 flex items-center justify-center rounded-md text-xs ${
                   hasNext ? 'bg-ds-hover text-ds-primary' : 'bg-ds-secondary text-ds-muted'
                 }`}
-                style={{ minHeight: TOUCH.minTapTarget }}
+                style={{ minHeight: 36 }}
               >
                 Next →
               </button>
