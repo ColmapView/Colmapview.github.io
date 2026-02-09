@@ -1513,7 +1513,8 @@ legend {
   transition: opacity 0.25s ease;
 }
 
-.scene-3d-container[data-idle="true"] .idle-hideable {
+.scene-3d-container[data-idle="true"] .idle-hideable,
+.scene-3d-container[data-autohide-preview="true"] .idle-hideable {
   opacity: 0;
 }
 

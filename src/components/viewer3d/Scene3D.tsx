@@ -3,6 +3,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PointCloud } from './PointCloud/index';
 import { CameraFrustums, CameraMatches } from './CameraFrustums';
+import { wasFrustumTapRecent, wasFrustumTouchDownRecent } from './frustumTouchGuards';
 import { RigConnections } from './RigConnections';
 import { ViewerControls } from './ViewerControls';
 import { TrackballControls } from './TrackballControls';
@@ -27,6 +28,7 @@ import { getImageWorldPosition } from '../../utils/colmapTransforms';
 import { createSim3dFromEuler, sim3dToMatrix4, isIdentityEuler, transformPoint } from '../../utils/sim3dTransforms';
 import { percentile, median } from '../../utils/mathUtils';
 import { CAMERA, VIZ_COLORS, OPACITY } from '../../theme';
+import { TOUCH } from '../../theme/sizing';
 
 function SceneContent() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
@@ -125,7 +127,8 @@ function SceneContent() {
   const gizmo = useGizmoNode();
   const isIdle = useUIStore((s) => s.isIdle);
   const autoHideElements = useUIStore((s) => s.autoHideElements);
-  const shouldHide = useCallback((key: AutoHideElement) => isIdle && autoHideElements[key], [isIdle, autoHideElements]);
+  const showAutoHideEditor = useUIStore((s) => s.showAutoHideEditor);
+  const shouldHide = useCallback((key: AutoHideElement) => (isIdle || showAutoHideEditor) && autoHideElements[key], [isIdle, showAutoHideEditor, autoHideElements]);
   const viewResetTrigger = useUIStore((s) => s.viewResetTrigger);
   const viewDirection = useUIStore((s) => s.viewDirection);
   const viewTrigger = useUIStore((s) => s.viewTrigger);
@@ -218,6 +221,7 @@ export function Scene3D() {
   const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
   const openContextMenu = useUIStore((s) => s.openContextMenu);
   const closeContextMenu = useUIStore((s) => s.closeContextMenu);
+  const showAutoHideEditor = useUIStore((s) => s.showAutoHideEditor);
 
   // Point picking state for right-click cancellation
   // Only subscribe to length to avoid re-renders when point contents change
@@ -227,11 +231,16 @@ export function Scene3D() {
   const reset = usePointPickingStore((s) => s.reset);
   const markerRightClickHandled = usePointPickingStore((s) => s.markerRightClickHandled);
 
+  const touchMode = useUIStore((s) => s.touchMode);
+
   const idleRef = useIdleTimer();
 
   // Track mouse position for distinguishing click from drag
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
   const DRAG_THRESHOLD = 5; // pixels
+
+  // Touch long-press for context menu (equivalent to desktop right-click)
+  const longPressRef = useRef<{ x: number; y: number; timer: ReturnType<typeof setTimeout> } | null>(null);
 
   const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
 
@@ -302,18 +311,58 @@ export function Scene3D() {
     openContextMenu(e.clientX, e.clientY);
   }, [openContextMenu, pickingMode, selectedPointsLength, removeLastPoint, reset, markerRightClickHandled]);
 
+  // Desktop: right-click tracking for contextmenu drag check
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button === 2) {
       mouseDownPos.current = { x: e.clientX, y: e.clientY };
-      closeContextMenu(); // Close any open menu when starting new interaction
+      closeContextMenu();
     }
   }, [closeContextMenu]);
 
   const handleMouseUp = useCallback(() => {
-    // Clear after a short delay to allow contextmenu event to check it
-    setTimeout(() => {
-      mouseDownPos.current = null;
-    }, 0);
+    setTimeout(() => { mouseDownPos.current = null; }, 0);
+  }, []);
+
+  // Touch: long-press opens context menu (equivalent to desktop right-click)
+  const handleTouchPointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') return;
+    // Skip if a frustum's onPointerDown already handled this touch
+    // (R3F fires synchronously before this DOM handler bubbles)
+    if (wasFrustumTouchDownRecent()) return;
+    closeContextMenu();
+    const x = e.clientX, y = e.clientY;
+    const timer = setTimeout(() => {
+      longPressRef.current = null;
+      // Same logic as handleContextMenu: picking mode cancels instead of opening menu
+      if (pickingMode !== 'off') {
+        if (selectedPointsLength > 0) {
+          removeLastPoint();
+        } else {
+          reset();
+        }
+        return;
+      }
+      openContextMenu(x, y);
+    }, TOUCH.longPressDelay);
+    longPressRef.current = { x, y, timer };
+  }, [closeContextMenu, pickingMode, selectedPointsLength, removeLastPoint, reset, openContextMenu]);
+
+  const handleTouchPointerMove = useCallback((e: React.PointerEvent) => {
+    if (longPressRef.current && e.pointerType === 'touch') {
+      const dx = e.clientX - longPressRef.current.x;
+      const dy = e.clientY - longPressRef.current.y;
+      if (dx * dx + dy * dy > TOUCH.dragThreshold * TOUCH.dragThreshold) {
+        clearTimeout(longPressRef.current.timer);
+        longPressRef.current = null;
+      }
+    }
+  }, []);
+
+  const handleTouchPointerUp = useCallback((e: React.PointerEvent) => {
+    if (longPressRef.current && e.pointerType === 'touch') {
+      clearTimeout(longPressRef.current.timer);
+      longPressRef.current = null;
+    }
   }, []);
 
   return (
@@ -321,10 +370,14 @@ export function Scene3D() {
       ref={idleRef}
       className="w-full h-full relative isolate scene-3d-container"
       data-testid="scene-3d"
+      data-autohide-preview={showAutoHideEditor ? 'true' : undefined}
       style={{ backgroundColor }}
       onContextMenu={handleContextMenu}
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
+      onPointerDown={touchMode ? handleTouchPointerDown : undefined}
+      onPointerMove={touchMode ? handleTouchPointerMove : undefined}
+      onPointerUp={touchMode ? handleTouchPointerUp : undefined}
+      onMouseDown={touchMode ? undefined : handleMouseDown}
+      onMouseUp={touchMode ? undefined : handleMouseUp}
     >
       <Scene3DErrorBoundary backgroundColor={backgroundColor}>
         <Canvas
@@ -337,7 +390,10 @@ export function Scene3D() {
           gl={{ antialias: true }}
           onPointerMissed={(e) => {
             // Left-click or right-click on empty space deselects
+            // On mobile, skip if a frustum tap was just handled in onPointerUp
+            // (R3F's click raycast may miss the mesh, triggering this falsely)
             if (e.button === 0 || e.button === 2) {
+              if (wasFrustumTapRecent()) return;
               setSelectedImageId(null);
             }
           }}

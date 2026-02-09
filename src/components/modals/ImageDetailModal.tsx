@@ -1737,32 +1737,34 @@ export function ImageDetailModal() {
               </div>
             )}
 
-            {/* Navigation row */}
-            <div className="flex items-center gap-1.5 px-2 py-1.5 border-t border-ds">
-              <button
-                onClick={goToPrev}
-                disabled={!hasPrev}
-                className={`flex-1 px-2 flex items-center justify-center rounded-md text-xs ${
-                  hasPrev ? 'bg-ds-hover text-ds-primary' : 'bg-ds-secondary text-ds-muted'
-                }`}
-                style={{ minHeight: TOUCH.compactButtonHeight }}
-              >
-                ← Prev
-              </button>
-              <span className="text-ds-primary text-xs px-1">
-                {currentIndex + 1} / {imageIds.length}
-              </span>
-              <button
-                onClick={goToNext}
-                disabled={!hasNext}
-                className={`flex-1 px-2 flex items-center justify-center rounded-md text-xs ${
-                  hasNext ? 'bg-ds-hover text-ds-primary' : 'bg-ds-secondary text-ds-muted'
-                }`}
-                style={{ minHeight: TOUCH.compactButtonHeight }}
-              >
-                Next →
-              </button>
-            </div>
+            {/* Navigation row — hidden in match mode (swipe still works) */}
+            {!showMatchesInModal && (
+              <div className="flex items-center gap-1.5 px-2 py-1.5 border-t border-ds">
+                <button
+                  onClick={goToPrev}
+                  disabled={!hasPrev}
+                  className={`flex-1 px-2 flex items-center justify-center rounded-md text-xs ${
+                    hasPrev ? 'bg-ds-hover text-ds-primary' : 'bg-ds-secondary text-ds-muted'
+                  }`}
+                  style={{ minHeight: TOUCH.compactButtonHeight }}
+                >
+                  ← Prev
+                </button>
+                <span className="text-ds-primary text-xs px-1">
+                  {currentIndex + 1} / {imageIds.length}
+                </span>
+                <button
+                  onClick={goToNext}
+                  disabled={!hasNext}
+                  className={`flex-1 px-2 flex items-center justify-center rounded-md text-xs ${
+                    hasNext ? 'bg-ds-hover text-ds-primary' : 'bg-ds-secondary text-ds-muted'
+                  }`}
+                  style={{ minHeight: TOUCH.compactButtonHeight }}
+                >
+                  Next →
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>,

@@ -25,6 +25,8 @@ import { UndistortedImageMaterial } from './UndistortedImageMaterial';
 import { useIsAlignmentMode } from '../../hooks/useAlignmentMode';
 import { lineVertexShader, lineFragmentShader } from './shaders';
 
+import { markFrustumTap, markFrustumTouchDown } from './frustumTouchGuards';
+
 /** Format image ID label: #{camId}:{imageId} when multiple cameras, #{imageId} otherwise */
 function formatImageId(imageId: number, cameraId: number, multiCamera: boolean): string {
   return multiCamera ? `#${cameraId}:${imageId}` : `#${imageId}`;
@@ -448,6 +450,7 @@ function BatchedArrowMeshes({
         }}
         onPointerDown={touchMode ? (e) => {
           if (e.instanceId === undefined) return;
+          markFrustumTouchDown(); // Tell Scene3D a frustum is handling this touch
           const iid = e.instanceId;
           const x = e.nativeEvent.clientX, y = e.nativeEvent.clientY;
           // Start long-press timer for image detail modal
@@ -472,6 +475,7 @@ function BatchedArrowMeshes({
           if (!f || f.image.imageId === selectedImageId) return;
           e.stopPropagation();
           // Tap flies to image (like desktop right-click)
+          markFrustumTap(); // Guard against onPointerMissed clearing selection
           onContextMenu(f.image.imageId);
         } : undefined}
         onClick={touchMode
@@ -1010,6 +1014,7 @@ function BatchedPlaneHitTargets({
         }}
         onPointerDown={touchMode ? (e) => {
           if (e.instanceId === undefined) return;
+          markFrustumTouchDown(); // Tell Scene3D a frustum is handling this touch
           const iid = e.instanceId;
           const x = e.nativeEvent.clientX, y = e.nativeEvent.clientY;
           // Start long-press timer for image detail modal
@@ -1034,6 +1039,7 @@ function BatchedPlaneHitTargets({
           if (!f || f.image.imageId === selectedImageId) return;
           e.stopPropagation();
           // Tap flies to image (like desktop right-click)
+          markFrustumTap(); // Guard against onPointerMissed clearing selection
           onContextMenu(f.image.imageId);
         } : undefined}
         onClick={touchMode
@@ -1421,6 +1427,7 @@ const FrustumPlane = memo(function FrustumPlane({
         // Disable raycasting when using BatchedPlaneHitTargets
         raycast={disableInteraction ? () => {} : undefined}
         onPointerDown={touchMode && !disableInteraction ? (e) => {
+          markFrustumTouchDown(); // Tell Scene3D a frustum is handling this touch
           const x = e.nativeEvent.clientX, y = e.nativeEvent.clientY;
           const timer = setTimeout(() => {
             if (!touchDownRef.current) return;
@@ -1442,6 +1449,7 @@ const FrustumPlane = memo(function FrustumPlane({
           if (isSelected) {
             setTouchTransparent(prev => !prev);
           } else {
+            markFrustumTap(); // Guard against onPointerMissed clearing selection
             onContextMenu(image.imageId);
           }
         } : undefined}
