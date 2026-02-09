@@ -35,7 +35,7 @@ import {
   useGizmoNodeActions,
 } from '../../nodes';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
-import { contextMenuStyles, modalStyles, HOTKEYS, Z_INDEX } from '../../theme';
+import { contextMenuStyles, modalStyles, HOTKEYS, Z_INDEX, CANVAS_COLORS } from '../../theme';
 import { useModalZIndex } from '../../hooks/useModalZIndex';
 import { formatKeyCombo } from '../../config/hotkeys';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
@@ -334,7 +334,7 @@ export function GlobalContextMenu() {
       }
       case 'toggleBackground': {
         const isLight = backgroundColor === '#ffffff' || backgroundColor === '#fff';
-        setBackgroundColor(isLight ? '#000000' : '#ffffff');
+        setBackgroundColor(isLight ? CANVAS_COLORS.outline : CANVAS_COLORS.white);
         break;
       }
       case 'toggleAxes':

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
+import { createPortal } from 'react-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useReconstructionStore, selectCameraCount, useUIStore, useDeletionStore } from '../../store';
 import type { Camera, Point2D } from '../../types/colmap';
@@ -7,20 +8,7 @@ import { useFileUrl } from '../../hooks/useFileUrl';
 import { SIZE, TIMING, GAP, VIZ_COLORS, OPACITY, MODAL, TOUCH, buttonStyles, inputStyles, resizeHandleStyles, modalStyles, CANVAS_COLORS } from '../../theme';
 import { HOTKEYS } from '../../config/hotkeys';
 import { ModalErrorBoundary } from './ModalErrorBoundary';
-
-const CAMERA_MODEL_NAMES: Record<number, string> = {
-  0: 'SIMPLE_PINHOLE',
-  1: 'PINHOLE',
-  2: 'SIMPLE_RADIAL',
-  3: 'RADIAL',
-  4: 'OPENCV',
-  5: 'OPENCV_FISHEYE',
-  6: 'FULL_OPENCV',
-  7: 'FOV',
-  8: 'SIMPLE_RADIAL_FISHEYE',
-  9: 'RADIAL_FISHEYE',
-  10: 'THIN_PRISM_FISHEYE',
-};
+import { CAMERA_MODEL_COLMAP_NAMES as CAMERA_MODEL_NAMES } from '../../utils/cameraModelNames';
 
 const CAMERA_PARAM_NAMES: Record<number, string> = {
   0: 'f, cx, cy',
@@ -471,7 +459,7 @@ function ImagePlaceholder({ width, height, cameraWidth, cameraHeight, label, sty
     // Background pill for text
     const bgWidth = maxTextWidth + padding * 2;
     const bgHeight = lineHeight * 2 + padding;
-    ctx.fillStyle = 'rgba(22, 22, 22, 0.85)';
+    ctx.fillStyle = DS_COLORS.bgSecondaryOverlay;
     ctx.beginPath();
     ctx.roundRect(
       width / 2 - bgWidth / 2,
@@ -530,7 +518,7 @@ function DeletedCrossOverlay({ width, height, style }: DeletedCrossOverlayProps)
     // Draw cross using background color - extends to borders
     const strokeWidth = Math.max(3, Math.min(width, height) * 0.025);
 
-    ctx.strokeStyle = '#0a0a0a'; // bg-ds-primary (dark background)
+    ctx.strokeStyle = DS_COLORS.bgVoid;
     ctx.lineWidth = strokeWidth;
     ctx.lineCap = 'square';
 
@@ -650,7 +638,7 @@ export function ImageDetailModal() {
     if (cameraImageIds.length === 0) return;
     if (cameraAllMarked) {
       unmarkBulkDeletion(cameraImageIds);
-    } else {
+    } else if (window.confirm(`Mark all ${cameraImageIds.length} images from this camera for deletion?`)) {
       markBulkForDeletion(cameraImageIds);
     }
   }, [cameraImageIds, cameraAllMarked, markBulkForDeletion, unmarkBulkDeletion]);
@@ -660,7 +648,7 @@ export function ImageDetailModal() {
     if (frameImageIds.length === 0) return;
     if (frameAllMarked) {
       unmarkBulkDeletion(frameImageIds);
-    } else {
+    } else if (window.confirm(`Mark all ${frameImageIds.length} images in this frame for deletion?`)) {
       markBulkForDeletion(frameImageIds);
     }
   }, [frameImageIds, frameAllMarked, markBulkForDeletion, unmarkBulkDeletion]);
@@ -927,10 +915,10 @@ export function ImageDetailModal() {
   // Position and size state for draggable/resizable
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [size, setSize] = useState({ width: 800, height: 600 }); // Will be recalculated on open
-  const [isDragging, setIsDragging] = useState(false);
-  const [isResizing, setIsResizing] = useState<string | null>(null);
-  const dragStart = useRef({ x: 0, y: 0, posX: 0, posY: 0 });
-  const resizeStart = useRef({ x: 0, y: 0, width: 0, height: 0, posX: 0, posY: 0 });
+  const positionRef = useRef(position);
+  const sizeRef = useRef(size);
+  useEffect(() => { positionRef.current = position; }, [position]);
+  useEffect(() => { sizeRef.current = size; }, [size]);
 
   const image = imageDetailId !== null ? reconstruction?.images.get(imageDetailId) : null;
   const camera = image ? reconstruction?.cameras.get(image.cameraId) : null;
@@ -1369,92 +1357,85 @@ export function ImageDetailModal() {
     [hasNext, goToNext]
   );
 
-  // Drag handlers
-  const handleDragStart = useCallback((e: React.MouseEvent) => {
+  // Drag handler — uses setPointerCapture so no window listeners needed
+  const handleDragStart = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
-    setIsDragging(true);
-    dragStart.current = {
-      x: e.clientX,
-      y: e.clientY,
-      posX: position.x,
-      posY: position.y,
-    };
-  }, [position]);
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
 
-  // Resize handlers
-  const handleResizeStart = useCallback((e: React.MouseEvent, direction: string) => {
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startPosX = positionRef.current.x;
+    const startPosY = positionRef.current.y;
+
+    const onMove = (ev: PointerEvent) => {
+      setPosition({
+        x: startPosX + ev.clientX - startX,
+        y: startPosY + ev.clientY - startY,
+      });
+    };
+    const onUp = () => {
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+    };
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+  }, []);
+
+  // Resize handler — each handle captures its own pointer
+  const handleResizeStart = useCallback((e: React.PointerEvent, direction: string) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsResizing(direction);
-    resizeStart.current = {
-      x: e.clientX,
-      y: e.clientY,
-      width: size.width,
-      height: size.height,
-      posX: position.x,
-      posY: position.y,
-    };
-  }, [size, position]);
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
 
-  // Mouse move and up handlers
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isDragging) {
-        const dx = e.clientX - dragStart.current.x;
-        const dy = e.clientY - dragStart.current.y;
-        setPosition({
-          x: dragStart.current.posX + dx,
-          y: dragStart.current.posY + dy,
-        });
-      } else if (isResizing) {
-        const dx = e.clientX - resizeStart.current.x;
-        const dy = e.clientY - resizeStart.current.y;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startW = sizeRef.current.width;
+    const startH = sizeRef.current.height;
+    const startPosX = positionRef.current.x;
+    const startPosY = positionRef.current.y;
 
-        let newWidth = resizeStart.current.width;
-        let newHeight = resizeStart.current.height;
-        let newX = resizeStart.current.posX;
-        let newY = resizeStart.current.posY;
+    const onMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
 
-        if (isResizing.includes('e')) {
-          newWidth = Math.max(MIN_WIDTH, resizeStart.current.width + dx);
-        }
-        if (isResizing.includes('w')) {
-          const proposedWidth = resizeStart.current.width - dx;
-          if (proposedWidth >= MIN_WIDTH) {
-            newWidth = proposedWidth;
-            newX = resizeStart.current.posX + dx;
-          }
-        }
-        if (isResizing.includes('s')) {
-          newHeight = Math.max(MIN_HEIGHT, resizeStart.current.height + dy);
-        }
-        if (isResizing.includes('n')) {
-          const proposedHeight = resizeStart.current.height - dy;
-          if (proposedHeight >= MIN_HEIGHT) {
-            newHeight = proposedHeight;
-            newY = resizeStart.current.posY + dy;
-          }
-        }
+      let newWidth = startW;
+      let newHeight = startH;
+      let newX = startPosX;
+      let newY = startPosY;
 
-        setSize({ width: newWidth, height: newHeight });
-        setPosition({ x: newX, y: newY });
+      if (direction.includes('e')) {
+        newWidth = Math.max(MIN_WIDTH, startW + dx);
       }
-    };
+      if (direction.includes('w')) {
+        const proposedWidth = startW - dx;
+        if (proposedWidth >= MIN_WIDTH) {
+          newWidth = proposedWidth;
+          newX = startPosX + dx;
+        }
+      }
+      if (direction.includes('s')) {
+        newHeight = Math.max(MIN_HEIGHT, startH + dy);
+      }
+      if (direction.includes('n')) {
+        const proposedHeight = startH - dy;
+        if (proposedHeight >= MIN_HEIGHT) {
+          newHeight = proposedHeight;
+          newY = startPosY + dy;
+        }
+      }
 
-    const handleMouseUp = () => {
-      setIsDragging(false);
-      setIsResizing(null);
+      setSize({ width: newWidth, height: newHeight });
+      setPosition({ x: newX, y: newY });
     };
-
-    if (isDragging || isResizing) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isDragging, isResizing]);
+    const onUp = () => {
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+    };
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+  }, []);
 
   // Keep modal within viewport bounds when browser window is resized
   useEffect(() => {
@@ -1503,10 +1484,10 @@ export function ImageDetailModal() {
 
   // Touch mode: full-screen modal with vertical match layout
   if (touchMode) {
-    return (
+    return createPortal(
       <div className="fixed inset-0 z-[1000] bg-ds-primary flex flex-col">
         {/* Header */}
-        <div className="flex flex-col bg-ds-secondary border-b border-ds flex-shrink-0">
+        <div className="flex flex-col bg-ds-secondary flex-shrink-0">
           <div className="flex items-center justify-between px-3 h-11">
             <span className={`text-ds-primary text-sm truncate flex-1 mr-2 ${isMarkedForDeletion ? 'line-through text-ds-error' : ''}`}>
               {isMatchViewMode
@@ -1676,7 +1657,7 @@ export function ImageDetailModal() {
 
         {/* Touch controls - bottom section */}
         {showModalControls && (
-          <div className="flex-shrink-0 bg-ds-tertiary border-t border-ds">
+          <div className="flex-shrink-0 bg-ds-tertiary">
             {/* Toggle buttons row */}
             <div className="flex gap-1.5 px-2 py-1.5 overflow-x-auto">
               {!showMatchesInModal && (
@@ -1784,12 +1765,13 @@ export function ImageDetailModal() {
             </div>
           </div>
         )}
-      </div>
+      </div>,
+      document.body
     );
   }
 
   // Desktop mode: draggable/resizable modal
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[1000] pointer-events-none">
       <div
         className={modalStyles.backdrop}
@@ -1810,7 +1792,8 @@ export function ImageDetailModal() {
         <ModalErrorBoundary onClose={closeImageDetail}>
           <div
             className="flex items-center justify-between px-4 py-2 rounded-t-lg bg-ds-secondary text-xs cursor-move select-none"
-            onMouseDown={handleDragStart}
+            onPointerDown={handleDragStart}
+            style={{ touchAction: 'none' }}
           >
             <span className={`text-ds-primary ${isMarkedForDeletion ? 'line-through text-ds-error' : ''}`}>
               {isMatchViewMode
@@ -1821,8 +1804,8 @@ export function ImageDetailModal() {
               {/* Delete/Restore image button */}
               <button
                 onClick={handleDeleteToggle}
-                onMouseDown={(e) => e.stopPropagation()}
-                className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
+                onPointerDown={(e) => e.stopPropagation()}
+                className={`${modalStyles.headerIconButton} ${
                   isMarkedForDeletion
                     ? 'text-ds-success hover:bg-ds-success/20'
                     : 'text-ds-muted hover:text-ds-error hover:bg-ds-error/20'
@@ -1840,8 +1823,8 @@ export function ImageDetailModal() {
               {multiCamera && (
                 <button
                   onClick={handleToggleCamera}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className={`${modalStyles.headerIconButton} ${
                     cameraAllMarked
                       ? 'text-ds-success hover:bg-ds-success/20'
                       : 'text-ds-muted hover:text-ds-error hover:bg-ds-error/20'
@@ -1860,8 +1843,8 @@ export function ImageDetailModal() {
               {frameImageIds.length > 0 && (
                 <button
                   onClick={handleToggleFrame}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className={`${modalStyles.headerIconButton} ${
                     frameAllMarked
                       ? 'text-ds-success hover:bg-ds-success/20'
                       : 'text-ds-muted hover:text-ds-error hover:bg-ds-error/20'
@@ -1878,8 +1861,8 @@ export function ImageDetailModal() {
               )}
               <button
                 onClick={closeImageDetail}
-                onMouseDown={(e) => e.stopPropagation()}
-                className="w-6 h-6 flex items-center justify-center rounded text-ds-muted hover:text-ds-primary hover:bg-ds-tertiary transition-colors"
+                onPointerDown={(e) => e.stopPropagation()}
+                className={modalStyles.toolHeaderClose}
                 title="Close"
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -2238,16 +2221,17 @@ export function ImageDetailModal() {
         </div>
         </ModalErrorBoundary>
 
-        <div className={`${resizeHandleStyles.corner} ${resizeHandleStyles.nw}`} onMouseDown={(e) => handleResizeStart(e, 'nw')} />
-        <div className={`${resizeHandleStyles.corner} ${resizeHandleStyles.ne}`} onMouseDown={(e) => handleResizeStart(e, 'ne')} />
-        <div className={`${resizeHandleStyles.corner} ${resizeHandleStyles.sw}`} onMouseDown={(e) => handleResizeStart(e, 'sw')} />
-        <div className={`${resizeHandleStyles.corner} ${resizeHandleStyles.se}`} onMouseDown={(e) => handleResizeStart(e, 'se')} />
-        <div className={`${resizeHandleStyles.edge} ${resizeHandleStyles.n}`} onMouseDown={(e) => handleResizeStart(e, 'n')} />
-        <div className={`${resizeHandleStyles.edge} ${resizeHandleStyles.s}`} onMouseDown={(e) => handleResizeStart(e, 's')} />
-        <div className={`${resizeHandleStyles.edge} ${resizeHandleStyles.w}`} onMouseDown={(e) => handleResizeStart(e, 'w')} />
-        <div className={`${resizeHandleStyles.edge} ${resizeHandleStyles.e}`} onMouseDown={(e) => handleResizeStart(e, 'e')} />
+        <div className={`${resizeHandleStyles.corner} ${resizeHandleStyles.nw}`} onPointerDown={(e) => handleResizeStart(e, 'nw')} />
+        <div className={`${resizeHandleStyles.corner} ${resizeHandleStyles.ne}`} onPointerDown={(e) => handleResizeStart(e, 'ne')} />
+        <div className={`${resizeHandleStyles.corner} ${resizeHandleStyles.sw}`} onPointerDown={(e) => handleResizeStart(e, 'sw')} />
+        <div className={`${resizeHandleStyles.corner} ${resizeHandleStyles.se}`} onPointerDown={(e) => handleResizeStart(e, 'se')} />
+        <div className={`${resizeHandleStyles.edge} ${resizeHandleStyles.n}`} onPointerDown={(e) => handleResizeStart(e, 'n')} />
+        <div className={`${resizeHandleStyles.edge} ${resizeHandleStyles.s}`} onPointerDown={(e) => handleResizeStart(e, 's')} />
+        <div className={`${resizeHandleStyles.edge} ${resizeHandleStyles.w}`} onPointerDown={(e) => handleResizeStart(e, 'w')} />
+        <div className={`${resizeHandleStyles.edge} ${resizeHandleStyles.e}`} onPointerDown={(e) => handleResizeStart(e, 'e')} />
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

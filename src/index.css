@@ -120,7 +120,9 @@
   --z-dropdown: 100;
   --z-sticky: 200;
   --z-overlay: 500;
+  --z-fab: 999;
   --z-modal: 1000;
+  --z-contextMenu: 1050;
   --z-toast: 1500;
   --z-tooltip: 2000;
 
@@ -530,17 +532,11 @@ legend {
 .z-dropdown { z-index: var(--z-dropdown); }
 .z-sticky { z-index: var(--z-sticky); }
 .z-overlay { z-index: var(--z-overlay); }
+.z-fab { z-index: var(--z-fab); }
 .z-modal { z-index: var(--z-modal); }
+.z-contextMenu { z-index: var(--z-contextMenu); }
 .z-toast { z-index: var(--z-toast); }
 .z-tooltip { z-index: var(--z-tooltip); }
-
-/* Arbitrary z-index values */
-.z-\[100\] { z-index: 100; }
-.z-\[500\] { z-index: 500; }
-.z-\[1000\] { z-index: 1000; }
-.z-\[1100\] { z-index: 1100; }
-.z-\[1200\] { z-index: 1200; }
-.z-\[9999\] { z-index: 9999; }
 
 /* Fixed positioning */
 .fixed { position: fixed; }
@@ -1492,7 +1488,6 @@ legend {
   background-color: var(--border-color);
   cursor: col-resize;
   flex-shrink: 0;
-  z-index: 10;
 }
 
 .resize-handle::after {
@@ -1507,6 +1502,24 @@ legend {
 
 .resize-handle:hover::after {
   width: 4px;
+}
+
+/* ============================================
+   Auto-hide overlays after idle
+   ============================================ */
+
+/* Elements marked as idle-hideable fade out when the scene is idle */
+.idle-hideable {
+  transition: opacity 0.25s ease;
+}
+
+.scene-3d-container[data-idle="true"] .idle-hideable {
+  opacity: 0;
+}
+
+/* During pointer lock (fly mode), fully block hover/click on overlays */
+.scene-3d-container[data-pointer-locked="true"] .idle-hideable {
+  pointer-events: none;
 }
 
 /* Responsive styles for small screens (laptops and smaller) */

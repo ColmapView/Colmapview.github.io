@@ -3,7 +3,8 @@
  * Use these to maintain consistency across similar components.
  */
 
-import { Z_INDEX } from './zIndex';
+import { STATUS_COLORS, STATUS_BG } from './colors';
+
 
 // ============================================
 // BUTTON STYLES
@@ -110,9 +111,9 @@ export const actionButtonStyles = {
 
   // Icon action buttons (for confirm/retry/cancel style buttons)
   iconButton: 'p-0.5 transition-colors flex items-center',
-  iconButtonConfirm: 'p-0.5 text-green-400 hover:text-green-300 transition-colors flex items-center',
+  iconButtonConfirm: `p-0.5 ${STATUS_COLORS.success} hover:text-green-300 transition-colors flex items-center`,
   iconButtonRetry: 'p-0.5 text-yellow-400 hover:text-yellow-300 transition-colors flex items-center',
-  iconButtonCancel: 'p-0.5 text-red-400 hover:text-red-300 transition-colors flex items-center',
+  iconButtonCancel: `p-0.5 ${STATUS_COLORS.error} hover:text-red-300 transition-colors flex items-center`,
 } as const;
 
 // ============================================
@@ -198,7 +199,7 @@ export const listStyles = {
 // ============================================
 
 export const modalStyles = {
-  container: `absolute inset-0 z-[${Z_INDEX.modal}] pointer-events-none`,
+  container: 'absolute inset-0 z-modal pointer-events-none',
   backdrop: 'absolute inset-0 bg-ds-void/50 pointer-events-auto',
   panel: 'absolute bg-ds-tertiary rounded-lg shadow-ds-lg flex flex-col pointer-events-auto',
   header: 'flex items-center justify-between px-4 py-2 border-b border-ds cursor-move select-none',
@@ -208,7 +209,11 @@ export const modalStyles = {
   // Tool modal header (rounded top with secondary background)
   toolHeader: 'flex items-center justify-between px-4 py-2 rounded-t-lg bg-ds-secondary cursor-move select-none',
   toolHeaderTitle: 'text-ds-primary text-sm font-medium',
-  toolHeaderClose: 'w-6 h-6 flex items-center justify-center rounded text-ds-muted hover:text-ds-primary hover:bg-ds-tertiary transition-colors tool-header-close',
+  toolHeaderClose: 'w-6 h-6 flex items-center justify-center rounded cursor-pointer text-ds-muted hover:text-ds-primary hover:bg-ds-tertiary transition-colors tool-header-close',
+  /** Base for modal header icon buttons (delete/restore actions) */
+  headerIconButton: 'w-6 h-6 flex items-center justify-center rounded cursor-pointer transition-colors',
+  /** Standard tool modal content area */
+  toolContent: 'px-4 py-3 space-y-3',
   closeButton: buttonStyles.closeLg,
   // Reference shared action button styles
   actionGroup: actionButtonStyles.group,
@@ -216,20 +221,6 @@ export const modalStyles = {
   iconButtonRetry: actionButtonStyles.iconButtonRetry,
   iconButtonCancel: actionButtonStyles.iconButtonCancel,
   actionButtonPrimary: actionButtonStyles.buttonFullWidth,
-} as const;
-
-// ============================================
-// PANEL STYLES
-// ============================================
-
-export const panelStyles = {
-  container: 'bg-ds-tertiary border border-ds rounded-lg shadow-ds-lg',
-  header: 'px-4 py-2 border-b border-ds',
-  title: 'text-ds-primary text-base font-medium',
-  content: 'p-4',
-  row: 'flex items-center justify-between gap-2',
-  label: 'text-ds-secondary text-base whitespace-nowrap',
-  value: 'text-ds-primary text-base text-right',
 } as const;
 
 // ============================================
@@ -379,7 +370,8 @@ export const loadingStyles = {
 
 export const controlPanelStyles = {
   // Container positioning - z-index tooltip ensures hover panels appear above tool modals
-  container: `absolute top-3 right-3 flex flex-col gap-2 z-[${Z_INDEX.tooltip}] control-panel-responsive`,
+  // Note: idle-hideable is added conditionally by ViewerControls based on autoHideElements.buttons
+  container: 'absolute top-3 right-3 flex flex-col gap-2 z-tooltip control-panel-responsive',
   // Button styles
   button: 'w-10 h-10 rounded-lg flex items-center justify-center transition-colors relative border border-ds control-button-responsive',
   buttonActive: 'bg-ds-accent text-ds-void border-ds-accent',
@@ -387,7 +379,7 @@ export const controlPanelStyles = {
   buttonInactive: 'bg-ds-tertiary text-ds-secondary hover-ds-hover hover-ds-text-primary',
   // Panel positioning - right-full positions at container's left edge, pr-2 creates gap inside hover area
   // z-index tooltip ensures hover panels always appear above tool modals (which start at 1000 and increment)
-  panelWrapper: `absolute right-full top-0 pr-2 z-[${Z_INDEX.tooltip}]`,
+  panelWrapper: 'absolute right-full top-0 pr-2 z-tooltip',
   // Panel content
   panel: 'bg-ds-tertiary border border-ds rounded-lg p-4 w-[240px] shadow-ds-lg hover-panel-responsive',
   panelTitle: 'text-ds-primary text-sm font-medium mb-3',
@@ -534,6 +526,7 @@ export const dragOverlayStyles = {
 // ============================================
 
 export const footerStyles = {
+  // Note: idle-hideable is added conditionally by FooterBranding based on autoHideElements.buttons
   logo: 'absolute bottom-6 left-6 footer-logo-responsive',
   logoImage: 'opacity-70 hover-opacity-100 transition-opacity',
   socialContainer: 'absolute bottom-6 right-6 flex items-center gap-4 footer-social-responsive',
@@ -616,7 +609,7 @@ export const resizeHandleStyles = {
 
 export const histogramStyles = {
   // Container positions above the stat, centered (transform handled inline for viewport clamping)
-  container: `absolute left-1/2 z-[${Z_INDEX.tooltip}]`,
+  container: 'absolute left-1/2 z-tooltip',
   // Inline style needed for positioning above: style={{ bottom: '100%', marginBottom: '8px' }}
   // Card styling
   card: 'bg-ds-tertiary rounded-lg px-4 py-3 shadow-ds-lg text-sm border border-ds',
@@ -672,7 +665,7 @@ export const touchStyles = {
   touchButton: 'min-h-[44px] px-4 flex items-center justify-center gap-2 rounded-lg',
 
   // Selection toast (brief feedback)
-  selectionToast: `fixed top-4 left-1/2 -translate-x-1/2 bg-ds-tertiary/95 px-4 py-2 rounded-lg shadow-ds z-[${Z_INDEX.fab}]`,
+  selectionToast: 'fixed top-4 left-1/2 -translate-x-1/2 bg-ds-tertiary/95 px-4 py-2 rounded-lg shadow-ds z-fab',
   selectionToastText: 'text-ds-primary text-sm whitespace-nowrap',
 
   // Touch status bar
@@ -700,7 +693,7 @@ export const cacheStatsStyles = {
   indicatorLabel: 'text-ds-secondary',
   indicatorValue: 'text-ds-primary',
   // Tooltip container (uses histogramStyles.container positioning)
-  tooltipContainer: `absolute z-[${Z_INDEX.tooltip}]`,
+  tooltipContainer: 'absolute z-tooltip',
   // Tooltip card - wider, no wrapping
   card: 'bg-ds-tertiary rounded-lg px-4 py-3 shadow-ds-lg text-sm border border-ds whitespace-nowrap',
   // Header row with title and legend
@@ -710,10 +703,10 @@ export const cacheStatsStyles = {
   legendItem: 'flex items-center gap-1',
   legendText: 'text-ds-muted',
   // Status dots
-  dotMemoryJs: 'inline-block w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0',
+  dotMemoryJs: `inline-block w-1.5 h-1.5 rounded-full ${STATUS_BG.success} flex-shrink-0`,
   dotMemoryWasm: 'inline-block w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0',
-  dotLazy: 'inline-block w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0',
-  dotUnavailable: 'inline-block w-1.5 h-1.5 rounded-full bg-neutral-600 flex-shrink-0',
+  dotLazy: `inline-block w-1.5 h-1.5 rounded-full ${STATUS_BG.info} flex-shrink-0`,
+  dotUnavailable: `inline-block w-1.5 h-1.5 rounded-full ${STATUS_BG.inactive} flex-shrink-0`,
   // Table styles
   table: 'w-full text-xs',
   tableHeader: 'text-[10px] text-ds-muted border-b border-ds',

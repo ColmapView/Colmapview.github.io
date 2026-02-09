@@ -2,11 +2,13 @@ import { useMemo, useRef, useEffect, useState, useCallback, memo } from 'react';
 import * as THREE from 'three';
 import { Text, Billboard, Html } from '@react-three/drei';
 import { useThree, type ThreeEvent } from '@react-three/fiber';
-import { VIZ_COLORS, contextMenuStyles, hoverCardStyles, ICON_SIZES, INTERACTION_HOVER_COLOR, MODAL_POSITION, GRID_COLORS } from '../../theme';
+import { VIZ_COLORS, contextMenuStyles, hoverCardStyles, ICON_SIZES, INTERACTION_HOVER_COLOR, GRID_COLORS, CANVAS_COLORS } from '../../theme';
 import type { AxesCoordinateSystem, AxisLabelMode } from '../../store/types';
 import { useAxesNodeActions } from '../../nodes';
+import { useClickOutside } from '../../hooks/useClickOutside';
 import { CheckIcon, HideIcon } from '../../icons';
 import { COORDINATE_SYSTEMS, AXIS_SEMANTIC } from '../../utils/coordinateSystems';
+import { HoverCard3D } from './HoverCard3D';
 
 // Helper to calculate rotation quaternion from default cylinder (Y-axis) to target direction
 function getAxisRotation(direction: [number, number, number]): THREE.Euler {
@@ -95,31 +97,7 @@ const LabelsMenu = memo(function LabelsMenu({
   const setShowAxes = axesActions.setVisible;
 
   // Close on click outside or escape
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    // Delay to avoid immediate close from triggering click
-    const timer = setTimeout(() => {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleKeyDown);
-    }, 0);
-
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [onClose]);
+  useClickOutside(menuRef, onClose);
 
   const handleLabelChange = useCallback((mode: AxisLabelMode) => {
     setAxisLabelMode(mode);
@@ -174,31 +152,7 @@ const SystemMenu = memo(function SystemMenu({
   const setAxesCoordinateSystem = axesActions.setCoordinateSystem;
 
   // Close on click outside or escape
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    // Delay to avoid immediate close from triggering click
-    const timer = setTimeout(() => {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleKeyDown);
-    }, 0);
-
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [onClose]);
+  useClickOutside(menuRef, onClose);
 
   const handleSystemChange = useCallback((system: AxesCoordinateSystem) => {
     setAxesCoordinateSystem(system);
@@ -330,7 +284,7 @@ const AxisLabel = memo(function AxisLabel({
           anchorX={((isXAxis && showExtra) || hasSuffix) ? 'right' : 'center'}
           anchorY="middle"
           outlineWidth={fontSize * 0.08}
-          outlineColor="#000000"
+          outlineColor={CANVAS_COLORS.outline}
           outlineOpacity={0.5}
         >
           {label}
@@ -343,7 +297,7 @@ const AxisLabel = memo(function AxisLabel({
             anchorY="middle"
             position={[fontSize * 0.15, 0, 0]}
             outlineWidth={fontSize * 0.05}
-            outlineColor="#000000"
+            outlineColor={CANVAS_COLORS.outline}
             outlineOpacity={0.5}
           >
             ({scaleStr})
@@ -357,7 +311,7 @@ const AxisLabel = memo(function AxisLabel({
             anchorY="middle"
             position={[fontSize * 0.15, 0, 0]}
             outlineWidth={fontSize * 0.05}
-            outlineColor="#000000"
+            outlineColor={CANVAS_COLORS.outline}
             outlineOpacity={0.5}
           >
             ({suffix})
@@ -561,39 +515,26 @@ export function OriginAxes({ size, scale = 1, coordinateSystem = 'colmap', label
       })}
       {/* Hover card popup */}
       {hoveredElement && mousePos && !labelsMenu && !systemMenu && (
-        <Html
-          style={{
-            position: 'fixed',
-            left: mousePos.x + MODAL_POSITION.cursorOffset,
-            top: mousePos.y + MODAL_POSITION.cursorOffset,
-            pointerEvents: 'none',
-            transform: 'none',
-          }}
-          calculatePosition={() => [0, 0]}
-        >
-          <div className={hoverCardStyles.container}>
-            <div className={hoverCardStyles.title}>Origin Axes</div>
-            <div className={hoverCardStyles.subtitle}>{COORDINATE_SYSTEM_NAMES[coordinateSystem]}</div>
-            <div className={hoverCardStyles.hint}>
-              <div className={hoverCardStyles.hintRow}>
-                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="6" y="2" width="12" height="20" rx="6"/>
-                  <path d="M12 2v8"/>
-                  <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
-                </svg>
-                Left: labels
-              </div>
-              <div className={hoverCardStyles.hintRow}>
-                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="6" y="2" width="12" height="20" rx="6"/>
-                  <path d="M12 2v8"/>
-                  <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
-                </svg>
-                Right: coord system
-              </div>
+        <HoverCard3D mousePos={mousePos} title="Origin Axes" subtitle={COORDINATE_SYSTEM_NAMES[coordinateSystem]}>
+          <div className={hoverCardStyles.hint}>
+            <div className={hoverCardStyles.hintRow}>
+              <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="6" y="2" width="12" height="20" rx="6"/>
+                <path d="M12 2v8"/>
+                <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
+              </svg>
+              Left: labels
+            </div>
+            <div className={hoverCardStyles.hintRow}>
+              <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="6" y="2" width="12" height="20" rx="6"/>
+                <path d="M12 2v8"/>
+                <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
+              </svg>
+              Right: coord system
             </div>
           </div>
-        </Html>
+        </HoverCard3D>
       )}
       {/* Labels menu (left-click) */}
       {labelsMenu && (

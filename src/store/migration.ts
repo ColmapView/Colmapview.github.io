@@ -1,3 +1,6 @@
+// Declare global version constant injected by Vite
+declare const __APP_VERSION__: string;
+
 // Storage keys
 export const STORAGE_KEYS = {
   legacy: 'colmap-viewer-settings',
@@ -8,11 +11,8 @@ export const STORAGE_KEYS = {
   rig: 'colmap-viewer-rig',
   guide: 'colmap-viewer-guide',
   profiles: 'colmap-viewer-profiles',
-  settingsResetWarningShown: 'colmap-viewer-settings-reset-warning-shown',
+  lastSeenVersion: 'colmap-viewer-last-seen-version',
 } as const;
-
-// Version for the settings reset warning - increment this to show the warning again
-const SETTINGS_RESET_WARNING_VERSION = 1;
 
 // Property mappings for migration
 const POINT_CLOUD_PROPERTIES = [
@@ -177,53 +177,37 @@ export function migrateFromLegacyStore(): boolean {
 }
 
 /**
- * Check if the settings reset warning should be shown and display it
+ * Check if the app version changed since last visit and show a notification if so.
+ * Caches the current app version in localStorage so we can detect upgrades.
  */
-function showSettingsResetWarning(): void {
+function showNewVersionNotification(): void {
   if (typeof window === 'undefined') return;
 
-  const currentVersion = String(SETTINGS_RESET_WARNING_VERSION);
+  const currentVersion = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '';
+  if (!currentVersion) return;
 
-  // Check if user has any existing settings FIRST (before checking version)
-  // This ensures reset users (no settings) don't see the notification,
-  // even if Zustand persist middleware writes defaults later
-  const hasExistingSettings = [
-    STORAGE_KEYS.pointCloud,
-    STORAGE_KEYS.camera,
-    STORAGE_KEYS.ui,
-    STORAGE_KEYS.export,
-    STORAGE_KEYS.rig,
-  ].some(key => localStorage.getItem(key) !== null);
+  const lastSeenVersion = localStorage.getItem(STORAGE_KEYS.lastSeenVersion);
 
-  if (!hasExistingSettings) {
-    // Mark as shown for new users / reset users
-    localStorage.setItem(STORAGE_KEYS.settingsResetWarningShown, currentVersion);
+  // First visit ever — just record the version, no notification
+  if (lastSeenVersion === null) {
+    localStorage.setItem(STORAGE_KEYS.lastSeenVersion, currentVersion);
     return;
   }
 
-  // For users WITH settings, check if they've seen this version
-  const shownVersion = localStorage.getItem(STORAGE_KEYS.settingsResetWarningShown);
-  if (shownVersion === currentVersion) return;
+  // Same version — nothing to do
+  if (lastSeenVersion === currentVersion) return;
 
-  // Show notification for existing users who haven't seen this version
+  // Version changed — show notification and update cached version
   import('./stores/notificationStore').then(({ useNotificationStore }) => {
     useNotificationStore.getState().addNotification(
-      'warning',
-      'New features available! Consider resetting settings via the ⟳ button in the startup panel to enable them.'
+      'info',
+      `Updated to v${currentVersion}! Consider resetting settings via the ⟳ button in Settings to enable new defaults.`
     );
-    localStorage.setItem(STORAGE_KEYS.settingsResetWarningShown, currentVersion);
+    localStorage.setItem(STORAGE_KEYS.lastSeenVersion, currentVersion);
   });
 }
 
 export function initStoreMigration(): void {
   migrateFromLegacyStore();
-  showSettingsResetWarning();
-}
-
-/**
- * Mark the settings reset warning as shown (used when user explicitly resets settings)
- */
-export function markSettingsResetWarningShown(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEYS.settingsResetWarningShown, String(SETTINGS_RESET_WARNING_VERSION));
+  showNewVersionNotification();
 }

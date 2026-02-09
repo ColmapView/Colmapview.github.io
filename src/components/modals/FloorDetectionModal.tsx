@@ -3,7 +3,8 @@
  * Triggered from TransformPanel button.
  */
 
-import { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
+import { useCallback, memo, useMemo } from 'react';
+import { SliderRow, SelectRow } from '../viewer3d/ControlComponents';
 import * as THREE from 'three';
 import { useHotkeys } from 'react-hotkeys-hook';
 import {
@@ -12,11 +13,13 @@ import {
   useUIStore,
 } from '../../store';
 import { useModalZIndex } from '../../hooks/useModalZIndex';
+import { useModalDrag } from '../../hooks/useModalDrag';
 import { useFloorPlaneStore, type FloorColorMode } from '../../store/stores/floorPlaneStore';
 import { detectPlaneRANSAC, computeDistancesToPlane, transformPositions, flipPlaneNormal } from '../../utils/ransac';
 import { createSim3dFromEuler, isIdentityEuler, sim3dToEuler, composeSim3d } from '../../utils/sim3dTransforms';
 import { COORDINATE_SYSTEMS } from '../../utils/coordinateSystems';
-import { modalStyles, controlPanelStyles, MODAL_POSITION } from '../../theme';
+import { modalStyles, controlPanelStyles } from '../../theme';
+import { CloseIcon } from '../../icons';
 import type { Sim3d } from '../../types/sim3d';
 
 const styles = controlPanelStyles;
@@ -54,65 +57,6 @@ function computePlaneAlignment(
     scale: 1,
   };
 }
-
-// Slider row component (simplified version for modal)
-interface SliderRowProps {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (value: number) => void;
-  formatValue?: (value: number) => string;
-}
-
-const SliderRow = memo(function SliderRow({ label, value, min, max, step, onChange, formatValue }: SliderRowProps) {
-  const decimals = step >= 1 ? 0 : step.toString().split('.')[1]?.length || 0;
-  const displayValue = formatValue ? formatValue(value) : value.toFixed(decimals);
-  const progress = ((value - min) / (max - min)) * 100;
-
-  return (
-    <div className={styles.row}>
-      <label className={styles.label}>{label}</label>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className={styles.slider}
-        style={{ '--range-progress': `${progress}%` } as React.CSSProperties}
-      />
-      <span className={styles.value}>{displayValue}</span>
-    </div>
-  );
-});
-
-// Select row component (simplified version for modal)
-interface SelectRowProps {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-}
-
-const SelectRow = memo(function SelectRow({ label, value, onChange, options }: SelectRowProps) {
-  return (
-    <div className={styles.row}>
-      <label className={styles.label}>{label}</label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={styles.selectRight}
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
-    </div>
-  );
-});
 
 export interface FloorDetectionModalProps {
   isOpen: boolean;
@@ -157,74 +101,13 @@ export const FloorDetectionModal = memo(function FloorDetectionModal({
     return new THREE.Vector3(direction[0], direction[1], direction[2]);
   }, [axesCoordinateSystem, targetAxis]);
 
-  // Position and drag state
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStart = useRef({ x: 0, y: 0, posX: 0, posY: 0 });
-  const panelRef = useRef<HTMLDivElement>(null);
+  // Position and drag
+  const { position, panelRef, handleDragStart } = useModalDrag({
+    estimatedWidth: 280, estimatedHeight: 300, isOpen,
+  });
 
   // Z-index management for stacking multiple modals
   const { zIndex, bringToFront } = useModalZIndex(isOpen);
-
-  // Center modal function
-  const centerModal = useCallback(() => {
-    if (panelRef.current) {
-      const rect = panelRef.current.getBoundingClientRect();
-      const viewportW = window.innerWidth;
-      const viewportH = window.innerHeight;
-      setPosition({
-        x: (viewportW - rect.width) / 2,
-        y: Math.max(MODAL_POSITION.minTop, (viewportH - rect.height) / 2),
-      });
-    }
-  }, []);
-
-  // Center modal when opened
-  useEffect(() => {
-    if (isOpen) {
-      const viewportW = window.innerWidth;
-      const viewportH = window.innerHeight;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPosition({
-        x: (viewportW - 280) / 2,
-        y: Math.max(MODAL_POSITION.minTop, (viewportH - 300) / 2),
-      });
-      requestAnimationFrame(centerModal);
-    }
-  }, [isOpen, centerModal]);
-
-  // Drag handlers
-  const handleDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-    dragStart.current = {
-      x: e.clientX,
-      y: e.clientY,
-      posX: position.x,
-      posY: position.y,
-    };
-  }, [position]);
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isDragging) {
-        setPosition({
-          x: dragStart.current.posX + e.clientX - dragStart.current.x,
-          y: dragStart.current.posY + e.clientY - dragStart.current.y,
-        });
-      }
-    };
-    const handleMouseUp = () => setIsDragging(false);
-
-    if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isDragging]);
 
   // Close handler - also clears detection
   const handleClose = useCallback(() => {
@@ -306,23 +189,22 @@ export const FloorDetectionModal = memo(function FloorDetectionModal({
         ref={panelRef}
         className={modalStyles.toolPanel}
         style={{ left: position.x, top: position.y, width: 280 }}
-        onMouseDown={bringToFront}
+        onPointerDown={bringToFront}
       >
         {/* Header */}
         <div
           className={modalStyles.toolHeader}
-          onMouseDown={handleDragStart}
+          onPointerDown={handleDragStart}
+          style={{ touchAction: 'none' }}
         >
           <span className={modalStyles.toolHeaderTitle}>Floor Detection</span>
           <button
             onClick={handleClose}
-            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
             className={modalStyles.toolHeaderClose}
             title="Close"
           >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
+            <CloseIcon className="w-3.5 h-3.5" />
           </button>
         </div>
 

@@ -3,6 +3,7 @@
  */
 
 import type { IconProps } from './types';
+import { ICON_COLORS } from '../theme/colors';
 
 // Screenshot icon (camera)
 export function ScreenshotIcon({ className }: IconProps) {
@@ -172,9 +173,9 @@ export function SelectionBlinkIcon({ className }: IconProps) {
 export function AxesIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round">
-      <path d="M12 12h9" stroke="#e74c3c" />
-      <path d="M12 12v-9" stroke="#2ecc71" />
-      <path d="M12 12l-6 6" stroke="#3498db" />
+      <path d="M12 12h9" stroke={ICON_COLORS.axisX} />
+      <path d="M12 12v-9" stroke={ICON_COLORS.axisY} />
+      <path d="M12 12l-6 6" stroke={ICON_COLORS.axisZ} />
     </svg>
   );
 }
@@ -205,9 +206,9 @@ export function AxesGridIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" strokeLinecap="round">
       <path d="M4 8h16M4 16h16M8 4v16M16 4v16" stroke="currentColor" strokeWidth="1" opacity="0.4" />
-      <path d="M12 12h9" stroke="#e74c3c" strokeWidth="2.5" />
-      <path d="M12 12v-9" stroke="#2ecc71" strokeWidth="2.5" />
-      <path d="M12 12l-6 6" stroke="#3498db" strokeWidth="2.5" />
+      <path d="M12 12h9" stroke={ICON_COLORS.axisX} strokeWidth="2.5" />
+      <path d="M12 12v-9" stroke={ICON_COLORS.axisY} strokeWidth="2.5" />
+      <path d="M12 12l-6 6" stroke={ICON_COLORS.axisZ} strokeWidth="2.5" />
     </svg>
   );
 }

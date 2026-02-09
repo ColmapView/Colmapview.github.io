@@ -5,6 +5,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useProfiles } from '../../hooks/useProfiles';
+import { useClickOutside } from '../../hooks/useClickOutside';
 import { useNotificationStore } from '../../store/stores/notificationStore';
 import { TrashIcon } from '../../icons';
 import { controlPanelStyles, Z_INDEX } from '../../theme';
@@ -29,20 +30,12 @@ export function ProfileSelector() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    if (!isDropdownOpen) return;
-
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setIsDropdownOpen(false);
-        setIsCreating(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isDropdownOpen]);
+  // Close dropdown when clicking outside or pressing Escape
+  const handleCloseDropdown = useCallback(() => {
+    setIsDropdownOpen(false);
+    setIsCreating(false);
+  }, []);
+  useClickOutside(dropdownRef, handleCloseDropdown, isDropdownOpen);
 
   // Focus input when creating new profile
   useEffect(() => {

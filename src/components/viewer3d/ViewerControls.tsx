@@ -27,7 +27,6 @@ import {
   useGridNodeActions,
   useRigNodeActions,
 } from '../../nodes';
-import { markSettingsResetWarningShown } from '../../store/migration';
 import { isIdentityEuler } from '../../utils/sim3dTransforms';
 import type { ColorMode } from '../../types/colmap';
 import type { CameraMode, CameraDisplayMode, CameraScaleFactor, FrustumColorMode, MatchesDisplayMode, SelectionColorMode, AxesCoordinateSystem, AxisLabelMode, AutoRotateMode, HorizonLockMode, RigDisplayMode, RigColorMode } from '../../store/types';
@@ -92,6 +91,7 @@ import { ProfileSelector } from '../dropzone/ProfileSelector';
 import { FloorDetectionModal } from '../modals/FloorDetectionModal';
 import { CameraConversionModal } from '../modals/CameraConversionModal';
 import { DeletionModal } from '../modals/DeletionModal';
+import { AutoHideModal } from '../modals/AutoHideModal';
 
 // Use styles from theme
 const styles = controlPanelStyles;
@@ -373,6 +373,8 @@ export function ViewerControls() {
   const setShowDeletionModal = useUIStore((s) => s.setShowDeletionModal);
   const showConversionModal = useUIStore((s) => s.showConversionModal);
   const setShowConversionModal = useUIStore((s) => s.setShowConversionModal);
+  const showAutoHideEditor = useUIStore((s) => s.showAutoHideEditor);
+  const setShowAutoHideEditor = useUIStore((s) => s.setShowAutoHideEditor);
 
   // Node hooks for reading state
   const pointsNode = usePointsNode();
@@ -498,6 +500,9 @@ export function ViewerControls() {
   const setBackgroundColor = useUIStore((s) => s.setBackgroundColor);
   const setView = useUIStore((s) => s.setView);
   const openContextMenuEditor = useUIStore((s) => s.openContextMenuEditor);
+  const idleHideTimeout = useUIStore((s) => s.idleHideTimeout);
+  const setIdleHideTimeout = useUIStore((s) => s.setIdleHideTimeout);
+  const autoHideButtons = useUIStore((s) => s.autoHideElements.buttons);
 
 
   // Reconstruction data (needed for various panels)
@@ -891,7 +896,7 @@ export function ViewerControls() {
 
   return (
     <>
-    <div className={styles.container} data-testid="viewer-controls">
+    <div className={`${styles.container}${autoHideButtons ? ' idle-hideable' : ''}`} data-testid="viewer-controls">
       <ControlButton
         panelId="view"
         activePanel={activePanel}
@@ -1128,7 +1133,7 @@ export function ViewerControls() {
               />
             </>
           )}
-          <div className="text-ds-secondary text-sm mt-3">
+          <div className={styles.hint}>
             <div className="mb-1 font-medium">Mouse:</div>
             {cameraMode === 'orbit' ? (
               <>
@@ -1250,7 +1255,7 @@ export function ViewerControls() {
           />
 
 
-          <div className="text-ds-secondary text-sm mt-3">
+          <div className={styles.hint}>
             {colorMode === 'rgb' ? (
               <>
                 <div className="mb-1 font-medium">RGB Colors:</div>
@@ -1411,7 +1416,7 @@ export function ViewerControls() {
               </div>
             </>
           )}
-          <div className="text-ds-secondary text-sm mt-3">
+          <div className={styles.hint}>
             {cameraDisplayMode === 'frustum' ? (
               <>
                 <div className="mb-1 font-medium">Frustum:</div>
@@ -1475,7 +1480,7 @@ export function ViewerControls() {
                   <HueRow label="Color" value={matchesColor} onChange={setMatchesColor} />
                 </>
               )}
-              <div className="text-ds-secondary text-sm mt-3">
+              <div className={styles.hint}>
                 {!showMatches ? (
                   <>
                     <div className="mb-1 font-medium">Off:</div>
@@ -1544,7 +1549,7 @@ export function ViewerControls() {
                   )}
                 </>
               )}
-              <div className="text-ds-secondary text-sm mt-3">
+              <div className={styles.hint}>
                 {selectionColorMode === 'static' ? (
                   <>
                     <div className="mb-1 font-medium">Static:</div>
@@ -1627,7 +1632,7 @@ export function ViewerControls() {
                   />
                 </>
               )}
-              <div className="text-ds-secondary text-sm mt-3">
+              <div className={styles.hint}>
                 <div className="mb-1 font-medium">Detected Rig:</div>
                 <div>{cameraCount} camera{cameraCount !== 1 ? 's' : ''}, {frameCount} frame{frameCount !== 1 ? 's' : ''}</div>
                 <div className="mt-2">
@@ -1704,8 +1709,6 @@ export function ViewerControls() {
               onClick={() => {
                 if (confirm('Clear all settings and reload? This cannot be undone.')) {
                   localStorage.clear();
-                  // Mark warning as shown so it doesn't reappear after reset
-                  markSettingsResetWarningShown();
                   window.location.reload();
                 }
               }}
@@ -1717,6 +1720,28 @@ export function ViewerControls() {
 
           {/* Customization Section */}
           <div className="text-ds-muted text-xs uppercase tracking-wide mt-4 mb-2">Customization</div>
+          <SliderRow
+            label="Auto-hide UI"
+            value={idleHideTimeout}
+            min={0}
+            max={10}
+            step={1}
+            onChange={setIdleHideTimeout}
+            formatValue={(v) => v === 0 ? 'Off' : `${v}s`}
+          />
+          {idleHideTimeout > 0 && (
+            <div className={styles.actionGroup}>
+              <button
+                onClick={() => {
+                  setShowAutoHideEditor(true);
+                  setActivePanel(null);
+                }}
+                className={styles.actionButton}
+              >
+                Auto-hide 3D Elements
+              </button>
+            </div>
+          )}
           <div className={styles.actionGroup}>
             <button
               onClick={() => {
@@ -1785,6 +1810,10 @@ export function ViewerControls() {
     <CameraConversionModal
       isOpen={showConversionModal}
       onClose={() => setShowConversionModal(false)}
+    />
+    <AutoHideModal
+      isOpen={showAutoHideEditor}
+      onClose={() => setShowAutoHideEditor(false)}
     />
     </>
   );

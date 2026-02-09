@@ -1,19 +1,23 @@
 import { SIZE, ICON_SIZES, footerStyles } from '../../theme';
 import { publicAsset } from '../../utils/paths';
+import { useUIStore } from '../../store';
 
 export function FooterBranding() {
+  const autoHideButtons = useUIStore((s) => s.autoHideElements.buttons);
+  const idleClass = autoHideButtons ? ' idle-hideable' : '';
+
   return (
     <>
       <a
         href="https://opsiclear.com"
         target="_blank"
         rel="noopener noreferrer"
-        className={footerStyles.logo}
+        className={footerStyles.logo + idleClass}
         draggable={false}
       >
         <img src={publicAsset('LOGO.png')} alt="Opsiclear" className={footerStyles.logoImage} style={{ height: SIZE.logoHeight }} draggable={false} />
       </a>
-      <div className={footerStyles.socialContainer}>
+      <div className={footerStyles.socialContainer + idleClass}>
         <a
           href="https://x.com/OpsiClear"
           target="_blank"

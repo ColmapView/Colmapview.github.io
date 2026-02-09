@@ -18,9 +18,11 @@ import { GlobalContextMenu } from './GlobalContextMenu';
 import { Scene3DErrorBoundary } from './Scene3DErrorBoundary';
 import { DistanceInputModal } from '../modals/DistanceInputModal';
 import { useReconstructionStore, useUIStore, useCameraStore, useTransformStore, usePointPickingStore } from '../../store';
+import type { AutoHideElement } from '../../store/stores/uiStore';
 import { useAxesNode, useGridNode, useGizmoNode, useCamerasNode } from '../../nodes';
 
 import { useIsAlignmentMode } from '../../hooks/useAlignmentMode';
+import { useIdleTimer } from '../../hooks/useIdleTimer';
 import { getImageWorldPosition } from '../../utils/colmapTransforms';
 import { createSim3dFromEuler, sim3dToMatrix4, isIdentityEuler, transformPoint } from '../../utils/sim3dTransforms';
 import { percentile, median } from '../../utils/mathUtils';
@@ -121,6 +123,9 @@ function SceneContent() {
   const axes = useAxesNode();
   const grid = useGridNode();
   const gizmo = useGizmoNode();
+  const isIdle = useUIStore((s) => s.isIdle);
+  const autoHideElements = useUIStore((s) => s.autoHideElements);
+  const shouldHide = useCallback((key: AutoHideElement) => isIdle && autoHideElements[key], [isIdle, autoHideElements]);
   const viewResetTrigger = useUIStore((s) => s.viewResetTrigger);
   const viewDirection = useUIStore((s) => s.viewDirection);
   const viewTrigger = useUIStore((s) => s.viewTrigger);
@@ -150,29 +155,29 @@ function SceneContent() {
           but selection overlay is always visible when a camera is selected */}
       {transformMatrix ? (
         <group matrixAutoUpdate={false} matrix={transformMatrix}>
-          <PointCloud />
-          {!isAlignmentMode && cameras.visible && <CameraFrustums />}
-          {!isAlignmentMode && cameras.visible && <CameraMatches />}
-          {!isAlignmentMode && cameras.visible && <RigConnections />}
+          {!shouldHide('points') && <PointCloud />}
+          {!isAlignmentMode && cameras.visible && !shouldHide('cameras') && <CameraFrustums />}
+          {!isAlignmentMode && cameras.visible && !shouldHide('matches') && <CameraMatches />}
+          {!isAlignmentMode && cameras.visible && !shouldHide('rigs') && <RigConnections />}
         </group>
       ) : (
         <>
-          <PointCloud />
-          {!isAlignmentMode && cameras.visible && <CameraFrustums />}
-          {!isAlignmentMode && cameras.visible && <CameraMatches />}
-          {!isAlignmentMode && cameras.visible && <RigConnections />}
+          {!shouldHide('points') && <PointCloud />}
+          {!isAlignmentMode && cameras.visible && !shouldHide('cameras') && <CameraFrustums />}
+          {!isAlignmentMode && cameras.visible && !shouldHide('matches') && <CameraMatches />}
+          {!isAlignmentMode && cameras.visible && !shouldHide('rigs') && <RigConnections />}
         </>
       )}
 
       {/* Axes/Grid stay in original coordinate system */}
       {/* Show axes automatically when in alignment mode for orientation reference */}
       <Suspense fallback={null}>
-        {(axes.visible || isAlignmentMode) && <OriginAxes size={bounds.radius * axes.scale} scale={axes.scale} coordinateSystem={axes.coordinateSystem} labelMode={axes.labelMode} />}
-        {grid.visible && <OriginGrid size={bounds.radius} scale={grid.scale} />}
+        {(axes.visible || isAlignmentMode) && !shouldHide('axes') && <OriginAxes size={bounds.radius * axes.scale} scale={axes.scale} coordinateSystem={axes.coordinateSystem} labelMode={axes.labelMode} />}
+        {grid.visible && !shouldHide('grid') && <OriginGrid size={bounds.radius} scale={grid.scale} />}
       </Suspense>
 
       {/* Transform gizmo follows the transformed data - hidden during alignment mode */}
-      {!isAlignmentMode && reconstruction && gizmo.visible && <TransformGizmo center={transformedCenter} size={bounds.radius * transform.scale * axes.scale} />}
+      {!isAlignmentMode && reconstruction && gizmo.visible && !shouldHide('gizmo') && <TransformGizmo center={transformedCenter} size={bounds.radius * transform.scale * axes.scale} />}
 
       {/* Point picking markers - rendered outside transform group for stable display */}
       <SelectedPointMarkers />
@@ -221,6 +226,8 @@ export function Scene3D() {
   const removeLastPoint = usePointPickingStore((s) => s.removeLastPoint);
   const reset = usePointPickingStore((s) => s.reset);
   const markerRightClickHandled = usePointPickingStore((s) => s.markerRightClickHandled);
+
+  const idleRef = useIdleTimer();
 
   // Track mouse position for distinguishing click from drag
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
@@ -311,7 +318,8 @@ export function Scene3D() {
 
   return (
     <div
-      className="w-full h-full relative isolate"
+      ref={idleRef}
+      className="w-full h-full relative isolate scene-3d-container"
       data-testid="scene-3d"
       style={{ backgroundColor }}
       onContextMenu={handleContextMenu}

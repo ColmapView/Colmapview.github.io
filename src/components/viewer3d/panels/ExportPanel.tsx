@@ -17,6 +17,7 @@ import { ControlButton, SelectRow, SliderRow, type PanelType } from '../ControlC
 import { exportReconstructionText, exportReconstructionBinary, exportPointsPLY, downloadReconstructionZip, downloadImagesZip, downloadMasksZip } from '../../../parsers';
 import { useDataset } from '../../../dataset';
 import { CameraModelId } from '../../../types/colmap';
+import { CAMERA_MODEL_NAMES as MODEL_NAMES } from '../../../utils/cameraModelNames';
 
 const styles = controlPanelStyles;
 
@@ -29,22 +30,6 @@ export interface ExportPanelProps {
   onOpenDeletionModal: () => void;
   onOpenConversionModal: () => void;
 }
-
-/** Human-readable names for camera models */
-const MODEL_NAMES: Record<CameraModelId, string> = {
-  [CameraModelId.SIMPLE_PINHOLE]: 'Simple Pinhole',
-  [CameraModelId.PINHOLE]: 'Pinhole',
-  [CameraModelId.SIMPLE_RADIAL]: 'Simple Radial',
-  [CameraModelId.RADIAL]: 'Radial',
-  [CameraModelId.OPENCV]: 'OpenCV',
-  [CameraModelId.OPENCV_FISHEYE]: 'OpenCV Fisheye',
-  [CameraModelId.FULL_OPENCV]: 'Full OpenCV',
-  [CameraModelId.FOV]: 'FOV',
-  [CameraModelId.SIMPLE_RADIAL_FISHEYE]: 'Simple Radial Fisheye',
-  [CameraModelId.RADIAL_FISHEYE]: 'Radial Fisheye',
-  [CameraModelId.THIN_PRISM_FISHEYE]: 'Thin Prism Fisheye',
-  [CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE]: 'Rad Tan Thin Prism',
-};
 
 export const ExportPanel = memo(function ExportPanel({
   activePanel,

@@ -1,8 +1,8 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
-import { Html } from '@react-three/drei';
 import { usePointPickingStore, usePointCloudStore, useUIStore } from '../../store';
-import { hoverCardStyles, INTERACTION_AXIS_COLORS, INTERACTION_HOVER_COLOR, MARKER_COLORS_INT, VIZ_COLORS, OPACITY, MODAL_POSITION } from '../../theme';
+import { INTERACTION_AXIS_COLORS, INTERACTION_HOVER_COLOR, MARKER_COLORS_INT, VIZ_COLORS, OPACITY } from '../../theme';
+import { HoverCard3D } from './HoverCard3D';
 import { getDefaultUpAxis } from '../../store/stores/pointPickingStore';
 
 const MARKER_SIZE = 0.012; // Relative to scene (smaller for cleaner look)
@@ -171,6 +171,7 @@ export function SelectedPointMarkers() {
 
   // Shared sphere geometry for markers (created once via useMemo to avoid impure render-time initialization)
   const sphereGeometry = useMemo(() => new THREE.SphereGeometry(1, 8, 8), []);
+  useEffect(() => () => { sphereGeometry.dispose(); }, [sphereGeometry]);
 
   if (selectedPoints.length === 0 && !hoveredPoint) return null;
 
@@ -238,22 +239,12 @@ export function SelectedPointMarkers() {
 
       {/* Tooltip for marker hover */}
       {hoveredMarker !== null && mousePos && (
-        <Html style={{ position: 'fixed', left: mousePos.x + MODAL_POSITION.cursorOffset, top: mousePos.y + MODAL_POSITION.cursorOffset, pointerEvents: 'none', transform: 'none' }} calculatePosition={() => [0, 0]}>
-          <div className={hoverCardStyles.container}>
-            <div className={hoverCardStyles.title}>P{hoveredMarker + 1}</div>
-            <div className={hoverCardStyles.subtitle}>Right-click to remove</div>
-          </div>
-        </Html>
+        <HoverCard3D mousePos={mousePos} title={`P${hoveredMarker + 1}`} subtitle="Right-click to remove" />
       )}
 
       {/* Tooltip for triangle hover */}
       {hoveredNormal && mousePos && (
-        <Html style={{ position: 'fixed', left: mousePos.x + MODAL_POSITION.cursorOffset, top: mousePos.y + MODAL_POSITION.cursorOffset, pointerEvents: 'none', transform: 'none' }} calculatePosition={() => [0, 0]}>
-          <div className={hoverCardStyles.container}>
-            <div className={hoverCardStyles.title} style={{ color: axisColor.css }}>{targetAxis}-axis</div>
-            <div className={hoverCardStyles.subtitle}>Left: flip · Right: X/Y/Z</div>
-          </div>
-        </Html>
+        <HoverCard3D mousePos={mousePos} title={`${targetAxis}-axis`} titleStyle={{ color: axisColor.css }} subtitle="Left: flip · Right: X/Y/Z" />
       )}
 
     </group>

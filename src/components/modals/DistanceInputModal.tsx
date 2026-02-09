@@ -4,7 +4,9 @@ import { useHotkeys } from 'react-hotkeys-hook';
 import { usePointPickingStore, useTransformStore, useUIStore } from '../../store';
 import { computeDistanceScale, computeNormalAlignment, computeOriginTranslation, sim3dToEuler, composeSim3d, createSim3dFromEuler } from '../../utils/sim3dTransforms';
 import { COORDINATE_SYSTEMS } from '../../utils/coordinateSystems';
-import { controlPanelStyles, modalStyles, Z_INDEX, MODAL_POSITION, VIEWPORT_FALLBACK } from '../../theme';
+import { controlPanelStyles, modalStyles, Z_INDEX } from '../../theme';
+import { CloseIcon } from '../../icons';
+import { useModalDrag } from '../../hooks/useModalDrag';
 
 /**
  * Confirmation popup for point picking tools.
@@ -44,44 +46,18 @@ export function DistanceInputModal() {
 
   const [inputValue, setInputValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
-  const modalRef = useRef<HTMLDivElement>(null);
+
+  const { position, panelRef, handleDragStart } = useModalDrag({
+    estimatedWidth: 200,
+    estimatedHeight: 80,
+    isOpen: showDistanceModal,
+    initialPosition: modalPosition,
+  });
 
   // Compute current distance between selected points
   const currentDistance = selectedPoints.length === 2
     ? selectedPoints[0].position.distanceTo(selectedPoints[1].position)
     : null;
-
-  // Calculate modal position with boundary checking
-  const computedPosition = useMemo(() => {
-    if (!modalPosition) {
-      return { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' };
-    }
-
-    const modalWidth = 200;
-    const modalHeight = 80;
-    const { viewportPadding: padding, cursorOffset } = MODAL_POSITION;
-
-    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : VIEWPORT_FALLBACK.width;
-    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : VIEWPORT_FALLBACK.height;
-
-    let x = modalPosition.x + cursorOffset;
-    let y = modalPosition.y - cursorOffset;
-
-    if (x + modalWidth + padding > viewportWidth) {
-      x = modalPosition.x - modalWidth - 20;
-    }
-    if (y + modalHeight + padding > viewportHeight) {
-      y = viewportHeight - modalHeight - padding;
-    }
-    if (y < padding) {
-      y = padding;
-    }
-    if (x < padding) {
-      x = padding;
-    }
-
-    return { left: `${x}px`, top: `${y}px`, transform: 'none' };
-  }, [modalPosition]);
 
   // Focus input when modal opens
   useEffect(() => {
@@ -188,9 +164,10 @@ export function DistanceInputModal() {
 
   return (
     <div
-      ref={modalRef}
+      ref={panelRef}
       className="fixed bg-ds-tertiary border border-ds rounded shadow-ds-lg p-1"
-      style={{ ...computedPosition, zIndex: Z_INDEX.modalOverlay }}
+      style={{ left: position.x, top: position.y, zIndex: Z_INDEX.modalOverlay }}
+      onPointerDown={handleDragStart}
     >
         <div className="flex items-center gap-0.5">
           {/* Distance input only for 2-point mode (not for 1-point origin or 3-point align) */}
@@ -201,6 +178,7 @@ export function DistanceInputModal() {
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
+              onPointerDown={(e) => e.stopPropagation()}
               className={`${controlPanelStyles.valueInput} w-14 font-mono`}
               title="Target distance"
             />
@@ -232,9 +210,7 @@ export function DistanceInputModal() {
             className={modalStyles.iconButtonCancel}
             title="Cancel"
           >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
+            <CloseIcon className="w-3.5 h-3.5" />
           </button>
         </div>
     </div>

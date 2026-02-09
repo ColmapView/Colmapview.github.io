@@ -13,27 +13,13 @@ import {
   resetDeletionsWithCleanup,
 } from '../../store';
 import { useModalZIndex } from '../../hooks/useModalZIndex';
+import { useModalDrag } from '../../hooks/useModalDrag';
 import { useThumbnail } from '../../hooks/useThumbnail';
 import { getImageFile, getUrlImageCached, getZipImageCached, isZipLoadingAvailable } from '../../utils/imageFileUtils';
-import { modalStyles, controlPanelStyles, inputStyles, MODAL_POSITION, DELETED_FILTER } from '../../theme';
-import { ResetIcon } from '../../icons';
-import { CameraModelId } from '../../types/colmap';
+import { modalStyles, controlPanelStyles, inputStyles, DELETED_FILTER } from '../../theme';
+import { ResetIcon, CloseIcon } from '../../icons';
 import { SensorType } from '../../types/rig';
-
-const CAMERA_MODEL_NAMES: Record<number, string> = {
-  [CameraModelId.SIMPLE_PINHOLE]: 'Simple Pinhole',
-  [CameraModelId.PINHOLE]: 'Pinhole',
-  [CameraModelId.SIMPLE_RADIAL]: 'Simple Radial',
-  [CameraModelId.RADIAL]: 'Radial',
-  [CameraModelId.OPENCV]: 'OpenCV',
-  [CameraModelId.OPENCV_FISHEYE]: 'OpenCV Fisheye',
-  [CameraModelId.FULL_OPENCV]: 'Full OpenCV',
-  [CameraModelId.FOV]: 'FOV',
-  [CameraModelId.SIMPLE_RADIAL_FISHEYE]: 'Simple Radial Fisheye',
-  [CameraModelId.RADIAL_FISHEYE]: 'Radial Fisheye',
-  [CameraModelId.THIN_PRISM_FISHEYE]: 'Thin Prism Fisheye',
-  [CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE]: 'Rad-Tan Thin Prism',
-};
+import { CAMERA_MODEL_NAMES } from '../../utils/cameraModelNames';
 
 const styles = controlPanelStyles;
 
@@ -200,74 +186,13 @@ export const DeletionModal = memo(function DeletionModal({
     }
   }, [confirming]);
 
-  // Position and drag state
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStart = useRef({ x: 0, y: 0, posX: 0, posY: 0 });
-  const panelRef = useRef<HTMLDivElement>(null);
+  // Position and drag
+  const { position, panelRef, handleDragStart } = useModalDrag({
+    estimatedWidth: 300, estimatedHeight: 400, isOpen,
+  });
 
   // Z-index management for stacking multiple modals
   const { zIndex, bringToFront } = useModalZIndex(isOpen);
-
-  // Center modal function
-  const centerModal = useCallback(() => {
-    if (panelRef.current) {
-      const rect = panelRef.current.getBoundingClientRect();
-      const viewportW = window.innerWidth;
-      const viewportH = window.innerHeight;
-      setPosition({
-        x: (viewportW - rect.width) / 2,
-        y: Math.max(MODAL_POSITION.minTop, (viewportH - rect.height) / 2),
-      });
-    }
-  }, []);
-
-  // Center modal when opened
-  useEffect(() => {
-    if (isOpen) {
-      const viewportW = window.innerWidth;
-      const viewportH = window.innerHeight;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPosition({
-        x: (viewportW - 300) / 2,
-        y: Math.max(MODAL_POSITION.minTop, (viewportH - 400) / 2),
-      });
-      requestAnimationFrame(centerModal);
-    }
-  }, [isOpen, centerModal]);
-
-  // Drag handlers
-  const handleDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-    dragStart.current = {
-      x: e.clientX,
-      y: e.clientY,
-      posX: position.x,
-      posY: position.y,
-    };
-  }, [position]);
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isDragging) {
-        setPosition({
-          x: dragStart.current.posX + e.clientX - dragStart.current.x,
-          y: dragStart.current.posY + e.clientY - dragStart.current.y,
-        });
-      }
-    };
-    const handleMouseUp = () => setIsDragging(false);
-
-    if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isDragging]);
 
   useHotkeys('escape', onClose, { enabled: isOpen }, [isOpen, onClose]);
 
@@ -331,28 +256,27 @@ export const DeletionModal = memo(function DeletionModal({
         ref={panelRef}
         className={modalStyles.toolPanel}
         style={{ left: position.x, top: position.y, width: 300 }}
-        onMouseDown={bringToFront}
+        onPointerDown={bringToFront}
       >
         {/* Header */}
         <div
           className={modalStyles.toolHeader}
-          onMouseDown={handleDragStart}
+          onPointerDown={handleDragStart}
+          style={{ touchAction: 'none' }}
         >
           <span className={modalStyles.toolHeaderTitle}>Delete Images</span>
           <button
             onClick={onClose}
-            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
             className={modalStyles.toolHeaderClose}
             title="Close"
           >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
+            <CloseIcon className="w-3.5 h-3.5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="px-4 py-3 space-y-3">
+        <div className={modalStyles.toolContent}>
           {/* Bulk select by camera */}
           {cameraGroups.length > 0 && (
             <div>

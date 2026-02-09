@@ -1,15 +1,15 @@
 import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { useDataset, type DatasetMemoryStats, type LoadStrategy, type MemoryType } from '../../dataset';
 import { useReconstructionStore } from '../../store';
-import { cacheStatsStyles } from '../../theme';
+import { cacheStatsStyles, STATUS_COLORS } from '../../theme';
 import { getCacheStatsEntries, type CacheStatsEntry } from '../../cache';
 
 /** Source type display info */
 const SOURCE_INFO: Record<string, { label: string; color: string }> = {
-  local: { label: 'Local', color: 'text-green-400' },
-  url: { label: 'URL', color: 'text-blue-400' },
-  manifest: { label: 'Manifest', color: 'text-purple-400' },
-  zip: { label: 'ZIP', color: 'text-amber-400' },
+  local: { label: 'Local', color: STATUS_COLORS.success },
+  url: { label: 'URL', color: STATUS_COLORS.info },
+  manifest: { label: 'Manifest', color: STATUS_COLORS.highlight },
+  zip: { label: 'ZIP', color: STATUS_COLORS.warning },
 };
 
 /** Icon components */

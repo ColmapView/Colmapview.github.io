@@ -3,13 +3,14 @@
  * Shows source and target parameters side-by-side with conversion characterization.
  */
 
-import { useState, useMemo, useCallback, useEffect, useRef, memo } from 'react';
+import { useState, useMemo, useCallback, useEffect, memo } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import {
   useReconstructionStore,
   useNotificationStore,
 } from '../../store';
 import { useModalZIndex } from '../../hooks/useModalZIndex';
+import { useModalDrag } from '../../hooks/useModalDrag';
 import {
   convertCameraModel,
   getValidTargetModels,
@@ -18,28 +19,9 @@ import {
   type ConversionPreview,
 } from '../../utils/cameraModelConversions';
 import { CameraModelId, type Camera, type CameraId } from '../../types/colmap';
-import { modalStyles, inputStyles, controlPanelStyles, MODAL_POSITION } from '../../theme';
-
-/** Human-readable names for camera models */
-const MODEL_NAMES: Record<CameraModelId, string> = {
-  [CameraModelId.SIMPLE_PINHOLE]: 'Simple Pinhole',
-  [CameraModelId.PINHOLE]: 'Pinhole',
-  [CameraModelId.SIMPLE_RADIAL]: 'Simple Radial',
-  [CameraModelId.RADIAL]: 'Radial',
-  [CameraModelId.OPENCV]: 'OpenCV',
-  [CameraModelId.OPENCV_FISHEYE]: 'OpenCV Fisheye',
-  [CameraModelId.FULL_OPENCV]: 'Full OpenCV',
-  [CameraModelId.FOV]: 'FOV',
-  [CameraModelId.SIMPLE_RADIAL_FISHEYE]: 'Simple Radial Fisheye',
-  [CameraModelId.RADIAL_FISHEYE]: 'Radial Fisheye',
-  [CameraModelId.THIN_PRISM_FISHEYE]: 'Thin Prism Fisheye',
-  [CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE]: 'Rad Tan Thin Prism',
-};
-
-/** Get model name with fallback */
-function getModelName(modelId: CameraModelId): string {
-  return MODEL_NAMES[modelId] ?? `Unknown (${modelId})`;
-}
+import { modalStyles, inputStyles, controlPanelStyles, STATUS_COLORS } from '../../theme';
+import { CloseIcon } from '../../icons';
+import { getCameraModelName as getModelName } from '../../utils/cameraModelNames';
 
 /** Format a parameter value for display */
 function formatParamValue(value: number): string {
@@ -52,10 +34,10 @@ function formatParamValue(value: number): string {
 
 /** Characterization styles */
 const CHAR_STYLES: Record<string, { text: string; label: string }> = {
-  exact: { text: 'text-green-400', label: 'Exact' },
-  expansion: { text: 'text-blue-400', label: 'Expansion' },
-  lossy: { text: 'text-amber-400', label: 'Lossy' },
-  approximation: { text: 'text-orange-400', label: 'Approx' },
+  exact: { text: STATUS_COLORS.success, label: 'Exact' },
+  expansion: { text: STATUS_COLORS.info, label: 'Expansion' },
+  lossy: { text: STATUS_COLORS.warning, label: 'Lossy' },
+  approximation: { text: STATUS_COLORS.caution, label: 'Approx' },
 };
 
 export interface CameraConversionModalProps {
@@ -75,74 +57,13 @@ export const CameraConversionModal = memo(function CameraConversionModal({
   const [selectedCameraId, setSelectedCameraId] = useState<CameraId | 'all'>('all');
   const [targetModelId, setTargetModelId] = useState<CameraModelId | null>(null);
 
-  // Position and drag state
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStart = useRef({ x: 0, y: 0, posX: 0, posY: 0 });
-  const panelRef = useRef<HTMLDivElement>(null);
+  // Position and drag
+  const { position, panelRef, handleDragStart, centerModal } = useModalDrag({
+    estimatedWidth: 360, estimatedHeight: 160, isOpen,
+  });
 
   // Z-index management for stacking multiple modals
   const { zIndex, bringToFront } = useModalZIndex(isOpen);
-
-  // Center modal function
-  const centerModal = useCallback(() => {
-    if (panelRef.current) {
-      const rect = panelRef.current.getBoundingClientRect();
-      const viewportW = window.innerWidth;
-      const viewportH = window.innerHeight;
-      setPosition({
-        x: (viewportW - rect.width) / 2,
-        y: Math.max(MODAL_POSITION.minTop, (viewportH - rect.height) / 2),
-      });
-    }
-  }, []);
-
-  // Center modal when opened
-  useEffect(() => {
-    if (isOpen) {
-      const viewportW = window.innerWidth;
-      const viewportH = window.innerHeight;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPosition({
-        x: (viewportW - 360) / 2,
-        y: Math.max(MODAL_POSITION.minTop, (viewportH - 160) / 2),
-      });
-      requestAnimationFrame(centerModal);
-    }
-  }, [isOpen, centerModal]);
-
-  // Drag handlers
-  const handleDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-    dragStart.current = {
-      x: e.clientX,
-      y: e.clientY,
-      posX: position.x,
-      posY: position.y,
-    };
-  }, [position]);
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isDragging) {
-        setPosition({
-          x: dragStart.current.posX + e.clientX - dragStart.current.x,
-          y: dragStart.current.posY + e.clientY - dragStart.current.y,
-        });
-      }
-    };
-    const handleMouseUp = () => setIsDragging(false);
-
-    if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isDragging]);
 
   useHotkeys('escape', onClose, { enabled: isOpen }, [isOpen, onClose]);
 
@@ -349,28 +270,27 @@ export const CameraConversionModal = memo(function CameraConversionModal({
         ref={panelRef}
         className={modalStyles.toolPanel}
         style={{ left: position.x, top: position.y }}
-        onMouseDown={bringToFront}
+        onPointerDown={bringToFront}
       >
         {/* Header */}
         <div
           className={modalStyles.toolHeader}
-          onMouseDown={handleDragStart}
+          onPointerDown={handleDragStart}
+          style={{ touchAction: 'none' }}
         >
           <span className={modalStyles.toolHeaderTitle}>Convert Camera Model</span>
           <button
             onClick={onClose}
-            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
             className={modalStyles.toolHeaderClose}
             title="Close"
           >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
+            <CloseIcon className="w-3.5 h-3.5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="px-4 py-3 space-y-3">
+        <div className={modalStyles.toolContent}>
           {/* Selectors */}
           <div className="flex items-center gap-2">
             <select

@@ -20,7 +20,7 @@ export function HoverIcon({ icon, label }: HoverIconProps) {
 // Close / X icon
 export function CloseIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
       <path d="M18 6L6 18M6 6l12 12" />
     </svg>
   );
@@ -288,6 +288,50 @@ export function TrashIcon({ className }: IconProps) {
       <path d="M3 6h18" />
       <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" />
       <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+    </svg>
+  );
+}
+
+// Gallery grid view icon (2x2 squares)
+export function GalleryGridIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="3" y="3" width="7" height="7" />
+      <rect x="14" y="3" width="7" height="7" />
+      <rect x="3" y="14" width="7" height="7" />
+      <rect x="14" y="14" width="7" height="7" />
+    </svg>
+  );
+}
+
+// Gallery list view icon (rows with thumbnails)
+export function GalleryListIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="3" y="4" width="4" height="4" />
+      <line x1="10" y1="6" x2="21" y2="6" />
+      <rect x="3" y="10" width="4" height="4" />
+      <line x1="10" y1="12" x2="21" y2="12" />
+      <rect x="3" y="16" width="4" height="4" />
+      <line x1="10" y1="18" x2="21" y2="18" />
+    </svg>
+  );
+}
+
+// Sort ascending icon (arrow up)
+export function SortAscIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 5v14M5 12l7-7 7 7" />
+    </svg>
+  );
+}
+
+// Sort descending icon (arrow down)
+export function SortDescIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 5v14M5 12l7 7 7-7" />
     </svg>
   );
 }

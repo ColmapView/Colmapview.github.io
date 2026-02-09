@@ -5,6 +5,8 @@ import type { MatchesDisplayMode, AxesCoordinateSystem, AxisLabelMode } from '..
 
 export type ViewDirection = 'reset' | 'x' | 'y' | 'z' | '-x' | '-y' | '-z';
 
+export type AutoHideElement = 'axes' | 'grid' | 'gizmo' | 'points' | 'cameras' | 'matches' | 'rigs' | 'buttons';
+
 // Context menu action types
 export type ContextMenuAction =
   // View
@@ -109,6 +111,10 @@ export interface UIState {
   backgroundColor: string;
   showGizmo: boolean;
 
+  // Idle auto-hide (0 = disabled)
+  idleHideTimeout: number;
+  autoHideElements: Record<AutoHideElement, boolean>;
+  isIdle: boolean;
 
   // Layout
   galleryCollapsed: boolean;
@@ -128,6 +134,7 @@ export interface UIState {
   showDeletionModal: boolean;
   showFloorModal: boolean;
   showConversionModal: boolean;
+  showAutoHideEditor: boolean;
 
   // Context menu (persisted config + transient state)
   contextMenuActions: ContextMenuAction[];
@@ -167,6 +174,9 @@ export interface UIState {
   setBackgroundColor: (color: string) => void;
   setShowGizmo: (show: boolean) => void;
   toggleGizmo: () => void;
+  setIdleHideTimeout: (timeout: number) => void;
+  setAutoHideElement: (element: AutoHideElement, enabled: boolean) => void;
+  setIsIdle: (idle: boolean) => void;
   resetView: () => void;
   setView: (direction: ViewDirection) => void;
   setGalleryCollapsed: (collapsed: boolean) => void;
@@ -181,6 +191,7 @@ export interface UIState {
   setShowDeletionModal: (show: boolean) => void;
   setShowFloorModal: (show: boolean) => void;
   setShowConversionModal: (show: boolean) => void;
+  setShowAutoHideEditor: (show: boolean) => void;
 
   // Context menu actions
   openContextMenu: (x: number, y: number) => void;
@@ -218,6 +229,9 @@ export const useUIStore = create<UIState>()(
       axisLabelMode: 'extra',
       backgroundColor: '#ffffff',
       showGizmo: false,
+      idleHideTimeout: 3,
+      autoHideElements: { axes: false, grid: false, gizmo: false, points: false, cameras: false, matches: false, rigs: false, buttons: true },
+      isIdle: false,
       galleryCollapsed: false,
       touchUI: {
         statusBar: true,
@@ -231,6 +245,7 @@ export const useUIStore = create<UIState>()(
       showDeletionModal: false,
       showFloorModal: false,
       showConversionModal: false,
+      showAutoHideEditor: false,
       contextMenuActions: DEFAULT_CONTEXT_MENU_ACTIONS,
       contextMenuPosition: null,
       showContextMenuEditor: false,
@@ -263,6 +278,11 @@ export const useUIStore = create<UIState>()(
       setBackgroundColor: (backgroundColor) => set({ backgroundColor }),
       setShowGizmo: (showGizmo) => set({ showGizmo }),
       toggleGizmo: () => set((state) => ({ showGizmo: !state.showGizmo })),
+      setIdleHideTimeout: (idleHideTimeout) => set({ idleHideTimeout }),
+      setAutoHideElement: (element, enabled) => set((state) => ({
+        autoHideElements: { ...state.autoHideElements, [element]: enabled },
+      })),
+      setIsIdle: (isIdle) => set({ isIdle }),
       resetView: () => set((state) => ({ viewResetTrigger: state.viewResetTrigger + 1 })),
       setView: (direction) => set((state) => ({
         viewDirection: direction,
@@ -286,6 +306,7 @@ export const useUIStore = create<UIState>()(
       setShowDeletionModal: (show) => set({ showDeletionModal: show }),
       setShowFloorModal: (show) => set({ showFloorModal: show }),
       setShowConversionModal: (show) => set({ showConversionModal: show }),
+      setShowAutoHideEditor: (show) => set({ showAutoHideEditor: show }),
 
       // Context menu actions
       openContextMenu: (x, y) => set({ contextMenuPosition: { x, y } }),
@@ -308,7 +329,7 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: STORAGE_KEYS.ui,
-      version: 9,
+      version: 10,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Record<string, unknown>;
         if (version < 3) {
@@ -346,6 +367,13 @@ export const useUIStore = create<UIState>()(
             // Keep current mode if it's valid
           }
         }
+        if (version < 10) {
+          // Ensure autoHideElements.buttons defaults to true for existing users
+          const ahe = state.autoHideElements as Record<string, boolean> | undefined;
+          if (ahe && ahe.buttons === undefined) {
+            ahe.buttons = true;
+          }
+        }
         return state;
       },
       partialize: (state) => ({
@@ -365,6 +393,8 @@ export const useUIStore = create<UIState>()(
         axisLabelMode: state.axisLabelMode,
         backgroundColor: state.backgroundColor,
         showGizmo: state.showGizmo,
+        idleHideTimeout: state.idleHideTimeout,
+        autoHideElements: state.autoHideElements,
         galleryCollapsed: state.galleryCollapsed,
         contextMenuActions: state.contextMenuActions,
       }),

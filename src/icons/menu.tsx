@@ -4,6 +4,7 @@
  */
 
 import type { ReactElement } from 'react';
+import { ICON_COLORS } from '../theme/colors';
 
 // Menu icon type - returns ReactElement for direct use in ACTIONS array
 export type MenuIcon = ReactElement;
@@ -12,24 +13,24 @@ export type MenuIcon = ReactElement;
 export const ViewPosXIcon: MenuIcon = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <circle cx="12" cy="12" r="9" />
-    <path d="M12 12h6" stroke="#e74c3c" strokeWidth="3" />
-    <path d="M15 9l3 3-3 3" stroke="#e74c3c" />
+    <path d="M12 12h6" stroke={ICON_COLORS.axisX} strokeWidth="3" />
+    <path d="M15 9l3 3-3 3" stroke={ICON_COLORS.axisX} />
   </svg>
 );
 
 export const ViewPosYIcon: MenuIcon = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <circle cx="12" cy="12" r="9" />
-    <path d="M12 12v-6" stroke="#2ecc71" strokeWidth="3" />
-    <path d="M9 9l3-3 3 3" stroke="#2ecc71" />
+    <path d="M12 12v-6" stroke={ICON_COLORS.axisY} strokeWidth="3" />
+    <path d="M9 9l3-3 3 3" stroke={ICON_COLORS.axisY} />
   </svg>
 );
 
 export const ViewPosZIcon: MenuIcon = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <circle cx="12" cy="12" r="9" />
-    <circle cx="12" cy="12" r="3" fill="#3498db" />
-    <path d="M12 12l4 4" stroke="#3498db" strokeWidth="2" />
+    <circle cx="12" cy="12" r="3" fill={ICON_COLORS.axisZ} />
+    <path d="M12 12l4 4" stroke={ICON_COLORS.axisZ} strokeWidth="2" />
   </svg>
 );
 
@@ -83,16 +84,16 @@ export const FrustumColorIcon: MenuIcon = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <rect x="2" y="6" width="13" height="12" rx="2" />
     <path d="M15 10l7-4v12l-7-4z" />
-    <circle cx="7" cy="12" r="1.5" fill="#e74c3c" stroke="none" />
-    <circle cx="11" cy="12" r="1.5" fill="#2ecc71" stroke="none" />
+    <circle cx="7" cy="12" r="1.5" fill={ICON_COLORS.axisX} stroke="none" />
+    <circle cx="11" cy="12" r="1.5" fill={ICON_COLORS.axisY} stroke="none" />
   </svg>
 );
 
 export const PointColorIcon: MenuIcon = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <circle cx="7" cy="12" r="3" fill="#e74c3c" stroke="none" />
-    <circle cx="12" cy="12" r="3" fill="#2ecc71" stroke="none" />
-    <circle cx="17" cy="12" r="3" fill="#3498db" stroke="none" />
+    <circle cx="7" cy="12" r="3" fill={ICON_COLORS.axisX} stroke="none" />
+    <circle cx="12" cy="12" r="3" fill={ICON_COLORS.axisY} stroke="none" />
+    <circle cx="17" cy="12" r="3" fill={ICON_COLORS.axisZ} stroke="none" />
   </svg>
 );
 

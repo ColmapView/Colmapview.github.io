@@ -6,51 +6,12 @@ import { getImageFile, getUrlImageCached, fetchUrlImage, getZipImageCached, fetc
 import { useThumbnail, pauseThumbnailCache, resumeThumbnailCache } from '../../hooks/useThumbnail';
 import { prioritizeFrustumTexture } from '../../hooks/useFrustumTexture';
 import { useLongPress } from '../../hooks/useLongPress';
+import { GalleryGridIcon, GalleryListIcon, SortAscIcon, SortDescIcon } from '../../icons';
 import { COLUMNS, GAP, SIZE, TIMING, buttonStyles, getTooltipProps, galleryStyles, listStyles, inputStyles, emptyStateStyles, toolbarStyles, hoverCardStyles, ICON_SIZES, DELETED_FILTER, MODAL_POSITION, Z_INDEX } from '../../theme';
 
 type ViewMode = 'gallery' | 'list';
 type SortField = 'name' | 'imageId' | 'avgError' | 'covisibleCount' | 'numPoints3D' | 'numPoints2D';
 type SortDirection = 'asc' | 'desc';
-
-function GridIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="3" y="3" width="7" height="7" />
-      <rect x="14" y="3" width="7" height="7" />
-      <rect x="3" y="14" width="7" height="7" />
-      <rect x="14" y="14" width="7" height="7" />
-    </svg>
-  );
-}
-
-function ListIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="3" y="4" width="4" height="4" />
-      <line x1="10" y1="6" x2="21" y2="6" />
-      <rect x="3" y="10" width="4" height="4" />
-      <line x1="10" y1="12" x2="21" y2="12" />
-      <rect x="3" y="16" width="4" height="4" />
-      <line x1="10" y1="18" x2="21" y2="18" />
-    </svg>
-  );
-}
-
-function SortAscIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 5v14M5 12l7-7 7 7" />
-    </svg>
-  );
-}
-
-function SortDescIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 5v14M5 12l7 7 7-7" />
-    </svg>
-  );
-}
 
 interface ImageData {
   imageId: number;
@@ -926,17 +887,17 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
   return (
     <div className="h-full flex flex-col bg-ds-secondary">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-1 py-1 pl-0.5 pr-1 bg-ds-tertiary">
-        <div className={toolbarStyles.group}>
+      <div className="flex flex-nowrap items-center justify-between gap-1 py-1 pl-0.5 pr-1 bg-ds-tertiary">
+        <div className={`${toolbarStyles.group} min-w-0`}>
           <select
             value={cameraFilter}
             onChange={(e) => setCameraFilter(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
             className={`${inputStyles.select} ${inputStyles.sizes.sm}`}
           >
-            <option value="all">All Cameras ({cameras.length})</option>
+            <option value="all">All Cams ({cameras.length})</option>
             {cameras.map((cam) => (
               <option key={cam.cameraId} value={cam.cameraId}>
-                Camera {cam.cameraId} ({cam.width}×{cam.height})
+                Cam {cam.cameraId} ({cam.width}×{cam.height})
               </option>
             ))}
           </select>
@@ -970,14 +931,14 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
                 className={getViewModeButtonClass(viewMode === 'gallery')}
                 data-tooltip="Grid view (Shift+{SCROLL} to resize)"
               >
-                <GridIcon className="w-4 h-4" />
+                <GalleryGridIcon className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setViewMode('list')}
                 className={getViewModeButtonClass(viewMode === 'list')}
                 data-tooltip="List view with stats"
               >
-                <ListIcon className="w-4 h-4" />
+                <GalleryListIcon className="w-4 h-4" />
               </button>
             </div>
           </div>

@@ -15,7 +15,7 @@ import type {
   ImageId,
   Point3DId,
 } from '../types/colmap';
-import { CameraModelId, UNMATCHED_POINT3D_ID } from '../types/colmap';
+import { UNMATCHED_POINT3D_ID } from '../types/colmap';
 import type { Rig, Frame, RigId, FrameId } from '../types/rig';
 import type { WasmReconstructionWrapper } from '../wasm/reconstruction';
 import type { Point2D } from '../types/colmap';
@@ -59,22 +59,7 @@ function getPoints3DForExport(
  */
 const COLMAP_INVALID_POINT3D_ID = BigInt('18446744073709551615');
 
-/**
- * Camera model ID to name mapping (inverse of parser's mapping)
- */
-const CAMERA_MODEL_NAMES: Record<number, string> = {
-  [CameraModelId.SIMPLE_PINHOLE]: 'SIMPLE_PINHOLE',
-  [CameraModelId.PINHOLE]: 'PINHOLE',
-  [CameraModelId.SIMPLE_RADIAL]: 'SIMPLE_RADIAL',
-  [CameraModelId.RADIAL]: 'RADIAL',
-  [CameraModelId.OPENCV]: 'OPENCV',
-  [CameraModelId.OPENCV_FISHEYE]: 'OPENCV_FISHEYE',
-  [CameraModelId.FULL_OPENCV]: 'FULL_OPENCV',
-  [CameraModelId.FOV]: 'FOV',
-  [CameraModelId.SIMPLE_RADIAL_FISHEYE]: 'SIMPLE_RADIAL_FISHEYE',
-  [CameraModelId.RADIAL_FISHEYE]: 'RADIAL_FISHEYE',
-  [CameraModelId.THIN_PRISM_FISHEYE]: 'THIN_PRISM_FISHEYE',
-};
+import { CAMERA_MODEL_COLMAP_NAMES as CAMERA_MODEL_NAMES } from '../utils/cameraModelNames';
 
 // ============================================================================
 // Utility Functions

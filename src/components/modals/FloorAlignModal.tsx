@@ -3,10 +3,11 @@ import * as THREE from 'three';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useFloorPlaneStore } from '../../store/stores/floorPlaneStore';
 import { useTransformStore, useUIStore, useReconstructionStore } from '../../store';
-import { modalStyles, Z_INDEX, MODAL_POSITION, VIEWPORT_FALLBACK } from '../../theme';
+import { modalStyles, Z_INDEX } from '../../theme';
 import { flipPlaneNormal, detectPlaneRANSAC, computeDistancesToPlane, transformPositions } from '../../utils/ransac';
 import { sim3dToEuler, composeSim3d, createSim3dFromEuler, isIdentityEuler } from '../../utils/sim3dTransforms';
 import { COORDINATE_SYSTEMS } from '../../utils/coordinateSystems';
+import { useModalDrag } from '../../hooks/useModalDrag';
 
 import type { Sim3d } from '../../types/sim3d';
 
@@ -77,37 +78,12 @@ export function FloorAlignModal() {
     return new THREE.Vector3(direction[0], direction[1], direction[2]);
   }, [axesCoordinateSystem, targetAxis]);
 
-  // Calculate modal position with boundary checking
-  const computedPosition = useMemo(() => {
-    if (!modalPosition) {
-      return { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' };
-    }
-
-    const modalWidth = 120;
-    const modalHeight = 40;
-    const { viewportPadding: padding, cursorOffset } = MODAL_POSITION;
-
-    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : VIEWPORT_FALLBACK.width;
-    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : VIEWPORT_FALLBACK.height;
-
-    let x = modalPosition.x + cursorOffset;
-    let y = modalPosition.y - cursorOffset;
-
-    if (x + modalWidth + padding > viewportWidth) {
-      x = modalPosition.x - modalWidth - 20;
-    }
-    if (y + modalHeight + padding > viewportHeight) {
-      y = viewportHeight - modalHeight - padding;
-    }
-    if (y < padding) {
-      y = padding;
-    }
-    if (x < padding) {
-      x = padding;
-    }
-
-    return { left: `${x}px`, top: `${y}px`, transform: 'none' };
-  }, [modalPosition]);
+  const { position, panelRef, handleDragStart } = useModalDrag({
+    estimatedWidth: 120,
+    estimatedHeight: 40,
+    isOpen: showFloorModal,
+    initialPosition: modalPosition,
+  });
 
   // Cancel: clear detection and close
   const handleCancel = useCallback(() => {
@@ -181,8 +157,10 @@ export function FloorAlignModal() {
 
   return (
     <div
+      ref={panelRef}
       className="fixed bg-ds-tertiary border border-ds rounded shadow-ds-lg p-1"
-      style={{ ...computedPosition, zIndex: Z_INDEX.modalOverlay }}
+      style={{ left: position.x, top: position.y, zIndex: Z_INDEX.modalOverlay }}
+      onPointerDown={handleDragStart}
     >
       <div className="flex items-center gap-0.5">
         {/* Confirm button (tick) */}

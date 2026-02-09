@@ -3,8 +3,9 @@
  * Only allows selecting/loading profiles, not saving.
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useProfiles } from '../../hooks/useProfiles';
+import { useClickOutside } from '../../hooks/useClickOutside';
 import { ChevronDownIcon } from '../../icons';
 import { buttonStyles, Z_INDEX } from '../../theme';
 
@@ -18,19 +19,9 @@ export function ProfileDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
+  // Close dropdown when clicking outside or pressing Escape
+  const handleClose = useCallback(() => setIsOpen(false), []);
+  useClickOutside(dropdownRef, handleClose, isOpen);
 
   const handleSelect = useCallback((name: string) => {
     loadProfile(name);

@@ -44,6 +44,10 @@ export {
   ChevronRightIcon,
   SaveIcon,
   TrashIcon,
+  GalleryGridIcon,
+  GalleryListIcon,
+  SortAscIcon,
+  SortDescIcon,
 } from './ui';
 
 // Toolbar icons

@@ -80,11 +80,15 @@ export const CHART_COLORS = {
 
 // Canvas rendering colors (hardcoded because canvas can't read CSS variables)
 export const CANVAS_COLORS = {
+  bgVoid: '#0a0a0a',
   bgSecondary: '#161616',
+  bgSecondaryOverlay: 'rgba(22, 22, 22, 0.85)',
   bgTertiary: '#1e1e1e',
   textPrimary: '#e8e8e8',
   textSecondary: '#8a8a8a',
   textMuted: '#5a5a5a',
+  outline: '#000000',
+  white: '#ffffff',
 } as const;
 
 // Status bar link hover colors (brand-specific)
@@ -171,3 +175,28 @@ export const FRUSTUM_COLORS = [
 export function getCameraColor(index: number): string {
   return FRUSTUM_COLORS[index % FRUSTUM_COLORS.length];
 }
+
+/** Semantic status colors as Tailwind utility class names */
+export const STATUS_COLORS = {
+  success: 'text-green-400',
+  info: 'text-blue-400',
+  warning: 'text-amber-400',
+  error: 'text-red-400',
+  caution: 'text-orange-400',
+  highlight: 'text-purple-400',
+} as const;
+
+/** Semantic status background colors as Tailwind utility class names */
+export const STATUS_BG = {
+  success: 'bg-green-400',
+  info: 'bg-blue-400',
+  warning: 'bg-amber-400',
+  inactive: 'bg-neutral-600',
+} as const;
+
+/** Axis colors for UI icons (flat-UI palette, distinct from VIZ_COLORS.interaction) */
+export const ICON_COLORS = {
+  axisX: '#e74c3c',
+  axisY: '#2ecc71',
+  axisZ: '#3498db',
+} as const;

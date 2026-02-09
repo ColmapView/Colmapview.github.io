@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import * as THREE from 'three';
-import { Html, Text, Billboard } from '@react-three/drei';
 import { type ThreeEvent } from '@react-three/fiber';
 import { useFloorPlaneStore } from '../../store/stores/floorPlaneStore';
 import { useUIStore } from '../../store';
-import { hoverCardStyles, ICON_SIZES, INTERACTION_AXIS_COLORS, INTERACTION_HOVER_COLOR, OPACITY, MODAL_POSITION } from '../../theme';
+import { hoverCardStyles, ICON_SIZES, INTERACTION_AXIS_COLORS, INTERACTION_HOVER_COLOR, OPACITY } from '../../theme';
 import { flipPlaneNormal } from '../../utils/ransac';
 import { AXIS_SEMANTIC } from '../../utils/coordinateSystems';
+import { HoverCard3D } from './HoverCard3D';
+import { BillboardLabel } from './BillboardLabel';
 
 /**
  * 3D widget showing the detected floor plane.
@@ -210,70 +211,36 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
       </mesh>
 
       {/* Axis label (billboard text matching origin axes style) */}
-      <Billboard position={planeData.labelPosition} follow={true}>
-        <group>
-          <Text
-            fontSize={planeData.fontSize}
-            color={axisColor.hex}
-            anchorX="right"
-            anchorY="middle"
-            outlineWidth={planeData.fontSize * 0.08}
-            outlineColor="#000000"
-            outlineOpacity={0.5}
-          >
-            {targetAxis}
-          </Text>
-          <Text
-            fontSize={planeData.fontSize * 0.6}
-            color={axisColor.hex}
-            anchorX="left"
-            anchorY="middle"
-            position={[planeData.fontSize * 0.15, 0, 0]}
-            outlineWidth={planeData.fontSize * 0.05}
-            outlineColor="#000000"
-            outlineOpacity={0.5}
-          >
-            ({AXIS_SEMANTIC[axesCoordinateSystem][targetAxis]})
-          </Text>
-        </group>
-      </Billboard>
+      <BillboardLabel
+        label={targetAxis}
+        suffix={AXIS_SEMANTIC[axesCoordinateSystem][targetAxis]}
+        fontSize={planeData.fontSize}
+        color={axisColor.hex}
+        position={planeData.labelPosition.toArray() as [number, number, number]}
+      />
 
       {/* Tooltip */}
       {hovered && mousePos && (
-        <Html
-          style={{
-            position: 'fixed',
-            left: mousePos.x + MODAL_POSITION.cursorOffset,
-            top: mousePos.y + MODAL_POSITION.cursorOffset,
-            pointerEvents: 'none',
-            transform: 'none',
-          }}
-          calculatePosition={() => [0, 0]}
-        >
-          <div className={hoverCardStyles.container}>
-            <div className={hoverCardStyles.title} style={{ color: axisColor.css }}>
-              {targetAxis}-axis
+        <HoverCard3D mousePos={mousePos} title={`${targetAxis}-axis`} titleStyle={{ color: axisColor.css }}>
+          <div className={hoverCardStyles.hint}>
+            <div className={hoverCardStyles.hintRow}>
+              <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="6" y="2" width="12" height="20" rx="6"/>
+                <path d="M12 2v8"/>
+                <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
+              </svg>
+              Flip normal
             </div>
-            <div className={hoverCardStyles.hint}>
-              <div className={hoverCardStyles.hintRow}>
-                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="6" y="2" width="12" height="20" rx="6"/>
-                  <path d="M12 2v8"/>
-                  <rect x="6" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
-                </svg>
-                Flip normal
-              </div>
-              <div className={hoverCardStyles.hintRow}>
-                <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="6" y="2" width="12" height="20" rx="6"/>
-                  <path d="M12 2v8"/>
-                  <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
-                </svg>
-                Cycle X/Y/Z
-              </div>
+            <div className={hoverCardStyles.hintRow}>
+              <svg className={ICON_SIZES.hoverCard} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="6" y="2" width="12" height="20" rx="6"/>
+                <path d="M12 2v8"/>
+                <rect x="12" y="2" width="6" height="8" rx="3" fill="currentColor" opacity="0.5"/>
+              </svg>
+              Cycle X/Y/Z
             </div>
           </div>
-        </Html>
+        </HoverCard3D>
       )}
     </group>
   );
