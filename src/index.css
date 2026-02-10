@@ -1525,10 +1525,11 @@ legend {
 
 /* Responsive styles for small screens (laptops and smaller) */
 @media (max-width: 1520px) {
-  /* Smaller control buttons */
+  /* Smaller control buttons — scale border-radius proportionally (desktop: 40px/8px = 20%) */
   .control-button-responsive {
     width: 2rem !important;
     height: 2rem !important;
+    border-radius: 0.375rem !important; /* 6px — balanced with 32px size */
   }
 
   .control-button-responsive svg {
@@ -1636,4 +1637,22 @@ legend {
   .hover-panel-responsive {
     transform-origin: top right;
   }
+}
+
+/* Compact control buttons in touch mode */
+.touch-control-panel {
+  top: 0.5rem !important;
+  right: 0.5rem !important;
+  gap: 0.125rem !important;
+}
+
+.touch-control-panel .control-button-responsive {
+  width: 1.75rem !important;   /* 28px */
+  height: 1.75rem !important;
+  border-radius: 0.3125rem !important; /* 5px — proportional to 28px */
+}
+
+.touch-control-panel .control-button-responsive svg {
+  width: 1rem;
+  height: 1rem;
 }

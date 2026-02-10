@@ -375,6 +375,7 @@ export function ViewerControls() {
   const setShowConversionModal = useUIStore((s) => s.setShowConversionModal);
   const showAutoHideEditor = useUIStore((s) => s.showAutoHideEditor);
   const setShowAutoHideEditor = useUIStore((s) => s.setShowAutoHideEditor);
+  const touchMode = useUIStore((s) => s.touchMode);
 
   // Node hooks for reading state
   const pointsNode = usePointsNode();
@@ -896,7 +897,7 @@ export function ViewerControls() {
 
   return (
     <>
-    <div className={`${styles.container}${autoHideButtons ? ' idle-hideable' : ''}`} data-testid="viewer-controls">
+    <div className={`${styles.container}${autoHideButtons ? ' idle-hideable' : ''}${touchMode ? ' touch-control-panel' : ''}`} data-testid="viewer-controls">
       <ControlButton
         panelId="view"
         activePanel={activePanel}

@@ -866,12 +866,12 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
             smoothedVelocity.current.x = 0;
             smoothedVelocity.current.y = 0;
             pointerLockRequested.current = false;
-            // Turn off auto-rotate on manual interaction
-            if (autoRotateMode !== 'off') navActions.setAutoRotateMode('off');
+            // Auto-rotate pauses naturally while isDragging; resumes after inertia damps
           } else if (button === 2 || button === 1) {
-            // Right click or middle click: pan (strafe)
+            // Right click or middle click: pan (strafe) — stops auto-rotate
             isPanning.current = true;
             dragging.current = true;
+            if (autoRotateMode !== 'off') navActions.setAutoRotateMode('off');
           }
         } else {
           // Orbit mode
@@ -882,12 +882,13 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
             angularVelocity.current.y = 0;
             smoothedVelocity.current.x = 0;
             smoothedVelocity.current.y = 0;
-            // Turn off auto-rotate on manual interaction
-            if (autoRotateMode !== 'off') navActions.setAutoRotateMode('off');
             pointerLockRequested.current = false;
+            // Auto-rotate pauses naturally while isDragging; resumes after inertia damps
           } else if (button === 2 || button === 1) {
+            // Right click or middle click: pan — stops auto-rotate
             isPanning.current = true;
             dragging.current = true;
+            if (autoRotateMode !== 'off') navActions.setAutoRotateMode('off');
           }
         }
       });
@@ -1174,8 +1175,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
         lastMouse.current = { x: touch.x, y: touch.y };
         lastTime.current = performance.now();
 
-        // Turn off auto-rotate on manual interaction
-        if (autoRotateMode !== 'off') navActions.setAutoRotateMode('off');
+        // Auto-rotate pauses naturally while isDragging; resumes after inertia damps
         // Cancel any ongoing animation
         animationTarget.current = null;
       } else if (pointerCount === 2) {
