@@ -8,6 +8,7 @@ import {
   usePointPickingStore,
   applyTransformPreset,
   applyTransformToData,
+  confirmReload,
   type ContextMenuAction,
   CAMERA_MODES,
   CAMERA_PROJECTIONS,
@@ -116,7 +117,7 @@ const ACTIONS: ActionDef[] = [
   { id: 'takeScreenshot', label: 'Screenshot', section: 'export', icon: <ScreenshotIcon /> },
   { id: 'exportPLY', label: 'Export PLY', section: 'export', icon: ExportPLYIcon },
   { id: 'exportConfig', label: 'Export Config', section: 'export', icon: ExportConfigIcon },
-  { id: 'openDeletion', label: 'Delete Images', section: 'export', icon: DeleteImagesIcon },
+  { id: 'openDeletion', label: 'Delete Images from Model', section: 'export', icon: DeleteImagesIcon },
   { id: 'openCameraConversion', label: 'Camera Convert', section: 'export', icon: CameraConvertIcon },
   // Navigation section
   { id: 'togglePointerLock', label: 'Pointer Lock', section: 'view', icon: <CrosshairIcon /> },
@@ -458,7 +459,7 @@ export function GlobalContextMenu() {
         applyTransformToData();
         break;
       case 'reloadData':
-        if (droppedFiles) {
+        if (droppedFiles && confirmReload()) {
           resetTransform();
           processFiles(droppedFiles);
         }

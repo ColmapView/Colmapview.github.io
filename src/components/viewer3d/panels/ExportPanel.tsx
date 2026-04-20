@@ -18,6 +18,8 @@ import { exportReconstructionText, exportReconstructionBinary, exportPointsPLY, 
 import { useDataset } from '../../../dataset';
 import { CameraModelId } from '../../../types/colmap';
 import { CAMERA_MODEL_NAMES as MODEL_NAMES } from '../../../utils/cameraModelNames';
+import { createSim3dFromEuler, isIdentityEuler, transformReconstruction } from '../../../utils/sim3dTransforms';
+import { confirmReload } from '../../../store';
 
 const styles = controlPanelStyles;
 
@@ -98,24 +100,43 @@ export const ExportPanel = memo(function ExportPanel({
     zip: 'Binary files (.bin) in a single archive.',
   };
 
-  // Handle format export
   const handleExportFormat = useCallback(async () => {
     if (!reconstruction) return;
+
+    // Read transform lazily so panel doesn't re-render on every gizmo drag frame.
+    const transform = useTransformStore.getState().transform;
+    const hasTransform = !isIdentityEuler(transform);
+    if (hasTransform) {
+      const proceed = window.confirm(
+        'You have an unapplied transform active in the viewer.\n\n' +
+          'Click OK to bake the transform into the exported poses and 3D points.\n' +
+          'Click Cancel to abort the export (reset the transform first if you want to export untransformed data).'
+      );
+      if (!proceed) {
+        addNotification('info', 'Export cancelled.', 3000);
+        return;
+      }
+    }
+    // Sim3D doesn't touch 2D image-plane coordinates, so writers can still read
+    // them from WASM after the transform is baked into poses & points3D.
+    const exportReconstruction = hasTransform
+      ? transformReconstruction(createSim3dFromEuler(transform), reconstruction, wasmReconstruction)
+      : reconstruction;
 
     try {
       switch (exportFormat) {
         case 'binary':
-          exportReconstructionBinary(reconstruction, wasmReconstruction);
+          exportReconstructionBinary(exportReconstruction, wasmReconstruction);
           break;
         case 'text':
-          exportReconstructionText(reconstruction, wasmReconstruction);
+          exportReconstructionText(exportReconstruction, wasmReconstruction);
           break;
         case 'ply':
-          exportPointsPLY(reconstruction, wasmReconstruction);
+          exportPointsPLY(exportReconstruction, wasmReconstruction);
           break;
         case 'zip':
           await downloadReconstructionZip(
-            reconstruction,
+            exportReconstruction,
             { format: 'binary' },
             loadedFiles?.imageFiles,
             wasmReconstruction
@@ -188,10 +209,10 @@ export const ExportPanel = memo(function ExportPanel({
 
   // Reload data from original files
   const handleReload = useCallback(() => {
-    if (droppedFiles) {
-      resetTransform();
-      processFiles(droppedFiles);
-    }
+    if (!droppedFiles) return;
+    if (!confirmReload()) return;
+    resetTransform();
+    processFiles(droppedFiles);
   }, [droppedFiles, resetTransform, processFiles]);
 
   const hasCameras = cameras.length > 0;
@@ -238,7 +259,7 @@ export const ExportPanel = memo(function ExportPanel({
               onClick={onOpenDeletionModal}
               className={styles.actionButton}
             >
-              Delete Images{hasPendingDeletions ? ` (${pendingDeletions.size})` : ''}
+              Delete Images from Model{hasPendingDeletions ? ` (${pendingDeletions.size})` : ''}
             </button>
             <button
               onClick={handleExportFormat}

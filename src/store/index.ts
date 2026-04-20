@@ -83,6 +83,8 @@ export {
   deselectAll,
   clearTransientState,
   closeAllModals,
+  confirmReload,
+  hasUnsavedReloadState,
   // Deletion actions
   applyDeletionsToData,
   resetDeletionsWithCleanup,

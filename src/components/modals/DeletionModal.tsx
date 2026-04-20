@@ -264,7 +264,7 @@ export const DeletionModal = memo(function DeletionModal({
           onPointerDown={handleDragStart}
           style={{ touchAction: 'none' }}
         >
-          <span className={modalStyles.toolHeaderTitle}>Delete Images</span>
+          <span className={modalStyles.toolHeaderTitle}>Delete Images from Model</span>
           <button
             onClick={onClose}
             onPointerDown={(e) => e.stopPropagation()}

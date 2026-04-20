@@ -1812,7 +1812,7 @@ export function ImageDetailModal() {
                     ? 'text-ds-success hover:bg-ds-success/20'
                     : 'text-ds-muted hover:text-ds-error hover:bg-ds-error/20'
                 }`}
-                title={isMarkedForDeletion ? 'Restore image' : 'Delete image'}
+                title={isMarkedForDeletion ? 'Restore image' : 'Delete image from model'}
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M3 6h18" />

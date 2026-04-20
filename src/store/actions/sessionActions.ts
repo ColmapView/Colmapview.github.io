@@ -11,6 +11,34 @@ import { useUIStore } from '../stores/uiStore.js';
 import { useCameraStore } from '../stores/cameraStore.js';
 import { useTransformStore } from '../stores/transformStore.js';
 import { usePointPickingStore } from '../stores/pointPickingStore.js';
+import { useDeletionStore } from '../stores/deletionStore.js';
+import { isIdentityEuler } from '../../utils/sim3dTransforms.js';
+
+/**
+ * Returns true if a reload would discard in-memory edits the user made
+ * (active transform or pending deletions). Camera conversions are already
+ * persisted into the reconstruction Map and can't be cheaply detected, so
+ * they're not factored in here — callers should treat this as a best-effort
+ * early-skip for the confirm prompt.
+ */
+export function hasUnsavedReloadState(): boolean {
+  const transform = useTransformStore.getState().transform;
+  if (!isIdentityEuler(transform)) return true;
+  const pending = useDeletionStore.getState().pendingDeletions;
+  if (pending && pending.size > 0) return true;
+  return false;
+}
+
+/**
+ * Prompt the user before a destructive reload. Returns true if the caller
+ * should proceed. Skips the prompt when there's nothing to lose.
+ */
+export function confirmReload(): boolean {
+  if (!hasUnsavedReloadState()) return true;
+  return window.confirm(
+    'Reloading will discard your current transform and any pending deletions. Continue?',
+  );
+}
 
 /**
  * Reset the entire session to initial state.

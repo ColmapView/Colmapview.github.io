@@ -162,7 +162,7 @@ export function FloorAlignModal() {
       style={{ left: position.x, top: position.y, zIndex: Z_INDEX.modalOverlay }}
       onPointerDown={handleDragStart}
     >
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-0.5" onPointerDown={(e) => e.stopPropagation()}>
         {/* Confirm button (tick) */}
         <button
           onClick={handleApply}

@@ -647,23 +647,46 @@ export function writeFramesBinary(frames: Map<FrameId, Frame>): ArrayBuffer {
 // DOWNLOAD HELPERS
 // ============================================================================
 
-/**
- * Download a file in the browser.
- */
+// Why the stagger + deferred revoke: Chromium queues a.click()-triggered
+// downloads asynchronously. Multiple tight-loop downloads with immediate
+// URL.revokeObjectURL can have their blob URLs freed before dispatch, causing
+// content mixups across files (observed: images.bin content saved as
+// cameras.bin during 3-file export).
+const DOWNLOAD_STAGGER_MS = 150;
+const DOWNLOAD_REVOKE_DELAY_MS = 60_000;
+let nextDownloadSlotAt = 0;
+
+/** @internal test-only — reset the stagger clock so fake-timer tests start deterministically. */
+export function __resetDownloadSchedulerForTests(): void {
+  nextDownloadSlotAt = 0;
+}
+
+export function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const now = Date.now();
+  const fireAt = Math.max(now, nextDownloadSlotAt);
+  nextDownloadSlotAt = fireAt + DOWNLOAD_STAGGER_MS;
+
+  const trigger = () => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_REVOKE_DELAY_MS);
+  };
+
+  if (fireAt === now) trigger();
+  else setTimeout(trigger, fireAt - now);
+}
+
 export function downloadFile(data: ArrayBuffer | string, filename: string): void {
   const blob =
     typeof data === 'string'
       ? new Blob([data], { type: 'text/plain;charset=utf-8' })
       : new Blob([data], { type: 'application/octet-stream' });
-
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  downloadBlob(blob, filename);
 }
 
 /**
@@ -900,14 +923,7 @@ export async function downloadReconstructionZip(
     onProgress
   );
 
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  downloadBlob(blob, filename);
 }
 
 // ============================================================================

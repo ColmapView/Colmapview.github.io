@@ -2,7 +2,7 @@ import { useRef, useMemo, useState, useCallback, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
-import { useTransformStore, useReconstructionStore, useUIStore, applyTransformToData } from '../../store';
+import { useTransformStore, useReconstructionStore, useUIStore, applyTransformToData, confirmReload } from '../../store';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { VIZ_COLORS, contextMenuStyles, hoverCardStyles, ICON_SIZES, INTERACTION_HOVER_COLOR, MODAL_POSITION } from '../../theme';
 import { ResetIcon, ReloadIcon, CheckIcon, OffIcon } from '../../icons';
@@ -646,7 +646,7 @@ export function TransformGizmo({ center, size }: TransformGizmoProps) {
           position={contextMenu}
           onClose={() => setContextMenu(null)}
           onReset={() => { resetTransform(); setContextMenu(null); }}
-          onReload={() => { if (droppedFiles) { resetTransform(); processFiles(droppedFiles); } setContextMenu(null); }}
+          onReload={() => { if (droppedFiles && confirmReload()) { resetTransform(); processFiles(droppedFiles); } setContextMenu(null); }}
           onApply={() => { applyTransformToData(); setContextMenu(null); }}
           onOff={() => { setShowGizmo(false); setContextMenu(null); }}
         />

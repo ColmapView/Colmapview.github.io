@@ -169,7 +169,7 @@ export function DistanceInputModal() {
       style={{ left: position.x, top: position.y, zIndex: Z_INDEX.modalOverlay }}
       onPointerDown={handleDragStart}
     >
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5" onPointerDown={(e) => e.stopPropagation()}>
           {/* Distance input only for 2-point mode (not for 1-point origin or 3-point align) */}
           {!is1PointMode && !is3PointMode && (
             <input

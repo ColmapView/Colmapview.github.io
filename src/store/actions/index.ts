@@ -47,6 +47,8 @@ export {
   deselectAll,
   clearTransientState,
   closeAllModals,
+  confirmReload,
+  hasUnsavedReloadState,
 } from './sessionActions.js';
 
 // Deletion actions
