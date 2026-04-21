@@ -5,45 +5,9 @@ import { useFloorPlaneStore } from '../../store/stores/floorPlaneStore';
 import { useTransformStore, useUIStore, useReconstructionStore } from '../../store';
 import { modalStyles, Z_INDEX } from '../../theme';
 import { flipPlaneNormal, detectPlaneRANSAC, computeDistancesToPlane, transformPositions } from '../../utils/ransac';
-import { sim3dToEuler, composeSim3d, createSim3dFromEuler, isIdentityEuler } from '../../utils/sim3dTransforms';
+import { sim3dToEuler, composeSim3d, createSim3dFromEuler, isIdentityEuler, computePlaneAlignment } from '../../utils/sim3dTransforms';
 import { COORDINATE_SYSTEMS } from '../../utils/coordinateSystems';
 import { useModalDrag } from '../../hooks/useModalDrag';
-
-import type { Sim3d } from '../../types/sim3d';
-
-/**
- * Compute the transform that aligns a plane normal to a target axis and moves the floor to the origin.
- * 1. Rotates so the plane normal aligns with the target axis
- * 2. Translates so the floor plane passes through the origin
- */
-function computePlaneAlignment(
-  normal: [number, number, number],
-  centroid: [number, number, number],
-  targetUp: THREE.Vector3
-): Sim3d {
-  const normalVec = new THREE.Vector3(normal[0], normal[1], normal[2]).normalize();
-  const centroidVec = new THREE.Vector3(centroid[0], centroid[1], centroid[2]);
-
-  // Compute rotation quaternion to align normal with target up
-  const rotation = new THREE.Quaternion();
-  rotation.setFromUnitVectors(normalVec, targetUp);
-
-  // Apply rotation to centroid to find where it ends up after rotation
-  const rotatedCentroid = centroidVec.clone().applyQuaternion(rotation);
-
-  // Compute translation to move the floor to the origin
-  // After rotation, the floor normal is aligned with targetUp, so we need to
-  // translate along targetUp to make the floor pass through y=0 (or z=0, etc.)
-  // The distance to translate is the component of rotatedCentroid along targetUp
-  const distanceAlongAxis = rotatedCentroid.dot(targetUp);
-  const translation = targetUp.clone().multiplyScalar(-distanceAlongAxis);
-
-  return {
-    rotation,
-    translation,
-    scale: 1,
-  };
-}
 
 /**
  * Confirmation modal for floor plane alignment.

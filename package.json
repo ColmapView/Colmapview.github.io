@@ -1,7 +1,7 @@
 {
   "name": "colmapview",
   "private": true,
-  "version": "0.5.7",
+  "version": "0.5.8",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,7 +16,9 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:debug": "playwright test --debug"
+    "test:e2e:debug": "playwright test --debug",
+    "test:pycolmap": "cd tests/pycolmap && uv run pytest",
+    "test:pycolmap:regen": "REGEN_FIXTURES=1 npm run test:pycolmap"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",

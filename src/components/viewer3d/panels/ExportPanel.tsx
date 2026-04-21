@@ -19,7 +19,7 @@ import { useDataset } from '../../../dataset';
 import { CameraModelId } from '../../../types/colmap';
 import { CAMERA_MODEL_NAMES as MODEL_NAMES } from '../../../utils/cameraModelNames';
 import { createSim3dFromEuler, isIdentityEuler, transformReconstruction } from '../../../utils/sim3dTransforms';
-import { confirmReload } from '../../../store';
+import { confirmReload, applyDeletionsToData } from '../../../store';
 
 const styles = controlPanelStyles;
 
@@ -41,7 +41,6 @@ export const ExportPanel = memo(function ExportPanel({
 }: ExportPanelProps) {
   // Store values
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
   const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
   const droppedFiles = useReconstructionStore((s) => s.droppedFiles);
   const addNotification = useNotificationStore((s) => s.addNotification);
@@ -103,6 +102,20 @@ export const ExportPanel = memo(function ExportPanel({
   const handleExportFormat = useCallback(async () => {
     if (!reconstruction) return;
 
+    const currentPending = useDeletionStore.getState().pendingDeletions;
+    if (currentPending.size > 0) {
+      const proceed = window.confirm(
+        `You have ${currentPending.size} image(s) marked for deletion but not applied.\n\n` +
+          'Click OK to apply the deletions now, then export.\n' +
+          'Click Cancel to abort the export.',
+      );
+      if (!proceed) {
+        addNotification('info', 'Export cancelled.', 3000);
+        return;
+      }
+      applyDeletionsToData();
+    }
+
     // Read transform lazily so panel doesn't re-render on every gizmo drag frame.
     const transform = useTransformStore.getState().transform;
     const hasTransform = !isIdentityEuler(transform);
@@ -117,29 +130,35 @@ export const ExportPanel = memo(function ExportPanel({
         return;
       }
     }
+    // Read the reconstruction live — deletions above may have replaced it,
+    // and WASM wrapper may have been cleared by other actions.
+    const liveStore = useReconstructionStore.getState();
+    const liveRecon = liveStore.reconstruction;
+    const liveWasm = liveStore.wasmReconstruction;
+    if (!liveRecon) return;
     // Sim3D doesn't touch 2D image-plane coordinates, so writers can still read
     // them from WASM after the transform is baked into poses & points3D.
     const exportReconstruction = hasTransform
-      ? transformReconstruction(createSim3dFromEuler(transform), reconstruction, wasmReconstruction)
-      : reconstruction;
+      ? transformReconstruction(createSim3dFromEuler(transform), liveRecon, liveWasm)
+      : liveRecon;
 
     try {
       switch (exportFormat) {
         case 'binary':
-          exportReconstructionBinary(exportReconstruction, wasmReconstruction);
+          exportReconstructionBinary(exportReconstruction, liveWasm);
           break;
         case 'text':
-          exportReconstructionText(exportReconstruction, wasmReconstruction);
+          exportReconstructionText(exportReconstruction, liveWasm);
           break;
         case 'ply':
-          exportPointsPLY(exportReconstruction, wasmReconstruction);
+          exportPointsPLY(exportReconstruction, liveWasm);
           break;
         case 'zip':
           await downloadReconstructionZip(
             exportReconstruction,
             { format: 'binary' },
             loadedFiles?.imageFiles,
-            wasmReconstruction
+            liveWasm
           );
           break;
       }
@@ -147,7 +166,7 @@ export const ExportPanel = memo(function ExportPanel({
       console.error('Export failed:', err);
       addNotification('warning', 'Export failed');
     }
-  }, [reconstruction, wasmReconstruction, loadedFiles, exportFormat, addNotification]);
+  }, [reconstruction, loadedFiles, exportFormat, addNotification]);
 
   // Get list of all image names from reconstruction
   const imageNames = useMemo(() => {
@@ -200,13 +219,6 @@ export const ExportPanel = memo(function ExportPanel({
     }
   }, [imageNames, dataset, addNotification]);
 
-  // Default export action (binary)
-  const handleDefaultExport = () => {
-    if (reconstruction) {
-      exportReconstructionBinary(reconstruction, wasmReconstruction);
-    }
-  };
-
   // Reload data from original files
   const handleReload = useCallback(() => {
     if (!droppedFiles) return;
@@ -229,7 +241,7 @@ export const ExportPanel = memo(function ExportPanel({
         setActivePanel={setActivePanel}
         icon={<ExportIcon className="w-6 h-6" />}
         tooltip="Export"
-        onClick={handleDefaultExport}
+        onClick={handleExportFormat}
         panelTitle="Export"
         disabled={!reconstruction}
       >

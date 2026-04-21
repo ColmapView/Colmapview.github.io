@@ -243,11 +243,26 @@ export function transformReconstruction(
     });
   }
 
-  // Cameras (intrinsics) and other data are unchanged
+  // Transform rig frames: rigFromWorld has the same structural role as
+  // cam_from_world (world-to-body rigid transform) so it uses the same
+  // math. Sensor poses within rigs (sensor_from_rig) are rigid
+  // body-frame transforms, invariant under a world Sim3D.
+  let transformedRigData = reconstruction.rigData;
+  if (reconstruction.rigData) {
+    const transformedFrames = new Map(reconstruction.rigData.frames);
+    for (const [frameId, frame] of reconstruction.rigData.frames) {
+      const { qvec, tvec } = transformCameraPose(sim3d, frame.rigFromWorld.qvec, frame.rigFromWorld.tvec);
+      transformedFrames.set(frameId, { ...frame, rigFromWorld: { qvec, tvec } });
+    }
+    transformedRigData = { rigs: reconstruction.rigData.rigs, frames: transformedFrames };
+  }
+
+  // Cameras (intrinsics) unchanged
   return {
     ...reconstruction,
     images: transformedImages,
     points3D: transformedPoints3D,
+    rigData: transformedRigData,
   };
 }
 
@@ -537,4 +552,29 @@ export function computeNormalAlignment(
     rotation,
     translation,
   };
+}
+
+/**
+ * Compute a transform that aligns a detected floor plane with a target axis
+ * and translates it to pass through the origin.
+ *
+ * 1. Rotates so the plane normal coincides with `targetUp`.
+ * 2. Translates so the (rotated) plane centroid lies on the plane perpendicular to `targetUp` at the origin.
+ *
+ * Used by the floor-detection and floor-align flows.
+ */
+export function computePlaneAlignment(
+  normal: [number, number, number],
+  centroid: [number, number, number],
+  targetUp: THREE.Vector3,
+): Sim3d {
+  const normalVec = new THREE.Vector3(normal[0], normal[1], normal[2]).normalize();
+  const centroidVec = new THREE.Vector3(centroid[0], centroid[1], centroid[2]);
+
+  const rotation = new THREE.Quaternion().setFromUnitVectors(normalVec, targetUp.clone().normalize());
+  const rotatedCentroid = centroidVec.clone().applyQuaternion(rotation);
+  const distanceAlongAxis = rotatedCentroid.dot(targetUp);
+  const translation = targetUp.clone().multiplyScalar(-distanceAlongAxis);
+
+  return { rotation, translation, scale: 1 };
 }

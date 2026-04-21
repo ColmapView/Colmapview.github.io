@@ -10,6 +10,7 @@
  */
 
 import type { Reconstruction, Image, Camera, ImageStats, ConnectedImagesIndex, ImageToPoint3DIdsMap, Point3D, Point3DId } from '../../types/colmap.js';
+import type { Frame, FrameId } from '../../types/rig.js';
 import { useReconstructionStore } from '../reconstructionStore.js';
 import { useUIStore } from '../stores/uiStore.js';
 import { useCameraStore } from '../stores/cameraStore.js';
@@ -114,6 +115,21 @@ export function filterReconstructionByImageIds(
     }
   }
 
+  // Filter rig frames: each frame.dataIds maps sensors to image IDs. Drop
+  // mappings whose dataId was deleted. Frames that lose all mappings are
+  // removed entirely. Rigs (sensor definitions) stay untouched.
+  let newRigData = reconstruction.rigData;
+  if (reconstruction.rigData) {
+    const newFrames = new Map<FrameId, Frame>();
+    for (const [frameId, frame] of reconstruction.rigData.frames) {
+      const keptDataIds = frame.dataIds.filter(d => !imageIdsToRemove.has(d.dataId));
+      if (keptDataIds.length > 0) {
+        newFrames.set(frameId, { ...frame, dataIds: keptDataIds });
+      }
+    }
+    newRigData = { rigs: reconstruction.rigData.rigs, frames: newFrames };
+  }
+
   // Create the new reconstruction object
   return {
     cameras: newCameras,
@@ -123,7 +139,7 @@ export function filterReconstructionByImageIds(
     connectedImagesIndex: newConnectedImagesIndex,
     globalStats: reconstruction.globalStats, // Stats are approximations, keep as-is
     imageToPoint3DIds: newImageToPoint3DIds,
-    rigData: reconstruction.rigData,
+    rigData: newRigData,
   };
 }
 
@@ -135,18 +151,27 @@ export function filterReconstructionByImageIds(
  */
 export function applyDeletionsToData(): boolean {
   const reconstructionStore = useReconstructionStore.getState();
-  const { reconstruction } = reconstructionStore;
+  const { reconstruction, wasmReconstruction } = reconstructionStore;
   if (!reconstruction) return false;
 
   const deletionStore = useDeletionStore.getState();
   const { pendingDeletions } = deletionStore;
   if (pendingDeletions.size === 0) return false;
 
+  // In WASM mode reconstruction.points3D is empty — build it from WASM so
+  // filterReconstructionByImageIds can strip track elements referencing
+  // deleted images. Otherwise the exported points3D.bin would keep those
+  // dangling track refs and pycolmap would IndexError on load.
+  const sourceReconstruction =
+    reconstruction.points3D && reconstruction.points3D.size > 0
+      ? reconstruction
+      : wasmReconstruction?.hasPoints()
+        ? { ...reconstruction, points3D: wasmReconstruction.buildPoints3DMap() }
+        : reconstruction;
+
   // Filter JS reconstruction data (images, cameras, stats, matches, imageToPoint3DIds).
   // WASM is kept alive — point positions/colors/errors are unchanged by image deletion.
-  // Only WASM track data becomes slightly stale (contains refs to deleted images),
-  // but this doesn't affect rendering.
-  const newReconstruction = filterReconstructionByImageIds(reconstruction, pendingDeletions);
+  const newReconstruction = filterReconstructionByImageIds(sourceReconstruction, pendingDeletions);
   if (!newReconstruction) return false;
 
   // Clear floor plane distances (stale after index changes)

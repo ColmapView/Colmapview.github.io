@@ -1,0 +1,14 @@
+[project]
+name = "colmapview-pycolmap-tests"
+version = "0.0.0"
+description = "pycolmap round-trip tests for colmap-webview exports"
+requires-python = ">=3.10"
+dependencies = [
+    "pycolmap>=3.11.0",
+    "pytest>=8.0",
+    "numpy>=1.26",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+python_files = ["test_*.py"]

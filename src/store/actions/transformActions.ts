@@ -19,6 +19,7 @@ import {
 import { useReconstructionStore } from '../reconstructionStore.js';
 import { useTransformStore } from '../stores/transformStore.js';
 import { usePointPickingStore } from '../stores/pointPickingStore.js';
+import { useFloorPlaneStore } from '../stores/floorPlaneStore.js';
 
 /**
  * Apply a transform preset to the scene.
@@ -84,14 +85,33 @@ export function applyTransformToData(): boolean {
   const sim3d = createSim3dFromEuler(transform);
   const transformed = transformReconstruction(sim3d, reconstruction, wasmReconstruction);
 
-  // After applying transform, the WASM wrapper is stale (positions changed)
-  // Clear it so we don't use outdated data
+  // Realize 2D points from WASM into the JS image records before dropping the
+  // wrapper. Points2D coordinates are image-plane, so the Sim3D transform
+  // doesn't touch them — but without this the reconstruction becomes
+  // self-inconsistent (points3D tracks reference image_id/point2D_idx while
+  // images have empty points2D arrays), which later breaks export (pycolmap
+  // throws IndexError on load).
   if (wasmReconstruction) {
+    for (const [imageId, image] of transformed.images) {
+      if (image.points2D.length === 0) {
+        const points2D = wasmReconstruction.getImagePoints2DArray(imageId);
+        if (points2D.length > 0) {
+          transformed.images.set(imageId, { ...image, points2D });
+        }
+      }
+    }
     reconstructionStore.setWasmReconstruction(null);
   }
 
   reconstructionStore.setReconstruction(transformed);
   transformStore.resetTransform();
+
+  // Floor plane data (normal, offset, per-point distances) was computed in the
+  // old coordinate frame and is now stale. Drop it; user re-runs detection if
+  // needed.
+  const floorStore = useFloorPlaneStore.getState();
+  floorStore.setDetectedPlane(null);
+  floorStore.setPointDistances(null);
 
   return true;
 }
