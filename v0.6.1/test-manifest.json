@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "name": "NGS scan_20250403_094132",
+  "baseUrl": "https://huggingface.co/datasets/OpsiClear/NGS/resolve/main/objects/scan_20250403_094132",
+  "files": {
+    "cameras": "sparse/0/cameras.bin",
+    "images": "sparse/0/images.bin",
+    "points3D": "sparse/0/points3D.bin",
+    "rigs": "sparse/0/rigs.bin",
+    "frames": "sparse/0/frames.bin"
+  },
+  "imagesPath": "images/",
+  "masksPath": "masks/"
+}
