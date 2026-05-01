@@ -6,14 +6,24 @@
 import { Archive } from 'libarchive.js';
 import type { ArchiveEntry, ArchiveReader } from '../types/libarchive';
 import { publicAsset } from './paths';
-import { fetchWithTimeout } from './urlUtils';
+import { fetchWithTimeout, getFilenameFromUrl } from './urlUtils';
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-/** Maximum ZIP file size (2GB) */
-export const ZIP_SIZE_LIMIT = 2 * 1024 * 1024 * 1024;
+/** Maximum archive file size (2GB) */
+export const ARCHIVE_SIZE_LIMIT = 2 * 1024 * 1024 * 1024;
+
+/** Archive extensions handled by libarchive.js. */
+export const ARCHIVE_EXTENSIONS = [
+  '.zip',
+  '.tar.gz', '.tgz',
+  '.tar.bz2', '.tbz2', '.tbz',
+  '.tar.xz', '.txz',
+  '.tar',
+  '.7z',
+] as const;
 
 /** Timeout for ZIP size validation HEAD request (5 seconds) */
 const SIZE_CHECK_TIMEOUT = 5000;
@@ -62,24 +72,40 @@ export interface ZipValidationResult {
 // ZIP Detection
 // ============================================================================
 
+function hasArchiveExtension(pathname: string): boolean {
+  const lower = pathname.toLowerCase();
+  return ARCHIVE_EXTENSIONS.some(ext => lower.endsWith(ext));
+}
+
 /**
- * Check if a URL points to a ZIP file.
+ * Check if a URL points to a supported archive file
+ * (.zip, .tar, .tar.gz/.tgz, .tar.bz2/.tbz2/.tbz, .tar.xz/.txz, .7z).
  */
-export function isZipUrl(url: string): boolean {
+export function isArchiveUrl(url: string): boolean {
   try {
-    const pathname = new URL(url).pathname.toLowerCase();
-    return pathname.endsWith('.zip');
+    const pathname = new URL(url).pathname;
+    return hasArchiveExtension(pathname);
   } catch {
-    return url.toLowerCase().endsWith('.zip');
+    return hasArchiveExtension(url);
   }
 }
 
 /**
- * Check if a File is a ZIP file.
+ * Check if a File is a supported archive
+ * (.zip, .tar, .tar.gz/.tgz, .tar.bz2/.tbz2/.tbz, .tar.xz/.txz, .7z).
  */
-export function isZipFile(file: File): boolean {
-  const name = file.name.toLowerCase();
-  return name.endsWith('.zip') || file.type === 'application/zip';
+export function isArchiveFile(file: File): boolean {
+  if (hasArchiveExtension(file.name)) return true;
+  const type = file.type;
+  return (
+    type === 'application/zip' ||
+    type === 'application/x-tar' ||
+    type === 'application/gzip' ||
+    type === 'application/x-gzip' ||
+    type === 'application/x-bzip2' ||
+    type === 'application/x-xz' ||
+    type === 'application/x-7z-compressed'
+  );
 }
 
 // ============================================================================
@@ -122,7 +148,7 @@ export async function validateZipUrl(url: string): Promise<ZipValidationResult> 
     if (!response.ok) {
       return {
         valid: false,
-        error: `Failed to access ZIP file (${response.status})`,
+        error: `Failed to access archive (${response.status})`,
       };
     }
 
@@ -133,13 +159,13 @@ export async function validateZipUrl(url: string): Promise<ZipValidationResult> 
     }
 
     const size = parseInt(contentLength, 10);
-    if (size > ZIP_SIZE_LIMIT) {
+    if (size > ARCHIVE_SIZE_LIMIT) {
       const sizeMB = (size / (1024 * 1024)).toFixed(1);
-      const limitMB = (ZIP_SIZE_LIMIT / (1024 * 1024)).toFixed(0);
+      const limitMB = (ARCHIVE_SIZE_LIMIT / (1024 * 1024)).toFixed(0);
       return {
         valid: false,
         size,
-        error: `ZIP file exceeds ${limitMB}MB limit (actual: ${sizeMB}MB)`,
+        error: `Archive exceeds ${limitMB}MB limit (actual: ${sizeMB}MB)`,
       };
     }
 
@@ -157,13 +183,13 @@ export async function validateZipUrl(url: string): Promise<ZipValidationResult> 
  * Validate a local ZIP file by checking its size.
  */
 export function validateZipFile(file: File): ZipValidationResult {
-  if (file.size > ZIP_SIZE_LIMIT) {
+  if (file.size > ARCHIVE_SIZE_LIMIT) {
     const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-    const limitMB = (ZIP_SIZE_LIMIT / (1024 * 1024)).toFixed(0);
+    const limitMB = (ARCHIVE_SIZE_LIMIT / (1024 * 1024)).toFixed(0);
     return {
       valid: false,
       size: file.size,
-      error: `ZIP file exceeds ${limitMB}MB limit (actual: ${sizeMB}MB)`,
+      error: `Archive exceeds ${limitMB}MB limit (actual: ${sizeMB}MB)`,
     };
   }
   return { valid: true, size: file.size };
@@ -209,7 +235,7 @@ async function downloadZip(
   const response = await fetchWithTimeout(url, 120000); // 2 minute timeout for large files
 
   if (!response.ok) {
-    throw new Error(`Failed to download ZIP (${response.status})`);
+    throw new Error(`Failed to download archive (${response.status})`);
   }
 
   const contentLength = response.headers.get('content-length');
@@ -239,7 +265,7 @@ async function downloadZip(
       const totalMB = (total / (1024 * 1024)).toFixed(1);
       onProgress({
         percent,
-        message: `Downloading ZIP (${loadedMB} / ${totalMB} MB)...`,
+        message: `Downloading archive (${loadedMB} / ${totalMB} MB)...`,
         bytesLoaded: loaded,
         bytesTotal: total,
       });
@@ -247,7 +273,7 @@ async function downloadZip(
       const loadedMB = (loaded / (1024 * 1024)).toFixed(1);
       onProgress({
         percent: 20,
-        message: `Downloading ZIP (${loadedMB} MB)...`,
+        message: `Downloading archive (${loadedMB} MB)...`,
         bytesLoaded: loaded,
       });
     }
@@ -356,27 +382,28 @@ export async function loadZipFromUrl(
   // Initialize libarchive.js
   await initializeArchive();
 
-  onProgress({ percent: 0, message: 'Checking ZIP file...' });
+  onProgress({ percent: 0, message: 'Checking archive...' });
 
   // Validate size
   const validation = await validateZipUrl(url);
   if (!validation.valid) {
-    throw new Error(validation.error ?? 'Invalid ZIP file');
+    throw new Error(validation.error ?? 'Invalid archive');
   }
 
-  // Download ZIP
+  // Download archive
   const blob = await downloadZip(url, onProgress);
 
   // Validate downloaded size
-  if (blob.size > ZIP_SIZE_LIMIT) {
+  if (blob.size > ARCHIVE_SIZE_LIMIT) {
     const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
-    throw new Error(`Downloaded ZIP exceeds size limit (${sizeMB}MB)`);
+    throw new Error(`Downloaded archive exceeds size limit (${sizeMB}MB)`);
   }
 
   onProgress({ percent: 40, message: 'Opening archive...' });
 
-  // Open archive
-  const file = new File([blob], 'archive.zip', { type: 'application/zip' });
+  // Preserve original filename so libarchive.js can sniff format from extension.
+  const archiveName = getFilenameFromUrl(url) || 'archive.zip';
+  const file = new File([blob], archiveName);
   const archive = await Archive.open(file);
 
   // Process archive
@@ -403,7 +430,7 @@ export async function loadZipFromUrl(
 
     if (!foundCameras || !foundImages || !foundPoints) {
       throw new Error(
-        'ZIP does not contain valid COLMAP files (cameras.bin, images.bin, points3D.bin)'
+        'Archive does not contain valid COLMAP files (cameras.bin, images.bin, points3D.bin)'
       );
     }
   }
@@ -422,12 +449,12 @@ export async function loadZipFromFile(
   // Initialize libarchive.js
   await initializeArchive();
 
-  onProgress({ percent: 0, message: 'Checking ZIP file...' });
+  onProgress({ percent: 0, message: 'Checking archive...' });
 
   // Validate size
   const validation = validateZipFile(zipFile);
   if (!validation.valid) {
-    throw new Error(validation.error ?? 'Invalid ZIP file');
+    throw new Error(validation.error ?? 'Invalid archive');
   }
 
   onProgress({ percent: 40, message: 'Opening archive...' });

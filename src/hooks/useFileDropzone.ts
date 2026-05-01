@@ -23,7 +23,7 @@ import { getFailedImageCount } from './useAsyncImageCache';
 import { clearAllCaches } from '../cache';
 import { parseConfigYaml, applyConfigurationToStores } from '../config/configuration';
 import type { WasmReconstructionWrapper } from '../wasm';
-import { isZipFile, loadZipFromFile, setActiveZipArchive } from '../utils/zipLoader';
+import { isArchiveFile, loadZipFromFile, setActiveZipArchive } from '../utils/zipLoader';
 
 export function useFileDropzone() {
   const {
@@ -557,11 +557,11 @@ export function useFileDropzone() {
     // IMPORTANT: Extract all data from dataTransfer SYNCHRONOUSLY before any await
     // The browser clears dataTransfer after the event handler yields
 
-    // Check if a single ZIP file was dropped
+    // Check if a single archive file was dropped
     if (e.dataTransfer.files.length === 1) {
       const singleFile = e.dataTransfer.files[0];
-      if (isZipFile(singleFile)) {
-        console.log(`[Drop] Detected ZIP file: ${singleFile.name}`);
+      if (isArchiveFile(singleFile)) {
+        console.log(`[Drop] Detected archive file: ${singleFile.name}`);
         await processZipFile(singleFile);
         return;
       }

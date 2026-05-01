@@ -12,6 +12,9 @@ import { ResetIcon, UploadIcon, LinkIcon, FileJsonIcon, MouseLeftIcon, MouseRigh
 import { UrlInputModal } from '../modals/UrlInputModal';
 import { ProfileDropdown } from './ProfileDropdown';
 import { publicAsset } from '../../utils/paths';
+import { ARCHIVE_EXTENSIONS } from '../../utils/zipLoader';
+
+const ARCHIVE_FORMATS_HINT = `${[...ARCHIVE_EXTENSIONS].join(' / ')} / manifest.json`;
 
 interface DropZoneProps {
   children: React.ReactNode;
@@ -315,7 +318,7 @@ export function DropZone({ children }: DropZoneProps) {
   <baseUrl>/sparse/0/points3D.bin
   <baseUrl>/images/  (optional)
   <baseUrl>/masks/   (optional)`}</div>
-                      <div className={`${hoverCardStyles.subtitle} mt-2`}>Or provide a .zip or manifest.json URL</div>
+                      <div className={`${hoverCardStyles.subtitle} mt-2`}>{`Or provide a ${ARCHIVE_FORMATS_HINT} URL`}</div>
                       <div className={`${hoverCardStyles.subtitle} mt-1 text-ds-muted/70`}>Supports: S3, GCS, R2, Dropbox, HuggingFace, GitHub</div>
                       <div className={`${hoverCardStyles.subtitle} mt-1 text-ds-muted/70`}>Local server: npx http-server --cors -p 8080</div>
                       <div className={hoverCardStyles.hint}>

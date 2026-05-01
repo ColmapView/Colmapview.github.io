@@ -13,7 +13,7 @@ import {
   isManifestUrl,
 } from '../utils/urlUtils';
 import {
-  isZipUrl,
+  isArchiveUrl,
   loadZipFromUrl,
   setActiveZipArchive,
   type ZipProgress,
@@ -341,8 +341,8 @@ export function useUrlLoader() {
       clearAllCaches();
 
       // Check if URL points to a ZIP file
-      if (isZipUrl(normalizedUrl)) {
-        console.log(`[URL Loader] Detected ZIP URL: ${normalizedUrl}`);
+      if (isArchiveUrl(normalizedUrl)) {
+        console.log(`[URL Loader] Detected archive URL: ${normalizedUrl}`);
         return await loadFromZipUrl(normalizedUrl);
       }
 
