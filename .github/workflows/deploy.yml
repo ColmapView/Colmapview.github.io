@@ -10,10 +10,11 @@ permissions:
   contents: write
 
 concurrency:
-  # Separate queues for main (dev) and tags (releases) to prevent cancellation
-  # when pushing both at the same time
-  group: pages-deploy-${{ github.ref_type }}
-  cancel-in-progress: false  # Queue, don't cancel (prevents corruption)
+  # Single shared queue so main (dev) and tag (release) runs serialize on the
+  # gh-pages push instead of racing. cancel-in-progress: false means both still
+  # run — they just take turns.
+  group: pages-deploy
+  cancel-in-progress: false
 
 env:
   NODE_VERSION: '22'

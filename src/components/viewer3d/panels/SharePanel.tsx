@@ -29,15 +29,16 @@ export const SharePanel = memo(function SharePanel({
 
   // Store values
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const sourceType = useReconstructionStore((s) => s.sourceType);
   const sourceUrl = useReconstructionStore((s) => s.sourceUrl);
   const sourceManifest = useReconstructionStore((s) => s.sourceManifest);
   const currentViewState = useCameraStore((s) => s.currentViewState);
   const getScreenshotBlob = useExportStore((s) => s.getScreenshotBlob);
 
-  // Check if share buttons should be shown (loaded from URL or manifest)
-  const canShare = (sourceType === 'url' || sourceType === 'manifest') && reconstruction;
+  // Share is possible whenever we have a URL-addressable source (url, manifest,
+  // or zip-from-URL). Local drops (including local zips) leave both sourceUrl
+  // and sourceManifest null, which correctly hides the buttons.
   const shareSource = sourceUrl ?? sourceManifest;
+  const canShare = !!shareSource && !!reconstruction;
 
   // Handle share link copy
   const handleCopyShareLink = useCallback(async () => {
