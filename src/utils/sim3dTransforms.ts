@@ -9,9 +9,19 @@
 import * as THREE from 'three';
 import type { Sim3d, Sim3dEuler } from '../types/sim3d';
 import type { Image, Point3D, Reconstruction } from '../types/colmap';
+import { appLogger } from './logger';
 import type { WasmReconstructionWrapper } from '../wasm/reconstruction';
-import { getImageWorldPosition } from './colmapTransforms';
-import { median } from './mathUtils';
+
+export {
+  computeDistanceScale,
+  computeNormalAlignment,
+  computeOriginTranslation,
+  computePlaneAlignment,
+} from './sim3dAlignment';
+export {
+  computeCenterAtOrigin,
+  computeNormalizeScale,
+} from './sim3dNormalization';
 
 // ============================================================================
 // Factory Functions
@@ -223,11 +233,11 @@ export function transformReconstruction(
   let sourcePoints3D = reconstruction.points3D;
   if (!sourcePoints3D || sourcePoints3D.size === 0) {
     if (wasmReconstruction?.hasPoints()) {
-      console.log('[Transform] Building points3D Map on-demand from WASM...');
+      appLogger.info('[Transform] Building points3D Map on-demand from WASM...');
       const startTime = performance.now();
       sourcePoints3D = wasmReconstruction.buildPoints3DMap();
       const elapsed = performance.now() - startTime;
-      console.log(`[Transform] Built ${sourcePoints3D.size.toLocaleString()} points in ${elapsed.toFixed(0)}ms`);
+      appLogger.info(`[Transform] Built ${sourcePoints3D.size.toLocaleString()} points in ${elapsed.toFixed(0)}ms`);
     } else {
       sourcePoints3D = new Map();
     }
@@ -267,118 +277,6 @@ export function transformReconstruction(
 }
 
 // ============================================================================
-// Preset Computations
-// ============================================================================
-
-/**
- * Compute transform to center reconstruction at origin.
- * Uses median of camera positions for robustness to outliers.
- */
-export function computeCenterAtOrigin(reconstruction: Reconstruction): Sim3d {
-  const positions: THREE.Vector3[] = [];
-
-  for (const image of reconstruction.images.values()) {
-    positions.push(getImageWorldPosition(image));
-  }
-
-  if (positions.length === 0) {
-    return createIdentitySim3d();
-  }
-
-  // Use median for robustness
-  const centerX = median(positions.map((p) => p.x));
-  const centerY = median(positions.map((p) => p.y));
-  const centerZ = median(positions.map((p) => p.z));
-
-  return {
-    scale: 1,
-    rotation: new THREE.Quaternion(),
-    translation: new THREE.Vector3(-centerX, -centerY, -centerZ),
-  };
-}
-
-/**
- * Compute transform to normalize scale (fit scene to specified extent).
- * Uses percentile-based bounding box for robustness.
- *
- * Reference: colmap/scene/reconstruction.cc Normalize()
- *
- * @param reconstruction - The reconstruction to normalize
- * @param extent - Target extent (bounding box diagonal), default 10
- * @param minPercentile - Lower percentile for bounding box, default 0.1
- * @param maxPercentile - Upper percentile for bounding box, default 0.9
- * @param useImages - Use camera positions (true) or 3D points (false), default true
- */
-export function computeNormalizeScale(
-  reconstruction: Reconstruction,
-  extent = 10,
-  minPercentile = 0.1,
-  maxPercentile = 0.9,
-  useImages = true
-): Sim3d {
-  const coordsX: number[] = [];
-  const coordsY: number[] = [];
-  const coordsZ: number[] = [];
-
-  if (useImages) {
-    for (const image of reconstruction.images.values()) {
-      const pos = getImageWorldPosition(image);
-      coordsX.push(pos.x);
-      coordsY.push(pos.y);
-      coordsZ.push(pos.z);
-    }
-  } else if (reconstruction.points3D) {
-    for (const point3D of reconstruction.points3D.values()) {
-      coordsX.push(point3D.xyz[0]);
-      coordsY.push(point3D.xyz[1]);
-      coordsZ.push(point3D.xyz[2]);
-    }
-  }
-
-  if (coordsX.length === 0) {
-    return createIdentitySim3d();
-  }
-
-  // Helper to compute percentile
-  const percentile = (arr: number[], p: number): number => {
-    const sorted = [...arr].sort((a, b) => a - b);
-    const idx = p * (sorted.length - 1);
-    const lower = Math.floor(idx);
-    const upper = Math.ceil(idx);
-    if (lower === upper) return sorted[lower];
-    return sorted[lower] * (upper - idx) + sorted[upper] * (idx - lower);
-  };
-
-  // Compute percentile-based bounds
-  const minX = percentile(coordsX, minPercentile);
-  const maxX = percentile(coordsX, maxPercentile);
-  const minY = percentile(coordsY, minPercentile);
-  const maxY = percentile(coordsY, maxPercentile);
-  const minZ = percentile(coordsZ, minPercentile);
-  const maxZ = percentile(coordsZ, maxPercentile);
-
-  // Compute center and diagonal
-  const centerX = (minX + maxX) / 2;
-  const centerY = (minY + maxY) / 2;
-  const centerZ = (minZ + maxZ) / 2;
-
-  const diagonal = Math.sqrt(
-    Math.pow(maxX - minX, 2) + Math.pow(maxY - minY, 2) + Math.pow(maxZ - minZ, 2)
-  );
-
-  // Scale to fit target extent
-  const scale = diagonal > 1e-6 ? extent / diagonal : 1;
-
-  // The transform: first translate to center, then scale
-  // Combined: p_new = scale * (p_old - center) = scale * p_old - scale * center
-  return {
-    scale,
-    rotation: new THREE.Quaternion(),
-    translation: new THREE.Vector3(-centerX * scale, -centerY * scale, -centerZ * scale),
-  };
-}
-
-// ============================================================================
 // Three.js Integration
 // ============================================================================
 
@@ -414,167 +312,4 @@ export function isIdentityEuler(euler: Sim3dEuler): boolean {
     Math.abs(euler.translationY) < epsilon &&
     Math.abs(euler.translationZ) < epsilon
   );
-}
-
-// ============================================================================
-// Point-Based Transform Computations
-// ============================================================================
-
-/**
- * Compute scale transform to set distance between two points to a target value.
- * Scale is applied uniformly about the midpoint of the two points.
- *
- * @param point1 - First point position
- * @param point2 - Second point position
- * @param targetDistance - Desired distance between the points
- * @returns Sim3d transform that scales the scene appropriately
- */
-export function computeDistanceScale(
-  point1: THREE.Vector3,
-  point2: THREE.Vector3,
-  targetDistance: number
-): Sim3d {
-  const currentDistance = point1.distanceTo(point2);
-
-  // Handle degenerate case (points too close)
-  if (currentDistance < 1e-10) {
-    return createIdentitySim3d();
-  }
-
-  const scale = targetDistance / currentDistance;
-
-  // Scale about the midpoint of the two points
-  // Transform: p_new = scale * (p - midpoint) + midpoint
-  //          = scale * p + midpoint * (1 - scale)
-  const midpoint = new THREE.Vector3()
-    .addVectors(point1, point2)
-    .multiplyScalar(0.5);
-
-  const translation = midpoint.clone().multiplyScalar(1 - scale);
-
-  return {
-    scale,
-    rotation: new THREE.Quaternion(), // Identity rotation
-    translation,
-  };
-}
-
-/**
- * Compute translation transform to move a point to the world origin (0, 0, 0).
- * This is a pure translation with no scale or rotation.
- *
- * @param point - The point to move to the origin
- * @returns Sim3d transform that translates the scene so the point is at origin
- */
-export function computeOriginTranslation(point: THREE.Vector3): Sim3d {
-  return {
-    scale: 1,
-    rotation: new THREE.Quaternion(), // Identity rotation
-    translation: new THREE.Vector3(-point.x, -point.y, -point.z),
-  };
-}
-
-/**
- * Compute rotation transform to align a plane's normal with the target up axis.
- * The plane is defined by three points, and rotation is about their centroid.
- *
- * @param point1 - First point of the triangle
- * @param point2 - Second point of the triangle
- * @param point3 - Third point of the triangle
- * @param flipNormal - If true, flip the computed normal direction
- * @param targetUp - Target "up" direction to align the normal with (default: Y-up in Three.js)
- * @returns Sim3d transform that rotates the scene to align the normal with target up
- */
-export function computeNormalAlignment(
-  point1: THREE.Vector3,
-  point2: THREE.Vector3,
-  point3: THREE.Vector3,
-  flipNormal: boolean = false,
-  targetUp: THREE.Vector3 = new THREE.Vector3(0, 1, 0)
-): Sim3d {
-  // Compute plane normal using cross product
-  const v1 = new THREE.Vector3().subVectors(point2, point1);
-  const v2 = new THREE.Vector3().subVectors(point3, point1);
-  const normal = new THREE.Vector3().crossVectors(v1, v2);
-
-  // Handle degenerate case (collinear points)
-  if (normal.lengthSq() < 1e-10) {
-    return createIdentitySim3d();
-  }
-
-  normal.normalize();
-
-  // Flip normal if requested
-  if (flipNormal) {
-    normal.negate();
-  }
-
-  // Target: align normal with the specified up direction
-  const upNormalized = targetUp.clone().normalize();
-
-  // Check if already aligned
-  const dot = normal.dot(upNormalized);
-  if (Math.abs(dot - 1) < 1e-6) {
-    // Already aligned with target up
-    return createIdentitySim3d();
-  }
-
-  let rotation: THREE.Quaternion;
-
-  if (Math.abs(dot + 1) < 1e-6) {
-    // Opposite direction - rotate 180° around a perpendicular axis
-    const perpAxis = new THREE.Vector3(1, 0, 0);
-    if (Math.abs(upNormalized.dot(perpAxis)) > 0.9) {
-      perpAxis.set(0, 0, 1);
-    }
-    rotation = new THREE.Quaternion().setFromAxisAngle(perpAxis, Math.PI);
-  } else {
-    // General case: compute rotation quaternion from current normal to target up
-    rotation = new THREE.Quaternion().setFromUnitVectors(normal, upNormalized);
-  }
-
-  // Rotation center is centroid of three points
-  const centroid = new THREE.Vector3()
-    .add(point1)
-    .add(point2)
-    .add(point3)
-    .divideScalar(3);
-
-  // To rotate about centroid, we need:
-  // p_new = R * (p - centroid) + centroid
-  //       = R * p - R * centroid + centroid
-  // So translation = centroid - R * centroid
-  const rotatedCentroid = centroid.clone().applyQuaternion(rotation);
-  const translation = new THREE.Vector3().subVectors(centroid, rotatedCentroid);
-
-  return {
-    scale: 1,
-    rotation,
-    translation,
-  };
-}
-
-/**
- * Compute a transform that aligns a detected floor plane with a target axis
- * and translates it to pass through the origin.
- *
- * 1. Rotates so the plane normal coincides with `targetUp`.
- * 2. Translates so the (rotated) plane centroid lies on the plane perpendicular to `targetUp` at the origin.
- *
- * Used by the floor-detection and floor-align flows.
- */
-export function computePlaneAlignment(
-  normal: [number, number, number],
-  centroid: [number, number, number],
-  targetUp: THREE.Vector3,
-): Sim3d {
-  const normalVec = new THREE.Vector3(normal[0], normal[1], normal[2]).normalize();
-  const centroidVec = new THREE.Vector3(centroid[0], centroid[1], centroid[2]);
-
-  const rotation = new THREE.Quaternion().setFromUnitVectors(normalVec, targetUp.clone().normalize());
-  const rotatedCentroid = centroidVec.clone().applyQuaternion(rotation);
-  const distanceAlongAxis = rotatedCentroid.dot(targetUp);
-  const translation = targetUp.clone().multiplyScalar(-distanceAlongAxis);
-
-  return { rotation, translation, scale: 1 };
 }

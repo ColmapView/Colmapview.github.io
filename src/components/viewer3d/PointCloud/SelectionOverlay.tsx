@@ -7,6 +7,7 @@ import React, { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useSelectionAnimation } from '../../../hooks/pointCloud/useSelectionAnimation';
 import type { SelectionColorMode } from '../../../store/types';
+import { appLogger } from '../../../utils/logger';
 
 export interface SelectionOverlayProps {
   selectedPositions: Float32Array;
@@ -54,7 +55,7 @@ export function SelectionOverlay(props: SelectionOverlayProps): React.JSX.Elemen
     }
 
     if (hasNaN) {
-      console.warn('[SelectionOverlay] Positions contain NaN/Infinity values, skipping geometry creation');
+      appLogger.warn('[SelectionOverlay] Positions contain NaN/Infinity values, skipping geometry creation');
       return null;
     }
 

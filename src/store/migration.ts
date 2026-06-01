@@ -1,3 +1,6 @@
+import { useNotificationStore } from './stores/notificationStore';
+import { appLogger } from '../utils/logger';
+
 // Declare global version constant injected by Vite
 declare const __APP_VERSION__: string;
 
@@ -14,6 +17,10 @@ export const STORAGE_KEYS = {
   lastSeenVersion: 'colmap-viewer-last-seen-version',
 } as const;
 
+export function clearPersistedSettings(): void {
+  Object.values(STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
+}
+
 // Property mappings for migration
 const POINT_CLOUD_PROPERTIES = [
   'pointSize',
@@ -22,6 +29,7 @@ const POINT_CLOUD_PROPERTIES = [
 ] as const;
 
 const CAMERA_PROPERTIES = [
+  'showCameras',
   'cameraDisplayMode',
   'cameraScale',
   'cameraMode',
@@ -37,6 +45,7 @@ const CAMERA_PROPERTIES = [
 const UI_PROPERTIES = [
   'showPoints2D',
   'showPoints3D',
+  'showMatches',
   'matchesDisplayMode',
   'matchesOpacity',
   'showMaskOverlay',
@@ -58,22 +67,40 @@ const EXPORT_PROPERTIES = [
 // Track if migration has been attempted this session
 let migrationAttempted = false;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function parseLegacyPersistedState(legacyData: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(legacyData);
+    if (!isRecord(parsed)) return null;
+
+    // Zustand persist wraps state in { state: {...}, version: number }.
+    if ('state' in parsed) {
+      return isRecord(parsed.state) ? parsed.state : null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Apply legacy boolean-to-enum migrations from the old format
  */
-function applyLegacyMigrations(state: Record<string, unknown>): Record<string, unknown> {
+export function applyLegacyMigrations(state: Record<string, unknown>): Record<string, unknown> {
   const migrated = { ...state };
 
   // Migrate old showCameras boolean to new cameraDisplayMode
   if ('showCameras' in migrated && typeof migrated.showCameras === 'boolean') {
-    migrated.cameraDisplayMode = migrated.showCameras ? 'frustum' : 'off';
-    delete migrated.showCameras;
+    migrated.cameraDisplayMode = 'frustum';
   }
 
   // Migrate old showMatches boolean to new matchesDisplayMode
   if ('showMatches' in migrated && typeof migrated.showMatches === 'boolean') {
-    migrated.matchesDisplayMode = migrated.showMatches ? 'static' : 'off';
-    delete migrated.showMatches;
+    migrated.matchesDisplayMode = 'static';
   }
 
   // Migrate old rainbowMode boolean to new selectionColorMode
@@ -140,9 +167,8 @@ export function migrateFromLegacyStore(): boolean {
     const legacyData = localStorage.getItem(STORAGE_KEYS.legacy);
     if (!legacyData) return false;
 
-    const parsed = JSON.parse(legacyData);
-    // Zustand persist wraps state in { state: {...}, version: number }
-    const legacyState = parsed.state || parsed;
+    const legacyState = parseLegacyPersistedState(legacyData);
+    if (!legacyState) return false;
 
     // Apply legacy boolean migrations first
     const migratedState = applyLegacyMigrations(legacyState);
@@ -168,10 +194,10 @@ export function migrateFromLegacyStore(): boolean {
     // Remove legacy store after successful migration
     localStorage.removeItem(STORAGE_KEYS.legacy);
 
-    console.log('[Store Migration] Successfully migrated from legacy store to domain stores');
+    appLogger.info('[Store Migration] Successfully migrated from legacy store to domain stores');
     return true;
   } catch (error) {
-    console.error('[Store Migration] Failed to migrate legacy store:', error);
+    appLogger.error('[Store Migration] Failed to migrate legacy store:', error);
     return false;
   }
 }
@@ -198,16 +224,15 @@ function showNewVersionNotification(): void {
   if (lastSeenVersion === currentVersion) return;
 
   // Version changed — show notification and update cached version
-  import('./stores/notificationStore').then(({ useNotificationStore }) => {
-    useNotificationStore.getState().addNotification(
-      'info',
-      `Updated to v${currentVersion}! Consider resetting settings via the ⟳ button in Settings to enable new defaults.`
-    );
-    localStorage.setItem(STORAGE_KEYS.lastSeenVersion, currentVersion);
-  });
+  useNotificationStore.getState().addNotification(
+    'info',
+    `Updated to v${currentVersion}! Consider resetting settings via the ⟳ button in Settings to enable new defaults.`
+  );
+  localStorage.setItem(STORAGE_KEYS.lastSeenVersion, currentVersion);
 }
 
-export function initStoreMigration(): void {
-  migrateFromLegacyStore();
+export function initStoreMigration(): boolean {
+  const migratedLegacyStore = migrateFromLegacyStore();
   showNewVersionNotification();
+  return migratedLegacyStore;
 }

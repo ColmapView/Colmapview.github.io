@@ -2,6 +2,7 @@ import { Component, type ReactNode } from 'react';
 import { buttonStyles } from '../../theme';
 import { classifyError, type AppErrorType } from '../../utils/errorUtils';
 import { getErrorMessage } from '../../constants/errorMessages';
+import { appLogger } from '../../utils/logger';
 
 interface GalleryErrorBoundaryProps {
   children: ReactNode;
@@ -38,7 +39,7 @@ export class GalleryErrorBoundary extends Component<GalleryErrorBoundaryProps, G
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
-    console.error('GalleryErrorBoundary caught an error:', error, errorInfo);
+    appLogger.error('GalleryErrorBoundary caught an error:', error, errorInfo);
   }
 
   private handleRetry = (): void => {

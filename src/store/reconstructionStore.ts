@@ -52,6 +52,7 @@ interface ReconstructionState {
   sourceManifest: ColmapManifest | null;
   /** URL loading state (shared across components) */
   urlLoading: boolean;
+  urlLoadActive: boolean;
   urlProgress: UrlLoadProgress | null;
   urlError: UrlLoadError | null;
 
@@ -63,6 +64,8 @@ interface ReconstructionState {
   setError: (error: string | null) => void;
   setProgress: (progress: number) => void;
   setSourceInfo: (type: ReconstructionSourceType, url?: string | null, imageUrlBase?: string | null, maskUrlBase?: string | null, manifest?: ColmapManifest | null) => void;
+  tryStartUrlLoad: () => boolean;
+  finishUrlLoad: () => void;
   setUrlLoading: (loading: boolean) => void;
   setUrlProgress: (progress: UrlLoadProgress | null) => void;
   setUrlError: (error: UrlLoadError | null) => void;
@@ -84,6 +87,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   sourceManifest: null,
   // Initialize loading state based on URL params so indicator shows immediately
   urlLoading: initialUrlLoading,
+  urlLoadActive: false,
   urlProgress: initialUrlLoading ? { percent: 0, message: 'Initializing...' } : null,
   urlError: null,
 
@@ -123,6 +127,16 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
 
   setSourceInfo: (sourceType, sourceUrl = null, imageUrlBase = null, maskUrlBase = null, sourceManifest = null) => set({ sourceType, sourceUrl, imageUrlBase, maskUrlBase, sourceManifest }),
 
+  tryStartUrlLoad: () => {
+    if (get().urlLoadActive) {
+      return false;
+    }
+    set({ urlLoadActive: true });
+    return true;
+  },
+
+  finishUrlLoad: () => set({ urlLoadActive: false }),
+
   setUrlLoading: (urlLoading) => set({ urlLoading }),
 
   setUrlProgress: (urlProgress) => set({ urlProgress }),
@@ -150,6 +164,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       maskUrlBase: null,
       sourceManifest: null,
       urlLoading: false,
+      urlLoadActive: false,
       urlProgress: null,
       urlError: null,
     });

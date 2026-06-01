@@ -2,6 +2,7 @@ import { Component, type ReactNode } from 'react';
 import { emptyStateStyles, buttonStyles } from '../theme';
 import { classifyError, getRecoveryStrategy, type AppErrorType } from '../utils/errorUtils';
 import { getErrorMessage } from '../constants/errorMessages';
+import { appLogger } from '../utils/logger';
 
 export type ErrorBoundaryVariant = 'full' | 'inline' | 'silent';
 
@@ -53,7 +54,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    appLogger.error('ErrorBoundary caught an error:', error, errorInfo);
     this.props.onError?.(error, errorInfo);
   }
 

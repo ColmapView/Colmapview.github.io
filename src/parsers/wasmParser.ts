@@ -8,8 +8,9 @@
 
 import type { Camera, Image as ColmapImage } from '../types/colmap';
 import type { RigData, Rig, Frame, RigSensor, FrameDataMapping, SensorId } from '../types/rig';
-import { SensorType } from '../types/rig';
-import { CameraModelId } from '../types/colmap';
+import { parseCameraModelId } from '../utils/cameraModelPolicy';
+import { appLogger } from '../utils/logger';
+import { parseSensorType } from '../utils/sensorTypePolicy';
 import { createWasmReconstruction, WasmReconstructionWrapper } from '../wasm';
 
 /**
@@ -29,10 +30,12 @@ export async function parseWithWasm(
   rigData?: RigData;
   wasmWrapper: WasmReconstructionWrapper;
 } | null> {
+  let wasm: WasmReconstructionWrapper | null = null;
+
   try {
-    const wasm = await createWasmReconstruction();
+    wasm = await createWasmReconstruction();
     if (!wasm) {
-      console.warn('[WASM] Module not available, falling back to JS parser');
+      appLogger.warn('[WASM] Module not available, falling back to JS parser');
       return null;
     }
 
@@ -40,7 +43,7 @@ export async function parseWithWasm(
     if (!camerasFile.name.endsWith('.bin') ||
         !imagesFile.name.endsWith('.bin') ||
         !points3DFile.name.endsWith('.bin')) {
-      console.log('[WASM] Text files detected, using JS parser');
+      appLogger.info('[WASM] Text files detected, using JS parser');
       wasm.dispose();
       return null;
     }
@@ -66,13 +69,13 @@ export async function parseWithWasm(
     const points3DOk = wasm.parsePoints3D(points3DBuffer);
 
     if (!camerasOk || !imagesOk || !points3DOk) {
-      console.warn('[WASM] Failed to parse some files, falling back to JS parser');
+      appLogger.warn('[WASM] Failed to parse some files, falling back to JS parser');
       wasm.dispose();
       return null;
     }
 
     const parseTime = performance.now() - startTime;
-    console.log(`[WASM] Parsed in ${parseTime.toFixed(0)}ms: ${wasm.cameraCount} cameras, ${wasm.imageCount} images, ${wasm.pointCount} points`);
+    appLogger.info(`[WASM] Parsed in ${parseTime.toFixed(0)}ms: ${wasm.cameraCount} cameras, ${wasm.imageCount} images, ${wasm.pointCount} points`);
 
     // Convert WASM data to JS Maps for compatibility with existing code
     // This maintains compatibility while allowing future optimization
@@ -81,7 +84,7 @@ export async function parseWithWasm(
     for (const cam of Object.values(allCameras)) {
       cameras.set(cam.cameraId, {
         cameraId: cam.cameraId,
-        modelId: cam.modelId as CameraModelId,
+        modelId: parseCameraModelId(cam.modelId, `WASM camera ${cam.cameraId}`),
         width: cam.width,
         height: cam.height,
         params: cam.params,
@@ -138,7 +141,10 @@ export async function parseWithWasm(
           for (const wasmRig of Object.values(wasmRigs)) {
             const sensors: RigSensor[] = wasmRig.sensors.map((s) => {
               const sensor: RigSensor = {
-                sensorId: { type: s.sensorId.type as SensorType, id: s.sensorId.id },
+                sensorId: {
+                  type: parseSensorType(s.sensorId.type, `WASM rig ${wasmRig.rigId} sensor ${s.sensorId.id}`),
+                  id: s.sensorId.id,
+                },
                 hasPose: s.hasPose,
               };
               if (s.hasPose && s.pose) {
@@ -151,7 +157,10 @@ export async function parseWithWasm(
             });
 
             const refSensorId: SensorId | null = wasmRig.refSensorId
-              ? { type: wasmRig.refSensorId.type as SensorType, id: wasmRig.refSensorId.id }
+              ? {
+                type: parseSensorType(wasmRig.refSensorId.type, `WASM rig ${wasmRig.rigId} reference sensor`),
+                id: wasmRig.refSensorId.id,
+              }
               : null;
 
             rigs.set(wasmRig.rigId, {
@@ -166,7 +175,10 @@ export async function parseWithWasm(
           const wasmFrames = wasm.getAllFrames();
           for (const wasmFrame of Object.values(wasmFrames)) {
             const dataIds: FrameDataMapping[] = wasmFrame.dataIds.map((d) => ({
-              sensorId: { type: d.sensorId.type as SensorType, id: d.sensorId.id },
+              sensorId: {
+                type: parseSensorType(d.sensorId.type, `WASM frame ${wasmFrame.frameId} data id ${d.dataId}`),
+                id: d.sensorId.id,
+              },
               dataId: d.dataId,
             }));
 
@@ -182,22 +194,23 @@ export async function parseWithWasm(
           }
 
           rigData = { rigs, frames };
-          console.log(`[WASM] Parsed rig data: ${rigs.size} rigs, ${frames.size} frames`);
+          appLogger.info(`[WASM] Parsed rig data: ${rigs.size} rigs, ${frames.size} frames`);
         }
       } catch (rigErr) {
-        console.warn('[WASM] Failed to parse rig/frame files:', rigErr);
+        appLogger.warn('[WASM] Failed to parse rig/frame files:', rigErr);
         // Non-fatal - continue without rig data
       }
     }
 
     const conversionTime = performance.now() - startTime - parseTime;
-    console.log(`[WASM] Converted to JS Maps in ${conversionTime.toFixed(0)}ms`);
+    appLogger.info(`[WASM] Converted to JS Maps in ${conversionTime.toFixed(0)}ms`);
 
     // Return the WASM wrapper along with the data - it will be kept alive for the fast rendering path
     // Note: points3D is NOT returned - use wasm.buildPoints3DMap() on-demand for export/transform
     return { cameras, images, rigData, wasmWrapper: wasm };
   } catch (err) {
-    console.warn('[WASM] Error during parsing, falling back to JS:', err);
+    wasm?.dispose();
+    appLogger.warn('[WASM] Error during parsing, falling back to JS:', err);
     return null;
   }
 }

@@ -1,6 +1,12 @@
 import { BinaryReader } from './BinaryReader';
 import type { Camera } from '../types/colmap';
 import { CameraModelId, CAMERA_MODEL_NUM_PARAMS } from '../types/colmap';
+import { parseCameraModelId } from '../utils/cameraModelPolicy';
+import { appLogger } from '../utils/logger';
+import {
+  parseColmapIntegerToken,
+  parseColmapNumberTokens,
+} from './colmapTextTokens';
 
 /**
  * Parse cameras.bin binary file
@@ -22,7 +28,7 @@ export function parseCamerasBinary(buffer: ArrayBuffer): Map<number, Camera> {
 
   for (let i = 0; i < numCameras; i++) {
     const cameraId = reader.readUint32();
-    const modelId = reader.readInt32() as CameraModelId;
+    const modelId = parseCameraModelId(reader.readInt32(), `binary camera ${cameraId}`);
     const width = reader.readUint64AsNumber();
     const height = reader.readUint64AsNumber();
 
@@ -70,6 +76,7 @@ export function parseCamerasText(text: string): Map<number, Camera> {
     'SIMPLE_RADIAL_FISHEYE': CameraModelId.SIMPLE_RADIAL_FISHEYE,
     'RADIAL_FISHEYE': CameraModelId.RADIAL_FISHEYE,
     'THIN_PRISM_FISHEYE': CameraModelId.THIN_PRISM_FISHEYE,
+    'RAD_TAN_THIN_PRISM_FISHEYE': CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE,
   };
 
   for (const line of lines) {
@@ -79,22 +86,22 @@ export function parseCamerasText(text: string): Map<number, Camera> {
     const parts = line.trim().split(/\s+/);
     if (parts.length < 4) continue;
 
-    const cameraId = parseInt(parts[0]);
+    const cameraId = parseColmapIntegerToken(parts[0], { min: 0 });
+    if (cameraId === null) continue;
+
     const modelName = parts[1];
     const modelId = modelNameToId[modelName];
 
     if (modelId === undefined) {
-      console.warn(`Unknown camera model: ${modelName}`);
+      appLogger.warn(`Unknown camera model: ${modelName}`);
       continue;
     }
 
-    const width = parseInt(parts[2]);
-    const height = parseInt(parts[3]);
+    const width = parseColmapIntegerToken(parts[2], { min: 0 });
+    const height = parseColmapIntegerToken(parts[3], { min: 0 });
+    const params = parseColmapNumberTokens(parts.slice(4));
 
-    const params: number[] = [];
-    for (let i = 4; i < parts.length; i++) {
-      params.push(parseFloat(parts[i]));
-    }
+    if (width === null || height === null || params === null) continue;
 
     cameras.set(cameraId, {
       cameraId,

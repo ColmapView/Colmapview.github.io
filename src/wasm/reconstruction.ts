@@ -5,6 +5,7 @@
  */
 
 import { loadColmapWasm } from './init';
+import { appLogger } from '../utils/logger';
 import type {
   ColmapWasmModule,
   WasmReconstruction,
@@ -133,7 +134,7 @@ export class WasmReconstructionWrapper {
     if (typeof this.reconstruction.parseImagesLazy === 'function') {
       return this.reconstruction.parseImagesLazy(buffer);
     }
-    console.warn('[WASM] parseImagesLazy not available, falling back to parseImages');
+    appLogger.warn('[WASM] parseImagesLazy not available, falling back to parseImages');
     return this.reconstruction.parseImages(buffer);
   }
 

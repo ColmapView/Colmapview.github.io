@@ -14,75 +14,42 @@
  * 6. Generation tracking - invalidates stale requests when cache is cleared
  */
 
-import { useState, useEffect } from 'react';
 import { SIZE, TIMING } from '../theme';
+import { appLogger } from '../utils/logger';
+import { prefetchAsyncImages } from './asyncImageCachePrefetch';
+import { useAsyncImageCacheItem } from './useAsyncImageCacheItem';
+import { createAsyncImageCacheScheduler } from './asyncImageCacheScheduler';
+import {
+  clearAsyncImageCacheState,
+  createAsyncImageCacheState,
+  getAsyncImageCacheStats,
+  movePendingImageCacheItemToFront,
+} from './asyncImageCacheState';
+import {
+  PENDING_BACKPRESSURE_BATCH_SIZE,
+  canStartQueuedLoad,
+  shouldApplyPendingBackpressure,
+} from './asyncImageCacheQueuePolicy';
+import {
+  createImageBitmapWithTimeout,
+  hasImageFailed,
+  markImageFailed,
+  shouldLogDecodeFailure,
+  shouldLogDecodeFailureSuppression,
+} from './asyncImageDecode';
+
+export { hasImageFailed, getFailedImageCount } from './asyncImageDecode';
 
 const MAX_CONCURRENT_LOADS = SIZE.maxConcurrentLoads;
 
-// Track images that failed to decode - don't retry them
-const failedImages = new Set<string>();
-
 // Timeout for createImageBitmap (some images hang indefinitely)
 const DECODE_TIMEOUT = 3000; // 3 seconds - fail fast to avoid blocking other loads
-
-// Max pending items to prevent OOM from accumulating full-res bitmaps
-// Each high-res image can be 10-50MB uncompressed in memory
-const MAX_PENDING_ITEMS = 50;
 
 /**
  * Placeholder for shared decode cache clear (no-op after simplification).
  */
 export function clearSharedDecodeCache(): void {
   // No-op - shared decode cache was removed for simplicity
-}
-
-/**
- * createImageBitmap with timeout to prevent hanging.
- */
-async function createImageBitmapWithTimeout(file: File, timeout: number): Promise<ImageBitmap> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-
-    const timer = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        reject(new Error(`Image decode timed out after ${timeout}ms`));
-      }
-    }, timeout);
-
-    createImageBitmap(file)
-      .then((bitmap) => {
-        if (!settled) {
-          settled = true;
-          clearTimeout(timer);
-          resolve(bitmap);
-        } else {
-          // Timed out already, clean up the bitmap
-          bitmap.close();
-        }
-      })
-      .catch((err) => {
-        if (!settled) {
-          settled = true;
-          clearTimeout(timer);
-          reject(err);
-        }
-      });
-  });
-}
-
-/**
- * Check if an image has previously failed to load.
- */
-export function hasImageFailed(cacheKey: string): boolean {
-  return failedImages.has(cacheKey);
-}
-
-/**
- * Get count of failed images for diagnostics.
- */
-export function getFailedImageCount(): number {
-  return failedImages.size;
 }
 
 /**
@@ -102,27 +69,6 @@ export interface ImageCacheConfig<T> {
 }
 
 /**
- * Internal state for a cache instance.
- */
-interface CacheState<T> {
-  cache: Map<string, T>;
-  loadingPromises: Map<string, Promise<T | null>>;
-  pendingQueue: Array<() => void>;
-  pendingItems: PendingItem<T>[];
-  activeLoads: number;
-  cacheGeneration: number;
-  idleCallbackScheduled: boolean;
-  paused: boolean;
-  bulkMode: boolean; // When true, process immediately without idle callbacks
-}
-
-interface PendingItem<T> {
-  bitmap: ImageBitmap;
-  cacheKey: string;
-  resolve: (result: T | null) => void;
-}
-
-/**
  * Create a new image cache instance with the given configuration.
  * Each cache instance maintains its own state and can be cleared independently.
  */
@@ -130,155 +76,21 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
   const { maxSize, processCanvas, dispose, idleTimeout = TIMING.textureUploadTimeout, idleFallback = TIMING.textureUploadFallback } = config;
 
   // Instance state
-  const state: CacheState<T> = {
-    cache: new Map(),
-    loadingPromises: new Map(),
-    pendingQueue: [],
-    pendingItems: [],
-    activeLoads: 0,
-    cacheGeneration: 0,
-    idleCallbackScheduled: false,
-    paused: false,
-    bulkMode: false,
-  };
+  const state = createAsyncImageCacheState<T>();
 
-  /**
-   * Process pending items during browser idle time.
-   * Uses deadline-based processing to maximize throughput while avoiding jank.
-   * @param deadline - IdleDeadline from requestIdleCallback, or undefined for sync mode
-   * @param maxItems - Optional limit on items to process (for backpressure mode)
-   */
-  function processPendingItems(deadline?: IdleDeadline, maxItems?: number): void {
-    // Skip processing if paused (e.g., during scroll)
-    if (state.paused) {
-      state.idleCallbackScheduled = false;
-      return;
-    }
-
-    // Process at least 1 item per callback, then check deadline
-    // Lower value = more responsive but more callback overhead
-    const MIN_ITEMS_PER_CALLBACK = 1;
-    let processedCount = 0;
-
-    while (state.pendingItems.length > 0) {
-      // Stop if we hit the max items limit (backpressure mode)
-      if (maxItems !== undefined && processedCount >= maxItems) {
-        break;
-      }
-      // Stop if we're running low on idle time, BUT only after processing minimum
-      if (processedCount >= MIN_ITEMS_PER_CALLBACK &&
-          deadline && deadline.timeRemaining() < TIMING.idleDeadlineBuffer) {
-        break;
-      }
-      processedCount++;
-
-      const pending = state.pendingItems.shift()!;
-
-      // Check if already cached
-      const cached = state.cache.get(pending.cacheKey);
-      if (cached) {
-        pending.bitmap.close();
-        pending.resolve(cached);
-        continue;
-      }
-
-      // Resize bitmap while preserving aspect ratio
-      const scale = Math.min(
-        maxSize / pending.bitmap.width,
-        maxSize / pending.bitmap.height,
-        1
-      );
-      const width = Math.round(pending.bitmap.width * scale);
-      const height = Math.round(pending.bitmap.height * scale);
-
-      // Use OffscreenCanvas if available
-      let canvas: HTMLCanvasElement | OffscreenCanvas;
-      let ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
-
-      if (typeof OffscreenCanvas !== 'undefined') {
-        canvas = new OffscreenCanvas(width, height);
-        ctx = canvas.getContext('2d');
-      } else {
-        canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        ctx = canvas.getContext('2d');
-      }
-
-      if (ctx) {
-        ctx.drawImage(pending.bitmap, 0, 0, width, height);
-      }
-      pending.bitmap.close();
-
-      // Process the canvas and resolve
-      const result = processCanvas(canvas);
-      if (result instanceof Promise) {
-        result.then((value) => {
-          if (value !== null) {
-            state.cache.set(pending.cacheKey, value);
-          }
-          pending.resolve(value);
-        }).catch(() => {
-          pending.resolve(null);
-        });
-      } else {
-        state.cache.set(pending.cacheKey, result);
-        pending.resolve(result);
-      }
-    }
-
-    state.idleCallbackScheduled = false;
-
-    if (state.pendingItems.length > 0) {
-      scheduleIdleProcessing();
-    }
-  }
-
-  // Debug: track idle processing
-  let idleCallCount = 0;
-  let lastIdleLog = 0;
-
-  /**
-   * Schedule processing during idle time.
-   * In bulk mode, processes immediately without waiting for idle.
-   */
-  function scheduleIdleProcessing(): void {
-    if (state.idleCallbackScheduled || state.paused) return;
-    state.idleCallbackScheduled = true;
-
-    // In bulk mode, process immediately on next microtask (no idle wait)
-    if (state.bulkMode) {
-      queueMicrotask(() => {
-        processPendingItems();
-      });
-      return;
-    }
-
-    if ('requestIdleCallback' in window) {
-      requestIdleCallback((deadline) => {
-        idleCallCount++;
-        // Log every 100 idle calls or every 10 seconds
-        const now = Date.now();
-        if (idleCallCount % 100 === 0 || (state.pendingItems.length > 0 && now - lastIdleLog > 10000)) {
-          lastIdleLog = now;
-          console.log(`Idle callback #${idleCallCount}: ${state.pendingItems.length} items to process, ${deadline?.timeRemaining()?.toFixed(0)}ms remaining`);
-        }
-        processPendingItems(deadline);
-      }, { timeout: idleTimeout });
-    } else {
-      setTimeout(() => {
-        idleCallCount++;
-        processPendingItems();
-      }, idleFallback);
-    }
-  }
+  const { processPendingItems, scheduleIdleProcessing } = createAsyncImageCacheScheduler({
+    state,
+    maxSize,
+    processCanvas,
+    idleTimeout,
+    idleFallback,
+  });
 
   /**
    * Process the next item in the queue if under concurrency limit.
    */
   function processQueue(): void {
-    if (state.paused) return;
-    while (state.activeLoads < MAX_CONCURRENT_LOADS && state.pendingQueue.length > 0) {
+    while (canStartQueuedLoad(state.paused, state.activeLoads, MAX_CONCURRENT_LOADS, state.pendingQueue.length)) {
       const next = state.pendingQueue.shift();
       if (next) {
         state.activeLoads++;
@@ -308,7 +120,7 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
 
     try {
       // Skip images that have previously failed to decode
-      if (failedImages.has(cacheKey)) {
+      if (hasImageFailed(cacheKey)) {
         cleanup();
         return null;
       }
@@ -329,12 +141,12 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
         bitmap = await createImageBitmapWithTimeout(imageFile, DECODE_TIMEOUT);
       } catch (bitmapErr) {
         // Mark as failed so we don't retry (causes OOM with many failures)
-        failedImages.add(cacheKey);
+        const failedCount = markImageFailed(cacheKey);
         // Only log first 20 failures to avoid console spam
-        if (failedImages.size <= 20) {
-          console.warn(`[decode] Failed: "${cacheKey}" (${(imageFile.size / 1024).toFixed(0)} KB) -`, bitmapErr);
-        } else if (failedImages.size === 21) {
-          console.warn(`... suppressing further decode errors (${failedImages.size} images failed)`);
+        if (shouldLogDecodeFailure(failedCount)) {
+          appLogger.warn(`[decode] Failed: "${cacheKey}" (${(imageFile.size / 1024).toFixed(0)} KB) -`, bitmapErr);
+        } else if (shouldLogDecodeFailureSuppression(failedCount)) {
+          appLogger.warn(`... suppressing further decode errors (${failedCount} images failed)`);
         }
         cleanup();
         return null;
@@ -350,9 +162,9 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
       return new Promise((resolve) => {
         // Backpressure: if too many pending items, process some synchronously
         // to prevent OOM from accumulating full-resolution bitmaps
-        if (state.pendingItems.length >= MAX_PENDING_ITEMS) {
+        if (shouldApplyPendingBackpressure(state.pendingItems.length)) {
           // Process only 10 items to reduce memory without blocking too long
-          processPendingItems(undefined, 10);
+          processPendingItems(undefined, PENDING_BACKPRESSURE_BATCH_SIZE);
         }
 
         state.pendingItems.push({
@@ -366,7 +178,7 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
         scheduleIdleProcessing();
       });
     } catch (err) {
-      console.warn(`Failed to load image "${cacheKey}":`, err);
+      appLogger.warn(`Failed to load image "${cacheKey}":`, err);
       cleanup();
       return null;
     }
@@ -438,11 +250,7 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
       const existingPromise = state.loadingPromises.get(cacheKey);
 
       // Check if it's in pendingItems (waiting for idle processing) - move to front
-      const pendingIndex = state.pendingItems.findIndex(p => p.cacheKey === cacheKey);
-      if (pendingIndex > 0) {
-        // Move to front of the array so it processes first
-        const [pending] = state.pendingItems.splice(pendingIndex, 1);
-        state.pendingItems.unshift(pending);
+      if (movePendingImageCacheItemToFront(state.pendingItems, cacheKey)) {
         // Trigger idle processing if not already scheduled
         scheduleIdleProcessing();
         return existingPromise ?? Promise.resolve(null);
@@ -461,24 +269,7 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
      * Clear all cached items.
      */
     clear(): void {
-      state.cacheGeneration++;
-
-      for (const pending of state.pendingItems) {
-        pending.bitmap.close();
-        pending.resolve(null);
-      }
-      state.pendingItems.length = 0;
-
-      for (const item of state.cache.values()) {
-        dispose(item);
-      }
-      state.cache.clear();
-      state.loadingPromises.clear();
-      state.pendingQueue.length = 0;
-      state.activeLoads = 0;
-      state.idleCallbackScheduled = false;
-      // Clear failed images to allow retry on new reconstruction
-      failedImages.clear();
+      clearAsyncImageCacheState(state, dispose);
     },
 
     /**
@@ -514,57 +305,17 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
       images: Array<{ file: File; name: string }>,
       onProgress?: (progress: number) => void
     ): Promise<void> {
-      if (images.length === 0) {
-        onProgress?.(1);
-        return;
-      }
-
-      // Enable bulk mode - process immediately without waiting for idle
-      state.bulkMode = true;
-
-      let completed = 0;
-      const total = images.length;
-      let lastReportedProgress = 0;
-
-      // Batch progress updates - only report every 5% or 10 items minimum
-      const reportProgress = () => {
-        const progress = completed / total;
-        if (progress - lastReportedProgress >= 0.05 || completed === total) {
-          lastReportedProgress = progress;
-          onProgress?.(progress);
-        }
-      };
-
-      try {
-        // Larger chunks for faster throughput during prefetch
-        const chunkSize = MAX_CONCURRENT_LOADS * 4;
-        for (let i = 0; i < images.length; i += chunkSize) {
-          const chunk = images.slice(i, i + chunkSize);
-
-          const chunkPromises = chunk.map(async ({ file, name }) => {
-            if (state.cache.has(name)) {
-              completed++;
-              reportProgress();
-              return;
-            }
-
-            let promise = state.loadingPromises.get(name);
-            if (!promise) {
-              promise = queueLoad(file, name);
-              state.loadingPromises.set(name, promise);
-            }
-
-            await promise;
-            completed++;
-            reportProgress();
-          });
-
-          await Promise.all(chunkPromises);
-        }
-      } finally {
-        // Always restore normal mode when done
-        state.bulkMode = false;
-      }
+      await prefetchAsyncImages({
+        images,
+        onProgress,
+        cache: state.cache,
+        loadingPromises: state.loadingPromises,
+        queueLoad,
+        setBulkMode: (bulkMode) => {
+          state.bulkMode = bulkMode;
+        },
+        maxConcurrentLoads: MAX_CONCURRENT_LOADS,
+      });
     },
 
     /**
@@ -578,11 +329,7 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
      * Get cache statistics (count of loaded items).
      */
     getStats(): { count: number; loading: number; pending: number } {
-      return {
-        count: state.cache.size,
-        loading: state.loadingPromises.size,
-        pending: state.pendingItems.length,
-      };
+      return getAsyncImageCacheStats(state);
     },
 
     /**
@@ -593,62 +340,15 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
       imageName: string,
       enabled: boolean
     ): T | null {
-      const [result, setResult] = useState<T | null>(() => {
-        return enabled && imageName ? state.cache.get(imageName) ?? null : null;
+      return useAsyncImageCacheItem({
+        imageFile,
+        imageName,
+        enabled,
+        cache: state.cache,
+        loadingPromises: state.loadingPromises,
+        cacheGeneration: state.cacheGeneration,
+        queueLoad,
       });
-      // Track cache generation to detect cache clears
-      const [generation, setGeneration] = useState(state.cacheGeneration);
-
-      // CRITICAL: Synchronously check if cache was cleared during render.
-      // This prevents showing stale blob URLs between cache clear and effect execution.
-      // When generation is stale, we return null immediately rather than the old result.
-      const isGenerationStale = generation !== state.cacheGeneration;
-
-      useEffect(() => {
-        // Sync generation state if it changed
-        if (isGenerationStale) {
-          setGeneration(state.cacheGeneration);
-          setResult(null);
-        }
-
-        if (!enabled || !imageFile || !imageName) {
-          setResult(null);
-          return;
-        }
-
-        const cached = state.cache.get(imageName);
-        if (cached) {
-          setResult(cached);
-          return;
-        }
-
-        // Not cached - clear any stale result while loading
-        setResult(null);
-
-        let promise = state.loadingPromises.get(imageName);
-        if (!promise) {
-          promise = queueLoad(imageFile, imageName);
-          state.loadingPromises.set(imageName, promise);
-        }
-
-        let cancelled = false;
-        promise.then((value) => {
-          if (!cancelled) {
-            setResult(value);
-          }
-        });
-
-        return () => {
-          cancelled = true;
-        };
-      }, [imageFile, imageName, enabled, isGenerationStale]);
-
-      // Return null if generation is stale to prevent showing old thumbnails
-      if (isGenerationStale) {
-        return null;
-      }
-
-      return result;
     },
   };
 }

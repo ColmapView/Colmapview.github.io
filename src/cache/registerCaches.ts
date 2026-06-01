@@ -17,12 +17,15 @@ import { clearFrustumTextureCache, getFrustumTextureCacheStats } from '../hooks/
 import { clearThumbnailCache, getThumbnailCacheStats } from '../hooks/useThumbnail';
 import { clearSharedDecodeCache } from '../hooks/useAsyncImageCache';
 import {
-  clearUrlImageCache,
   clearZipCache,
-  getUrlImageCacheStats,
   getZipImageCacheStats,
   getZipMaskCacheStats,
-} from '../utils/imageFileUtils';
+} from '../utils/zipImageFiles';
+import {
+  clearUrlImageCache,
+  getUrlImageCacheStats,
+} from '../utils/urlImageFiles';
+import { appLogger } from '../utils/logger';
 import { getActiveZipStats } from '../utils/zipLoader';
 
 // Zustand stores
@@ -213,7 +216,7 @@ export function registerAllCaches(): void {
     showInStats: true,
   });
 
-  console.log(`[CacheManager] Registered ${CacheManager.getRegisteredNames().length} caches`);
+  appLogger.info(`[CacheManager] Registered ${CacheManager.getRegisteredNames().length} caches`);
 }
 
 /**

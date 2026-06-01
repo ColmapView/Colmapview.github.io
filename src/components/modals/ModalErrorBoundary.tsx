@@ -1,6 +1,6 @@
 import { Component, type ReactNode } from 'react';
-import { useNotificationStore } from '../../store/stores/notificationStore';
-import { NOTIFICATION_MESSAGES } from '../../constants/errorMessages';
+import { notifyModalBoundaryError } from './modalErrorBoundaryStoreFacade';
+import { appLogger } from '../../utils/logger';
 
 interface ModalErrorBoundaryProps {
   children: ReactNode;
@@ -35,13 +35,10 @@ export class ModalErrorBoundary extends Component<ModalErrorBoundaryProps, Modal
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
-    console.error('ModalErrorBoundary caught an error:', error, errorInfo);
+    appLogger.error('ModalErrorBoundary caught an error:', error, errorInfo);
 
     // Show notification
-    useNotificationStore.getState().addNotification(
-      'warning',
-      NOTIFICATION_MESSAGES.modalError
-    );
+    notifyModalBoundaryError();
 
     // Close the modal
     this.props.onClose();

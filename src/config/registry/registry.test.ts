@@ -1,8 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import { generateDefaultConfiguration } from './generators/defaults';
 import { generateConfigTemplate } from './generators/template';
-import { generatedAppConfigurationSchema } from './generators/schema';
-import { sections, getPersistedProperties } from './index';
+import { generatedAppConfigurationSchema, generateSectionSchema } from './generators/schema';
+import { getStoreConfigAdapter } from './generators/storeAdapters';
+import { sections, getPersistedProperties, getStoreKey, pointCloudSection } from './index';
+import type { PropertyDef } from './types';
+
+function getStoreWritableDefault(prop: PropertyDef): unknown {
+  if (prop.type === 'number' && prop.nullable && prop.default === null) {
+    return Infinity;
+  }
+
+  return prop.default;
+}
 
 describe('Property Registry', () => {
   describe('Sections', () => {
@@ -23,6 +33,7 @@ describe('Property Registry', () => {
       expect(defaults.camera).toBeDefined();
       expect(defaults.ui).toBeDefined();
       expect(defaults.export).toBeDefined();
+      expect(defaults.rig).toBeDefined();
     });
 
     it('should generate correct point cloud defaults', () => {
@@ -53,6 +64,14 @@ describe('Property Registry', () => {
       expect(defaults.export.screenshotFormat).toBe('jpeg');
       expect(defaults.export.modelFormat).toBe('binary');
     });
+
+    it('should generate correct rig defaults', () => {
+      const defaults = generateDefaultConfiguration();
+      expect(defaults.rig.showRig).toBe(true);
+      expect(defaults.rig.rigDisplayMode).toBe('static');
+      expect(defaults.rig.rigColorMode).toBe('perFrame');
+      expect(defaults.rig.rigLineColor).toBe('#00ffff');
+    });
   });
 
   describe('Schema Generator', () => {
@@ -80,6 +99,14 @@ describe('Property Registry', () => {
       };
       const result = generatedAppConfigurationSchema.safeParse(partial);
       expect(result.success).toBe(true);
+    });
+
+    it('should make generated sections optional while validating present values', () => {
+      const schema = generateSectionSchema(pointCloudSection);
+
+      expect(schema.safeParse(undefined).success).toBe(true);
+      expect(schema.safeParse({ pointSize: 5 }).success).toBe(true);
+      expect(schema.safeParse({ pointSize: -1 }).success).toBe(false);
     });
   });
 
@@ -113,6 +140,20 @@ describe('Property Registry', () => {
         for (const prop of persisted) {
           expect(prop.persist).toBe(true);
           expect(prop.transient).not.toBe(true);
+        }
+      }
+    });
+
+    it('should have store adapter read/write coverage for every persisted property', () => {
+      for (const section of sections) {
+        const adapter = getStoreConfigAdapter(section.storeHook);
+
+        for (const prop of getPersistedProperties(section)) {
+          const storeKey = getStoreKey(prop);
+          const value = getStoreWritableDefault(prop);
+
+          expect(() => adapter.write(storeKey, value), `${section.key}.${prop.key} write`).not.toThrow();
+          expect(() => adapter.read(storeKey), `${section.key}.${prop.key} read`).not.toThrow();
         }
       }
     });

@@ -3,6 +3,7 @@
  */
 
 import type { ColmapWasmModule, CreateColmapWasm } from './types';
+import { appLogger } from '../utils/logger';
 
 let modulePromise: Promise<ColmapWasmModule | null> | null = null;
 let cachedModule: ColmapWasmModule | null = null;
@@ -47,7 +48,7 @@ export async function loadColmapWasm(): Promise<ColmapWasmModule | null> {
 
   // Check WASM support
   if (!isWasmSupported()) {
-    console.warn('WebAssembly is not supported in this browser');
+    appLogger.warn('WebAssembly is not supported in this browser');
     return null;
   }
 
@@ -78,10 +79,10 @@ export async function loadColmapWasm(): Promise<ColmapWasmModule | null> {
         locateFile: (path: string) => `${baseUrl}wasm/${path}`,
       });
       cachedModule = module;
-      console.log('colmap-wasm module loaded successfully');
+      appLogger.info('colmap-wasm module loaded successfully');
       return module;
     } catch (error) {
-      console.warn('Failed to load colmap-wasm module:', error);
+      appLogger.warn('Failed to load colmap-wasm module:', error);
       modulePromise = null;
       return null;
     }

@@ -2,6 +2,8 @@ import { Component, type ReactNode, createRef } from 'react';
 import { emptyStateStyles, buttonStyles } from '../../theme';
 import { classifyError, type AppErrorType } from '../../utils/errorUtils';
 import { getErrorMessage } from '../../constants/errorMessages';
+import { appLogger } from '../../utils/logger';
+import { getSceneErrorContainerStyle } from './scene3dViewModel';
 
 interface Scene3DErrorBoundaryProps {
   children: ReactNode;
@@ -60,7 +62,7 @@ export class Scene3DErrorBoundary extends Component<Scene3DErrorBoundaryProps, S
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
-    console.error('Scene3DErrorBoundary caught an error:', error, errorInfo);
+    appLogger.error('Scene3DErrorBoundary caught an error:', error, errorInfo);
   }
 
   private setupWebGLContextListeners(): void {
@@ -77,7 +79,7 @@ export class Scene3DErrorBoundary extends Component<Scene3DErrorBoundaryProps, S
     // Create handlers once (they don't need canvas-specific data)
     this.contextLostHandler = (event: Event) => {
       event.preventDefault();
-      console.warn('WebGL context lost');
+      appLogger.warn('WebGL context lost');
       this.setState({
         hasError: true,
         error: new Error('WebGL context lost'),
@@ -86,7 +88,7 @@ export class Scene3DErrorBoundary extends Component<Scene3DErrorBoundaryProps, S
     };
 
     this.contextRestoredHandler = () => {
-      console.info('WebGL context restored');
+      appLogger.info('WebGL context restored');
       this.handleRetry();
     };
 
@@ -136,7 +138,7 @@ export class Scene3DErrorBoundary extends Component<Scene3DErrorBoundaryProps, S
       return (
         <div
           className="w-full h-full flex flex-col items-center justify-center"
-          style={{ backgroundColor: backgroundColor ?? 'var(--ds-secondary)' }}
+          style={getSceneErrorContainerStyle(backgroundColor)}
         >
           <div className="text-center max-w-md px-4">
             <div className={emptyStateStyles.icon}>!</div>

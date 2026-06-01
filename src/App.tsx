@@ -4,15 +4,42 @@ import { DropZone } from './components/dropzone';
 import { AppLayout } from './components/layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { HotkeyHelpModal } from './components/modals/HotkeyHelpModal';
+import { ConfirmationHost } from './components/ui/ConfirmationHost';
 import { MouseTooltip } from './components/ui/MouseTooltip';
 import { NotificationContainer } from './components/ui/NotificationContainer';
-import { initStoreMigration, useUIStore, useCameraStore } from './store';
+import {
+  initStoreMigration,
+  useCameraStore,
+  useExportStore,
+  usePointCloudStore,
+  useRigStore,
+  useUIStore,
+} from './store';
 import { useUrlLoader } from './hooks/useUrlLoader';
 import { decodeShareData, applyShareConfig } from './hooks/useUrlState';
 import { detectTouchDevice } from './hooks/useIsTouchDevice';
+import { appLogger } from './utils/logger';
+import {
+  APP_EMBED_MODE_LOG_MESSAGE,
+  APP_SHARED_CONFIG_LOG_MESSAGE,
+  getAppStartupLoadPlan,
+  getTouchModeAutoAction,
+  getTouchModeUrlActionFromSearch,
+  shouldEnableEmbedModeFromSearch,
+} from './appStartupPolicy';
+
+function rehydrateLegacyMigratedStores(): void {
+  void usePointCloudStore.persist.rehydrate();
+  void useCameraStore.persist.rehydrate();
+  void useUIStore.persist.rehydrate();
+  void useExportStore.persist.rehydrate();
+  void useRigStore.persist.rehydrate();
+}
 
 // Run store migration on app startup (migrates from old monolithic store to domain stores)
-initStoreMigration();
+if (initStoreMigration()) {
+  rehydrateLegacyMigratedStores();
+}
 
 function App() {
   const { loadFromUrl, loadFromManifest } = useUrlLoader();
@@ -24,69 +51,53 @@ function App() {
     if (hasCheckedUrl.current) return;
     hasCheckedUrl.current = true;
 
-    // Check for embed mode parameter (?embed=1 or ?embed=true)
-    const params = new URLSearchParams(window.location.search);
-    const embedParam = params.get('embed');
-    if (embedParam === '1' || embedParam === 'true') {
-      console.log('[App] Embed mode enabled');
+    const search = window.location.search;
+
+    if (shouldEnableEmbedModeFromSearch(search)) {
+      appLogger.info(APP_EMBED_MODE_LOG_MESSAGE);
       useUIStore.getState().setEmbedMode(true);
     }
 
-    // Check for touch mode parameter (?touch=1, ?touch=true, ?touch=0, ?touch=false)
-    // If not specified, auto-detect based on device capabilities
-    const touchParam = params.get('touch');
-    if (touchParam !== null) {
-      const enabled = touchParam === '1' || touchParam === 'true';
-      console.log(`[App] Touch mode ${enabled ? 'enabled' : 'disabled'} (URL override)`);
-      useUIStore.getState().setTouchMode(enabled, 'url');
-    } else {
-      // Auto-detect touch capability
-      const isTouchDevice = detectTouchDevice();
-      if (isTouchDevice) {
-        console.log('[App] Touch mode enabled (auto-detected)');
-        useUIStore.getState().setTouchMode(true, 'auto');
-      }
+    const touchAction = getTouchModeUrlActionFromSearch(search) ?? getTouchModeAutoAction(detectTouchDevice());
+    if (touchAction) {
+      appLogger.info(touchAction.logMessage);
+      useUIStore.getState().setTouchMode(touchAction.enabled, touchAction.source);
     }
 
     // Async function to handle URL loading
     const checkUrlAndLoad = async () => {
-      // First check for combined format in hash (d=...)
       const shareData = await decodeShareData(window.location.hash);
-      if (shareData) {
-        // Apply config if present (before loading data so UI is ready)
-        if (shareData.config) {
-          console.log('[App] Applying shared config');
-          applyShareConfig(shareData.config);
-        }
+      const loadPlan = getAppStartupLoadPlan({
+        shareData,
+        legacyManifestUrl: new URLSearchParams(search).get('url'),
+      });
 
-        // Check for inline manifest first (takes priority)
-        if (shareData.manifest) {
-          console.log(`[App] Loading from inline manifest in URL hash: ${shareData.manifest.name || 'unnamed'}`);
-          const loaded = await loadFromManifest(shareData.manifest);
-          // Re-apply selectedImageId after load (clearAllCaches resets it during loading)
-          if (loaded && shareData.config?.camera?.selectedImageId != null) {
-            useCameraStore.getState().setSelectedImageId(shareData.config.camera.selectedImageId as number);
-          }
-          return;
-        }
-
-        // Otherwise use manifest URL
-        if (shareData.manifestUrl) {
-          console.log(`[App] Loading from combined URL hash: ${shareData.manifestUrl}`);
-          const loaded = await loadFromUrl(shareData.manifestUrl);
-          if (loaded && shareData.config?.camera?.selectedImageId != null) {
-            useCameraStore.getState().setSelectedImageId(shareData.config.camera.selectedImageId as number);
-          }
-          return;
-        }
+      if (loadPlan.config) {
+        appLogger.info(APP_SHARED_CONFIG_LOG_MESSAGE);
+        applyShareConfig(loadPlan.config);
       }
 
-      // Fall back to legacy query parameter format (?url=...)
-      const manifestUrl = params.get('url');
+      if (loadPlan.kind === 'inline-manifest') {
+        appLogger.info(loadPlan.logMessage);
+        const loaded = await loadFromManifest(loadPlan.manifest);
+        if (loaded && loadPlan.selectedImageId !== null) {
+          useCameraStore.getState().setSelectedImageId(loadPlan.selectedImageId);
+        }
+        return;
+      }
 
-      if (manifestUrl) {
-        console.log(`[App] Loading from URL parameter: ${manifestUrl}`);
-        loadFromUrl(manifestUrl);
+      if (loadPlan.kind === 'manifest-url') {
+        appLogger.info(loadPlan.logMessage);
+        const loaded = await loadFromUrl(loadPlan.manifestUrl);
+        if (loaded && loadPlan.selectedImageId !== null) {
+          useCameraStore.getState().setSelectedImageId(loadPlan.selectedImageId);
+        }
+        return;
+      }
+
+      if (loadPlan.kind === 'legacy-url') {
+        appLogger.info(loadPlan.logMessage);
+        loadFromUrl(loadPlan.manifestUrl);
       }
     };
 
@@ -100,6 +111,7 @@ function App() {
           <AppLayout />
         </DropZone>
         <HotkeyHelpModal />
+        <ConfirmationHost />
         <MouseTooltip />
         <NotificationContainer />
       </HotkeysProvider>

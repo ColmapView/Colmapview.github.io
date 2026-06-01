@@ -1,3 +1,5 @@
+import { appLogger } from '../utils/logger';
+
 /**
  * Centralized cache management system with priority-based disposal.
  *
@@ -91,7 +93,7 @@ class CacheManagerClass {
    */
   register(entry: CacheEntry): void {
     if (this.entries.has(entry.name)) {
-      console.warn(`[CacheManager] Cache "${entry.name}" already registered, overwriting`);
+      appLogger.warn(`[CacheManager] Cache "${entry.name}" already registered, overwriting`);
     }
     this.entries.set(entry.name, entry);
   }
@@ -112,7 +114,7 @@ class CacheManagerClass {
   clearAll(options: ClearAllOptions = {}): void {
     // Guard against re-entry (some clear functions might trigger events)
     if (this.isClearing) {
-      console.warn('[CacheManager] clearAll already in progress, skipping');
+      appLogger.warn('[CacheManager] clearAll already in progress, skipping');
       return;
     }
 
@@ -128,13 +130,13 @@ class CacheManagerClass {
         try {
           entry.clear();
         } catch (err) {
-          console.error(`[CacheManager] Error clearing "${entry.name}":`, err);
+          appLogger.error(`[CacheManager] Error clearing "${entry.name}":`, err);
           // Continue clearing other caches
         }
       }
 
       const elapsed = performance.now() - startTime;
-      console.log(`[CacheManager] Cleared ${sortedEntries.length} caches in ${elapsed.toFixed(1)}ms`);
+      appLogger.info(`[CacheManager] Cleared ${sortedEntries.length} caches in ${elapsed.toFixed(1)}ms`);
     } finally {
       this.isClearing = false;
     }
@@ -146,7 +148,7 @@ class CacheManagerClass {
    */
   clearByNames(names: string[]): void {
     if (this.isClearing) {
-      console.warn('[CacheManager] clearAll already in progress, skipping clearByNames');
+      appLogger.warn('[CacheManager] clearAll already in progress, skipping clearByNames');
       return;
     }
 
@@ -163,7 +165,7 @@ class CacheManagerClass {
         try {
           entry.clear();
         } catch (err) {
-          console.error(`[CacheManager] Error clearing "${entry.name}":`, err);
+          appLogger.error(`[CacheManager] Error clearing "${entry.name}":`, err);
         }
       }
     } finally {
@@ -209,7 +211,7 @@ class CacheManagerClass {
             stats,
           });
         } catch (err) {
-          console.error(`[CacheManager] Error getting stats for "${entry.name}":`, err);
+          appLogger.error(`[CacheManager] Error getting stats for "${entry.name}":`, err);
         }
       }
     }
@@ -313,7 +315,7 @@ class CacheManagerClass {
     // Handle any remaining entries (circular dependencies - shouldn't happen)
     for (const entry of group) {
       if (!result.includes(entry)) {
-        console.warn(`[CacheManager] Circular dependency detected for "${entry.name}"`);
+        appLogger.warn(`[CacheManager] Circular dependency detected for "${entry.name}"`);
         result.push(entry);
       }
     }
