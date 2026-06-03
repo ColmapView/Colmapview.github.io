@@ -29,7 +29,17 @@ FIXTURES = HERE / "fixtures"
 REPO = HERE.parent.parent
 # Parent directory containing the bicycle dataset sibling
 WORKSPACE = REPO.parent
-BICYCLE = WORKSPACE / "360_v2" / "bicycle" / "sparse" / "0" / "cameras.bin"
+BICYCLE_FIXTURE_ENV = "COLMAP_BICYCLE_FIXTURE_DIR"
+
+
+def _bicycle_fixture_dir() -> Path:
+    override = os.environ.get(BICYCLE_FIXTURE_ENV)
+    if override:
+        return Path(override)
+    return WORKSPACE / "360_v2" / "bicycle" / "sparse" / "0"
+
+
+BICYCLE = _bicycle_fixture_dir()
 
 
 def _fixture_path(scenario: str) -> Path:
@@ -47,7 +57,7 @@ def _regenerate_fixtures() -> None:
 def _ensure_fixtures():
     # Regenerate if the user opts in or if fixtures are missing.
     if os.environ.get("REGEN_FIXTURES") == "1" or not (FIXTURES / "untransformed").exists():
-        if not BICYCLE.exists():
+        if not (BICYCLE / "cameras.bin").exists():
             pytest.skip(f"bicycle fixture not present (expected at {BICYCLE})")
         _regenerate_fixtures()
 

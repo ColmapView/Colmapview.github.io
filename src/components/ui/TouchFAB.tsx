@@ -1,6 +1,11 @@
 import type { ReactNode, MouseEvent } from 'react';
-import { TOUCH } from '../../theme/sizing';
-import { Z_INDEX } from '../../theme/zIndex';
+import {
+  getTouchFabClassName,
+  getTouchFabIconClassName,
+  getTouchFabStyle,
+  type TouchFabPosition,
+  type TouchFabSize,
+} from './touchFabPolicy';
 
 /**
  * Trigger haptic feedback on touch devices.
@@ -12,24 +17,14 @@ function triggerHaptic() {
   }
 }
 
-type FABPosition = 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
-type FABSize = 'primary' | 'secondary';
-
 interface TouchFABProps {
   icon: ReactNode;
   onClick: (e: MouseEvent<HTMLButtonElement>) => void;
-  position?: FABPosition;
-  size?: FABSize;
+  position?: TouchFabPosition;
+  size?: TouchFabSize;
   label?: string;
   className?: string;
 }
-
-const positionClasses: Record<FABPosition, string> = {
-  'bottom-right': 'bottom-4 right-4',
-  'bottom-left': 'bottom-4 left-4',
-  'top-right': 'top-4 right-4',
-  'top-left': 'top-4 left-4',
-};
 
 /**
  * Floating Action Button for touch mode.
@@ -44,24 +39,6 @@ export function TouchFAB({
   label,
   className = '',
 }: TouchFABProps) {
-  const isPrimary = size === 'primary';
-  const diameter = isPrimary ? TOUCH.minTapTarget : TOUCH.fabSecondarySize;
-
-  const baseClasses = `
-    fixed
-    rounded-full shadow-lg
-    flex items-center justify-center
-    transition-all duration-200
-    active:scale-95
-    ${positionClasses[position]}
-  `;
-
-  const sizeClasses = isPrimary
-    ? 'bg-ds-accent text-ds-void hover:bg-ds-accent/90'
-    : 'bg-ds-tertiary text-ds-primary border border-ds hover:bg-ds-hover';
-
-  const iconSize = isPrimary ? 'w-5 h-5' : 'w-4 h-4';
-
   const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
     triggerHaptic();
     onClick(e);
@@ -71,11 +48,11 @@ export function TouchFAB({
     <button
       type="button"
       onClick={handleClick}
-      className={`${baseClasses} ${sizeClasses} ${className}`}
-      style={{ width: diameter, height: diameter, zIndex: Z_INDEX.fab }}
+      className={getTouchFabClassName({ position, size, className })}
+      style={getTouchFabStyle(size)}
       aria-label={label}
     >
-      <span className={iconSize}>{icon}</span>
+      <span className={getTouchFabIconClassName(size)}>{icon}</span>
     </button>
   );
 }

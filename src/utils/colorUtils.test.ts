@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sRGBToLinear, jetColormap } from './colorUtils';
+import { sRGBToLinear, jetColormap, hexToHsl } from './colorUtils';
 
 describe('sRGBToLinear', () => {
   it('returns 0 for input 0', () => {
@@ -100,5 +100,19 @@ describe('jetColormap', () => {
       expect(b).toBeGreaterThanOrEqual(0);
       expect(b).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe('hexToHsl', () => {
+  it('converts full CSS hex colors to rounded HSL values', () => {
+    expect(hexToHsl('#ff0000')).toEqual({ h: 0, s: 100, l: 50 });
+    expect(hexToHsl('#00ff00')).toEqual({ h: 120, s: 100, l: 50 });
+    expect(hexToHsl('#0000ff')).toEqual({ h: 240, s: 100, l: 50 });
+    expect(hexToHsl('#ffffff')).toEqual({ h: 0, s: 0, l: 100 });
+  });
+
+  it('rejects malformed hex colors instead of producing NaN HSL state', () => {
+    expect(() => hexToHsl('#fff')).toThrow('Invalid CSS hex color: #fff');
+    expect(() => hexToHsl('#ff000g')).toThrow('Invalid CSS hex color: #ff000g');
   });
 });

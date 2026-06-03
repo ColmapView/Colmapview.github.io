@@ -1,12 +1,20 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import * as THREE from 'three';
+import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
-import { usePointPickingStore, useTransformStore, useUIStore } from '../../store';
-import { computeDistanceScale, computeNormalAlignment, computeOriginTranslation, sim3dToEuler, composeSim3d, createSim3dFromEuler } from '../../utils/sim3dTransforms';
-import { COORDINATE_SYSTEMS } from '../../utils/coordinateSystems';
-import { controlPanelStyles, modalStyles, Z_INDEX } from '../../theme';
+import { controlPanelStyles, modalStyles } from '../../theme';
 import { CloseIcon } from '../../icons';
 import { useModalDrag } from '../../hooks/useModalDrag';
+import { useResetKeyedState } from '../../hooks/useResetKeyedState';
+import { useDistanceInputStoreFacade } from './useDistanceInputStoreFacade';
+import {
+  DISTANCE_INPUT_MODAL_ESTIMATED_HEIGHT,
+  DISTANCE_INPUT_MODAL_ESTIMATED_WIDTH,
+  getDistanceInputApplyResult,
+  getDistanceInputModalPanelStyle,
+  getDistanceInputTargetUp,
+  getInitialDistanceInputValue,
+  shouldApplyDistanceInputKey,
+  shouldShowDistanceValueInput,
+} from './distanceInputModalViewModel';
 
 /**
  * Confirmation popup for point picking tools.
@@ -18,46 +26,43 @@ import { useModalDrag } from '../../hooks/useModalDrag';
  * click outside = cancel (exit picking mode)
  */
 export function DistanceInputModal() {
-  const showDistanceModal = usePointPickingStore((s) => s.showDistanceModal);
-  const modalPosition = usePointPickingStore((s) => s.modalPosition);
-  const setShowDistanceModal = usePointPickingStore((s) => s.setShowDistanceModal);
-  const selectedPoints = usePointPickingStore((s) => s.selectedPoints);
-  const setTargetDistance = usePointPickingStore((s) => s.setTargetDistance);
-  const pickingMode = usePointPickingStore((s) => s.pickingMode);
-  const clearSelectedPoints = usePointPickingStore((s) => s.clearSelectedPoints);
-  const normalFlipped = usePointPickingStore((s) => s.normalFlipped);
-  const targetAxis = usePointPickingStore((s) => s.targetAxis);
-  const reset = usePointPickingStore((s) => s.reset);
-  const transform = useTransformStore((s) => s.transform);
-  const setTransform = useTransformStore((s) => s.setTransform);
-  const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
+  const {
+    pointPicking: {
+      showDistanceModal,
+      modalPosition,
+      selectedPoints,
+      pickingMode,
+      normalFlipped,
+      targetAxis,
+      setShowDistanceModal,
+      setTargetDistance,
+      clearSelectedPoints,
+      reset,
+    },
+    transform: {
+      transform,
+      setTransform,
+    },
+    ui: {
+      axesCoordinateSystem,
+    },
+  } = useDistanceInputStoreFacade();
 
-  const is1PointMode = pickingMode === 'origin-1pt';
-  const is3PointMode = pickingMode === 'normal-3pt';
-
-  // Get target direction based on selected axis and coordinate system
-  // Maps the axis name (X, Y, Z) to the actual direction vector in the coordinate system
   const targetUp = useMemo(() => {
-    const system = COORDINATE_SYSTEMS[axesCoordinateSystem];
-    const axisKey = targetAxis.toLowerCase() as 'x' | 'y' | 'z';
-    const direction = system[axisKey];
-    return new THREE.Vector3(direction[0], direction[1], direction[2]);
+    return getDistanceInputTargetUp(axesCoordinateSystem, targetAxis);
   }, [axesCoordinateSystem, targetAxis]);
+  const showDistanceInput = shouldShowDistanceValueInput(pickingMode);
 
-  const [inputValue, setInputValue] = useState('');
+  const initialInputValue = getInitialDistanceInputValue(showDistanceModal, selectedPoints);
+  const [inputValue, setInputValue] = useResetKeyedState(showDistanceModal, initialInputValue);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { position, panelRef, handleDragStart } = useModalDrag({
-    estimatedWidth: 200,
-    estimatedHeight: 80,
+    estimatedWidth: DISTANCE_INPUT_MODAL_ESTIMATED_WIDTH,
+    estimatedHeight: DISTANCE_INPUT_MODAL_ESTIMATED_HEIGHT,
     isOpen: showDistanceModal,
     initialPosition: modalPosition,
   });
-
-  // Compute current distance between selected points
-  const currentDistance = selectedPoints.length === 2
-    ? selectedPoints[0].position.distanceTo(selectedPoints[1].position)
-    : null;
 
   // Focus input when modal opens
   useEffect(() => {
@@ -67,14 +72,6 @@ export function DistanceInputModal() {
         inputRef.current?.select();
       }, 50);
     }
-  }, [showDistanceModal]);
-
-  // Initialize input with current distance when modal opens
-  useEffect(() => {
-    if (showDistanceModal && currentDistance !== null) {
-      setInputValue(currentDistance.toFixed(4));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only initialize on modal open, not when currentDistance changes
   }, [showDistanceModal]);
 
   // Cancel: exit picking mode entirely
@@ -99,63 +96,26 @@ export function DistanceInputModal() {
 
   // Apply: compute and apply the transform
   const handleApply = useCallback(() => {
-    if (is1PointMode) {
-      // 1-point origin translation
-      if (selectedPoints.length !== 1) return;
+    const result = getDistanceInputApplyResult({
+      pickingMode,
+      selectedPoints,
+      inputValue,
+      normalFlipped,
+      targetUp,
+      transform,
+    });
+    if (!result) return;
 
-      const originTransform = computeOriginTranslation(selectedPoints[0].position);
-
-      const currentSim3d = createSim3dFromEuler(transform);
-      const composed = composeSim3d(originTransform, currentSim3d);
-      const composedEuler = sim3dToEuler(composed);
-
-      setTransform(composedEuler);
-      setShowDistanceModal(false);
-      reset();
-    } else if (is3PointMode) {
-      // 3-point normal alignment
-      if (selectedPoints.length !== 3) return;
-
-      const alignTransform = computeNormalAlignment(
-        selectedPoints[0].position,
-        selectedPoints[1].position,
-        selectedPoints[2].position,
-        normalFlipped,
-        targetUp
-      );
-
-      const currentSim3d = createSim3dFromEuler(transform);
-      const composed = composeSim3d(alignTransform, currentSim3d);
-      const composedEuler = sim3dToEuler(composed);
-
-      setTransform(composedEuler);
-      setShowDistanceModal(false);
-      reset();
-    } else {
-      // 2-point distance scale
-      const value = parseFloat(inputValue);
-      if (isNaN(value) || value <= 0) return;
-      if (selectedPoints.length !== 2) return;
-
-      const scaleTransform = computeDistanceScale(
-        selectedPoints[0].position,
-        selectedPoints[1].position,
-        value
-      );
-
-      const currentSim3d = createSim3dFromEuler(transform);
-      const composed = composeSim3d(scaleTransform, currentSim3d);
-      const composedEuler = sim3dToEuler(composed);
-
-      setTransform(composedEuler);
-      setTargetDistance(value);
-      setShowDistanceModal(false);
-      reset();
+    setTransform(result.transform);
+    if (result.targetDistance !== null) {
+      setTargetDistance(result.targetDistance);
     }
-  }, [is1PointMode, is3PointMode, inputValue, selectedPoints, normalFlipped, transform, setTransform, setTargetDistance, setShowDistanceModal, reset, targetUp]);
+    setShowDistanceModal(false);
+    reset();
+  }, [pickingMode, inputValue, selectedPoints, normalFlipped, targetUp, transform, setTransform, setTargetDistance, setShowDistanceModal, reset]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+    if (shouldApplyDistanceInputKey(e.key)) {
       handleApply();
     }
   }, [handleApply]);
@@ -166,12 +126,12 @@ export function DistanceInputModal() {
     <div
       ref={panelRef}
       className="fixed bg-ds-tertiary border border-ds rounded shadow-ds-lg p-1"
-      style={{ left: position.x, top: position.y, zIndex: Z_INDEX.modalOverlay }}
+      style={getDistanceInputModalPanelStyle(position)}
       onPointerDown={handleDragStart}
     >
         <div className="flex items-center gap-0.5" onPointerDown={(e) => e.stopPropagation()}>
           {/* Distance input only for 2-point mode (not for 1-point origin or 3-point align) */}
-          {!is1PointMode && !is3PointMode && (
+          {showDistanceInput && (
             <input
               ref={inputRef}
               type="text"

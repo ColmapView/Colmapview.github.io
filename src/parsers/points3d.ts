@@ -1,5 +1,11 @@
 import { BinaryReader } from './BinaryReader';
 import type { Point3D, TrackElement } from '../types/colmap';
+import {
+  parseColmapBigIntToken,
+  parseColmapIntegerToken,
+  parseColmapNumberToken,
+  parseColmapNumberTokens,
+} from './colmapTextTokens';
 
 /**
  * Parse points3D.bin binary file
@@ -74,28 +80,46 @@ export function parsePoints3DText(text: string): Map<bigint, Point3D> {
     const parts = line.trim().split(/\s+/);
     if (parts.length < 8) continue;
 
-    const point3DId = BigInt(parts[0]);
+    const point3DId = parseColmapBigIntToken(parts[0]);
+    const xyzValues = parseColmapNumberTokens(parts.slice(1, 4));
+    const red = parseColmapIntegerToken(parts[4], { min: 0, max: 255 });
+    const green = parseColmapIntegerToken(parts[5], { min: 0, max: 255 });
+    const blue = parseColmapIntegerToken(parts[6], { min: 0, max: 255 });
+    const error = parseColmapNumberToken(parts[7]);
+
+    if (
+      point3DId === null ||
+      xyzValues === null ||
+      red === null ||
+      green === null ||
+      blue === null ||
+      error === null
+    ) {
+      continue;
+    }
 
     const xyz: [number, number, number] = [
-      parseFloat(parts[1]),
-      parseFloat(parts[2]),
-      parseFloat(parts[3]),
+      xyzValues[0],
+      xyzValues[1],
+      xyzValues[2],
     ];
-
     const rgb: [number, number, number] = [
-      parseInt(parts[4]),
-      parseInt(parts[5]),
-      parseInt(parts[6]),
+      red,
+      green,
+      blue,
     ];
-
-    const error = parseFloat(parts[7]);
 
     // Parse track elements (pairs of IMAGE_ID, POINT2D_IDX)
     const track: TrackElement[] = [];
     for (let i = 8; i + 1 < parts.length; i += 2) {
+      const imageId = parseColmapIntegerToken(parts[i], { min: 0 });
+      const point2DIdx = parseColmapIntegerToken(parts[i + 1], { min: 0 });
+
+      if (imageId === null || point2DIdx === null) continue;
+
       track.push({
-        imageId: parseInt(parts[i]),
-        point2DIdx: parseInt(parts[i + 1]),
+        imageId,
+        point2DIdx,
       });
     }
 

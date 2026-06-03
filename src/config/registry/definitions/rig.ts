@@ -3,6 +3,7 @@
  */
 import { defineSection } from '../types';
 import { RIG_DISPLAY_MODES, RIG_COLOR_MODES } from '../../../store/types';
+import { CSS_HEX_COLOR_PATTERN, CSS_HEX_COLOR_PATTERN_DESCRIPTION } from '../../../utils/hexColor';
 
 export const rigSection = defineSection({
   key: 'rig',
@@ -34,6 +35,8 @@ export const rigSection = defineSection({
     {
       key: 'rigLineColor',
       type: 'string',
+      pattern: CSS_HEX_COLOR_PATTERN,
+      patternDesc: CSS_HEX_COLOR_PATTERN_DESCRIPTION,
       default: '#00ffff',
       persist: true,
       description: 'Rig line color (hex)',

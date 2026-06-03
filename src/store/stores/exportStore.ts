@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { STORAGE_KEYS } from '../migration';
 import type { ScreenshotSize, ScreenshotFormat, ExportFormat } from '../types';
+import { buildTimestampedFilename, downloadUrl } from '../../utils/download';
 
 // Callback type for getting screenshot blob
 export type ScreenshotCallback = () => Promise<Blob | null>;
@@ -97,10 +98,7 @@ export const useExportStore = create<ExportState>()(
         const format = get().recordingFormat;
         if (!url) return;
         const ext = format === 'webm' ? 'webm' : format === 'mp4' ? 'mp4' : 'gif';
-        const link = document.createElement('a');
-        link.download = `colmap-view-${new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')}.${ext}`;
-        link.href = url;
-        link.click();
+        downloadUrl(url, buildTimestampedFilename('colmap-view', ext));
       },
     }),
     {

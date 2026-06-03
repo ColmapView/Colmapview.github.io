@@ -3,6 +3,8 @@
  * UI colors should use CSS variables (--bg-*, --text-*, etc.) via Tailwind classes.
  */
 
+import { requireCssHexColorInt } from '../utils/hexColor';
+
 // 3D Visualization colors (bright colors preserved for visibility on dark background)
 export const VIZ_COLORS = {
   frustum: {
@@ -36,7 +38,7 @@ export const VIZ_COLORS = {
 
 /** Convert a CSS hex color string to a Three.js integer (e.g. '#ff4444' -> 0xff4444) */
 export function hexToInt(hex: string): number {
-  return parseInt(hex.slice(1), 16);
+  return requireCssHexColorInt(hex);
 }
 
 /** Axis colors for 3D interaction widgets (point markers, floor plane, picking cursor) */

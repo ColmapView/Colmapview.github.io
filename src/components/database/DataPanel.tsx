@@ -1,12 +1,25 @@
 import { useMemo, useState } from 'react';
-import { useReconstructionStore } from '../../store';
-import { tabStyles, tableStyles, cardStyles } from '../../theme';
+import { inputStyles, tableStyles } from '../../theme';
+import {
+  DATA_PANEL_TABS,
+  getDataPanelCameraRows,
+  getDataPanelImageLimitMessage,
+  getDataPanelImageRows,
+  getDataPanelPointStatCards,
+  type DataPanelTabId,
+} from './dataPanelViewModel';
+import {
+  useDataPanelStoreFacade,
+  type DataPanelReconstruction,
+} from './useDataPanelStoreFacade';
 
-type TabId = 'cameras' | 'images' | 'points';
+const compactTableClass = `${tableStyles.table} table-fixed text-xs`;
+const compactHeaderCellClass = `${tableStyles.headerCell} px-2 py-1 font-medium whitespace-nowrap`;
+const compactCellClass = `${tableStyles.cell} px-2 py-1 align-middle`;
 
 export function DataPanel() {
-  const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const [activeTab, setActiveTab] = useState<TabId>('cameras');
+  const { reconstruction } = useDataPanelStoreFacade();
+  const [activeTab, setActiveTab] = useState<DataPanelTabId>('cameras');
 
   if (!reconstruction) {
     return (
@@ -18,52 +31,64 @@ export function DataPanel() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className={tabStyles.container}>
-        {(['cameras', 'images', 'points'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={activeTab === tab ? tabStyles.tabActive : tabStyles.tab}
-          >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-          </button>
-        ))}
+      <div className="border-b border-ds px-2 py-1 bg-ds-secondary">
+        <label htmlFor="data-panel-section" className="sr-only">
+          Data section
+        </label>
+        <select
+          id="data-panel-section"
+          value={activeTab}
+          onChange={(event) => setActiveTab(event.target.value as DataPanelTabId)}
+          className={`${inputStyles.select} ${inputStyles.selectSizes.xs} w-full`}
+        >
+          {DATA_PANEL_TABS.map((tab) => (
+            <option key={tab.id} value={tab.id}>
+              {tab.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="flex-1 overflow-auto">
-        {activeTab === 'cameras' && <CamerasTable />}
-        {activeTab === 'images' && <ImagesTable />}
-        {activeTab === 'points' && <PointsInfo />}
+        {activeTab === 'cameras' && <CamerasTable reconstruction={reconstruction} />}
+        {activeTab === 'images' && <ImagesTable reconstruction={reconstruction} />}
+        {activeTab === 'points' && <PointsInfo reconstruction={reconstruction} />}
       </div>
     </div>
   );
 }
 
-function CamerasTable() {
-  const reconstruction = useReconstructionStore((s) => s.reconstruction);
-
-  const cameras = useMemo(() => {
-    if (!reconstruction) return [];
-    return Array.from(reconstruction.cameras.values());
-  }, [reconstruction]);
+function CamerasTable({ reconstruction }: { reconstruction: DataPanelReconstruction }) {
+  const cameras = useMemo(() => getDataPanelCameraRows(reconstruction), [reconstruction]);
 
   return (
-    <table className={tableStyles.table}>
+    <table className={compactTableClass}>
+      <colgroup>
+        <col className="w-14" />
+        <col />
+        <col className="w-24" />
+        <col className="w-20" />
+      </colgroup>
       <thead className={tableStyles.header}>
         <tr>
-          <th className={tableStyles.headerCell}>ID</th>
-          <th className={tableStyles.headerCell}>Model</th>
-          <th className={tableStyles.headerCell}>Size</th>
-          <th className={tableStyles.headerCell}>Focal</th>
+          <th className={compactHeaderCellClass}>ID</th>
+          <th className={compactHeaderCellClass}>Model</th>
+          <th className={compactHeaderCellClass}>Size</th>
+          <th className={compactHeaderCellClass}>Focal</th>
         </tr>
       </thead>
       <tbody>
-        {cameras.map((cam) => (
-          <tr key={cam.cameraId} className={tableStyles.row}>
-            <td className={tableStyles.cell}>{cam.cameraId}</td>
-            <td className={tableStyles.cell}>{cam.modelId}</td>
-            <td className={tableStyles.cell}>{cam.width}x{cam.height}</td>
-            <td className={tableStyles.cell}>{cam.params[0]?.toFixed(2)}</td>
+        {cameras.map((camera) => (
+          <tr key={camera.cameraId} className={tableStyles.row}>
+            <td className={compactCellClass}>{camera.cameraId}</td>
+            <td
+              className={`${compactCellClass} truncate`}
+              title={`${camera.colmapModelName} (${camera.modelId})`}
+            >
+              {camera.modelName}
+            </td>
+            <td className={compactCellClass}>{camera.size}</td>
+            <td className={compactCellClass}>{camera.focal}</td>
           </tr>
         ))}
       </tbody>
@@ -71,78 +96,76 @@ function CamerasTable() {
   );
 }
 
-function ImagesTable() {
-  const reconstruction = useReconstructionStore((s) => s.reconstruction);
-
-  const images = useMemo(() => {
-    if (!reconstruction) return [];
-    return Array.from(reconstruction.images.values()).slice(0, 100); // Limit for performance
-  }, [reconstruction]);
+function ImagesTable({ reconstruction }: { reconstruction: DataPanelReconstruction }) {
+  const images = useMemo(() => getDataPanelImageRows(reconstruction), [reconstruction]);
+  const limitMessage = getDataPanelImageLimitMessage(reconstruction);
 
   return (
     <div>
-      <table className={tableStyles.table}>
+      <table className={compactTableClass}>
+        <colgroup>
+          <col className="w-14" />
+          <col />
+          <col className="w-16" />
+          <col className="w-16" />
+        </colgroup>
         <thead className={tableStyles.header}>
           <tr>
-            <th className={tableStyles.headerCell}>ID</th>
-            <th className={tableStyles.headerCell}>Name</th>
-            <th className={tableStyles.headerCell}>Camera</th>
-            <th className={tableStyles.headerCell}>Points</th>
+            <th className={compactHeaderCellClass}>ID</th>
+            <th className={compactHeaderCellClass}>Name</th>
+            <th className={compactHeaderCellClass}>Camera</th>
+            <th className={compactHeaderCellClass}>Points</th>
           </tr>
         </thead>
         <tbody>
-          {images.map((img) => (
-            <tr key={img.imageId} className={tableStyles.row}>
-              <td className={tableStyles.cell}>{img.imageId}</td>
-              <td className={`${tableStyles.cell} ${tableStyles.cellTruncate}`} title={img.name}>
-                {img.name}
+          {images.map((image) => (
+            <tr key={image.imageId} className={tableStyles.row}>
+              <td className={compactCellClass}>{image.imageId}</td>
+              <td className={`${compactCellClass} ${tableStyles.cellTruncate}`} title={image.name}>
+                {image.name}
               </td>
-              <td className={tableStyles.cell}>{img.cameraId}</td>
-              <td className={tableStyles.cell}>{img.numPoints2D ?? img.points2D.length}</td>
+              <td className={compactCellClass}>{image.cameraId}</td>
+              <td className={compactCellClass}>{image.pointCount}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      {reconstruction && reconstruction.images.size > 100 && (
-        <div className="text-center text-ds-muted text-base py-2">
-          Showing 100 of {reconstruction.images.size} images
+      {limitMessage && (
+        <div className="text-center text-ds-muted text-xs py-1">
+          {limitMessage}
         </div>
       )}
     </div>
   );
 }
 
-function PointsInfo() {
-  const reconstruction = useReconstructionStore((s) => s.reconstruction);
+function PointsInfo({ reconstruction }: { reconstruction: DataPanelReconstruction }) {
+  const statCards = getDataPanelPointStatCards(reconstruction);
 
-  // Use pre-computed global stats instead of computing on every render
-  const globalStats = reconstruction?.globalStats;
-
-  if (!globalStats || globalStats.totalPoints === 0) {
-    return <div className="p-4 text-ds-muted">No points data</div>;
+  if (statCards.length === 0) {
+    return <div className="px-2 py-1 text-xs text-ds-muted">No points data</div>;
   }
 
   return (
-    <div className="p-4 space-y-4">
-      <h3 className="font-semibold text-ds-primary">Point Cloud Statistics</h3>
-
-      <div className="grid grid-cols-2 gap-4">
-        <StatCard label="Total Points" value={globalStats.totalPoints.toLocaleString()} />
-        <StatCard label="Avg Track Length" value={globalStats.avgTrackLength.toFixed(2)} />
-        <StatCard label="Min Track Length" value={globalStats.minTrackLength.toString()} />
-        <StatCard label="Max Track Length" value={globalStats.maxTrackLength.toString()} />
-        <StatCard label="Avg Error (px)" value={globalStats.avgError.toFixed(3)} />
-        <StatCard label="Max Error (px)" value={globalStats.maxError.toFixed(3)} />
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className={cardStyles.container}>
-      <div className={cardStyles.label}>{label}</div>
-      <div className={cardStyles.value}>{value}</div>
-    </div>
+    <table className={compactTableClass}>
+      <colgroup>
+        <col />
+        <col className="w-28" />
+      </colgroup>
+      <thead className={tableStyles.header}>
+        <tr>
+          <th className={compactHeaderCellClass}>Metric</th>
+          <th className={compactHeaderCellClass}>Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        {statCards.map((statCard) => (
+          <tr key={statCard.label} className={tableStyles.row}>
+            <td className={compactCellClass}>{statCard.label}</td>
+            <td className={`${compactCellClass} tabular-nums`}>{statCard.value}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

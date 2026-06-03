@@ -1,13 +1,15 @@
 {
   "name": "colmapview",
   "private": true,
-  "version": "0.6.1",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "typecheck": "tsc -b",
     "build": "tsc -b && vite build",
-    "build:wasm": "cd colmap-wasm && emcmake cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel && cp build/colmap_wasm.js build/colmap_wasm.wasm ../public/wasm/",
+    "build:wasm": "cd colmap-wasm && emcmake cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel && node ../scripts/copy-wasm-assets.mjs",
     "build:all": "npm run build:wasm && npm run build",
+    "check": "npm run lint && npm run test:run && npm run build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",
@@ -17,12 +19,13 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug",
-    "test:pycolmap": "cd tests/pycolmap && uv run pytest",
-    "test:pycolmap:regen": "REGEN_FIXTURES=1 npm run test:pycolmap"
+    "test:pycolmap": "node scripts/run-pycolmap-tests.mjs",
+    "test:pycolmap:regen": "node scripts/run-pycolmap-tests.mjs --regen"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
+    "@sparkjsdev/spark": "^2.1.0",
     "@tanstack/react-virtual": "^3.13.18",
     "fflate": "^0.8.2",
     "gif.js": "^0.2.0",
@@ -65,5 +68,10 @@
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4",
     "vitest": "^4.0.17"
+  },
+  "overrides": {
+    "stats-gl@2.4.2": {
+      "three": "^0.182.0"
+    }
   }
 }

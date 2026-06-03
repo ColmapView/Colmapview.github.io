@@ -6,9 +6,30 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useProfiles } from '../../hooks/useProfiles';
 import { useClickOutside } from '../../hooks/useClickOutside';
-import { useNotificationStore } from '../../store/stores/notificationStore';
 import { TrashIcon } from '../../icons';
-import { controlPanelStyles, Z_INDEX } from '../../theme';
+import { controlPanelStyles } from '../../theme';
+import { requestConfirmation } from '../../utils/confirmation';
+import {
+  createProfileDeleteConfirmation,
+  getProfileSelectorButtonLabel,
+  getProfileSelectorCreateIntent,
+  getProfileSelectorCreateKeyAction,
+  getProfileSelectorMenuStyle,
+  getProfileSelectorOptionRows,
+  getProfileSelectorSaveIntent,
+  PROFILE_SELECTOR_CREATE_BUTTON_CLASS,
+  PROFILE_SELECTOR_CREATE_INPUT_CLASS,
+  PROFILE_SELECTOR_CREATE_INPUT_WRAPPER_CLASS,
+  PROFILE_SELECTOR_DELETE_BUTTON_CLASS,
+  PROFILE_SELECTOR_LABEL,
+  PROFILE_SELECTOR_MENU_CLASS,
+  PROFILE_SELECTOR_NAME_PLACEHOLDER,
+  PROFILE_SELECTOR_NEW_PROFILE_LABEL,
+  PROFILE_SELECTOR_OPTION_SELECT_BUTTON_CLASS,
+  PROFILE_SELECTOR_SAVE_LABEL,
+  PROFILE_SELECTOR_TRIGGER_CARET_CLASS,
+} from './profileSelectorViewModel';
+import { useProfileSelectorStoreFacade } from './useProfileSelectorStoreFacade';
 
 const styles = controlPanelStyles;
 
@@ -22,7 +43,7 @@ export function ProfileSelector() {
     deleteProfile,
     suggestName,
   } = useProfiles();
-  const addNotification = useNotificationStore((s) => s.addNotification);
+  const { addNotification } = useProfileSelectorStoreFacade();
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -46,14 +67,15 @@ export function ProfileSelector() {
   }, [isCreating]);
 
   const handleSave = useCallback(() => {
-    if (isActiveProfileReadOnly) {
+    const intent = getProfileSelectorSaveIntent(activeProfile, isActiveProfileReadOnly);
+    if (intent.type === 'create') {
       // Default is selected - create a new profile instead
       setNewName(suggestName());
       setIsCreating(true);
       setIsDropdownOpen(true);
-    } else if (activeProfile) {
-      saveProfile(activeProfile);
-      addNotification('info', `Profile "${activeProfile}" saved`);
+    } else if (intent.type === 'save') {
+      saveProfile(intent.profileName);
+      addNotification('info', `Profile "${intent.profileName}" saved`);
     }
   }, [activeProfile, isActiveProfileReadOnly, saveProfile, suggestName, addNotification]);
 
@@ -62,10 +84,10 @@ export function ProfileSelector() {
     setIsDropdownOpen(false);
   }, [loadProfile]);
 
-  const handleDeleteProfile = useCallback((name: string, e: React.MouseEvent) => {
+  const handleDeleteProfile = useCallback(async (name: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (profileNames.length <= 1) return;
-    if (confirm(`Delete profile "${name}"?`)) {
+    if (await requestConfirmation(createProfileDeleteConfirmation(name))) {
       deleteProfile(name);
     }
   }, [profileNames.length, deleteProfile]);
@@ -76,10 +98,10 @@ export function ProfileSelector() {
   }, [suggestName]);
 
   const handleConfirmCreate = useCallback(() => {
-    const name = newName.trim();
-    if (!name) return;
-    saveProfile(name);
-    addNotification('info', `Profile "${name}" saved`);
+    const intent = getProfileSelectorCreateIntent(newName);
+    if (intent.type === 'none') return;
+    saveProfile(intent.profileName);
+    addNotification('info', `Profile "${intent.profileName}" saved`);
     setIsCreating(false);
     setNewName('');
     setIsDropdownOpen(false);
@@ -91,57 +113,65 @@ export function ProfileSelector() {
   }, []);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+    const action = getProfileSelectorCreateKeyAction(e.key);
+    if (action === 'confirm') {
       handleConfirmCreate();
-    } else if (e.key === 'Escape') {
+    } else if (action === 'cancel') {
       handleCancelCreate();
     }
   }, [handleConfirmCreate, handleCancelCreate]);
+
+  const profileRows = getProfileSelectorOptionRows(profileNames, activeProfile);
 
   return (
     <>
       {/* Profile selector row with custom dropdown */}
       <div className={styles.row}>
-        <label className={styles.label}>Profile</label>
+        <label className={styles.label}>{PROFILE_SELECTOR_LABEL}</label>
         <div className="relative flex-1" ref={dropdownRef}>
           <button
             type="button"
-            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            onClick={() => setIsDropdownOpen((current) => !current)}
             className={`${styles.selectRight} text-left flex items-center justify-between`}
+            aria-haspopup="listbox"
+            aria-expanded={isDropdownOpen}
           >
-            <span className="truncate">{activeProfile || 'Select...'}</span>
-            <span className="ml-1 text-ds-muted">▾</span>
+            <span className="truncate">{getProfileSelectorButtonLabel(activeProfile)}</span>
+            <span className={PROFILE_SELECTOR_TRIGGER_CARET_CLASS}>▾</span>
           </button>
 
           {isDropdownOpen && (
-            <div className={`absolute top-full left-0 right-0 mt-1 bg-ds-tertiary border border-ds rounded shadow-lg z-[${Z_INDEX.dropdown}] py-1`}>
-              {profileNames.map((name) => {
-                const isDefault = name === 'Default';
-                return (
-                  <div
-                    key={name}
-                    onClick={() => handleSelectProfile(name)}
-                    className={`flex items-center justify-between px-2 py-1 cursor-pointer hover-ds-hover text-sm ${
-                      name === activeProfile ? 'bg-ds-hover text-ds-accent' : 'text-ds-primary'
-                    }`}
+            <div className={PROFILE_SELECTOR_MENU_CLASS} style={getProfileSelectorMenuStyle()} role="listbox">
+              {profileRows.map((row) => (
+                <div
+                  key={row.name}
+                  className={row.className}
+                  role="option"
+                  aria-selected={row.isActive}
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleSelectProfile(row.name)}
+                    className={PROFILE_SELECTOR_OPTION_SELECT_BUTTON_CLASS}
                   >
-                    <span className="truncate">{name}</span>
-                    {!isDefault && (
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteProfile(name, e)}
-                        className="p-0.5 text-ds-muted hover-ds-text-primary ml-2 flex-shrink-0"
-                      >
-                        <TrashIcon className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
+                    <span className="block truncate">{row.name}</span>
+                  </button>
+                  {row.canDelete && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteProfile(row.name, e)}
+                      className={PROFILE_SELECTOR_DELETE_BUTTON_CLASS}
+                      aria-label={`Delete profile ${row.name}`}
+                    >
+                      <TrashIcon className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
 
               {/* New profile input or button */}
               {isCreating ? (
-                <div className="px-2 py-1 border-t border-ds mt-1">
+                <div className={PROFILE_SELECTOR_CREATE_INPUT_WRAPPER_CLASS}>
                   <input
                     ref={inputRef}
                     type="text"
@@ -149,17 +179,18 @@ export function ProfileSelector() {
                     onChange={(e) => setNewName(e.target.value)}
                     onKeyDown={handleKeyDown}
                     onBlur={handleCancelCreate}
-                    placeholder="Profile name"
-                    className="w-full bg-ds-input text-ds-primary text-sm px-1.5 py-0.5 rounded border border-ds focus-ds"
+                    placeholder={PROFILE_SELECTOR_NAME_PLACEHOLDER}
+                    className={PROFILE_SELECTOR_CREATE_INPUT_CLASS}
                   />
                 </div>
               ) : (
-                <div
+                <button
+                  type="button"
                   onClick={handleStartCreate}
-                  className="px-2 py-1 cursor-pointer hover-ds-hover text-sm text-ds-muted border-t border-ds mt-1"
+                  className={PROFILE_SELECTOR_CREATE_BUTTON_CLASS}
                 >
-                  + New Profile
-                </div>
+                  {PROFILE_SELECTOR_NEW_PROFILE_LABEL}
+                </button>
               )}
             </div>
           )}
@@ -172,7 +203,7 @@ export function ProfileSelector() {
           onClick={handleSave}
           className={styles.actionButton}
         >
-          Save Profile
+          {PROFILE_SELECTOR_SAVE_LABEL}
         </button>
       </div>
     </>

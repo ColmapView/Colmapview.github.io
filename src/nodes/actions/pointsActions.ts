@@ -4,6 +4,7 @@ import type { ColorMode } from '../../store/types';
 
 export interface PointsNodeActions {
   setVisible: (visible: boolean) => void;
+  setSplatsVisible: (visible: boolean) => void;
   setOpacity: (opacity: number) => void;
   setSize: (size: number) => void;
   setColorMode: (mode: ColorMode) => void;
@@ -12,12 +13,14 @@ export interface PointsNodeActions {
   setThinning: (n: number) => void;
   setSelectedPointId: (id: bigint | null) => void;
   toggleVisible: () => void;
+  toggleSplats: () => void;
 }
 
 export function usePointsNodeActions(): PointsNodeActions {
   return useMemo(
     () => ({
       setVisible: (v) => usePointCloudStore.getState().setShowPointCloud(v),
+      setSplatsVisible: (v) => usePointCloudStore.getState().setShowSplats(v),
       setOpacity: (o) => usePointCloudStore.getState().setPointOpacity(o),
       setSize: (s) => usePointCloudStore.getState().setPointSize(s),
       setColorMode: (m) => usePointCloudStore.getState().setColorMode(m),
@@ -27,6 +30,7 @@ export function usePointsNodeActions(): PointsNodeActions {
       setThinning: (n) => usePointCloudStore.getState().setThinning(n),
       setSelectedPointId: (id) => usePointCloudStore.getState().setSelectedPointId(id),
       toggleVisible: () => usePointCloudStore.getState().togglePointCloud(),
+      toggleSplats: () => usePointCloudStore.getState().toggleSplats(),
     }),
     []
   );

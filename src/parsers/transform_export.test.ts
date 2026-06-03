@@ -3,7 +3,8 @@
  * Skips if the bicycle fixture isn't present.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { parseCamerasBinary } from './cameras';
 import { parseImagesBinary } from './images';
 import { parsePoints3DBinary } from './points3d';
@@ -12,20 +13,21 @@ import {
   createSim3dFromEuler,
   transformReconstruction,
 } from '../utils/sim3dTransforms';
+import { copyBytesToArrayBuffer } from '../test/builders/fileFakes';
 import type { Reconstruction } from '../types/colmap';
+import { getBicycleFixtureDir, hasSparseBinaryFixture } from '../../tests/colmapFixturePaths';
 
-const BIN = 'C:/Users/HEQ/Projects/colmap_webview/360_v2/bicycle/sparse/0';
+const BIN = getBicycleFixtureDir();
 
-describe.skipIf(!existsSync(`${BIN}/cameras.bin`))('transform flows through export', () => {
+describe.skipIf(!hasSparseBinaryFixture(BIN))('transform flows through export', () => {
   it('45° Y rotation changes exported qvecs and point xyz', () => {
     const toAB = (path: string): ArrayBuffer => {
-      const b = readFileSync(path);
-      return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
+      return copyBytesToArrayBuffer(readFileSync(path));
     };
 
-    const cameras = parseCamerasBinary(toAB(`${BIN}/cameras.bin`));
-    const images = parseImagesBinary(toAB(`${BIN}/images.bin`));
-    const points3D = parsePoints3DBinary(toAB(`${BIN}/points3D.bin`));
+    const cameras = parseCamerasBinary(toAB(resolve(BIN, 'cameras.bin')));
+    const images = parseImagesBinary(toAB(resolve(BIN, 'images.bin')));
+    const points3D = parsePoints3DBinary(toAB(resolve(BIN, 'points3D.bin')));
 
     const reconstruction: Reconstruction = {
       cameras,
@@ -49,11 +51,6 @@ describe.skipIf(!existsSync(`${BIN}/cameras.bin`))('transform flows through expo
     const origFirstImg = images.values().next().value!;
     const newFirstImg = transformed.images.values().next().value!;
 
-    console.log('original qvec:', origFirstImg.qvec);
-    console.log('transformed qvec:', newFirstImg.qvec);
-    console.log('original tvec:', origFirstImg.tvec);
-    console.log('transformed tvec:', newFirstImg.tvec);
-
     // qvec should differ when rotation is applied
     const qvecChanged = origFirstImg.qvec.some((v, i) => Math.abs(v - newFirstImg.qvec[i]) > 1e-6);
     expect(qvecChanged).toBe(true);
@@ -61,8 +58,6 @@ describe.skipIf(!existsSync(`${BIN}/cameras.bin`))('transform flows through expo
     // Points should be rotated too
     const origFirstPoint = points3D.values().next().value!;
     const newFirstPoint = transformed.points3D!.get(origFirstPoint.point3DId)!;
-    console.log('original xyz:', origFirstPoint.xyz);
-    console.log('transformed xyz:', newFirstPoint.xyz);
     const xyzChanged = origFirstPoint.xyz.some((v, i) => Math.abs(v - newFirstPoint.xyz[i]) > 1e-6);
     expect(xyzChanged).toBe(true);
 

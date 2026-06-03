@@ -1,43 +1,38 @@
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
-import { hoverCardStyles, ICON_SIZES, Z_INDEX, MODAL_POSITION } from '../../theme';
+import { hoverCardStyles, ICON_SIZES } from '../../theme';
 import { MouseLeftIcon, MouseRightIcon, MouseScrollIcon } from '../../icons';
-import { useUIStore } from '../../store/stores/uiStore';
+import {
+  getMouseTooltipStyle,
+  getMouseTooltipTarget,
+  parseMouseTooltipContent,
+  shouldClearMouseTooltipOnMouseOut,
+  shouldUpdateMouseTooltipTarget,
+} from './mouseTooltipPolicy';
+import type { MouseTooltipIconMarker } from './mouseTooltipPolicy';
+import { useMouseTooltipStoreFacade } from './useMouseTooltipStoreFacade';
 
-/**
- * Parse tooltip text and replace {LMB}, {RMB}, {SCROLL} markers with mouse icons.
- * Returns an array of ReactNodes for rendering.
- */
-function parseTooltipContent(text: string): ReactNode[] {
-  const parts: ReactNode[] = [];
-  const regex = /\{(LMB|RMB|SCROLL)\}/g;
-  let lastIndex = 0;
-  let match;
+function renderMouseTooltipIcon(marker: MouseTooltipIconMarker, key: string): ReactNode {
+  const className = `${ICON_SIZES.hoverCard} inline-block align-text-bottom`;
 
-  while ((match = regex.exec(text)) !== null) {
-    // Add text before the marker
-    if (match.index > lastIndex) {
-      parts.push(text.slice(lastIndex, match.index));
-    }
-
-    // Add the icon
-    const iconType = match[1];
-    if (iconType === 'LMB') {
-      parts.push(<MouseLeftIcon key={`icon-${match.index}`} className={`${ICON_SIZES.hoverCard} inline-block align-text-bottom`} />);
-    } else if (iconType === 'RMB') {
-      parts.push(<MouseRightIcon key={`icon-${match.index}`} className={`${ICON_SIZES.hoverCard} inline-block align-text-bottom`} />);
-    } else if (iconType === 'SCROLL') {
-      parts.push(<MouseScrollIcon key={`icon-${match.index}`} className={`${ICON_SIZES.hoverCard} inline-block align-text-bottom`} />);
-    }
-
-    lastIndex = regex.lastIndex;
+  if (marker === 'LMB') {
+    return <MouseLeftIcon key={key} className={className} />;
   }
 
-  // Add remaining text
-  if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex));
+  if (marker === 'RMB') {
+    return <MouseRightIcon key={key} className={className} />;
   }
 
-  return parts.length > 0 ? parts : [text];
+  return <MouseScrollIcon key={key} className={className} />;
+}
+
+function renderMouseTooltipContent(text: string): ReactNode[] {
+  return parseMouseTooltipContent(text).map((part) => {
+    if (part.type === 'text') {
+      return part.text;
+    }
+
+    return renderMouseTooltipIcon(part.marker, part.key);
+  });
 }
 
 /**
@@ -50,7 +45,7 @@ function parseTooltipContent(text: string): ReactNode[] {
  * - {SCROLL} - Mouse scroll wheel icon
  */
 export function MouseTooltip() {
-  const touchMode = useUIStore((s) => s.touchMode);
+  const { touchMode } = useMouseTooltipStoreFacade();
   const [tooltip, setTooltip] = useState<string | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const currentElementRef = useRef<HTMLElement | null>(null);
@@ -58,44 +53,33 @@ export function MouseTooltip() {
   const handleMouseMove = useCallback((e: MouseEvent) => {
     setMousePos({ x: e.clientX, y: e.clientY });
 
-    // Check if we're still over a tooltip element (handles cases where elements get removed)
-    const target = e.target as HTMLElement;
-    const tooltipEl = target.closest('[data-tooltip]') as HTMLElement | null;
+    const nextTarget = getMouseTooltipTarget(e.target);
 
-    if (tooltipEl) {
-      // Update tooltip if over a different element or same element with different text
-      if (tooltipEl !== currentElementRef.current || tooltipEl.dataset.tooltip !== tooltip) {
-        currentElementRef.current = tooltipEl;
-        setTooltip(tooltipEl.dataset.tooltip || null);
+    if (nextTarget) {
+      if (shouldUpdateMouseTooltipTarget({
+        next: nextTarget,
+        currentElement: currentElementRef.current,
+        currentText: tooltip,
+      })) {
+        currentElementRef.current = nextTarget.element;
+        setTooltip(nextTarget.text);
       }
     } else if (currentElementRef.current) {
-      // No longer over a tooltip element
       currentElementRef.current = null;
       setTooltip(null);
     }
   }, [tooltip]);
 
   const handleMouseOver = useCallback((e: MouseEvent) => {
-    const target = e.target as HTMLElement;
-    const tooltipEl = target.closest('[data-tooltip]') as HTMLElement | null;
-    if (tooltipEl) {
-      currentElementRef.current = tooltipEl;
-      setTooltip(tooltipEl.dataset.tooltip || null);
+    const nextTarget = getMouseTooltipTarget(e.target);
+    if (nextTarget) {
+      currentElementRef.current = nextTarget.element;
+      setTooltip(nextTarget.text);
     }
   }, []);
 
   const handleMouseOut = useCallback((e: MouseEvent) => {
-    const relatedTarget = e.relatedTarget as HTMLElement | null;
-
-    // Clear if leaving window or moving to element without tooltip
-    if (!relatedTarget) {
-      currentElementRef.current = null;
-      setTooltip(null);
-      return;
-    }
-
-    const newTooltipEl = relatedTarget.closest('[data-tooltip]') as HTMLElement | null;
-    if (!newTooltipEl) {
+    if (shouldClearMouseTooltipOnMouseOut(e.relatedTarget)) {
       currentElementRef.current = null;
       setTooltip(null);
     }
@@ -119,14 +103,10 @@ export function MouseTooltip() {
   return (
     <div
       className="fixed pointer-events-none"
-      style={{
-        zIndex: Z_INDEX.mouseTooltip,
-        right: `calc(100vw - ${mousePos.x}px + ${MODAL_POSITION.cursorOffset}px)`,
-        top: mousePos.y + MODAL_POSITION.cursorOffset,
-      }}
+      style={getMouseTooltipStyle(mousePos)}
     >
       <div className={`${hoverCardStyles.container} border border-ds rounded text-xs px-2 py-1 whitespace-pre-line max-w-xs`}>
-        {parseTooltipContent(tooltip)}
+        {renderMouseTooltipContent(tooltip)}
       </div>
     </div>
   );

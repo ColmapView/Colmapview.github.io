@@ -2,39 +2,40 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DatasetManager } from './DatasetManager';
 import type { DatasetState } from './types';
 
-// Mock the imageFileUtils module
 vi.mock('../utils/imageFileUtils', () => ({
   getImageFile: vi.fn(),
   getMaskFile: vi.fn(),
+}));
+
+vi.mock('../utils/urlImageFiles', () => ({
   getUrlImageCached: vi.fn(),
   fetchUrlImage: vi.fn(),
   fetchUrlMask: vi.fn(),
   prefetchUrlImages: vi.fn(),
+}));
+
+vi.mock('../utils/zipImageFiles', () => ({
   getZipImageCached: vi.fn(),
   fetchZipImage: vi.fn(),
   fetchZipMask: vi.fn(),
   isZipLoadingAvailable: vi.fn(),
-  getUrlImageCacheStats: vi.fn(),
-  getZipImageCacheStats: vi.fn(),
-  getZipMaskCacheStats: vi.fn(),
-  getLocalImageStats: vi.fn(),
 }));
 
 import {
   getImageFile,
   getMaskFile,
+} from '../utils/imageFileUtils';
+import {
   getUrlImageCached,
   fetchUrlImage,
   fetchUrlMask,
+} from '../utils/urlImageFiles';
+import {
   getZipImageCached,
   fetchZipImage,
   fetchZipMask,
   isZipLoadingAvailable,
-  getUrlImageCacheStats,
-  getZipImageCacheStats,
-  getZipMaskCacheStats,
-  getLocalImageStats,
-} from '../utils/imageFileUtils';
+} from '../utils/zipImageFiles';
 
 describe('DatasetManager', () => {
   let manager: DatasetManager;
@@ -302,78 +303,6 @@ describe('DatasetManager', () => {
       mockState.sourceType = 'url';
       mockState.maskUrlBase = 'https://example.com/masks/';
       expect(manager.hasMasks()).toBe(true);
-    });
-  });
-
-  describe('getCacheStats', () => {
-    beforeEach(() => {
-      vi.mocked(getUrlImageCacheStats).mockReturnValue({ count: 0, sizeBytes: 0 });
-      vi.mocked(getZipImageCacheStats).mockReturnValue({ count: 0, sizeBytes: 0 });
-      vi.mocked(getZipMaskCacheStats).mockReturnValue({ count: 0, sizeBytes: 0 });
-      vi.mocked(getLocalImageStats).mockReturnValue({ count: 0, sizeBytes: 0 });
-    });
-
-    it('returns empty stats when no data', () => {
-      const stats = manager.getCacheStats();
-      expect(stats.total.count).toBe(0);
-      expect(stats.total.sizeBytes).toBe(0);
-      expect(stats.total.sizeFormatted).toBe('0 B');
-      expect(stats.sourceType).toBeNull();
-    });
-
-    it('returns URL cache stats', () => {
-      mockState.sourceType = 'url';
-      vi.mocked(getUrlImageCacheStats).mockReturnValue({ count: 10, sizeBytes: 5 * 1024 * 1024 });
-
-      const stats = manager.getCacheStats();
-      expect(stats.urlImages.count).toBe(10);
-      expect(stats.urlImages.sizeBytes).toBe(5 * 1024 * 1024);
-      expect(stats.urlImages.sizeFormatted).toBe('5.00 MB');
-      expect(stats.sourceType).toBe('url');
-    });
-
-    it('returns ZIP cache stats', () => {
-      mockState.sourceType = 'zip';
-      vi.mocked(getZipImageCacheStats).mockReturnValue({ count: 20, sizeBytes: 10 * 1024 * 1024 });
-      vi.mocked(getZipMaskCacheStats).mockReturnValue({ count: 5, sizeBytes: 2 * 1024 * 1024 });
-
-      const stats = manager.getCacheStats();
-      expect(stats.zipImages.count).toBe(20);
-      expect(stats.zipMasks.count).toBe(5);
-      expect(stats.total.count).toBe(25);
-      expect(stats.total.sizeBytes).toBe(12 * 1024 * 1024);
-    });
-
-    it('returns local image stats', () => {
-      mockState.sourceType = 'local';
-      mockState.loadedFiles = {
-        imageFiles: new Map(),
-        hasMasks: false,
-      };
-      vi.mocked(getLocalImageStats).mockReturnValue({ count: 100, sizeBytes: 500 * 1024 * 1024 });
-
-      const stats = manager.getCacheStats();
-      expect(stats.localImages.count).toBe(100);
-      expect(stats.localImages.sizeBytes).toBe(500 * 1024 * 1024);
-      expect(stats.localImages.sizeFormatted).toBe('500 MB');
-    });
-
-    it('formats bytes correctly', () => {
-      vi.mocked(getUrlImageCacheStats).mockReturnValue({ count: 1, sizeBytes: 1536 }); // 1.5 KB
-
-      const stats = manager.getCacheStats();
-      expect(stats.urlImages.sizeFormatted).toBe('1.50 KB');
-    });
-
-    it('calculates total across all caches', () => {
-      vi.mocked(getUrlImageCacheStats).mockReturnValue({ count: 10, sizeBytes: 1024 * 1024 });
-      vi.mocked(getZipImageCacheStats).mockReturnValue({ count: 20, sizeBytes: 2 * 1024 * 1024 });
-      vi.mocked(getZipMaskCacheStats).mockReturnValue({ count: 5, sizeBytes: 512 * 1024 });
-      vi.mocked(getLocalImageStats).mockReturnValue({ count: 50, sizeBytes: 5 * 1024 * 1024 });
-
-      const stats = manager.getCacheStats();
-      expect(stats.total.count).toBe(85);
-      expect(stats.total.sizeBytes).toBe(1024 * 1024 + 2 * 1024 * 1024 + 512 * 1024 + 5 * 1024 * 1024);
     });
   });
 });

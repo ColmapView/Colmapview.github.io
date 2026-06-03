@@ -13,12 +13,16 @@
  *   const file = await dataset.getImage(imageName);
  */
 
+import { useMemo } from 'react';
 import { useReconstructionStore } from '../store/reconstructionStore';
 import { DatasetManager } from './DatasetManager';
+import { DatasetDiagnostics } from './DatasetDiagnostics';
 import type { DatasetState } from './types';
 
 // Re-export types and class
 export { DatasetManager } from './DatasetManager';
+export { DatasetDiagnostics } from './DatasetDiagnostics';
+export type { DatasetDiagnosticsState, DatasetDiagnosticsStateReader } from './DatasetDiagnostics';
 export type {
   DatasetSource,
   DatasetState,
@@ -37,6 +41,7 @@ export type {
 // ===========================================================================
 
 let instance: DatasetManager | null = null;
+let diagnosticsInstance: DatasetDiagnostics | null = null;
 
 /**
  * Get the singleton DatasetManager instance.
@@ -59,6 +64,23 @@ export function getDatasetManager(): DatasetManager {
   return instance;
 }
 
+export function getDatasetDiagnostics(): DatasetDiagnostics {
+  if (!diagnosticsInstance) {
+    diagnosticsInstance = new DatasetDiagnostics(() => {
+      const state = useReconstructionStore.getState();
+      return {
+        sourceType: state.sourceType,
+        imageUrlBase: state.imageUrlBase,
+        maskUrlBase: state.maskUrlBase,
+        loadedFiles: state.loadedFiles,
+        reconstruction: state.reconstruction,
+        wasmReconstruction: state.wasmReconstruction,
+      };
+    });
+  }
+  return diagnosticsInstance;
+}
+
 // ===========================================================================
 // React Hook
 // ===========================================================================
@@ -72,13 +94,41 @@ export function getDatasetManager(): DatasetManager {
  *   const file = await dataset.getImage(imageName);
  */
 export function useDataset(): DatasetManager {
-  // Subscribe to relevant state changes to trigger re-renders
-  // when the dataset source changes
-  useReconstructionStore((s) => s.sourceType);
-  useReconstructionStore((s) => s.imageUrlBase);
-  useReconstructionStore((s) => s.loadedFiles);
+  const sourceType = useReconstructionStore((s) => s.sourceType);
+  const imageUrlBase = useReconstructionStore((s) => s.imageUrlBase);
+  const maskUrlBase = useReconstructionStore((s) => s.maskUrlBase);
+  const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
 
-  return getDatasetManager();
+  return useMemo(
+    () => new DatasetManager(() => ({
+      sourceType,
+      imageUrlBase,
+      maskUrlBase,
+      loadedFiles,
+    })),
+    [sourceType, imageUrlBase, maskUrlBase, loadedFiles]
+  );
+}
+
+export function useDatasetDiagnostics(): DatasetDiagnostics {
+  const sourceType = useReconstructionStore((s) => s.sourceType);
+  const imageUrlBase = useReconstructionStore((s) => s.imageUrlBase);
+  const maskUrlBase = useReconstructionStore((s) => s.maskUrlBase);
+  const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
+  const reconstruction = useReconstructionStore((s) => s.reconstruction);
+  const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
+
+  return useMemo(
+    () => new DatasetDiagnostics(() => ({
+      sourceType,
+      imageUrlBase,
+      maskUrlBase,
+      loadedFiles,
+      reconstruction,
+      wasmReconstruction,
+    })),
+    [sourceType, imageUrlBase, maskUrlBase, loadedFiles, reconstruction, wasmReconstruction]
+  );
 }
 
 /**
@@ -87,4 +137,5 @@ export function useDataset(): DatasetManager {
  */
 export function resetDatasetManager(): void {
   instance = null;
+  diagnosticsInstance = null;
 }

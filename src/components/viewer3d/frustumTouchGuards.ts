@@ -1,5 +1,5 @@
 /**
- * Guards for mobile touch interaction between CameraFrustums and Scene3D.
+ * Guards for mobile touch interaction between interactive scene objects and Scene3D.
  *
  * 1. Tap guard: onPointerUp handles the tap (select + fly-to) but R3F's click
  *    raycast may miss the mesh due to touch coordinate drift, firing onPointerMissed
@@ -7,17 +7,50 @@
  *
  * 2. Touch-down guard: R3F's onPointerDown fires synchronously before the DOM event
  *    bubbles to the container div. Scene3D checks this to avoid starting a competing
- *    long-press timer when a frustum is already handling the touch.
+ *    long-press timer when an object is already handling the touch.
  */
-let _frustumTapTime = 0;
-let _frustumTouchDownTime = 0;
+let _frustumTapTime = Number.NEGATIVE_INFINITY;
+let _sceneObjectTouchDownTime = Number.NEGATIVE_INFINITY;
 
 /** How long after a frustum tap to suppress onPointerMissed selection clearing */
-const POINTER_MISSED_GUARD_MS = 200;
+export const POINTER_MISSED_GUARD_MS = 200;
 /** How long after a frustum touch-down to suppress Scene3D long-press timer start */
-const TOUCH_DOWN_GUARD_MS = 50; // same-event sync; 50ms is generous
+export const TOUCH_DOWN_GUARD_MS = 50; // same-event sync; 50ms is generous
 
-export function markFrustumTap() { _frustumTapTime = Date.now(); }
-export function wasFrustumTapRecent() { return Date.now() - _frustumTapTime < POINTER_MISSED_GUARD_MS; }
-export function markFrustumTouchDown() { _frustumTouchDownTime = Date.now(); }
-export function wasFrustumTouchDownRecent() { return Date.now() - _frustumTouchDownTime < TOUCH_DOWN_GUARD_MS; }
+export function markFrustumTap(now = Date.now()) {
+  _frustumTapTime = now;
+}
+
+export function wasFrustumTapRecent(now = Date.now()) {
+  return now - _frustumTapTime < POINTER_MISSED_GUARD_MS;
+}
+
+export function markSceneObjectTouchDown(now = Date.now()) {
+  _sceneObjectTouchDownTime = now;
+}
+
+export function markSceneObjectTouchDownForTouchPointer(pointerType: string | undefined, now = Date.now()) {
+  if (pointerType !== 'touch') {
+    return false;
+  }
+
+  markSceneObjectTouchDown(now);
+  return true;
+}
+
+export function wasSceneObjectTouchDownRecent(now = Date.now()) {
+  return now - _sceneObjectTouchDownTime < TOUCH_DOWN_GUARD_MS;
+}
+
+export function markFrustumTouchDown(now = Date.now()) {
+  markSceneObjectTouchDown(now);
+}
+
+export function wasFrustumTouchDownRecent(now = Date.now()) {
+  return wasSceneObjectTouchDownRecent(now);
+}
+
+export function resetFrustumTouchGuards() {
+  _frustumTapTime = Number.NEGATIVE_INFINITY;
+  _sceneObjectTouchDownTime = Number.NEGATIVE_INFINITY;
+}

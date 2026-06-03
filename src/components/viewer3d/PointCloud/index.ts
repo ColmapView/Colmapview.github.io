@@ -4,3 +4,4 @@
 
 export { PointCloud } from './PointCloud';
 export { SelectionOverlay, type SelectionOverlayProps } from './SelectionOverlay';
+export { SplatLayer } from './SplatLayer';

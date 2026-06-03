@@ -1,4 +1,4 @@
-import { Page, Locator, expect } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 /**
  * Page object for 3D canvas interactions
@@ -21,8 +21,10 @@ export class Scene3DPageObject {
    */
   async waitForCanvasReady(): Promise<void> {
     await expect(this.canvas).toBeVisible();
-    // Give Three.js time to initialize
-    await this.page.waitForTimeout(500);
+    await expect.poll(async () => {
+      const box = await this.canvas.boundingBox();
+      return box !== null && box.width > 100 && box.height > 100;
+    }, { timeout: 5000 }).toBe(true);
   }
 
   /**
@@ -71,10 +73,10 @@ export class Scene3DPageObject {
     const box = await this.getCanvasBoundingBox();
     if (!box) throw new Error('Canvas not found');
 
-    const centerX = box.x + box.width / 2;
-    const centerY = box.y + box.height / 2;
+    const rightClickX = box.x + box.width * 0.75;
+    const rightClickY = box.y + box.height * 0.35;
 
-    await this.page.mouse.click(centerX, centerY, { button: 'right' });
+    await this.page.mouse.click(rightClickX, rightClickY, { button: 'right' });
   }
 
   /**

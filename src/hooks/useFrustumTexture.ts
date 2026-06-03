@@ -7,16 +7,42 @@
  */
 
 import * as THREE from 'three';
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { createImageCache } from './useAsyncImageCache';
 import { SIZE, TIMING } from '../theme';
+import {
+  clearActiveFrustumTextures,
+  clearFrustumBitmapCache,
+  createFrustumTextureFromBitmap,
+  getActiveFrustumTexture,
+  getCachedFrustumBitmap,
+  getOrLoadFrustumBitmap,
+  touchActiveFrustumTexture,
+  type FrustumBitmapCache,
+  type FrustumTextureCache,
+} from './frustumTextureCache';
+import {
+  clearSelectedImageTextureCache,
+  createSelectedImageTextureFromBitmap,
+  getSelectedImageTexture,
+  replaceSelectedImageTexture,
+} from './selectedImageTextureCache';
+import {
+  createFrustumTextureResource,
+  createSelectedImageTextureResource,
+  getFrustumTextureCacheKey,
+  getSelectedImageTextureCacheKey,
+  type FrustumTextureResource,
+  type SelectedImageTextureResource,
+} from './frustumTextureResources';
+import { isOffscreenCanvas } from '../utils/canvasTypeGuards';
 
 /**
  * Process canvas to JPEG blob URL (same as thumbnails, but larger size).
  */
 async function canvasToJpegUrl(canvas: HTMLCanvasElement | OffscreenCanvas): Promise<string | null> {
   try {
-    const blob = canvas instanceof OffscreenCanvas
+    const blob = isOffscreenCanvas(canvas)
       ? await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.75 })
       : await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.75));
     return blob ? URL.createObjectURL(blob) : null;
@@ -34,39 +60,23 @@ const frustumUrlCache = createImageCache<string>({
   idleFallback: TIMING.textureUploadFallback,
 });
 
-// Cache all decoded ImageBitmaps (small due to 128px max size, ~65KB each)
-// No eviction needed - cleared when loading new reconstruction
-const bitmapCache = new Map<string, { bitmap: ImageBitmap; lastUsed: number }>();
+const bitmapCache: FrustumBitmapCache = new Map();
+const activeTextures: FrustumTextureCache = new Map();
 
-// Small LRU cache for active textures (only keep recently used ones in GPU memory)
-const MAX_ACTIVE_TEXTURES = 50;
-const activeTextures = new Map<string, { texture: THREE.Texture; lastUsed: number }>();
+function getCachedFrustumTexture(imageName: string): THREE.Texture | null {
+  const existing = getActiveFrustumTexture(activeTextures, imageName);
+  if (existing) return existing;
+
+  const cachedBitmap = getCachedFrustumBitmap(bitmapCache, imageName);
+  return cachedBitmap ? createTextureFromBitmap(cachedBitmap, imageName) : null;
+}
 
 /**
  * Load and cache an ImageBitmap from a blob URL.
  * Returns cached bitmap if available, otherwise loads and caches it.
  */
 async function getOrLoadBitmap(url: string, imageName: string): Promise<ImageBitmap | null> {
-  // Check cache first
-  const cached = bitmapCache.get(imageName);
-  if (cached) {
-    cached.lastUsed = Date.now();
-    return cached.bitmap;
-  }
-
-  try {
-    // Fetch blob from URL and decode to ImageBitmap
-    const response = await fetch(url);
-    const blob = await response.blob();
-    const bitmap = await createImageBitmap(blob);
-
-    // Cache the bitmap (no eviction - small size, cleared on new reconstruction)
-    bitmapCache.set(imageName, { bitmap, lastUsed: Date.now() });
-
-    return bitmap;
-  } catch {
-    return null;
-  }
+  return getOrLoadFrustumBitmap(url, imageName, bitmapCache);
 }
 
 /**
@@ -74,63 +84,7 @@ async function getOrLoadBitmap(url: string, imageName: string): Promise<ImageBit
  * Returns null if bitmap has invalid dimensions.
  */
 function createTextureFromBitmap(bitmap: ImageBitmap, imageName: string): THREE.Texture | null {
-  // Guard against invalid bitmaps that would cause WebGL errors
-  if (!bitmap || bitmap.width <= 0 || bitmap.height <= 0) {
-    console.warn(`[useFrustumTexture] Invalid bitmap dimensions for ${imageName}: ${bitmap?.width}x${bitmap?.height}`);
-    return null;
-  }
-
-  const texture = new THREE.Texture(bitmap);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.flipY = false;
-  texture.needsUpdate = true;
-
-  // Add to active textures
-  activeTextures.set(imageName, { texture, lastUsed: Date.now() });
-
-  // Evict old textures if over limit
-  if (activeTextures.size > MAX_ACTIVE_TEXTURES) {
-    evictOldestTextures();
-  }
-
-  return texture;
-}
-
-function getOrCreateTexture(url: string, imageName: string): THREE.Texture | null {
-  // Check if we already have this texture active
-  const existing = activeTextures.get(imageName);
-  if (existing) {
-    existing.lastUsed = Date.now();
-    return existing.texture;
-  }
-
-  // Check if we have a cached bitmap - create texture synchronously
-  const cachedBitmap = bitmapCache.get(imageName);
-  if (cachedBitmap) {
-    cachedBitmap.lastUsed = Date.now();
-    return createTextureFromBitmap(cachedBitmap.bitmap, imageName);
-  }
-
-  // No cached bitmap - need to load async (this path is for initial load)
-  // Start loading bitmap in background, return null for now
-  // The texture will be created once bitmap is ready
-  getOrLoadBitmap(url, imageName); // Fire and forget - will be picked up on next render
-
-  return null;
-}
-
-function evictOldestTextures(): void {
-  // Sort by lastUsed and remove oldest
-  const entries = Array.from(activeTextures.entries());
-  entries.sort((a, b) => a[1].lastUsed - b[1].lastUsed);
-
-  // Remove oldest half
-  const toRemove = Math.floor(entries.length / 2);
-  for (let i = 0; i < toRemove; i++) {
-    const [key, { texture }] = entries[i];
-    texture.dispose();
-    activeTextures.delete(key);
-  }
+  return createFrustumTextureFromBitmap(bitmap, imageName, activeTextures);
 }
 
 /**
@@ -145,34 +99,13 @@ export function clearFrustumTextureCache(): void {
   // When a texture has needsUpdate=true, Three.js will try to upload the bitmap data
   // on the next render. If we close the bitmap first, we get "source data detached" errors.
 
-  // Dispose and clear active textures first
-  for (const { texture } of activeTextures.values()) {
-    // Clear the image reference to prevent Three.js from trying to upload detached data
-    texture.image = null;
-    texture.needsUpdate = false;
-    texture.dispose();
-  }
-  activeTextures.clear();
+  clearActiveFrustumTextures(activeTextures);
 
   // Clear high-res selected image texture
-  if (selectedImageTexture) {
-    const tex = selectedImageTexture.texture as THREE.Texture & { _bitmap?: ImageBitmap };
-    // Clear image reference first
-    tex.image = null;
-    tex.needsUpdate = false;
-    if (tex._bitmap) {
-      tex._bitmap.close();
-      tex._bitmap = undefined;
-    }
-    tex.dispose();
-    selectedImageTexture = null;
-  }
+  clearSelectedImageTextureCache();
 
   // NOW safe to close bitmap cache (textures no longer reference them)
-  for (const { bitmap } of bitmapCache.values()) {
-    bitmap.close();
-  }
-  bitmapCache.clear();
+  clearFrustumBitmapCache(bitmapCache);
 }
 
 /**
@@ -258,59 +191,41 @@ export function useFrustumTexture(
   imageName: string,
   enabled: boolean
 ): THREE.Texture | null {
-  const [texture, setTexture] = useState<THREE.Texture | null>(null);
-  const urlRef = useRef<string | null>(null);
-
   // Get the cached JPEG blob URL
   const cachedUrl = frustumUrlCache.useCache(imageFile, imageName, enabled);
+  const resourceRef = useRef<FrustumTextureResource | null>(null);
+  resourceRef.current ??= createFrustumTextureResource({
+    getCachedTexture: getCachedFrustumTexture,
+    getOrLoadBitmap,
+    createTextureFromBitmap,
+  });
+  const resource = resourceRef.current;
+  const snapshot = useSyncExternalStore(
+    resource.subscribe,
+    resource.getSnapshot,
+    resource.getSnapshot
+  );
+  const cacheKey = getFrustumTextureCacheKey(cachedUrl, imageName, enabled);
 
   useEffect(() => {
-    if (!enabled || !cachedUrl) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- Async texture loading pattern with setState
-      setTexture(null);
-      return;
-    }
-
-    // Try to get texture (sync if bitmap cached, null if needs async load)
-    const tex = getOrCreateTexture(cachedUrl, imageName);
-    if (tex) {
-      urlRef.current = cachedUrl;
-       
-      setTexture(tex);
-      return;
-    }
-
-    // Bitmap not cached - load async and update when ready
-    let cancelled = false;
-    getOrLoadBitmap(cachedUrl, imageName).then((bitmap) => {
-      if (cancelled || !bitmap) return;
-      const newTex = createTextureFromBitmap(bitmap, imageName);
-      if (!newTex) return; // Skip if texture creation failed (invalid bitmap)
-      urlRef.current = cachedUrl;
-
-      setTexture(newTex);
+    resource.sync({
+      cachedUrl,
+      enabled,
+      imageName,
     });
+  }, [cachedUrl, enabled, imageName, resource]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [cachedUrl, imageName, enabled]);
+  const texture = snapshot.cacheKey === cacheKey ? snapshot.texture : null;
 
   // Update lastUsed time when texture is accessed
   useEffect(() => {
     if (texture && imageName) {
-      const entry = activeTextures.get(imageName);
-      if (entry) {
-        entry.lastUsed = Date.now();
-      }
+      touchActiveFrustumTexture(activeTextures, imageName);
     }
   }, [texture, imageName]);
 
   return texture;
 }
-
-// High-resolution texture for selected image (single instance, loaded from original file)
-let selectedImageTexture: { name: string; texture: THREE.Texture } | null = null;
 
 /**
  * Hook to get a high-resolution texture for the selected image.
@@ -327,62 +242,31 @@ export function useSelectedImageTexture(
   imageName: string,
   isSelected: boolean
 ): THREE.Texture | null {
-  const [texture, setTexture] = useState<THREE.Texture | null>(null);
+  const resourceRef = useRef<SelectedImageTextureResource | null>(null);
+  resourceRef.current ??= createSelectedImageTextureResource({
+    getCachedTexture: getSelectedImageTexture,
+    clearTextureCache: clearSelectedImageTextureCache,
+    createBitmap: createImageBitmap,
+    createTextureFromBitmap: createSelectedImageTextureFromBitmap,
+    replaceTexture: replaceSelectedImageTexture,
+  });
+  const resource = resourceRef.current;
+  const snapshot = useSyncExternalStore(
+    resource.subscribe,
+    resource.getSnapshot,
+    resource.getSnapshot
+  );
+  const cacheKey = getSelectedImageTextureCacheKey(imageFile, imageName, isSelected);
 
   useEffect(() => {
-    if (!isSelected || !imageFile) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- Async texture loading pattern with setState
-      setTexture(null);
-      return;
-    }
-
-    // Check if we already have this image loaded at high-res
-    if (selectedImageTexture?.name === imageName) {
-       
-      setTexture(selectedImageTexture.texture);
-      return;
-    }
-
-    // Dispose previous high-res texture and its bitmap
-    if (selectedImageTexture) {
-      const tex = selectedImageTexture.texture as THREE.Texture & { _bitmap?: ImageBitmap };
-      if (tex._bitmap) {
-        tex._bitmap.close();
-      }
-      tex.dispose();
-      selectedImageTexture = null;
-    }
-
-    // Load new high-res texture from original file
-    let cancelled = false;
-    createImageBitmap(imageFile).then((bitmap) => {
-      if (cancelled) {
-        bitmap.close();
-        return;
-      }
-
-      const tex = new THREE.Texture(bitmap);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.flipY = false;
-      tex.needsUpdate = true;
-      // Store bitmap reference so we can close it when disposing
-      (tex as THREE.Texture & { _bitmap?: ImageBitmap })._bitmap = bitmap;
-
-      selectedImageTexture = { name: imageName, texture: tex };
-
-      setTexture(tex);
-    }).catch(() => {
-      // Fall back to low-res on error
-
-      setTexture(null);
+    resource.sync({
+      imageFile,
+      imageName,
+      isSelected,
     });
+  }, [imageFile, imageName, isSelected, resource]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [imageFile, imageName, isSelected]);
-
-  return texture;
+  return snapshot.cacheKey === cacheKey ? snapshot.texture : null;
 }
 
 /**
@@ -390,12 +274,5 @@ export function useSelectedImageTexture(
  * Call this when loading a new reconstruction.
  */
 export function clearSelectedImageTexture(): void {
-  if (selectedImageTexture) {
-    const tex = selectedImageTexture.texture as THREE.Texture & { _bitmap?: ImageBitmap };
-    if (tex._bitmap) {
-      tex._bitmap.close();
-    }
-    tex.dispose();
-    selectedImageTexture = null;
-  }
+  clearSelectedImageTextureCache();
 }

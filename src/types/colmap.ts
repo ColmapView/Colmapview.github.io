@@ -134,6 +134,7 @@ export interface LoadedFiles {
   camerasFile?: File;
   imagesFile?: File;
   points3DFile?: File;
+  splatFile?: File;
   databaseFile?: File;
   rigsFile?: File;
   framesFile?: File;

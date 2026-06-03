@@ -1,20 +1,52 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import {
+  getTouchCapabilitiesFromEnvironment,
+  getTouchMediaState,
+  NO_TOUCH_CAPABILITIES,
+  shouldUseTouchMode,
+  TOUCH_CAPABILITY_MEDIA_QUERIES,
+} from './touchDevicePolicy';
+import type { TouchCapabilities, TouchEnvironment } from './touchDevicePolicy';
 
-/**
- * Detect if the device has touch capability.
- * This is different from useIsMobile which only checks viewport width.
- *
- * Detection methods (in priority order):
- * 1. navigator.maxTouchPoints > 0 (most reliable)
- * 2. 'ontouchstart' in window (legacy fallback)
- * 3. (pointer: coarse) media query (primary input is imprecise)
- * 4. (hover: none) media query (device cannot hover)
- */
+// Browser adapter for touch-mode detection. Decision logic lives in touchDevicePolicy.
+function getCurrentTouchEnvironment(): TouchEnvironment {
+  if (typeof window === 'undefined') {
+    return {};
+  }
 
-interface TouchCapabilities {
-  hasTouch: boolean;       // Device has touch capability
-  isCoarsePointer: boolean; // Primary pointer is coarse (finger vs mouse)
-  cannotHover: boolean;     // Device cannot hover (true for most tablets)
+  return {
+    matchMedia: typeof window.matchMedia === 'function'
+      ? window.matchMedia.bind(window)
+      : undefined,
+    maxTouchPoints: typeof navigator === 'undefined' ? 0 : navigator.maxTouchPoints,
+    hasTouchStart: 'ontouchstart' in window,
+  };
+}
+
+function subscribeToTouchMediaChanges(onChange: () => void): () => void {
+  const mediaQueries = TOUCH_CAPABILITY_MEDIA_QUERIES.map((query) =>
+    window.matchMedia(query)
+  );
+
+  mediaQueries.forEach((query) => query.addEventListener('change', onChange));
+
+  return () => {
+    mediaQueries.forEach((query) => query.removeEventListener('change', onChange));
+  };
+}
+
+function useTouchMediaSnapshot<T>(readSnapshot: () => T): T {
+  const [snapshot, setSnapshot] = useState(readSnapshot);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    return subscribeToTouchMediaChanges(() => setSnapshot(readSnapshot()));
+  }, [readSnapshot]);
+
+  return snapshot;
 }
 
 /**
@@ -29,16 +61,9 @@ interface TouchCapabilities {
  * so they get desktop mode with full gallery.
  */
 export function detectTouchDevice(): boolean {
-  if (typeof window === 'undefined') return false;
-
-  // Only enable touch mode if:
-  // 1. Primary pointer is coarse (touch) - excludes devices with mouse as primary
-  // 2. Device cannot hover - excludes laptops with trackpads
-  const isCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
-  const cannotHover = window.matchMedia('(hover: none)').matches;
-
-  // Both conditions must be true for touch mode
-  return isCoarsePointer && cannotHover;
+  return shouldUseTouchMode(
+    getTouchMediaState(getCurrentTouchEnvironment().matchMedia)
+  );
 }
 
 /**
@@ -46,85 +71,31 @@ export function detectTouchDevice(): boolean {
  */
 export function getTouchCapabilities(): TouchCapabilities {
   if (typeof window === 'undefined') {
-    return { hasTouch: false, isCoarsePointer: false, cannotHover: false };
+    return NO_TOUCH_CAPABILITIES;
   }
 
-  const hasTouch = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
-  const isCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
-  const cannotHover = window.matchMedia('(hover: none)').matches;
-
-  return { hasTouch, isCoarsePointer, cannotHover };
+  return getTouchCapabilitiesFromEnvironment(getCurrentTouchEnvironment());
 }
 
 /**
- * Hook to detect if the device has touch capability.
- * Returns true if the device supports touch input.
- *
- * Note: This detects capability, not current input method.
- * A laptop with touchscreen will return true even when using mouse.
+ * Hook to detect whether touch mode should be active.
+ * This intentionally differs from generic touchscreen capability.
  */
 export function useIsTouchDevice(): boolean {
-  const [isTouchDevice, setIsTouchDevice] = useState(detectTouchDevice);
-
-  useEffect(() => {
-    // Listen for changes in pointer type (e.g., connecting external mouse)
-    const coarseQuery = window.matchMedia('(pointer: coarse)');
-    const hoverQuery = window.matchMedia('(hover: none)');
-
-    const handleChange = () => {
-      setIsTouchDevice(detectTouchDevice());
-    };
-
-    coarseQuery.addEventListener('change', handleChange);
-    hoverQuery.addEventListener('change', handleChange);
-
-    return () => {
-      coarseQuery.removeEventListener('change', handleChange);
-      hoverQuery.removeEventListener('change', handleChange);
-    };
-  }, []);
-
-  return isTouchDevice;
+  return useTouchMediaSnapshot(detectTouchDevice);
 }
 
 /**
  * Hook to get detailed touch capabilities with reactive updates.
  */
 export function useTouchCapabilities(): TouchCapabilities {
-  const [capabilities, setCapabilities] = useState(getTouchCapabilities);
-
-  useEffect(() => {
-    const coarseQuery = window.matchMedia('(pointer: coarse)');
-    const hoverQuery = window.matchMedia('(hover: none)');
-
-    const handleChange = () => {
-      setCapabilities(getTouchCapabilities());
-    };
-
-    coarseQuery.addEventListener('change', handleChange);
-    hoverQuery.addEventListener('change', handleChange);
-
-    return () => {
-      coarseQuery.removeEventListener('change', handleChange);
-      hoverQuery.removeEventListener('change', handleChange);
-    };
-  }, []);
-
-  return capabilities;
+  return useTouchMediaSnapshot(getTouchCapabilities);
 }
 
 /**
- * Hook that returns true if touch mode should be active.
- * Combines device detection with store state for URL override support.
- *
- * Priority:
- * 1. URL override (?touch=1 or ?touch=0)
- * 2. Auto-detection based on device capabilities
+ * Facade for touch-mode selection.
+ * Keep callers here if URL or store overrides are added later.
  */
 export function useShouldUseTouchMode(): boolean {
-  const isTouchDevice = useIsTouchDevice();
-
-  // This will be used with store state once touchMode is added to uiStore
-  // For now, just return device detection
-  return isTouchDevice;
+  return useIsTouchDevice();
 }

@@ -1,0 +1,90 @@
+import { describe, expect, it } from 'vitest';
+import {
+  buildArchiveEntryPath,
+  findLargestArchivePlyCandidate,
+  getArchiveImageLookupKeys,
+  getColmapArchiveKey,
+  getZipEntryLookupCandidates,
+  hasArchiveExtension,
+  hasRequiredColmapArchiveFiles,
+  isArchiveColmapPath,
+  isArchiveImagePath,
+  isArchiveMimeType,
+  isArchivePlyPath,
+} from './zipLoaderPolicy';
+
+describe('zip loader policy', () => {
+  it('detects supported archive extensions and MIME types', () => {
+    expect(hasArchiveExtension('dataset.tar.gz')).toBe(true);
+    expect(hasArchiveExtension('/path/DATASET.7Z')).toBe(true);
+    expect(hasArchiveExtension('manifest.json')).toBe(false);
+    expect(isArchiveMimeType('application/zip')).toBe(true);
+    expect(isArchiveMimeType('application/json')).toBe(false);
+  });
+
+  it('classifies archive image and COLMAP paths by filename', () => {
+    expect(isArchiveImagePath('project/images/cam1/PHOTO.JPG')).toBe(true);
+    expect(isArchiveImagePath('project/sparse/0/images.bin')).toBe(false);
+    expect(isArchiveColmapPath('project/sparse/0/points3D.bin')).toBe(true);
+    expect(isArchiveColmapPath('project/images/photo.jpg')).toBe(false);
+    expect(isArchivePlyPath('project/splats/scene.PLY')).toBe(true);
+    expect(isArchivePlyPath('project/sparse/0/points3D.bin')).toBe(false);
+  });
+
+  it('chooses the largest PLY candidate across root and nested archive folders', () => {
+    expect(findLargestArchivePlyCandidate([
+      { path: 'root_gaussians.ply', size: 10 },
+      { path: 'output/surface_gaussians.ply', size: 100 },
+      { path: '3dgs/model.ply', size: 200 },
+      { path: 'folder/folder/folder/deep_gaussians.ply', size: 300 },
+      { path: 'sparse/0/points3D.bin', size: 1000 },
+    ])).toEqual({
+      path: 'folder/folder/folder/deep_gaussians.ply',
+      size: 300,
+    });
+  });
+
+  it('builds stable archive entry paths and image lookup keys', () => {
+    expect(buildArchiveEntryPath(undefined, 'cameras.bin')).toBe('cameras.bin');
+    expect(buildArchiveEntryPath('project/sparse/0', 'images.bin')).toBe('project/sparse/0/images.bin');
+    expect(buildArchiveEntryPath('project/images/', 'photo.jpg')).toBe('project/images/photo.jpg');
+
+    expect(getArchiveImageLookupKeys('project/images/photo.jpg')).toEqual([
+      'project/images/photo.jpg',
+      'photo.jpg',
+    ]);
+    expect(getArchiveImageLookupKeys('photo.jpg')).toEqual(['photo.jpg']);
+  });
+
+  it('normalizes COLMAP archive keys to sparse directories', () => {
+    expect(getColmapArchiveKey('project/sparse/1/cameras.bin')).toBe('sparse/1/cameras.bin');
+    expect(getColmapArchiveKey('cameras.bin')).toBe('sparse/0/cameras.bin');
+    expect(getColmapArchiveKey('project/model/cameras.txt')).toBe('sparse/0/cameras.txt');
+  });
+
+  it('checks required COLMAP archive files case-insensitively by filename', () => {
+    expect(hasRequiredColmapArchiveFiles([
+      'sparse/0/cameras.bin',
+      'sparse/0/images.txt',
+      'sparse/0/points3D.bin',
+    ])).toBe(true);
+    expect(hasRequiredColmapArchiveFiles([
+      'sparse/0/cameras.bin',
+      'sparse/0/images.txt',
+    ])).toBe(false);
+  });
+
+  it('builds ZIP entry lookup candidates for normalized, filename, and prefixed paths', () => {
+    expect(getZipEntryLookupCandidates('cam1\\photo.jpg')).toEqual([
+      'cam1/photo.jpg',
+      'photo.jpg',
+      'images/cam1/photo.jpg',
+      'sparse/0/cam1/photo.jpg',
+    ]);
+    expect(getZipEntryLookupCandidates('photo.jpg')).toEqual([
+      'photo.jpg',
+      'images/photo.jpg',
+      'sparse/0/photo.jpg',
+    ]);
+  });
+});

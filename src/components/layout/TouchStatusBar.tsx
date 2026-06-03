@@ -1,5 +1,9 @@
-import { useUIStore } from '../../store';
-import { useReconstructionStore } from '../../store';
+import {
+  formatStatusBarFps,
+  getTouchEmptyStatusText,
+  shouldShowTouchStatusBar,
+} from './statusBarViewModel';
+import { useTouchStatusBarStoreFacade } from './useTouchStatusBarStoreFacade';
 
 /**
  * Simplified status bar for touch mode.
@@ -8,20 +12,26 @@ import { useReconstructionStore } from '../../store';
  * Visibility controlled by touchUI.statusBar.
  */
 export function TouchStatusBar() {
-  const fps = useUIStore((s) => s.fps);
-  const touchUI = useUIStore((s) => s.touchUI);
-  const urlLoading = useReconstructionStore((s) => s.urlLoading);
-  const reconstruction = useReconstructionStore((s) => s.reconstruction);
+  const {
+    fps,
+    touchUI,
+    urlLoading,
+    reconstruction,
+  } = useTouchStatusBarStoreFacade();
+  const emptyStatusText = getTouchEmptyStatusText({
+    hasReconstruction: Boolean(reconstruction),
+    urlLoading,
+  });
 
   // Hide status bar if touchUI.statusBar is false
-  if (!touchUI.statusBar) return null;
+  if (!shouldShowTouchStatusBar(touchUI.statusBar)) return null;
 
   return (
     <footer className="h-6 border-t border-ds bg-ds-tertiary text-ds-secondary text-xs px-3 flex items-center justify-between">
-      <span className="text-ds-tertiary">{fps} FPS</span>
-      {!reconstruction && (
+      <span className="text-ds-tertiary">{formatStatusBarFps(fps)}</span>
+      {emptyStatusText !== null && (
         <span className="text-ds-muted">
-          {urlLoading ? 'Loading...' : ''}
+          {emptyStatusText}
         </span>
       )}
     </footer>

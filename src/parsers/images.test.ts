@@ -87,4 +87,25 @@ describe('parseImagesText', () => {
     const result = parseImagesText(input);
     expect(result.size).toBe(0);
   });
+
+  it('skips image headers with partial or invalid numeric tokens', () => {
+    const input = `1 0.9px 0.0 0.0 0.0 0.0 0.0 0.0 1 bad-qvec.jpg
+100.0 200.0 123
+2 0.9 0.0 0.0 0.0 0.0 0.0 0.0 1 ok.jpg
+100.0 200.0 123`;
+    const result = parseImagesText(input);
+
+    expect([...result.keys()]).toEqual([2]);
+    expect(result.get(2)?.name).toBe('ok.jpg');
+  });
+
+  it('skips malformed point triplets without throwing or storing NaN', () => {
+    const input = `1 0.9 0.0 0.0 0.0 0.0 0.0 0.0 1 test.jpg
+100.0px 200.0 123 300.0 400.0 bad-id 500.0 600.0 -1`;
+    const result = parseImagesText(input);
+
+    expect(result.get(1)?.points2D).toEqual([
+      { xy: [500, 600], point3DId: -1n },
+    ]);
+  });
 });

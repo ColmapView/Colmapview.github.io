@@ -6,70 +6,98 @@ import type {
   HorizonLockMode,
   CameraDisplayMode,
   FrustumColorMode,
+  CameraScaleFactor,
+  UndistortionMode,
   SelectionColorMode,
   MatchesDisplayMode,
   AxesCoordinateSystem,
   AxisLabelMode,
   ScreenshotSize,
   ScreenshotFormat,
-  ExportFormat,
+  RigDisplayMode,
+  RigColorMode,
 } from '../../store/types';
 
 export const CONFIG_VERSION = 1;
 
+type ModelExportFormat = 'text' | 'binary' | 'ply' | 'zip';
+
 export interface PointCloudConfig {
-  showPointCloud: boolean;
-  pointSize: number;
-  pointOpacity: number;
-  colorMode: ColorMode;
-  minTrackLength: number;
-  maxReprojectionError: number | null; // null = Infinity
+  [key: string]: unknown;
+  showPointCloud?: boolean;
+  pointSize?: number;
+  pointOpacity?: number;
+  colorMode?: ColorMode;
+  minTrackLength?: number;
+  maxReprojectionError?: number | null; // null = Infinity
+  thinning?: number;
 }
 
 export interface CameraConfig {
-  displayMode: CameraDisplayMode;
-  scale: number;
-  frustumColorMode: FrustumColorMode;
-  unselectedOpacity: number;
-  mode: CameraMode;
-  projection: CameraProjection;
-  fov: number;
-  horizonLock: HorizonLockMode;
-  autoRotateMode: AutoRotateMode;
-  autoRotateSpeed: number;
-  flySpeed: number;
-  pointerLock: boolean;
-  selectionColorMode: SelectionColorMode;
-  selectionColor: string;
-  selectionAnimationSpeed: number;
-  selectionPlaneOpacity: number;
-  autoFovEnabled: boolean;
+  [key: string]: unknown;
+  show?: boolean;
+  displayMode?: CameraDisplayMode;
+  scaleFactor?: CameraScaleFactor;
+  scale?: number;
+  frustumColorMode?: FrustumColorMode;
+  frustumSingleColor?: string;
+  frustumStandbyOpacity?: number;
+  unselectedOpacity?: number;
+  mode?: CameraMode;
+  projection?: CameraProjection;
+  fov?: number;
+  horizonLock?: HorizonLockMode;
+  autoRotateMode?: AutoRotateMode;
+  autoRotateSpeed?: number;
+  flySpeed?: number;
+  flyTransitionDuration?: number;
+  pointerLock?: boolean;
+  showSelectionHighlight?: boolean;
+  selectionColorMode?: SelectionColorMode;
+  selectionColor?: string;
+  selectionAnimationSpeed?: number;
+  selectionPlaneOpacity?: number;
+  undistortionEnabled?: boolean;
+  undistortionMode?: UndistortionMode;
+  autoFovEnabled?: boolean;
 }
 
 export interface UIConfig {
-  showPoints2D: boolean;
-  showPoints3D: boolean;
-  backgroundColor: string;
-  matchesDisplayMode: MatchesDisplayMode;
-  matchesOpacity: number;
-  matchesColor: string;
-  maskOverlay: boolean;
-  maskOpacity: number;
-  showAxes: boolean;
-  showGrid: boolean;
-  axesCoordinateSystem: AxesCoordinateSystem;
-  axesScale: number;
-  gridScale: number;
-  axisLabelMode: AxisLabelMode;
-  showGizmo: boolean;
-  galleryCollapsed: boolean;
+  [key: string]: unknown;
+  showPoints2D?: boolean;
+  showPoints3D?: boolean;
+  backgroundColor?: string;
+  showMatches?: boolean;
+  matchesDisplayMode?: MatchesDisplayMode;
+  matchesOpacity?: number;
+  matchesColor?: string;
+  maskOverlay?: boolean;
+  maskOpacity?: number;
+  showAxes?: boolean;
+  showGrid?: boolean;
+  axesCoordinateSystem?: AxesCoordinateSystem;
+  axesScale?: number;
+  gridScale?: number;
+  axisLabelMode?: AxisLabelMode;
+  showGizmo?: boolean;
+  galleryCollapsed?: boolean;
 }
 
 export interface ExportConfig {
-  screenshotSize: ScreenshotSize;
-  screenshotFormat: ScreenshotFormat;
-  screenshotHideLogo: boolean;
-  modelFormat: ExportFormat;
+  [key: string]: unknown;
+  screenshotSize?: ScreenshotSize;
+  screenshotFormat?: ScreenshotFormat;
+  screenshotHideLogo?: boolean;
+  modelFormat?: ModelExportFormat;
+}
+
+export interface RigConfig {
+  [key: string]: unknown;
+  showRig?: boolean;
+  rigDisplayMode?: RigDisplayMode;
+  rigColorMode?: RigColorMode;
+  rigLineColor?: string;
+  rigLineOpacity?: number;
 }
 
 export interface AppConfiguration {
@@ -78,6 +106,7 @@ export interface AppConfiguration {
   camera: CameraConfig;
   ui: UIConfig;
   export: ExportConfig;
+  rig: RigConfig;
 }
 
 // Deep partial type for partial configuration imports

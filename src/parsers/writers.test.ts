@@ -1,28 +1,30 @@
-import { describe, it, expect, vi } from 'vitest';
-import { exportMasksZip, downloadMasksZip } from './writers';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import {
+  __resetDownloadSchedulerForTests,
+  downloadMasksZip,
+  exportMasksZip,
+  exportReconstructionZip,
+} from './writers';
 import { unzipSync } from 'fflate';
-
-/**
- * jsdom's Blob/File don't implement arrayBuffer(). Use FileReader as a polyfill.
- */
-async function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as ArrayBuffer);
-    reader.onerror = reject;
-    reader.readAsArrayBuffer(blob);
-  });
-}
+import {
+  buildAnchorElement,
+  buildReadableBinaryFile,
+  buildPoint3D,
+  buildReconstruction,
+  buildSetTimeoutImplementation,
+  readBlobAsArrayBuffer,
+} from '../test/builders';
 
 /**
  * Create a File with a working arrayBuffer() method for jsdom.
  */
 function makeMockFile(data: Uint8Array, name: string, type = 'image/png'): File {
-  const file = new File([data], name, { type });
-  // Polyfill arrayBuffer for jsdom
-  file.arrayBuffer = () => blobToArrayBuffer(file);
-  return file;
+  return buildReadableBinaryFile({ contents: data, name, type });
 }
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('exportMasksZip', () => {
   const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]); // PNG header
@@ -37,7 +39,7 @@ describe('exportMasksZip', () => {
       fetchMask,
     );
 
-    const zipData = new Uint8Array(await blobToArrayBuffer(blob));
+    const zipData = new Uint8Array(await readBlobAsArrayBuffer(blob));
     const entries = unzipSync(zipData);
 
     expect(Object.keys(entries)).toEqual([
@@ -54,7 +56,7 @@ describe('exportMasksZip', () => {
       fetchMask,
     );
 
-    const zipData = new Uint8Array(await blobToArrayBuffer(blob));
+    const zipData = new Uint8Array(await readBlobAsArrayBuffer(blob));
     const entries = unzipSync(zipData);
 
     expect(Object.keys(entries)).toEqual(['masks/cam1/photo.jpg.png']);
@@ -68,7 +70,7 @@ describe('exportMasksZip', () => {
       fetchMask,
     );
 
-    const zipData = new Uint8Array(await blobToArrayBuffer(blob));
+    const zipData = new Uint8Array(await readBlobAsArrayBuffer(blob));
     const entries = unzipSync(zipData);
 
     expect(Object.keys(entries)).toEqual(['masks/cam1/photo.jpg.png']);
@@ -80,7 +82,7 @@ describe('exportMasksZip', () => {
 
     const blob = await exportMasksZip(['photo.jpg'], fetchMask);
 
-    const zipData = new Uint8Array(await blobToArrayBuffer(blob));
+    const zipData = new Uint8Array(await readBlobAsArrayBuffer(blob));
     const entries = unzipSync(zipData);
     const stored = entries['masks/photo.jpg.png'];
 
@@ -88,6 +90,7 @@ describe('exportMasksZip', () => {
   });
 
   it('skips images with no mask (null return)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const fetchMask = vi.fn()
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(makeMockFile(pngBytes, 'mask.png'));
@@ -97,10 +100,11 @@ describe('exportMasksZip', () => {
       fetchMask,
     );
 
-    const zipData = new Uint8Array(await blobToArrayBuffer(blob));
+    const zipData = new Uint8Array(await readBlobAsArrayBuffer(blob));
     const entries = unzipSync(zipData);
 
     expect(Object.keys(entries)).toEqual(['masks/has-mask.jpg.png']);
+    expect(warn).toHaveBeenCalledWith('[Mask Export] 1/2 masks failed to export');
   });
 
   it('reports progress', async () => {
@@ -120,6 +124,7 @@ describe('exportMasksZip', () => {
   });
 
   it('reports progress for skipped masks', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const fetchMask = vi.fn()
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(makeMockFile(pngBytes, 'm.png'));
@@ -134,11 +139,14 @@ describe('exportMasksZip', () => {
 
     expect(progress[0]).toEqual({ percent: 50, message: 'Skipped: skip.jpg' });
     expect(progress[1]).toEqual({ percent: 100, message: undefined });
+    expect(warn).toHaveBeenCalledWith('[Mask Export] 1/2 masks failed to export');
   });
 
   it('handles fetch errors gracefully', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const error = new Error('network error');
     const fetchMask = vi.fn()
-      .mockRejectedValueOnce(new Error('network error'))
+      .mockRejectedValueOnce(error)
       .mockResolvedValueOnce(makeMockFile(pngBytes, 'm.png'));
 
     const blob = await exportMasksZip(
@@ -146,53 +154,88 @@ describe('exportMasksZip', () => {
       fetchMask,
     );
 
-    const zipData = new Uint8Array(await blobToArrayBuffer(blob));
+    const zipData = new Uint8Array(await readBlobAsArrayBuffer(blob));
     const entries = unzipSync(zipData);
 
     expect(Object.keys(entries)).toEqual(['masks/good.jpg.png']);
+    expect(warn).toHaveBeenCalledWith('[Mask Export] Failed to process bad.jpg:', error);
+    expect(warn).toHaveBeenCalledWith('[Mask Export] 1/2 masks failed to export');
   });
 
   it('produces valid ZIP with zero entries when all masks missing', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const fetchMask = vi.fn().mockResolvedValue(null);
 
     const blob = await exportMasksZip(['a.jpg'], fetchMask);
 
     expect(blob.size).toBeGreaterThan(0);
     expect(blob.type).toBe('application/zip');
-    const zipData = new Uint8Array(await blobToArrayBuffer(blob));
+    const zipData = new Uint8Array(await readBlobAsArrayBuffer(blob));
     const entries = unzipSync(zipData);
     expect(Object.keys(entries)).toEqual([]);
+    expect(warn).toHaveBeenCalledWith('[Mask Export] 1/1 masks failed to export');
   });
 });
 
 describe('downloadMasksZip', () => {
   it('triggers a download with filename masks.zip', async () => {
+    __resetDownloadSchedulerForTests();
+
     const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
     const fetchMask = vi.fn().mockResolvedValue(makeMockFile(pngBytes, 'mask.png'));
 
     // Mock DOM download mechanism
-    let capturedDownload = '';
     const clickSpy = vi.fn();
-    const createElementSpy = vi.spyOn(document, 'createElement').mockReturnValue({
-      set href(_: string) {},
-      set download(v: string) { capturedDownload = v; },
-      get download() { return capturedDownload; },
-      click: clickSpy,
-    } as unknown as HTMLAnchorElement);
+    const anchor = buildAnchorElement({ click: clickSpy });
+    const createElementSpy = vi.spyOn(document, 'createElement').mockReturnValue(anchor);
     const appendChildSpy = vi.spyOn(document.body, 'appendChild').mockImplementation((node) => node);
     const removeChildSpy = vi.spyOn(document.body, 'removeChild').mockImplementation((node) => node);
     const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    let scheduledRevoke: TimerHandler | undefined;
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(buildSetTimeoutImplementation({
+      onSchedule: (handler) => {
+        scheduledRevoke = handler;
+      },
+    }));
 
-    await downloadMasksZip(['img.jpg'], fetchMask);
+    try {
+      await downloadMasksZip(['img.jpg'], fetchMask);
 
-    expect(createElementSpy).toHaveBeenCalledWith('a');
-    expect(clickSpy).toHaveBeenCalledOnce();
-    expect(capturedDownload).toBe('masks.zip');
-    expect(revokeObjectURLSpy).toHaveBeenCalledOnce();
+      expect(createElementSpy).toHaveBeenCalledWith('a');
+      expect(clickSpy).toHaveBeenCalledOnce();
+      expect(anchor.download).toBe('masks.zip');
+      expect(revokeObjectURLSpy).not.toHaveBeenCalled();
 
-    createElementSpy.mockRestore();
-    appendChildSpy.mockRestore();
-    removeChildSpy.mockRestore();
-    revokeObjectURLSpy.mockRestore();
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 60_000);
+      expect(typeof scheduledRevoke).toBe('function');
+      if (typeof scheduledRevoke === 'function') scheduledRevoke();
+      expect(revokeObjectURLSpy).toHaveBeenCalledOnce();
+    } finally {
+      createElementSpy.mockRestore();
+      appendChildSpy.mockRestore();
+      removeChildSpy.mockRestore();
+      revokeObjectURLSpy.mockRestore();
+      setTimeoutSpy.mockRestore();
+    }
+  });
+});
+
+describe('exportReconstructionZip', () => {
+  it('exports text COLMAP files through the writers facade', async () => {
+    const reconstruction = buildReconstruction({
+      points3D: [buildPoint3D()],
+    });
+
+    const blob = await exportReconstructionZip(reconstruction, { format: 'text' });
+    const entries = unzipSync(new Uint8Array(await readBlobAsArrayBuffer(blob)));
+
+    expect(Object.keys(entries)).toEqual([
+      'sparse/0/cameras.txt',
+      'sparse/0/images.txt',
+      'sparse/0/points3D.txt',
+    ]);
+    expect(new TextDecoder().decode(entries['sparse/0/cameras.txt'])).toContain('PINHOLE');
+    expect(new TextDecoder().decode(entries['sparse/0/images.txt'])).toContain('image.jpg');
+    expect(new TextDecoder().decode(entries['sparse/0/points3D.txt'])).toContain('# Number of points: 1');
   });
 });

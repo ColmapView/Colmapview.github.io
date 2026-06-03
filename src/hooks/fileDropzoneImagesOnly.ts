@@ -10,6 +10,7 @@ interface ProgressUpdate {
 interface RunImagesOnlyLoadOptions {
   imageFiles: Map<string, File>;
   hasMasks: boolean;
+  splatFile?: File;
   mapProgress: (localPercent: number) => number;
   setUrlProgress: (progress: ProgressUpdate) => void;
   setLoadedFiles: (files: LoadedFiles) => void;
@@ -23,6 +24,7 @@ interface RunImagesOnlyLoadOptions {
 export function runImagesOnlyLoad({
   imageFiles,
   hasMasks,
+  splatFile,
   mapProgress,
   setUrlProgress,
   setLoadedFiles,
@@ -42,6 +44,7 @@ export function runImagesOnlyLoad({
     camerasFile: undefined,
     imagesFile: undefined,
     points3DFile: undefined,
+    splatFile,
     databaseFile: undefined,
     rigsFile: undefined,
     framesFile: undefined,

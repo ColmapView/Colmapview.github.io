@@ -2,6 +2,11 @@ import { useEffect, useState, useCallback } from 'react';
 import { CloseIcon, InfoIcon, WarningIcon } from '../../icons';
 import { notificationStyles } from '../../theme/componentStyles';
 import type { Notification } from '../../store/stores/notificationStore';
+import {
+  getNotificationToastVisualState,
+  NOTIFICATION_EXIT_DELAY_MS,
+  shouldAutoDismissNotification,
+} from './notificationToastPolicy';
 
 interface NotificationToastProps {
   notification: Notification;
@@ -13,15 +18,16 @@ export function NotificationToast({ notification, onClose }: NotificationToastPr
 
   const handleClose = useCallback(() => {
     setIsExiting(true);
-    // Wait for fade-out animation to complete before removing
     setTimeout(() => {
       onClose(notification.id);
-    }, 200);
+    }, NOTIFICATION_EXIT_DELAY_MS);
   }, [notification.id, onClose]);
 
-  // Auto-dismiss for info notifications
   useEffect(() => {
-    if (notification.type === 'info' && notification.duration) {
+    if (shouldAutoDismissNotification({
+      type: notification.type,
+      duration: notification.duration,
+    })) {
       const timer = setTimeout(() => {
         handleClose();
       }, notification.duration);
@@ -29,14 +35,12 @@ export function NotificationToast({ notification, onClose }: NotificationToastPr
     }
   }, [notification.type, notification.duration, handleClose]);
 
-  const isInfo = notification.type === 'info';
-  const Icon = isInfo ? InfoIcon : WarningIcon;
-  const iconContainerClass = isInfo ? notificationStyles.iconContainerInfo : notificationStyles.iconContainerWarning;
-  const animationClass = isExiting ? notificationStyles.exiting : notificationStyles.entering;
+  const visualState = getNotificationToastVisualState(notification.type, isExiting);
+  const Icon = visualState.iconKind === 'info' ? InfoIcon : WarningIcon;
 
   return (
-    <div className={`${notificationStyles.toast} ${animationClass}`}>
-      <div className={`${notificationStyles.iconContainer} ${iconContainerClass}`}>
+    <div className={`${notificationStyles.toast} ${visualState.animationClass}`}>
+      <div className={`${notificationStyles.iconContainer} ${visualState.iconContainerClass}`}>
         <Icon className={notificationStyles.icon} />
       </div>
       <div className={notificationStyles.content}>

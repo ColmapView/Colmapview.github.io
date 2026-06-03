@@ -3,15 +3,13 @@
  * Layout mirrors the context menu editor: icon + label + toggle switch rows.
  */
 
-import { memo, useCallback } from 'react';
-import { useUIStore } from '../../store';
-import type { AutoHideElement } from '../../store/stores/uiStore';
+import { memo, useCallback, type ReactNode } from 'react';
 import { useModalZIndex } from '../../hooks/useModalZIndex';
 import { useModalDrag } from '../../hooks/useModalDrag';
 import { modalStyles } from '../../theme';
+import { FloatingWindowShell } from '../ui/FloatingWindowShell';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import {
-  CloseIcon,
   AxesIcon,
   GridIcon,
   TransformIcon,
@@ -21,23 +19,32 @@ import {
   RigIcon,
   SettingsIcon,
 } from '../../icons';
+import {
+  AUTO_HIDE_MODAL_DESCRIPTION,
+  AUTO_HIDE_MODAL_DONE_LABEL,
+  AUTO_HIDE_MODAL_ESTIMATED_HEIGHT,
+  AUTO_HIDE_MODAL_TITLE,
+  AUTO_HIDE_MODAL_WIDTH,
+  getAutoHideModalBodyStyle,
+  getAutoHideModalHeaderDragStyle,
+  getAutoHideModalOverlayStyle,
+  getAutoHideModalPanelStyle,
+  getAutoHideModalRows,
+  getNextAutoHideElementValue,
+  type AutoHideModalIconId,
+} from './autoHideModalViewModel';
+import { useAutoHideModalStoreFacade } from './useAutoHideModalStoreFacade';
 
-interface ElementDef {
-  key: AutoHideElement;
-  label: string;
-  icon: React.ReactNode;
-}
-
-const ELEMENTS: ElementDef[] = [
-  { key: 'buttons', label: 'Buttons', icon: <SettingsIcon className="w-4 h-4" /> },
-  { key: 'axes', label: 'Axes', icon: <AxesIcon className="w-4 h-4" /> },
-  { key: 'grid', label: 'Grid', icon: <GridIcon className="w-4 h-4" /> },
-  { key: 'gizmo', label: 'Gizmo', icon: <TransformIcon className="w-4 h-4" /> },
-  { key: 'points', label: 'Points', icon: <ColorRgbIcon className="w-4 h-4" /> },
-  { key: 'cameras', label: 'Cameras', icon: <FrustumIcon className="w-4 h-4" /> },
-  { key: 'matches', label: 'Matches', icon: <MatchOnIcon className="w-4 h-4" /> },
-  { key: 'rigs', label: 'Rigs', icon: <RigIcon className="w-4 h-4" /> },
-];
+const AUTO_HIDE_MODAL_ICONS: Record<AutoHideModalIconId, ReactNode> = {
+  settings: <SettingsIcon className="w-4 h-4" />,
+  axes: <AxesIcon className="w-4 h-4" />,
+  grid: <GridIcon className="w-4 h-4" />,
+  gizmo: <TransformIcon className="w-4 h-4" />,
+  points: <ColorRgbIcon className="w-4 h-4" />,
+  cameras: <FrustumIcon className="w-4 h-4" />,
+  matches: <MatchOnIcon className="w-4 h-4" />,
+  rigs: <RigIcon className="w-4 h-4" />,
+};
 
 interface AutoHideModalProps {
   isOpen: boolean;
@@ -45,64 +52,56 @@ interface AutoHideModalProps {
 }
 
 export const AutoHideModal = memo(function AutoHideModal({ isOpen, onClose }: AutoHideModalProps) {
-  const autoHideElements = useUIStore((s) => s.autoHideElements);
-  const setAutoHideElement = useUIStore((s) => s.setAutoHideElement);
+  const {
+    data: { autoHideElements },
+    actions: { setAutoHideElement },
+  } = useAutoHideModalStoreFacade();
 
   const { zIndex, bringToFront } = useModalZIndex(isOpen);
   const { position, panelRef, handleDragStart } = useModalDrag({
-    estimatedWidth: 240,
-    estimatedHeight: 400,
+    estimatedWidth: AUTO_HIDE_MODAL_WIDTH,
+    estimatedHeight: AUTO_HIDE_MODAL_ESTIMATED_HEIGHT,
     isOpen,
   });
+  const rows = getAutoHideModalRows(autoHideElements);
 
-  const toggleElement = useCallback((key: AutoHideElement) => {
-    setAutoHideElement(key, !autoHideElements[key]);
+  const toggleElement = useCallback((key: (typeof rows)[number]['key']) => {
+    setAutoHideElement(key, getNextAutoHideElementValue(autoHideElements, key));
   }, [autoHideElements, setAutoHideElement]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 pointer-events-none" style={{ zIndex }}>
-      <div
-        ref={panelRef}
-        className={modalStyles.toolPanel}
-        style={{ left: position.x, top: position.y, width: 240 }}
-        onPointerDown={bringToFront}
-      >
-        {/* Header */}
-        <div
-          className={modalStyles.toolHeader}
-          onPointerDown={handleDragStart}
-          style={{ touchAction: 'none' }}
-        >
-          <span className={modalStyles.toolHeaderTitle}>Auto-hide Elements</span>
-          <button
-            onClick={onClose}
-            onPointerDown={(e) => e.stopPropagation()}
-            className={modalStyles.toolHeaderClose}
-            title="Close"
-          >
-            <CloseIcon className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
+    <FloatingWindowShell
+      isOpen={isOpen}
+      title={AUTO_HIDE_MODAL_TITLE}
+      onClose={onClose}
+      panelRef={panelRef}
+      overlayStyle={getAutoHideModalOverlayStyle(zIndex)}
+      panelStyle={getAutoHideModalPanelStyle(position)}
+      headerStyle={getAutoHideModalHeaderDragStyle()}
+      onPanelPointerDown={bringToFront}
+      onHeaderPointerDown={handleDragStart}
+    >
         {/* Body */}
-        <div className="p-4 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 120px)' }}>
+        <div className="p-4 overflow-y-auto" style={getAutoHideModalBodyStyle()}>
           <div className="text-ds-secondary text-xs mb-3">
-            Select which elements hide when idle.
+            {AUTO_HIDE_MODAL_DESCRIPTION}
           </div>
 
           <div className="flex flex-col">
-            {ELEMENTS.map(({ key, label, icon }) => (
+            {rows.map(({ key, label, iconId, checked }) => (
               <label
                 key={key}
                 className="flex items-center gap-2 cursor-pointer hover-ds-hover rounded px-2 py-1.5"
               >
-                <span className="w-4 h-4 flex-shrink-0 opacity-60">{icon}</span>
+                <span className="w-4 h-4 flex-shrink-0 opacity-60">
+                  {AUTO_HIDE_MODAL_ICONS[iconId]}
+                </span>
                 <span className="text-sm text-ds-primary">{label}</span>
                 <span className="ml-auto">
                   <ToggleSwitch
-                    checked={autoHideElements[key]}
+                    checked={checked}
                     onChange={() => toggleElement(key)}
                   />
                 </span>
@@ -115,11 +114,10 @@ export const AutoHideModal = memo(function AutoHideModal({ isOpen, onClose }: Au
               onClick={onClose}
               className={modalStyles.actionButtonPrimary}
             >
-              Done
+              {AUTO_HIDE_MODAL_DONE_LABEL}
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </FloatingWindowShell>
   );
 });

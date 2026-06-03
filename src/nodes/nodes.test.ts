@@ -28,9 +28,27 @@ import { usePointCloudStore } from '../store/stores/pointCloudStore';
 import { useCameraStore } from '../store/stores/cameraStore';
 import { useUIStore } from '../store/stores/uiStore';
 import { useRigStore } from '../store/stores/rigStore';
+import type { CameraViewState, NavigationHistoryEntry } from '../store/types';
 
 // Type guards
 import { isVisibleNode, isVisualNode } from './types/base';
+
+function buildCameraViewState(offset = 0): CameraViewState {
+  return {
+    position: [1 + offset, 2 + offset, 3 + offset],
+    quaternion: [0, 0, 0, 1],
+    target: [offset, offset, offset],
+    distance: 5 + offset,
+  };
+}
+
+function buildNavigationHistoryEntry(toImageId: number, offset = 0): NavigationHistoryEntry {
+  return {
+    fromState: buildCameraViewState(offset),
+    fromImageId: offset === 0 ? null : offset,
+    toImageId,
+  };
+}
 
 describe('Node Hooks', () => {
   beforeEach(() => {
@@ -56,6 +74,7 @@ describe('Node Hooks', () => {
 
     it('returns all expected properties', () => {
       const { result } = renderHook(() => usePointsNode());
+      expect(result.current).toHaveProperty('splatsVisible');
       expect(result.current).toHaveProperty('size');
       expect(result.current).toHaveProperty('colorMode');
       expect(result.current).toHaveProperty('minTrackLength');
@@ -267,6 +286,16 @@ describe('Node Actions', () => {
       expect(usePointCloudStore.getState().showPointCloud).toBe(false);
     });
 
+    it('setSplatsVisible selects the splat color mode', () => {
+      const { result } = renderHook(() => usePointsNodeActions());
+      act(() => result.current.setSplatsVisible(true));
+      expect(usePointCloudStore.getState()).toMatchObject({
+        showPointCloud: true,
+        showSplats: true,
+        colorMode: 'splats',
+      });
+    });
+
     it('setOpacity updates store', () => {
       const { result } = renderHook(() => usePointsNodeActions());
       act(() => result.current.setOpacity(0.5));
@@ -281,8 +310,8 @@ describe('Node Actions', () => {
 
     it('setColorMode updates store', () => {
       const { result } = renderHook(() => usePointsNodeActions());
-      act(() => result.current.setColorMode('height'));
-      expect(usePointCloudStore.getState().colorMode).toBe('height');
+      act(() => result.current.setColorMode('error'));
+      expect(usePointCloudStore.getState().colorMode).toBe('error');
     });
 
     it('setMinTrackLength updates store', () => {
@@ -327,6 +356,20 @@ describe('Node Actions', () => {
       const { result } = renderHook(() => usePointsNodeActions());
       act(() => result.current.toggleVisible());
       expect(usePointCloudStore.getState().showPointCloud).toBe(!initial);
+    });
+
+    it('toggleSplats switches between splat and RGB color modes', () => {
+      const { result } = renderHook(() => usePointsNodeActions());
+      act(() => result.current.toggleSplats());
+      expect(usePointCloudStore.getState()).toMatchObject({
+        showSplats: true,
+        colorMode: 'splats',
+      });
+      act(() => result.current.toggleSplats());
+      expect(usePointCloudStore.getState()).toMatchObject({
+        showSplats: false,
+        colorMode: 'rgb',
+      });
     });
   });
 
@@ -541,34 +584,34 @@ describe('Node Actions', () => {
 
     it('flyToState sets flyToViewState', () => {
       const { result } = renderHook(() => useNavigationNodeActions());
-      const viewState = { position: [1, 2, 3], target: [0, 0, 0], up: [0, 1, 0] };
-      act(() => result.current.flyToState(viewState as any));
+      const viewState = buildCameraViewState();
+      act(() => result.current.flyToState(viewState));
       expect(useCameraStore.getState().flyToViewState).toEqual(viewState);
     });
 
     it('clearFlyToViewState clears flyToViewState', () => {
       const { result } = renderHook(() => useNavigationNodeActions());
-      const viewState = { position: [1, 2, 3], target: [0, 0, 0], up: [0, 1, 0] };
-      act(() => result.current.flyToState(viewState as any));
+      const viewState = buildCameraViewState();
+      act(() => result.current.flyToState(viewState));
       act(() => result.current.clearFlyToViewState());
       expect(useCameraStore.getState().flyToViewState).toBeNull();
     });
 
     it('setCurrentViewState updates store', () => {
       const { result } = renderHook(() => useNavigationNodeActions());
-      const viewState = { position: [4, 5, 6], target: [1, 1, 1], up: [0, 1, 0] };
-      act(() => result.current.setCurrentViewState(viewState as any));
+      const viewState = buildCameraViewState(3);
+      act(() => result.current.setCurrentViewState(viewState));
       expect(useCameraStore.getState().currentViewState).toEqual(viewState);
     });
 
     it('navigation history push/pop/peek work correctly', () => {
       const { result } = renderHook(() => useNavigationNodeActions());
-      const entry1 = { position: [1, 2, 3], target: [0, 0, 0], up: [0, 1, 0], timestamp: Date.now() };
-      const entry2 = { position: [4, 5, 6], target: [1, 1, 1], up: [0, 1, 0], timestamp: Date.now() };
+      const entry1 = buildNavigationHistoryEntry(1);
+      const entry2 = buildNavigationHistoryEntry(2, 3);
 
       // Push entries
-      act(() => result.current.pushNavigationHistory(entry1 as any));
-      act(() => result.current.pushNavigationHistory(entry2 as any));
+      act(() => result.current.pushNavigationHistory(entry1));
+      act(() => result.current.pushNavigationHistory(entry2));
       expect(useCameraStore.getState().navigationHistory).toHaveLength(2);
 
       // Peek should return last entry without removing
@@ -590,8 +633,8 @@ describe('Node Actions', () => {
 
     it('clearNavigationHistory empties history', () => {
       const { result } = renderHook(() => useNavigationNodeActions());
-      const entry = { position: [1, 2, 3], target: [0, 0, 0], up: [0, 1, 0], timestamp: Date.now() };
-      act(() => result.current.pushNavigationHistory(entry as any));
+      const entry = buildNavigationHistoryEntry(1);
+      act(() => result.current.pushNavigationHistory(entry));
       act(() => result.current.clearNavigationHistory());
       expect(useCameraStore.getState().navigationHistory).toHaveLength(0);
     });

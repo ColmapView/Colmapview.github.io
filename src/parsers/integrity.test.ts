@@ -15,52 +15,53 @@
  * three bins via the real writers, re-parses them, and asserts every
  * track element resolves to a valid (image, points2D[idx]).
  */
-import { describe, it, expect } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { parseCamerasBinary } from './cameras';
 import { parseImagesBinary } from './images';
 import { parsePoints3DBinary } from './points3d';
 import { writeCamerasBinary, writeImagesBinary, writePoints3DBinary } from './writers';
-import type { Camera, Image, Point3D, Reconstruction } from '../types/colmap';
-import { CameraModelId } from '../types/colmap';
+import type { Image, Point3D, Reconstruction } from '../types/colmap';
 import { WasmReconstructionWrapper } from '../wasm/reconstruction';
-import type { ColmapWasmModule } from '../wasm/types';
 import {
   createSim3dFromEuler,
   transformReconstruction,
 } from '../utils/sim3dTransforms';
+import {
+  buildWasmCameraImageMaps,
+  resolveColmapWasmFactory,
+} from '../test/builders/wasmFakes';
+import { copyBytesToArrayBuffer } from '../test/builders/fileFakes';
 import { filterReconstructionByImageIds } from '../store/actions/deletionActions';
+import {
+  getBicycleFixtureDir,
+  hasSparseBinaryFixture,
+} from '../../tests/colmapFixturePaths';
 
-const BIN = 'C:/Users/HEQ/Projects/colmap_webview/360_v2/bicycle/sparse/0';
+const BIN = getBicycleFixtureDir();
 const WASM_JS = resolve(process.cwd(), 'public/wasm/colmap_wasm.js');
 const WASM_BIN = resolve(process.cwd(), 'public/wasm/colmap_wasm.wasm');
-
-type Factory = (opts: { wasmBinary: Buffer; locateFile?: (f: string) => string }) => Promise<ColmapWasmModule>;
+const INTEGRITY_TEST_TIMEOUT_MS = 15000;
 
 async function makeWrapperInNode(): Promise<WasmReconstructionWrapper> {
-  const require = createRequire(import.meta.url);
-  const mod = require(WASM_JS) as { default?: Factory } | Factory;
-  const factory = (typeof mod === 'function' ? mod : mod.default) as Factory;
+  const factory = resolveColmapWasmFactory(await import(pathToFileURL(WASM_JS).href));
   const wasmBinary = readFileSync(WASM_BIN);
   const module = await factory({
     wasmBinary,
     locateFile: (f) => resolve(process.cwd(), 'public/wasm', f),
   });
-  // The wrapper's initialize() calls loadColmapWasm() which fetches — skip it
-  // and inject the Node-loaded module directly. Private fields, so cast.
+  // The wrapper's initialize() calls loadColmapWasm() which fetches; inject
+  // the Node-loaded module directly.
   const wrapper = new WasmReconstructionWrapper();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const internal = wrapper as any;
-  internal.module = module;
-  internal.reconstruction = new module.Reconstruction();
+  Reflect.set(wrapper, 'module', module);
+  Reflect.set(wrapper, 'reconstruction', new module.Reconstruction());
   return wrapper;
 }
 
 function toAB(path: string): ArrayBuffer {
-  const b = readFileSync(path);
-  return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
+  return copyBytesToArrayBuffer(readFileSync(path));
 }
 
 /**
@@ -85,40 +86,27 @@ function assertIntegrity(images: Map<number, Image>, points3D: Map<bigint, Point
   }
 }
 
-const missingFixture = !existsSync(`${BIN}/cameras.bin`) || !existsSync(WASM_JS) || !existsSync(WASM_BIN);
+const missingFixture = !hasSparseBinaryFixture(BIN) || !existsSync(WASM_JS) || !existsSync(WASM_BIN);
 
 describe.skipIf(missingFixture)('exported binary integrity (bicycle, WASM-mode)', () => {
+  let consoleLogSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    consoleLogSpy.mockRestore();
+  });
+
   it('round-trips the untransformed reconstruction with consistent tracks', async () => {
     const wasm = await makeWrapperInNode();
-    wasm.parseCameras(toAB(`${BIN}/cameras.bin`));
-    wasm.parseImages(toAB(`${BIN}/images.bin`));
-    wasm.parsePoints3D(toAB(`${BIN}/points3D.bin`));
-
-    const cameras = new Map<number, Camera>();
-    for (const c of Object.values(wasm.getAllCameras())) {
-      cameras.set(c.cameraId, {
-        cameraId: c.cameraId,
-        modelId: c.modelId as CameraModelId,
-        width: c.width,
-        height: c.height,
-        params: c.params,
-      });
-    }
+    wasm.parseCameras(toAB(resolve(BIN, 'cameras.bin')));
+    wasm.parseImages(toAB(resolve(BIN, 'images.bin')));
+    wasm.parsePoints3D(toAB(resolve(BIN, 'points3D.bin')));
 
     // Build JS images with empty points2D (what the app holds in WASM mode)
-    const images = new Map<number, Image>();
-    for (const info of wasm.getAllImageInfos()) {
-      const q = info.quaternion ?? [1, 0, 0, 0];
-      const t = info.translation ?? [0, 0, 0];
-      images.set(info.imageId, {
-        imageId: info.imageId,
-        qvec: [q[0], q[1], q[2], q[3]],
-        tvec: [t[0], t[1], t[2]],
-        cameraId: info.cameraId,
-        name: info.name,
-        points2D: [],
-      });
-    }
+    const { cameras, images } = buildWasmCameraImageMaps(wasm);
 
     // Write using WASM fallback for 2D points
     const camBuf = writeCamerasBinary(cameras);
@@ -133,37 +121,15 @@ describe.skipIf(missingFixture)('exported binary integrity (bicycle, WASM-mode)'
     expect(reImages.size).toBe(images.size);
     expect(rePoints.size).toBeGreaterThan(0);
     assertIntegrity(reImages, rePoints);
-  });
+  }, INTEGRITY_TEST_TIMEOUT_MS);
 
   it('survives applyTransformToData-style bake (realizes 2D points before dropping WASM)', async () => {
     const wasm = await makeWrapperInNode();
-    wasm.parseCameras(toAB(`${BIN}/cameras.bin`));
-    wasm.parseImages(toAB(`${BIN}/images.bin`));
-    wasm.parsePoints3D(toAB(`${BIN}/points3D.bin`));
+    wasm.parseCameras(toAB(resolve(BIN, 'cameras.bin')));
+    wasm.parseImages(toAB(resolve(BIN, 'images.bin')));
+    wasm.parsePoints3D(toAB(resolve(BIN, 'points3D.bin')));
 
-    const cameras = new Map<number, Camera>();
-    for (const c of Object.values(wasm.getAllCameras())) {
-      cameras.set(c.cameraId, {
-        cameraId: c.cameraId,
-        modelId: c.modelId as CameraModelId,
-        width: c.width,
-        height: c.height,
-        params: c.params,
-      });
-    }
-    const images = new Map<number, Image>();
-    for (const info of wasm.getAllImageInfos()) {
-      const q = info.quaternion ?? [1, 0, 0, 0];
-      const t = info.translation ?? [0, 0, 0];
-      images.set(info.imageId, {
-        imageId: info.imageId,
-        qvec: [q[0], q[1], q[2], q[3]],
-        tvec: [t[0], t[1], t[2]],
-        cameraId: info.cameraId,
-        name: info.name,
-        points2D: [],
-      });
-    }
+    const { cameras, images } = buildWasmCameraImageMaps(wasm);
     const reconstruction: Reconstruction = { cameras, images };
 
     // Simulate the fixed applyTransformToData:
@@ -203,37 +169,15 @@ describe.skipIf(missingFixture)('exported binary integrity (bicycle, WASM-mode)'
     let totalPoints2D = 0;
     for (const img of reImages.values()) totalPoints2D += img.points2D.length;
     expect(totalPoints2D).toBeGreaterThan(0);
-  });
+  }, INTEGRITY_TEST_TIMEOUT_MS);
 
   it('survives applyDeletionsToData in WASM mode (realizes points3D, filters tracks)', async () => {
     const wasm = await makeWrapperInNode();
-    wasm.parseCameras(toAB(`${BIN}/cameras.bin`));
-    wasm.parseImages(toAB(`${BIN}/images.bin`));
-    wasm.parsePoints3D(toAB(`${BIN}/points3D.bin`));
+    wasm.parseCameras(toAB(resolve(BIN, 'cameras.bin')));
+    wasm.parseImages(toAB(resolve(BIN, 'images.bin')));
+    wasm.parsePoints3D(toAB(resolve(BIN, 'points3D.bin')));
 
-    const cameras = new Map<number, Camera>();
-    for (const c of Object.values(wasm.getAllCameras())) {
-      cameras.set(c.cameraId, {
-        cameraId: c.cameraId,
-        modelId: c.modelId as CameraModelId,
-        width: c.width,
-        height: c.height,
-        params: c.params,
-      });
-    }
-    const images = new Map<number, Image>();
-    for (const info of wasm.getAllImageInfos()) {
-      const q = info.quaternion ?? [1, 0, 0, 0];
-      const t = info.translation ?? [0, 0, 0];
-      images.set(info.imageId, {
-        imageId: info.imageId,
-        qvec: [q[0], q[1], q[2], q[3]],
-        tvec: [t[0], t[1], t[2]],
-        cameraId: info.cameraId,
-        name: info.name,
-        points2D: [],
-      });
-    }
+    const { cameras, images } = buildWasmCameraImageMaps(wasm);
     const reconstruction: Reconstruction = {
       cameras,
       images,
@@ -279,29 +223,17 @@ describe.skipIf(missingFixture)('exported binary integrity (bicycle, WASM-mode)'
 
     // Full pycolmap-style integrity
     assertIntegrity(reImages, rePoints);
-  });
+  }, INTEGRITY_TEST_TIMEOUT_MS);
 
   it('regression: WITHOUT the applyTransformToData fix, integrity is violated', async () => {
     // This test documents the bug the fix targets. We intentionally skip
     // realizing points2D, then assert the integrity check fails.
     const wasm = await makeWrapperInNode();
-    wasm.parseCameras(toAB(`${BIN}/cameras.bin`));
-    wasm.parseImages(toAB(`${BIN}/images.bin`));
-    wasm.parsePoints3D(toAB(`${BIN}/points3D.bin`));
+    wasm.parseCameras(toAB(resolve(BIN, 'cameras.bin')));
+    wasm.parseImages(toAB(resolve(BIN, 'images.bin')));
+    wasm.parsePoints3D(toAB(resolve(BIN, 'points3D.bin')));
 
-    const images = new Map<number, Image>();
-    for (const info of wasm.getAllImageInfos()) {
-      const q = info.quaternion ?? [1, 0, 0, 0];
-      const t = info.translation ?? [0, 0, 0];
-      images.set(info.imageId, {
-        imageId: info.imageId,
-        qvec: [q[0], q[1], q[2], q[3]],
-        tvec: [t[0], t[1], t[2]],
-        cameraId: info.cameraId,
-        name: info.name,
-        points2D: [], // Empty — this is the bug state before the fix
-      });
-    }
+    const { images } = buildWasmCameraImageMaps(wasm);
     const points3D = wasm.buildPoints3DMap();
 
     // Write without wasm fallback and without realizing 2D points
@@ -311,5 +243,5 @@ describe.skipIf(missingFixture)('exported binary integrity (bicycle, WASM-mode)'
     const rePoints = parsePoints3DBinary(ptBuf);
 
     expect(() => assertIntegrity(reImages, rePoints)).toThrow(/out of range/);
-  });
+  }, INTEGRITY_TEST_TIMEOUT_MS);
 });

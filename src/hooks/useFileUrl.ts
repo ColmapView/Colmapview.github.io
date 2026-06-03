@@ -8,7 +8,83 @@
  * when rapidly switching between files (e.g., during quick scrolling).
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
+import {
+  revokeAllPendingBlobUrls,
+  scheduleBlobUrlRevocation,
+} from './fileUrlRevocationPolicy';
+
+interface FileUrlSnapshot {
+  file: File | null;
+  url: string | null;
+}
+
+interface FileUrlResource {
+  dispose: () => void;
+  getSnapshot: () => FileUrlSnapshot;
+  subscribe: (listener: () => void) => () => void;
+  syncFile: (file: File | null | undefined) => void;
+}
+
+const EMPTY_FILE_URL_SNAPSHOT: FileUrlSnapshot = {
+  file: null,
+  url: null,
+};
+
+function createFileUrlResource(): FileUrlResource {
+  let snapshot = EMPTY_FILE_URL_SNAPSHOT;
+  const listeners = new Set<() => void>();
+  const pendingRevocations = new Set<string>();
+
+  const emit = () => {
+    for (const listener of listeners) {
+      listener();
+    }
+  };
+
+  const scheduleCurrentUrlRevocation = () => {
+    if (!snapshot.url) return;
+
+    scheduleBlobUrlRevocation({
+      blobUrl: snapshot.url,
+      pendingRevocations,
+      requestIdleCallback: typeof requestIdleCallback !== 'undefined'
+        ? requestIdleCallback
+        : undefined,
+    });
+  };
+
+  return {
+    dispose: () => {
+      if (snapshot.url) {
+        pendingRevocations.add(snapshot.url);
+        snapshot = EMPTY_FILE_URL_SNAPSHOT;
+      }
+
+      revokeAllPendingBlobUrls(pendingRevocations);
+    },
+    getSnapshot: () => snapshot,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    syncFile: (file) => {
+      const nextFile = file ?? null;
+      if (snapshot.file === nextFile) return;
+
+      scheduleCurrentUrlRevocation();
+      snapshot = nextFile
+        ? {
+            file: nextFile,
+            url: URL.createObjectURL(nextFile),
+          }
+        : EMPTY_FILE_URL_SNAPSHOT;
+      emit();
+    },
+  };
+}
 
 /**
  * Create a blob URL for a file with automatic cleanup.
@@ -20,56 +96,22 @@ import { useState, useEffect, useRef } from 'react';
  * @returns The blob URL or null
  */
 export function useFileUrl(file: File | null | undefined): string | null {
-  const [url, setUrl] = useState<string | null>(null);
-  // Track pending URLs that need to be revoked
-  const pendingRevocationsRef = useRef<Set<string>>(new Set());
+  const resourceRef = useRef<FileUrlResource | null>(null);
+  resourceRef.current ??= createFileUrlResource();
+  const resource = resourceRef.current;
+  const snapshot = useSyncExternalStore(
+    resource.subscribe,
+    resource.getSnapshot,
+    resource.getSnapshot
+  );
 
   useEffect(() => {
-    if (!file) {
-       
-      setUrl(null);
-      return;
-    }
+    resource.syncFile(file);
+  }, [file, resource]);
 
-    const blobUrl = URL.createObjectURL(file);
-     
-    setUrl(blobUrl);
-
-    return () => {
-      // Defer revocation to allow React's commit phase to complete
-      // and any in-flight image loads to be properly canceled.
-      // This prevents ERR_FILE_NOT_FOUND errors during rapid scrolling.
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- Capture the Set reference once - it remains stable throughout the hook's lifetime
-      const pendingSet = pendingRevocationsRef.current;
-      pendingSet.add(blobUrl);
-
-      // Use requestIdleCallback if available, otherwise use setTimeout
-      // to defer until after the current event loop tick
-      const revoke = () => {
-        if (pendingSet.has(blobUrl)) {
-          pendingSet.delete(blobUrl);
-          URL.revokeObjectURL(blobUrl);
-        }
-      };
-
-      if (typeof requestIdleCallback !== 'undefined') {
-        requestIdleCallback(revoke, { timeout: 1000 });
-      } else {
-        setTimeout(revoke, 100);
-      }
-    };
-  }, [file]);
-
-  // Cleanup any remaining URLs on unmount
   useEffect(() => {
-    const pending = pendingRevocationsRef.current;
-    return () => {
-      pending.forEach((blobUrl) => {
-        URL.revokeObjectURL(blobUrl);
-      });
-      pending.clear();
-    };
-  }, []);
+    return resource.dispose;
+  }, [resource]);
 
-  return url;
+  return snapshot.file === (file ?? null) ? snapshot.url : null;
 }

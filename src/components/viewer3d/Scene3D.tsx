@@ -1,9 +1,8 @@
-import { Suspense, useMemo, useEffect, useCallback, useRef } from 'react';
+import { Suspense, useMemo, useEffect } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
-import * as THREE from 'three';
-import { PointCloud } from './PointCloud/index';
+import { PointCloud, SplatLayer } from './PointCloud/index';
 import { CameraFrustums, CameraMatches } from './CameraFrustums';
-import { wasFrustumTapRecent, wasFrustumTouchDownRecent } from './frustumTouchGuards';
+import { wasFrustumTapRecent } from './frustumTouchGuards';
 import { RigConnections } from './RigConnections';
 import { ViewerControls } from './ViewerControls';
 import { TrackballControls } from './TrackballControls';
@@ -15,126 +14,55 @@ import { PickingCursor } from './PickingCursor';
 import { ScreenshotCapture } from './ScreenshotCapture';
 import { FpsTracker } from './FpsTracker';
 import { FooterBranding } from './FooterBranding';
-import { GlobalContextMenu } from './GlobalContextMenu';
+import { GlobalContextMenu } from './contextMenu/GlobalContextMenu';
+import { Scene3DE2EProbe } from './Scene3DE2EProbe';
 import { Scene3DErrorBoundary } from './Scene3DErrorBoundary';
 import { DistanceInputModal } from '../modals/DistanceInputModal';
-import { useReconstructionStore, useUIStore, useCameraStore, useTransformStore, usePointPickingStore } from '../../store';
-import type { AutoHideElement } from '../../store/stores/uiStore';
 import { useAxesNode, useGridNode, useGizmoNode, useCamerasNode } from '../../nodes';
 
 import { useIsAlignmentMode } from '../../hooks/useAlignmentMode';
 import { useIdleTimer } from '../../hooks/useIdleTimer';
-import { getImageWorldPosition } from '../../utils/colmapTransforms';
 import { createSim3dFromEuler, sim3dToMatrix4, isIdentityEuler, transformPoint } from '../../utils/sim3dTransforms';
-import { percentile, median } from '../../utils/mathUtils';
+import { syncSceneBackgroundColor } from '../../utils/threeObjectMutations';
 import { CAMERA, VIZ_COLORS, OPACITY } from '../../theme';
-import { TOUCH } from '../../theme/sizing';
+import {
+  buildSceneBounds,
+  getInitialSceneCameraPosition,
+  getSceneLayerVisibility,
+  getSceneContainerStyle,
+  shouldDeselectCanvasPointerMiss,
+} from './scene3dViewModel';
+import { useSceneContextMenuController } from './useSceneContextMenuController';
+import {
+  useSceneContainerStoreFacade,
+  useSceneContentStoreFacade,
+} from './useScene3DStoreFacade';
 
 function SceneContent() {
-  const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
+  const {
+    data: {
+      reconstruction,
+      wasmReconstruction,
+      isIdle,
+      autoHideElements,
+      showAutoHideEditor,
+      viewResetTrigger,
+      viewDirection,
+      viewTrigger,
+      transform,
+    },
+  } = useSceneContentStoreFacade();
   // Use shared alignment mode (includes point picking AND floor detection)
   const isAlignmentMode = useIsAlignmentMode();
 
   const bounds = useMemo(() => {
-    if (!reconstruction) {
-      return { center: [0, 0, 0] as [number, number, number], radius: 5 };
-    }
-
-    const images = Array.from(reconstruction.images.values());
-
-    if (images.length > 0) {
-      const xCoords: number[] = [];
-      const yCoords: number[] = [];
-      const zCoords: number[] = [];
-
-      for (const image of images) {
-        const pos = getImageWorldPosition(image);
-        xCoords.push(pos.x);
-        yCoords.push(pos.y);
-        zCoords.push(pos.z);
-      }
-
-      const center: [number, number, number] = [
-        median(xCoords),
-        median(yCoords),
-        median(zCoords),
-      ];
-
-      const sortedX = [...xCoords].sort((a, b) => a - b);
-      const sortedY = [...yCoords].sort((a, b) => a - b);
-      const sortedZ = [...zCoords].sort((a, b) => a - b);
-
-      const rangeX = percentile(sortedX, 95) - percentile(sortedX, 5);
-      const rangeY = percentile(sortedY, 95) - percentile(sortedY, 5);
-      const rangeZ = percentile(sortedZ, 95) - percentile(sortedZ, 5);
-
-      const radius = Math.max(rangeX, rangeY, rangeZ, 0.001) / 2;
-
-      return { center, radius };
-    }
-
-    // Use WASM bounding box if available (avoids iterating points3D Map)
-    if (wasmReconstruction?.hasPoints()) {
-      const bbox = wasmReconstruction.getBoundingBox();
-      if (bbox) {
-        const center: [number, number, number] = [
-          (bbox.minX + bbox.maxX) / 2,
-          (bbox.minY + bbox.maxY) / 2,
-          (bbox.minZ + bbox.maxZ) / 2,
-        ];
-        const radius = Math.max(
-          bbox.maxX - bbox.minX,
-          bbox.maxY - bbox.minY,
-          bbox.maxZ - bbox.minZ
-        ) / 2;
-        return { center, radius: Math.max(radius, 0.001) };
-      }
-    }
-
-    // Fallback: iterate points3D Map if available (JS parser path)
-    if (reconstruction.points3D && reconstruction.points3D.size > 0) {
-      let minX = Infinity, maxX = -Infinity;
-      let minY = Infinity, maxY = -Infinity;
-      let minZ = Infinity, maxZ = -Infinity;
-
-      for (const point of reconstruction.points3D.values()) {
-        minX = Math.min(minX, point.xyz[0]);
-        maxX = Math.max(maxX, point.xyz[0]);
-        minY = Math.min(minY, point.xyz[1]);
-        maxY = Math.max(maxY, point.xyz[1]);
-        minZ = Math.min(minZ, point.xyz[2]);
-        maxZ = Math.max(maxZ, point.xyz[2]);
-      }
-
-      const center: [number, number, number] = [
-        (minX + maxX) / 2,
-        (minY + maxY) / 2,
-        (minZ + maxZ) / 2,
-      ];
-
-      const radius = Math.max(maxX - minX, maxY - minY, maxZ - minZ) / 2;
-
-      return { center, radius };
-    }
-
-    return { center: [0, 0, 0] as [number, number, number], radius: 5 };
+    return buildSceneBounds(reconstruction, wasmReconstruction);
   }, [reconstruction, wasmReconstruction]);
 
   const cameras = useCamerasNode();
   const axes = useAxesNode();
   const grid = useGridNode();
   const gizmo = useGizmoNode();
-  const isIdle = useUIStore((s) => s.isIdle);
-  const autoHideElements = useUIStore((s) => s.autoHideElements);
-  const showAutoHideEditor = useUIStore((s) => s.showAutoHideEditor);
-  const shouldHide = useCallback((key: AutoHideElement) => (isIdle || showAutoHideEditor) && autoHideElements[key], [isIdle, showAutoHideEditor, autoHideElements]);
-  const viewResetTrigger = useUIStore((s) => s.viewResetTrigger);
-  const viewDirection = useUIStore((s) => s.viewDirection);
-  const viewTrigger = useUIStore((s) => s.viewTrigger);
-
-  // Transform preview state (always enabled)
-  const transform = useTransformStore((s) => s.transform);
 
   // Compute transform for visual preview
   const { transformMatrix, transformedCenter } = useMemo(() => {
@@ -147,6 +75,40 @@ function SceneContent() {
     return { transformMatrix: matrix, transformedCenter: newCenter as [number, number, number] };
   }, [transform, bounds.center]);
 
+  const visibleLayers = useMemo(() => getSceneLayerVisibility({
+    isAlignmentMode,
+    hasReconstruction: reconstruction !== null,
+    camerasVisible: cameras.visible,
+    axesVisible: axes.visible,
+    gridVisible: grid.visible,
+    gizmoVisible: gizmo.visible,
+    isIdle,
+    showAutoHideEditor,
+    autoHideElements,
+  }), [
+    isAlignmentMode,
+    reconstruction,
+    cameras.visible,
+    axes.visible,
+    grid.visible,
+    gizmo.visible,
+    isIdle,
+    showAutoHideEditor,
+    autoHideElements,
+  ]);
+
+  const transformableContent = (
+    <>
+      {visibleLayers.points && <PointCloud />}
+      {visibleLayers.points && <SplatLayer />}
+      {visibleLayers.cameras && <CameraFrustums />}
+      {visibleLayers.matches && <CameraMatches />}
+      {visibleLayers.rigs && <RigConnections />}
+    </>
+  );
+  const e2eProbeEnabled = import.meta.env.DEV
+    && new URLSearchParams(window.location.search).get('e2eProbe') === '1';
+
   return (
     <>
       <ambientLight intensity={OPACITY.light.ambient} />
@@ -154,39 +116,33 @@ function SceneContent() {
 
       {/* Transformable content - wrapped in group when preview is active */}
       {/* Hide frustums during alignment modes (point picking or floor detection) for cleaner visualization */}
-      {/* PointCloud always rendered - it handles showPointCloud internally for main points,
-          but selection overlay is always visible when a camera is selected */}
+      {/* Point content handles point/splat visibility internally; selection overlay
+          stays visible when a camera is selected. */}
       {transformMatrix ? (
         <group matrixAutoUpdate={false} matrix={transformMatrix}>
-          {!shouldHide('points') && <PointCloud />}
-          {!isAlignmentMode && cameras.visible && !shouldHide('cameras') && <CameraFrustums />}
-          {!isAlignmentMode && cameras.visible && !shouldHide('matches') && <CameraMatches />}
-          {!isAlignmentMode && cameras.visible && !shouldHide('rigs') && <RigConnections />}
+          {transformableContent}
         </group>
       ) : (
-        <>
-          {!shouldHide('points') && <PointCloud />}
-          {!isAlignmentMode && cameras.visible && !shouldHide('cameras') && <CameraFrustums />}
-          {!isAlignmentMode && cameras.visible && !shouldHide('matches') && <CameraMatches />}
-          {!isAlignmentMode && cameras.visible && !shouldHide('rigs') && <RigConnections />}
-        </>
+        transformableContent
       )}
 
       {/* Axes/Grid stay in original coordinate system */}
       {/* Show axes automatically when in alignment mode for orientation reference */}
       <Suspense fallback={null}>
-        {(axes.visible || isAlignmentMode) && !shouldHide('axes') && <OriginAxes size={bounds.radius * axes.scale} scale={axes.scale} coordinateSystem={axes.coordinateSystem} labelMode={axes.labelMode} />}
-        {grid.visible && !shouldHide('grid') && <OriginGrid size={bounds.radius} scale={grid.scale} />}
+        {visibleLayers.axes && <OriginAxes size={bounds.radius * axes.scale} scale={axes.scale} coordinateSystem={axes.coordinateSystem} labelMode={axes.labelMode} />}
+        {visibleLayers.grid && <OriginGrid size={bounds.radius} scale={grid.scale} />}
       </Suspense>
 
       {/* Transform gizmo follows the transformed data - hidden during alignment mode */}
-      {!isAlignmentMode && reconstruction && gizmo.visible && !shouldHide('gizmo') && <TransformGizmo center={transformedCenter} size={bounds.radius * transform.scale * axes.scale} />}
+      {visibleLayers.gizmo && <TransformGizmo center={transformedCenter} size={bounds.radius * transform.scale * axes.scale} />}
 
       {/* Point picking markers - rendered outside transform group for stable display */}
       <SelectedPointMarkers />
 
       {/* Floor plane widget - rendered outside transform group for stable display */}
       <FloorPlaneWidget boundsRadius={bounds.radius} />
+
+      {e2eProbeEnabled && <Scene3DE2EProbe />}
 
       <TrackballControls target={bounds.center} radius={bounds.radius} resetTrigger={viewResetTrigger} viewDirection={viewDirection} viewTrigger={viewTrigger} />
     </>
@@ -206,164 +162,34 @@ function BackgroundColor({ color }: { color: string }) {
   const { scene, invalidate } = useThree();
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/immutability -- THREE.js scene requires direct property assignment
-    scene.background = new THREE.Color(color);
-    // Force frame invalidation to ensure render happens after background change
-    invalidate();
+    if (syncSceneBackgroundColor(scene, color)) {
+      // Force frame invalidation to ensure render happens after background change
+      invalidate();
+    }
   }, [scene, color, invalidate]);
 
   return null;
 }
 
 export function Scene3D() {
-  const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const backgroundColor = useUIStore((s) => s.backgroundColor);
-  const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
-  const openContextMenu = useUIStore((s) => s.openContextMenu);
-  const closeContextMenu = useUIStore((s) => s.closeContextMenu);
-  const showAutoHideEditor = useUIStore((s) => s.showAutoHideEditor);
-
-  // Point picking state for right-click cancellation
-  // Only subscribe to length to avoid re-renders when point contents change
-  const pickingMode = usePointPickingStore((s) => s.pickingMode);
-  const selectedPointsLength = usePointPickingStore((s) => s.selectedPoints.length);
-  const removeLastPoint = usePointPickingStore((s) => s.removeLastPoint);
-  const reset = usePointPickingStore((s) => s.reset);
-  const markerRightClickHandled = usePointPickingStore((s) => s.markerRightClickHandled);
-
-  const touchMode = useUIStore((s) => s.touchMode);
+  const {
+    data: {
+      reconstruction,
+      wasmReconstruction,
+      backgroundColor,
+      showAutoHideEditor,
+    },
+    actions: {
+      setSelectedImageId,
+    },
+  } = useSceneContainerStoreFacade();
+  const sceneContextMenu = useSceneContextMenuController();
 
   const idleRef = useIdleTimer();
 
-  // Track mouse position for distinguishing click from drag
-  const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
-  const DRAG_THRESHOLD = 5; // pixels
-
-  // Touch long-press for context menu (equivalent to desktop right-click)
-  const longPressRef = useRef<{ x: number; y: number; timer: ReturnType<typeof setTimeout> } | null>(null);
-
-  const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
-
   const cameraPosition = useMemo(() => {
-    // Use WASM bounding box if available
-    if (wasmReconstruction?.hasPoints()) {
-      const bbox = wasmReconstruction.getBoundingBox();
-      if (bbox) {
-        const maxDist = Math.max(
-          Math.abs(bbox.minX), Math.abs(bbox.maxX),
-          Math.abs(bbox.minY), Math.abs(bbox.maxY),
-          Math.abs(bbox.minZ), Math.abs(bbox.maxZ)
-        );
-        return [0, 0, maxDist * 2] as [number, number, number];
-      }
-    }
-
-    // Fallback: use points3D Map if available
-    if (!reconstruction || !reconstruction.points3D || reconstruction.points3D.size === 0) {
-      return [0, 0, 5] as [number, number, number];
-    }
-
-    let maxDist = 0;
-    for (const point of reconstruction.points3D.values()) {
-      const dist = Math.sqrt(
-        point.xyz[0] ** 2 + point.xyz[1] ** 2 + point.xyz[2] ** 2
-      );
-      maxDist = Math.max(maxDist, dist);
-    }
-
-    return [0, 0, maxDist * 2] as [number, number, number];
+    return getInitialSceneCameraPosition(reconstruction, wasmReconstruction);
   }, [reconstruction, wasmReconstruction]);
-
-  // Handle right-click for context menu (only if not dragging/panning)
-  // In point picking mode, right-click cancels instead of opening menu
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    // Check if this was a click (not a drag)
-    if (mouseDownPos.current) {
-      const dx = Math.abs(e.clientX - mouseDownPos.current.x);
-      const dy = Math.abs(e.clientY - mouseDownPos.current.y);
-      if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) {
-        // This was a drag, don't show menu
-        return;
-      }
-    }
-    e.preventDefault();
-
-    // If in point picking mode, right-click cancels instead of opening context menu
-    if (pickingMode !== 'off') {
-      // Check if a marker was already right-clicked (handled by SelectedPointMarkers)
-      // If so, skip to avoid double-removal (Three.js and DOM events are separate)
-      if (markerRightClickHandled) {
-        // Clear the flag for next time
-        usePointPickingStore.setState({ markerRightClickHandled: false });
-        return;
-      }
-
-      if (selectedPointsLength > 0) {
-        // Remove the last selected point
-        removeLastPoint();
-      } else {
-        // No points selected, exit picking mode entirely
-        reset();
-      }
-      return;
-    }
-
-    openContextMenu(e.clientX, e.clientY);
-  }, [openContextMenu, pickingMode, selectedPointsLength, removeLastPoint, reset, markerRightClickHandled]);
-
-  // Desktop: right-click tracking for contextmenu drag check
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button === 2) {
-      mouseDownPos.current = { x: e.clientX, y: e.clientY };
-      closeContextMenu();
-    }
-  }, [closeContextMenu]);
-
-  const handleMouseUp = useCallback(() => {
-    setTimeout(() => { mouseDownPos.current = null; }, 0);
-  }, []);
-
-  // Touch: long-press opens context menu (equivalent to desktop right-click)
-  const handleTouchPointerDown = useCallback((e: React.PointerEvent) => {
-    if (e.pointerType !== 'touch') return;
-    // Skip if a frustum's onPointerDown already handled this touch
-    // (R3F fires synchronously before this DOM handler bubbles)
-    if (wasFrustumTouchDownRecent()) return;
-    closeContextMenu();
-    const x = e.clientX, y = e.clientY;
-    const timer = setTimeout(() => {
-      longPressRef.current = null;
-      // Same logic as handleContextMenu: picking mode cancels instead of opening menu
-      if (pickingMode !== 'off') {
-        if (selectedPointsLength > 0) {
-          removeLastPoint();
-        } else {
-          reset();
-        }
-        return;
-      }
-      openContextMenu(x, y);
-    }, TOUCH.longPressDelay);
-    longPressRef.current = { x, y, timer };
-  }, [closeContextMenu, pickingMode, selectedPointsLength, removeLastPoint, reset, openContextMenu]);
-
-  const handleTouchPointerMove = useCallback((e: React.PointerEvent) => {
-    if (longPressRef.current && e.pointerType === 'touch') {
-      const dx = e.clientX - longPressRef.current.x;
-      const dy = e.clientY - longPressRef.current.y;
-      if (dx * dx + dy * dy > TOUCH.dragThreshold * TOUCH.dragThreshold) {
-        clearTimeout(longPressRef.current.timer);
-        longPressRef.current = null;
-      }
-    }
-  }, []);
-
-  const handleTouchPointerUp = useCallback((e: React.PointerEvent) => {
-    if (longPressRef.current && e.pointerType === 'touch') {
-      clearTimeout(longPressRef.current.timer);
-      longPressRef.current = null;
-    }
-  }, []);
 
   return (
     <div
@@ -371,13 +197,13 @@ export function Scene3D() {
       className="w-full h-full relative isolate scene-3d-container"
       data-testid="scene-3d"
       data-autohide-preview={showAutoHideEditor ? 'true' : undefined}
-      style={{ backgroundColor }}
-      onContextMenu={handleContextMenu}
-      onPointerDown={touchMode ? handleTouchPointerDown : undefined}
-      onPointerMove={touchMode ? handleTouchPointerMove : undefined}
-      onPointerUp={touchMode ? handleTouchPointerUp : undefined}
-      onMouseDown={touchMode ? undefined : handleMouseDown}
-      onMouseUp={touchMode ? undefined : handleMouseUp}
+      style={getSceneContainerStyle(backgroundColor)}
+      onContextMenu={sceneContextMenu.handleContextMenu}
+      onPointerDown={sceneContextMenu.touchMode ? sceneContextMenu.handleTouchPointerDown : undefined}
+      onPointerMove={sceneContextMenu.touchMode ? sceneContextMenu.handleTouchPointerMove : undefined}
+      onPointerUp={sceneContextMenu.touchMode ? sceneContextMenu.handleTouchPointerUp : undefined}
+      onMouseDown={sceneContextMenu.touchMode ? undefined : sceneContextMenu.handleMouseDown}
+      onMouseUp={sceneContextMenu.touchMode ? undefined : sceneContextMenu.handleMouseUp}
     >
       <Scene3DErrorBoundary backgroundColor={backgroundColor}>
         <Canvas
@@ -387,13 +213,14 @@ export function Scene3D() {
             near: CAMERA.nearPlane,
             far: CAMERA.farPlane,
           }}
-          gl={{ antialias: true }}
+          gl={{ antialias: false }}
           onPointerMissed={(e) => {
-            // Left-click or right-click on empty space deselects
             // On mobile, skip if a frustum tap was just handled in onPointerUp
             // (R3F's click raycast may miss the mesh, triggering this falsely)
-            if (e.button === 0 || e.button === 2) {
-              if (wasFrustumTapRecent()) return;
+            const frustumTapRecent = e.button === 0 || e.button === 2
+              ? wasFrustumTapRecent()
+              : false;
+            if (shouldDeselectCanvasPointerMiss(e.button, frustumTapRecent)) {
               setSelectedImageId(null);
             }
           }}

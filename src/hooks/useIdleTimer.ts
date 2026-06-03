@@ -1,7 +1,12 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useUIStore } from '../store';
-
-const MOVE_THRESHOLD = 20; // px — ignore small movements from orbit/scroll jitter
+import {
+  getIdleTimeoutDelayMs,
+  hasDeliberateIdlePointerMove,
+  isIdleHideableTarget,
+  shouldResumeIdleTimerAfterMouseOut,
+  type IdlePointerPosition,
+} from './idleTimerPolicy';
 
 /**
  * Sets data-idle="true" on the container after no deliberate interaction for the configured timeout.
@@ -11,7 +16,7 @@ const MOVE_THRESHOLD = 20; // px — ignore small movements from orbit/scroll ji
 export function useIdleTimer() {
   const containerRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const lastPos = useRef<{ x: number; y: number } | null>(null);
+  const lastPos = useRef<IdlePointerPosition | null>(null);
   const hoveringRef = useRef(false);
   const timeoutRef = useRef(useUIStore.getState().idleHideTimeout);
 
@@ -31,15 +36,15 @@ export function useIdleTimer() {
   const startTimer = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-    const timeout = timeoutRef.current;
+    const delayMs = getIdleTimeoutDelayMs(timeoutRef.current);
     clearTimeout(timerRef.current);
-    if (timeout <= 0) return; // disabled
+    if (delayMs === null) return;
     timerRef.current = setTimeout(() => {
       if (containerRef.current && !hoveringRef.current) {
         containerRef.current.dataset.idle = 'true';
         useUIStore.getState().setIsIdle(true);
       }
-    }, timeout * 1000);
+    }, delayMs);
   }, []);
 
   const resetTimer = useCallback(() => {
@@ -68,9 +73,7 @@ export function useIdleTimer() {
         lastPos.current = { x: e.clientX, y: e.clientY };
         return;
       }
-      const dx = e.clientX - lastPos.current.x;
-      const dy = e.clientY - lastPos.current.y;
-      if (dx * dx + dy * dy > MOVE_THRESHOLD * MOVE_THRESHOLD) {
+      if (hasDeliberateIdlePointerMove(lastPos.current, { x: e.clientX, y: e.clientY })) {
         lastPos.current = { x: e.clientX, y: e.clientY };
         resetTimer();
       }
@@ -95,8 +98,7 @@ export function useIdleTimer() {
 
     // Hover on idle-hideable elements — pause hiding, show if hidden
     const onMouseOver = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.closest?.('.idle-hideable')) {
+      if (isIdleHideableTarget(e.target)) {
         hoveringRef.current = true;
         clearTimeout(timerRef.current);
         if (containerRef.current) {
@@ -106,8 +108,7 @@ export function useIdleTimer() {
       }
     };
     const onMouseOut = (e: MouseEvent) => {
-      const target = e.relatedTarget as HTMLElement | null;
-      if (!target?.closest?.('.idle-hideable')) {
+      if (shouldResumeIdleTimerAfterMouseOut(e.relatedTarget)) {
         hoveringRef.current = false;
         startTimer();
       }

@@ -5,40 +5,37 @@
 
 import { useState, useMemo, useCallback, useEffect, memo } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
-import {
-  useReconstructionStore,
-  useNotificationStore,
-} from '../../store';
 import { useModalZIndex } from '../../hooks/useModalZIndex';
 import { useModalDrag } from '../../hooks/useModalDrag';
 import {
-  convertCameraModel,
-  getValidTargetModels,
   getConversionPreview,
-  type ConversionCompatibility,
   type ConversionPreview,
 } from '../../utils/cameraModelConversions';
-import { CameraModelId, type Camera, type CameraId } from '../../types/colmap';
-import { modalStyles, inputStyles, controlPanelStyles, STATUS_COLORS } from '../../theme';
-import { CloseIcon } from '../../icons';
-import { getCameraModelName as getModelName } from '../../utils/cameraModelNames';
-
-/** Format a parameter value for display */
-function formatParamValue(value: number): string {
-  if (Math.abs(value) < 1e-10) return '0';
-  if (Math.abs(value) >= 100 || (Math.abs(value) < 0.01 && Math.abs(value) > 0)) {
-    return value.toExponential(2);
-  }
-  return value.toPrecision(5).replace(/\.?0+$/, '');
-}
-
-/** Characterization styles */
-const CHAR_STYLES: Record<string, { text: string; label: string }> = {
-  exact: { text: STATUS_COLORS.success, label: 'Exact' },
-  expansion: { text: STATUS_COLORS.info, label: 'Expansion' },
-  lossy: { text: STATUS_COLORS.warning, label: 'Lossy' },
-  approximation: { text: STATUS_COLORS.caution, label: 'Approx' },
-};
+import { CameraModelId, type CameraId } from '../../types/colmap';
+import { modalStyles, inputStyles, controlPanelStyles } from '../../theme';
+import { FloatingWindowShell } from '../ui/FloatingWindowShell';
+import { CameraConversionPreview } from './CameraConversionPreview';
+import {
+  applyCameraModelConversion,
+  buildCameraConversionOptions,
+  buildCameraConversionParameterRows,
+  buildCameraConversionTargetOptions,
+  CAMERA_CONVERSION_MODAL_ESTIMATED_HEIGHT,
+  CAMERA_CONVERSION_MODAL_ESTIMATED_WIDTH,
+  getCameraConversionActionState,
+  getCameraConversionModalHeaderDragStyle,
+  getCameraConversionModalOverlayStyle,
+  getCameraConversionModalPanelStyle,
+  getCameraConversionNotificationMessage,
+  getCommonConversionTargetModels,
+  getEffectiveConversionTargetModelId,
+  getReconstructionCameraEntries,
+  getSelectedConversionCameras,
+  getSourceConversionModelIds,
+  parseCameraConversionSelection,
+  parseCameraConversionTarget,
+} from './cameraConversionModalViewModel';
+import { useCameraConversionStoreFacade } from './useCameraConversionStoreFacade';
 
 export interface CameraConversionModalProps {
   isOpen: boolean;
@@ -49,9 +46,10 @@ export const CameraConversionModal = memo(function CameraConversionModal({
   isOpen,
   onClose,
 }: CameraConversionModalProps) {
-  const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const setReconstruction = useReconstructionStore((s) => s.setReconstruction);
-  const addNotification = useNotificationStore((s) => s.addNotification);
+  const {
+    data: { reconstruction },
+    actions: { setReconstruction, addNotification },
+  } = useCameraConversionStoreFacade();
 
   // State
   const [selectedCameraId, setSelectedCameraId] = useState<CameraId | 'all'>('all');
@@ -59,7 +57,9 @@ export const CameraConversionModal = memo(function CameraConversionModal({
 
   // Position and drag
   const { position, panelRef, handleDragStart, centerModal } = useModalDrag({
-    estimatedWidth: 360, estimatedHeight: 160, isOpen,
+    estimatedWidth: CAMERA_CONVERSION_MODAL_ESTIMATED_WIDTH,
+    estimatedHeight: CAMERA_CONVERSION_MODAL_ESTIMATED_HEIGHT,
+    isOpen,
   });
 
   // Z-index management for stacking multiple modals
@@ -68,75 +68,30 @@ export const CameraConversionModal = memo(function CameraConversionModal({
   useHotkeys('escape', onClose, { enabled: isOpen }, [isOpen, onClose]);
 
   // Get cameras from reconstruction
-  const cameras = useMemo(() => {
-    if (!reconstruction) return [];
-    return Array.from(reconstruction.cameras.entries());
-  }, [reconstruction]);
+  const cameras = useMemo(() => getReconstructionCameraEntries(reconstruction), [reconstruction]);
 
-  const selectedCameras = useMemo((): Camera[] => {
-    if (!reconstruction) return [];
-    if (selectedCameraId === 'all') {
-      return Array.from(reconstruction.cameras.values());
-    }
-    const camera = reconstruction.cameras.get(selectedCameraId);
-    return camera ? [camera] : [];
-  }, [reconstruction, selectedCameraId]);
+  const selectedCameras = useMemo(
+    () => getSelectedConversionCameras(reconstruction, selectedCameraId),
+    [reconstruction, selectedCameraId]
+  );
 
-  const sourceModels = useMemo(() => {
-    const models = new Set<CameraModelId>();
-    for (const camera of selectedCameras) {
-      models.add(camera.modelId);
-    }
-    return Array.from(models);
-  }, [selectedCameras]);
+  const sourceModels = useMemo(() => getSourceConversionModelIds(selectedCameras), [selectedCameras]);
 
-  const validTargetModels = useMemo(() => {
-    if (sourceModels.length === 0) return [];
-
-    const targetSets = sourceModels.map(model =>
-      new Map(getValidTargetModels(model).map(t => [t.modelId, t.compatibility]))
-    );
-
-    if (targetSets.length === 1) {
-      return Array.from(targetSets[0].entries()).map(([modelId, compatibility]) => ({
-        modelId,
-        compatibility,
-      }));
-    }
-
-    const firstSet = targetSets[0];
-    const commonTargets: Array<{ modelId: CameraModelId; compatibility: ConversionCompatibility }> = [];
-
-    for (const [modelId, compatibility] of firstSet) {
-      let isCommon = true;
-      let worstCompatibility: ConversionCompatibility = compatibility;
-
-      for (let i = 1; i < targetSets.length; i++) {
-        const otherCompatibility = targetSets[i].get(modelId);
-        if (!otherCompatibility) {
-          isCommon = false;
-          break;
-        }
-        if (otherCompatibility === 'approximate') {
-          worstCompatibility = 'approximate';
-        }
-      }
-
-      if (isCommon) {
-        commonTargets.push({ modelId, compatibility: worstCompatibility });
-      }
-    }
-
-    return commonTargets;
-  }, [sourceModels]);
+  const validTargetModels = useMemo(
+    () => getCommonConversionTargetModels(sourceModels),
+    [sourceModels]
+  );
 
   const effectiveTargetModelId = useMemo(() => {
-    if (targetModelId === null) return null;
-    return validTargetModels.some(t => t.modelId === targetModelId) ? targetModelId : null;
+    return getEffectiveConversionTargetModelId(targetModelId, validTargetModels);
   }, [targetModelId, validTargetModels]);
+  const targetOptions = useMemo(
+    () => buildCameraConversionTargetOptions(validTargetModels),
+    [validTargetModels]
+  );
 
   const conversionPreview = useMemo((): ConversionPreview | null => {
-    if (!effectiveTargetModelId || selectedCameras.length === 0) return null;
+    if (effectiveTargetModelId === null || selectedCameras.length === 0) return null;
     return getConversionPreview(selectedCameras[0], effectiveTargetModelId);
   }, [effectiveTargetModelId, selectedCameras]);
 
@@ -148,147 +103,70 @@ export const CameraConversionModal = memo(function CameraConversionModal({
   }, [isOpen, conversionPreview, centerModal]);
 
   const applyConversion = useCallback(() => {
-    if (!reconstruction || !effectiveTargetModelId) return;
+    if (!reconstruction || effectiveTargetModelId === null) return;
 
-    const newCameras = new Map(reconstruction.cameras);
-    let convertedCount = 0;
-    let approximateCount = 0;
+    const result = applyCameraModelConversion({
+      reconstruction,
+      selectedCameras,
+      targetModelId: effectiveTargetModelId,
+    });
 
-    for (const camera of selectedCameras) {
-      const result = convertCameraModel(camera, effectiveTargetModelId);
-      if (result.type !== 'incompatible') {
-        newCameras.set(camera.cameraId, {
-          ...camera,
-          modelId: effectiveTargetModelId,
-          params: result.params,
-        });
-        convertedCount++;
-        if (result.type === 'approximate') approximateCount++;
-      }
-    }
-
-    if (convertedCount === 0) {
+    if (!result) {
       addNotification('warning', 'No cameras were converted');
       return;
     }
 
-    setReconstruction({ ...reconstruction, cameras: newCameras });
-
-    const targetName = getModelName(effectiveTargetModelId);
-    const message = approximateCount > 0
-      ? `Converted ${convertedCount} camera(s) to ${targetName} (~)`
-      : `Converted ${convertedCount} camera(s) to ${targetName}`;
-    addNotification('info', message);
+    setReconstruction(result.reconstruction);
+    addNotification('info', getCameraConversionNotificationMessage({
+      convertedCount: result.convertedCount,
+      approximateCount: result.approximateCount,
+      targetModelId: effectiveTargetModelId,
+    }));
 
     onClose();
   }, [reconstruction, selectedCameras, effectiveTargetModelId, setReconstruction, addNotification, onClose]);
 
-  const cameraOptions = useMemo(() => {
-    const options: { value: string; label: string }[] = [];
-    if (cameras.length > 1) {
-      options.push({ value: 'all', label: `All (${cameras.length})` });
-    }
-    for (const [id, camera] of cameras) {
-      options.push({
-        value: String(id),
-        label: `#${id}: ${getModelName(camera.modelId)}`,
-      });
-    }
-    return options;
-  }, [cameras]);
+  const cameraOptions = useMemo(() => buildCameraConversionOptions(cameras), [cameras]);
 
   const handleCameraChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
-    setSelectedCameraId(value === 'all' ? 'all' : parseInt(value, 10));
-    setTargetModelId(null);
-  }, []);
+    const nextSelection = parseCameraConversionSelection(e.target.value, cameraOptions);
+    if (nextSelection !== null) {
+      setSelectedCameraId(nextSelection);
+      setTargetModelId(null);
+    }
+  }, [cameraOptions]);
 
   const handleTargetChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
-    setTargetModelId(value === '' ? null : parseInt(value, 10) as CameraModelId);
+    setTargetModelId(parseCameraConversionTarget(e.target.value));
   }, []);
 
   // Build parameter rows for display
-  const parameterRows = useMemo(() => {
-    if (!conversionPreview) return [];
-
-    const rows: Array<{
-      name: string;
-      sourceValue: number | null;
-      targetValue: number;
-      status: 'unchanged' | 'changed' | 'new' | 'removed';
-    }> = [];
-
-    const allNames = new Set([
-      ...conversionPreview.sourceParamNames,
-      ...conversionPreview.targetParamNames,
-    ]);
-
-    for (const name of allNames) {
-      const sourceIdx = conversionPreview.sourceParamNames.indexOf(name);
-      const targetIdx = conversionPreview.targetParamNames.indexOf(name);
-
-      if (sourceIdx !== -1 && targetIdx !== -1) {
-        const srcVal = conversionPreview.sourceParams[sourceIdx];
-        const tgtVal = conversionPreview.targetParams[targetIdx];
-        rows.push({
-          name,
-          sourceValue: srcVal,
-          targetValue: tgtVal,
-          status: Math.abs(srcVal - tgtVal) > 1e-10 ? 'changed' : 'unchanged',
-        });
-      } else if (sourceIdx !== -1) {
-        rows.push({
-          name,
-          sourceValue: conversionPreview.sourceParams[sourceIdx],
-          targetValue: 0,
-          status: 'removed',
-        });
-      } else {
-        rows.push({
-          name,
-          sourceValue: null,
-          targetValue: conversionPreview.targetParams[targetIdx],
-          status: 'new',
-        });
-      }
-    }
-
-    return rows;
-  }, [conversionPreview]);
-
-  const canConvert = effectiveTargetModelId !== null && selectedCameras.length > 0;
-  const charStyle = conversionPreview ? CHAR_STYLES[conversionPreview.characterization] : null;
+  const parameterRows = useMemo(
+    () => buildCameraConversionParameterRows(conversionPreview),
+    [conversionPreview]
+  );
+  const convertAction = getCameraConversionActionState(
+    effectiveTargetModelId,
+    selectedCameras.length
+  );
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 pointer-events-none" style={{ zIndex }}>
-      <div className={modalStyles.backdrop} onClick={onClose} />
-
-      <div
-        ref={panelRef}
-        className={modalStyles.toolPanel}
-        style={{ left: position.x, top: position.y }}
-        onPointerDown={bringToFront}
-      >
-        {/* Header */}
-        <div
-          className={modalStyles.toolHeader}
-          onPointerDown={handleDragStart}
-          style={{ touchAction: 'none' }}
-        >
-          <span className={modalStyles.toolHeaderTitle}>Convert Camera Model</span>
-          <button
-            onClick={onClose}
-            onPointerDown={(e) => e.stopPropagation()}
-            className={modalStyles.toolHeaderClose}
-            title="Close"
-          >
-            <CloseIcon className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
+    <FloatingWindowShell
+      isOpen={isOpen}
+      title="Convert Camera Model"
+      onClose={onClose}
+      panelRef={panelRef}
+      panelTestId="camera-conversion-modal"
+      overlayStyle={getCameraConversionModalOverlayStyle(zIndex)}
+      panelStyle={getCameraConversionModalPanelStyle(position)}
+      headerStyle={getCameraConversionModalHeaderDragStyle()}
+      onPanelPointerDown={bringToFront}
+      onHeaderPointerDown={handleDragStart}
+      renderBackdrop
+      onBackdropClick={onClose}
+    >
         {/* Content */}
         <div className={modalStyles.toolContent}>
           {/* Selectors */}
@@ -303,16 +181,16 @@ export const CameraConversionModal = memo(function CameraConversionModal({
               ))}
             </select>
             <span className="text-ds-muted text-xs">→</span>
-            {validTargetModels.length > 0 ? (
+            {targetOptions.length > 0 ? (
               <select
                 value={effectiveTargetModelId !== null ? String(effectiveTargetModelId) : ''}
                 onChange={handleTargetChange}
                 className={`${inputStyles.select} ${inputStyles.selectSizes.xs} flex-1`}
               >
                 <option value="">Select...</option>
-                {validTargetModels.map(({ modelId, compatibility }) => (
-                  <option key={modelId} value={String(modelId)}>
-                    {getModelName(modelId)}{compatibility === 'approximate' ? ' ~' : ''}
+                {targetOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
                   </option>
                 ))}
               </select>
@@ -323,54 +201,20 @@ export const CameraConversionModal = memo(function CameraConversionModal({
 
           {/* Preview */}
           {conversionPreview && (
-            <div className="text-xs space-y-2">
-              {/* Characterization */}
-              <div className="flex items-center gap-2">
-                <span className={charStyle?.text}>{charStyle?.label}</span>
-                <span className="text-ds-muted truncate">{conversionPreview.description}</span>
-              </div>
-
-              {/* Parameters table */}
-              <div className="font-mono">
-                {parameterRows.map((row, i) => (
-                  <div key={i} className="flex items-center">
-                    <span className={`w-16 text-right ${row.status === 'removed' ? 'text-red-400 line-through' : 'text-ds-primary'}`}>
-                      {row.sourceValue !== null ? formatParamValue(row.sourceValue) : '—'}
-                    </span>
-                    <span className={`flex-1 text-center px-2 ${
-                      row.status === 'new' ? 'text-blue-400' :
-                      row.status === 'removed' ? 'text-red-400' :
-                      'text-ds-muted'
-                    }`}>
-                      {row.name}
-                    </span>
-                    <span className={`w-16 text-left ${
-                      row.status === 'new' ? 'text-blue-400' :
-                      row.status === 'changed' ? 'text-amber-400' :
-                      row.status === 'removed' ? 'text-ds-muted' :
-                      'text-ds-primary'
-                    }`}>
-                      {row.status === 'removed' ? '—' : formatParamValue(row.targetValue)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Warning */}
-              {conversionPreview.warning && (
-                <div className="text-amber-400">{conversionPreview.warning}</div>
-              )}
-            </div>
+            <CameraConversionPreview
+              conversionPreview={conversionPreview}
+              parameterRows={parameterRows}
+            />
           )}
 
           {/* Actions */}
           <div className={controlPanelStyles.actionGroup}>
             <button
               onClick={applyConversion}
-              disabled={!canConvert}
-              className={canConvert ? controlPanelStyles.actionButtonPrimary : controlPanelStyles.actionButtonPrimaryDisabled}
+              disabled={!convertAction.canConvert}
+              className={convertAction.canConvert ? controlPanelStyles.actionButtonPrimary : controlPanelStyles.actionButtonPrimaryDisabled}
             >
-              Convert{selectedCameras.length > 1 ? ` (${selectedCameras.length})` : ''}
+              {convertAction.label}
             </button>
             <button
               onClick={onClose}
@@ -380,7 +224,6 @@ export const CameraConversionModal = memo(function CameraConversionModal({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </FloatingWindowShell>
   );
 });

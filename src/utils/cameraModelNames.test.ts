@@ -56,7 +56,7 @@ describe('CAMERA_MODEL_COLMAP_NAMES', () => {
 describe('getCameraModelName', () => {
   it('returns human-readable name for valid model IDs', () => {
     expect(getCameraModelName(0)).toBe('Simple Pinhole');
-    expect(getCameraModelName(1)).toBe('Pinhole');
+    expect(getCameraModelName(1)).toBe('OpenCV K');
     expect(getCameraModelName(4)).toBe('OpenCV');
   });
 

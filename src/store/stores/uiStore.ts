@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { STORAGE_KEYS } from '../migration';
+import { migrateUIPersistedState } from '../persistedStoreMigrations';
 import type { MatchesDisplayMode, AxesCoordinateSystem, AxisLabelMode } from '../types';
 
 export type ViewDirection = 'reset' | 'x' | 'y' | 'z' | '-x' | '-y' | '-z';
@@ -329,53 +330,9 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: STORAGE_KEYS.ui,
-      version: 10,
-      migrate: (persistedState: unknown, version: number) => {
-        const state = persistedState as Record<string, unknown>;
-        if (version < 3) {
-          // Reset context menu actions to new defaults (added cycleAutoRotate)
-          state.contextMenuActions = DEFAULT_CONTEXT_MENU_ACTIONS;
-        }
-        if (version < 6) {
-          // Clean up old parsing-related properties (now always WASM with lazy loading)
-          delete state.useWasmParser;
-          delete state.liteParserThresholdMB;
-          delete state.memoryStrategy;
-          delete state.imageLoadMode;
-        }
-        if (version < 7) {
-          // Convert old axesDisplayMode to new booleans
-          const mode = state.axesDisplayMode as string | undefined;
-          state.showAxes = mode === 'axes' || mode === 'both' || mode === undefined;
-          state.showGrid = mode === 'grid' || mode === 'both' || mode === undefined;
-          delete state.axesDisplayMode;
-        }
-        if (version < 8) {
-          // Convert old gizmoMode enum to boolean (remove local mode, keep only global)
-          const gizmoMode = state.gizmoMode as string | undefined;
-          state.showGizmo = gizmoMode === 'local' || gizmoMode === 'global';
-          delete state.gizmoMode;
-        }
-        if (version < 9) {
-          // Convert old matchesDisplayMode 'off' to separate showMatches boolean
-          const matchesMode = state.matchesDisplayMode as string | undefined;
-          if (matchesMode === 'off') {
-            state.showMatches = false;
-            state.matchesDisplayMode = 'static';
-          } else {
-            state.showMatches = matchesMode !== undefined;
-            // Keep current mode if it's valid
-          }
-        }
-        if (version < 10) {
-          // Ensure autoHideElements.buttons defaults to true for existing users
-          const ahe = state.autoHideElements as Record<string, boolean> | undefined;
-          if (ahe && ahe.buttons === undefined) {
-            ahe.buttons = true;
-          }
-        }
-        return state;
-      },
+      version: 11,
+      migrate: (persistedState, version) =>
+        migrateUIPersistedState(persistedState, version, DEFAULT_CONTEXT_MENU_ACTIONS),
       partialize: (state) => ({
         showPoints2D: state.showPoints2D,
         showPoints3D: state.showPoints3D,

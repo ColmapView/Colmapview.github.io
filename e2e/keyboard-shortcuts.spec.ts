@@ -1,6 +1,11 @@
+import type { Locator } from '@playwright/test';
 import { test, expect } from './fixtures/test-fixtures';
 
 test.describe('Keyboard Shortcuts', () => {
+  async function getSceneBackgroundColor(container: Locator): Promise<string> {
+    return container.evaluate((el) => getComputedStyle(el).backgroundColor);
+  }
+
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     // Dismiss the empty state panel to access the canvas
@@ -25,13 +30,13 @@ test.describe('Keyboard Shortcuts', () => {
 
     // Get initial background color
     const container = page.locator('[data-testid="scene-3d"]');
-    const initialBg = await container.evaluate((el) => (el as HTMLElement).style.backgroundColor);
+    const initialBg = await getSceneBackgroundColor(container);
 
     // Press B to toggle background
     await page.keyboard.press('b');
 
     // Background color should change
-    const newBg = await container.evaluate((el) => (el as HTMLElement).style.backgroundColor);
+    const newBg = await getSceneBackgroundColor(container);
     expect(newBg).not.toBe(initialBg);
   });
 
@@ -40,11 +45,8 @@ test.describe('Keyboard Shortcuts', () => {
 
     // Press G multiple times to cycle through axes/grid states
     await page.keyboard.press('g');
-    await page.waitForTimeout(100);
     await page.keyboard.press('g');
-    await page.waitForTimeout(100);
     await page.keyboard.press('g');
-    await page.waitForTimeout(100);
     await page.keyboard.press('g');
 
     // Page should still be responsive after cycling
@@ -64,10 +66,12 @@ test.describe('Keyboard Shortcuts', () => {
   test('T key should toggle transform gizmo', async ({ page, scene3d }) => {
     await scene3d.waitForCanvasReady();
 
+    await expect(page.locator('button[aria-label*="Transform (T): Off"]')).toBeVisible();
+
     // Press T to toggle gizmo
     await page.keyboard.press('t');
 
-    // Page should still be responsive
+    await expect(page.locator('button[aria-label*="Transform (T): On"]')).toBeVisible();
     await expect(page.locator('[data-testid="scene-3d"]')).toBeVisible();
   });
 
@@ -97,7 +101,6 @@ test.describe('Keyboard Shortcuts', () => {
     // Test each number key
     for (const key of ['1', '2', '3', '4', '5', '6']) {
       await page.keyboard.press(key);
-      await page.waitForTimeout(100);
     }
 
     // Page should still be responsive
@@ -110,9 +113,7 @@ test.describe('Keyboard Shortcuts', () => {
 
     // Press a few hotkeys and verify no errors
     await page.keyboard.press('r'); // Reset
-    await page.waitForTimeout(100);
     await page.keyboard.press('b'); // Background toggle
-    await page.waitForTimeout(100);
 
     // Page should still be responsive
     await expect(scene3d.container).toBeVisible();

@@ -45,7 +45,11 @@ coverage/
 deno.lock
 tmpclaude-*
 
+# Local agent scratch space
+.tmp/
+
 # Playwright
+.playwright-cli/
 .playwright-mcp/
 playwright-report/
 test-results/

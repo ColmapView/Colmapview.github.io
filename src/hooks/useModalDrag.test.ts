@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
-import { useModalDrag } from './useModalDrag';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { getEstimatedModalPosition, useModalDrag } from './useModalDrag';
+import { buildPointerEvent } from '../test/builders';
 
 // Mock window dimensions for predictable tests
 const MOCK_WIDTH = 1920;
@@ -11,7 +12,34 @@ beforeEach(() => {
   Object.defineProperty(window, 'innerHeight', { value: MOCK_HEIGHT, writable: true });
 });
 
+function createCapturedPointerElement(): { element: HTMLDivElement; setPointerCapture: ReturnType<typeof vi.fn> } {
+  const element = document.createElement('div');
+  const setPointerCapture = vi.fn();
+  Object.defineProperty(element, 'setPointerCapture', {
+    configurable: true,
+    value: setPointerCapture,
+  });
+  return { element, setPointerCapture };
+}
+
 describe('useModalDrag', () => {
+  describe('initial position policy', () => {
+    it('computes centered and cursor-relative estimated positions', () => {
+      expect(getEstimatedModalPosition({ estimatedWidth: 400, estimatedHeight: 300 })).toEqual({
+        x: 760,
+        y: 390,
+      });
+      expect(getEstimatedModalPosition({
+        estimatedWidth: 200,
+        estimatedHeight: 80,
+        initialPosition: { x: 0, y: 0 },
+      })).toEqual({
+        x: 16,
+        y: 16,
+      });
+    });
+  });
+
   describe('initial centered positioning', () => {
     it('centers modal in viewport when opened without initialPosition', () => {
       const { result, rerender } = renderHook(
@@ -41,6 +69,19 @@ describe('useModalDrag', () => {
 
       // Centering would give (1080-2000)/2 = -460, clamped to minTop (20)
       expect(result.current.position.y).toBe(20);
+    });
+
+    it('recomputes centered position when estimated dimensions change while open', () => {
+      const { result, rerender } = renderHook(
+        ({ estimatedWidth }) => useModalDrag({ estimatedWidth, estimatedHeight: 300, isOpen: true }),
+        { initialProps: { estimatedWidth: 200 } },
+      );
+
+      expect(result.current.position.x).toBe(860);
+
+      rerender({ estimatedWidth: 400 });
+
+      expect(result.current.position.x).toBe(760);
     });
   });
 
@@ -113,6 +154,31 @@ describe('useModalDrag', () => {
       expect(result.current.panelRef).toBeDefined();
       expect(typeof result.current.handleDragStart).toBe('function');
       expect(typeof result.current.centerModal).toBe('function');
+    });
+
+    it('moves the modal while the captured pointer drag is active', () => {
+      const { result } = renderHook(() =>
+        useModalDrag({ estimatedWidth: 200, estimatedHeight: 100, isOpen: true }),
+      );
+      const { element, setPointerCapture } = createCapturedPointerElement();
+      const preventDefault = vi.fn();
+
+      act(() => {
+        result.current.handleDragStart({
+          clientX: 100,
+          clientY: 120,
+          currentTarget: element,
+          pointerId: 3,
+          preventDefault,
+        });
+      });
+      act(() => {
+        element.dispatchEvent(buildPointerEvent({ clientX: 130, clientY: 110 }));
+      });
+
+      expect(preventDefault).toHaveBeenCalledTimes(1);
+      expect(setPointerCapture).toHaveBeenCalledWith(3);
+      expect(result.current.position).toEqual({ x: 890, y: 480 });
     });
   });
 });

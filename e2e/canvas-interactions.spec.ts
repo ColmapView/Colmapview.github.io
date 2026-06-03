@@ -7,7 +7,6 @@ test.describe('Canvas Interactions', () => {
     const closeButton = page.locator('button:has-text("×")').first();
     if (await closeButton.isVisible()) {
       await closeButton.click();
-      await page.waitForTimeout(300);
     }
   });
 
@@ -53,7 +52,6 @@ test.describe('Canvas Interactions', () => {
 
     // Scroll to zoom
     await scene3d.scrollCanvas(-100);
-    await scene3d.page.waitForTimeout(100);
     await scene3d.scrollCanvas(100);
 
     // Canvas should still be visible
@@ -65,10 +63,26 @@ test.describe('Canvas Interactions', () => {
 
     // Click on canvas
     await scene3d.clickCanvas();
-    await scene3d.page.waitForTimeout(100);
 
     // Canvas should still be visible
     await expect(scene3d.canvas).toBeVisible();
+  });
+
+  test('should open context menu and edit popup from right-click', async ({ scene3d, page }) => {
+    await scene3d.waitForCanvasReady();
+
+    await scene3d.rightClickCanvas();
+
+    await expect(scene3d.contextMenu).toBeVisible();
+    await expect(scene3d.contextMenu.getByRole('button', { name: /Reset View/ })).toBeVisible();
+
+    await scene3d.contextMenu.getByRole('button', { name: /Edit Menu/ }).click();
+
+    await expect(page.getByText('Edit Context Menu')).toBeVisible();
+    await expect(page.getByText('Select which actions appear in the right-click menu.')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Done' }).click();
+    await expect(page.getByText('Edit Context Menu')).toBeHidden();
   });
 
   test('should handle multiple drag operations', async ({ scene3d }) => {
@@ -85,7 +99,6 @@ test.describe('Canvas Interactions', () => {
         box!.width / 2 + 50,
         box!.height / 2 + 50
       );
-      await scene3d.page.waitForTimeout(100);
     }
 
     // Canvas should still be visible

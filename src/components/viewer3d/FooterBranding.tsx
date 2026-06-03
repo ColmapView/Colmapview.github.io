@@ -1,9 +1,10 @@
-import { SIZE, ICON_SIZES, footerStyles } from '../../theme';
+import { ICON_SIZES, footerStyles } from '../../theme';
 import { publicAsset } from '../../utils/paths';
-import { useUIStore } from '../../store';
+import { getFooterLogoImageStyle } from './footerBrandingViewModel';
+import { useFooterBrandingStoreFacade } from './useFooterBrandingStoreFacade';
 
 export function FooterBranding() {
-  const autoHideButtons = useUIStore((s) => s.autoHideElements.buttons);
+  const { autoHideButtons } = useFooterBrandingStoreFacade();
   const idleClass = autoHideButtons ? ' idle-hideable' : '';
 
   return (
@@ -15,7 +16,13 @@ export function FooterBranding() {
         className={footerStyles.logo + idleClass}
         draggable={false}
       >
-        <img src={publicAsset('LOGO.png')} alt="Opsiclear" className={footerStyles.logoImage} style={{ height: SIZE.logoHeight }} draggable={false} />
+        <img
+          src={publicAsset('LOGO.png')}
+          alt="Opsiclear"
+          className={footerStyles.logoImage}
+          style={getFooterLogoImageStyle()}
+          draggable={false}
+        />
       </a>
       <div className={footerStyles.socialContainer + idleClass}>
         <a

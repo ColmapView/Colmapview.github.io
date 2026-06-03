@@ -3,7 +3,7 @@
 // ============================================================================
 
 // Point cloud visualization
-export const COLOR_MODES = ['rgb', 'error', 'trackLength'] as const;
+export const COLOR_MODES = ['rgb', 'error', 'trackLength', 'splats'] as const;
 export type ColorMode = (typeof COLOR_MODES)[number];
 
 // Camera and navigation
@@ -76,7 +76,7 @@ export type ScreenshotSize = (typeof SCREENSHOT_SIZES)[number];
 export const SCREENSHOT_FORMATS = ['jpeg', 'png', 'webp'] as const;
 export type ScreenshotFormat = (typeof SCREENSHOT_FORMATS)[number];
 
-export const EXPORT_FORMATS = ['text', 'binary', 'ply', 'config'] as const;
+export const EXPORT_FORMATS = ['text', 'binary', 'ply', 'zip', 'config'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 // Camera view state for navigation history

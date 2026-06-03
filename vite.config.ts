@@ -45,6 +45,8 @@ export default defineConfig({
     assetsDir: 'assets',
     sourcemap: false,
     target: 'esnext',
+    // Three.js is the expected baseline for this viewer; keep warnings for unexpected chunks above that budget.
+    chunkSizeWarningLimit: 1300,
     rollupOptions: {
       output: {
         manualChunks: {

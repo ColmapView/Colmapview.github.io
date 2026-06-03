@@ -1,10 +1,12 @@
-import { useNotificationStore } from '../../store/stores/notificationStore';
 import { notificationStyles } from '../../theme/componentStyles';
 import { NotificationToast } from './NotificationToast';
+import { useNotificationContainerStoreFacade } from './useNotificationContainerStoreFacade';
 
 export function NotificationContainer() {
-  const notifications = useNotificationStore((state) => state.notifications);
-  const removeNotification = useNotificationStore((state) => state.removeNotification);
+  const {
+    notifications,
+    removeNotification,
+  } = useNotificationContainerStoreFacade();
 
   if (notifications.length === 0) {
     return null;

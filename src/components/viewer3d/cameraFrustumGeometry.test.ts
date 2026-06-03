@@ -1,0 +1,126 @@
+import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
+import {
+  buildCameraFrustumItems,
+  buildCameraIdToIndex,
+  buildFrustumLineGeometryData,
+  buildImageFrameIndexMap,
+  getFrustumBaseColor,
+  getFrustumPlaneSize,
+} from './cameraFrustumGeometry';
+import {
+  buildCamera,
+  buildFile,
+  buildImage,
+  buildImageStats,
+  buildReconstruction,
+} from '../../test/builders';
+
+describe('camera frustum geometry helpers', () => {
+  it('builds camera and rig-frame color indexes used for frustum coloring', () => {
+    const camera2 = buildCamera({ cameraId: 2 });
+    const camera1 = buildCamera({ cameraId: 1 });
+    const frameA0 = buildImage({ imageId: 10, cameraId: camera1.cameraId, name: 'left/frame-0001.jpg' });
+    const frameA1 = buildImage({ imageId: 11, cameraId: camera2.cameraId, name: 'right/frame-0001.jpg' });
+    const unpaired = buildImage({ imageId: 12, cameraId: camera1.cameraId, name: 'left/frame-0002.jpg' });
+    const frameB0 = buildImage({ imageId: 13, cameraId: camera1.cameraId, name: 'left/frame-0003.jpg' });
+    const frameB1 = buildImage({ imageId: 14, cameraId: camera2.cameraId, name: 'right/frame-0003.jpg' });
+    const reconstruction = buildReconstruction({
+      cameras: [camera2, camera1],
+      images: [frameA0, frameA1, unpaired, frameB0, frameB1],
+    });
+
+    const cameraIdToIndex = buildCameraIdToIndex(reconstruction);
+    const imageFrameIndexMap = buildImageFrameIndexMap(reconstruction);
+
+    expect(Array.from(cameraIdToIndex.entries())).toEqual([
+      [camera2.cameraId, 0],
+      [camera1.cameraId, 1],
+    ]);
+    expect(Array.from(imageFrameIndexMap.entries())).toEqual([
+      [frameA0.imageId, 0],
+      [frameA1.imageId, 0],
+      [frameB0.imageId, 1],
+      [frameB1.imageId, 1],
+    ]);
+    expect(getFrustumBaseColor('single', 0, frameA0.imageId, imageFrameIndexMap, '#123456')).toBe('#123456');
+    expect(getFrustumBaseColor('byRigFrame', 7, frameA1.imageId, imageFrameIndexMap, '#123456')).not.toBe('#123456');
+    expect(getFrustumBaseColor('byRigFrame', 7, unpaired.imageId, imageFrameIndexMap, '#123456')).toBe('#123456');
+  });
+
+  it('builds renderable frustum items from reconstruction data', () => {
+    const camera1 = buildCamera({ cameraId: 1 });
+    const camera2 = buildCamera({ cameraId: 2 });
+    const visible = buildImage({ imageId: 1, cameraId: camera1.cameraId, name: 'visible.jpg' });
+    const deleted = buildImage({ imageId: 2, cameraId: camera1.cameraId, name: 'deleted.jpg' });
+    const invalidPose = buildImage({ imageId: 3, cameraId: camera1.cameraId, name: 'invalid.jpg', tvec: [Number.NaN, 0, 0] });
+    const missingCamera = buildImage({ imageId: 4, cameraId: 999, name: 'missing-camera.jpg' });
+    const otherCamera = buildImage({ imageId: 5, cameraId: camera2.cameraId, name: 'other.jpg' });
+    const imageFile = buildFile(visible.name);
+    const reconstruction = buildReconstruction({
+      cameras: [camera1, camera2],
+      images: [visible, deleted, invalidPose, missingCamera, otherCamera],
+      imageStats: new Map([[visible.imageId, buildImageStats({ numPoints3D: 42 })]]),
+    });
+
+    const frustums = buildCameraFrustumItems({
+      reconstruction,
+      imageSource: {
+        getImageSync: (name) => name === visible.name ? imageFile : undefined,
+      },
+      cameraIdToIndex: buildCameraIdToIndex(reconstruction),
+      pendingDeletions: new Set([deleted.imageId]),
+    });
+
+    expect(frustums.map(frustum => frustum.image.imageId)).toEqual([visible.imageId, otherCamera.imageId]);
+    expect(frustums[0]).toMatchObject({
+      image: visible,
+      camera: camera1,
+      imageFile,
+      cameraIndex: 0,
+      numPoints3D: 42,
+    });
+    expect(frustums[0].position.toArray()).toEqual([0, 0, 0]);
+    expect(frustums[0].quaternion.equals(new THREE.Quaternion(0, 0, 0, 1))).toBe(true);
+  });
+
+  it('computes plane sizes and batched frustum line geometry', () => {
+    const camera = buildCamera({
+      width: 800,
+      height: 400,
+      params: [200, 200, 400, 200],
+    });
+    const image = buildImage({ imageId: 1, cameraId: camera.cameraId });
+    const reconstruction = buildReconstruction({ cameras: [camera], images: [image] });
+    const [frustum] = buildCameraFrustumItems({
+      reconstruction,
+      imageSource: { getImageSync: () => undefined },
+      cameraIdToIndex: buildCameraIdToIndex(reconstruction),
+      pendingDeletions: new Set(),
+    });
+    const singleColor = '#336699';
+    const expectedColor = new THREE.Color(singleColor);
+
+    expect(getFrustumPlaneSize(camera, 2)).toEqual({ width: 8, height: 4, depth: 2 });
+    expect(getFrustumPlaneSize(buildCamera({ width: 0, height: 400, params: [200] }), 2)).toEqual({
+      width: 0,
+      height: 0,
+      depth: 2,
+    });
+
+    const geometry = buildFrustumLineGeometryData([frustum], 2, {
+      frustumColorMode: 'single',
+      frustumSingleColor: singleColor,
+      imageFrameIndexMap: new Map(),
+    });
+
+    expect(Array.from(geometry.positions.slice(0, 6))).toEqual([0, 0, 0, -4, -2, 2]);
+    expect(geometry.positions).toHaveLength(48);
+    expect(geometry.baseColors).toHaveLength(48);
+    expect(geometry.baseAlphas).toHaveLength(16);
+    expect(geometry.baseColors[0]).toBeCloseTo(expectedColor.r);
+    expect(geometry.baseColors[1]).toBeCloseTo(expectedColor.g);
+    expect(geometry.baseColors[2]).toBeCloseTo(expectedColor.b);
+    expect(Array.from(geometry.baseAlphas)).toEqual(Array(16).fill(1));
+  });
+});

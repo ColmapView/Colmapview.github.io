@@ -6,6 +6,55 @@
 import type { Reconstruction, Camera, Image as ColmapImage } from '../types/colmap';
 import { CameraModelId } from '../types/colmap';
 
+export interface ColmapFileSelection {
+  camerasFile?: File;
+  imagesFile?: File;
+  points3DFile?: File;
+  databaseFile?: File;
+  rigsFile?: File;
+  framesFile?: File;
+}
+
+interface ColmapDirectoryFiles {
+  cameras?: File;
+  images?: File;
+  points3D?: File;
+  database?: File;
+  rigs?: File;
+  frames?: File;
+}
+
+function getParentDir(path: string): string {
+  const lastSlash = path.lastIndexOf('/');
+  return lastSlash >= 0 ? path.substring(0, lastSlash) : '';
+}
+
+function choosePreferredColmapFile(current: File | undefined, candidate: File): File {
+  if (!current) {
+    return candidate;
+  }
+
+  const candidateIsBinary = candidate.name.toLowerCase().endsWith('.bin');
+  const currentIsBinary = current.name.toLowerCase().endsWith('.bin');
+
+  if (candidateIsBinary || !currentIsBinary) {
+    return candidate;
+  }
+
+  return current;
+}
+
+function getColmapDirectoryScore(dir: string): number {
+  const lower = dir.toLowerCase();
+
+  if (lower.endsWith('/sparse/0') || lower === 'sparse/0') return 0;
+  if (lower.endsWith('/sparse') || lower === 'sparse') return 1;
+  if (lower.includes('/sparse/')) return 2;
+  if (lower.includes('/sparse')) return 3;
+
+  return 4 + dir.length;
+}
+
 /**
  * Find a configuration file (YAML) in the file map
  */
@@ -17,6 +66,59 @@ export function findConfigFile(files: Map<string, File>): File | null {
     }
   }
   return null;
+}
+
+/**
+ * Find the best complete COLMAP file set from scanned files.
+ * Prefers complete sparse/0 directories and binary files over text files.
+ */
+export function findColmapFiles(files: Map<string, File>): ColmapFileSelection {
+  const colmapDirs = new Map<string, ColmapDirectoryFiles>();
+
+  for (const [path, file] of files) {
+    const name = file.name.toLowerCase();
+    const dir = getParentDir(path);
+    const dirFiles = colmapDirs.get(dir) ?? {};
+
+    if (name === 'cameras.bin' || name === 'cameras.txt') {
+      dirFiles.cameras = choosePreferredColmapFile(dirFiles.cameras, file);
+    } else if (name === 'images.bin' || name === 'images.txt') {
+      dirFiles.images = choosePreferredColmapFile(dirFiles.images, file);
+    } else if (name === 'points3d.bin' || name === 'points3d.txt') {
+      dirFiles.points3D = choosePreferredColmapFile(dirFiles.points3D, file);
+    } else if (name === 'database.db' || name === 'colmap.db') {
+      dirFiles.database = file;
+    } else if (name === 'rigs.bin' || name === 'rigs.txt') {
+      dirFiles.rigs = choosePreferredColmapFile(dirFiles.rigs, file);
+    } else if (name === 'frames.bin' || name === 'frames.txt') {
+      dirFiles.frames = choosePreferredColmapFile(dirFiles.frames, file);
+    }
+
+    colmapDirs.set(dir, dirFiles);
+  }
+
+  const validDirs: { dir: string; files: ColmapDirectoryFiles }[] = [];
+  for (const [dir, dirFiles] of colmapDirs) {
+    if (dirFiles.cameras && dirFiles.images && dirFiles.points3D) {
+      validDirs.push({ dir, files: dirFiles });
+    }
+  }
+
+  if (validDirs.length === 0) {
+    return {};
+  }
+
+  validDirs.sort((a, b) => getColmapDirectoryScore(a.dir) - getColmapDirectoryScore(b.dir));
+
+  const best = validDirs[0].files;
+  return {
+    camerasFile: best.cameras,
+    imagesFile: best.images,
+    points3DFile: best.points3D,
+    databaseFile: best.database,
+    rigsFile: best.rigs,
+    framesFile: best.frames,
+  };
 }
 
 /**
@@ -34,6 +136,26 @@ export function hasColmapFiles(files: Map<string, File>): boolean {
     }
   }
   return false;
+}
+
+/**
+ * Find the largest PLY file in a scanned dataset.
+ * Spark can auto-detect gsplat and point-cloud PLY variants from contents.
+ */
+export function findLargestPlyFile(files: Map<string, File>): File | undefined {
+  let largest: File | undefined;
+
+  for (const [, file] of files) {
+    if (!file.name.toLowerCase().endsWith('.ply')) {
+      continue;
+    }
+
+    if (!largest || file.size > largest.size) {
+      largest = file;
+    }
+  }
+
+  return largest;
 }
 
 /**

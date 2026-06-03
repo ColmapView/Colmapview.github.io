@@ -369,7 +369,7 @@ export const loadingStyles = {
 // ============================================
 
 export const controlPanelStyles = {
-  // Container positioning - z-index tooltip ensures hover panels appear above tool modals
+  // Container positioning - z-index tooltip keeps hover panels above tool modals.
   // Note: idle-hideable is added conditionally by ViewerControls based on autoHideElements.buttons
   container: 'absolute top-3 right-3 flex flex-col gap-2 z-tooltip control-panel-responsive',
   // Button styles
@@ -378,7 +378,7 @@ export const controlPanelStyles = {
   buttonHover: 'bg-ds-hover text-ds-primary',
   buttonInactive: 'bg-ds-tertiary text-ds-secondary hover-ds-hover hover-ds-text-primary',
   // Panel positioning - right-full positions at container's left edge, pr-2 creates gap inside hover area
-  // z-index tooltip ensures hover panels always appear above tool modals (which start at 1000 and increment)
+  // z-index tooltip keeps hover panels above tool modals, while context menus render above panels.
   panelWrapper: 'absolute right-full top-0 pr-2 z-tooltip',
   // Panel content
   panel: 'bg-ds-tertiary border border-ds rounded-lg p-4 w-[240px] shadow-ds-lg hover-panel-responsive',

@@ -1,0 +1,124 @@
+import { act, renderHook } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  applyAxesGridState,
+  applyVisibleModeState,
+  useViewerControlCycleActions,
+} from './useViewerControlCycleActions';
+
+function createOptions(overrides: Partial<Parameters<typeof useViewerControlCycleActions>[0]> = {}) {
+  return {
+    backgroundHsl: { h: 0, s: 0, l: 20 },
+    setBackgroundHsl: vi.fn(),
+    cameraMode: 'orbit' as const,
+    setCameraMode: vi.fn(),
+    undistortionEnabled: true,
+    setUndistortionEnabled: vi.fn(),
+    showPointCloud: false,
+    colorMode: 'trackLength' as const,
+    setShowPointCloud: vi.fn(),
+    setColorMode: vi.fn(),
+    showCameras: true,
+    cameraDisplayMode: 'frustum' as const,
+    setShowCameras: vi.fn(),
+    setCameraDisplayMode: vi.fn(),
+    showMatches: true,
+    matchesDisplayMode: 'static' as const,
+    setShowMatches: vi.fn(),
+    setMatchesDisplayMode: vi.fn(),
+    showSelectionHighlight: true,
+    selectionColorMode: 'blink' as const,
+    setShowSelectionHighlight: vi.fn(),
+    setSelectionColorMode: vi.fn(),
+    showRig: true,
+    rigDisplayMode: 'static' as const,
+    setShowRig: vi.fn(),
+    setRigDisplayMode: vi.fn(),
+    setView: vi.fn(),
+    setCameraProjection: vi.fn(),
+    showAxes: true,
+    showGrid: true,
+    setShowAxes: vi.fn(),
+    setShowGrid: vi.fn(),
+    ...overrides,
+  };
+}
+
+describe('viewer control cycle actions', () => {
+  it('applies visible/mode state changes without redundant setter calls', () => {
+    const setVisible = vi.fn();
+    const setMode = vi.fn();
+
+    applyVisibleModeState({
+      current: { visible: true, mode: 'rgb' },
+      next: { visible: true, mode: 'error' },
+      setVisible,
+      setMode,
+    });
+
+    expect(setVisible).not.toHaveBeenCalled();
+    expect(setMode).toHaveBeenCalledWith('error');
+  });
+
+  it('applies axes/grid state changes without redundant setter calls', () => {
+    const setShowAxes = vi.fn();
+    const setShowGrid = vi.fn();
+
+    applyAxesGridState({
+      current: { showAxes: true, showGrid: true },
+      next: { showAxes: true, showGrid: false },
+      setShowAxes,
+      setShowGrid,
+    });
+
+    expect(setShowAxes).not.toHaveBeenCalled();
+    expect(setShowGrid).toHaveBeenCalledWith(false);
+  });
+
+  it('returns callbacks for common toolbar cycles and toggles', () => {
+    const options = createOptions();
+    const { result } = renderHook(() => useViewerControlCycleActions(options));
+
+    act(() => result.current.toggleBackground());
+    expect(options.setBackgroundHsl).toHaveBeenCalledWith({ h: 0, s: 0, l: 100 });
+
+    act(() => result.current.toggleCameraMode());
+    expect(options.setCameraMode).toHaveBeenCalledWith('fly');
+
+    act(() => result.current.toggleUndistortion());
+    expect(options.setUndistortionEnabled).toHaveBeenCalledWith(false);
+
+    act(() => result.current.cycleColorMode());
+    expect(options.setShowPointCloud).toHaveBeenCalledWith(true);
+    expect(options.setColorMode).toHaveBeenCalledWith('rgb');
+
+    act(() => result.current.handleResetView());
+    expect(options.setView).toHaveBeenCalledWith('reset');
+    expect(options.setCameraProjection).toHaveBeenCalledWith('perspective');
+
+    act(() => result.current.cycleAxesGrid());
+    expect(options.setShowAxes).not.toHaveBeenCalled();
+    expect(options.setShowGrid).toHaveBeenCalledWith(false);
+  });
+
+  it('cycles camera, matches, selection, and rig display state', () => {
+    const options = createOptions();
+    const { result } = renderHook(() => useViewerControlCycleActions(options));
+
+    act(() => result.current.cycleCameraDisplayMode());
+    expect(options.setShowCameras).not.toHaveBeenCalled();
+    expect(options.setCameraDisplayMode).toHaveBeenCalledWith('arrow');
+
+    act(() => result.current.cycleMatchesDisplayMode());
+    expect(options.setShowMatches).not.toHaveBeenCalled();
+    expect(options.setMatchesDisplayMode).toHaveBeenCalledWith('blink');
+
+    act(() => result.current.cycleSelectionColorMode());
+    expect(options.setShowSelectionHighlight).not.toHaveBeenCalled();
+    expect(options.setSelectionColorMode).toHaveBeenCalledWith('rainbow');
+
+    act(() => result.current.cycleRigDisplayMode());
+    expect(options.setShowRig).not.toHaveBeenCalled();
+    expect(options.setRigDisplayMode).toHaveBeenCalledWith('blink');
+  });
+});

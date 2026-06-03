@@ -6,7 +6,6 @@ import {
   createConvertedCamera,
   getValidTargetModels,
   getConversionPreview,
-  ConversionResult,
   PARAM_NAMES,
 } from './cameraModelConversions';
 import { Camera, CameraModelId } from '../types/colmap';

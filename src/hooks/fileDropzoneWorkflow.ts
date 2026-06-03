@@ -8,6 +8,7 @@ import { collectImageFiles, findMissingImageFiles, hasMaskFiles } from '../utils
 import {
   findColmapFiles,
   findConfigFile,
+  findLargestPlyFile,
   hasColmapFiles,
   hasImageFiles,
 } from '../utils/fileClassification';
@@ -41,6 +42,7 @@ export interface FileDropzoneWorkflowDeps {
   clearCaches?: ClearCaches;
   delay?: (ms: number) => Promise<void>;
   getFailedImageCount?: () => number;
+  getLoadedFiles: () => LoadedFiles | null;
   getMinTrackLength: () => number;
   getSourceInfo: () => SetSourceInfo;
   getUrlLoading: () => boolean;
@@ -55,6 +57,31 @@ export interface FileDropzoneWorkflowDeps {
   setUrlLoading: (loading: boolean) => void;
   setUrlProgress: SetUrlProgress;
   setWasmReconstruction: (wasm: WasmReconstructionWrapper | null) => void;
+}
+
+function updateLoadedSplatFile(
+  splatFile: File,
+  deps: Pick<FileDropzoneWorkflowDeps, 'addNotification' | 'getLoadedFiles' | 'setLoadedFiles' | 'setUrlProgress'>,
+  mapProgress: (localPercent: number) => number,
+  log: (message: string) => void
+): boolean {
+  const loadedFiles = deps.getLoadedFiles();
+  if (!loadedFiles) {
+    return false;
+  }
+
+  deps.setLoadedFiles({
+    ...loadedFiles,
+    splatFile,
+  });
+  deps.setUrlProgress({
+    percent: mapProgress(100),
+    message: 'Splat file updated',
+    currentFile: splatFile.name,
+  });
+  deps.addNotification('info', `Updated splat file: ${splatFile.name}`, 4000);
+  log(`[Splats] Updated splat file: ${splatFile.name}`);
+  return true;
 }
 
 export async function processFileDropzoneFiles(
@@ -73,6 +100,7 @@ export async function processFileDropzoneFiles(
   const pStart = progressRange?.start ?? 0;
   const pEnd = progressRange?.end ?? 100;
   const mapProgress = (localPercent: number) => Math.round(pStart + (localPercent / 100) * (pEnd - pStart));
+  const splatFile = findLargestPlyFile(files);
 
   if (!deps.getUrlLoading()) {
     deps.setUrlLoading(true);
@@ -87,14 +115,17 @@ export async function processFileDropzoneFiles(
     }
 
     if (!hasColmapFiles(files) && !hasImageFiles(files)) {
+      if (splatFile && updateLoadedSplatFile(splatFile, deps, mapProgress, logger.info)) {
+        deps.setUrlLoading(false);
+        return;
+      }
+
       deps.setUrlLoading(false);
       return;
     }
   }
 
   try {
-    deps.setDroppedFiles(files);
-
     const { camerasFile, imagesFile, points3DFile, databaseFile, rigsFile, framesFile } = findColmapFiles(files);
 
     deps.setUrlProgress({ percent: mapProgress(5), message: 'Scanning image files...' });
@@ -102,10 +133,16 @@ export async function processFileDropzoneFiles(
     const hasMasks = hasMaskFiles(files);
 
     if (!camerasFile || !imagesFile || !points3DFile) {
+      if (splatFile && updateLoadedSplatFile(splatFile, deps, mapProgress, logger.info)) {
+        return;
+      }
+
       if (hasImageFiles(files)) {
+        deps.setDroppedFiles(files);
         runImagesOnlyLoad({
           imageFiles,
           hasMasks,
+          splatFile,
           mapProgress,
           setUrlProgress: deps.setUrlProgress,
           setLoadedFiles: deps.setLoadedFiles,
@@ -123,12 +160,15 @@ export async function processFileDropzoneFiles(
       );
     }
 
+    deps.setDroppedFiles(files);
+
     logger.info(`Scanned ${files.size} total files, ${imageFiles.size} image lookup keys`);
 
     deps.setLoadedFiles({
       camerasFile,
       imagesFile,
       points3DFile,
+      splatFile,
       databaseFile,
       rigsFile,
       framesFile,

@@ -8,6 +8,21 @@ function file(name: string): File {
   return new File([''], name);
 }
 
+function loadedFiles(overrides: Partial<NonNullable<ReturnType<FileDropzoneWorkflowDeps['getLoadedFiles']>>> = {}) {
+  return {
+    camerasFile: file('cameras.bin'),
+    imagesFile: file('images.bin'),
+    points3DFile: file('points3D.bin'),
+    splatFile: undefined,
+    databaseFile: undefined,
+    rigsFile: undefined,
+    framesFile: undefined,
+    imageFiles: new Map<string, File>(),
+    hasMasks: false,
+    ...overrides,
+  };
+}
+
 function createLogger(): AppLogger {
   return {
     debug: vi.fn(),
@@ -52,6 +67,7 @@ function createDeps(overrides: Partial<FileDropzoneWorkflowDeps> = {}): FileDrop
     clearCaches: vi.fn(),
     delay: vi.fn(async () => undefined),
     getFailedImageCount: vi.fn(() => 0),
+    getLoadedFiles: vi.fn(() => null),
     getMinTrackLength: vi.fn(() => 1),
     getSourceInfo: vi.fn(() => ({ imageUrlBase: null, sourceType: 'local' })),
     getUrlLoading: vi.fn(() => false),
@@ -108,6 +124,8 @@ describe('file dropzone workflow', () => {
       ['sparse/0/cameras.bin', file('cameras.bin')],
       ['sparse/0/images.bin', file('images.bin')],
       ['sparse/0/points3D.bin', file('points3D.bin')],
+      ['splats/small.ply', new File(['x'], 'small.ply')],
+      ['splats/large.ply', new File(['xxxx'], 'large.ply')],
       ['images/image.jpg', file('image.jpg')],
     ]);
 
@@ -123,10 +141,77 @@ describe('file dropzone workflow', () => {
     expect(buildReconstruction).toHaveBeenCalledWith(expect.objectContaining({
       parseResult,
     }));
+    expect(deps.setLoadedFiles).toHaveBeenCalledWith(expect.objectContaining({
+      splatFile: expect.objectContaining({ name: 'large.ply' }),
+    }));
     expect(deps.clearCaches).toHaveBeenCalledWith({ preserveZip: true });
     expect(deps.setReconstruction).toHaveBeenCalledWith(reconstruction);
     expect(deps.resetView).toHaveBeenCalled();
     expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
     expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('updates the current splat file for PLY-only drops after reconstruction load', async () => {
+    const logger = createLogger();
+    const oldSplat = new File(['x'], 'old.ply');
+    const smallSplat = new File(['xx'], 'small.ply');
+    const largestSplat = new File(['xxxx'], 'replacement.ply');
+    const currentLoadedFiles = loadedFiles({ splatFile: oldSplat });
+    const parseFiles = vi.fn();
+    const deps = createDeps({
+      getLoadedFiles: vi.fn(() => currentLoadedFiles),
+      logger,
+      parseFiles,
+    });
+    const files = new Map([
+      ['output/small.ply', smallSplat],
+      ['folder/folder/folder/replacement.ply', largestSplat],
+    ]);
+
+    await processFileDropzoneFiles(files, deps);
+
+    expect(deps.setLoadedFiles).toHaveBeenCalledWith({
+      ...currentLoadedFiles,
+      splatFile: largestSplat,
+    });
+    expect(deps.setUrlProgress).toHaveBeenCalledWith({
+      percent: 100,
+      message: 'Splat file updated',
+      currentFile: 'replacement.ply',
+    });
+    expect(deps.addNotification).toHaveBeenCalledWith(
+      'info',
+      'Updated splat file: replacement.ply',
+      4000
+    );
+    expect(deps.setDroppedFiles).not.toHaveBeenCalled();
+    expect(parseFiles).not.toHaveBeenCalled();
+    expect(deps.setReconstruction).not.toHaveBeenCalled();
+    expect(deps.resetView).not.toHaveBeenCalled();
+    expect(deps.setError).not.toHaveBeenCalled();
+    expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
+    expect(logger.info).toHaveBeenCalledWith('[Splats] Updated splat file: replacement.ply');
+  });
+
+  it('keeps rejecting PLY-only drops when no dataset is loaded', async () => {
+    const logger = createLogger();
+    const parseFiles = vi.fn();
+    const deps = createDeps({
+      getLoadedFiles: vi.fn(() => null),
+      logger,
+      parseFiles,
+    });
+
+    await processFileDropzoneFiles(new Map([
+      ['model.ply', new File(['xxxx'], 'model.ply')],
+    ]), deps);
+
+    expect(deps.setLoadedFiles).not.toHaveBeenCalled();
+    expect(deps.setDroppedFiles).not.toHaveBeenCalled();
+    expect(parseFiles).not.toHaveBeenCalled();
+    expect(deps.setError).toHaveBeenCalledWith(
+      'Missing required COLMAP files. Expected cameras.bin/txt, images.bin/txt, and points3D.bin/txt'
+    );
+    expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
   });
 });

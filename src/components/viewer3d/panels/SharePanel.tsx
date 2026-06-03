@@ -4,11 +4,20 @@
  */
 
 import { useState, useCallback, memo } from 'react';
-import { useReconstructionStore, useCameraStore, useExportStore, useNotificationStore } from '../../../store';
 import { controlPanelStyles } from '../../../theme';
 import { ShareIcon, CheckIcon } from '../../../icons';
 import { ControlButton, ToggleRow, type PanelType } from '../ControlComponents';
 import { generateShareableUrl, generateEmbedUrl, generateIframeHtml, copyWithFeedback } from '../../../hooks/useUrlState';
+import { copyScreenshotToClipboard } from '../../../utils/clipboard';
+import {
+  buildLinkedInShareContent,
+  buildSocialSharePayload,
+  buildXShareUrl,
+  canShareReconstruction,
+  getSocialShareButtonStyle,
+  getShareSource,
+} from './sharePanelViewModel';
+import { useSharePanelStoreFacade } from './useSharePanelStoreFacade';
 
 const styles = controlPanelStyles;
 
@@ -26,19 +35,22 @@ export const SharePanel = memo(function SharePanel({
   const [copiedEmbedHtml, setCopiedEmbedHtml] = useState(false);
   const [includeShareLink, setIncludeShareLink] = useState(true);
   const [includeScreenshot, setIncludeScreenshot] = useState(true);
-
-  // Store values
-  const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const sourceUrl = useReconstructionStore((s) => s.sourceUrl);
-  const sourceManifest = useReconstructionStore((s) => s.sourceManifest);
-  const currentViewState = useCameraStore((s) => s.currentViewState);
-  const getScreenshotBlob = useExportStore((s) => s.getScreenshotBlob);
+  const {
+    data: {
+      reconstruction,
+      sourceUrl,
+      sourceManifest,
+      currentViewState,
+      getScreenshotBlob,
+    },
+    addNotification,
+  } = useSharePanelStoreFacade();
 
   // Share is possible whenever we have a URL-addressable source (url, manifest,
   // or zip-from-URL). Local drops (including local zips) leave both sourceUrl
   // and sourceManifest null, which correctly hides the buttons.
-  const shareSource = sourceUrl ?? sourceManifest;
-  const canShare = !!shareSource && !!reconstruction;
+  const shareSource = getShareSource(sourceUrl, sourceManifest);
+  const canShare = canShareReconstruction(shareSource, reconstruction);
 
   // Handle share link copy
   const handleCopyShareLink = useCallback(async () => {
@@ -62,94 +74,41 @@ export const SharePanel = memo(function SharePanel({
     await copyWithFeedback(iframeHtml, setCopiedEmbedHtml);
   }, [shareSource, currentViewState]);
 
-  // Get reconstruction stats for social sharing
-  const getShareText = useCallback((withShareLink: boolean) => {
-    const parts: string[] = [];
-
-    // Add stats if reconstruction is loaded
-    if (reconstruction) {
-      const numPoints = reconstruction.globalStats?.totalPoints ?? 0;
-      const numImages = reconstruction.images.size;
-      const numCameras = reconstruction.cameras.size;
-
-      // Format numbers with K/M suffixes
-      const formatNum = (n: number) => {
-        if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
-        if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-        return n.toString();
-      };
-
-      if (numPoints > 0) {
-        parts.push(`📍 ${formatNum(numPoints)} points`);
-      }
-      if (numImages > 0) {
-        parts.push(`🖼️ ${numImages} images`);
-      }
-      if (numCameras > 1) {
-        parts.push(`📷 ${numCameras} cameras`);
-      }
-    }
-
-    // Add hashtags and attribution
-    // If share link is included separately, don't duplicate the URL in text
-    const hashtags = '#3DReconstruction #Photogrammetry #COLMAP';
-    const attribution = withShareLink
-      ? 'Made with ColmapView by @opsiclear'
-      : 'Made with https://colmapview.github.io/ by @opsiclear';
-
-    const placeholder = '[type something here ...]';
-    if (parts.length > 0) {
-      return `${placeholder}\n\n${parts.join(' | ')}\n\n${hashtags}\n${attribution}`;
-    }
-    return `${placeholder}\n\n${hashtags}\n${attribution}`;
-  }, [reconstruction]);
-
-  // Copy screenshot to clipboard
-  const copyScreenshotToClipboard = useCallback(async () => {
-    if (!getScreenshotBlob) return false;
-    try {
-      const blob = await getScreenshotBlob();
-      if (blob) {
-        await navigator.clipboard.write([
-          new ClipboardItem({ 'image/png': blob })
-        ]);
-        useNotificationStore.getState().addNotification(
-          'info',
-          'Screenshot copied! Press Ctrl+V to paste',
-          4000
-        );
-        return true;
-      }
-    } catch (err) {
-      console.error('Failed to copy screenshot to clipboard:', err);
-    }
-    return false;
-  }, [getScreenshotBlob]);
+  const handleCopyScreenshotToClipboard = useCallback(async () => {
+    return copyScreenshotToClipboard(getScreenshotBlob, {
+      addNotification,
+    });
+  }, [addNotification, getScreenshotBlob]);
 
   // Handle share to X (Twitter)
   const handleShareToX = useCallback(async () => {
-    const url = shareSource ? generateShareableUrl(shareSource, currentViewState) : null;
-    const willIncludeLink = includeShareLink && !!url;
-    const text = getShareText(willIncludeLink);
+    const sharePayload = buildSocialSharePayload({
+      currentViewState,
+      generateShareableUrl,
+      includeShareLink,
+      reconstruction,
+      shareSource,
+    });
 
     // Copy screenshot to clipboard for easy pasting (if enabled)
     if (includeScreenshot) {
-      await copyScreenshotToClipboard();
+      await handleCopyScreenshotToClipboard();
     }
 
     // Open X share dialog
-    const xUrl = willIncludeLink
-      ? `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`
-      : `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
-    window.open(xUrl, '_blank', 'width=700,height=600');
-  }, [shareSource, currentViewState, getShareText, copyScreenshotToClipboard, includeShareLink, includeScreenshot]);
+    window.open(buildXShareUrl(sharePayload), '_blank', 'width=700,height=600');
+  }, [shareSource, currentViewState, reconstruction, handleCopyScreenshotToClipboard, includeShareLink, includeScreenshot]);
 
   // Handle share to LinkedIn
   const handleShareToLinkedIn = useCallback(async () => {
-    const url = shareSource ? generateShareableUrl(shareSource, currentViewState) : null;
-    const willIncludeLink = includeShareLink && !!url;
-    const text = getShareText(willIncludeLink);
-    const shareContent = willIncludeLink ? `${text}\n${url}` : text;
+    const sharePayload = buildSocialSharePayload({
+      currentViewState,
+      generateShareableUrl,
+      includeShareLink,
+      reconstruction,
+      shareSource,
+    });
+    const shareContent = buildLinkedInShareContent(sharePayload);
 
     // Copy text + screenshot together so a single paste provides both
     try {
@@ -164,7 +123,7 @@ export const SharePanel = memo(function SharePanel({
       const msg = items['image/png']
         ? 'Text + screenshot copied! Paste in LinkedIn post'
         : 'Message copied! Paste in LinkedIn post';
-      useNotificationStore.getState().addNotification('info', msg, 4000);
+      addNotification('info', msg, 4000);
     } catch {
       // Fallback - try text only
       try { await navigator.clipboard.writeText(shareContent); } catch { /* noop */ }
@@ -172,7 +131,7 @@ export const SharePanel = memo(function SharePanel({
 
     // Open LinkedIn - go to feed to create new post
     window.open('https://www.linkedin.com/feed/', '_blank', 'width=700,height=600');
-  }, [shareSource, currentViewState, getShareText, getScreenshotBlob, includeShareLink, includeScreenshot]);
+  }, [shareSource, currentViewState, reconstruction, getScreenshotBlob, includeShareLink, includeScreenshot, addNotification]);
 
   return (
     <ControlButton
@@ -228,7 +187,7 @@ export const SharePanel = memo(function SharePanel({
             <button
               onClick={handleShareToX}
               className={styles.actionButton}
-              style={{ flex: 1, padding: '8px' }}
+              style={getSocialShareButtonStyle()}
               data-tooltip="Share to X"
               data-tooltip-pos="bottom"
             >
@@ -239,7 +198,7 @@ export const SharePanel = memo(function SharePanel({
             <button
               onClick={handleShareToLinkedIn}
               className={styles.actionButton}
-              style={{ flex: 1, padding: '8px' }}
+              style={getSocialShareButtonStyle()}
               data-tooltip="Share to LinkedIn"
               data-tooltip-pos="bottom"
             >

@@ -8,79 +8,66 @@ import { z, type ZodTypeAny } from 'zod';
 import type {
   PropertyDef,
   SectionDef,
-  NumberPropertyDef,
-  NullableNumberPropertyDef,
-  StringPropertyDef,
-  EnumPropertyDef,
 } from '../types';
 import { sections, getPersistedProperties } from '../index';
 import { CONFIG_VERSION } from '../../configuration/types';
+
+export type GeneratedSectionSchema = z.ZodOptional<z.ZodObject<Record<string, ZodTypeAny>>>;
+
+function assertNever(value: never): never {
+  throw new Error(`Unsupported property definition: ${JSON.stringify(value)}`);
+}
 
 /**
  * Generate a Zod schema for a single property
  */
 export function generatePropertySchema(prop: PropertyDef): ZodTypeAny {
-  let schema: ZodTypeAny;
-
   switch (prop.type) {
     case 'number': {
-      const numProp = prop as NumberPropertyDef | NullableNumberPropertyDef;
       let numSchema = z.number();
-      if (numProp.min !== undefined) numSchema = numSchema.min(numProp.min);
-      if (numProp.max !== undefined) numSchema = numSchema.max(numProp.max);
-      if (numProp.isInt) numSchema = numSchema.int();
-      schema = numSchema;
-      if (numProp.nullable === true) {
-        schema = numSchema.nullable();
-      }
-      break;
+      if (prop.min !== undefined) numSchema = numSchema.min(prop.min);
+      if (prop.max !== undefined) numSchema = numSchema.max(prop.max);
+      if (prop.isInt) numSchema = numSchema.int();
+      const schema = prop.nullable === true ? numSchema.nullable() : numSchema;
+      return schema.optional();
     }
 
     case 'boolean': {
-      schema = z.boolean();
-      break;
+      return z.boolean().optional();
     }
 
     case 'string': {
-      const strProp = prop as StringPropertyDef;
       let strSchema = z.string();
-      if (strProp.pattern) {
-        const errorMsg = strProp.patternDesc
-          ? `Invalid format: expected ${strProp.patternDesc}`
+      if (prop.pattern) {
+        const errorMsg = prop.patternDesc
+          ? `Invalid format: expected ${prop.patternDesc}`
           : 'Invalid format';
-        strSchema = strSchema.regex(strProp.pattern, errorMsg);
+        strSchema = strSchema.regex(prop.pattern, errorMsg);
       }
-      schema = strSchema;
-      break;
+      return strSchema.optional();
     }
 
     case 'enum': {
-      const enumProp = prop as EnumPropertyDef;
-      schema = z.enum(enumProp.enumValues as [string, ...string[]]);
-      break;
+      return z.enum(prop.enumValues).optional();
     }
 
     default: {
-      // Fallback for unknown types
-      schema = z.unknown();
+      return assertNever(prop);
     }
   }
-
-  // All config properties are optional (partial config support)
-  return schema.optional();
 }
 
 /**
  * Generate a Zod schema for a section
  */
-export function generateSectionSchema(section: SectionDef): z.ZodObject<Record<string, ZodTypeAny>> {
+export function generateSectionSchema(section: SectionDef): GeneratedSectionSchema {
   const shape: Record<string, ZodTypeAny> = {};
 
   for (const prop of getPersistedProperties(section)) {
     shape[prop.key] = generatePropertySchema(prop);
   }
 
-  return z.object(shape).optional() as unknown as z.ZodObject<Record<string, ZodTypeAny>>;
+  return z.object(shape).optional();
 }
 
 /**

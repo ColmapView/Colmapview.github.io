@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { STORAGE_KEYS } from '../migration';
+import { migrateCameraPersistedState } from '../persistedStoreMigrations';
 import type {
   CameraMode,
   CameraProjection,
@@ -201,29 +202,8 @@ export const useCameraStore = create<CameraState>()(
     }),
     {
       name: STORAGE_KEYS.camera,
-      version: 2,
-      migrate: (persistedState: unknown, version: number) => {
-        const state = persistedState as Record<string, unknown>;
-        if (version < 1) {
-          // Convert old 'off' display mode to showCameras boolean
-          if (state.cameraDisplayMode === 'off') {
-            state.showCameras = false;
-            state.cameraDisplayMode = 'frustum';
-          } else {
-            state.showCameras = true;
-          }
-        }
-        if (version < 2) {
-          // Convert old 'off' selection color mode to showSelectionHighlight boolean
-          if (state.selectionColorMode === 'off') {
-            state.showSelectionHighlight = false;
-            state.selectionColorMode = 'rainbow';
-          } else {
-            state.showSelectionHighlight = true;
-          }
-        }
-        return state;
-      },
+      version: 3,
+      migrate: migrateCameraPersistedState,
       partialize: (state) => ({
         showCameras: state.showCameras,
         cameraDisplayMode: state.cameraDisplayMode,

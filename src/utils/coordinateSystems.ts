@@ -1,9 +1,20 @@
 import type { AxesCoordinateSystem } from '../store/types';
 
+export type CoordinateSystemAxis = 'X' | 'Y' | 'Z';
+export type CoordinateSystemAxisKey = 'x' | 'y' | 'z';
+export type CoordinateSystemDirection = [number, number, number];
+export type CoordinateSystemDirections = Record<CoordinateSystemAxisKey, CoordinateSystemDirection>;
+
+const COORDINATE_SYSTEM_AXIS_KEYS: Record<CoordinateSystemAxis, CoordinateSystemAxisKey> = {
+  X: 'x',
+  Y: 'y',
+  Z: 'z',
+};
+
 // Coordinate system axis directions (as unit vectors in Three.js world space)
 // In Three.js: +X=right, +Y=up, +Z=toward viewer (backward), -Z=into scene (forward)
 // Each system defines where X, Y, Z axes point
-export const COORDINATE_SYSTEMS: Record<AxesCoordinateSystem, { x: [number, number, number]; y: [number, number, number]; z: [number, number, number] }> = {
+export const COORDINATE_SYSTEMS: Record<AxesCoordinateSystem, CoordinateSystemDirections> = {
   colmap: {   // Raw COLMAP data rendered directly in Three.js (numerical ground truth)
     x: [1, 0, 0],     // +X data at Three.js +X
     y: [0, 1, 0],     // +Y data at Three.js +Y
@@ -51,6 +62,13 @@ export const COORDINATE_SYSTEMS: Record<AxesCoordinateSystem, { x: [number, numb
   },
 };
 
+export function getCoordinateSystemAxisDirection(
+  coordinateSystem: AxesCoordinateSystem,
+  axis: CoordinateSystemAxis
+): CoordinateSystemDirection {
+  return COORDINATE_SYSTEMS[coordinateSystem][COORDINATE_SYSTEM_AXIS_KEYS[axis]];
+}
+
 // Get the "world up" direction for a coordinate system (used for horizon lock)
 // For Y-vertical systems, this is the Y direction; for Z-up systems, this is the Z direction
 export function getWorldUp(coordinateSystem: AxesCoordinateSystem): [number, number, number] {
@@ -65,7 +83,7 @@ export function getWorldUp(coordinateSystem: AxesCoordinateSystem): [number, num
 
 // Semantic meaning of each axis per coordinate system
 // Shows what direction +X, +Y, +Z represent in that system's convention
-export const AXIS_SEMANTIC: Record<AxesCoordinateSystem, Record<string, string>> = {
+export const AXIS_SEMANTIC: Record<AxesCoordinateSystem, Record<CoordinateSystemAxis, string>> = {
   colmap:  { X: 'Right', Y: 'Down', Z: 'Fwd' },
   opencv:  { X: 'Right', Y: 'Down', Z: 'Fwd' },
   threejs: { X: 'Right', Y: 'Up', Z: 'Back' },

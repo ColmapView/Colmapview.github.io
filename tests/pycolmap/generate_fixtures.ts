@@ -7,54 +7,52 @@
  *   npx tsx tests/pycolmap/generate_fixtures.ts
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   writeCamerasBinary,
   writeImagesBinary,
   writePoints3DBinary,
 } from '../../src/parsers/writers';
-import type { Camera, Image, Reconstruction } from '../../src/types/colmap';
-import { CameraModelId } from '../../src/types/colmap';
+import type { Reconstruction } from '../../src/types/colmap';
 import { WasmReconstructionWrapper } from '../../src/wasm/reconstruction';
-import type { ColmapWasmModule } from '../../src/wasm/types';
 import {
   createSim3dFromEuler,
   transformReconstruction,
 } from '../../src/utils/sim3dTransforms';
 import { filterReconstructionByImageIds } from '../../src/store/actions/deletionActions';
+import {
+  buildWasmCameraImageMaps,
+  resolveColmapWasmFactory,
+} from '../../src/test/builders/wasmFakes';
+import { getBicycleFixtureDir, hasSparseBinaryFixture } from '../colmapFixturePaths';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT = resolve(__dirname, '..', '..');
-const BICYCLE_BIN = 'C:/Users/HEQ/Projects/colmap_webview/360_v2/bicycle/sparse/0';
+const BICYCLE_BIN = getBicycleFixtureDir(ROOT);
 const WASM_JS = resolve(ROOT, 'public/wasm/colmap_wasm.js');
 const WASM_BIN = resolve(ROOT, 'public/wasm/colmap_wasm.wasm');
 const FIXTURES_DIR = resolve(__dirname, 'fixtures');
 
-type Factory = (opts: { wasmBinary: Buffer; locateFile?: (f: string) => string }) => Promise<ColmapWasmModule>;
-
 async function loadWasm(): Promise<WasmReconstructionWrapper> {
-  const require = createRequire(import.meta.url);
-  const mod = require(WASM_JS) as { default?: Factory } | Factory;
-  const factory = (typeof mod === 'function' ? mod : mod.default) as Factory;
+  const factory = resolveColmapWasmFactory(await import(pathToFileURL(WASM_JS).href));
   const wasmBinary = readFileSync(WASM_BIN);
   const module = await factory({
     wasmBinary,
     locateFile: (f) => resolve(ROOT, 'public/wasm', f),
   });
   const wrapper = new WasmReconstructionWrapper();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const internal = wrapper as any;
-  internal.module = module;
-  internal.reconstruction = new module.Reconstruction();
+  Reflect.set(wrapper, 'module', module);
+  Reflect.set(wrapper, 'reconstruction', new module.Reconstruction());
   return wrapper;
 }
 
 function toAB(path: string): ArrayBuffer {
-  const b = readFileSync(path);
-  return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
+  const bytes = readFileSync(path);
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
 }
 
 function writeScenario(
@@ -71,37 +69,8 @@ function writeScenario(
   console.log(`[fixtures] wrote ${name}`);
 }
 
-async function buildCamerasAndImages(
-  wasm: WasmReconstructionWrapper,
-): Promise<{ cameras: Map<number, Camera>; images: Map<number, Image> }> {
-  const cameras = new Map<number, Camera>();
-  for (const c of Object.values(wasm.getAllCameras())) {
-    cameras.set(c.cameraId, {
-      cameraId: c.cameraId,
-      modelId: c.modelId as CameraModelId,
-      width: c.width,
-      height: c.height,
-      params: c.params,
-    });
-  }
-  const images = new Map<number, Image>();
-  for (const info of wasm.getAllImageInfos()) {
-    const q = info.quaternion ?? [1, 0, 0, 0];
-    const t = info.translation ?? [0, 0, 0];
-    images.set(info.imageId, {
-      imageId: info.imageId,
-      qvec: [q[0], q[1], q[2], q[3]],
-      tvec: [t[0], t[1], t[2]],
-      cameraId: info.cameraId,
-      name: info.name,
-      points2D: [],
-    });
-  }
-  return { cameras, images };
-}
-
 async function main(): Promise<void> {
-  if (!existsSync(BICYCLE_BIN)) {
+  if (!hasSparseBinaryFixture(BICYCLE_BIN)) {
     console.error(`[fixtures] bicycle fixture not found at ${BICYCLE_BIN} — skipping`);
     process.exit(0);
   }
@@ -111,13 +80,13 @@ async function main(): Promise<void> {
   }
 
   const wasm = await loadWasm();
-  wasm.parseCameras(toAB(`${BICYCLE_BIN}/cameras.bin`));
-  wasm.parseImages(toAB(`${BICYCLE_BIN}/images.bin`));
-  wasm.parsePoints3D(toAB(`${BICYCLE_BIN}/points3D.bin`));
+  wasm.parseCameras(toAB(resolve(BICYCLE_BIN, 'cameras.bin')));
+  wasm.parseImages(toAB(resolve(BICYCLE_BIN, 'images.bin')));
+  wasm.parsePoints3D(toAB(resolve(BICYCLE_BIN, 'points3D.bin')));
 
   // Scenario 1: untransformed — writer uses WASM fallback for 2D
   {
-    const { cameras, images } = await buildCamerasAndImages(wasm);
+    const { cameras, images } = buildWasmCameraImageMaps(wasm);
     const camBuf = writeCamerasBinary(cameras);
     const imgBuf = writeImagesBinary(images, wasm);
     const ptBuf = writePoints3DBinary(wasm.buildPoints3DMap());
@@ -126,7 +95,7 @@ async function main(): Promise<void> {
 
   // Scenario 2: transform baked — simulate applyTransformToData behaviour
   {
-    const { cameras, images } = await buildCamerasAndImages(wasm);
+    const { cameras, images } = buildWasmCameraImageMaps(wasm);
     const reconstruction: Reconstruction = {
       cameras,
       images,
@@ -182,7 +151,7 @@ async function main(): Promise<void> {
 
   // Scenario 3: deletions applied — WASM mode (simulates fixed applyDeletionsToData)
   {
-    const { cameras, images } = await buildCamerasAndImages(wasm);
+    const { cameras, images } = buildWasmCameraImageMaps(wasm);
     const reconstruction: Reconstruction = {
       cameras,
       images,
@@ -213,7 +182,7 @@ async function main(): Promise<void> {
   // pycolmap should reject this (or at least produce inconsistent data). We
   // ship it so the python test can assert that WE catch the crash.
   {
-    const { cameras, images } = await buildCamerasAndImages(wasm);
+    const { cameras, images } = buildWasmCameraImageMaps(wasm);
     const camBuf = writeCamerasBinary(cameras);
     const imgBuf = writeImagesBinary(images, null); // no 2D fallback
     const ptBuf = writePoints3DBinary(wasm.buildPoints3DMap());

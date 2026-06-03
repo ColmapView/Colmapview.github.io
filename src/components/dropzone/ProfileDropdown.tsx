@@ -7,7 +7,15 @@ import { useState, useCallback, useRef } from 'react';
 import { useProfiles } from '../../hooks/useProfiles';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { ChevronDownIcon } from '../../icons';
-import { buttonStyles, Z_INDEX } from '../../theme';
+import { buttonStyles } from '../../theme';
+import {
+  getProfileDropdownButtonLabel,
+  getProfileDropdownChevronClass,
+  getProfileDropdownMenuStyle,
+  getProfileDropdownOptionRows,
+  PROFILE_DROPDOWN_MENU_CLASS,
+  PROFILE_DROPDOWN_TOOLTIP,
+} from './profileDropdownViewModel';
 
 export function ProfileDropdown() {
   const {
@@ -28,30 +36,32 @@ export function ProfileDropdown() {
     setIsOpen(false);
   }, [loadProfile]);
 
+  const profileRows = getProfileDropdownOptionRows(profileNames, activeProfile);
+
   return (
     <div className="relative" ref={dropdownRef}>
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => setIsOpen((current) => !current)}
         className={`${buttonStyles.base} ${buttonStyles.variants.ghost} h-8 px-2 gap-1`}
-        data-tooltip="Select settings profile"
+        data-tooltip={PROFILE_DROPDOWN_TOOLTIP}
       >
-        <span className="text-sm truncate max-w-[80px]">{activeProfile || 'Profile'}</span>
-        <ChevronDownIcon className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <span className="text-sm truncate max-w-[80px]">{getProfileDropdownButtonLabel(activeProfile)}</span>
+        <ChevronDownIcon className={getProfileDropdownChevronClass(isOpen)} />
       </button>
 
       {isOpen && (
-        <div className={`absolute top-full right-0 mt-1 bg-ds-tertiary border border-ds rounded shadow-lg z-[${Z_INDEX.dropdown}] min-w-[120px] py-1`}>
-          {profileNames.map((name) => (
-            <div
-              key={name}
-              onClick={() => handleSelect(name)}
-              className={`px-3 py-1.5 cursor-pointer hover-ds-hover text-sm ${
-                name === activeProfile ? 'bg-ds-hover text-ds-accent' : 'text-ds-primary'
-              }`}
+        <div className={PROFILE_DROPDOWN_MENU_CLASS} style={getProfileDropdownMenuStyle()}>
+          {profileRows.map((row) => (
+            <button
+              type="button"
+              key={row.name}
+              onClick={() => handleSelect(row.name)}
+              className={row.className}
+              aria-current={row.isActive ? 'true' : undefined}
             >
-              {name}
-            </div>
+              {row.name}
+            </button>
           ))}
         </div>
       )}

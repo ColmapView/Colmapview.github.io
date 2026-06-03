@@ -30,28 +30,28 @@ describe('reload confirmation gating', () => {
     expect(hasUnsavedReloadState()).toBe(true);
   });
 
-  it('confirmReload skips the prompt when there is nothing to lose', () => {
-    const result = confirmReload();
+  it('confirmReload skips the prompt when there is nothing to lose', async () => {
+    const result = await confirmReload();
     expect(result).toBe(true);
     expect(confirmSpy).not.toHaveBeenCalled();
   });
 
-  it('confirmReload prompts when a transform is active and returns the user answer', () => {
+  it('confirmReload prompts when a transform is active and returns the user answer', async () => {
     useTransformStore.getState().setTransform({ scale: 2 });
 
     confirmSpy.mockReturnValueOnce(true);
-    expect(confirmReload()).toBe(true);
+    await expect(confirmReload()).resolves.toBe(true);
     expect(confirmSpy).toHaveBeenCalledTimes(1);
 
     confirmSpy.mockReturnValueOnce(false);
-    expect(confirmReload()).toBe(false);
+    await expect(confirmReload()).resolves.toBe(false);
     expect(confirmSpy).toHaveBeenCalledTimes(2);
   });
 
-  it('confirmReload prompts when deletions are pending', () => {
+  it('confirmReload prompts when deletions are pending', async () => {
     useDeletionStore.getState().markForDeletion(7);
     confirmSpy.mockReturnValueOnce(false);
-    expect(confirmReload()).toBe(false);
+    await expect(confirmReload()).resolves.toBe(false);
     expect(confirmSpy).toHaveBeenCalledTimes(1);
   });
 });

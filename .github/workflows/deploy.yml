@@ -46,6 +46,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Check
+        run: npm run check
+
       # Build for version/dev directory
       - name: Build
         run: npm run build

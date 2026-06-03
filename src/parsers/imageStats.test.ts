@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { computeImageStats, computeImageStatsFromWasm } from './imageStats';
 import type { Image, Point3D } from '../types/colmap';
-import type { WasmReconstructionWrapper } from '../wasm/reconstruction';
+import { buildWasmReconstructionWrapper } from '../test/builders';
 
 // ---------------------------------------------------------------------------
 // Helpers to build minimal test data
@@ -206,7 +206,7 @@ describe('computeImageStatsFromWasm', () => {
    */
   function makeMockWasm(
     points: { error: number; trackImageIds: number[]; point3DId?: bigint }[],
-  ): WasmReconstructionWrapper {
+  ): ReturnType<typeof buildWasmReconstructionWrapper> {
     const pointCount = points.length;
     const errors = new Float32Array(points.map(p => p.error));
 
@@ -220,13 +220,13 @@ describe('computeImageStatsFromWasm', () => {
       allPoint3DIds.push(p.point3DId ?? BigInt(allPoint3DIds.length + 1));
     }
 
-    return {
+    return buildWasmReconstructionWrapper({
       pointCount,
-      getErrors: () => errors,
-      getTrackOffsets: () => new Uint32Array(offsets),
-      getTrackImageIds: () => new Uint32Array(allTrackImageIds),
-      getPoint3DIds: () => BigInt64Array.from(allPoint3DIds),
-    } as unknown as WasmReconstructionWrapper;
+      errors,
+      trackOffsets: new Uint32Array(offsets),
+      trackImageIds: new Uint32Array(allTrackImageIds),
+      point3DIds: BigUint64Array.from(allPoint3DIds),
+    });
   }
 
   it('returns empty stats with zero points', () => {

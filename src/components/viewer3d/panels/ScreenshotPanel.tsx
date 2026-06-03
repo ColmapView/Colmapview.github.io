@@ -4,11 +4,23 @@
  */
 
 import { useState, useCallback, memo } from 'react';
-import { useExportStore, useNotificationStore } from '../../../store';
 import { controlPanelStyles } from '../../../theme';
 import { ScreenshotIcon } from '../../../icons';
 import { ControlButton, SliderRow, SelectRow, type PanelType } from '../ControlComponents';
-import type { ScreenshotSize, ScreenshotFormat } from '../../../store/types';
+import { copyScreenshotToClipboard } from '../../../utils/clipboard';
+import {
+  GIF_DOWNSAMPLE_OPTIONS,
+  GIF_SPEED_OPTIONS,
+  RECORDING_FORMAT_OPTIONS,
+  RECORDING_QUALITY_OPTIONS,
+  SCREENSHOT_FORMAT_OPTIONS,
+  SCREENSHOT_SIZE_OPTIONS,
+  getRecordButtonState,
+  getRecordingActionButtonStyle,
+  getSaveRecordingButtonState,
+  startRecordingCountdown,
+} from './screenshotPanelRecording';
+import { useScreenshotPanelStoreFacade } from './useScreenshotPanelStoreFacade';
 
 const styles = controlPanelStyles;
 
@@ -22,84 +34,68 @@ export const ScreenshotPanel = memo(function ScreenshotPanel({
   setActivePanel,
 }: ScreenshotPanelProps) {
   const [recordCountdown, setRecordCountdown] = useState<number | null>(null);
+  const {
+    screenshot: {
+      size: screenshotSize,
+      format: screenshotFormat,
+      hideLogo: screenshotHideLogo,
+      setSize: setScreenshotSize,
+      setFormat: setScreenshotFormat,
+      setHideLogo: setScreenshotHideLogo,
+      takeScreenshot,
+      getScreenshotBlob,
+    },
+    recording: {
+      recordGif,
+      isRecordingGif,
+      gifRenderProgress,
+      gifBlobUrl,
+      gifDuration,
+      setGifDuration,
+      gifDownsample,
+      setGifDownsample,
+      downloadGif,
+      stopRecording,
+      recordingFormat,
+      setRecordingFormat,
+      recordingQuality,
+      setRecordingQuality,
+      gifSpeed,
+      setGifSpeed,
+    },
+    addNotification,
+  } = useScreenshotPanelStoreFacade();
 
-  // Export store values
-  const screenshotSize = useExportStore((s) => s.screenshotSize);
-  const setScreenshotSize = useExportStore((s) => s.setScreenshotSize);
-  const screenshotFormat = useExportStore((s) => s.screenshotFormat);
-  const setScreenshotFormat = useExportStore((s) => s.setScreenshotFormat);
-  const screenshotHideLogo = useExportStore((s) => s.screenshotHideLogo);
-  const setScreenshotHideLogo = useExportStore((s) => s.setScreenshotHideLogo);
-  const takeScreenshot = useExportStore((s) => s.takeScreenshot);
-  const getScreenshotBlob = useExportStore((s) => s.getScreenshotBlob);
-  const recordGif = useExportStore((s) => s.recordGif);
-  const isRecordingGif = useExportStore((s) => s.isRecordingGif);
-  const gifRenderProgress = useExportStore((s) => s.gifRenderProgress);
-  const gifBlobUrl = useExportStore((s) => s.gifBlobUrl);
-  const gifDuration = useExportStore((s) => s.gifDuration);
-  const setGifDuration = useExportStore((s) => s.setGifDuration);
-  const gifDownsample = useExportStore((s) => s.gifDownsample);
-  const setGifDownsample = useExportStore((s) => s.setGifDownsample);
-  const downloadGif = useExportStore((s) => s.downloadGif);
-  const stopRecording = useExportStore((s) => s.stopRecording);
-  const recordingFormat = useExportStore((s) => s.recordingFormat);
-  const setRecordingFormat = useExportStore((s) => s.setRecordingFormat);
-  const recordingQuality = useExportStore((s) => s.recordingQuality);
-  const setRecordingQuality = useExportStore((s) => s.setRecordingQuality);
-  const gifSpeed = useExportStore((s) => s.gifSpeed);
-  const setGifSpeed = useExportStore((s) => s.setGifSpeed);
-
-  // Copy screenshot to clipboard
-  const copyScreenshotToClipboard = useCallback(async () => {
-    if (!getScreenshotBlob) return false;
-    try {
-      const blob = await getScreenshotBlob();
-      if (blob) {
-        await navigator.clipboard.write([
-          new ClipboardItem({ 'image/png': blob })
-        ]);
-        useNotificationStore.getState().addNotification(
-          'info',
-          'Screenshot copied! Press Ctrl+V to paste',
-          4000
-        );
-        return true;
-      }
-    } catch (err) {
-      console.error('Failed to copy screenshot to clipboard:', err);
-    }
-    return false;
-  }, [getScreenshotBlob]);
+  const handleCopyScreenshotToClipboard = useCallback(async () => {
+    return copyScreenshotToClipboard(getScreenshotBlob, {
+      addNotification,
+    });
+  }, [addNotification, getScreenshotBlob]);
 
   // Start recording with countdown
   const startRecordingWithCountdown = useCallback(() => {
-    if (!recordGif || isRecordingGif || recordCountdown !== null) return;
+    startRecordingCountdown({
+      addNotification,
+      downloadGif,
+      isRecordingGif,
+      recordCountdown,
+      recordGif,
+      setRecordCountdown,
+    });
+  }, [addNotification, recordGif, isRecordingGif, recordCountdown, downloadGif]);
 
-    setRecordCountdown(3);
-    useNotificationStore.getState().addNotification('info', 'Countdown (3)', 900);
-
-    const countdown = (count: number) => {
-      if (count > 0) {
-        setRecordCountdown(count);
-        if (count < 3) {
-          useNotificationStore.getState().addNotification('info', `Countdown (${count})`, 900);
-        }
-        setTimeout(() => countdown(count - 1), 1000);
-      } else {
-        setRecordCountdown(null);
-        useNotificationStore.getState().addNotification('info', 'Recording started!', 2000);
-        recordGif().then(() => {
-          useNotificationStore.getState().addNotification('info', 'Recording complete! Downloading...', 3000);
-          // Auto download after a short delay to ensure blob URL is set
-          setTimeout(() => {
-            downloadGif();
-          }, 100);
-        });
-      }
-    };
-
-    countdown(3);
-  }, [recordGif, isRecordingGif, recordCountdown, downloadGif]);
+  const recordButtonState = getRecordButtonState({
+    gifRenderProgress,
+    hasRecordGif: Boolean(recordGif),
+    isRecordingGif,
+    recordCountdown,
+  });
+  const saveRecordingButtonState = getSaveRecordingButtonState({
+    gifBlobUrl,
+    gifRenderProgress,
+    isRecordingGif,
+    recordCountdown,
+  });
 
   return (
     <ControlButton
@@ -116,26 +112,14 @@ export const ScreenshotPanel = memo(function ScreenshotPanel({
         <SelectRow
           label="Size"
           value={screenshotSize}
-          onChange={(v) => setScreenshotSize(v as ScreenshotSize)}
-          options={[
-            { value: 'current', label: 'Current' },
-            { value: '1280x720', label: '1280×720' },
-            { value: '1920x1080', label: '1920×1080' },
-            { value: '3840x2160', label: '3840×2160' },
-            { value: '512x512', label: '512×512' },
-            { value: '1024x1024', label: '1024×1024' },
-            { value: '2048x2048', label: '2048×2048' },
-          ]}
+          onChange={setScreenshotSize}
+          options={SCREENSHOT_SIZE_OPTIONS}
         />
         <SelectRow
           label="Format"
           value={screenshotFormat}
-          onChange={(v) => setScreenshotFormat(v as ScreenshotFormat)}
-          options={[
-            { value: 'jpeg', label: 'JPEG' },
-            { value: 'png', label: 'PNG' },
-            { value: 'webp', label: 'WebP' },
-          ]}
+          onChange={setScreenshotFormat}
+          options={SCREENSHOT_FORMAT_OPTIONS}
         />
         <div className="flex gap-2 mt-2">
           <button
@@ -145,7 +129,7 @@ export const ScreenshotPanel = memo(function ScreenshotPanel({
             Save
           </button>
           <button
-            onClick={copyScreenshotToClipboard}
+            onClick={handleCopyScreenshotToClipboard}
             className={`${styles.actionButton} flex-1`}
           >
             Copy
@@ -155,23 +139,14 @@ export const ScreenshotPanel = memo(function ScreenshotPanel({
         <SelectRow
           label="Format"
           value={recordingFormat}
-          onChange={(v) => setRecordingFormat(v as 'gif' | 'webm' | 'mp4')}
-          options={[
-            { value: 'gif', label: 'GIF' },
-            { value: 'webm', label: 'WebM' },
-            { value: 'mp4', label: 'MP4' },
-          ]}
+          onChange={setRecordingFormat}
+          options={RECORDING_FORMAT_OPTIONS}
         />
         <SelectRow
           label="Quality"
           value={recordingQuality}
-          onChange={(v) => setRecordingQuality(v as 'low' | 'medium' | 'high' | 'ultra')}
-          options={[
-            { value: 'low', label: 'Low' },
-            { value: 'medium', label: 'Medium' },
-            { value: 'high', label: 'High' },
-            { value: 'ultra', label: 'Ultra' },
-          ]}
+          onChange={setRecordingQuality}
+          options={RECORDING_QUALITY_OPTIONS}
         />
         <SliderRow
           label="Duration"
@@ -187,52 +162,36 @@ export const ScreenshotPanel = memo(function ScreenshotPanel({
           label="Scale"
           value={String(gifDownsample)}
           onChange={(v) => setGifDownsample(Number(v))}
-          options={[
-            { value: '1', label: '1× (Full)' },
-            { value: '2', label: '½' },
-            { value: '4', label: '¼' },
-            { value: '8', label: '⅛' },
-          ]}
+          options={GIF_DOWNSAMPLE_OPTIONS}
         />
         <SelectRow
           label="Speed"
           value={String(gifSpeed)}
           onChange={(v) => setGifSpeed(Number(v))}
-          options={[
-            { value: '1', label: '1×' },
-            { value: '2', label: '2×' },
-            { value: '3', label: '3×' },
-            { value: '4', label: '4×' },
-          ]}
+          options={GIF_SPEED_OPTIONS}
         />
         <div className="flex gap-2 mt-2">
           <button
             onClick={startRecordingWithCountdown}
-            disabled={isRecordingGif || gifRenderProgress !== null || !recordGif || recordCountdown !== null}
-            className={isRecordingGif || gifRenderProgress !== null || recordCountdown !== null ? styles.actionButtonPrimary : styles.actionButton}
-            style={{ flex: 1, minWidth: 0 }}
+            disabled={recordButtonState.disabled}
+            className={recordButtonState.style === 'primary' ? styles.actionButtonPrimary : styles.actionButton}
+            style={getRecordingActionButtonStyle()}
           >
-            {recordCountdown !== null
-              ? `(${recordCountdown})`
-              : gifRenderProgress !== null
-                ? `Render ${gifRenderProgress}%`
-                : isRecordingGif
-                  ? 'Recording...'
-                  : 'Record'}
+            {recordButtonState.label}
           </button>
           <button
             onClick={isRecordingGif ? stopRecording ?? undefined : downloadGif}
-            disabled={recordCountdown !== null || gifRenderProgress !== null || (!isRecordingGif && !gifBlobUrl)}
+            disabled={saveRecordingButtonState.disabled}
             className={
-              recordCountdown !== null || gifRenderProgress !== null || (!isRecordingGif && !gifBlobUrl)
+              saveRecordingButtonState.style === 'disabled'
                 ? styles.actionButtonDisabled
-                : isRecordingGif
+                : saveRecordingButtonState.style === 'primary'
                   ? styles.actionButtonPrimary
                   : styles.actionButton
             }
-            style={{ flex: 1, minWidth: 0 }}
+            style={getRecordingActionButtonStyle()}
           >
-            {isRecordingGif ? 'Stop' : 'Save'}
+            {saveRecordingButtonState.label}
           </button>
         </div>
         <div

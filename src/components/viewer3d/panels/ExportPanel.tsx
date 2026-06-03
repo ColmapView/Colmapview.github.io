@@ -13,6 +13,7 @@ import { useDataset } from '../../../dataset';
 import { createSim3dFromEuler, isIdentityEuler, transformReconstruction } from '../../../utils/sim3dTransforms';
 import { requestConfirmation } from '../../../utils/confirmation';
 import { appLogger } from '../../../utils/logger';
+import { downloadBlob } from '../../../utils/download';
 import {
   getCameraModelSummary,
   type ExportFormat,
@@ -163,6 +164,13 @@ export const ExportPanel = memo(function ExportPanel({
     });
   }, [imageNames, dataset, addNotification]);
 
+  const handleDownloadSplat = useCallback(() => {
+    const splatFile = loadedFiles?.splatFile;
+    if (!splatFile) return;
+
+    downloadBlob(splatFile, splatFile.name);
+  }, [loadedFiles]);
+
   // Reload data from original files
   const handleReload = useCallback(async () => {
     if (!droppedFiles) return;
@@ -199,6 +207,8 @@ export const ExportPanel = memo(function ExportPanel({
             onOpenConversionModal={onOpenConversionModal}
             onOpenDeletionModal={onOpenDeletionModal}
             onDownload={handleExportFormat}
+            onDownloadSplat={handleDownloadSplat}
+            hasSplatFile={Boolean(loadedFiles?.splatFile)}
           />
           <ExportMediaSection
             hasImages={hasImages}

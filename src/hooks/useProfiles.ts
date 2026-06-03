@@ -4,48 +4,10 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { STORAGE_KEYS } from '../store/migration';
 import { extractConfigurationFromStores, applyConfigurationToStores, getDefaultConfiguration } from '../config/configuration';
 import type { ProfilesData } from '../store/profileTypes';
-import { DEFAULT_PROFILES_DATA } from '../store/profileTypes';
-
-/** The default profile name - this profile is read-only and always uses project defaults */
-const DEFAULT_PROFILE_NAME = 'Default';
-
-/**
- * Load profiles data from localStorage.
- */
-function loadProfilesData(): ProfilesData {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEYS.profiles);
-    if (!stored) return DEFAULT_PROFILES_DATA;
-    const parsed = JSON.parse(stored);
-    // Basic validation
-    if (typeof parsed.profiles !== 'object' || parsed.profiles === null) {
-      return DEFAULT_PROFILES_DATA;
-    }
-    return {
-      profiles: parsed.profiles,
-      activeProfile: parsed.activeProfile ?? null,
-    };
-  } catch {
-    return DEFAULT_PROFILES_DATA;
-  }
-}
-
-/**
- * Save profiles data to localStorage.
- * Excludes the Default profile since it's always computed fresh.
- */
-function saveProfilesData(data: ProfilesData): void {
-  // Don't store the Default profile - it's always computed fresh
-  const { [DEFAULT_PROFILE_NAME]: _default, ...userProfiles } = data.profiles;
-  void _default;
-  localStorage.setItem(STORAGE_KEYS.profiles, JSON.stringify({
-    profiles: userProfiles,
-    activeProfile: data.activeProfile,
-  }));
-}
+import { DEFAULT_PROFILE_NAME } from '../store/profileTypes';
+import { loadProfilesData, saveProfilesData } from './profilesStorage';
 
 /**
  * Generate a default profile name like "Profile 1", "Profile 2", etc.

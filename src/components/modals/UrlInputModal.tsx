@@ -1,7 +1,27 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useHotkeys } from 'react-hotkeys-hook';
-import { inputStyles, getButtonClass, Z_INDEX } from '../../theme';
+import { useState, useEffect, useRef, useCallback, useId } from 'react';
+import { inputStyles, getButtonClass } from '../../theme';
 import { ChevronDownIcon, ChevronRightIcon } from '../../icons';
+import { ModalDialogShell } from '../ui/ModalDialogShell';
+import {
+  getUrlInputHelpItemClassName,
+  getUrlInputHelpItemKey,
+  getUrlInputActionState,
+  getUrlInputHelpIconKind,
+  getUrlInputHelpSectionTitleClassName,
+  getUrlInputModalOverlayStyle,
+  getUrlInputSubmitUrl,
+  getUrlInputWarningHelpText,
+  isUrlInputWarningHelpSection,
+  shouldCloseUrlInputFromBackdrop,
+  shouldSubmitUrlInputKey,
+  URL_INPUT_DESCRIPTION,
+  URL_INPUT_HELP_CODE_CLASS,
+  URL_INPUT_HELP_LIST_CLASS,
+  URL_INPUT_HELP_SECTIONS,
+  URL_INPUT_PLACEHOLDER,
+  URL_INPUT_WARNING_TEXT_CLASS,
+  type UrlInputHelpIconKind,
+} from './urlInputModalViewModel';
 
 interface UrlInputModalProps {
   isOpen: boolean;
@@ -18,65 +38,53 @@ interface UrlInputModalProps {
  * - Enter key to submit, Escape to close
  */
 export function UrlInputModal({ isOpen, onClose, onLoad, loading = false }: UrlInputModalProps) {
+  const titleId = useId();
+  const descriptionId = useId();
   const [url, setUrl] = useState('');
   const [showHelp, setShowHelp] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  // Focus input when modal opens
-  useEffect(() => {
-    if (isOpen && inputRef.current) {
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 50);
-    }
-  }, [isOpen]);
+  const actionState = getUrlInputActionState(url, loading);
+  const helpIconKind = getUrlInputHelpIconKind(showHelp);
 
   // Clear URL when modal closes
   useEffect(() => {
     if (!isOpen) {
-      setUrl('');
+      const timeout = setTimeout(() => setUrl(''), 0);
+      return () => clearTimeout(timeout);
     }
   }, [isOpen]);
 
   // Handle load action
   const handleLoad = useCallback(() => {
-    const trimmedUrl = url.trim();
-    if (!trimmedUrl || loading) return;
-    onLoad(trimmedUrl);
+    const submitUrl = getUrlInputSubmitUrl(url, loading);
+    if (!submitUrl) return;
+    onLoad(submitUrl);
   }, [url, loading, onLoad]);
 
   // Handle key events
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !loading) {
+    if (shouldSubmitUrlInputKey(e.key, loading)) {
       handleLoad();
     }
   }, [handleLoad, loading]);
 
-  // Close with Escape
-  useHotkeys(
-    'escape',
-    () => onClose(),
-    { enabled: isOpen && !loading },
-    [isOpen, loading, onClose]
-  );
-
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="fixed inset-0 flex items-center justify-center bg-ds-void/50"
-      style={{ zIndex: Z_INDEX.modalOverlay }}
-      onClick={(e) => {
-        // Close when clicking backdrop (not when clicking modal content)
-        if (e.target === e.currentTarget && !loading) {
-          onClose();
-        }
-      }}
+    <ModalDialogShell
+      isOpen={isOpen}
+      onClose={onClose}
+      ariaLabelledBy={titleId}
+      ariaDescribedBy={descriptionId}
+      overlayClassName="fixed inset-0 flex items-center justify-center bg-ds-void/50"
+      overlayStyle={getUrlInputModalOverlayStyle()}
+      panelClassName="bg-ds-tertiary border border-ds rounded-lg shadow-ds-lg p-5 min-w-[400px] max-w-[520px]"
+      panelTestId="url-modal"
+      initialFocusRef={inputRef}
+      closeOnBackdrop={shouldCloseUrlInputFromBackdrop(true, loading)}
+      closeOnEscape={!loading}
     >
-      <div className="bg-ds-tertiary border border-ds rounded-lg shadow-ds-lg p-5 min-w-[400px] max-w-[520px]" data-testid="url-modal" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-ds-primary font-medium mb-3">Load from URL</h3>
-        <p className="text-ds-muted text-sm mb-4">
-          Enter a manifest URL (.json), a ZIP file URL (.zip), or a direct path to a COLMAP folder
+        <h3 id={titleId} className="text-ds-primary font-medium mb-3">Load from URL</h3>
+        <p id={descriptionId} className="text-ds-muted text-sm mb-4">
+          {URL_INPUT_DESCRIPTION}
         </p>
 
         {/* URL input */}
@@ -86,7 +94,7 @@ export function UrlInputModal({ isOpen, onClose, onLoad, loading = false }: UrlI
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="https://huggingface.co/.../resolve/main/reconstruction"
+          placeholder={URL_INPUT_PLACEHOLDER}
           className={`${inputStyles.base} ${inputStyles.sizes.lg} w-full mb-4 text-sm placeholder-ds-muted`}
           disabled={loading}
         />
@@ -98,51 +106,14 @@ export function UrlInputModal({ isOpen, onClose, onLoad, loading = false }: UrlI
             onClick={() => setShowHelp(!showHelp)}
             className="flex items-center gap-1 text-ds-muted text-xs hover:text-ds-primary transition-colors"
           >
-            {showHelp ? (
-              <ChevronDownIcon className="w-3 h-3" />
-            ) : (
-              <ChevronRightIcon className="w-3 h-3" />
-            )}
+            <UrlInputHelpIcon iconKind={helpIconKind} />
             Supported URL formats
           </button>
           {showHelp && (
             <div className="mt-2 p-3 bg-ds-secondary rounded border border-ds text-xs text-ds-muted">
-              <div className="font-medium text-ds-primary mb-2">ZIP Files</div>
-              <ul className="space-y-1 mb-3">
-                <li><code className="text-ds-accent">https://example.com/reconstruction.zip</code></li>
-                <li className="text-ds-muted/70">ZIP should contain cameras.bin, images.bin, points3D.bin</li>
-                <li className="text-ds-muted/70">Images in ZIP are loaded lazily on-demand</li>
-                <li className="text-ds-muted/70">Maximum ZIP size: 2GB</li>
-              </ul>
-              <div className="font-medium text-ds-primary mb-2">Cloud Storage URLs</div>
-              <ul className="space-y-1 mb-3">
-                <li><code className="text-ds-accent">s3://bucket/path</code> — AWS S3</li>
-                <li><code className="text-ds-accent">gs://bucket/path</code> — Google Cloud Storage</li>
-                <li><code className="text-ds-accent">https://bucket.s3.amazonaws.com/path</code></li>
-                <li><code className="text-ds-accent">https://storage.googleapis.com/bucket/path</code></li>
-                <li><code className="text-ds-accent">https://account.r2.cloudflarestorage.com/bucket/path</code></li>
-              </ul>
-              <div className="font-medium text-ds-primary mb-2">Dropbox</div>
-              <ul className="space-y-1 mb-3">
-                <li><code className="text-ds-accent">https://www.dropbox.com/s/.../file.txt?dl=0</code></li>
-                <li><code className="text-ds-accent">https://www.dropbox.com/scl/fi/.../file.txt?rlkey=...</code></li>
-                <li className="text-ds-muted/70">Share links auto-converted to direct downloads</li>
-              </ul>
-              <div className="font-medium text-ds-primary mb-2">Git Hosting URLs</div>
-              <ul className="space-y-1 mb-3">
-                <li><code className="text-ds-accent">https://huggingface.co/.../resolve/main/...</code></li>
-                <li><code className="text-ds-accent">https://github.com/.../blob/main/...</code></li>
-                <li><code className="text-ds-accent">https://gitlab.com/.../-/blob/main/...</code></li>
-              </ul>
-              <div className="font-medium text-ds-primary mb-2">Local / Self-hosted Server</div>
-              <ul className="space-y-1 mb-3">
-                <li><code className="text-ds-accent">http://localhost:8080/</code></li>
-                <li className="text-ds-muted/70">Start with: <code className="text-ds-accent">npx http-server --cors -p 8080</code></li>
-              </ul>
-              <div className="font-medium text-amber-400 mb-1">CORS Requirements</div>
-              <p className="text-ds-muted/80">
-                Cloud buckets must have CORS configured. Dropbox, pre-signed URLs, and same-origin servers work automatically.
-              </p>
+              {URL_INPUT_HELP_SECTIONS.map((section) => (
+                <UrlInputHelpSection key={section.title} section={section} />
+              ))}
             </div>
           )}
         </div>
@@ -152,21 +123,63 @@ export function UrlInputModal({ isOpen, onClose, onLoad, loading = false }: UrlI
           <button
             type="button"
             onClick={onClose}
-            disabled={loading}
-            className={getButtonClass('ghost', 'lg', loading)}
+            disabled={actionState.cancelDisabled}
+            className={getButtonClass('ghost', 'lg', actionState.cancelDisabled)}
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={handleLoad}
-            disabled={loading || !url.trim()}
-            className={getButtonClass('primary', 'lg', loading || !url.trim())}
+            disabled={actionState.loadDisabled}
+            className={getButtonClass('primary', 'lg', actionState.loadDisabled)}
           >
-            {loading ? 'Loading...' : 'Load'}
+            {actionState.loadLabel}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalDialogShell>
+  );
+}
+
+function UrlInputHelpIcon({ iconKind }: { iconKind: UrlInputHelpIconKind }) {
+  if (iconKind === 'open') {
+    return <ChevronDownIcon className="w-3 h-3" />;
+  }
+
+  return <ChevronRightIcon className="w-3 h-3" />;
+}
+
+function UrlInputHelpSection({
+  section,
+}: {
+  section: (typeof URL_INPUT_HELP_SECTIONS)[number];
+}) {
+  const titleClass = getUrlInputHelpSectionTitleClassName(section);
+
+  if (isUrlInputWarningHelpSection(section)) {
+    return (
+      <>
+        <div className={titleClass}>{section.title}</div>
+        <p className={URL_INPUT_WARNING_TEXT_CLASS}>{getUrlInputWarningHelpText(section)}</p>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className={titleClass}>{section.title}</div>
+      <ul className={URL_INPUT_HELP_LIST_CLASS}>
+        {section.items.map((item) => (
+          <li
+            key={getUrlInputHelpItemKey(item)}
+            className={getUrlInputHelpItemClassName(item)}
+          >
+            {item.text && <>{item.text}{item.code ? ' ' : ''}</>}
+            {item.code && <code className={URL_INPUT_HELP_CODE_CLASS}>{item.code}</code>}
+            {item.suffix}
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }

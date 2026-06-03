@@ -1,6 +1,10 @@
 import { BinaryReader } from './BinaryReader';
 import type { Rig, RigSensor, SensorId } from '../types/rig';
-import { SensorType } from '../types/rig';
+import { parseSensorType } from '../utils/sensorTypePolicy';
+import {
+  parseColmapIntegerToken,
+  parseColmapNumberTokens,
+} from './colmapTextTokens';
 
 /**
  * Parse rigs.bin binary file
@@ -31,7 +35,7 @@ export function parseRigsBinary(buffer: ArrayBuffer): Map<number, Rig> {
 
     if (numSensors > 0) {
       // Read reference sensor (first sensor, always has identity pose)
-      const refType = reader.readInt32() as SensorType;
+      const refType = parseSensorType(reader.readInt32(), `binary rig ${rigId} reference sensor`);
       const refId = reader.readUint32();
       refSensorId = { type: refType, id: refId };
 
@@ -42,7 +46,7 @@ export function parseRigsBinary(buffer: ArrayBuffer): Map<number, Rig> {
 
       // Read additional sensors
       for (let j = 1; j < numSensors; j++) {
-        const sensorType = reader.readInt32() as SensorType;
+        const sensorType = parseSensorType(reader.readInt32(), `binary rig ${rigId} sensor ${j}`);
         const sensorId = reader.readUint32();
         const hasPose = reader.readUint8() !== 0;
 
@@ -108,12 +112,19 @@ export function parseRigsText(text: string): Map<number, Rig> {
     if (parts.length < 4) continue;
 
     // Parse rig header: RIG_ID, NUM_SENSORS, REF_SENSOR_TYPE, REF_SENSOR_ID
-    const rigId = parseInt(parts[0]);
-    const numSensors = parseInt(parts[1]);
-    const refSensorType = parseInt(parts[2]) as SensorType;
+    const rigId = parseColmapIntegerToken(parts[0], { min: 0 });
+    const numSensors = parseColmapIntegerToken(parts[1], { min: 0 });
+    const refSensorTypeValue = parseColmapIntegerToken(parts[2]);
+    const refSensorIdValue = parseColmapIntegerToken(parts[3], { min: 0 });
+
+    if (rigId === null || numSensors === null || refSensorTypeValue === null || refSensorIdValue === null) {
+      continue;
+    }
+
+    const refSensorType = parseSensorType(refSensorTypeValue, `text rig ${rigId} reference sensor`);
     const refSensorId: SensorId = {
       type: refSensorType,
-      id: parseInt(parts[3]),
+      id: refSensorIdValue,
     };
 
     const sensors: RigSensor[] = [];
@@ -137,27 +148,36 @@ export function parseRigsText(text: string): Map<number, Rig> {
       const sensorParts = sensorLine.split(/\s+/);
       if (sensorParts.length < 3) continue;
 
-      const sensorType = parseInt(sensorParts[0]) as SensorType;
-      const sensorId = parseInt(sensorParts[1]);
-      const hasPose = parseInt(sensorParts[2]) !== 0;
+      const sensorTypeValue = parseColmapIntegerToken(sensorParts[0]);
+      const sensorId = parseColmapIntegerToken(sensorParts[1], { min: 0 });
+      const hasPoseValue = parseColmapIntegerToken(sensorParts[2], { min: 0 });
+
+      if (sensorTypeValue === null || sensorId === null || hasPoseValue === null) continue;
+
+      const sensorType = parseSensorType(sensorTypeValue, `text rig ${rigId} sensor ${j}`);
+      const hasPose = hasPoseValue !== 0;
 
       const sensor: RigSensor = {
         sensorId: { type: sensorType, id: sensorId },
         hasPose,
       };
 
-      if (hasPose && sensorParts.length >= 10) {
+      if (hasPose) {
+        const qvecValues = parseColmapNumberTokens(sensorParts.slice(3, 7));
+        const tvecValues = parseColmapNumberTokens(sensorParts.slice(7, 10));
+        if (qvecValues === null || tvecValues === null) continue;
+
         sensor.pose = {
           qvec: [
-            parseFloat(sensorParts[3]),
-            parseFloat(sensorParts[4]),
-            parseFloat(sensorParts[5]),
-            parseFloat(sensorParts[6]),
+            qvecValues[0],
+            qvecValues[1],
+            qvecValues[2],
+            qvecValues[3],
           ],
           tvec: [
-            parseFloat(sensorParts[7]),
-            parseFloat(sensorParts[8]),
-            parseFloat(sensorParts[9]),
+            tvecValues[0],
+            tvecValues[1],
+            tvecValues[2],
           ],
         };
       }

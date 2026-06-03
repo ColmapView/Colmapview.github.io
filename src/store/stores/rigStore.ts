@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { STORAGE_KEYS } from '../migration';
+import { migrateRigPersistedState } from '../persistedStoreMigrations';
 import type { RigDisplayMode, RigColorMode } from '../types';
 
 export interface RigState {
@@ -38,21 +39,8 @@ export const useRigStore = create<RigState>()(
     }),
     {
       name: STORAGE_KEYS.rig,
-      version: 1,
-      migrate: (persistedState: unknown, version: number) => {
-        const state = persistedState as Record<string, unknown>;
-        if (version < 1) {
-          // Convert old rigDisplayMode 'off' to separate showRig boolean
-          const mode = state.rigDisplayMode as string | undefined;
-          if (mode === 'off') {
-            state.showRig = false;
-            state.rigDisplayMode = 'static';
-          } else {
-            state.showRig = true;
-          }
-        }
-        return state;
-      },
+      version: 2,
+      migrate: migrateRigPersistedState,
       partialize: (state) => ({
         showRig: state.showRig,
         rigDisplayMode: state.rigDisplayMode,

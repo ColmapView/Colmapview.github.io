@@ -7,6 +7,7 @@
 
 // Supported property types
 export type PropertyType = 'number' | 'boolean' | 'string' | 'enum';
+export type EnumValues = readonly [string, ...string[]];
 
 // Base property definition
 export interface PropertyDefBase {
@@ -57,7 +58,7 @@ export interface StringPropertyDef extends PropertyDefBase {
 }
 
 // Enum property
-export interface EnumPropertyDef<T extends readonly string[] = readonly string[]>
+export interface EnumPropertyDef<T extends EnumValues = EnumValues>
   extends PropertyDefBase {
   type: 'enum';
   enumValues: T;

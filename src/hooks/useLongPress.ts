@@ -1,16 +1,21 @@
 import { useRef, useCallback } from 'react';
+import type * as React from 'react';
 import { TOUCH } from '../theme/sizing';
 
+export interface LongPressTouchEvent {
+  touches: React.TouchList;
+}
+
 interface UseLongPressOptions {
-  onLongPress: (e: React.TouchEvent) => void;
-  onClick?: (e: React.TouchEvent) => void;
+  onLongPress: (e: LongPressTouchEvent) => void;
+  onClick?: (e: LongPressTouchEvent) => void;
   delay?: number;
 }
 
 interface UseLongPressReturn {
-  onTouchStart: (e: React.TouchEvent) => void;
-  onTouchEnd: (e: React.TouchEvent) => void;
-  onTouchMove: (e: React.TouchEvent) => void;
+  onTouchStart: (e: LongPressTouchEvent) => void;
+  onTouchEnd: (e: LongPressTouchEvent) => void;
+  onTouchMove: (e: LongPressTouchEvent) => void;
   onTouchCancel: () => void;
 }
 
@@ -38,7 +43,7 @@ export function useLongPress({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
   const longPressTriggeredRef = useRef(false);
-  const touchEventRef = useRef<React.TouchEvent | null>(null);
+  const touchEventRef = useRef<LongPressTouchEvent | null>(null);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -47,7 +52,7 @@ export function useLongPress({
     }
   }, []);
 
-  const onTouchStart = useCallback((e: React.TouchEvent) => {
+  const onTouchStart = useCallback((e: LongPressTouchEvent) => {
     // Store starting position for drag detection
     const touch = e.touches[0];
     startPosRef.current = { x: touch.clientX, y: touch.clientY };
@@ -61,7 +66,7 @@ export function useLongPress({
     }, delay);
   }, [onLongPress, delay]);
 
-  const onTouchMove = useCallback((e: React.TouchEvent) => {
+  const onTouchMove = useCallback((e: LongPressTouchEvent) => {
     if (!startPosRef.current) return;
 
     const touch = e.touches[0];
@@ -75,7 +80,7 @@ export function useLongPress({
     }
   }, [clearTimer]);
 
-  const onTouchEnd = useCallback((e: React.TouchEvent) => {
+  const onTouchEnd = useCallback((e: LongPressTouchEvent) => {
     clearTimer();
 
     // If long-press wasn't triggered, treat as a click

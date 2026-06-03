@@ -6,6 +6,11 @@ import { useCallback, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import type { PointPickingMode } from '../../store/stores/pointPickingStore';
+import {
+  getRequiredPointCount,
+  needsMoreSelectedPoints,
+} from '../../store/pointPickingPolicy';
+import { syncPointRaycasterThreshold } from '../../utils/threeObjectMutations';
 import type { NearestPointResult, SelectedPointData, ScreenPosition } from './types';
 
 export interface UsePointPickingParams {
@@ -57,8 +62,8 @@ export function usePointPicking(params: UsePointPickingParams): UsePointPickingR
   const lastHoverPosRef = useRef<THREE.Vector3 | null>(null);
 
   // Calculate max points based on picking mode
-  const maxPoints = getMaxPointsForMode(pickingMode);
-  const needsMorePoints = pickingMode !== 'off' && selectedPointsLength < maxPoints;
+  const maxPoints = getRequiredPointCount(pickingMode);
+  const needsMorePoints = needsMoreSelectedPoints(selectedPointsLength, pickingMode);
 
   // Find nearest point from intersections using pre-computed distanceToRay
   const findNearestPoint = useCallback(
@@ -183,8 +188,7 @@ export function usePointPicking(params: UsePointPickingParams): UsePointPickingR
   useEffect(() => {
     if (pickingMode !== 'off') {
       // Tighter threshold = fewer points to check = faster raycasting
-      // eslint-disable-next-line react-hooks/immutability -- raycaster params are mutable by design
-      raycaster.params.Points.threshold = pointSize * 0.3;
+      syncPointRaycasterThreshold(raycaster, pointSize * 0.3);
     }
   }, [pickingMode, pointSize, raycaster]);
 
@@ -200,20 +204,4 @@ export function usePointPicking(params: UsePointPickingParams): UsePointPickingR
     handlePointClick,
     needsMorePoints,
   };
-}
-
-/**
- * Get the maximum number of points allowed for a picking mode.
- */
-function getMaxPointsForMode(mode: PointPickingMode): number {
-  switch (mode) {
-    case 'origin-1pt':
-      return 1;
-    case 'distance-2pt':
-      return 2;
-    case 'normal-3pt':
-      return 3;
-    default:
-      return 0;
-  }
 }

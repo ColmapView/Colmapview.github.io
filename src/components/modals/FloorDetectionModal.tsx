@@ -5,21 +5,30 @@
 
 import { useCallback, memo, useMemo } from 'react';
 import { SliderRow, SelectRow } from '../viewer3d/ControlComponents';
-import * as THREE from 'three';
 import { useHotkeys } from 'react-hotkeys-hook';
-import {
-  useReconstructionStore,
-  useTransformStore,
-  useUIStore,
-} from '../../store';
 import { useModalZIndex } from '../../hooks/useModalZIndex';
 import { useModalDrag } from '../../hooks/useModalDrag';
-import { useFloorPlaneStore, type FloorColorMode } from '../../store/stores/floorPlaneStore';
-import { detectPlaneRANSAC, computeDistancesToPlane, transformPositions, flipPlaneNormal } from '../../utils/ransac';
-import { createSim3dFromEuler, isIdentityEuler, sim3dToEuler, composeSim3d, computePlaneAlignment } from '../../utils/sim3dTransforms';
-import { COORDINATE_SYSTEMS } from '../../utils/coordinateSystems';
-import { modalStyles, controlPanelStyles } from '../../theme';
-import { CloseIcon } from '../../icons';
+import { controlPanelStyles } from '../../theme';
+import { FloatingWindowShell } from '../ui/FloatingWindowShell';
+import {
+  FLOOR_COLOR_MODE_OPTIONS,
+  FLOOR_DETECTION_MODAL_ESTIMATED_HEIGHT,
+  FLOOR_DETECTION_MODAL_ESTIMATED_WIDTH,
+  computeFloorAlignmentTransform,
+  detectFloorPlaneFromPositions,
+  formatFloorSampleCount,
+  getFloorDetectionButtonStyle,
+  getFloorColorModeAfterDetection,
+  getFloorDetectionModalPanelStyle,
+  getFloorDetectedPlaneActionState,
+  getFloorDetectionActionState,
+  getFloorDetectionStatusInfo,
+  getFloorModalHeaderDragStyle,
+  getFloorModalOverlayStyle,
+  getFloorPlaneControlState,
+  getFloorTargetUpVector,
+} from './floorPlaneAlignmentPolicy';
+import { useFloorDetectionStoreFacade } from './useFloorDetectionStoreFacade';
 
 const styles = controlPanelStyles;
 
@@ -32,43 +41,43 @@ export const FloorDetectionModal = memo(function FloorDetectionModal({
   isOpen,
   onClose,
 }: FloorDetectionModalProps) {
-  const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
-  const transform = useTransformStore((s) => s.transform);
-  const setTransform = useTransformStore((s) => s.setTransform);
-  const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
-
-  // Floor plane store
-  const detectedPlane = useFloorPlaneStore((s) => s.detectedPlane);
-  const setDetectedPlane = useFloorPlaneStore((s) => s.setDetectedPlane);
-  const distanceThreshold = useFloorPlaneStore((s) => s.distanceThreshold);
-  const setDistanceThreshold = useFloorPlaneStore((s) => s.setDistanceThreshold);
-  const sampleCount = useFloorPlaneStore((s) => s.sampleCount);
-  const setSampleCount = useFloorPlaneStore((s) => s.setSampleCount);
-  const floorColorMode = useFloorPlaneStore((s) => s.floorColorMode);
-  const setFloorColorMode = useFloorPlaneStore((s) => s.setFloorColorMode);
-  const setPointDistances = useFloorPlaneStore((s) => s.setPointDistances);
-  const isDetecting = useFloorPlaneStore((s) => s.isDetecting);
-  const setIsDetecting = useFloorPlaneStore((s) => s.setIsDetecting);
-  const normalFlipped = useFloorPlaneStore((s) => s.normalFlipped);
-  const toggleNormalFlipped = useFloorPlaneStore((s) => s.toggleNormalFlipped);
-  const targetAxis = useFloorPlaneStore((s) => s.targetAxis);
-  const cycleTargetAxis = useFloorPlaneStore((s) => s.cycleTargetAxis);
-  const reset = useFloorPlaneStore((s) => s.reset);
+  const {
+    data: { reconstruction, wasmReconstruction },
+    floor: {
+      detectedPlane,
+      distanceThreshold,
+      sampleCount,
+      floorColorMode,
+      isDetecting,
+      normalFlipped,
+      targetAxis,
+      setDetectedPlane,
+      setDistanceThreshold,
+      setSampleCount,
+      setFloorColorMode,
+      setPointDistances,
+      setIsDetecting,
+      toggleNormalFlipped,
+      cycleTargetAxis,
+      reset,
+    },
+    transform: { transform, setTransform },
+    ui: { axesCoordinateSystem },
+  } = useFloorDetectionStoreFacade();
 
   const pointCount = wasmReconstruction?.pointCount ?? reconstruction?.points3D?.size ?? 0;
+  const hasFloorDetectionPoints = wasmReconstruction?.hasPoints() ?? false;
 
   // Get target direction based on selected axis and coordinate system
   const targetUp = useMemo(() => {
-    const system = COORDINATE_SYSTEMS[axesCoordinateSystem];
-    const axisKey = targetAxis.toLowerCase() as 'x' | 'y' | 'z';
-    const direction = system[axisKey];
-    return new THREE.Vector3(direction[0], direction[1], direction[2]);
+    return getFloorTargetUpVector(axesCoordinateSystem, targetAxis);
   }, [axesCoordinateSystem, targetAxis]);
 
   // Position and drag
   const { position, panelRef, handleDragStart } = useModalDrag({
-    estimatedWidth: 280, estimatedHeight: 300, isOpen,
+    estimatedWidth: FLOOR_DETECTION_MODAL_ESTIMATED_WIDTH,
+    estimatedHeight: FLOOR_DETECTION_MODAL_ESTIMATED_HEIGHT,
+    isOpen,
   });
 
   // Z-index management for stacking multiple modals
@@ -89,29 +98,22 @@ export const FloorDetectionModal = memo(function FloorDetectionModal({
 
     // Use setTimeout to allow UI to update before potentially blocking operation
     setTimeout(() => {
-      let positions = wasmReconstruction.getPositions();
+      const positions = wasmReconstruction.getPositions();
       if (!positions) {
         setIsDetecting(false);
         return;
       }
 
-      // Apply current transform if not identity (so detection matches visual)
-      if (!isIdentityEuler(transform)) {
-        const sim3d = createSim3dFromEuler(transform);
-        positions = transformPositions(positions, sim3d);
-      }
+      const result = detectFloorPlaneFromPositions(positions, transform, {
+        distanceThreshold,
+        sampleCount,
+      });
+      setDetectedPlane(result.plane);
+      setPointDistances(result.distances);
 
-      const plane = detectPlaneRANSAC(positions, { distanceThreshold, sampleCount });
-      setDetectedPlane(plane);
-
-      if (plane) {
-        const distances = computeDistancesToPlane(positions, plane);
-        setPointDistances(distances);
-        if (floorColorMode === 'off') {
-          setFloorColorMode('binary');
-        }
-      } else {
-        setPointDistances(null);
+      const nextFloorColorMode = getFloorColorModeAfterDetection(floorColorMode, result.plane);
+      if (nextFloorColorMode !== floorColorMode) {
+        setFloorColorMode(nextFloorColorMode);
       }
 
       setIsDetecting(false);
@@ -126,53 +128,41 @@ export const FloorDetectionModal = memo(function FloorDetectionModal({
   const handleApply = useCallback(() => {
     if (!detectedPlane) return;
 
-    // Get the plane normal (flipped if needed)
-    const plane = normalFlipped ? flipPlaneNormal(detectedPlane) : detectedPlane;
-
-    // Compute the alignment transform (rotation + translation to origin)
-    const alignSim3d = computePlaneAlignment(plane.normal, plane.centroid, targetUp);
-
-    // Compose with current transform
-    const currentSim3d = createSim3dFromEuler(transform);
-    const composed = composeSim3d(alignSim3d, currentSim3d);
-    const composedEuler = sim3dToEuler(composed);
+    const composedEuler = computeFloorAlignmentTransform(
+      detectedPlane,
+      normalFlipped,
+      targetUp,
+      transform
+    );
 
     setTransform(composedEuler);
     reset();
     onClose();
   }, [detectedPlane, normalFlipped, targetUp, transform, setTransform, reset, onClose]);
 
-  const inlierPercentage = detectedPlane && pointCount > 0
-    ? ((detectedPlane.inlierCount / pointCount) * 100).toFixed(1)
-    : null;
+  const planeControls = getFloorPlaneControlState(detectedPlane, targetAxis);
+  const detectionAction = getFloorDetectionActionState({
+    isDetecting,
+    hasPoints: hasFloorDetectionPoints,
+    hasPlane: detectedPlane !== null,
+  });
+  const detectedPlaneAction = getFloorDetectedPlaneActionState(detectedPlane);
+  const statusInfo = getFloorDetectionStatusInfo(detectedPlane, pointCount);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 pointer-events-none" style={{ zIndex }}>
-      <div
-        ref={panelRef}
-        className={modalStyles.toolPanel}
-        style={{ left: position.x, top: position.y, width: 280 }}
-        onPointerDown={bringToFront}
-      >
-        {/* Header */}
-        <div
-          className={modalStyles.toolHeader}
-          onPointerDown={handleDragStart}
-          style={{ touchAction: 'none' }}
-        >
-          <span className={modalStyles.toolHeaderTitle}>Floor Detection</span>
-          <button
-            onClick={handleClose}
-            onPointerDown={(e) => e.stopPropagation()}
-            className={modalStyles.toolHeaderClose}
-            title="Close"
-          >
-            <CloseIcon className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
+    <FloatingWindowShell
+      isOpen={isOpen}
+      title="Floor Detection"
+      onClose={handleClose}
+      panelRef={panelRef}
+      overlayStyle={getFloorModalOverlayStyle(zIndex)}
+      panelStyle={getFloorDetectionModalPanelStyle(position)}
+      headerStyle={getFloorModalHeaderDragStyle()}
+      onPanelPointerDown={bringToFront}
+      onHeaderPointerDown={handleDragStart}
+    >
         {/* Content */}
         <div className={`px-4 py-3 ${styles.panelContent}`}>
           {/* Settings */}
@@ -192,82 +182,71 @@ export const FloorDetectionModal = memo(function FloorDetectionModal({
             max={100000}
             step={1000}
             onChange={setSampleCount}
-            formatValue={(v) => `${(v / 1000).toFixed(0)}k`}
+            formatValue={formatFloorSampleCount}
           />
           <SelectRow
             label="Color"
             value={floorColorMode}
-            onChange={(v) => setFloorColorMode(v as FloorColorMode)}
-            options={[
-              { value: 'off', label: 'Off' },
-              { value: 'binary', label: 'Binary (In/Out)' },
-              { value: 'distance', label: 'Distance' },
-            ]}
+            onChange={setFloorColorMode}
+            options={FLOOR_COLOR_MODE_OPTIONS}
           />
 
           {/* Flip/Axis buttons - always visible, disabled when no plane */}
           <div className={styles.actionGroup}>
             <button
               onClick={toggleNormalFlipped}
-              disabled={!detectedPlane}
-              className={detectedPlane ? styles.actionButton : styles.actionButtonDisabled}
+              disabled={planeControls.disabled}
+              className={planeControls.disabled ? styles.actionButtonDisabled : styles.actionButton}
               title="Flip the detected plane normal direction"
             >
               Flip
             </button>
             <button
               onClick={cycleTargetAxis}
-              disabled={!detectedPlane}
-              className={detectedPlane ? styles.actionButton : styles.actionButtonDisabled}
+              disabled={planeControls.disabled}
+              className={planeControls.disabled ? styles.actionButtonDisabled : styles.actionButton}
               title="Change target alignment axis"
             >
-              Axis: {targetAxis}
+              {planeControls.axisLabel}
             </button>
           </div>
 
           {/* Status info */}
-          {detectedPlane ? (
-            <div className="text-ds-secondary text-sm">
-              <div className="mb-1 font-medium">Detection Result:</div>
-              <div>{inlierPercentage}% inliers ({detectedPlane.inlierCount.toLocaleString()} pts)</div>
-            </div>
-          ) : (
-            <div className="text-ds-secondary text-sm">
-              <div className="mb-1 font-medium">RANSAC Floor Detection:</div>
-              <div>Detect dominant plane in the</div>
-              <div>point cloud for alignment.</div>
-            </div>
-          )}
+          <div className="text-ds-secondary text-sm">
+            <div className="mb-1 font-medium">{statusInfo.heading}</div>
+            {statusInfo.lines.map((line) => (
+              <div key={line}>{line}</div>
+            ))}
+          </div>
 
           {/* Action buttons at bottom */}
           <div className={styles.actionGroup}>
             <button
               onClick={handleDetectFloor}
-              disabled={isDetecting || !wasmReconstruction?.hasPoints()}
-              className={isDetecting || !wasmReconstruction?.hasPoints() ? styles.actionButtonDisabled : styles.actionButtonPrimary}
-              style={{ flex: 1 }}
+              disabled={detectionAction.disabled}
+              className={detectionAction.disabled ? styles.actionButtonDisabled : styles.actionButtonPrimary}
+              style={getFloorDetectionButtonStyle()}
             >
-              {isDetecting ? 'Detecting...' : detectedPlane ? 'Re-detect' : 'Detect'}
+              {detectionAction.label}
             </button>
           </div>
           <div className={styles.actionGroup}>
             <button
               onClick={handleApply}
-              disabled={!detectedPlane}
-              className={detectedPlane ? styles.actionButtonPrimary : styles.actionButtonPrimaryDisabled}
+              disabled={detectedPlaneAction.disabled}
+              className={detectedPlaneAction.disabled ? styles.actionButtonPrimaryDisabled : styles.actionButtonPrimary}
             >
               Apply
             </button>
             <button
               onClick={handleClear}
-              disabled={!detectedPlane}
-              className={detectedPlane ? styles.actionButton : styles.actionButtonDisabled}
+              disabled={detectedPlaneAction.disabled}
+              className={detectedPlaneAction.disabled ? styles.actionButtonDisabled : styles.actionButton}
             >
               Clear
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </FloatingWindowShell>
   );
 });

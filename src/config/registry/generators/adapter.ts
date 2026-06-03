@@ -5,30 +5,41 @@
  * Handles extracting config from stores, applying config to stores, and resetting to defaults.
  */
 
-import type { PropertyDef, StoreHook } from '../types';
+import type { PropertyDef } from '../types';
 import { sections, getPersistedProperties, getStoreKey } from '../index';
-import { CONFIG_VERSION } from '../../configuration/types';
 import type { AppConfiguration, PartialAppConfiguration } from '../../configuration/types';
+import { getStoreConfigAdapter } from './storeAdapters';
+import {
+  addConfigurationSection,
+  createConfigurationFromSections,
+  isConfigurationSectionKey,
+  type ConfigurationSections,
+} from './configurationRecord';
 
-import { usePointCloudStore } from '../../../store/stores/pointCloudStore';
-import { useCameraStore } from '../../../store/stores/cameraStore';
-import { useUIStore } from '../../../store/stores/uiStore';
-import { useExportStore } from '../../../store/stores/exportStore';
-import { useRigStore } from '../../../store/stores/rigStore';
+type StoreStateRecord = Record<string, unknown>;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyStore = { getState: () => any };
+function isRecord(value: unknown): value is StoreStateRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
-const stores: Record<StoreHook, AnyStore> = {
-  usePointCloudStore,
-  useCameraStore,
-  useUIStore,
-  useExportStore,
-  useRigStore,
-};
+function getConfigurationSection(
+  config: PartialAppConfiguration,
+  sectionKey: string
+): StoreStateRecord | undefined {
+  if (!isConfigurationSectionKey(sectionKey)) {
+    throw new Error(`Unsupported configuration section: ${sectionKey}`);
+  }
 
-function getStoreState(hookName: StoreHook): Record<string, unknown> {
-  return stores[hookName].getState() as Record<string, unknown>;
+  const sectionConfig = config[sectionKey];
+  if (sectionConfig === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(sectionConfig)) {
+    throw new Error(`Configuration section ${sectionKey} must be an object`);
+  }
+
+  return sectionConfig;
 }
 
 // Handle nullable number conversion: Infinity in store <-> null in config
@@ -46,29 +57,25 @@ function configToStoreValue(prop: PropertyDef, configValue: unknown): unknown {
   return configValue;
 }
 
-function getSetterName(key: string): string {
-  return `set${key.charAt(0).toUpperCase()}${key.slice(1)}`;
-}
-
 /**
  * Extract full configuration from all stores
  */
 export function extractConfigurationFromStores(): AppConfiguration {
-  const config: Record<string, unknown> = { version: CONFIG_VERSION };
+  const configSections: ConfigurationSections = {};
 
   for (const section of sections) {
-    const state = getStoreState(section.storeHook);
-    const sectionConfig: Record<string, unknown> = {};
+    const adapter = getStoreConfigAdapter(section.storeHook);
+    const sectionConfig: StoreStateRecord = {};
 
     for (const prop of getPersistedProperties(section)) {
       const storeKey = getStoreKey(prop);
-      sectionConfig[prop.key] = storeToConfigValue(prop, state[storeKey]);
+      sectionConfig[prop.key] = storeToConfigValue(prop, adapter.read(storeKey));
     }
 
-    config[section.key] = sectionConfig;
+    addConfigurationSection(configSections, section.key, sectionConfig);
   }
 
-  return config as unknown as AppConfiguration;
+  return createConfigurationFromSections(configSections);
 }
 
 /**
@@ -76,22 +83,17 @@ export function extractConfigurationFromStores(): AppConfiguration {
  */
 export function applyConfigurationToStores(config: PartialAppConfiguration): void {
   for (const section of sections) {
-    const sectionConfig = config[section.key as keyof PartialAppConfiguration] as
-      | Record<string, unknown>
-      | undefined;
+    const sectionConfig = getConfigurationSection(config, section.key);
     if (!sectionConfig) continue;
 
-    const state = getStoreState(section.storeHook);
+    const adapter = getStoreConfigAdapter(section.storeHook);
 
     for (const prop of getPersistedProperties(section)) {
       const configValue = sectionConfig[prop.key];
       if (configValue === undefined) continue;
 
       const storeKey = getStoreKey(prop);
-      const setter = state[getSetterName(storeKey)] as ((value: unknown) => void) | undefined;
-      if (setter) {
-        setter(configToStoreValue(prop, configValue));
-      }
+      adapter.write(storeKey, configToStoreValue(prop, configValue));
     }
   }
 }
@@ -101,14 +103,11 @@ export function applyConfigurationToStores(config: PartialAppConfiguration): voi
  */
 export function resetToDefaults(): void {
   for (const section of sections) {
-    const state = getStoreState(section.storeHook);
+    const adapter = getStoreConfigAdapter(section.storeHook);
 
     for (const prop of getPersistedProperties(section)) {
       const storeKey = getStoreKey(prop);
-      const setter = state[getSetterName(storeKey)] as ((value: unknown) => void) | undefined;
-      if (setter) {
-        setter(configToStoreValue(prop, prop.default));
-      }
+      adapter.write(storeKey, configToStoreValue(prop, prop.default));
     }
   }
 }

@@ -5,6 +5,7 @@
  */
 
 import { createImageCache } from './useAsyncImageCache';
+import { isOffscreenCanvas } from '../utils/canvasTypeGuards';
 
 const THUMBNAIL_SIZE = 256;
 
@@ -13,7 +14,7 @@ const THUMBNAIL_SIZE = 256;
  */
 async function canvasToBlobUrl(canvas: HTMLCanvasElement | OffscreenCanvas): Promise<string | null> {
   return new Promise((resolve) => {
-    if (canvas instanceof OffscreenCanvas) {
+    if (isOffscreenCanvas(canvas)) {
       canvas.convertToBlob({ type: 'image/jpeg', quality: 0.75 }).then((blob) => {
         resolve(URL.createObjectURL(blob));
       }).catch(() => {

@@ -16,7 +16,7 @@ import { useUIStore } from '../stores/uiStore.js';
 import { useCameraStore } from '../stores/cameraStore.js';
 import { useDeletionStore } from '../stores/deletionStore.js';
 import { useFloorPlaneStore } from '../stores/floorPlaneStore.js';
-import { removeZipMaskCacheEntries } from '../../utils/imageFileUtils.js';
+import { removeZipMaskCacheEntries } from '../../utils/zipImageFiles.js';
 
 /**
  * Pure function: Filter a reconstruction to remove specified images.

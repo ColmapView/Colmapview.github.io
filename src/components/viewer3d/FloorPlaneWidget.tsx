@@ -1,13 +1,19 @@
 import { useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { type ThreeEvent } from '@react-three/fiber';
-import { useFloorPlaneStore } from '../../store/stores/floorPlaneStore';
-import { useUIStore } from '../../store';
 import { hoverCardStyles, ICON_SIZES, INTERACTION_AXIS_COLORS, INTERACTION_HOVER_COLOR, OPACITY } from '../../theme';
-import { flipPlaneNormal } from '../../utils/ransac';
 import { AXIS_SEMANTIC } from '../../utils/coordinateSystems';
 import { HoverCard3D } from './HoverCard3D';
 import { BillboardLabel } from './BillboardLabel';
+import { markSceneContextMenuHandled } from './sceneContextMenuGuard';
+import { markSceneObjectTouchDownForTouchPointer } from './frustumTouchGuards';
+import {
+  getFloorPlaneWidgetData,
+  getScreenPoint,
+  shouldClaimFloorPlaneContextPointer,
+  shouldOpenFloorModalOnHover,
+} from './floorPlaneWidgetViewModel';
+import { useFloorPlaneWidgetStoreFacade } from './useFloorPlaneWidgetStoreFacade';
 
 /**
  * 3D widget showing the detected floor plane.
@@ -20,18 +26,22 @@ interface FloorPlaneWidgetProps {
 }
 
 export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
-  const detectedPlane = useFloorPlaneStore((s) => s.detectedPlane);
-  const normalFlipped = useFloorPlaneStore((s) => s.normalFlipped);
-  const toggleNormalFlipped = useFloorPlaneStore((s) => s.toggleNormalFlipped);
-  const targetAxis = useFloorPlaneStore((s) => s.targetAxis);
-  const cycleTargetAxis = useFloorPlaneStore((s) => s.cycleTargetAxis);
-  const setShowFloorModal = useFloorPlaneStore((s) => s.setShowFloorModal);
-  const setModalPosition = useFloorPlaneStore((s) => s.setModalPosition);
-  const showFloorModal = useFloorPlaneStore((s) => s.showFloorModal);
-
-  // Get axes scale and coordinate system to match arrow dimensions and labels with origin axes
-  const axesScale = useUIStore((s) => s.axesScale);
-  const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
+  const {
+    floor: {
+      detectedPlane,
+      normalFlipped,
+      toggleNormalFlipped,
+      targetAxis,
+      cycleTargetAxis,
+      setShowFloorModal,
+      setModalPosition,
+      showFloorModal,
+    },
+    ui: {
+      axesScale,
+      axesCoordinateSystem,
+    },
+  } = useFloorPlaneWidgetStoreFacade();
 
   // Hover state for tooltip
   const [hovered, setHovered] = useState(false);
@@ -42,74 +52,12 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
 
   // Compute plane geometry data
   const planeData = useMemo(() => {
-    if (!detectedPlane) return null;
-
-    // Apply normal flip if needed
-    const plane = normalFlipped ? flipPlaneNormal(detectedPlane) : detectedPlane;
-    const { normal, centroid, radius } = plane;
-
-    // Create position vector
-    const position = new THREE.Vector3(centroid[0], centroid[1], centroid[2]);
-
-    // Create normal vector
-    const normalVec = new THREE.Vector3(normal[0], normal[1], normal[2]);
-
-    // Compute rotation to align circle with plane (circle lies in XY, normal is Z)
-    // We need to rotate from Z-up to our normal direction
-    const quaternion = new THREE.Quaternion();
-    quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normalVec);
-
-    // Arrow dimensions match origin axes (size = boundsRadius * axesScale)
-    // Origin axes use: axisLength = size * 0.5, axisRadius = size * 0.005
-    const axisSize = boundsRadius * axesScale;
-    const arrowLength = axisSize * 0.5;
-    const arrowRadius = axisSize * 0.005;
-
-    // Arrowhead size proportional to axis radius (similar to axes cone tips)
-    const coneHeight = arrowRadius * 8;
-    const coneRadius = arrowRadius * 3;
-
-    // Arrow shaft length (total arrow minus cone)
-    const shaftLength = arrowLength - coneHeight;
-
-    // Shaft center (midpoint of shaft from centroid)
-    const shaftCenter = position.clone().add(normalVec.clone().multiplyScalar(shaftLength / 2));
-
-    // Cone position: base connects to shaft end
-    // Three.js cone is centered at its geometric middle, so offset by coneHeight/2
-    const conePosition = position.clone().add(normalVec.clone().multiplyScalar(shaftLength + coneHeight / 2));
-
-    // Rotation for cone (cone tip is at +Y in local space, align +Y with normal)
-    const coneQuaternion = new THREE.Quaternion();
-    coneQuaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normalVec);
-
-    // Rotation for shaft cylinder (cylinder is Y-axis aligned, rotate to normal)
-    const shaftQuaternion = new THREE.Quaternion();
-    shaftQuaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normalVec);
-
-    // Label position: beyond the arrow tip (matching origin axes label offset)
-    const labelOffset = arrowLength * 1.15;
-    const labelPosition = position.clone().add(normalVec.clone().multiplyScalar(labelOffset));
-
-    // Font size matching origin axes (size * 0.08)
-    const fontSize = axisSize * 0.08;
-
-    return {
-      position,
-      normalVec,
-      quaternion,
-      radius,
-      arrowRadius,
-      shaftLength,
-      shaftCenter,
-      shaftQuaternion,
-      conePosition,
-      coneHeight,
-      coneRadius,
-      coneQuaternion,
-      labelPosition,
-      fontSize,
-    };
+    return getFloorPlaneWidgetData({
+      boundsRadius,
+      detectedPlane,
+      normalFlipped,
+      axesScale,
+    });
   }, [detectedPlane, normalFlipped, boundsRadius, axesScale]);
 
   if (!detectedPlane || !planeData) return null;
@@ -121,24 +69,33 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
 
   const handleContextMenu = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
+    markSceneContextMenuHandled();
     // Also stop native DOM event to prevent global context menu from opening
     e.nativeEvent.stopPropagation();
     e.nativeEvent.preventDefault();
     cycleTargetAxis();
   };
 
+  const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
+    markSceneObjectTouchDownForTouchPointer(e.nativeEvent.pointerType);
+
+    if (shouldClaimFloorPlaneContextPointer(e.nativeEvent.button)) {
+      markSceneContextMenuHandled();
+    }
+  };
+
   const handlePointerOver = (e: ThreeEvent<PointerEvent>) => {
+    const point = getScreenPoint(e.nativeEvent.clientX, e.nativeEvent.clientY);
     setHovered(true);
-    setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
-    // Show modal when hovering if not already shown
-    if (!showFloorModal) {
+    setMousePos(point);
+    if (shouldOpenFloorModalOnHover(showFloorModal)) {
       setShowFloorModal(true);
-      setModalPosition({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
+      setModalPosition(point);
     }
   };
 
   const handlePointerMove = (e: ThreeEvent<PointerEvent>) => {
-    setMousePos({ x: e.nativeEvent.clientX, y: e.nativeEvent.clientY });
+    setMousePos(getScreenPoint(e.nativeEvent.clientX, e.nativeEvent.clientY));
   };
 
   const handlePointerOut = () => {
@@ -154,6 +111,7 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
         quaternion={planeData.quaternion}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
+        onPointerDown={handlePointerDown}
         onPointerOver={handlePointerOver}
         onPointerMove={handlePointerMove}
         onPointerOut={handlePointerOut}
@@ -174,6 +132,7 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
         quaternion={planeData.quaternion}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
+        onPointerDown={handlePointerDown}
         onPointerOver={handlePointerOver}
         onPointerMove={handlePointerMove}
         onPointerOut={handlePointerOut}
@@ -194,6 +153,7 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
         quaternion={planeData.shaftQuaternion}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
+        onPointerDown={handlePointerDown}
       >
         <cylinderGeometry args={[planeData.arrowRadius, planeData.arrowRadius, planeData.shaftLength, 8]} />
         <meshBasicMaterial color={axisColor.hex} depthTest={false} />
@@ -205,6 +165,7 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
         quaternion={planeData.coneQuaternion}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
+        onPointerDown={handlePointerDown}
       >
         <coneGeometry args={[planeData.coneRadius, planeData.coneHeight, 8]} />
         <meshBasicMaterial color={axisColor.hex} depthTest={false} />

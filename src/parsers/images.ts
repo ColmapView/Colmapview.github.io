@@ -1,5 +1,11 @@
 import { BinaryReader } from './BinaryReader';
 import type { Image, Point2D } from '../types/colmap';
+import {
+  parseColmapBigIntToken,
+  parseColmapIntegerToken,
+  parseColmapNumberToken,
+  parseColmapNumberTokens,
+} from './colmapTextTokens';
 
 /**
  * Parse images.bin binary file
@@ -117,20 +123,28 @@ export function parseImagesText(text: string): Map<number, Image> {
       continue;
     }
 
-    const imageId = parseInt(headerParts[0]);
+    const imageId = parseColmapIntegerToken(headerParts[0], { min: 0 });
+    const qvecValues = parseColmapNumberTokens(headerParts.slice(1, 5));
+    const tvecValues = parseColmapNumberTokens(headerParts.slice(5, 8));
+    const cameraId = parseColmapIntegerToken(headerParts[8], { min: 0 });
+    const name = headerParts[9];
+
+    if (imageId === null || qvecValues === null || tvecValues === null || cameraId === null) {
+      i++;
+      continue;
+    }
+
     const qvec: [number, number, number, number] = [
-      parseFloat(headerParts[1]),
-      parseFloat(headerParts[2]),
-      parseFloat(headerParts[3]),
-      parseFloat(headerParts[4]),
+      qvecValues[0],
+      qvecValues[1],
+      qvecValues[2],
+      qvecValues[3],
     ];
     const tvec: [number, number, number] = [
-      parseFloat(headerParts[5]),
-      parseFloat(headerParts[6]),
-      parseFloat(headerParts[7]),
+      tvecValues[0],
+      tvecValues[1],
+      tvecValues[2],
     ];
-    const cameraId = parseInt(headerParts[8]);
-    const name = headerParts[9];
 
     // Parse points2D line (next line)
     i++;
@@ -143,9 +157,11 @@ export function parseImagesText(text: string): Map<number, Image> {
 
         // Points are in triplets: X, Y, POINT3D_ID
         for (let j = 0; j + 2 < pointsParts.length; j += 3) {
-          const x = parseFloat(pointsParts[j]);
-          const y = parseFloat(pointsParts[j + 1]);
-          const point3DId = BigInt(pointsParts[j + 2]);
+          const x = parseColmapNumberToken(pointsParts[j]);
+          const y = parseColmapNumberToken(pointsParts[j + 1]);
+          const point3DId = parseColmapBigIntToken(pointsParts[j + 2]);
+
+          if (x === null || y === null || point3DId === null) continue;
 
           points2D.push({
             xy: [x, y],

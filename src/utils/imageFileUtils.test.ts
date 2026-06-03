@@ -1,4 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  buildArchiveEntry,
+  buildFile,
+  buildReadableFile,
+  buildResponse,
+} from '../test/builders';
 
 // Mock the zipLoader module so fetchZipMask can populate the cache
 vi.mock('./zipLoader', () => ({
@@ -9,35 +15,105 @@ vi.mock('./zipLoader', () => ({
   clearActiveZipArchive: vi.fn(),
 }));
 
-import { hasActiveZipArchive, findZipEntry, getActiveZipImageIndex } from './zipLoader';
+import { hasActiveZipArchive, findZipEntry, getActiveZipImageIndex, extractZipImage } from './zipLoader';
 import {
+  clearUrlImageCache,
+  fetchUrlImage,
+  fetchZipImage,
   fetchZipMask,
+  getZipImageCacheStats,
   removeZipMaskCacheEntries,
   getZipMaskCacheStats,
   clearZipCache,
   getMaskPathVariants,
 } from './imageFileUtils';
 
-describe('removeZipMaskCacheEntries', () => {
-  beforeEach(() => {
-    clearZipCache();
-    vi.clearAllMocks();
+let consoleLog: ReturnType<typeof vi.spyOn>;
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
+beforeEach(() => {
+  clearUrlImageCache();
+  clearZipCache();
+  vi.clearAllMocks();
+  consoleLog = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+});
+
+afterEach(() => {
+  consoleLog.mockRestore();
+  vi.unstubAllGlobals();
+});
+
+describe('image request deduplication', () => {
+  it('resolves concurrent URL image waiters when the shared fetch fails', async () => {
+    const response = buildResponse({ status: 404 });
+    const deferred = createDeferred<Response>();
+    const fetchMock = vi.fn(() => deferred.promise);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = fetchUrlImage('https://example.test/images', 'cam1/photo.jpg');
+    const second = fetchUrlImage('https://example.test/images', 'cam1/photo.jpg');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    deferred.resolve(response);
+
+    await expect(Promise.all([first, second])).resolves.toEqual([null, null]);
+
+    warn.mockRestore();
   });
 
+  it('dedupes concurrent ZIP image extraction and caches the result', async () => {
+    vi.mocked(hasActiveZipArchive).mockReturnValue(true);
+
+    const extractedFile = buildReadableFile({ name: 'photo.jpg', contents: '123' });
+    const deferred = createDeferred<File | null>();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    vi.mocked(extractZipImage).mockReturnValue(deferred.promise);
+
+    const first = fetchZipImage('cam1/photo.jpg');
+    const second = fetchZipImage('cam1/photo.jpg');
+
+    expect(extractZipImage).toHaveBeenCalledTimes(1);
+
+    deferred.resolve(extractedFile);
+
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(firstResult).toBe(secondResult);
+    expect(firstResult?.name).toBe('photo.jpg');
+    expect(getZipImageCacheStats().count).toBe(1);
+
+    await expect(fetchZipImage('cam1/photo.jpg')).resolves.toBe(firstResult);
+    expect(extractZipImage).toHaveBeenCalledTimes(1);
+
+    warn.mockRestore();
+  });
+});
+
+describe('removeZipMaskCacheEntries', () => {
   it('removes cached mask entries by image name', async () => {
     // Set up mocks so fetchZipMask can find and cache masks
     vi.mocked(hasActiveZipArchive).mockReturnValue(true);
     vi.mocked(getActiveZipImageIndex).mockReturnValue(new Map());
 
-    const maskFile = new File([new Uint8Array([1, 2, 3])], 'mask.png', { type: 'image/png' });
+    const maskFile = buildFile('mask.png', '123', 'image/png');
 
     // findZipEntry returns an extractable entry for any mask path
     vi.mocked(findZipEntry).mockImplementation((path: string) => {
       if (path.startsWith('masks/')) {
-        return {
-          path,
-          extract: () => Promise.resolve(maskFile),
-        } as any;
+        return buildArchiveEntry({ name: path, extract: () => Promise.resolve(maskFile) });
       }
       return null;
     });
@@ -46,6 +122,10 @@ describe('removeZipMaskCacheEntries', () => {
     await fetchZipMask('cam1/photo1.jpg');
     await fetchZipMask('cam1/photo2.jpg');
     await fetchZipMask('cam1/photo3.jpg');
+
+    expect(console.log).toHaveBeenCalledWith('[ZIP Mask] Found mask for cam1/photo1.jpg');
+    expect(console.log).toHaveBeenCalledWith('[ZIP Mask] Found mask for cam1/photo2.jpg');
+    expect(console.log).toHaveBeenCalledWith('[ZIP Mask] Found mask for cam1/photo3.jpg');
 
     expect(getZipMaskCacheStats().count).toBe(3);
 
@@ -66,15 +146,16 @@ describe('removeZipMaskCacheEntries', () => {
     vi.mocked(hasActiveZipArchive).mockReturnValue(true);
     vi.mocked(getActiveZipImageIndex).mockReturnValue(new Map());
 
-    const maskFile = new File([new Uint8Array([1])], 'mask.png', { type: 'image/png' });
+    const maskFile = buildFile('mask.png', '1', 'image/png');
     vi.mocked(findZipEntry).mockImplementation((path: string) => {
       if (path.startsWith('masks/')) {
-        return { path, extract: () => Promise.resolve(maskFile) } as any;
+        return buildArchiveEntry({ name: path, extract: () => Promise.resolve(maskFile) });
       }
       return null;
     });
 
     await fetchZipMask('existing.jpg');
+    expect(console.log).toHaveBeenCalledWith('[ZIP Mask] Found mask for existing.jpg');
     expect(getZipMaskCacheStats().count).toBe(1);
 
     // Remove a name that was never cached

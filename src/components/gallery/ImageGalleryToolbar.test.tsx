@@ -1,0 +1,89 @@
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ImageGalleryToolbar } from './ImageGalleryToolbar';
+
+const cameras = [
+  { cameraId: 1, width: 800, height: 600 },
+  { cameraId: 2, width: 1024, height: 768 },
+];
+
+function renderToolbar(overrides = {}) {
+  const props = {
+    cameraFilter: 'all' as const,
+    cameras,
+    sortDirection: 'asc' as const,
+    sortField: 'name' as const,
+    touchMode: false,
+    viewMode: 'gallery' as const,
+    onCameraFilterChange: vi.fn(),
+    onSortDirectionToggle: vi.fn(),
+    onSortFieldChange: vi.fn(),
+    onViewModeChange: vi.fn(),
+    ...overrides,
+  };
+
+  render(<ImageGalleryToolbar {...props} />);
+  return props;
+}
+
+afterEach(() => {
+  cleanup();
+});
+
+describe('ImageGalleryToolbar', () => {
+  it('renders camera options and reports camera filter changes', () => {
+    const props = renderToolbar();
+
+    expect(screen.getByRole('option', { name: 'All Cams (2)' })).toBeVisible();
+    expect(screen.getByRole('option', { name: 'Cam 2 (1024×768)' })).toBeVisible();
+
+    fireEvent.change(screen.getByLabelText('Camera filter'), {
+      target: { value: '2' },
+    });
+    fireEvent.change(screen.getByLabelText('Camera filter'), {
+      target: { value: 'all' },
+    });
+
+    expect(props.onCameraFilterChange).toHaveBeenNthCalledWith(1, 2);
+    expect(props.onCameraFilterChange).toHaveBeenNthCalledWith(2, 'all');
+  });
+
+  it('ignores unsupported raw camera filter changes', () => {
+    const props = renderToolbar();
+
+    fireEvent.change(screen.getByLabelText('Camera filter'), {
+      target: { value: '999' },
+    });
+
+    expect(props.onCameraFilterChange).not.toHaveBeenCalled();
+  });
+
+  it('reports sort field and direction changes', () => {
+    const props = renderToolbar({ sortDirection: 'desc' });
+
+    fireEvent.change(screen.getByLabelText('Sort field'), {
+      target: { value: 'avgError' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle sort direction' }));
+
+    expect(props.onSortFieldChange).toHaveBeenCalledWith('avgError');
+    expect(props.onSortDirectionToggle).toHaveBeenCalledOnce();
+    expect(screen.getByRole('button', { name: 'Toggle sort direction' })).toHaveAttribute('data-tooltip', 'Descending');
+  });
+
+  it('renders desktop view mode controls and hides them in touch mode', () => {
+    const props = renderToolbar({ viewMode: 'list' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Grid view' }));
+    fireEvent.click(screen.getByRole('button', { name: 'List view' }));
+
+    expect(props.onViewModeChange).toHaveBeenNthCalledWith(1, 'gallery');
+    expect(props.onViewModeChange).toHaveBeenNthCalledWith(2, 'list');
+
+    cleanup();
+    renderToolbar({ touchMode: true });
+
+    expect(screen.queryByRole('button', { name: 'Grid view' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'List view' })).toBeNull();
+  });
+});

@@ -1,6 +1,10 @@
 import { BinaryReader } from './BinaryReader';
 import type { Frame, FrameDataMapping } from '../types/rig';
-import { SensorType } from '../types/rig';
+import { parseSensorType } from '../utils/sensorTypePolicy';
+import {
+  parseColmapIntegerToken,
+  parseColmapNumberTokens,
+} from './colmapTextTokens';
 
 /**
  * Parse frames.bin binary file
@@ -45,7 +49,7 @@ export function parseFramesBinary(buffer: ArrayBuffer): Map<number, Frame> {
     const dataIds: FrameDataMapping[] = [];
 
     for (let j = 0; j < numDataIds; j++) {
-      const sensorType = reader.readInt32() as SensorType;
+      const sensorType = parseSensorType(reader.readInt32(), `binary frame ${frameId} data id ${j}`);
       const sensorId = reader.readUint32();
       const dataId = reader.readUint64AsNumber();
 
@@ -94,22 +98,29 @@ export function parseFramesText(text: string): Map<number, Frame> {
     if (parts.length < 10) continue;
 
     // Parse frame header: FRAME_ID, RIG_ID, QW, QX, QY, QZ, TX, TY, TZ, NUM_DATA_IDS
-    const frameId = parseInt(parts[0]);
-    const rigId = parseInt(parts[1]);
+    const frameId = parseColmapIntegerToken(parts[0], { min: 0 });
+    const rigId = parseColmapIntegerToken(parts[1], { min: 0 });
+    const qvecValues = parseColmapNumberTokens(parts.slice(2, 6));
+    const tvecValues = parseColmapNumberTokens(parts.slice(6, 9));
+    const numDataIds = parseColmapIntegerToken(parts[9], { min: 0 });
+
+    if (frameId === null || rigId === null || qvecValues === null || tvecValues === null || numDataIds === null) {
+      continue;
+    }
+
     const rigFromWorld = {
       qvec: [
-        parseFloat(parts[2]),
-        parseFloat(parts[3]),
-        parseFloat(parts[4]),
-        parseFloat(parts[5]),
+        qvecValues[0],
+        qvecValues[1],
+        qvecValues[2],
+        qvecValues[3],
       ] as [number, number, number, number],
       tvec: [
-        parseFloat(parts[6]),
-        parseFloat(parts[7]),
-        parseFloat(parts[8]),
+        tvecValues[0],
+        tvecValues[1],
+        tvecValues[2],
       ] as [number, number, number],
     };
-    const numDataIds = parseInt(parts[9]);
 
     const dataIds: FrameDataMapping[] = [];
 
@@ -126,12 +137,18 @@ export function parseFramesText(text: string): Map<number, Frame> {
       const dataParts = dataLine.split(/\s+/);
       if (dataParts.length < 3) continue;
 
+      const sensorType = parseColmapIntegerToken(dataParts[0]);
+      const sensorId = parseColmapIntegerToken(dataParts[1], { min: 0 });
+      const dataId = parseColmapIntegerToken(dataParts[2], { min: 0 });
+
+      if (sensorType === null || sensorId === null || dataId === null) continue;
+
       dataIds.push({
         sensorId: {
-          type: parseInt(dataParts[0]) as SensorType,
-          id: parseInt(dataParts[1]),
+          type: parseSensorType(sensorType, `text frame ${frameId} data id ${j}`),
+          id: sensorId,
         },
-        dataId: parseInt(dataParts[2]),
+        dataId,
       });
     }
 

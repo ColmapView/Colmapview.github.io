@@ -1,4 +1,4 @@
-import { Page, Locator, expect } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 /**
  * Page object for viewer control panel interactions
@@ -23,8 +23,7 @@ export class ViewerControlsPageObject {
    * Get a control button by its tooltip text (partial match)
    */
   getButtonByTooltip(tooltip: string): Locator {
-    // Match any element with data-tooltip containing the text (case-insensitive)
-    return this.container.locator(`button`).filter({ has: this.page.locator(`[data-tooltip]`) }).first();
+    return this.container.locator(`button[aria-label*="${tooltip}" i], button[data-tooltip*="${tooltip}" i]`).first();
   }
 
   /**

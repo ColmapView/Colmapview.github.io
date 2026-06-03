@@ -9,6 +9,7 @@ import {
 } from '../../../store/types';
 import { OPACITY } from '../../../theme/opacity';
 import { VIZ_COLORS } from '../../../theme/colors';
+import { CSS_HEX_COLOR_PATTERN, CSS_HEX_COLOR_PATTERN_DESCRIPTION } from '../../../utils/hexColor';
 
 export const uiSection = defineSection({
   key: 'ui',
@@ -31,8 +32,8 @@ export const uiSection = defineSection({
     {
       key: 'backgroundColor',
       type: 'string',
-      pattern: /^#[0-9A-Fa-f]{6}$/,
-      patternDesc: 'hex color (#RRGGBB)',
+      pattern: CSS_HEX_COLOR_PATTERN,
+      patternDesc: CSS_HEX_COLOR_PATTERN_DESCRIPTION,
       default: '#ffffff',
       persist: true,
     },
@@ -63,8 +64,8 @@ export const uiSection = defineSection({
     {
       key: 'matchesColor',
       type: 'string',
-      pattern: /^#[0-9A-Fa-f]{6}$/,
-      patternDesc: 'hex color (#RRGGBB)',
+      pattern: CSS_HEX_COLOR_PATTERN,
+      patternDesc: CSS_HEX_COLOR_PATTERN_DESCRIPTION,
       default: VIZ_COLORS.match,
       persist: true,
       description: 'Hex color for matches visualization',

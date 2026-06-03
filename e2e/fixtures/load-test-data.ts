@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -50,6 +50,21 @@ export async function loadTestDataset(page: Page): Promise<void> {
   await page.evaluate(async (fileData: FileEntry[]) => {
     // Helper: build a nested tree from flat paths
     type TreeNode = { name: string; children: Map<string, TreeNode>; file?: File };
+    type TestFileSystemEntry = TestFileSystemFileEntry | TestFileSystemDirectoryEntry;
+    type TestFileSystemFileEntry = {
+      isFile: true;
+      isDirectory: false;
+      name: string;
+      file: (successCallback: (file: File) => void) => void;
+    };
+    type TestFileSystemDirectoryEntry = {
+      isFile: false;
+      isDirectory: true;
+      name: string;
+      createReader: () => {
+        readEntries: (successCallback: (entries: TestFileSystemEntry[]) => void) => void;
+      };
+    };
     const root: TreeNode = { name: '', children: new Map() };
 
     for (const entry of fileData) {
@@ -68,32 +83,24 @@ export async function loadTestDataset(page: Page): Promise<void> {
       node.children.set(fileName, { name: fileName, children: new Map(), file });
     }
 
-    // Helper: convert tree node to FileSystemEntry
-    function makeFileEntry(node: TreeNode): FileSystemEntry {
+    // Helper: convert tree nodes to the FileSystemEntry subset scanEntry reads.
+    function makeFileEntry(node: TreeNode): TestFileSystemEntry {
       if (node.file) {
-        // FileSystemFileEntry
         return {
           isFile: true,
           isDirectory: false,
           name: node.name,
-          fullPath: '/' + node.name,
-          filesystem: {} as FileSystem,
-          getParent: () => {},
           file: (cb: (f: File) => void) => cb(node.file!),
-        } as unknown as FileSystemFileEntry;
+        };
       } else {
-        // FileSystemDirectoryEntry
         const children = Array.from(node.children.values()).map(makeFileEntry);
         let read = false;
         return {
           isFile: false,
           isDirectory: true,
           name: node.name,
-          fullPath: '/' + node.name,
-          filesystem: {} as FileSystem,
-          getParent: () => {},
           createReader: () => ({
-            readEntries: (cb: (entries: FileSystemEntry[]) => void) => {
+            readEntries: (cb: (entries: TestFileSystemEntry[]) => void) => {
               if (!read) {
                 read = true;
                 cb(children);
@@ -102,7 +109,7 @@ export async function loadTestDataset(page: Page): Promise<void> {
               }
             },
           }),
-        } as unknown as FileSystemDirectoryEntry;
+        };
       }
     }
 

@@ -15,37 +15,36 @@
  * Strategy: Store images under multiple lookup keys for O(1) retrieval.
  */
 
-import type { ArchiveEntry } from '../types/libarchive';
 import {
-  hasActiveZipArchive,
-  findZipEntry,
-  extractZipImage,
-  getActiveZipImageIndex,
-  clearActiveZipArchive,
-} from './zipLoader';
-import { VIEWPORT_FALLBACK } from '../theme/sizing';
+  getImageLookupKeys,
+  getMaskLookupPaths,
+  isImageFile,
+  normalizeImagePath,
+} from './imageFileLookupPolicy';
+import {
+  getUniqueFileMapStats,
+  type CacheInfo,
+} from './imageFileCachePolicy';
 
-const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'];
-
-function isImageFile(path: string): boolean {
-  const lowerPath = path.toLowerCase();
-  return IMAGE_EXTENSIONS.some(ext => lowerPath.endsWith(ext));
-}
-
-/**
- * Generate path suffixes for lookup.
- * "project/images/1/photo.jpg" -> ["project/images/1/photo.jpg", "images/1/photo.jpg", "1/photo.jpg", "photo.jpg"]
- */
-function getPathSuffixes(path: string): string[] {
-  const parts = path.split('/');
-  const suffixes: string[] = [];
-
-  for (let i = 0; i < parts.length; i++) {
-    suffixes.push(parts.slice(i).join('/'));
-  }
-
-  return suffixes;
-}
+export { getMaskPathVariants } from './imageFileLookupPolicy';
+export {
+  clearUrlImageCache,
+  fetchUrlImage,
+  fetchUrlMask,
+  getUrlImageCached,
+  getUrlImageCacheStats,
+  prefetchUrlImages,
+} from './urlImageFiles';
+export {
+  clearZipCache,
+  fetchZipImage,
+  fetchZipMask,
+  getZipImageCached,
+  getZipImageCacheStats,
+  getZipMaskCacheStats,
+  isZipLoadingAvailable,
+  removeZipMaskCacheEntries,
+} from './zipImageFiles';
 
 /**
  * Check if any files are in a masks/ folder.
@@ -73,19 +72,9 @@ export function collectImageFiles(files: Map<string, File>): Map<string, File> {
       continue;
     }
 
-    const normalizedPath = path.replace(/\\/g, '/');
-    const suffixes = getPathSuffixes(normalizedPath);
-
-    for (const suffix of suffixes) {
-      // Store under original case (first match wins)
-      if (!imageFiles.has(suffix)) {
-        imageFiles.set(suffix, file);
-      }
-
-      // Store under lowercase for case-insensitive matching
-      const lowerSuffix = suffix.toLowerCase();
-      if (!imageFiles.has(lowerSuffix)) {
-        imageFiles.set(lowerSuffix, file);
+    for (const key of getImageLookupKeys(path)) {
+      if (!imageFiles.has(key)) {
+        imageFiles.set(key, file);
       }
     }
   }
@@ -106,7 +95,7 @@ export function getImageFile(
   }
 
   // Normalize backslashes and try direct lookup
-  const normalizedName = imageName.replace(/\\/g, '/');
+  const normalizedName = normalizeImagePath(imageName);
 
   // Try exact match (most common case)
   const exactMatch = imageFiles.get(normalizedName);
@@ -116,296 +105,6 @@ export function getImageFile(
 
   // Try lowercase match
   return imageFiles.get(normalizedName.toLowerCase());
-}
-
-// ============================================================================
-// URL-based image loading (for remote reconstructions)
-// ============================================================================
-
-/** JPEG quality for cached URL images (0-1) */
-const URL_IMAGE_JPEG_QUALITY = 0.75;
-
-/** Maximum dimension for cached images (cap to prevent excessive memory on 4K+ displays) */
-const URL_IMAGE_MAX_DIMENSION = 2048;
-
-/** Cache for images fetched from URLs (stored as compressed JPEG, resized) */
-const urlImageCache = new Map<string, File>();
-
-/** Set of URLs currently being fetched (to avoid duplicate requests) */
-const pendingFetches = new Set<string>();
-
-/** Callbacks waiting for a fetch to complete */
-const fetchCallbacks = new Map<string, Array<(file: File | null) => void>>();
-
-/**
- * Get max dimensions for cached images.
- * Capped at URL_IMAGE_MAX_DIMENSION to prevent excessive memory on high-DPI displays.
- */
-function getMaxCacheDimensions(): { maxWidth: number; maxHeight: number } {
-  const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1;
-  const screenWidth = typeof screen !== 'undefined' ? screen.width : VIEWPORT_FALLBACK.width;
-  const screenHeight = typeof screen !== 'undefined' ? screen.height : VIEWPORT_FALLBACK.height;
-  // Cap dimensions to prevent excessive memory usage
-  return {
-    maxWidth: Math.min(Math.round(screenWidth * dpr), URL_IMAGE_MAX_DIMENSION),
-    maxHeight: Math.min(Math.round(screenHeight * dpr), URL_IMAGE_MAX_DIMENSION),
-  };
-}
-
-/**
- * Compress and resize an image blob to JPEG format.
- * Resizes to max screen resolution and compresses to JPEG quality 75.
- * Returns the original blob if compression fails.
- */
-async function compressAndResizeToJpeg(blob: Blob, filename: string): Promise<File> {
-  try {
-    // Decode the image
-    const bitmap = await createImageBitmap(blob);
-    const { maxWidth, maxHeight } = getMaxCacheDimensions();
-
-    // Calculate scaled dimensions (fit within max, preserve aspect ratio)
-    let targetWidth = bitmap.width;
-    let targetHeight = bitmap.height;
-
-    if (bitmap.width > maxWidth || bitmap.height > maxHeight) {
-      const scale = Math.min(maxWidth / bitmap.width, maxHeight / bitmap.height);
-      targetWidth = Math.round(bitmap.width * scale);
-      targetHeight = Math.round(bitmap.height * scale);
-    }
-
-    // Use OffscreenCanvas if available, otherwise regular canvas
-    let canvas: OffscreenCanvas | HTMLCanvasElement;
-    let ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null;
-
-    if (typeof OffscreenCanvas !== 'undefined') {
-      canvas = new OffscreenCanvas(targetWidth, targetHeight);
-      ctx = canvas.getContext('2d');
-    } else {
-      canvas = document.createElement('canvas');
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-      ctx = canvas.getContext('2d');
-    }
-
-    if (!ctx) {
-      bitmap.close();
-      return new File([blob], filename, { type: blob.type || 'image/png' });
-    }
-
-    // Draw the image (scaled if needed)
-    ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
-    bitmap.close();
-
-    // Convert to JPEG blob
-    let jpegBlob: Blob;
-    if (canvas instanceof OffscreenCanvas) {
-      jpegBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: URL_IMAGE_JPEG_QUALITY });
-    } else {
-      jpegBlob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob(
-          (b) => b ? resolve(b) : reject(new Error('Failed to create blob')),
-          'image/jpeg',
-          URL_IMAGE_JPEG_QUALITY
-        );
-      });
-    }
-
-    // Use compressed version
-    const jpegFilename = filename.replace(/\.[^.]+$/, '.jpg');
-    return new File([jpegBlob], jpegFilename, { type: 'image/jpeg' });
-  } catch (err) {
-    // Fall back to original blob on any error
-    console.warn('[URL Image] Compression failed, using original:', err);
-    return new File([blob], filename, { type: blob.type || 'application/octet-stream' });
-  }
-}
-
-/**
- * Clear the URL image cache.
- * Call this when loading a new reconstruction.
- */
-export function clearUrlImageCache(): void {
-  urlImageCache.clear();
-  pendingFetches.clear();
-  fetchCallbacks.clear();
-}
-
-/**
- * Get a cached URL image (synchronous).
- * Returns undefined if not yet fetched.
- */
-export function getUrlImageCached(imageName: string): File | undefined {
-  return urlImageCache.get(imageName);
-}
-
-/**
- * Fetch an image from URL and cache it.
- * Returns the cached File if already fetched, otherwise fetches and caches.
- *
- * @param imageUrlBase - Base URL for images (e.g., "https://example.com/dataset/images/")
- * @param imageName - Image name from COLMAP (e.g., "camera_123/00.png")
- * @returns The fetched File or null if fetch failed
- */
-export async function fetchUrlImage(
-  imageUrlBase: string,
-  imageName: string
-): Promise<File | null> {
-  // Check cache first
-  const cached = urlImageCache.get(imageName);
-  if (cached) {
-    return cached;
-  }
-
-  // Construct full URL
-  let normalizedName = imageName.replace(/\\/g, '/');
-
-  // Handle path duplication: if imageUrlBase ends with "images/" and imageName starts with "images/",
-  // strip the prefix from imageName to avoid double "images/images/" in the URL
-  const urlBaseLower = imageUrlBase.toLowerCase();
-  const nameLower = normalizedName.toLowerCase();
-  if (urlBaseLower.endsWith('/images/') && nameLower.startsWith('images/')) {
-    normalizedName = normalizedName.slice(7); // Remove "images/"
-  }
-
-  const imageUrl = imageUrlBase.endsWith('/')
-    ? `${imageUrlBase}${normalizedName}`
-    : `${imageUrlBase}/${normalizedName}`;
-
-  // Intentionally no log here — this fires per-image and spams the console
-
-  // Check if already fetching
-  if (pendingFetches.has(imageUrl)) {
-    // Wait for existing fetch to complete
-    return new Promise((resolve) => {
-      const callbacks = fetchCallbacks.get(imageUrl) || [];
-      callbacks.push(resolve);
-      fetchCallbacks.set(imageUrl, callbacks);
-    });
-  }
-
-  // Start fetching
-  pendingFetches.add(imageUrl);
-
-  try {
-    const response = await fetch(imageUrl);
-    if (!response.ok) {
-      console.warn(`[URL Image] Failed to fetch ${imageName}: ${response.status}`);
-      return null;
-    }
-
-    const blob = await response.blob();
-
-    // Extract filename from imageName
-    const filename = normalizedName.split('/').pop() || normalizedName;
-
-    // Compress and resize to JPEG (max screen resolution, quality 75)
-    const file = await compressAndResizeToJpeg(blob, filename);
-
-    // Cache the compressed file
-    urlImageCache.set(imageName, file);
-
-    // Notify waiting callbacks
-    const callbacks = fetchCallbacks.get(imageUrl) || [];
-    for (const cb of callbacks) {
-      cb(file);
-    }
-    fetchCallbacks.delete(imageUrl);
-
-    return file;
-  } catch (err) {
-    console.warn(`[URL Image] Error fetching ${imageName}:`, err);
-
-    // Notify waiting callbacks of failure
-    const callbacks = fetchCallbacks.get(imageUrl) || [];
-    for (const cb of callbacks) {
-      cb(null);
-    }
-    fetchCallbacks.delete(imageUrl);
-
-    return null;
-  } finally {
-    pendingFetches.delete(imageUrl);
-  }
-}
-
-/**
- * Fetch a mask from URL (lazy loaded, no cache).
- * Tries multiple naming conventions:
- * 1. Same name as image (e.g., "cam1/photo.png" → "masks/cam1/photo.png")
- * 2. Image name + ".png" suffix (COLMAP convention: "cam1/photo.jpg" → "masks/cam1/photo.jpg.png")
- *
- * @param maskUrlBase - Base URL for masks (e.g., "https://example.com/dataset/masks/")
- * @param imageName - Image name from COLMAP (e.g., "camera_123/00.png")
- * @returns The fetched File or null if fetch failed
- */
-export async function fetchUrlMask(
-  maskUrlBase: string,
-  imageName: string
-): Promise<File | null> {
-  let normalizedName = imageName.replace(/\\/g, '/');
-
-  // Handle path duplication: if maskUrlBase ends with "masks/" and imageName starts with "masks/",
-  // strip the prefix from imageName to avoid double "masks/masks/" in the URL
-  const urlBaseLower = maskUrlBase.toLowerCase();
-  const nameLower = normalizedName.toLowerCase();
-  if (urlBaseLower.endsWith('/masks/') && nameLower.startsWith('masks/')) {
-    normalizedName = normalizedName.slice(6); // Remove "masks/"
-  }
-
-  // Also strip "images/" prefix if present (common case: image name is "images/cam1/photo.jpg")
-  if (normalizedName.toLowerCase().startsWith('images/')) {
-    normalizedName = normalizedName.slice(7); // Remove "images/"
-  }
-
-  const baseUrl = maskUrlBase.endsWith('/') ? maskUrlBase : `${maskUrlBase}/`;
-
-  // Try multiple naming conventions
-  const maskNames = [
-    normalizedName,                    // Same name (for PNG images: cam1/photo.png)
-    `${normalizedName}.png`,           // COLMAP convention (cam1/photo.jpg.png)
-  ];
-
-  for (const maskName of maskNames) {
-    const maskUrl = `${baseUrl}${maskName}`;
-    // console.debug for mask probing — silent by default
-
-    try {
-      const response = await fetch(maskUrl);
-      if (response.ok) {
-        const blob = await response.blob();
-        const filename = maskName.split('/').pop() || maskName;
-        console.debug(`[URL Mask] Found mask for ${imageName}`);
-        return new File([blob], filename, { type: blob.type || 'image/png' });
-      }
-      // Continue to next naming convention on 404
-    } catch (err) {
-      // Continue to next naming convention on error
-      console.debug(`[URL Mask] Error trying ${maskUrl}:`, err);
-    }
-  }
-
-  console.debug(`[URL Mask] No mask found for ${imageName}`);
-  return null;
-}
-
-/**
- * Prefetch multiple images from URLs.
- * Useful for preloading visible frustum images.
- */
-export async function prefetchUrlImages(
-  imageUrlBase: string,
-  imageNames: string[],
-  concurrency: number = 5
-): Promise<void> {
-  // Filter out already cached images
-  const toFetch = imageNames.filter(name => !urlImageCache.has(name));
-  if (toFetch.length === 0) return;
-
-  // Fetch in batches
-  for (let i = 0; i < toFetch.length; i += concurrency) {
-    const batch = toFetch.slice(i, i + concurrency);
-    await Promise.all(batch.map(name => fetchUrlImage(imageUrlBase, name)));
-  }
 }
 
 /**
@@ -457,38 +156,7 @@ export function getMaskFile(
 ): File | undefined {
   if (!imageFiles || !imageName) return undefined;
 
-  const normalized = imageName.replace(/\\/g, '/');
-
-  // Strategy 1: Replace 'images/' with 'masks/' anywhere in path
-  // Only use if it actually contains 'images/' to replace
-  const replaced = normalized.replace(/\/images\//i, '/masks/').replace(/^images\//i, 'masks/');
-  const hasImagesInPath = replaced !== normalized;
-
-  // Strategy 2: Strip leading images/ and prepend masks/
-  const stripped = normalized.replace(/^images\//i, '');
-  const maskPath = `masks/${stripped}`;
-
-  // Strategy 3: Just filename with masks/ prefix (fallback)
-  const filename = normalized.split('/').pop() || '';
-  const maskByFilename = `masks/${filename}`;
-
-  // Build list of paths to try - only include paths that have 'masks/' in them
-  const tryPaths: string[] = [];
-
-  // Only add replaced paths if the original had 'images/' in it
-  if (hasImagesInPath) {
-    tryPaths.push(replaced, `${replaced}.png`);
-  }
-
-  // Always try masks/ prefixed paths
-  tryPaths.push(maskPath, `${maskPath}.png`);
-
-  // Add filename-only fallback if different from maskPath
-  if (maskByFilename !== maskPath) {
-    tryPaths.push(maskByFilename, `${maskByFilename}.png`);
-  }
-
-  for (const path of tryPaths) {
+  for (const path of getMaskLookupPaths(imageName)) {
     const match = imageFiles.get(path) || imageFiles.get(path.toLowerCase());
     if (match) return match;
   }
@@ -496,244 +164,9 @@ export function getMaskFile(
   return undefined;
 }
 
-// ============================================================================
-// ZIP-based image/mask loading (for ZIP archives)
-// ============================================================================
-
-/** Cache for images extracted from ZIP */
-const zipImageCache = new Map<string, File>();
-
-/** Cache for masks extracted from ZIP */
-const zipMaskCache = new Map<string, File>();
-
-/** Set of images currently being extracted (deduplication) */
-const pendingZipExtracts = new Set<string>();
-
-/** Callbacks waiting for extraction */
-const zipExtractCallbacks = new Map<string, Array<(file: File | null) => void>>();
-
-/**
- * Get a cached ZIP image (synchronous).
- * Returns undefined if not yet extracted.
- */
-export function getZipImageCached(imageName: string): File | undefined {
-  return zipImageCache.get(imageName);
-}
-
-/**
- * Check if ZIP loading is available.
- */
-export function isZipLoadingAvailable(): boolean {
-  return hasActiveZipArchive();
-}
-
-/**
- * Extract an image from ZIP and cache it.
- * Returns the cached File if already extracted, otherwise extracts and caches.
- * Follows same pattern as fetchUrlImage().
- */
-export async function fetchZipImage(imageName: string): Promise<File | null> {
-  // Check cache first
-  const cached = zipImageCache.get(imageName);
-  if (cached) return cached;
-
-  if (!hasActiveZipArchive()) return null;
-
-  // Deduplication (same pattern as URL loading)
-  if (pendingZipExtracts.has(imageName)) {
-    return new Promise((resolve) => {
-      const callbacks = zipExtractCallbacks.get(imageName) || [];
-      callbacks.push(resolve);
-      zipExtractCallbacks.set(imageName, callbacks);
-    });
-  }
-
-  pendingZipExtracts.add(imageName);
-
-  try {
-    // Extract from WASM memory
-    const extractedFile = await extractZipImage(imageName);
-    if (!extractedFile) {
-      // Notify waiting callbacks
-      const callbacks = zipExtractCallbacks.get(imageName) || [];
-      for (const cb of callbacks) cb(null);
-      zipExtractCallbacks.delete(imageName);
-      return null;
-    }
-
-    // Compress to JPEG (same as URL images)
-    const filename = imageName.split('/').pop() || imageName;
-    const file = await compressAndResizeToJpeg(new Blob([await extractedFile.arrayBuffer()]), filename);
-    zipImageCache.set(imageName, file);
-
-    // Notify waiting callbacks
-    const callbacks = zipExtractCallbacks.get(imageName) || [];
-    for (const cb of callbacks) cb(file);
-    zipExtractCallbacks.delete(imageName);
-
-    return file;
-  } catch (err) {
-    console.warn(`[ZIP Image] Error extracting ${imageName}:`, err);
-    const callbacks = zipExtractCallbacks.get(imageName) || [];
-    for (const cb of callbacks) cb(null);
-    zipExtractCallbacks.delete(imageName);
-    return null;
-  } finally {
-    pendingZipExtracts.delete(imageName);
-  }
-}
-
-/**
- * Get mask path variants for a given image name.
- * Used for both URL and ZIP mask lookups.
- */
-export function getMaskPathVariants(imageName: string): string[] {
-  const normalized = imageName.replace(/\\/g, '/');
-
-  // Strip images/ prefix if present
-  let basePath = normalized;
-  if (normalized.toLowerCase().startsWith('images/')) {
-    basePath = normalized.slice(7); // Remove "images/"
-  }
-
-  const variants: string[] = [
-    // Same name (for PNG images)
-    `masks/${basePath}`,
-    // COLMAP convention (image.jpg.png)
-    `masks/${basePath}.png`,
-    // Just filename
-    `masks/${basePath.split('/').pop() || basePath}`,
-    `masks/${basePath.split('/').pop() || basePath}.png`,
-  ];
-
-  return variants;
-}
-
-/**
- * Extract a mask from ZIP (same naming conventions as fetchUrlMask).
- */
-export async function fetchZipMask(imageName: string): Promise<File | null> {
-  // Check cache first
-  const cached = zipMaskCache.get(imageName);
-  if (cached) return cached;
-
-  if (!hasActiveZipArchive()) return null;
-
-  const imageIndex = getActiveZipImageIndex();
-  if (!imageIndex) return null;
-
-  // Try multiple mask naming conventions (same as URL)
-  const maskPaths = getMaskPathVariants(imageName);
-
-  for (const maskPath of maskPaths) {
-    const entry = findZipEntry(maskPath, imageIndex);
-    if (entry) {
-      try {
-        const file = await (entry as ArchiveEntry & { extract: () => Promise<File> }).extract();
-        zipMaskCache.set(imageName, file);
-        console.log(`[ZIP Mask] Found mask for ${imageName}`);
-        return file;
-      } catch (err) {
-        console.debug(`[ZIP Mask] Error extracting ${maskPath}:`, err);
-      }
-    }
-  }
-
-  console.debug(`[ZIP Mask] No mask found for ${imageName}`);
-  return null;
-}
-
-/**
- * Remove specific entries from the ZIP mask cache.
- * Called when images are deleted to prevent stale mask data.
- */
-export function removeZipMaskCacheEntries(imageNames: string[]): void {
-  for (const name of imageNames) {
-    zipMaskCache.delete(name);
-  }
-}
-
-/**
- * Clear ZIP caches and release WASM memory.
- */
-export function clearZipCache(): void {
-  zipImageCache.clear();
-  zipMaskCache.clear();
-  pendingZipExtracts.clear();
-  zipExtractCallbacks.clear();
-  clearActiveZipArchive();
-}
-
-// ============================================================================
-// Cache Statistics
-// ============================================================================
-
-/** Statistics for a cache */
-export interface CacheInfo {
-  count: number;
-  sizeBytes: number;
-}
-
-/**
- * Calculate total size of files in a Map.
- */
-function calculateMapSize(files: Map<string, File>): number {
-  let total = 0;
-  for (const file of files.values()) {
-    total += file.size;
-  }
-  return total;
-}
-
-/**
- * Get URL image cache statistics.
- */
-export function getUrlImageCacheStats(): CacheInfo {
-  return {
-    count: urlImageCache.size,
-    sizeBytes: calculateMapSize(urlImageCache),
-  };
-}
-
-/**
- * Get ZIP image cache statistics.
- */
-export function getZipImageCacheStats(): CacheInfo {
-  return {
-    count: zipImageCache.size,
-    sizeBytes: calculateMapSize(zipImageCache),
-  };
-}
-
-/**
- * Get ZIP mask cache statistics.
- */
-export function getZipMaskCacheStats(): CacheInfo {
-  return {
-    count: zipMaskCache.size,
-    sizeBytes: calculateMapSize(zipMaskCache),
-  };
-}
-
 /**
  * Get statistics for local image files.
  */
 export function getLocalImageStats(imageFiles: Map<string, File> | undefined): CacheInfo {
-  if (!imageFiles) {
-    return { count: 0, sizeBytes: 0 };
-  }
-  // Note: imageFiles contains duplicates (multiple keys per file for lookup)
-  // Count unique files by using a Set of file references
-  const uniqueFiles = new Set<File>();
-  for (const file of imageFiles.values()) {
-    uniqueFiles.add(file);
-  }
-  let totalSize = 0;
-  for (const file of uniqueFiles) {
-    totalSize += file.size;
-  }
-  return {
-    count: uniqueFiles.size,
-    sizeBytes: totalSize,
-  };
+  return getUniqueFileMapStats(imageFiles);
 }

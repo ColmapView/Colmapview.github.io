@@ -1,27 +1,25 @@
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { useUIStore } from '../../store';
+import {
+  getNextFpsSample,
+  INITIAL_FPS_SAMPLE_STATE,
+  type FpsSampleState,
+} from './fpsTrackerViewModel';
+import { useFpsTrackerStoreFacade } from './useFpsTrackerStoreFacade';
 
 /**
  * Invisible component that tracks FPS and reports to the UI store.
  * Must be placed inside a Canvas component.
  */
 export function FpsTracker() {
-  const setFps = useUIStore((s) => s.setFps);
-  const framesRef = useRef(0);
-  const lastTimeRef = useRef(performance.now());
+  const { setFps } = useFpsTrackerStoreFacade();
+  const sampleStateRef = useRef<FpsSampleState>(INITIAL_FPS_SAMPLE_STATE);
 
   useFrame(() => {
-    framesRef.current++;
-    const now = performance.now();
-    const elapsed = now - lastTimeRef.current;
-
-    // Update FPS every 500ms to avoid too frequent store updates
-    if (elapsed >= 500) {
-      const fps = Math.round((framesRef.current / elapsed) * 1000);
-      setFps(fps);
-      framesRef.current = 0;
-      lastTimeRef.current = now;
+    const result = getNextFpsSample(sampleStateRef.current, performance.now());
+    sampleStateRef.current = result.nextState;
+    if (result.fps !== null) {
+      setFps(result.fps);
     }
   });
 

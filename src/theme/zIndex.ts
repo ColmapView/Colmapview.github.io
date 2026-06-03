@@ -10,7 +10,7 @@ export const Z_INDEX = {
   overlay: 500,       // Drag overlay, loading states
   fab: 999,           // Touch FABs, selection toasts
   modal: 1000,        // Modal dialogs
-  contextMenu: 1050,  // Context menus (above modals, below overlays)
+  contextMenu: 2100,  // Context menus must sit above hover panels and native select popups.
   modalOverlay: 1100, // Tool modals above regular modals
   toast: 1500,        // Toast notifications
   tooltip: 2000,      // Tooltips, control panels (always on top)

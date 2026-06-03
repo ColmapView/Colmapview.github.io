@@ -2,6 +2,15 @@ import { useEffect, useRef, useCallback } from 'react';
 import { ImageGallery } from '../gallery/ImageGallery';
 import { GalleryErrorBoundary } from '../gallery/GalleryErrorBoundary';
 import { TOUCH } from '../../theme/sizing';
+import {
+  getTouchGalleryDrawerPanelStyle,
+  getTouchGalleryDrawerEndAction,
+  getTouchGalleryDrawerMoveState,
+  TOUCH_GALLERY_DRAWER_BACKDROP_CLASS,
+  TOUCH_GALLERY_DRAWER_BODY_OPEN_OVERFLOW,
+  TOUCH_GALLERY_DRAWER_BODY_RESET_OVERFLOW,
+  TOUCH_GALLERY_DRAWER_PANEL_CLASS,
+} from './touchGalleryDrawerPolicy';
 
 interface TouchGalleryDrawerProps {
   onClose: () => void;
@@ -18,8 +27,6 @@ export function TouchGalleryDrawer({ onClose }: TouchGalleryDrawerProps) {
   const startXRef = useRef<number | null>(null);
   const currentXRef = useRef<number>(0);
 
-  const swipeProgressRef = useRef(0);
-
   // Handle swipe-to-close gesture
   const handleTouchStart = useCallback((e: TouchEvent) => {
     startXRef.current = e.touches[0].clientX;
@@ -27,28 +34,27 @@ export function TouchGalleryDrawer({ onClose }: TouchGalleryDrawerProps) {
   }, []);
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
-    if (startXRef.current === null) return;
-
-    const deltaX = e.touches[0].clientX - startXRef.current;
-    // Only track rightward swipes (positive delta)
-    if (deltaX > 0) {
-      currentXRef.current = deltaX;
+    const moveState = getTouchGalleryDrawerMoveState({
+      startX: startXRef.current,
+      clientX: e.touches[0].clientX,
+    });
+    if (moveState.type === 'dragging') {
+      currentXRef.current = moveState.deltaX;
       if (drawerRef.current) {
-        drawerRef.current.style.transform = `translateX(${deltaX}px)`;
+        drawerRef.current.style.transform = moveState.transform;
       }
-      // Calculate swipe progress (0-1) based on close threshold
-      const threshold = Math.min(100, TOUCH.drawerWidth * 0.3);
-      const progress = Math.min(1, deltaX / threshold);
-      swipeProgressRef.current = progress;
     }
   }, []);
 
   const handleTouchEnd = useCallback(() => {
-    if (startXRef.current === null) return;
+    const action = getTouchGalleryDrawerEndAction({
+      startX: startXRef.current,
+      deltaX: currentXRef.current,
+      drawerWidth: TOUCH.drawerWidth,
+    });
+    if (action === 'none') return;
 
-    // If swiped more than 100px or 30% of drawer width, close it
-    const threshold = Math.min(100, TOUCH.drawerWidth * 0.3);
-    if (currentXRef.current > threshold) {
+    if (action === 'close') {
       onClose();
     } else {
       // Snap back
@@ -59,7 +65,6 @@ export function TouchGalleryDrawer({ onClose }: TouchGalleryDrawerProps) {
 
     startXRef.current = null;
     currentXRef.current = 0;
-    swipeProgressRef.current = 0;
   }, [onClose]);
 
   // Attach touch listeners for swipe-to-close
@@ -80,9 +85,9 @@ export function TouchGalleryDrawer({ onClose }: TouchGalleryDrawerProps) {
 
   // Prevent body scroll when drawer is open
   useEffect(() => {
-    document.body.style.overflow = 'hidden';
+    document.body.style.overflow = TOUCH_GALLERY_DRAWER_BODY_OPEN_OVERFLOW;
     return () => {
-      document.body.style.overflow = '';
+      document.body.style.overflow = TOUCH_GALLERY_DRAWER_BODY_RESET_OVERFLOW;
     };
   }, []);
 
@@ -90,7 +95,7 @@ export function TouchGalleryDrawer({ onClose }: TouchGalleryDrawerProps) {
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-[997] bg-ds-void/50 backdrop-blur-sm"
+        className={TOUCH_GALLERY_DRAWER_BACKDROP_CLASS}
         onClick={onClose}
         aria-hidden="true"
       />
@@ -98,10 +103,8 @@ export function TouchGalleryDrawer({ onClose }: TouchGalleryDrawerProps) {
       {/* Drawer */}
       <div
         ref={drawerRef}
-        className="fixed inset-y-0 right-0 z-[998] bg-ds-secondary border-l border-ds shadow-ds-lg flex flex-col"
-        style={{
-          width: `min(${TOUCH.drawerWidth}px, 85vw)`,
-        }}
+        className={TOUCH_GALLERY_DRAWER_PANEL_CLASS}
+        style={getTouchGalleryDrawerPanelStyle(TOUCH.drawerWidth)}
         role="dialog"
         aria-modal="true"
         aria-label="Image gallery"

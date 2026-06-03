@@ -16,6 +16,7 @@ export function usePointsNode(): PointsNode {
     () => ({
       nodeType: 'points',
       visible: showPointCloud,
+      splatsVisible: showPointCloud && colorMode === 'splats',
       opacity: pointOpacity,
       size: pointSize,
       colorMode,

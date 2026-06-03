@@ -3,6 +3,7 @@
  */
 import { defineSection } from '../types';
 import { VIZ_COLORS } from '../../../theme/colors';
+import { CSS_HEX_COLOR_PATTERN, CSS_HEX_COLOR_PATTERN_DESCRIPTION } from '../../../utils/hexColor';
 import {
   CAMERA_DISPLAY_MODES,
   FRUSTUM_COLOR_MODES,
@@ -67,8 +68,8 @@ export const cameraSection = defineSection({
     {
       key: 'frustumSingleColor',
       type: 'string',
-      pattern: /^#[0-9A-Fa-f]{6}$/,
-      patternDesc: 'hex color (#RRGGBB)',
+      pattern: CSS_HEX_COLOR_PATTERN,
+      patternDesc: CSS_HEX_COLOR_PATTERN_DESCRIPTION,
       default: VIZ_COLORS.frustum.default,
       persist: true,
       description: 'Hex color for single frustum color mode',
@@ -189,8 +190,8 @@ export const cameraSection = defineSection({
     {
       key: 'selectionColor',
       type: 'string',
-      pattern: /^#[0-9A-Fa-f]{6}$/,
-      patternDesc: 'hex color (#RRGGBB)',
+      pattern: CSS_HEX_COLOR_PATTERN,
+      patternDesc: CSS_HEX_COLOR_PATTERN_DESCRIPTION,
       default: '#00ff00',
       persist: true,
       description: 'Hex color for static selection mode',

@@ -30,6 +30,7 @@ export function useFileDropzone() {
   const processFiles = useCallback(async (files: Map<string, File>, progressRange?: { start: number; end: number }) => {
     await processFileDropzoneFiles(files, {
       addNotification: useNotificationStore.getState().addNotification,
+      getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
       getMinTrackLength: () => usePointCloudStore.getState().minTrackLength,
       getSourceInfo: () => {
         const { imageUrlBase, sourceType } = useReconstructionStore.getState();

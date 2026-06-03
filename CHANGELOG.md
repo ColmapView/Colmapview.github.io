@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-03
+
+### Added
+
+- Splat point-cloud rendering support with dedicated runtime store facades and render-policy tests.
+- Browser and Python validation coverage for export, archive loading, gallery, modals, viewer controls, and COLMAP round trips.
+- Typed helpers for camera-model conversion, URL/share state, ZIP/archive handling, DOM targets, canvas guards, and numeric/color parsing.
+
+### Changed
+
+- Decomposed the gallery, image-detail modal, viewer controls, camera frustums, origin axes, trackball controls, and export panels into focused components, view models, policy helpers, and store facades.
+- Hardened persisted-store migrations, configuration import/export, URL-loaded datasets, and file-drop workflows around explicit validation boundaries.
+- Updated release deployment to run the full project check before publishing versioned builds.
+
+### Fixed
+
+- Prevented generated Playwright CLI snapshots from appearing as release artifacts.
+- Improved cleanup for object URLs, ZIP archives, WASM fallbacks, screenshot recording resources, and texture/cache lifecycles.
+- Tightened parser and writer behavior for COLMAP text/binary exports, masks, image paths, camera models, rigs, and point filtering.
+
 ## [0.3.0] - 2026-01-20
 
 ### Added
@@ -165,7 +185,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript for type safety
 - Deno native test runner for testing
 
-[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/ColmapView/colmapview.github.io/compare/v0.6.1...v0.7.0
 [0.3.0]: https://github.com/ColmapView/colmapview.github.io/compare/v0.2.5...v0.3.0
 [0.2.5]: https://github.com/ColmapView/colmapview.github.io/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/ColmapView/colmapview.github.io/compare/v0.2.3...v0.2.4

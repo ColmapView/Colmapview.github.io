@@ -3,6 +3,7 @@ import type { VisualNode } from './base';
 
 export interface PointsNode extends VisualNode {
   readonly nodeType: 'points';
+  splatsVisible: boolean;
   size: number;
   colorMode: ColorMode;
   minTrackLength: number;

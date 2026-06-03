@@ -8,7 +8,7 @@ import * as YAML from 'js-yaml';
 import { camelToSnake, snakeToCamel } from './converter';
 import { validateConfiguration } from './schema';
 import { generateConfigTemplate } from '../registry/generators/template';
-import type { AppConfiguration, PartialAppConfiguration, ConfigValidationResult } from './types';
+import type { AppConfiguration, ConfigValidationResult } from './types';
 
 /**
  * Parse a YAML configuration string and validate it.
@@ -33,11 +33,7 @@ export function parseConfigYaml(yamlString: string): ConfigValidationResult {
       };
     }
 
-    // Convert snake_case keys to camelCase
-    const camelCased = snakeToCamel(parsed) as PartialAppConfiguration;
-
-    // Validate the configuration
-    return validateConfiguration(camelCased);
+    return validateConfiguration(snakeToCamel(parsed));
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown YAML parse error';
     return {

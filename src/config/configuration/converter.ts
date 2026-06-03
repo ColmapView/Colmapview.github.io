@@ -8,6 +8,10 @@ function toCamelCase(str: string): string {
   return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export function camelToSnake(obj: unknown): JsonValue {
   if (obj === null || obj === undefined) {
     return null;
@@ -17,9 +21,9 @@ export function camelToSnake(obj: unknown): JsonValue {
     return obj.map(camelToSnake);
   }
 
-  if (typeof obj === 'object') {
+  if (isRecord(obj)) {
     const result: { [key: string]: JsonValue } = {};
-    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+    for (const [key, value] of Object.entries(obj)) {
       result[toSnakeCase(key)] = camelToSnake(value);
     }
     return result;
@@ -41,9 +45,9 @@ export function snakeToCamel(obj: unknown): unknown {
     return obj.map(snakeToCamel);
   }
 
-  if (typeof obj === 'object') {
+  if (isRecord(obj)) {
     const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+    for (const [key, value] of Object.entries(obj)) {
       result[toCamelCase(key)] = snakeToCamel(value);
     }
     return result;

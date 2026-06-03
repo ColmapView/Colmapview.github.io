@@ -1,10 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { STORAGE_KEYS } from '../migration';
+import { mergePointCloudPersistedState } from '../persistedStoreMigrations';
 import type { ColorMode } from '../types';
 
 export interface PointCloudState {
   showPointCloud: boolean;
+  showSplats: boolean;
   pointSize: number;
   pointOpacity: number;
   colorMode: ColorMode;
@@ -14,7 +16,9 @@ export interface PointCloudState {
   selectedPointId: bigint | null;
 
   setShowPointCloud: (show: boolean) => void;
+  setShowSplats: (show: boolean) => void;
   togglePointCloud: () => void;
+  toggleSplats: () => void;
   setPointSize: (size: number) => void;
   setPointOpacity: (opacity: number) => void;
   setColorMode: (mode: ColorMode) => void;
@@ -28,6 +32,7 @@ export const usePointCloudStore = create<PointCloudState>()(
   persist(
     (set) => ({
       showPointCloud: true,
+      showSplats: false,
       pointSize: 2,
       pointOpacity: 1,
       colorMode: 'rgb',
@@ -37,10 +42,32 @@ export const usePointCloudStore = create<PointCloudState>()(
       selectedPointId: null,
 
       setShowPointCloud: (showPointCloud) => set({ showPointCloud }),
+      setShowSplats: (showSplats) => set((state) => {
+        let colorMode = state.colorMode;
+        if (showSplats) {
+          colorMode = 'splats';
+        } else if (colorMode === 'splats') {
+          colorMode = 'rgb';
+        }
+
+        return {
+          showPointCloud: showSplats ? true : state.showPointCloud,
+          showSplats,
+          colorMode,
+        };
+      }),
       togglePointCloud: () => set((state) => ({ showPointCloud: !state.showPointCloud })),
+      toggleSplats: () => set((state) => {
+        const showSplats = state.colorMode !== 'splats';
+        return {
+          showPointCloud: showSplats ? true : state.showPointCloud,
+          showSplats,
+          colorMode: showSplats ? 'splats' : 'rgb',
+        };
+      }),
       setPointSize: (pointSize) => set({ pointSize }),
       setPointOpacity: (pointOpacity) => set({ pointOpacity }),
-      setColorMode: (colorMode) => set({ colorMode }),
+      setColorMode: (colorMode) => set({ colorMode, showSplats: colorMode === 'splats' }),
       setMinTrackLength: (minTrackLength) => set({ minTrackLength }),
       setMaxReprojectionError: (maxReprojectionError) => set({ maxReprojectionError }),
       setThinning: (thinning) => set({ thinning }),
@@ -58,14 +85,7 @@ export const usePointCloudStore = create<PointCloudState>()(
         maxReprojectionError: state.maxReprojectionError,
         thinning: state.thinning,
       }),
-      // Handle Infinity serialization: JSON.stringify(Infinity) becomes null,
-      // so we convert null back to Infinity on load
-      merge: (persistedState, currentState) => ({
-        ...currentState,
-        ...(persistedState as Partial<PointCloudState>),
-        maxReprojectionError:
-          (persistedState as Partial<PointCloudState>)?.maxReprojectionError ?? Infinity,
-      }),
+      merge: mergePointCloudPersistedState,
     }
   )
 );

@@ -1,50 +1,51 @@
 import { useMemo, useCallback } from 'react';
-import * as THREE from 'three';
 import { useHotkeys } from 'react-hotkeys-hook';
-import { useFloorPlaneStore } from '../../store/stores/floorPlaneStore';
-import { useTransformStore, useUIStore, useReconstructionStore } from '../../store';
-import { modalStyles, Z_INDEX } from '../../theme';
-import { flipPlaneNormal, detectPlaneRANSAC, computeDistancesToPlane, transformPositions } from '../../utils/ransac';
-import { sim3dToEuler, composeSim3d, createSim3dFromEuler, isIdentityEuler, computePlaneAlignment } from '../../utils/sim3dTransforms';
-import { COORDINATE_SYSTEMS } from '../../utils/coordinateSystems';
+import { modalStyles } from '../../theme';
 import { useModalDrag } from '../../hooks/useModalDrag';
+import {
+  FLOOR_ALIGN_MODAL_ESTIMATED_HEIGHT,
+  FLOOR_ALIGN_MODAL_ESTIMATED_WIDTH,
+  computeFloorAlignmentTransform,
+  detectFloorPlaneFromPositions,
+  getFloorAlignModalPanelStyle,
+  getFloorTargetUpVector,
+} from './floorPlaneAlignmentPolicy';
+import { useFloorAlignStoreFacade } from './useFloorAlignStoreFacade';
 
 /**
  * Confirmation modal for floor plane alignment.
  * Shows: ✓ Apply | ↻ Re-detect | × Cancel
  */
 export function FloorAlignModal() {
-  const showFloorModal = useFloorPlaneStore((s) => s.showFloorModal);
-  const modalPosition = useFloorPlaneStore((s) => s.modalPosition);
-  const setShowFloorModal = useFloorPlaneStore((s) => s.setShowFloorModal);
-  const detectedPlane = useFloorPlaneStore((s) => s.detectedPlane);
-  const setDetectedPlane = useFloorPlaneStore((s) => s.setDetectedPlane);
-  const normalFlipped = useFloorPlaneStore((s) => s.normalFlipped);
-  const targetAxis = useFloorPlaneStore((s) => s.targetAxis);
-  const distanceThreshold = useFloorPlaneStore((s) => s.distanceThreshold);
-  const maxIterations = useFloorPlaneStore((s) => s.maxIterations);
-  const sampleCount = useFloorPlaneStore((s) => s.sampleCount);
-  const setPointDistances = useFloorPlaneStore((s) => s.setPointDistances);
-  const setIsDetecting = useFloorPlaneStore((s) => s.setIsDetecting);
-  const reset = useFloorPlaneStore((s) => s.reset);
-
-  const transform = useTransformStore((s) => s.transform);
-  const setTransform = useTransformStore((s) => s.setTransform);
-
-  const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
-  const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
+  const {
+    data: { wasmReconstruction },
+    floor: {
+      showFloorModal,
+      modalPosition,
+      detectedPlane,
+      normalFlipped,
+      targetAxis,
+      distanceThreshold,
+      maxIterations,
+      sampleCount,
+      setShowFloorModal,
+      setDetectedPlane,
+      setPointDistances,
+      setIsDetecting,
+      reset,
+    },
+    transform: { transform, setTransform },
+    ui: { axesCoordinateSystem },
+  } = useFloorAlignStoreFacade();
 
   // Get target direction based on selected axis and coordinate system
   const targetUp = useMemo(() => {
-    const system = COORDINATE_SYSTEMS[axesCoordinateSystem];
-    const axisKey = targetAxis.toLowerCase() as 'x' | 'y' | 'z';
-    const direction = system[axisKey];
-    return new THREE.Vector3(direction[0], direction[1], direction[2]);
+    return getFloorTargetUpVector(axesCoordinateSystem, targetAxis);
   }, [axesCoordinateSystem, targetAxis]);
 
   const { position, panelRef, handleDragStart } = useModalDrag({
-    estimatedWidth: 120,
-    estimatedHeight: 40,
+    estimatedWidth: FLOOR_ALIGN_MODAL_ESTIMATED_WIDTH,
+    estimatedHeight: FLOOR_ALIGN_MODAL_ESTIMATED_HEIGHT,
     isOpen: showFloorModal,
     initialPosition: modalPosition,
   });
@@ -71,27 +72,19 @@ export function FloorAlignModal() {
 
     // Use setTimeout to allow UI to update before potentially blocking operation
     setTimeout(() => {
-      let positions = wasmReconstruction.getPositions();
+      const positions = wasmReconstruction.getPositions();
       if (!positions) {
         setIsDetecting(false);
         return;
       }
 
-      // Apply current transform if not identity (so detection matches visual)
-      if (!isIdentityEuler(transform)) {
-        const sim3d = createSim3dFromEuler(transform);
-        positions = transformPositions(positions, sim3d);
-      }
-
-      const plane = detectPlaneRANSAC(positions, { distanceThreshold, maxIterations, sampleCount });
-      setDetectedPlane(plane);
-
-      if (plane) {
-        const distances = computeDistancesToPlane(positions, plane);
-        setPointDistances(distances);
-      } else {
-        setPointDistances(null);
-      }
+      const result = detectFloorPlaneFromPositions(positions, transform, {
+        distanceThreshold,
+        maxIterations,
+        sampleCount,
+      });
+      setDetectedPlane(result.plane);
+      setPointDistances(result.distances);
 
       setIsDetecting(false);
     }, 10);
@@ -101,16 +94,12 @@ export function FloorAlignModal() {
   const handleApply = useCallback(() => {
     if (!detectedPlane) return;
 
-    // Get the plane normal (flipped if needed)
-    const plane = normalFlipped ? flipPlaneNormal(detectedPlane) : detectedPlane;
-
-    // Compute the alignment transform (rotation + translation to origin)
-    const alignSim3d = computePlaneAlignment(plane.normal, plane.centroid, targetUp);
-
-    // Compose with current transform
-    const currentSim3d = createSim3dFromEuler(transform);
-    const composed = composeSim3d(alignSim3d, currentSim3d);
-    const composedEuler = sim3dToEuler(composed);
+    const composedEuler = computeFloorAlignmentTransform(
+      detectedPlane,
+      normalFlipped,
+      targetUp,
+      transform
+    );
 
     setTransform(composedEuler);
     setShowFloorModal(false);
@@ -123,7 +112,7 @@ export function FloorAlignModal() {
     <div
       ref={panelRef}
       className="fixed bg-ds-tertiary border border-ds rounded shadow-ds-lg p-1"
-      style={{ left: position.x, top: position.y, zIndex: Z_INDEX.modalOverlay }}
+      style={getFloorAlignModalPanelStyle(position)}
       onPointerDown={handleDragStart}
     >
       <div className="flex items-center gap-0.5" onPointerDown={(e) => e.stopPropagation()}>

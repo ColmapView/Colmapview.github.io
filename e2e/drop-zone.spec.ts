@@ -3,7 +3,6 @@ import { test, expect } from './fixtures/test-fixtures';
 test.describe('DropZone', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForTimeout(500); // Wait for app to fully initialize
   });
 
   test('should display empty state panel on initial load', async ({ dropZone }) => {
@@ -19,43 +18,37 @@ test.describe('DropZone', () => {
 
   test('should open URL modal when clicking Load URL button', async ({ dropZone, page }) => {
     await dropZone.clickLoadUrl();
-    await page.waitForTimeout(200);
-    expect(await dropZone.isUrlModalOpen()).toBe(true);
+    await expect(page.locator('[data-testid="url-modal"]')).toBeVisible();
   });
 
   test('should close URL modal when clicking Cancel', async ({ dropZone, page }) => {
     await dropZone.clickLoadUrl();
-    await page.waitForTimeout(200);
-    expect(await dropZone.isUrlModalOpen()).toBe(true);
+    await expect(dropZone.urlModal).toBeVisible();
 
     // Click Cancel button
     await page.locator('[data-testid="url-modal"] button:has-text("Cancel")').click();
-    await page.waitForTimeout(200);
-    expect(await dropZone.isUrlModalOpen()).toBe(false);
+    await expect(dropZone.urlModal).not.toBeVisible();
   });
 
   test('should close URL modal when clicking backdrop', async ({ dropZone, page }) => {
     await dropZone.clickLoadUrl();
-    await page.waitForTimeout(200);
-    expect(await dropZone.isUrlModalOpen()).toBe(true);
+    await expect(dropZone.urlModal).toBeVisible();
 
     // Click on the backdrop (the parent overlay)
     await page.locator('.fixed.inset-0').click({ position: { x: 10, y: 10 } });
-    await page.waitForTimeout(200);
-    expect(await dropZone.isUrlModalOpen()).toBe(false);
+    await expect(dropZone.urlModal).not.toBeVisible();
   });
 
   test('should have disabled Load button when URL is empty', async ({ dropZone, page }) => {
     await dropZone.clickLoadUrl();
-    await page.waitForTimeout(200);
+    await expect(dropZone.urlModal).toBeVisible();
     const loadButton = page.locator('[data-testid="url-modal"] button:has-text("Load")');
     await expect(loadButton).toBeDisabled();
   });
 
-  test('should dismiss empty state panel when clicking X', async ({ dropZone, page }) => {
+  test('should dismiss empty state panel when clicking X', async ({ dropZone }) => {
     await dropZone.waitForEmptyState();
     await dropZone.dismissEmptyState();
-    await page.waitForTimeout(200);
     expect(await dropZone.isEmptyStateVisible()).toBe(false);
   });
 

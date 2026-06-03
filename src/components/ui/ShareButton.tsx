@@ -1,37 +1,36 @@
 import { useCallback, useState } from 'react';
 import { useThree } from '@react-three/fiber';
-import { useReconstructionStore, useCameraStore, useUIStore } from '../../store';
 import { generateShareableUrl, generateEmbedUrl, generateIframeHtml, copyWithFeedback, getControlsViewState } from '../../hooks/useUrlState';
 import { ShareIcon, CheckIcon, LinkIcon, EmbedIcon } from '../../icons';
-import { buttonStyles } from '../../theme';
-import type { ColmapManifest } from '../../types/manifest';
-
-// Helper for share button styling with copied state
-function getShareButtonClass(copied: boolean, rounded: 'full' | 'left' | 'middle' | 'right' = 'full'): string {
-  let roundedClass: string;
-  switch (rounded) {
-    case 'left':
-      roundedClass = 'rounded-l';
-      break;
-    case 'right':
-      roundedClass = 'rounded-r';
-      break;
-    case 'middle':
-      roundedClass = 'rounded-none';
-      break;
-    default:
-      roundedClass = 'rounded';
-  }
-
-  const baseClass = `${buttonStyles.base} ${buttonStyles.sizes.sm} ${roundedClass}`;
-  const variantClass = copied
-    ? `${buttonStyles.variants.toggleSuccess} border-0`
-    : 'bg-ds-secondary/50 text-ds-muted hover:text-ds-primary hover:bg-ds-secondary';
-  return `${baseClass} ${variantClass}`;
-}
+import {
+  getShareButtonClass,
+  getShareButtonDisplayState,
+  getShareSource,
+  shouldRenderShareButton,
+} from './shareButtonPolicy';
+import type { ShareButtonIconKind, ShareSource } from './shareButtonPolicy';
+import { useShareButtonStoreFacade } from './useShareButtonStoreFacade';
 
 interface ShareButtonProps {
   className?: string;
+}
+
+function ShareButtonIcon({ iconKind }: { iconKind: ShareButtonIconKind }) {
+  const className = 'w-4 h-4';
+
+  if (iconKind === 'check') {
+    return <CheckIcon className={className} />;
+  }
+
+  if (iconKind === 'link') {
+    return <LinkIcon className={className} />;
+  }
+
+  if (iconKind === 'embed') {
+    return <EmbedIcon className={className} />;
+  }
+
+  return <ShareIcon className={className} />;
 }
 
 /**
@@ -39,25 +38,28 @@ interface ShareButtonProps {
  * Visible when loaded from URL (sourceType === 'url') or manifest (sourceType === 'manifest').
  */
 export function ShareButton({ className = '' }: ShareButtonProps) {
-  const sourceType = useReconstructionStore((s) => s.sourceType);
-  const sourceUrl = useReconstructionStore((s) => s.sourceUrl);
-  const sourceManifest = useReconstructionStore((s) => s.sourceManifest);
-  const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const embedMode = useUIStore((s) => s.embedMode);
+  const {
+    data: {
+      sourceType,
+      sourceUrl,
+      sourceManifest,
+      reconstruction,
+      embedMode,
+    },
+  } = useShareButtonStoreFacade();
   const [copied, setCopied] = useState(false);
 
-  // Show when loaded from URL or manifest and not in embed mode
-  const canShare = (sourceType === 'url' || sourceType === 'manifest') && reconstruction && !embedMode;
-  if (!canShare) {
+  if (!shouldRenderShareButton({
+    sourceType,
+    hasReconstruction: reconstruction !== null,
+    embedMode,
+  })) {
     return null;
   }
 
-  // Use sourceUrl if available, otherwise use sourceManifest for inline embedding
-  const shareSource: string | ColmapManifest | null = sourceUrl ?? sourceManifest;
-
   return (
     <ShareButtonInner
-      shareSource={shareSource}
+      shareSource={getShareSource(sourceUrl, sourceManifest)}
       copied={copied}
       setCopied={setCopied}
       className={className}
@@ -66,7 +68,7 @@ export function ShareButton({ className = '' }: ShareButtonProps) {
 }
 
 interface ShareButtonInnerProps {
-  shareSource: string | ColmapManifest | null;
+  shareSource: ShareSource;
   copied: boolean;
   setCopied: (copied: boolean) => void;
   className: string;
@@ -77,6 +79,7 @@ interface ShareButtonInnerProps {
  */
 function ShareButtonInner({ shareSource, copied, setCopied, className }: ShareButtonInnerProps) {
   const { controls } = useThree();
+  const display = getShareButtonDisplayState('share', copied);
 
   const handleShare = useCallback(async () => {
     const viewState = getControlsViewState(controls);
@@ -89,19 +92,10 @@ function ShareButtonInner({ shareSource, copied, setCopied, className }: ShareBu
       type="button"
       onClick={handleShare}
       className={`${getShareButtonClass(copied)} ${className}`}
-      title={copied ? 'Link copied!' : 'Copy shareable link to clipboard'}
+      title={display.title}
     >
-      {copied ? (
-        <>
-          <CheckIcon className="w-4 h-4" />
-          <span>Copied!</span>
-        </>
-      ) : (
-        <>
-          <ShareIcon className="w-4 h-4" />
-          <span>Share</span>
-        </>
-      )}
+      <ShareButtonIcon iconKind={display.iconKind} />
+      <span>{display.label}</span>
     </button>
   );
 }
@@ -113,24 +107,32 @@ function ShareButtonInner({ shareSource, copied, setCopied, className }: ShareBu
  * Visible when loaded from URL (sourceType === 'url') or manifest (sourceType === 'manifest').
  */
 export function ShareButtonStandalone({ className = '' }: ShareButtonProps) {
-  const sourceType = useReconstructionStore((s) => s.sourceType);
-  const sourceUrl = useReconstructionStore((s) => s.sourceUrl);
-  const sourceManifest = useReconstructionStore((s) => s.sourceManifest);
-  const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const currentViewState = useCameraStore((s) => s.currentViewState);
-  const embedMode = useUIStore((s) => s.embedMode);
+  const {
+    data: {
+      sourceType,
+      sourceUrl,
+      sourceManifest,
+      reconstruction,
+      currentViewState,
+      embedMode,
+    },
+  } = useShareButtonStoreFacade();
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedEmbedUrl, setCopiedEmbedUrl] = useState(false);
   const [copiedEmbedHtml, setCopiedEmbedHtml] = useState(false);
 
-  // Show when loaded from URL or manifest and not in embed mode
-  const canShare = (sourceType === 'url' || sourceType === 'manifest') && reconstruction && !embedMode;
-  if (!canShare) {
+  if (!shouldRenderShareButton({
+    sourceType,
+    hasReconstruction: reconstruction !== null,
+    embedMode,
+  })) {
     return null;
   }
 
-  // Use sourceUrl if available, otherwise use sourceManifest for inline embedding
-  const shareSource: string | ColmapManifest | null = sourceUrl ?? sourceManifest;
+  const shareSource = getShareSource(sourceUrl, sourceManifest);
+  const linkDisplay = getShareButtonDisplayState('copyLink', copiedLink);
+  const embedUrlDisplay = getShareButtonDisplayState('embedUrl', copiedEmbedUrl);
+  const embedHtmlDisplay = getShareButtonDisplayState('embedHtml', copiedEmbedHtml);
 
   const handleCopyLink = async () => {
     const url = generateShareableUrl(shareSource, currentViewState);
@@ -154,55 +156,28 @@ export function ShareButtonStandalone({ className = '' }: ShareButtonProps) {
         type="button"
         onClick={handleCopyLink}
         className={getShareButtonClass(copiedLink, 'left')}
-        title={copiedLink ? 'Link copied!' : 'Copy shareable link to clipboard'}
+        title={linkDisplay.title}
       >
-        {copiedLink ? (
-          <>
-            <CheckIcon className="w-4 h-4" />
-            <span>Copied!</span>
-          </>
-        ) : (
-          <>
-            <LinkIcon className="w-4 h-4" />
-            <span>copy</span>
-          </>
-        )}
+        <ShareButtonIcon iconKind={linkDisplay.iconKind} />
+        <span>{linkDisplay.label}</span>
       </button>
       <button
         type="button"
         onClick={handleCopyEmbedUrl}
         className={getShareButtonClass(copiedEmbedUrl, 'middle')}
-        title={copiedEmbedUrl ? 'Embed URL copied!' : 'Copy embed URL to clipboard'}
+        title={embedUrlDisplay.title}
       >
-        {copiedEmbedUrl ? (
-          <>
-            <CheckIcon className="w-4 h-4" />
-            <span>Copied!</span>
-          </>
-        ) : (
-          <>
-            <EmbedIcon className="w-4 h-4" />
-            <span>embed</span>
-          </>
-        )}
+        <ShareButtonIcon iconKind={embedUrlDisplay.iconKind} />
+        <span>{embedUrlDisplay.label}</span>
       </button>
       <button
         type="button"
         onClick={handleCopyEmbedHtml}
         className={getShareButtonClass(copiedEmbedHtml, 'right')}
-        title={copiedEmbedHtml ? 'HTML copied!' : 'Copy iframe HTML to clipboard'}
+        title={embedHtmlDisplay.title}
       >
-        {copiedEmbedHtml ? (
-          <>
-            <CheckIcon className="w-4 h-4" />
-            <span>Copied!</span>
-          </>
-        ) : (
-          <>
-            <EmbedIcon className="w-4 h-4" />
-            <span>&lt;embed&gt;</span>
-          </>
-        )}
+        <ShareButtonIcon iconKind={embedHtmlDisplay.iconKind} />
+        <span>{embedHtmlDisplay.label}</span>
       </button>
     </div>
   );

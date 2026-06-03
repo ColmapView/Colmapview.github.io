@@ -2,14 +2,18 @@
  * Type definitions for the settings profile storage system.
  */
 
-import type { AppConfiguration } from '../config/configuration';
+import type { PartialAppConfiguration } from '../config/configuration';
+
+/** The default profile name - this profile is read-only and always uses project defaults */
+export const DEFAULT_PROFILE_NAME = 'Default';
 
 /**
- * A saved profile containing a full configuration snapshot.
+ * Saved profile data. Profile entries may be full snapshots from the current
+ * app or partial snapshots from older compatible storage.
  */
 export interface ProfilesData {
-  /** Map of profile name to full configuration */
-  profiles: Record<string, AppConfiguration>;
+  /** Map of profile name to validated configuration */
+  profiles: Record<string, PartialAppConfiguration>;
   /** Currently selected profile name, or null if none */
   activeProfile: string | null;
 }

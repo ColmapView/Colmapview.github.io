@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { SRGB, RAINBOW, COLORMAP } from '../theme';
+import { getCssHexColorRgb } from './hexColor';
 
 // Reusable Color object to avoid allocations in animation loop
 const tempColor = new THREE.Color();
@@ -76,9 +77,14 @@ export function hslToHex(h: number, s: number, l: number): string {
  * @returns Object with h (0-360), s (0-100), l (0-100)
  */
 export function hexToHsl(hex: string): { h: number; s: number; l: number } {
-  const r = parseInt(hex.slice(1, 3), 16) / 255;
-  const g = parseInt(hex.slice(3, 5), 16) / 255;
-  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const rgb = getCssHexColorRgb(hex);
+  if (rgb === null) {
+    throw new Error(`Invalid CSS hex color: ${hex}`);
+  }
+
+  const r = rgb.r / 255;
+  const g = rgb.g / 255;
+  const b = rgb.b / 255;
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   let h = 0;

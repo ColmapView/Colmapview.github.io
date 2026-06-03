@@ -111,4 +111,22 @@ describe('parsePoints3DText', () => {
 
     expect(result.get(1n)!.error).toBeCloseTo(0.000001, 8);
   });
+
+  it('skips rows with partial or invalid base numeric tokens', () => {
+    const input = `1 0px 0 0 128 128 128 0.1
+2 0 0 0 256 128 128 0.1
+3 0 0 0 128 128 128 0.1`;
+    const result = parsePoints3DText(input);
+
+    expect([...result.keys()]).toEqual([3n]);
+  });
+
+  it('skips malformed track pairs without throwing or storing partial IDs', () => {
+    const input = '1 0 0 0 128 128 128 0.1 10px 20 11 21 -1 22';
+    const result = parsePoints3DText(input);
+
+    expect(result.get(1n)?.track).toEqual([
+      { imageId: 11, point2DIdx: 21 },
+    ]);
+  });
 });

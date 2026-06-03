@@ -1,9 +1,15 @@
 import { create } from 'zustand';
 import * as THREE from 'three';
 import type { AxesCoordinateSystem } from '../types';
+import {
+  getRequiredPointCount,
+  type PointPickingMode,
+} from '../pointPickingPolicy';
 
-export type PointPickingMode = 'off' | 'origin-1pt' | 'distance-2pt' | 'normal-3pt';
 export type TargetAxis = 'X' | 'Y' | 'Z';
+export type { PointPickingMode } from '../pointPickingPolicy';
+
+const DEFAULT_TARGET_AXIS: TargetAxis = 'Y';
 
 // Axis cycle order based on coordinate system's "up" axis
 // Y-up systems: Y → X → Z
@@ -70,6 +76,7 @@ export interface PointPickingState {
   toggleNormalFlipped: () => void;
   cycleTargetAxis: (coordinateSystem: AxesCoordinateSystem) => void;
   setTargetAxis: (axis: TargetAxis) => void;
+  setMarkerRightClickHandled: (handled: boolean) => void;
   reset: () => void;
 }
 
@@ -81,7 +88,7 @@ export const usePointPickingStore = create<PointPickingState>()((set, get) => ({
   showDistanceModal: false,
   modalPosition: null,
   normalFlipped: false,
-  targetAxis: 'Y' as TargetAxis,
+  targetAxis: DEFAULT_TARGET_AXIS,
   markerRightClickHandled: false,
 
   setPickingMode: (pickingMode) => set({
@@ -92,13 +99,13 @@ export const usePointPickingStore = create<PointPickingState>()((set, get) => ({
     showDistanceModal: false,
     modalPosition: null,
     normalFlipped: false,
-    targetAxis: 'Y' as TargetAxis,
+    targetAxis: DEFAULT_TARGET_AXIS,
     markerRightClickHandled: false,
   }),
 
   addSelectedPoint: (point, screenPosition) => {
     const { pickingMode, selectedPoints } = get();
-    const maxPoints = pickingMode === 'origin-1pt' ? 1 : pickingMode === 'distance-2pt' ? 2 : pickingMode === 'normal-3pt' ? 3 : 0;
+    const maxPoints = getRequiredPointCount(pickingMode);
 
     if (selectedPoints.length >= maxPoints) return;
 
@@ -119,7 +126,6 @@ export const usePointPickingStore = create<PointPickingState>()((set, get) => ({
     selectedPoints: state.selectedPoints.filter((_, i) => i !== index),
     showDistanceModal: false,
     modalPosition: null,
-    markerRightClickHandled: true, // Flag to prevent Scene3D from also removing a point
   })),
 
   removeLastPoint: () => set((state) => ({
@@ -135,7 +141,7 @@ export const usePointPickingStore = create<PointPickingState>()((set, get) => ({
     showDistanceModal: false,
     modalPosition: null,
     normalFlipped: false,
-    targetAxis: 'Y' as TargetAxis,
+    targetAxis: DEFAULT_TARGET_AXIS,
   }),
 
   setHoveredPoint: (hoveredPoint) => set({ hoveredPoint }),
@@ -151,10 +157,12 @@ export const usePointPickingStore = create<PointPickingState>()((set, get) => ({
     const currentIndex = axes.indexOf(state.targetAxis);
     // If current axis not in cycle order (shouldn't happen), start from beginning
     const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % 3;
-    return { targetAxis: axes[nextIndex], markerRightClickHandled: true };
+    return { targetAxis: axes[nextIndex] };
   }),
 
   setTargetAxis: (axis) => set({ targetAxis: axis }),
+
+  setMarkerRightClickHandled: (markerRightClickHandled) => set({ markerRightClickHandled }),
 
   reset: () => set({
     pickingMode: 'off',
@@ -164,7 +172,7 @@ export const usePointPickingStore = create<PointPickingState>()((set, get) => ({
     showDistanceModal: false,
     modalPosition: null,
     normalFlipped: false,
-    targetAxis: 'Y' as TargetAxis,
+    targetAxis: DEFAULT_TARGET_AXIS,
     markerRightClickHandled: false,
   }),
 }));

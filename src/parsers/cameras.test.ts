@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseCamerasText } from './cameras';
+import { BinaryWriter } from './BinaryWriter';
+import { parseCamerasBinary, parseCamerasText } from './cameras';
 import { CameraModelId } from '../types/colmap';
 
 describe('parseCamerasText', () => {
@@ -63,6 +64,16 @@ describe('parseCamerasText', () => {
     expect(camera!.params).toHaveLength(8);
   });
 
+  it('parses RAD_TAN_THIN_PRISM_FISHEYE cameras', () => {
+    const input = '7 RAD_TAN_THIN_PRISM_FISHEYE 1920 1080 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16';
+    const result = parseCamerasText(input);
+
+    const camera = result.get(7);
+    expect(camera).toBeDefined();
+    expect(camera!.modelId).toBe(CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE);
+    expect(camera!.params).toHaveLength(16);
+  });
+
   it('skips lines with too few parts', () => {
     const input = `1 SIMPLE_PINHOLE 3072`;
     const result = parseCamerasText(input);
@@ -91,4 +102,45 @@ describe('parseCamerasText', () => {
     expect(camera).toBeDefined();
     expect(camera!.params).toEqual([]);
   });
+
+  it('skips rows with partial or invalid numeric tokens', () => {
+    const input = `1 SIMPLE_PINHOLE 640px 480 500 320 240
+2 SIMPLE_PINHOLE 640 480 500px 320 240
+3 SIMPLE_PINHOLE 640 480 500 320 240`;
+    const result = parseCamerasText(input);
+
+    expect([...result.keys()]).toEqual([3]);
+  });
 });
+
+describe('parseCamerasBinary', () => {
+  it('parses supported binary camera model IDs', () => {
+    const result = parseCamerasBinary(createBinaryCameraBuffer(CameraModelId.PINHOLE, [1, 2, 3, 4]));
+
+    const camera = result.get(1);
+    expect(camera).toBeDefined();
+    expect(camera!.modelId).toBe(CameraModelId.PINHOLE);
+    expect(camera!.params).toEqual([1, 2, 3, 4]);
+  });
+
+  it('rejects unsupported binary camera model IDs before trusting params', () => {
+    expect(() => parseCamerasBinary(createBinaryCameraBuffer(999, []))).toThrow(
+      'Unsupported camera model id 999 in binary camera 1'
+    );
+  });
+});
+
+function createBinaryCameraBuffer(modelId: number, params: number[]): ArrayBuffer {
+  const writer = new BinaryWriter();
+  writer.writeUint64FromNumber(1);
+  writer.writeUint32(1);
+  writer.writeInt32(modelId);
+  writer.writeUint64FromNumber(640);
+  writer.writeUint64FromNumber(480);
+
+  for (const param of params) {
+    writer.writeFloat64(param);
+  }
+
+  return writer.toArrayBuffer();
+}

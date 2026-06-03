@@ -1,24 +1,29 @@
 import { useState, useEffect } from 'react';
-import { usePointPickingStore } from '../../store';
-import { MARKER_COLORS_CSS, Z_INDEX } from '../../theme';
-
-const POINT_LABELS = ['P1', 'P2', 'P3'];
+import {
+  getPickingCursorContainerStyle,
+  getPickingCursorMarkerStyle,
+  getPickingCursorViewModel,
+  PICKING_CURSOR_CONTAINER_CLASS,
+  PICKING_CURSOR_LABEL_PREFIX,
+  PICKING_CURSOR_MARKER_CLASS,
+  PICKING_CURSOR_TOOLTIP_CLASS,
+} from './pickingCursorViewModel';
+import { usePickingCursorStoreFacade } from './usePickingCursorStoreFacade';
 
 /**
  * Cursor-following tooltip that shows picking status during point selection.
  * Displays which point is being selected with matching color coding.
  */
 export function PickingCursor() {
-  const pickingMode = usePointPickingStore((s) => s.pickingMode);
-  // Only subscribe to length to avoid re-renders when point contents change
-  const selectedPointsLength = usePointPickingStore((s) => s.selectedPoints.length);
+  const {
+    pickingMode,
+    selectedPointsLength,
+  } = usePickingCursorStoreFacade();
 
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
-  const requiredPoints = pickingMode === 'origin-1pt' ? 1 : pickingMode === 'distance-2pt' ? 2 : pickingMode === 'normal-3pt' ? 3 : 0;
-  const isActive = pickingMode !== 'off';
-  const nextPointIndex = selectedPointsLength;
-  const isComplete = nextPointIndex >= requiredPoints;
+  const cursorState = getPickingCursorViewModel(pickingMode, selectedPointsLength);
+  const isActive = cursorState.isVisible;
 
   useEffect(() => {
     if (!isActive) return;
@@ -32,25 +37,19 @@ export function PickingCursor() {
   }, [isActive]);
 
   // Don't show cursor when not active or when all points are selected
-  if (!isActive || isComplete) return null;
-
-  const nextColor = MARKER_COLORS_CSS[nextPointIndex] || MARKER_COLORS_CSS[0];
-  const nextLabel = POINT_LABELS[nextPointIndex] || 'P1';
+  if (!cursorState.isVisible) return null;
 
   return (
     <div
-      className={`fixed pointer-events-none z-[${Z_INDEX.modal}]`}
-      style={{
-        left: mousePos.x + 16,
-        top: mousePos.y + 16,
-      }}
+      className={PICKING_CURSOR_CONTAINER_CLASS}
+      style={getPickingCursorContainerStyle(mousePos)}
     >
-      <div className="bg-black/90 text-white text-xs px-2 py-1.5 rounded whitespace-nowrap flex items-center gap-2">
+      <div className={PICKING_CURSOR_TOOLTIP_CLASS}>
         <span
-          className="w-3 h-3 rounded-full inline-block"
-          style={{ backgroundColor: nextColor }}
+          className={PICKING_CURSOR_MARKER_CLASS}
+          style={getPickingCursorMarkerStyle(cursorState.nextColor)}
         />
-        <span>Select <strong>{nextLabel}</strong></span>
+        <span>{PICKING_CURSOR_LABEL_PREFIX} <strong>{cursorState.nextLabel}</strong></span>
       </div>
     </div>
   );

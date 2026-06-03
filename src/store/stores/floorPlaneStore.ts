@@ -7,6 +7,9 @@ export type FloorColorMode = 'off' | 'binary' | 'distance';
 /** Target axis for floor alignment */
 export type FloorTargetAxis = 'X' | 'Y' | 'Z';
 
+const DEFAULT_FLOOR_TARGET_AXIS: FloorTargetAxis = 'Y';
+const DEFAULT_FLOOR_COLOR_MODE: FloorColorMode = 'off';
+
 export interface FloorPlaneState {
   /** Detected floor plane from RANSAC */
   detectedPlane: Plane | null;
@@ -55,8 +58,8 @@ const initialState = {
   sampleCount: 50000,
   pointDistances: null,
   normalFlipped: false,
-  targetAxis: 'Y' as FloorTargetAxis,
-  floorColorMode: 'off' as FloorColorMode,
+  targetAxis: DEFAULT_FLOOR_TARGET_AXIS,
+  floorColorMode: DEFAULT_FLOOR_COLOR_MODE,
   showFloorModal: false,
   modalPosition: null,
   isDetecting: false,

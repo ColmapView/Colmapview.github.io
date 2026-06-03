@@ -8,23 +8,29 @@ import { GalleryErrorBoundary } from '../gallery/GalleryErrorBoundary';
 import { ImageDetailModal } from '../modals/ImageDetailModal';
 import { useHotkeyScope } from '../../hooks/useHotkeyScope';
 import { LAYOUT_PANELS } from '../../theme';
-import { useUIStore } from '../../store/stores/uiStore';
-import { useReconstructionStore } from '../../store/reconstructionStore';
-import { useGuideStore } from '../../store/stores/guideStore';
-
-const MIN_PANEL_WIDTH = 300;
-const MAX_PANEL_WIDTH_PERCENT = 0.6; // 60% of window width
+import { clearBodyCursor, setBodyCursor } from '../../utils/bodyCursor';
+import {
+  APP_LAYOUT_CURSOR_OWNER,
+  getAppLayoutGuideTip,
+  getDraggedGalleryPanelWidth,
+  getGalleryPanelInnerStyle,
+  getGalleryPanelStyle,
+  getInitialGalleryPanelWidth,
+  getWindowResizedGalleryPanelWidth,
+  shouldHideInlineGallery,
+} from './appLayoutPolicy';
+import { useAppLayoutStoreFacade } from './useAppLayoutStoreFacade';
 
 function useResizablePanel(defaultWidthPercent: number) {
   const [panelWidth, setPanelWidth] = useState(() => {
-    return Math.round(window.innerWidth * (defaultWidthPercent / 100));
+    return getInitialGalleryPanelWidth(window.innerWidth, defaultWidthPercent);
   });
   const [isResizing, setIsResizing] = useState(false);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsResizing(true);
-    document.body.style.cursor = 'col-resize';
+    setBodyCursor(APP_LAYOUT_CURSOR_OWNER, 'col-resize');
     document.body.style.userSelect = 'none';
   }, []);
 
@@ -32,16 +38,16 @@ function useResizablePanel(defaultWidthPercent: number) {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return;
 
-      const newWidth = window.innerWidth - e.clientX;
-      const maxWidth = window.innerWidth * MAX_PANEL_WIDTH_PERCENT;
-      const clampedWidth = Math.max(MIN_PANEL_WIDTH, Math.min(maxWidth, newWidth));
-      setPanelWidth(clampedWidth);
+      setPanelWidth(getDraggedGalleryPanelWidth({
+        windowWidth: window.innerWidth,
+        clientX: e.clientX,
+      }));
     };
 
     const handleMouseUp = () => {
       if (isResizing) {
         setIsResizing(false);
-        document.body.style.cursor = '';
+        clearBodyCursor(APP_LAYOUT_CURSOR_OWNER);
         document.body.style.userSelect = '';
       }
     };
@@ -54,14 +60,20 @@ function useResizablePanel(defaultWidthPercent: number) {
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      if (isResizing) {
+        clearBodyCursor(APP_LAYOUT_CURSOR_OWNER);
+        document.body.style.userSelect = '';
+      }
     };
   }, [isResizing]);
 
   // Adjust panel width when window resizes
   useEffect(() => {
     const handleResize = () => {
-      const maxWidth = window.innerWidth * MAX_PANEL_WIDTH_PERCENT;
-      setPanelWidth((prev) => Math.min(prev, maxWidth));
+      setPanelWidth((prev) => getWindowResizedGalleryPanelWidth({
+        currentWidth: prev,
+        windowWidth: window.innerWidth,
+      }));
     };
 
     window.addEventListener('resize', handleResize);
@@ -74,15 +86,24 @@ function useResizablePanel(defaultWidthPercent: number) {
 export function AppLayout() {
   useHotkeyScope(); // Manage hotkey scopes based on modal state
 
-  const galleryCollapsed = useUIStore((s) => s.galleryCollapsed);
-  const embedMode = useUIStore((s) => s.embedMode);
-  const touchMode = useUIStore((s) => s.touchMode);
-  const touchUI = useUIStore((s) => s.touchUI);
-  const setTouchUIVisible = useUIStore((s) => s.setTouchUIVisible);
+  const {
+    data: {
+      galleryCollapsed,
+      embedMode,
+      touchMode,
+      touchUI,
+      reconstruction,
+      urlLoading,
+    },
+    actions: {
+      setTouchUIVisible,
+      showGuideTip,
+    },
+  } = useAppLayoutStoreFacade();
   const { panelWidth, handleMouseDown, isResizing } = useResizablePanel(LAYOUT_PANELS.gallery.defaultSize);
 
   // In embed mode or touch mode, always hide inline gallery
-  const hideGallery = embedMode || touchMode || galleryCollapsed;
+  const hideGallery = shouldHideInlineGallery({ embedMode, touchMode, galleryCollapsed });
 
   // Prevent browser-level pinch-to-zoom and two-finger scroll in touch mode
   // so gestures are handled exclusively by the 3D canvas
@@ -109,30 +130,21 @@ export function AppLayout() {
   }, [touchMode]);
 
   // Show context menu tip when reconstruction is first loaded (only on desktop)
-  const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const urlLoading = useReconstructionStore((s) => s.urlLoading);
-  const hasShownContextMenuTipRef = useRef(false);
+  const hasShownLayoutTipRef = useRef(false);
 
   useEffect(() => {
-    if (reconstruction && !urlLoading && !hasShownContextMenuTipRef.current && !touchMode) {
-      hasShownContextMenuTipRef.current = true;
-      useGuideStore.getState().showTip(
-        'contextMenu',
-        'Right-click anywhere for quick actions'
-      );
-    }
-  }, [reconstruction, urlLoading, touchMode]);
+    const guideTip = getAppLayoutGuideTip({
+      hasReconstruction: Boolean(reconstruction),
+      urlLoading,
+      touchMode,
+      hasShownTip: hasShownLayoutTipRef.current,
+    });
 
-  // Show touch tip for touch mode
-  useEffect(() => {
-    if (reconstruction && !urlLoading && touchMode && !hasShownContextMenuTipRef.current) {
-      hasShownContextMenuTipRef.current = true;
-      useGuideStore.getState().showTip(
-        'touchMode',
-        'Tap to select, long-press for options'
-      );
-    }
-  }, [reconstruction, urlLoading, touchMode]);
+    if (!guideTip) return;
+
+    hasShownLayoutTipRef.current = true;
+    showGuideTip(guideTip.id, guideTip.message);
+  }, [reconstruction, urlLoading, touchMode, showGuideTip]);
 
   // Touch mode layout - simplified like embed mode, no gallery
   if (touchMode && !embedMode) {
@@ -179,11 +191,9 @@ export function AppLayout() {
         {!embedMode && (
           <div
             className={`overflow-hidden flex-shrink-0 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
-            style={{
-              width: hideGallery ? 0 : panelWidth,
-            }}
+            style={getGalleryPanelStyle({ hideGallery, panelWidth })}
           >
-            <div className="h-full border-l border-ds" style={{ minWidth: `${MIN_PANEL_WIDTH}px` }}>
+            <div className="h-full border-l border-ds" style={getGalleryPanelInnerStyle()}>
               <GalleryErrorBoundary>
                 <ImageGallery isResizing={isResizing} />
               </GalleryErrorBoundary>

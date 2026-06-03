@@ -1,5 +1,6 @@
 import { Html } from '@react-three/drei';
-import { hoverCardStyles, MODAL_POSITION } from '../../theme';
+import { hoverCardStyles } from '../../theme';
+import { calculateFixedHtmlPosition, getFixedCursorHtmlStyle } from './htmlOverlayStylePolicy';
 
 interface HoverCard3DProps {
   mousePos: { x: number; y: number };
@@ -16,14 +17,8 @@ interface HoverCard3DProps {
 export function HoverCard3D({ mousePos, title, titleStyle, subtitle, children }: HoverCard3DProps) {
   return (
     <Html
-      style={{
-        position: 'fixed',
-        left: mousePos.x + MODAL_POSITION.cursorOffset,
-        top: mousePos.y + MODAL_POSITION.cursorOffset,
-        pointerEvents: 'none',
-        transform: 'none',
-      }}
-      calculatePosition={() => [0, 0]}
+      style={getFixedCursorHtmlStyle(mousePos)}
+      calculatePosition={calculateFixedHtmlPosition}
     >
       <div className={hoverCardStyles.container}>
         <div className={hoverCardStyles.title} style={titleStyle}>{title}</div>

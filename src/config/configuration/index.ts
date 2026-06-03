@@ -20,6 +20,17 @@ export { validateConfiguration } from './schema';
 // Serialization
 export { parseConfigYaml, serializeConfigToYaml, generateConfigTemplate } from './serializer';
 
+// File import
+export {
+  formatConfigValidationErrors,
+  importConfigFile,
+} from './fileImport';
+export type {
+  ConfigFileLike,
+  ImportConfigFileOptions,
+  ImportConfigFileResult,
+} from './fileImport';
+
 // Store adapter
 export {
   extractConfigurationFromStores,

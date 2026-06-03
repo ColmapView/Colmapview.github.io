@@ -1,44 +1,20 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { useReconstructionStore } from '../../store';
 import { useRigNode, useSelectionNode } from '../../nodes';
-import { getImageWorldPosition } from '../../utils/colmapTransforms';
-import { getCameraColor } from '../../theme';
 import { lineVertexShader, lineFragmentShader } from './shaders';
-import type { Image } from '../../types/colmap';
+import {
+  buildRigConnectionGeometryData,
+  getRigConnectionAlpha,
+  getRigConnectionBlinkOpacityFactor,
+  hasRigConnectionRenderStateChanged,
+  shouldRestoreRigConnectionFrameColors,
+  type RigConnectionRenderState,
+} from './rigConnectionsViewModel';
+import { getFloat32BufferAttribute } from './threeBufferAttributes';
+import { useRigConnectionsStoreFacade } from './useRigConnectionsStoreFacade';
 
-// Temp color object for per-frame coloring
 const tempColor = new THREE.Color();
-
-/**
- * Helper to calculate blink factor (0-1) from phase (0-2 seconds)
- * Matches the pattern used in CameraMatches for visual consistency
- */
-function getBlinkFactor(phase: number): number {
-  if (phase < 0.3) return phase / 0.3;        // Fade in
-  if (phase < 0.6) return 1;                   // Full
-  if (phase < 1.0) return 1 - (phase - 0.6) / 0.4;  // Fade out
-  return 0;                                    // Hidden
-}
-
-/**
- * Extract frame identifier from image name.
- * Supports patterns like:
- * - "cam_1/00.png" → "00.png" (directory/filename)
- * - "cam1_frame00.jpg" → "frame00.jpg" (prefix_frame)
- * - "image_001.png" → "001.png" (fallback: filename only)
- */
-function extractFrameId(imageName: string): string {
-  // Handle path separators (both / and \)
-  const parts = imageName.split(/[/\\]/);
-  if (parts.length >= 2) {
-    // Return the filename part (last component)
-    return parts[parts.length - 1];
-  }
-  // Fallback: return the whole name
-  return imageName;
-}
 
 /**
  * RigConnections component renders visual connections between cameras
@@ -49,90 +25,23 @@ function extractFrameId(imageName: string): string {
  * are connected with lines.
  */
 export function RigConnections() {
-  const reconstruction = useReconstructionStore((s) => s.reconstruction);
+  const { reconstruction } = useRigConnectionsStoreFacade();
   const rig = useRigNode();
   const selection = useSelectionNode();
 
-  // Refs for geometry and animation
   const geometryRef = useRef<THREE.BufferGeometry>(null);
   const blinkPhaseRef = useRef(0);
+  const prevStateRef = useRef<RigConnectionRenderState | null>(null);
 
-  // Track previous state to avoid unnecessary GPU uploads
-  const prevStateRef = useRef<{
-    selectedImageId: number | null;
-    rigOpacity: number;
-    unselectedOpacity: number;
-  } | null>(null);
-
-  // Build geometry data with positions, colors, and frame membership for selection
   const geometryData = useMemo(() => {
-    // Render when rig is shown
     if (!rig.visible || !reconstruction) return null;
+    return buildRigConnectionGeometryData(reconstruction.images.values());
+  }, [reconstruction, rig.visible]);
 
-    // Group images by frame identifier (extracted from image name)
-    const frameGroups = new Map<string, Image[]>();
-    for (const image of reconstruction.images.values()) {
-      const frameId = extractFrameId(image.name);
-      const group = frameGroups.get(frameId);
-      if (group) {
-        group.push(image);
-      } else {
-        frameGroups.set(frameId, [image]);
-      }
-    }
+  useEffect(() => {
+    prevStateRef.current = null;
+  }, [geometryData]);
 
-    // Build flat arrays
-    const positions: number[] = [];
-    const colors: number[] = [];
-    const alphas: number[] = [];
-    // Track which image IDs are in each line segment's frame (for selection highlighting)
-    const lineFrameImageIds: Set<number>[] = [];
-
-    // Assign frame indices for consistent coloring
-    let frameIndex = 0;
-    for (const images of frameGroups.values()) {
-      // Need at least 2 cameras to draw connections
-      if (images.length < 2) continue;
-
-      // Get positions of all cameras in this frame group
-      const cameraPositions = images.map(img => getImageWorldPosition(img));
-
-      // Collect all image IDs in this frame
-      const frameImageIds = new Set(images.map(img => img.imageId));
-
-      // Get color for this frame
-      tempColor.set(getCameraColor(frameIndex));
-      frameIndex++;
-
-      // Draw lines connecting first camera to all others (star pattern)
-      const firstPos = cameraPositions[0];
-      for (let i = 1; i < cameraPositions.length; i++) {
-        const pos = cameraPositions[i];
-        // Start point
-        positions.push(firstPos.x, firstPos.y, firstPos.z);
-        colors.push(tempColor.r, tempColor.g, tempColor.b);
-        alphas.push(1.0);
-        // End point
-        positions.push(pos.x, pos.y, pos.z);
-        colors.push(tempColor.r, tempColor.g, tempColor.b);
-        alphas.push(1.0);
-        // Track frame membership for both vertices of this line segment
-        lineFrameImageIds.push(frameImageIds);
-        lineFrameImageIds.push(frameImageIds);
-      }
-    }
-
-    if (positions.length === 0) return null;
-
-    return {
-      positions: new Float32Array(positions),
-      colors: new Float32Array(colors),
-      alphas: new Float32Array(alphas),
-      lineFrameImageIds,
-    };
-  }, [reconstruction, rig.visible, rig.colorMode]);
-
-  // Create shader material for per-vertex alpha support
   const shaderMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
       vertexShader: lineVertexShader,
@@ -152,68 +61,58 @@ export function RigConnections() {
   useFrame((_, delta) => {
     if (!geometryRef.current || !geometryData) return;
 
-    const colorAttr = geometryRef.current.getAttribute('color') as THREE.BufferAttribute;
-    const alphaAttr = geometryRef.current.getAttribute('alpha') as THREE.BufferAttribute;
+    const colorAttr = getFloat32BufferAttribute(geometryRef.current, 'color');
+    const alphaAttr = getFloat32BufferAttribute(geometryRef.current, 'alpha');
     if (!colorAttr || !alphaAttr) return;
 
-    // Check if blink animation is active
     const isBlinkAnimated = rig.displayMode === 'blink';
     if (isBlinkAnimated) {
       blinkPhaseRef.current = (blinkPhaseRef.current + delta) % 2;
     }
 
-    // Check if state changed - skip update if static and unchanged
-    const prev = prevStateRef.current;
-    const stateChanged = !prev ||
-      prev.selectedImageId !== selection.selectedImageId ||
-      prev.rigOpacity !== rig.opacity ||
-      prev.unselectedOpacity !== selection.unselectedOpacity;
+    const currentState: RigConnectionRenderState = {
+      selectedImageId: selection.selectedImageId,
+      rigOpacity: rig.opacity,
+      unselectedOpacity: selection.unselectedOpacity,
+      colorMode: rig.colorMode,
+      color: rig.color,
+    };
+    const previousState = prevStateRef.current;
+    const stateChanged = hasRigConnectionRenderStateChanged(prevStateRef.current, currentState);
 
-    // Skip update if static and unchanged
     if (!isBlinkAnimated && !stateChanged) return;
 
-    // Update alpha values
-    const blinkFactor = isBlinkAnimated ? (0.1 + 0.9 * getBlinkFactor(blinkPhaseRef.current)) : 1;
+    const blinkOpacityFactor = getRigConnectionBlinkOpacityFactor(rig.displayMode, blinkPhaseRef.current);
     const { lineFrameImageIds } = geometryData;
 
     for (let i = 0; i < alphaAttr.count; i++) {
-      const frameImageIds = lineFrameImageIds[i];
-      const isInSelectedFrame = selection.selectedImageId !== null && frameImageIds.has(selection.selectedImageId);
-
-      // When a camera is selected: selected frame gets full opacity, others get dimmed
-      // When no camera is selected: all lines get full opacity
-      let alpha: number;
-      if (selection.selectedImageId === null) {
-        alpha = rig.opacity * blinkFactor;
-      } else if (isInSelectedFrame) {
-        alpha = rig.opacity * blinkFactor;
-      } else {
-        alpha = rig.opacity * selection.unselectedOpacity * blinkFactor;
-      }
-
-      alphaAttr.setX(i, alpha);
+      alphaAttr.setX(i, getRigConnectionAlpha({
+        frameImageIds: lineFrameImageIds[i],
+        selectedImageId: currentState.selectedImageId,
+        rigOpacity: currentState.rigOpacity,
+        unselectedOpacity: currentState.unselectedOpacity,
+        blinkOpacityFactor,
+      }));
     }
 
     // Update colors based on color mode
-    if (rig.colorMode === 'single') {
+    if (currentState.colorMode === 'single') {
       tempColor.set(rig.color);
       for (let i = 0; i < colorAttr.count; i++) {
         colorAttr.setXYZ(i, tempColor.r, tempColor.g, tempColor.b);
       }
       colorAttr.needsUpdate = true;
+    } else if (shouldRestoreRigConnectionFrameColors(previousState, currentState)) {
+      const colors = colorAttr.array;
+      colors.set(geometryData.colors);
+      colorAttr.needsUpdate = true;
     }
 
     alphaAttr.needsUpdate = true;
 
-    // Update previous state
-    prevStateRef.current = {
-      selectedImageId: selection.selectedImageId,
-      rigOpacity: rig.opacity,
-      unselectedOpacity: selection.unselectedOpacity,
-    };
+    prevStateRef.current = currentState;
   });
 
-  // Don't render when off or no geometry data
   if (!rig.visible || !geometryData) return null;
 
   return (

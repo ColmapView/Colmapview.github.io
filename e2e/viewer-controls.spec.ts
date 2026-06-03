@@ -2,12 +2,11 @@ import { test, expect } from './fixtures/test-fixtures';
 
 test.describe('ViewerControls', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     // Dismiss the empty state panel to access controls
     const closeButton = page.locator('button:has-text("×")').first();
-    if (await closeButton.isVisible()) {
+    if (await closeButton.isVisible({ timeout: 2000 })) {
       await closeButton.click();
-      await page.waitForTimeout(300);
     }
   });
 
@@ -30,52 +29,78 @@ test.describe('ViewerControls', () => {
   test('should respond to button clicks', async ({ viewerControls, page }) => {
     await viewerControls.waitForControlsReady();
 
-    // Click a control button
-    const buttons = viewerControls.container.locator('button');
-    const firstButton = buttons.first();
-    await expect(firstButton).toBeVisible();
+    const viewButton = viewerControls.getButtonByTooltip('View options');
+    await expect(viewButton).toBeVisible();
+    await viewButton.click();
 
-    // Click should not throw errors
-    await firstButton.click();
-    await page.waitForTimeout(200);
-
-    // Page should still be responsive
+    await expect(page.locator('button:has-text("Reset View")')).toBeVisible();
     await expect(viewerControls.container).toBeVisible();
   });
 
-  test('control buttons should be clickable', async ({ viewerControls, page }) => {
+  test('control buttons should be clickable', async ({ viewerControls }) => {
     await viewerControls.waitForControlsReady();
 
-    // Get multiple buttons and click them
-    const buttons = viewerControls.container.locator('button');
-    const count = await buttons.count();
-
-    // Click first few buttons to ensure they work
-    for (let i = 0; i < Math.min(3, count); i++) {
-      await buttons.nth(i).click();
-      await page.waitForTimeout(100);
+    for (const tooltip of ['View options', 'Axes & Grid', 'Settings']) {
+      const button = viewerControls.getButtonByTooltip(tooltip);
+      await expect(button).toBeVisible();
+      await button.click();
+      await expect(viewerControls.container).toBeVisible();
     }
-
-    // Page should still be responsive
-    await expect(viewerControls.container).toBeVisible();
   });
 
   test('View button should show view options when clicked', async ({ viewerControls, page }) => {
     await viewerControls.waitForControlsReady();
 
-    // Click first button (View)
-    const firstButton = viewerControls.container.locator('button').first();
-    await firstButton.click();
-    await page.waitForTimeout(500);
+    // Hover first button (View) to reveal the desktop flyout.
+    await viewerControls.getButtonByTooltip('View options').hover();
 
-    // Look for view-related content anywhere on the page
-    // The panel content includes Reset View, Persp/Ortho buttons
     const resetViewButton = page.locator('button:has-text("Reset View")');
-    const isVisible = await resetViewButton.isVisible();
+    await expect(resetViewButton).toBeVisible();
+  });
 
-    // Panel may or may not be visible depending on UI state
-    // Just verify the app didn't crash
-    await expect(viewerControls.container).toBeVisible();
+  test('Settings button should show settings actions when hovered', async ({ viewerControls, page }) => {
+    await viewerControls.waitForControlsReady();
+
+    await viewerControls.getButtonByTooltip('Settings').hover();
+
+    await expect(page.locator('button:has-text("Export Config")')).toBeVisible();
+    await expect(page.locator('button:has-text("Clear Settings")')).toBeVisible();
+    await expect(page.locator('button:has-text("Example manifest.json")')).toBeVisible();
+  });
+
+  test('Axes & Grid button should show axes and grid controls when hovered', async ({ viewerControls, page }) => {
+    await viewerControls.waitForControlsReady();
+
+    await viewerControls.getButtonByTooltip('Axes & Grid').hover();
+
+    await expect(page.locator('text="Show Axes"')).toBeVisible();
+    await expect(page.locator('text="Show Grid"')).toBeVisible();
+    await expect(page.locator('text="System"')).toBeVisible();
+    await expect(page.locator('text="Axes Scale"')).toBeVisible();
+  });
+
+  test('Point Cloud button should show point controls when hovered', async ({ viewerControls, page }) => {
+    await viewerControls.waitForControlsReady();
+
+    await viewerControls.getButtonByTooltip('Point Cloud').hover();
+
+    await expect(page.locator('text="Show Points"')).toBeVisible();
+    await expect(page.locator('text="Min Track"')).toBeVisible();
+    await expect(page.locator('text="Max Error"')).toBeVisible();
+  });
+
+  test('Camera Display button should show camera controls when hovered', async ({ viewerControls, page }) => {
+    await viewerControls.waitForControlsReady();
+
+    const cameraDisplayButton = viewerControls.container.locator(
+      'button[aria-label*="Frustum mode" i], button[aria-label*="Arrow mode" i], button[aria-label*="Image plane mode" i], button[aria-label*="Cameras hidden" i]'
+    ).first();
+    await expect(cameraDisplayButton).toBeVisible();
+    await cameraDisplayButton.hover();
+
+    await expect(page.locator('text="Show Cameras"')).toBeVisible();
+    await expect(page.locator('text="Scale ×"')).toBeVisible();
+    await expect(page.locator('text="Standby α"')).toBeVisible();
   });
 
   test('should have icons in control buttons', async ({ viewerControls }) => {
@@ -87,5 +112,15 @@ test.describe('ViewerControls', () => {
 
     // Should have icons in buttons
     expect(count).toBeGreaterThan(0);
+  });
+
+  test('Save screenshot button should download an image', async ({ viewerControls, page }) => {
+    await viewerControls.waitForControlsReady();
+
+    const downloadPromise = page.waitForEvent('download');
+    await viewerControls.getButtonByTooltip('Save screenshot').click();
+    const download = await downloadPromise;
+
+    expect(download.suggestedFilename()).toMatch(/^colmap-view-\d{8}T\d{6}\.jpg$/);
   });
 });

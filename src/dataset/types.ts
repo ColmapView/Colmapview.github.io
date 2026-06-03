@@ -106,6 +106,8 @@ export interface DatasetMemoryStats {
   database: ResourceInfo;
   /** Rig definitions */
   rigs: ResourceInfo;
+  /** Gaussian splat PLY file reference */
+  splats: ResourceInfo;
   /** ZIP archive loaded in memory (for 'zip' source) */
   zipArchive: ResourceInfo;
   /** Total in WASM memory */

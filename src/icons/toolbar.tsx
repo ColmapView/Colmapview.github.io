@@ -271,6 +271,21 @@ export function ColorTrackIcon({ className }: IconProps) {
   );
 }
 
+export function ColorSplatIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="7" fill="#f8fafc" opacity="0.2" />
+      <circle cx="12" cy="12" r="5.5" fill="#60a5fa" opacity="0.45" />
+      <circle cx="9" cy="10" r="4" fill="#f472b6" opacity="0.55" />
+      <circle cx="15" cy="14" r="4.5" fill="#facc15" opacity="0.5" />
+      <circle cx="12" cy="12" r="1.8" fill="currentColor" opacity="0.9" />
+      <circle cx="6" cy="6" r="1.2" fill="currentColor" opacity="0.65" />
+      <circle cx="18" cy="7" r="1.1" fill="currentColor" opacity="0.65" />
+      <circle cx="19" cy="18" r="1.3" fill="currentColor" opacity="0.65" />
+    </svg>
+  );
+}
+
 // Background toggle icon
 export function BgIcon({ className }: IconProps) {
   return (

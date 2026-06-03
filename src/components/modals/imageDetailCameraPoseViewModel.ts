@@ -1,0 +1,87 @@
+import { CAMERA_MODEL_COLMAP_NAMES, CAMERA_MODEL_NAMES } from '../../utils/cameraModelNames';
+
+const CAMERA_PARAM_NAMES: Record<number, string> = {
+  0: 'f, cx, cy',
+  1: 'fx, fy, cx, cy',
+  2: 'f, cx, cy, k',
+  3: 'f, cx, cy, k1, k2',
+  4: 'fx, fy, cx, cy, k1, k2, p1, p2',
+  5: 'fx, fy, cx, cy, k1, k2, k3, k4',
+  6: 'fx, fy, cx, cy, k1, k2, p1, p2, k3, k4, k5, k6',
+  7: 'fx, fy, cx, cy, omega',
+  8: 'f, cx, cy, k',
+  9: 'f, cx, cy, k1, k2',
+  10: 'fx, fy, cx, cy, k1, k2, p1, p2, k3, k4, sx1, sy1',
+};
+
+export interface CameraPoseParameterDisplay {
+  name: string;
+  value: string;
+}
+
+export interface CameraPoseNumericDisplay {
+  className: string;
+  value: string;
+  isNegative: boolean;
+}
+
+export interface CameraPoseDisplayModel {
+  modelName: string;
+  modelTitle: string;
+  width: number;
+  height: number;
+  parameters: CameraPoseParameterDisplay[];
+  rotation: CameraPoseNumericDisplay[];
+  translation: CameraPoseNumericDisplay[];
+}
+
+export interface CameraPoseSource {
+  modelId: number;
+  width: number;
+  height: number;
+  params: readonly number[];
+}
+
+export function formatImageDetailCameraParam(value: number): string {
+  const absVal = Math.abs(value);
+  if (absVal >= 1) {
+    return value.toFixed(1);
+  }
+  if (absVal === 0) {
+    return '0';
+  }
+  return value.toPrecision(4);
+}
+
+export function getCameraPoseSignedValueClassName(value: number): string {
+  return value < 0 ? 'text-ds-error' : 'text-ds-primary';
+}
+
+function formatSignedPoseValue(value: number, fractionDigits: number): CameraPoseNumericDisplay {
+  return {
+    className: getCameraPoseSignedValueClassName(value),
+    value: value.toFixed(fractionDigits),
+    isNegative: value < 0,
+  };
+}
+
+export function buildCameraPoseDisplayModel(
+  camera: CameraPoseSource,
+  qvec: readonly number[],
+  tvec: readonly number[]
+): CameraPoseDisplayModel {
+  const paramNames = (CAMERA_PARAM_NAMES[camera.modelId] ?? '').split(', ');
+
+  return {
+    modelName: CAMERA_MODEL_NAMES[camera.modelId] ?? `MODEL_${camera.modelId}`,
+    modelTitle: CAMERA_MODEL_COLMAP_NAMES[camera.modelId] ?? `MODEL_${camera.modelId}`,
+    width: camera.width,
+    height: camera.height,
+    parameters: camera.params.map((param, index) => ({
+      name: paramNames[index] || `p${index}`,
+      value: formatImageDetailCameraParam(param),
+    })),
+    rotation: [qvec[1], qvec[2], qvec[3], qvec[0]].map((value) => formatSignedPoseValue(value, 3)),
+    translation: tvec.map((value) => formatSignedPoseValue(value, 2)),
+  };
+}

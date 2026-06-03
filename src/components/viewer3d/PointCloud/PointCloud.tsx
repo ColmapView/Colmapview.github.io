@@ -5,16 +5,11 @@
 
 import React, { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
-import {
-  useReconstructionStore,
-  usePointPickingStore,
-  useDeletionStore,
-} from '../../../store';
-import { usePointsNode, useSelectionNode } from '../../../nodes';
-import { useFloorPlaneStore } from '../../../store/stores/floorPlaneStore';
 import { usePointCloudData } from '../../../hooks/pointCloud/usePointCloudData';
 import { usePointPicking } from '../../../hooks/pointCloud/usePointPicking';
 import { SelectionOverlay } from './SelectionOverlay';
+import { usePointCloudStoreFacade } from './usePointCloudStoreFacade';
+import { shouldRenderPointGeometry } from './pointCloudRenderPolicy';
 
 /**
  * Main point cloud component.
@@ -26,13 +21,23 @@ import { SelectionOverlay } from './SelectionOverlay';
  * - Renders main point cloud and selection overlay
  */
 export function PointCloud(): React.JSX.Element | null {
-  // Store subscriptions
-  const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
-
-  // Node hooks for points and selection state
-  const points = usePointsNode();
-  const selection = useSelectionNode();
+  const {
+    data: {
+      reconstruction,
+      wasmReconstruction,
+      points,
+      selection,
+      pointPicking,
+      floor,
+      deletion,
+      splatFile,
+      readySplatFile,
+    },
+    actions: {
+      addSelectedPoint,
+      setHoveredPoint,
+    },
+  } = usePointCloudStoreFacade();
 
   // Extract points state
   const {
@@ -47,6 +52,13 @@ export function PointCloud(): React.JSX.Element | null {
 
   // Convert null back to Infinity for usePointCloudData hook
   const maxReprojectionError = maxReprojectionErrorRaw ?? Infinity;
+  const showPointGeometry = shouldRenderPointGeometry({
+    showPointCloud,
+    colorMode,
+    splatFile,
+    readySplatFile,
+  });
+  const pointColorMode = colorMode === 'splats' ? 'rgb' : colorMode;
 
   // Extract selection state
   const {
@@ -58,19 +70,7 @@ export function PointCloud(): React.JSX.Element | null {
   } = selection;
 
   // Point picking state
-  const pickingMode = usePointPickingStore((s) => s.pickingMode);
-  const selectedPointsLength = usePointPickingStore((s) => s.selectedPoints.length);
-  const addSelectedPoint = usePointPickingStore((s) => s.addSelectedPoint);
-  const setHoveredPoint = usePointPickingStore((s) => s.setHoveredPoint);
-
-  // Floor plane state
-  const pointDistances = useFloorPlaneStore((s) => s.pointDistances);
-  const distanceThreshold = useFloorPlaneStore((s) => s.distanceThreshold);
-  const floorColorMode = useFloorPlaneStore((s) => s.floorColorMode);
-
-  // Pending deletions - filter selection if selected image is pending deletion
-  const pendingDeletions = useDeletionStore((s) => s.pendingDeletions);
-  const effectiveSelectedImageId = selectedImageId !== null && pendingDeletions.has(selectedImageId)
+  const effectiveSelectedImageId = selectedImageId !== null && deletion.pendingDeletions.has(selectedImageId)
     ? null
     : selectedImageId;
 
@@ -79,22 +79,22 @@ export function PointCloud(): React.JSX.Element | null {
     usePointCloudData({
       reconstruction,
       wasmReconstruction,
-      colorMode,
+      colorMode: pointColorMode,
       minTrackLength,
       maxReprojectionError,
       thinning,
       selectedImageId: effectiveSelectedImageId,
       showSelectionHighlight,
       selectionColor,
-      floorColorMode,
-      pointDistances,
-      distanceThreshold,
+      floorColorMode: floor.floorColorMode,
+      pointDistances: floor.pointDistances,
+      distanceThreshold: floor.distanceThreshold,
     });
 
   // Set up point picking
   const { pointsRef, handlePointClick, needsMorePoints } = usePointPicking({
-    pickingMode,
-    selectedPointsLength,
+    pickingMode: pointPicking.pickingMode,
+    selectedPointsLength: pointPicking.selectedPointsLength,
     pointSize,
     indexToPoint3DIdRef,
     addSelectedPoint,
@@ -127,8 +127,8 @@ export function PointCloud(): React.JSX.Element | null {
 
   return (
     <>
-      {/* Main point cloud - only shown when showPointCloud is true */}
-      {showPointCloud && geometry && (
+      {/* Main point cloud - hidden when splat rendering is selected */}
+      {showPointGeometry && geometry && (
         <points
           ref={pointsRef}
           matrixAutoUpdate={false}

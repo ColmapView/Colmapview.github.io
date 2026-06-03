@@ -1,20 +1,35 @@
-import { useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
-import {
-  HOTKEYS,
-  HOTKEY_CATEGORIES,
-  getHotkeysByCategory,
-  formatKeyCombo,
-  type HotkeyCategory,
-} from '../../config/hotkeys';
-import { tableStyles, modalStyles, Z_INDEX } from '../../theme';
+import { HOTKEYS } from '../../config/hotkeys';
+import { tableStyles, modalStyles } from '../../theme';
 import { CloseIcon } from '../../icons';
+import { ModalDialogShell } from '../ui/ModalDialogShell';
+import {
+  HOTKEY_HELP_DESCRIPTION_CELL_CLASS,
+  HOTKEY_HELP_FOOTER_CLASS,
+  HOTKEY_HELP_FOOTER_KEY_CLASS,
+  HOTKEY_HELP_FOOTER_PREFIX,
+  HOTKEY_HELP_FOOTER_SUFFIX,
+  HOTKEY_HELP_HEADER_CLASS,
+  HOTKEY_HELP_KEY_CELL_CLASS,
+  HOTKEY_HELP_KEY_CLASS,
+  HOTKEY_HELP_PANEL_LAYOUT_CLASS,
+  HOTKEY_HELP_SECTION_CLASS,
+  HOTKEY_HELP_SECTION_TITLE_CLASS,
+  HOTKEY_HELP_TABLE_CLASS,
+  HOTKEY_HELP_TITLE,
+  getHotkeyHelpOverlayStyle,
+  getHotkeyHelpSections,
+  getHotkeyHelpToggleKeyLabel,
+} from './hotkeyHelpViewModel';
 
 /**
  * Modal that displays all available keyboard shortcuts.
  * Toggle with Shift+? (question mark).
  */
 export function HotkeyHelpModal() {
+  const titleId = useId();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [isOpen, setIsOpen] = useState(false);
 
   // Toggle help panel with ? key (global scope, always available)
@@ -28,32 +43,25 @@ export function HotkeyHelpModal() {
     []
   );
 
-  // Close with Escape when help is open
-  useHotkeys(
-    'escape',
-    () => setIsOpen(false),
-    { enabled: isOpen },
-    [isOpen]
-  );
-
-  if (!isOpen) return null;
-
-  const categories = Object.keys(HOTKEY_CATEGORIES) as HotkeyCategory[];
+  const sections = getHotkeyHelpSections();
 
   return (
-    <div className="fixed inset-0 pointer-events-none" style={{ zIndex: Z_INDEX.modalOverlay }}>
-      {/* Backdrop */}
-      <div
-        className={modalStyles.backdrop}
-        onClick={() => setIsOpen(false)}
-      />
-
-      {/* Panel */}
-      <div className={`${modalStyles.panel} top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 p-6 max-w-lg w-full max-h-[80vh] overflow-auto`}>
+    <ModalDialogShell
+      isOpen={isOpen}
+      onClose={() => setIsOpen(false)}
+      ariaLabelledBy={titleId}
+      overlayClassName="fixed inset-0 pointer-events-none"
+      overlayStyle={getHotkeyHelpOverlayStyle()}
+      panelClassName={`${modalStyles.panel} ${HOTKEY_HELP_PANEL_LAYOUT_CLASS}`}
+      renderBackdrop
+      backdropClassName={modalStyles.backdrop}
+      initialFocusRef={closeButtonRef}
+    >
         {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-ds-primary text-lg font-semibold">Keyboard Shortcuts</h2>
+        <div className={HOTKEY_HELP_HEADER_CLASS}>
+          <h2 id={titleId} className="text-ds-primary text-lg font-semibold">{HOTKEY_HELP_TITLE}</h2>
           <button
+            ref={closeButtonRef}
             onClick={() => setIsOpen(false)}
             className={modalStyles.toolHeaderClose}
             title="Close"
@@ -63,40 +71,34 @@ export function HotkeyHelpModal() {
         </div>
 
         {/* Categories */}
-        {categories.map((category) => {
-          const hotkeys = getHotkeysByCategory(category);
-          if (hotkeys.length === 0) return null;
-
-          return (
-            <div key={category} className="mb-4">
-              <h3 className="text-ds-secondary text-sm font-medium mb-2">
-                {HOTKEY_CATEGORIES[category]}
-              </h3>
-              <table className="w-full text-sm">
-                <tbody>
-                  {hotkeys.map((hotkey, idx) => (
-                    <tr key={idx} className={tableStyles.row}>
-                      <td className="py-1.5 text-ds-primary">{hotkey.description}</td>
-                      <td className="py-1.5 text-right">
-                        <kbd className="px-2 py-0.5 bg-ds-secondary rounded text-ds-primary text-xs font-mono">
-                          {formatKeyCombo(hotkey.keys)}
-                        </kbd>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          );
-        })}
+        {sections.map((section) => (
+          <div key={section.category} className={HOTKEY_HELP_SECTION_CLASS}>
+            <h3 className={HOTKEY_HELP_SECTION_TITLE_CLASS}>
+              {section.title}
+            </h3>
+            <table className={HOTKEY_HELP_TABLE_CLASS}>
+              <tbody>
+                {section.rows.map((row) => (
+                  <tr key={row.id} className={tableStyles.row}>
+                    <td className={HOTKEY_HELP_DESCRIPTION_CELL_CLASS}>{row.description}</td>
+                    <td className={HOTKEY_HELP_KEY_CELL_CLASS}>
+                      <kbd className={HOTKEY_HELP_KEY_CLASS}>
+                        {row.keyCombo}
+                      </kbd>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
 
         {/* Footer hint */}
-        <div className="mt-4 pt-4 border-t border-ds text-ds-muted text-xs text-center">
-          Press{' '}
-          <kbd className="px-1.5 py-0.5 bg-ds-secondary rounded">?</kbd>{' '}
-          to toggle this panel
+        <div className={HOTKEY_HELP_FOOTER_CLASS}>
+          {HOTKEY_HELP_FOOTER_PREFIX}{' '}
+          <kbd className={HOTKEY_HELP_FOOTER_KEY_CLASS}>{getHotkeyHelpToggleKeyLabel()}</kbd>{' '}
+          {HOTKEY_HELP_FOOTER_SUFFIX}
         </div>
-      </div>
-    </div>
+    </ModalDialogShell>
   );
 }

@@ -11,7 +11,7 @@ import { CameraModelId } from '../types/colmap';
 /** Human-readable camera model names for UI display */
 export const CAMERA_MODEL_NAMES: Record<number, string> = {
   [CameraModelId.SIMPLE_PINHOLE]: 'Simple Pinhole',
-  [CameraModelId.PINHOLE]: 'Pinhole',
+  [CameraModelId.PINHOLE]: 'OpenCV K',
   [CameraModelId.SIMPLE_RADIAL]: 'Simple Radial',
   [CameraModelId.RADIAL]: 'Radial',
   [CameraModelId.OPENCV]: 'OpenCV',

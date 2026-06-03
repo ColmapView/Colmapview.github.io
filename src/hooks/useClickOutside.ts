@@ -1,4 +1,8 @@
 import { useEffect, type RefObject } from 'react';
+import {
+  shouldCloseForEscapeKey,
+  shouldCloseForOutsideMouseDown,
+} from './clickOutsidePolicy';
 
 /**
  * Close a dropdown/menu when clicking outside or pressing Escape.
@@ -13,12 +17,12 @@ export function useClickOutside(
     if (!enabled) return;
 
     const handleClickOutside = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      if (shouldCloseForOutsideMouseDown(ref.current, e.target)) {
         onClose();
       }
     };
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (shouldCloseForEscapeKey(e.key)) onClose();
     };
 
     // Delay attachment to avoid closing on the same event that opened

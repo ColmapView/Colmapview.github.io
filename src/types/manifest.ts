@@ -42,6 +42,8 @@ export interface ColmapManifest {
   images?: string[];
   /** Optional explicit array of mask file paths (overrides masksPath inference) */
   masks?: string[];
+  /** Optional explicit array of splat PLY file paths; the largest loaded PLY is rendered */
+  splats?: string[];
 }
 
 /**
@@ -63,6 +65,7 @@ export const ColmapManifestSchema = z.object({
   skipImages: z.boolean().optional(),
   images: z.array(z.string()).optional(),
   masks: z.array(z.string()).optional(),
+  splats: z.array(z.string().min(1)).optional(),
 });
 
 /**

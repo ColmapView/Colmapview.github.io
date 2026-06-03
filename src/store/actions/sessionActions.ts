@@ -13,6 +13,7 @@ import { useTransformStore } from '../stores/transformStore.js';
 import { usePointPickingStore } from '../stores/pointPickingStore.js';
 import { useDeletionStore } from '../stores/deletionStore.js';
 import { isIdentityEuler } from '../../utils/sim3dTransforms.js';
+import { requestConfirmation } from '../../utils/confirmation.js';
 
 /**
  * Returns true if a reload would discard in-memory edits the user made
@@ -33,11 +34,14 @@ export function hasUnsavedReloadState(): boolean {
  * Prompt the user before a destructive reload. Returns true if the caller
  * should proceed. Skips the prompt when there's nothing to lose.
  */
-export function confirmReload(): boolean {
+export async function confirmReload(): Promise<boolean> {
   if (!hasUnsavedReloadState()) return true;
-  return window.confirm(
-    'Reloading will discard your current transform and any pending deletions. Continue?',
-  );
+  return requestConfirmation({
+    title: 'Reload data?',
+    message: 'Reloading will discard your current transform and any pending deletions.',
+    confirmLabel: 'Reload',
+    tone: 'danger',
+  });
 }
 
 /**
