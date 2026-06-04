@@ -248,6 +248,10 @@ export function useViewerControlsController(): ViewerControlsController {
       maxReprojectionError: pointsNode.maxReprojectionError,
       setMaxReprojectionError: pointsActions.setMaxReprojectionError,
       reconstruction,
+      selectionColor: selectionNode.color,
+      setSelectionColor: selectionActions.setColor,
+      selectionAnimationSpeed: selectionNode.animationSpeed,
+      setSelectionAnimationSpeed: selectionActions.setAnimationSpeed,
       onCycleColorMode: cycleColorMode,
     },
     cameraDisplayPanel: {

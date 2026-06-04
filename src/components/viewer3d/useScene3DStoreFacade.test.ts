@@ -6,7 +6,7 @@ import {
   useTransformStore,
   useUIStore,
 } from '../../store';
-import { buildReconstruction } from '../../test/builders';
+import { buildFile, buildLoadedFiles, buildReconstruction } from '../../test/builders';
 import type { Sim3dEuler } from '../../types/sim3d';
 import {
   useSceneContainerStoreFacade,
@@ -23,6 +23,7 @@ describe('useScene3DStoreFacade', () => {
 
   it('collects scene content dependencies from owning stores', () => {
     const reconstruction = buildReconstruction();
+    const splatFile = buildFile('scene.splat');
     const autoHideElements = {
       ...useUIStore.getInitialState().autoHideElements,
       axes: true,
@@ -38,7 +39,10 @@ describe('useScene3DStoreFacade', () => {
       translationZ: 3,
     };
 
-    useReconstructionStore.setState({ reconstruction });
+    useReconstructionStore.setState({
+      reconstruction,
+      loadedFiles: buildLoadedFiles({ splatFile }),
+    });
     useTransformStore.setState({ transform });
     useUIStore.setState({
       isIdle: true,
@@ -54,6 +58,7 @@ describe('useScene3DStoreFacade', () => {
     expect(result.current.data).toMatchObject({
       reconstruction,
       wasmReconstruction: null,
+      splatFile,
       isIdle: true,
       autoHideElements,
       showAutoHideEditor: true,

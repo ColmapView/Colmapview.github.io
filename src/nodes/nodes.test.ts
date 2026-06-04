@@ -94,6 +94,20 @@ describe('Node Hooks', () => {
       const { result } = renderHook(() => usePointsNode());
       expect(result.current.maxReprojectionError).toBe(2.5);
     });
+
+    it('reports splats visible for splat-only and splat point overlay modes', () => {
+      act(() => usePointCloudStore.setState({ showPointCloud: true, colorMode: 'splats' }));
+      const { result, rerender } = renderHook(() => usePointsNode());
+      expect(result.current.splatsVisible).toBe(true);
+
+      act(() => usePointCloudStore.setState({ colorMode: 'splatPoints' }));
+      rerender();
+      expect(result.current.splatsVisible).toBe(true);
+
+      act(() => usePointCloudStore.setState({ colorMode: 'splatRainbowPoints' }));
+      rerender();
+      expect(result.current.splatsVisible).toBe(true);
+    });
   });
 
   describe('useCamerasNode', () => {
@@ -310,8 +324,11 @@ describe('Node Actions', () => {
 
     it('setColorMode updates store', () => {
       const { result } = renderHook(() => usePointsNodeActions());
-      act(() => result.current.setColorMode('error'));
-      expect(usePointCloudStore.getState().colorMode).toBe('error');
+      act(() => result.current.setColorMode('splatPoints'));
+      expect(usePointCloudStore.getState()).toMatchObject({
+        showSplats: true,
+        colorMode: 'splatPoints',
+      });
     });
 
     it('setMinTrackLength updates store', () => {

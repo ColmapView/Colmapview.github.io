@@ -27,6 +27,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
     handleClick,
     handleDoubleClick,
     handleRightClick,
+    hideToolbar,
     images,
     isSettling,
     lastNavigationToImageId,
@@ -119,18 +120,20 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
 
   return (
     <div className="h-full flex flex-col bg-ds-secondary">
-      <ImageGalleryToolbar
-        cameraFilter={cameraFilter}
-        cameras={cameras}
-        sortDirection={sortDirection}
-        sortField={sortField}
-        touchMode={touchMode}
-        viewMode={viewMode}
-        onCameraFilterChange={setCameraFilter}
-        onSortDirectionToggle={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
-        onSortFieldChange={setSortField}
-        onViewModeChange={setViewMode}
-      />
+      {!hideToolbar && (
+        <ImageGalleryToolbar
+          cameraFilter={cameraFilter}
+          cameras={cameras}
+          sortDirection={sortDirection}
+          sortField={sortField}
+          touchMode={touchMode}
+          viewMode={viewMode}
+          onCameraFilterChange={setCameraFilter}
+          onSortDirectionToggle={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
+          onSortFieldChange={setSortField}
+          onViewModeChange={setViewMode}
+        />
+      )}
 
       <ImageGalleryVirtualizedContent
         containerRef={containerRef}

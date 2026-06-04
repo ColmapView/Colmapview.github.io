@@ -1,25 +1,51 @@
-import type { ColorMode } from '../../../store';
+import {
+  isSplatPointOverlayColorMode,
+  type ColorMode,
+  type SelectionColorMode,
+} from '../../../store';
 
 interface PointGeometryVisibilityOptions {
   showPointCloud: boolean;
   colorMode: ColorMode;
   splatFile?: File;
-  readySplatFile: File | null;
 }
 
 export function shouldRenderPointGeometry({
   showPointCloud,
   colorMode,
   splatFile,
-  readySplatFile,
 }: PointGeometryVisibilityOptions): boolean {
   if (!showPointCloud) {
     return false;
+  }
+
+  if (isSplatPointOverlayColorMode(colorMode)) {
+    return true;
   }
 
   if (colorMode !== 'splats') {
     return true;
   }
 
-  return !splatFile || readySplatFile !== splatFile;
+  return !splatFile;
+}
+
+export function getPointGeometryDataColorMode(colorMode: ColorMode): ColorMode {
+  return colorMode === 'splats' || isSplatPointOverlayColorMode(colorMode)
+    ? 'rgb'
+    : colorMode;
+}
+
+export function getSplatPointOverlayAnimationMode(
+  colorMode: ColorMode
+): SelectionColorMode | null {
+  if (colorMode === 'splatPoints') {
+    return 'blink';
+  }
+
+  if (colorMode === 'splatRainbowPoints') {
+    return 'rainbow';
+  }
+
+  return null;
 }

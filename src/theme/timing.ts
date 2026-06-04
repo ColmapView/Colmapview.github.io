@@ -52,7 +52,7 @@ export const CONTROLS = {
   minVelocity: 0.0001,
 
   // Movement multipliers
-  moveSpeedMultiplier: 0.02,
+  moveSpeedMultiplier: 0.01,
   wheelMoveMultiplier: 0.001,
   shiftSpeedBoost: 3,
 

@@ -1,6 +1,6 @@
-import { Suspense, useMemo, useEffect } from 'react';
+import { lazy, Suspense, useMemo, useEffect } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
-import { PointCloud, SplatLayer } from './PointCloud/index';
+import { PointCloud } from './PointCloud/PointCloud';
 import { CameraFrustums, CameraMatches } from './CameraFrustums';
 import { wasFrustumTapRecent } from './frustumTouchGuards';
 import { RigConnections } from './RigConnections';
@@ -38,11 +38,16 @@ import {
   useSceneContentStoreFacade,
 } from './useScene3DStoreFacade';
 
+const LazySplatLayer = lazy(() =>
+  import('./PointCloud/SplatLayer').then((module) => ({ default: module.SplatLayer }))
+);
+
 function SceneContent() {
   const {
     data: {
       reconstruction,
       wasmReconstruction,
+      splatFile,
       isIdle,
       autoHideElements,
       showAutoHideEditor,
@@ -100,7 +105,11 @@ function SceneContent() {
   const transformableContent = (
     <>
       {visibleLayers.points && <PointCloud />}
-      {visibleLayers.points && <SplatLayer />}
+      {visibleLayers.points && splatFile && (
+        <Suspense fallback={null}>
+          <LazySplatLayer />
+        </Suspense>
+      )}
       {visibleLayers.cameras && <CameraFrustums />}
       {visibleLayers.matches && <CameraMatches />}
       {visibleLayers.rigs && <RigConnections />}

@@ -70,7 +70,10 @@ export function renderPointCloudButtonIcon(iconKind: PointCloudButtonIcon): Reac
     case 'pointsTrack':
       return icon(ColorTrackIcon);
     case 'pointsSplats':
+    case 'pointsSplatPoints':
       return icon(ColorSplatIcon);
+    case 'pointsSplatRainbow':
+      return icon(RainbowIcon);
   }
 }
 

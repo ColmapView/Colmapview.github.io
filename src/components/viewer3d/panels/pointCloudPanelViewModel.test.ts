@@ -7,6 +7,8 @@ import {
   getPointCloudColorHint,
   getPointCloudMaxErrorLimit,
   getSupportedPointColorMode,
+  shouldShowSplatPointOverlayColorControl,
+  shouldShowSplatPointOverlaySpeedControl,
 } from './pointCloudPanelViewModel';
 
 describe('point cloud panel view-model helpers', () => {
@@ -16,6 +18,8 @@ describe('point cloud panel view-model helpers', () => {
       { value: 'error', label: 'Error' },
       { value: 'trackLength', label: 'Track Length' },
       { value: 'splats', label: 'Splats' },
+      { value: 'splatPoints', label: 'Splats + Points' },
+      { value: 'splatRainbowPoints', label: 'Splats + Rainbow' },
     ]);
   });
 
@@ -36,6 +40,14 @@ describe('point cloud panel view-model helpers', () => {
       title: 'Splats:',
       lines: ['3D Gaussian rendering from', 'the discovered PLY file.'],
     });
+    expect(getPointCloudColorHint('splatPoints')).toEqual({
+      title: 'Splats + Points:',
+      lines: ['Blinking COLMAP points over', 'the splat rendering.'],
+    });
+    expect(getPointCloudColorHint('splatRainbowPoints')).toEqual({
+      title: 'Splats + Rainbow:',
+      lines: ['Rainbow COLMAP points over', 'the splat rendering.'],
+    });
   });
 
   it('falls back to RGB for stale point color modes', () => {
@@ -44,6 +56,16 @@ describe('point cloud panel view-model helpers', () => {
       title: 'RGB Colors:',
       lines: ['Original point colors from', 'the reconstruction.'],
     });
+  });
+
+  it('shows overlay color and speed controls only for splat point overlay modes', () => {
+    expect(shouldShowSplatPointOverlayColorControl('splatPoints')).toBe(true);
+    expect(shouldShowSplatPointOverlayColorControl('splatRainbowPoints')).toBe(false);
+    expect(shouldShowSplatPointOverlayColorControl('splats')).toBe(false);
+
+    expect(shouldShowSplatPointOverlaySpeedControl('splatPoints')).toBe(true);
+    expect(shouldShowSplatPointOverlaySpeedControl('splatRainbowPoints')).toBe(true);
+    expect(shouldShowSplatPointOverlaySpeedControl('rgb')).toBe(false);
   });
 
   it('uses the reconstruction max error when available and keeps the fallback otherwise', () => {

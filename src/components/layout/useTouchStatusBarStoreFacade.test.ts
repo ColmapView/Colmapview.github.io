@@ -26,6 +26,8 @@ describe('useTouchStatusBarStoreFacade', () => {
         galleryDrawer: false,
         modalControls: true,
       },
+      isIdle: true,
+      showAutoHideEditor: true,
     });
 
     const { result } = renderHook(() => useTouchStatusBarStoreFacade());
@@ -38,6 +40,9 @@ describe('useTouchStatusBarStoreFacade', () => {
         galleryDrawer: false,
         modalControls: true,
       },
+      autoHideButtons: true,
+      isIdle: true,
+      showAutoHideEditor: true,
       urlLoading: true,
       reconstruction,
     });

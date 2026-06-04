@@ -33,6 +33,9 @@ describe('useStatusBarStoreFacade', () => {
       reconstruction,
       wasmReconstruction: null,
       fps: 61,
+      autoHideButtons: true,
+      isIdle: false,
+      showAutoHideEditor: false,
     });
   });
 });

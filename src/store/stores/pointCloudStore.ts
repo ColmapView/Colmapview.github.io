@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { STORAGE_KEYS } from '../migration';
 import { mergePointCloudPersistedState } from '../persistedStoreMigrations';
-import type { ColorMode } from '../types';
+import { isSplatColorMode, type ColorMode } from '../types';
 
 export interface PointCloudState {
   showPointCloud: boolean;
@@ -46,7 +46,7 @@ export const usePointCloudStore = create<PointCloudState>()(
         let colorMode = state.colorMode;
         if (showSplats) {
           colorMode = 'splats';
-        } else if (colorMode === 'splats') {
+        } else if (isSplatColorMode(colorMode)) {
           colorMode = 'rgb';
         }
 
@@ -58,7 +58,7 @@ export const usePointCloudStore = create<PointCloudState>()(
       }),
       togglePointCloud: () => set((state) => ({ showPointCloud: !state.showPointCloud })),
       toggleSplats: () => set((state) => {
-        const showSplats = state.colorMode !== 'splats';
+        const showSplats = !isSplatColorMode(state.colorMode);
         return {
           showPointCloud: showSplats ? true : state.showPointCloud,
           showSplats,
@@ -67,7 +67,7 @@ export const usePointCloudStore = create<PointCloudState>()(
       }),
       setPointSize: (pointSize) => set({ pointSize }),
       setPointOpacity: (pointOpacity) => set({ pointOpacity }),
-      setColorMode: (colorMode) => set({ colorMode, showSplats: colorMode === 'splats' }),
+      setColorMode: (colorMode) => set({ colorMode, showSplats: isSplatColorMode(colorMode) }),
       setMinTrackLength: (minTrackLength) => set({ minTrackLength }),
       setMaxReprojectionError: (maxReprojectionError) => set({ maxReprojectionError }),
       setThinning: (thinning) => set({ thinning }),

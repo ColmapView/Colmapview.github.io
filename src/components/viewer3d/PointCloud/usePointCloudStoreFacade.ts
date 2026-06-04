@@ -15,7 +15,6 @@ import {
 } from '../../../store';
 import type { Reconstruction } from '../../../types/colmap';
 import type { WasmReconstructionWrapper } from '../../../wasm/reconstruction';
-import { useSplatLayerRuntimeStore } from './splatLayerRuntimeStore';
 
 interface PointCloudDataFacade {
   reconstruction: Reconstruction | null;
@@ -32,7 +31,6 @@ interface PointCloudDataFacade {
     floorColorMode: FloorPlaneState['floorColorMode'];
   };
   splatFile?: File;
-  readySplatFile: File | null;
   deletion: {
     pendingDeletions: DeletionState['pendingDeletions'];
   };
@@ -52,7 +50,6 @@ export function usePointCloudStoreFacade(): PointCloudStoreFacade {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
   const splatFile = useReconstructionStore((s) => s.loadedFiles?.splatFile);
-  const readySplatFile = useSplatLayerRuntimeStore((s) => s.readySplatFile);
   const points = usePointsNode();
   const selection = useSelectionNode();
   const pickingMode = usePointPickingStore((s) => s.pickingMode);
@@ -80,7 +77,6 @@ export function usePointCloudStoreFacade(): PointCloudStoreFacade {
         floorColorMode,
       },
       splatFile,
-      readySplatFile,
       deletion: {
         pendingDeletions,
       },

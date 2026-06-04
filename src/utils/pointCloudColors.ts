@@ -6,7 +6,7 @@
 import { BRIGHTNESS, COLORMAP } from '../theme';
 import { sRGBToLinear, jetColormap } from './colorUtils';
 import type { Point3D } from '../types/colmap';
-import type { ColorMode } from '../store/types';
+import { isSplatColorMode, type ColorMode } from '../store/types';
 import type { FloorColorMode } from '../store/stores/floorPlaneStore';
 
 /**
@@ -42,7 +42,7 @@ export interface MapColorContext {
  * Compute color for a point using WASM arrays.
  *
  * @param index - Point index in the WASM arrays
- * @param colorMode - The color mode to use (rgb, error, trackLength, splats)
+ * @param colorMode - The color mode to use (rgb, error, trackLength, splat modes)
  * @param context - Pre-computed context with normalization values
  * @returns RGB tuple [r, g, b] with values 0-1
  */
@@ -110,7 +110,7 @@ export function computeColorFromWasm(
  * Compute color for a point using Point3D object.
  *
  * @param point - The Point3D object
- * @param colorMode - The color mode to use (rgb, error, trackLength, splats)
+ * @param colorMode - The color mode to use (rgb, error, trackLength, splat modes)
  * @param context - Pre-computed context with normalization values
  * @returns RGB tuple [r, g, b] with values 0-1
  */
@@ -166,7 +166,7 @@ export function computeColorsForFastPath(
 ): Float32Array {
   const finalColors = new Float32Array(count * 3);
 
-  if (colorMode === 'rgb' || colorMode === 'splats') {
+  if (colorMode === 'rgb' || isSplatColorMode(colorMode)) {
     // Use WASM colors directly - already in normalized 0-1 format
     if (wasmColors) {
       // Convert from sRGB to linear for proper Three.js rendering

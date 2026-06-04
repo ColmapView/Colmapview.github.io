@@ -100,6 +100,14 @@ export function getNextPointColorMenuState({
     return { showPointCloud: true, colorMode: 'splats' };
   }
 
+  if (colorMode === 'splats') {
+    return { showPointCloud: true, colorMode: 'splatPoints' };
+  }
+
+  if (colorMode === 'splatPoints') {
+    return { showPointCloud: true, colorMode: 'splatRainbowPoints' };
+  }
+
   return { showPointCloud: false, colorMode };
 }
 

@@ -17,6 +17,9 @@ interface ImageGalleryDataFacade {
   matchesDisplayMode: UIState['matchesDisplayMode'];
   matchesColor: UIState['matchesColor'];
   touchMode: UIState['touchMode'];
+  autoHideButtons: UIState['autoHideElements']['buttons'];
+  isIdle: UIState['isIdle'];
+  showAutoHideEditor: UIState['showAutoHideEditor'];
   pendingDeletions: DeletionState['pendingDeletions'];
   selectedImageId: CameraState['selectedImageId'];
   currentViewState: CameraState['currentViewState'];
@@ -50,6 +53,9 @@ export function useImageGalleryStoreFacade(): ImageGalleryStoreFacade {
   const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
   const matchesColor = useUIStore((s) => s.matchesColor);
   const touchMode = useUIStore((s) => s.touchMode);
+  const autoHideButtons = useUIStore((s) => s.autoHideElements.buttons);
+  const isIdle = useUIStore((s) => s.isIdle);
+  const showAutoHideEditor = useUIStore((s) => s.showAutoHideEditor);
   const pendingDeletions = useDeletionStore((s) => s.pendingDeletions);
   const selectedImageId = useCameraStore((s) => s.selectedImageId);
   const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
@@ -69,6 +75,9 @@ export function useImageGalleryStoreFacade(): ImageGalleryStoreFacade {
       matchesDisplayMode,
       matchesColor,
       touchMode,
+      autoHideButtons,
+      isIdle,
+      showAutoHideEditor,
       pendingDeletions,
       selectedImageId,
       currentViewState,

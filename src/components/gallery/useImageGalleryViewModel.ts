@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useResetKeyedState } from '../../hooks/useResetKeyedState';
 import { prioritizeFrustumTexture } from '../../hooks/useFrustumTexture';
 import { COLUMNS } from '../../theme';
+import { shouldHideChromeWithButtons } from '../layout/autoHideChromePolicy';
 import { useImageGalleryStoreFacade } from './useImageGalleryStoreFacade';
 import { useImageGalleryThumbnailSettling } from './useImageGalleryThumbnailSettling';
 import { getImageGalleryRightClickAction } from './imageGalleryRightClickPolicy';
@@ -44,6 +45,9 @@ export function useImageGalleryViewModel() {
       matchesDisplayMode,
       matchesColor,
       touchMode,
+      autoHideButtons,
+      isIdle,
+      showAutoHideEditor,
       pendingDeletions,
       selectedImageId,
       currentViewState,
@@ -168,6 +172,12 @@ export function useImageGalleryViewModel() {
     setImageCacheVersion(v => v + 1);
   }, []);
 
+  const hideToolbar = shouldHideChromeWithButtons({
+    autoHideButtons,
+    isIdle,
+    showAutoHideEditor,
+  });
+
   return {
     cameraFilter,
     cameras,
@@ -191,6 +201,7 @@ export function useImageGalleryViewModel() {
     setSortDirection,
     setSortField,
     setViewMode,
+    hideToolbar,
     showMatches,
     sortDirection,
     sortField,

@@ -39,7 +39,7 @@ export const pointCloudSection = defineSection({
       enumValues: COLOR_MODES,
       default: 'rgb',
       persist: true,
-      description: 'rgb | error | trackLength | splats',
+      description: 'rgb | error | trackLength | splats | splatPoints | splatRainbowPoints',
     },
     {
       key: 'minTrackLength',

@@ -59,8 +59,16 @@ describe('global context menu action policy', () => {
       colorMode: 'splats',
     });
     expect(getNextPointColorMenuState({ showPointCloud: true, colorMode: 'splats' })).toEqual({
+      showPointCloud: true,
+      colorMode: 'splatPoints',
+    });
+    expect(getNextPointColorMenuState({ showPointCloud: true, colorMode: 'splatPoints' })).toEqual({
+      showPointCloud: true,
+      colorMode: 'splatRainbowPoints',
+    });
+    expect(getNextPointColorMenuState({ showPointCloud: true, colorMode: 'splatRainbowPoints' })).toEqual({
       showPointCloud: false,
-      colorMode: 'splats',
+      colorMode: 'splatRainbowPoints',
     });
   });
 

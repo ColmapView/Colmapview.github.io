@@ -14,7 +14,7 @@ describe('useSplatLayerStoreFacade', () => {
 
   it('exposes splat visibility and the resolved dataset PLY file', () => {
     const splatFile = buildFile('scene.ply', 'splat');
-    usePointCloudStore.setState({ showPointCloud: true, colorMode: 'splats' });
+    usePointCloudStore.setState({ showPointCloud: true, colorMode: 'splatPoints' });
     useReconstructionStore.setState({
       loadedFiles: buildLoadedFiles({ splatFile }),
     });

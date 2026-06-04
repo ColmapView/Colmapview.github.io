@@ -45,13 +45,15 @@ export default defineConfig({
     assetsDir: 'assets',
     sourcemap: false,
     target: 'esnext',
-    // Three.js is the expected baseline for this viewer; keep warnings for unexpected chunks above that budget.
-    chunkSizeWarningLimit: 1300,
+    // Spark's splat renderer is an optional lazy chunk of roughly 4.9 MB minified.
+    // Keep warnings for chunks that exceed that known feature bundle.
+    chunkSizeWarningLimit: 5000,
     rollupOptions: {
       output: {
         manualChunks: {
           'react-vendor': ['react', 'react-dom'],
           'three-vendor': ['three', '@react-three/fiber', '@react-three/drei'],
+          'spark-vendor': ['@sparkjsdev/spark'],
           'ui-vendor': ['react-resizable-panels', '@tanstack/react-virtual'],
         }
       }

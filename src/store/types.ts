@@ -3,8 +3,25 @@
 // ============================================================================
 
 // Point cloud visualization
-export const COLOR_MODES = ['rgb', 'error', 'trackLength', 'splats'] as const;
+export const COLOR_MODES = [
+  'rgb',
+  'error',
+  'trackLength',
+  'splats',
+  'splatPoints',
+  'splatRainbowPoints',
+] as const;
 export type ColorMode = (typeof COLOR_MODES)[number];
+
+export function isSplatColorMode(mode: ColorMode): boolean {
+  return mode === 'splats'
+    || mode === 'splatPoints'
+    || mode === 'splatRainbowPoints';
+}
+
+export function isSplatPointOverlayColorMode(mode: ColorMode): boolean {
+  return mode === 'splatPoints' || mode === 'splatRainbowPoints';
+}
 
 // Camera and navigation
 export const CAMERA_MODES = ['orbit', 'fly'] as const;

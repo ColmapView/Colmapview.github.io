@@ -67,6 +67,22 @@ describe('persistedStoreMigrations', () => {
         thinning: currentState.thinning,
       });
     });
+
+    it('restores splat point overlay modes as splat-visible point-cloud modes', () => {
+      const currentState = usePointCloudStore.getState();
+
+      const merged = mergePointCloudPersistedState(
+        {
+          colorMode: 'splatRainbowPoints',
+        },
+        currentState
+      );
+
+      expect(merged).toMatchObject({
+        showSplats: true,
+        colorMode: 'splatRainbowPoints',
+      });
+    });
   });
 
   describe('migrateCameraPersistedState', () => {

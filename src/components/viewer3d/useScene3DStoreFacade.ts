@@ -13,6 +13,7 @@ import type { WasmReconstructionWrapper } from '../../wasm/reconstruction';
 interface SceneContentDataFacade {
   reconstruction: Reconstruction | null;
   wasmReconstruction: WasmReconstructionWrapper | null;
+  splatFile?: File;
   isIdle: UIState['isIdle'];
   autoHideElements: UIState['autoHideElements'];
   showAutoHideEditor: UIState['showAutoHideEditor'];
@@ -45,6 +46,7 @@ export interface SceneContainerStoreFacade {
 export function useSceneContentStoreFacade(): SceneContentStoreFacade {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
+  const splatFile = useReconstructionStore((s) => s.loadedFiles?.splatFile);
   const isIdle = useUIStore((s) => s.isIdle);
   const autoHideElements = useUIStore((s) => s.autoHideElements);
   const showAutoHideEditor = useUIStore((s) => s.showAutoHideEditor);
@@ -57,6 +59,7 @@ export function useSceneContentStoreFacade(): SceneContentStoreFacade {
     data: {
       reconstruction,
       wasmReconstruction,
+      splatFile,
       isIdle,
       autoHideElements,
       showAutoHideEditor,

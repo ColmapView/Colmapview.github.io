@@ -3,6 +3,7 @@ import { HoverIcon } from '../../../icons';
 import { controlPanelStyles } from '../../../theme';
 import {
   ControlButton,
+  HueRow,
   MouseScrollIcon,
   SelectRow,
   SliderRow,
@@ -18,6 +19,8 @@ import {
   getMaxReprojectionErrorSliderValue,
   getPointCloudColorHint,
   getPointCloudMaxErrorLimit,
+  shouldShowSplatPointOverlayColorControl,
+  shouldShowSplatPointOverlaySpeedControl,
 } from './pointCloudPanelViewModel';
 
 const styles = controlPanelStyles;
@@ -40,6 +43,10 @@ export interface PointCloudPanelProps {
   maxReprojectionError: number | null;
   setMaxReprojectionError: (error: number | null) => void;
   reconstruction: Reconstruction | null;
+  selectionColor: string;
+  setSelectionColor: (color: string) => void;
+  selectionAnimationSpeed: number;
+  setSelectionAnimationSpeed: (speed: number) => void;
   onCycleColorMode: () => void;
 }
 
@@ -61,11 +68,17 @@ export function PointCloudPanel({
   maxReprojectionError,
   setMaxReprojectionError,
   reconstruction,
+  selectionColor,
+  setSelectionColor,
+  selectionAnimationSpeed,
+  setSelectionAnimationSpeed,
   onCycleColorMode,
 }: PointCloudPanelProps) {
   const buttonState = getPointCloudButtonState(showPointCloud, colorMode);
   const maxError = getPointCloudMaxErrorLimit(reconstruction?.globalStats.maxError);
   const colorHint = getPointCloudColorHint(colorMode);
+  const showSplatPointOverlayColorControl = shouldShowSplatPointOverlayColorControl(colorMode);
+  const showSplatPointOverlaySpeedControl = shouldShowSplatPointOverlaySpeedControl(colorMode);
 
   return (
     <ControlButton
@@ -108,6 +121,20 @@ export function PointCloudPanel({
           onChange={setPointOpacity}
           formatValue={(v) => `${Math.round(v * 100)}%`}
         />
+        {showSplatPointOverlayColorControl && (
+          <HueRow label="Point Color" value={selectionColor} onChange={setSelectionColor} />
+        )}
+        {showSplatPointOverlaySpeedControl && (
+          <SliderRow
+            label="Blink Speed"
+            value={selectionAnimationSpeed}
+            min={0.1}
+            max={5}
+            step={0.1}
+            onChange={setSelectionAnimationSpeed}
+            formatValue={(value) => value.toFixed(1)}
+          />
+        )}
         <SliderRow
           label="Min Track"
           value={minTrackLength}

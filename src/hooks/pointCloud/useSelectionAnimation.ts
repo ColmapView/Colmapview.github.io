@@ -10,6 +10,7 @@ import { RAINBOW } from '../../theme';
 import { rainbowColor } from '../../utils/colorUtils';
 
 export interface UseSelectionAnimationParams {
+  enabled?: boolean;
   selectedImageId: number | null;
   selectionColorMode: SelectionColorMode;
   selectionAnimationSpeed: number;
@@ -34,7 +35,12 @@ export interface UseSelectionAnimationResult {
 export function useSelectionAnimation(
   params: UseSelectionAnimationParams
 ): UseSelectionAnimationResult {
-  const { selectedImageId, selectionColorMode, selectionAnimationSpeed, selectionColor } = params;
+  const {
+    enabled = params.selectedImageId !== null,
+    selectionColorMode,
+    selectionAnimationSpeed,
+    selectionColor,
+  } = params;
 
   const selectedMaterialRef = useRef<THREE.PointsMaterial>(null);
   // Use ref instead of state to avoid re-renders on every frame
@@ -43,7 +49,7 @@ export function useSelectionAnimation(
 
   // Update selection color directly in useFrame without triggering re-renders
   useFrame((state, delta) => {
-    if (selectedImageId !== null && selectedMaterialRef.current) {
+    if (enabled && selectedMaterialRef.current) {
       if (selectionColorMode === 'rainbow') {
         rainbowHueRef.current =
           (rainbowHueRef.current + delta * selectionAnimationSpeed * RAINBOW.speedMultiplier) % 1;

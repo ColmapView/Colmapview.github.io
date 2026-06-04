@@ -3,7 +3,6 @@ import { useThree } from '@react-three/fiber';
 import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
 import { appLogger } from '../../../utils/logger';
 import { useSplatLayerStoreFacade } from './SplatLayerStoreFacade';
-import { useSplatLayerRuntimeStore } from './splatLayerRuntimeStore';
 
 interface LoadedSplatMesh {
   file: File;
@@ -56,13 +55,8 @@ export function SplatLayer(): JSX.Element | null {
     return () => {
       loadedSplatRef.current?.mesh.dispose();
       loadedSplatRef.current = null;
-      useSplatLayerRuntimeStore.getState().setReadySplatFile(null);
     };
   }, []);
-
-  useEffect(() => {
-    useSplatLayerRuntimeStore.getState().setReadySplatFile(loadedSplat?.file ?? null);
-  }, [loadedSplat]);
 
   useEffect(() => {
     if (!splatFile) {

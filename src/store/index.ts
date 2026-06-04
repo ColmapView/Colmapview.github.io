@@ -46,6 +46,8 @@ export type {
 
 export {
   COLOR_MODES,
+  isSplatColorMode,
+  isSplatPointOverlayColorMode,
   CAMERA_MODES,
   CAMERA_PROJECTIONS,
   AUTO_ROTATE_MODES,

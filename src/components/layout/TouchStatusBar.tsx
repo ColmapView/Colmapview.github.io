@@ -3,6 +3,7 @@ import {
   getTouchEmptyStatusText,
   shouldShowTouchStatusBar,
 } from './statusBarViewModel';
+import { shouldHideChromeWithButtons } from './autoHideChromePolicy';
 import { useTouchStatusBarStoreFacade } from './useTouchStatusBarStoreFacade';
 
 /**
@@ -15,6 +16,9 @@ export function TouchStatusBar() {
   const {
     fps,
     touchUI,
+    autoHideButtons,
+    isIdle,
+    showAutoHideEditor,
     urlLoading,
     reconstruction,
   } = useTouchStatusBarStoreFacade();
@@ -25,6 +29,7 @@ export function TouchStatusBar() {
 
   // Hide status bar if touchUI.statusBar is false
   if (!shouldShowTouchStatusBar(touchUI.statusBar)) return null;
+  if (shouldHideChromeWithButtons({ autoHideButtons, isIdle, showAutoHideEditor })) return null;
 
   return (
     <footer className="h-6 border-t border-ds bg-ds-tertiary text-ds-secondary text-xs px-3 flex items-center justify-between">

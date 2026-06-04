@@ -1,4 +1,5 @@
 import type { PointCloudState } from './stores/pointCloudStore';
+import { isSplatColorMode } from './types';
 import type {
   AxesCoordinateSystem,
   AxisLabelMode,
@@ -43,6 +44,8 @@ function getColorMode(value: unknown): ColorMode | undefined {
     case 'error':
     case 'trackLength':
     case 'splats':
+    case 'splatPoints':
+    case 'splatRainbowPoints':
       return value;
     default:
       return undefined;
@@ -227,7 +230,7 @@ export function mergePointCloudPersistedState(
   return {
     ...currentState,
     showPointCloud,
-    showSplats: colorMode === 'splats',
+    showSplats: isSplatColorMode(colorMode),
     pointSize: getNumber(state.pointSize) ?? currentState.pointSize,
     pointOpacity: getNumber(state.pointOpacity) ?? currentState.pointOpacity,
     colorMode,

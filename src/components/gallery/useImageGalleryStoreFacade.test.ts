@@ -53,6 +53,8 @@ describe('useImageGalleryStoreFacade', () => {
       matchesDisplayMode: 'blink',
       matchesColor: '#123456',
       touchMode: true,
+      isIdle: true,
+      showAutoHideEditor: true,
     });
     useCameraStore.setState({
       selectedImageId: 2,
@@ -68,6 +70,9 @@ describe('useImageGalleryStoreFacade', () => {
       matchesDisplayMode: 'blink',
       matchesColor: '#123456',
       touchMode: true,
+      autoHideButtons: true,
+      isIdle: true,
+      showAutoHideEditor: true,
       pendingDeletions,
       selectedImageId: 2,
       currentViewState: viewState,

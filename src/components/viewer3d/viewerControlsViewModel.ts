@@ -47,7 +47,9 @@ export type PointCloudButtonIcon =
   | 'pointsRgb'
   | 'pointsError'
   | 'pointsTrack'
-  | 'pointsSplats';
+  | 'pointsSplats'
+  | 'pointsSplatPoints'
+  | 'pointsSplatRainbow';
 export type CameraDisplayButtonIcon = 'cameraOff' | 'frustum' | 'arrow' | 'imageplane';
 export type MatchesButtonIcon = 'matchesOff' | 'matchesStatic' | 'matchesBlink';
 export type SelectionButtonIcon = 'selectionOff' | 'selectionStatic' | 'selectionBlink' | 'selectionRainbow';
@@ -102,6 +104,8 @@ export const POINT_CLOUD_MODE_CONTROL = {
     { mode: 'error', icon: 'pointsError', label: 'ERR', tooltip: 'Point Cloud: Error (P)' },
     { mode: 'trackLength', icon: 'pointsTrack', label: 'TRK', tooltip: 'Point Cloud: Track (P)' },
     { mode: 'splats', icon: 'pointsSplats', label: 'SPL', tooltip: 'Point Cloud: Splats (P)' },
+    { mode: 'splatPoints', icon: 'pointsSplatPoints', label: 'S+P', tooltip: 'Point Cloud: Splats + Blinking Points (P)' },
+    { mode: 'splatRainbowPoints', icon: 'pointsSplatRainbow', label: 'RNB', tooltip: 'Point Cloud: Splats + Rainbow Points (P)' },
   ],
 } satisfies VisibleModeControlConfig<ColorMode, PointCloudButtonIcon>;
 

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { usePointCloudStore } from '../../store';
+import { isSplatColorMode, usePointCloudStore } from '../../store';
 import type { PointsNode } from '../types';
 
 export function usePointsNode(): PointsNode {
@@ -16,7 +16,7 @@ export function usePointsNode(): PointsNode {
     () => ({
       nodeType: 'points',
       visible: showPointCloud,
-      splatsVisible: showPointCloud && colorMode === 'splats',
+      splatsVisible: showPointCloud && isSplatColorMode(colorMode),
       opacity: pointOpacity,
       size: pointSize,
       colorMode,

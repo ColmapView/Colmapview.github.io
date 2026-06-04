@@ -14,6 +14,7 @@ import {
   shouldShowStatusHistograms,
   type StatusBarLink,
 } from './statusBarViewModel';
+import { shouldHideChromeWithButtons } from './autoHideChromePolicy';
 import { useStatusBarStoreFacade } from './useStatusBarStoreFacade';
 
 function StatusBarLinkAnchor({ link }: { link: StatusBarLink }) {
@@ -39,7 +40,15 @@ export function StatusBar() {
     reconstruction,
     wasmReconstruction,
     fps,
+    autoHideButtons,
+    isIdle,
+    showAutoHideEditor,
   } = useStatusBarStoreFacade();
+  const hideWithButtons = shouldHideChromeWithButtons({
+    autoHideButtons,
+    isIdle,
+    showAutoHideEditor,
+  });
 
   // Use pre-computed global stats instead of computing on every render
   const globalStats = reconstruction?.globalStats;
@@ -51,6 +60,8 @@ export function StatusBar() {
     hasReconstruction: Boolean(reconstruction),
     hasGlobalStats: Boolean(globalStats),
   });
+
+  if (hideWithButtons) return null;
 
   return (
     <footer className={statusBarStyles.container}>

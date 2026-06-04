@@ -7,9 +7,14 @@ import React, { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { usePointCloudData } from '../../../hooks/pointCloud/usePointCloudData';
 import { usePointPicking } from '../../../hooks/pointCloud/usePointPicking';
+import { useSelectionAnimation } from '../../../hooks/pointCloud/useSelectionAnimation';
 import { SelectionOverlay } from './SelectionOverlay';
 import { usePointCloudStoreFacade } from './usePointCloudStoreFacade';
-import { shouldRenderPointGeometry } from './pointCloudRenderPolicy';
+import {
+  getPointGeometryDataColorMode,
+  getSplatPointOverlayAnimationMode,
+  shouldRenderPointGeometry,
+} from './pointCloudRenderPolicy';
 
 /**
  * Main point cloud component.
@@ -31,7 +36,6 @@ export function PointCloud(): React.JSX.Element | null {
       floor,
       deletion,
       splatFile,
-      readySplatFile,
     },
     actions: {
       addSelectedPoint,
@@ -56,9 +60,9 @@ export function PointCloud(): React.JSX.Element | null {
     showPointCloud,
     colorMode,
     splatFile,
-    readySplatFile,
   });
-  const pointColorMode = colorMode === 'splats' ? 'rgb' : colorMode;
+  const pointColorMode = getPointGeometryDataColorMode(colorMode);
+  const splatPointOverlayAnimationMode = getSplatPointOverlayAnimationMode(colorMode);
 
   // Extract selection state
   const {
@@ -68,6 +72,14 @@ export function PointCloud(): React.JSX.Element | null {
     animationSpeed: selectionAnimationSpeed,
     color: selectionColor,
   } = selection;
+  const showSplatPointOverlay = showPointGeometry && splatPointOverlayAnimationMode !== null;
+  const { selectedMaterialRef: splatPointMaterialRef } = useSelectionAnimation({
+    enabled: showSplatPointOverlay,
+    selectedImageId: null,
+    selectionColorMode: splatPointOverlayAnimationMode ?? 'static',
+    selectionAnimationSpeed,
+    selectionColor,
+  });
 
   // Point picking state
   const effectiveSelectedImageId = selectedImageId !== null && deletion.pendingDeletions.has(selectedImageId)
@@ -127,21 +139,25 @@ export function PointCloud(): React.JSX.Element | null {
 
   return (
     <>
-      {/* Main point cloud - hidden when splat rendering is selected */}
+      {/* Main point cloud - hidden for splat-only rendering, overlaid for splat point modes. */}
       {showPointGeometry && geometry && (
         <points
           ref={pointsRef}
           matrixAutoUpdate={false}
           geometry={geometry}
-          renderOrder={1}
+          renderOrder={showSplatPointOverlay ? 3 : 1}
           onClick={needsMorePoints ? handlePointClick : undefined}
         >
           <pointsMaterial
+            ref={showSplatPointOverlay ? splatPointMaterialRef : undefined}
             size={pointSize}
-            vertexColors
+            vertexColors={!showSplatPointOverlay}
+            color={showSplatPointOverlay ? selectionColor : '#ffffff'}
             sizeAttenuation={false}
             transparent
             opacity={pointOpacity}
+            depthTest={!showSplatPointOverlay}
+            depthWrite={!showSplatPointOverlay}
           />
         </points>
       )}

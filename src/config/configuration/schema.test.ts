@@ -8,6 +8,7 @@ describe('configuration schema validation', () => {
       version: 1,
       pointCloud: {
         pointSize: 5,
+        colorMode: 'splatPoints',
         maxReprojectionError: null,
       },
       camera: {
@@ -22,6 +23,7 @@ describe('configuration schema validation', () => {
         version: 1,
         pointCloud: {
           pointSize: 5,
+          colorMode: 'splatPoints',
           maxReprojectionError: null,
         },
         camera: {

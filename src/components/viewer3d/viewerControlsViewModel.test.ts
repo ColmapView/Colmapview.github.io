@@ -135,7 +135,14 @@ describe('viewer controls view-model helpers', () => {
   });
 
   it('cycles point, camera, matches, selection, rig, axes, and grid states', () => {
-    expect(POINT_CLOUD_MODE_CONTROL.activeButtons.map((button) => button.mode)).toEqual(['rgb', 'error', 'trackLength', 'splats']);
+    expect(POINT_CLOUD_MODE_CONTROL.activeButtons.map((button) => button.mode)).toEqual([
+      'rgb',
+      'error',
+      'trackLength',
+      'splats',
+      'splatPoints',
+      'splatRainbowPoints',
+    ]);
     expect(CAMERA_DISPLAY_MODE_CONTROL.activeButtons.map((button) => button.mode)).toEqual(['frustum', 'arrow', 'imageplane']);
     expect(MATCHES_DISPLAY_MODE_CONTROL.activeButtons.map((button) => button.mode)).toEqual(['static', 'blink']);
     expect(SELECTION_COLOR_MODE_CONTROL.activeButtons.map((button) => button.mode)).toEqual(['static', 'blink', 'rainbow']);
@@ -145,7 +152,9 @@ describe('viewer controls view-model helpers', () => {
     expect(getNextPointColorState(true, 'rgb')).toEqual({ visible: true, mode: 'error' });
     expect(getNextPointColorState(true, 'error')).toEqual({ visible: true, mode: 'trackLength' });
     expect(getNextPointColorState(true, 'trackLength')).toEqual({ visible: true, mode: 'splats' });
-    expect(getNextPointColorState(true, 'splats')).toEqual({ visible: false, mode: 'splats' });
+    expect(getNextPointColorState(true, 'splats')).toEqual({ visible: true, mode: 'splatPoints' });
+    expect(getNextPointColorState(true, 'splatPoints')).toEqual({ visible: true, mode: 'splatRainbowPoints' });
+    expect(getNextPointColorState(true, 'splatRainbowPoints')).toEqual({ visible: false, mode: 'splatRainbowPoints' });
 
     expect(getNextCameraDisplayState(false, 'imageplane')).toEqual({ visible: true, mode: 'frustum' });
     expect(getNextCameraDisplayState(true, 'frustum')).toEqual({ visible: true, mode: 'arrow' });
@@ -221,6 +230,16 @@ describe('viewer controls view-model helpers', () => {
       icon: 'pointsSplats',
       label: 'SPL',
       tooltip: 'Point Cloud: Splats (P)',
+    });
+    expect(getPointCloudButtonState(true, 'splatPoints')).toMatchObject({
+      icon: 'pointsSplatPoints',
+      label: 'S+P',
+      tooltip: 'Point Cloud: Splats + Blinking Points (P)',
+    });
+    expect(getPointCloudButtonState(true, 'splatRainbowPoints')).toMatchObject({
+      icon: 'pointsSplatRainbow',
+      label: 'RNB',
+      tooltip: 'Point Cloud: Splats + Rainbow Points (P)',
     });
 
     expect(getCameraDisplayButtonState(false, 'imageplane')).toMatchObject({
