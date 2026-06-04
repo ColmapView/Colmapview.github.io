@@ -6,7 +6,11 @@ import {
 } from './urlLoaderPolicy';
 import { fetchManifestColmapFiles } from './urlLoaderManifestFetch';
 
-type ProcessFiles = (files: Map<string, File>, progressRange?: { start: number; end: number }) => Promise<void>;
+type ProcessFiles = (
+  files: Map<string, File>,
+  progressRange?: { start: number; end: number },
+  options?: { throwOnError?: boolean }
+) => Promise<void>;
 type FetchColmapFiles = (manifest: ColmapManifest) => Promise<Map<string, File>>;
 type SetSourceInfo = (
   type: ManifestLoadSource['type'],
@@ -57,7 +61,7 @@ export async function loadManifestSource(
   log(`[URL Loader] Mask URL base for lazy loading: ${sourceInfo.maskUrlBase}`);
 
   log('[URL Loader] Calling processFiles...');
-  await deps.processFiles(files, { start: 80, end: 100 });
+  await deps.processFiles(files, { start: 80, end: 100 }, { throwOnError: true });
 
   deps.setUrlProgress({ percent: 100, message: 'Complete' });
   log(`[URL Loader] Successfully loaded ${files.size} files from ${sourceInfo.successLabel}`);

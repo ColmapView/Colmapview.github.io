@@ -14,6 +14,13 @@ import {
 let deflateSync: ((data: Uint8Array, opts?: DeflateOptions) => Uint8Array) | null = null;
 let inflateSync: ((data: Uint8Array) => Uint8Array) | null = null;
 let fflateLoaded = false;
+const SHARE_DATA_FLAG_CAMERA = 1;
+const SHARE_DATA_FLAG_CONFIG = 2;
+const SHARE_DATA_FLAG_INLINE_MANIFEST = 4;
+const SHARE_DATA_FLAG_COMPRESSED = 8;
+const SHARE_DATA_FLAG_WIDE_LENGTHS = 16;
+const UINT16_MAX = 0xffff;
+type ShareDataLengthBytes = 2 | 4;
 
 export async function loadShareDataCompression(): Promise<void> {
   if (fflateLoaded) return;
@@ -80,13 +87,42 @@ function isShareConfig(value: unknown): value is ShareConfig {
   );
 }
 
+function getLengthFieldBytes(usesWideLengths: boolean): ShareDataLengthBytes {
+  return usesWideLengths ? 4 : 2;
+}
+
+function writeShareDataLength(
+  view: DataView,
+  offset: number,
+  value: number,
+  lengthFieldBytes: ShareDataLengthBytes
+): number {
+  if (lengthFieldBytes === 4) {
+    view.setUint32(offset, value, true);
+  } else {
+    view.setUint16(offset, value, true);
+  }
+  return offset + lengthFieldBytes;
+}
+
+function readShareDataLength(
+  view: DataView,
+  offset: number,
+  lengthFieldBytes: ShareDataLengthBytes
+): number {
+  return lengthFieldBytes === 4
+    ? view.getUint32(offset, true)
+    : view.getUint16(offset, true);
+}
+
 /**
  * Encode combined share data into one hash parameter.
  *
  * Format:
- * d=<Base64URL([flags:1][url_or_manifest_length:2][url_or_manifest_bytes][camera:72 if bit0][config_length:2 + config_json if bit1])>
+ * d=<Base64URL([flags:1][url_or_manifest_length][url_or_manifest_bytes][camera:72 if bit0][config_length + config_json if bit1])>
  *
- * Flags: bit 0 = has camera, bit 1 = has config, bit 2 = inline manifest, bit 3 = compressed.
+ * Flags: bit 0 = has camera, bit 1 = has config, bit 2 = inline manifest, bit 3 = compressed,
+ * bit 4 = 32-bit little-endian length fields instead of legacy 16-bit lengths.
  */
 export function encodeShareData(
   manifestUrlOrManifest: string | ColmapManifest,
@@ -104,15 +140,16 @@ export function encodeShareData(
   const hasConfig = config !== null && config !== undefined;
   const configBytes = hasConfig ? new TextEncoder().encode(JSON.stringify(config)) : null;
   const configLength = configBytes?.length ?? 0;
+  const usesWideLengths = dataLength > UINT16_MAX || configLength > UINT16_MAX;
+  const lengthFieldBytes = getLengthFieldBytes(usesWideLengths);
 
-  const payloadLength = 2 + dataLength + (hasCamera ? 72 : 0) + (hasConfig ? 2 + configLength : 0);
+  const payloadLength = lengthFieldBytes + dataLength + (hasCamera ? 72 : 0) + (hasConfig ? lengthFieldBytes + configLength : 0);
   const payloadBuffer = new ArrayBuffer(payloadLength);
   const payloadView = new DataView(payloadBuffer);
   const payloadBytes = new Uint8Array(payloadBuffer);
 
   let offset = 0;
-  payloadView.setUint16(offset, dataLength, true);
-  offset += 2;
+  offset = writeShareDataLength(payloadView, offset, dataLength, lengthFieldBytes);
 
   payloadBytes.set(dataBytes, offset);
   offset += dataLength;
@@ -123,8 +160,7 @@ export function encodeShareData(
   }
 
   if (hasConfig && configBytes) {
-    payloadView.setUint16(offset, configLength, true);
-    offset += 2;
+    offset = writeShareDataLength(payloadView, offset, configLength, lengthFieldBytes);
     payloadBytes.set(configBytes, offset);
   }
 
@@ -143,7 +179,12 @@ export function encodeShareData(
     }
   }
 
-  const flags = (hasCamera ? 1 : 0) | (hasConfig ? 2 : 0) | (isInlineManifest ? 4 : 0) | (isCompressed ? 8 : 0);
+  const flags =
+    (hasCamera ? SHARE_DATA_FLAG_CAMERA : 0) |
+    (hasConfig ? SHARE_DATA_FLAG_CONFIG : 0) |
+    (isInlineManifest ? SHARE_DATA_FLAG_INLINE_MANIFEST : 0) |
+    (isCompressed ? SHARE_DATA_FLAG_COMPRESSED : 0) |
+    (usesWideLengths ? SHARE_DATA_FLAG_WIDE_LENGTHS : 0);
   const result = new Uint8Array(1 + finalPayload.length);
   result[0] = flags;
   result.set(finalPayload, 1);
@@ -166,10 +207,12 @@ export async function decodeShareData(hash: string): Promise<DecodedShareData | 
   if (!bytes || bytes.length < 3) return null;
 
   const flags = bytes[0];
-  const hasCamera = (flags & 1) !== 0;
-  const hasConfig = (flags & 2) !== 0;
-  const isInlineManifest = (flags & 4) !== 0;
-  const isCompressed = (flags & 8) !== 0;
+  const hasCamera = (flags & SHARE_DATA_FLAG_CAMERA) !== 0;
+  const hasConfig = (flags & SHARE_DATA_FLAG_CONFIG) !== 0;
+  const isInlineManifest = (flags & SHARE_DATA_FLAG_INLINE_MANIFEST) !== 0;
+  const isCompressed = (flags & SHARE_DATA_FLAG_COMPRESSED) !== 0;
+  const usesWideLengths = (flags & SHARE_DATA_FLAG_WIDE_LENGTHS) !== 0;
+  const lengthFieldBytes = getLengthFieldBytes(usesWideLengths);
 
   let payload: Uint8Array = bytes.slice(1);
 
@@ -187,13 +230,13 @@ export async function decodeShareData(hash: string): Promise<DecodedShareData | 
     }
   }
 
-  if (payload.length < 2) return null;
+  if (payload.length < lengthFieldBytes) return null;
 
   const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
   let offset = 0;
 
-  const dataLength = view.getUint16(offset, true);
-  offset += 2;
+  const dataLength = readShareDataLength(view, offset, lengthFieldBytes);
+  offset += lengthFieldBytes;
 
   if (payload.length < offset + dataLength) return null;
 
@@ -226,9 +269,9 @@ export async function decodeShareData(hash: string): Promise<DecodedShareData | 
 
   let config: ShareConfig | null = null;
   if (hasConfig) {
-    if (payload.length < offset + 2) return null;
-    const configLength = view.getUint16(offset, true);
-    offset += 2;
+    if (payload.length < offset + lengthFieldBytes) return null;
+    const configLength = readShareDataLength(view, offset, lengthFieldBytes);
+    offset += lengthFieldBytes;
 
     if (payload.length < offset + configLength) return null;
     const configBytes = payload.slice(offset, offset + configLength);

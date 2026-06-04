@@ -9,7 +9,11 @@ import {
   type ZipProgress,
 } from '../utils/zipLoader';
 
-type ProcessFiles = (files: Map<string, File>, progressRange?: { start: number; end: number }) => Promise<void>;
+type ProcessFiles = (
+  files: Map<string, File>,
+  progressRange?: { start: number; end: number },
+  options?: { throwOnError?: boolean }
+) => Promise<void>;
 type SetSourceInfo = (type: ReconstructionSourceType, url?: string | null) => void;
 type SetUrlProgress = (progress: UrlLoadProgress | null) => void;
 type LoadZipFromUrl = (
@@ -66,7 +70,7 @@ export async function loadZipUrlSource(
   log(`[URL Loader] ZIP contains ${colmapFiles.size} COLMAP files, ${imageCount} indexed images`);
   log('[URL Loader] Calling processFiles...');
 
-  await deps.processFiles(colmapFiles, { start: 80, end: 100 });
+  await deps.processFiles(colmapFiles, { start: 80, end: 100 }, { throwOnError: true });
 
   deps.setUrlProgress({ percent: 100, message: 'Complete' });
   log('[URL Loader] Successfully loaded reconstruction from ZIP');

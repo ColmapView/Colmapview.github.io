@@ -66,4 +66,13 @@ describe('URL camera state codec', () => {
     expect(encoded).toBe('-___');
     expect(fromBase64Url(encoded)).toEqual(bytes);
   });
+
+  it('encodes large byte arrays without overflowing the call stack', () => {
+    const bytes = new Uint8Array(100_000);
+    bytes.fill(65);
+
+    const decoded = fromBase64Url(toBase64Url(bytes));
+
+    expect(decoded).toEqual(bytes);
+  });
 });

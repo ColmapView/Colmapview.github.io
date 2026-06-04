@@ -59,6 +59,11 @@ export interface FileDropzoneWorkflowDeps {
   setWasmReconstruction: (wasm: WasmReconstructionWrapper | null) => void;
 }
 
+export interface FileDropzoneWorkflowOptions {
+  progressRange?: { start: number; end: number };
+  throwOnError?: boolean;
+}
+
 function updateLoadedSplatFile(
   splatFile: File,
   deps: Pick<FileDropzoneWorkflowDeps, 'addNotification' | 'getLoadedFiles' | 'setLoadedFiles' | 'setUrlProgress'>,
@@ -84,11 +89,29 @@ function updateLoadedSplatFile(
   return true;
 }
 
+function normalizeWorkflowOptions(
+  options?: { start: number; end: number } | FileDropzoneWorkflowOptions
+): FileDropzoneWorkflowOptions {
+  if (!options) {
+    return {};
+  }
+
+  if ('start' in options && 'end' in options) {
+    return { progressRange: options };
+  }
+
+  return options;
+}
+
+function getProcessingErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Unknown error';
+}
+
 export async function processFileDropzoneFiles(
   files: Map<string, File>,
   deps: FileDropzoneWorkflowDeps,
-  progressRange?: { start: number; end: number }
-): Promise<void> {
+  options?: { start: number; end: number } | FileDropzoneWorkflowOptions
+): Promise<boolean> {
   const logger = deps.logger ?? appLogger;
   const clearCaches = deps.clearCaches ?? clearAllCaches;
   const importConfig = deps.importConfig ?? importConfigFile;
@@ -96,6 +119,7 @@ export async function processFileDropzoneFiles(
   const buildReconstruction = deps.buildReconstruction ?? buildColmapReconstruction;
   const getDecodeFailureCount = deps.getFailedImageCount ?? getFailedImageCount;
   const delay = deps.delay ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)));
+  const { progressRange, throwOnError = false } = normalizeWorkflowOptions(options);
 
   const pStart = progressRange?.start ?? 0;
   const pEnd = progressRange?.end ?? 100;
@@ -107,25 +131,27 @@ export async function processFileDropzoneFiles(
     deps.setUrlProgress({ percent: mapProgress(0), message: 'Starting...' });
   }
 
-  const configFile = findConfigFile(files);
-  if (configFile) {
-    const result = await importConfig(configFile, { logErrors: true });
-    if (!result.applied && result.errorMessage) {
-      deps.setError(result.errorMessage);
-    }
-
-    if (!hasColmapFiles(files) && !hasImageFiles(files)) {
-      if (splatFile && updateLoadedSplatFile(splatFile, deps, mapProgress, logger.info)) {
-        deps.setUrlLoading(false);
-        return;
+  try {
+    const configFile = findConfigFile(files);
+    let configErrorMessage: string | null = null;
+    if (configFile) {
+      const result = await importConfig(configFile, { logErrors: true });
+      if (!result.applied && result.errorMessage) {
+        deps.setError(result.errorMessage);
+        configErrorMessage = result.errorMessage;
       }
 
-      deps.setUrlLoading(false);
-      return;
+      if (!hasColmapFiles(files) && !hasImageFiles(files)) {
+        if (splatFile) {
+          updateLoadedSplatFile(splatFile, deps, mapProgress, logger.info);
+        }
+        if (configErrorMessage && throwOnError) {
+          throw new Error(configErrorMessage);
+        }
+        return configErrorMessage === null;
+      }
     }
-  }
 
-  try {
     const { camerasFile, imagesFile, points3DFile, databaseFile, rigsFile, framesFile } = findColmapFiles(files);
 
     deps.setUrlProgress({ percent: mapProgress(5), message: 'Scanning image files...' });
@@ -134,7 +160,7 @@ export async function processFileDropzoneFiles(
 
     if (!camerasFile || !imagesFile || !points3DFile) {
       if (splatFile && updateLoadedSplatFile(splatFile, deps, mapProgress, logger.info)) {
-        return;
+        return true;
       }
 
       if (hasImageFiles(files)) {
@@ -152,7 +178,7 @@ export async function processFileDropzoneFiles(
           addNotification: deps.addNotification,
           log: logger.info,
         });
-        return;
+        return true;
       }
 
       throw new Error(
@@ -232,9 +258,15 @@ export async function processFileDropzoneFiles(
       logger.warn,
       { skipMissingImageDiagnostic: shouldSkipMissingImageDiagnosticForSource({ sourceType, imageUrlBase }) }
     );
+    return true;
   } catch (err) {
     logger.error('Error processing files:', err);
-    deps.setError(err instanceof Error ? err.message : 'Unknown error');
+    const errorMessage = getProcessingErrorMessage(err);
+    deps.setError(errorMessage);
+    if (throwOnError) {
+      throw err instanceof Error ? err : new Error(errorMessage);
+    }
+    return false;
   } finally {
     deps.setUrlLoading(false);
   }

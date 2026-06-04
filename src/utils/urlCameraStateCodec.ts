@@ -5,7 +5,12 @@ import { parseFiniteNumberString } from './numberParsing';
  * Convert Uint8Array to Base64URL string (URL-safe, no padding).
  */
 export function toBase64Url(bytes: Uint8Array): string {
-  const base64 = btoa(String.fromCharCode(...bytes));
+  const chunkSize = 0x8000;
+  const chunks: string[] = [];
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + chunkSize)));
+  }
+  const base64 = btoa(chunks.join(''));
   return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 

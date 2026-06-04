@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-06-04
+
+### Fixed
+
+- Propagate parse failures from URL and ZIP loaders so failed imports no longer report success.
+- Support large inline share manifests without 16-bit length overflows or Base64 stack overflows.
+- Clear pending touch long-press timers when scene controls unmount or touch mode is disabled.
+
 ## [0.7.0] - 2026-06-03
 
 ### Added

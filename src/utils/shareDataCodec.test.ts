@@ -128,6 +128,22 @@ describe('share data codec', () => {
     expect(decoded?.viewState?.distance).toBe(5);
   });
 
+  it('round-trips inline manifests that require wide length fields', async () => {
+    const largeManifest: ColmapManifest = {
+      ...manifest,
+      name: 'large-manifest',
+      images: Array.from({ length: 4500 }, (_, index) => `images/camera-${index.toString().padStart(5, '0')}.jpg`),
+    };
+    const encoded = encodeShareData(largeManifest, viewState, null);
+    const encodedBytes = fromBase64Url(new URLSearchParams(encoded).get('d')!);
+
+    expect(encodedBytes?.[0] && encodedBytes[0] & 16).toBe(16);
+
+    const decoded = await decodeShareData(`#${encoded}`);
+    expect(decoded?.manifest).toEqual(largeManifest);
+    expect(decoded?.viewState?.distance).toBe(5);
+  });
+
   it('rejects malformed or truncated payloads', async () => {
     const invalidInlineJson = new Uint8Array([4, 1, 0, '{'.charCodeAt(0)]);
 

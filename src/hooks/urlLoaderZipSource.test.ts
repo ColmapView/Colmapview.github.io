@@ -61,7 +61,7 @@ describe('URL loader ZIP source helpers', () => {
       message: 'Parsing reconstruction...',
     });
     expect(deps.setSourceInfo).toHaveBeenCalledWith('zip', 'https://example.com/scene.zip');
-    expect(deps.processFiles).toHaveBeenCalledWith(colmapFiles, { start: 80, end: 100 });
+    expect(deps.processFiles).toHaveBeenCalledWith(colmapFiles, { start: 80, end: 100 }, { throwOnError: true });
     expect(deps.setUrlProgress).toHaveBeenLastCalledWith({ percent: 100, message: 'Complete' });
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] ZIP contains 3 COLMAP files, 1 indexed images');
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Calling processFiles...');

@@ -27,7 +27,11 @@ export function useFileDropzone() {
    * @param progressRange Optional range for progress reporting. Default is 0-100.
    *                      When called from URL loader (files already downloaded), use { start: 80, end: 100 }
    */
-  const processFiles = useCallback(async (files: Map<string, File>, progressRange?: { start: number; end: number }) => {
+  const processFiles = useCallback(async (
+    files: Map<string, File>,
+    progressRange?: { start: number; end: number },
+    options: { throwOnError?: boolean } = {}
+  ) => {
     await processFileDropzoneFiles(files, {
       addNotification: useNotificationStore.getState().addNotification,
       getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
@@ -46,7 +50,10 @@ export function useFileDropzone() {
       setUrlLoading,
       setUrlProgress,
       setWasmReconstruction,
-    }, progressRange);
+    }, {
+      progressRange,
+      throwOnError: options.throwOnError ?? false,
+    });
   }, [
     setReconstruction,
     setWasmReconstruction,

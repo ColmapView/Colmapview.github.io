@@ -90,8 +90,9 @@ describe('file dropzone workflow', () => {
     const parseFiles = vi.fn();
     const deps = createDeps({ importConfig, parseFiles });
 
-    await processFileDropzoneFiles(new Map([['viewer.yaml', file('viewer.yaml')]]), deps);
+    const result = await processFileDropzoneFiles(new Map([['viewer.yaml', file('viewer.yaml')]]), deps);
 
+    expect(result).toBe(false);
     expect(importConfig).toHaveBeenCalledWith(expect.any(File), { logErrors: true });
     expect(deps.setError).toHaveBeenCalledWith('Config error: invalid');
     expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
@@ -129,8 +130,9 @@ describe('file dropzone workflow', () => {
       ['images/image.jpg', file('image.jpg')],
     ]);
 
-    await processFileDropzoneFiles(files, deps, { start: 80, end: 100 });
+    const result = await processFileDropzoneFiles(files, deps, { start: 80, end: 100 });
 
+    expect(result).toBe(true);
     expect(parseFiles).toHaveBeenCalledWith(expect.objectContaining({
       camerasFile: expect.any(File),
       imagesFile: expect.any(File),
@@ -168,8 +170,9 @@ describe('file dropzone workflow', () => {
       ['folder/folder/folder/replacement.ply', largestSplat],
     ]);
 
-    await processFileDropzoneFiles(files, deps);
+    const result = await processFileDropzoneFiles(files, deps);
 
+    expect(result).toBe(true);
     expect(deps.setLoadedFiles).toHaveBeenCalledWith({
       ...currentLoadedFiles,
       splatFile: largestSplat,
@@ -202,16 +205,51 @@ describe('file dropzone workflow', () => {
       parseFiles,
     });
 
-    await processFileDropzoneFiles(new Map([
+    const result = await processFileDropzoneFiles(new Map([
       ['model.ply', new File(['xxxx'], 'model.ply')],
     ]), deps);
 
+    expect(result).toBe(false);
     expect(deps.setLoadedFiles).not.toHaveBeenCalled();
     expect(deps.setDroppedFiles).not.toHaveBeenCalled();
     expect(parseFiles).not.toHaveBeenCalled();
     expect(deps.setError).toHaveBeenCalledWith(
       'Missing required COLMAP files. Expected cameras.bin/txt, images.bin/txt, and points3D.bin/txt'
     );
+    expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
+  });
+
+  it('throws processing errors for URL-loader style calls that request propagation', async () => {
+    const error = new Error('parse failed');
+    const deps = createDeps({
+      parseFiles: vi.fn(async () => {
+        throw error;
+      }),
+    });
+    const files = new Map([
+      ['sparse/0/cameras.bin', file('cameras.bin')],
+      ['sparse/0/images.bin', file('images.bin')],
+      ['sparse/0/points3D.bin', file('points3D.bin')],
+    ]);
+
+    await expect(processFileDropzoneFiles(files, deps, {
+      progressRange: { start: 80, end: 100 },
+      throwOnError: true,
+    })).rejects.toBe(error);
+
+    expect(deps.setError).toHaveBeenCalledWith('parse failed');
+    expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
+  });
+
+  it('throws config-only failures when propagation is requested', async () => {
+    const importConfig = vi.fn(async () => ({ applied: false, errorMessage: 'Config error: invalid' }));
+    const deps = createDeps({ importConfig });
+
+    await expect(processFileDropzoneFiles(new Map([['viewer.yaml', file('viewer.yaml')]]), deps, {
+      throwOnError: true,
+    })).rejects.toThrow('Config error: invalid');
+
+    expect(deps.setError).toHaveBeenCalledWith('Config error: invalid');
     expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
   });
 });

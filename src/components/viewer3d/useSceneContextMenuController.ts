@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useRef,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -43,6 +44,19 @@ export function useSceneContextMenuController(): SceneContextMenuController {
 
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
   const longPressRef = useRef<{ x: number; y: number; timer: ReturnType<typeof setTimeout> } | null>(null);
+
+  const clearLongPress = useCallback(() => {
+    if (!longPressRef.current) return;
+    clearTimeout(longPressRef.current.timer);
+    longPressRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (!touchMode) {
+      clearLongPress();
+    }
+    return clearLongPress;
+  }, [touchMode, clearLongPress]);
 
   const wasRightClickDrag = useCallback((clientX: number, clientY: number) => {
     return hasSceneContextMenuDragMoved(mouseDownPos.current, { x: clientX, y: clientY });
@@ -138,18 +152,16 @@ export function useSceneContextMenuController(): SceneContextMenuController {
       const dx = event.clientX - longPressRef.current.x;
       const dy = event.clientY - longPressRef.current.y;
       if (dx * dx + dy * dy > TOUCH.dragThreshold * TOUCH.dragThreshold) {
-        clearTimeout(longPressRef.current.timer);
-        longPressRef.current = null;
+        clearLongPress();
       }
     }
-  }, []);
+  }, [clearLongPress]);
 
   const handleTouchPointerUp = useCallback((event: ReactPointerEvent) => {
     if (longPressRef.current && event.pointerType === 'touch') {
-      clearTimeout(longPressRef.current.timer);
-      longPressRef.current = null;
+      clearLongPress();
     }
-  }, []);
+  }, [clearLongPress]);
 
   return {
     touchMode,

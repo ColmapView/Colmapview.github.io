@@ -65,7 +65,7 @@ describe('URL loader manifest source helpers', () => {
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Image URL base for lazy loading: https://example.com/dataset/rgb/');
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Mask URL base for lazy loading: https://example.com/dataset/segmentation/');
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Calling processFiles...');
-    expect(deps.processFiles).toHaveBeenCalledWith(files, { start: 80, end: 100 });
+    expect(deps.processFiles).toHaveBeenCalledWith(files, { start: 80, end: 100 }, { throwOnError: true });
     expect(deps.setUrlProgress).toHaveBeenLastCalledWith({ percent: 100, message: 'Complete' });
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Successfully loaded 3 files from URL');
   });
