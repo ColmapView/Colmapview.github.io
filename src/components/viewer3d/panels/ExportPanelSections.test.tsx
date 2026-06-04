@@ -21,7 +21,7 @@ function createReconstructionProps(
     hasCameras: true,
     hasPendingDeletions: true,
     hasReconstruction: true,
-    cameraModelSummary: '2x OpenCV K',
+    cameraModelSummary: '2x Pinhole',
     pendingDeletionCount: 2,
     onExportFormatChange: vi.fn(),
     onOpenConversionModal: vi.fn(),
@@ -65,7 +65,7 @@ describe('ExportPanelSections', () => {
     render(<ExportReconstructionSection {...props} />);
 
     expect(screen.getByText('COLMAP text format. Human-readable, useful for debugging.')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Convert Camera Model' })).toHaveAttribute('title', '2x OpenCV K');
+    expect(screen.getByRole('button', { name: 'Convert Camera Model' })).toHaveAttribute('title', '2x Pinhole');
     expect(screen.getByRole('button', { name: 'Delete Images from Model (2)' })).toBeVisible();
 
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'zip' } });

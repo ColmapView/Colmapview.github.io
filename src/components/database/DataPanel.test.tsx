@@ -47,7 +47,7 @@ describe('DataPanel', () => {
     expect(selector).toHaveValue('cameras');
     expect(selector).toHaveClass('text-xs');
     expect(screen.getByRole('table')).toHaveClass('text-xs');
-    expect(screen.getByText('OpenCV K')).toHaveAttribute('title', 'PINHOLE (1)');
+    expect(screen.getByText('Pinhole')).toHaveAttribute('title', 'PINHOLE (1)');
     expect(screen.getByText('1024x768')).toBeInTheDocument();
 
     fireEvent.change(selector, { target: { value: 'images' } });

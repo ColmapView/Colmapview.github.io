@@ -101,11 +101,13 @@ describe('camera frustum geometry helpers', () => {
     const singleColor = '#336699';
     const expectedColor = new THREE.Color(singleColor);
 
-    expect(getFrustumPlaneSize(camera, 2)).toEqual({ width: 8, height: 4, depth: 2 });
+    expect(getFrustumPlaneSize(camera, 2)).toEqual({ width: 8, height: 4, depth: 2, offsetX: 0, offsetY: 0 });
     expect(getFrustumPlaneSize(buildCamera({ width: 0, height: 400, params: [200] }), 2)).toEqual({
       width: 0,
       height: 0,
       depth: 2,
+      offsetX: 0,
+      offsetY: 0,
     });
 
     const geometry = buildFrustumLineGeometryData([frustum], 2, {
@@ -122,5 +124,43 @@ describe('camera frustum geometry helpers', () => {
     expect(geometry.baseColors[1]).toBeCloseTo(expectedColor.g);
     expect(geometry.baseColors[2]).toBeCloseTo(expectedColor.b);
     expect(Array.from(geometry.baseAlphas)).toEqual(Array(16).fill(1));
+  });
+
+  it('uses separate focal axes and principal-point offsets for pinhole image planes', () => {
+    const camera = buildCamera({
+      width: 800,
+      height: 400,
+      params: [200, 400, 410, 190],
+    });
+    const image = buildImage({ imageId: 1, cameraId: camera.cameraId });
+    const reconstruction = buildReconstruction({ cameras: [camera], images: [image] });
+    const [frustum] = buildCameraFrustumItems({
+      reconstruction,
+      imageSource: { getImageSync: () => undefined },
+      cameraIdToIndex: buildCameraIdToIndex(reconstruction),
+      pendingDeletions: new Set(),
+    });
+
+    const planeSize = getFrustumPlaneSize(camera, 2);
+    expect(planeSize.width).toBeCloseTo(8);
+    expect(planeSize.height).toBeCloseTo(2);
+    expect(planeSize.depth).toBe(2);
+    expect(planeSize.offsetX).toBeCloseTo(-0.1);
+    expect(planeSize.offsetY).toBeCloseTo(-0.05);
+
+    const geometry = buildFrustumLineGeometryData([frustum], 2, {
+      frustumColorMode: 'single',
+      frustumSingleColor: '#336699',
+      imageFrameIndexMap: new Map(),
+    });
+
+    expect(Array.from(geometry.positions.slice(0, 6))).toEqual([
+      0,
+      0,
+      0,
+      -4.099999904632568,
+      -1.0499999523162842,
+      2,
+    ]);
   });
 });

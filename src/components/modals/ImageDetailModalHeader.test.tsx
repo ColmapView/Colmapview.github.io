@@ -106,7 +106,7 @@ describe('image detail modal headers', () => {
     );
 
     expect(screen.getByText('touch.jpg')).toBeVisible();
-    expect(screen.getByText('OpenCV K')).toHaveAttribute('title', 'PINHOLE');
+    expect(screen.getByText('Pinhole')).toHaveAttribute('title', 'PINHOLE');
 
     const closeButton = screen.getByTitle('Close');
     expect(closeButton).toHaveStyle({

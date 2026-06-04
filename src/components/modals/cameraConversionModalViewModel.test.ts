@@ -47,7 +47,7 @@ describe('CameraConversionModal view-model helpers', () => {
     ]);
     expect(buildCameraConversionOptions(getReconstructionCameraEntries(reconstruction))).toEqual([
       { value: 'all', label: 'All (2)' },
-      { value: '2', label: '#2: OpenCV K' },
+      { value: '2', label: '#2: Pinhole' },
       { value: '1', label: '#1: OpenCV' },
     ]);
     expect(getSelectedConversionCameras(reconstruction, 'all')).toEqual([cameraA, cameraB]);
@@ -90,7 +90,7 @@ describe('CameraConversionModal view-model helpers', () => {
   it('parses select values without dropping model id zero', () => {
     const cameraOptions = [
       { value: 'all', label: 'All (2)' },
-      { value: '7', label: '#7: OpenCV K' },
+      { value: '7', label: '#7: Pinhole' },
     ];
 
     expect(parseCameraConversionSelection('all', cameraOptions)).toBe('all');

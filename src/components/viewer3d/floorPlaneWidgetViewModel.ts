@@ -31,6 +31,17 @@ export interface ScreenPoint {
   y: number;
 }
 
+export interface FloorPlaneBlinkOpacityOptions {
+  baseOpacity: number;
+  elapsedTime: number;
+  animationSpeed?: number;
+}
+
+export const FLOOR_PLANE_RENDER_ORDER = 50;
+export const FLOOR_PLANE_BLINK_SPEED = 2;
+const FLOOR_PLANE_BLINK_MIN_FACTOR = 0.35;
+const FLOOR_PLANE_BLINK_MAX_FACTOR = 1.9;
+
 export function getFloorPlaneWidgetData({
   boundsRadius,
   detectedPlane,
@@ -96,4 +107,17 @@ export function shouldOpenFloorModalOnHover(showFloorModal: boolean): boolean {
 
 export function getScreenPoint(clientX: number, clientY: number): ScreenPoint {
   return { x: clientX, y: clientY };
+}
+
+export function getFloorPlaneBlinkOpacity({
+  baseOpacity,
+  elapsedTime,
+  animationSpeed = FLOOR_PLANE_BLINK_SPEED,
+}: FloorPlaneBlinkOpacityOptions): number {
+  if (baseOpacity <= 0 || !Number.isFinite(baseOpacity)) return 0;
+
+  const blinkFactor = (Math.sin(elapsedTime * animationSpeed * 2) + 1) / 2;
+  const minOpacity = baseOpacity * FLOOR_PLANE_BLINK_MIN_FACTOR;
+  const maxOpacity = Math.min(1, baseOpacity * FLOOR_PLANE_BLINK_MAX_FACTOR);
+  return minOpacity + (maxOpacity - minOpacity) * blinkFactor;
 }

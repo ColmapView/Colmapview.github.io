@@ -112,7 +112,7 @@ function getFrustumTargetWorldPoint(
   }
 
   const planeSize = getFrustumPlaneSize(frustum.camera, cameraScale);
-  return new THREE.Vector3(0, 0, planeSize.depth)
+  return new THREE.Vector3(planeSize.offsetX, planeSize.offsetY, planeSize.depth)
     .applyQuaternion(frustum.quaternion)
     .add(frustum.position);
 }

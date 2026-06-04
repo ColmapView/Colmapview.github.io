@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Camera, Image, ImageId, Reconstruction } from '../../types/colmap';
 import { getCameraColor } from '../../theme';
 import { getImageWorldPose } from '../../utils/colmapTransforms';
+import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
 
 export type FrustumColorMode = 'single' | 'byCamera' | 'byRigFrame';
 
@@ -23,6 +24,8 @@ export interface FrustumPlaneSize {
   width: number;
   height: number;
   depth: number;
+  offsetX: number;
+  offsetY: number;
 }
 
 export interface FrustumLineGeometryData {
@@ -91,6 +94,7 @@ export function buildImageFrameIndexMap(reconstruction: Reconstruction | null): 
 }
 
 export function getFrustumPlaneSize(camera: Camera, scale: number): FrustumPlaneSize {
+  const invalidPlaneSize = { width: 0, height: 0, depth: scale, offsetX: 0, offsetY: 0 };
   if (
     camera.width <= 0 ||
     camera.height <= 0 ||
@@ -99,18 +103,27 @@ export function getFrustumPlaneSize(camera: Camera, scale: number): FrustumPlane
     !Number.isFinite(camera.height) ||
     !Number.isFinite(scale)
   ) {
-    return { width: 0, height: 0, depth: scale };
+    return invalidPlaneSize;
   }
 
-  const aspectRatio = camera.width / camera.height;
-  const focalLength = camera.params[0] || 1;
-  const halfWidth = scale * camera.width / (2 * focalLength);
-  const halfHeight = halfWidth / aspectRatio;
+  const { fx, fy, cx, cy } = getCameraIntrinsics(camera);
+  if (
+    fx <= 0 ||
+    fy <= 0 ||
+    !Number.isFinite(fx) ||
+    !Number.isFinite(fy) ||
+    !Number.isFinite(cx) ||
+    !Number.isFinite(cy)
+  ) {
+    return invalidPlaneSize;
+  }
 
   return {
-    width: halfWidth * 2,
-    height: halfHeight * 2,
+    width: scale * camera.width / fx,
+    height: scale * camera.height / fy,
     depth: scale,
+    offsetX: scale * (camera.width / 2 - cx) / fx,
+    offsetY: scale * (cy - camera.height / 2) / fy,
   };
 }
 
@@ -179,12 +192,14 @@ export function buildFrustumLineGeometryData(
     const halfWidth = planeSize.width / 2;
     const halfHeight = planeSize.height / 2;
     const depth = planeSize.depth;
+    const centerX = planeSize.offsetX;
+    const centerY = planeSize.offsetY;
 
     const apex = new THREE.Vector3(0, 0, 0);
-    const bl = new THREE.Vector3(-halfWidth, -halfHeight, depth);
-    const br = new THREE.Vector3(halfWidth, -halfHeight, depth);
-    const tr = new THREE.Vector3(halfWidth, halfHeight, depth);
-    const tl = new THREE.Vector3(-halfWidth, halfHeight, depth);
+    const bl = new THREE.Vector3(centerX - halfWidth, centerY - halfHeight, depth);
+    const br = new THREE.Vector3(centerX + halfWidth, centerY - halfHeight, depth);
+    const tr = new THREE.Vector3(centerX + halfWidth, centerY + halfHeight, depth);
+    const tl = new THREE.Vector3(centerX - halfWidth, centerY + halfHeight, depth);
 
     apex.applyQuaternion(frustum.quaternion).add(frustum.position);
     bl.applyQuaternion(frustum.quaternion).add(frustum.position);

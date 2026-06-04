@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Plane } from '../../utils/ransac';
 import {
+  FLOOR_PLANE_RENDER_ORDER,
+  getFloorPlaneBlinkOpacity,
   getFloorPlaneWidgetData,
   getScreenPoint,
   shouldClaimFloorPlaneContextPointer,
@@ -82,5 +84,29 @@ describe('floor plane widget view model', () => {
 
   it('normalizes client coordinates into screen points', () => {
     expect(getScreenPoint(12, 34)).toEqual({ x: 12, y: 34 });
+  });
+
+  it('keeps the floor widget ordered above splats', () => {
+    expect(FLOOR_PLANE_RENDER_ORDER).toBeGreaterThan(3);
+  });
+
+  it('derives a blinking opacity range from the base floor disk opacity', () => {
+    const baseOpacity = 0.3;
+
+    expect(getFloorPlaneBlinkOpacity({
+      baseOpacity,
+      elapsedTime: 3 * Math.PI / 4,
+      animationSpeed: 1,
+    })).toBeCloseTo(0.105);
+    expect(getFloorPlaneBlinkOpacity({
+      baseOpacity,
+      elapsedTime: Math.PI / 4,
+      animationSpeed: 1,
+    })).toBeCloseTo(0.57);
+    expect(getFloorPlaneBlinkOpacity({
+      baseOpacity: 0,
+      elapsedTime: Math.PI / 4,
+      animationSpeed: 1,
+    })).toBe(0);
   });
 });

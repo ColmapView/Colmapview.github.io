@@ -27,11 +27,11 @@ describe('export panel view-model helpers', () => {
     const simpleRadial = buildCamera({ cameraId: 2, modelId: CameraModelId.SIMPLE_RADIAL });
 
     expect(getCameraModelSummary([])).toBeNull();
-    expect(getCameraModelSummary([[pinhole.cameraId, pinhole]])).toBe('OpenCV K');
+    expect(getCameraModelSummary([[pinhole.cameraId, pinhole]])).toBe('Pinhole');
     expect(getCameraModelSummary([
       [pinhole.cameraId, pinhole],
       [3, buildCamera({ cameraId: 3, modelId: CameraModelId.PINHOLE })],
-    ])).toBe('2x OpenCV K');
+    ])).toBe('2x Pinhole');
     expect(getCameraModelSummary([
       [pinhole.cameraId, pinhole],
       [simpleRadial.cameraId, simpleRadial],

@@ -38,7 +38,7 @@ describe('batched plane hit-target policy', () => {
       targetScale: new THREE.Vector3(),
       frustumPosition: new THREE.Vector3(1, 2, 3),
       frustumQuaternion: new THREE.Quaternion(),
-      planeSize: { width: 2, height: 3, depth: 4 },
+      planeSize: { width: 2, height: 3, depth: 4, offsetX: 0, offsetY: 0 },
       isSelected: false,
       touchMode: false,
     });
@@ -61,7 +61,7 @@ describe('batched plane hit-target policy', () => {
       targetScale: new THREE.Vector3(),
       frustumPosition: new THREE.Vector3(1, 2, 3),
       frustumQuaternion: quaternion,
-      planeSize: { width: 2, height: 3, depth: 4 },
+      planeSize: { width: 2, height: 3, depth: 4, offsetX: 0, offsetY: 0 },
       isSelected: false,
       touchMode: false,
     });
@@ -75,6 +75,28 @@ describe('batched plane hit-target policy', () => {
     expect(position.y).toBeCloseTo(2);
     expect(position.z).toBeCloseTo(3);
     expect(actualQuaternion.angleTo(quaternion)).toBeCloseTo(0);
+  });
+
+  it('includes principal-point offsets in the image-plane center', () => {
+    const matrix = composePlaneHitTargetMatrix({
+      matrix: new THREE.Matrix4(),
+      targetPosition: new THREE.Vector3(),
+      targetForward: new THREE.Vector3(),
+      targetScale: new THREE.Vector3(),
+      frustumPosition: new THREE.Vector3(1, 2, 3),
+      frustumQuaternion: new THREE.Quaternion(),
+      planeSize: { width: 2, height: 3, depth: 4, offsetX: -0.25, offsetY: 0.5 },
+      isSelected: false,
+      touchMode: false,
+    });
+    const position = new THREE.Vector3();
+    const quaternion = new THREE.Quaternion();
+    const scale = new THREE.Vector3();
+
+    matrix.decompose(position, quaternion, scale);
+
+    expect(position.toArray()).toEqual([0.75, 2.5, 7]);
+    expect(scale.toArray()).toEqual([2, 3, 1]);
   });
 
   it('builds stable mesh keys from count and first image id', () => {

@@ -35,7 +35,7 @@ describe('image detail camera pose view model', () => {
       [0.7071, -0.2, 0, 1.23456],
       [-1.234, 0, 0.009]
     )).toEqual({
-      modelName: 'OpenCV K',
+      modelName: 'Pinhole',
       modelTitle: 'PINHOLE',
       width: 800,
       height: 600,

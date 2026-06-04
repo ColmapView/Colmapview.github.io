@@ -42,9 +42,9 @@ export function FrustumPlaneSelectionBorder({
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
     const material = new THREE.LineBasicMaterial({ color: VIZ_COLORS.frustum.selected, transparent: true });
     const line: THREE.LineLoop<THREE.BufferGeometry, THREE.LineBasicMaterial> = new THREE.LineLoop(geometry, material);
-    line.position.z = planeSize.depth;
+    line.position.set(planeSize.offsetX, planeSize.offsetY, planeSize.depth);
     return line;
-  }, [planeSize.width, planeSize.height, planeSize.depth]);
+  }, [planeSize.width, planeSize.height, planeSize.depth, planeSize.offsetX, planeSize.offsetY]);
 
   useEffect(() => {
     return () => {

@@ -75,12 +75,12 @@ describe('DeletionModal view-model helpers', () => {
     expect(buildDeletionCameraGroups(reconstruction)).toEqual([
       {
         cameraId: cameraA.cameraId,
-        label: 'Camera 1: OpenCV K 640x480 (2 imgs)',
+        label: 'Camera 1: Pinhole 640x480 (2 imgs)',
         imageIds: [imageA1.imageId, imageA2.imageId],
       },
       {
         cameraId: cameraB.cameraId,
-        label: 'Camera 2: OpenCV K 800x600 (1 img)',
+        label: 'Camera 2: Pinhole 800x600 (1 img)',
         imageIds: [imageB.imageId],
       },
     ]);

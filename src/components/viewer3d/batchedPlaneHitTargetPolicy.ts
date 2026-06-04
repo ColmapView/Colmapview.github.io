@@ -51,7 +51,7 @@ export function composePlaneHitTargetMatrix({
   });
 
   targetPosition.copy(frustumPosition);
-  targetForward.set(0, 0, planeSize.depth);
+  targetForward.set(planeSize.offsetX, planeSize.offsetY, planeSize.depth);
   targetForward.applyQuaternion(frustumQuaternion);
   targetPosition.add(targetForward);
   targetScale.set(scaleX, scaleY, scaleZ);

@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { type ThreeEvent } from '@react-three/fiber';
+import { type ThreeEvent, useFrame } from '@react-three/fiber';
 import { hoverCardStyles, ICON_SIZES, INTERACTION_AXIS_COLORS, INTERACTION_HOVER_COLOR, OPACITY } from '../../theme';
 import { AXIS_SEMANTIC } from '../../utils/coordinateSystems';
 import { HoverCard3D } from './HoverCard3D';
@@ -8,11 +8,14 @@ import { BillboardLabel } from './BillboardLabel';
 import { markSceneContextMenuHandled } from './sceneContextMenuGuard';
 import { markSceneObjectTouchDownForTouchPointer } from './frustumTouchGuards';
 import {
+  FLOOR_PLANE_RENDER_ORDER,
+  getFloorPlaneBlinkOpacity,
   getFloorPlaneWidgetData,
   getScreenPoint,
   shouldClaimFloorPlaneContextPointer,
   shouldOpenFloorModalOnHover,
 } from './floorPlaneWidgetViewModel';
+import { syncMaterialOpacity } from './threeMaterialMutations';
 import { useFloorPlaneWidgetStoreFacade } from './useFloorPlaneWidgetStoreFacade';
 
 /**
@@ -46,6 +49,8 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
   // Hover state for tooltip
   const [hovered, setHovered] = useState(false);
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+  const ringMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const diskMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
 
   // Get axis color
   const axisColor = INTERACTION_AXIS_COLORS[targetAxis];
@@ -59,6 +64,24 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
       axesScale,
     });
   }, [detectedPlane, normalFlipped, boundsRadius, axesScale]);
+
+  useFrame((state) => {
+    const ringBaseOpacity = hovered ? OPACITY.interaction.ringHovered : OPACITY.interaction.ringDefault;
+    const diskBaseOpacity = hovered ? OPACITY.interaction.circleHovered : OPACITY.interaction.circleDefault;
+
+    if (ringMaterialRef.current) {
+      syncMaterialOpacity(ringMaterialRef.current, getFloorPlaneBlinkOpacity({
+        baseOpacity: ringBaseOpacity,
+        elapsedTime: state.clock.elapsedTime,
+      }));
+    }
+    if (diskMaterialRef.current) {
+      syncMaterialOpacity(diskMaterialRef.current, getFloorPlaneBlinkOpacity({
+        baseOpacity: diskBaseOpacity,
+        elapsedTime: state.clock.elapsedTime,
+      }));
+    }
+  });
 
   if (!detectedPlane || !planeData) return null;
 
@@ -109,6 +132,7 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
       <mesh
         position={planeData.position}
         quaternion={planeData.quaternion}
+        renderOrder={FLOOR_PLANE_RENDER_ORDER}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         onPointerDown={handlePointerDown}
@@ -118,11 +142,13 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
       >
         <ringGeometry args={[planeData.radius * 0.95, planeData.radius, 64]} />
         <meshBasicMaterial
+          ref={ringMaterialRef}
           color={hovered ? INTERACTION_HOVER_COLOR : axisColor.hex}
           transparent
           opacity={hovered ? OPACITY.interaction.ringHovered : OPACITY.interaction.ringDefault}
           side={THREE.DoubleSide}
           depthTest={false}
+          depthWrite={false}
         />
       </mesh>
 
@@ -130,6 +156,7 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
       <mesh
         position={planeData.position}
         quaternion={planeData.quaternion}
+        renderOrder={FLOOR_PLANE_RENDER_ORDER}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         onPointerDown={handlePointerDown}
@@ -139,11 +166,13 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
       >
         <circleGeometry args={[planeData.radius * 0.3, 32]} />
         <meshBasicMaterial
+          ref={diskMaterialRef}
           color={hovered ? INTERACTION_HOVER_COLOR : axisColor.hex}
           transparent
           opacity={hovered ? OPACITY.interaction.circleHovered : OPACITY.interaction.circleDefault}
           side={THREE.DoubleSide}
           depthTest={false}
+          depthWrite={false}
         />
       </mesh>
 
@@ -151,24 +180,26 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
       <mesh
         position={planeData.shaftCenter}
         quaternion={planeData.shaftQuaternion}
+        renderOrder={FLOOR_PLANE_RENDER_ORDER + 1}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         onPointerDown={handlePointerDown}
       >
         <cylinderGeometry args={[planeData.arrowRadius, planeData.arrowRadius, planeData.shaftLength, 8]} />
-        <meshBasicMaterial color={axisColor.hex} depthTest={false} />
+        <meshBasicMaterial color={axisColor.hex} depthTest={false} depthWrite={false} />
       </mesh>
 
       {/* Arrowhead cone */}
       <mesh
         position={planeData.conePosition}
         quaternion={planeData.coneQuaternion}
+        renderOrder={FLOOR_PLANE_RENDER_ORDER + 1}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         onPointerDown={handlePointerDown}
       >
         <coneGeometry args={[planeData.coneRadius, planeData.coneHeight, 8]} />
-        <meshBasicMaterial color={axisColor.hex} depthTest={false} />
+        <meshBasicMaterial color={axisColor.hex} depthTest={false} depthWrite={false} />
       </mesh>
 
       {/* Axis label (billboard text matching origin axes style) */}

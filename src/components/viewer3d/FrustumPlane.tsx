@@ -172,7 +172,7 @@ export const FrustumPlane = memo(function FrustumPlane({
   return (
     <group ref={groupRef} position={position} quaternion={quaternion}>
       <mesh
-        position={[0, 0, planeSize.depth]}
+        position={[planeSize.offsetX, planeSize.offsetY, planeSize.depth]}
         renderOrder={isSelected ? 100 : 0}
         userData={{ isSelectedPlane: isSelected }}
         raycast={disableInteraction ? () => {} : undefined}

@@ -1,5 +1,6 @@
 import type { Camera, ImageId } from '../../types/colmap';
 import type { CameraScaleFactor } from '../../store/types';
+import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
 
 export {
   buildMatchedImageIds,
@@ -92,21 +93,24 @@ export function getAutoAdjustedFov({
   minFov = 5,
   maxFov = 120,
 }: AutoFovAdjustmentOptions): number | null {
-  const focalLength = camera.params[0] || 1;
+  const { fx, fy } = getCameraIntrinsics(camera);
   if (
     camera.width <= 0 ||
     camera.height <= 0 ||
-    focalLength <= 0 ||
+    fx <= 0 ||
+    fy <= 0 ||
     cameraScale <= 0 ||
     viewportWidth <= 0 ||
     viewportHeight <= 0 ||
-    currentFov <= 0
+    currentFov <= 0 ||
+    !Number.isFinite(fx) ||
+    !Number.isFinite(fy)
   ) {
     return null;
   }
 
-  const planeWidth = cameraScale * camera.width / focalLength;
-  const planeHeight = cameraScale * camera.height / focalLength;
+  const planeWidth = cameraScale * camera.width / fx;
+  const planeHeight = cameraScale * camera.height / fy;
   const planeDistance = cameraScale;
   const viewportAspect = viewportWidth / viewportHeight;
   const currentFovRad = currentFov * Math.PI / 180;
