@@ -8,6 +8,7 @@ import {
   STATUS_BAR_PROJECT_LINKS,
   formatStatusBarFps,
   getDesktopEmptyStatusText,
+  getStatusBarContainerClassName,
   getStatusBarLinkHoverColor,
   getStatusBarLinkRestColor,
   getStatusBarLinkStyle,
@@ -61,10 +62,15 @@ export function StatusBar() {
     hasGlobalStats: Boolean(globalStats),
   });
 
-  if (hideWithButtons) return null;
-
   return (
-    <footer className={statusBarStyles.container}>
+    <footer
+      className={getStatusBarContainerClassName({
+        baseClassName: statusBarStyles.container,
+        hidden: hideWithButtons,
+      })}
+      aria-hidden={hideWithButtons}
+      data-idle-pause="true"
+    >
       <div className={statusBarStyles.group}>
         <span className="text-ds-tertiary">{formatStatusBarFps(fps)}</span>
         <CacheStatsIndicator />

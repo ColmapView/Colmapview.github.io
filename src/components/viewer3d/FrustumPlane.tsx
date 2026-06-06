@@ -41,6 +41,7 @@ interface FrustumPlaneProps {
   undistortionEnabled?: boolean;
   undistortionMode?: 'cropped' | 'fullFrame';
   numPoints3D: number;
+  splatPsnr?: number;
   hoveredImageId: number | null;
   onHover: (id: number | null) => void;
   onClick: (imageId: number) => void;
@@ -67,6 +68,7 @@ export const FrustumPlane = memo(function FrustumPlane({
   undistortionEnabled = false,
   undistortionMode = 'fullFrame',
   numPoints3D,
+  splatPsnr,
   hoveredImageId,
   onHover,
   onClick,
@@ -217,6 +219,7 @@ export const FrustumPlane = memo(function FrustumPlane({
             cameraId={image.cameraId}
             multiCamera={multiCamera}
             numPoints3D={numPoints3D}
+            splatPsnr={splatPsnr}
             isSelected={isSelected}
             isMatched={isMatched}
             wouldGoBack={wouldGoBack}

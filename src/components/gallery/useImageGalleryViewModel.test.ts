@@ -76,7 +76,7 @@ describe('useImageGalleryViewModel', () => {
     unmount();
   });
 
-  it('hides the gallery toolbar with the button auto-hide state', () => {
+  it('keeps the gallery toolbar visible while hiding image overlays with button auto-hide', () => {
     const reconstruction = buildReconstruction({
       cameras: [buildCamera({ cameraId: 1 })],
       images: [buildImage({ imageId: 10, cameraId: 1, name: 'a.jpg' })],
@@ -96,7 +96,8 @@ describe('useImageGalleryViewModel', () => {
 
     const { result, unmount } = renderHook(() => useImageGalleryViewModel());
 
-    expect(result.current.hideToolbar).toBe(true);
+    expect(result.current.hideToolbar).toBe(false);
+    expect(result.current.hideImageOverlay).toBe(true);
 
     act(() => {
       useUIStore.setState({
@@ -108,6 +109,7 @@ describe('useImageGalleryViewModel', () => {
     });
 
     expect(result.current.hideToolbar).toBe(false);
+    expect(result.current.hideImageOverlay).toBe(false);
 
     act(() => {
       useUIStore.setState({
@@ -120,7 +122,8 @@ describe('useImageGalleryViewModel', () => {
       });
     });
 
-    expect(result.current.hideToolbar).toBe(true);
+    expect(result.current.hideToolbar).toBe(false);
+    expect(result.current.hideImageOverlay).toBe(true);
 
     unmount();
   });

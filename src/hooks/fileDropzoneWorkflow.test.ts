@@ -64,6 +64,7 @@ function createReconstruction(): Reconstruction {
 function createDeps(overrides: Partial<FileDropzoneWorkflowDeps> = {}): FileDropzoneWorkflowDeps {
   return {
     addNotification: vi.fn(),
+    clearSplatPsnr: vi.fn(),
     clearCaches: vi.fn(),
     delay: vi.fn(async () => undefined),
     getFailedImageCount: vi.fn(() => 0),
@@ -73,6 +74,7 @@ function createDeps(overrides: Partial<FileDropzoneWorkflowDeps> = {}): FileDrop
     getUrlLoading: vi.fn(() => false),
     logger: noopLogger,
     resetView: vi.fn(),
+    preloadSplatRuntime: vi.fn(async () => undefined),
     setDroppedFiles: vi.fn(),
     setError: vi.fn(),
     setLoadedFiles: vi.fn(),
@@ -127,6 +129,7 @@ describe('file dropzone workflow', () => {
       ['sparse/0/points3D.bin', file('points3D.bin')],
       ['splats/small.ply', new File(['x'], 'small.ply')],
       ['splats/large.ply', new File(['xxxx'], 'large.ply')],
+      ['splats/model.spz', new File(['xx'], 'model.spz')],
       ['images/image.jpg', file('image.jpg')],
     ]);
 
@@ -143,8 +146,15 @@ describe('file dropzone workflow', () => {
     expect(buildReconstruction).toHaveBeenCalledWith(expect.objectContaining({
       parseResult,
     }));
+    expect(deps.preloadSplatRuntime).toHaveBeenCalledTimes(1);
+    expect(deps.clearSplatPsnr).toHaveBeenCalledTimes(1);
     expect(deps.setLoadedFiles).toHaveBeenCalledWith(expect.objectContaining({
-      splatFile: expect.objectContaining({ name: 'large.ply' }),
+      splatFile: expect.objectContaining({ name: 'model.spz' }),
+      splatFiles: [
+        expect.objectContaining({ name: 'model.spz' }),
+        expect.objectContaining({ name: 'large.ply' }),
+        expect.objectContaining({ name: 'small.ply' }),
+      ],
     }));
     expect(deps.clearCaches).toHaveBeenCalledWith({ preserveZip: true });
     expect(deps.setReconstruction).toHaveBeenCalledWith(reconstruction);
@@ -173,9 +183,12 @@ describe('file dropzone workflow', () => {
     const result = await processFileDropzoneFiles(files, deps);
 
     expect(result).toBe(true);
+    expect(deps.preloadSplatRuntime).toHaveBeenCalledTimes(1);
+    expect(deps.clearSplatPsnr).toHaveBeenCalledTimes(1);
     expect(deps.setLoadedFiles).toHaveBeenCalledWith({
       ...currentLoadedFiles,
       splatFile: largestSplat,
+      splatFiles: [largestSplat, smallSplat],
     });
     expect(deps.setUrlProgress).toHaveBeenCalledWith({
       percent: 100,

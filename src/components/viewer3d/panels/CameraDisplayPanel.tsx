@@ -52,6 +52,8 @@ export interface CameraDisplayPanelProps {
   setCameraScale: (scale: number) => void;
   frustumStandbyOpacity: number;
   setFrustumStandbyOpacity: (opacity: number) => void;
+  frustumLineWidth: number;
+  setFrustumLineWidth: (lineWidth: number) => void;
   selectionPlaneOpacity: number;
   setSelectionPlaneOpacity: (opacity: number) => void;
   unselectedCameraOpacity: number;
@@ -60,6 +62,11 @@ export interface CameraDisplayPanelProps {
   setUndistortionEnabled: (enabled: boolean) => void;
   autoFovEnabled: boolean;
   setAutoFovEnabled: (enabled: boolean) => void;
+  splatPsnrFrameReady: boolean;
+  splatPsnrComputing: boolean;
+  splatPsnrReadyCount: number;
+  splatPsnrTotalCount: number;
+  splatPsnrUnavailableReason: string | null;
   onCycleCameraDisplayMode: () => void;
 }
 
@@ -85,6 +92,8 @@ export function CameraDisplayPanel({
   setCameraScale,
   frustumStandbyOpacity,
   setFrustumStandbyOpacity,
+  frustumLineWidth,
+  setFrustumLineWidth,
   selectionPlaneOpacity,
   setSelectionPlaneOpacity,
   unselectedCameraOpacity,
@@ -93,10 +102,18 @@ export function CameraDisplayPanel({
   setUndistortionEnabled,
   autoFovEnabled,
   setAutoFovEnabled,
+  splatPsnrFrameReady,
+  splatPsnrComputing,
+  splatPsnrReadyCount,
+  splatPsnrTotalCount,
+  splatPsnrUnavailableReason,
   onCycleCameraDisplayMode,
 }: CameraDisplayPanelProps) {
   const buttonState = getCameraDisplayButtonState(showCameras, cameraDisplayMode);
-  const frustumColorModeOptions = getFrustumColorModeOptions(hasRigData);
+  const frustumColorModeOptions = getFrustumColorModeOptions({
+    hasRigData,
+    hasSplatPsnr: splatPsnrFrameReady,
+  });
   const hint = getCameraDisplayHint(cameraDisplayMode);
 
   return (
@@ -131,6 +148,25 @@ export function CameraDisplayPanel({
               onChange={setFrustumColorMode}
               options={frustumColorModeOptions}
             />
+            {splatPsnrFrameReady && (
+              <div className={styles.row}>
+                <label className={styles.label}>PSNR</label>
+                <div className="flex flex-1 items-center justify-end gap-1">
+                  <span className="text-ds-muted text-xs tabular-nums">
+                    {splatPsnrComputing ? 'Computing ' : ''}
+                    {splatPsnrReadyCount}/{splatPsnrTotalCount}
+                  </span>
+                </div>
+              </div>
+            )}
+            {!splatPsnrFrameReady && splatPsnrUnavailableReason && (
+              <div className={styles.row}>
+                <label className={styles.label}>PSNR</label>
+                <div className="text-ds-muted flex-1 text-right text-xs">
+                  {splatPsnrUnavailableReason}
+                </div>
+              </div>
+            )}
             {frustumColorMode === 'single' && (
               <>
                 <ColorPickerRow
@@ -186,6 +222,15 @@ export function CameraDisplayPanel({
               step={0.05}
               onChange={setFrustumStandbyOpacity}
               formatValue={(v) => v.toFixed(2)}
+            />
+            <SliderRow
+              label="Line Width"
+              value={frustumLineWidth}
+              min={1}
+              max={6}
+              step={0.5}
+              onChange={setFrustumLineWidth}
+              formatValue={(v) => v.toFixed(1)}
             />
             <SliderRow
               label="Selection α"

@@ -42,6 +42,7 @@ export interface CameraConfig {
   frustumColorMode?: FrustumColorMode;
   frustumSingleColor?: string;
   frustumStandbyOpacity?: number;
+  frustumLineWidth?: number;
   unselectedOpacity?: number;
   mode?: CameraMode;
   projection?: CameraProjection;
@@ -71,6 +72,7 @@ export interface UIConfig {
   matchesDisplayMode?: MatchesDisplayMode;
   matchesOpacity?: number;
   matchesColor?: string;
+  matchesLineWidth?: number;
   maskOverlay?: boolean;
   maskOpacity?: number;
   showAxes?: boolean;
@@ -98,6 +100,7 @@ export interface RigConfig {
   rigColorMode?: RigColorMode;
   rigLineColor?: string;
   rigLineOpacity?: number;
+  rigLineWidth?: number;
 }
 
 export interface AppConfiguration {

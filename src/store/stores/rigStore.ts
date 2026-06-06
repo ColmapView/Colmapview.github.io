@@ -11,6 +11,7 @@ export interface RigState {
   rigColorMode: RigColorMode;
   rigLineColor: string;
   rigLineOpacity: number;
+  rigLineWidth: number;
 
   // Actions
   setShowRig: (show: boolean) => void;
@@ -19,6 +20,7 @@ export interface RigState {
   setRigColorMode: (mode: RigColorMode) => void;
   setRigLineColor: (color: string) => void;
   setRigLineOpacity: (opacity: number) => void;
+  setRigLineWidth: (lineWidth: number) => void;
 }
 
 export const useRigStore = create<RigState>()(
@@ -29,6 +31,7 @@ export const useRigStore = create<RigState>()(
       rigColorMode: 'perFrame',
       rigLineColor: '#00ffff', // Cyan
       rigLineOpacity: 0.7,
+      rigLineWidth: 1,
 
       setShowRig: (showRig) => set({ showRig }),
       toggleRig: () => set((state) => ({ showRig: !state.showRig })),
@@ -36,6 +39,7 @@ export const useRigStore = create<RigState>()(
       setRigColorMode: (rigColorMode) => set({ rigColorMode }),
       setRigLineColor: (rigLineColor) => set({ rigLineColor }),
       setRigLineOpacity: (rigLineOpacity) => set({ rigLineOpacity }),
+      setRigLineWidth: (rigLineWidth) => set({ rigLineWidth }),
     }),
     {
       name: STORAGE_KEYS.rig,
@@ -47,6 +51,7 @@ export const useRigStore = create<RigState>()(
         rigColorMode: state.rigColorMode,
         rigLineColor: state.rigLineColor,
         rigLineOpacity: state.rigLineOpacity,
+        rigLineWidth: state.rigLineWidth,
       }),
     }
   )

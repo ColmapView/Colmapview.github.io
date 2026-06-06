@@ -75,6 +75,31 @@ export async function fetchUrlImage(
 }
 
 /**
+ * Fetch an image from URL without display-cache resizing or JPEG recompression.
+ * Metric computations use this path because lossy cached images bias PSNR.
+ */
+export async function fetchUrlImageRaw(
+  imageUrlBase: string,
+  imageName: string
+): Promise<File | null> {
+  const { url: imageUrl, filename } = buildImageUrl(imageUrlBase, imageName);
+
+  try {
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      appLogger.warn(`[URL Image] Failed to fetch raw ${imageName}: ${response.status}`);
+      return null;
+    }
+
+    const blob = await response.blob();
+    return new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+  } catch (err) {
+    appLogger.warn(`[URL Image] Error fetching raw ${imageName}:`, err);
+    return null;
+  }
+}
+
+/**
  * Fetch a mask from URL (lazy loaded, no cache).
  * Tries both same-name masks and COLMAP-style ".png" mask suffixes.
  *

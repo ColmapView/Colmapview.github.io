@@ -35,6 +35,7 @@ interface LoadedFilesBuilderOptions {
   databaseFile?: File;
   rigsFile?: File;
   framesFile?: File;
+  splatFiles?: File[];
 }
 
 interface RigDataBuilderOptions {
@@ -186,6 +187,7 @@ export function buildLoadedFiles(options: LoadedFilesBuilderOptions = {}): Loade
     databaseFile: options.databaseFile,
     rigsFile: options.rigsFile,
     framesFile: options.framesFile,
+    splatFiles: options.splatFiles ?? (options.splatFile ? [options.splatFile] : undefined),
     imageFiles: normalizeImageFiles(options.imageFiles),
     hasMasks: options.hasMasks ?? false,
   };

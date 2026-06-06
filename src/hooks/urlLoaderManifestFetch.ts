@@ -17,7 +17,7 @@ import {
   getDirectoryListingRootUrl,
   getHuggingFaceDatasetTreeRequest,
   getLargestRemoteSplatCandidate,
-  getLargestHuggingFacePlyPath,
+  getPreferredHuggingFaceSplatPath,
   getManifestColmapFileEntries,
   joinManifestUrlPath,
   type RemoteSplatCandidate,
@@ -83,7 +83,7 @@ export async function discoverHuggingFaceSplatPath(
     return null;
   }
 
-  return getLargestHuggingFacePlyPath(entries, request.treePath);
+  return getPreferredHuggingFaceSplatPath(entries, request.treePath);
 }
 
 async function getRemoteFileContentLength(url: string, fetchImpl: FetchUrl): Promise<number | null> {
@@ -152,7 +152,7 @@ export async function discoverDirectoryListingSplatPath(
     }
 
     for (const link of getDirectoryListingLinks(current.url, rootUrl, html)) {
-      if (link.isPly) {
+      if (link.isSplat) {
         if (checkedCandidates >= maxCandidates) {
           continue;
         }

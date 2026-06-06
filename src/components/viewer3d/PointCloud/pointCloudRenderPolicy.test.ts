@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { buildFile } from '../../../test/builders';
 import {
+  getPointGeometryLayerProps,
   getPointGeometryDataColorMode,
   getSplatPointOverlayAnimationMode,
+  POINT_GEOMETRY_RENDER_ORDER,
   shouldRenderPointGeometry,
+  SPARK_SPLAT_RENDER_ORDER,
+  SPLAT_POINT_OVERLAY_RENDER_ORDER,
 } from './pointCloudRenderPolicy';
 
 describe('shouldRenderPointGeometry', () => {
@@ -62,5 +66,35 @@ describe('shouldRenderPointGeometry', () => {
     expect(getSplatPointOverlayAnimationMode('splats')).toBeNull();
     expect(getSplatPointOverlayAnimationMode('splatPoints')).toBe('blink');
     expect(getSplatPointOverlayAnimationMode('splatRainbowPoints')).toBe('rainbow');
+  });
+
+  it('keeps points, splats, and splat point overlays in a stable layer order', () => {
+    expect(POINT_GEOMETRY_RENDER_ORDER).toBeLessThan(SPARK_SPLAT_RENDER_ORDER);
+    expect(SPARK_SPLAT_RENDER_ORDER).toBeLessThan(SPLAT_POINT_OVERLAY_RENDER_ORDER);
+
+    expect(getPointGeometryLayerProps('rgb')).toEqual({
+      renderOrder: POINT_GEOMETRY_RENDER_ORDER,
+      vertexColors: true,
+      depthTest: true,
+      depthWrite: true,
+    });
+    expect(getPointGeometryLayerProps('splats')).toEqual({
+      renderOrder: POINT_GEOMETRY_RENDER_ORDER,
+      vertexColors: true,
+      depthTest: true,
+      depthWrite: true,
+    });
+    expect(getPointGeometryLayerProps('splatPoints')).toEqual({
+      renderOrder: SPLAT_POINT_OVERLAY_RENDER_ORDER,
+      vertexColors: false,
+      depthTest: false,
+      depthWrite: false,
+    });
+    expect(getPointGeometryLayerProps('splatRainbowPoints')).toEqual({
+      renderOrder: SPLAT_POINT_OVERLAY_RENDER_ORDER,
+      vertexColors: false,
+      depthTest: false,
+      depthWrite: false,
+    });
   });
 });

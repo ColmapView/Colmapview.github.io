@@ -32,7 +32,14 @@ import {
   type SelectionNode,
   type SelectionNodeActions,
 } from '../../nodes';
-import { useReconstructionStore, useUIStore, type UIState } from '../../store';
+import {
+  useImageMetricsStore,
+  useReconstructionStore,
+  useSplatBackendStore,
+  useUIStore,
+  type UIState,
+} from '../../store';
+import type { SplatMetricCapability } from '../../utils/splatBackendPolicy';
 import type { Reconstruction } from '../../types/colmap';
 
 interface ViewerControlsUiFacade {
@@ -65,11 +72,40 @@ interface ViewerControlsActionFacade {
   rig: RigNodeActions;
 }
 
+interface ViewerControlsMetricsFacade {
+  splatPsnrFrameReady: boolean;
+  splatPsnrComputing: boolean;
+  splatPsnrReadyCount: number;
+  splatPsnrTotalCount: number;
+  splatPsnrUnavailableReason: string | null;
+}
+
+interface ViewerControlsSplatFacade {
+  activeSplatFile?: File;
+  splatFiles: readonly File[];
+  setActiveSplatFile: (file: File) => void;
+}
+
 export interface ViewerControlsStoreFacade {
   ui: ViewerControlsUiFacade;
   nodes: ViewerControlsNodeFacade;
   actions: ViewerControlsActionFacade;
+  metrics: ViewerControlsMetricsFacade;
+  splats: ViewerControlsSplatFacade;
   reconstruction: Reconstruction | null;
+}
+
+const EMPTY_SPLAT_FILES: readonly File[] = [];
+
+function getSplatPsnrUnavailableReason(
+  activeSplatFile: File | undefined,
+  metricCapability: SplatMetricCapability
+): string | null {
+  if (!activeSplatFile || metricCapability.gpuPsnr) {
+    return null;
+  }
+
+  return metricCapability.reason;
 }
 
 export function useViewerControlsStoreFacade(): ViewerControlsStoreFacade {
@@ -78,6 +114,33 @@ export function useViewerControlsStoreFacade(): ViewerControlsStoreFacade {
   const setBackgroundColor = useUIStore((s) => s.setBackgroundColor);
   const setView = useUIStore((s) => s.setView);
   const autoHideButtons = useUIStore((s) => s.autoHideElements.buttons);
+  const reconstruction = useReconstructionStore((s) => s.reconstruction);
+  const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
+  const splatPsnrFrameReady = useImageMetricsStore((s) => s.splatPsnrFrameReady);
+  const splatPsnrComputing = useImageMetricsStore((s) => s.splatPsnrComputing);
+  const splatPsnrReadyCount = useImageMetricsStore((s) => s.splatPsnrMetrics.size);
+  const splatMetricCapability = useSplatBackendStore((s) => s.metricCapability);
+  const activeSplatFile = loadedFiles?.splatFile;
+  const splatFiles = loadedFiles?.splatFiles ?? (activeSplatFile ? [activeSplatFile] : EMPTY_SPLAT_FILES);
+  const splatPsnrUnavailableReason = getSplatPsnrUnavailableReason(activeSplatFile, splatMetricCapability);
+
+  const setActiveSplatFile = (file: File) => {
+    const state = useReconstructionStore.getState();
+    const currentLoadedFiles = state.loadedFiles;
+    const availableSplatFiles = currentLoadedFiles?.splatFiles
+      ?? (currentLoadedFiles?.splatFile ? [currentLoadedFiles.splatFile] : []);
+
+    if (!currentLoadedFiles || currentLoadedFiles.splatFile === file || !availableSplatFiles.includes(file)) {
+      return;
+    }
+
+    state.setLoadedFiles({
+      ...currentLoadedFiles,
+      splatFile: file,
+      splatFiles: availableSplatFiles,
+    });
+    useImageMetricsStore.getState().clearSplatPsnr();
+  };
 
   return {
     ui: {
@@ -107,6 +170,18 @@ export function useViewerControlsStoreFacade(): ViewerControlsStoreFacade {
       grid: useGridNodeActions(),
       rig: useRigNodeActions(),
     },
-    reconstruction: useReconstructionStore((s) => s.reconstruction),
+    metrics: {
+      splatPsnrFrameReady,
+      splatPsnrComputing,
+      splatPsnrReadyCount,
+      splatPsnrTotalCount: reconstruction?.images.size ?? 0,
+      splatPsnrUnavailableReason,
+    },
+    splats: {
+      activeSplatFile,
+      splatFiles,
+      setActiveSplatFile,
+    },
+    reconstruction,
   };
 }

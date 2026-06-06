@@ -38,7 +38,10 @@ export interface FloorPlaneBlinkOpacityOptions {
 }
 
 export const FLOOR_PLANE_RENDER_ORDER = 50;
+export const FLOOR_PLANE_DISK_RENDER_ORDER = FLOOR_PLANE_RENDER_ORDER;
+export const FLOOR_PLANE_ARROW_RENDER_ORDER = FLOOR_PLANE_RENDER_ORDER + 1;
 export const FLOOR_PLANE_BLINK_SPEED = 2;
+export const FLOOR_PLANE_DISK_OPACITY_SCALE = 0.45;
 const FLOOR_PLANE_BLINK_MIN_FACTOR = 0.35;
 const FLOOR_PLANE_BLINK_MAX_FACTOR = 1.9;
 
@@ -120,4 +123,10 @@ export function getFloorPlaneBlinkOpacity({
   const minOpacity = baseOpacity * FLOOR_PLANE_BLINK_MIN_FACTOR;
   const maxOpacity = Math.min(1, baseOpacity * FLOOR_PLANE_BLINK_MAX_FACTOR);
   return minOpacity + (maxOpacity - minOpacity) * blinkFactor;
+}
+
+export function getFloorPlaneDiskOpacity(baseOpacity: number): number {
+  if (baseOpacity <= 0 || !Number.isFinite(baseOpacity)) return 0;
+
+  return baseOpacity * FLOOR_PLANE_DISK_OPACITY_SCALE;
 }

@@ -40,6 +40,7 @@ export const FrustumContextMenu = memo(function FrustumContextMenu({
       >
         <div
           className={contextMenuStyles.container}
+          data-idle-pause="true"
           onMouseLeave={onClose}
           onPointerDown={stopContextMenuSurfacePointerEvent}
           onMouseDown={stopContextMenuSurfaceMouseEvent}

@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   POINT_COLOR_MODE_OPTIONS,
   formatMaxReprojectionError,
+  getActiveSplatFileSelectValue,
   getMaxReprojectionErrorFromSliderValue,
   getMaxReprojectionErrorSliderValue,
   getPointCloudColorHint,
   getPointCloudMaxErrorLimit,
+  getSplatFileFromSelectValue,
+  getSplatFileSelectOptions,
   getSupportedPointColorMode,
   shouldShowSplatPointOverlayColorControl,
   shouldShowSplatPointOverlaySpeedControl,
@@ -38,7 +41,7 @@ describe('point cloud panel view-model helpers', () => {
     });
     expect(getPointCloudColorHint('splats')).toEqual({
       title: 'Splats:',
-      lines: ['3D Gaussian rendering from', 'the discovered PLY file.'],
+      lines: ['3D Gaussian rendering from', 'the selected splat file.'],
     });
     expect(getPointCloudColorHint('splatPoints')).toEqual({
       title: 'Splats + Points:',
@@ -66,6 +69,22 @@ describe('point cloud panel view-model helpers', () => {
     expect(shouldShowSplatPointOverlaySpeedControl('splatPoints')).toBe(true);
     expect(shouldShowSplatPointOverlaySpeedControl('splatRainbowPoints')).toBe(true);
     expect(shouldShowSplatPointOverlaySpeedControl('rgb')).toBe(false);
+  });
+
+  it('builds stable splat file select options and resolves selected values by index', () => {
+    const ply = new File(['ply'], 'model.ply');
+    const spz = new File(['spz'], 'model.spz');
+    const files = [spz, ply];
+
+    expect(getSplatFileSelectOptions(files)).toEqual([
+      { value: '0', label: '1. model.spz' },
+      { value: '1', label: '2. model.ply' },
+    ]);
+    expect(getActiveSplatFileSelectValue(files, ply)).toBe('1');
+    expect(getActiveSplatFileSelectValue(files, undefined)).toBe('0');
+    expect(getSplatFileFromSelectValue(files, '0')).toBe(spz);
+    expect(getSplatFileFromSelectValue(files, '1')).toBe(ply);
+    expect(getSplatFileFromSelectValue(files, '2')).toBeNull();
   });
 
   it('uses the reconstruction max error when available and keeps the fallback otherwise', () => {

@@ -59,6 +59,7 @@ export const LabelsMenu = memo(function LabelsMenu({
       <div
         ref={menuRef}
         className={contextMenuStyles.container}
+        data-idle-pause="true"
         onPointerDown={stopContextMenuSurfacePointerEvent}
         onMouseDown={stopContextMenuSurfaceMouseEvent}
         onContextMenu={suppressContextMenuSurfaceContextMenu}
@@ -113,6 +114,7 @@ export const SystemMenu = memo(function SystemMenu({
       <div
         ref={menuRef}
         className={contextMenuStyles.container}
+        data-idle-pause="true"
         onPointerDown={stopContextMenuSurfacePointerEvent}
         onMouseDown={stopContextMenuSurfaceMouseEvent}
         onContextMenu={suppressContextMenuSurfaceContextMenu}

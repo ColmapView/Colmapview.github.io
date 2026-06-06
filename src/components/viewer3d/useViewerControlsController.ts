@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { controlPanelStyles } from '../../theme';
 import type {
   AxesGridPanelProps,
@@ -57,7 +57,7 @@ const styles = controlPanelStyles;
 export function useViewerControlsController(): ViewerControlsController {
   const panelState = useViewerControlPanelState();
   const modals = useViewerToolModalState();
-  const { ui, nodes, actions, reconstruction } = useViewerControlsStoreFacade();
+  const { ui, nodes, actions, metrics, splats, reconstruction } = useViewerControlsStoreFacade();
   const {
     touchMode,
     backgroundColor,
@@ -168,6 +168,12 @@ export function useViewerControlsController(): ViewerControlsController {
   const selectionButton = getSelectionButtonState(selectionNode.visible, selectionNode.colorMode);
   const rigButton = getRigButtonState(hasRigData, rigNode.visible, rigNode.displayMode);
 
+  useEffect(() => {
+    if (!metrics.splatPsnrFrameReady && camerasNode.colorMode === 'splatPsnr') {
+      camerasActions.setColorMode('byCamera');
+    }
+  }, [camerasActions, camerasNode.colorMode, metrics.splatPsnrFrameReady]);
+
   return {
     className: getViewerControlsContainerClassName({
       baseClassName: styles.container,
@@ -248,6 +254,9 @@ export function useViewerControlsController(): ViewerControlsController {
       maxReprojectionError: pointsNode.maxReprojectionError,
       setMaxReprojectionError: pointsActions.setMaxReprojectionError,
       reconstruction,
+      splatFiles: splats.splatFiles,
+      activeSplatFile: splats.activeSplatFile,
+      setActiveSplatFile: splats.setActiveSplatFile,
       selectionColor: selectionNode.color,
       setSelectionColor: selectionActions.setColor,
       selectionAnimationSpeed: selectionNode.animationSpeed,
@@ -275,6 +284,8 @@ export function useViewerControlsController(): ViewerControlsController {
       setCameraScale: camerasActions.setScale,
       frustumStandbyOpacity: camerasNode.standbyOpacity,
       setFrustumStandbyOpacity: camerasActions.setStandbyOpacity,
+      frustumLineWidth: camerasNode.lineWidth,
+      setFrustumLineWidth: camerasActions.setLineWidth,
       selectionPlaneOpacity: selectionNode.planeOpacity,
       setSelectionPlaneOpacity: selectionActions.setPlaneOpacity,
       unselectedCameraOpacity: selectionNode.unselectedOpacity,
@@ -283,6 +294,11 @@ export function useViewerControlsController(): ViewerControlsController {
       setUndistortionEnabled: camerasActions.setUndistortionEnabled,
       autoFovEnabled: navNode.autoFovEnabled,
       setAutoFovEnabled: navActions.setAutoFovEnabled,
+      splatPsnrFrameReady: metrics.splatPsnrFrameReady,
+      splatPsnrComputing: metrics.splatPsnrComputing,
+      splatPsnrReadyCount: metrics.splatPsnrReadyCount,
+      splatPsnrTotalCount: metrics.splatPsnrTotalCount,
+      splatPsnrUnavailableReason: metrics.splatPsnrUnavailableReason,
       onCycleCameraDisplayMode: cycleCameraDisplayMode,
     },
     matchesPanel: {
@@ -296,6 +312,8 @@ export function useViewerControlsController(): ViewerControlsController {
       setMatchesOpacity: matchesActions.setOpacity,
       matchesColor: matchesNode.color,
       setMatchesColor: matchesActions.setColor,
+      matchesLineWidth: matchesNode.lineWidth,
+      setMatchesLineWidth: matchesActions.setLineWidth,
       onCycleMatchesDisplayMode: cycleMatchesDisplayMode,
     },
     selectionHighlightPanel: {
@@ -325,6 +343,8 @@ export function useViewerControlsController(): ViewerControlsController {
       setRigLineColor: rigActions.setColor,
       rigLineOpacity: rigNode.opacity,
       setRigLineOpacity: rigActions.setOpacity,
+      rigLineWidth: rigNode.lineWidth,
+      setRigLineWidth: rigActions.setLineWidth,
       cameraCount,
       frameCount,
       onCycleRigDisplayMode: cycleRigDisplayMode,

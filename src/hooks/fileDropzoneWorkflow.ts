@@ -8,12 +8,13 @@ import { collectImageFiles, findMissingImageFiles, hasMaskFiles } from '../utils
 import {
   findColmapFiles,
   findConfigFile,
-  findLargestPlyFile,
+  findSplatFiles,
   hasColmapFiles,
   hasImageFiles,
 } from '../utils/fileClassification';
 import type { AppLogger } from '../utils/logger';
 import { appLogger } from '../utils/logger';
+import { preloadSparkModule } from '../utils/sparkSplatRuntime';
 import type { WasmReconstructionWrapper } from '../wasm/reconstruction';
 import { getFailedImageCount } from './useAsyncImageCache';
 import { getPointFilterWarning } from './fileDropzonePointFilterWarning';
@@ -35,10 +36,12 @@ type ImportConfigFile = typeof importConfigFile;
 type ParseColmapFiles = typeof parseColmapFiles;
 type BuildColmapReconstruction = typeof buildColmapReconstruction;
 type ClearCaches = (options?: ClearAllOptions) => void;
+type PreloadSplatRuntime = () => Promise<unknown>;
 
 export interface FileDropzoneWorkflowDeps {
   addNotification: (type: 'info' | 'warning', message: string, duration?: number) => void;
   buildReconstruction?: BuildColmapReconstruction;
+  clearSplatPsnr?: () => void;
   clearCaches?: ClearCaches;
   delay?: (ms: number) => Promise<void>;
   getFailedImageCount?: () => number;
@@ -49,6 +52,7 @@ export interface FileDropzoneWorkflowDeps {
   importConfig?: ImportConfigFile;
   logger?: AppLogger;
   parseFiles?: ParseColmapFiles;
+  preloadSplatRuntime?: PreloadSplatRuntime;
   resetView: () => void;
   setDroppedFiles: (files: Map<string, File>) => void;
   setError: (error: string | null) => void;
@@ -66,7 +70,8 @@ export interface FileDropzoneWorkflowOptions {
 
 function updateLoadedSplatFile(
   splatFile: File,
-  deps: Pick<FileDropzoneWorkflowDeps, 'addNotification' | 'getLoadedFiles' | 'setLoadedFiles' | 'setUrlProgress'>,
+  splatFiles: File[],
+  deps: Pick<FileDropzoneWorkflowDeps, 'addNotification' | 'clearSplatPsnr' | 'getLoadedFiles' | 'setLoadedFiles' | 'setUrlProgress'>,
   mapProgress: (localPercent: number) => number,
   log: (message: string) => void
 ): boolean {
@@ -75,9 +80,11 @@ function updateLoadedSplatFile(
     return false;
   }
 
+  deps.clearSplatPsnr?.();
   deps.setLoadedFiles({
     ...loadedFiles,
     splatFile,
+    splatFiles,
   });
   deps.setUrlProgress({
     percent: mapProgress(100),
@@ -117,6 +124,7 @@ export async function processFileDropzoneFiles(
   const importConfig = deps.importConfig ?? importConfigFile;
   const parseFiles = deps.parseFiles ?? parseColmapFiles;
   const buildReconstruction = deps.buildReconstruction ?? buildColmapReconstruction;
+  const preloadSplatRuntime = deps.preloadSplatRuntime ?? preloadSparkModule;
   const getDecodeFailureCount = deps.getFailedImageCount ?? getFailedImageCount;
   const delay = deps.delay ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)));
   const { progressRange, throwOnError = false } = normalizeWorkflowOptions(options);
@@ -124,7 +132,16 @@ export async function processFileDropzoneFiles(
   const pStart = progressRange?.start ?? 0;
   const pEnd = progressRange?.end ?? 100;
   const mapProgress = (localPercent: number) => Math.round(pStart + (localPercent / 100) * (pEnd - pStart));
-  const splatFile = findLargestPlyFile(files);
+  const splatFiles = findSplatFiles(files);
+  const splatFile = splatFiles[0];
+
+  if (splatFile) {
+    void preloadSplatRuntime().catch((error: unknown) => {
+      logger.warn(
+        `[Splats] Failed to preload Spark runtime: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
+  }
 
   if (!deps.getUrlLoading()) {
     deps.setUrlLoading(true);
@@ -143,7 +160,7 @@ export async function processFileDropzoneFiles(
 
       if (!hasColmapFiles(files) && !hasImageFiles(files)) {
         if (splatFile) {
-          updateLoadedSplatFile(splatFile, deps, mapProgress, logger.info);
+          updateLoadedSplatFile(splatFile, splatFiles, deps, mapProgress, logger.info);
         }
         if (configErrorMessage && throwOnError) {
           throw new Error(configErrorMessage);
@@ -159,7 +176,7 @@ export async function processFileDropzoneFiles(
     const hasMasks = hasMaskFiles(files);
 
     if (!camerasFile || !imagesFile || !points3DFile) {
-      if (splatFile && updateLoadedSplatFile(splatFile, deps, mapProgress, logger.info)) {
+      if (splatFile && updateLoadedSplatFile(splatFile, splatFiles, deps, mapProgress, logger.info)) {
         return true;
       }
 
@@ -169,9 +186,11 @@ export async function processFileDropzoneFiles(
           imageFiles,
           hasMasks,
           splatFile,
+          splatFiles,
           mapProgress,
           setUrlProgress: deps.setUrlProgress,
           setLoadedFiles: deps.setLoadedFiles,
+          clearSplatPsnr: deps.clearSplatPsnr,
           clearCaches,
           setReconstruction: deps.setReconstruction,
           resetView: deps.resetView,
@@ -190,11 +209,13 @@ export async function processFileDropzoneFiles(
 
     logger.info(`Scanned ${files.size} total files, ${imageFiles.size} image lookup keys`);
 
+    deps.clearSplatPsnr?.();
     deps.setLoadedFiles({
       camerasFile,
       imagesFile,
       points3DFile,
       splatFile,
+      splatFiles,
       databaseFile,
       rigsFile,
       framesFile,

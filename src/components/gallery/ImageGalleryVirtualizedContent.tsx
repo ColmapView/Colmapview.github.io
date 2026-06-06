@@ -37,6 +37,7 @@ interface ImageGalleryVirtualizedContentProps {
   isResizing: boolean;
   lastNavigationToImageId: number | null;
   touchMode: boolean;
+  hideImageOverlay: boolean;
   onClick: (imageId: number) => void;
   onDoubleClick: (imageId: number) => void;
   onRightClick: (imageId: number) => void;
@@ -60,6 +61,7 @@ export function ImageGalleryVirtualizedContent({
   isResizing,
   lastNavigationToImageId,
   touchMode,
+  hideImageOverlay,
   onClick,
   onDoubleClick,
   onRightClick,
@@ -103,6 +105,7 @@ export function ImageGalleryVirtualizedContent({
                     isResizing={isResizing}
                     wouldGoBack={img.imageId === lastNavigationToImageId}
                     touchMode={touchMode}
+                    hideOverlay={hideImageOverlay}
                   />
                 ))}
               </div>

@@ -1,3 +1,10 @@
+import {
+  compareSplatCandidates,
+  getPreferredSplatCandidate,
+  isSplatFilePath,
+  type SplatCandidate,
+} from './splatFilePolicy';
+
 /** Archive extensions handled by libarchive.js. */
 export const ARCHIVE_EXTENSIONS = [
   '.zip',
@@ -56,10 +63,16 @@ export function isArchivePlyPath(path: string): boolean {
   return path.toLowerCase().endsWith('.ply');
 }
 
+export function isArchiveSplatPath(path: string): boolean {
+  return isSplatFilePath(path);
+}
+
 export interface ArchivePlyCandidate {
   path: string;
   size: number;
 }
+
+export type ArchiveSplatCandidate = SplatCandidate;
 
 export function findLargestArchivePlyCandidate<TCandidate extends ArchivePlyCandidate>(
   candidates: readonly TCandidate[]
@@ -77,6 +90,30 @@ export function findLargestArchivePlyCandidate<TCandidate extends ArchivePlyCand
   }
 
   return largest;
+}
+
+export function findPreferredArchiveSplatCandidate<TCandidate extends ArchiveSplatCandidate>(
+  candidates: readonly TCandidate[]
+): TCandidate | undefined {
+  let preferred: TCandidate | null = null;
+
+  for (const candidate of candidates) {
+    if (!isArchiveSplatPath(candidate.path)) {
+      continue;
+    }
+
+    preferred = getPreferredSplatCandidate(preferred, candidate);
+  }
+
+  return preferred ?? undefined;
+}
+
+export function sortArchiveSplatCandidatesByPreference<TCandidate extends ArchiveSplatCandidate>(
+  candidates: readonly TCandidate[]
+): TCandidate[] {
+  return candidates
+    .filter((candidate) => isArchiveSplatPath(candidate.path))
+    .sort((a, b) => compareSplatCandidates(b, a));
 }
 
 export function buildArchiveEntryPath(entryPath: string | undefined, fileName: string): string {

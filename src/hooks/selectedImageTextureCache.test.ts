@@ -44,7 +44,7 @@ describe('selected image texture cache helpers', () => {
     replaceSelectedImageTexture('second.jpg', secondTexture);
 
     expect(firstBitmap.close).toHaveBeenCalledOnce();
-    expect(firstTexture.image).toBeNull();
+    expect(firstTexture.image).not.toBeNull();
     expect(firstDispose).toHaveBeenCalledOnce();
     expect(getSelectedImageTexture('first.jpg')).toBeNull();
     expect(getSelectedImageTexture('second.jpg')).toBe(secondTexture);
@@ -60,7 +60,7 @@ describe('selected image texture cache helpers', () => {
     clearSelectedImageTextureCache();
 
     expect(bitmap.close).toHaveBeenCalledOnce();
-    expect(texture.image).toBeNull();
+    expect(texture.image).not.toBeNull();
     expect(dispose).toHaveBeenCalledOnce();
     expect(getSelectedImageTexture('selected.jpg')).toBeNull();
   });
@@ -71,7 +71,7 @@ describe('selected image texture cache helpers', () => {
 
     disposeSelectedImageTextureEntry({ name: 'selected.jpg', texture });
 
-    expect(texture.image).toBeNull();
+    expect(texture.image).not.toBeNull();
     expect(dispose).toHaveBeenCalledOnce();
   });
 });

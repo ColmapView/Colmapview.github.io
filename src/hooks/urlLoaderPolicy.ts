@@ -1,5 +1,9 @@
 import type { ColmapManifest } from '../types/manifest';
 import {
+  getPreferredSplatCandidate,
+  isSplatFilePath,
+} from '../utils/splatFilePolicy';
+import {
   normalizeCloudStorageUrl,
   normalizeGitHostingUrl,
 } from '../utils/urlUtils';
@@ -24,7 +28,7 @@ export interface DirectoryListingLink {
   url: string;
   relativePath: string;
   isDirectory: boolean;
-  isPly: boolean;
+  isSplat: boolean;
 }
 
 export interface RemoteSplatCandidate {
@@ -212,8 +216,8 @@ export function getDirectoryListingLinks(
     }
 
     const isDirectory = href.endsWith('/') || target.pathname.endsWith('/');
-    const isPly = target.pathname.toLowerCase().endsWith('.ply');
-    if (!isDirectory && !isPly) {
+    const isSplat = isSplatFilePath(target.pathname);
+    if (!isDirectory && !isSplat) {
       continue;
     }
 
@@ -227,7 +231,7 @@ export function getDirectoryListingLinks(
       url: target.toString(),
       relativePath,
       isDirectory,
-      isPly,
+      isSplat,
     });
   }
 
@@ -293,7 +297,7 @@ export function getRelativeHuggingFaceTreePath(entryPath: string, treePath: stri
   return relativePath || null;
 }
 
-export function getLargestHuggingFacePlyPath(
+export function getPreferredHuggingFaceSplatPath(
   entries: readonly HuggingFaceDatasetTreeEntry[],
   treePath: string
 ): RemoteSplatCandidate | null {
@@ -305,7 +309,7 @@ export function getLargestHuggingFacePlyPath(
     }
 
     const relativePath = getRelativeHuggingFaceTreePath(entry.path, treePath);
-    if (!relativePath?.toLowerCase().endsWith('.ply')) {
+    if (!relativePath || !isSplatFilePath(relativePath)) {
       continue;
     }
 
@@ -313,19 +317,19 @@ export function getLargestHuggingFacePlyPath(
       continue;
     }
 
-    if (!largest || entry.size > largest.size) {
-      largest = { path: relativePath, size: entry.size };
-    }
+    largest = getPreferredSplatCandidate(largest, { path: relativePath, size: entry.size });
   }
 
   return largest;
 }
 
+export const getLargestHuggingFacePlyPath = getPreferredHuggingFaceSplatPath;
+
 export function getLargestRemoteSplatCandidate(
   current: RemoteSplatCandidate | null,
   candidate: RemoteSplatCandidate
 ): RemoteSplatCandidate {
-  return !current || candidate.size > current.size ? candidate : current;
+  return getPreferredSplatCandidate(current, candidate);
 }
 
 export function getManifestColmapFileEntries(manifest: ColmapManifest): ManifestColmapFileEntries {

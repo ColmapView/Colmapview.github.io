@@ -6,7 +6,7 @@ export {
 } from '../../utils/imageNavigationPolicy';
 
 export type ViewMode = 'gallery' | 'list';
-export type SortField = 'name' | 'imageId' | 'avgError' | 'covisibleCount' | 'numPoints3D' | 'numPoints2D';
+export type SortField = 'name' | 'imageId' | 'avgError' | 'covisibleCount' | 'numPoints3D' | 'numPoints2D' | 'splatPsnr';
 export type SortDirection = 'asc' | 'desc';
 export type CameraFilter = number | 'all';
 
@@ -21,6 +21,7 @@ export interface ImageData {
   cameraHeight: number;
   covisibleCount: number;
   avgError: number;
+  splatPsnr?: number;
 }
 
 interface GalleryImageSource {
@@ -30,6 +31,7 @@ interface GalleryImageSource {
 interface BuildGalleryImagesOptions {
   reconstruction: Reconstruction | null;
   imageSource: GalleryImageSource;
+  splatPsnrByImage?: ReadonlyMap<number, { psnr: number }>;
   cameraFilter: CameraFilter;
   sortField: SortField;
   sortDirection: SortDirection;
@@ -55,6 +57,7 @@ export function buildGalleryCameras(reconstruction: Reconstruction | null): Came
 export function buildGalleryImages({
   reconstruction,
   imageSource,
+  splatPsnrByImage,
   cameraFilter,
   sortField,
   sortDirection,
@@ -78,6 +81,7 @@ export function buildGalleryImages({
         cameraHeight: camera?.height ?? 0,
         covisibleCount: stats?.covisibleCount ?? 0,
         avgError: stats?.avgError ?? 0,
+        splatPsnr: splatPsnrByImage?.get(img.imageId)?.psnr,
       };
     });
 
@@ -86,7 +90,15 @@ export function buildGalleryImages({
     if (sortField === 'name') {
       return sortMultiplier * a.name.localeCompare(b.name);
     }
-    return sortMultiplier * (a[sortField] - b[sortField]);
+    if (sortField === 'splatPsnr') {
+      if (a.splatPsnr === undefined && b.splatPsnr === undefined) return 0;
+      if (a.splatPsnr === undefined) return 1;
+      if (b.splatPsnr === undefined) return -1;
+    }
+    const aValue = a[sortField];
+    const bValue = b[sortField];
+    if (typeof aValue !== 'number' || typeof bValue !== 'number') return 0;
+    return sortMultiplier * (aValue - bValue);
   });
 
   return mapped;

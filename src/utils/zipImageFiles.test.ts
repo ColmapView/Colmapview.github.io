@@ -29,6 +29,7 @@ import {
 import {
   clearZipCache,
   fetchZipImage,
+  fetchZipImageRaw,
   fetchZipMask,
   getZipImageCacheStats,
   getZipImageCached,
@@ -87,6 +88,20 @@ describe('zip image files', () => {
 
     await expect(fetchZipImage('cam1/photo.png')).resolves.toBe(firstResult);
     expect(extractZipImage).toHaveBeenCalledTimes(1);
+  });
+
+  it('extracts raw ZIP images without compression or display-cache writes', async () => {
+    vi.mocked(hasActiveZipArchive).mockReturnValue(true);
+
+    const rawFile = buildReadableFile({ name: 'photo.png', contents: 'raw' });
+    vi.mocked(extractZipImage).mockResolvedValue(rawFile);
+
+    const result = await fetchZipImageRaw('cam1/photo.png');
+
+    expect(result).toBe(rawFile);
+    expect(extractZipImage).toHaveBeenCalledWith('cam1/photo.png');
+    expect(getZipImageCached('cam1/photo.png')).toBeUndefined();
+    expect(getZipImageCacheStats()).toEqual({ count: 0, sizeBytes: 0 });
   });
 
   it('extracts, caches, and removes ZIP masks by image name', async () => {

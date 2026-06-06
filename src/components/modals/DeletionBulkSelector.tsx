@@ -31,14 +31,14 @@ export const DeletionBulkSelector = memo(function DeletionBulkSelector({
   const labelText = label.endsWith(':') ? label.slice(0, -1) : label;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 min-w-0">
       <div className="text-ds-secondary text-xs w-24 flex-shrink-0">{label}</div>
       <div className="flex gap-1 items-center flex-1 min-w-0">
         <select
           aria-label={labelText}
           value={value}
           onChange={(event) => onChange(event.currentTarget.value)}
-          className={`${inputStyles.select} ${inputStyles.selectSizes.xs} flex-1`}
+          className={`${inputStyles.select} ${inputStyles.selectSizes.xs} flex-1 min-w-0 max-w-full`}
         >
           <option value="">{placeholder}</option>
           {options.map((option) => (

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   useCameraStore,
   useDeletionStore,
+  useImageMetricsStore,
   useReconstructionStore,
   useUIStore,
 } from '../../store';
@@ -28,6 +29,7 @@ describe('useImageGalleryStoreFacade', () => {
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
     useCameraStore.setState(useCameraStore.getInitialState(), true);
     useDeletionStore.setState(useDeletionStore.getInitialState(), true);
+    useImageMetricsStore.setState(useImageMetricsStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
   });
 
@@ -61,6 +63,15 @@ describe('useImageGalleryStoreFacade', () => {
       currentViewState: viewState,
       navigationHistory: [navigationEntry],
     });
+    useImageMetricsStore.getState().setSplatPsnrMetric({
+      imageId: 2,
+      psnr: 29,
+      mse: 82,
+      validPixelCount: 100,
+      width: 64,
+      height: 48,
+      computedAt: 123,
+    });
 
     const { result } = renderHook(() => useImageGalleryStoreFacade());
 
@@ -79,6 +90,7 @@ describe('useImageGalleryStoreFacade', () => {
       navigationHistory: [navigationEntry],
     });
     expect(result.current.data.dataset.getImageSync('image.jpg')).toBe(imageFile);
+    expect(result.current.data.splatPsnrByImage.get(2)?.psnr).toBe(29);
   });
 
   it('routes gallery actions back to the owning stores', () => {

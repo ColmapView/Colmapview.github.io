@@ -106,7 +106,7 @@ export interface DatasetMemoryStats {
   database: ResourceInfo;
   /** Rig definitions */
   rigs: ResourceInfo;
-  /** Gaussian splat PLY file reference */
+  /** Gaussian splat file reference */
   splats: ResourceInfo;
   /** ZIP archive loaded in memory (for 'zip' source) */
   zipArchive: ResourceInfo;

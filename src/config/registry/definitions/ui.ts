@@ -8,6 +8,7 @@ import {
   AXIS_LABEL_MODES,
 } from '../../../store/types';
 import { OPACITY } from '../../../theme/opacity';
+import { LINE_WIDTH } from '../../../theme/opacity';
 import { VIZ_COLORS } from '../../../theme/colors';
 import { CSS_HEX_COLOR_PATTERN, CSS_HEX_COLOR_PATTERN_DESCRIPTION } from '../../../utils/hexColor';
 
@@ -69,6 +70,15 @@ export const uiSection = defineSection({
       default: VIZ_COLORS.match,
       persist: true,
       description: 'Hex color for matches visualization',
+    },
+    {
+      key: 'matchesLineWidth',
+      type: 'number',
+      min: 1,
+      max: 6,
+      default: LINE_WIDTH.match,
+      persist: true,
+      description: 'Match line width (1 - 6)',
     },
     // Mask overlay
     {

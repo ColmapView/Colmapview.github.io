@@ -91,6 +91,7 @@ export function GizmoContextMenu({
       <div
         ref={menuRef}
         className={contextMenuStyles.container}
+        data-idle-pause="true"
         onPointerDown={stopContextMenuSurfacePointerEvent}
         onMouseDown={stopContextMenuSurfaceMouseEvent}
         onContextMenu={suppressContextMenuSurfaceContextMenu}

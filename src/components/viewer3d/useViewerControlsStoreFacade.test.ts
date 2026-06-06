@@ -2,15 +2,24 @@ import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   useCameraStore,
+  useImageMetricsStore,
   usePointCloudStore,
   useReconstructionStore,
+  useRigStore,
+  useSplatBackendStore,
   useUIStore,
 } from '../../store';
-import { buildReconstruction } from '../../test/builders';
+import { buildFile, buildLoadedFiles, buildReconstruction } from '../../test/builders';
 import { useViewerControlsStoreFacade } from './useViewerControlsStoreFacade';
 
 describe('useViewerControlsStoreFacade', () => {
   beforeEach(() => {
+    useImageMetricsStore.setState(useImageMetricsStore.getInitialState(), true);
+    useSplatBackendStore.setState(useSplatBackendStore.getInitialState(), true);
+    useSplatBackendStore.getState().setRequestedBackend('auto');
+    useSplatBackendStore.getState().setWebGpuBackendState('unavailable');
+    useSplatBackendStore.getState().setSparkBackendAvailable(false);
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
     useUIStore.setState({
       touchMode: true,
       backgroundColor: '#123456',
@@ -29,12 +38,37 @@ describe('useViewerControlsStoreFacade', () => {
       cameraMode: 'fly',
       cameraProjection: 'orthographic',
       frustumSingleColor: '#abcdef',
+      frustumLineWidth: 2.5,
+    });
+    useUIStore.setState({
+      matchesLineWidth: 3,
+    });
+    useRigStore.setState({
+      rigLineWidth: 4,
     });
   });
 
   it('collects viewer controls UI, node, action, and reconstruction dependencies', () => {
     const reconstruction = buildReconstruction();
-    useReconstructionStore.setState({ reconstruction });
+    const activeSplatFile = buildFile('model.spz');
+    const fallbackSplatFile = buildFile('model.ply');
+    useReconstructionStore.setState({
+      reconstruction,
+      loadedFiles: buildLoadedFiles({
+        splatFile: activeSplatFile,
+        splatFiles: [activeSplatFile, fallbackSplatFile],
+      }),
+    });
+    useImageMetricsStore.setState({ splatPsnrFrameReady: true });
+    useImageMetricsStore.getState().setSplatPsnrMetric({
+      imageId: 1,
+      psnr: 31,
+      mse: 51,
+      validPixelCount: 64,
+      width: 32,
+      height: 24,
+      computedAt: 1,
+    });
 
     const { result } = renderHook(() => useViewerControlsStoreFacade());
 
@@ -54,7 +88,45 @@ describe('useViewerControlsStoreFacade', () => {
       projection: 'orthographic',
     });
     expect(result.current.nodes.cameras.singleColor).toBe('#abcdef');
+    expect(result.current.nodes.cameras.lineWidth).toBe(2.5);
+    expect(result.current.nodes.matches.lineWidth).toBe(3);
+    expect(result.current.nodes.rig.lineWidth).toBe(4);
+    expect(result.current.metrics).toMatchObject({
+      splatPsnrFrameReady: true,
+      splatPsnrComputing: false,
+      splatPsnrReadyCount: 1,
+      splatPsnrTotalCount: 1,
+    });
+    expect(result.current.splats.activeSplatFile).toBe(activeSplatFile);
+    expect(result.current.splats.splatFiles).toEqual([activeSplatFile, fallbackSplatFile]);
     expect(result.current.reconstruction).toBe(reconstruction);
+  });
+
+  it('does not hide PSNR while Spark is visible if metric WebGPU is ready', () => {
+    const activeSplatFile = buildFile('model.spz');
+    useReconstructionStore.setState({
+      loadedFiles: buildLoadedFiles({ splatFile: activeSplatFile }),
+    });
+    useSplatBackendStore.getState().setSparkBackendAvailable(true);
+    useSplatBackendStore.getState().setWebGpuMetricState('ready');
+
+    const { result } = renderHook(() => useViewerControlsStoreFacade());
+
+    expect(result.current.metrics.splatPsnrUnavailableReason).toBeNull();
+  });
+
+  it('reports metric PSNR unavailability from metric capability state', () => {
+    const activeSplatFile = buildFile('model.spz');
+    useReconstructionStore.setState({
+      loadedFiles: buildLoadedFiles({ splatFile: activeSplatFile }),
+    });
+    useSplatBackendStore.getState().setSparkBackendAvailable(true);
+    useSplatBackendStore.getState().setWebGpuMetricState('failed', 'adapter unavailable');
+
+    const { result } = renderHook(() => useViewerControlsStoreFacade());
+
+    expect(result.current.metrics.splatPsnrUnavailableReason)
+      .toBe('WebGPU PSNR failed to initialize: adapter unavailable');
   });
 
   it('routes action facade callbacks back to owning stores', () => {
@@ -64,6 +136,8 @@ describe('useViewerControlsStoreFacade', () => {
       result.current.actions.points.setVisible(true);
       result.current.actions.points.setSplatsVisible(false);
       result.current.actions.navigation.setProjection('perspective');
+      result.current.actions.matches.setLineWidth(2);
+      result.current.actions.rig.setLineWidth(5);
       result.current.ui.setBackgroundColor('#ffffff');
     });
 
@@ -71,6 +145,39 @@ describe('useViewerControlsStoreFacade', () => {
     expect(usePointCloudStore.getState().showSplats).toBe(false);
     expect(usePointCloudStore.getState().colorMode).toBe('rgb');
     expect(useCameraStore.getState().cameraProjection).toBe('perspective');
+    expect(useUIStore.getState().matchesLineWidth).toBe(2);
+    expect(useRigStore.getState().rigLineWidth).toBe(5);
     expect(useUIStore.getState().backgroundColor).toBe('#ffffff');
+  });
+
+  it('switches the active splat file and clears stale PSNR metrics', () => {
+    const activeSplatFile = buildFile('model.spz');
+    const fallbackSplatFile = buildFile('model.ply');
+    useReconstructionStore.setState({
+      loadedFiles: buildLoadedFiles({
+        splatFile: activeSplatFile,
+        splatFiles: [activeSplatFile, fallbackSplatFile],
+      }),
+    });
+    useImageMetricsStore.setState({ splatPsnrFrameReady: true });
+    useImageMetricsStore.getState().setSplatPsnrMetric({
+      imageId: 1,
+      psnr: 31,
+      mse: 51,
+      validPixelCount: 64,
+      width: 32,
+      height: 24,
+      computedAt: 1,
+    });
+
+    const { result } = renderHook(() => useViewerControlsStoreFacade());
+
+    act(() => {
+      result.current.splats.setActiveSplatFile(fallbackSplatFile);
+    });
+
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(fallbackSplatFile);
+    expect(useImageMetricsStore.getState().splatPsnrFrameReady).toBe(false);
+    expect(useImageMetricsStore.getState().splatPsnrMetrics.size).toBe(0);
   });
 });

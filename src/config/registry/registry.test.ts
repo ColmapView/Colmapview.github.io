@@ -48,6 +48,7 @@ describe('Property Registry', () => {
       const defaults = generateDefaultConfiguration();
       expect(defaults.camera.displayMode).toBe('frustum');
       expect(defaults.camera.scale).toBe(0.25);
+      expect(defaults.camera.frustumLineWidth).toBe(1);
       expect(defaults.camera.mode).toBe('orbit');
       expect(defaults.camera.fov).toBe(60);
     });
@@ -55,6 +56,7 @@ describe('Property Registry', () => {
     it('should generate correct UI defaults', () => {
       const defaults = generateDefaultConfiguration();
       expect(defaults.ui.backgroundColor).toBe('#ffffff');
+      expect(defaults.ui.matchesLineWidth).toBe(1);
       expect(defaults.ui.showAxes).toBe(true);
       expect(defaults.ui.showGrid).toBe(true);
     });
@@ -71,6 +73,7 @@ describe('Property Registry', () => {
       expect(defaults.rig.rigDisplayMode).toBe('static');
       expect(defaults.rig.rigColorMode).toBe('perFrame');
       expect(defaults.rig.rigLineColor).toBe('#00ffff');
+      expect(defaults.rig.rigLineWidth).toBe(1);
     });
   });
 

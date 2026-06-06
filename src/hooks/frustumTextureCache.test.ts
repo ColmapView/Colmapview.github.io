@@ -117,6 +117,18 @@ describe('frustum texture cache helpers', () => {
     expect(Array.from(cache.keys())).toEqual(['c.jpg', 'd.jpg']);
   });
 
+  it('keeps active textures by default so mounted image planes keep valid texture data', () => {
+    const cache: FrustumTextureCache = new Map([
+      ['a.jpg', { texture: createTexture(), lastUsed: 1 }],
+      ['b.jpg', { texture: createTexture(), lastUsed: 2 }],
+      ['c.jpg', { texture: createTexture(), lastUsed: 3 }],
+      ['d.jpg', { texture: createTexture(), lastUsed: 4 }],
+    ]);
+
+    expect(evictOldestFrustumTextures(cache)).toBe(0);
+    expect(Array.from(cache.keys())).toEqual(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+  });
+
   it('clears active textures and bitmap caches with resource cleanup', () => {
     const texture = createTexture();
     const bitmap = createBitmap();
@@ -131,7 +143,8 @@ describe('frustum texture cache helpers', () => {
     clearActiveFrustumTextures(activeTextures);
     clearFrustumBitmapCache(bitmapCache);
 
-    expect(texture.image).toBeNull();
+    expect(texture.image).not.toBeNull();
+    expect(texture.dispose).toHaveBeenCalledOnce();
     expect(activeTextures.size).toBe(0);
     expect(close).toHaveBeenCalledOnce();
     expect(bitmapCache.size).toBe(0);

@@ -33,6 +33,7 @@ describe('FloatingWindowShell', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByText('Floating title')).toBeVisible();
     expect(panelRef.current).toHaveClass(...modalStyles.toolPanel.split(' '));
+    expect(panelRef.current).toHaveAttribute('data-idle-pause', 'true');
     expect(panelRef.current).toHaveStyle({ left: '12px', top: '24px', width: '300px' });
 
     fireEvent.pointerDown(panelRef.current!);

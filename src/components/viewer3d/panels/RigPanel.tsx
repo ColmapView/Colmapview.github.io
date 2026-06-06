@@ -36,6 +36,8 @@ export interface RigPanelProps {
   setRigLineColor: (color: string) => void;
   rigLineOpacity: number;
   setRigLineOpacity: (opacity: number) => void;
+  rigLineWidth: number;
+  setRigLineWidth: (lineWidth: number) => void;
   cameraCount: number;
   frameCount: number;
   onCycleRigDisplayMode: () => void;
@@ -56,6 +58,8 @@ export function RigPanel({
   setRigLineColor,
   rigLineOpacity,
   setRigLineOpacity,
+  rigLineWidth,
+  setRigLineWidth,
   cameraCount,
   frameCount,
   onCycleRigDisplayMode,
@@ -112,6 +116,15 @@ export function RigPanel({
                   step={0.05}
                   onChange={setRigLineOpacity}
                   formatValue={(value) => value.toFixed(2)}
+                />
+                <SliderRow
+                  label="Width"
+                  value={rigLineWidth}
+                  min={1}
+                  max={6}
+                  step={0.5}
+                  onChange={setRigLineWidth}
+                  formatValue={(value) => value.toFixed(1)}
                 />
               </>
             )}

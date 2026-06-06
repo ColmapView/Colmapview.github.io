@@ -19,6 +19,7 @@ export {
   type FrustumGeometryItem,
   type FrustumImageSource,
   type FrustumLineGeometryData,
+  type FrustumPsnrMetricSource,
   type FrustumPlaneSize,
 } from './cameraFrustumGeometry';
 

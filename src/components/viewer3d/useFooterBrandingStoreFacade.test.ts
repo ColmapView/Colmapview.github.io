@@ -8,16 +8,20 @@ describe('useFooterBrandingStoreFacade', () => {
     useUIStore.setState(useUIStore.getInitialState(), true);
   });
 
-  it('collects button auto-hide visibility from the UI store', () => {
+  it('collects footer layout state from the UI store', () => {
     useUIStore.setState({
       autoHideElements: {
         ...useUIStore.getState().autoHideElements,
         buttons: false,
       },
+      embedMode: true,
+      touchMode: true,
     });
 
     const { result } = renderHook(() => useFooterBrandingStoreFacade());
 
     expect(result.current.autoHideButtons).toBe(false);
+    expect(result.current.embedMode).toBe(true);
+    expect(result.current.touchMode).toBe(true);
   });
 });

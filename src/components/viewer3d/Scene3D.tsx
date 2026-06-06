@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useEffect } from 'react';
+import { lazy, Suspense, useCallback, useMemo, useEffect } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { PointCloud } from './PointCloud/PointCloud';
 import { CameraFrustums, CameraMatches } from './CameraFrustums';
@@ -14,6 +14,16 @@ import { PickingCursor } from './PickingCursor';
 import { ScreenshotCapture } from './ScreenshotCapture';
 import { FpsTracker } from './FpsTracker';
 import { FooterBranding } from './FooterBranding';
+import { SplatPsnrEvaluator } from './SplatPsnrEvaluator';
+import { SplatBackendStatusNotifier } from './SplatBackendStatusNotifier';
+import {
+  shouldMountWebGpuSplatCanvas,
+  shouldRenderWebGpuSplatCanvas,
+} from './WebGpuSplatCanvasLayerPolicy';
+import {
+  WebGpuSplatCanvasBridge,
+  WebGpuSplatCanvasLayer,
+} from './WebGpuSplatCanvasLayer';
 import { GlobalContextMenu } from './contextMenu/GlobalContextMenu';
 import { Scene3DE2EProbe } from './Scene3DE2EProbe';
 import { Scene3DErrorBoundary } from './Scene3DErrorBoundary';
@@ -22,8 +32,9 @@ import { useAxesNode, useGridNode, useGizmoNode, useCamerasNode } from '../../no
 
 import { useIsAlignmentMode } from '../../hooks/useAlignmentMode';
 import { useIdleTimer } from '../../hooks/useIdleTimer';
+import { preloadSparkModule } from '../../utils/sparkSplatRuntime';
 import { createSim3dFromEuler, sim3dToMatrix4, isIdentityEuler, transformPoint } from '../../utils/sim3dTransforms';
-import { syncSceneBackgroundColor } from '../../utils/threeObjectMutations';
+import { syncSceneBackgroundColor, syncSceneBackgroundTransparent } from '../../utils/threeObjectMutations';
 import { CAMERA, VIZ_COLORS, OPACITY } from '../../theme';
 import {
   buildSceneBounds,
@@ -38,9 +49,32 @@ import {
   useSceneContentStoreFacade,
 } from './useScene3DStoreFacade';
 
-const LazySplatLayer = lazy(() =>
-  import('./PointCloud/SplatLayer').then((module) => ({ default: module.SplatLayer }))
-);
+const loadSplatLayer = () => import('./PointCloud/SplatLayer').then((module) => ({ default: module.SplatLayer }));
+
+const LazySplatLayer = lazy(loadSplatLayer);
+
+function SplatRuntimePreloader({
+  requestedBackend,
+  setSparkBackendAvailable,
+  splatFile,
+}: {
+  requestedBackend: 'auto' | 'webgpu' | 'spark';
+  setSparkBackendAvailable: (spark: boolean) => void;
+  splatFile?: File;
+}) {
+  useEffect(() => {
+    if (!splatFile || requestedBackend === 'webgpu') {
+      return;
+    }
+
+    void loadSplatLayer().catch(() => undefined);
+    void preloadSparkModule()
+      .then(() => setSparkBackendAvailable(true))
+      .catch(() => setSparkBackendAvailable(false));
+  }, [requestedBackend, setSparkBackendAvailable, splatFile]);
+
+  return null;
+}
 
 function SceneContent() {
   const {
@@ -55,6 +89,11 @@ function SceneContent() {
       viewDirection,
       viewTrigger,
       transform,
+      requestedSplatBackend,
+      splatBackendAvailability,
+    },
+    actions: {
+      setSparkBackendAvailable,
     },
   } = useSceneContentStoreFacade();
   // Use shared alignment mode (includes point picking AND floor detection)
@@ -68,6 +107,11 @@ function SceneContent() {
   const axes = useAxesNode();
   const grid = useGridNode();
   const gizmo = useGizmoNode();
+  const webGpuSplatCanvasMounted = shouldMountWebGpuSplatCanvas(
+    requestedSplatBackend,
+    splatBackendAvailability,
+    splatFile
+  );
 
   // Compute transform for visual preview
   const { transformMatrix, transformedCenter } = useMemo(() => {
@@ -127,6 +171,12 @@ function SceneContent() {
       {/* Hide frustums during alignment modes (point picking or floor detection) for cleaner visualization */}
       {/* Point content handles point/splat visibility internally; selection overlay
           stays visible when a camera is selected. */}
+      <SplatRuntimePreloader
+        requestedBackend={requestedSplatBackend}
+        setSparkBackendAvailable={setSparkBackendAvailable}
+        splatFile={splatFile}
+      />
+      <WebGpuSplatCanvasBridge enabled={webGpuSplatCanvasMounted} modelMatrix={transformMatrix} />
       {transformMatrix ? (
         <group matrixAutoUpdate={false} matrix={transformMatrix}>
           {transformableContent}
@@ -152,6 +202,7 @@ function SceneContent() {
       <FloorPlaneWidget boundsRadius={bounds.radius} />
 
       {e2eProbeEnabled && <Scene3DE2EProbe />}
+      <SplatPsnrEvaluator />
 
       <TrackballControls target={bounds.center} radius={bounds.radius} resetTrigger={viewResetTrigger} viewDirection={viewDirection} viewTrigger={viewTrigger} />
     </>
@@ -167,15 +218,23 @@ function LoadingFallback() {
   );
 }
 
-function BackgroundColor({ color }: { color: string }) {
-  const { scene, invalidate } = useThree();
+function BackgroundColor({ color, transparent }: { color: string; transparent: boolean }) {
+  const { gl, scene, invalidate } = useThree();
 
   useEffect(() => {
+    if (transparent) {
+      syncSceneBackgroundTransparent(scene);
+      gl.setClearAlpha(0);
+      invalidate();
+      return;
+    }
+
+    gl.setClearAlpha(1);
     if (syncSceneBackgroundColor(scene, color)) {
       // Force frame invalidation to ensure render happens after background change
       invalidate();
     }
-  }, [scene, color, invalidate]);
+  }, [gl, scene, color, transparent, invalidate]);
 
   return null;
 }
@@ -187,9 +246,16 @@ export function Scene3D() {
       wasmReconstruction,
       backgroundColor,
       showAutoHideEditor,
+      splatFile,
+      requestedSplatBackend,
+      splatBackendAvailability,
+      splatBackendResolution,
+      splatsVisible,
     },
     actions: {
+      addNotification,
       setSelectedImageId,
+      setWebGpuBackendState,
     },
   } = useSceneContainerStoreFacade();
   const sceneContextMenu = useSceneContextMenuController();
@@ -199,6 +265,22 @@ export function Scene3D() {
   const cameraPosition = useMemo(() => {
     return getInitialSceneCameraPosition(reconstruction, wasmReconstruction);
   }, [reconstruction, wasmReconstruction]);
+  const webGpuSplatCanvasMounted = shouldMountWebGpuSplatCanvas(
+    requestedSplatBackend,
+    splatBackendAvailability,
+    splatFile
+  );
+  const webGpuSplatCanvasVisible = shouldRenderWebGpuSplatCanvas(
+    splatBackendResolution,
+    splatFile,
+    splatsVisible
+  );
+  const handleWebGpuSplatRuntimeReady = useCallback(() => {
+    setWebGpuBackendState('ready');
+  }, [setWebGpuBackendState]);
+  const handleWebGpuSplatRuntimeFailed = useCallback((reason: string) => {
+    setWebGpuBackendState('failed', reason);
+  }, [setWebGpuBackendState]);
 
   return (
     <div
@@ -214,15 +296,30 @@ export function Scene3D() {
       onMouseDown={sceneContextMenu.touchMode ? undefined : sceneContextMenu.handleMouseDown}
       onMouseUp={sceneContextMenu.touchMode ? undefined : sceneContextMenu.handleMouseUp}
     >
+      <WebGpuSplatCanvasLayer
+        mounted={webGpuSplatCanvasMounted}
+        visible={webGpuSplatCanvasVisible}
+        splatFile={splatFile}
+        onRuntimeReady={handleWebGpuSplatRuntimeReady}
+        onRuntimeFailed={handleWebGpuSplatRuntimeFailed}
+      />
+      <SplatBackendStatusNotifier
+        addNotification={addNotification}
+        requestedBackend={requestedSplatBackend}
+        splatBackendResolution={splatBackendResolution}
+        splatFile={splatFile}
+        webGpuSplatCanvasMounted={webGpuSplatCanvasMounted}
+      />
       <Scene3DErrorBoundary backgroundColor={backgroundColor}>
         <Canvas
+          className="relative z-10"
           camera={{
             position: cameraPosition,
             fov: CAMERA.fov,
             near: CAMERA.nearPlane,
             far: CAMERA.farPlane,
           }}
-          gl={{ antialias: false }}
+          gl={{ antialias: false, alpha: true }}
           onPointerMissed={(e) => {
             // On mobile, skip if a frustum tap was just handled in onPointerUp
             // (R3F's click raycast may miss the mesh, triggering this falsely)
@@ -234,7 +331,7 @@ export function Scene3D() {
             }
           }}
         >
-          <BackgroundColor color={backgroundColor} />
+          <BackgroundColor color={backgroundColor} transparent={webGpuSplatCanvasVisible} />
           <FpsTracker />
           <ScreenshotCapture />
           <Suspense fallback={<LoadingFallback />}>

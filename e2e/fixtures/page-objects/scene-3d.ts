@@ -12,7 +12,7 @@ export class Scene3DPageObject {
   constructor(page: Page) {
     this.page = page;
     this.container = page.locator('[data-testid="scene-3d"]');
-    this.canvas = this.container.locator('canvas');
+    this.canvas = this.container.locator('canvas:not([data-testid="webgpu-splat-canvas"])').first();
     this.contextMenu = page.locator('[data-testid="context-menu"]');
   }
 

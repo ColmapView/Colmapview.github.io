@@ -3,7 +3,7 @@
  * Orchestrates data computation, rendering, and interaction.
  */
 
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useLayoutEffect } from 'react';
 import * as THREE from 'three';
 import { usePointCloudData } from '../../../hooks/pointCloud/usePointCloudData';
 import { usePointPicking } from '../../../hooks/pointCloud/usePointPicking';
@@ -12,6 +12,7 @@ import { SelectionOverlay } from './SelectionOverlay';
 import { usePointCloudStoreFacade } from './usePointCloudStoreFacade';
 import {
   getPointGeometryDataColorMode,
+  getPointGeometryLayerProps,
   getSplatPointOverlayAnimationMode,
   shouldRenderPointGeometry,
 } from './pointCloudRenderPolicy';
@@ -62,6 +63,7 @@ export function PointCloud(): React.JSX.Element | null {
     splatFile,
   });
   const pointColorMode = getPointGeometryDataColorMode(colorMode);
+  const pointGeometryLayerProps = getPointGeometryLayerProps(colorMode);
   const splatPointOverlayAnimationMode = getSplatPointOverlayAnimationMode(colorMode);
 
   // Extract selection state
@@ -115,13 +117,23 @@ export function PointCloud(): React.JSX.Element | null {
 
   // Create geometry for main point cloud
   const geometry = useMemo(() => {
-    if (!positions || !colors || positions.length === 0) return null;
+    if (!positions || positions.length === 0) return null;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.computeBoundingSphere();
     return geo;
-  }, [positions, colors]);
+  }, [positions]);
+
+  useLayoutEffect(() => {
+    if (!geometry || !colors) return;
+    const existing = geometry.getAttribute('color');
+    if (existing instanceof THREE.BufferAttribute && existing.array instanceof Float32Array && existing.array.length === colors.length) {
+      existing.array.set(colors);
+      existing.needsUpdate = true;
+      return;
+    }
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  }, [geometry, colors]);
 
   // Dispose geometry when it changes to prevent GPU memory leaks
   useEffect(() => {
@@ -131,7 +143,7 @@ export function PointCloud(): React.JSX.Element | null {
   }, [geometry]);
 
   // Return null only if there's nothing to render at all
-  const hasMainGeometry = geometry !== null;
+  const hasMainGeometry = geometry !== null && colors !== null;
   const hasSelectionOverlay =
     selectedPositions !== null && selectedColors !== null && selectedPositions.length > 0;
 
@@ -145,19 +157,19 @@ export function PointCloud(): React.JSX.Element | null {
           ref={pointsRef}
           matrixAutoUpdate={false}
           geometry={geometry}
-          renderOrder={showSplatPointOverlay ? 3 : 1}
+          renderOrder={pointGeometryLayerProps.renderOrder}
           onClick={needsMorePoints ? handlePointClick : undefined}
         >
           <pointsMaterial
             ref={showSplatPointOverlay ? splatPointMaterialRef : undefined}
             size={pointSize}
-            vertexColors={!showSplatPointOverlay}
+            vertexColors={pointGeometryLayerProps.vertexColors}
             color={showSplatPointOverlay ? selectionColor : '#ffffff'}
             sizeAttenuation={false}
             transparent
             opacity={pointOpacity}
-            depthTest={!showSplatPointOverlay}
-            depthWrite={!showSplatPointOverlay}
+            depthTest={pointGeometryLayerProps.depthTest}
+            depthWrite={pointGeometryLayerProps.depthWrite}
           />
         </points>
       )}

@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Plane } from '../../utils/ransac';
+import { SPARK_SPLAT_RENDER_ORDER } from './PointCloud/pointCloudRenderPolicy';
 import {
+  FLOOR_PLANE_ARROW_RENDER_ORDER,
+  FLOOR_PLANE_DISK_RENDER_ORDER,
   FLOOR_PLANE_RENDER_ORDER,
   getFloorPlaneBlinkOpacity,
+  getFloorPlaneDiskOpacity,
   getFloorPlaneWidgetData,
   getScreenPoint,
   shouldClaimFloorPlaneContextPointer,
@@ -87,7 +91,15 @@ describe('floor plane widget view model', () => {
   });
 
   it('keeps the floor widget ordered above splats', () => {
-    expect(FLOOR_PLANE_RENDER_ORDER).toBeGreaterThan(3);
+    expect(FLOOR_PLANE_RENDER_ORDER).toBeGreaterThan(SPARK_SPLAT_RENDER_ORDER);
+    expect(FLOOR_PLANE_DISK_RENDER_ORDER).toBe(FLOOR_PLANE_RENDER_ORDER);
+    expect(FLOOR_PLANE_ARROW_RENDER_ORDER).toBeGreaterThan(FLOOR_PLANE_DISK_RENDER_ORDER);
+  });
+
+  it('makes the filled floor disk more transparent than the shared circle opacity', () => {
+    expect(getFloorPlaneDiskOpacity(0.3)).toBeCloseTo(0.135);
+    expect(getFloorPlaneDiskOpacity(0)).toBe(0);
+    expect(getFloorPlaneDiskOpacity(Number.NaN)).toBe(0);
   });
 
   it('derives a blinking opacity range from the base floor disk opacity', () => {

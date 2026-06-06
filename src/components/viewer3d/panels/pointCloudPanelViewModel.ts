@@ -34,7 +34,7 @@ const POINT_COLOR_HINTS: Record<ColorMode, PointCloudColorHint> = {
   },
   splats: {
     title: 'Splats:',
-    lines: ['3D Gaussian rendering from', 'the discovered PLY file.'],
+    lines: ['3D Gaussian rendering from', 'the selected splat file.'],
   },
   splatPoints: {
     title: 'Splats + Points:',
@@ -67,6 +67,33 @@ export function shouldShowSplatPointOverlayColorControl(colorMode: ColorMode | s
 export function shouldShowSplatPointOverlaySpeedControl(colorMode: ColorMode | string): boolean {
   const supportedMode = getSupportedPointColorMode(colorMode);
   return supportedMode === 'splatPoints' || supportedMode === 'splatRainbowPoints';
+}
+
+export function getSplatFileSelectOptions(files: readonly File[]): SelectOption<string>[] {
+  return files.map((file, index) => ({
+    value: String(index),
+    label: files.length > 1 ? `${index + 1}. ${file.name}` : file.name,
+  }));
+}
+
+export function getActiveSplatFileSelectValue(
+  files: readonly File[],
+  activeFile: File | undefined
+): string {
+  const activeIndex = activeFile ? files.indexOf(activeFile) : -1;
+  return String(activeIndex >= 0 ? activeIndex : 0);
+}
+
+export function getSplatFileFromSelectValue(
+  files: readonly File[],
+  value: string
+): File | null {
+  const index = Number(value);
+  if (!Number.isInteger(index) || index < 0 || index >= files.length) {
+    return null;
+  }
+
+  return files[index];
 }
 
 export function getPointCloudColorHint(colorMode: ColorMode | string): PointCloudColorHint {

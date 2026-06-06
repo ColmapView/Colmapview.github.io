@@ -2,23 +2,36 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useUIStore } from '../store';
 import {
   getIdleTimeoutDelayMs,
-  hasDeliberateIdlePointerMove,
-  isIdleHideableTarget,
+  isIdleFocusPauseTarget,
+  isIdlePauseTarget,
+  shouldResumeIdleTimerAfterFocusOut,
   shouldResumeIdleTimerAfterMouseOut,
-  type IdlePointerPosition,
 } from './idleTimerPolicy';
 
 /**
  * Sets data-idle="true" on the container after no deliberate interaction for the configured timeout.
- * Pauses during pointer lock (fly mode) and when hovering over idle-hideable elements.
+ * Pauses during pointer lock (fly mode) and while hovering popup/control surfaces.
  * Timeout of 0 disables auto-hide entirely.
  */
 export function useIdleTimer() {
   const containerRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const lastPos = useRef<IdlePointerPosition | null>(null);
-  const hoveringRef = useRef(false);
+  const hoveringPauseTargetRef = useRef(false);
+  const focusPauseTargetRef = useRef(false);
   const timeoutRef = useRef(useUIStore.getState().idleHideTimeout);
+
+  const isPausedByUi = useCallback(
+    () =>
+      hoveringPauseTargetRef.current ||
+      (focusPauseTargetRef.current && isIdleFocusPauseTarget(document.activeElement)),
+    []
+  );
+
+  const showFromIdle = useCallback(() => {
+    if (!containerRef.current) return;
+    containerRef.current.dataset.idle = 'false';
+    useUIStore.getState().setIsIdle(false);
+  }, []);
 
   // Keep timeout in sync without re-running the effect
   useEffect(() => {
@@ -40,20 +53,19 @@ export function useIdleTimer() {
     clearTimeout(timerRef.current);
     if (delayMs === null) return;
     timerRef.current = setTimeout(() => {
-      if (containerRef.current && !hoveringRef.current) {
+      if (containerRef.current && !isPausedByUi()) {
         containerRef.current.dataset.idle = 'true';
         useUIStore.getState().setIsIdle(true);
       }
     }, delayMs);
-  }, []);
+  }, [isPausedByUi]);
 
   const resetTimer = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-    el.dataset.idle = 'false';
-    useUIStore.getState().setIsIdle(false);
+    showFromIdle();
     startTimer();
-  }, [startTimer]);
+  }, [showFromIdle, startTimer]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -61,22 +73,14 @@ export function useIdleTimer() {
 
     resetTimer();
 
-    // Taps and keyboard always reset
-    const onTap = () => {
-      lastPos.current = null;
-      resetTimer();
-    };
-
-    // Only reset on significant pointer movement
-    const onMove = (e: PointerEvent) => {
-      if (!lastPos.current) {
-        lastPos.current = { x: e.clientX, y: e.clientY };
-        return;
-      }
-      if (hasDeliberateIdlePointerMove(lastPos.current, { x: e.clientX, y: e.clientY })) {
-        lastPos.current = { x: e.clientX, y: e.clientY };
+    const onPointerActivity = (e: Event) => {
+      if (isIdlePauseTarget(e.target)) {
         resetTimer();
       }
+    };
+
+    const onKeyDown = () => {
+      resetTimer();
     };
 
     // Pointer lock (fly mode) — hide immediately and block hover, show on exit
@@ -96,45 +100,60 @@ export function useIdleTimer() {
       }
     };
 
-    // Hover on idle-hideable elements — pause hiding, show if hidden
+    // Hover on popup/control surfaces — pause hiding, show if hidden.
+    // These can be rendered through portals, so listen at document level.
     const onMouseOver = (e: MouseEvent) => {
-      if (isIdleHideableTarget(e.target)) {
-        hoveringRef.current = true;
+      if (isIdlePauseTarget(e.target)) {
+        hoveringPauseTargetRef.current = true;
         clearTimeout(timerRef.current);
-        if (containerRef.current) {
-          containerRef.current.dataset.idle = 'false';
-          useUIStore.getState().setIsIdle(false);
-        }
+        showFromIdle();
       }
     };
     const onMouseOut = (e: MouseEvent) => {
       if (shouldResumeIdleTimerAfterMouseOut(e.relatedTarget)) {
-        hoveringRef.current = false;
-        startTimer();
+        hoveringPauseTargetRef.current = false;
+        if (!isPausedByUi()) startTimer();
+      }
+    };
+    const onFocusIn = (e: FocusEvent) => {
+      if (isIdleFocusPauseTarget(e.target)) {
+        focusPauseTargetRef.current = true;
+        clearTimeout(timerRef.current);
+        showFromIdle();
+      }
+    };
+    const onFocusOut = (e: FocusEvent) => {
+      if (shouldResumeIdleTimerAfterFocusOut(e.relatedTarget)) {
+        focusPauseTargetRef.current = false;
+        if (!isPausedByUi()) startTimer();
       }
     };
 
-    el.addEventListener('pointerdown', onTap, { passive: true });
-    el.addEventListener('pointerup', onTap, { passive: true });
-    el.addEventListener('pointermove', onMove, { passive: true });
-    el.addEventListener('keydown', onTap, { passive: true });
-    el.addEventListener('wheel', onTap, { passive: true });
-    el.addEventListener('mouseover', onMouseOver, { passive: true });
-    el.addEventListener('mouseout', onMouseOut, { passive: true });
+    el.addEventListener('pointerdown', onPointerActivity, { passive: true });
+    el.addEventListener('pointerup', onPointerActivity, { passive: true });
+    el.addEventListener('pointermove', onPointerActivity, { passive: true });
+    el.addEventListener('keydown', onKeyDown, { passive: true });
+    el.addEventListener('wheel', onPointerActivity, { passive: true });
+    document.addEventListener('mouseover', onMouseOver, { passive: true });
+    document.addEventListener('mouseout', onMouseOut, { passive: true });
+    document.addEventListener('focusin', onFocusIn);
+    document.addEventListener('focusout', onFocusOut);
     document.addEventListener('pointerlockchange', onPointerLockChange);
 
     return () => {
       clearTimeout(timerRef.current);
-      el.removeEventListener('pointerdown', onTap);
-      el.removeEventListener('pointerup', onTap);
-      el.removeEventListener('pointermove', onMove);
-      el.removeEventListener('keydown', onTap);
-      el.removeEventListener('wheel', onTap);
-      el.removeEventListener('mouseover', onMouseOver);
-      el.removeEventListener('mouseout', onMouseOut);
+      el.removeEventListener('pointerdown', onPointerActivity);
+      el.removeEventListener('pointerup', onPointerActivity);
+      el.removeEventListener('pointermove', onPointerActivity);
+      el.removeEventListener('keydown', onKeyDown);
+      el.removeEventListener('wheel', onPointerActivity);
+      document.removeEventListener('mouseover', onMouseOver);
+      document.removeEventListener('mouseout', onMouseOut);
+      document.removeEventListener('focusin', onFocusIn);
+      document.removeEventListener('focusout', onFocusOut);
       document.removeEventListener('pointerlockchange', onPointerLockChange);
     };
-  }, [resetTimer, startTimer]);
+  }, [isPausedByUi, resetTimer, showFromIdle, startTimer]);
 
   return containerRef;
 }

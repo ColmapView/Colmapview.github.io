@@ -1,10 +1,11 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { buildImageBitmap } from '../test/builders';
 import {
   clearFrustumTextureCache,
   clearSelectedImageTexture,
+  prefetchFrustumTexturesInBackground,
   useFrustumTexture,
   useSelectedImageTexture,
 } from './useFrustumTexture';
@@ -21,6 +22,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
   clearFrustumTextureCache();
   clearSelectedImageTexture();
   vi.unstubAllGlobals();
@@ -58,6 +60,51 @@ describe('useFrustumTexture', () => {
 
     expect(result.current?.image).toBe(textureBitmap);
     expect(decodedBitmap.close).toHaveBeenCalledOnce();
+    expect(createBitmap).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses a prefetched image-plane URL even when the frustum has no file attached yet', async () => {
+    const prefetchedBitmap = createBitmapStub({ width: 128, height: 64 });
+    const textureBitmap = createBitmapStub({ width: 96, height: 48 });
+    const createBitmap = vi.fn()
+      .mockResolvedValueOnce(prefetchedBitmap)
+      .mockResolvedValueOnce(textureBitmap);
+    vi.stubGlobal('createImageBitmap', createBitmap);
+
+    await prefetchFrustumTexturesInBackground([{ file: createFile(), name: 'image.jpg' }]);
+
+    const { result } = renderHook(() => useFrustumTexture(undefined, 'image.jpg', true));
+
+    await waitFor(() => {
+      expect(result.current).toBeInstanceOf(THREE.Texture);
+    });
+
+    expect(result.current?.image).toBe(textureBitmap);
+    expect(prefetchedBitmap.close).toHaveBeenCalledOnce();
+    expect(createBitmap).toHaveBeenCalledTimes(2);
+  });
+
+  it('updates a mounted image-plane texture when background prefetch fills the URL cache', async () => {
+    const prefetchedBitmap = createBitmapStub({ width: 128, height: 64 });
+    const textureBitmap = createBitmapStub({ width: 96, height: 48 });
+    const createBitmap = vi.fn()
+      .mockResolvedValueOnce(prefetchedBitmap)
+      .mockResolvedValueOnce(textureBitmap);
+    vi.stubGlobal('createImageBitmap', createBitmap);
+
+    const { result } = renderHook(() => useFrustumTexture(undefined, 'image.jpg', true));
+    expect(result.current).toBeNull();
+
+    await act(async () => {
+      await prefetchFrustumTexturesInBackground([{ file: createFile(), name: 'image.jpg' }]);
+    });
+
+    await waitFor(() => {
+      expect(result.current).toBeInstanceOf(THREE.Texture);
+    });
+
+    expect(result.current?.image).toBe(textureBitmap);
+    expect(prefetchedBitmap.close).toHaveBeenCalledOnce();
     expect(createBitmap).toHaveBeenCalledTimes(2);
   });
 });

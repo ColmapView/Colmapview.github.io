@@ -139,6 +139,7 @@ export interface LoadedFiles {
   rigsFile?: File;
   framesFile?: File;
   imageFiles: Map<string, File>;
+  splatFiles?: File[];
   hasMasks: boolean;
 }
 

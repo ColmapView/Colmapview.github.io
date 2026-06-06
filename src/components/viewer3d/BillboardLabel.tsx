@@ -1,5 +1,6 @@
-import { Billboard, Text } from '@react-three/drei';
+import { Billboard } from '@react-three/drei';
 import { CANVAS_COLORS } from '../../theme';
+import { CanvasTextSprite } from './CanvasTextSprite';
 
 interface BillboardLabelProps {
   label: string;
@@ -20,30 +21,26 @@ export function BillboardLabel({ label, suffix, fontSize, color, position, ancho
   return (
     <Billboard position={position} follow={true}>
       <group>
-        <Text
+        <CanvasTextSprite
+          text={label}
           fontSize={fontSize}
           color={color}
           anchorX={hasSuffix ? 'right' : anchorX}
-          anchorY="middle"
           outlineWidth={fontSize * 0.08}
           outlineColor={CANVAS_COLORS.outline}
           outlineOpacity={0.5}
-        >
-          {label}
-        </Text>
+        />
         {hasSuffix && (
-          <Text
+          <CanvasTextSprite
+            text={`(${suffix})`}
             fontSize={fontSize * 0.6}
             color={color}
             anchorX="left"
-            anchorY="middle"
             position={[fontSize * 0.15, 0, 0]}
             outlineWidth={fontSize * 0.05}
             outlineColor={CANVAS_COLORS.outline}
             outlineOpacity={0.5}
-          >
-            ({suffix})
-          </Text>
+          />
         )}
       </group>
     </Billboard>

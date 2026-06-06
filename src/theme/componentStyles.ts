@@ -527,9 +527,9 @@ export const dragOverlayStyles = {
 
 export const footerStyles = {
   // Note: idle-hideable is added conditionally by FooterBranding based on autoHideElements.buttons
-  logo: 'absolute bottom-6 left-6 footer-logo-responsive',
+  logo: 'absolute left-6 footer-logo-responsive',
   logoImage: 'opacity-70 hover-opacity-100 transition-opacity',
-  socialContainer: 'absolute bottom-6 right-6 flex items-center gap-4 footer-social-responsive',
+  socialContainer: 'absolute right-6 flex items-center gap-4 footer-social-responsive',
   socialLink: 'text-ds-secondary opacity-70 hover-opacity-100 transition-opacity',
 } as const;
 
@@ -558,7 +558,7 @@ export const toolbarStyles = {
 // ============================================
 
 export const statusBarStyles = {
-  container: 'h-10 border-t border-ds bg-ds-tertiary text-ds-secondary text-base px-4 flex items-center justify-between status-bar-responsive overflow-visible',
+  container: 'absolute inset-x-0 bottom-0 z-[200] h-10 border-t border-ds bg-ds-tertiary text-ds-secondary text-base px-4 flex items-center justify-between status-bar-responsive overflow-visible',
   group: 'flex items-center gap-6 status-bar-group overflow-visible',
 } as const;
 

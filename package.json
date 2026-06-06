@@ -29,6 +29,7 @@
     "@tanstack/react-virtual": "^3.13.18",
     "fflate": "^0.8.2",
     "gif.js": "^0.2.0",
+    "gs-toolbox": "file:vendor/gs-toolbox",
     "js-yaml": "^4.1.1",
     "libarchive.js": "^2.0.2",
     "mp4-muxer": "^5.2.2",

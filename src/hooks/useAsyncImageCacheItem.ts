@@ -67,8 +67,8 @@ function createAsyncImageCacheItemResource<T>(): AsyncImageCacheItemResource<T> 
       cacheGeneration,
       queueLoad,
     }) => {
-      const cacheKey = enabled && imageFile && imageName ? imageName : '';
-      if (!cacheKey || !imageFile) {
+      const cacheKey = enabled && imageName ? imageName : '';
+      if (!cacheKey) {
         requestId++;
         publish({ cacheGeneration, cacheKey: '', result: null });
         return;
@@ -78,6 +78,12 @@ function createAsyncImageCacheItemResource<T>(): AsyncImageCacheItemResource<T> 
         const cached = cache.get(cacheKey) ?? null;
         requestId++;
         publish({ cacheGeneration, cacheKey, result: cached });
+        return;
+      }
+
+      if (!imageFile) {
+        requestId++;
+        publish({ cacheGeneration, cacheKey: '', result: null });
         return;
       }
 
@@ -142,11 +148,13 @@ export function useAsyncImageCacheItem<T>({
     resource,
   ]);
 
-  if (!enabled || !imageFile || !imageName) return null;
+  if (!enabled || !imageName) return null;
 
   if (cache.has(imageName)) {
     return cache.get(imageName) ?? null;
   }
+
+  if (!imageFile) return null;
 
   return snapshot.cacheGeneration === cacheGeneration && snapshot.cacheKey === imageName
     ? snapshot.result

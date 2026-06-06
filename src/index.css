@@ -1523,6 +1523,19 @@ legend {
   pointer-events: none;
 }
 
+.footer-status-clearance {
+  bottom: calc(var(--sp-10) + var(--sp-6));
+}
+
+.footer-no-status-clearance {
+  bottom: var(--sp-6);
+}
+
+.footer-logo-responsive,
+.footer-social-responsive {
+  z-index: 250;
+}
+
 /* Responsive styles for small screens (laptops and smaller) */
 @media (max-width: 1520px) {
   /* Smaller control buttons — scale border-radius proportionally (desktop: 40px/8px = 20%) */
@@ -1544,7 +1557,6 @@ legend {
 
   /* Smaller footer branding */
   .footer-logo-responsive {
-    bottom: 0.75rem !important;
     left: 0.75rem !important;
   }
 
@@ -1553,7 +1565,6 @@ legend {
   }
 
   .footer-social-responsive {
-    bottom: 0.75rem !important;
     right: 0.75rem !important;
     gap: 0.5rem !important;
   }
@@ -1561,6 +1572,14 @@ legend {
   .footer-social-responsive svg {
     width: 1.25rem;
     height: 1.25rem;
+  }
+
+  .footer-status-clearance {
+    bottom: calc(var(--sp-8) + var(--sp-3)) !important;
+  }
+
+  .footer-no-status-clearance {
+    bottom: var(--sp-3) !important;
   }
 
   /* Smaller status bar */

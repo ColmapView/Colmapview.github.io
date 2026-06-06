@@ -7,6 +7,7 @@ vi.mock('../utils/imageFileUtils', () => ({
 }));
 
 vi.mock('../utils/urlImageFiles', () => ({
+  fetchUrlImageRaw: vi.fn(),
   getUrlImageCached: vi.fn(),
   fetchUrlImage: vi.fn(),
   fetchUrlMask: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock('../utils/urlImageFiles', () => ({
 }));
 
 vi.mock('../utils/zipImageFiles', () => ({
+  fetchZipImageRaw: vi.fn(),
   getZipImageCached: vi.fn(),
   fetchZipImage: vi.fn(),
   fetchZipMask: vi.fn(),
@@ -25,12 +27,14 @@ import {
   getMaskFile,
 } from '../utils/imageFileUtils';
 import {
+  fetchUrlImageRaw,
   getUrlImageCached,
   fetchUrlImage,
   fetchUrlMask,
   prefetchUrlImages,
 } from '../utils/urlImageFiles';
 import {
+  fetchZipImageRaw,
   getZipImageCached,
   fetchZipImage,
   fetchZipMask,
@@ -78,6 +82,7 @@ describe('dataset source adapters', () => {
 
   it('shares remote source behavior for URL and manifest datasets', async () => {
     const fetchedImage = new File(['image'], 'image.jpg');
+    const rawImage = new File(['raw'], 'image.jpg');
     const maskFile = new File(['mask'], 'mask.png');
     const state: DatasetState = {
       ...baseState,
@@ -92,10 +97,13 @@ describe('dataset source adapters', () => {
 
     vi.mocked(getUrlImageCached).mockReturnValue(undefined);
     vi.mocked(fetchUrlImage).mockResolvedValue(fetchedImage);
+    vi.mocked(fetchUrlImageRaw).mockResolvedValue(rawImage);
     vi.mocked(fetchUrlMask).mockResolvedValue(maskFile);
 
     await expect(manifestAdapter.getImage(state, 'image.jpg')).resolves.toBe(fetchedImage);
     expect(fetchUrlImage).toHaveBeenCalledWith('https://example.test/images/', 'image.jpg');
+    await expect(manifestAdapter.getMetricImage(state, 'image.jpg')).resolves.toBe(rawImage);
+    expect(fetchUrlImageRaw).toHaveBeenCalledWith('https://example.test/images/', 'image.jpg');
     await expect(manifestAdapter.getMask(state, 'image.jpg')).resolves.toBe(maskFile);
     expect(fetchUrlMask).toHaveBeenCalledWith('https://example.test/masks/', 'image.jpg');
 
@@ -108,17 +116,21 @@ describe('dataset source adapters', () => {
   it('adapts ZIP source availability, cached reads, extraction, and prefetch batching', async () => {
     const cached = new File(['cached'], 'cached.jpg');
     const fetched = new File(['fetched'], 'fetched.jpg');
+    const raw = new File(['raw'], 'raw.jpg');
     const state: DatasetState = { ...baseState, sourceType: 'zip' };
     const adapter = getDatasetSourceAdapter('zip')!;
 
     vi.mocked(isZipLoadingAvailable).mockReturnValue(true);
     vi.mocked(getZipImageCached).mockImplementation((name: string) => name === 'cached.jpg' ? cached : undefined);
     vi.mocked(fetchZipImage).mockResolvedValue(fetched);
+    vi.mocked(fetchZipImageRaw).mockResolvedValue(raw);
     vi.mocked(fetchZipMask).mockResolvedValue(new File(['mask'], 'mask.png'));
 
     await expect(adapter.getImage(state, 'cached.jpg')).resolves.toBe(cached);
     await expect(adapter.getImage(state, 'missing.jpg')).resolves.toBe(fetched);
     expect(fetchZipImage).toHaveBeenCalledWith('missing.jpg');
+    await expect(adapter.getMetricImage(state, 'missing.jpg')).resolves.toBe(raw);
+    expect(fetchZipImageRaw).toHaveBeenCalledWith('missing.jpg');
     expect(adapter.getImageSync(state, 'cached.jpg')).toBe(cached);
     await expect(adapter.getMask(state, 'image.jpg')).resolves.toBeInstanceOf(File);
     expect(adapter.hasImages(state)).toBe(true);

@@ -10,6 +10,17 @@ interface PointGeometryVisibilityOptions {
   splatFile?: File;
 }
 
+export interface PointGeometryLayerProps {
+  renderOrder: number;
+  vertexColors: boolean;
+  depthTest: boolean;
+  depthWrite: boolean;
+}
+
+export const POINT_GEOMETRY_RENDER_ORDER = 1;
+export const SPARK_SPLAT_RENDER_ORDER = 2;
+export const SPLAT_POINT_OVERLAY_RENDER_ORDER = 3;
+
 export function shouldRenderPointGeometry({
   showPointCloud,
   colorMode,
@@ -48,4 +59,22 @@ export function getSplatPointOverlayAnimationMode(
   }
 
   return null;
+}
+
+export function getPointGeometryLayerProps(colorMode: ColorMode): PointGeometryLayerProps {
+  if (isSplatPointOverlayColorMode(colorMode)) {
+    return {
+      renderOrder: SPLAT_POINT_OVERLAY_RENDER_ORDER,
+      vertexColors: false,
+      depthTest: false,
+      depthWrite: false,
+    };
+  }
+
+  return {
+    renderOrder: POINT_GEOMETRY_RENDER_ORDER,
+    vertexColors: true,
+    depthTest: true,
+    depthWrite: true,
+  };
 }

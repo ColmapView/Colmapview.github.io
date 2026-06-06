@@ -58,6 +58,18 @@ export class DatasetManager {
   }
 
   /**
+   * Get an original image file for metric computations.
+   * Unlike getImage(), URL and ZIP sources bypass the resized/lossy display cache.
+   *
+   * @param imageName - Image name from COLMAP
+   * @returns The original image File or null if not found/failed
+   */
+  async getMetricImage(imageName: string): Promise<File | null> {
+    const state = this.getState();
+    return await (this.getSourceAdapter(state)?.getMetricImage(state, imageName) ?? Promise.resolve(null));
+  }
+
+  /**
    * Get a cached image file synchronously.
    * Returns undefined if not in cache (does not trigger fetch).
    * Useful for render loops where async is not allowed.

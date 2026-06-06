@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useLayoutEffect } from 'react';
 import { useDatasetDiagnostics, type DatasetMemoryStats } from '../../dataset';
 import { cacheStatsStyles } from '../../theme';
 import { getCacheStatsEntries, type CacheStatsEntry } from '../../cache';
-import { CacheRow, ResourceRow, SourceIcon, StatusDot } from './CacheStatsRows';
+import { CacheRow, ResourceRow, StatusDot } from './CacheStatsRows';
 import {
   buildCacheStatsFooterTotals,
   buildDatasetResourceRows,
@@ -74,7 +74,6 @@ export function CacheStatsIndicator() {
     >
       {/* Status bar indicator */}
       <span className={cacheStatsStyles.indicator}>
-        <span className={`flex items-center ${sourceInfo?.color}`}><SourceIcon sourceType={sourceType} /></span>
         <span className={cacheStatsStyles.indicatorLabel}>Source:</span>
         <span className={cacheStatsStyles.indicatorValue}>{sourceLabel}</span>
       </span>
@@ -90,7 +89,6 @@ export function CacheStatsIndicator() {
             {/* Header */}
             <div className={cacheStatsStyles.header}>
               <div className={cacheStatsStyles.headerTitle}>
-                <span className={sourceInfo?.color}><SourceIcon sourceType={sourceType} /></span>
                 {sourceInfo?.label} Dataset
               </div>
               <div className={cacheStatsStyles.headerLegend}>

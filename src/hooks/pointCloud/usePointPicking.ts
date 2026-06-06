@@ -11,13 +11,13 @@ import {
   needsMoreSelectedPoints,
 } from '../../store/pointPickingPolicy';
 import { syncPointRaycasterThreshold } from '../../utils/threeObjectMutations';
-import type { NearestPointResult, SelectedPointData, ScreenPosition } from './types';
+import type { NearestPointResult, Point3DIdLookup, SelectedPointData, ScreenPosition } from './types';
 
 export interface UsePointPickingParams {
   pickingMode: PointPickingMode;
   selectedPointsLength: number;
   pointSize: number;
-  indexToPoint3DIdRef: React.RefObject<Map<number, bigint>>;
+  indexToPoint3DIdRef: React.RefObject<Point3DIdLookup>;
   addSelectedPoint: (point: SelectedPointData, screenPosition?: ScreenPosition) => void;
   setHoveredPoint: (position: THREE.Vector3 | null) => void;
 }

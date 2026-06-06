@@ -1,8 +1,9 @@
 import { memo } from 'react';
 import * as THREE from 'three';
-import { Billboard, Text } from '@react-three/drei';
+import { Billboard } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
 import { CANVAS_COLORS, INTERACTION_HOVER_COLOR } from '../../theme';
+import { CanvasTextSprite } from './CanvasTextSprite';
 
 interface AxisCylinderProps {
   position: [number, number, number];
@@ -103,44 +104,38 @@ export const AxisLabel = memo(function AxisLabel({
         onClick={onClick}
         onContextMenu={onContextMenu}
       >
-        <Text
+        <CanvasTextSprite
+          text={label}
           fontSize={fontSize}
           color={displayColor}
           anchorX={((isXAxis && showExtra) || hasSuffix) ? 'right' : 'center'}
-          anchorY="middle"
           outlineWidth={fontSize * 0.08}
           outlineColor={CANVAS_COLORS.outline}
           outlineOpacity={0.5}
-        >
-          {label}
-        </Text>
+        />
         {isXAxis && showExtra && (
-          <Text
+          <CanvasTextSprite
+            text={`(${scaleStr})`}
             fontSize={fontSize * 0.6}
             color={displayColor}
             anchorX="left"
-            anchorY="middle"
             position={[fontSize * 0.15, 0, 0]}
             outlineWidth={fontSize * 0.05}
             outlineColor={CANVAS_COLORS.outline}
             outlineOpacity={0.5}
-          >
-            ({scaleStr})
-          </Text>
+          />
         )}
         {hasSuffix && (
-          <Text
+          <CanvasTextSprite
+            text={`(${suffix})`}
             fontSize={fontSize * 0.6}
             color={displayColor}
             anchorX="left"
-            anchorY="middle"
             position={[fontSize * 0.15, 0, 0]}
             outlineWidth={fontSize * 0.05}
             outlineColor={CANVAS_COLORS.outline}
             outlineOpacity={0.5}
-          >
-            ({suffix})
-          </Text>
+          />
         )}
       </group>
     </Billboard>

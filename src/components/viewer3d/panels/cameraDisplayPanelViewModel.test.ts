@@ -17,26 +17,35 @@ describe('camera display panel view-model helpers', () => {
   });
 
   it('adds rig-frame color only when rig data is available', () => {
-    expect(getFrustumColorModeOptions(false)).toEqual([
+    expect(getFrustumColorModeOptions({ hasRigData: false, hasSplatPsnr: false })).toEqual([
       { value: 'single', label: 'Single' },
       { value: 'byCamera', label: 'By Cam' },
     ]);
-    expect(getFrustumColorModeOptions(true)).toEqual([
+    expect(getFrustumColorModeOptions({ hasRigData: true, hasSplatPsnr: false })).toEqual([
       { value: 'single', label: 'Single' },
       { value: 'byCamera', label: 'By Cam' },
       { value: 'byRigFrame', label: 'By Frame' },
     ]);
   });
 
+  it('adds PSNR color only when a splat frame is ready', () => {
+    expect(getFrustumColorModeOptions({ hasRigData: false, hasSplatPsnr: true })).toEqual([
+      { value: 'single', label: 'Single' },
+      { value: 'byCamera', label: 'By Cam' },
+      { value: 'splatPsnr', label: 'PSNR' },
+    ]);
+  });
+
   it('returns fresh frustum color options for each call', () => {
-    const options = getFrustumColorModeOptions(true);
+    const options = getFrustumColorModeOptions({ hasRigData: true, hasSplatPsnr: true });
 
     options.pop();
 
-    expect(getFrustumColorModeOptions(true).map((option) => option.value)).toEqual([
+    expect(getFrustumColorModeOptions({ hasRigData: true, hasSplatPsnr: true }).map((option) => option.value)).toEqual([
       'single',
       'byCamera',
       'byRigFrame',
+      'splatPsnr',
     ]);
   });
 

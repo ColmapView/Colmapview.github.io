@@ -79,7 +79,7 @@ export const ExportReconstructionSection = memo(function ExportReconstructionSec
             onClick={onDownloadSplat}
             className={styles.actionButton}
           >
-            Download Splat PLY
+            Download Splat File
           </button>
         )}
       </div>

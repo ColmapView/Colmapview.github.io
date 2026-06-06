@@ -37,6 +37,28 @@ import {
 } from './frustumTextureResources';
 import { isOffscreenCanvas } from '../utils/canvasTypeGuards';
 
+const BACKGROUND_FRUSTUM_TEXTURE_PREFETCH_BATCH_SIZE = 4;
+let frustumTextureCacheVersion = 0;
+const frustumTextureCacheListeners = new Set<() => void>();
+
+function notifyFrustumTextureCacheChanged(): void {
+  frustumTextureCacheVersion++;
+  for (const listener of frustumTextureCacheListeners) {
+    listener();
+  }
+}
+
+export function subscribeFrustumTextureCacheChanges(listener: () => void): () => void {
+  frustumTextureCacheListeners.add(listener);
+  return () => {
+    frustumTextureCacheListeners.delete(listener);
+  };
+}
+
+export function getFrustumTextureCacheVersion(): number {
+  return frustumTextureCacheVersion;
+}
+
 /**
  * Process canvas to JPEG blob URL (same as thumbnails, but larger size).
  */
@@ -106,6 +128,7 @@ export function clearFrustumTextureCache(): void {
 
   // NOW safe to close bitmap cache (textures no longer reference them)
   clearFrustumBitmapCache(bitmapCache);
+  notifyFrustumTextureCacheChanged();
 }
 
 /**
@@ -146,7 +169,35 @@ export async function prefetchFrustumTextures(
   images: Array<{ file: File; name: string }>,
   onProgress?: (progress: number) => void
 ): Promise<void> {
-  return frustumUrlCache.prefetch(images, onProgress);
+  await frustumUrlCache.prefetch(images, onProgress);
+  notifyFrustumTextureCacheChanged();
+}
+
+export interface BackgroundFrustumTexturePrefetchOptions {
+  batchSize?: number;
+  shouldCancel?: () => boolean;
+}
+
+/**
+ * Gently prefetch the low-resolution JPEG URL cache used by image-plane display.
+ */
+export async function prefetchFrustumTexturesInBackground(
+  images: Array<{ file: File; name: string }>,
+  options: BackgroundFrustumTexturePrefetchOptions = {}
+): Promise<void> {
+  const batchSize = Math.max(1, Math.floor(options.batchSize ?? BACKGROUND_FRUSTUM_TEXTURE_PREFETCH_BATCH_SIZE));
+  for (let i = 0; i < images.length; i += batchSize) {
+    if (options.shouldCancel?.()) {
+      return;
+    }
+
+    const batch = images.slice(i, i + batchSize);
+    await Promise.all(batch.map(({ file, name }) => frustumUrlCache.load(file, name)));
+    notifyFrustumTextureCacheChanged();
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
+  }
 }
 
 /**
@@ -179,7 +230,7 @@ export async function prioritizeFrustumTexture(
  * Strategy:
  * 1. Cache stores JPEG blob URLs (compressed, ~50-100KB each)
  * 2. Small bitmap cache for fast texture recreation (MAX_CACHED_BITMAPS)
- * 3. Keep only MAX_ACTIVE_TEXTURES in GPU memory (LRU eviction)
+ * 3. Keep active Three textures valid while mounted image planes may reference them
  *
  * @param imageFile - The image file to load
  * @param imageName - Unique identifier for caching
@@ -191,6 +242,13 @@ export function useFrustumTexture(
   imageName: string,
   enabled: boolean
 ): THREE.Texture | null {
+  const cacheVersion = useSyncExternalStore(
+    subscribeFrustumTextureCacheChanges,
+    getFrustumTextureCacheVersion,
+    getFrustumTextureCacheVersion
+  );
+  void cacheVersion;
+
   // Get the cached JPEG blob URL
   const cachedUrl = frustumUrlCache.useCache(imageFile, imageName, enabled);
   const resourceRef = useRef<FrustumTextureResource | null>(null);

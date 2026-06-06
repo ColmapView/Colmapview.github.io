@@ -122,6 +122,7 @@ const cameraAdapter: StoreConfigAdapter = {
       case 'frustumColorMode': return state.frustumColorMode;
       case 'frustumSingleColor': return state.frustumSingleColor;
       case 'frustumStandbyOpacity': return state.frustumStandbyOpacity;
+      case 'frustumLineWidth': return state.frustumLineWidth;
       case 'unselectedCameraOpacity': return state.unselectedCameraOpacity;
       case 'cameraMode': return state.cameraMode;
       case 'cameraProjection': return state.cameraProjection;
@@ -166,6 +167,9 @@ const cameraAdapter: StoreConfigAdapter = {
         return;
       case 'frustumStandbyOpacity':
         state.setFrustumStandbyOpacity(requireNumber(storeKey, value));
+        return;
+      case 'frustumLineWidth':
+        state.setFrustumLineWidth(requireNumber(storeKey, value));
         return;
       case 'unselectedCameraOpacity':
         state.setUnselectedCameraOpacity(requireNumber(storeKey, value));
@@ -238,6 +242,7 @@ const uiAdapter: StoreConfigAdapter = {
       case 'matchesDisplayMode': return state.matchesDisplayMode;
       case 'matchesOpacity': return state.matchesOpacity;
       case 'matchesColor': return state.matchesColor;
+      case 'matchesLineWidth': return state.matchesLineWidth;
       case 'showMaskOverlay': return state.showMaskOverlay;
       case 'maskOpacity': return state.maskOpacity;
       case 'showAxes': return state.showAxes;
@@ -274,6 +279,9 @@ const uiAdapter: StoreConfigAdapter = {
         return;
       case 'matchesColor':
         state.setMatchesColor(requireString(storeKey, value));
+        return;
+      case 'matchesLineWidth':
+        state.setMatchesLineWidth(requireNumber(storeKey, value));
         return;
       case 'showMaskOverlay':
         state.setShowMaskOverlay(requireBoolean(storeKey, value));
@@ -352,6 +360,7 @@ const rigAdapter: StoreConfigAdapter = {
       case 'rigColorMode': return state.rigColorMode;
       case 'rigLineColor': return state.rigLineColor;
       case 'rigLineOpacity': return state.rigLineOpacity;
+      case 'rigLineWidth': return state.rigLineWidth;
       default: return unsupportedStoreKey('useRigStore', storeKey);
     }
   },
@@ -372,6 +381,9 @@ const rigAdapter: StoreConfigAdapter = {
         return;
       case 'rigLineOpacity':
         state.setRigLineOpacity(requireNumber(storeKey, value));
+        return;
+      case 'rigLineWidth':
+        state.setRigLineWidth(requireNumber(storeKey, value));
         return;
       default:
         return unsupportedStoreKey('useRigStore', storeKey);

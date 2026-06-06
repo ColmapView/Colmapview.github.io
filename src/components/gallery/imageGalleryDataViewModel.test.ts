@@ -50,6 +50,7 @@ describe('image gallery data view-model', () => {
       imageSource: {
         getImageSync: (name) => name === cachedFile.name ? cachedFile : undefined,
       },
+      splatPsnrByImage: new Map([[frameA.imageId, { psnr: 31.2 }]]),
       cameraFilter: 'all',
       sortField: 'numPoints3D',
       sortDirection: 'desc',
@@ -64,6 +65,7 @@ describe('image gallery data view-model', () => {
       cameraHeight: 480,
       covisibleCount: 9,
       avgError: 0.5,
+      splatPsnr: 31.2,
     });
 
     const camera2Only = buildGalleryImages({
@@ -74,6 +76,31 @@ describe('image gallery data view-model', () => {
       sortDirection: 'asc',
     });
     expect(camera2Only.map(image => image.imageId)).toEqual([frameB.imageId]);
+  });
+
+  it('sorts PSNR values with missing metrics last', () => {
+    const camera = buildCamera();
+    const sharp = buildImage({ imageId: 1, cameraId: camera.cameraId, name: 'sharp.jpg' });
+    const soft = buildImage({ imageId: 2, cameraId: camera.cameraId, name: 'soft.jpg' });
+    const missing = buildImage({ imageId: 3, cameraId: camera.cameraId, name: 'missing.jpg' });
+    const reconstruction = buildReconstruction({
+      cameras: [camera],
+      images: [missing, soft, sharp],
+    });
+
+    const images = buildGalleryImages({
+      reconstruction,
+      imageSource: { getImageSync: () => undefined },
+      splatPsnrByImage: new Map([
+        [sharp.imageId, { psnr: 32 }],
+        [soft.imageId, { psnr: 18 }],
+      ]),
+      cameraFilter: 'all',
+      sortField: 'splatPsnr',
+      sortDirection: 'desc',
+    });
+
+    expect(images.map(image => image.name)).toEqual(['sharp.jpg', 'soft.jpg', 'missing.jpg']);
   });
 
   it('derives camera options sorted by camera ID', () => {

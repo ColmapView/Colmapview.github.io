@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useThree } from '@react-three/fiber';
 
 import { BatchedArrowMeshes } from './BatchedArrowMeshes';
@@ -12,6 +12,7 @@ import { useSelectedFrustumImageCacheRefresh } from './useSelectedFrustumImageCa
 import { useCameraFrustumNavigationHandlers } from './useCameraFrustumNavigationHandlers';
 import { useCameraFrustumsStoreFacade } from './useCameraFrustumsStoreFacade';
 import { useTrackballControlsApi } from './trackballControlsApi';
+import { appLogger } from '../../utils/logger';
 import {
   buildCameraFrustumItems,
   buildCameraIdToIndex,
@@ -20,6 +21,7 @@ import {
   getCameraScaleValue,
   getLastNavigationToImageId,
 } from './cameraFrustumViewModel';
+import { prefetchImagePlaneTexturesForReconstruction } from './imagePlaneTexturePrefetch';
 
 export function CameraFrustums() {
   const {
@@ -33,6 +35,7 @@ export function CameraFrustums() {
       isAlignmentMode,
       touchMode,
       pendingDeletions,
+      splatPsnrByImage,
     },
     actions: {
       navActions,
@@ -51,6 +54,7 @@ export function CameraFrustums() {
     colorMode: frustumColorMode,
     singleColor: frustumSingleColor,
     standbyOpacity: frustumStandbyOpacity,
+    lineWidth: frustumLineWidth,
     undistortionEnabled,
     undistortionMode,
   } = cameras;
@@ -122,7 +126,6 @@ export function CameraFrustums() {
   const frustums = useMemo(() => {
     // Cache version intentionally triggers a recompute when lazy image loads finish.
     void imageCacheVersion;
-    void cameraDisplayMode;
 
     return buildCameraFrustumItems({
       reconstruction,
@@ -130,7 +133,7 @@ export function CameraFrustums() {
       cameraIdToIndex,
       pendingDeletions,
     });
-  }, [reconstruction, cameraDisplayMode, dataset, cameraIdToIndex, imageCacheVersion, pendingDeletions]);
+  }, [reconstruction, dataset, cameraIdToIndex, imageCacheVersion, pendingDeletions]);
 
   const handleSelectedImageLoaded = useCallback(() => {
     setImageCacheVersion(v => v + 1);
@@ -142,6 +145,33 @@ export function CameraFrustums() {
     selectedImageId,
     onImageLoaded: handleSelectedImageLoaded,
   });
+
+  useEffect(() => {
+    if (!showImagePlanes || !reconstruction || reconstruction.images.size === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    void prefetchImagePlaneTexturesForReconstruction({
+      reconstruction,
+      dataset,
+      shouldCancel: () => cancelled,
+      onBatchPrefetched: handleSelectedImageLoaded,
+    }).catch((error: unknown) => {
+      if (cancelled) return;
+      const message = error instanceof Error ? error.message : String(error);
+      appLogger.warn(`[Image Plane] Background texture prefetch failed: ${message}`);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    dataset,
+    handleSelectedImageLoaded,
+    reconstruction,
+    showImagePlanes,
+  ]);
 
   const {
     contextMenu,
@@ -195,6 +225,7 @@ export function CameraFrustums() {
       touchMode={touchMode}
       undistortionEnabled={undistortionEnabled}
       undistortionMode={undistortionMode}
+      splatPsnrByImage={splatPsnrByImage}
     />
   );
 
@@ -220,6 +251,7 @@ export function CameraFrustums() {
           selectionAnimationSpeed={selectionAnimationSpeed}
           unselectedCameraOpacity={unselectedCameraOpacity}
           imageFrameIndexMap={imageFrameIndexMap}
+          splatPsnrByImage={splatPsnrByImage}
           onHover={setHoveredImageId}
           onClick={handleArrowClick}
           onContextMenu={handleArrowContextMenu}
@@ -256,6 +288,7 @@ export function CameraFrustums() {
           onContextMenu={handleArrowContextMenu}
           onLongPress={openImageDetail}
           lastNavigationToImageId={lastNavigationToImageId}
+          splatPsnrByImage={splatPsnrByImage}
           touchMode={touchMode}
         />
         {/* Per-frustum planes for texture rendering (non-selected only, interaction handled by BatchedPlaneHitTargets) */}
@@ -280,6 +313,7 @@ export function CameraFrustums() {
           touchMode={touchMode}
           undistortionEnabled={undistortionEnabled}
           undistortionMode={undistortionMode}
+          splatPsnrByImage={splatPsnrByImage}
         />
         {/* Selected camera image plane (source of truth) */}
         {selectedCameraPlane}
@@ -310,12 +344,14 @@ export function CameraFrustums() {
         frustumColorMode={frustumColorMode}
         frustumSingleColor={frustumSingleColor}
         frustumStandbyOpacity={frustumStandbyOpacity}
+        frustumLineWidth={frustumLineWidth}
         selectionColorMode={selectionColorMode}
         selectionColor={selectionColor}
         selectionAnimationSpeed={selectionAnimationSpeed}
         unselectedCameraOpacity={unselectedCameraOpacity}
         showImagePlanes={showImagePlanes}
         imageFrameIndexMap={imageFrameIndexMap}
+        splatPsnrByImage={splatPsnrByImage}
         pendingDeletions={pendingDeletions}
       />
       {/* Batched invisible hit targets for frustum selection */}
@@ -329,6 +365,7 @@ export function CameraFrustums() {
         onContextMenu={handleArrowContextMenu}
         onLongPress={openImageDetail}
         lastNavigationToImageId={lastNavigationToImageId}
+        splatPsnrByImage={splatPsnrByImage}
         touchMode={touchMode}
       />
       {/* Selected camera image plane (source of truth) */}

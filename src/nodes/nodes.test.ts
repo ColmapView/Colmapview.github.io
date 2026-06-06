@@ -135,6 +135,7 @@ describe('Node Hooks', () => {
       expect(result.current).toHaveProperty('scaleFactor');
       expect(result.current).toHaveProperty('colorMode');
       expect(result.current).toHaveProperty('singleColor');
+      expect(result.current).toHaveProperty('lineWidth');
       expect(result.current).toHaveProperty('undistortionEnabled');
       expect(result.current).toHaveProperty('undistortionMode');
     });
@@ -210,6 +211,7 @@ describe('Node Hooks', () => {
       const { result } = renderHook(() => useMatchesNode());
       expect(result.current).toHaveProperty('displayMode');
       expect(result.current).toHaveProperty('color');
+      expect(result.current).toHaveProperty('lineWidth');
     });
   });
 
@@ -229,6 +231,7 @@ describe('Node Hooks', () => {
       expect(result.current).toHaveProperty('displayMode');
       expect(result.current).toHaveProperty('colorMode');
       expect(result.current).toHaveProperty('color');
+      expect(result.current).toHaveProperty('lineWidth');
     });
   });
 
@@ -431,6 +434,12 @@ describe('Node Actions', () => {
       const { result } = renderHook(() => useCamerasNodeActions());
       act(() => result.current.setStandbyOpacity(0.3));
       expect(useCameraStore.getState().frustumStandbyOpacity).toBe(0.3);
+    });
+
+    it('setLineWidth updates frustum line width in store', () => {
+      const { result } = renderHook(() => useCamerasNodeActions());
+      act(() => result.current.setLineWidth(3));
+      expect(useCameraStore.getState().frustumLineWidth).toBe(3);
     });
 
     it('setUndistortionEnabled updates store', () => {
@@ -682,6 +691,12 @@ describe('Node Actions', () => {
       expect(useUIStore.getState().matchesColor).toBe('#ff00ff');
     });
 
+    it('setLineWidth updates match line width in store', () => {
+      const { result } = renderHook(() => useMatchesNodeActions());
+      act(() => result.current.setLineWidth(2.5));
+      expect(useUIStore.getState().matchesLineWidth).toBe(2.5);
+    });
+
     it('toggleVisible toggles store value', () => {
       const initial = useUIStore.getState().showMatches;
       const { result } = renderHook(() => useMatchesNodeActions());
@@ -719,6 +734,12 @@ describe('Node Actions', () => {
       const { result } = renderHook(() => useRigNodeActions());
       act(() => result.current.setOpacity(0.6));
       expect(useRigStore.getState().rigLineOpacity).toBe(0.6);
+    });
+
+    it('setLineWidth updates rig line width in store', () => {
+      const { result } = renderHook(() => useRigNodeActions());
+      act(() => result.current.setLineWidth(4));
+      expect(useRigStore.getState().rigLineWidth).toBe(4);
     });
 
     it('toggleVisible toggles store value', () => {

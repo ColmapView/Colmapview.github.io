@@ -15,6 +15,7 @@ export interface CamerasNodeActions {
   setColorMode: (mode: FrustumColorMode) => void;
   setSingleColor: (color: string) => void;
   setStandbyOpacity: (opacity: number) => void;
+  setLineWidth: (lineWidth: number) => void;
   setUndistortionEnabled: (enabled: boolean) => void;
   setUndistortionMode: (mode: UndistortionMode) => void;
   toggleVisible: () => void;
@@ -30,6 +31,7 @@ export function useCamerasNodeActions(): CamerasNodeActions {
       setColorMode: (m) => useCameraStore.getState().setFrustumColorMode(m),
       setSingleColor: (c) => useCameraStore.getState().setFrustumSingleColor(c),
       setStandbyOpacity: (o) => useCameraStore.getState().setFrustumStandbyOpacity(o),
+      setLineWidth: (w) => useCameraStore.getState().setFrustumLineWidth(w),
       setUndistortionEnabled: (e) => useCameraStore.getState().setUndistortionEnabled(e),
       setUndistortionMode: (m) => useCameraStore.getState().setUndistortionMode(m),
       toggleVisible: () => useCameraStore.getState().toggleCameras(),

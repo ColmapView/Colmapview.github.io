@@ -11,6 +11,7 @@ import { compressAndResizeToJpeg } from './imageFileCompression';
 import {
   clearUrlImageCache,
   fetchUrlImage,
+  fetchUrlImageRaw,
   fetchUrlMask,
   getUrlImageCacheStats,
   getUrlImageCached,
@@ -75,6 +76,20 @@ describe('url image files', () => {
     expect(getUrlImageCacheStats()).toEqual({ count: 0, sizeBytes: 0 });
 
     warn.mockRestore();
+  });
+
+  it('fetches raw URL image files without compression or display-cache writes', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okImageResponse('raw-image', 'image/jpeg'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const file = await fetchUrlImageRaw('https://example.test/images/', 'images/cam1/photo.JPG');
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.test/images/cam1/photo.JPG');
+    expect(compressAndResizeToJpeg).not.toHaveBeenCalled();
+    expect(file?.name).toBe('photo.JPG');
+    expect(file?.type).toBe('image/jpeg');
+    expect(file?.size).toBe('raw-image'.length);
+    expect(getUrlImageCached('images/cam1/photo.JPG')).toBeUndefined();
   });
 
   it('tries URL mask candidates and returns the first matching file', async () => {

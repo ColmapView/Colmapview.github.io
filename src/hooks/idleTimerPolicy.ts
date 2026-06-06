@@ -1,5 +1,28 @@
 export const IDLE_MOVE_THRESHOLD_PX = 20;
 export const IDLE_HIDEABLE_SELECTOR = '.idle-hideable';
+export const IDLE_IGNORE_SELECTOR = '[data-idle-ignore="true"]';
+export const IDLE_PAUSE_TARGET_SELECTOR = [
+  IDLE_HIDEABLE_SELECTOR,
+  '[data-idle-pause="true"]',
+  '[role="dialog"]',
+  '[role="menu"]',
+  '[role="listbox"]',
+  '[aria-haspopup]',
+  'button:not([disabled])',
+  'select:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'textarea:not([disabled])',
+  'a[href]',
+].join(',');
+export const IDLE_FOCUS_PAUSE_TARGET_SELECTOR = [
+  '[data-idle-pause="true"]',
+  '[role="dialog"]',
+  '[role="menu"]',
+  '[role="listbox"]',
+  'select:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'textarea:not([disabled])',
+].join(',');
 
 export interface IdlePointerPosition {
   x: number;
@@ -31,6 +54,26 @@ export function isIdleHideableTarget(target: EventTarget | null): boolean {
   return isElementTarget(target) && target.closest(IDLE_HIDEABLE_SELECTOR) !== null;
 }
 
+export function isIdleIgnoredTarget(target: EventTarget | null): boolean {
+  return isElementTarget(target) && target.closest(IDLE_IGNORE_SELECTOR) !== null;
+}
+
+export function isIdlePauseTarget(target: EventTarget | null): boolean {
+  return isElementTarget(target) &&
+    !isIdleIgnoredTarget(target) &&
+    target.closest(IDLE_PAUSE_TARGET_SELECTOR) !== null;
+}
+
+export function isIdleFocusPauseTarget(target: EventTarget | null): boolean {
+  return isElementTarget(target) &&
+    !isIdleIgnoredTarget(target) &&
+    target.closest(IDLE_FOCUS_PAUSE_TARGET_SELECTOR) !== null;
+}
+
 export function shouldResumeIdleTimerAfterMouseOut(relatedTarget: EventTarget | null): boolean {
-  return !isIdleHideableTarget(relatedTarget);
+  return !isIdlePauseTarget(relatedTarget);
+}
+
+export function shouldResumeIdleTimerAfterFocusOut(relatedTarget: EventTarget | null): boolean {
+  return !isIdleFocusPauseTarget(relatedTarget);
 }

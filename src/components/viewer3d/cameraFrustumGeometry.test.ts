@@ -46,6 +46,14 @@ describe('camera frustum geometry helpers', () => {
     expect(getFrustumBaseColor('single', 0, frameA0.imageId, imageFrameIndexMap, '#123456')).toBe('#123456');
     expect(getFrustumBaseColor('byRigFrame', 7, frameA1.imageId, imageFrameIndexMap, '#123456')).not.toBe('#123456');
     expect(getFrustumBaseColor('byRigFrame', 7, unpaired.imageId, imageFrameIndexMap, '#123456')).toBe('#123456');
+    expect(getFrustumBaseColor(
+      'splatPsnr',
+      7,
+      frameA0.imageId,
+      imageFrameIndexMap,
+      '#123456',
+      new Map([[frameA0.imageId, { psnr: 30 }]])
+    )).toBe('#22c55e');
   });
 
   it('builds renderable frustum items from reconstruction data', () => {

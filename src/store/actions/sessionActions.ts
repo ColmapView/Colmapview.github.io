@@ -12,6 +12,7 @@ import { useCameraStore } from '../stores/cameraStore.js';
 import { useTransformStore } from '../stores/transformStore.js';
 import { usePointPickingStore } from '../stores/pointPickingStore.js';
 import { useDeletionStore } from '../stores/deletionStore.js';
+import { useImageMetricsStore } from '../stores/imageMetricsStore.js';
 import { isIdentityEuler } from '../../utils/sim3dTransforms.js';
 import { requestConfirmation } from '../../utils/confirmation.js';
 
@@ -54,6 +55,7 @@ export function resetSession(): void {
 
   // Clear reconstruction store
   useReconstructionStore.getState().clear();
+  useImageMetricsStore.getState().clearSplatPsnr();
 
   // Reset transform state
   useTransformStore.getState().resetTransform();

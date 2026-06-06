@@ -4,12 +4,14 @@ import {
   getMaskFile,
 } from '../utils/imageFileUtils';
 import {
+  fetchUrlImageRaw,
   getUrlImageCached,
   fetchUrlImage,
   fetchUrlMask,
   prefetchUrlImages,
 } from '../utils/urlImageFiles';
 import {
+  fetchZipImageRaw,
   getZipImageCached,
   fetchZipImage,
   fetchZipMask,
@@ -18,6 +20,7 @@ import {
 
 export interface DatasetSourceAdapter {
   getImage: (state: DatasetState, imageName: string) => Promise<File | null>;
+  getMetricImage: (state: DatasetState, imageName: string) => Promise<File | null>;
   getImageSync: (state: DatasetState, imageName: string) => File | undefined;
   getMask: (state: DatasetState, imageName: string) => Promise<File | null>;
   getMaskSync: (state: DatasetState, imageName: string) => File | undefined;
@@ -28,6 +31,9 @@ export interface DatasetSourceAdapter {
 
 const localSourceAdapter: DatasetSourceAdapter = {
   async getImage(state, imageName) {
+    return getImageFile(state.loadedFiles?.imageFiles, imageName) ?? null;
+  },
+  async getMetricImage(state, imageName) {
     return getImageFile(state.loadedFiles?.imageFiles, imageName) ?? null;
   },
   getImageSync(state, imageName) {
@@ -55,6 +61,10 @@ const remoteSourceAdapter: DatasetSourceAdapter = {
     if (!state.imageUrlBase) return null;
     return getUrlImageCached(imageName) ?? await fetchUrlImage(state.imageUrlBase, imageName);
   },
+  async getMetricImage(state, imageName) {
+    if (!state.imageUrlBase) return null;
+    return await fetchUrlImageRaw(state.imageUrlBase, imageName);
+  },
   getImageSync(_state, imageName) {
     return getUrlImageCached(imageName);
   },
@@ -81,6 +91,10 @@ const zipSourceAdapter: DatasetSourceAdapter = {
   async getImage(_state, imageName) {
     if (!isZipLoadingAvailable()) return null;
     return getZipImageCached(imageName) ?? await fetchZipImage(imageName);
+  },
+  async getMetricImage(_state, imageName) {
+    if (!isZipLoadingAvailable()) return null;
+    return await fetchZipImageRaw(imageName);
   },
   getImageSync(_state, imageName) {
     return getZipImageCached(imageName);

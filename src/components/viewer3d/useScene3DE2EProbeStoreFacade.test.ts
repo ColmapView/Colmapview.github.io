@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   useCameraStore,
   useDeletionStore,
+  useImageMetricsStore,
   useReconstructionStore,
+  useSplatBackendStore,
   useTransformStore,
   useUIStore,
 } from '../../store';
@@ -15,7 +17,9 @@ describe('useScene3DE2EProbeStoreFacade', () => {
   beforeEach(() => {
     useCameraStore.setState(useCameraStore.getInitialState(), true);
     useDeletionStore.setState(useDeletionStore.getInitialState(), true);
+    useImageMetricsStore.setState(useImageMetricsStore.getInitialState(), true);
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    useSplatBackendStore.setState(useSplatBackendStore.getInitialState(), true);
     useTransformStore.setState(useTransformStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
   });
@@ -104,6 +108,125 @@ describe('useScene3DE2EProbeStoreFacade', () => {
     expect(useCameraStore.getState()).toMatchObject({
       selectedImageId: null,
       flyToImageId: null,
+    });
+  });
+
+  it('routes E2E PSNR commands through image metrics store actions', () => {
+    useImageMetricsStore.setState({
+      splatPsnrFrameReady: true,
+      splatPsnrMetrics: new Map([[
+        12,
+        {
+          imageId: 12,
+          psnr: 24,
+          mse: 200,
+          validPixelCount: 128,
+          width: 64,
+          height: 32,
+          computedAt: 1000,
+          diagnostics: {
+            lowPsnrThresholdDb: 20,
+            validPixelRatio: 1,
+            renderedMeanRgb: [10, 20, 30],
+            groundTruthMeanRgb: [12, 22, 32],
+            meanRgbDelta: [-2, -2, -2],
+            backgroundDiagnostics: {
+              baseline: {
+                label: 'opaque-black',
+                rgba: [0, 0, 0, 1],
+                psnr: 24,
+                mse: 200,
+                validPixelCount: 128,
+                sumSquaredError: 76800,
+                improvementDb: 0,
+              },
+              alternatives: [{
+                label: 'opaque-white',
+                rgba: [1, 1, 1, 1],
+                psnr: 18,
+                mse: 800,
+                validPixelCount: 128,
+                sumSquaredError: 307200,
+                improvementDb: -6,
+              }],
+              best: {
+                label: 'opaque-black',
+                rgba: [0, 0, 0, 1],
+                psnr: 24,
+                mse: 200,
+                validPixelCount: 128,
+                sumSquaredError: 76800,
+                improvementDb: 0,
+              },
+            },
+            backgroundMismatch: {
+              classification: 'unlikely',
+              reason: 'Mean RGB deltas are not a broad same-direction shift.',
+            },
+            renderSize: { width: 64, height: 32 },
+            sourceImageSize: { width: 64, height: 32 },
+            cameraId: 1,
+            cameraModelId: 1,
+            imageName: 'image.jpg',
+          },
+        },
+      ]]),
+      splatPsnrStatus: new Map([[12, 'ready']]),
+    });
+
+    const { result } = renderHook(() => useScene3DE2EProbeStoreFacade());
+
+    expect(result.current.actions.getSplatPsnrState(12)).toMatchObject({
+      frameReady: true,
+      computing: false,
+      readyCount: 1,
+      status: 'ready',
+      error: null,
+      metric: {
+        psnr: 24,
+        mse: 200,
+          validPixelCount: 128,
+          width: 64,
+          height: 32,
+          diagnostics: expect.objectContaining({
+            backgroundDiagnostics: expect.objectContaining({
+              baseline: expect.objectContaining({ label: 'opaque-black' }),
+              alternatives: [expect.objectContaining({ label: 'opaque-white' })],
+            }),
+          }),
+        },
+      });
+
+    act(() => {
+      result.current.actions.requestSplatPsnrCompute('selected', 12);
+    });
+
+    expect(useImageMetricsStore.getState().splatPsnrComputeRequest).toMatchObject({
+      id: 1,
+      scope: 'selected',
+      selectedImageId: 12,
+    });
+  });
+
+  it('exposes splat backend state for E2E assertions', () => {
+    useSplatBackendStore.getState().setRequestedBackend('auto');
+    useSplatBackendStore.getState().setSparkBackendAvailable(true);
+    useSplatBackendStore.getState().setWebGpuBackendState('failed', 'adapter lost');
+
+    const { result } = renderHook(() => useScene3DE2EProbeStoreFacade());
+
+    expect(result.current.actions.getSplatBackendState()).toMatchObject({
+      requestedBackend: 'auto',
+      availability: {
+        webGpu: 'failed',
+        webGpuFailureReason: 'adapter lost',
+        spark: true,
+      },
+      resolution: {
+        status: 'resolved',
+        backend: 'spark',
+        reason: 'Spark fallback selected because WebGPU splat renderer failed to initialize: adapter lost',
+      },
     });
   });
 });

@@ -70,6 +70,21 @@ export async function fetchZipImage(imageName: string): Promise<File | null> {
 }
 
 /**
+ * Extract an image from ZIP without display-cache resizing or JPEG recompression.
+ * Metric computations use this path because lossy cached images bias PSNR.
+ */
+export async function fetchZipImageRaw(imageName: string): Promise<File | null> {
+  if (!hasActiveZipArchive()) return null;
+
+  try {
+    return await extractZipImage(imageName);
+  } catch (err) {
+    appLogger.warn(`[ZIP Image] Error extracting raw ${imageName}:`, err);
+    return null;
+  }
+}
+
+/**
  * Extract a mask from ZIP.
  */
 export async function fetchZipMask(imageName: string): Promise<File | null> {

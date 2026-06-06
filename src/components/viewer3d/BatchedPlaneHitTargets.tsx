@@ -1,8 +1,9 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import type { Camera, Image } from '../../types/colmap';
 import { getFrustumPlaneSize } from './cameraFrustumViewModel';
+import type { FrustumPsnrMetricSource } from './cameraFrustumGeometry';
 import { FrustumPlaneHoverCard } from './FrustumPlaneHoverCard';
 import { useTrackballDraggingReader } from './trackballControlsApi';
 import { useBatchedFrustumInteractions } from './useBatchedFrustumInteractions';
@@ -30,6 +31,7 @@ interface BatchedPlaneHitTargetsProps {
   onContextMenu: (imageId: number) => void;
   onLongPress: (imageId: number) => void;
   lastNavigationToImageId: number | null;
+  splatPsnrByImage: FrustumPsnrMetricSource;
   touchMode?: boolean;
 }
 
@@ -48,10 +50,17 @@ export function BatchedPlaneHitTargets({
   onContextMenu,
   onLongPress,
   lastNavigationToImageId,
+  splatPsnrByImage,
   touchMode = false,
 }: BatchedPlaneHitTargetsProps) {
   const { multiCamera } = useFrustumHoverCardStoreFacade();
   const meshRef = useRef<THREE.InstancedMesh>(null);
+  const prevSelectedImageIdRef = useRef<number | null>(null);
+  const selectedImageIdRef = useRef<number | null>(selectedImageId);
+
+  useLayoutEffect(() => {
+    selectedImageIdRef.current = selectedImageId;
+  }, [selectedImageId]);
 
   const isDragging = useTrackballDraggingReader();
   const { tooltipData, tooltipFrustum, interactionHandlers } = useBatchedFrustumInteractions({
@@ -84,31 +93,72 @@ export function BatchedPlaneHitTargets({
     return frustums.map(frustum => getFrustumPlaneSize(frustum.camera, cameraScale));
   }, [frustums, cameraScale]);
 
+  const imageIdToIndex = useMemo(() => {
+    const map = new Map<number, number>();
+    frustums.forEach((frustum, index) => {
+      map.set(frustum.image.imageId, index);
+    });
+    return map;
+  }, [frustums]);
+
+  const writeHitTargetMatrix = useCallback((
+    mesh: THREE.InstancedMesh,
+    index: number,
+    isSelected: boolean
+  ) => {
+    const frustum = frustums[index];
+    const size = planeSizes[index];
+    if (!frustum || !size) return;
+
+    composePlaneHitTargetMatrix({
+      matrix: tempMatrix,
+      targetPosition: tempPosition,
+      targetForward: tempForward,
+      targetScale: tempScale,
+      frustumPosition: frustum.position,
+      frustumQuaternion: frustum.quaternion,
+      planeSize: size,
+      isSelected,
+      touchMode,
+    });
+    mesh.setMatrixAt(index, tempMatrix);
+  }, [frustums, planeSizes, touchMode]);
+
   useLayoutEffect(() => {
     if (!meshRef.current) return;
     const mesh = meshRef.current;
 
     frustums.forEach((frustum, index) => {
-      const size = planeSizes[index];
-      const isSelected = frustum.image.imageId === selectedImageId;
-
-      composePlaneHitTargetMatrix({
-        matrix: tempMatrix,
-        targetPosition: tempPosition,
-        targetForward: tempForward,
-        targetScale: tempScale,
-        frustumPosition: frustum.position,
-        frustumQuaternion: frustum.quaternion,
-        planeSize: size,
-        isSelected,
-        touchMode,
-      });
-      mesh.setMatrixAt(index, tempMatrix);
+      writeHitTargetMatrix(mesh, index, frustum.image.imageId === selectedImageIdRef.current);
     });
 
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
-  }, [frustums, planeSizes, selectedImageId, touchMode]);
+    prevSelectedImageIdRef.current = selectedImageIdRef.current;
+  }, [frustums, writeHitTargetMatrix]);
+
+  useLayoutEffect(() => {
+    if (!meshRef.current) return;
+    const previousSelectedImageId = prevSelectedImageIdRef.current;
+    if (previousSelectedImageId === selectedImageId) return;
+
+    const mesh = meshRef.current;
+    if (previousSelectedImageId !== null) {
+      const previousIndex = imageIdToIndex.get(previousSelectedImageId);
+      if (previousIndex !== undefined) {
+        writeHitTargetMatrix(mesh, previousIndex, false);
+      }
+    }
+    if (selectedImageId !== null) {
+      const nextIndex = imageIdToIndex.get(selectedImageId);
+      if (nextIndex !== undefined) {
+        writeHitTargetMatrix(mesh, nextIndex, true);
+      }
+    }
+
+    mesh.instanceMatrix.needsUpdate = true;
+    prevSelectedImageIdRef.current = selectedImageId;
+  }, [selectedImageId, imageIdToIndex, writeHitTargetMatrix]);
 
   if (frustums.length === 0) return null;
 
@@ -134,6 +184,7 @@ export function BatchedPlaneHitTargets({
             cameraId={tooltipFrustum.image.cameraId}
             multiCamera={multiCamera}
             numPoints3D={tooltipFrustum.numPoints3D}
+            splatPsnr={splatPsnrByImage.get(tooltipFrustum.image.imageId)?.psnr}
             isSelected={false}
             isMatched={matchedImageIds.has(tooltipFrustum.image.imageId)}
             wouldGoBack={tooltipFrustum.image.imageId === lastNavigationToImageId}

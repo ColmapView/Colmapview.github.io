@@ -8,6 +8,7 @@ vi.mock('../utils/imageFileUtils', () => ({
 }));
 
 vi.mock('../utils/urlImageFiles', () => ({
+  fetchUrlImageRaw: vi.fn(),
   getUrlImageCached: vi.fn(),
   fetchUrlImage: vi.fn(),
   fetchUrlMask: vi.fn(),
@@ -15,6 +16,7 @@ vi.mock('../utils/urlImageFiles', () => ({
 }));
 
 vi.mock('../utils/zipImageFiles', () => ({
+  fetchZipImageRaw: vi.fn(),
   getZipImageCached: vi.fn(),
   fetchZipImage: vi.fn(),
   fetchZipMask: vi.fn(),
@@ -26,11 +28,13 @@ import {
   getMaskFile,
 } from '../utils/imageFileUtils';
 import {
+  fetchUrlImageRaw,
   getUrlImageCached,
   fetchUrlImage,
   fetchUrlMask,
 } from '../utils/urlImageFiles';
 import {
+  fetchZipImageRaw,
   getZipImageCached,
   fetchZipImage,
   fetchZipMask,
@@ -139,6 +143,17 @@ describe('DatasetManager', () => {
       const result = await manager.getImage('test.jpg');
       expect(result).toBeNull();
     });
+
+    it('fetches raw URL images for metric computation', async () => {
+      const rawFile = new File(['raw'], 'raw.jpg');
+      vi.mocked(fetchUrlImageRaw).mockResolvedValue(rawFile);
+
+      const result = await manager.getMetricImage('test.jpg');
+
+      expect(result).toBe(rawFile);
+      expect(fetchUrlImageRaw).toHaveBeenCalledWith('https://example.com/images/', 'test.jpg');
+      expect(fetchUrlImage).not.toHaveBeenCalled();
+    });
   });
 
   describe('getImage (zip source)', () => {
@@ -171,6 +186,17 @@ describe('DatasetManager', () => {
 
       const result = await manager.getImage('test.jpg');
       expect(result).toBeNull();
+    });
+
+    it('extracts raw ZIP images for metric computation', async () => {
+      const rawFile = new File(['raw'], 'raw.jpg');
+      vi.mocked(fetchZipImageRaw).mockResolvedValue(rawFile);
+
+      const result = await manager.getMetricImage('test.jpg');
+
+      expect(result).toBe(rawFile);
+      expect(fetchZipImageRaw).toHaveBeenCalledWith('test.jpg');
+      expect(fetchZipImage).not.toHaveBeenCalled();
     });
   });
 

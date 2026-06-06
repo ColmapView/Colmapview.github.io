@@ -141,7 +141,12 @@ export function ProfileSelector() {
           </button>
 
           {isDropdownOpen && (
-            <div className={PROFILE_SELECTOR_MENU_CLASS} style={getProfileSelectorMenuStyle()} role="listbox">
+            <div
+              className={PROFILE_SELECTOR_MENU_CLASS}
+              style={getProfileSelectorMenuStyle()}
+              data-idle-pause="true"
+              role="listbox"
+            >
               {profileRows.map((row) => (
                 <div
                   key={row.name}

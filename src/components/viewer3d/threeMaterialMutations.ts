@@ -2,6 +2,8 @@ import * as THREE from 'three';
 
 const nextColor = new THREE.Color();
 
+type LineWidthMaterial = THREE.Material & { linewidth?: number };
+
 export function syncMaterialOpacity(material: THREE.Material, opacity: number): boolean {
   if (Object.is(material.opacity, opacity)) return false;
 
@@ -17,6 +19,13 @@ export function syncMaterialColor(
   if (material.color.equals(nextColor)) return false;
 
   material.color.copy(nextColor);
+  return true;
+}
+
+export function syncMaterialLineWidth(material: LineWidthMaterial, lineWidth: number): boolean {
+  if (Object.is(material.linewidth, lineWidth)) return false;
+
+  material.linewidth = lineWidth;
   return true;
 }
 

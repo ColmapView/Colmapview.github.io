@@ -19,8 +19,20 @@ export const GALLERY_SORT_FIELD_OPTIONS: GallerySortFieldOption[] = [
   { value: 'numPoints2D', label: 'Sort: 2D Points' },
 ];
 
-export function getGallerySortFieldValue(value: string): SortField | null {
-  return GALLERY_SORT_FIELD_OPTIONS.find(option => option.value === value)?.value ?? null;
+const SPLAT_PSNR_SORT_FIELD_OPTION: GallerySortFieldOption = {
+  value: 'splatPsnr',
+  label: 'Sort: PSNR',
+};
+
+export function getGallerySortFieldOptions(hasSplatPsnr: boolean): GallerySortFieldOption[] {
+  return [
+    ...GALLERY_SORT_FIELD_OPTIONS,
+    ...(hasSplatPsnr ? [SPLAT_PSNR_SORT_FIELD_OPTION] : []),
+  ];
+}
+
+export function getGallerySortFieldValue(value: string, hasSplatPsnr = false): SortField | null {
+  return getGallerySortFieldOptions(hasSplatPsnr).find(option => option.value === value)?.value ?? null;
 }
 
 export function getGalleryCameraFilterValue(

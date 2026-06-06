@@ -3,7 +3,7 @@
  * Extracted from ViewerControls.tsx for better organization.
  */
 
-import { useState, useEffect, useLayoutEffect, memo, useRef, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, memo, useRef, useCallback, type ReactNode } from 'react';
 import { controlPanelStyles, getControlButtonClass, getTooltipProps } from '../../theme';
 import { isEventTargetOutside } from '../../utils/domTargetGuards';
 import {
@@ -40,21 +40,49 @@ export const PanelWrapper = memo(function PanelWrapper({ title, children }: Pane
   const [adjustedTop, setAdjustedTop] = useState<number | null>(null);
   const lastHeightRef = useRef<number>(0);
 
-  // Adjust position to keep panel above status bar
-  // Only recalculate when panel height changes significantly (>5px) to avoid jitter
-  useLayoutEffect(() => {
-    if (!panelRef.current) return;
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
 
-    const rect = panelRef.current.getBoundingClientRect();
+    let animationFrame: number | null = null;
+    const measure = (heightHint?: number, force = false) => {
+      if (animationFrame !== null) {
+        cancelAnimationFrame(animationFrame);
+      }
 
-    // Skip recalculation if height hasn't changed significantly
-    if (!hasControlPanelHeightChangedSignificantly(rect.height, lastHeightRef.current)) {
-      return;
-    }
-    lastHeightRef.current = rect.height;
+      animationFrame = requestAnimationFrame(() => {
+        animationFrame = null;
+        const rect = panel.getBoundingClientRect();
+        const height = heightHint ?? rect.height;
+        if (!force && !hasControlPanelHeightChangedSignificantly(height, lastHeightRef.current)) {
+          return;
+        }
 
-    setAdjustedTop(getControlPanelAdjustedTop(rect, window.innerHeight));
-  }, [children]); // Re-check when content changes
+        lastHeightRef.current = height;
+        setAdjustedTop(getControlPanelAdjustedTop(rect, window.innerHeight));
+      });
+    };
+
+    measure(undefined, true);
+
+    const resizeObserver = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver((entries) => {
+        measure(entries[0]?.contentRect.height);
+      });
+    resizeObserver?.observe(panel);
+
+    const handleWindowResize = () => measure(undefined, true);
+    window.addEventListener('resize', handleWindowResize);
+
+    return () => {
+      if (animationFrame !== null) {
+        cancelAnimationFrame(animationFrame);
+      }
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', handleWindowResize);
+    };
+  }, []);
 
   return (
     <div

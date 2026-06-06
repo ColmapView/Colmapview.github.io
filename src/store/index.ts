@@ -19,6 +19,8 @@ export { useNotificationStore, type NotificationState, type NotificationType, ty
 export { useGuideStore, type GuideState } from './stores/guideStore';
 export { useFloorPlaneStore, type FloorPlaneState, type FloorColorMode, type FloorTargetAxis } from './stores/floorPlaneStore';
 export { useDeletionStore, type DeletionState } from './stores/deletionStore';
+export { useImageMetricsStore, type ImageMetricsState, type SplatPsnrComputeRequest, type SplatPsnrComputeScope, type SplatPsnrMetric, type SplatPsnrMetricDiagnostics } from './stores/imageMetricsStore';
+export { useSplatBackendStore, type SplatBackendState } from './stores/splatBackendStore';
 
 // Types and constants
 export type {
@@ -53,6 +55,7 @@ export {
   AUTO_ROTATE_MODES,
   HORIZON_LOCK_MODES,
   CAMERA_DISPLAY_MODES,
+  FRUSTUM_COLOR_MODES,
   MATCHES_DISPLAY_MODES,
   SELECTION_COLOR_MODES,
   RIG_DISPLAY_MODES,

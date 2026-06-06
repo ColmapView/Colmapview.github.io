@@ -8,6 +8,7 @@ export interface RigNodeActions {
   setColorMode: (mode: RigColorMode) => void;
   setColor: (color: string) => void;
   setOpacity: (opacity: number) => void;
+  setLineWidth: (lineWidth: number) => void;
   toggleVisible: () => void;
 }
 
@@ -19,6 +20,7 @@ export function useRigNodeActions(): RigNodeActions {
       setColorMode: (m) => useRigStore.getState().setRigColorMode(m),
       setColor: (c) => useRigStore.getState().setRigLineColor(c),
       setOpacity: (o) => useRigStore.getState().setRigLineOpacity(o),
+      setLineWidth: (w) => useRigStore.getState().setRigLineWidth(w),
       toggleVisible: () => useRigStore.getState().toggleRig(),
     }),
     []

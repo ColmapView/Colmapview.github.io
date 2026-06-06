@@ -2,6 +2,7 @@ import { useDataset, type DatasetManager } from '../../dataset';
 import {
   useCameraStore,
   useDeletionStore,
+  useImageMetricsStore,
   useReconstructionStore,
   useUIStore,
   type CameraState,
@@ -21,6 +22,8 @@ interface ImageGalleryDataFacade {
   isIdle: UIState['isIdle'];
   showAutoHideEditor: UIState['showAutoHideEditor'];
   pendingDeletions: DeletionState['pendingDeletions'];
+  splatPsnrFrameReady: ReturnType<typeof useImageMetricsStore.getState>['splatPsnrFrameReady'];
+  splatPsnrByImage: ReturnType<typeof useImageMetricsStore.getState>['splatPsnrMetrics'];
   selectedImageId: CameraState['selectedImageId'];
   currentViewState: CameraState['currentViewState'];
   navigationHistory: CameraState['navigationHistory'];
@@ -57,6 +60,8 @@ export function useImageGalleryStoreFacade(): ImageGalleryStoreFacade {
   const isIdle = useUIStore((s) => s.isIdle);
   const showAutoHideEditor = useUIStore((s) => s.showAutoHideEditor);
   const pendingDeletions = useDeletionStore((s) => s.pendingDeletions);
+  const splatPsnrFrameReady = useImageMetricsStore((s) => s.splatPsnrFrameReady);
+  const splatPsnrByImage = useImageMetricsStore((s) => s.splatPsnrMetrics);
   const selectedImageId = useCameraStore((s) => s.selectedImageId);
   const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
   const flyToImage = useCameraStore((s) => s.flyToImage);
@@ -79,6 +84,8 @@ export function useImageGalleryStoreFacade(): ImageGalleryStoreFacade {
       isIdle,
       showAutoHideEditor,
       pendingDeletions,
+      splatPsnrFrameReady,
+      splatPsnrByImage,
       selectedImageId,
       currentViewState,
       navigationHistory,

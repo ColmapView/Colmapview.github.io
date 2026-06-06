@@ -97,6 +97,7 @@ export interface UIState {
   matchesDisplayMode: MatchesDisplayMode;
   matchesOpacity: number;
   matchesColor: string;
+  matchesLineWidth: number;
 
   // Mask overlay
   showMaskOverlay: boolean;
@@ -162,6 +163,7 @@ export interface UIState {
   setMatchesDisplayMode: (mode: MatchesDisplayMode) => void;
   setMatchesOpacity: (opacity: number) => void;
   setMatchesColor: (color: string) => void;
+  setMatchesLineWidth: (lineWidth: number) => void;
   setShowMaskOverlay: (show: boolean) => void;
   setMaskOpacity: (opacity: number) => void;
   setShowAxes: (show: boolean) => void;
@@ -220,6 +222,7 @@ export const useUIStore = create<UIState>()(
       matchesDisplayMode: 'static',
       matchesOpacity: 0.7,
       matchesColor: '#ff00ff',
+      matchesLineWidth: 1,
       showMaskOverlay: false,
       maskOpacity: 0.7,
       showAxes: true,
@@ -266,6 +269,7 @@ export const useUIStore = create<UIState>()(
       setMatchesDisplayMode: (matchesDisplayMode) => set({ matchesDisplayMode }),
       setMatchesOpacity: (matchesOpacity) => set({ matchesOpacity }),
       setMatchesColor: (matchesColor) => set({ matchesColor }),
+      setMatchesLineWidth: (matchesLineWidth) => set({ matchesLineWidth }),
       setShowMaskOverlay: (showMaskOverlay) => set({ showMaskOverlay }),
       setMaskOpacity: (maskOpacity) => set({ maskOpacity }),
       setShowAxes: (showAxes) => set({ showAxes }),
@@ -340,6 +344,7 @@ export const useUIStore = create<UIState>()(
         matchesDisplayMode: state.matchesDisplayMode,
         matchesOpacity: state.matchesOpacity,
         matchesColor: state.matchesColor,
+        matchesLineWidth: state.matchesLineWidth,
         showMaskOverlay: state.showMaskOverlay,
         maskOpacity: state.maskOpacity,
         showAxes: state.showAxes,

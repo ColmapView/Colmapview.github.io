@@ -7,6 +7,7 @@ export function useMatchesNode(): MatchesNode {
   const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
   const matchesOpacity = useUIStore((s) => s.matchesOpacity);
   const matchesColor = useUIStore((s) => s.matchesColor);
+  const matchesLineWidth = useUIStore((s) => s.matchesLineWidth);
 
   return useMemo<MatchesNode>(
     () => ({
@@ -15,7 +16,8 @@ export function useMatchesNode(): MatchesNode {
       displayMode: matchesDisplayMode,
       opacity: matchesOpacity,
       color: matchesColor,
+      lineWidth: matchesLineWidth,
     }),
-    [showMatches, matchesDisplayMode, matchesOpacity, matchesColor]
+    [showMatches, matchesDisplayMode, matchesOpacity, matchesColor, matchesLineWidth]
   );
 }

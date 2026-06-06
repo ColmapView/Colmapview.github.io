@@ -9,6 +9,7 @@ import type { Reconstruction } from '../../types/colmap.js';
 import type { WasmReconstructionWrapper } from '../../wasm/reconstruction.js';
 import { clearAllCaches } from '../../cache/index.js';
 import { useReconstructionStore } from '../reconstructionStore.js';
+import { useImageMetricsStore } from '../stores/imageMetricsStore.js';
 import { useUIStore } from '../stores/uiStore.js';
 
 export interface ClearReconstructionOptions {
@@ -41,6 +42,7 @@ export function clearReconstruction(options?: ClearReconstructionOptions): void 
 
   // Clear caches first (before store clear which disposes WASM)
   clearAllCaches({ preserveZip });
+  useImageMetricsStore.getState().clearSplatPsnr();
 
   // Clear reconstruction store
   useReconstructionStore.getState().clear();
@@ -69,6 +71,7 @@ export function setNewReconstruction(
 
   // Clear caches (preserveZip by default to maintain ZIP archive during reload)
   clearAllCaches({ preserveZip });
+  useImageMetricsStore.getState().clearSplatPsnr();
 
   const store = useReconstructionStore.getState();
 

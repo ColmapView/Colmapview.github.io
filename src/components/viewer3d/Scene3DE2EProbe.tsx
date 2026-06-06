@@ -2,9 +2,22 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useDataset } from '../../dataset';
+import { useUrlLoader } from '../../hooks/useUrlLoader';
 import type { CameraDisplayMode } from '../../store/types';
+import type { ColmapManifest } from '../../types/manifest';
+import { resetSession } from '../../store/actions';
 import { createSim3dFromEuler, isIdentityEuler, sim3dToMatrix4 } from '../../utils/sim3dTransforms';
 import { useIsAlignmentMode } from '../../hooks/useAlignmentMode';
+import type {
+  SplatBackendAvailability,
+  SplatBackendPreference,
+  SplatBackendResolution,
+  SplatMetricCapability,
+} from '../../utils/splatBackendPolicy';
+import {
+  getWebGpuSplatDebugCounters,
+  type WebGpuSplatDebugCounters,
+} from '../../splat/webgpu/webGpuSplatDebugCounters';
 import {
   buildCameraFrustumItems,
   buildCameraIdToIndex,
@@ -30,8 +43,34 @@ interface SceneObjectTarget {
 
 interface ColmapWebViewE2EApi {
   clearSelectedImage: () => void;
+  getImageIds: () => number[];
   getSceneObjectTarget: (name: SceneObjectTargetName) => SceneObjectTarget | null;
   getSelectedImageId: () => number | null;
+  getSplatBackendState: () => {
+    requestedBackend: SplatBackendPreference;
+    availability: SplatBackendAvailability;
+    resolution: SplatBackendResolution;
+    metricCapability: SplatMetricCapability;
+  };
+  getSplatPsnrState: (imageId?: number | null) => {
+    frameReady: boolean;
+    computing: boolean;
+    readyCount: number;
+    status: string | null;
+    error: string | null;
+    metric: {
+      psnr: number;
+      mse: number;
+      validPixelCount: number;
+      width: number;
+      height: number;
+      computedAt: number;
+    } | null;
+  };
+  getWebGpuSplatDebugCounters: () => Promise<WebGpuSplatDebugCounters>;
+  loadManifest: (manifest: ColmapManifest) => Promise<boolean>;
+  requestSplatPsnrCompute: (scope: 'selected' | 'all', selectedImageId?: number | null) => void;
+  resetSession: () => void;
   setCameraDisplayMode: (mode: CameraDisplayMode) => void;
   setCameraScale: (scale: number) => void;
   setSelectedImageId: (imageId: number | null) => void;
@@ -120,6 +159,7 @@ function getFrustumTargetWorldPoint(
 export function Scene3DE2EProbe() {
   const { camera, gl } = useThree();
   const dataset = useDataset();
+  const { loadFromManifest } = useUrlLoader();
   const {
     data: {
       reconstruction,
@@ -136,7 +176,11 @@ export function Scene3DE2EProbe() {
     },
     actions: {
       clearSelectedImage,
+      getImageIds,
+      getSplatBackendState,
+      getSplatPsnrState,
       getSelectedImageId,
+      requestSplatPsnrCompute,
       setCameraDisplayMode,
       setCameraScale,
       setSelectedImageId,
@@ -200,8 +244,15 @@ export function Scene3DE2EProbe() {
 
   const api = useMemo<ColmapWebViewE2EApi>(() => ({
     clearSelectedImage,
+    getImageIds,
+    getSplatBackendState,
     getSceneObjectTarget,
     getSelectedImageId,
+    getSplatPsnrState,
+    getWebGpuSplatDebugCounters: async () => getWebGpuSplatDebugCounters(),
+    loadManifest: loadFromManifest,
+    requestSplatPsnrCompute,
+    resetSession,
     setCameraDisplayMode,
     setCameraScale,
     setSelectedImageId,
@@ -219,8 +270,13 @@ export function Scene3DE2EProbe() {
     }),
   }), [
     clearSelectedImage,
+    getImageIds,
     getSceneObjectTarget,
     getSelectedImageId,
+    getSplatBackendState,
+    getSplatPsnrState,
+    loadFromManifest,
+    requestSplatPsnrCompute,
     setCameraDisplayMode,
     setCameraScale,
     setSelectedImageId,

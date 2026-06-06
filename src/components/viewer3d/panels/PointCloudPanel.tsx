@@ -15,10 +15,13 @@ import { getPointCloudButtonState } from '../viewerControlsViewModel';
 import {
   POINT_COLOR_MODE_OPTIONS,
   formatMaxReprojectionError,
+  getActiveSplatFileSelectValue,
   getMaxReprojectionErrorFromSliderValue,
   getMaxReprojectionErrorSliderValue,
   getPointCloudColorHint,
   getPointCloudMaxErrorLimit,
+  getSplatFileFromSelectValue,
+  getSplatFileSelectOptions,
   shouldShowSplatPointOverlayColorControl,
   shouldShowSplatPointOverlaySpeedControl,
 } from './pointCloudPanelViewModel';
@@ -43,6 +46,9 @@ export interface PointCloudPanelProps {
   maxReprojectionError: number | null;
   setMaxReprojectionError: (error: number | null) => void;
   reconstruction: Reconstruction | null;
+  splatFiles: readonly File[];
+  activeSplatFile?: File;
+  setActiveSplatFile: (file: File) => void;
   selectionColor: string;
   setSelectionColor: (color: string) => void;
   selectionAnimationSpeed: number;
@@ -68,6 +74,9 @@ export function PointCloudPanel({
   maxReprojectionError,
   setMaxReprojectionError,
   reconstruction,
+  splatFiles,
+  activeSplatFile,
+  setActiveSplatFile,
   selectionColor,
   setSelectionColor,
   selectionAnimationSpeed,
@@ -79,6 +88,8 @@ export function PointCloudPanel({
   const colorHint = getPointCloudColorHint(colorMode);
   const showSplatPointOverlayColorControl = shouldShowSplatPointOverlayColorControl(colorMode);
   const showSplatPointOverlaySpeedControl = shouldShowSplatPointOverlaySpeedControl(colorMode);
+  const splatFileOptions = getSplatFileSelectOptions(splatFiles);
+  const activeSplatFileValue = getActiveSplatFileSelectValue(splatFiles, activeSplatFile);
 
   return (
     <ControlButton
@@ -104,6 +115,19 @@ export function PointCloudPanel({
           onChange={setColorMode}
           options={POINT_COLOR_MODE_OPTIONS}
         />
+        {splatFiles.length > 1 && (
+          <SelectRow
+            label="Splat File"
+            value={activeSplatFileValue}
+            onChange={(value) => {
+              const nextFile = getSplatFileFromSelectValue(splatFiles, value);
+              if (nextFile) {
+                setActiveSplatFile(nextFile);
+              }
+            }}
+            options={splatFileOptions}
+          />
+        )}
         <SliderRow
           label={<>Size <span className="text-ds-muted text-xs inline-flex items-center gap-0.5">(Ctrl+<MouseScrollIcon className="w-3 h-3 inline" />)</span></>}
           value={pointSize}

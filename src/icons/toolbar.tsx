@@ -271,17 +271,65 @@ export function ColorTrackIcon({ className }: IconProps) {
   );
 }
 
+interface SplatBlobProps {
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+  rotation: number;
+  color: string;
+}
+
+function SplatBlob({ cx, cy, rx, ry, rotation, color }: SplatBlobProps) {
+  const transform = `rotate(${rotation} ${cx} ${cy})`;
+
+  return (
+    <g transform={transform}>
+      <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill={color} opacity="0.18" />
+      <ellipse cx={cx} cy={cy} rx={rx * 0.64} ry={ry * 0.64} fill={color} opacity="0.34" />
+      <ellipse cx={cx} cy={cy} rx={rx * 0.34} ry={ry * 0.34} fill={color} opacity="0.6" />
+    </g>
+  );
+}
+
 export function ColorSplatIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="7" fill="#f8fafc" opacity="0.2" />
-      <circle cx="12" cy="12" r="5.5" fill="#60a5fa" opacity="0.45" />
-      <circle cx="9" cy="10" r="4" fill="#f472b6" opacity="0.55" />
-      <circle cx="15" cy="14" r="4.5" fill="#facc15" opacity="0.5" />
-      <circle cx="12" cy="12" r="1.8" fill="currentColor" opacity="0.9" />
-      <circle cx="6" cy="6" r="1.2" fill="currentColor" opacity="0.65" />
-      <circle cx="18" cy="7" r="1.1" fill="currentColor" opacity="0.65" />
-      <circle cx="19" cy="18" r="1.3" fill="currentColor" opacity="0.65" />
+      <SplatBlob cx={8.2} cy={9.5} rx={5.6} ry={3.4} rotation={-28} color="#f472b6" />
+      <SplatBlob cx={15.4} cy={8.2} rx={4.8} ry={3.1} rotation={22} color="#60a5fa" />
+      <SplatBlob cx={13.8} cy={15.4} rx={5.8} ry={3.7} rotation={-12} color="#facc15" />
+      <ellipse cx="11.8" cy="12" rx="7.7" ry="5.1" fill="#f8fafc" opacity="0.08" />
+    </svg>
+  );
+}
+
+export function ColorSplatPointsIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none">
+      <SplatBlob cx={8.2} cy={9.5} rx={5.6} ry={3.4} rotation={-28} color="#f472b6" />
+      <SplatBlob cx={15.4} cy={8.2} rx={4.8} ry={3.1} rotation={22} color="#60a5fa" />
+      <SplatBlob cx={13.8} cy={15.4} rx={5.8} ry={3.7} rotation={-12} color="#facc15" />
+      <circle cx="7.2" cy="7.6" r="1.15" fill="#ff00ff" />
+      <circle cx="7.2" cy="7.6" r="2" stroke="#ff00ff" strokeWidth="0.9" opacity="0.45" />
+      <circle cx="17.3" cy="10.6" r="1.15" fill="#ff00ff" />
+      <circle cx="17.3" cy="10.6" r="2" stroke="#ff00ff" strokeWidth="0.9" opacity="0.45" />
+      <circle cx="11" cy="17.2" r="1.15" fill="#ff00ff" />
+      <circle cx="11" cy="17.2" r="2" stroke="#ff00ff" strokeWidth="0.9" opacity="0.45" />
+    </svg>
+  );
+}
+
+export function ColorSplatRainbowPointsIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none">
+      <SplatBlob cx={8.2} cy={9.5} rx={5.6} ry={3.4} rotation={-28} color="#f472b6" />
+      <SplatBlob cx={15.4} cy={8.2} rx={4.8} ry={3.1} rotation={22} color="#60a5fa" />
+      <SplatBlob cx={13.8} cy={15.4} rx={5.8} ry={3.7} rotation={-12} color="#facc15" />
+      <circle cx="6.4" cy="7.3" r="1.2" fill="#ef4444" />
+      <circle cx="14.4" cy="6.9" r="1.2" fill="#facc15" />
+      <circle cx="18" cy="12" r="1.2" fill="#22c55e" />
+      <circle cx="13.1" cy="17.6" r="1.2" fill="#38bdf8" />
+      <circle cx="7.6" cy="15.2" r="1.2" fill="#a855f7" />
     </svg>
   );
 }

@@ -32,6 +32,8 @@ describe('DeletionBulkSelector', () => {
     const select = screen.getByRole('combobox', { name: 'Select by camera' });
     const addButton = screen.getByRole('button', { name: 'Add all images from this camera' });
 
+    expect(select).toHaveClass('min-w-0');
+    expect(select).toHaveClass('max-w-full');
     expect(addButton).toBeDisabled();
 
     fireEvent.change(select, { target: { value: '2' } });

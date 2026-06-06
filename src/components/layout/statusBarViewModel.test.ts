@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { statusBarStyles } from '../../theme';
 import {
   STATUS_BAR_COLMAP_LINK,
+  STATUS_BAR_HIDDEN_CLASS_NAME,
   STATUS_BAR_LINK_CLASS_NAME,
   STATUS_BAR_PROJECT_LINKS,
   formatStatusBarFps,
   getDesktopEmptyStatusText,
+  getStatusBarContainerClassName,
   getStatusBarLinkHoverColor,
   getStatusBarLinkRestColor,
   getStatusBarLinkStyle,
@@ -102,5 +105,19 @@ describe('status bar view model', () => {
     expect(getStatusBarLinkHoverColor(STATUS_BAR_PROJECT_LINKS[1])).toBe('#ef4444');
     expect(getStatusBarLinkHoverColor(STATUS_BAR_COLMAP_LINK)).toBe('#60a5fa');
     expect(getStatusBarLinkRestColor()).toBe('inherit');
+  });
+
+  it('visually hides the desktop status bar while preserving its hover target', () => {
+    expect(STATUS_BAR_HIDDEN_CLASS_NAME).toBe('opacity-0');
+    expect(statusBarStyles.container).toContain('absolute');
+    expect(statusBarStyles.container).toContain('bottom-0');
+    expect(getStatusBarContainerClassName({
+      baseClassName: 'h-10 footer',
+      hidden: false,
+    })).toBe('h-10 footer');
+    expect(getStatusBarContainerClassName({
+      baseClassName: 'h-10 footer',
+      hidden: true,
+    })).toBe('h-10 footer opacity-0');
   });
 });

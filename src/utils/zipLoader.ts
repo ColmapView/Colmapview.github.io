@@ -21,13 +21,13 @@ import {
   buildArchiveEntryPath,
   getArchiveImageLookupKeys,
   getColmapArchiveKey,
-  findLargestArchivePlyCandidate,
   hasArchiveExtension,
   hasRequiredColmapArchiveFiles,
   isArchiveColmapPath,
   isArchiveImagePath,
   isArchiveMimeType,
-  isArchivePlyPath,
+  isArchiveSplatPath,
+  sortArchiveSplatCandidatesByPreference,
 } from './zipLoaderPolicy';
 
 // ============================================================================
@@ -141,7 +141,7 @@ async function processZipArchive(
 
     if (isArchiveColmapPath(fullPath)) {
       colmapEntries.push({ file: entry.file, path: fullPath });
-    } else if (isArchivePlyPath(fullPath)) {
+    } else if (isArchiveSplatPath(fullPath)) {
       splatEntries.push({ file: entry.file, path: fullPath, size: entry.file.size });
     } else if (isArchiveImagePath(fullPath)) {
       // Store in index for lazy extraction
@@ -173,18 +173,20 @@ async function processZipArchive(
   }
 
   if (splatEntries.length > 0) {
-    const splatEntry = findLargestArchivePlyCandidate(splatEntries);
-    if (!splatEntry) {
-      throw new Error('Internal error selecting archive PLY file');
+    const sortedSplatEntries = sortArchiveSplatCandidatesByPreference(splatEntries);
+    if (sortedSplatEntries.length === 0) {
+      throw new Error('Internal error selecting archive splat file');
     }
-    const filename = splatEntry.path.split('/').pop() ?? splatEntry.path;
-    const extractedFile = await splatEntry.file.extract();
-    const namedFile = extractedFile.name.toLowerCase().endsWith('.ply')
-      ? extractedFile
-      : new File([extractedFile], filename, { type: extractedFile.type });
+    for (const splatEntry of sortedSplatEntries) {
+      const filename = splatEntry.path.split('/').pop() ?? splatEntry.path;
+      const extractedFile = await splatEntry.file.extract();
+      const namedFile = isArchiveSplatPath(extractedFile.name)
+        ? extractedFile
+        : new File([extractedFile], filename, { type: extractedFile.type });
 
-    colmapFiles.set(splatEntry.path, namedFile);
-    onProgress({ percent: 70, message: `Extracting ${filename}...` });
+      colmapFiles.set(splatEntry.path, namedFile);
+      onProgress({ percent: 70, message: `Extracting ${filename}...` });
+    }
   }
 
   onProgress({ percent: 70, message: `Indexed ${imageCount} images for lazy loading` });

@@ -3,6 +3,7 @@
  */
 import { defineSection } from '../types';
 import { RIG_DISPLAY_MODES, RIG_COLOR_MODES } from '../../../store/types';
+import { LINE_WIDTH } from '../../../theme/opacity';
 import { CSS_HEX_COLOR_PATTERN, CSS_HEX_COLOR_PATTERN_DESCRIPTION } from '../../../utils/hexColor';
 
 export const rigSection = defineSection({
@@ -49,6 +50,15 @@ export const rigSection = defineSection({
       default: 0.7,
       persist: true,
       description: 'Rig line opacity (0-1)',
+    },
+    {
+      key: 'rigLineWidth',
+      type: 'number',
+      min: 1,
+      max: 6,
+      default: LINE_WIDTH.rig,
+      persist: true,
+      description: 'Rig connection line width (1 - 6)',
     },
   ],
 });

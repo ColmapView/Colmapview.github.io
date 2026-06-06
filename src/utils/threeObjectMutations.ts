@@ -15,6 +15,17 @@ export function syncSceneBackgroundColor(
   return true;
 }
 
+export function syncSceneBackgroundTransparent(
+  scene: Pick<THREE.Scene, 'background'>
+): boolean {
+  if (scene.background === null) {
+    return false;
+  }
+
+  scene.background = null;
+  return true;
+}
+
 export function syncPointRaycasterThreshold(
   raycaster: THREE.Raycaster,
   threshold: number

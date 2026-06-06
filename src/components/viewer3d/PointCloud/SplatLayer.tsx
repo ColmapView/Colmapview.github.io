@@ -1,32 +1,56 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import { useThree } from '@react-three/fiber';
-import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
 import { appLogger } from '../../../utils/logger';
+import {
+  getSplatMeshSourceOptions,
+  preloadSparkModule,
+  type SparkModule,
+} from '../../../utils/sparkSplatRuntime';
+import { SPARK_SPLAT_RENDER_ORDER } from './pointCloudRenderPolicy';
 import { useSplatLayerStoreFacade } from './SplatLayerStoreFacade';
+
+type SplatMeshInstance = InstanceType<SparkModule['SplatMesh']>;
 
 interface LoadedSplatMesh {
   file: File;
-  mesh: SplatMesh;
+  mesh: SplatMeshInstance;
 }
 
-function SparkRendererBridge() {
+interface SplatLoadingNotification {
+  file: File;
+  id: string;
+}
+
+function SparkRendererBridge({ SparkRenderer }: { SparkRenderer: SparkModule['SparkRenderer'] }) {
   const { gl, scene, invalidate } = useThree();
 
   useEffect(() => {
-    const spark = new SparkRenderer({
-      renderer: gl,
-      onDirty: invalidate,
+    let spark: InstanceType<SparkModule['SparkRenderer']> | null = null;
+    let cancelled = false;
+    const frameId = requestAnimationFrame(() => {
+      if (cancelled) {
+        return;
+      }
+
+      spark = new SparkRenderer({
+        renderer: gl,
+        onDirty: invalidate,
+      });
+
+      scene.add(spark);
+      invalidate();
     });
 
-    scene.add(spark);
-    invalidate();
-
     return () => {
-      scene.remove(spark);
-      spark.dispose();
-      invalidate();
+      cancelled = true;
+      cancelAnimationFrame(frameId);
+      if (spark) {
+        scene.remove(spark);
+        spark.dispose();
+        invalidate();
+      }
     };
-  }, [gl, scene, invalidate]);
+  }, [SparkRenderer, gl, scene, invalidate]);
 
   return null;
 }
@@ -36,11 +60,49 @@ export function SplatLayer(): JSX.Element | null {
     data: {
       showSplats,
       splatFile,
+      requestedBackend,
+      splatBackendResolution,
+    },
+    actions: {
+      addNotification,
+      removeNotification,
+      setSparkBackendAvailable,
     },
   } = useSplatLayerStoreFacade();
   const { invalidate } = useThree();
+  const [sparkModule, setSparkModule] = useState<SparkModule | null>(null);
   const [loadedSplat, setLoadedSplat] = useState<LoadedSplatMesh | null>(null);
   const loadedSplatRef = useRef<LoadedSplatMesh | null>(null);
+  const loadingNotificationRef = useRef<SplatLoadingNotification | null>(null);
+  const shouldUseSparkBackend = splatBackendResolution.status === 'resolved'
+    && splatBackendResolution.backend === 'spark';
+  const activeLoadedSplat = loadedSplat?.file === splatFile ? loadedSplat : null;
+  const hasLoadedSplat = activeLoadedSplat !== null;
+  const showLoadedSplat = showSplats && hasLoadedSplat;
+
+  const clearSplatLoadingNotification = useCallback((file?: File) => {
+    const current = loadingNotificationRef.current;
+    if (!current || (file && current.file !== file)) {
+      return;
+    }
+
+    removeNotification(current.id);
+    loadingNotificationRef.current = null;
+  }, [removeNotification]);
+
+  const startSplatLoadingNotification = useCallback((file: File) => {
+    const current = loadingNotificationRef.current;
+    if (current?.file === file) {
+      return;
+    }
+
+    if (current) {
+      removeNotification(current.id);
+    }
+
+    const id = addNotification('info', `Loading splat: ${file.name}`, 0);
+    loadingNotificationRef.current = { file, id };
+  }, [addNotification, removeNotification]);
 
   const replaceLoadedSplat = useCallback((nextLoadedSplat: LoadedSplatMesh | null) => {
     const previousLoadedSplat = loadedSplatRef.current;
@@ -53,10 +115,69 @@ export function SplatLayer(): JSX.Element | null {
 
   useEffect(() => {
     return () => {
+      clearSplatLoadingNotification();
       loadedSplatRef.current?.mesh.dispose();
       loadedSplatRef.current = null;
     };
-  }, []);
+  }, [clearSplatLoadingNotification]);
+
+  useEffect(() => {
+    if (!splatFile || !shouldUseSparkBackend) {
+      clearSplatLoadingNotification();
+      return;
+    }
+
+    if (loadedSplatRef.current?.file !== splatFile) {
+      startSplatLoadingNotification(splatFile);
+    }
+
+    return () => {
+      clearSplatLoadingNotification(splatFile);
+    };
+  }, [
+    clearSplatLoadingNotification,
+    shouldUseSparkBackend,
+    splatFile,
+    startSplatLoadingNotification,
+  ]);
+
+  useEffect(() => {
+    if (!splatFile) {
+      return;
+    }
+    if (requestedBackend === 'webgpu') {
+      return;
+    }
+
+    let cancelled = false;
+    void preloadSparkModule()
+      .then((module) => {
+        setSparkBackendAvailable(true);
+        if (!cancelled) {
+          setSparkModule(module);
+        }
+      })
+      .catch((error: unknown) => {
+        setSparkBackendAvailable(false);
+        if (!cancelled) {
+          clearSplatLoadingNotification(splatFile);
+          addNotification('warning', `Failed to initialize splat renderer: ${splatFile.name}`);
+          appLogger.warn(
+            `[Splats] Failed to preload Spark runtime: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    addNotification,
+    clearSplatLoadingNotification,
+    requestedBackend,
+    setSparkBackendAvailable,
+    splatFile,
+  ]);
 
   useEffect(() => {
     if (!splatFile) {
@@ -70,11 +191,20 @@ export function SplatLayer(): JSX.Element | null {
         cancelled = true;
       };
     }
+    if (!sparkModule) {
+      return;
+    }
+    if (!shouldUseSparkBackend) {
+      return;
+    }
 
     const sourceFile = splatFile;
+    const { SplatMesh } = sparkModule;
     let cancelled = false;
-    let mesh: SplatMesh | null = null;
+    let mesh: SplatMeshInstance | null = null;
     let committed = false;
+
+    startSplatLoadingNotification(sourceFile);
 
     if (loadedSplatRef.current && loadedSplatRef.current.file !== sourceFile) {
       queueMicrotask(() => {
@@ -85,14 +215,14 @@ export function SplatLayer(): JSX.Element | null {
     }
 
     async function loadSplat(): Promise<void> {
-      const fileBytes = await sourceFile.arrayBuffer();
+      const sourceOptions = await getSplatMeshSourceOptions(sourceFile);
 
       if (cancelled) {
         return;
       }
 
       mesh = new SplatMesh({
-        fileBytes: new Uint8Array(fileBytes),
+        ...sourceOptions,
         fileName: sourceFile.name,
         raycastable: false,
       });
@@ -106,6 +236,8 @@ export function SplatLayer(): JSX.Element | null {
 
       committed = true;
       replaceLoadedSplat({ file: sourceFile, mesh });
+      clearSplatLoadingNotification(sourceFile);
+      addNotification('info', `Loaded splat: ${sourceFile.name}`, 3000);
       invalidate();
     }
 
@@ -113,6 +245,8 @@ export function SplatLayer(): JSX.Element | null {
       mesh?.dispose();
       mesh = null;
       if (!cancelled) {
+        clearSplatLoadingNotification(sourceFile);
+        addNotification('warning', `Failed to load splat: ${sourceFile.name}`);
         appLogger.warn(
           `[Splats] Failed to load ${sourceFile.name}: ${error instanceof Error ? error.message : String(error)}`
         );
@@ -121,22 +255,36 @@ export function SplatLayer(): JSX.Element | null {
 
     return () => {
       cancelled = true;
+      clearSplatLoadingNotification(sourceFile);
       if (!committed) {
         mesh?.dispose();
       }
     };
-  }, [splatFile, invalidate, replaceLoadedSplat]);
+  }, [
+    addNotification,
+    clearSplatLoadingNotification,
+    splatFile,
+    sparkModule,
+    shouldUseSparkBackend,
+    invalidate,
+    replaceLoadedSplat,
+    startSplatLoadingNotification,
+  ]);
 
-  if (!splatFile) {
+  if (!splatFile || !sparkModule || !shouldUseSparkBackend) {
     return null;
   }
 
-  const showLoadedSplat = showSplats && loadedSplat?.file === splatFile;
-
   return (
     <>
-      <SparkRendererBridge />
-      {showLoadedSplat && <primitive object={loadedSplat.mesh} renderOrder={2} />}
+      {showLoadedSplat && <SparkRendererBridge SparkRenderer={sparkModule.SparkRenderer} />}
+      {activeLoadedSplat && (
+        <primitive
+          object={activeLoadedSplat.mesh}
+          renderOrder={SPARK_SPLAT_RENDER_ORDER}
+          visible={showLoadedSplat}
+        />
+      )}
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { useThumbnail } from '../../hooks/useThumbnail';
+import { formatSplatPsnrValue, hasSplatPsnrValue } from '../viewer3d/splatPsnrMetric';
 import {
   listStyles,
   galleryStyles,
@@ -33,6 +34,7 @@ export interface GalleryItemProps {
   isResizing: boolean;
   wouldGoBack: boolean;
   touchMode?: boolean;
+  hideOverlay?: boolean;
 }
 
 export const GalleryItem = memo(function GalleryItem({
@@ -51,6 +53,7 @@ export const GalleryItem = memo(function GalleryItem({
   isResizing,
   wouldGoBack,
   touchMode = false,
+  hideOverlay = false,
 }: GalleryItemProps) {
   const { multiCamera } = useImageGalleryItemStoreFacade();
   const src = useThumbnail(img.file, img.name, !isScrolling && !skipImages && !isSettling && !isResizing);
@@ -100,9 +103,11 @@ export const GalleryItem = memo(function GalleryItem({
           />
         )}
       </div>
-      <div className={`${galleryStyles.overlay} z-20`}>
-        <div className={galleryStyles.overlayText}>{img.name}</div>
-      </div>
+      {!hideOverlay && (
+        <div className={`${galleryStyles.overlay} z-20`}>
+          <div className={galleryStyles.overlayText}>{img.name}</div>
+        </div>
+      )}
       {!touchMode && hovered && mousePos && (
         <ImageGalleryItemHoverCard
           img={img}
@@ -151,6 +156,20 @@ export const ListItem = memo(function ListItem({
     : isMatched
       ? `${matchesBlink ? 'matches-blink' : ''}`
       : listStyles.itemHover;
+  const hasPsnr = hasSplatPsnrValue(img.splatPsnr);
+  const compactValues = [
+    `${img.numPoints3D}/${img.numPoints2D}`,
+    String(img.covisibleCount),
+    img.avgError.toFixed(2),
+    ...(hasPsnr ? [formatSplatPsnrValue(img.splatPsnr)] : []),
+  ];
+  const compactLabels = [
+    'pts',
+    'covis',
+    'err',
+    ...(hasPsnr ? ['psnr'] : []),
+  ];
+
   return (
     <div
       style={getListItemFrameStyle({ isMatched, isSelected, matchesColor })}
@@ -181,8 +200,8 @@ export const ListItem = memo(function ListItem({
         <div className={listStyles.subtitle}>{multiCamera ? `#${img.cameraId}:${img.imageId}` : `#${img.imageId}`} · {img.cameraWidth}×{img.cameraHeight}</div>
       </div>
       <div className="flex-shrink-0 text-right list-stats-compact">
-        <div className="text-ds-primary text-xs whitespace-nowrap">{img.numPoints3D}<span className="text-ds-muted">/{img.numPoints2D}</span> · {img.covisibleCount} · {img.avgError.toFixed(2)}</div>
-        <div className="text-ds-muted text-xs whitespace-nowrap">pts · covis · err</div>
+        <div className="text-ds-primary text-xs whitespace-nowrap">{compactValues.join(' · ')}</div>
+        <div className="text-ds-muted text-xs whitespace-nowrap">{compactLabels.join(' · ')}</div>
       </div>
       <div className="flex-shrink-0 text-right list-stats-full">
         <div className="text-ds-primary text-sm">{img.numPoints3D}<span className="text-ds-muted">/{img.numPoints2D}</span></div>
@@ -196,6 +215,12 @@ export const ListItem = memo(function ListItem({
         <div className="text-ds-primary text-sm">{img.avgError.toFixed(2)}</div>
         <div className="text-ds-muted text-xs">avg err</div>
       </div>
+      {hasPsnr && (
+        <div className="flex-shrink-0 text-right w-16 list-stats-full">
+          <div className="text-ds-primary text-sm">{formatSplatPsnrValue(img.splatPsnr)}</div>
+          <div className="text-ds-muted text-xs">PSNR</div>
+        </div>
+      )}
       {!touchMode && hovered && mousePos && (
         <ImageGalleryItemHoverCard
           img={img}

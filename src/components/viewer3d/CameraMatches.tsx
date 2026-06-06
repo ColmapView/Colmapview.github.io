@@ -1,9 +1,17 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import * as THREE from 'three';
 import { useCamerasNode, useMatchesNode, useSelectionNode } from '../../nodes';
 import { getMatchesDisplayOpacity } from './cameraFrustumStylePolicy';
 import { buildCameraMatchLinePositions } from './cameraMatchesViewModel';
+import {
+  createFatLineSegmentsObject,
+  disposeFatLineSegmentsObject,
+} from './fatLineSegments';
+import {
+  syncMaterialColor,
+  syncMaterialLineWidth,
+  syncMaterialOpacity,
+} from './threeMaterialMutations';
 import { useCameraMatchesStoreFacade } from './useCameraMatchesStoreFacade';
 
 export function CameraMatches() {
@@ -20,24 +28,10 @@ export function CameraMatches() {
     displayMode: matchesDisplayMode,
     opacity: matchesOpacity,
     color: matchesColor,
+    lineWidth: matchesLineWidth,
   } = matches;
 
-  const materialRef = useRef<THREE.LineBasicMaterial>(null);
   const blinkPhaseRef = useRef(0);
-
-  useFrame((_, delta) => {
-    if (!showMatches || !materialRef.current) return;
-
-    if (matchesDisplayMode === 'blink') {
-      blinkPhaseRef.current = (blinkPhaseRef.current + delta) % 2;
-    }
-
-    materialRef.current.opacity = getMatchesDisplayOpacity(
-      matchesOpacity,
-      matchesDisplayMode,
-      blinkPhaseRef.current
-    );
-  });
 
   const linePositions = useMemo(() => buildCameraMatchLinePositions({
     reconstruction,
@@ -46,30 +40,48 @@ export function CameraMatches() {
     cameraDisplayMode,
   }), [reconstruction, selectedImageId, showMatches, cameraDisplayMode]);
 
-  const geometry = useMemo(() => {
+  const fatLines = useMemo(() => {
     if (!linePositions) return null;
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
-    return geo;
+    return createFatLineSegmentsObject({
+      positions: linePositions,
+      lineWidth: 1,
+      depthTest: false,
+      depthWrite: false,
+      renderOrder: 999,
+    });
   }, [linePositions]);
 
   useEffect(() => {
-    return () => {
-      geometry?.dispose();
-    };
-  }, [geometry]);
+    if (!fatLines) return undefined;
+    return () => disposeFatLineSegmentsObject(fatLines);
+  }, [fatLines]);
 
-  if (!showMatches || cameraDisplayMode === 'imageplane' || !geometry) return null;
+  useLayoutEffect(() => {
+    if (!fatLines) return;
+    syncMaterialColor(fatLines.material, matchesColor);
+    syncMaterialLineWidth(fatLines.material, matchesLineWidth);
+    syncMaterialOpacity(fatLines.material, getMatchesDisplayOpacity(
+      matchesOpacity,
+      matchesDisplayMode,
+      blinkPhaseRef.current
+    ));
+  }, [fatLines, matchesColor, matchesLineWidth, matchesOpacity, matchesDisplayMode]);
 
-  return (
-    <lineSegments geometry={geometry} renderOrder={999}>
-      <lineBasicMaterial
-        ref={materialRef}
-        color={matchesColor}
-        transparent
-        opacity={matchesOpacity}
-        depthTest={false}
-      />
-    </lineSegments>
-  );
+  useFrame((_, delta) => {
+    if (!showMatches || !fatLines) return;
+
+    if (matchesDisplayMode === 'blink') {
+      blinkPhaseRef.current = (blinkPhaseRef.current + delta) % 2;
+    }
+
+    syncMaterialOpacity(fatLines.material, getMatchesDisplayOpacity(
+      matchesOpacity,
+      matchesDisplayMode,
+      blinkPhaseRef.current
+    ));
+  });
+
+  if (!showMatches || cameraDisplayMode === 'imageplane' || !fatLines) return null;
+
+  return <primitive object={fatLines.object} />;
 }

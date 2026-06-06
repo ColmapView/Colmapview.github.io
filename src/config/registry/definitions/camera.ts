@@ -3,6 +3,7 @@
  */
 import { defineSection } from '../types';
 import { VIZ_COLORS } from '../../../theme/colors';
+import { LINE_WIDTH } from '../../../theme/opacity';
 import { CSS_HEX_COLOR_PATTERN, CSS_HEX_COLOR_PATTERN_DESCRIPTION } from '../../../utils/hexColor';
 import {
   CAMERA_DISPLAY_MODES,
@@ -63,7 +64,7 @@ export const cameraSection = defineSection({
       enumValues: FRUSTUM_COLOR_MODES,
       default: 'byCamera',
       persist: true,
-      description: 'single | byCamera | byRigFrame',
+      description: 'single | byCamera | byRigFrame | splatPsnr',
     },
     {
       key: 'frustumSingleColor',
@@ -82,6 +83,15 @@ export const cameraSection = defineSection({
       default: 0.9,
       persist: true,
       description: 'Frustum opacity when no camera is selected (0 - 1)',
+    },
+    {
+      key: 'frustumLineWidth',
+      type: 'number',
+      min: 1,
+      max: 6,
+      default: LINE_WIDTH.frustum,
+      persist: true,
+      description: 'Frustum wireframe line width (1 - 6)',
     },
     {
       key: 'unselectedOpacity',

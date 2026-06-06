@@ -1,0 +1,257 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  initializeWebGpuSplatDevice,
+  type WebGpuSplatGpuProvider,
+} from './webGpuSplatDevice';
+import {
+  getWebGpuSplatDebugCounters,
+  resetWebGpuSplatDebugCountersForTests,
+} from './webGpuSplatDebugCounters';
+
+interface FakeCanvasContext {
+  configure: ReturnType<typeof vi.fn>;
+  unconfigure: ReturnType<typeof vi.fn>;
+}
+
+function createDeferredLost(): {
+  lost: Promise<GPUDeviceLostInfo>;
+  resolve: (info: GPUDeviceLostInfo) => void;
+} {
+  let resolveLost!: (info: GPUDeviceLostInfo) => void;
+  return {
+    lost: new Promise<GPUDeviceLostInfo>((resolve) => {
+      resolveLost = resolve;
+    }),
+    resolve: resolveLost,
+  };
+}
+
+function createDeviceHarness(options: {
+  context?: FakeCanvasContext | null;
+  adapter?: Pick<GPUAdapter, 'limits' | 'requestDevice'> | null;
+  deviceLimits?: GPUSupportedLimits;
+  format?: GPUTextureFormat;
+} = {}): {
+  canvas: HTMLCanvasElement;
+  context: FakeCanvasContext | null;
+  device: GPUDevice & { destroy: ReturnType<typeof vi.fn> };
+  lost: ReturnType<typeof createDeferredLost>;
+  adapter: Pick<GPUAdapter, 'limits' | 'requestDevice'> | null;
+  gpu: WebGpuSplatGpuProvider;
+} {
+  const context = options.context === undefined
+    ? { configure: vi.fn(), unconfigure: vi.fn() }
+    : options.context;
+  const lost = createDeferredLost();
+  const defaultLimits = {
+    maxBufferSize: 2_147_483_648,
+    maxStorageBufferBindingSize: 2_147_483_644,
+  } as GPUSupportedLimits;
+  const device = {
+    lost: lost.lost,
+    limits: options.deviceLimits ?? defaultLimits,
+    destroy: vi.fn(),
+  } as unknown as GPUDevice & { destroy: ReturnType<typeof vi.fn> };
+  const adapter = options.adapter === undefined
+    ? {
+        limits: defaultLimits,
+        requestDevice: vi.fn().mockResolvedValue(device),
+      }
+    : options.adapter;
+  const gpu: WebGpuSplatGpuProvider = {
+    requestAdapter: vi.fn().mockResolvedValue(adapter),
+    getPreferredCanvasFormat: vi.fn(() => options.format ?? 'rgba8unorm'),
+  };
+  const canvas = {
+    getContext: vi.fn((name: string) => name === 'webgpu' ? context : null),
+  } as unknown as HTMLCanvasElement;
+
+  return { canvas, context, device, lost, adapter, gpu };
+}
+
+describe('WebGPU splat device initialization', () => {
+  beforeEach(() => {
+    resetWebGpuSplatDebugCountersForTests();
+  });
+
+  it('requests an adapter/device and configures the canvas context', async () => {
+    const { adapter, canvas, context, device, gpu } = createDeviceHarness();
+
+    const handle = await initializeWebGpuSplatDevice(canvas, { gpu });
+
+    expect(gpu.requestAdapter).toHaveBeenCalledTimes(1);
+    expect(gpu.requestAdapter).toHaveBeenCalledWith({ powerPreference: 'high-performance' });
+    expect(adapter?.requestDevice).toHaveBeenCalledWith(undefined);
+    expect(handle.device).toBe(device);
+    expect(handle.format).toBe('rgba8unorm');
+    expect(context?.configure).toHaveBeenCalledWith({
+      device,
+      format: 'rgba8unorm',
+      alphaMode: 'premultiplied',
+    });
+    expect(getWebGpuSplatDebugCounters()).toMatchObject({
+      devices: 1,
+      canvases: 1,
+    });
+
+    handle.dispose();
+    handle.dispose();
+    expect(context?.unconfigure).toHaveBeenCalledTimes(1);
+    expect(getWebGpuSplatDebugCounters()).toMatchObject({
+      devices: 0,
+      canvases: 0,
+    });
+  });
+
+  it('falls back to the default adapter request when a high-performance adapter is unavailable', async () => {
+    const { adapter: fallbackAdapter, canvas, context } = createDeviceHarness();
+    const gpu: WebGpuSplatGpuProvider = {
+      requestAdapter: vi.fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(fallbackAdapter),
+      getPreferredCanvasFormat: vi.fn(() => 'rgba8unorm'),
+    };
+
+    const handle = await initializeWebGpuSplatDevice(canvas, { gpu });
+
+    expect(gpu.requestAdapter).toHaveBeenNthCalledWith(1, { powerPreference: 'high-performance' });
+    expect(gpu.requestAdapter).toHaveBeenNthCalledWith(2);
+    expect(fallbackAdapter?.requestDevice).toHaveBeenCalledWith(undefined);
+    expect(context?.configure).toHaveBeenCalledWith(expect.objectContaining({
+      device: handle.device,
+    }));
+
+    handle.dispose();
+  });
+
+  it('fails when WebGPU support or canvas context is unavailable', async () => {
+    await expect(initializeWebGpuSplatDevice({} as HTMLCanvasElement, { gpu: null }))
+      .rejects.toThrow('WebGPU is not supported by this browser');
+
+    const { canvas, gpu } = createDeviceHarness({ context: null });
+    await expect(initializeWebGpuSplatDevice(canvas, { gpu }))
+      .rejects.toThrow('WebGPU canvas context is unavailable');
+  });
+
+  it('fails when no adapter is available', async () => {
+    const { canvas, gpu } = createDeviceHarness({ adapter: null });
+
+    await expect(initializeWebGpuSplatDevice(canvas, { gpu }))
+      .rejects.toThrow('WebGPU adapter is unavailable');
+  });
+
+  it('suppresses device-lost callbacks after disposal', async () => {
+    const { canvas, gpu, lost } = createDeviceHarness();
+    const onDeviceLost = vi.fn();
+
+    const handle = await initializeWebGpuSplatDevice(canvas, {
+      gpu,
+      onDeviceLost,
+    });
+    handle.dispose();
+    lost.resolve({ reason: 'destroyed', message: 'test lost' } as GPUDeviceLostInfo);
+    await Promise.resolve();
+
+    expect(onDeviceLost).not.toHaveBeenCalled();
+  });
+
+  it('requests elevated buffer limits when large splats require them', async () => {
+    const { adapter, canvas, gpu } = createDeviceHarness();
+
+    await initializeWebGpuSplatDevice(canvas, {
+      gpu,
+      requiredLimits: {
+        maxBufferSize: 900_000_000,
+        maxStorageBufferBindingSize: 900_000_000,
+      },
+    });
+
+    expect(adapter?.requestDevice).toHaveBeenCalledWith({
+      requiredLimits: {
+        maxBufferSize: 900_000_000,
+        maxStorageBufferBindingSize: 900_000_000,
+      },
+    });
+  });
+
+  it('uses the default device descriptor when splats fit portable WebGPU limits', async () => {
+    const { adapter, canvas, gpu } = createDeviceHarness();
+
+    await initializeWebGpuSplatDevice(canvas, {
+      gpu,
+      requiredLimits: {
+        maxBufferSize: 64,
+        maxStorageBufferBindingSize: 64,
+      },
+    });
+
+    expect(adapter?.requestDevice).toHaveBeenCalledWith(undefined);
+  });
+
+  it('fails before device creation when required splat limits exceed the adapter', async () => {
+    const device = {
+      lost: createDeferredLost().lost,
+      limits: {
+        maxBufferSize: 268_435_456,
+        maxStorageBufferBindingSize: 134_217_728,
+      } as GPUSupportedLimits,
+      destroy: vi.fn(),
+    } as unknown as GPUDevice & { destroy: ReturnType<typeof vi.fn> };
+    const adapter = {
+      limits: {
+        maxBufferSize: 268_435_456,
+        maxStorageBufferBindingSize: 134_217_728,
+      } as GPUSupportedLimits,
+      requestDevice: vi.fn().mockResolvedValue(device),
+    };
+    const { canvas, gpu } = createDeviceHarness({ adapter });
+
+    await expect(initializeWebGpuSplatDevice(canvas, {
+      gpu,
+      requiredLimits: {
+        maxBufferSize: 320_000_000,
+        maxStorageBufferBindingSize: 240_000_000,
+      },
+    })).rejects.toThrow(
+      'WebGPU splat renderer requires maxBufferSize 320000000 bytes, but this adapter supports 268435456 bytes'
+    );
+    expect(adapter.requestDevice).not.toHaveBeenCalled();
+    expect(device.destroy).not.toHaveBeenCalled();
+    expect(getWebGpuSplatDebugCounters()).toMatchObject({
+      devices: 0,
+      canvases: 0,
+    });
+  });
+
+  it('destroys the device and fails before canvas configuration when requestDevice under-delivers limits', async () => {
+    const { adapter, canvas, context, device, gpu } = createDeviceHarness({
+      deviceLimits: {
+        maxBufferSize: 268_435_456,
+        maxStorageBufferBindingSize: 134_217_728,
+      } as GPUSupportedLimits,
+    });
+
+    await expect(initializeWebGpuSplatDevice(canvas, {
+      gpu,
+      requiredLimits: {
+        maxBufferSize: 900_000_000,
+        maxStorageBufferBindingSize: 900_000_000,
+      },
+    })).rejects.toThrow(
+      'WebGPU device maxBufferSize 268435456 is below required 900000000 bytes'
+    );
+
+    expect(adapter?.requestDevice).toHaveBeenCalledWith({
+      requiredLimits: {
+        maxBufferSize: 900_000_000,
+        maxStorageBufferBindingSize: 900_000_000,
+      },
+    });
+    expect(context?.configure).not.toHaveBeenCalled();
+    expect(device.destroy).toHaveBeenCalledTimes(1);
+    expect(getWebGpuSplatDebugCounters()).toMatchObject({
+      devices: 0,
+      canvases: 0,
+    });
+  });
+});

@@ -49,6 +49,8 @@ export function useImageGalleryViewModel() {
       isIdle,
       showAutoHideEditor,
       pendingDeletions,
+      splatPsnrFrameReady,
+      splatPsnrByImage,
       selectedImageId,
       currentViewState,
       navigationHistory,
@@ -71,6 +73,8 @@ export function useImageGalleryViewModel() {
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [imageCacheVersion, setImageCacheVersion] = useState(0);
+  const showSplatPsnr = splatPsnrFrameReady && splatPsnrByImage.size > 0;
+  const effectiveSortField = showSplatPsnr || sortField !== 'splatPsnr' ? sortField : 'name';
 
   const matchedImageIds = useMemo(
     () => buildMatchedImageIds(reconstruction, selectedImageId, showMatches),
@@ -150,7 +154,7 @@ export function useImageGalleryViewModel() {
     cameraFilter,
     selectedImageId,
     sortDirection,
-    sortField,
+    sortField: effectiveSortField,
   }, 50);
 
   const cameras = useMemo(() => buildGalleryCameras(reconstruction), [reconstruction]);
@@ -162,17 +166,27 @@ export function useImageGalleryViewModel() {
       imageSource: {
         getImageSync: (imageName) => dataset.getImageSync(imageName),
       },
+      splatPsnrByImage: showSplatPsnr ? splatPsnrByImage : undefined,
       cameraFilter,
-      sortField,
+      sortField: effectiveSortField,
       sortDirection,
     });
-  }, [reconstruction, dataset, cameraFilter, sortField, sortDirection, imageCacheVersion]);
+  }, [
+    reconstruction,
+    dataset,
+    showSplatPsnr,
+    splatPsnrByImage,
+    cameraFilter,
+    effectiveSortField,
+    sortDirection,
+    imageCacheVersion,
+  ]);
 
   const refreshImageCacheVersion = useCallback(() => {
     setImageCacheVersion(v => v + 1);
   }, []);
 
-  const hideToolbar = shouldHideChromeWithButtons({
+  const hideImageOverlay = shouldHideChromeWithButtons({
     autoHideButtons,
     isIdle,
     showAutoHideEditor,
@@ -201,10 +215,12 @@ export function useImageGalleryViewModel() {
     setSortDirection,
     setSortField,
     setViewMode,
-    hideToolbar,
+    hideImageOverlay,
+    hideToolbar: false,
+    showSplatPsnr,
     showMatches,
     sortDirection,
-    sortField,
+    sortField: effectiveSortField,
     touchMode,
     viewMode,
   };

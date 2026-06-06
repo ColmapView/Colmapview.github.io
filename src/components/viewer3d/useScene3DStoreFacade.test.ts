@@ -2,7 +2,10 @@ import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   useCameraStore,
+  useNotificationStore,
+  usePointCloudStore,
   useReconstructionStore,
+  useSplatBackendStore,
   useTransformStore,
   useUIStore,
 } from '../../store';
@@ -17,6 +20,9 @@ describe('useScene3DStoreFacade', () => {
   beforeEach(() => {
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
     useCameraStore.setState(useCameraStore.getInitialState(), true);
+    useNotificationStore.setState(useNotificationStore.getInitialState(), true);
+    usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
+    useSplatBackendStore.setState(useSplatBackendStore.getInitialState(), true);
     useTransformStore.setState(useTransformStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
   });
@@ -52,6 +58,8 @@ describe('useScene3DStoreFacade', () => {
       viewDirection: 'z',
       viewTrigger: 5,
     });
+    useSplatBackendStore.getState().setRequestedBackend('webgpu');
+    useSplatBackendStore.getState().setWebGpuBackendState('unavailable');
 
     const { result } = renderHook(() => useSceneContentStoreFacade());
 
@@ -66,31 +74,57 @@ describe('useScene3DStoreFacade', () => {
       viewDirection: 'z',
       viewTrigger: 5,
       transform,
+      requestedSplatBackend: 'webgpu',
     });
+    expect(result.current.data.splatBackendAvailability.webGpu).toBe('unavailable');
+
+    act(() => {
+      result.current.actions.setSparkBackendAvailable(true);
+    });
+
+    expect(useSplatBackendStore.getState().availability.spark).toBe(true);
   });
 
   it('collects scene container dependencies and routes selection actions', () => {
     const reconstruction = buildReconstruction();
+    const splatFile = buildFile('scene.spz');
 
-    useReconstructionStore.setState({ reconstruction });
+    useReconstructionStore.setState({
+      reconstruction,
+      loadedFiles: buildLoadedFiles({ splatFile }),
+    });
     useUIStore.setState({
       backgroundColor: '#101820',
       showAutoHideEditor: true,
     });
+    useSplatBackendStore.getState().setSparkBackendAvailable(true);
+    usePointCloudStore.getState().setColorMode('splats');
 
     const { result } = renderHook(() => useSceneContainerStoreFacade());
 
     expect(result.current.data).toMatchObject({
       reconstruction,
       wasmReconstruction: null,
+      splatFile,
       backgroundColor: '#101820',
       showAutoHideEditor: true,
+      requestedSplatBackend: 'auto',
+      splatsVisible: true,
     });
+    expect(result.current.data.splatBackendAvailability.spark).toBe(true);
+    expect(result.current.data.splatBackendResolution.backend).toBe('spark');
 
     act(() => {
+      result.current.actions.addNotification('warning', 'WebGPU unavailable');
       result.current.actions.setSelectedImageId(42);
+      result.current.actions.setWebGpuBackendState('failed', 'adapter lost');
     });
 
     expect(useCameraStore.getState().selectedImageId).toBe(42);
+    expect(useNotificationStore.getState().notifications).toMatchObject([
+      { type: 'warning', message: 'WebGPU unavailable' },
+    ]);
+    expect(useSplatBackendStore.getState().availability.webGpu).toBe('failed');
+    expect(useSplatBackendStore.getState().availability.webGpuFailureReason).toBe('adapter lost');
   });
 });

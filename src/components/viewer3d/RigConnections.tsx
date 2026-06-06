@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useRigNode, useSelectionNode } from '../../nodes';
-import { lineVertexShader, lineFragmentShader } from './shaders';
 import {
   buildRigConnectionGeometryData,
   getRigConnectionAlpha,
@@ -11,7 +10,15 @@ import {
   shouldRestoreRigConnectionFrameColors,
   type RigConnectionRenderState,
 } from './rigConnectionsViewModel';
-import { getFloat32BufferAttribute } from './threeBufferAttributes';
+import {
+  createFatLineSegmentsObject,
+  disposeFatLineSegmentsObject,
+  getFatLineAlphaArray,
+  getFatLineColorArray,
+  markFatLineAlphasNeedUpdate,
+  markFatLineColorsNeedUpdate,
+} from './fatLineSegments';
+import { syncMaterialLineWidth } from './threeMaterialMutations';
 import { useRigConnectionsStoreFacade } from './useRigConnectionsStoreFacade';
 
 const tempColor = new THREE.Color();
@@ -29,7 +36,6 @@ export function RigConnections() {
   const rig = useRigNode();
   const selection = useSelectionNode();
 
-  const geometryRef = useRef<THREE.BufferGeometry>(null);
   const blinkPhaseRef = useRef(0);
   const prevStateRef = useRef<RigConnectionRenderState | null>(null);
 
@@ -42,28 +48,41 @@ export function RigConnections() {
     prevStateRef.current = null;
   }, [geometryData]);
 
-  const shaderMaterial = useMemo(() => {
-    return new THREE.ShaderMaterial({
-      vertexShader: lineVertexShader,
-      fragmentShader: lineFragmentShader,
-      vertexColors: true,
-      transparent: true,
+  const fatLines = useMemo(() => {
+    if (!geometryData) return null;
+
+    return createFatLineSegmentsObject({
+      positions: geometryData.positions,
+      colors: new Float32Array(geometryData.colors),
+      alphas: new Float32Array(geometryData.alphas),
+      lineWidth: 1,
       depthWrite: false,
       depthTest: true,
       // Push lines slightly back in depth to avoid rendering in front of image planes
       polygonOffset: true,
       polygonOffsetFactor: 1,
       polygonOffsetUnits: 1,
+      renderOrder: 2,
     });
-  }, []);
+  }, [geometryData]);
+
+  useLayoutEffect(() => {
+    if (!fatLines) return;
+    syncMaterialLineWidth(fatLines.material, rig.lineWidth);
+  }, [fatLines, rig.lineWidth]);
+
+  useEffect(() => {
+    if (!fatLines) return undefined;
+    return () => disposeFatLineSegmentsObject(fatLines);
+  }, [fatLines]);
 
   // Update colors and alphas based on selection, color mode, and blink animation
   useFrame((_, delta) => {
-    if (!geometryRef.current || !geometryData) return;
+    if (!geometryData || !fatLines) return;
 
-    const colorAttr = getFloat32BufferAttribute(geometryRef.current, 'color');
-    const alphaAttr = getFloat32BufferAttribute(geometryRef.current, 'alpha');
-    if (!colorAttr || !alphaAttr) return;
+    const colors = getFatLineColorArray(fatLines.geometry);
+    const alphas = getFatLineAlphaArray(fatLines.geometry);
+    if (!colors || !alphas) return;
 
     const isBlinkAnimated = rig.displayMode === 'blink';
     if (isBlinkAnimated) {
@@ -85,52 +104,36 @@ export function RigConnections() {
     const blinkOpacityFactor = getRigConnectionBlinkOpacityFactor(rig.displayMode, blinkPhaseRef.current);
     const { lineFrameImageIds } = geometryData;
 
-    for (let i = 0; i < alphaAttr.count; i++) {
-      alphaAttr.setX(i, getRigConnectionAlpha({
+    for (let i = 0; i < alphas.length; i++) {
+      alphas[i] = getRigConnectionAlpha({
         frameImageIds: lineFrameImageIds[i],
         selectedImageId: currentState.selectedImageId,
         rigOpacity: currentState.rigOpacity,
         unselectedOpacity: currentState.unselectedOpacity,
         blinkOpacityFactor,
-      }));
+      });
     }
 
     // Update colors based on color mode
     if (currentState.colorMode === 'single') {
       tempColor.set(rig.color);
-      for (let i = 0; i < colorAttr.count; i++) {
-        colorAttr.setXYZ(i, tempColor.r, tempColor.g, tempColor.b);
+      for (let i = 0; i < colors.length; i += 3) {
+        colors[i] = tempColor.r;
+        colors[i + 1] = tempColor.g;
+        colors[i + 2] = tempColor.b;
       }
-      colorAttr.needsUpdate = true;
+      markFatLineColorsNeedUpdate(fatLines.geometry);
     } else if (shouldRestoreRigConnectionFrameColors(previousState, currentState)) {
-      const colors = colorAttr.array;
       colors.set(geometryData.colors);
-      colorAttr.needsUpdate = true;
+      markFatLineColorsNeedUpdate(fatLines.geometry);
     }
 
-    alphaAttr.needsUpdate = true;
+    markFatLineAlphasNeedUpdate(fatLines.geometry);
 
     prevStateRef.current = currentState;
   });
 
-  if (!rig.visible || !geometryData) return null;
+  if (!rig.visible || !geometryData || !fatLines) return null;
 
-  return (
-    <lineSegments material={shaderMaterial} renderOrder={2}>
-      <bufferGeometry ref={geometryRef}>
-        <bufferAttribute
-          attach="attributes-position"
-          args={[geometryData.positions, 3]}
-        />
-        <bufferAttribute
-          attach="attributes-color"
-          args={[geometryData.colors, 3]}
-        />
-        <bufferAttribute
-          attach="attributes-alpha"
-          args={[geometryData.alphas, 1]}
-        />
-      </bufferGeometry>
-    </lineSegments>
-  );
+  return <primitive object={fatLines.object} />;
 }

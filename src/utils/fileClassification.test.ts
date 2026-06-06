@@ -4,6 +4,8 @@ import {
   createImagesOnlyReconstruction,
   findColmapFiles,
   findLargestPlyFile,
+  findPreferredSplatFile,
+  findSplatFiles,
   hasColmapFiles,
   hasImageFiles,
 } from './fileClassification';
@@ -78,10 +80,36 @@ describe('file classification helpers', () => {
     expect(result).toBe(largest);
   });
 
-  it('returns undefined when no PLY file is present', () => {
-    expect(findLargestPlyFile(fileMap([
+  it('finds all splat files with largest SPZ preferred over largest PLY fallback', () => {
+    const smallSpz = buildFile('small.spz', 'x');
+    const largestSpz = buildFile('large.spz', 'xx');
+    const largestPly = buildFile('large.ply', 'xxxxx');
+    const smallPly = buildFile('small.ply', 'xxx');
+
+    const files = fileMap([
+      ['splats/small.spz', smallSpz],
+      ['splats/large.ply', largestPly],
+      ['splats/large.spz', largestSpz],
+      ['splats/small.ply', smallPly],
+    ]);
+
+    expect(findPreferredSplatFile(files)).toBe(largestSpz);
+    expect(findSplatFiles(files)).toEqual([
+      largestSpz,
+      smallSpz,
+      largestPly,
+      smallPly,
+    ]);
+  });
+
+  it('returns undefined when no splat file is present', () => {
+    const files = fileMap([
       ['images/frame.jpg', buildFile('frame.jpg')],
-    ]))).toBeUndefined();
+    ]);
+
+    expect(findLargestPlyFile(files)).toBeUndefined();
+    expect(findPreferredSplatFile(files)).toBeUndefined();
+    expect(findSplatFiles(files)).toEqual([]);
   });
 
   it('classifies COLMAP, image-only, and generated reconstruction inputs', () => {

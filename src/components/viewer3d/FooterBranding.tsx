@@ -1,11 +1,17 @@
 import { ICON_SIZES, footerStyles } from '../../theme';
 import { publicAsset } from '../../utils/paths';
-import { getFooterLogoImageStyle } from './footerBrandingViewModel';
+import {
+  getFooterBrandingPositionClassName,
+  getFooterLogoImageStyle,
+} from './footerBrandingViewModel';
 import { useFooterBrandingStoreFacade } from './useFooterBrandingStoreFacade';
 
 export function FooterBranding() {
-  const { autoHideButtons } = useFooterBrandingStoreFacade();
+  const { autoHideButtons, embedMode, touchMode } = useFooterBrandingStoreFacade();
   const idleClass = autoHideButtons ? ' idle-hideable' : '';
+  const positionClass = ` ${getFooterBrandingPositionClassName({
+    clearStatusBar: !embedMode && !touchMode,
+  })}`;
 
   return (
     <>
@@ -13,8 +19,9 @@ export function FooterBranding() {
         href="https://opsiclear.com"
         target="_blank"
         rel="noopener noreferrer"
-        className={footerStyles.logo + idleClass}
+        className={footerStyles.logo + positionClass + idleClass}
         draggable={false}
+        data-idle-pause="true"
       >
         <img
           src={publicAsset('LOGO.png')}
@@ -24,7 +31,7 @@ export function FooterBranding() {
           draggable={false}
         />
       </a>
-      <div className={footerStyles.socialContainer + idleClass}>
+      <div className={footerStyles.socialContainer + positionClass + idleClass} data-idle-pause="true">
         <a
           href="https://x.com/OpsiClear"
           target="_blank"

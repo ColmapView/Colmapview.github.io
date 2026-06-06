@@ -51,7 +51,11 @@ export function ProfileDropdown() {
       </button>
 
       {isOpen && (
-        <div className={PROFILE_DROPDOWN_MENU_CLASS} style={getProfileDropdownMenuStyle()}>
+        <div
+          className={PROFILE_DROPDOWN_MENU_CLASS}
+          style={getProfileDropdownMenuStyle()}
+          data-idle-pause="true"
+        >
           {profileRows.map((row) => (
             <button
               type="button"

@@ -12,6 +12,7 @@ export interface StatusBarLink {
 
 export const STATUS_BAR_LINK_CLASS_NAME = 'no-underline transition-colors';
 export const STATUS_BAR_LINK_DEFAULT_COLOR = 'inherit';
+export const STATUS_BAR_HIDDEN_CLASS_NAME = 'opacity-0';
 
 export const STATUS_BAR_PROJECT_LINKS: StatusBarLink[] = [
   {
@@ -43,6 +44,16 @@ export function getStatusBarLinkStyle(
   color = STATUS_BAR_LINK_DEFAULT_COLOR
 ): CSSProperties {
   return { color };
+}
+
+export function getStatusBarContainerClassName({
+  baseClassName,
+  hidden,
+}: {
+  baseClassName: string;
+  hidden: boolean;
+}): string {
+  return hidden ? `${baseClassName} ${STATUS_BAR_HIDDEN_CLASS_NAME}` : baseClassName;
 }
 
 export function getStatusBarLinkHoverColor(link: StatusBarLink): string {

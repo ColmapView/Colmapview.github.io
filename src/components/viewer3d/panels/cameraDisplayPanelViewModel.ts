@@ -36,6 +36,11 @@ const RIG_FRAME_COLOR_MODE_OPTION: SelectOption<FrustumColorMode> = {
   label: 'By Frame',
 };
 
+const SPLAT_PSNR_COLOR_MODE_OPTION: SelectOption<FrustumColorMode> = {
+  value: 'splatPsnr',
+  label: 'PSNR',
+};
+
 const CAMERA_DISPLAY_HINTS: Record<CameraDisplayMode, CameraDisplayHint> = {
   frustum: {
     title: 'Frustum:',
@@ -56,12 +61,18 @@ export function getSupportedCameraDisplayMode(value: string): CameraDisplayMode 
   return null;
 }
 
-export function getFrustumColorModeOptions(
-  hasRigData: boolean
-): SelectOption<FrustumColorMode>[] {
-  return hasRigData
-    ? [...BASE_FRUSTUM_COLOR_MODE_OPTIONS, RIG_FRAME_COLOR_MODE_OPTION]
-    : [...BASE_FRUSTUM_COLOR_MODE_OPTIONS];
+export function getFrustumColorModeOptions({
+  hasRigData,
+  hasSplatPsnr,
+}: {
+  hasRigData: boolean;
+  hasSplatPsnr: boolean;
+}): SelectOption<FrustumColorMode>[] {
+  return [
+    ...BASE_FRUSTUM_COLOR_MODE_OPTIONS,
+    ...(hasRigData ? [RIG_FRAME_COLOR_MODE_OPTION] : []),
+    ...(hasSplatPsnr ? [SPLAT_PSNR_COLOR_MODE_OPTION] : []),
+  ];
 }
 
 export function getCameraDisplayHint(mode: CameraDisplayMode | string): CameraDisplayHint {

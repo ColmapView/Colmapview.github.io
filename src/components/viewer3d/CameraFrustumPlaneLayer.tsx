@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { VIZ_COLORS } from '../../theme';
 import type { ImageId } from '../../types/colmap';
 import type { SelectionColorMode } from '../../store/types';
@@ -15,6 +16,7 @@ interface SharedPlaneLayerProps {
   touchMode: boolean;
   undistortionEnabled: boolean;
   undistortionMode: 'cropped' | 'fullFrame';
+  splatPsnrByImage: ReadonlyMap<ImageId, { psnr: number }>;
 }
 
 interface SelectedCameraPlaneProps extends SharedPlaneLayerProps {
@@ -41,6 +43,7 @@ export function SelectedCameraFrustumPlane({
   touchMode,
   undistortionEnabled,
   undistortionMode,
+  splatPsnrByImage,
 }: SelectedCameraPlaneProps) {
   if (!frustum) return null;
 
@@ -62,6 +65,7 @@ export function SelectedCameraFrustumPlane({
       undistortionEnabled={undistortionEnabled}
       undistortionMode={undistortionMode}
       numPoints3D={frustum.numPoints3D}
+      splatPsnr={splatPsnrByImage.get(frustum.image.imageId)?.psnr}
       hoveredImageId={hoveredImageId}
       onHover={onHover}
       onClick={onClick}
@@ -72,7 +76,9 @@ export function SelectedCameraFrustumPlane({
   );
 }
 
-interface ImagePlaneFrustumPlanesProps extends SharedPlaneLayerProps, BuildImagePlaneRenderItemsOptions {
+interface ImagePlaneFrustumPlanesProps
+  extends SharedPlaneLayerProps,
+    Omit<BuildImagePlaneRenderItemsOptions, 'splatPsnrByImage'> {
   onLongPress?: (imageId: ImageId) => void;
 }
 
@@ -85,9 +91,53 @@ export function ImagePlaneFrustumPlanes({
   touchMode,
   undistortionEnabled,
   undistortionMode,
-  ...renderItemOptions
+  splatPsnrByImage,
+  frustums,
+  selectedImageId,
+  matchedImageIds,
+  pendingDeletions,
+  imageFrameIndexMap,
+  lastNavigationToImageId,
+  frustumColorMode,
+  frustumSingleColor,
+  selectionPlaneOpacity,
+  matchesOpacity,
+  unselectedCameraOpacity,
+  matchesColor,
+  deletedColor,
+  onLongPress: _onLongPress,
 }: ImagePlaneFrustumPlanesProps) {
-  const items = buildImagePlaneRenderItems(renderItemOptions);
+  const items = useMemo(() => buildImagePlaneRenderItems({
+    frustums,
+    selectedImageId,
+    matchedImageIds,
+    pendingDeletions,
+    imageFrameIndexMap,
+    splatPsnrByImage,
+    lastNavigationToImageId,
+    frustumColorMode,
+    frustumSingleColor,
+    selectionPlaneOpacity,
+    matchesOpacity,
+    unselectedCameraOpacity,
+    matchesColor,
+    deletedColor,
+  }), [
+    frustums,
+    selectedImageId,
+    matchedImageIds,
+    pendingDeletions,
+    imageFrameIndexMap,
+    splatPsnrByImage,
+    lastNavigationToImageId,
+    frustumColorMode,
+    frustumSingleColor,
+    selectionPlaneOpacity,
+    matchesOpacity,
+    unselectedCameraOpacity,
+    matchesColor,
+    deletedColor,
+  ]);
 
   return (
     <>
@@ -100,7 +150,7 @@ export function ImagePlaneFrustumPlanes({
           image={frustum.image}
           scale={cameraScale}
           imageFile={frustum.imageFile}
-          showImagePlane={renderItemOptions.selectedImageId === null}
+          showImagePlane={selectedImageId === null}
           isSelected={false}
           isMatched={isMatched}
           wouldGoBack={wouldGoBack}
@@ -110,6 +160,7 @@ export function ImagePlaneFrustumPlanes({
           undistortionEnabled={undistortionEnabled}
           undistortionMode={undistortionMode}
           numPoints3D={frustum.numPoints3D}
+          splatPsnr={splatPsnrByImage.get(frustum.image.imageId)?.psnr}
           hoveredImageId={hoveredImageId}
           onHover={onHover}
           onClick={onClick}

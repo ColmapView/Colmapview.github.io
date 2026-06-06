@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import {
   disposeMaterial,
   syncMaterialColor,
+  syncMaterialLineWidth,
   syncMaterialOpacity,
 } from './threeMaterialMutations';
 
@@ -23,6 +24,15 @@ describe('Three material mutations', () => {
     expect(syncMaterialColor(material, '#ff0000')).toBe(false);
     expect(syncMaterialColor(material, new THREE.Color('#00ff00'))).toBe(true);
     expect(material.color.getHexString()).toBe('00ff00');
+  });
+
+  it('syncs line width on line-compatible materials only when it changes', () => {
+    const material = new THREE.ShaderMaterial();
+
+    expect(syncMaterialLineWidth(material, 2)).toBe(true);
+    expect(material.linewidth).toBe(2);
+    expect(syncMaterialLineWidth(material, 2)).toBe(false);
+    expect(material.linewidth).toBe(2);
   });
 
   it('disposes single materials and material arrays', () => {

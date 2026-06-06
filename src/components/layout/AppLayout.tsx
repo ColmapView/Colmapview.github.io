@@ -172,7 +172,7 @@ export function AppLayout() {
 
   // Desktop layout - keep content visible during loading so translucent overlay shows through
   return (
-    <div className="h-screen flex flex-col bg-ds-primary">
+    <div className="h-screen flex flex-col bg-ds-primary relative">
       <div className="flex-1 flex overflow-hidden">
         {/* 3D Viewer - takes remaining space */}
         <div className="flex-1 min-w-0">

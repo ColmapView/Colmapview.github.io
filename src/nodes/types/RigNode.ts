@@ -6,4 +6,5 @@ export interface RigNode extends VisualNode {
   displayMode: RigDisplayMode;
   colorMode: RigColorMode;
   color: string;
+  lineWidth: number;
 }

@@ -14,6 +14,7 @@ import {
   type SelectionNodeActions,
 } from '../../nodes';
 import {
+  useImageMetricsStore,
   useDeletionStore,
   useReconstructionStore,
   useUIStore,
@@ -33,6 +34,7 @@ interface CameraFrustumsDataFacade {
   isAlignmentMode: boolean;
   touchMode: UIState['touchMode'];
   pendingDeletions: DeletionState['pendingDeletions'];
+  splatPsnrByImage: ReturnType<typeof useImageMetricsStore.getState>['splatPsnrMetrics'];
 }
 
 interface CameraFrustumsActionsFacade {
@@ -63,6 +65,7 @@ export function useCameraFrustumsStoreFacade(): CameraFrustumsStoreFacade {
   const setShowMatchesInModal = useUIStore((s) => s.setShowMatchesInModal);
   const touchMode = useUIStore((s) => s.touchMode);
   const pendingDeletions = useDeletionStore((s) => s.pendingDeletions);
+  const splatPsnrByImage = useImageMetricsStore((s) => s.splatPsnrMetrics);
 
   return {
     data: {
@@ -75,6 +78,7 @@ export function useCameraFrustumsStoreFacade(): CameraFrustumsStoreFacade {
       isAlignmentMode,
       touchMode,
       pendingDeletions,
+      splatPsnrByImage,
     },
     actions: {
       navActions,

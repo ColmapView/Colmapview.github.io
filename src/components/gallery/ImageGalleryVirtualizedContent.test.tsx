@@ -16,6 +16,7 @@ vi.mock('./ImageGalleryItems', () => ({
       data-scrolling={String(props.isScrolling)}
       data-selected={String(props.isSelected)}
       data-settling={String(props.isSettling)}
+      data-hide-overlay={String(props.hideOverlay)}
       data-touch={String(props.touchMode)}
     />
   )),
@@ -50,6 +51,7 @@ interface ItemProps {
   isResizing: boolean;
   wouldGoBack: boolean;
   touchMode?: boolean;
+  hideOverlay?: boolean;
 }
 
 function createImage(imageId: number, name = `${imageId}.jpg`): ImageData {
@@ -97,6 +99,7 @@ function renderContent(overrides = {}) {
     isResizing: true,
     lastNavigationToImageId: 1,
     touchMode: true,
+    hideImageOverlay: true,
     onClick: vi.fn(),
     onDoubleClick: vi.fn(),
     onRightClick: vi.fn(),
@@ -124,6 +127,7 @@ describe('ImageGalleryVirtualizedContent', () => {
     expect(screen.getByTestId('gallery-item-2')).toHaveAttribute('data-scrolling', 'true');
     expect(screen.getByTestId('gallery-item-2')).toHaveAttribute('data-resizing', 'true');
     expect(screen.getByTestId('gallery-item-2')).toHaveAttribute('data-touch', 'true');
+    expect(screen.getByTestId('gallery-item-2')).toHaveAttribute('data-hide-overlay', 'true');
     expect(screen.queryByTestId('gallery-item-3')).toBeNull();
     expect(screen.queryByTestId('list-item-2')).toBeNull();
 

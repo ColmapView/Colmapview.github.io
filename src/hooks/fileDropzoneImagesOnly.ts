@@ -11,9 +11,11 @@ interface RunImagesOnlyLoadOptions {
   imageFiles: Map<string, File>;
   hasMasks: boolean;
   splatFile?: File;
+  splatFiles?: File[];
   mapProgress: (localPercent: number) => number;
   setUrlProgress: (progress: ProgressUpdate) => void;
   setLoadedFiles: (files: LoadedFiles) => void;
+  clearSplatPsnr?: () => void;
   clearCaches: (options: { preserveZip: true }) => void;
   setReconstruction: (reconstruction: Reconstruction) => void;
   resetView: () => void;
@@ -25,9 +27,11 @@ export function runImagesOnlyLoad({
   imageFiles,
   hasMasks,
   splatFile,
+  splatFiles,
   mapProgress,
   setUrlProgress,
   setLoadedFiles,
+  clearSplatPsnr,
   clearCaches,
   setReconstruction,
   resetView,
@@ -40,11 +44,13 @@ export function runImagesOnlyLoad({
 
   const reconstruction = createImagesOnlyReconstruction(imageFiles);
 
+  clearSplatPsnr?.();
   setLoadedFiles({
     camerasFile: undefined,
     imagesFile: undefined,
     points3DFile: undefined,
     splatFile,
+    splatFiles,
     databaseFile: undefined,
     rigsFile: undefined,
     framesFile: undefined,

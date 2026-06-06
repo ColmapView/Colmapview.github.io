@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   GALLERY_SORT_FIELD_OPTIONS,
   getGalleryCameraFilterValue,
+  getGallerySortFieldOptions,
   getGallerySortFieldValue,
 } from './imageGalleryToolbarViewModel';
 
@@ -20,10 +21,29 @@ describe('image gallery toolbar view model', () => {
       'numPoints3D',
       'numPoints2D',
     ]);
+    expect(getGallerySortFieldOptions(false).map(option => option.value)).toEqual([
+      'name',
+      'imageId',
+      'avgError',
+      'covisibleCount',
+      'numPoints3D',
+      'numPoints2D',
+    ]);
+    expect(getGallerySortFieldOptions(true).map(option => option.value)).toEqual([
+      'name',
+      'imageId',
+      'avgError',
+      'covisibleCount',
+      'numPoints3D',
+      'numPoints2D',
+      'splatPsnr',
+    ]);
   });
 
   it('narrows raw select values to supported sort fields', () => {
     expect(getGallerySortFieldValue('avgError')).toBe('avgError');
+    expect(getGallerySortFieldValue('splatPsnr')).toBeNull();
+    expect(getGallerySortFieldValue('splatPsnr', true)).toBe('splatPsnr');
     expect(getGallerySortFieldValue('unknown')).toBeNull();
   });
 

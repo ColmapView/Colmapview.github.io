@@ -2,14 +2,24 @@ import { useCallback } from 'react';
 import {
   useCameraStore,
   useDeletionStore,
+  useImageMetricsStore,
   useReconstructionStore,
+  useSplatBackendStore,
   useTransformStore,
   useUIStore,
   type CameraState,
   type DeletionState,
+  type SplatPsnrComputeScope,
+  type SplatPsnrMetric,
   type TransformState,
   type UIState,
 } from '../../store';
+import type {
+  SplatBackendAvailability,
+  SplatBackendPreference,
+  SplatBackendResolution,
+  SplatMetricCapability,
+} from '../../utils/splatBackendPolicy';
 import type { CameraDisplayMode } from '../../store/types';
 import type { Reconstruction } from '../../types/colmap';
 
@@ -29,7 +39,32 @@ interface Scene3DE2EProbeDataFacade {
 
 interface Scene3DE2EProbeActionsFacade {
   clearSelectedImage: () => void;
+  getImageIds: () => number[];
+  getSplatPsnrState: (imageId?: number | null) => {
+    frameReady: boolean;
+    computing: boolean;
+    readyCount: number;
+    status: string | null;
+    error: string | null;
+    metric: {
+      psnr: number;
+      mse: number;
+      validPixelCount: number;
+      width: number;
+      height: number;
+      computedAt: number;
+      renderBackground?: SplatPsnrMetric['renderBackground'];
+      diagnostics?: SplatPsnrMetric['diagnostics'];
+    } | null;
+  };
   getSelectedImageId: () => CameraState['selectedImageId'];
+  getSplatBackendState: () => {
+    requestedBackend: SplatBackendPreference;
+    availability: SplatBackendAvailability;
+    resolution: SplatBackendResolution;
+    metricCapability: SplatMetricCapability;
+  };
+  requestSplatPsnrCompute: (scope: SplatPsnrComputeScope, selectedImageId?: number | null) => void;
   setCameraDisplayMode: (mode: CameraDisplayMode) => void;
   setCameraScale: (scale: number) => void;
   setSelectedImageId: CameraState['setSelectedImageId'];
@@ -60,6 +95,7 @@ export function useScene3DE2EProbeStoreFacade(): Scene3DE2EProbeStoreFacade {
   const setCameraDisplayMode = useCameraStore((state) => state.setCameraDisplayMode);
   const setCameraScaleFactor = useCameraStore((state) => state.setCameraScaleFactor);
   const setCameraScale = useCameraStore((state) => state.setCameraScale);
+  const requestSplatPsnrCompute = useImageMetricsStore((state) => state.requestSplatPsnrCompute);
 
   const clearSelectedImage = useCallback(() => {
     setSelectedImageId(null);
@@ -80,6 +116,50 @@ export function useScene3DE2EProbeStoreFacade(): Scene3DE2EProbeStoreFacade {
   const getSelectedImageId = useCallback(() => {
     return useCameraStore.getState().selectedImageId;
   }, []);
+  const getImageIds = useCallback(() => {
+    const reconstruction = useReconstructionStore.getState().reconstruction;
+    return reconstruction ? Array.from(reconstruction.images.keys()) : [];
+  }, []);
+  const getSplatBackendState = useCallback(() => {
+    const state = useSplatBackendStore.getState();
+    return {
+      requestedBackend: state.requestedBackend,
+      availability: state.availability,
+      resolution: state.resolution,
+      metricCapability: state.metricCapability,
+    };
+  }, []);
+
+  const getSplatPsnrState = useCallback((imageId?: number | null) => {
+    const state = useImageMetricsStore.getState();
+    const metric = imageId === undefined || imageId === null
+      ? null
+      : state.splatPsnrMetrics.get(imageId) ?? null;
+
+    return {
+      frameReady: state.splatPsnrFrameReady,
+      computing: state.splatPsnrComputing,
+      readyCount: state.splatPsnrMetrics.size,
+      status: imageId === undefined || imageId === null
+        ? null
+        : state.splatPsnrStatus.get(imageId) ?? null,
+      error: imageId === undefined || imageId === null
+        ? null
+        : state.splatPsnrError.get(imageId) ?? null,
+      metric: metric
+        ? {
+          psnr: metric.psnr,
+          mse: metric.mse,
+          validPixelCount: metric.validPixelCount,
+          width: metric.width,
+          height: metric.height,
+          computedAt: metric.computedAt,
+          renderBackground: metric.renderBackground,
+          diagnostics: metric.diagnostics,
+        }
+        : null,
+    };
+  }, []);
 
   return {
     data: {
@@ -97,7 +177,11 @@ export function useScene3DE2EProbeStoreFacade(): Scene3DE2EProbeStoreFacade {
     },
     actions: {
       clearSelectedImage,
+      getImageIds,
+      getSplatBackendState,
+      getSplatPsnrState,
       getSelectedImageId,
+      requestSplatPsnrCompute,
       setCameraDisplayMode: showCameraDisplayMode,
       setCameraScale: setFixedCameraScale,
       setSelectedImageId,

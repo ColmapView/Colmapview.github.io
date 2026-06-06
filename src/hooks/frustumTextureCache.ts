@@ -14,7 +14,10 @@ export interface FrustumTextureCacheEntry {
 export type FrustumBitmapCache = Map<string, FrustumBitmapCacheEntry>;
 export type FrustumTextureCache = Map<string, FrustumTextureCacheEntry>;
 
-export const MAX_ACTIVE_FRUSTUM_TEXTURES = 50;
+// Image-plane textures are also held by mounted Three materials. Evicting an
+// active texture can leave a material pointing at a disposed texture for a frame,
+// which causes Three to render a white plane and warn about missing image data.
+export const MAX_ACTIVE_FRUSTUM_TEXTURES = Number.POSITIVE_INFINITY;
 
 interface BlobResponse {
   blob(): Promise<Blob>;
@@ -142,6 +145,7 @@ export function evictOldestFrustumTextures(
   activeTextures: FrustumTextureCache,
   maxActiveTextures = MAX_ACTIVE_FRUSTUM_TEXTURES
 ): number {
+  if (!Number.isFinite(maxActiveTextures)) return 0;
   if (activeTextures.size <= maxActiveTextures) return 0;
 
   const entries = Array.from(activeTextures.entries());
@@ -158,7 +162,6 @@ export function evictOldestFrustumTextures(
 }
 
 export function disposeDetachedFrustumTexture(texture: THREE.Texture): void {
-  texture.image = null;
   texture.needsUpdate = false;
   texture.dispose();
 }

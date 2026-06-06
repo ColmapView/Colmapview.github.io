@@ -72,7 +72,7 @@ describe('ExportPanelSections', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Convert Camera Model' }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete Images from Model (2)' }));
     fireEvent.click(screen.getByRole('button', { name: 'Download COLMAP' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Download Splat PLY' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Download Splat File' }));
 
     expect(props.onExportFormatChange).toHaveBeenCalledWith('zip');
     expect(props.onOpenConversionModal).toHaveBeenCalledTimes(1);
@@ -93,7 +93,7 @@ describe('ExportPanelSections', () => {
     expect(screen.queryByRole('button', { name: 'Convert Camera Model' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Delete Images from Model' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Download COLMAP' })).toBeDisabled();
-    expect(screen.queryByRole('button', { name: 'Download Splat PLY' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Download Splat File' })).toBeNull();
   });
 
   it('routes media quality, image export, and mask export callbacks', () => {

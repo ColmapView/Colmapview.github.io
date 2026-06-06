@@ -1,12 +1,22 @@
 import {
   useCameraStore,
+  useNotificationStore,
   useReconstructionStore,
+  useSplatBackendStore,
   useTransformStore,
   useUIStore,
   type CameraState,
+  type NotificationState,
+  type SplatBackendState,
   type TransformState,
   type UIState,
 } from '../../store';
+import { usePointsNode } from '../../nodes';
+import type {
+  SplatBackendAvailability,
+  SplatBackendPreference,
+  SplatBackendResolution,
+} from '../../utils/splatBackendPolicy';
 import type { Reconstruction } from '../../types/colmap';
 import type { WasmReconstructionWrapper } from '../../wasm/reconstruction';
 
@@ -21,21 +31,35 @@ interface SceneContentDataFacade {
   viewDirection: UIState['viewDirection'];
   viewTrigger: UIState['viewTrigger'];
   transform: TransformState['transform'];
+  requestedSplatBackend: SplatBackendPreference;
+  splatBackendAvailability: SplatBackendAvailability;
+}
+
+interface SceneContentActionsFacade {
+  setSparkBackendAvailable: SplatBackendState['setSparkBackendAvailable'];
 }
 
 interface SceneContainerDataFacade {
   reconstruction: Reconstruction | null;
   wasmReconstruction: WasmReconstructionWrapper | null;
+  splatFile?: File;
   backgroundColor: UIState['backgroundColor'];
   showAutoHideEditor: UIState['showAutoHideEditor'];
+  requestedSplatBackend: SplatBackendPreference;
+  splatBackendAvailability: SplatBackendAvailability;
+  splatBackendResolution: SplatBackendResolution;
+  splatsVisible: boolean;
 }
 
 interface SceneContainerActionsFacade {
+  addNotification: NotificationState['addNotification'];
   setSelectedImageId: CameraState['setSelectedImageId'];
+  setWebGpuBackendState: SplatBackendState['setWebGpuBackendState'];
 }
 
 export interface SceneContentStoreFacade {
   data: SceneContentDataFacade;
+  actions: SceneContentActionsFacade;
 }
 
 export interface SceneContainerStoreFacade {
@@ -54,6 +78,9 @@ export function useSceneContentStoreFacade(): SceneContentStoreFacade {
   const viewDirection = useUIStore((s) => s.viewDirection);
   const viewTrigger = useUIStore((s) => s.viewTrigger);
   const transform = useTransformStore((s) => s.transform);
+  const requestedSplatBackend = useSplatBackendStore((s) => s.requestedBackend);
+  const splatBackendAvailability = useSplatBackendStore((s) => s.availability);
+  const setSparkBackendAvailable = useSplatBackendStore((s) => s.setSparkBackendAvailable);
 
   return {
     data: {
@@ -67,6 +94,11 @@ export function useSceneContentStoreFacade(): SceneContentStoreFacade {
       viewDirection,
       viewTrigger,
       transform,
+      requestedSplatBackend,
+      splatBackendAvailability,
+    },
+    actions: {
+      setSparkBackendAvailable,
     },
   };
 }
@@ -74,19 +106,33 @@ export function useSceneContentStoreFacade(): SceneContentStoreFacade {
 export function useSceneContainerStoreFacade(): SceneContainerStoreFacade {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
+  const splatFile = useReconstructionStore((s) => s.loadedFiles?.splatFile);
   const backgroundColor = useUIStore((s) => s.backgroundColor);
   const showAutoHideEditor = useUIStore((s) => s.showAutoHideEditor);
+  const addNotification = useNotificationStore((s) => s.addNotification);
   const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
+  const requestedSplatBackend = useSplatBackendStore((s) => s.requestedBackend);
+  const splatBackendAvailability = useSplatBackendStore((s) => s.availability);
+  const splatBackendResolution = useSplatBackendStore((s) => s.resolution);
+  const setWebGpuBackendState = useSplatBackendStore((s) => s.setWebGpuBackendState);
+  const points = usePointsNode();
 
   return {
     data: {
       reconstruction,
       wasmReconstruction,
+      splatFile,
       backgroundColor,
       showAutoHideEditor,
+      requestedSplatBackend,
+      splatBackendAvailability,
+      splatBackendResolution,
+      splatsVisible: points.splatsVisible,
     },
     actions: {
+      addNotification,
       setSelectedImageId,
+      setWebGpuBackendState,
     },
   };
 }

@@ -75,6 +75,8 @@ export {
   ColorErrorIcon,
   ColorTrackIcon,
   ColorSplatIcon,
+  ColorSplatPointsIcon,
+  ColorSplatRainbowPointsIcon,
   BgIcon,
   ViewIcon,
   PrefetchIcon,

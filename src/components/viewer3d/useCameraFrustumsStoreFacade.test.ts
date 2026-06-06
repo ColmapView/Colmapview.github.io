@@ -4,6 +4,7 @@ import {
   useCameraStore,
   useDeletionStore,
   useFloorPlaneStore,
+  useImageMetricsStore,
   usePointPickingStore,
   useReconstructionStore,
   useUIStore,
@@ -31,6 +32,7 @@ describe('useCameraFrustumsStoreFacade', () => {
     useCameraStore.setState(useCameraStore.getInitialState(), true);
     useDeletionStore.setState(useDeletionStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
+    useImageMetricsStore.setState(useImageMetricsStore.getInitialState(), true);
     usePointPickingStore.setState(usePointPickingStore.getInitialState(), true);
     useFloorPlaneStore.setState(useFloorPlaneStore.getInitialState(), true);
   });
@@ -55,6 +57,7 @@ describe('useCameraFrustumsStoreFacade', () => {
       cameraScale: 2,
       cameraScaleFactor: '10',
       frustumColorMode: 'byCamera',
+      frustumLineWidth: 3,
       selectedImageId: 1,
       cameraFov: 45,
       autoFovEnabled: true,
@@ -65,9 +68,19 @@ describe('useCameraFrustumsStoreFacade', () => {
       matchesDisplayMode: 'blink',
       matchesOpacity: 0.4,
       matchesColor: '#123456',
+      matchesLineWidth: 2,
       touchMode: true,
     });
     useDeletionStore.setState({ pendingDeletions });
+    useImageMetricsStore.getState().setSplatPsnrMetric({
+      imageId: 1,
+      psnr: 30.5,
+      mse: 58,
+      validPixelCount: 128,
+      width: 80,
+      height: 60,
+      computedAt: 321,
+    });
 
     const { result } = renderHook(() => useCameraFrustumsStoreFacade());
 
@@ -83,6 +96,7 @@ describe('useCameraFrustumsStoreFacade', () => {
       scale: 2,
       scaleFactor: '10',
       colorMode: 'byCamera',
+      lineWidth: 3,
     });
     expect(result.current.data.selection.selectedImageId).toBe(1);
     expect(result.current.data.matches).toMatchObject({
@@ -90,12 +104,14 @@ describe('useCameraFrustumsStoreFacade', () => {
       displayMode: 'blink',
       opacity: 0.4,
       color: '#123456',
+      lineWidth: 2,
     });
     expect(result.current.data.nav).toMatchObject({
       fov: 45,
       autoFovEnabled: true,
       navigationHistory: [navigationEntry],
     });
+    expect(result.current.data.splatPsnrByImage.get(1)?.psnr).toBe(30.5);
   });
 
   it('exposes alignment state and routes frustum actions to owning stores', () => {

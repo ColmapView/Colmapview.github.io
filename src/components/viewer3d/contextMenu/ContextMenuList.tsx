@@ -35,6 +35,7 @@ export function ContextMenuList({
     <div
       ref={menuRef}
       className={contextMenuStyles.container}
+      data-idle-pause="true"
       data-testid="context-menu"
       onPointerDown={stopContextMenuSurfacePointerEvent}
       onMouseDown={stopContextMenuSurfaceMouseEvent}

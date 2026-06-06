@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 declare const __APP_VERSION__: string;
+declare const __LOCAL_GSPLAT_WEBGPU_ENABLED__: boolean;
 
 // File System Access API types
 interface FileSystemHandle {

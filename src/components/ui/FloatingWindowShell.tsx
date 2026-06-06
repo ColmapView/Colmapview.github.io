@@ -74,6 +74,7 @@ export function FloatingWindowShell({
       )}
       <div
         ref={panelRef}
+        data-idle-pause="true"
         data-testid={panelTestId}
         className={panelClassName}
         style={panelStyle}

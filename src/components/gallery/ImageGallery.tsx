@@ -27,6 +27,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
     handleClick,
     handleDoubleClick,
     handleRightClick,
+    hideImageOverlay,
     hideToolbar,
     images,
     isSettling,
@@ -44,6 +45,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
     setSortField,
     setViewMode,
     showMatches,
+    showSplatPsnr,
     sortDirection,
     sortField,
     touchMode,
@@ -119,21 +121,32 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-ds-secondary">
-      {!hideToolbar && (
-        <ImageGalleryToolbar
-          cameraFilter={cameraFilter}
-          cameras={cameras}
-          sortDirection={sortDirection}
-          sortField={sortField}
-          touchMode={touchMode}
-          viewMode={viewMode}
-          onCameraFilterChange={setCameraFilter}
-          onSortDirectionToggle={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
-          onSortFieldChange={setSortField}
-          onViewModeChange={setViewMode}
-        />
-      )}
+    <div
+      className="h-full flex flex-col bg-ds-secondary"
+      data-idle-ignore="true"
+      data-testid="image-gallery"
+    >
+      <div
+        className="h-10 flex-shrink-0 overflow-hidden bg-ds-secondary"
+        data-testid="image-gallery-toolbar-slot"
+        aria-hidden={hideToolbar}
+      >
+        {!hideToolbar && (
+          <ImageGalleryToolbar
+            cameraFilter={cameraFilter}
+            cameras={cameras}
+            sortDirection={sortDirection}
+            sortField={sortField}
+            showSplatPsnrSort={showSplatPsnr}
+            touchMode={touchMode}
+            viewMode={viewMode}
+            onCameraFilterChange={setCameraFilter}
+            onSortDirectionToggle={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
+            onSortFieldChange={setSortField}
+            onViewModeChange={setViewMode}
+          />
+        )}
+      </div>
 
       <ImageGalleryVirtualizedContent
         containerRef={containerRef}
@@ -153,6 +166,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
         isResizing={isResizing}
         lastNavigationToImageId={lastNavigationToImageId}
         touchMode={touchMode}
+        hideImageOverlay={hideImageOverlay}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
         onRightClick={handleRightClick}

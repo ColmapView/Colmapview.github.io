@@ -10,6 +10,7 @@ export function useCamerasNode(): CamerasNode {
   const frustumColorMode = useCameraStore((s) => s.frustumColorMode);
   const frustumSingleColor = useCameraStore((s) => s.frustumSingleColor);
   const frustumStandbyOpacity = useCameraStore((s) => s.frustumStandbyOpacity);
+  const frustumLineWidth = useCameraStore((s) => s.frustumLineWidth);
   const undistortionEnabled = useCameraStore((s) => s.undistortionEnabled);
   const undistortionMode = useCameraStore((s) => s.undistortionMode);
 
@@ -23,6 +24,7 @@ export function useCamerasNode(): CamerasNode {
       colorMode: frustumColorMode,
       singleColor: frustumSingleColor,
       standbyOpacity: frustumStandbyOpacity,
+      lineWidth: frustumLineWidth,
       undistortionEnabled,
       undistortionMode,
     }),
@@ -34,6 +36,7 @@ export function useCamerasNode(): CamerasNode {
       frustumColorMode,
       frustumSingleColor,
       frustumStandbyOpacity,
+      frustumLineWidth,
       undistortionEnabled,
       undistortionMode,
     ]

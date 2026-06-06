@@ -3,6 +3,7 @@ import {
   hoverCardStyles,
   ICON_SIZES,
 } from '../../theme';
+import { formatSplatPsnrMetric, hasSplatPsnrValue } from '../viewer3d/splatPsnrMetric';
 import { getImageGalleryHoverCardStyle } from './imageGalleryStyleViewModel';
 import type { ImageData } from './useImageGalleryViewModel';
 
@@ -66,6 +67,9 @@ export function ImageGalleryItemHoverCard({
             <div className={hoverCardStyles.subtitle}>{img.numPoints2D} 2D points</div>
             <div className={hoverCardStyles.subtitle}>{img.covisibleCount} covisible</div>
             <div className={hoverCardStyles.subtitle}>{img.avgError.toFixed(2)} avg error</div>
+            {hasSplatPsnrValue(img.splatPsnr) && (
+              <div className={hoverCardStyles.subtitle}>{formatSplatPsnrMetric(img.splatPsnr)}</div>
+            )}
           </>
         )}
         <div className={hoverCardStyles.hint}>

@@ -38,12 +38,12 @@ export function disposeSelectedImageTextureEntry(entry: SelectedImageTextureCach
   if (!entry) return;
 
   const { texture } = entry;
+  texture.needsUpdate = false;
+  texture.dispose();
+
   const bitmap = selectedImageTextureBitmaps.get(texture);
   if (bitmap) {
     bitmap.close();
     selectedImageTextureBitmaps.delete(texture);
   }
-  texture.image = null;
-  texture.needsUpdate = false;
-  texture.dispose();
 }

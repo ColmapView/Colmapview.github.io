@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const SRC_ROOT = path.join(process.cwd(), 'src');
 const COMPONENTS_ROOT = path.join(SRC_ROOT, 'components');
+const STORE_BOUNDARY_SCAN_TIMEOUT_MS = 15_000;
 const STORE_HOOK_CALL_PATTERN = /\buse[A-Z][A-Za-z0-9]*Store\s*\(/g;
 const DOCUMENTED_STORE_BOUNDARY_CALLERS = new Set([
   'src/dataset/index.ts',
@@ -83,7 +84,7 @@ describe('component store boundaries', () => {
     }
 
     expect(violations).toEqual([]);
-  });
+  }, STORE_BOUNDARY_SCAN_TIMEOUT_MS);
 
   it('keeps non-component store hook calls in documented boundary modules', async () => {
     const files = await collectSourceFiles(SRC_ROOT);
@@ -110,7 +111,7 @@ describe('component store boundaries', () => {
     }
 
     expect(violations).toEqual([]);
-  });
+  }, STORE_BOUNDARY_SCAN_TIMEOUT_MS);
 
   it('keeps store facades covered by colocated tests', async () => {
     const files = await collectSourceFiles(COMPONENTS_ROOT);

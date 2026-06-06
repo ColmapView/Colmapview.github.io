@@ -8,7 +8,7 @@ import {
   getDirectoryListingRootUrl,
   getHuggingFaceDatasetTreeRequest,
   getInlineManifestLoadLogMessage,
-  getLargestHuggingFacePlyPath,
+  getPreferredHuggingFaceSplatPath,
   getManifestColmapFileEntries,
   getManifestLoadedLogMessage,
   getManifestLoadSourceInfo,
@@ -60,7 +60,7 @@ describe('url loader policy helpers', () => {
     expect(getHuggingFaceDatasetTreeRequest('https://example.com/dataset')).toBeNull();
   });
 
-  it('extracts same-dataset directory and PLY links from generic directory listings', () => {
+  it('extracts same-dataset directory and splat links from generic directory listings', () => {
     expect(getDirectoryListingRootUrl('https://example.com/dataset')).toBe('https://example.com/dataset/');
 
     expect(getDirectoryListingLinks(
@@ -69,6 +69,7 @@ describe('url loader policy helpers', () => {
       `
         <a href="../">parent</a>
         <a href="surface_gaussians.ply">root splat</a>
+        <a href="surface_gaussians.spz">compressed splat</a>
         <a href="output/">output</a>
         <a href="3dgs/">3dgs</a>
         <a href="folder/folder/folder/">deep</a>
@@ -80,25 +81,31 @@ describe('url loader policy helpers', () => {
         url: 'https://example.com/dataset/surface_gaussians.ply',
         relativePath: 'surface_gaussians.ply',
         isDirectory: false,
-        isPly: true,
+        isSplat: true,
+      },
+      {
+        url: 'https://example.com/dataset/surface_gaussians.spz',
+        relativePath: 'surface_gaussians.spz',
+        isDirectory: false,
+        isSplat: true,
       },
       {
         url: 'https://example.com/dataset/output/',
         relativePath: 'output',
         isDirectory: true,
-        isPly: false,
+        isSplat: false,
       },
       {
         url: 'https://example.com/dataset/3dgs/',
         relativePath: '3dgs',
         isDirectory: true,
-        isPly: false,
+        isSplat: false,
       },
       {
         url: 'https://example.com/dataset/folder/folder/folder/',
         relativePath: 'folder/folder/folder',
         isDirectory: true,
-        isPly: false,
+        isSplat: false,
       },
     ]);
 
@@ -110,11 +117,11 @@ describe('url loader policy helpers', () => {
       url: 'https://example.com/dataset/folder%20name/model%23a.ply',
       relativePath: 'folder%20name/model%23a.ply',
       isDirectory: false,
-      isPly: true,
+      isSplat: true,
     });
   });
 
-  it('recursively chooses the largest PLY path from Hugging Face tree entries relative to the loaded dataset', () => {
+  it('recursively chooses the preferred splat path from Hugging Face tree entries relative to the loaded dataset', () => {
     const treePath = 'objects/scan';
 
     expect(getRelativeHuggingFaceTreePath('objects/scan/splats/surface_gaussians.ply', treePath))
@@ -122,17 +129,19 @@ describe('url loader policy helpers', () => {
     expect(getRelativeHuggingFaceTreePath('objects/other/surface_gaussians.ply', treePath))
       .toBeNull();
 
-    expect(getLargestHuggingFacePlyPath([
+    expect(getPreferredHuggingFaceSplatPath([
       { type: 'directory', path: 'objects/scan/splats', size: 0 },
       { type: 'file', path: 'objects/scan/inside_gaussians.ply', size: 100 },
       { type: 'file', path: 'objects/scan/output/surface_gaussians.ply', size: 250 },
       { type: 'file', path: 'objects/scan/3dgs/surface_gaussians.ply', size: 500 },
       { type: 'file', path: 'objects/scan/folder/folder/folder/deep_gaussians.ply', size: 750 },
+      { type: 'file', path: 'objects/scan/compressed/surface_gaussians.spz', size: 25 },
+      { type: 'file', path: 'objects/scan/compressed/larger.spz', size: 50 },
       { type: 'file', path: 'objects/scan/points3D.bin', size: 500 },
       { type: 'file', path: 'objects/other/larger.ply', size: 1000 },
     ], treePath)).toEqual({
-      path: 'folder/folder/folder/deep_gaussians.ply',
-      size: 750,
+      path: 'compressed/larger.spz',
+      size: 50,
     });
   });
 

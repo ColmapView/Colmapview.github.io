@@ -1,0 +1,1 @@
+{"version":3,"file":"wrapper.d.ts","sourceRoot":"","sources":["../../../src/sort/wasm/wrapper.ts"],"names":[],"mappings":"AAMA,OAAO,KAAK,EAAE,aAAa,EAAiB,MAAM,UAAU,CAAC;AAE7D,MAAM,MAAM,iBAAiB,GACzB,YAAY,GACZ,kBAAkB,GAClB,iBAAiB,GACjB,eAAe,CAAC;AAwCpB,wBAAsB,oBAAoB,CACxC,SAAS,GAAE,iBAAgC,GAC1C,OAAO,CAAC,aAAa,CAAC,CA2DxB"}

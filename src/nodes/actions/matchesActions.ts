@@ -7,6 +7,7 @@ export interface MatchesNodeActions {
   setDisplayMode: (mode: MatchesDisplayMode) => void;
   setOpacity: (opacity: number) => void;
   setColor: (color: string) => void;
+  setLineWidth: (lineWidth: number) => void;
   toggleVisible: () => void;
 }
 
@@ -17,6 +18,7 @@ export function useMatchesNodeActions(): MatchesNodeActions {
       setDisplayMode: (m) => useUIStore.getState().setMatchesDisplayMode(m),
       setOpacity: (o) => useUIStore.getState().setMatchesOpacity(o),
       setColor: (c) => useUIStore.getState().setMatchesColor(c),
+      setLineWidth: (w) => useUIStore.getState().setMatchesLineWidth(w),
       toggleVisible: () => useUIStore.getState().toggleMatches(),
     }),
     []

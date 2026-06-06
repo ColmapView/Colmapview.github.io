@@ -25,6 +25,7 @@ export interface CameraState {
   frustumColorMode: FrustumColorMode;
   frustumSingleColor: string;
   frustumStandbyOpacity: number;
+  frustumLineWidth: number;
   unselectedCameraOpacity: number;
 
   // Navigation
@@ -72,6 +73,7 @@ export interface CameraState {
   setFrustumColorMode: (mode: FrustumColorMode) => void;
   setFrustumSingleColor: (color: string) => void;
   setFrustumStandbyOpacity: (opacity: number) => void;
+  setFrustumLineWidth: (lineWidth: number) => void;
   setUnselectedCameraOpacity: (opacity: number) => void;
   setCameraMode: (mode: CameraMode) => void;
   setCameraProjection: (projection: CameraProjection) => void;
@@ -116,6 +118,7 @@ export const useCameraStore = create<CameraState>()(
       frustumColorMode: 'byCamera',
       frustumSingleColor: '#ff0000',
       frustumStandbyOpacity: 0.9,
+      frustumLineWidth: 1,
       unselectedCameraOpacity: 0.5,
       cameraMode: 'orbit',
       cameraProjection: 'perspective',
@@ -148,6 +151,7 @@ export const useCameraStore = create<CameraState>()(
       setFrustumColorMode: (frustumColorMode) => set({ frustumColorMode }),
       setFrustumSingleColor: (frustumSingleColor) => set({ frustumSingleColor }),
       setFrustumStandbyOpacity: (frustumStandbyOpacity) => set({ frustumStandbyOpacity }),
+      setFrustumLineWidth: (frustumLineWidth) => set({ frustumLineWidth }),
       setUnselectedCameraOpacity: (unselectedCameraOpacity) => set({ unselectedCameraOpacity }),
       setCameraMode: (cameraMode) => set({ cameraMode }),
       setCameraProjection: (cameraProjection) => set({ cameraProjection }),
@@ -212,6 +216,7 @@ export const useCameraStore = create<CameraState>()(
         frustumColorMode: state.frustumColorMode,
         frustumSingleColor: state.frustumSingleColor,
         frustumStandbyOpacity: state.frustumStandbyOpacity,
+        frustumLineWidth: state.frustumLineWidth,
         unselectedCameraOpacity: state.unselectedCameraOpacity,
         cameraMode: state.cameraMode,
         cameraProjection: state.cameraProjection,

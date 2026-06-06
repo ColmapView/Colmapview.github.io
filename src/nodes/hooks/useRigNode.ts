@@ -8,6 +8,7 @@ export function useRigNode(): RigNode {
   const rigColorMode = useRigStore((s) => s.rigColorMode);
   const rigLineColor = useRigStore((s) => s.rigLineColor);
   const rigLineOpacity = useRigStore((s) => s.rigLineOpacity);
+  const rigLineWidth = useRigStore((s) => s.rigLineWidth);
 
   return useMemo<RigNode>(
     () => ({
@@ -17,7 +18,8 @@ export function useRigNode(): RigNode {
       colorMode: rigColorMode,
       color: rigLineColor,
       opacity: rigLineOpacity,
+      lineWidth: rigLineWidth,
     }),
-    [showRig, rigDisplayMode, rigColorMode, rigLineColor, rigLineOpacity]
+    [showRig, rigDisplayMode, rigColorMode, rigLineColor, rigLineOpacity, rigLineWidth]
   );
 }

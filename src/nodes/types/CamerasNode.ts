@@ -20,6 +20,7 @@ export interface CamerasNode extends VisibleNode {
   colorMode: FrustumColorMode;
   singleColor: string;
   standbyOpacity: number;
+  lineWidth: number;
   undistortionEnabled: boolean;
   undistortionMode: UndistortionMode;
 }

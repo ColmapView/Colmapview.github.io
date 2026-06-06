@@ -9,6 +9,8 @@ import {
   ColorOffIcon,
   ColorRgbIcon,
   ColorSplatIcon,
+  ColorSplatPointsIcon,
+  ColorSplatRainbowPointsIcon,
   ColorTrackIcon,
   FlyIcon,
   FrustumIcon,
@@ -70,10 +72,11 @@ export function renderPointCloudButtonIcon(iconKind: PointCloudButtonIcon): Reac
     case 'pointsTrack':
       return icon(ColorTrackIcon);
     case 'pointsSplats':
-    case 'pointsSplatPoints':
       return icon(ColorSplatIcon);
+    case 'pointsSplatPoints':
+      return icon(ColorSplatPointsIcon);
     case 'pointsSplatRainbow':
-      return icon(RainbowIcon);
+      return icon(ColorSplatRainbowPointsIcon);
   }
 }
 

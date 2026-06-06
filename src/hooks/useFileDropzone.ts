@@ -1,5 +1,11 @@
 import { useCallback } from 'react';
-import { useReconstructionStore, useUIStore, usePointCloudStore, useNotificationStore } from '../store';
+import {
+  useImageMetricsStore,
+  useNotificationStore,
+  usePointCloudStore,
+  useReconstructionStore,
+  useUIStore,
+} from '../store';
 import { clearAllCaches } from '../cache';
 import { isArchiveFile, loadZipFromFile, setActiveZipArchive } from '../utils/zipLoader';
 import { scanDirectoryHandle, scanEntry } from '../utils/fileScanning';
@@ -34,6 +40,7 @@ export function useFileDropzone() {
   ) => {
     await processFileDropzoneFiles(files, {
       addNotification: useNotificationStore.getState().addNotification,
+      clearSplatPsnr: useImageMetricsStore.getState().clearSplatPsnr,
       getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
       getMinTrackLength: () => usePointCloudStore.getState().minTrackLength,
       getSourceInfo: () => {

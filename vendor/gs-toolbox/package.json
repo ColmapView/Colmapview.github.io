@@ -1,0 +1,18 @@
+{
+  "name": "gs-toolbox",
+  "version": "0.1.0-colmapview.1",
+  "description": "Vendored gs-toolbox build for colmapview Gaussian splat loading and WebGPU modules.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "pako": "^2.1.0"
+  },
+  "license": "Apache-2.0"
+}

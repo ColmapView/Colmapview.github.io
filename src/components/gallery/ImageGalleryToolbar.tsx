@@ -12,8 +12,8 @@ import type {
   ViewMode,
 } from './useImageGalleryViewModel';
 import {
-  GALLERY_SORT_FIELD_OPTIONS,
   getGalleryCameraFilterValue,
+  getGallerySortFieldOptions,
   getGallerySortFieldValue,
 } from './imageGalleryToolbarViewModel';
 
@@ -28,6 +28,7 @@ interface ImageGalleryToolbarProps {
   cameras: GalleryToolbarCamera[];
   sortDirection: SortDirection;
   sortField: SortField;
+  showSplatPsnrSort: boolean;
   touchMode: boolean;
   viewMode: ViewMode;
   onCameraFilterChange: (cameraFilter: CameraFilter) => void;
@@ -48,6 +49,7 @@ export function ImageGalleryToolbar({
   cameras,
   sortDirection,
   sortField,
+  showSplatPsnrSort,
   touchMode,
   viewMode,
   onCameraFilterChange,
@@ -55,8 +57,13 @@ export function ImageGalleryToolbar({
   onSortFieldChange,
   onViewModeChange,
 }: ImageGalleryToolbarProps) {
+  const sortFieldOptions = getGallerySortFieldOptions(showSplatPsnrSort);
+
   return (
-    <div className="flex flex-nowrap items-center justify-between gap-1 py-1 pl-0.5 pr-1 bg-ds-tertiary">
+    <div
+      className="flex h-full flex-nowrap items-center justify-between gap-1 py-1 pl-0.5 pr-1 bg-ds-tertiary"
+      data-testid="image-gallery-toolbar"
+    >
       <div className={`${toolbarStyles.group} min-w-0`}>
         <select
           aria-label="Camera filter"
@@ -82,14 +89,14 @@ export function ImageGalleryToolbar({
           aria-label="Sort field"
           value={sortField}
           onChange={(e) => {
-            const nextSortField = getGallerySortFieldValue(e.target.value);
+            const nextSortField = getGallerySortFieldValue(e.target.value, showSplatPsnrSort);
             if (nextSortField !== null) {
               onSortFieldChange(nextSortField);
             }
           }}
           className={`${inputStyles.select} ${inputStyles.sizes.sm}`}
         >
-          {GALLERY_SORT_FIELD_OPTIONS.map((option) => (
+          {sortFieldOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>

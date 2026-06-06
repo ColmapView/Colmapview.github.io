@@ -5,4 +5,5 @@ export interface MatchesNode extends VisualNode {
   readonly nodeType: 'matches';
   displayMode: MatchesDisplayMode;
   color: string;
+  lineWidth: number;
 }

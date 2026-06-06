@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import {
   syncPointRaycasterThreshold,
   syncSceneBackgroundColor,
+  syncSceneBackgroundTransparent,
 } from './threeObjectMutations';
 
 describe('Three object mutations', () => {
@@ -25,6 +26,15 @@ describe('Three object mutations', () => {
     expect(syncSceneBackgroundColor(scene, '#445566')).toBe(true);
     expect(scene.background).toBeInstanceOf(THREE.Color);
     expect((scene.background as THREE.Color).getHexString()).toBe('445566');
+  });
+
+  it('syncs transparent scene backgrounds only when needed', () => {
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#112233');
+
+    expect(syncSceneBackgroundTransparent(scene)).toBe(true);
+    expect(scene.background).toBeNull();
+    expect(syncSceneBackgroundTransparent(scene)).toBe(false);
   });
 
   it('syncs point raycaster threshold only when it changes', () => {

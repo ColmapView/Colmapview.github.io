@@ -3,8 +3,10 @@ import type { Camera, Image, ImageId, Reconstruction } from '../../types/colmap'
 import { getCameraColor } from '../../theme';
 import { getImageWorldPose } from '../../utils/colmapTransforms';
 import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
+import { getSplatPsnrColor } from './splatPsnrMetric';
 
-export type FrustumColorMode = 'single' | 'byCamera' | 'byRigFrame';
+export type FrustumColorMode = 'single' | 'byCamera' | 'byRigFrame' | 'splatPsnr';
+export type FrustumPsnrMetricSource = ReadonlyMap<ImageId, { psnr: number }>;
 
 export interface FrustumImageSource {
   getImageSync(name: string): File | null | undefined;
@@ -44,8 +46,12 @@ export function getFrustumBaseColor(
   cameraIndex: number,
   imageId: ImageId,
   imageFrameIndexMap: Map<ImageId, number>,
-  frustumSingleColor: string
+  frustumSingleColor: string,
+  splatPsnrByImage?: FrustumPsnrMetricSource
 ): string {
+  if (frustumColorMode === 'splatPsnr') {
+    return getSplatPsnrColor(splatPsnrByImage?.get(imageId)?.psnr);
+  }
   if (frustumColorMode === 'byCamera') {
     return getCameraColor(cameraIndex);
   }
@@ -174,10 +180,12 @@ export function buildFrustumLineGeometryData(
     frustumColorMode,
     frustumSingleColor,
     imageFrameIndexMap,
+    splatPsnrByImage,
   }: {
     frustumColorMode: FrustumColorMode;
     frustumSingleColor: string;
     imageFrameIndexMap: Map<ImageId, number>;
+    splatPsnrByImage?: FrustumPsnrMetricSource;
   }
 ): FrustumLineGeometryData {
   const positions = new Float32Array(frustums.length * 48);
@@ -221,7 +229,8 @@ export function buildFrustumLineGeometryData(
       frustum.cameraIndex,
       frustum.image.imageId,
       imageFrameIndexMap,
-      frustumSingleColor
+      frustumSingleColor,
+      splatPsnrByImage
     ));
 
     for (let vertex = 0; vertex < 16; vertex++) {

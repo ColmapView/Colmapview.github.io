@@ -7,6 +7,7 @@ import type { Camera, Image } from '../../types/colmap';
 import { VIZ_COLORS, RAINBOW } from '../../theme';
 import {
   getFrustumBaseColor,
+  type FrustumPsnrMetricSource,
   type FrustumColorMode,
 } from './cameraFrustumViewModel';
 import {
@@ -46,6 +47,7 @@ interface BatchedArrowMeshesProps {
   selectionAnimationSpeed: number;
   unselectedCameraOpacity: number;
   imageFrameIndexMap: Map<number, number>;
+  splatPsnrByImage: FrustumPsnrMetricSource;
   onHover: (id: number | null) => void;
   onClick: (imageId: number) => void;
   onContextMenu: (imageId: number) => void;
@@ -79,6 +81,7 @@ export function BatchedArrowMeshes({
   selectionAnimationSpeed,
   unselectedCameraOpacity,
   imageFrameIndexMap,
+  splatPsnrByImage,
   onHover,
   onClick,
   onContextMenu,
@@ -95,6 +98,13 @@ export function BatchedArrowMeshes({
   const prevSelectedRef = useRef<number | null>(null);
   const prevHoveredRef = useRef<number | null>(null);
   const needsUpdateRef = useRef(true);
+  const imageIdToIndex = useMemo(() => {
+    const map = new Map<number, number>();
+    frustums.forEach((frustum, index) => {
+      map.set(frustum.image.imageId, index);
+    });
+    return map;
+  }, [frustums]);
 
   const isDragging = useTrackballDraggingReader();
   const { tooltipData, tooltipFrustum, interactionHandlers } = useBatchedFrustumInteractions({
@@ -164,7 +174,8 @@ export function BatchedArrowMeshes({
       selectedImageId !== prevSelectedRef.current ||
       hoveredImageId !== prevHoveredRef.current;
 
-    if (!isSelectionAnimated && !isMatchesAnimated && !stateChanged && !needsUpdateRef.current) {
+    const forceFullUpdate = stateChanged || needsUpdateRef.current;
+    if (!isSelectionAnimated && !isMatchesAnimated && !forceFullUpdate) {
       return;
     }
 
@@ -172,7 +183,9 @@ export function BatchedArrowMeshes({
     prevHoveredRef.current = hoveredImageId;
     needsUpdateRef.current = false;
 
-    frustums.forEach((f, i) => {
+    const updateArrow = (i: number) => {
+      const f = frustums[i];
+      if (!f) return false;
       const isSelected = f.image.imageId === selectedImageId;
       const isHovered = f.image.imageId === hoveredImageId;
       const isMatched = matchedImageIds.has(f.image.imageId);
@@ -209,7 +222,14 @@ export function BatchedArrowMeshes({
           tempColor.set(matchesColor);
           break;
         case 'base':
-          tempColor.set(getFrustumBaseColor(frustumColorMode, f.cameraIndex, f.image.imageId, imageFrameIndexMap, frustumSingleColor));
+          tempColor.set(getFrustumBaseColor(
+            frustumColorMode,
+            f.cameraIndex,
+            f.image.imageId,
+            imageFrameIndexMap,
+            frustumSingleColor,
+            splatPsnrByImage
+          ));
           break;
       }
 
@@ -236,7 +256,32 @@ export function BatchedArrowMeshes({
       tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
       cone.setMatrixAt(i, tempMatrix);
       cone.setColorAt(i, tempColor);
-    });
+      return true;
+    };
+
+    let updatedAny = false;
+    if ((isSelectionAnimated || isMatchesAnimated) && !forceFullUpdate) {
+      const animatedIndices = new Set<number>();
+      if (isSelectionAnimated && selectedImageId !== null) {
+        const selectedIndex = imageIdToIndex.get(selectedImageId);
+        if (selectedIndex !== undefined) animatedIndices.add(selectedIndex);
+      }
+      if (isMatchesAnimated) {
+        matchedImageIds.forEach((imageId) => {
+          const index = imageIdToIndex.get(imageId);
+          if (index !== undefined) animatedIndices.add(index);
+        });
+      }
+      animatedIndices.forEach((index) => {
+        updatedAny = updateArrow(index) || updatedAny;
+      });
+    } else {
+      for (let i = 0; i < frustums.length; i++) {
+        updatedAny = updateArrow(i) || updatedAny;
+      }
+    }
+
+    if (!updatedAny) return;
 
     shaft.instanceMatrix.needsUpdate = true;
     cone.instanceMatrix.needsUpdate = true;
@@ -259,6 +304,7 @@ export function BatchedArrowMeshes({
     selectionColor,
     selectionAnimationSpeed,
     imageFrameIndexMap,
+    splatPsnrByImage,
     pendingDeletions,
   ]);
 
@@ -333,6 +379,7 @@ export function BatchedArrowMeshes({
             cameraId={tooltipFrustum.image.cameraId}
             multiCamera={multiCamera}
             numPoints3D={tooltipFrustum.numPoints3D}
+            splatPsnr={splatPsnrByImage.get(tooltipFrustum.image.imageId)?.psnr}
             isSelected={false}
             isMatched={matchedImageIds.has(tooltipFrustum.image.imageId)}
             wouldGoBack={tooltipFrustum.image.imageId === lastNavigationToImageId}

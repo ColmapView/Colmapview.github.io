@@ -26,6 +26,13 @@ export interface PointCloudDataParams {
 }
 
 /**
+ * Map-like point id lookup for raycast hit indices.
+ */
+export interface Point3DIdLookup {
+  get(index: number): bigint | undefined;
+}
+
+/**
  * Result from point cloud data computation.
  */
 export interface PointCloudDataResult {
@@ -33,7 +40,7 @@ export interface PointCloudDataResult {
   colors: Float32Array | null;
   selectedPositions: Float32Array | null;
   selectedColors: Float32Array | null;
-  indexToPoint3DId: Map<number, bigint>;
+  indexToPoint3DId: Point3DIdLookup;
 }
 
 /**

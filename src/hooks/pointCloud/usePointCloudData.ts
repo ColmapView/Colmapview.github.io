@@ -10,7 +10,7 @@ import type { ColorMode } from '../../store/types';
 import type { FloorColorMode } from '../../store/stores/floorPlaneStore';
 import type { WasmReconstructionWrapper } from '../../wasm/reconstruction';
 import { appLogger } from '../../utils/logger';
-import type { PointCloudDataResult } from './types';
+import type { Point3DIdLookup, PointCloudDataResult } from './types';
 import {
   computeColorsForFastPath,
   applyFloorColoring,
@@ -38,7 +38,27 @@ export interface UsePointCloudDataParams {
 }
 
 export interface UsePointCloudDataResult extends PointCloudDataResult {
-  indexToPoint3DIdRef: React.RefObject<Map<number, bigint>>;
+  indexToPoint3DIdRef: React.RefObject<Point3DIdLookup>;
+}
+
+interface FastPathPositionCache {
+  source: Float32Array;
+  copy: Float32Array;
+  count: number;
+}
+
+interface FastPathPositionCacheStore {
+  value: FastPathPositionCache | null;
+}
+
+const EMPTY_POINT_ID_LOOKUP = new Map<number, bigint>();
+
+function createSequentialPoint3DIdLookup(count: number): Point3DIdLookup {
+  return {
+    get(index: number) {
+      return index >= 0 && index < count ? BigInt(index + 1) : undefined;
+    },
+  };
 }
 
 /**
@@ -67,7 +87,8 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
     distanceThreshold,
   } = params;
 
-  const indexToPoint3DIdRef = useRef<Map<number, bigint>>(new Map());
+  const indexToPoint3DIdRef = useRef<Point3DIdLookup>(EMPTY_POINT_ID_LOOKUP);
+  const fastPathPositionCache = useMemo<FastPathPositionCacheStore>(() => ({ value: null }), []);
 
   // Compute highlight color directly in useMemo to avoid stale ref issue
   // (useEffect runs after render, so ref would have old value during useMemo execution)
@@ -83,7 +104,7 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
         colors: null,
         selectedPositions: null,
         selectedColors: null,
-        indexToPoint3DId: new Map(),
+        indexToPoint3DId: EMPTY_POINT_ID_LOOKUP,
       };
     }
 
@@ -104,7 +125,8 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
         highlightColor,
         floorColorMode,
         pointDistances,
-        distanceThreshold
+        distanceThreshold,
+        fastPathPositionCache
       );
       if (result) return result;
     }
@@ -139,6 +161,7 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
     pointDistances,
     distanceThreshold,
     floorColorMode,
+    fastPathPositionCache,
   ]);
 
   useEffect(() => {
@@ -163,15 +186,10 @@ function computeFastPath(
   highlightColor: [number, number, number],
   floorColorMode: FloorColorMode,
   pointDistances: Float32Array | null,
-  distanceThreshold: number
+  distanceThreshold: number,
+  fastPathPositionCache: FastPathPositionCacheStore
 ): PointCloudDataResult | null {
   const count = wasmReconstruction.pointCount;
-
-  // Build indexToPoint3DId mapping (still needed for picking)
-  const indexToPoint3DId = new Map<number, bigint>();
-  for (let i = 0; i < count; i++) {
-    indexToPoint3DId.set(i, BigInt(i + 1)); // COLMAP uses 1-based IDs
-  }
   // Get WASM arrays directly (zero-copy views)
   const wasmPositions = wasmReconstruction.getPositions();
   if (!wasmPositions || wasmPositions.length === 0) {
@@ -220,16 +238,24 @@ function computeFastPath(
     selectedColors = result.selectedColors;
   }
 
-  // Copy WASM positions to prevent view invalidation when WASM memory is reallocated
-  // The wasmPositions view can become detached (length 0) if WASM memory changes
-  const positionsCopy = new Float32Array(wasmPositions);
+  let positionsCopy = fastPathPositionCache.value?.copy ?? null;
+  const cache = fastPathPositionCache.value;
+  if (!cache || cache.source !== wasmPositions || cache.count !== count || cache.copy.length !== wasmPositions.length) {
+    // Copy WASM positions to prevent view invalidation when WASM memory is reallocated.
+    positionsCopy = new Float32Array(wasmPositions);
+    fastPathPositionCache.value = {
+      source: wasmPositions,
+      copy: positionsCopy,
+      count,
+    };
+  }
 
   return {
     positions: positionsCopy,
     colors: finalColors,
     selectedPositions,
     selectedColors,
-    indexToPoint3DId,
+    indexToPoint3DId: createSequentialPoint3DIdLookup(count),
   };
 }
 

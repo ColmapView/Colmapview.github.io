@@ -4,6 +4,7 @@ import {
   getFrustumBaseColor,
   type CameraFrustumItem,
   type FrustumColorMode,
+  type FrustumPsnrMetricSource,
 } from './cameraFrustumViewModel';
 import {
   getImagePlaneStyle,
@@ -23,6 +24,7 @@ export interface BuildImagePlaneRenderItemsOptions {
   matchedImageIds: Set<ImageId>;
   pendingDeletions: Set<ImageId>;
   imageFrameIndexMap: Map<ImageId, number>;
+  splatPsnrByImage?: FrustumPsnrMetricSource;
   lastNavigationToImageId: ImageId | null;
   frustumColorMode: FrustumColorMode;
   frustumSingleColor: string;
@@ -39,6 +41,7 @@ export function buildImagePlaneRenderItems({
   matchedImageIds,
   pendingDeletions,
   imageFrameIndexMap,
+  splatPsnrByImage,
   lastNavigationToImageId,
   frustumColorMode,
   frustumSingleColor,
@@ -58,7 +61,8 @@ export function buildImagePlaneRenderItems({
       frustum.cameraIndex,
       imageId,
       imageFrameIndexMap,
-      frustumSingleColor
+      frustumSingleColor,
+      splatPsnrByImage
     );
 
     return [{

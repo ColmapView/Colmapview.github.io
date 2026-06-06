@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TEST_DATA_DIR = path.join(__dirname, 'test-data');
 
-interface FileEntry {
+export interface TestDatasetFileEntry {
   /** Relative path for the file key, e.g. "sparse/cameras.txt" */
   relativePath: string;
   /** Base64-encoded file contents */
@@ -19,8 +19,8 @@ interface FileEntry {
 /**
  * Recursively collect files from a directory, returning relative paths.
  */
-function collectFiles(dir: string, prefix: string = ''): FileEntry[] {
-  const entries: FileEntry[] = [];
+function collectFiles(dir: string, prefix: string = ''): TestDatasetFileEntry[] {
+  const entries: TestDatasetFileEntry[] = [];
   for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
     const fullPath = path.join(dir, item.name);
     const relPath = prefix ? `${prefix}/${item.name}` : item.name;
@@ -44,10 +44,13 @@ function collectFiles(dir: string, prefix: string = ''): FileEntry[] {
  * The app's scanEntry() traverses FileSystemDirectoryEntry / FileSystemFileEntry,
  * so we mock that API in the browser context.
  */
-export async function loadTestDataset(page: Page): Promise<void> {
-  const files = collectFiles(TEST_DATA_DIR);
+export async function loadTestDataset(
+  page: Page,
+  extraFiles: TestDatasetFileEntry[] = []
+): Promise<void> {
+  const files = [...collectFiles(TEST_DATA_DIR), ...extraFiles];
 
-  await page.evaluate(async (fileData: FileEntry[]) => {
+  await page.evaluate(async (fileData: TestDatasetFileEntry[]) => {
     // Helper: build a nested tree from flat paths
     type TreeNode = { name: string; children: Map<string, TreeNode>; file?: File };
     type TestFileSystemEntry = TestFileSystemFileEntry | TestFileSystemDirectoryEntry;

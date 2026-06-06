@@ -29,6 +29,8 @@ export interface MatchesPanelProps {
   setMatchesOpacity: (opacity: number) => void;
   matchesColor: string;
   setMatchesColor: (color: string) => void;
+  matchesLineWidth: number;
+  setMatchesLineWidth: (lineWidth: number) => void;
   onCycleMatchesDisplayMode: () => void;
 }
 
@@ -44,6 +46,8 @@ export function MatchesPanel({
   setMatchesOpacity,
   matchesColor,
   setMatchesColor,
+  matchesLineWidth,
+  setMatchesLineWidth,
   onCycleMatchesDisplayMode,
 }: MatchesPanelProps) {
   const hint = getMatchesPanelHint(showMatches, matchesDisplayMode);
@@ -79,6 +83,15 @@ export function MatchesPanel({
               step={0.05}
               onChange={setMatchesOpacity}
               formatValue={(value) => value.toFixed(2)}
+            />
+            <SliderRow
+              label="Width"
+              value={matchesLineWidth}
+              min={1}
+              max={6}
+              step={0.5}
+              onChange={setMatchesLineWidth}
+              formatValue={(value) => value.toFixed(1)}
             />
             <HueRow label="Color" value={matchesColor} onChange={setMatchesColor} />
           </>

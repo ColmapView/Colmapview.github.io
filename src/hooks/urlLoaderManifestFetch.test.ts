@@ -170,7 +170,7 @@ describe('URL loader manifest fetch helpers', () => {
     expect(log).toHaveBeenCalledWith('[URL Loader] Optional file loaded: splats/large.ply');
   });
 
-  it('discovers the largest Hugging Face PLY for direct dataset manifests', async () => {
+  it('discovers the preferred Hugging Face splat for direct dataset manifests', async () => {
     const setUrlProgress = vi.fn();
     const log = vi.fn();
     const baseUrl = 'https://huggingface.co/datasets/OpsiClear/NGS/resolve/main/objects/scan_toy';
@@ -180,6 +180,7 @@ describe('URL loader manifest fetch helpers', () => {
       { type: 'file', path: 'objects/scan_toy/output/surface_gaussians.ply', size: 128_935_787 },
       { type: 'file', path: 'objects/scan_toy/3dgs/surface_gaussians.ply', size: 178_935_787 },
       { type: 'file', path: 'objects/scan_toy/folder/folder/folder/surface_gaussians.ply', size: 228_935_787 },
+      { type: 'file', path: 'objects/scan_toy/splats/surface_gaussians.spz', size: 40_000_000 },
     ]));
     const fetchFile = vi.fn(async (_baseUrl: string, path: string) =>
       buildFile(path.split('/').pop() ?? path)
@@ -199,22 +200,24 @@ describe('URL loader manifest fetch helpers', () => {
     expect(fetchImpl).toHaveBeenCalledWith(
       'https://huggingface.co/api/datasets/OpsiClear/NGS/tree/main/objects/scan_toy?recursive=true'
     );
-    expect(fetchFile).toHaveBeenCalledWith(baseUrl, 'folder/folder/folder/surface_gaussians.ply');
+    expect(fetchFile).toHaveBeenCalledWith(baseUrl, 'splats/surface_gaussians.spz');
     expect(fetchFile).not.toHaveBeenCalledWith(baseUrl, 'inside_gaussians.ply');
     expect(fetchFile).not.toHaveBeenCalledWith(baseUrl, 'output/surface_gaussians.ply');
     expect(fetchFile).not.toHaveBeenCalledWith(baseUrl, '3dgs/surface_gaussians.ply');
-    expect([...files.keys()]).toContain('folder/folder/folder/surface_gaussians.ply');
+    expect(fetchFile).not.toHaveBeenCalledWith(baseUrl, 'folder/folder/folder/surface_gaussians.ply');
+    expect([...files.keys()]).toContain('splats/surface_gaussians.spz');
     expect(log).toHaveBeenCalledWith(
-      '[URL Loader] Discovered Hugging Face splat file: folder/folder/folder/surface_gaussians.ply (228935787 bytes)'
+      '[URL Loader] Discovered Hugging Face splat file: splats/surface_gaussians.spz (40000000 bytes)'
     );
-    expect(log).toHaveBeenCalledWith('[URL Loader] Optional file loaded: folder/folder/folder/surface_gaussians.ply');
+    expect(log).toHaveBeenCalledWith('[URL Loader] Optional file loaded: splats/surface_gaussians.spz');
   });
 
-  it('discovers the largest generic directory-listing PLY recursively', async () => {
+  it('discovers the preferred generic directory-listing splat recursively', async () => {
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === 'HEAD') {
         const sizes = new Map([
           ['https://example.com/dataset/root_gaussians.ply', 10],
+          ['https://example.com/dataset/root_gaussians.spz', 5],
           ['https://example.com/dataset/output/surface_gaussians.ply', 100],
           ['https://example.com/dataset/3dgs/model.ply', 200],
           ['https://example.com/dataset/folder/folder/folder/deep_gaussians.ply', 300],
@@ -228,6 +231,7 @@ describe('URL loader manifest fetch helpers', () => {
       if (url === 'https://example.com/dataset/') {
         return textResponse(`
           <a href="root_gaussians.ply">root</a>
+          <a href="root_gaussians.spz">root compressed</a>
           <a href="output/">output</a>
           <a href="3dgs/">3dgs</a>
           <a href="folder/">folder</a>
@@ -255,17 +259,17 @@ describe('URL loader manifest fetch helpers', () => {
     await expect(discoverDirectoryListingSplatPath('https://example.com/dataset', {
       fetchImpl,
     })).resolves.toEqual({
-      path: 'folder/folder/folder/deep_gaussians.ply',
-      size: 300,
+      path: 'root_gaussians.spz',
+      size: 5,
     });
   });
 
-  it('adds the generic directory-listing PLY to downloaded manifest files', async () => {
+  it('adds the generic directory-listing splat to downloaded manifest files', async () => {
     const setUrlProgress = vi.fn();
     const log = vi.fn();
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === 'HEAD') {
-        const size = url.endsWith('/3dgs/model.ply') ? 200 : 100;
+        const size = url.endsWith('/output/model.spz') ? 50 : 200;
         return new Response(null, { headers: { 'content-length': String(size) } });
       }
 
@@ -273,7 +277,7 @@ describe('URL loader manifest fetch helpers', () => {
         return textResponse('<a href="output/">output</a><a href="3dgs/">3dgs</a>');
       }
       if (url === 'https://example.com/dataset/output/') {
-        return textResponse('<a href="surface_gaussians.ply">surface</a>');
+        return textResponse('<a href="model.spz">surface</a>');
       }
       if (url === 'https://example.com/dataset/3dgs/') {
         return textResponse('<a href="model.ply">model</a>');
@@ -300,11 +304,11 @@ describe('URL loader manifest fetch helpers', () => {
       setUrlProgress,
     });
 
-    expect(fetchFile).toHaveBeenCalledWith('https://example.com/dataset', '3dgs/model.ply');
-    expect(fetchFile).not.toHaveBeenCalledWith('https://example.com/dataset', 'output/surface_gaussians.ply');
-    expect([...files.keys()]).toContain('3dgs/model.ply');
-    expect(log).toHaveBeenCalledWith('[URL Loader] Discovered directory splat file: 3dgs/model.ply (200 bytes)');
-    expect(log).toHaveBeenCalledWith('[URL Loader] Optional file loaded: 3dgs/model.ply');
+    expect(fetchFile).toHaveBeenCalledWith('https://example.com/dataset', 'output/model.spz');
+    expect(fetchFile).not.toHaveBeenCalledWith('https://example.com/dataset', '3dgs/model.ply');
+    expect([...files.keys()]).toContain('output/model.spz');
+    expect(log).toHaveBeenCalledWith('[URL Loader] Discovered directory splat file: output/model.spz (50 bytes)');
+    expect(log).toHaveBeenCalledWith('[URL Loader] Optional file loaded: output/model.spz');
   });
 
   it('keeps explicit manifest splats instead of querying Hugging Face discovery', async () => {
