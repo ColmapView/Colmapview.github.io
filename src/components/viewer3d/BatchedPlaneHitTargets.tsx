@@ -3,7 +3,6 @@ import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import type { Camera, Image } from '../../types/colmap';
 import { getFrustumPlaneSize } from './cameraFrustumViewModel';
-import type { FrustumPsnrMetricSource } from './cameraFrustumGeometry';
 import { FrustumPlaneHoverCard } from './FrustumPlaneHoverCard';
 import { useTrackballDraggingReader } from './trackballControlsApi';
 import { useBatchedFrustumInteractions } from './useBatchedFrustumInteractions';
@@ -31,7 +30,6 @@ interface BatchedPlaneHitTargetsProps {
   onContextMenu: (imageId: number) => void;
   onLongPress: (imageId: number) => void;
   lastNavigationToImageId: number | null;
-  splatPsnrByImage: FrustumPsnrMetricSource;
   touchMode?: boolean;
 }
 
@@ -50,7 +48,6 @@ export function BatchedPlaneHitTargets({
   onContextMenu,
   onLongPress,
   lastNavigationToImageId,
-  splatPsnrByImage,
   touchMode = false,
 }: BatchedPlaneHitTargetsProps) {
   const { multiCamera } = useFrustumHoverCardStoreFacade();
@@ -184,7 +181,6 @@ export function BatchedPlaneHitTargets({
             cameraId={tooltipFrustum.image.cameraId}
             multiCamera={multiCamera}
             numPoints3D={tooltipFrustum.numPoints3D}
-            splatPsnr={splatPsnrByImage.get(tooltipFrustum.image.imageId)?.psnr}
             isSelected={false}
             isMatched={matchedImageIds.has(tooltipFrustum.image.imageId)}
             wouldGoBack={tooltipFrustum.image.imageId === lastNavigationToImageId}

@@ -6,7 +6,15 @@ export {
 } from '../../utils/imageNavigationPolicy';
 
 export type ViewMode = 'gallery' | 'list';
-export type SortField = 'name' | 'imageId' | 'avgError' | 'covisibleCount' | 'numPoints3D' | 'numPoints2D' | 'splatPsnr';
+export type SortField =
+  | 'name'
+  | 'imageId'
+  | 'avgError'
+  | 'covisibleCount'
+  | 'numPoints3D'
+  | 'numPoints2D'
+  | 'splatPsnr'
+  | 'splatSsim';
 export type SortDirection = 'asc' | 'desc';
 export type CameraFilter = number | 'all';
 
@@ -22,6 +30,7 @@ export interface ImageData {
   covisibleCount: number;
   avgError: number;
   splatPsnr?: number;
+  splatSsim?: number;
 }
 
 interface GalleryImageSource {
@@ -31,7 +40,7 @@ interface GalleryImageSource {
 interface BuildGalleryImagesOptions {
   reconstruction: Reconstruction | null;
   imageSource: GalleryImageSource;
-  splatPsnrByImage?: ReadonlyMap<number, { psnr: number }>;
+  splatPsnrByImage?: ReadonlyMap<number, { psnr: number; ssim?: number }>;
   cameraFilter: CameraFilter;
   sortField: SortField;
   sortDirection: SortDirection;
@@ -82,6 +91,7 @@ export function buildGalleryImages({
         covisibleCount: stats?.covisibleCount ?? 0,
         avgError: stats?.avgError ?? 0,
         splatPsnr: splatPsnrByImage?.get(img.imageId)?.psnr,
+        splatSsim: splatPsnrByImage?.get(img.imageId)?.ssim,
       };
     });
 
@@ -90,10 +100,12 @@ export function buildGalleryImages({
     if (sortField === 'name') {
       return sortMultiplier * a.name.localeCompare(b.name);
     }
-    if (sortField === 'splatPsnr') {
-      if (a.splatPsnr === undefined && b.splatPsnr === undefined) return 0;
-      if (a.splatPsnr === undefined) return 1;
-      if (b.splatPsnr === undefined) return -1;
+    if (sortField === 'splatPsnr' || sortField === 'splatSsim') {
+      const aMetric = a[sortField];
+      const bMetric = b[sortField];
+      if (aMetric === undefined && bMetric === undefined) return 0;
+      if (aMetric === undefined) return 1;
+      if (bMetric === undefined) return -1;
     }
     const aValue = a[sortField];
     const bValue = b[sortField];

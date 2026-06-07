@@ -24,15 +24,20 @@ const SPLAT_PSNR_SORT_FIELD_OPTION: GallerySortFieldOption = {
   label: 'Sort: PSNR',
 };
 
-export function getGallerySortFieldOptions(hasSplatPsnr: boolean): GallerySortFieldOption[] {
+const SPLAT_SSIM_SORT_FIELD_OPTION: GallerySortFieldOption = {
+  value: 'splatSsim',
+  label: 'Sort: SSIM',
+};
+
+export function getGallerySortFieldOptions(hasSplatMetrics: boolean): GallerySortFieldOption[] {
   return [
     ...GALLERY_SORT_FIELD_OPTIONS,
-    ...(hasSplatPsnr ? [SPLAT_PSNR_SORT_FIELD_OPTION] : []),
+    ...(hasSplatMetrics ? [SPLAT_PSNR_SORT_FIELD_OPTION, SPLAT_SSIM_SORT_FIELD_OPTION] : []),
   ];
 }
 
-export function getGallerySortFieldValue(value: string, hasSplatPsnr = false): SortField | null {
-  return getGallerySortFieldOptions(hasSplatPsnr).find(option => option.value === value)?.value ?? null;
+export function getGallerySortFieldValue(value: string, hasSplatMetrics = false): SortField | null {
+  return getGallerySortFieldOptions(hasSplatMetrics).find(option => option.value === value)?.value ?? null;
 }
 
 export function getGalleryCameraFilterValue(

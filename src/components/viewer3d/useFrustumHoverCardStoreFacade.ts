@@ -1,7 +1,16 @@
-import { selectCameraCount, useReconstructionStore } from '../../store';
+import {
+  selectCameraCount,
+  useImageMetricsStore,
+  useReconstructionStore,
+  type SplatPsnrMetric,
+} from '../../store';
 
 export interface FrustumHoverCardStoreFacade {
   multiCamera: boolean;
+}
+
+export interface FrustumHoverCardMetricStoreFacade {
+  splatMetric?: SplatPsnrMetric;
 }
 
 export function useFrustumHoverCardStoreFacade(): FrustumHoverCardStoreFacade {
@@ -9,5 +18,13 @@ export function useFrustumHoverCardStoreFacade(): FrustumHoverCardStoreFacade {
 
   return {
     multiCamera: cameraCount > 1,
+  };
+}
+
+export function useFrustumHoverCardMetricStoreFacade(imageId: number): FrustumHoverCardMetricStoreFacade {
+  const splatMetric = useImageMetricsStore((state) => state.splatPsnrMetrics.get(imageId));
+
+  return {
+    splatMetric,
   };
 }

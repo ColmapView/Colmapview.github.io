@@ -3,6 +3,7 @@ import {
   getFrustumPlaneDisplayTexture,
   getFrustumPlaneMaterialTexture,
   getFrustumPlaneSourceTexture,
+  isRenderableFrustumPlaneTexture,
   shouldShowFrustumPlaneTexture,
 } from './frustumPlaneTexturePolicy';
 
@@ -74,5 +75,12 @@ describe('frustum plane texture policy', () => {
       shouldShowTexture: false,
       displayTexture: 'hidden',
     })).toBeNull();
+  });
+
+  it('requires image dimensions before treating a texture as renderable', () => {
+    expect(isRenderableFrustumPlaneTexture(null)).toBe(false);
+    expect(isRenderableFrustumPlaneTexture({ image: null })).toBe(false);
+    expect(isRenderableFrustumPlaneTexture({ image: { width: 0, height: 64 } })).toBe(false);
+    expect(isRenderableFrustumPlaneTexture({ image: { width: 64, height: 32 } })).toBe(true);
   });
 });

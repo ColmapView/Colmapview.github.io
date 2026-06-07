@@ -28,11 +28,12 @@ describe('camera display panel view-model helpers', () => {
     ]);
   });
 
-  it('adds PSNR color only when a splat frame is ready', () => {
+  it('adds PSNR and SSIM color only when a splat frame is ready', () => {
     expect(getFrustumColorModeOptions({ hasRigData: false, hasSplatPsnr: true })).toEqual([
       { value: 'single', label: 'Single' },
       { value: 'byCamera', label: 'By Cam' },
       { value: 'splatPsnr', label: 'PSNR' },
+      { value: 'splatSsim', label: 'SSIM' },
     ]);
   });
 
@@ -46,6 +47,7 @@ describe('camera display panel view-model helpers', () => {
       'byCamera',
       'byRigFrame',
       'splatPsnr',
+      'splatSsim',
     ]);
   });
 

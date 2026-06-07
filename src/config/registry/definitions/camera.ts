@@ -64,7 +64,7 @@ export const cameraSection = defineSection({
       enumValues: FRUSTUM_COLOR_MODES,
       default: 'byCamera',
       persist: true,
-      description: 'single | byCamera | byRigFrame | splatPsnr',
+      description: 'single | byCamera | byRigFrame | splatPsnr | splatSsim',
     },
     {
       key: 'frustumSingleColor',

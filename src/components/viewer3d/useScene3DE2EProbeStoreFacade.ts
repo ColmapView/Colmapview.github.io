@@ -48,13 +48,13 @@ interface Scene3DE2EProbeActionsFacade {
     error: string | null;
     metric: {
       psnr: number;
+      ssim?: number;
       mse: number;
       validPixelCount: number;
       width: number;
       height: number;
       computedAt: number;
       renderBackground?: SplatPsnrMetric['renderBackground'];
-      diagnostics?: SplatPsnrMetric['diagnostics'];
     } | null;
   };
   getSelectedImageId: () => CameraState['selectedImageId'];
@@ -149,13 +149,13 @@ export function useScene3DE2EProbeStoreFacade(): Scene3DE2EProbeStoreFacade {
       metric: metric
         ? {
           psnr: metric.psnr,
+          ssim: metric.ssim,
           mse: metric.mse,
           validPixelCount: metric.validPixelCount,
           width: metric.width,
           height: metric.height,
           computedAt: metric.computedAt,
           renderBackground: metric.renderBackground,
-          diagnostics: metric.diagnostics,
         }
         : null,
     };

@@ -1,9 +1,11 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { useImageMetricsStore } from '../../store';
 import { FrustumPlaneHoverCard } from './FrustumPlaneHoverCard';
 
 afterEach(() => {
   cleanup();
+  useImageMetricsStore.setState(useImageMetricsStore.getInitialState(), true);
 });
 
 describe('FrustumPlaneHoverCard', () => {
@@ -73,5 +75,35 @@ describe('FrustumPlaneHoverCard', () => {
     expect(screen.getByText('Right: fly to')).toBeVisible();
     expect(screen.queryByText('Right: back')).toBeNull();
     expect(screen.queryByText('Right: matches')).toBeNull();
+  });
+
+  it('renders splat PSNR and SSIM metrics when available', () => {
+    useImageMetricsStore.getState().setSplatPsnrMetric({
+      imageId: 8,
+      psnr: 31.24,
+      ssim: 0.9428,
+      mse: 12,
+      validPixelCount: 100,
+      width: 10,
+      height: 10,
+      computedAt: 123,
+    });
+
+    render(
+      <FrustumPlaneHoverCard
+        imageName="next.jpg"
+        imageId={8}
+        cameraId={1}
+        multiCamera={false}
+        numPoints3D={12}
+        isSelected={false}
+        isMatched={false}
+        wouldGoBack={false}
+        cameraProjection="orthographic"
+      />
+    );
+
+    expect(screen.getByText('31.2 dB PSNR')).toBeVisible();
+    expect(screen.getByText('0.943 SSIM')).toBeVisible();
   });
 });

@@ -28,7 +28,7 @@ interface ImageGalleryToolbarProps {
   cameras: GalleryToolbarCamera[];
   sortDirection: SortDirection;
   sortField: SortField;
-  showSplatPsnrSort: boolean;
+  showSplatMetricSort: boolean;
   touchMode: boolean;
   viewMode: ViewMode;
   onCameraFilterChange: (cameraFilter: CameraFilter) => void;
@@ -49,7 +49,7 @@ export function ImageGalleryToolbar({
   cameras,
   sortDirection,
   sortField,
-  showSplatPsnrSort,
+  showSplatMetricSort,
   touchMode,
   viewMode,
   onCameraFilterChange,
@@ -57,7 +57,7 @@ export function ImageGalleryToolbar({
   onSortFieldChange,
   onViewModeChange,
 }: ImageGalleryToolbarProps) {
-  const sortFieldOptions = getGallerySortFieldOptions(showSplatPsnrSort);
+  const sortFieldOptions = getGallerySortFieldOptions(showSplatMetricSort);
 
   return (
     <div
@@ -89,7 +89,7 @@ export function ImageGalleryToolbar({
           aria-label="Sort field"
           value={sortField}
           onChange={(e) => {
-            const nextSortField = getGallerySortFieldValue(e.target.value, showSplatPsnrSort);
+            const nextSortField = getGallerySortFieldValue(e.target.value, showSplatMetricSort);
             if (nextSortField !== null) {
               onSortFieldChange(nextSortField);
             }

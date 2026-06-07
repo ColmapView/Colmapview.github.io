@@ -65,12 +65,13 @@ export class CompositeOutputModule {
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
         // Create 1x1 fallback background texture (opaque black)
+        this.fallbackBackgroundBytes = new Uint8Array([0, 0, 0, 255]);
         this.fallbackBackgroundTexture = device.createTexture({
             size: [1, 1, 1],
             format: 'rgba8unorm',
             usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
         });
-        device.queue.writeTexture({ texture: this.fallbackBackgroundTexture }, new Uint8Array([0, 0, 0, 255]), { bytesPerRow: 4 }, [1, 1, 1]);
+        device.queue.writeTexture({ texture: this.fallbackBackgroundTexture }, this.fallbackBackgroundBytes, { bytesPerRow: 4 }, [1, 1, 1]);
         // Create 1x1 fallback depth texture (depth = 1.0)
         this.fallbackDepthTexture = device.createTexture({
             size: [1, 1, 1],
@@ -117,6 +118,7 @@ export class CompositeOutputModule {
         data[9] = u.farPlane ?? 100.0;
         // _pad1, _pad2
         this.device.queue.writeBuffer(this.uniformBuffer, 0, data);
+        this.updateFallbackBackgroundTexture(bg);
     }
     execute(encoder, target) {
         if (!this.configured || !this.pipeline || !this.bindGroup)
@@ -178,4 +180,24 @@ export class CompositeOutputModule {
             ],
         });
     }
+    updateFallbackBackgroundTexture(backgroundColor) {
+        const next = new Uint8Array([
+            floatToUnorm8(backgroundColor[0]),
+            floatToUnorm8(backgroundColor[1]),
+            floatToUnorm8(backgroundColor[2]),
+            floatToUnorm8(backgroundColor[3]),
+        ]);
+        if (this.fallbackBackgroundBytes[0] === next[0]
+            && this.fallbackBackgroundBytes[1] === next[1]
+            && this.fallbackBackgroundBytes[2] === next[2]
+            && this.fallbackBackgroundBytes[3] === next[3]) {
+            return;
+        }
+        this.fallbackBackgroundBytes = next;
+        this.device.queue.writeTexture({ texture: this.fallbackBackgroundTexture }, next, { bytesPerRow: 4 }, [1, 1, 1]);
+    }
+}
+function floatToUnorm8(value) {
+    const safeValue = Number.isFinite(value) ? value : 0;
+    return Math.round(Math.max(0, Math.min(1, safeValue)) * 255);
 }

@@ -27,30 +27,9 @@ export const SPLAT_PSNR_ORANGE = '#fb923c';
 export const SPLAT_PSNR_YELLOW = '#facc15';
 export const SPLAT_PSNR_GREEN = '#22c55e';
 
-export interface SplatPsnrPixelDiagnostics {
-  renderedMeanRgb: [number, number, number];
-  groundTruthMeanRgb: [number, number, number];
-  renderedCoverage: number;
-  coveredPsnr: number;
-  coveredPixelCount: number;
-  affineColorPsnr: number;
-  affineColor: {
-    gain: [number, number, number];
-    bias: [number, number, number];
-  };
-  croppedPsnr: number;
-  bestOffset: {
-    dx: number;
-    dy: number;
-    psnr: number;
-    validPixelCount: number;
-  };
-  bestSubpixelOffset: {
-    dx: number;
-    dy: number;
-    psnr: number;
-    validPixelCount: number;
-  };
+export interface SplatMetricColorScale {
+  min: number;
+  max: number;
 }
 
 interface SampledColor {
@@ -62,12 +41,6 @@ interface SampledColor {
 
 const keepColor = new THREE.Color();
 const WEBGPU_PSNR_WORKGROUP_SIZE = 64;
-const PSNR_DIAGNOSTIC_COVERAGE_THRESHOLD = 8;
-const PSNR_DIAGNOSTIC_OFFSET_RADIUS = 8;
-const PSNR_DIAGNOSTIC_OFFSET_STRIDE = 2;
-const PSNR_DIAGNOSTIC_SUBPIXEL_RADIUS = 1;
-const PSNR_DIAGNOSTIC_SUBPIXEL_STEP = 0.25;
-const PSNR_DIAGNOSTIC_CROP_FRACTION = 0.05;
 const GPU_BUFFER_USAGE_MAP_READ = 0x0001;
 const GPU_BUFFER_USAGE_COPY_SRC = 0x0004;
 const GPU_BUFFER_USAGE_COPY_DST = 0x0008;
@@ -95,6 +68,20 @@ export function formatSplatPsnrMetric(psnr: number | null | undefined): string {
   return value === '--' ? 'PSNR --' : `${value} dB PSNR`;
 }
 
+export function hasSplatSsimValue(ssim: number | null | undefined): ssim is number {
+  return ssim !== undefined && ssim !== null && Number.isFinite(ssim);
+}
+
+export function formatSplatSsimValue(ssim: number | null | undefined): string {
+  if (!hasSplatSsimValue(ssim)) return '--';
+  return ssim.toFixed(3);
+}
+
+export function formatSplatSsimMetric(ssim: number | null | undefined): string {
+  const value = formatSplatSsimValue(ssim);
+  return value === '--' ? 'SSIM --' : `${value} SSIM`;
+}
+
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * Math.max(0, Math.min(1, t));
 }
@@ -110,6 +97,53 @@ function interpolateHexColor(from: string, to: string, t: number): string {
   return `#${keepColor.getHexString()}`;
 }
 
+export function computeSplatMetricColorScale(
+  values: Iterable<number | null | undefined>
+): SplatMetricColorScale | null {
+  let min = Infinity;
+  let max = -Infinity;
+
+  for (const value of values) {
+    if (value === undefined || value === null || !Number.isFinite(value)) {
+      continue;
+    }
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+  }
+
+  return min <= max ? { min, max } : null;
+}
+
+export function getSplatMetricScaleColor(
+  value: number | null | undefined,
+  scale: SplatMetricColorScale | null | undefined
+): string {
+  if (value === undefined || value === null || Number.isNaN(value)) {
+    return SPLAT_PSNR_UNAVAILABLE_COLOR;
+  }
+  if (value === Infinity) {
+    return SPLAT_PSNR_GREEN;
+  }
+  if (!Number.isFinite(value)) {
+    return SPLAT_PSNR_UNAVAILABLE_COLOR;
+  }
+  if (!scale || !Number.isFinite(scale.min) || !Number.isFinite(scale.max)) {
+    return SPLAT_PSNR_UNAVAILABLE_COLOR;
+  }
+  if (scale.max <= scale.min) {
+    return SPLAT_PSNR_GREEN;
+  }
+
+  const t = Math.max(0, Math.min(1, (value - scale.min) / (scale.max - scale.min)));
+  if (t <= 1 / 3) {
+    return interpolateHexColor(SPLAT_PSNR_RED, SPLAT_PSNR_ORANGE, t * 3);
+  }
+  if (t <= 2 / 3) {
+    return interpolateHexColor(SPLAT_PSNR_ORANGE, SPLAT_PSNR_YELLOW, (t - 1 / 3) * 3);
+  }
+  return interpolateHexColor(SPLAT_PSNR_YELLOW, SPLAT_PSNR_GREEN, (t - 2 / 3) * 3);
+}
+
 export function getSplatPsnrColor(psnr: number | null | undefined): string {
   if (psnr === undefined || psnr === null || Number.isNaN(psnr)) {
     return SPLAT_PSNR_UNAVAILABLE_COLOR;
@@ -118,6 +152,17 @@ export function getSplatPsnrColor(psnr: number | null | undefined): string {
   if (psnr >= 25) return interpolateHexColor(SPLAT_PSNR_YELLOW, SPLAT_PSNR_GREEN, (psnr - 25) / 5);
   if (psnr >= 20) return interpolateHexColor(SPLAT_PSNR_ORANGE, SPLAT_PSNR_YELLOW, (psnr - 20) / 5);
   if (psnr >= 10) return interpolateHexColor(SPLAT_PSNR_RED, SPLAT_PSNR_ORANGE, (psnr - 10) / 10);
+  return SPLAT_PSNR_RED;
+}
+
+export function getSplatSsimColor(ssim: number | null | undefined): string {
+  if (!hasSplatSsimValue(ssim)) {
+    return SPLAT_PSNR_UNAVAILABLE_COLOR;
+  }
+  if (ssim >= 0.95) return SPLAT_PSNR_GREEN;
+  if (ssim >= 0.9) return interpolateHexColor(SPLAT_PSNR_YELLOW, SPLAT_PSNR_GREEN, (ssim - 0.9) / 0.05);
+  if (ssim >= 0.75) return interpolateHexColor(SPLAT_PSNR_ORANGE, SPLAT_PSNR_YELLOW, (ssim - 0.75) / 0.15);
+  if (ssim >= 0.5) return interpolateHexColor(SPLAT_PSNR_RED, SPLAT_PSNR_ORANGE, (ssim - 0.5) / 0.25);
   return SPLAT_PSNR_RED;
 }
 
@@ -145,385 +190,6 @@ export function computePsnrFromRgba(
   }
 
   return computePsnrFromSquaredError(squaredError, validPixelCount);
-}
-
-function isRenderedCovered(
-  renderedPixels: Uint8Array | Uint8ClampedArray,
-  offset: number
-): boolean {
-  return Math.max(
-    renderedPixels[offset],
-    renderedPixels[offset + 1],
-    renderedPixels[offset + 2]
-  ) >= PSNR_DIAGNOSTIC_COVERAGE_THRESHOLD;
-}
-
-function computeOffsetPsnr(
-  renderedPixels: Uint8Array | Uint8ClampedArray,
-  groundTruthPixels: Uint8Array | Uint8ClampedArray,
-  width: number,
-  height: number,
-  dx: number,
-  dy: number,
-  stride: number
-): PsnrResult {
-  let squaredError = 0;
-  let validPixelCount = 0;
-
-  for (let y = 0; y < height; y += stride) {
-    const renderedY = y + dy;
-    if (renderedY < 0 || renderedY >= height) continue;
-
-    for (let x = 0; x < width; x += stride) {
-      const renderedX = x + dx;
-      if (renderedX < 0 || renderedX >= width) continue;
-
-      const groundTruthOffset = (y * width + x) * 4;
-      if (groundTruthPixels[groundTruthOffset + 3] === 0) continue;
-
-      const renderedOffset = (renderedY * width + renderedX) * 4;
-      const dr = renderedPixels[renderedOffset] - groundTruthPixels[groundTruthOffset];
-      const dg = renderedPixels[renderedOffset + 1] - groundTruthPixels[groundTruthOffset + 1];
-      const db = renderedPixels[renderedOffset + 2] - groundTruthPixels[groundTruthOffset + 2];
-      squaredError += dr * dr + dg * dg + db * db;
-      validPixelCount++;
-    }
-  }
-
-  if (validPixelCount === 0) {
-    return { psnr: NaN, mse: NaN, validPixelCount: 0 };
-  }
-
-  return computePsnrFromSquaredError(squaredError, validPixelCount);
-}
-
-function sampleRenderedRgbBilinear(
-  renderedPixels: Uint8Array | Uint8ClampedArray,
-  width: number,
-  height: number,
-  x: number,
-  y: number
-): [number, number, number] | null {
-  if (x < 0 || y < 0 || x > width - 1 || y > height - 1) {
-    return null;
-  }
-
-  const x0 = Math.floor(x);
-  const y0 = Math.floor(y);
-  const x1 = Math.min(width - 1, x0 + 1);
-  const y1 = Math.min(height - 1, y0 + 1);
-  const tx = x - x0;
-  const ty = y - y0;
-
-  const i00 = (y0 * width + x0) * 4;
-  const i10 = (y0 * width + x1) * 4;
-  const i01 = (y1 * width + x0) * 4;
-  const i11 = (y1 * width + x1) * 4;
-
-  const wx00 = (1 - tx) * (1 - ty);
-  const wx10 = tx * (1 - ty);
-  const wx01 = (1 - tx) * ty;
-  const wx11 = tx * ty;
-
-  return [
-    renderedPixels[i00] * wx00 + renderedPixels[i10] * wx10 + renderedPixels[i01] * wx01 + renderedPixels[i11] * wx11,
-    renderedPixels[i00 + 1] * wx00 + renderedPixels[i10 + 1] * wx10 + renderedPixels[i01 + 1] * wx01 + renderedPixels[i11 + 1] * wx11,
-    renderedPixels[i00 + 2] * wx00 + renderedPixels[i10 + 2] * wx10 + renderedPixels[i01 + 2] * wx01 + renderedPixels[i11 + 2] * wx11,
-  ];
-}
-
-function computeSubpixelOffsetPsnr(
-  renderedPixels: Uint8Array | Uint8ClampedArray,
-  groundTruthPixels: Uint8Array | Uint8ClampedArray,
-  width: number,
-  height: number,
-  dx: number,
-  dy: number,
-  stride: number
-): PsnrResult {
-  let squaredError = 0;
-  let validPixelCount = 0;
-
-  for (let y = 0; y < height; y += stride) {
-    for (let x = 0; x < width; x += stride) {
-      const groundTruthOffset = (y * width + x) * 4;
-      if (groundTruthPixels[groundTruthOffset + 3] === 0) continue;
-
-      const renderedSample = sampleRenderedRgbBilinear(
-        renderedPixels,
-        width,
-        height,
-        x + dx,
-        y + dy
-      );
-      if (!renderedSample) continue;
-
-      const dr = renderedSample[0] - groundTruthPixels[groundTruthOffset];
-      const dg = renderedSample[1] - groundTruthPixels[groundTruthOffset + 1];
-      const db = renderedSample[2] - groundTruthPixels[groundTruthOffset + 2];
-      squaredError += dr * dr + dg * dg + db * db;
-      validPixelCount++;
-    }
-  }
-
-  if (validPixelCount === 0) {
-    return { psnr: NaN, mse: NaN, validPixelCount: 0 };
-  }
-
-  return computePsnrFromSquaredError(squaredError, validPixelCount);
-}
-
-function computeCroppedPsnr(
-  renderedPixels: Uint8Array | Uint8ClampedArray,
-  groundTruthPixels: Uint8Array | Uint8ClampedArray,
-  width: number,
-  height: number,
-  cropFraction: number
-): PsnrResult {
-  const cropX = Math.floor(width * cropFraction);
-  const cropY = Math.floor(height * cropFraction);
-  let squaredError = 0;
-  let validPixelCount = 0;
-
-  for (let y = cropY; y < height - cropY; y++) {
-    for (let x = cropX; x < width - cropX; x++) {
-      const offset = (y * width + x) * 4;
-      if (groundTruthPixels[offset + 3] === 0) continue;
-
-      const dr = renderedPixels[offset] - groundTruthPixels[offset];
-      const dg = renderedPixels[offset + 1] - groundTruthPixels[offset + 1];
-      const db = renderedPixels[offset + 2] - groundTruthPixels[offset + 2];
-      squaredError += dr * dr + dg * dg + db * db;
-      validPixelCount++;
-    }
-  }
-
-  if (validPixelCount === 0) {
-    return { psnr: NaN, mse: NaN, validPixelCount: 0 };
-  }
-
-  return computePsnrFromSquaredError(squaredError, validPixelCount);
-}
-
-function computeAffineColorDiagnostics(
-  renderedPixels: Uint8Array | Uint8ClampedArray,
-  groundTruthPixels: Uint8Array | Uint8ClampedArray
-): Pick<SplatPsnrPixelDiagnostics, 'affineColor' | 'affineColorPsnr'> {
-  const pixelCount = Math.min(renderedPixels.length, groundTruthPixels.length) / 4;
-  const sumX: [number, number, number] = [0, 0, 0];
-  const sumY: [number, number, number] = [0, 0, 0];
-  const sumXX: [number, number, number] = [0, 0, 0];
-  const sumXY: [number, number, number] = [0, 0, 0];
-  let validPixelCount = 0;
-
-  for (let pixel = 0; pixel < pixelCount; pixel++) {
-    const offset = pixel * 4;
-    if (groundTruthPixels[offset + 3] === 0) continue;
-
-    validPixelCount++;
-    for (let channel = 0; channel < 3; channel++) {
-      const rendered = renderedPixels[offset + channel];
-      const groundTruth = groundTruthPixels[offset + channel];
-      sumX[channel] += rendered;
-      sumY[channel] += groundTruth;
-      sumXX[channel] += rendered * rendered;
-      sumXY[channel] += rendered * groundTruth;
-    }
-  }
-
-  if (validPixelCount === 0) {
-    return {
-      affineColor: { gain: [1, 1, 1], bias: [0, 0, 0] },
-      affineColorPsnr: NaN,
-    };
-  }
-
-  const gain: [number, number, number] = [1, 1, 1];
-  const bias: [number, number, number] = [0, 0, 0];
-  for (let channel = 0; channel < 3; channel++) {
-    const denominator = validPixelCount * sumXX[channel] - sumX[channel] * sumX[channel];
-    if (Math.abs(denominator) > 1e-6) {
-      gain[channel] = (validPixelCount * sumXY[channel] - sumX[channel] * sumY[channel]) / denominator;
-      bias[channel] = (sumY[channel] - gain[channel] * sumX[channel]) / validPixelCount;
-    } else {
-      gain[channel] = 1;
-      bias[channel] = (sumY[channel] - sumX[channel]) / validPixelCount;
-    }
-  }
-
-  let squaredError = 0;
-  for (let pixel = 0; pixel < pixelCount; pixel++) {
-    const offset = pixel * 4;
-    if (groundTruthPixels[offset + 3] === 0) continue;
-
-    for (let channel = 0; channel < 3; channel++) {
-      const predicted = Math.max(0, Math.min(255, renderedPixels[offset + channel] * gain[channel] + bias[channel]));
-      const delta = predicted - groundTruthPixels[offset + channel];
-      squaredError += delta * delta;
-    }
-  }
-
-  return {
-    affineColor: { gain, bias },
-    affineColorPsnr: computePsnrFromSquaredError(squaredError, validPixelCount).psnr,
-  };
-}
-
-export function analyzeSplatPsnrPixels(
-  renderedPixels: Uint8Array | Uint8ClampedArray,
-  groundTruthPixels: Uint8Array | Uint8ClampedArray,
-  width: number,
-  height: number
-): SplatPsnrPixelDiagnostics {
-  const pixelCount = Math.min(
-    Math.floor(renderedPixels.length / 4),
-    Math.floor(groundTruthPixels.length / 4),
-    width * height
-  );
-  let renderedR = 0;
-  let renderedG = 0;
-  let renderedB = 0;
-  let groundTruthR = 0;
-  let groundTruthG = 0;
-  let groundTruthB = 0;
-  let coveredSquaredError = 0;
-  let coveredPixelCount = 0;
-  let coveredRenderedPixels = 0;
-  let validPixelCount = 0;
-
-  for (let pixel = 0; pixel < pixelCount; pixel++) {
-    const offset = pixel * 4;
-    if (groundTruthPixels[offset + 3] === 0) continue;
-
-    renderedR += renderedPixels[offset];
-    renderedG += renderedPixels[offset + 1];
-    renderedB += renderedPixels[offset + 2];
-    groundTruthR += groundTruthPixels[offset];
-    groundTruthG += groundTruthPixels[offset + 1];
-    groundTruthB += groundTruthPixels[offset + 2];
-    validPixelCount++;
-
-    if (!isRenderedCovered(renderedPixels, offset)) {
-      continue;
-    }
-
-    coveredRenderedPixels++;
-    const dr = renderedPixels[offset] - groundTruthPixels[offset];
-    const dg = renderedPixels[offset + 1] - groundTruthPixels[offset + 1];
-    const db = renderedPixels[offset + 2] - groundTruthPixels[offset + 2];
-    coveredSquaredError += dr * dr + dg * dg + db * db;
-    coveredPixelCount++;
-  }
-
-  let bestOffset = {
-    dx: 0,
-    dy: 0,
-    ...computeOffsetPsnr(
-      renderedPixels,
-      groundTruthPixels,
-      width,
-      height,
-      0,
-      0,
-      PSNR_DIAGNOSTIC_OFFSET_STRIDE
-    ),
-  };
-
-  for (let dy = -PSNR_DIAGNOSTIC_OFFSET_RADIUS; dy <= PSNR_DIAGNOSTIC_OFFSET_RADIUS; dy++) {
-    for (let dx = -PSNR_DIAGNOSTIC_OFFSET_RADIUS; dx <= PSNR_DIAGNOSTIC_OFFSET_RADIUS; dx++) {
-      if (dx === 0 && dy === 0) continue;
-      const candidate = computeOffsetPsnr(
-        renderedPixels,
-        groundTruthPixels,
-        width,
-        height,
-        dx,
-        dy,
-        PSNR_DIAGNOSTIC_OFFSET_STRIDE
-      );
-      if (candidate.validPixelCount > 0 && candidate.psnr > bestOffset.psnr) {
-        bestOffset = { dx, dy, ...candidate };
-      }
-    }
-  }
-
-  let bestSubpixelOffset = {
-    dx: 0,
-    dy: 0,
-    ...computeSubpixelOffsetPsnr(
-      renderedPixels,
-      groundTruthPixels,
-      width,
-      height,
-      0,
-      0,
-      PSNR_DIAGNOSTIC_OFFSET_STRIDE
-    ),
-  };
-
-  for (let dyStep = -PSNR_DIAGNOSTIC_SUBPIXEL_RADIUS / PSNR_DIAGNOSTIC_SUBPIXEL_STEP; dyStep <= PSNR_DIAGNOSTIC_SUBPIXEL_RADIUS / PSNR_DIAGNOSTIC_SUBPIXEL_STEP; dyStep++) {
-    const dy = dyStep * PSNR_DIAGNOSTIC_SUBPIXEL_STEP;
-    for (let dxStep = -PSNR_DIAGNOSTIC_SUBPIXEL_RADIUS / PSNR_DIAGNOSTIC_SUBPIXEL_STEP; dxStep <= PSNR_DIAGNOSTIC_SUBPIXEL_RADIUS / PSNR_DIAGNOSTIC_SUBPIXEL_STEP; dxStep++) {
-      const dx = dxStep * PSNR_DIAGNOSTIC_SUBPIXEL_STEP;
-      if (dx === 0 && dy === 0) continue;
-      const candidate = computeSubpixelOffsetPsnr(
-        renderedPixels,
-        groundTruthPixels,
-        width,
-        height,
-        dx,
-        dy,
-        PSNR_DIAGNOSTIC_OFFSET_STRIDE
-      );
-      if (candidate.validPixelCount > 0 && candidate.psnr > bestSubpixelOffset.psnr) {
-        bestSubpixelOffset = { dx, dy, ...candidate };
-      }
-    }
-  }
-
-  const safeCount = Math.max(1, validPixelCount);
-  const coveredResult = coveredPixelCount > 0
-    ? computePsnrFromSquaredError(coveredSquaredError, coveredPixelCount)
-    : { psnr: NaN, mse: NaN, validPixelCount: 0 };
-  const affineColorDiagnostics = computeAffineColorDiagnostics(renderedPixels, groundTruthPixels);
-  const croppedResult = computeCroppedPsnr(
-    renderedPixels,
-    groundTruthPixels,
-    width,
-    height,
-    PSNR_DIAGNOSTIC_CROP_FRACTION
-  );
-
-  return {
-    renderedMeanRgb: [
-      renderedR / safeCount,
-      renderedG / safeCount,
-      renderedB / safeCount,
-    ],
-    groundTruthMeanRgb: [
-      groundTruthR / safeCount,
-      groundTruthG / safeCount,
-      groundTruthB / safeCount,
-    ],
-    renderedCoverage: validPixelCount > 0 ? coveredRenderedPixels / validPixelCount : 0,
-    coveredPsnr: coveredResult.psnr,
-    coveredPixelCount: coveredResult.validPixelCount,
-    affineColorPsnr: affineColorDiagnostics.affineColorPsnr,
-    affineColor: affineColorDiagnostics.affineColor,
-    croppedPsnr: croppedResult.psnr,
-    bestOffset: {
-      dx: bestOffset.dx,
-      dy: bestOffset.dy,
-      psnr: bestOffset.psnr,
-      validPixelCount: bestOffset.validPixelCount,
-    },
-    bestSubpixelOffset: {
-      dx: bestSubpixelOffset.dx,
-      dy: bestSubpixelOffset.dy,
-      psnr: bestSubpixelOffset.psnr,
-      validPixelCount: bestSubpixelOffset.validPixelCount,
-    },
-  };
 }
 
 function computePsnrFromSquaredError(squaredError: number, validPixelCount: number): PsnrResult {

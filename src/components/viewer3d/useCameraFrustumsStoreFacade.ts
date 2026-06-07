@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useDataset, type DatasetManager } from '../../dataset';
 import {
   useCamerasNode,
@@ -14,15 +15,19 @@ import {
   type SelectionNodeActions,
 } from '../../nodes';
 import {
-  useImageMetricsStore,
   useDeletionStore,
+  useImageMetricsStore,
   useReconstructionStore,
   useUIStore,
   type DeletionState,
+  type ImageMetricsState,
   type UIState,
 } from '../../store';
 import { useIsAlignmentMode } from '../../hooks/useAlignmentMode';
 import type { Reconstruction } from '../../types/colmap';
+import type { FrustumPsnrMetricSource } from './cameraFrustumViewModel';
+
+const EMPTY_SPLAT_PSNR_BY_IMAGE: FrustumPsnrMetricSource = new Map();
 
 interface CameraFrustumsDataFacade {
   reconstruction: Reconstruction | null;
@@ -34,7 +39,7 @@ interface CameraFrustumsDataFacade {
   isAlignmentMode: boolean;
   touchMode: UIState['touchMode'];
   pendingDeletions: DeletionState['pendingDeletions'];
-  splatPsnrByImage: ReturnType<typeof useImageMetricsStore.getState>['splatPsnrMetrics'];
+  splatPsnrByImage: FrustumPsnrMetricSource;
 }
 
 interface CameraFrustumsActionsFacade {
@@ -54,6 +59,12 @@ export function useCameraFrustumsStoreFacade(): CameraFrustumsStoreFacade {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const dataset = useDataset();
   const cameras = useCamerasNode();
+  const splatPsnrByImage = useImageMetricsStore(useCallback(
+    (state: ImageMetricsState) => cameras.colorMode === 'splatPsnr' || cameras.colorMode === 'splatSsim'
+      ? state.splatPsnrMetrics
+      : EMPTY_SPLAT_PSNR_BY_IMAGE,
+    [cameras.colorMode]
+  ));
   const selection = useSelectionNode();
   const matches = useMatchesNode();
   const nav = useNavigationNode();
@@ -65,7 +76,6 @@ export function useCameraFrustumsStoreFacade(): CameraFrustumsStoreFacade {
   const setShowMatchesInModal = useUIStore((s) => s.setShowMatchesInModal);
   const touchMode = useUIStore((s) => s.touchMode);
   const pendingDeletions = useDeletionStore((s) => s.pendingDeletions);
-  const splatPsnrByImage = useImageMetricsStore((s) => s.splatPsnrMetrics);
 
   return {
     data: {

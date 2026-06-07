@@ -19,7 +19,7 @@ export { useNotificationStore, type NotificationState, type NotificationType, ty
 export { useGuideStore, type GuideState } from './stores/guideStore';
 export { useFloorPlaneStore, type FloorPlaneState, type FloorColorMode, type FloorTargetAxis } from './stores/floorPlaneStore';
 export { useDeletionStore, type DeletionState } from './stores/deletionStore';
-export { useImageMetricsStore, type ImageMetricsState, type SplatPsnrComputeRequest, type SplatPsnrComputeScope, type SplatPsnrMetric, type SplatPsnrMetricDiagnostics } from './stores/imageMetricsStore';
+export { useImageMetricsStore, type ImageMetricsState, type SplatPsnrComputeRequest, type SplatPsnrComputeScope, type SplatPsnrMetric } from './stores/imageMetricsStore';
 export { useSplatBackendStore, type SplatBackendState } from './stores/splatBackendStore';
 
 // Types and constants

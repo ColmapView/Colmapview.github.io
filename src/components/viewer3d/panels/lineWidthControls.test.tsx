@@ -55,10 +55,6 @@ describe('viewer line width controls', () => {
         autoFovEnabled={true}
         setAutoFovEnabled={vi.fn()}
         splatPsnrFrameReady={false}
-        splatPsnrComputing={false}
-        splatPsnrReadyCount={0}
-        splatPsnrTotalCount={0}
-        splatPsnrUnavailableReason={null}
         onCycleCameraDisplayMode={vi.fn()}
       />
     );

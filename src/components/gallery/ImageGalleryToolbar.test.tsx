@@ -13,7 +13,7 @@ function renderToolbar(overrides = {}) {
     cameras,
     sortDirection: 'asc' as const,
     sortField: 'name' as const,
-    showSplatPsnrSort: false,
+    showSplatMetricSort: false,
     touchMode: false,
     viewMode: 'gallery' as const,
     onCameraFilterChange: vi.fn(),
@@ -74,16 +74,21 @@ describe('ImageGalleryToolbar', () => {
     expect(screen.getByRole('button', { name: 'Toggle sort direction' })).toHaveAttribute('data-tooltip', 'Descending');
   });
 
-  it('exposes PSNR sorting only after PSNR metrics are available', () => {
-    const props = renderToolbar({ showSplatPsnrSort: true });
+  it('exposes PSNR and SSIM sorting only after splat metrics are available', () => {
+    const props = renderToolbar({ showSplatMetricSort: true });
 
     expect(screen.getByRole('option', { name: 'Sort: PSNR' })).toBeVisible();
+    expect(screen.getByRole('option', { name: 'Sort: SSIM' })).toBeVisible();
 
     fireEvent.change(screen.getByLabelText('Sort field'), {
       target: { value: 'splatPsnr' },
     });
+    fireEvent.change(screen.getByLabelText('Sort field'), {
+      target: { value: 'splatSsim' },
+    });
 
     expect(props.onSortFieldChange).toHaveBeenCalledWith('splatPsnr');
+    expect(props.onSortFieldChange).toHaveBeenCalledWith('splatSsim');
   });
 
   it('renders desktop view mode controls and hides them in touch mode', () => {

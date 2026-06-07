@@ -2,6 +2,7 @@
  * Hook for computing point cloud positions and colors.
  * Handles both WASM fast path and Map fallback path.
  */
+// @refresh reset
 
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
@@ -23,6 +24,7 @@ import { computeSlowPathMap } from './pointCloudMapData';
 import { computeSlowPathWasm } from './pointCloudWasmData';
 
 export interface UsePointCloudDataParams {
+  enabled: boolean;
   reconstruction: Reconstruction | null;
   wasmReconstruction: WasmReconstructionWrapper | null;
   colorMode: ColorMode;
@@ -73,6 +75,7 @@ function createSequentialPoint3DIdLookup(count: number): Point3DIdLookup {
  */
 export function usePointCloudData(params: UsePointCloudDataParams): UsePointCloudDataResult {
   const {
+    enabled,
     reconstruction,
     wasmReconstruction,
     colorMode,
@@ -98,7 +101,7 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
   }, [selectionColor]);
 
   const pointCloudData = useMemo((): PointCloudDataResult => {
-    if (!reconstruction) {
+    if (!enabled || !reconstruction) {
       return {
         positions: null,
         colors: null,
@@ -149,6 +152,7 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
 
     return result;
   }, [
+    enabled,
     reconstruction,
     wasmReconstruction,
     colorMode,

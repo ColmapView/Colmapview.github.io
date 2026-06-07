@@ -12,8 +12,10 @@ import {
 
 let restoreCanvasToBlob: (() => void) | null = null;
 let restoreObjectUrls: (() => void) | null = null;
+let restoreCanvasContext: (() => void) | null = null;
 
 beforeEach(() => {
+  restoreCanvasContext = installCanvasContext();
   restoreCanvasToBlob = installCanvasToBlob();
   restoreObjectUrls = installObjectUrls();
   vi.stubGlobal('fetch', vi.fn(async () => ({
@@ -27,8 +29,10 @@ afterEach(() => {
   clearSelectedImageTexture();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  restoreCanvasContext?.();
   restoreCanvasToBlob?.();
   restoreObjectUrls?.();
+  restoreCanvasContext = null;
   restoreCanvasToBlob = null;
   restoreObjectUrls = null;
 });
@@ -209,12 +213,26 @@ function installCanvasToBlob(): () => void {
   Object.defineProperty(HTMLCanvasElement.prototype, 'toBlob', {
     configurable: true,
     value: (callback: BlobCallback) => {
-      callback(new Blob(['jpeg'], { type: 'image/jpeg' }));
+      callback(new Blob(['png'], { type: 'image/png' }));
     },
   });
 
   return () => {
     restoreProperty(HTMLCanvasElement.prototype, 'toBlob', originalToBlob);
+  };
+}
+
+function installCanvasContext(): () => void {
+  const originalGetContext = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'getContext');
+  Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+    configurable: true,
+    value: vi.fn(() => ({
+      drawImage: vi.fn(),
+    })),
+  });
+
+  return () => {
+    restoreProperty(HTMLCanvasElement.prototype, 'getContext', originalGetContext);
   };
 }
 

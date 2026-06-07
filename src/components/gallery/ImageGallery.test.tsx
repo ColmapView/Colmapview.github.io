@@ -102,7 +102,7 @@ function createImageGalleryViewModel(overrides: Record<string, unknown> = {}) {
     setSortField: vi.fn(),
     setViewMode: vi.fn(),
     showMatches: false,
-    showSplatPsnr: false,
+    showSplatMetrics: false,
     sortDirection: 'asc',
     sortField: 'name',
     touchMode: false,

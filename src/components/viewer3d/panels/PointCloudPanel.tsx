@@ -105,12 +105,12 @@ export function PointCloudPanel({
       tooltip={buttonState.tooltip}
       isActive={buttonState.isActive}
       onClick={onCycleColorMode}
-      panelTitle="Point Cloud (P)"
+      panelTitle="Point Cloud and Splat (P)"
     >
       <div className={styles.panelContent}>
         <ToggleRow label="Show Points" checked={showPointCloud} onChange={togglePointCloud} />
         <SelectRow
-          label="Color"
+          label="Mode"
           value={colorMode}
           onChange={setColorMode}
           options={POINT_COLOR_MODE_OPTIONS}

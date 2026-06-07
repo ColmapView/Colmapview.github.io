@@ -269,7 +269,7 @@ describe('visible WebGPU splat renderer adapter', () => {
     await flushPromises();
 
     expect(harness.initializeDevice).toHaveBeenCalledWith(harness.canvas, expect.objectContaining({
-      alphaMode: 'premultiplied',
+      alphaMode: 'opaque',
       requiredLimits: {
         maxBufferSize: 128,
         maxStorageBufferBindingSize: 128,
@@ -288,7 +288,7 @@ describe('visible WebGPU splat renderer adapter', () => {
       width: 200,
       height: 100,
       backgroundColor: [0, 0, 0, 1],
-      outputAlgorithm: 'xr-passthrough',
+      outputAlgorithm: 'composite',
       sortAlgorithm: 'radix-16bit',
     }));
     expect(harness.session.setCamera).toHaveBeenCalledTimes(1);

@@ -225,7 +225,6 @@ export function CameraFrustums() {
       touchMode={touchMode}
       undistortionEnabled={undistortionEnabled}
       undistortionMode={undistortionMode}
-      splatPsnrByImage={splatPsnrByImage}
     />
   );
 
@@ -288,7 +287,6 @@ export function CameraFrustums() {
           onContextMenu={handleArrowContextMenu}
           onLongPress={openImageDetail}
           lastNavigationToImageId={lastNavigationToImageId}
-          splatPsnrByImage={splatPsnrByImage}
           touchMode={touchMode}
         />
         {/* Per-frustum planes for texture rendering (non-selected only, interaction handled by BatchedPlaneHitTargets) */}
@@ -365,7 +363,6 @@ export function CameraFrustums() {
         onContextMenu={handleArrowContextMenu}
         onLongPress={openImageDetail}
         lastNavigationToImageId={lastNavigationToImageId}
-        splatPsnrByImage={splatPsnrByImage}
         touchMode={touchMode}
       />
       {/* Selected camera image plane (source of truth) */}

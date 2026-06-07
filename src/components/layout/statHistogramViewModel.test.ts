@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Point3D } from '../../types/colmap';
 import {
   ERROR_BINS,
+  PSNR_HISTOGRAM_BIN_COUNT,
   STAT_HISTOGRAM_CHART_HEIGHT,
   STAT_HISTOGRAM_CHART_WIDTH,
   STAT_HISTOGRAM_LABEL_HEIGHT,
@@ -9,8 +10,15 @@ import {
   STAT_HISTOGRAM_TOP_PADDING,
   TRACK_LENGTH_BINS,
   computeHistogramFromMap,
+  computeHistogramFromPsnrMetrics,
+  computeHistogramFromSsimMetrics,
   computeHistogramFromWasm,
+  computeMeanPsnrFromMetrics,
+  computeMeanSsimFromMetrics,
   countsToHistogramBins,
+  formatMeanPsnrValue,
+  formatMeanSsimValue,
+  formatPsnrHistogramCountLabel,
   getStatHistogramBarLayout,
   getStatHistogramBarWidth,
   getStatHistogramHorizontalAdjustment,
@@ -25,6 +33,12 @@ describe('stat histogram view model', () => {
   it('selects histogram titles by stat type', () => {
     expect(getStatHistogramTitle('trackLength')).toBe('Track Length Distribution');
     expect(getStatHistogramTitle('error')).toBe('Reprojection Error Distribution');
+    expect(getStatHistogramTitle('psnr')).toBe('PSNR Distribution');
+    expect(getStatHistogramTitle('psnr', { sampleCount: 100, totalCount: 200 }))
+      .toBe('PSNR Distribution (100/200)');
+    expect(getStatHistogramTitle('ssim')).toBe('SSIM Distribution');
+    expect(getStatHistogramTitle('ssim', { sampleCount: 80, totalCount: 200 }))
+      .toBe('SSIM Distribution (80/200)');
   });
 
   it('uses exclusive upper bounds when assigning values to bins', () => {
@@ -90,6 +104,72 @@ describe('stat histogram view model', () => {
     expect(histogram.total).toBe(0);
     expect(histogram.mean).toBe(0);
     expect(histogram.bins.every((bin) => bin.count === 0 && bin.percentage === 0)).toBe(true);
+  });
+
+  it('computes PSNR histograms as 10 dynamic min-max bins', () => {
+    const metrics = new Map([
+      [1, { psnr: 8 }],
+      [2, { psnr: 18 }],
+      [3, { psnr: 31 }],
+      [4, { psnr: 42 }],
+      [5, { psnr: NaN }],
+      [6, { psnr: Infinity }],
+    ]);
+
+    const histogram = computeHistogramFromPsnrMetrics(metrics);
+
+    expect(histogram.total).toBe(5);
+    expect(histogram.mean).toBeCloseTo(39.8, 4);
+    expect(histogram.bins).toHaveLength(PSNR_HISTOGRAM_BIN_COUNT);
+    expect(histogram.bins.map((bin) => bin.label)).toEqual([
+      '8',
+      '17',
+      '26',
+      '36',
+      '45',
+      '54',
+      '63',
+      '72',
+      '82',
+      '91',
+    ]);
+    expect(binCount(histogram.bins, '8')).toBe(1);
+    expect(binCount(histogram.bins, '17')).toBe(1);
+    expect(binCount(histogram.bins, '26')).toBe(1);
+    expect(binCount(histogram.bins, '36')).toBe(1);
+    expect(binCount(histogram.bins, '91')).toBe(1);
+  });
+
+  it('formats mean PSNR from metric maps', () => {
+    expect(computeMeanPsnrFromMetrics(new Map([[1, { psnr: 28 }], [2, { psnr: 32 }]]))).toBe(30);
+    expect(computeMeanPsnrFromMetrics(new Map([[1, { psnr: NaN }]]))).toBeNull();
+    expect(formatMeanPsnrValue(30)).toBe('30.0 dB');
+    expect(formatMeanPsnrValue(100)).toBe('99+ dB');
+    expect(formatMeanPsnrValue(null)).toBe('--');
+    expect(formatPsnrHistogramCountLabel(12.8, 20.2)).toBe('(12/20)');
+    expect(formatPsnrHistogramCountLabel(null, 20)).toBeNull();
+  });
+
+  it('computes and formats SSIM histograms from finite metrics', () => {
+    const metrics = new Map([
+      [1, { psnr: 20, ssim: 0.8 }],
+      [2, { psnr: 21, ssim: 0.9 }],
+      [3, { psnr: 22, ssim: 1 }],
+      [4, { psnr: 23 }],
+      [5, { psnr: 24, ssim: NaN }],
+    ]);
+
+    const histogram = computeHistogramFromSsimMetrics(metrics);
+
+    expect(histogram.total).toBe(3);
+    expect(histogram.mean).toBeCloseTo(0.9);
+    expect(histogram.bins).toHaveLength(PSNR_HISTOGRAM_BIN_COUNT);
+    expect(binCount(histogram.bins, '0.80')).toBe(1);
+    expect(binCount(histogram.bins, '0.90')).toBe(1);
+    expect(binCount(histogram.bins, '0.98')).toBe(1);
+    expect(computeMeanSsimFromMetrics(metrics)).toBeCloseTo(0.9);
+    expect(formatMeanSsimValue(0.91234)).toBe('0.912');
+    expect(formatMeanSsimValue(null)).toBe('--');
   });
 
   it('computes tooltip viewport adjustment and styles', () => {

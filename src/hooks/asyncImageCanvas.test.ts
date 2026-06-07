@@ -28,11 +28,13 @@ describe('async image canvas helpers', () => {
     expect(createCanvas).toHaveBeenCalledWith(1000, 500);
     expect(canvas.width).toBe(1000);
     expect(canvas.height).toBe(500);
+    expect(context.imageSmoothingEnabled).toBe(true);
+    expect(context.imageSmoothingQuality).toBe('high');
     expect(drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 1000, 500);
     expect(bitmap.close).toHaveBeenCalledOnce();
   });
 
-  it('still closes the bitmap when no 2D context is available', () => {
+  it('returns null and closes the bitmap when no 2D context is available', () => {
     const bitmap = buildImageBitmap({ width: 100, height: 100, close: vi.fn() });
     const getContext = vi.fn(() => null);
     const createCanvas = vi.fn((width: number, height: number): ImageCacheCanvas =>
@@ -41,9 +43,27 @@ describe('async image canvas helpers', () => {
 
     const canvas = drawImageBitmapToCacheCanvas(bitmap, 1000, createCanvas);
 
-    expect(canvas.width).toBe(100);
-    expect(canvas.height).toBe(100);
+    expect(canvas).toBeNull();
     expect(getContext).toHaveBeenCalledWith('2d');
+    expect(bitmap.close).toHaveBeenCalledOnce();
+  });
+
+  it('returns null and closes the bitmap when canvas drawing fails', () => {
+    const bitmap = buildImageBitmap({ width: 100, height: 100, close: vi.fn() });
+    const context = buildCanvas2dContext({
+      drawImage: vi.fn(() => {
+        throw new Error('draw failed');
+      }),
+    });
+    const createCanvas = vi.fn((width: number, height: number): ImageCacheCanvas =>
+      buildImageCacheCanvas({
+        width,
+        height,
+        getContext: vi.fn(() => context),
+      })
+    );
+
+    expect(drawImageBitmapToCacheCanvas(bitmap, 1000, createCanvas)).toBeNull();
     expect(bitmap.close).toHaveBeenCalledOnce();
   });
 

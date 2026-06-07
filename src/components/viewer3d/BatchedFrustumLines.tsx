@@ -41,7 +41,7 @@ interface BatchedFrustumLinesProps {
   matchesOpacity: number;
   matchesDisplayMode: 'off' | 'static' | 'blink';
   matchesColor: string;
-  frustumColorMode: 'single' | 'byCamera' | 'byRigFrame' | 'splatPsnr';
+  frustumColorMode: 'single' | 'byCamera' | 'byRigFrame' | 'splatPsnr' | 'splatSsim';
   frustumSingleColor: string;
   frustumStandbyOpacity: number;
   frustumLineWidth: number;

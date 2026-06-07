@@ -1,6 +1,11 @@
 import { memo } from 'react';
 import { useThumbnail } from '../../hooks/useThumbnail';
-import { formatSplatPsnrValue, hasSplatPsnrValue } from '../viewer3d/splatPsnrMetric';
+import {
+  formatSplatPsnrValue,
+  formatSplatSsimValue,
+  hasSplatPsnrValue,
+  hasSplatSsimValue,
+} from '../viewer3d/splatPsnrMetric';
 import {
   listStyles,
   galleryStyles,
@@ -157,17 +162,20 @@ export const ListItem = memo(function ListItem({
       ? `${matchesBlink ? 'matches-blink' : ''}`
       : listStyles.itemHover;
   const hasPsnr = hasSplatPsnrValue(img.splatPsnr);
+  const hasSsim = hasSplatSsimValue(img.splatSsim);
   const compactValues = [
     `${img.numPoints3D}/${img.numPoints2D}`,
     String(img.covisibleCount),
     img.avgError.toFixed(2),
     ...(hasPsnr ? [formatSplatPsnrValue(img.splatPsnr)] : []),
+    ...(hasSsim ? [formatSplatSsimValue(img.splatSsim)] : []),
   ];
   const compactLabels = [
     'pts',
     'covis',
     'err',
     ...(hasPsnr ? ['psnr'] : []),
+    ...(hasSsim ? ['ssim'] : []),
   ];
 
   return (
@@ -219,6 +227,18 @@ export const ListItem = memo(function ListItem({
         <div className="flex-shrink-0 text-right w-16 list-stats-full">
           <div className="text-ds-primary text-sm">{formatSplatPsnrValue(img.splatPsnr)}</div>
           <div className="text-ds-muted text-xs">PSNR</div>
+          {hasSsim && (
+            <>
+              <div className="text-ds-primary text-sm mt-1">{formatSplatSsimValue(img.splatSsim)}</div>
+              <div className="text-ds-muted text-xs">SSIM</div>
+            </>
+          )}
+        </div>
+      )}
+      {!hasPsnr && hasSsim && (
+        <div className="flex-shrink-0 text-right w-16 list-stats-full">
+          <div className="text-ds-primary text-sm">{formatSplatSsimValue(img.splatSsim)}</div>
+          <div className="text-ds-muted text-xs">SSIM</div>
         </div>
       )}
       {!touchMode && hovered && mousePos && (

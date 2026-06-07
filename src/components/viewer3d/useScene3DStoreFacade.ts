@@ -32,7 +32,8 @@ interface SceneContentDataFacade {
   viewTrigger: UIState['viewTrigger'];
   transform: TransformState['transform'];
   requestedSplatBackend: SplatBackendPreference;
-  splatBackendAvailability: SplatBackendAvailability;
+  splatBackendResolution: SplatBackendResolution;
+  splatsVisible: boolean;
 }
 
 interface SceneContentActionsFacade {
@@ -79,8 +80,9 @@ export function useSceneContentStoreFacade(): SceneContentStoreFacade {
   const viewTrigger = useUIStore((s) => s.viewTrigger);
   const transform = useTransformStore((s) => s.transform);
   const requestedSplatBackend = useSplatBackendStore((s) => s.requestedBackend);
-  const splatBackendAvailability = useSplatBackendStore((s) => s.availability);
+  const splatBackendResolution = useSplatBackendStore((s) => s.resolution);
   const setSparkBackendAvailable = useSplatBackendStore((s) => s.setSparkBackendAvailable);
+  const points = usePointsNode();
 
   return {
     data: {
@@ -95,7 +97,8 @@ export function useSceneContentStoreFacade(): SceneContentStoreFacade {
       viewTrigger,
       transform,
       requestedSplatBackend,
-      splatBackendAvailability,
+      splatBackendResolution,
+      splatsVisible: points.splatsVisible,
     },
     actions: {
       setSparkBackendAvailable,

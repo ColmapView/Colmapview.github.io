@@ -5,6 +5,7 @@ import {
   getPointGeometryDataColorMode,
   getSplatPointOverlayAnimationMode,
   POINT_GEOMETRY_RENDER_ORDER,
+  shouldComputePointCloudData,
   shouldRenderPointGeometry,
   SPARK_SPLAT_RENDER_ORDER,
   SPLAT_POINT_OVERLAY_RENDER_ORDER,
@@ -96,5 +97,31 @@ describe('shouldRenderPointGeometry', () => {
       depthTest: false,
       depthWrite: false,
     });
+  });
+
+  it('skips point cloud data when neither geometry nor a selected overlay can render', () => {
+    expect(shouldComputePointCloudData({
+      showPointGeometry: false,
+      showSelectionHighlight: false,
+      selectedImageId: null,
+    })).toBe(false);
+    expect(shouldComputePointCloudData({
+      showPointGeometry: false,
+      showSelectionHighlight: true,
+      selectedImageId: null,
+    })).toBe(false);
+  });
+
+  it('computes point cloud data for visible geometry or selected overlays', () => {
+    expect(shouldComputePointCloudData({
+      showPointGeometry: true,
+      showSelectionHighlight: false,
+      selectedImageId: null,
+    })).toBe(true);
+    expect(shouldComputePointCloudData({
+      showPointGeometry: false,
+      showSelectionHighlight: true,
+      selectedImageId: 7,
+    })).toBe(true);
   });
 });

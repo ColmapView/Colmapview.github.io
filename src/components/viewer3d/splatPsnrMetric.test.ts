@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { buildCamera, buildImage } from '../../test/builders';
 import { createSim3dFromEuler } from '../../utils/sim3dTransforms';
 import {
-  analyzeSplatPsnrPixels,
+  computeSplatMetricColorScale,
   computePsnrFromRgba,
   computePsnrFromRgbaWebGpu,
   createColmapPsnrCamera,
@@ -11,8 +11,12 @@ import {
   ensureSplatPsnrWebGpuDevice,
   formatSplatPsnrMetric,
   formatSplatPsnrValue,
+  formatSplatSsimMetric,
+  formatSplatSsimValue,
+  getSplatMetricScaleColor,
   getSplatPsnrColor,
   getSplatPsnrRenderSize,
+  getSplatSsimColor,
   imageCoordinateToImageDataSampleCoordinate,
   subscribeSplatPsnrWebGpuDeviceLoss,
 } from './splatPsnrMetric';
@@ -27,6 +31,24 @@ describe('splatPsnrMetric helpers', () => {
     expect(getSplatPsnrColor(8)).toBe('#ef4444');
     expect(getSplatPsnrColor(30)).toBe('#22c55e');
     expect(getSplatPsnrColor(100)).toBe('#22c55e');
+
+    expect(formatSplatSsimValue(undefined)).toBe('--');
+    expect(formatSplatSsimMetric(0.9428)).toBe('0.943 SSIM');
+    expect(getSplatSsimColor(undefined)).toBe('#6b7280');
+    expect(getSplatSsimColor(0.4)).toBe('#ef4444');
+    expect(getSplatSsimColor(0.95)).toBe('#22c55e');
+  });
+
+  it('maps metric frustum colors across the active min-max range', () => {
+    const scale = computeSplatMetricColorScale([10, 20, 30, 40]);
+
+    expect(scale).toEqual({ min: 10, max: 40 });
+    expect(getSplatMetricScaleColor(undefined, scale)).toBe('#6b7280');
+    expect(getSplatMetricScaleColor(10, scale)).toBe('#ef4444');
+    expect(getSplatMetricScaleColor(20, scale)).toBe('#fb923c');
+    expect(getSplatMetricScaleColor(30, scale)).toBe('#facc15');
+    expect(getSplatMetricScaleColor(40, scale)).toBe('#22c55e');
+    expect(getSplatMetricScaleColor(50, scale)).toBe('#22c55e');
   });
 
   it('uses full-resolution render dimensions by default', () => {
@@ -206,25 +228,6 @@ describe('splatPsnrMetric helpers', () => {
     expect(blackVsWhite.psnr).toBeCloseTo(0);
     expect(blackVsWhite.mse).toBe(255 * 255);
     expect(blackVsWhite.validPixelCount).toBe(1);
-  });
-
-  it('diagnoses covered pixels and small rendered-image offsets', () => {
-    const rendered = new Uint8Array([
-      0, 0, 0, 255, 0, 0, 0, 255,
-      10, 20, 30, 255, 200, 210, 220, 255,
-    ]);
-    const groundTruth = new Uint8Array([
-      10, 20, 30, 255, 200, 210, 220, 255,
-      0, 0, 0, 255, 0, 0, 0, 255,
-    ]);
-
-    const diagnostics = analyzeSplatPsnrPixels(rendered, groundTruth, 2, 2);
-
-    expect(diagnostics.renderedCoverage).toBe(0.5);
-    expect(diagnostics.coveredPixelCount).toBe(2);
-    expect(diagnostics.coveredPsnr).toBeLessThan(20);
-    expect(diagnostics.bestOffset.dy).toBe(1);
-    expect(diagnostics.bestOffset.psnr).toBe(Infinity);
   });
 
   it('requires WebGPU for the GPU PSNR path', async () => {

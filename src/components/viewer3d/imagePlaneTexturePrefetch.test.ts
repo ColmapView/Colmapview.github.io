@@ -36,13 +36,14 @@ describe('prefetchImagePlaneTexturesForReconstruction', () => {
     expect(onBatchPrefetched).toHaveBeenCalledOnce();
   });
 
-  it('uses synchronously cached image files without refetching them', async () => {
+  it('uses synchronously cached image files without refetching them when metric images are unavailable', async () => {
     const image = buildImage({ imageId: 1, name: 'cached.jpg' });
     const imageFile = buildFile('cached.jpg');
     const reconstruction = buildReconstruction({ images: [image] });
     const dataset = {
       getImageSync: vi.fn(() => imageFile),
       getImage: vi.fn(),
+      getMetricImage: vi.fn(async () => null),
     };
     const prefetch = vi.fn(async () => undefined);
 
@@ -60,13 +61,14 @@ describe('prefetchImagePlaneTexturesForReconstruction', () => {
     );
   });
 
-  it('falls back to metric image files when display images are unavailable', async () => {
-    const image = buildImage({ imageId: 1, name: 'metric-only.jpg' });
-    const metricFile = buildFile('metric-only.jpg');
+  it('prefers metric image files over display-cache images', async () => {
+    const image = buildImage({ imageId: 1, name: 'metric.jpg' });
+    const displayFile = buildFile('display.jpg');
+    const metricFile = buildFile('metric.jpg');
     const reconstruction = buildReconstruction({ images: [image] });
     const dataset = {
-      getImageSync: vi.fn(() => undefined),
-      getImage: vi.fn(async () => null),
+      getImageSync: vi.fn(() => displayFile),
+      getImage: vi.fn(),
       getMetricImage: vi.fn(async () => metricFile),
     };
     const prefetch = vi.fn(async () => undefined);
@@ -78,9 +80,10 @@ describe('prefetchImagePlaneTexturesForReconstruction', () => {
       prefetch,
     });
 
-    expect(dataset.getMetricImage).toHaveBeenCalledWith('metric-only.jpg');
+    expect(dataset.getImage).not.toHaveBeenCalled();
+    expect(dataset.getMetricImage).toHaveBeenCalledWith('metric.jpg');
     expect(prefetch).toHaveBeenCalledWith(
-      [{ file: metricFile, name: 'metric-only.jpg' }],
+      [{ file: metricFile, name: 'metric.jpg' }],
       expect.objectContaining({ shouldCancel: expect.any(Function) })
     );
   });

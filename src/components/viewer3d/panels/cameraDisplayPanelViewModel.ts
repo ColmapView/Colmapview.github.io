@@ -41,6 +41,11 @@ const SPLAT_PSNR_COLOR_MODE_OPTION: SelectOption<FrustumColorMode> = {
   label: 'PSNR',
 };
 
+const SPLAT_SSIM_COLOR_MODE_OPTION: SelectOption<FrustumColorMode> = {
+  value: 'splatSsim',
+  label: 'SSIM',
+};
+
 const CAMERA_DISPLAY_HINTS: Record<CameraDisplayMode, CameraDisplayHint> = {
   frustum: {
     title: 'Frustum:',
@@ -71,7 +76,7 @@ export function getFrustumColorModeOptions({
   return [
     ...BASE_FRUSTUM_COLOR_MODE_OPTIONS,
     ...(hasRigData ? [RIG_FRAME_COLOR_MODE_OPTION] : []),
-    ...(hasSplatPsnr ? [SPLAT_PSNR_COLOR_MODE_OPTION] : []),
+    ...(hasSplatPsnr ? [SPLAT_PSNR_COLOR_MODE_OPTION, SPLAT_SSIM_COLOR_MODE_OPTION] : []),
   ];
 }
 

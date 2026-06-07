@@ -54,7 +54,7 @@ beforeEach(() => {
 
 describe('useFrustumPlaneDisplayTexture', () => {
   it('keeps the last loaded texture visible while the source texture refreshes', () => {
-    lowResTexture = new THREE.Texture();
+    lowResTexture = createRenderableTexture();
     const { result, rerender, materialRef } = renderDisplayTexture();
 
     expect(result.current.displayTexture).toBe(lowResTexture);
@@ -72,8 +72,8 @@ describe('useFrustumPlaneDisplayTexture', () => {
   });
 
   it('uses the selected high-res texture as the latest display texture', () => {
-    lowResTexture = new THREE.Texture();
-    highResTexture = new THREE.Texture();
+    lowResTexture = createRenderableTexture();
+    highResTexture = createRenderableTexture();
     const { result, materialRef } = renderDisplayTexture({ isSelected: true, showImagePlane: true, viewAngleOk: true });
 
     expect(result.current.displayTexture).toBe(highResTexture);
@@ -81,7 +81,7 @@ describe('useFrustumPlaneDisplayTexture', () => {
   });
 
   it('clears the material map when texture display is hidden', () => {
-    lowResTexture = new THREE.Texture();
+    lowResTexture = createRenderableTexture();
     const { result, rerender, materialRef } = renderDisplayTexture();
 
     expect(materialRef.current.map).toBe(lowResTexture);
@@ -96,4 +96,17 @@ describe('useFrustumPlaneDisplayTexture', () => {
     expect(result.current.shouldShowTexture).toBe(false);
     expect(materialRef.current.map).toBeNull();
   });
+
+  it('does not show an invalid texture object as an image-plane preview', () => {
+    lowResTexture = new THREE.Texture();
+    const { result, materialRef } = renderDisplayTexture();
+
+    expect(result.current.displayTexture).toBe(lowResTexture);
+    expect(result.current.shouldShowTexture).toBe(false);
+    expect(materialRef.current.map).toBeNull();
+  });
 });
+
+function createRenderableTexture(): THREE.Texture {
+  return new THREE.Texture({ width: 64, height: 32 } as unknown as ImageBitmap);
+}

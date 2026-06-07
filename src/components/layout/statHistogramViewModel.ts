@@ -3,12 +3,23 @@ import type { Point3D, Point3DId } from '../../types/colmap';
 import type { WasmReconstructionWrapper } from '../../wasm/reconstruction';
 import type { HistogramBin } from './StatHistogramTooltip';
 
-export type HistogramType = 'trackLength' | 'error';
+export type ReconstructionHistogramType = 'trackLength' | 'error';
+export type HistogramType = ReconstructionHistogramType | 'psnr' | 'ssim';
 
 export interface HistogramData {
   bins: HistogramBin[];
   mean: number;
   total: number;
+}
+
+export interface PsnrHistogramMetric {
+  psnr: number;
+  ssim?: number;
+}
+
+export interface StatHistogramTitleOptions {
+  sampleCount?: number | null;
+  totalCount?: number | null;
 }
 
 export interface StatHistogramHorizontalRect {
@@ -67,6 +78,8 @@ export const ERROR_BINS: BinDefinition[] = [
   { label: '5+', min: 5, max: Infinity },
 ];
 
+export const PSNR_HISTOGRAM_BIN_COUNT = 10;
+
 export const STAT_HISTOGRAM_CHART_WIDTH = 320;
 export const STAT_HISTOGRAM_CHART_HEIGHT = 100;
 export const STAT_HISTOGRAM_BAR_GAP = 2;
@@ -81,10 +94,22 @@ export const STAT_HISTOGRAM_SVG_HEIGHT =
   STAT_HISTOGRAM_LABEL_HEIGHT +
   STAT_HISTOGRAM_TOP_PADDING;
 
-export function getStatHistogramTitle(type: HistogramType): string {
-  return type === 'trackLength'
-    ? 'Track Length Distribution'
-    : 'Reprojection Error Distribution';
+export function getStatHistogramTitle(
+  type: HistogramType,
+  options: StatHistogramTitleOptions = {}
+): string {
+  if (type === 'trackLength') return 'Track Length Distribution';
+  if (type === 'error') return 'Reprojection Error Distribution';
+
+  const countLabel = formatPsnrHistogramCountLabel(options.sampleCount, options.totalCount);
+  if (type === 'ssim') {
+    return countLabel === null
+      ? 'SSIM Distribution'
+      : `SSIM Distribution ${countLabel}`;
+  }
+  return countLabel === null
+    ? 'PSNR Distribution'
+    : `PSNR Distribution ${countLabel}`;
 }
 
 export function getStatHistogramHorizontalAdjustment(
@@ -186,7 +211,7 @@ export function countsToHistogramBins(
 
 export function computeHistogramFromWasm(
   wasm: HistogramWasmSource,
-  type: HistogramType
+  type: ReconstructionHistogramType
 ): HistogramData {
   const binDefs = type === 'trackLength' ? TRACK_LENGTH_BINS : ERROR_BINS;
   const values = type === 'trackLength' ? wasm.getTrackLengths() : wasm.getErrors();
@@ -204,7 +229,7 @@ export function computeHistogramFromWasm(
 
 export function computeHistogramFromMap(
   points3D: Map<Point3DId, Point3D>,
-  type: HistogramType
+  type: ReconstructionHistogramType
 ): HistogramData {
   const values = Array.from(
     points3D.values(),
@@ -213,6 +238,138 @@ export function computeHistogramFromMap(
   const binDefs = type === 'trackLength' ? TRACK_LENGTH_BINS : ERROR_BINS;
 
   return computeHistogramFromValues(values, binDefs);
+}
+
+export function computeHistogramFromPsnrMetrics(
+  metrics: ReadonlyMap<number, PsnrHistogramMetric>
+): HistogramData {
+  const values = getMetricValues(metrics, (metric) => normalizePsnrHistogramValue(metric.psnr));
+  return computeHistogramFromValues(values, createMetricBins(values));
+}
+
+export function computeHistogramFromSsimMetrics(
+  metrics: ReadonlyMap<number, PsnrHistogramMetric>
+): HistogramData {
+  const values = getMetricValues(metrics, (metric) => normalizeSsimHistogramValue(metric.ssim));
+  return computeHistogramFromValues(values, createMetricBins(values));
+}
+
+export function computeMeanPsnrFromMetrics(
+  metrics: ReadonlyMap<number, PsnrHistogramMetric>
+): number | null {
+  return computeMeanFromMetricValues(metrics, (metric) => normalizePsnrHistogramValue(metric.psnr));
+}
+
+export function computeMeanSsimFromMetrics(
+  metrics: ReadonlyMap<number, PsnrHistogramMetric>
+): number | null {
+  return computeMeanFromMetricValues(metrics, (metric) => normalizeSsimHistogramValue(metric.ssim));
+}
+
+function computeMeanFromMetricValues(
+  metrics: ReadonlyMap<number, PsnrHistogramMetric>,
+  getValue: (metric: PsnrHistogramMetric) => number | null
+): number | null {
+  let sum = 0;
+  let total = 0;
+
+  for (const metric of metrics.values()) {
+    const value = getValue(metric);
+    if (value === null) continue;
+    sum += value;
+    total++;
+  }
+
+  return total > 0 ? sum / total : null;
+}
+
+export function formatMeanPsnrValue(psnr: number | null): string {
+  if (psnr === null || Number.isNaN(psnr)) return '--';
+  if (psnr >= 99) return '99+ dB';
+  return `${psnr.toFixed(1)} dB`;
+}
+
+export function formatMeanSsimValue(ssim: number | null): string {
+  if (ssim === null || Number.isNaN(ssim)) return '--';
+  return ssim.toFixed(3);
+}
+
+export function formatPsnrHistogramCountLabel(
+  sampleCount: number | null | undefined,
+  totalCount: number | null | undefined
+): string | null {
+  if (
+    sampleCount === undefined ||
+    sampleCount === null ||
+    totalCount === undefined ||
+    totalCount === null ||
+    sampleCount < 0 ||
+    totalCount < 0
+  ) {
+    return null;
+  }
+
+  return `(${Math.floor(sampleCount)}/${Math.floor(totalCount)})`;
+}
+
+function normalizePsnrHistogramValue(psnr: number): number | null {
+  if (Number.isFinite(psnr)) return psnr;
+  if (psnr === Infinity) return 100;
+  return null;
+}
+
+function normalizeSsimHistogramValue(ssim: number | null | undefined): number | null {
+  return ssim !== undefined && ssim !== null && Number.isFinite(ssim) ? ssim : null;
+}
+
+function getMetricValues(
+  metrics: ReadonlyMap<number, PsnrHistogramMetric>,
+  getValue: (metric: PsnrHistogramMetric) => number | null
+): number[] {
+  const values: number[] = [];
+  for (const metric of metrics.values()) {
+    const value = getValue(metric);
+    if (value !== null) {
+      values.push(value);
+    }
+  }
+  return values;
+}
+
+function createMetricBins(values: readonly number[]): BinDefinition[] {
+  if (values.length === 0) return [];
+
+  let min = Infinity;
+  let max = -Infinity;
+  for (const value of values) {
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+  }
+
+  const hasRange = max > min;
+  const start = hasRange ? min : min - 0.5;
+  const end = hasRange ? max : max + 0.5;
+  const range = end - start;
+  const binWidth = range / PSNR_HISTOGRAM_BIN_COUNT;
+  const binEpsilon = Math.max(Number.EPSILON, Math.abs(end) * Number.EPSILON);
+
+  return Array.from({ length: PSNR_HISTOGRAM_BIN_COUNT }, (_, index) => {
+    const binMin = start + index * binWidth;
+    const binMax = index === PSNR_HISTOGRAM_BIN_COUNT - 1
+      ? end + binEpsilon
+      : start + (index + 1) * binWidth;
+    return {
+      label: formatMetricBinEdge(binMin, range),
+      min: binMin,
+      max: binMax,
+    };
+  });
+}
+
+function formatMetricBinEdge(value: number, range: number): string {
+  if (range >= 20) return value.toFixed(0);
+  if (range >= 5) return value.toFixed(1);
+  return value.toFixed(2);
 }
 
 function computeHistogramFromValues(

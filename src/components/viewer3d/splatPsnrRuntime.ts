@@ -21,65 +21,9 @@ interface RenderSize {
 
 export interface PsnrResult {
   psnr: number;
+  ssim?: number;
   mse: number;
   validPixelCount: number;
-  colorDiagnostics?: {
-    validPixelCount: number;
-    validPixelRatio: number;
-    renderedMeanRgb: [number, number, number] | null;
-    groundTruthMeanRgb: [number, number, number] | null;
-    meanRgbDelta: [number, number, number] | null;
-  };
-  offsetDiagnostics?: {
-    maxOffsetPixels: number;
-    evaluatedOffsetCount: number;
-    baseline: {
-      dx: number;
-      dy: number;
-      psnr: number;
-      mse: number;
-      validPixelCount: number;
-      sumSquaredError: number;
-    };
-    best: {
-      dx: number;
-      dy: number;
-      psnr: number;
-      mse: number;
-      validPixelCount: number;
-      sumSquaredError: number;
-    };
-    improvementDb: number;
-  };
-  backgroundDiagnostics?: {
-    baseline: {
-      label: 'opaque-black' | 'opaque-white';
-      rgba: [number, number, number, number];
-      psnr: number;
-      mse: number;
-      validPixelCount: number;
-      sumSquaredError: number;
-      improvementDb: number;
-    };
-    alternatives: Array<{
-      label: 'opaque-black' | 'opaque-white';
-      rgba: [number, number, number, number];
-      psnr: number;
-      mse: number;
-      validPixelCount: number;
-      sumSquaredError: number;
-      improvementDb: number;
-    }>;
-    best: {
-      label: 'opaque-black' | 'opaque-white';
-      rgba: [number, number, number, number];
-      psnr: number;
-      mse: number;
-      validPixelCount: number;
-      sumSquaredError: number;
-      improvementDb: number;
-    };
-  };
 }
 
 type SplatPsnrWebGpuDeviceLossListener = (info: GPUDeviceLostInfo, device: GPUDevice) => void;

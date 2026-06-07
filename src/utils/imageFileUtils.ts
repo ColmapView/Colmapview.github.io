@@ -94,17 +94,32 @@ export function getImageFile(
     return undefined;
   }
 
-  // Normalize backslashes and try direct lookup
   const normalizedName = normalizeImagePath(imageName);
-
-  // Try exact match (most common case)
-  const exactMatch = imageFiles.get(normalizedName);
-  if (exactMatch) {
-    return exactMatch;
+  const lookupKeys = getPreferredImageLookupKeys(normalizedName);
+  for (const key of lookupKeys) {
+    const match = imageFiles.get(key);
+    if (match) return match;
   }
 
-  // Try lowercase match
-  return imageFiles.get(normalizedName.toLowerCase());
+  return undefined;
+}
+
+function getPreferredImageLookupKeys(normalizedName: string): string[] {
+  const keys: string[] = [];
+  const addKey = (key: string) => {
+    if (!key || keys.includes(key)) return;
+    keys.push(key);
+    const lowerKey = key.toLowerCase();
+    if (lowerKey !== key && !keys.includes(lowerKey)) {
+      keys.push(lowerKey);
+    }
+  };
+
+  if (!normalizedName.toLowerCase().startsWith('images/')) {
+    addKey(`images/${normalizedName}`);
+  }
+  addKey(normalizedName);
+  return keys;
 }
 
 /**

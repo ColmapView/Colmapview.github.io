@@ -3,7 +3,12 @@ import {
   hoverCardStyles,
   ICON_SIZES,
 } from '../../theme';
-import { formatSplatPsnrMetric, hasSplatPsnrValue } from '../viewer3d/splatPsnrMetric';
+import {
+  formatSplatPsnrMetric,
+  formatSplatSsimMetric,
+  hasSplatPsnrValue,
+  hasSplatSsimValue,
+} from '../viewer3d/splatPsnrMetric';
 import { getImageGalleryHoverCardStyle } from './imageGalleryStyleViewModel';
 import type { ImageData } from './useImageGalleryViewModel';
 
@@ -69,6 +74,9 @@ export function ImageGalleryItemHoverCard({
             <div className={hoverCardStyles.subtitle}>{img.avgError.toFixed(2)} avg error</div>
             {hasSplatPsnrValue(img.splatPsnr) && (
               <div className={hoverCardStyles.subtitle}>{formatSplatPsnrMetric(img.splatPsnr)}</div>
+            )}
+            {hasSplatSsimValue(img.splatSsim) && (
+              <div className={hoverCardStyles.subtitle}>{formatSplatSsimMetric(img.splatSsim)}</div>
             )}
           </>
         )}

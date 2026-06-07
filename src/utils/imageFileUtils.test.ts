@@ -17,10 +17,12 @@ vi.mock('./zipLoader', () => ({
 
 import { hasActiveZipArchive, findZipEntry, getActiveZipImageIndex, extractZipImage } from './zipLoader';
 import {
+  collectImageFiles,
   clearUrlImageCache,
   fetchUrlImage,
   fetchZipImage,
   fetchZipMask,
+  getImageFile,
   getZipImageCacheStats,
   removeZipMaskCacheEntries,
   getZipMaskCacheStats,
@@ -195,5 +197,27 @@ describe('getMaskPathVariants', () => {
     const variants = getMaskPathVariants('images/cam1/photo.jpg');
     expect(variants).toContain('masks/photo.jpg');
     expect(variants).toContain('masks/photo.jpg.png');
+  });
+});
+
+describe('local image lookup', () => {
+  it('prefers the canonical images folder over duplicate basename suffixes', () => {
+    const downscaled = buildFile('photo.jpg', 'small');
+    const fullResolution = buildFile('photo.jpg', 'full');
+    const imageFiles = collectImageFiles(new Map([
+      ['dataset/images_4/photo.jpg', downscaled],
+      ['dataset/images/photo.jpg', fullResolution],
+    ]));
+
+    expect(getImageFile(imageFiles, 'photo.jpg')).toBe(fullResolution);
+  });
+
+  it('falls back to a plain filename when no images folder key exists', () => {
+    const image = buildFile('photo.jpg', 'root');
+    const imageFiles = collectImageFiles(new Map([
+      ['photo.jpg', image],
+    ]));
+
+    expect(getImageFile(imageFiles, 'photo.jpg')).toBe(image);
   });
 });

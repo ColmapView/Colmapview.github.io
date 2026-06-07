@@ -73,8 +73,9 @@ export function useImageGalleryViewModel() {
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [imageCacheVersion, setImageCacheVersion] = useState(0);
-  const showSplatPsnr = splatPsnrFrameReady && splatPsnrByImage.size > 0;
-  const effectiveSortField = showSplatPsnr || sortField !== 'splatPsnr' ? sortField : 'name';
+  const showSplatMetrics = splatPsnrFrameReady && splatPsnrByImage.size > 0;
+  const isSplatMetricSort = sortField === 'splatPsnr' || sortField === 'splatSsim';
+  const effectiveSortField = showSplatMetrics || !isSplatMetricSort ? sortField : 'name';
 
   const matchedImageIds = useMemo(
     () => buildMatchedImageIds(reconstruction, selectedImageId, showMatches),
@@ -166,7 +167,7 @@ export function useImageGalleryViewModel() {
       imageSource: {
         getImageSync: (imageName) => dataset.getImageSync(imageName),
       },
-      splatPsnrByImage: showSplatPsnr ? splatPsnrByImage : undefined,
+      splatPsnrByImage: showSplatMetrics ? splatPsnrByImage : undefined,
       cameraFilter,
       sortField: effectiveSortField,
       sortDirection,
@@ -174,7 +175,7 @@ export function useImageGalleryViewModel() {
   }, [
     reconstruction,
     dataset,
-    showSplatPsnr,
+    showSplatMetrics,
     splatPsnrByImage,
     cameraFilter,
     effectiveSortField,
@@ -217,7 +218,7 @@ export function useImageGalleryViewModel() {
     setViewMode,
     hideImageOverlay,
     hideToolbar: false,
-    showSplatPsnr,
+    showSplatMetrics,
     showMatches,
     sortDirection,
     sortField: effectiveSortField,

@@ -89,6 +89,8 @@ function getFrustumColorMode(value: unknown): FrustumColorMode | undefined {
     case 'single':
     case 'byCamera':
     case 'byRigFrame':
+    case 'splatPsnr':
+    case 'splatSsim':
       return value;
     default:
       return undefined;

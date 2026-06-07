@@ -25,11 +25,7 @@ import {
   accumulatePsnrTextureReductions,
   computePsnrFromTextureReduction,
   computePsnrFromRgbaTexturesWebGpu as defaultComputePsnrFromTextures,
-  computePsnrTextureColorDiagnosticsFromRgbaTexturesWebGpu as defaultComputePsnrTextureColorDiagnosticsFromTextures,
-  computePsnrTextureOffsetDiagnosticsFromRgbaTexturesWebGpu as defaultComputePsnrTextureOffsetDiagnosticsFromTextures,
   computePsnrTextureReductionFromRgbaTexturesWebGpu as defaultComputePsnrTextureReductionFromTextures,
-  type WebGpuPsnrBackgroundCandidate,
-  type WebGpuPsnrBackgroundDiagnostics,
   type WebGpuPsnrTextureReduction,
   type WebGpuPsnrTextureResult,
 } from './psnrTextureCompute';
@@ -38,7 +34,6 @@ import {
 } from './webGpuSplatDebugCounters';
 import {
   getWebGpuSplatDefaultBackgroundColor,
-  getWebGpuSplatOpaqueWhiteBackgroundColor,
   type WebGpuSplatBackgroundColor,
 } from './splatRenderBackground';
 import {
@@ -65,7 +60,6 @@ export interface WebGpuSplatPsnrImageMetricOptions {
   width: number;
   height: number;
   transform?: Sim3dEuler;
-  includeDiagnostics?: boolean;
 }
 
 export interface WebGpuSplatPsnrSessionOptions {
@@ -88,8 +82,6 @@ export interface WebGpuSplatPsnrSessionDeps {
   createGroundTruthTexture?: typeof defaultCreateGroundTruthTexture;
   computePsnrFromTextures?: typeof defaultComputePsnrFromTextures;
   computePsnrTextureReductionFromTextures?: typeof defaultComputePsnrTextureReductionFromTextures;
-  computePsnrTextureColorDiagnosticsFromTextures?: typeof defaultComputePsnrTextureColorDiagnosticsFromTextures;
-  computePsnrTextureOffsetDiagnosticsFromTextures?: typeof defaultComputePsnrTextureOffsetDiagnosticsFromTextures;
   createMetricFrame?: typeof defaultCreateMetricFrame;
 }
 
@@ -100,7 +92,6 @@ const WEBGPU_PSNR_FORMAT: GPUTextureFormat = 'rgba8unorm';
 const WEBGPU_PSNR_RENDER_TARGET_USAGE = GPU_TEXTURE_USAGE_COPY_SRC
   | GPU_TEXTURE_USAGE_TEXTURE_BINDING
   | GPU_TEXTURE_USAGE_RENDER_ATTACHMENT;
-const LOW_PSNR_DIAGNOSTIC_THRESHOLD_DB = 20;
 
 const createDefaultImageBitmap: WebGpuCreateImageBitmap = (source, options) => {
   return globalThis.createImageBitmap(source, options);
@@ -132,6 +123,7 @@ export async function createWebGpuSplatPsnrSession({
       width: 1,
       height: 1,
       backgroundColor: getWebGpuSplatDefaultBackgroundColor(),
+      sortAlgorithm: 'radix',
     });
     return new DefaultWebGpuSplatPsnrSession({
       device,
@@ -154,8 +146,6 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
   private readonly createGroundTruthTexture: typeof defaultCreateGroundTruthTexture;
   private readonly computePsnrFromTextures: typeof defaultComputePsnrFromTextures;
   private readonly computePsnrTextureReductionFromTextures: typeof defaultComputePsnrTextureReductionFromTextures;
-  private readonly computePsnrTextureColorDiagnosticsFromTextures: typeof defaultComputePsnrTextureColorDiagnosticsFromTextures;
-  private readonly computePsnrTextureOffsetDiagnosticsFromTextures: typeof defaultComputePsnrTextureOffsetDiagnosticsFromTextures;
   private readonly createMetricFrame: typeof defaultCreateMetricFrame;
   private readonly activeResourceScopes = new Set<ActivePsnrImageResources>();
   private readonly releasePsnrSessionCounter = trackWebGpuSplatDebugCounter('psnrSessions');
@@ -181,10 +171,6 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
     this.computePsnrFromTextures = deps.computePsnrFromTextures ?? defaultComputePsnrFromTextures;
     this.computePsnrTextureReductionFromTextures = deps.computePsnrTextureReductionFromTextures
       ?? defaultComputePsnrTextureReductionFromTextures;
-    this.computePsnrTextureColorDiagnosticsFromTextures = deps.computePsnrTextureColorDiagnosticsFromTextures
-      ?? defaultComputePsnrTextureColorDiagnosticsFromTextures;
-    this.computePsnrTextureOffsetDiagnosticsFromTextures = deps.computePsnrTextureOffsetDiagnosticsFromTextures
-      ?? defaultComputePsnrTextureOffsetDiagnosticsFromTextures;
     this.createMetricFrame = deps.createMetricFrame ?? defaultCreateMetricFrame;
   }
 
@@ -195,7 +181,6 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
     width,
     height,
     transform,
-    includeDiagnostics,
   }: WebGpuSplatPsnrImageMetricOptions): Promise<WebGpuPsnrTextureResult> {
     const submitted = await this.submitImageMetric({
       imageFile,
@@ -204,7 +189,6 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
       width,
       height,
       transform,
-      includeDiagnostics,
     });
     try {
       return await submitted.result;
@@ -220,12 +204,17 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
     width,
     height,
     transform,
-    includeDiagnostics = false,
   }: WebGpuSplatPsnrImageMetricOptions): Promise<WebGpuSubmittedSplatPsnrImageMetric> {
     this.assertNotDisposed();
     const safeWidth = requirePositiveInteger(width, 'width');
     const safeHeight = requirePositiveInteger(height, 'height');
     assertPinholeCamera(camera);
+    assertMetricRenderSizeMatchesCamera({
+      camera,
+      width: safeWidth,
+      height: safeHeight,
+      imageName: image.name,
+    });
     const resources = this.createResourceScope();
     const releaseActiveJobCounter = trackWebGpuSplatDebugCounter('activePsnrImageJobs');
     const telemetryStart = nowWebGpuSplatTelemetryMs();
@@ -240,6 +229,12 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
 
       const sourceWidth = requirePositiveInteger(bitmap.width, 'source width');
       const sourceHeight = requirePositiveInteger(bitmap.height, 'source height');
+      assertMetricBitmapSizeMatchesCamera({
+        camera,
+        sourceWidth,
+        sourceHeight,
+        imageName: image.name,
+      });
       const maxTextureDimension2D = getMaxTextureDimension2D(this.device);
       if (fitsSingleTexture(maxTextureDimension2D, safeWidth, safeHeight, sourceWidth, sourceHeight)) {
         return this.submitSingleImageMetric({
@@ -252,7 +247,6 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
           width: safeWidth,
           height: safeHeight,
           transform,
-          includeDiagnostics,
         });
       }
 
@@ -319,7 +313,6 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
     width,
     height,
     transform,
-    includeDiagnostics,
   }: {
     resources: ActivePsnrImageResources;
     bitmap: ImageBitmap;
@@ -330,7 +323,6 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
     width: number;
     height: number;
     transform?: Sim3dEuler;
-    includeDiagnostics: boolean;
   }): WebGpuSubmittedSplatPsnrImageMetric {
     let renderedTexture: TrackedGpuTexture | null = null;
     let groundTruthTexture: WebGpuPsnrGroundTruthTexture | null = null;
@@ -370,41 +362,13 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
         if (disposed) {
           throw new Error('WebGPU splat PSNR image metric has been disposed');
         }
-        let result = await this.computePsnrFromTextures({
+        const result = await this.computePsnrFromTextures({
           device: this.device,
           renderedTexture: submittedRenderedTexture.texture,
           groundTruthTexture: submittedGroundTruthTexture.texture,
           width,
           height,
         });
-        if (includeDiagnostics && shouldAttachLowPsnrTextureDiagnostics(result)) {
-          result = {
-            ...result,
-            colorDiagnostics: await this.computePsnrTextureColorDiagnosticsFromTextures({
-              device: this.device,
-              renderedTexture: submittedRenderedTexture.texture,
-              groundTruthTexture: submittedGroundTruthTexture.texture,
-              width,
-              height,
-            }),
-            offsetDiagnostics: await this.computePsnrTextureOffsetDiagnosticsFromTextures({
-              device: this.device,
-              renderedTexture: submittedRenderedTexture.texture,
-              groundTruthTexture: submittedGroundTruthTexture.texture,
-              width,
-              height,
-            }),
-            backgroundDiagnostics: await this.computeAlternateBackgroundDiagnostics({
-              resources,
-              baseline: result,
-              frame,
-              groundTruthTexture: submittedGroundTruthTexture,
-              width,
-              height,
-              imageName: image.name,
-            }),
-          };
-        }
         this.assertNotDisposed();
         if (disposed) {
           throw new Error('WebGPU splat PSNR image metric has been disposed');
@@ -531,56 +495,6 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
     return computePsnrFromTextureReduction(accumulatePsnrTextureReductions(reductions));
   }
 
-  private async computeAlternateBackgroundDiagnostics({
-    resources,
-    baseline,
-    frame,
-    groundTruthTexture,
-    width,
-    height,
-    imageName,
-  }: {
-    resources: ActivePsnrImageResources;
-    baseline: WebGpuPsnrTextureResult;
-    frame: SplatCameraFrame;
-    groundTruthTexture: WebGpuPsnrGroundTruthTexture;
-    width: number;
-    height: number;
-    imageName: string;
-  }): Promise<WebGpuPsnrBackgroundDiagnostics> {
-    const alternateBackground = getWebGpuSplatOpaqueWhiteBackgroundColor();
-    const renderedTexture = this.createRenderedTexture(width, height, `${imageName} opaque-white background`);
-    resources.trackRenderedTexture(renderedTexture);
-
-    try {
-      await this.renderMetricFrameToTexture({
-        frame,
-        target: renderedTexture.texture,
-        backgroundColor: alternateBackground,
-      });
-      this.assertNotDisposed();
-      const alternate = await this.computePsnrFromTextures({
-        device: this.device,
-        renderedTexture: renderedTexture.texture,
-        groundTruthTexture: groundTruthTexture.texture,
-        width,
-        height,
-      });
-      this.assertNotDisposed();
-      return createBackgroundDiagnostics({
-        baseline,
-        alternate,
-        alternateBackground,
-      });
-    } finally {
-      try {
-        await this.resetRenderBackgroundToDefault();
-      } finally {
-        resources.destroyRenderedTexture(renderedTexture);
-      }
-    }
-  }
-
   private renderMetricFrameToTexture({
     frame,
     target,
@@ -594,16 +508,8 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
       this.renderSession.setCamera(frame);
       this.renderSession.setBackgroundColor(backgroundColor);
       this.assertNotDisposed();
-      await this.renderSession.renderToTexture(target, { completion: 'submitted' });
+      await this.renderSession.renderToTexture(target, { completion: 'completed' });
       this.assertNotDisposed();
-    });
-  }
-
-  private resetRenderBackgroundToDefault(): Promise<void> {
-    return this.enqueueRender(() => {
-      if (!this.disposed) {
-        this.renderSession.setBackgroundColor(getWebGpuSplatDefaultBackgroundColor());
-      }
     });
   }
 
@@ -770,6 +676,46 @@ function assertPinholeCamera(camera: Camera): void {
   );
 }
 
+function assertMetricRenderSizeMatchesCamera({
+  camera,
+  width,
+  height,
+  imageName,
+}: {
+  camera: Camera;
+  width: number;
+  height: number;
+  imageName: string;
+}): void {
+  if (width === camera.width && height === camera.height) {
+    return;
+  }
+
+  throw new Error(
+    `WebGPU PSNR requires full-resolution metric rendering for ${imageName}: requested ${width}x${height}, camera is ${camera.width}x${camera.height}`
+  );
+}
+
+function assertMetricBitmapSizeMatchesCamera({
+  camera,
+  sourceWidth,
+  sourceHeight,
+  imageName,
+}: {
+  camera: Camera;
+  sourceWidth: number;
+  sourceHeight: number;
+  imageName: string;
+}): void {
+  if (sourceWidth === camera.width && sourceHeight === camera.height) {
+    return;
+  }
+
+  throw new Error(
+    `WebGPU PSNR requires an undistorted metric image matching the PINHOLE camera for ${imageName}: decoded ${sourceWidth}x${sourceHeight}, camera is ${camera.width}x${camera.height}. Load the image set that belongs to the sparse model.`
+  );
+}
+
 function getCameraModelName(modelId: Camera['modelId']): string {
   for (const [name, value] of Object.entries(CameraModelId)) {
     if (value === modelId) return name;
@@ -835,78 +781,6 @@ function createPsnrTiles(width: number, height: number, maxTextureDimension2D: n
     }
   }
   return tiles;
-}
-
-function shouldAttachLowPsnrTextureDiagnostics(result: WebGpuPsnrTextureResult): boolean {
-  return Number.isFinite(result.psnr) && result.psnr < LOW_PSNR_DIAGNOSTIC_THRESHOLD_DB;
-}
-
-function createBackgroundDiagnostics({
-  baseline,
-  alternate,
-  alternateBackground,
-}: {
-  baseline: WebGpuPsnrTextureResult;
-  alternate: WebGpuPsnrTextureResult;
-  alternateBackground: WebGpuSplatBackgroundColor;
-}): WebGpuPsnrBackgroundDiagnostics {
-  const baselineCandidate = createBackgroundCandidate(
-    'opaque-black',
-    getWebGpuSplatDefaultBackgroundColor(),
-    baseline,
-    baseline
-  );
-  const alternateCandidate = createBackgroundCandidate(
-    'opaque-white',
-    alternateBackground,
-    alternate,
-    baseline
-  );
-  return {
-    baseline: baselineCandidate,
-    alternatives: [alternateCandidate],
-    best: selectBestBackgroundCandidate(baselineCandidate, alternateCandidate),
-  };
-}
-
-function createBackgroundCandidate(
-  label: WebGpuPsnrBackgroundCandidate['label'],
-  rgba: WebGpuSplatBackgroundColor,
-  result: WebGpuPsnrTextureResult,
-  baseline: WebGpuPsnrTextureResult
-): WebGpuPsnrBackgroundCandidate {
-  return {
-    label,
-    rgba: [...rgba],
-    sumSquaredError: result.sumSquaredError,
-    validPixelCount: result.validPixelCount,
-    psnr: result.psnr,
-    mse: result.mse,
-    improvementDb: getPsnrDeltaDb(result.psnr, baseline.psnr),
-  };
-}
-
-function selectBestBackgroundCandidate(
-  baseline: WebGpuPsnrBackgroundCandidate,
-  alternate: WebGpuPsnrBackgroundCandidate
-): WebGpuPsnrBackgroundCandidate {
-  return alternate.psnr > baseline.psnr ? alternate : baseline;
-}
-
-function getPsnrDeltaDb(candidatePsnr: number, baselinePsnr: number): number {
-  if (candidatePsnr === baselinePsnr) {
-    return 0;
-  }
-  if (candidatePsnr === Infinity && baselinePsnr === Infinity) {
-    return 0;
-  }
-  if (candidatePsnr === Infinity) {
-    return Infinity;
-  }
-  if (baselinePsnr === Infinity) {
-    return Number.NEGATIVE_INFINITY;
-  }
-  return candidatePsnr - baselinePsnr;
 }
 
 function requirePositiveInteger(value: number, name: string): number {

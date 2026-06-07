@@ -21,13 +21,16 @@ async function getImagePlaneTextureSourceFile(
   dataset: ImagePlaneTexturePrefetchOptions['dataset'],
   imageName: string
 ): Promise<File | null> {
+  const metricImageFile = await (dataset.getMetricImage?.(imageName) ?? Promise.resolve(null));
+  if (metricImageFile) return metricImageFile;
+
   const cachedImageFile = dataset.getImageSync(imageName);
   if (cachedImageFile) return cachedImageFile;
 
   const displayImageFile = await dataset.getImage(imageName);
   if (displayImageFile) return displayImageFile;
 
-  return await (dataset.getMetricImage?.(imageName) ?? Promise.resolve(null));
+  return null;
 }
 
 export async function prefetchImagePlaneTexturesForReconstruction({

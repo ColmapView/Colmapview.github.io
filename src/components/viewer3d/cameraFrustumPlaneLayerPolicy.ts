@@ -2,6 +2,7 @@ import { VIZ_COLORS } from '../../theme';
 import type { ImageId } from '../../types/colmap';
 import {
   getFrustumBaseColor,
+  getFrustumMetricColorScale,
   type CameraFrustumItem,
   type FrustumColorMode,
   type FrustumPsnrMetricSource,
@@ -51,6 +52,12 @@ export function buildImagePlaneRenderItems({
   matchesColor,
   deletedColor = VIZ_COLORS.frustum.deleted ?? '#ff4444',
 }: BuildImagePlaneRenderItemsOptions): ImagePlaneRenderItem[] {
+  const metricColorScale = getFrustumMetricColorScale(
+    frustumColorMode,
+    frustums.map((frustum) => frustum.image.imageId),
+    splatPsnrByImage
+  );
+
   return frustums.flatMap((frustum) => {
     const imageId = frustum.image.imageId;
     if (imageId === selectedImageId) return [];
@@ -62,7 +69,8 @@ export function buildImagePlaneRenderItems({
       imageId,
       imageFrameIndexMap,
       frustumSingleColor,
-      splatPsnrByImage
+      splatPsnrByImage,
+      metricColorScale
     );
 
     return [{

@@ -1,6 +1,12 @@
 import { ICON_SIZES, hoverCardStyles } from '../../theme';
-import { formatSplatPsnrMetric, hasSplatPsnrValue } from './splatPsnrMetric';
+import {
+  formatSplatPsnrMetric,
+  formatSplatSsimMetric,
+  hasSplatPsnrValue,
+  hasSplatSsimValue,
+} from './splatPsnrMetric';
 import { formatImageId } from './cameraFrustumViewModel';
+import { useFrustumHoverCardMetricStoreFacade } from './useFrustumHoverCardStoreFacade';
 
 interface FrustumPlaneHoverCardProps {
   imageName: string;
@@ -8,7 +14,6 @@ interface FrustumPlaneHoverCardProps {
   cameraId: number;
   multiCamera: boolean;
   numPoints3D: number;
-  splatPsnr?: number;
   isSelected: boolean;
   isMatched: boolean;
   wouldGoBack: boolean;
@@ -42,12 +47,12 @@ export function FrustumPlaneHoverCard({
   cameraId,
   multiCamera,
   numPoints3D,
-  splatPsnr,
   isSelected,
   isMatched,
   wouldGoBack,
   cameraProjection,
 }: FrustumPlaneHoverCardProps) {
+  const { splatMetric } = useFrustumHoverCardMetricStoreFacade(imageId);
   const rightAction = isMatched ? 'Right: matches' : wouldGoBack ? 'Right: back' : 'Right: fly to';
 
   return (
@@ -55,8 +60,11 @@ export function FrustumPlaneHoverCard({
       <div className={hoverCardStyles.title}>{imageName}</div>
       <div className={hoverCardStyles.subtitle}>{formatImageId(imageId, cameraId, multiCamera)}</div>
       <div className={hoverCardStyles.subtitle}>{numPoints3D} points</div>
-      {hasSplatPsnrValue(splatPsnr) && (
-        <div className={hoverCardStyles.subtitle}>{formatSplatPsnrMetric(splatPsnr)}</div>
+      {hasSplatPsnrValue(splatMetric?.psnr) && (
+        <div className={hoverCardStyles.subtitle}>{formatSplatPsnrMetric(splatMetric.psnr)}</div>
+      )}
+      {hasSplatSsimValue(splatMetric?.ssim) && (
+        <div className={hoverCardStyles.subtitle}>{formatSplatSsimMetric(splatMetric.ssim)}</div>
       )}
       <div className={hoverCardStyles.hint}>
         {isSelected && cameraProjection === 'perspective' && (

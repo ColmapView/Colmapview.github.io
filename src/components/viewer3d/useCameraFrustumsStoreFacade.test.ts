@@ -72,16 +72,6 @@ describe('useCameraFrustumsStoreFacade', () => {
       touchMode: true,
     });
     useDeletionStore.setState({ pendingDeletions });
-    useImageMetricsStore.getState().setSplatPsnrMetric({
-      imageId: 1,
-      psnr: 30.5,
-      mse: 58,
-      validPixelCount: 128,
-      width: 80,
-      height: 60,
-      computedAt: 321,
-    });
-
     const { result } = renderHook(() => useCameraFrustumsStoreFacade());
 
     expect(result.current.data).toMatchObject({
@@ -111,7 +101,47 @@ describe('useCameraFrustumsStoreFacade', () => {
       autoFovEnabled: true,
       navigationHistory: [navigationEntry],
     });
+  });
+
+  it('does not rerender frustum dependencies for PSNR metric batches', () => {
+    let renders = 0;
+    renderHook(() => {
+      renders += 1;
+      return useCameraFrustumsStoreFacade();
+    });
+
+    act(() => {
+      useImageMetricsStore.getState().setSplatPsnrMetric({
+        imageId: 1,
+        psnr: 30.5,
+        mse: 58,
+        validPixelCount: 128,
+        width: 80,
+        height: 60,
+        computedAt: 321,
+      });
+    });
+
+    expect(renders).toBe(1);
+  });
+
+  it('exposes splat metrics when camera frustum color mode needs them', () => {
+    useCameraStore.setState({ frustumColorMode: 'splatPsnr' });
+    useImageMetricsStore.getState().setSplatPsnrMetric({
+      imageId: 1,
+      psnr: 30.5,
+      ssim: 0.94,
+      mse: 58,
+      validPixelCount: 128,
+      width: 80,
+      height: 60,
+      computedAt: 321,
+    });
+
+    const { result } = renderHook(() => useCameraFrustumsStoreFacade());
+
     expect(result.current.data.splatPsnrByImage.get(1)?.psnr).toBe(30.5);
+    expect(result.current.data.splatPsnrByImage.get(1)?.ssim).toBe(0.94);
   });
 
   it('exposes alignment state and routes frustum actions to owning stores', () => {

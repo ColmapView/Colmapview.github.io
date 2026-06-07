@@ -1,5 +1,6 @@
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { controlPanelStyles } from '../../theme';
+import { isSplatColorMode, type ColorMode, type FrustumColorMode } from '../../store/types';
 import type {
   AxesGridPanelProps,
   BackgroundPanelProps,
@@ -54,6 +55,10 @@ export interface ViewerControlsController {
 
 const styles = controlPanelStyles;
 
+interface PendingSplatCameraColorDefault {
+  cameraColorModeAtRequest: FrustumColorMode;
+}
+
 export function useViewerControlsController(): ViewerControlsController {
   const panelState = useViewerControlPanelState();
   const modals = useViewerToolModalState();
@@ -88,6 +93,7 @@ export function useViewerControlsController(): ViewerControlsController {
 
   const rigInfo = useMemo(() => buildRigInfo(reconstruction), [reconstruction]);
   const { hasRigData, cameraCount, frameCount } = rigInfo;
+  const pendingSplatCameraColorDefaultRef = useRef<PendingSplatCameraColorDefault | null>(null);
 
   const {
     hsl,
@@ -105,6 +111,30 @@ export function useViewerControlsController(): ViewerControlsController {
     handleSaturationChange: handleFrustumSaturationChange,
     handleLightnessChange: handleFrustumLightnessChange,
   } = useSyncedHslColor(camerasNode.singleColor, camerasActions.setSingleColor);
+
+  const requestDefaultSplatCameraColor = useCallback((nextColorMode: ColorMode) => {
+    if (!isSplatColorMode(nextColorMode) || isSplatColorMode(pointsNode.colorMode)) {
+      return;
+    }
+
+    pendingSplatCameraColorDefaultRef.current = {
+      cameraColorModeAtRequest: camerasNode.colorMode,
+    };
+    if (metrics.splatPsnrFrameReady) {
+      camerasActions.setColorMode('splatPsnr');
+      pendingSplatCameraColorDefaultRef.current = null;
+    }
+  }, [
+    camerasActions,
+    camerasNode.colorMode,
+    metrics.splatPsnrFrameReady,
+    pointsNode.colorMode,
+  ]);
+
+  const setPointColorMode = useCallback((nextColorMode: ColorMode) => {
+    pointsActions.setColorMode(nextColorMode);
+    requestDefaultSplatCameraColor(nextColorMode);
+  }, [pointsActions, requestDefaultSplatCameraColor]);
 
   const {
     toggleBackground,
@@ -127,7 +157,7 @@ export function useViewerControlsController(): ViewerControlsController {
     showPointCloud: pointsNode.visible,
     colorMode: pointsNode.colorMode,
     setShowPointCloud: pointsActions.setVisible,
-    setColorMode: pointsActions.setColorMode,
+    setColorMode: setPointColorMode,
     showCameras: camerasNode.visible,
     cameraDisplayMode: camerasNode.displayMode,
     setShowCameras: camerasActions.setVisible,
@@ -169,10 +199,40 @@ export function useViewerControlsController(): ViewerControlsController {
   const rigButton = getRigButtonState(hasRigData, rigNode.visible, rigNode.displayMode);
 
   useEffect(() => {
-    if (!metrics.splatPsnrFrameReady && camerasNode.colorMode === 'splatPsnr') {
+    if (
+      !metrics.splatPsnrFrameReady &&
+      (camerasNode.colorMode === 'splatPsnr' || camerasNode.colorMode === 'splatSsim')
+    ) {
       camerasActions.setColorMode('byCamera');
     }
   }, [camerasActions, camerasNode.colorMode, metrics.splatPsnrFrameReady]);
+
+  useEffect(() => {
+    const pending = pendingSplatCameraColorDefaultRef.current;
+    if (!pending) {
+      return;
+    }
+
+    if (!isSplatColorMode(pointsNode.colorMode)) {
+      pendingSplatCameraColorDefaultRef.current = null;
+      return;
+    }
+    if (camerasNode.colorMode !== pending.cameraColorModeAtRequest) {
+      pendingSplatCameraColorDefaultRef.current = null;
+      return;
+    }
+    if (!metrics.splatPsnrFrameReady) {
+      return;
+    }
+
+    camerasActions.setColorMode('splatPsnr');
+    pendingSplatCameraColorDefaultRef.current = null;
+  }, [
+    camerasActions,
+    camerasNode.colorMode,
+    metrics.splatPsnrFrameReady,
+    pointsNode.colorMode,
+  ]);
 
   return {
     className: getViewerControlsContainerClassName({
@@ -242,7 +302,7 @@ export function useViewerControlsController(): ViewerControlsController {
       showPointCloud: pointsNode.visible,
       togglePointCloud: pointsActions.toggleVisible,
       colorMode: pointsNode.colorMode,
-      setColorMode: pointsActions.setColorMode,
+      setColorMode: setPointColorMode,
       pointSize: pointsNode.size,
       setPointSize: pointsActions.setSize,
       pointOpacity: pointsNode.opacity,
@@ -295,10 +355,6 @@ export function useViewerControlsController(): ViewerControlsController {
       autoFovEnabled: navNode.autoFovEnabled,
       setAutoFovEnabled: navActions.setAutoFovEnabled,
       splatPsnrFrameReady: metrics.splatPsnrFrameReady,
-      splatPsnrComputing: metrics.splatPsnrComputing,
-      splatPsnrReadyCount: metrics.splatPsnrReadyCount,
-      splatPsnrTotalCount: metrics.splatPsnrTotalCount,
-      splatPsnrUnavailableReason: metrics.splatPsnrUnavailableReason,
       onCycleCameraDisplayMode: cycleCameraDisplayMode,
     },
     matchesPanel: {

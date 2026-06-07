@@ -22,17 +22,22 @@ export function drawImageBitmapToCacheCanvas(
   bitmap: ImageBitmap,
   maxSize: number,
   createCanvas: ImageCacheCanvasFactory = createBrowserImageCacheCanvas
-): ImageCacheCanvas {
+): ImageCacheCanvas | null {
   const { width, height } = getResizedImageDimensions(bitmap, maxSize);
   const canvas = createCanvas(width, height);
   const ctx = getCanvas2dContext(canvas);
 
-  if (ctx) {
+  try {
+    if (!ctx) return null;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(bitmap, 0, 0, width, height);
+    return canvas;
+  } catch {
+    return null;
+  } finally {
+    bitmap.close();
   }
-  bitmap.close();
-
-  return canvas;
 }
 
 export type ImageCacheCanvasContext = TwoDimensionalCanvasContext;

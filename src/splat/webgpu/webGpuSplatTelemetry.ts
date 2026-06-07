@@ -4,8 +4,7 @@ export type WebGpuSplatTelemetryEventName =
   | 'first-frame'
   | 'render'
   | 'psnr-image'
-  | 'psnr-reduction'
-  | 'psnr-diagnostics';
+  | 'psnr-reduction';
 
 export type WebGpuSplatTelemetryValue = string | number | boolean | null;
 

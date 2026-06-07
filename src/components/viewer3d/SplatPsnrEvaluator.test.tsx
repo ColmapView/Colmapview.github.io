@@ -58,65 +58,9 @@ vi.mock('./splatPsnrRuntime', async (importOriginal) => {
 
 interface DeferredMetricValue {
   psnr: number;
+  ssim?: number;
   mse: number;
   validPixelCount: number;
-  colorDiagnostics?: {
-    validPixelCount: number;
-    validPixelRatio: number;
-    renderedMeanRgb: [number, number, number] | null;
-    groundTruthMeanRgb: [number, number, number] | null;
-    meanRgbDelta: [number, number, number] | null;
-  };
-  offsetDiagnostics?: {
-    maxOffsetPixels: number;
-    evaluatedOffsetCount: number;
-    baseline: {
-      dx: number;
-      dy: number;
-      psnr: number;
-      mse: number;
-      validPixelCount: number;
-      sumSquaredError: number;
-    };
-    best: {
-      dx: number;
-      dy: number;
-      psnr: number;
-      mse: number;
-      validPixelCount: number;
-      sumSquaredError: number;
-    };
-    improvementDb: number;
-  };
-  backgroundDiagnostics?: {
-    baseline: {
-      label: 'opaque-black' | 'opaque-white';
-      rgba: [number, number, number, number];
-      psnr: number;
-      mse: number;
-      validPixelCount: number;
-      sumSquaredError: number;
-      improvementDb: number;
-    };
-    alternatives: Array<{
-      label: 'opaque-black' | 'opaque-white';
-      rgba: [number, number, number, number];
-      psnr: number;
-      mse: number;
-      validPixelCount: number;
-      sumSquaredError: number;
-      improvementDb: number;
-    }>;
-    best: {
-      label: 'opaque-black' | 'opaque-white';
-      rgba: [number, number, number, number];
-      psnr: number;
-      mse: number;
-      validPixelCount: number;
-      sumSquaredError: number;
-      improvementDb: number;
-    };
-  };
 }
 
 function createDeferredMetric() {
@@ -243,7 +187,7 @@ describe('SplatPsnrEvaluator', () => {
     expect(actions.requestSplatPsnrCompute).not.toHaveBeenCalled();
 
     act(() => {
-      vi.advanceTimersByTime(250);
+      vi.advanceTimersByTime(1500);
     });
 
     expect(actions.requestSplatPsnrCompute).toHaveBeenCalledWith('all');
@@ -330,7 +274,6 @@ describe('SplatPsnrEvaluator', () => {
       width: 4,
       height: 3,
       transform: expect.objectContaining({ scale: 1 }),
-      includeDiagnostics: true,
     }));
 
     facade.data.transform = {
@@ -350,7 +293,7 @@ describe('SplatPsnrEvaluator', () => {
     expect(actions.finishSplatPsnrCompute).not.toHaveBeenCalled();
 
     await act(async () => {
-      deferredMetric.resolve({ psnr: 31, mse: 12, validPixelCount: 12 });
+      deferredMetric.resolve({ psnr: 31, ssim: 0.94, mse: 12, validPixelCount: 12 });
       await deferredMetric.promise;
     });
 
@@ -358,6 +301,7 @@ describe('SplatPsnrEvaluator', () => {
       expect(actions.setSplatPsnrMetric).toHaveBeenCalledWith(expect.objectContaining({
         imageId: image.imageId,
         psnr: 31,
+        ssim: 0.94,
         mse: 12,
         validPixelCount: 12,
         width: 4,
@@ -435,7 +379,7 @@ describe('SplatPsnrEvaluator', () => {
     expect(secondSession.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('publishes low-PSNR diagnostics with camera and image context', async () => {
+  it('publishes low-PSNR metrics without diagnostic metadata', async () => {
     const deferredMetric = createDeferredMetric();
     const computeImageMetric = vi.fn(() => deferredMetric.promise);
     const dispose = vi.fn();
@@ -465,72 +409,12 @@ describe('SplatPsnrEvaluator', () => {
     await waitFor(() => {
       expect(computeImageMetric).toHaveBeenCalledTimes(1);
     });
-    expect(computeImageMetric).toHaveBeenCalledWith(expect.objectContaining({
-      includeDiagnostics: true,
-    }));
 
     await act(async () => {
       deferredMetric.resolve({
         psnr: 15,
         mse: 100,
         validPixelCount: 1_500,
-        colorDiagnostics: {
-          validPixelCount: 1_500,
-          validPixelRatio: 0.95,
-          renderedMeanRgb: [10, 20, 30],
-          groundTruthMeanRgb: [50, 60, 70],
-          meanRgbDelta: [-40, -40, -40],
-        },
-        offsetDiagnostics: {
-          maxOffsetPixels: 2,
-          evaluatedOffsetCount: 25,
-          baseline: {
-            dx: 0,
-            dy: 0,
-            psnr: 15,
-            mse: 100,
-            validPixelCount: 1_500,
-            sumSquaredError: 450_000,
-          },
-          best: {
-            dx: -1,
-            dy: 0,
-            psnr: 24,
-            mse: 24,
-            validPixelCount: 1_500,
-            sumSquaredError: 108_000,
-          },
-          improvementDb: 9,
-        },
-        backgroundDiagnostics: {
-          baseline: {
-            label: 'opaque-black',
-            rgba: [0, 0, 0, 1],
-            psnr: 15,
-            mse: 100,
-            validPixelCount: 1_500,
-            sumSquaredError: 450_000,
-            improvementDb: 0,
-          },
-          alternatives: [{
-            label: 'opaque-white',
-            rgba: [1, 1, 1, 1],
-            psnr: 18,
-            mse: 50,
-            validPixelCount: 1_500,
-            sumSquaredError: 225_000,
-            improvementDb: 3,
-          }],
-          best: {
-            label: 'opaque-white',
-            rgba: [1, 1, 1, 1],
-            psnr: 18,
-            mse: 50,
-            validPixelCount: 1_500,
-            sumSquaredError: 225_000,
-            improvementDb: 3,
-          },
-        },
       });
       await deferredMetric.promise;
     });
@@ -543,67 +427,9 @@ describe('SplatPsnrEvaluator', () => {
           label: 'opaque-black',
           rgba: [0, 0, 0, 1],
         },
-        diagnostics: {
-          lowPsnrThresholdDb: 20,
-          validPixelRatio: 0.95,
-          renderedMeanRgb: [10, 20, 30],
-          groundTruthMeanRgb: [50, 60, 70],
-          meanRgbDelta: [-40, -40, -40],
-          bestOffset: {
-            maxOffsetPixels: 2,
-            evaluatedOffsetCount: 25,
-            dx: -1,
-            dy: 0,
-            psnr: 24,
-            mse: 24,
-            validPixelCount: 1_500,
-            improvementDb: 9,
-          },
-          backgroundDiagnostics: {
-            baseline: {
-              label: 'opaque-black',
-              rgba: [0, 0, 0, 1],
-              psnr: 15,
-              mse: 100,
-              validPixelCount: 1_500,
-              sumSquaredError: 450_000,
-              improvementDb: 0,
-            },
-            alternatives: [{
-              label: 'opaque-white',
-              rgba: [1, 1, 1, 1],
-              psnr: 18,
-              mse: 50,
-              validPixelCount: 1_500,
-              sumSquaredError: 225_000,
-              improvementDb: 3,
-            }],
-            best: {
-              label: 'opaque-white',
-              rgba: [1, 1, 1, 1],
-              psnr: 18,
-              mse: 50,
-              validPixelCount: 1_500,
-              sumSquaredError: 225_000,
-              improvementDb: 3,
-            },
-          },
-          backgroundMismatch: {
-            classification: 'possible',
-            reason: 'Mean RGB shifts in the same direction across channels, consistent with a broad background or exposure mismatch.',
-          },
-          renderSize: {
-            width: 4000,
-            height: 3000,
-          },
-          sourceImageSize: {
-            width: 4000,
-            height: 3000,
-          },
-          cameraId: camera.cameraId,
-          cameraModelId: camera.modelId,
-          imageName: image.name,
-        },
+      }));
+      expect(actions.setSplatPsnrMetric).not.toHaveBeenCalledWith(expect.objectContaining({
+        diagnostics: expect.anything(),
       }));
     });
     expect(dispose).not.toHaveBeenCalled();
@@ -711,11 +537,9 @@ describe('SplatPsnrEvaluator', () => {
     });
     expect(session.submitImageMetric).toHaveBeenNthCalledWith(1, expect.objectContaining({
       image: firstImage,
-      includeDiagnostics: false,
     }));
     expect(session.submitImageMetric).toHaveBeenNthCalledWith(2, expect.objectContaining({
       image: secondImage,
-      includeDiagnostics: false,
     }));
     expect(session.computeImageMetric).not.toHaveBeenCalled();
     expect(actions.setSplatPsnrPending).toHaveBeenCalledWith([firstImage.imageId, secondImage.imageId]);

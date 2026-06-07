@@ -169,6 +169,7 @@ describe('useViewerControlsStoreFacade', () => {
       height: 24,
       computedAt: 1,
     });
+    usePointCloudStore.setState({ colorMode: 'rgb', showSplats: false });
 
     const { result } = renderHook(() => useViewerControlsStoreFacade());
 
@@ -177,6 +178,8 @@ describe('useViewerControlsStoreFacade', () => {
     });
 
     expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(fallbackSplatFile);
+    expect(usePointCloudStore.getState().colorMode).toBe('splats');
+    expect(usePointCloudStore.getState().showSplats).toBe(true);
     expect(useImageMetricsStore.getState().splatPsnrFrameReady).toBe(false);
     expect(useImageMetricsStore.getState().splatPsnrMetrics.size).toBe(0);
   });

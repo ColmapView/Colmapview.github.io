@@ -58,6 +58,25 @@ describe('async image cache pending item processing', () => {
     expect(pending.resolve).toHaveBeenCalledWith('processed-value');
   });
 
+  it('does not process or cache when drawing returns no canvas', () => {
+    const pending = createPending<string>();
+    const cache = new Map<string, string>();
+    const drawToCanvas = vi.fn(() => null);
+    const processCanvas = vi.fn(() => 'processed-value');
+
+    processAsyncImagePendingItem(pending, {
+      cache,
+      drawToCanvas,
+      maxSize: 512,
+      processCanvas,
+    });
+
+    expect(drawToCanvas).toHaveBeenCalledWith(pending.bitmap, 512);
+    expect(processCanvas).not.toHaveBeenCalled();
+    expect(cache.has('image.jpg')).toBe(false);
+    expect(pending.resolve).toHaveBeenCalledWith(null);
+  });
+
   it('caches non-null asynchronous canvas results', async () => {
     const pending = createPending<string>();
     const cache = new Map<string, string>();

@@ -60,6 +60,7 @@ interface ColmapWebViewE2EApi {
     error: string | null;
     metric: {
       psnr: number;
+      ssim?: number;
       mse: number;
       validPixelCount: number;
       width: number;

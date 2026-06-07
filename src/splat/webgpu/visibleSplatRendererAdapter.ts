@@ -21,6 +21,7 @@ import { getWebGpuSplatRequiredLimitsForCloud } from './webGpuSplatLimits';
 
 const MAX_VISIBLE_SPLAT_IN_FLIGHT_RENDERS = 2;
 const VISIBLE_SPLAT_SORT_ALGORITHM: NonNullable<SplatRenderSessionOptions['sortAlgorithm']> = 'radix-16bit';
+const VISIBLE_SPLAT_OUTPUT_ALGORITHM: NonNullable<SplatRenderSessionOptions['outputAlgorithm']> = 'composite';
 
 export interface VisibleWebGpuSplatCloudOptions {
   sceneId: string;
@@ -77,7 +78,7 @@ export async function createVisibleWebGpuSplatRendererAdapter(
   const initializeDevice = deps.initializeDevice ?? initializeWebGpuSplatDevice;
   let adapter: DefaultVisibleWebGpuSplatRendererAdapter | null = null;
   const deviceHandle = await initializeDevice(canvas, {
-    alphaMode: 'premultiplied',
+    alphaMode: 'opaque',
     requiredLimits: deps.requiredLimits,
     onDeviceLost: (info) => {
       adapter?.handleDeviceLost(info);
@@ -156,7 +157,7 @@ class DefaultVisibleWebGpuSplatRendererAdapter implements VisibleWebGpuSplatRend
         width: this.frame?.viewport.pixelWidth ?? getCanvasPixelWidth(this.canvas),
         height: this.frame?.viewport.pixelHeight ?? getCanvasPixelHeight(this.canvas),
         backgroundColor: getWebGpuSplatDefaultBackgroundColor(),
-        outputAlgorithm: 'xr-passthrough',
+        outputAlgorithm: VISIBLE_SPLAT_OUTPUT_ALGORITHM,
         sortAlgorithm: VISIBLE_SPLAT_SORT_ALGORITHM,
       });
 

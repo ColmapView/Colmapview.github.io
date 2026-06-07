@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Camera, Image, ImageId, Reconstruction } from '../../types/colmap';
 import type { Sim3dEuler } from '../../types/sim3d';
 import type { DatasetManager } from '../../dataset';
-import type { ImageMetricsState, SplatPsnrComputeRequest, SplatPsnrMetricDiagnostics } from '../../store';
+import type { ImageMetricsState, SplatPsnrComputeRequest } from '../../store';
 import { prefetchFrustumTexturesInBackground } from '../../hooks/useFrustumTexture';
 import { useLatestRef } from '../../hooks/useLatestRef';
 import { appLogger } from '../../utils/logger';
@@ -27,7 +27,6 @@ interface SplatPsnrRenderSession {
     width: number;
     height: number;
     transform?: Sim3dEuler;
-    includeDiagnostics?: boolean;
   }) => Promise<PsnrResult>;
   submitImageMetric?: (options: {
     imageFile: File;
@@ -36,7 +35,6 @@ interface SplatPsnrRenderSession {
     width: number;
     height: number;
     transform?: Sim3dEuler;
-    includeDiagnostics?: boolean;
   }) => Promise<SplatPsnrSubmittedMetric>;
   dispose: () => void;
 }
@@ -97,10 +95,9 @@ interface SplatPsnrRenderSessionCache {
 }
 
 const MAX_IN_FLIGHT_ALL_IMAGE_PSNR = 2;
-const LOW_PSNR_DIAGNOSTIC_THRESHOLD_DB = 20;
 const ALL_IMAGE_PSNR_METRIC_BATCH_SIZE = 16;
 const ALL_IMAGE_PSNR_METRIC_FLUSH_DELAY_MS = 32;
-const BACKGROUND_PSNR_START_DELAY_MS = 250;
+const BACKGROUND_PSNR_START_DELAY_MS = 1500;
 const BACKGROUND_IMAGE_PLANE_TEXTURE_COLLECT_BATCH_SIZE = 32;
 
 function getSplatPsnrDataIdentity(snapshot: {
@@ -195,8 +192,6 @@ function getRequestedSplatPsnrImageIds(
 
 function publishSplatPsnrMetric({
   imageId,
-  image,
-  camera,
   metric,
   width,
   height,
@@ -204,8 +199,6 @@ function publishSplatPsnrMetric({
   setSplatPsnrImageError,
 }: {
   imageId: ImageId;
-  image: Image;
-  camera: Camera;
   metric: PsnrResult;
   width: number;
   height: number;
@@ -214,8 +207,6 @@ function publishSplatPsnrMetric({
 }): void {
   const storeMetric = createSplatPsnrStoreMetric({
     imageId,
-    image,
-    camera,
     metric,
     width,
     height,
@@ -230,16 +221,12 @@ function publishSplatPsnrMetric({
 
 function createSplatPsnrStoreMetric({
   imageId,
-  image,
-  camera,
   metric,
   width,
   height,
   setSplatPsnrImageError,
 }: {
   imageId: ImageId;
-  image: Image;
-  camera: Camera;
   metric: PsnrResult;
   width: number;
   height: number;
@@ -253,6 +240,7 @@ function createSplatPsnrStoreMetric({
   return {
     imageId,
     psnr: metric.psnr,
+    ssim: metric.ssim,
     mse: metric.mse,
     validPixelCount: metric.validPixelCount,
     width,
@@ -262,98 +250,6 @@ function createSplatPsnrStoreMetric({
       label: 'opaque-black',
       rgba: getWebGpuSplatDefaultBackgroundColor(),
     },
-    diagnostics: createSplatPsnrMetricDiagnostics({
-      image,
-      camera,
-      metric,
-      width,
-      height,
-    }),
-  };
-}
-
-function createSplatPsnrMetricDiagnostics({
-  image,
-  camera,
-  metric,
-  width,
-  height,
-}: {
-  image: Image;
-  camera: Camera;
-  metric: PsnrResult;
-  width: number;
-  height: number;
-}): SplatPsnrMetricDiagnostics | undefined {
-  if (!metric.colorDiagnostics) {
-    return undefined;
-  }
-
-  return {
-    lowPsnrThresholdDb: LOW_PSNR_DIAGNOSTIC_THRESHOLD_DB,
-    validPixelRatio: metric.colorDiagnostics.validPixelRatio,
-    renderedMeanRgb: metric.colorDiagnostics.renderedMeanRgb,
-    groundTruthMeanRgb: metric.colorDiagnostics.groundTruthMeanRgb,
-    meanRgbDelta: metric.colorDiagnostics.meanRgbDelta,
-    bestOffset: metric.offsetDiagnostics
-      ? {
-          maxOffsetPixels: metric.offsetDiagnostics.maxOffsetPixels,
-          evaluatedOffsetCount: metric.offsetDiagnostics.evaluatedOffsetCount,
-          dx: metric.offsetDiagnostics.best.dx,
-          dy: metric.offsetDiagnostics.best.dy,
-          psnr: metric.offsetDiagnostics.best.psnr,
-          mse: metric.offsetDiagnostics.best.mse,
-          validPixelCount: metric.offsetDiagnostics.best.validPixelCount,
-          improvementDb: metric.offsetDiagnostics.improvementDb,
-        }
-      : undefined,
-    backgroundDiagnostics: metric.backgroundDiagnostics,
-    backgroundMismatch: classifySplatPsnrBackgroundMismatch(metric.colorDiagnostics),
-    renderSize: {
-      width,
-      height,
-    },
-    sourceImageSize: {
-      width: camera.width,
-      height: camera.height,
-    },
-    cameraId: camera.cameraId,
-    cameraModelId: camera.modelId,
-    imageName: image.name,
-  };
-}
-
-function classifySplatPsnrBackgroundMismatch(
-  diagnostics: NonNullable<PsnrResult['colorDiagnostics']>
-): SplatPsnrMetricDiagnostics['backgroundMismatch'] {
-  const delta = diagnostics.meanRgbDelta;
-  if (!delta) {
-    return {
-      classification: 'unknown',
-      reason: 'No valid ground-truth pixels were available for RGB diagnostics.',
-    };
-  }
-
-  if (diagnostics.validPixelRatio < 0.8) {
-    return {
-      classification: 'unknown',
-      reason: 'Valid-pixel coverage is too low for a reliable background classification.',
-    };
-  }
-
-  const averageAbsDelta = (Math.abs(delta[0]) + Math.abs(delta[1]) + Math.abs(delta[2])) / 3;
-  const samePositiveShift = delta.every((value) => value >= 15);
-  const sameNegativeShift = delta.every((value) => value <= -15);
-  if ((samePositiveShift || sameNegativeShift) && averageAbsDelta >= 15) {
-    return {
-      classification: 'possible',
-      reason: 'Mean RGB shifts in the same direction across channels, consistent with a broad background or exposure mismatch.',
-    };
-  }
-
-  return {
-    classification: 'unlikely',
-    reason: 'Mean RGB deltas are not a broad same-direction shift.',
   };
 }
 
@@ -491,14 +387,11 @@ async function runSplatPsnrTask(
           width: prepared.width,
           height: prepared.height,
           transform,
-          includeDiagnostics: request.scope === 'selected',
         });
         if (task.cancelled) return;
 
         publishSplatPsnrMetric({
           imageId,
-          image: prepared.image,
-          camera: prepared.camera,
           metric,
           width: prepared.width,
           height: prepared.height,
@@ -566,7 +459,6 @@ async function runBatchedAllImageSplatPsnrTask(
           width: prepared.width,
           height: prepared.height,
           transform,
-          includeDiagnostics: false,
         });
         if (!submitted) {
           return false;
@@ -581,8 +473,6 @@ async function runBatchedAllImageSplatPsnrTask(
             if (task.cancelled) return;
             const storeMetric = createSplatPsnrStoreMetric({
               imageId,
-              image: prepared.image,
-              camera: prepared.camera,
               metric,
               width: prepared.width,
               height: prepared.height,
@@ -699,6 +589,7 @@ async function prefetchSplatPsnrImagePlaneTextures({
       return;
     }
 
+    const metricImageFile = await dataset.getMetricImage(image.name);
     const cachedImageFile = typeof dataset.getImageSync === 'function'
       ? dataset.getImageSync(image.name)
       : undefined;
@@ -707,7 +598,7 @@ async function prefetchSplatPsnrImagePlaneTextures({
         ? await dataset.getImage(image.name)
         : null
     );
-    const imageFile = displayImageFile ?? await dataset.getMetricImage(image.name);
+    const imageFile = metricImageFile ?? displayImageFile;
     if (shouldCancel()) {
       return;
     }

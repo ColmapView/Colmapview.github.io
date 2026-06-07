@@ -72,7 +72,7 @@ export function createWebGpuPsnrGroundTruthTextureFromBitmap({
   try {
     device.queue.copyExternalImageToTexture(
       { source, origin: { x: safeSourceOriginX, y: safeSourceOriginY } },
-      { texture: sourceTexture },
+      { texture: sourceTexture, colorSpace: 'srgb', premultipliedAlpha: false },
       { width: safeSourceWidth, height: safeSourceHeight }
     );
   } catch (error) {

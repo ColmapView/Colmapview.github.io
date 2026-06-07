@@ -3,10 +3,16 @@ import type { Camera, Image, ImageId, Reconstruction } from '../../types/colmap'
 import { getCameraColor } from '../../theme';
 import { getImageWorldPose } from '../../utils/colmapTransforms';
 import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
-import { getSplatPsnrColor } from './splatPsnrMetric';
+import {
+  computeSplatMetricColorScale,
+  getSplatMetricScaleColor,
+  getSplatPsnrColor,
+  getSplatSsimColor,
+  type SplatMetricColorScale,
+} from './splatPsnrMetric';
 
-export type FrustumColorMode = 'single' | 'byCamera' | 'byRigFrame' | 'splatPsnr';
-export type FrustumPsnrMetricSource = ReadonlyMap<ImageId, { psnr: number }>;
+export type FrustumColorMode = 'single' | 'byCamera' | 'byRigFrame' | 'splatPsnr' | 'splatSsim';
+export type FrustumPsnrMetricSource = ReadonlyMap<ImageId, { psnr: number; ssim?: number }>;
 
 export interface FrustumImageSource {
   getImageSync(name: string): File | null | undefined;
@@ -47,10 +53,20 @@ export function getFrustumBaseColor(
   imageId: ImageId,
   imageFrameIndexMap: Map<ImageId, number>,
   frustumSingleColor: string,
-  splatPsnrByImage?: FrustumPsnrMetricSource
+  splatPsnrByImage?: FrustumPsnrMetricSource,
+  metricColorScale?: SplatMetricColorScale | null
 ): string {
   if (frustumColorMode === 'splatPsnr') {
-    return getSplatPsnrColor(splatPsnrByImage?.get(imageId)?.psnr);
+    const psnr = splatPsnrByImage?.get(imageId)?.psnr;
+    return metricColorScale
+      ? getSplatMetricScaleColor(psnr, metricColorScale)
+      : getSplatPsnrColor(psnr);
+  }
+  if (frustumColorMode === 'splatSsim') {
+    const ssim = splatPsnrByImage?.get(imageId)?.ssim;
+    return metricColorScale
+      ? getSplatMetricScaleColor(ssim, metricColorScale)
+      : getSplatSsimColor(ssim);
   }
   if (frustumColorMode === 'byCamera') {
     return getCameraColor(cameraIndex);
@@ -60,6 +76,21 @@ export function getFrustumBaseColor(
     return frameIndex !== undefined ? getCameraColor(frameIndex) : frustumSingleColor;
   }
   return frustumSingleColor;
+}
+
+export function getFrustumMetricColorScale(
+  frustumColorMode: FrustumColorMode,
+  imageIds: Iterable<ImageId>,
+  splatPsnrByImage?: FrustumPsnrMetricSource
+): SplatMetricColorScale | null {
+  if (!splatPsnrByImage) return null;
+  if (frustumColorMode === 'splatPsnr') {
+    return computeSplatMetricColorScale(Array.from(imageIds, (imageId) => splatPsnrByImage.get(imageId)?.psnr));
+  }
+  if (frustumColorMode === 'splatSsim') {
+    return computeSplatMetricColorScale(Array.from(imageIds, (imageId) => splatPsnrByImage.get(imageId)?.ssim));
+  }
+  return null;
 }
 
 export function buildCameraIdToIndex(reconstruction: Reconstruction | null): Map<number, number> {
@@ -192,6 +223,11 @@ export function buildFrustumLineGeometryData(
   const baseColors = new Float32Array(frustums.length * 48);
   const baseAlphas = new Float32Array(frustums.length * 16);
   const color = new THREE.Color();
+  const metricColorScale = getFrustumMetricColorScale(
+    frustumColorMode,
+    frustums.map((frustum) => frustum.image.imageId),
+    splatPsnrByImage
+  );
 
   frustums.forEach((frustum, index) => {
     const offset = index * 48;
@@ -230,7 +266,8 @@ export function buildFrustumLineGeometryData(
       frustum.image.imageId,
       imageFrameIndexMap,
       frustumSingleColor,
-      splatPsnrByImage
+      splatPsnrByImage,
+      metricColorScale
     ));
 
     for (let vertex = 0; vertex < 16; vertex++) {

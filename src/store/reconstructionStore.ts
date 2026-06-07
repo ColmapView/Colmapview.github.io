@@ -3,6 +3,7 @@ import type { Reconstruction, LoadedFiles } from '../types/colmap';
 import type { WasmReconstructionWrapper } from '../wasm/reconstruction';
 import type { UrlLoadProgress, UrlLoadError, ColmapManifest } from '../types/manifest';
 import { useUIStore } from './stores/uiStore';
+import { usePointCloudStore } from './stores/pointCloudStore';
 import { getDefaultBackgroundColorForSplatLoad } from './splatBackgroundPolicy';
 
 /** Source type for loaded reconstruction */
@@ -115,13 +116,17 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   },
 
   setLoadedFiles: (loadedFiles) => {
+    const hasSplatFile = Boolean(loadedFiles.splatFile);
     const uiStore = useUIStore.getState();
     const nextBackgroundColor = getDefaultBackgroundColorForSplatLoad(
       uiStore.backgroundColor,
-      Boolean(loadedFiles.splatFile)
+      hasSplatFile
     );
     if (nextBackgroundColor !== uiStore.backgroundColor) {
       uiStore.setBackgroundColor(nextBackgroundColor);
+    }
+    if (hasSplatFile) {
+      usePointCloudStore.getState().setColorMode('splats');
     }
 
     set({ loadedFiles });

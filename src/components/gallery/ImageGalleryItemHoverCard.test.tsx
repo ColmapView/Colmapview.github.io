@@ -15,6 +15,8 @@ function createImage(overrides: Partial<ImageData> = {}): ImageData {
     cameraHeight: 768,
     covisibleCount: 5,
     avgError: 0.345,
+    splatPsnr: 31.24,
+    splatSsim: 0.9428,
     ...overrides,
   };
 }
@@ -42,6 +44,8 @@ describe('ImageGalleryItemHoverCard', () => {
     expect(screen.getByText('23 2D points')).toBeInTheDocument();
     expect(screen.getByText('5 covisible')).toBeInTheDocument();
     expect(screen.getByText('0.34 avg error')).toBeInTheDocument();
+    expect(screen.getByText('31.2 dB PSNR')).toBeInTheDocument();
+    expect(screen.getByText('0.943 SSIM')).toBeInTheDocument();
     expect(screen.getByText('Left: details')).toBeInTheDocument();
     expect(screen.getByText('Right: matches')).toBeInTheDocument();
 
@@ -70,6 +74,8 @@ describe('ImageGalleryItemHoverCard', () => {
     expect(screen.queryByText('image-7.jpg')).toBeNull();
     expect(screen.queryByText('#7')).toBeNull();
     expect(screen.queryByText('11 3D points')).toBeNull();
+    expect(screen.queryByText('31.2 dB PSNR')).toBeNull();
+    expect(screen.queryByText('0.943 SSIM')).toBeNull();
     expect(screen.getByText('Left: select')).toBeInTheDocument();
     expect(screen.getByText('Right: back')).toBeInTheDocument();
   });

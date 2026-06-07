@@ -2,7 +2,7 @@ import { drawImageBitmapToCacheCanvas } from './asyncImageCanvas';
 import type { AsyncImageCachePendingItem } from './asyncImageCacheState';
 
 type CacheCanvas = HTMLCanvasElement | OffscreenCanvas;
-type DrawToCanvas = (bitmap: ImageBitmap, maxSize: number) => CacheCanvas;
+type DrawToCanvas = (bitmap: ImageBitmap, maxSize: number) => CacheCanvas | null;
 type ProcessCanvas<T> = (canvas: CacheCanvas) => T | Promise<T | null>;
 
 export interface ProcessAsyncImagePendingItemDeps<T> {
@@ -25,6 +25,11 @@ export function processAsyncImagePendingItem<T>(
 
   const drawToCanvas = deps.drawToCanvas ?? drawImageBitmapToCacheCanvas;
   const canvas = drawToCanvas(pending.bitmap, deps.maxSize);
+  if (!canvas) {
+    pending.resolve(null);
+    return;
+  }
+
   const result = deps.processCanvas(canvas);
 
   if (result instanceof Promise) {

@@ -10,6 +10,12 @@ interface PointGeometryVisibilityOptions {
   splatFile?: File;
 }
 
+interface PointCloudDataComputationOptions {
+  showPointGeometry: boolean;
+  showSelectionHighlight: boolean;
+  selectedImageId: number | null;
+}
+
 export interface PointGeometryLayerProps {
   renderOrder: number;
   vertexColors: boolean;
@@ -45,6 +51,14 @@ export function getPointGeometryDataColorMode(colorMode: ColorMode): ColorMode {
   return colorMode === 'splats' || isSplatPointOverlayColorMode(colorMode)
     ? 'rgb'
     : colorMode;
+}
+
+export function shouldComputePointCloudData({
+  showPointGeometry,
+  showSelectionHighlight,
+  selectedImageId,
+}: PointCloudDataComputationOptions): boolean {
+  return showPointGeometry || (showSelectionHighlight && selectedImageId !== null);
 }
 
 export function getSplatPointOverlayAnimationMode(

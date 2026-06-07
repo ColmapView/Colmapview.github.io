@@ -7,6 +7,7 @@ import type { Camera, Image } from '../../types/colmap';
 import { VIZ_COLORS, RAINBOW } from '../../theme';
 import {
   getFrustumBaseColor,
+  getFrustumMetricColorScale,
   type FrustumPsnrMetricSource,
   type FrustumColorMode,
 } from './cameraFrustumViewModel';
@@ -105,6 +106,11 @@ export function BatchedArrowMeshes({
     });
     return map;
   }, [frustums]);
+  const metricColorScale = useMemo(() => getFrustumMetricColorScale(
+    frustumColorMode,
+    frustums.map((frustum) => frustum.image.imageId),
+    splatPsnrByImage
+  ), [frustums, frustumColorMode, splatPsnrByImage]);
 
   const isDragging = useTrackballDraggingReader();
   const { tooltipData, tooltipFrustum, interactionHandlers } = useBatchedFrustumInteractions({
@@ -228,7 +234,8 @@ export function BatchedArrowMeshes({
             f.image.imageId,
             imageFrameIndexMap,
             frustumSingleColor,
-            splatPsnrByImage
+            splatPsnrByImage,
+            metricColorScale
           ));
           break;
       }
@@ -305,6 +312,7 @@ export function BatchedArrowMeshes({
     selectionAnimationSpeed,
     imageFrameIndexMap,
     splatPsnrByImage,
+    metricColorScale,
     pendingDeletions,
   ]);
 
@@ -379,7 +387,6 @@ export function BatchedArrowMeshes({
             cameraId={tooltipFrustum.image.cameraId}
             multiCamera={multiCamera}
             numPoints3D={tooltipFrustum.numPoints3D}
-            splatPsnr={splatPsnrByImage.get(tooltipFrustum.image.imageId)?.psnr}
             isSelected={false}
             isMatched={matchedImageIds.has(tooltipFrustum.image.imageId)}
             wouldGoBack={tooltipFrustum.image.imageId === lastNavigationToImageId}

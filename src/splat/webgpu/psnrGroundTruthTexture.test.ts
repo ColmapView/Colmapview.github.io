@@ -100,6 +100,11 @@ describe('WebGPU PSNR ground-truth texture helpers', () => {
     expect(fake.createdTextures[0].usage).toBe(0x02 | 0x04 | 0x10);
     expect(fake.externalCopies).toHaveLength(1);
     expect(fake.externalCopies[0].source).toEqual({ source: bitmap, origin: { x: 0, y: 0 } });
+    expect(fake.externalCopies[0].destination).toEqual({
+      texture: fake.createdTextures[0].texture,
+      colorSpace: 'srgb',
+      premultipliedAlpha: false,
+    });
     expect(fake.externalCopies[0].size).toEqual({ width: 800, height: 400 });
     expect(fake.dispatches).toEqual([]);
     expect(fake.submissions).toEqual([]);
@@ -180,6 +185,11 @@ describe('WebGPU PSNR ground-truth texture helpers', () => {
     expect(fake.externalCopies[0].source).toEqual({
       source: bitmap,
       origin: { x: 512, y: 128 },
+    });
+    expect(fake.externalCopies[0].destination).toEqual({
+      texture: fake.createdTextures[0].texture,
+      colorSpace: 'srgb',
+      premultipliedAlpha: false,
     });
     expect(fake.externalCopies[0].size).toEqual({ width: 256, height: 128 });
     expect(fake.dispatches).toEqual([]);

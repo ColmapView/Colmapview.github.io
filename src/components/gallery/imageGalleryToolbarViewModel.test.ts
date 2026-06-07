@@ -37,13 +37,16 @@ describe('image gallery toolbar view model', () => {
       'numPoints3D',
       'numPoints2D',
       'splatPsnr',
+      'splatSsim',
     ]);
   });
 
   it('narrows raw select values to supported sort fields', () => {
     expect(getGallerySortFieldValue('avgError')).toBe('avgError');
     expect(getGallerySortFieldValue('splatPsnr')).toBeNull();
+    expect(getGallerySortFieldValue('splatSsim')).toBeNull();
     expect(getGallerySortFieldValue('splatPsnr', true)).toBe('splatPsnr');
+    expect(getGallerySortFieldValue('splatSsim', true)).toBe('splatSsim');
     expect(getGallerySortFieldValue('unknown')).toBeNull();
   });
 

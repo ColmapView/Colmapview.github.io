@@ -1,7 +1,7 @@
 /**
  * Texture loading for camera frustum image planes.
  *
- * Strategy: Cache JPEG blob URLs (compressed, ~50-100KB each) instead of
+ * Strategy: Cache PNG blob URLs (compressed, alpha-safe, small at 128px) instead of
  * THREE.Texture objects (uncompressed, ~4MB each). Create textures on-demand.
  * This allows caching thousands of images without running out of memory.
  */
@@ -60,23 +60,23 @@ export function getFrustumTextureCacheVersion(): number {
 }
 
 /**
- * Process canvas to JPEG blob URL (same as thumbnails, but larger size).
+ * Process canvas to an alpha-preserving PNG blob URL.
  */
-async function canvasToJpegUrl(canvas: HTMLCanvasElement | OffscreenCanvas): Promise<string | null> {
+async function canvasToPngUrl(canvas: HTMLCanvasElement | OffscreenCanvas): Promise<string | null> {
   try {
     const blob = isOffscreenCanvas(canvas)
-      ? await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.75 })
-      : await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.75));
+      ? await canvas.convertToBlob({ type: 'image/png' })
+      : await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
     return blob ? URL.createObjectURL(blob) : null;
   } catch {
     return null;
   }
 }
 
-// Cache stores JPEG blob URLs (compressed) instead of textures (uncompressed)
+// Cache stores small PNG blob URLs instead of textures (uncompressed)
 const frustumUrlCache = createImageCache<string>({
   maxSize: SIZE.frustumMaxSize,
-  processCanvas: canvasToJpegUrl,
+  processCanvas: canvasToPngUrl,
   dispose: (url) => URL.revokeObjectURL(url),
   idleTimeout: TIMING.textureUploadTimeout,
   idleFallback: TIMING.textureUploadFallback,
@@ -114,7 +114,7 @@ function createTextureFromBitmap(bitmap: ImageBitmap, imageName: string): THREE.
  * Call this when loading a new reconstruction.
  */
 export function clearFrustumTextureCache(): void {
-  // Clear the JPEG URL cache
+  // Clear the PNG URL cache
   frustumUrlCache.clear();
 
   // IMPORTANT: Dispose textures BEFORE closing bitmaps to prevent WebGL errors
@@ -163,7 +163,7 @@ export function getFrustumTextureCacheStats(): {
 
 /**
  * Prefetch frustum textures for a list of images.
- * This caches JPEG blob URLs, not actual textures.
+ * This caches PNG blob URLs, not actual textures.
  */
 export async function prefetchFrustumTextures(
   images: Array<{ file: File; name: string }>,
@@ -179,7 +179,7 @@ export interface BackgroundFrustumTexturePrefetchOptions {
 }
 
 /**
- * Gently prefetch the low-resolution JPEG URL cache used by image-plane display.
+ * Gently prefetch the low-resolution PNG URL cache used by image-plane display.
  */
 export async function prefetchFrustumTexturesInBackground(
   images: Array<{ file: File; name: string }>,
@@ -228,7 +228,7 @@ export async function prioritizeFrustumTexture(
  * Hook to get a frustum texture with caching and optimization.
  *
  * Strategy:
- * 1. Cache stores JPEG blob URLs (compressed, ~50-100KB each)
+ * 1. Cache stores PNG blob URLs (compressed, alpha-safe, small at 128px)
  * 2. Small bitmap cache for fast texture recreation (MAX_CACHED_BITMAPS)
  * 3. Keep active Three textures valid while mounted image planes may reference them
  *
@@ -249,7 +249,7 @@ export function useFrustumTexture(
   );
   void cacheVersion;
 
-  // Get the cached JPEG blob URL
+  // Get the cached PNG blob URL
   const cachedUrl = frustumUrlCache.useCache(imageFile, imageName, enabled);
   const resourceRef = useRef<FrustumTextureResource | null>(null);
   resourceRef.current ??= createFrustumTextureResource({

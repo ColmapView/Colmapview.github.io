@@ -2,6 +2,7 @@
  * Point cloud visualization component.
  * Orchestrates data computation, rendering, and interaction.
  */
+// @refresh reset
 
 import React, { useMemo, useEffect, useLayoutEffect } from 'react';
 import * as THREE from 'three';
@@ -14,6 +15,7 @@ import {
   getPointGeometryDataColorMode,
   getPointGeometryLayerProps,
   getSplatPointOverlayAnimationMode,
+  shouldComputePointCloudData,
   shouldRenderPointGeometry,
 } from './pointCloudRenderPolicy';
 
@@ -87,10 +89,16 @@ export function PointCloud(): React.JSX.Element | null {
   const effectiveSelectedImageId = selectedImageId !== null && deletion.pendingDeletions.has(selectedImageId)
     ? null
     : selectedImageId;
+  const computePointCloudData = shouldComputePointCloudData({
+    showPointGeometry,
+    showSelectionHighlight,
+    selectedImageId: effectiveSelectedImageId,
+  });
 
   // Compute point cloud data (positions, colors, selection)
   const { positions, colors, selectedPositions, selectedColors, indexToPoint3DIdRef } =
     usePointCloudData({
+      enabled: computePointCloudData,
       reconstruction,
       wasmReconstruction,
       colorMode: pointColorMode,

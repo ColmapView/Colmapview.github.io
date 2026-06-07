@@ -3,7 +3,7 @@ import { VIZ_COLORS } from '../../theme';
 import type { ImageId } from '../../types/colmap';
 import type { SelectionColorMode } from '../../store/types';
 import { COS_90_DEG } from './cameraFrustumConstants';
-import type { CameraFrustumItem } from './cameraFrustumViewModel';
+import type { CameraFrustumItem, FrustumPsnrMetricSource } from './cameraFrustumViewModel';
 import { buildImagePlaneRenderItems, type BuildImagePlaneRenderItemsOptions } from './cameraFrustumPlaneLayerPolicy';
 import { FrustumPlane } from './FrustumPlane';
 
@@ -16,7 +16,6 @@ interface SharedPlaneLayerProps {
   touchMode: boolean;
   undistortionEnabled: boolean;
   undistortionMode: 'cropped' | 'fullFrame';
-  splatPsnrByImage: ReadonlyMap<ImageId, { psnr: number }>;
 }
 
 interface SelectedCameraPlaneProps extends SharedPlaneLayerProps {
@@ -43,7 +42,6 @@ export function SelectedCameraFrustumPlane({
   touchMode,
   undistortionEnabled,
   undistortionMode,
-  splatPsnrByImage,
 }: SelectedCameraPlaneProps) {
   if (!frustum) return null;
 
@@ -65,7 +63,6 @@ export function SelectedCameraFrustumPlane({
       undistortionEnabled={undistortionEnabled}
       undistortionMode={undistortionMode}
       numPoints3D={frustum.numPoints3D}
-      splatPsnr={splatPsnrByImage.get(frustum.image.imageId)?.psnr}
       hoveredImageId={hoveredImageId}
       onHover={onHover}
       onClick={onClick}
@@ -79,6 +76,7 @@ export function SelectedCameraFrustumPlane({
 interface ImagePlaneFrustumPlanesProps
   extends SharedPlaneLayerProps,
     Omit<BuildImagePlaneRenderItemsOptions, 'splatPsnrByImage'> {
+  splatPsnrByImage: FrustumPsnrMetricSource;
   onLongPress?: (imageId: ImageId) => void;
 }
 
@@ -150,7 +148,7 @@ export function ImagePlaneFrustumPlanes({
           image={frustum.image}
           scale={cameraScale}
           imageFile={frustum.imageFile}
-          showImagePlane={selectedImageId === null}
+          showImagePlane={true}
           isSelected={false}
           isMatched={isMatched}
           wouldGoBack={wouldGoBack}
@@ -160,7 +158,6 @@ export function ImagePlaneFrustumPlanes({
           undistortionEnabled={undistortionEnabled}
           undistortionMode={undistortionMode}
           numPoints3D={frustum.numPoints3D}
-          splatPsnr={splatPsnrByImage.get(frustum.image.imageId)?.psnr}
           hoveredImageId={hoveredImageId}
           onHover={onHover}
           onClick={onClick}

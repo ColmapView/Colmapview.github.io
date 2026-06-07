@@ -88,6 +88,8 @@ function createBrowserCompressionCanvas(
 
   return {
     drawImage(bitmap: ImageBitmap, targetWidth: number, targetHeight: number): void {
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
     },
     toBlob(type: string, quality: number): Promise<Blob> {

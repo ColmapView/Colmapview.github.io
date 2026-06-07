@@ -119,56 +119,12 @@ describe('useScene3DE2EProbeStoreFacade', () => {
         {
           imageId: 12,
           psnr: 24,
+          ssim: 0.91,
           mse: 200,
           validPixelCount: 128,
           width: 64,
           height: 32,
           computedAt: 1000,
-          diagnostics: {
-            lowPsnrThresholdDb: 20,
-            validPixelRatio: 1,
-            renderedMeanRgb: [10, 20, 30],
-            groundTruthMeanRgb: [12, 22, 32],
-            meanRgbDelta: [-2, -2, -2],
-            backgroundDiagnostics: {
-              baseline: {
-                label: 'opaque-black',
-                rgba: [0, 0, 0, 1],
-                psnr: 24,
-                mse: 200,
-                validPixelCount: 128,
-                sumSquaredError: 76800,
-                improvementDb: 0,
-              },
-              alternatives: [{
-                label: 'opaque-white',
-                rgba: [1, 1, 1, 1],
-                psnr: 18,
-                mse: 800,
-                validPixelCount: 128,
-                sumSquaredError: 307200,
-                improvementDb: -6,
-              }],
-              best: {
-                label: 'opaque-black',
-                rgba: [0, 0, 0, 1],
-                psnr: 24,
-                mse: 200,
-                validPixelCount: 128,
-                sumSquaredError: 76800,
-                improvementDb: 0,
-              },
-            },
-            backgroundMismatch: {
-              classification: 'unlikely',
-              reason: 'Mean RGB deltas are not a broad same-direction shift.',
-            },
-            renderSize: { width: 64, height: 32 },
-            sourceImageSize: { width: 64, height: 32 },
-            cameraId: 1,
-            cameraModelId: 1,
-            imageName: 'image.jpg',
-          },
         },
       ]]),
       splatPsnrStatus: new Map([[12, 'ready']]),
@@ -184,18 +140,13 @@ describe('useScene3DE2EProbeStoreFacade', () => {
       error: null,
       metric: {
         psnr: 24,
+        ssim: 0.91,
         mse: 200,
-          validPixelCount: 128,
-          width: 64,
-          height: 32,
-          diagnostics: expect.objectContaining({
-            backgroundDiagnostics: expect.objectContaining({
-              baseline: expect.objectContaining({ label: 'opaque-black' }),
-              alternatives: [expect.objectContaining({ label: 'opaque-white' })],
-            }),
-          }),
-        },
-      });
+        validPixelCount: 128,
+        width: 64,
+        height: 32,
+      },
+    });
 
     act(() => {
       result.current.actions.requestSplatPsnrCompute('selected', 12);

@@ -7,68 +7,20 @@ export type SplatPsnrComputeScope = 'selected' | 'all';
 export interface SplatPsnrMetric {
   imageId: ImageId;
   psnr: number;
+  ssim?: number;
   mse: number;
   validPixelCount: number;
   width: number;
   height: number;
   computedAt: number;
   renderBackground?: SplatPsnrRenderBackground;
-  diagnostics?: SplatPsnrMetricDiagnostics;
 }
 
-export type SplatPsnrRenderBackgroundLabel = 'opaque-black' | 'opaque-white';
+export type SplatPsnrRenderBackgroundLabel = 'opaque-black';
 
 export interface SplatPsnrRenderBackground {
   label: SplatPsnrRenderBackgroundLabel;
   rgba: [number, number, number, number];
-}
-
-export interface SplatPsnrBackgroundCandidate extends SplatPsnrRenderBackground {
-  psnr: number;
-  mse: number;
-  validPixelCount: number;
-  sumSquaredError: number;
-  improvementDb: number;
-}
-
-export interface SplatPsnrBackgroundDiagnostics {
-  baseline: SplatPsnrBackgroundCandidate;
-  alternatives: SplatPsnrBackgroundCandidate[];
-  best: SplatPsnrBackgroundCandidate;
-}
-
-export interface SplatPsnrMetricDiagnostics {
-  lowPsnrThresholdDb: number;
-  validPixelRatio: number;
-  renderedMeanRgb: [number, number, number] | null;
-  groundTruthMeanRgb: [number, number, number] | null;
-  meanRgbDelta: [number, number, number] | null;
-  bestOffset?: {
-    maxOffsetPixels: number;
-    evaluatedOffsetCount: number;
-    dx: number;
-    dy: number;
-    psnr: number;
-    mse: number;
-    validPixelCount: number;
-    improvementDb: number;
-  };
-  backgroundDiagnostics?: SplatPsnrBackgroundDiagnostics;
-  backgroundMismatch: {
-    classification: 'possible' | 'unlikely' | 'unknown';
-    reason: string;
-  };
-  renderSize: {
-    width: number;
-    height: number;
-  };
-  sourceImageSize: {
-    width: number;
-    height: number;
-  };
-  cameraId: number;
-  cameraModelId: number;
-  imageName: string;
 }
 
 export interface SplatPsnrComputeRequest {
@@ -107,6 +59,14 @@ function setManyStatuses(
   return next;
 }
 
+function deleteImageIds<T>(current: Map<ImageId, T>, imageIds: ImageId[]): Map<ImageId, T> {
+  const next = new Map(current);
+  for (const imageId of imageIds) {
+    next.delete(imageId);
+  }
+  return next;
+}
+
 export const useImageMetricsStore = create<ImageMetricsState>()((set) => ({
   splatPsnrFrameReady: false,
   splatPsnrMetrics: new Map(),
@@ -126,11 +86,23 @@ export const useImageMetricsStore = create<ImageMetricsState>()((set) => ({
   setSplatPsnrPending: (imageIds) => set((state) => ({
     splatPsnrComputing: imageIds.length > 0,
     splatPsnrStatus: setManyStatuses(state.splatPsnrStatus, imageIds, 'pending'),
+    splatPsnrMetrics: deleteImageIds(state.splatPsnrMetrics, imageIds),
+    splatPsnrError: deleteImageIds(state.splatPsnrError, imageIds),
   })),
-  setSplatPsnrComputingImage: (imageId) => set((state) => ({
-    splatPsnrComputing: true,
-    splatPsnrStatus: new Map(state.splatPsnrStatus).set(imageId, 'computing'),
-  })),
+  setSplatPsnrComputingImage: (imageId) => set((state) => {
+    const nextMetrics = new Map(state.splatPsnrMetrics);
+    nextMetrics.delete(imageId);
+
+    const nextError = new Map(state.splatPsnrError);
+    nextError.delete(imageId);
+
+    return {
+      splatPsnrComputing: true,
+      splatPsnrStatus: new Map(state.splatPsnrStatus).set(imageId, 'computing'),
+      splatPsnrMetrics: nextMetrics,
+      splatPsnrError: nextError,
+    };
+  }),
   setSplatPsnrMetric: (metric) => set((state) => {
     const nextMetrics = new Map(state.splatPsnrMetrics);
     nextMetrics.set(metric.imageId, metric);
@@ -168,10 +140,16 @@ export const useImageMetricsStore = create<ImageMetricsState>()((set) => ({
       splatPsnrError: nextError,
     };
   }),
-  setSplatPsnrImageError: (imageId, error) => set((state) => ({
-    splatPsnrStatus: new Map(state.splatPsnrStatus).set(imageId, 'error'),
-    splatPsnrError: new Map(state.splatPsnrError).set(imageId, error),
-  })),
+  setSplatPsnrImageError: (imageId, error) => set((state) => {
+    const nextMetrics = new Map(state.splatPsnrMetrics);
+    nextMetrics.delete(imageId);
+
+    return {
+      splatPsnrStatus: new Map(state.splatPsnrStatus).set(imageId, 'error'),
+      splatPsnrMetrics: nextMetrics,
+      splatPsnrError: new Map(state.splatPsnrError).set(imageId, error),
+    };
+  }),
   finishSplatPsnrCompute: () => set({ splatPsnrComputing: false }),
   clearSplatPsnr: () => set({
     splatPsnrFrameReady: false,

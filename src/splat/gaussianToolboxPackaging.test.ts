@@ -127,6 +127,17 @@ describe('Gaussian toolbox release packaging', () => {
     expect(sortIndexJs).toContain('WASM sort modules are not included');
   });
 
+  it('keeps solid composite backgrounds synchronized with the backgroundColor uniform', () => {
+    const compositeJs = readFileSync(
+      join(rootDir, 'vendor/gs-toolbox/dist/output/gpu/composite.js'),
+      'utf8'
+    );
+
+    expect(compositeJs).toContain('this.fallbackBackgroundBytes = new Uint8Array([0, 0, 0, 255])');
+    expect(compositeJs).toContain('this.updateFallbackBackgroundTexture(bg)');
+    expect(compositeJs).toContain('function floatToUnorm8(value)');
+  });
+
   it('keeps higher-order SH evaluation aligned with the Spark basis and view direction', () => {
     const sh0: [number, number, number] = [0.08, -0.04, 0.03];
     const shN = new Float32Array(45);

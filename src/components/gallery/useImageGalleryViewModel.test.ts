@@ -9,12 +9,14 @@ import {
 import {
   useCameraStore,
   useDeletionStore,
+  useImageMetricsStore,
   useReconstructionStore,
   useUIStore,
 } from '../../store';
 
 afterEach(() => {
   useReconstructionStore.getState().clear();
+  useImageMetricsStore.setState(useImageMetricsStore.getInitialState(), true);
   useCameraStore.setState({
     currentViewState: null,
     flyToImageId: null,
@@ -124,6 +126,54 @@ describe('useImageGalleryViewModel', () => {
 
     expect(result.current.hideToolbar).toBe(false);
     expect(result.current.hideImageOverlay).toBe(true);
+
+    unmount();
+  });
+
+  it('sorts by SSIM when splat metrics are ready', () => {
+    const camera = buildCamera({ cameraId: 1 });
+    const lowSsim = buildImage({ imageId: 10, cameraId: camera.cameraId, name: 'low.jpg' });
+    const highSsim = buildImage({ imageId: 20, cameraId: camera.cameraId, name: 'high.jpg' });
+    const reconstruction = buildReconstruction({
+      cameras: [camera],
+      images: [lowSsim, highSsim],
+    });
+
+    act(() => {
+      useReconstructionStore.getState().setReconstruction(reconstruction);
+      useImageMetricsStore.setState({ splatPsnrFrameReady: true });
+      useImageMetricsStore.getState().setSplatPsnrMetric({
+        imageId: lowSsim.imageId,
+        psnr: 30,
+        ssim: 0.82,
+        mse: 12,
+        validPixelCount: 100,
+        width: 10,
+        height: 10,
+        computedAt: 1,
+      });
+      useImageMetricsStore.getState().setSplatPsnrMetric({
+        imageId: highSsim.imageId,
+        psnr: 25,
+        ssim: 0.96,
+        mse: 18,
+        validPixelCount: 100,
+        width: 10,
+        height: 10,
+        computedAt: 2,
+      });
+    });
+
+    const { result, unmount } = renderHook(() => useImageGalleryViewModel());
+
+    act(() => {
+      result.current.setSortField('splatSsim');
+      result.current.setSortDirection('desc');
+    });
+
+    expect(result.current.showSplatMetrics).toBe(true);
+    expect(result.current.sortField).toBe('splatSsim');
+    expect(result.current.images.map((image) => image.name)).toEqual(['high.jpg', 'low.jpg']);
 
     unmount();
   });

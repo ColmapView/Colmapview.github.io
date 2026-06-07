@@ -5,6 +5,7 @@ import {
   getFrustumPlaneDisplayTexture,
   getFrustumPlaneMaterialTexture,
   getFrustumPlaneSourceTexture,
+  isRenderableFrustumPlaneTexture,
   shouldShowFrustumPlaneTexture,
 } from './frustumPlaneTexturePolicy';
 
@@ -84,7 +85,7 @@ export function useFrustumPlaneDisplayTexture({
   });
   const shouldShowTexture = shouldShowFrustumPlaneTexture({
     showImagePlane,
-    hasDisplayTexture: Boolean(displayTexture),
+    hasDisplayTexture: isRenderableFrustumPlaneTexture(displayTexture),
     viewAngleOk,
   });
   const materialTexture = getFrustumPlaneMaterialTexture({

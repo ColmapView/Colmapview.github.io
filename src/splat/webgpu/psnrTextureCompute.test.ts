@@ -3,8 +3,6 @@ import {
   accumulatePsnrTextureReductions,
   computePsnrFromRgbaTexturesWebGpu,
   computePsnrFromTextureReduction,
-  computePsnrTextureColorDiagnosticsFromRgbaTexturesWebGpu,
-  computePsnrTextureOffsetDiagnosticsFromRgbaTexturesWebGpu,
   computePsnrTextureReductionFromRgbaTexturesWebGpu,
 } from './psnrTextureCompute';
 import {
@@ -108,14 +106,69 @@ function makeFakeDevice(
   };
 }
 
+function metricReadback(
+  sumSquaredError: number,
+  validPixelCount: number,
+  ssim = 1,
+  ssimWindowCount = validPixelCount
+): number[] {
+  const ssimScaledSum = ssimWindowCount > 0
+    ? Math.round((ssim + 1) * 500_000 * ssimWindowCount)
+    : 0;
+  return [
+    sumSquaredError, 0,
+    validPixelCount, 0,
+    ssimScaledSum, 0,
+    ssimWindowCount, 0,
+  ];
+}
+
 describe('WebGPU PSNR texture compute', () => {
   beforeEach(() => {
     resetWebGpuSplatDebugCountersForTests();
     resetWebGpuSplatTelemetryEventsForTests();
   });
 
+  it('computes PSNR from RGB 8-bit squared error using channel-count MSE', () => {
+    expect(computePsnrFromTextureReduction({
+      sumSquaredError: 0,
+      validPixelCount: 12,
+    })).toMatchObject({
+      psnr: Infinity,
+      mse: 0,
+      validPixelCount: 12,
+    });
+
+    const oneHundredMsePerChannel = computePsnrFromTextureReduction({
+      sumSquaredError: 100 * 12 * 3,
+      validPixelCount: 12,
+    });
+    expect(oneHundredMsePerChannel.mse).toBe(100);
+    expect(oneHundredMsePerChannel.psnr).toBeCloseTo(10 * Math.log10((255 * 255) / 100));
+
+    const maximumRgbError = computePsnrFromTextureReduction({
+      sumSquaredError: 255 * 255 * 3,
+      validPixelCount: 1,
+    });
+    expect(maximumRgbError.mse).toBe(255 * 255);
+    expect(maximumRgbError.psnr).toBe(0);
+  });
+
+  it('decodes shifted fixed-point SSIM reductions without affecting PSNR', () => {
+    const result = computePsnrFromTextureReduction({
+      sumSquaredError: 100 * 4 * 3,
+      validPixelCount: 4,
+      ssimScaledSum: Math.round((0.75 + 1) * 500_000 * 4),
+      ssimWindowCount: 4,
+    });
+
+    expect(result.mse).toBe(100);
+    expect(result.psnr).toBeCloseTo(28.130803608679106);
+    expect(result.ssim).toBeCloseTo(0.75);
+  });
+
   it('compares textures directly and reads back only the final 64-bit reduction pairs', async () => {
-    const fake = makeFakeDevice([0, 0, 1, 0]);
+    const fake = makeFakeDevice(metricReadback(0, 1));
     const renderedTexture = makeTexture();
     const groundTruthTexture = makeTexture();
 
@@ -131,17 +184,19 @@ describe('WebGPU PSNR texture compute', () => {
     expect(result.mse).toBe(0);
     expect(result.sumSquaredError).toBe(0);
     expect(result.validPixelCount).toBe(1);
+    expect(result.ssim).toBe(1);
     expect(fake.dispatches).toEqual([[1, 1, undefined]]);
-    expect(fake.copySizes).toEqual([16]);
+    expect(fake.copySizes).toEqual([32]);
     expect(fake.shaderCodes.join('\n')).toContain('textureLoad');
-    expect(fake.shaderCodes.join('\n')).toContain('vec4<u32>');
+    expect(fake.shaderCodes.join('\n')).toContain('MetricPartial');
+    expect(fake.shaderCodes.join('\n')).toContain('computeWindowSsim');
     expect(fake.bindGroups[0].entries[0].resource).toEqual({ kind: 'texture-view' });
     expect(fake.bindGroups[0].entries[1].resource).toEqual({ kind: 'texture-view' });
     expect(getWebGpuSplatDebugCounters().buffers).toBe(0);
     expect(getWebGpuSplatTelemetryEvents()).toEqual([
       expect.objectContaining({
         name: 'psnr-reduction',
-        readbackBytes: 16,
+        readbackBytes: 32,
         readbackDurationMs: expect.any(Number),
         details: expect.objectContaining({
           width: 1,
@@ -154,7 +209,7 @@ describe('WebGPU PSNR texture compute', () => {
   });
 
   it('exposes tiling-ready reduction data and pure PSNR calculation', async () => {
-    const fake = makeFakeDevice([255 * 255 * 3, 0, 1, 0]);
+    const fake = makeFakeDevice(metricReadback(255 * 255 * 3, 1, 0));
 
     const reduction = await computePsnrTextureReductionFromRgbaTexturesWebGpu({
       device: fake.device,
@@ -172,6 +227,8 @@ describe('WebGPU PSNR texture compute', () => {
     expect(reduction).toEqual({
       sumSquaredError: 255 * 255 * 3,
       validPixelCount: 1,
+      ssimScaledSum: 500_000,
+      ssimWindowCount: 1,
     });
     expect(accumulated).toEqual({
       sumSquaredError: 255 * 255 * 3,
@@ -179,12 +236,13 @@ describe('WebGPU PSNR texture compute', () => {
     });
     expect(result.mse).toBeCloseTo((255 * 255 * 3) / 6);
     expect(result.psnr).toBeCloseTo(10 * Math.log10((255 * 255) / result.mse));
-    expect(fake.copySizes).toEqual([16]);
+    expect(result.ssim).toBeUndefined();
+    expect(fake.copySizes).toEqual([32]);
     expect(getWebGpuSplatDebugCounters().buffers).toBe(0);
   });
 
-  it('reduces multi-workgroup texture partials on GPU before the 16-byte readback', async () => {
-    const fake = makeFakeDevice([255 * 255 * 3, 0, 1, 0]);
+  it('reduces multi-workgroup texture partials on GPU before the final metric readback', async () => {
+    const fake = makeFakeDevice(metricReadback(255 * 255 * 3, 1, 0));
 
     const result = await computePsnrFromRgbaTexturesWebGpu({
       device: fake.device,
@@ -199,14 +257,14 @@ describe('WebGPU PSNR texture compute', () => {
     expect(result.psnr).toBeCloseTo(0);
     expect(result.validPixelCount).toBe(1);
     expect(fake.dispatches).toEqual([[3, 1, undefined], [1, 1, undefined]]);
-    expect(fake.copySizes).toEqual([16]);
+    expect(fake.copySizes).toEqual([32]);
     expect(fake.writeBuffers.length).toBe(2);
     expect(new Uint32Array(fake.writeBuffers[0])).toEqual(new Uint32Array([129, 1, 2, 3, 4, 5, 3, 3]));
     expect(new Uint32Array(fake.writeBuffers[1])).toEqual(new Uint32Array([3, 1, 1, 0]));
     expect(getWebGpuSplatDebugCounters().buffers).toBe(0);
     expect(getWebGpuSplatTelemetryEvents()).toContainEqual(expect.objectContaining({
       name: 'psnr-reduction',
-      readbackBytes: 16,
+      readbackBytes: 32,
       details: expect.objectContaining({
         width: 129,
         height: 1,
@@ -215,51 +273,8 @@ describe('WebGPU PSNR texture compute', () => {
     }));
   });
 
-  it('computes low-PSNR color diagnostics with a small scalar readback', async () => {
-    const fake = makeFakeDevice([
-      12, 0,
-      2, 0,
-      20, 0,
-      40, 0,
-      60, 0,
-      30, 0,
-      36, 0,
-      70, 0,
-    ]);
-
-    const diagnostics = await computePsnrTextureColorDiagnosticsFromRgbaTexturesWebGpu({
-      device: fake.device,
-      renderedTexture: makeTexture(),
-      groundTruthTexture: makeTexture(),
-      width: 4,
-      height: 2,
-    });
-
-    expect(diagnostics).toEqual({
-      validPixelCount: 2,
-      validPixelRatio: 0.25,
-      renderedMeanRgb: [10, 20, 30],
-      groundTruthMeanRgb: [15, 18, 35],
-      meanRgbDelta: [-5, 2, -5],
-    });
-    expect(fake.copySizes).toEqual([64]);
-    expect(fake.shaderCodes.join('\n')).toContain('DiagnosticPartial');
-    expect(getWebGpuSplatDebugCounters().buffers).toBe(0);
-    expect(getWebGpuSplatTelemetryEvents()).toEqual([
-      expect.objectContaining({
-        name: 'psnr-diagnostics',
-        readbackBytes: 64,
-        details: expect.objectContaining({
-          width: 4,
-          height: 2,
-          pixelCount: 8,
-        }),
-      }),
-    ]);
-  });
-
   it('splits large texture reductions across 2D compute dispatches', async () => {
-    const fake = makeFakeDevice([0, 0, 1, 0], {
+    const fake = makeFakeDevice(metricReadback(0, 1), {
       maxComputeWorkgroupsPerDimension: 3,
     });
 
@@ -284,59 +299,6 @@ describe('WebGPU PSNR texture compute', () => {
     }));
   });
 
-  it('searches small pixel offsets with GPU reductions and reports the best alignment', async () => {
-    const highError = [30_000, 0, 12, 0];
-    const fake = makeFakeDevice([
-      highError,
-      highError,
-      highError,
-      highError,
-      [1_200, 0, 16, 0],
-      [12, 0, 12, 0],
-      highError,
-      highError,
-      highError,
-    ]);
-
-    const diagnostics = await computePsnrTextureOffsetDiagnosticsFromRgbaTexturesWebGpu({
-      device: fake.device,
-      renderedTexture: makeTexture(),
-      groundTruthTexture: makeTexture(),
-      width: 4,
-      height: 4,
-      maxOffsetPixels: 1,
-    });
-
-    expect(diagnostics.evaluatedOffsetCount).toBe(9);
-    expect(diagnostics.maxOffsetPixels).toBe(1);
-    expect(diagnostics.baseline).toMatchObject({
-      dx: 0,
-      dy: 0,
-      sumSquaredError: 1_200,
-      validPixelCount: 16,
-    });
-    expect(diagnostics.best).toMatchObject({
-      dx: 1,
-      dy: 0,
-      sumSquaredError: 12,
-      validPixelCount: 12,
-    });
-    expect(diagnostics.improvementDb).toBeGreaterThan(10);
-    expect(fake.copySizes).toEqual(Array.from({ length: 9 }, () => 16));
-    expect(fake.writeBuffers.map((buffer) => Array.from(new Uint32Array(buffer)).slice(0, 6))).toEqual([
-      [3, 3, 0, 0, 1, 1],
-      [4, 3, 0, 0, 0, 1],
-      [3, 3, 1, 0, 0, 1],
-      [3, 4, 0, 0, 1, 0],
-      [4, 4, 0, 0, 0, 0],
-      [3, 4, 1, 0, 0, 0],
-      [3, 3, 0, 1, 1, 0],
-      [4, 3, 0, 1, 0, 0],
-      [3, 3, 1, 1, 0, 0],
-    ]);
-    expect(getWebGpuSplatDebugCounters().buffers).toBe(0);
-  });
-
   it('rejects invalid dimensions and origins before submitting GPU work', async () => {
     const fake = makeFakeDevice([0, 0, 0, 0]);
     await expect(computePsnrFromRgbaTexturesWebGpu({
@@ -355,15 +317,6 @@ describe('WebGPU PSNR texture compute', () => {
       height: 1,
       renderedOrigin: { x: -1, y: 0 },
     })).rejects.toThrow('Invalid WebGPU PSNR texture renderedOrigin.x');
-
-    await expect(computePsnrTextureOffsetDiagnosticsFromRgbaTexturesWebGpu({
-      device: fake.device,
-      renderedTexture: makeTexture(),
-      groundTruthTexture: makeTexture(),
-      width: 1,
-      height: 1,
-      maxOffsetPixels: 9,
-    })).rejects.toThrow('Invalid WebGPU PSNR texture maxOffsetPixels');
 
     expect(fake.dispatches).toEqual([]);
     expect(getWebGpuSplatDebugCounters().buffers).toBe(0);

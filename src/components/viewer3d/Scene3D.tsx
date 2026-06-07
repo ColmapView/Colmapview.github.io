@@ -90,7 +90,8 @@ function SceneContent() {
       viewTrigger,
       transform,
       requestedSplatBackend,
-      splatBackendAvailability,
+      splatBackendResolution,
+      splatsVisible,
     },
     actions: {
       setSparkBackendAvailable,
@@ -107,10 +108,10 @@ function SceneContent() {
   const axes = useAxesNode();
   const grid = useGridNode();
   const gizmo = useGizmoNode();
-  const webGpuSplatCanvasMounted = shouldMountWebGpuSplatCanvas(
-    requestedSplatBackend,
-    splatBackendAvailability,
-    splatFile
+  const webGpuSplatCanvasVisible = shouldRenderWebGpuSplatCanvas(
+    splatBackendResolution,
+    splatFile,
+    splatsVisible
   );
 
   // Compute transform for visual preview
@@ -176,7 +177,7 @@ function SceneContent() {
         setSparkBackendAvailable={setSparkBackendAvailable}
         splatFile={splatFile}
       />
-      <WebGpuSplatCanvasBridge enabled={webGpuSplatCanvasMounted} modelMatrix={transformMatrix} />
+      <WebGpuSplatCanvasBridge enabled={webGpuSplatCanvasVisible} modelMatrix={transformMatrix} />
       {transformMatrix ? (
         <group matrixAutoUpdate={false} matrix={transformMatrix}>
           {transformableContent}

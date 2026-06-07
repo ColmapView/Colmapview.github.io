@@ -75,8 +75,12 @@ describe('useScene3DStoreFacade', () => {
       viewTrigger: 5,
       transform,
       requestedSplatBackend: 'webgpu',
+      splatsVisible: false,
     });
-    expect(result.current.data.splatBackendAvailability.webGpu).toBe('unavailable');
+    expect(result.current.data.splatBackendResolution).toMatchObject({
+      status: 'unavailable',
+      requested: 'webgpu',
+    });
 
     act(() => {
       result.current.actions.setSparkBackendAvailable(true);

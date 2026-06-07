@@ -45,7 +45,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
     setSortField,
     setViewMode,
     showMatches,
-    showSplatPsnr,
+    showSplatMetrics,
     sortDirection,
     sortField,
     touchMode,
@@ -137,7 +137,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
             cameras={cameras}
             sortDirection={sortDirection}
             sortField={sortField}
-            showSplatPsnrSort={showSplatPsnr}
+            showSplatMetricSort={showSplatMetrics}
             touchMode={touchMode}
             viewMode={viewMode}
             onCameraFilterChange={setCameraFilter}

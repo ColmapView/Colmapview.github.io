@@ -48,6 +48,9 @@ export default defineConfig(({ command, mode }) => {
     server: {
       port: 5173,
       open: true,
+      // Fast Refresh can preserve stale R3F hook state after deep renderer edits.
+      // Use full reloads in dev so hook-order changes cannot survive in the browser.
+      hmr: false,
       // Required for SharedArrayBuffer (optional but better WASM performance)
       headers: {
         'Cross-Origin-Opener-Policy': 'same-origin',

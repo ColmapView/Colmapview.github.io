@@ -63,10 +63,6 @@ export interface CameraDisplayPanelProps {
   autoFovEnabled: boolean;
   setAutoFovEnabled: (enabled: boolean) => void;
   splatPsnrFrameReady: boolean;
-  splatPsnrComputing: boolean;
-  splatPsnrReadyCount: number;
-  splatPsnrTotalCount: number;
-  splatPsnrUnavailableReason: string | null;
   onCycleCameraDisplayMode: () => void;
 }
 
@@ -103,10 +99,6 @@ export function CameraDisplayPanel({
   autoFovEnabled,
   setAutoFovEnabled,
   splatPsnrFrameReady,
-  splatPsnrComputing,
-  splatPsnrReadyCount,
-  splatPsnrTotalCount,
-  splatPsnrUnavailableReason,
   onCycleCameraDisplayMode,
 }: CameraDisplayPanelProps) {
   const buttonState = getCameraDisplayButtonState(showCameras, cameraDisplayMode);
@@ -148,25 +140,6 @@ export function CameraDisplayPanel({
               onChange={setFrustumColorMode}
               options={frustumColorModeOptions}
             />
-            {splatPsnrFrameReady && (
-              <div className={styles.row}>
-                <label className={styles.label}>PSNR</label>
-                <div className="flex flex-1 items-center justify-end gap-1">
-                  <span className="text-ds-muted text-xs tabular-nums">
-                    {splatPsnrComputing ? 'Computing ' : ''}
-                    {splatPsnrReadyCount}/{splatPsnrTotalCount}
-                  </span>
-                </div>
-              </div>
-            )}
-            {!splatPsnrFrameReady && splatPsnrUnavailableReason && (
-              <div className={styles.row}>
-                <label className={styles.label}>PSNR</label>
-                <div className="text-ds-muted flex-1 text-right text-xs">
-                  {splatPsnrUnavailableReason}
-                </div>
-              </div>
-            )}
             {frustumColorMode === 'single' && (
               <>
                 <ColorPickerRow

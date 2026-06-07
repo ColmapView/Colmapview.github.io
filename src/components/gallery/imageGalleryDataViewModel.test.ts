@@ -50,7 +50,7 @@ describe('image gallery data view-model', () => {
       imageSource: {
         getImageSync: (name) => name === cachedFile.name ? cachedFile : undefined,
       },
-      splatPsnrByImage: new Map([[frameA.imageId, { psnr: 31.2 }]]),
+      splatPsnrByImage: new Map([[frameA.imageId, { psnr: 31.2, ssim: 0.943 }]]),
       cameraFilter: 'all',
       sortField: 'numPoints3D',
       sortDirection: 'desc',
@@ -66,6 +66,7 @@ describe('image gallery data view-model', () => {
       covisibleCount: 9,
       avgError: 0.5,
       splatPsnr: 31.2,
+      splatSsim: 0.943,
     });
 
     const camera2Only = buildGalleryImages({
@@ -101,6 +102,31 @@ describe('image gallery data view-model', () => {
     });
 
     expect(images.map(image => image.name)).toEqual(['sharp.jpg', 'soft.jpg', 'missing.jpg']);
+  });
+
+  it('sorts SSIM values with missing metrics last', () => {
+    const camera = buildCamera();
+    const best = buildImage({ imageId: 1, cameraId: camera.cameraId, name: 'best.jpg' });
+    const ok = buildImage({ imageId: 2, cameraId: camera.cameraId, name: 'ok.jpg' });
+    const missing = buildImage({ imageId: 3, cameraId: camera.cameraId, name: 'missing.jpg' });
+    const reconstruction = buildReconstruction({
+      cameras: [camera],
+      images: [missing, ok, best],
+    });
+
+    const images = buildGalleryImages({
+      reconstruction,
+      imageSource: { getImageSync: () => undefined },
+      splatPsnrByImage: new Map([
+        [best.imageId, { psnr: 30, ssim: 0.96 }],
+        [ok.imageId, { psnr: 31, ssim: 0.84 }],
+      ]),
+      cameraFilter: 'all',
+      sortField: 'splatSsim',
+      sortDirection: 'desc',
+    });
+
+    expect(images.map(image => image.name)).toEqual(['best.jpg', 'ok.jpg', 'missing.jpg']);
   });
 
   it('derives camera options sorted by camera ID', () => {

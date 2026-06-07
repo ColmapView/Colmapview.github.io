@@ -6,6 +6,7 @@ import {
   buildFrustumLineGeometryData,
   buildImageFrameIndexMap,
   getFrustumBaseColor,
+  getFrustumMetricColorScale,
   getFrustumPlaneSize,
 } from './cameraFrustumGeometry';
 import {
@@ -53,6 +54,74 @@ describe('camera frustum geometry helpers', () => {
       imageFrameIndexMap,
       '#123456',
       new Map([[frameA0.imageId, { psnr: 30 }]])
+    )).toBe('#22c55e');
+    expect(getFrustumBaseColor(
+      'splatSsim',
+      7,
+      frameA0.imageId,
+      imageFrameIndexMap,
+      '#123456',
+      new Map([[frameA0.imageId, { psnr: 30, ssim: 0.95 }]])
+    )).toBe('#22c55e');
+
+    const psnrMetrics = new Map([
+      [frameA0.imageId, { psnr: 20 }],
+      [frameA1.imageId, { psnr: 25 }],
+      [frameB0.imageId, { psnr: 30 }],
+      [frameB1.imageId, { psnr: 35 }],
+    ]);
+    const psnrScale = getFrustumMetricColorScale(
+      'splatPsnr',
+      [frameA0.imageId, frameA1.imageId, frameB0.imageId, frameB1.imageId],
+      psnrMetrics
+    );
+    expect(psnrScale).toEqual({ min: 20, max: 35 });
+    expect(getFrustumBaseColor(
+      'splatPsnr',
+      7,
+      frameA0.imageId,
+      imageFrameIndexMap,
+      '#123456',
+      psnrMetrics,
+      psnrScale
+    )).toBe('#ef4444');
+    expect(getFrustumBaseColor(
+      'splatPsnr',
+      7,
+      frameB1.imageId,
+      imageFrameIndexMap,
+      '#123456',
+      psnrMetrics,
+      psnrScale
+    )).toBe('#22c55e');
+
+    const ssimMetrics = new Map([
+      [frameA0.imageId, { psnr: 20, ssim: 0.82 }],
+      [frameA1.imageId, { psnr: 25, ssim: 0.92 }],
+    ]);
+    const ssimScale = getFrustumMetricColorScale(
+      'splatSsim',
+      [frameA0.imageId, frameA1.imageId],
+      ssimMetrics
+    );
+    expect(ssimScale).toEqual({ min: 0.82, max: 0.92 });
+    expect(getFrustumBaseColor(
+      'splatSsim',
+      7,
+      frameA0.imageId,
+      imageFrameIndexMap,
+      '#123456',
+      ssimMetrics,
+      ssimScale
+    )).toBe('#ef4444');
+    expect(getFrustumBaseColor(
+      'splatSsim',
+      7,
+      frameA1.imageId,
+      imageFrameIndexMap,
+      '#123456',
+      ssimMetrics,
+      ssimScale
     )).toBe('#22c55e');
   });
 

@@ -13,6 +13,7 @@ export {
   buildFrustumLineGeometryData,
   buildImageFrameIndexMap,
   getFrustumBaseColor,
+  getFrustumMetricColorScale,
   getFrustumPlaneSize,
   type CameraFrustumItem,
   type FrustumColorMode,

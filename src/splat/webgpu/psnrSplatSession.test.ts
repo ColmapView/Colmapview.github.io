@@ -169,8 +169,6 @@ function createHarness(options: {
   createRenderSession?: WebGpuSplatPsnrSessionDeps['createRenderSession'];
   computePsnrFromTextures?: WebGpuSplatPsnrSessionDeps['computePsnrFromTextures'];
   computePsnrTextureReductionFromTextures?: WebGpuSplatPsnrSessionDeps['computePsnrTextureReductionFromTextures'];
-  computePsnrTextureColorDiagnosticsFromTextures?: WebGpuSplatPsnrSessionDeps['computePsnrTextureColorDiagnosticsFromTextures'];
-  computePsnrTextureOffsetDiagnosticsFromTextures?: WebGpuSplatPsnrSessionDeps['computePsnrTextureOffsetDiagnosticsFromTextures'];
   createMetricFrame?: WebGpuSplatPsnrSessionDeps['createMetricFrame'];
 } = {}) {
   const splatFile = buildFile('scene.spz', 'spz');
@@ -204,36 +202,6 @@ function createHarness(options: {
     computePsnrFromTextures: options.computePsnrFromTextures ?? vi.fn(async () => metric),
     computePsnrTextureReductionFromTextures: options.computePsnrTextureReductionFromTextures
       ?? vi.fn(async () => ({ sumSquaredError: 0, validPixelCount: 1 })),
-    computePsnrTextureColorDiagnosticsFromTextures: options.computePsnrTextureColorDiagnosticsFromTextures
-      ?? vi.fn(async () => ({
-        validPixelCount: 12,
-        validPixelRatio: 1,
-        renderedMeanRgb: [10, 20, 30],
-        groundTruthMeanRgb: [11, 19, 31],
-        meanRgbDelta: [-1, 1, -1],
-      })),
-    computePsnrTextureOffsetDiagnosticsFromTextures: options.computePsnrTextureOffsetDiagnosticsFromTextures
-      ?? vi.fn(async () => ({
-        maxOffsetPixels: 2,
-        evaluatedOffsetCount: 25,
-        baseline: {
-          dx: 0,
-          dy: 0,
-          sumSquaredError: 100,
-          psnr: 15,
-          mse: 8.33,
-          validPixelCount: 12,
-        },
-        best: {
-          dx: -1,
-          dy: 0,
-          sumSquaredError: 10,
-          psnr: 25,
-          mse: 0.83,
-          validPixelCount: 12,
-        },
-        improvementDb: 10,
-      })),
     createMetricFrame: options.createMetricFrame ?? vi.fn(() => makeFrame()),
   } satisfies WebGpuSplatPsnrSessionDeps;
 
@@ -307,6 +275,7 @@ describe('WebGPU splat PSNR session', () => {
       width: 1,
       height: 1,
       backgroundColor: [0, 0, 0, 1],
+      sortAlgorithm: 'radix',
     }));
     const renderSessionOptions = vi.mocked(harness.deps.createRenderSession).mock.calls[0][0];
     expect(renderSessionOptions).not.toHaveProperty('canvasContext');
@@ -336,7 +305,7 @@ describe('WebGPU splat PSNR session', () => {
     const renderedTexture = vi.mocked(harness.renderSession.renderToTexture).mock.calls[0][0];
     expect(harness.renderSession.renderToTexture).toHaveBeenCalledWith(
       renderedTexture,
-      { completion: 'submitted' }
+      { completion: 'completed' }
     );
     expect(harness.deps.computePsnrFromTextures).toHaveBeenCalledWith({
       device: fakeDevice.device,
@@ -345,8 +314,6 @@ describe('WebGPU splat PSNR session', () => {
       width: 4,
       height: 3,
     });
-    expect(harness.deps.computePsnrTextureColorDiagnosticsFromTextures).not.toHaveBeenCalled();
-    expect(harness.deps.computePsnrTextureOffsetDiagnosticsFromTextures).not.toHaveBeenCalled();
     expect(harness.groundTruthTexture.dispose).toHaveBeenCalledTimes(1);
     expect(harness.bitmap.close).toHaveBeenCalledTimes(1);
     expect(renderedTexture.destroy).toHaveBeenCalledTimes(1);
@@ -378,141 +345,7 @@ describe('WebGPU splat PSNR session', () => {
     });
   });
 
-  it('attaches GPU diagnostics for suspiciously low finite PSNR metrics when enabled', async () => {
-    const fakeDevice = makeDevice();
-    const lowMetric = {
-      sumSquaredError: 1_000_000,
-      psnr: 15,
-      mse: 27_777.78,
-      validPixelCount: 12,
-    };
-    const whiteMetric = {
-      sumSquaredError: 400_000,
-      psnr: 19,
-      mse: 11_111.11,
-      validPixelCount: 12,
-    };
-    const colorDiagnostics = {
-      validPixelCount: 12,
-      validPixelRatio: 1,
-      renderedMeanRgb: [8, 9, 10] as [number, number, number],
-      groundTruthMeanRgb: [60, 61, 62] as [number, number, number],
-      meanRgbDelta: [-52, -52, -52] as [number, number, number],
-    };
-    const offsetDiagnostics = {
-      maxOffsetPixels: 2,
-      evaluatedOffsetCount: 25,
-      baseline: {
-        dx: 0,
-        dy: 0,
-        sumSquaredError: 1_000_000,
-        psnr: 15,
-        mse: 27_777.78,
-        validPixelCount: 12,
-      },
-      best: {
-        dx: -1,
-        dy: 0,
-        sumSquaredError: 100_000,
-        psnr: 25,
-        mse: 2_777.78,
-        validPixelCount: 12,
-      },
-      improvementDb: 10,
-    };
-    const computePsnrFromTextures = vi.fn()
-      .mockResolvedValueOnce(lowMetric)
-      .mockResolvedValueOnce(whiteMetric);
-    const computePsnrTextureColorDiagnosticsFromTextures = vi.fn(async () => colorDiagnostics);
-    const computePsnrTextureOffsetDiagnosticsFromTextures = vi.fn(async () => offsetDiagnostics);
-    const harness = createHarness({
-      device: fakeDevice.device,
-      computePsnrFromTextures,
-      computePsnrTextureColorDiagnosticsFromTextures,
-      computePsnrTextureOffsetDiagnosticsFromTextures,
-    });
-    const session = await createWebGpuSplatPsnrSession({
-      device: fakeDevice.device,
-      splatFile: harness.splatFile,
-      deps: harness.deps,
-    });
-
-    const metric = await session.computeImageMetric({
-      imageFile: buildFile('low.jpg'),
-      image: buildImage(),
-      camera: buildCamera({ width: 4, height: 3 }),
-      width: 4,
-      height: 3,
-      includeDiagnostics: true,
-    });
-
-    expect(metric).toEqual({
-      ...lowMetric,
-      colorDiagnostics,
-      offsetDiagnostics,
-      backgroundDiagnostics: {
-        baseline: {
-          label: 'opaque-black',
-          rgba: [0, 0, 0, 1],
-          ...lowMetric,
-          improvementDb: 0,
-        },
-        alternatives: [{
-          label: 'opaque-white',
-          rgba: [1, 1, 1, 1],
-          ...whiteMetric,
-          improvementDb: 4,
-        }],
-        best: {
-          label: 'opaque-white',
-          rgba: [1, 1, 1, 1],
-          ...whiteMetric,
-          improvementDb: 4,
-        },
-      },
-    });
-    const renderedTexture = vi.mocked(harness.renderSession.renderToTexture).mock.calls[0][0];
-    const alternateRenderedTexture = vi.mocked(harness.renderSession.renderToTexture).mock.calls[1][0];
-    expect(harness.renderSession.renderToTexture).toHaveBeenCalledTimes(2);
-    expect(harness.renderSession.setBackgroundColor).toHaveBeenNthCalledWith(1, [0, 0, 0, 1]);
-    expect(harness.renderSession.setBackgroundColor).toHaveBeenNthCalledWith(2, [1, 1, 1, 1]);
-    expect(harness.renderSession.setBackgroundColor).toHaveBeenNthCalledWith(3, [0, 0, 0, 1]);
-    expect(computePsnrFromTextures).toHaveBeenNthCalledWith(1, {
-      device: fakeDevice.device,
-      renderedTexture,
-      groundTruthTexture: harness.groundTruthTexture.texture,
-      width: 4,
-      height: 3,
-    });
-    expect(computePsnrFromTextures).toHaveBeenNthCalledWith(2, {
-      device: fakeDevice.device,
-      renderedTexture: alternateRenderedTexture,
-      groundTruthTexture: harness.groundTruthTexture.texture,
-      width: 4,
-      height: 3,
-    });
-    expect(computePsnrTextureColorDiagnosticsFromTextures).toHaveBeenCalledWith({
-      device: fakeDevice.device,
-      renderedTexture,
-      groundTruthTexture: harness.groundTruthTexture.texture,
-      width: 4,
-      height: 3,
-    });
-    expect(computePsnrTextureOffsetDiagnosticsFromTextures).toHaveBeenCalledWith({
-      device: fakeDevice.device,
-      renderedTexture,
-      groundTruthTexture: harness.groundTruthTexture.texture,
-      width: 4,
-      height: 3,
-    });
-    expect(renderedTexture.destroy).toHaveBeenCalledTimes(1);
-    expect(alternateRenderedTexture.destroy).toHaveBeenCalledTimes(1);
-    expect(harness.groundTruthTexture.dispose).toHaveBeenCalledTimes(1);
-
-    session.dispose();
-  });
-
-  it('skips low-PSNR diagnostics by default', async () => {
+  it('computes low finite PSNR metrics without extra diagnostic renders', async () => {
     const fakeDevice = makeDevice();
     const lowMetric = {
       sumSquaredError: 1_000_000,
@@ -540,118 +373,19 @@ describe('WebGPU splat PSNR session', () => {
     });
 
     expect(metric).toEqual(lowMetric);
+    const renderedTexture = vi.mocked(harness.renderSession.renderToTexture).mock.calls[0][0];
     expect(harness.renderSession.renderToTexture).toHaveBeenCalledTimes(1);
-    expect(computePsnrFromTextures).toHaveBeenCalledTimes(1);
-    expect(harness.deps.computePsnrTextureColorDiagnosticsFromTextures).not.toHaveBeenCalled();
-    expect(harness.deps.computePsnrTextureOffsetDiagnosticsFromTextures).not.toHaveBeenCalled();
-
-    session.dispose();
-  });
-
-  it('renders low-PSNR background diagnostics with the original frame when another image is queued', async () => {
-    const fakeDevice = makeDevice();
-    const firstFrame = makeFrame();
-    const secondFrame = makeFrame({
-      camera: {
-        ...makeFrame().camera,
-        position: [9, 8, 7],
-      },
-    });
-    const firstBaseline = createDeferred<{
-      sumSquaredError: number;
-      psnr: number;
-      mse: number;
-      validPixelCount: number;
-    }>();
-    const secondBaseline = createDeferred<{
-      sumSquaredError: number;
-      psnr: number;
-      mse: number;
-      validPixelCount: number;
-    }>();
-    const lowMetric = {
-      sumSquaredError: 1_000_000,
-      psnr: 15,
-      mse: 27_777.78,
-      validPixelCount: 12,
-    };
-    const secondMetric = {
-      sumSquaredError: 120,
-      psnr: 34,
-      mse: 3.33,
-      validPixelCount: 12,
-    };
-    const alternateMetric = {
-      sumSquaredError: 400_000,
-      psnr: 19,
-      mse: 11_111.11,
-      validPixelCount: 12,
-    };
-    const computePsnrFromTextures = vi.fn()
-      .mockReturnValueOnce(firstBaseline.promise)
-      .mockReturnValueOnce(secondBaseline.promise)
-      .mockResolvedValueOnce(alternateMetric);
-    const createMetricFrame = vi.fn()
-      .mockReturnValueOnce(firstFrame)
-      .mockReturnValueOnce(secondFrame);
-    const harness = createHarness({
-      device: fakeDevice.device,
-      computePsnrFromTextures,
-      createMetricFrame,
-    });
-    const session = await createWebGpuSplatPsnrSession({
-      device: fakeDevice.device,
-      splatFile: harness.splatFile,
-      deps: harness.deps,
-    });
-
-    const firstSubmitted = await session.submitImageMetric({
-      imageFile: buildFile('first.jpg'),
-      image: buildImage({ imageId: 1, name: 'first.jpg' }),
-      camera: buildCamera({ width: 4, height: 3 }),
-      width: 4,
-      height: 3,
-      includeDiagnostics: true,
-    });
-    await flushPromises();
-    expect(computePsnrFromTextures).toHaveBeenCalledTimes(1);
-
-    const secondSubmitted = await session.submitImageMetric({
-      imageFile: buildFile('second.jpg'),
-      image: buildImage({ imageId: 2, name: 'second.jpg' }),
-      camera: buildCamera({ width: 4, height: 3 }),
-      width: 4,
-      height: 3,
-    });
-    await flushPromises();
-    expect(computePsnrFromTextures).toHaveBeenCalledTimes(2);
-
-    firstBaseline.resolve(lowMetric);
-    await expect(firstSubmitted.result).resolves.toMatchObject({
-      psnr: 15,
-      backgroundDiagnostics: {
-        baseline: expect.objectContaining({
-          label: 'opaque-black',
-        }),
-        best: expect.objectContaining({
-          label: 'opaque-white',
-        }),
-      },
-    });
-
-    expect(harness.renderSession.setCamera).toHaveBeenNthCalledWith(1, firstFrame);
-    expect(harness.renderSession.setCamera).toHaveBeenNthCalledWith(2, secondFrame);
-    expect(harness.renderSession.setCamera).toHaveBeenNthCalledWith(3, firstFrame);
     expect(harness.renderSession.setBackgroundColor).toHaveBeenNthCalledWith(1, [0, 0, 0, 1]);
-    expect(harness.renderSession.setBackgroundColor).toHaveBeenNthCalledWith(2, [0, 0, 0, 1]);
-    expect(harness.renderSession.setBackgroundColor).toHaveBeenNthCalledWith(3, [1, 1, 1, 1]);
-    expect(harness.renderSession.setBackgroundColor).toHaveBeenNthCalledWith(4, [0, 0, 0, 1]);
+    expect(computePsnrFromTextures).toHaveBeenNthCalledWith(1, {
+      device: fakeDevice.device,
+      renderedTexture,
+      groundTruthTexture: harness.groundTruthTexture.texture,
+      width: 4,
+      height: 3,
+    });
+    expect(renderedTexture.destroy).toHaveBeenCalledTimes(1);
+    expect(harness.groundTruthTexture.dispose).toHaveBeenCalledTimes(1);
 
-    secondBaseline.resolve(secondMetric);
-    await expect(secondSubmitted.result).resolves.toEqual(secondMetric);
-
-    firstSubmitted.dispose();
-    secondSubmitted.dispose();
     session.dispose();
   });
 
@@ -710,6 +444,56 @@ describe('WebGPU splat PSNR session', () => {
     expect(harness.groundTruthTexture.dispose).toHaveBeenCalledTimes(1);
     expect(harness.bitmap.close).toHaveBeenCalledTimes(1);
     expect(renderedTexture.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for completed offscreen rendering before reducing the metric textures', async () => {
+    const fakeDevice = makeDevice();
+    const renderComplete = createDeferred<void>();
+    const renderSession = {
+      ...makeRenderSession(),
+      renderToTexture: vi.fn(() => renderComplete.promise),
+    };
+    const metric = {
+      sumSquaredError: 492,
+      psnr: 32,
+      mse: 41,
+      validPixelCount: 12,
+    };
+    const computePsnrFromTextures = vi.fn(async () => metric);
+    const harness = createHarness({
+      device: fakeDevice.device,
+      renderSession,
+      computePsnrFromTextures,
+    });
+    const session = await createWebGpuSplatPsnrSession({
+      device: fakeDevice.device,
+      splatFile: harness.splatFile,
+      deps: harness.deps,
+    });
+
+    const submitted = await session.submitImageMetric({
+      imageFile: buildFile('image.jpg'),
+      image: buildImage(),
+      camera: buildCamera({ width: 4, height: 3 }),
+      width: 4,
+      height: 3,
+    });
+    await flushPromises();
+
+    expect(renderSession.renderToTexture).toHaveBeenCalledWith(
+      expect.anything(),
+      { completion: 'completed' }
+    );
+    expect(computePsnrFromTextures).not.toHaveBeenCalled();
+
+    renderComplete.resolve();
+    await flushPromises();
+
+    expect(computePsnrFromTextures).toHaveBeenCalledTimes(1);
+    await expect(submitted.result).resolves.toEqual(metric);
+
+    submitted.dispose();
+    session.dispose();
   });
 
   it('treats pinhole cameras with unequal fx and fy as undistorted metric inputs', async () => {
@@ -819,6 +603,50 @@ describe('WebGPU splat PSNR session', () => {
     })).rejects.toThrow('WebGPU PSNR currently requires an undistorted pinhole ground-truth image');
 
     expect(harness.deps.createBitmap).not.toHaveBeenCalled();
+    expect(fakeDevice.textures).toEqual([]);
+  });
+
+  it('rejects scaled metric render targets before decoding or allocating metric textures', async () => {
+    const fakeDevice = makeDevice();
+    const harness = createHarness({ device: fakeDevice.device });
+    const session = await createWebGpuSplatPsnrSession({
+      device: fakeDevice.device,
+      splatFile: harness.splatFile,
+      deps: harness.deps,
+    });
+
+    await expect(session.computeImageMetric({
+      imageFile: buildFile('image.jpg'),
+      image: buildImage(),
+      camera: buildCamera({ width: 8, height: 6 }),
+      width: 4,
+      height: 3,
+    })).rejects.toThrow('requires full-resolution metric rendering');
+
+    expect(harness.deps.createBitmap).not.toHaveBeenCalled();
+    expect(fakeDevice.textures).toEqual([]);
+  });
+
+  it('rejects metric images whose decoded size does not match the pinhole camera', async () => {
+    const fakeDevice = makeDevice();
+    const harness = createHarness({ device: fakeDevice.device });
+    harness.deps.createBitmap.mockResolvedValueOnce(makeBitmap(2, 2));
+    const session = await createWebGpuSplatPsnrSession({
+      device: fakeDevice.device,
+      splatFile: harness.splatFile,
+      deps: harness.deps,
+    });
+
+    await expect(session.computeImageMetric({
+      imageFile: buildFile('image.jpg'),
+      image: buildImage({ name: 'image.jpg' }),
+      camera: buildCamera({ width: 4, height: 3 }),
+      width: 4,
+      height: 3,
+    })).rejects.toThrow('decoded 2x2, camera is 4x3');
+
+    expect(harness.deps.createBitmap).toHaveBeenCalledTimes(1);
+    expect(harness.deps.createGroundTruthTexture).not.toHaveBeenCalled();
     expect(fakeDevice.textures).toEqual([]);
   });
 
@@ -1083,12 +911,12 @@ describe('WebGPU splat PSNR session', () => {
     expect(harness.renderSession.renderToTexture).toHaveBeenNthCalledWith(
       1,
       expect.anything(),
-      { completion: 'submitted' }
+      { completion: 'completed' }
     );
     expect(harness.renderSession.renderToTexture).toHaveBeenNthCalledWith(
       2,
       expect.anything(),
-      { completion: 'submitted' }
+      { completion: 'completed' }
     );
     expect(computeTileReduction).toHaveBeenCalledTimes(2);
     expect(harness.groundTruthTexture.dispose).toHaveBeenCalledTimes(2);
@@ -1119,7 +947,7 @@ describe('WebGPU splat PSNR session', () => {
       camera: buildCamera({ width: 16, height: 3 }),
       width: 16,
       height: 3,
-    })).rejects.toThrow('texture-limit tiling currently requires decoded source size 4x3 to match target size 16x3');
+    })).rejects.toThrow('decoded 4x3, camera is 16x3');
 
     expect(harness.deps.createBitmap).toHaveBeenCalledTimes(1);
     expect(harness.bitmap.close).toHaveBeenCalledTimes(1);
@@ -1143,7 +971,7 @@ describe('WebGPU splat PSNR session', () => {
       camera: buildCamera({ width: 4, height: 3 }),
       width: 4,
       height: 3,
-    })).rejects.toThrow('texture-limit tiling currently requires decoded source size 16x3 to match target size 4x3');
+    })).rejects.toThrow('decoded 16x3, camera is 4x3');
 
     expect(harness.deps.createBitmap).toHaveBeenCalledTimes(1);
     expect(harness.deps.createGroundTruthTexture).not.toHaveBeenCalled();

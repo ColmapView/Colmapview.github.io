@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, useMemo } from 'react';
 import { statusBarStyles } from '../../theme';
 import { StatWithHistogram } from './StatWithHistogram';
 import { CacheStatsIndicator } from './CacheStatsIndicator';
@@ -17,6 +17,12 @@ import {
 } from './statusBarViewModel';
 import { shouldHideChromeWithButtons } from './autoHideChromePolicy';
 import { useStatusBarStoreFacade } from './useStatusBarStoreFacade';
+import {
+  computeMeanPsnrFromMetrics,
+  computeMeanSsimFromMetrics,
+  formatMeanPsnrValue,
+  formatMeanSsimValue,
+} from './statHistogramViewModel';
 
 function StatusBarLinkAnchor({ link }: { link: StatusBarLink }) {
   return (
@@ -40,6 +46,9 @@ export function StatusBar() {
     urlLoading,
     reconstruction,
     wasmReconstruction,
+    hasSplatFile,
+    splatPsnrFrameReady,
+    splatPsnrByImage,
     fps,
     autoHideButtons,
     isIdle,
@@ -61,6 +70,30 @@ export function StatusBar() {
     hasReconstruction: Boolean(reconstruction),
     hasGlobalStats: Boolean(globalStats),
   });
+  const meanPsnr = useMemo(
+    () => computeMeanPsnrFromMetrics(splatPsnrByImage),
+    [splatPsnrByImage]
+  );
+  const meanSsim = useMemo(
+    () => computeMeanSsimFromMetrics(splatPsnrByImage),
+    [splatPsnrByImage]
+  );
+  const showPsnrHistogram = Boolean(
+    reconstruction &&
+    reconstruction.images.size > 0 &&
+    hasSplatFile &&
+    splatPsnrFrameReady &&
+    splatPsnrByImage.size > 0 &&
+    meanPsnr !== null
+  );
+  const showSsimHistogram = Boolean(
+    reconstruction &&
+    reconstruction.images.size > 0 &&
+    hasSplatFile &&
+    splatPsnrFrameReady &&
+    splatPsnrByImage.size > 0 &&
+    meanSsim !== null
+  );
 
   return (
     <footer
@@ -77,20 +110,38 @@ export function StatusBar() {
         {showHistograms && reconstruction && globalStats && (
           <>
             <StatWithHistogram
-              label="Avg Track"
+              label="Track"
               value={globalStats.avgTrackLength.toFixed(2)}
               type="trackLength"
               points3D={reconstruction.points3D}
               wasmReconstruction={wasmReconstruction}
             />
             <StatWithHistogram
-              label="Avg Reproj Error"
+              label="Reproj Err"
               value={`${globalStats.avgError.toFixed(3)}px`}
               type="error"
               points3D={reconstruction.points3D}
               wasmReconstruction={wasmReconstruction}
             />
           </>
+        )}
+        {showPsnrHistogram && (
+          <StatWithHistogram
+            label="PSNR"
+            value={formatMeanPsnrValue(meanPsnr)}
+            type="psnr"
+            psnrMetrics={splatPsnrByImage}
+            psnrTotalCount={reconstruction?.images.size ?? 0}
+          />
+        )}
+        {showSsimHistogram && (
+          <StatWithHistogram
+            label="SSIM"
+            value={formatMeanSsimValue(meanSsim)}
+            type="ssim"
+            psnrMetrics={splatPsnrByImage}
+            psnrTotalCount={reconstruction?.images.size ?? 0}
+          />
         )}
         {emptyStatusText !== null && <span>{emptyStatusText}</span>}
       </div>
