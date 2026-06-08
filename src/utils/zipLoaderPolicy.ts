@@ -4,6 +4,9 @@ import {
   isSplatFilePath,
   type SplatCandidate,
 } from './splatFilePolicy';
+import {
+  getImagePathLookupSuffixes,
+} from './imageFileLookupPolicy';
 
 /** Archive extensions handled by libarchive.js. */
 export const ARCHIVE_EXTENSIONS = [
@@ -126,8 +129,7 @@ export function buildArchiveEntryPath(entryPath: string | undefined, fileName: s
 }
 
 export function getArchiveImageLookupKeys(fullPath: string): string[] {
-  const filename = fullPath.split('/').pop() ?? fullPath;
-  return filename === fullPath ? [fullPath] : [fullPath, filename];
+  return getImagePathLookupSuffixes(fullPath);
 }
 
 export function getColmapArchiveKey(entryPath: string): string {

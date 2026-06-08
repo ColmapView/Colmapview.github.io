@@ -19,11 +19,13 @@ import { SplatBackendStatusNotifier } from './SplatBackendStatusNotifier';
 import {
   shouldMountWebGpuSplatCanvas,
   shouldRenderWebGpuSplatCanvas,
+  shouldSyncWebGpuSplatCanvasFrame,
 } from './WebGpuSplatCanvasLayerPolicy';
 import {
   WebGpuSplatCanvasBridge,
   WebGpuSplatCanvasLayer,
 } from './WebGpuSplatCanvasLayer';
+import { isWebGpuAdapterUnavailableReason } from '../../splat/webgpu/webGpuSplatDevice';
 import { GlobalContextMenu } from './contextMenu/GlobalContextMenu';
 import { Scene3DE2EProbe } from './Scene3DE2EProbe';
 import { Scene3DErrorBoundary } from './Scene3DErrorBoundary';
@@ -33,6 +35,8 @@ import { useAxesNode, useGridNode, useGizmoNode, useCamerasNode } from '../../no
 import { useIsAlignmentMode } from '../../hooks/useAlignmentMode';
 import { useIdleTimer } from '../../hooks/useIdleTimer';
 import { preloadSparkModule } from '../../utils/sparkSplatRuntime';
+import { shouldPreloadSparkSplatRuntime } from '../../utils/splatBackendPolicy';
+import type { SplatBackendAvailability } from '../../utils/splatBackendPolicy';
 import { createSim3dFromEuler, sim3dToMatrix4, isIdentityEuler, transformPoint } from '../../utils/sim3dTransforms';
 import { syncSceneBackgroundColor, syncSceneBackgroundTransparent } from '../../utils/threeObjectMutations';
 import { CAMERA, VIZ_COLORS, OPACITY } from '../../theme';
@@ -55,15 +59,20 @@ const LazySplatLayer = lazy(loadSplatLayer);
 
 function SplatRuntimePreloader({
   requestedBackend,
+  splatBackendAvailability,
   setSparkBackendAvailable,
   splatFile,
 }: {
   requestedBackend: 'auto' | 'webgpu' | 'spark';
+  splatBackendAvailability: SplatBackendAvailability;
   setSparkBackendAvailable: (spark: boolean) => void;
   splatFile?: File;
 }) {
   useEffect(() => {
-    if (!splatFile || requestedBackend === 'webgpu') {
+    if (
+      !splatFile ||
+      !shouldPreloadSparkSplatRuntime(requestedBackend, splatBackendAvailability)
+    ) {
       return;
     }
 
@@ -71,7 +80,7 @@ function SplatRuntimePreloader({
     void preloadSparkModule()
       .then(() => setSparkBackendAvailable(true))
       .catch(() => setSparkBackendAvailable(false));
-  }, [requestedBackend, setSparkBackendAvailable, splatFile]);
+  }, [requestedBackend, setSparkBackendAvailable, splatBackendAvailability, splatFile]);
 
   return null;
 }
@@ -90,6 +99,7 @@ function SceneContent() {
       viewTrigger,
       transform,
       requestedSplatBackend,
+      splatBackendAvailability,
       splatBackendResolution,
       splatsVisible,
     },
@@ -108,11 +118,23 @@ function SceneContent() {
   const axes = useAxesNode();
   const grid = useGridNode();
   const gizmo = useGizmoNode();
+  const webGpuSplatCanvasMounted = shouldMountWebGpuSplatCanvas(
+    requestedSplatBackend,
+    splatBackendAvailability,
+    splatFile
+  );
   const webGpuSplatCanvasVisible = shouldRenderWebGpuSplatCanvas(
     splatBackendResolution,
     splatFile,
     splatsVisible
   );
+  const webGpuSplatCanvasBridgeEnabled = shouldSyncWebGpuSplatCanvasFrame(
+    webGpuSplatCanvasMounted,
+    webGpuSplatCanvasVisible,
+    splatBackendResolution
+  );
+  const sparkSplatLayerNeeded = splatFile
+    && shouldPreloadSparkSplatRuntime(requestedSplatBackend, splatBackendAvailability);
 
   // Compute transform for visual preview
   const { transformMatrix, transformedCenter } = useMemo(() => {
@@ -150,7 +172,7 @@ function SceneContent() {
   const transformableContent = (
     <>
       {visibleLayers.points && <PointCloud />}
-      {visibleLayers.points && splatFile && (
+      {visibleLayers.points && sparkSplatLayerNeeded && (
         <Suspense fallback={null}>
           <LazySplatLayer />
         </Suspense>
@@ -174,10 +196,11 @@ function SceneContent() {
           stays visible when a camera is selected. */}
       <SplatRuntimePreloader
         requestedBackend={requestedSplatBackend}
+        splatBackendAvailability={splatBackendAvailability}
         setSparkBackendAvailable={setSparkBackendAvailable}
         splatFile={splatFile}
       />
-      <WebGpuSplatCanvasBridge enabled={webGpuSplatCanvasVisible} modelMatrix={transformMatrix} />
+      <WebGpuSplatCanvasBridge enabled={webGpuSplatCanvasBridgeEnabled} modelMatrix={transformMatrix} />
       {transformMatrix ? (
         <group matrixAutoUpdate={false} matrix={transformMatrix}>
           {transformableContent}
@@ -255,8 +278,10 @@ export function Scene3D() {
     },
     actions: {
       addNotification,
+      removeNotification,
       setSelectedImageId,
       setWebGpuBackendState,
+      setWebGpuMetricState,
     },
   } = useSceneContainerStoreFacade();
   const sceneContextMenu = useSceneContextMenuController();
@@ -279,9 +304,26 @@ export function Scene3D() {
   const handleWebGpuSplatRuntimeReady = useCallback(() => {
     setWebGpuBackendState('ready');
   }, [setWebGpuBackendState]);
+  const handleWebGpuSplatMetricRuntimeReady = useCallback(() => {
+    setWebGpuMetricState('ready');
+  }, [setWebGpuMetricState]);
   const handleWebGpuSplatRuntimeFailed = useCallback((reason: string) => {
+    if (isWebGpuAdapterRecoveryExhaustedReason(reason)) {
+      setWebGpuBackendState('failed', reason);
+      return;
+    }
+
+    if (isWebGpuAdapterUnavailableReason(reason)) {
+      setWebGpuBackendState('unavailable', reason);
+      return;
+    }
+
     setWebGpuBackendState('failed', reason);
   }, [setWebGpuBackendState]);
+  const handleWebGpuSplatAdapterUnavailable = useCallback((reason: string) => {
+    setWebGpuBackendState('unavailable', reason);
+    setWebGpuMetricState('failed', reason);
+  }, [setWebGpuBackendState, setWebGpuMetricState]);
 
   return (
     <div
@@ -301,8 +343,12 @@ export function Scene3D() {
         mounted={webGpuSplatCanvasMounted}
         visible={webGpuSplatCanvasVisible}
         splatFile={splatFile}
+        addNotification={addNotification}
+        removeNotification={removeNotification}
         onRuntimeReady={handleWebGpuSplatRuntimeReady}
+        onMetricRuntimeReady={handleWebGpuSplatMetricRuntimeReady}
         onRuntimeFailed={handleWebGpuSplatRuntimeFailed}
+        onAdapterUnavailable={handleWebGpuSplatAdapterUnavailable}
       />
       <SplatBackendStatusNotifier
         addNotification={addNotification}
@@ -347,4 +393,8 @@ export function Scene3D() {
       <DistanceInputModal />
     </div>
   );
+}
+
+function isWebGpuAdapterRecoveryExhaustedReason(reason: string): boolean {
+  return /adapter recovery did not succeed/i.test(reason);
 }

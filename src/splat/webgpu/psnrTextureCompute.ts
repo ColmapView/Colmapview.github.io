@@ -17,10 +17,12 @@ export interface WebGpuPsnrTextureComputeOptions {
   device: GPUDevice;
   renderedTexture: GPUTexture;
   groundTruthTexture: GPUTexture;
+  maskTexture?: GPUTexture;
   width: number;
   height: number;
   renderedOrigin?: WebGpuPsnrTextureOrigin;
   groundTruthOrigin?: WebGpuPsnrTextureOrigin;
+  maskOrigin?: WebGpuPsnrTextureOrigin;
 }
 
 export interface WebGpuPsnrTextureReduction {
@@ -65,20 +67,24 @@ export async function computePsnrFromRgbaTexturesWebGpu({
   device,
   renderedTexture,
   groundTruthTexture,
+  maskTexture,
   width,
   height,
   renderedOrigin,
   groundTruthOrigin,
+  maskOrigin,
 }: WebGpuPsnrTextureComputeOptions): Promise<WebGpuPsnrTextureResult> {
   return computePsnrFromTextureReduction(
     await computePsnrTextureReductionFromRgbaTexturesWebGpu({
       device,
       renderedTexture,
       groundTruthTexture,
+      maskTexture,
       width,
       height,
       renderedOrigin,
       groundTruthOrigin,
+      maskOrigin,
     })
   );
 }
@@ -87,10 +93,12 @@ export async function computePsnrTextureReductionFromRgbaTexturesWebGpu({
   device,
   renderedTexture,
   groundTruthTexture,
+  maskTexture,
   width,
   height,
   renderedOrigin = { x: 0, y: 0 },
   groundTruthOrigin = { x: 0, y: 0 },
+  maskOrigin = groundTruthOrigin,
 }: WebGpuPsnrTextureComputeOptions): Promise<WebGpuPsnrTextureReduction> {
   const safeWidth = requirePositiveInteger(width, 'width');
   const safeHeight = requirePositiveInteger(height, 'height');
@@ -137,8 +145,12 @@ export async function computePsnrTextureReductionFromRgbaTexturesWebGpu({
       requireNonNegativeInteger(renderedOrigin.y, 'renderedOrigin.y'),
       requireNonNegativeInteger(groundTruthOrigin.x, 'groundTruthOrigin.x'),
       requireNonNegativeInteger(groundTruthOrigin.y, 'groundTruthOrigin.y'),
+      requireNonNegativeInteger(maskOrigin.x, 'maskOrigin.x'),
+      requireNonNegativeInteger(maskOrigin.y, 'maskOrigin.y'),
+      maskTexture ? 1 : 0,
       compareDispatch.x,
       compareWorkgroupCount,
+      0,
     ]));
     paramsBuffers.push(compareParams);
 
@@ -147,8 +159,9 @@ export async function computePsnrTextureReductionFromRgbaTexturesWebGpu({
       entries: [
         { binding: 0, resource: renderedTexture.createView() },
         { binding: 1, resource: groundTruthTexture.createView() },
-        { binding: 2, resource: { buffer: partialA } },
-        { binding: 3, resource: { buffer: compareParams.buffer } },
+        { binding: 2, resource: (maskTexture ?? groundTruthTexture).createView() },
+        { binding: 3, resource: { buffer: partialA } },
+        { binding: 4, resource: { buffer: compareParams.buffer } },
       ],
     });
 
@@ -208,6 +221,7 @@ export async function computePsnrTextureReductionFromRgbaTexturesWebGpu({
         width: safeWidth,
         height: safeHeight,
         pixelCount,
+        masked: Boolean(maskTexture),
         compareWorkgroups: compareWorkgroupCount,
         compareDispatchX: compareDispatch.x,
         compareDispatchY: compareDispatch.y,
@@ -457,12 +471,16 @@ struct CompareParams {
   renderedOriginY: u32,
   groundTruthOriginX: u32,
   groundTruthOriginY: u32,
+  maskOriginX: u32,
+  maskOriginY: u32,
+  hasMask: u32,
   dispatchX: u32,
   workgroupCount: u32,
 }
 
 @group(0) @binding(0) var renderedTexture: texture_2d<f32>;
 @group(0) @binding(1) var groundTruthTexture: texture_2d<f32>;
+@group(0) @binding(2) var maskTexture: texture_2d<f32>;
 struct MetricPartial {
   sumSquaredError: vec2<u32>,
   validPixelCount: vec2<u32>,
@@ -470,8 +488,8 @@ struct MetricPartial {
   ssimWindowCount: vec2<u32>,
 }
 
-@group(0) @binding(2) var<storage, read_write> partials: array<MetricPartial>;
-@group(0) @binding(3) var<uniform> params: CompareParams;
+@group(0) @binding(3) var<storage, read_write> partials: array<MetricPartial>;
+@group(0) @binding(4) var<uniform> params: CompareParams;
 
 var<workgroup> partialSums: array<MetricPartial, ${WEBGPU_PSNR_TEXTURE_WORKGROUP_SIZE}>;
 
@@ -514,6 +532,29 @@ fn textureRgbBytes(textureValue: vec4<f32>) -> vec3<f32> {
   );
 }
 
+fn isMaskValueValid(maskValue: vec4<f32>) -> bool {
+  let maskBrightness = max(maskValue.r, max(maskValue.g, maskValue.b));
+  return maskValue.a > 0.0 && maskBrightness > 0.5;
+}
+
+fn isSampleValid(x: u32, y: u32, groundTruthValue: vec4<f32>) -> bool {
+  if (groundTruthValue.a <= 0.0) {
+    return false;
+  }
+  if (params.hasMask == 0u) {
+    return true;
+  }
+  let maskValue = textureLoad(
+    maskTexture,
+    vec2<i32>(
+      i32(x + params.maskOriginX),
+      i32(y + params.maskOriginY)
+    ),
+    0
+  );
+  return isMaskValueValid(maskValue);
+}
+
 fn computeWindowSsim(x: u32, y: u32) -> f32 {
   var weightSum = 0.0;
   var renderedSum = vec3<f32>(0.0);
@@ -549,7 +590,7 @@ fn computeWindowSsim(x: u32, y: u32) -> f32 {
             ),
             0
           );
-          if (sampleGroundTruth.a > 0.0) {
+          if (isSampleValid(u32(sampleX), u32(sampleY), sampleGroundTruth)) {
             let sampleRendered = textureLoad(
               renderedTexture,
               vec2<i32>(
@@ -642,7 +683,7 @@ fn main(
       0
     );
 
-    if (groundTruth.a > 0.0) {
+    if (isSampleValid(x, y, groundTruth)) {
       let renderedR = rgbaToByte(rendered.r);
       let renderedG = rgbaToByte(rendered.g);
       let renderedB = rgbaToByte(rendered.b);

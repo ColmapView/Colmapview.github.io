@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { controlPanelStyles } from '../../theme';
-import { isSplatColorMode, type ColorMode, type FrustumColorMode } from '../../store/types';
+import { isSplatColorMode, type ColorMode } from '../../store/types';
 import type {
   AxesGridPanelProps,
   BackgroundPanelProps,
@@ -55,10 +55,6 @@ export interface ViewerControlsController {
 
 const styles = controlPanelStyles;
 
-interface PendingSplatCameraColorDefault {
-  cameraColorModeAtRequest: FrustumColorMode;
-}
-
 export function useViewerControlsController(): ViewerControlsController {
   const panelState = useViewerControlPanelState();
   const modals = useViewerToolModalState();
@@ -93,7 +89,7 @@ export function useViewerControlsController(): ViewerControlsController {
 
   const rigInfo = useMemo(() => buildRigInfo(reconstruction), [reconstruction]);
   const { hasRigData, cameraCount, frameCount } = rigInfo;
-  const pendingSplatCameraColorDefaultRef = useRef<PendingSplatCameraColorDefault | null>(null);
+  const initialSplatCameraColorDefaultFileRef = useRef<File | null>(null);
 
   const {
     hsl,
@@ -112,23 +108,24 @@ export function useViewerControlsController(): ViewerControlsController {
     handleLightnessChange: handleFrustumLightnessChange,
   } = useSyncedHslColor(camerasNode.singleColor, camerasActions.setSingleColor);
 
+  const requestSplatCameraColorDefault = useCallback(() => {
+    camerasActions.setColorMode('splatPsnr');
+  }, [camerasActions]);
+
   const requestDefaultSplatCameraColor = useCallback((nextColorMode: ColorMode) => {
-    if (!isSplatColorMode(nextColorMode) || isSplatColorMode(pointsNode.colorMode)) {
+    if (
+      !isSplatColorMode(nextColorMode) ||
+      isSplatColorMode(pointsNode.colorMode) ||
+      !splats.activeSplatFile
+    ) {
       return;
     }
 
-    pendingSplatCameraColorDefaultRef.current = {
-      cameraColorModeAtRequest: camerasNode.colorMode,
-    };
-    if (metrics.splatPsnrFrameReady) {
-      camerasActions.setColorMode('splatPsnr');
-      pendingSplatCameraColorDefaultRef.current = null;
-    }
+    requestSplatCameraColorDefault();
   }, [
-    camerasActions,
-    camerasNode.colorMode,
-    metrics.splatPsnrFrameReady,
     pointsNode.colorMode,
+    requestSplatCameraColorDefault,
+    splats.activeSplatFile,
   ]);
 
   const setPointColorMode = useCallback((nextColorMode: ColorMode) => {
@@ -199,39 +196,41 @@ export function useViewerControlsController(): ViewerControlsController {
   const rigButton = getRigButtonState(hasRigData, rigNode.visible, rigNode.displayMode);
 
   useEffect(() => {
+    const activeSplatFile = splats.activeSplatFile ?? null;
+    if (!activeSplatFile || !isSplatColorMode(pointsNode.colorMode)) {
+      initialSplatCameraColorDefaultFileRef.current = null;
+      return;
+    }
+
     if (
-      !metrics.splatPsnrFrameReady &&
+      initialSplatCameraColorDefaultFileRef.current === activeSplatFile ||
+      camerasNode.colorMode === 'splatPsnr' ||
+      camerasNode.colorMode === 'splatSsim'
+    ) {
+      return;
+    }
+
+    initialSplatCameraColorDefaultFileRef.current = activeSplatFile;
+    requestSplatCameraColorDefault();
+  }, [
+    camerasNode.colorMode,
+    pointsNode.colorMode,
+    requestSplatCameraColorDefault,
+    splats.activeSplatFile,
+  ]);
+
+  useEffect(() => {
+    const activeSplatFile = splats.activeSplatFile ?? null;
+    if (
+      !activeSplatFile &&
       (camerasNode.colorMode === 'splatPsnr' || camerasNode.colorMode === 'splatSsim')
     ) {
       camerasActions.setColorMode('byCamera');
     }
-  }, [camerasActions, camerasNode.colorMode, metrics.splatPsnrFrameReady]);
-
-  useEffect(() => {
-    const pending = pendingSplatCameraColorDefaultRef.current;
-    if (!pending) {
-      return;
-    }
-
-    if (!isSplatColorMode(pointsNode.colorMode)) {
-      pendingSplatCameraColorDefaultRef.current = null;
-      return;
-    }
-    if (camerasNode.colorMode !== pending.cameraColorModeAtRequest) {
-      pendingSplatCameraColorDefaultRef.current = null;
-      return;
-    }
-    if (!metrics.splatPsnrFrameReady) {
-      return;
-    }
-
-    camerasActions.setColorMode('splatPsnr');
-    pendingSplatCameraColorDefaultRef.current = null;
   }, [
     camerasActions,
     camerasNode.colorMode,
-    metrics.splatPsnrFrameReady,
-    pointsNode.colorMode,
+    splats.activeSplatFile,
   ]);
 
   return {
@@ -354,6 +353,7 @@ export function useViewerControlsController(): ViewerControlsController {
       setUndistortionEnabled: camerasActions.setUndistortionEnabled,
       autoFovEnabled: navNode.autoFovEnabled,
       setAutoFovEnabled: navActions.setAutoFovEnabled,
+      hasActiveSplat: Boolean(splats.activeSplatFile),
       splatPsnrFrameReady: metrics.splatPsnrFrameReady,
       onCycleCameraDisplayMode: cycleCameraDisplayMode,
     },

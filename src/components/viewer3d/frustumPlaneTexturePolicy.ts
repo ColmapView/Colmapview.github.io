@@ -10,16 +10,6 @@ export function getFrustumPlaneSourceTexture<T>({
   return isSelected ? (highResTexture ?? lowResTexture) : lowResTexture;
 }
 
-export function getFrustumPlaneDisplayTexture<T>({
-  currentTexture,
-  lastTexture,
-}: {
-  currentTexture: T | null;
-  lastTexture: T | null;
-}): T | null {
-  return currentTexture ?? lastTexture;
-}
-
 export function shouldShowFrustumPlaneTexture({
   showImagePlane,
   hasDisplayTexture,
@@ -45,14 +35,4 @@ export function isRenderableFrustumPlaneTexture<T extends { image?: unknown } | 
     && typeof height === 'number'
     && width > 0
     && height > 0;
-}
-
-export function getFrustumPlaneMaterialTexture<T>({
-  shouldShowTexture,
-  displayTexture,
-}: {
-  shouldShowTexture: boolean;
-  displayTexture: T | null;
-}): T | null {
-  return shouldShowTexture ? displayTexture : null;
 }

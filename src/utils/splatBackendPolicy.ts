@@ -154,7 +154,10 @@ export function resolveSplatBackend(
     };
   }
 
-  if (availability.spark) {
+  if (
+    availability.spark
+    && (availability.webGpu === 'unsupported' || availability.webGpu === 'failed')
+  ) {
     return {
       status: 'resolved',
       requested,
@@ -169,10 +172,23 @@ export function resolveSplatBackend(
     requested,
     backend: null,
     gpuPsnr: false,
-    reason: availability.webGpu === 'failed'
+    reason: availability.webGpu === 'unavailable'
+      ? availability.webGpuFailureReason ?? 'Preparing WebGPU splat renderer'
+      : availability.webGpu === 'failed'
       ? getWebGpuUnavailableReason(availability)
       : 'No splat renderer is available',
   };
+}
+
+export function shouldPreloadSparkSplatRuntime(
+  requested: SplatBackendPreference,
+  availability: Pick<SplatBackendAvailability, 'webGpu'>
+): boolean {
+  return requested === 'spark'
+    || (
+      requested === 'auto'
+      && (availability.webGpu === 'unsupported' || availability.webGpu === 'failed')
+    );
 }
 
 export function resolveSplatMetricCapability(
@@ -203,7 +219,7 @@ function getAutoSparkFallbackReason(availability: SplatBackendAvailability): str
         : 'Spark fallback selected because WebGPU splat renderer failed to initialize';
     case 'unavailable':
     case 'ready':
-      return 'Spark fallback selected until the WebGPU renderer is available';
+      return 'Spark fallback selected because WebGPU splat renderer is unavailable';
   }
 }
 
@@ -216,7 +232,7 @@ function getWebGpuUnavailableReason(availability: SplatBackendAvailability): str
         ? `WebGPU splat renderer failed to initialize: ${availability.webGpuFailureReason}`
         : 'WebGPU splat renderer failed to initialize';
     case 'unavailable':
-      return 'WebGPU splat renderer is not available';
+      return availability.webGpuFailureReason ?? 'WebGPU splat renderer is not available';
     case 'ready':
       return 'WebGPU splat renderer is available';
   }

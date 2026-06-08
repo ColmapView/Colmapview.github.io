@@ -8,6 +8,9 @@ import type { WebGpuSplatUniformFrame } from './cameraUniforms';
 
 const colmapToThreeCameraRotation = new THREE.Quaternion()
   .setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
+const threeCameraViewFromModel = new THREE.Matrix4();
+const threeCameraModelWorld = new THREE.Matrix4();
+const threeCameraModelPosition = new THREE.Vector3();
 
 export interface WebGpuSplatViewportFrame {
   cssWidth: number;
@@ -81,12 +84,12 @@ export function createWebGpuSplatFrameFromThreeCamera({
     isPerspectiveCamera?: boolean;
     isOrthographicCamera?: boolean;
   };
-  const viewFromModel = camera.matrixWorldInverse.clone();
+  const viewFromModel = threeCameraViewFromModel.copy(camera.matrixWorldInverse);
   if (modelMatrix) {
     viewFromModel.multiply(modelMatrix);
   }
-  const modelCameraWorld = viewFromModel.clone().invert();
-  const modelCameraPosition = new THREE.Vector3().setFromMatrixPosition(modelCameraWorld);
+  const modelCameraWorld = threeCameraModelWorld.copy(viewFromModel).invert();
+  const modelCameraPosition = threeCameraModelPosition.setFromMatrixPosition(modelCameraWorld);
 
   return {
     viewport: createWebGpuSplatViewportFrame(width, height, dpr),

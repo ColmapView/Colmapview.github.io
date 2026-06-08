@@ -1,10 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { GaussianCloud } from '../gaussianCloud';
 import {
   createLoadedVisibleWebGpuSplatRendererAdapter,
   createVisibleWebGpuSplatRendererAdapter,
   type VisibleWebGpuSplatRendererAdapterDeps,
 } from './visibleSplatRendererAdapter';
+import {
+  clearVisibleWebGpuSplatSharedRuntimesForTests,
+} from './visibleSplatRuntimeRegistry';
 import type { GpuGaussianSceneRef } from './gaussianSceneResourceManager';
 import type { SplatCameraFrame, SplatRenderSession } from './gaussianRenderer';
 import type { WebGpuSplatDeviceHandle } from './webGpuSplatDevice';
@@ -198,6 +201,10 @@ async function flushPromises(): Promise<void> {
 }
 
 describe('visible WebGPU splat renderer adapter', () => {
+  afterEach(() => {
+    clearVisibleWebGpuSplatSharedRuntimesForTests();
+  });
+
   it('creates a loaded renderer with cloud-specific elevated limits before upload', async () => {
     const harness = createHarness();
     const largeCloud = makeLargeShCloud();
@@ -226,6 +233,53 @@ describe('visible WebGPU splat renderer adapter', () => {
       cloud: largeCloud,
       labelPrefix: 'large splat',
     });
+
+    adapter.dispose();
+  });
+
+  it('retries loaded renderer initialization with SH0-only data when full SH exceeds WebGPU limits', async () => {
+    const harness = createHarness();
+    const largeCloud = makeLargeShCloud();
+    const onShFallback = vi.fn();
+    harness.initializeDevice
+      .mockRejectedValueOnce(new Error('maxStorageBufferBindingSize is below required size'))
+      .mockResolvedValueOnce(harness.deviceHandle);
+
+    const adapter = await createLoadedVisibleWebGpuSplatRendererAdapter(
+      harness.canvas,
+      largeCloud,
+      { sceneId: 'large-scene', labelPrefix: 'large splat' },
+      {
+        initializeDevice: harness.initializeDevice,
+        createSceneResourceManager: () => harness.resourceManager as unknown as ReturnType<NonNullable<VisibleWebGpuSplatRendererAdapterDeps['createSceneResourceManager']>>,
+        createRenderSession: harness.createRenderSession,
+        onShFallback,
+      }
+    );
+
+    expect(harness.initializeDevice).toHaveBeenNthCalledWith(1, harness.canvas, expect.objectContaining({
+      requiredLimits: {
+        maxBufferSize: 900_000_000,
+        maxStorageBufferBindingSize: 900_000_000,
+      },
+    }));
+    expect(harness.initializeDevice).toHaveBeenNthCalledWith(2, harness.canvas, expect.objectContaining({
+      requiredLimits: {
+        maxBufferSize: 320_000_000,
+        maxStorageBufferBindingSize: 320_000_000,
+      },
+    }));
+    expect(onShFallback).toHaveBeenCalledWith('maxStorageBufferBindingSize is below required size');
+    expect(harness.resourceManager.acquire).toHaveBeenCalledWith(harness.deviceHandle.device, {
+      sceneId: 'large-scene',
+      cloud: expect.objectContaining({
+        count: largeCloud.count,
+        shDegree: 0,
+      }),
+      labelPrefix: 'large splat',
+    });
+    const uploadedCloud = harness.resourceManager.acquire.mock.calls[0][1].cloud;
+    expect(uploadedCloud.shN).toBeUndefined();
 
     adapter.dispose();
   });
@@ -295,6 +349,40 @@ describe('visible WebGPU splat renderer adapter', () => {
     expect(harness.session.renderToCanvas).toHaveBeenCalledWith({ completion: 'submitted' });
     expect(harness.onFirstFrame).toHaveBeenCalledTimes(1);
     expect(harness.onError).not.toHaveBeenCalled();
+  });
+
+  it('uses larger chunks for visible async scene uploads', async () => {
+    const harness = createHarness();
+    const resourceManager = {
+      acquireAsync: vi.fn(async () => harness.sceneRef),
+      acquire: vi.fn(() => harness.sceneRef),
+      dispose: vi.fn(),
+    };
+    const adapter = await createVisibleWebGpuSplatRendererAdapter(harness.canvas, {
+      initializeDevice: harness.initializeDevice,
+      createSceneResourceManager: () => resourceManager as unknown as ReturnType<NonNullable<VisibleWebGpuSplatRendererAdapterDeps['createSceneResourceManager']>>,
+      createRenderSession: harness.createRenderSession,
+      onError: harness.onError,
+    });
+    const cloud = makeCloud();
+
+    await adapter.loadCloud(cloud, { sceneId: 'scene', labelPrefix: 'visible scene' });
+
+    expect(resourceManager.acquireAsync).toHaveBeenCalledWith(
+      harness.deviceHandle.device,
+      {
+        sceneId: 'scene',
+        cloud,
+        labelPrefix: 'visible scene',
+      },
+      expect.objectContaining({
+        labelPrefix: 'visible scene',
+        maxChunkBytes: 64 * 1024 * 1024,
+      })
+    );
+    expect(resourceManager.acquire).not.toHaveBeenCalled();
+
+    adapter.dispose();
   });
 
   it('coalesces render requests while a frame is in flight', async () => {
@@ -443,7 +531,7 @@ describe('visible WebGPU splat renderer adapter', () => {
 
     expect(harness.onError).toHaveBeenCalledWith('validation failed');
     expect(harness.session.dispose).toHaveBeenCalledTimes(1);
-    expect(harness.resourceManager.dispose).toHaveBeenCalledTimes(1);
+    expect(harness.resourceManager.dispose).not.toHaveBeenCalled();
     expect(harness.deviceHandle.dispose).toHaveBeenCalledTimes(1);
 
     adapter.setFrameSnapshot(makeFrame());
@@ -482,7 +570,7 @@ describe('visible WebGPU splat renderer adapter', () => {
 
     expect(harness.onError).toHaveBeenCalledWith('WebGPU device lost: lost');
     expect(harness.session.dispose).toHaveBeenCalledTimes(1);
-    expect(harness.resourceManager.dispose).toHaveBeenCalledTimes(1);
+    expect(harness.resourceManager.dispose).not.toHaveBeenCalled();
     expect(harness.deviceHandle.dispose).toHaveBeenCalledTimes(1);
   });
 
@@ -500,7 +588,7 @@ describe('visible WebGPU splat renderer adapter', () => {
 
     expect(harness.onError).toHaveBeenCalledWith('WebGPU device lost');
     expect(harness.session.dispose).toHaveBeenCalledTimes(1);
-    expect(harness.resourceManager.dispose).toHaveBeenCalledTimes(1);
+    expect(harness.resourceManager.dispose).not.toHaveBeenCalled();
     expect(harness.deviceHandle.dispose).toHaveBeenCalledTimes(1);
   });
 });

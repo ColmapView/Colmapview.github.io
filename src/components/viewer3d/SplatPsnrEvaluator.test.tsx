@@ -10,6 +10,11 @@ import {
 } from '../../test/builders';
 import type { SplatPsnrEvaluatorStoreFacade } from './SplatPsnrEvaluatorStoreFacade';
 import { SplatPsnrEvaluator } from './SplatPsnrEvaluator';
+import {
+  clearVisibleWebGpuSplatSharedRuntimesForTests,
+  createVisibleWebGpuSplatSceneId,
+  registerVisibleWebGpuSplatSharedRuntime,
+} from '../../splat/webgpu/visibleSplatRuntimeRegistry';
 
 const {
   deviceLossListenerRef,
@@ -79,6 +84,19 @@ function createMetricCapability(): SplatMetricCapability {
   };
 }
 
+function createShCloud() {
+  return {
+    count: 1,
+    positions: new Float32Array([0, 0, 0]),
+    scales: new Float32Array([1, 1, 1]),
+    rotations: new Float32Array([1, 0, 0, 0]),
+    opacities: new Float32Array([0.5]),
+    sh0: new Float32Array([0.1, 0.2, 0.3]),
+    shDegree: 3,
+    shN: new Float32Array(45),
+  };
+}
+
 function createFacade(overrides: Partial<SplatPsnrEvaluatorStoreFacade['data']> = {}) {
   const imageFile = buildFile('image.jpg');
   const camera = buildCamera({ width: 4, height: 3 });
@@ -103,6 +121,9 @@ function createFacade(overrides: Partial<SplatPsnrEvaluatorStoreFacade['data']> 
       getImageSync: vi.fn(() => imageFile),
       getImage: vi.fn(async () => imageFile),
       getMetricImage: vi.fn(async () => imageFile),
+      hasMasks: vi.fn(() => false),
+      getMask: vi.fn(async () => null),
+      getMaskSync: vi.fn(() => undefined),
     } as unknown as SplatPsnrEvaluatorStoreFacade['data']['dataset'],
     datasetIdentity: {
       sourceType: 'local',
@@ -148,11 +169,12 @@ describe('SplatPsnrEvaluator', () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    clearVisibleWebGpuSplatSharedRuntimesForTests();
   });
 
   beforeEach(() => {
     vi.useRealTimers();
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     deviceLossListenerRef.current = null;
     loadGaussianCloudFromFileMock.mockResolvedValue({
       file: buildFile('scene.spz', 'splat'),
@@ -175,7 +197,7 @@ describe('SplatPsnrEvaluator', () => {
     });
   });
 
-  it('automatically requests all-image PSNR once the scene is metric-ready', async () => {
+  it('automatically requests all-image metrics for SPZ splats once the scene is metric-ready', async () => {
     vi.useFakeTimers();
     const { facade, actions } = createFacade({
       splatPsnrComputeRequest: null,
@@ -191,6 +213,89 @@ describe('SplatPsnrEvaluator', () => {
     });
 
     expect(actions.requestSplatPsnrCompute).toHaveBeenCalledWith('all');
+  });
+
+  it('does not request SPZ metrics when the visible renderer is using Spark fallback', async () => {
+    vi.useFakeTimers();
+    const splatFile = buildFile('scene.spz', 'splat');
+    const { facade, actions, imageFile } = createFacade({
+      splatFile,
+      splatPsnrComputeRequest: null,
+      splatBackendResolution: {
+        status: 'resolved',
+        requested: 'auto',
+        backend: 'spark',
+        reason: 'Spark fallback selected because WebGPU splat renderer failed to initialize: adapter lost',
+        gpuPsnr: false,
+      },
+    });
+    facade.data.datasetIdentity = {
+      ...facade.data.datasetIdentity,
+      loadedFiles: buildLoadedFiles({ imageFiles: [imageFile], splatFile }),
+    };
+    useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
+
+    render(<SplatPsnrEvaluator />);
+
+    expect(actions.requestSplatPsnrCompute).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(1500);
+    });
+
+    expect(actions.requestSplatPsnrCompute).not.toHaveBeenCalled();
+  });
+
+  it('does not probe the PSNR WebGPU device before the visible WebGPU renderer is ready', async () => {
+    const { facade } = createFacade({
+      splatBackendResolution: {
+        status: 'unavailable',
+        requested: 'auto',
+        backend: null,
+        reason: 'Preparing WebGPU splat renderer',
+        gpuPsnr: false,
+      },
+      splatMetricCapability: {
+        gpuPsnr: false,
+        status: 'unavailable',
+        reason: 'WebGPU PSNR is not ready',
+      },
+    });
+    useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
+
+    render(<SplatPsnrEvaluator />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(ensureSplatPsnrWebGpuDeviceMock).not.toHaveBeenCalled();
+    expect(loadGaussianCloudFromFileMock).not.toHaveBeenCalled();
+    expect(createWebGpuSplatPsnrSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('does not request background metrics for splat-only scenes without ground truth images', async () => {
+    vi.useFakeTimers();
+    const splatFile = buildFile('scene.spz', 'splat');
+    const { facade, actions } = createFacade({
+      reconstruction: buildReconstruction({ cameras: [], images: [] }),
+      splatFile,
+      splatPsnrComputeRequest: null,
+    });
+    facade.data.datasetIdentity = {
+      ...facade.data.datasetIdentity,
+      loadedFiles: buildLoadedFiles({ splatFile }),
+    };
+    useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
+
+    render(<SplatPsnrEvaluator />);
+
+    act(() => {
+      vi.advanceTimersByTime(3000);
+    });
+
+    expect(actions.requestSplatPsnrCompute).not.toHaveBeenCalled();
+    expect(prefetchFrustumTexturesInBackgroundMock).not.toHaveBeenCalled();
   });
 
   it('starts gentle image-plane texture prefetch for the loaded scene', async () => {
@@ -231,6 +336,9 @@ describe('SplatPsnrEvaluator', () => {
         getImageSync: vi.fn(() => undefined),
         getImage: vi.fn(async () => null),
         getMetricImage: vi.fn(async () => metricFile),
+        hasMasks: vi.fn(() => false),
+        getMask: vi.fn(async () => null),
+        getMaskSync: vi.fn(() => undefined),
       } as unknown as SplatPsnrEvaluatorStoreFacade['data']['dataset'],
       splatPsnrComputeRequest: { id: 1, scope: 'selected', selectedImageId: image.imageId },
     });
@@ -239,7 +347,14 @@ describe('SplatPsnrEvaluator', () => {
     render(<SplatPsnrEvaluator />);
 
     await waitFor(() => {
+      expect(loadGaussianCloudFromFileMock).toHaveBeenCalledTimes(1);
+      expect(createWebGpuSplatPsnrSessionMock).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
       expect(computeImageMetric).toHaveBeenCalledTimes(1);
+      expect(computeImageMetric).toHaveBeenCalledWith(expect.objectContaining({
+        imageFile: metricFile,
+      }));
     });
     await waitFor(() => {
       expect(prefetchFrustumTexturesInBackgroundMock).toHaveBeenCalledWith(
@@ -249,6 +364,95 @@ describe('SplatPsnrEvaluator', () => {
           shouldCancel: expect.any(Function),
         })
       );
+    });
+  });
+
+  it('passes dataset masks into masked PSNR and SSIM image metrics', async () => {
+    const deferredMetric = createDeferredMetric();
+    const computeImageMetric = vi.fn(() => deferredMetric.promise);
+    createWebGpuSplatPsnrSessionMock.mockResolvedValue({
+      computeImageMetric,
+      dispose: vi.fn(),
+    });
+    const maskFile = buildFile('image.jpg.png', 'mask');
+    const { facade, image, imageFile } = createFacade({
+      dataset: {
+        getImageSync: vi.fn(() => imageFile),
+        getImage: vi.fn(async () => imageFile),
+        getMetricImage: vi.fn(async () => imageFile),
+        hasMasks: vi.fn(() => true),
+        getMask: vi.fn(async () => maskFile),
+        getMaskSync: vi.fn(() => maskFile),
+      } as unknown as SplatPsnrEvaluatorStoreFacade['data']['dataset'],
+    });
+    useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
+
+    render(<SplatPsnrEvaluator />);
+
+    await waitFor(() => {
+      expect(computeImageMetric).toHaveBeenCalledTimes(1);
+    });
+    expect(facade.data.dataset.getMask).toHaveBeenCalledWith(image.name);
+    expect(computeImageMetric).toHaveBeenCalledWith(expect.objectContaining({
+      imageFile,
+      maskFile,
+      image,
+      width: 4,
+      height: 3,
+    }));
+  });
+
+  it('retries PSNR setup with SH0-only data when full SH exceeds WebGPU limits', async () => {
+    const splatFile = buildFile('scene.ply', 'splat');
+    const shCloud = createShCloud();
+    const deferredMetric = createDeferredMetric();
+    const computeImageMetric = vi.fn(() => deferredMetric.promise);
+    createWebGpuSplatPsnrSessionMock.mockResolvedValue({
+      computeImageMetric,
+      dispose: vi.fn(),
+    });
+    loadGaussianCloudFromFileMock.mockResolvedValueOnce({
+      file: splatFile,
+      format: 'ply',
+      byteLength: 123,
+      cloud: shCloud,
+    });
+    const fallbackDevice = { label: 'fallback-device' } as unknown as GPUDevice;
+    ensureSplatPsnrWebGpuDeviceMock
+      .mockRejectedValueOnce(new Error('maxStorageBufferBindingSize is below required size'))
+      .mockResolvedValueOnce(fallbackDevice);
+    const { facade, imageFile } = createFacade({
+      splatFile,
+    });
+    facade.data.datasetIdentity = {
+      ...facade.data.datasetIdentity,
+      loadedFiles: buildLoadedFiles({ imageFiles: [imageFile], splatFile }),
+    };
+    useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
+
+    render(<SplatPsnrEvaluator />);
+
+    await waitFor(() => {
+      expect(createWebGpuSplatPsnrSessionMock).toHaveBeenCalledTimes(1);
+    });
+    expect(ensureSplatPsnrWebGpuDeviceMock).toHaveBeenNthCalledWith(1, {
+      maxBufferSize: 180,
+      maxStorageBufferBindingSize: 180,
+    });
+    expect(ensureSplatPsnrWebGpuDeviceMock).toHaveBeenNthCalledWith(2, {
+      maxBufferSize: 64,
+      maxStorageBufferBindingSize: 64,
+    });
+    const sessionOptions = createWebGpuSplatPsnrSessionMock.mock.calls[0][0];
+    expect(sessionOptions.device).toBe(fallbackDevice);
+    expect(sessionOptions.loadedCloud.cloud).not.toBe(shCloud);
+    expect(sessionOptions.loadedCloud.cloud.shDegree).toBe(0);
+    expect(sessionOptions.loadedCloud.cloud.shN).toBeUndefined();
+    expect(shCloud.shDegree).toBe(3);
+
+    await act(async () => {
+      deferredMetric.resolve({ psnr: 31, ssim: 0.94, mse: 12, validPixelCount: 12 });
+      await deferredMetric.promise;
     });
   });
 
@@ -525,6 +729,9 @@ describe('SplatPsnrEvaluator', () => {
       }),
       dataset: {
         getMetricImage: vi.fn(async (name: string) => files.get(name) ?? null),
+        hasMasks: vi.fn(() => false),
+        getMask: vi.fn(async () => null),
+        getMaskSync: vi.fn(() => undefined),
       } as unknown as SplatPsnrEvaluatorStoreFacade['data']['dataset'],
       splatPsnrComputeRequest: { id: 1, scope: 'all' },
     });
@@ -780,7 +987,7 @@ describe('SplatPsnrEvaluator', () => {
     expect(actions.finishSplatPsnrCompute).toHaveBeenCalledTimes(1);
   });
 
-  it('re-probes metric WebGPU after device loss and accepts a later request once ready', async () => {
+  it('waits for visible WebGPU resources after device loss and accepts a later request once ready', async () => {
     const firstMetric = createDeferredMetric();
     const secondMetric = createDeferredMetric();
     const firstSession = {
@@ -825,10 +1032,17 @@ describe('SplatPsnrEvaluator', () => {
       reason: 'WebGPU PSNR failed to initialize: adapter reset',
     };
     facade.data.splatPsnrFrameReady = false;
+    registerVisibleWebGpuSplatSharedRuntime({
+      sceneId: createVisibleWebGpuSplatSceneId(facade.data.splatFile!),
+      device: { label: 'visible-device' } as unknown as GPUDevice,
+      sceneResourceManager: {
+        acquire: vi.fn(),
+      },
+    });
     view.rerender(<SplatPsnrEvaluator />);
 
     await waitFor(() => {
-      expect(ensureSplatPsnrWebGpuDeviceMock).toHaveBeenCalledTimes(2);
+      expect(ensureSplatPsnrWebGpuDeviceMock).toHaveBeenCalledTimes(1);
       expect(actions.setWebGpuMetricState).toHaveBeenCalledWith('ready');
     });
 

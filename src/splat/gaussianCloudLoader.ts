@@ -128,9 +128,7 @@ async function decodeGaussianCloud(
 ): Promise<{ cloud: GaussianCloud; packed: PackedWebGpuGaussianCloud | null }> {
   if (deps.loadPLYFromBuffer || deps.loadSPZFromBuffer) {
     return {
-      cloud: format === 'spz'
-        ? (deps.loadSPZFromBuffer ?? defaultLoadSPZFromBuffer)(buffer)
-        : (deps.loadPLYFromBuffer ?? defaultLoadPLYFromBuffer)(buffer),
+      cloud: await decodeGaussianCloudInProcess(format, buffer, deps),
       packed: null,
     };
   }
@@ -141,14 +139,25 @@ async function decodeGaussianCloud(
   const worker = workerFactory?.();
   if (!worker) {
     return {
-      cloud: format === 'spz'
-        ? defaultLoadSPZFromBuffer(buffer)
-        : defaultLoadPLYFromBuffer(buffer),
+      cloud: await decodeGaussianCloudInProcess(format, buffer, deps),
       packed: null,
     };
   }
 
   return decodeGaussianCloudInWorker(worker, format, buffer);
+}
+
+async function decodeGaussianCloudInProcess(
+  format: GaussianCloudFormat,
+  buffer: ArrayBuffer,
+  deps: GaussianCloudLoaderDeps
+): Promise<GaussianCloud> {
+  switch (format) {
+    case 'spz':
+      return (deps.loadSPZFromBuffer ?? defaultLoadSPZFromBuffer)(buffer);
+    case 'ply':
+      return (deps.loadPLYFromBuffer ?? defaultLoadPLYFromBuffer)(buffer);
+  }
 }
 
 function createDefaultGaussianCloudLoaderWorker(): Worker | null {

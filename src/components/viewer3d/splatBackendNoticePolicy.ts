@@ -17,6 +17,7 @@ export interface ForcedWebGpuSplatFailureNotice {
 
 export function getWebGpuSplatBackendNotice(options: ForcedWebGpuSplatFailureNoticeOptions): ForcedWebGpuSplatFailureNotice | null {
   return getForcedWebGpuSplatFailureNotice(options)
+    ?? getAutoWebGpuUnavailableNotice(options)
     ?? getAutoWebGpuFailureSparkFallbackNotice(options);
 }
 
@@ -31,6 +32,26 @@ export function getForcedWebGpuSplatFailureNotice({
     requestedBackend !== 'webgpu' ||
     splatBackendResolution.status !== 'unavailable' ||
     webGpuSplatCanvasMounted
+  ) {
+    return null;
+  }
+
+  return {
+    key: `${splatFile.name}:${splatBackendResolution.reason}`,
+    message: `WebGPU splat renderer unavailable: ${splatBackendResolution.reason}`,
+  };
+}
+
+function getAutoWebGpuUnavailableNotice({
+  requestedBackend,
+  splatFile,
+  splatBackendResolution,
+}: ForcedWebGpuSplatFailureNoticeOptions): ForcedWebGpuSplatFailureNotice | null {
+  if (
+    !splatFile ||
+    requestedBackend !== 'auto' ||
+    splatBackendResolution.status !== 'unavailable' ||
+    splatBackendResolution.reason === 'Preparing WebGPU splat renderer'
   ) {
     return null;
   }

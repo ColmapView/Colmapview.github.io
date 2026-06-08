@@ -80,7 +80,9 @@ export const useSplatBackendStore = create<SplatBackendState>()((set) => ({
       {
         ...state.availability,
         webGpu,
-        webGpuFailureReason: webGpu === 'failed' ? failureReason : null,
+        webGpuFailureReason: webGpu === 'failed' || (webGpu === 'unavailable' && failureReason)
+          ? failureReason
+          : null,
       },
       state.metricAvailability
     )

@@ -59,50 +59,6 @@ export interface SPZHeader {
     flags: number;
     reserved: number;
 }
-export interface SOGMetadata {
-    version?: number;
-    count: number;
-    means: {
-        min?: [number, number, number];
-        max?: [number, number, number];
-        mins?: [number, number, number];
-        maxs?: [number, number, number];
-        shape?: number[];
-        files?: string[];
-    };
-    scales: {
-        codebook?: number[];
-        mins?: [number, number, number];
-        maxs?: [number, number, number];
-        shape?: number[];
-        files?: string[];
-    };
-    quats?: {
-        files?: string[];
-    };
-    sh0: {
-        codebook?: number[];
-        mins?: number[];
-        maxs?: number[];
-        shape?: number[];
-        files?: string[];
-    };
-    shN?: {
-        count?: number;
-        bands?: number;
-        codebook?: number[];
-        mins?: number;
-        maxs?: number;
-        quantization?: number;
-        files?: string[];
-    };
-    asset?: Record<string, unknown>;
-}
-export interface PixelData {
-    width: number;
-    height: number;
-    data: Uint8ClampedArray;
-}
 export type PackedFormat = 'compact' | 'balanced';
 /**
  * GPU-optimized packed Gaussian storage.

@@ -32,7 +32,14 @@ export function shouldMountWebGpuSplatCanvas(
   );
 }
 
+export function shouldSyncWebGpuSplatCanvasFrame(
+  mounted: boolean,
+  visible: boolean,
+  resolution: SplatBackendResolution
+): boolean {
+  return mounted && (visible || resolution.status !== 'resolved');
+}
+
 export function isWebGpuGaussianCloudFile(file: File): boolean {
-  const extension = getSplatFileExtension(file.name);
-  return extension === '.spz' || extension === '.ply';
+  return getSplatFileExtension(file.name) !== null;
 }

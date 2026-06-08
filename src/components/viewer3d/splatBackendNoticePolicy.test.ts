@@ -89,18 +89,36 @@ describe('splat backend notice policy', () => {
     });
   });
 
-  it('does not warn for auto Spark fallback while hidden WebGPU is still warming up', () => {
+  it('does not warn while auto WebGPU is still warming up', () => {
     expect(getWebGpuSplatBackendNotice({
       requestedBackend: 'auto',
       splatFile: new File(['x'], 'scene.spz'),
       splatBackendResolution: {
-        status: 'resolved',
+        status: 'unavailable',
         requested: 'auto',
-        backend: 'spark',
+        backend: null,
         gpuPsnr: false,
-        reason: 'Spark fallback selected until the WebGPU renderer is available',
+        reason: 'Preparing WebGPU splat renderer',
       },
       webGpuSplatCanvasMounted: true,
     })).toBeNull();
+  });
+
+  it('creates an auto-mode warning when WebGPU has a concrete unavailable reason', () => {
+    expect(getWebGpuSplatBackendNotice({
+      requestedBackend: 'auto',
+      splatFile: new File(['x'], 'scene.spz'),
+      splatBackendResolution: {
+        status: 'unavailable',
+        requested: 'auto',
+        backend: null,
+        gpuPsnr: false,
+        reason: 'WebGPU adapter is unavailable',
+      },
+      webGpuSplatCanvasMounted: true,
+    })).toEqual({
+      key: 'scene.spz:WebGPU adapter is unavailable',
+      message: 'WebGPU splat renderer unavailable: WebGPU adapter is unavailable',
+    });
   });
 });

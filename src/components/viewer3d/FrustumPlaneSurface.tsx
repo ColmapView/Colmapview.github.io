@@ -1,9 +1,12 @@
-import type { RefObject } from 'react';
+import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import type { Camera } from '../../types/colmap';
 import { VIZ_COLORS } from '../../theme';
 import type { FrustumPlaneSize } from './cameraFrustumGeometry';
-import { getFrustumPlaneBasicMaterialProps } from './frustumPlaneMaterialPolicy';
+import {
+  getFrustumPlaneBasicMaterialProps,
+  syncFrustumPlaneMaterialMap,
+} from './frustumPlaneMaterialPolicy';
 import { UndistortedImageMaterial } from './UndistortedImageMaterial';
 
 const TESSELLATION_SEGMENTS = 32;
@@ -14,10 +17,10 @@ interface FrustumPlaneSurfaceProps {
   displayTexture: THREE.Texture | null;
   isSelected: boolean;
   isTransparent: boolean;
-  materialRef: RefObject<THREE.MeshBasicMaterial | null>;
   planeSize: FrustumPlaneSize;
   selectionPlaneOpacity: number;
   shouldShowTexture: boolean;
+  textureHiddenByViewAngle: boolean;
   undistortionEnabled: boolean;
   undistortionMode: 'cropped' | 'fullFrame';
 }
@@ -28,13 +31,26 @@ export function FrustumPlaneSurface({
   displayTexture,
   isSelected,
   isTransparent,
-  materialRef,
   planeSize,
   selectionPlaneOpacity,
   shouldShowTexture,
+  textureHiddenByViewAngle,
   undistortionEnabled,
   undistortionMode,
 }: FrustumPlaneSurfaceProps) {
+  const materialRef = useRef<THREE.MeshBasicMaterial | null>(null);
+  const previousMaterialTextureRef = useRef<THREE.Texture | null | undefined>(undefined);
+  const materialTexture = shouldShowTexture ? displayTexture : null;
+
+  useEffect(() => {
+    syncFrustumPlaneMaterialMap(
+      materialRef.current,
+      materialTexture,
+      previousMaterialTextureRef.current
+    );
+    previousMaterialTextureRef.current = materialTexture;
+  }, [materialTexture]);
+
   if (undistortionEnabled && shouldShowTexture && displayTexture) {
     return (
       <>
@@ -65,6 +81,7 @@ export function FrustumPlaneSurface({
     isSelected,
     isTransparent,
     shouldShowTexture,
+    textureHiddenByViewAngle,
     selectionPlaneOpacity,
     displayColor,
   });
@@ -74,7 +91,7 @@ export function FrustumPlaneSurface({
       <planeGeometry args={[planeSize.width, planeSize.height]} />
       <meshBasicMaterial
         ref={materialRef}
-        map={shouldShowTexture ? displayTexture : null}
+        map={materialTexture}
         color={materialProps.color}
         side={THREE.DoubleSide}
         transparent={materialProps.transparent}

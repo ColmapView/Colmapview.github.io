@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   initializeWebGpuSplatDevice,
+  requestPreferredWebGpuSplatAdapter,
   type WebGpuSplatGpuProvider,
 } from './webGpuSplatDevice';
 import {
@@ -103,6 +104,25 @@ describe('WebGPU splat device initialization', () => {
     });
   });
 
+  it('uses a provided adapter without requesting another one', async () => {
+    const { adapter, canvas, context, device, gpu } = createDeviceHarness();
+
+    const handle = await initializeWebGpuSplatDevice(canvas, {
+      gpu,
+      adapter: adapter ?? undefined,
+    });
+
+    expect(gpu.requestAdapter).not.toHaveBeenCalled();
+    expect(adapter?.requestDevice).toHaveBeenCalledWith(undefined);
+    expect(handle.adapter).toBe(adapter);
+    expect(handle.device).toBe(device);
+    expect(context?.configure).toHaveBeenCalledWith(expect.objectContaining({
+      device,
+    }));
+
+    handle.dispose();
+  });
+
   it('falls back to the default adapter request when a high-performance adapter is unavailable', async () => {
     const { adapter: fallbackAdapter, canvas, context } = createDeviceHarness();
     const gpu: WebGpuSplatGpuProvider = {
@@ -122,6 +142,41 @@ describe('WebGPU splat device initialization', () => {
     }));
 
     handle.dispose();
+  });
+
+  it('continues adapter fallback when high-performance adapter requests reject', async () => {
+    const { adapter: fallbackAdapter, canvas, context } = createDeviceHarness();
+    const gpu: WebGpuSplatGpuProvider = {
+      requestAdapter: vi.fn()
+        .mockRejectedValueOnce(new Error('No available adapters'))
+        .mockResolvedValueOnce(fallbackAdapter),
+      getPreferredCanvasFormat: vi.fn(() => 'rgba8unorm'),
+    };
+
+    const handle = await initializeWebGpuSplatDevice(canvas, { gpu });
+
+    expect(gpu.requestAdapter).toHaveBeenNthCalledWith(1, { powerPreference: 'high-performance' });
+    expect(gpu.requestAdapter).toHaveBeenNthCalledWith(2);
+    expect(fallbackAdapter?.requestDevice).toHaveBeenCalledWith(undefined);
+    expect(context?.configure).toHaveBeenCalledWith(expect.objectContaining({
+      device: handle.device,
+    }));
+
+    handle.dispose();
+  });
+
+  it('uses a single default adapter request on Windows because powerPreference is ignored', async () => {
+    const { adapter } = createDeviceHarness();
+    const gpu: WebGpuSplatGpuProvider = {
+      requestAdapter: vi.fn().mockResolvedValue(adapter),
+      getPlatform: vi.fn(() => 'Windows'),
+    };
+
+    const requestedAdapter = await requestPreferredWebGpuSplatAdapter(gpu);
+
+    expect(requestedAdapter).toBe(adapter);
+    expect(gpu.requestAdapter).toHaveBeenCalledTimes(1);
+    expect(gpu.requestAdapter).toHaveBeenCalledWith();
   });
 
   it('fails when WebGPU support or canvas context is unavailable', async () => {

@@ -36,7 +36,7 @@ describe('prefetchImagePlaneTexturesForReconstruction', () => {
     expect(onBatchPrefetched).toHaveBeenCalledOnce();
   });
 
-  it('uses synchronously cached image files without refetching them when metric images are unavailable', async () => {
+  it('uses synchronously cached image files without refetching them', async () => {
     const image = buildImage({ imageId: 1, name: 'cached.jpg' });
     const imageFile = buildFile('cached.jpg');
     const reconstruction = buildReconstruction({ images: [image] });
@@ -55,14 +55,15 @@ describe('prefetchImagePlaneTexturesForReconstruction', () => {
     });
 
     expect(dataset.getImage).not.toHaveBeenCalled();
+    expect(dataset.getMetricImage).not.toHaveBeenCalled();
     expect(prefetch).toHaveBeenCalledWith(
       [{ file: imageFile, name: 'cached.jpg' }],
       expect.objectContaining({ shouldCancel: expect.any(Function) })
     );
   });
 
-  it('prefers metric image files over display-cache images', async () => {
-    const image = buildImage({ imageId: 1, name: 'metric.jpg' });
+  it('prefers display-cache images over metric files for thumbnail warming', async () => {
+    const image = buildImage({ imageId: 1, name: 'display.jpg' });
     const displayFile = buildFile('display.jpg');
     const metricFile = buildFile('metric.jpg');
     const reconstruction = buildReconstruction({ images: [image] });
@@ -81,6 +82,32 @@ describe('prefetchImagePlaneTexturesForReconstruction', () => {
     });
 
     expect(dataset.getImage).not.toHaveBeenCalled();
+    expect(dataset.getMetricImage).not.toHaveBeenCalled();
+    expect(prefetch).toHaveBeenCalledWith(
+      [{ file: displayFile, name: 'display.jpg' }],
+      expect.objectContaining({ shouldCancel: expect.any(Function) })
+    );
+  });
+
+  it('falls back to metric image files when no display image is available', async () => {
+    const image = buildImage({ imageId: 1, name: 'metric.jpg' });
+    const metricFile = buildFile('metric.jpg');
+    const reconstruction = buildReconstruction({ images: [image] });
+    const dataset = {
+      getImageSync: vi.fn(() => undefined),
+      getImage: vi.fn(async () => null),
+      getMetricImage: vi.fn(async () => metricFile),
+    };
+    const prefetch = vi.fn(async () => undefined);
+
+    await prefetchImagePlaneTexturesForReconstruction({
+      reconstruction,
+      dataset,
+      shouldCancel: () => false,
+      prefetch,
+    });
+
+    expect(dataset.getImage).toHaveBeenCalledWith('metric.jpg');
     expect(dataset.getMetricImage).toHaveBeenCalledWith('metric.jpg');
     expect(prefetch).toHaveBeenCalledWith(
       [{ file: metricFile, name: 'metric.jpg' }],

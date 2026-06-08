@@ -33,6 +33,7 @@ describe('zip loader policy', () => {
     expect(isArchivePlyPath('project/splats/scene.PLY')).toBe(true);
     expect(isArchivePlyPath('project/sparse/0/points3D.bin')).toBe(false);
     expect(isArchiveSplatPath('project/splats/scene.SPZ')).toBe(true);
+    expect(isArchiveSplatPath('project/splats/scene.PLY')).toBe(true);
     expect(isArchiveSplatPath('project/sparse/0/points3D.bin')).toBe(false);
   });
 
@@ -49,7 +50,17 @@ describe('zip loader policy', () => {
     });
   });
 
-  it('chooses the largest SPZ candidate before falling back to the largest PLY', () => {
+  it('chooses the largest SPZ candidate before falling back to PLY', () => {
+    expect(findPreferredArchiveSplatCandidate([
+      { path: 'root_gaussians.ply', size: 1_000 },
+      { path: 'output/surface_gaussians.spz', size: 100 },
+      { path: '3dgs/model.spz', size: 200 },
+      { path: 'sparse/0/points3D.bin', size: 10_000 },
+    ])).toEqual({
+      path: '3dgs/model.spz',
+      size: 200,
+    });
+
     expect(findPreferredArchiveSplatCandidate([
       { path: 'root_gaussians.ply', size: 1_000 },
       { path: 'output/surface_gaussians.spz', size: 100 },
@@ -89,9 +100,41 @@ describe('zip loader policy', () => {
 
     expect(getArchiveImageLookupKeys('project/images/photo.jpg')).toEqual([
       'project/images/photo.jpg',
+      'images/photo.jpg',
+      'photo.jpg',
+    ]);
+    expect(getArchiveImageLookupKeys('project/images/cam1/photo.jpg')).toEqual([
+      'project/images/cam1/photo.jpg',
+      'images/cam1/photo.jpg',
+      'cam1/photo.jpg',
       'photo.jpg',
     ]);
     expect(getArchiveImageLookupKeys('photo.jpg')).toEqual(['photo.jpg']);
+  });
+
+  it('keeps archive auxiliary images out of plain image lookup aliases', () => {
+    expect(getArchiveImageLookupKeys('project/masks/photo.jpg')).toEqual([
+      'project/masks/photo.jpg',
+      'masks/photo.jpg',
+    ]);
+    expect(getArchiveImageLookupKeys('project/masks/cam1/photo.jpg')).toEqual([
+      'project/masks/cam1/photo.jpg',
+      'masks/cam1/photo.jpg',
+    ]);
+    expect(getArchiveImageLookupKeys('project/depth/cam1/photo.jpg')).toEqual([
+      'project/depth/cam1/photo.jpg',
+      'depth/cam1/photo.jpg',
+    ]);
+    expect(getArchiveImageLookupKeys('project/segmentation/photo.jpg')).toEqual([
+      'project/segmentation/photo.jpg',
+      'segmentation/photo.jpg',
+    ]);
+    expect(getArchiveImageLookupKeys('project/images_4/depth/photo.jpg')).toEqual([
+      'project/images_4/depth/photo.jpg',
+      'images_4/depth/photo.jpg',
+      'depth/photo.jpg',
+      'photo.jpg',
+    ]);
   });
 
   it('normalizes COLMAP archive keys to sparse directories', () => {

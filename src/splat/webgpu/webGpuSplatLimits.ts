@@ -5,7 +5,7 @@ const FLOAT32_BYTES = Float32Array.BYTES_PER_ELEMENT;
 const U32_BYTES = Uint32Array.BYTES_PER_ELEMENT;
 const WEBGPU_MIN_STORAGE_BUFFER_BYTES = 16;
 const WEBGPU_RENDERER_SPLAT_DATA_BYTES = 48;
-const WEBGPU_PORTABLE_DEFAULT_LIMITS: WebGpuSplatRequiredLimits = {
+export const WEBGPU_PORTABLE_DEFAULT_LIMITS: WebGpuSplatRequiredLimits = {
   maxBufferSize: 256 * 1024 * 1024,
   maxStorageBufferBindingSize: 128 * 1024 * 1024,
 };

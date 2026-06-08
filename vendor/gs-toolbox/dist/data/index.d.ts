@@ -3,7 +3,6 @@ export { parsePLYHeader, isCompressedPLY, readPLYChunks, readStandardPLYBody, re
 export { loadSplatFromBuffer, loadSplat } from './loaders/splat';
 export { parseSPZHeader, parseSparkSPZHeader, validateSPZMagic, decodeSPZPositions, decodeSPZRotations, decodeSPZScales, decodeSPZOpacities, decodeSPZSH0, decodeSPZSHN, loadSPZFromDecompressed, loadSparkSPZFromDecompressed, loadSPZFromBuffer, loadSPZ, } from './loaders/spz';
 export type { SparkSPZHeader } from './loaders/spz';
-export { parseSOGMetadata, decodeSOGPositions, decodeSOGRotations, decodeSOGScales, decodeSOGRangeScales, decodeSOGColors, decodeSOGRangeColors, decodeSOGSHN, loadSOGFromMetadata, loadSOGFromZip, loadSOGFromURL, loadSOG, isSOGMetadata, } from './loaders/sog';
 export { loadSparkRAD, loadSparkRADFromBuffer, parseRADHeader, parseRADChunkHeader, unpackSparkPackedSplat, sparkPackedResultToCloud, } from './loaders/spark';
 export type { SparkPackedResult, SparkRADChunkHeader, SparkRADChunkMeta, SparkRADHeader, SparkRADMeta, SparkSplatEncoding, SparkUnpackedSplat, } from './loaders/spark';
 export { packGaussians, unpackGaussians, computeCovariance3D, quatScaleToCovarPreciCPU, } from './pack';

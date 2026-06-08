@@ -5,7 +5,7 @@
  */
 export declare function decodeSmallestThree32(packed: number): [number, number, number, number];
 /**
- * Decode smallest-three quaternion from 3×8-bit RGB + 2-bit mode (SOG format).
+ * Decode smallest-three quaternion from 3x8-bit RGB + 2-bit mode.
  * Returns [w, x, y, z].
  */
 export declare function decodeSmallestThree888(r: number, g: number, b: number, mode: number): [number, number, number, number];

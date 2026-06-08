@@ -55,6 +55,7 @@ export interface WebGpuSubmittedSplatPsnrImageMetric {
 
 export interface WebGpuSplatPsnrImageMetricOptions {
   imageFile: File;
+  maskFile?: File | null;
   image: Image;
   camera: Camera;
   width: number;
@@ -66,7 +67,13 @@ export interface WebGpuSplatPsnrSessionOptions {
   device: GPUDevice;
   splatFile: File;
   loadedCloud?: LoadedGaussianCloud;
+  sharedScene?: WebGpuSplatPsnrSharedScene;
   deps?: WebGpuSplatPsnrSessionDeps;
+}
+
+export interface WebGpuSplatPsnrSharedScene {
+  sceneId: string;
+  resourceManager: Pick<GaussianSceneResourceManagerType, 'acquire'>;
 }
 
 type WebGpuCreateImageBitmap = (
@@ -97,10 +104,17 @@ const createDefaultImageBitmap: WebGpuCreateImageBitmap = (source, options) => {
   return globalThis.createImageBitmap(source, options);
 };
 
+function disposeOwnedSceneResourceManager(
+  resourceManager: Pick<GaussianSceneResourceManagerType, 'acquire'> | Pick<GaussianSceneResourceManagerType, 'acquire' | 'dispose'>
+): void {
+  (resourceManager as Pick<GaussianSceneResourceManagerType, 'dispose'>).dispose?.();
+}
+
 export async function createWebGpuSplatPsnrSession({
   device,
   splatFile,
   loadedCloud: providedLoadedCloud,
+  sharedScene,
   deps = {},
 }: WebGpuSplatPsnrSessionOptions): Promise<WebGpuSplatPsnrSession> {
   const loadGaussianCloudFromFile = deps.loadGaussianCloudFromFile ?? defaultLoadGaussianCloudFromFile;
@@ -108,9 +122,10 @@ export async function createWebGpuSplatPsnrSession({
     ?? (() => new GaussianSceneResourceManager());
   const createRenderSession = deps.createRenderSession ?? defaultCreateRenderSession;
   const loadedCloud = providedLoadedCloud ?? await loadGaussianCloudFromFile(splatFile);
-  const resourceManager = createSceneResourceManager();
+  const resourceManager = sharedScene?.resourceManager ?? createSceneResourceManager();
+  const ownsResourceManager = !sharedScene;
   const scene = resourceManager.acquire(device, {
-    sceneId: createPsnrSceneId(splatFile, loadedCloud),
+    sceneId: sharedScene?.sceneId ?? createPsnrSceneId(splatFile, loadedCloud),
     cloud: loadedCloud.cloud,
     labelPrefix: `psnr ${splatFile.name}`,
   });
@@ -128,12 +143,14 @@ export async function createWebGpuSplatPsnrSession({
     return new DefaultWebGpuSplatPsnrSession({
       device,
       renderSession,
-      resourceManager,
+      disposeResourceManager: ownsResourceManager ? () => disposeOwnedSceneResourceManager(resourceManager) : undefined,
       deps,
     });
   } catch (error) {
     scene.release();
-    resourceManager.dispose();
+    if (ownsResourceManager) {
+      disposeOwnedSceneResourceManager(resourceManager);
+    }
     throw error;
   }
 }
@@ -141,7 +158,7 @@ export async function createWebGpuSplatPsnrSession({
 class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
   private readonly device: GPUDevice;
   private readonly renderSession: SplatRenderSession;
-  private readonly resourceManager: Pick<GaussianSceneResourceManagerType, 'dispose'>;
+  private readonly disposeResourceManager?: () => void;
   private readonly createBitmap: WebGpuCreateImageBitmap;
   private readonly createGroundTruthTexture: typeof defaultCreateGroundTruthTexture;
   private readonly computePsnrFromTextures: typeof defaultComputePsnrFromTextures;
@@ -155,17 +172,17 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
   constructor({
     device,
     renderSession,
-    resourceManager,
+    disposeResourceManager,
     deps,
   }: {
     device: GPUDevice;
     renderSession: SplatRenderSession;
-    resourceManager: Pick<GaussianSceneResourceManagerType, 'dispose'>;
+    disposeResourceManager?: () => void;
     deps: WebGpuSplatPsnrSessionDeps;
   }) {
     this.device = device;
     this.renderSession = renderSession;
-    this.resourceManager = resourceManager;
+    this.disposeResourceManager = disposeResourceManager;
     this.createBitmap = deps.createBitmap ?? createDefaultImageBitmap;
     this.createGroundTruthTexture = deps.createGroundTruthTexture ?? defaultCreateGroundTruthTexture;
     this.computePsnrFromTextures = deps.computePsnrFromTextures ?? defaultComputePsnrFromTextures;
@@ -176,6 +193,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
 
   async computeImageMetric({
     imageFile,
+    maskFile,
     image,
     camera,
     width,
@@ -184,6 +202,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
   }: WebGpuSplatPsnrImageMetricOptions): Promise<WebGpuPsnrTextureResult> {
     const submitted = await this.submitImageMetric({
       imageFile,
+      maskFile,
       image,
       camera,
       width,
@@ -199,6 +218,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
 
   async submitImageMetric({
     imageFile,
+    maskFile,
     image,
     camera,
     width,
@@ -235,11 +255,27 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
         sourceHeight,
         imageName: image.name,
       });
+      let maskBitmap: ImageBitmap | null = null;
+      if (maskFile) {
+        maskBitmap = await this.createBitmap(maskFile, {
+          colorSpaceConversion: 'none',
+          premultiplyAlpha: 'none',
+        });
+        resources.setMaskBitmap(maskBitmap);
+        this.assertNotDisposed();
+        assertMetricMaskBitmapSizeMatchesCamera({
+          camera,
+          sourceWidth: requirePositiveInteger(maskBitmap.width, 'mask source width'),
+          sourceHeight: requirePositiveInteger(maskBitmap.height, 'mask source height'),
+          imageName: image.name,
+        });
+      }
       const maxTextureDimension2D = getMaxTextureDimension2D(this.device);
       if (fitsSingleTexture(maxTextureDimension2D, safeWidth, safeHeight, sourceWidth, sourceHeight)) {
         return this.submitSingleImageMetric({
           resources,
           bitmap,
+          maskBitmap,
           releaseActiveJobCounter,
           telemetryStart,
           image,
@@ -261,6 +297,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
       const result = await this.computeTiledImageMetric({
         resources,
         bitmap,
+        maskBitmap,
         image,
         camera,
         width: safeWidth,
@@ -299,13 +336,14 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
     }
     this.activeResourceScopes.clear();
     this.renderSession.dispose();
-    this.resourceManager.dispose();
+    this.disposeResourceManager?.();
     this.releasePsnrSessionCounter();
   }
 
   private submitSingleImageMetric({
     resources,
     bitmap,
+    maskBitmap,
     releaseActiveJobCounter,
     telemetryStart,
     image,
@@ -316,6 +354,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
   }: {
     resources: ActivePsnrImageResources;
     bitmap: ImageBitmap;
+    maskBitmap: ImageBitmap | null;
     releaseActiveJobCounter: () => void;
     telemetryStart: number;
     image: Image;
@@ -326,6 +365,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
   }): WebGpuSubmittedSplatPsnrImageMetric {
     let renderedTexture: TrackedGpuTexture | null = null;
     let groundTruthTexture: WebGpuPsnrGroundTruthTexture | null = null;
+    let maskTexture: WebGpuPsnrGroundTruthTexture | null = null;
     let reductionPromise: Promise<WebGpuPsnrTextureResult> | null = null;
     let disposed = false;
     let released = false;
@@ -338,6 +378,15 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
         targetHeight: height,
       });
       resources.trackGroundTruthTexture(groundTruthTexture);
+      if (maskBitmap) {
+        maskTexture = this.createGroundTruthTexture({
+          device: this.device,
+          source: maskBitmap,
+          targetWidth: width,
+          targetHeight: height,
+        });
+        resources.trackGroundTruthTexture(maskTexture);
+      }
       renderedTexture = this.createRenderedTexture(width, height, image.name);
       resources.trackRenderedTexture(renderedTexture);
       const frame = this.createMetricFrame({
@@ -355,6 +404,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
       });
       const submittedRenderedTexture = renderedTexture;
       const submittedGroundTruthTexture = groundTruthTexture;
+      const submittedMaskTexture = maskTexture;
       this.assertNotDisposed();
       const createReductionPromise = async (): Promise<WebGpuPsnrTextureResult> => {
         await renderPromise;
@@ -366,6 +416,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
           device: this.device,
           renderedTexture: submittedRenderedTexture.texture,
           groundTruthTexture: submittedGroundTruthTexture.texture,
+          ...(submittedMaskTexture ? { maskTexture: submittedMaskTexture.texture } : {}),
           width,
           height,
         });
@@ -392,6 +443,9 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
         if (groundTruthTexture) {
           resources.disposeGroundTruthTexture(groundTruthTexture);
         }
+        if (maskTexture) {
+          resources.disposeGroundTruthTexture(maskTexture);
+        }
         resources.releaseAll();
         this.activeResourceScopes.delete(resources);
         releaseActiveJobCounter();
@@ -412,6 +466,9 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
         if (groundTruthTexture) {
           resources.disposeGroundTruthTexture(groundTruthTexture);
         }
+        if (maskTexture) {
+          resources.disposeGroundTruthTexture(maskTexture);
+        }
       }
     }
   }
@@ -419,6 +476,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
   private async computeTiledImageMetric({
     resources,
     bitmap,
+    maskBitmap,
     image,
     camera,
     width,
@@ -428,6 +486,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
   }: {
     resources: ActivePsnrImageResources;
     bitmap: ImageBitmap;
+    maskBitmap: ImageBitmap | null;
     image: Image;
     camera: Camera;
     width: number;
@@ -440,6 +499,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
       this.assertNotDisposed();
       let renderedTexture: TrackedGpuTexture | null = null;
       let groundTruthTexture: WebGpuPsnrGroundTruthTexture | null = null;
+      let maskTexture: WebGpuPsnrGroundTruthTexture | null = null;
 
       try {
         groundTruthTexture = this.createGroundTruthTexture({
@@ -452,6 +512,18 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
           targetHeight: tile.height,
         });
         resources.trackGroundTruthTexture(groundTruthTexture);
+        if (maskBitmap) {
+          maskTexture = this.createGroundTruthTexture({
+            device: this.device,
+            source: maskBitmap,
+            sourceOrigin: { x: tile.originX, y: tile.originY },
+            sourceWidth: tile.width,
+            sourceHeight: tile.height,
+            targetWidth: tile.width,
+            targetHeight: tile.height,
+          });
+          resources.trackGroundTruthTexture(maskTexture);
+        }
         renderedTexture = this.createRenderedTexture(tile.width, tile.height, image.name, tile);
         resources.trackRenderedTexture(renderedTexture);
         const frame = this.createMetricFrame({
@@ -478,6 +550,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
           device: this.device,
           renderedTexture: renderedTexture.texture,
           groundTruthTexture: groundTruthTexture.texture,
+          ...(maskTexture ? { maskTexture: maskTexture.texture } : {}),
           width: tile.width,
           height: tile.height,
         }));
@@ -488,6 +561,9 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
         }
         if (groundTruthTexture) {
           resources.disposeGroundTruthTexture(groundTruthTexture);
+        }
+        if (maskTexture) {
+          resources.disposeGroundTruthTexture(maskTexture);
         }
       }
     }
@@ -584,6 +660,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
 
 class ActivePsnrImageResources {
   private bitmap: ImageBitmap | null = null;
+  private maskBitmap: ImageBitmap | null = null;
   private readonly renderedTextures = new Set<TrackedGpuTexture>();
   private readonly groundTruthTextures = new Set<WebGpuPsnrGroundTruthTexture>();
   private released = false;
@@ -594,6 +671,14 @@ class ActivePsnrImageResources {
       return;
     }
     this.bitmap = bitmap;
+  }
+
+  setMaskBitmap(bitmap: ImageBitmap): void {
+    if (this.released) {
+      bitmap.close();
+      return;
+    }
+    this.maskBitmap = bitmap;
   }
 
   trackRenderedTexture(texture: TrackedGpuTexture): void {
@@ -631,6 +716,8 @@ class ActivePsnrImageResources {
     this.released = true;
     this.bitmap?.close();
     this.bitmap = null;
+    this.maskBitmap?.close();
+    this.maskBitmap = null;
     for (const texture of this.renderedTextures) {
       texture.texture.destroy();
       texture.releaseCounter();
@@ -713,6 +800,26 @@ function assertMetricBitmapSizeMatchesCamera({
 
   throw new Error(
     `WebGPU PSNR requires an undistorted metric image matching the PINHOLE camera for ${imageName}: decoded ${sourceWidth}x${sourceHeight}, camera is ${camera.width}x${camera.height}. Load the image set that belongs to the sparse model.`
+  );
+}
+
+function assertMetricMaskBitmapSizeMatchesCamera({
+  camera,
+  sourceWidth,
+  sourceHeight,
+  imageName,
+}: {
+  camera: Camera;
+  sourceWidth: number;
+  sourceHeight: number;
+  imageName: string;
+}): void {
+  if (sourceWidth === camera.width && sourceHeight === camera.height) {
+    return;
+  }
+
+  throw new Error(
+    `WebGPU PSNR requires a mask matching the PINHOLE camera for ${imageName}: decoded ${sourceWidth}x${sourceHeight}, camera is ${camera.width}x${camera.height}.`
   );
 }
 

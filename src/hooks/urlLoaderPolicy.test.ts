@@ -68,6 +68,7 @@ describe('url loader policy helpers', () => {
       'https://example.com/dataset',
       `
         <a href="../">parent</a>
+        <a href="notes.txt">notes</a>
         <a href="surface_gaussians.ply">root splat</a>
         <a href="surface_gaussians.spz">compressed splat</a>
         <a href="output/">output</a>

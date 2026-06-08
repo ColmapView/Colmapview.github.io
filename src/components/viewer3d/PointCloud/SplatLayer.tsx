@@ -6,6 +6,7 @@ import {
   preloadSparkModule,
   type SparkModule,
 } from '../../../utils/sparkSplatRuntime';
+import { shouldPreloadSparkSplatRuntime } from '../../../utils/splatBackendPolicy';
 import { SPARK_SPLAT_RENDER_ORDER } from './pointCloudRenderPolicy';
 import { useSplatLayerStoreFacade } from './SplatLayerStoreFacade';
 
@@ -61,6 +62,7 @@ export function SplatLayer(): JSX.Element | null {
       showSplats,
       splatFile,
       requestedBackend,
+      splatBackendAvailability,
       splatBackendResolution,
     },
     actions: {
@@ -142,10 +144,10 @@ export function SplatLayer(): JSX.Element | null {
   ]);
 
   useEffect(() => {
-    if (!splatFile) {
-      return;
-    }
-    if (requestedBackend === 'webgpu') {
+    if (
+      !splatFile ||
+      !shouldPreloadSparkSplatRuntime(requestedBackend, splatBackendAvailability)
+    ) {
       return;
     }
 
@@ -176,6 +178,7 @@ export function SplatLayer(): JSX.Element | null {
     clearSplatLoadingNotification,
     requestedBackend,
     setSparkBackendAvailable,
+    splatBackendAvailability,
     splatFile,
   ]);
 

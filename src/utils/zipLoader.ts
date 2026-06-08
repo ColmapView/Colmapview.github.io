@@ -6,6 +6,7 @@
 import { Archive } from 'libarchive.js';
 import type { ArchiveEntry, ArchiveReader } from '../types/libarchive';
 import { publicAsset } from './paths';
+import { isSplatFilePath } from './splatFilePolicy';
 import { getFilenameFromUrl } from './urlUtils';
 import {
   downloadZip,
@@ -95,6 +96,7 @@ export function isArchiveUrl(url: string): boolean {
  * (.zip, .tar, .tar.gz/.tgz, .tar.bz2/.tbz2/.tbz, .tar.xz/.txz, .7z).
  */
 export function isArchiveFile(file: File): boolean {
+  if (isSplatFilePath(file.name)) return false;
   if (hasArchiveExtension(file.name)) return true;
   return isArchiveMimeType(file.type);
 }

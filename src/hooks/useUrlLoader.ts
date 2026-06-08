@@ -20,6 +20,7 @@ import { fetchUrlManifest } from './urlLoaderManifestFetch';
 import { handleUrlLoadFailure } from './urlLoaderErrorHandling';
 import { loadZipUrlSource } from './urlLoaderZipSource';
 import { loadManifestSource } from './urlLoaderManifestSource';
+import { isSplatUrl, loadSplatUrlSource } from './urlLoaderSplatSource';
 
 export interface UseUrlLoaderDeps {
   logger?: Pick<AppLogger, 'error' | 'info'>;
@@ -66,10 +67,20 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
     });
   }, [logInfo, processFiles, setSourceInfo, setUrlProgress]);
 
+  const loadFromSplatUrl = useCallback(async (url: string): Promise<boolean> => {
+    return loadSplatUrlSource(url, {
+      log: logInfo,
+      processFiles,
+      setSourceInfo,
+      setUrlProgress,
+    });
+  }, [logInfo, processFiles, setSourceInfo, setUrlProgress]);
+
   /**
    * Main entry point: load reconstruction from URL
    * Accepts either:
    * - A ZIP file URL (ends with .zip)
+   * - A splat file URL (ends with .spz or .ply)
    * - A manifest JSON URL (ends with .json)
    * - A direct base URL (assumes standard COLMAP directory structure)
    */
@@ -90,6 +101,10 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
     }
 
     try {
+      if (isSplatUrl(normalizedUrl)) {
+        return await loadFromSplatUrl(normalizedUrl);
+      }
+
       // Clear any previous ZIP/URL cache state before loading new data
       // This ensures clean state regardless of previous load type
       clearAllCaches();
@@ -136,6 +151,7 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
     fetchManifest,
     finishUrlLoad,
     loadFromZipUrl,
+    loadFromSplatUrl,
     logError,
     logInfo,
     processFiles,

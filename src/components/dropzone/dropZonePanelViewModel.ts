@@ -22,17 +22,18 @@ export const DROP_ZONE_UPLOAD_CONFIG_TOOLTIP = 'Upload configuration file (.yaml
 export const DROP_ZONE_RESET_CONFIG_TOOLTIP = 'Reset all settings to defaults';
 export const DROP_ZONE_DISMISS_TOOLTIP = 'Dismiss this panel';
 
-export const DROP_ZONE_DESKTOP_TITLE = 'Load COLMAP Data';
-export const DROP_ZONE_DESKTOP_MESSAGE = 'Drag and drop a COLMAP dataset folder here.\nOr click the box above to browse.';
+export const DROP_ZONE_DESKTOP_TITLE = 'Load Dataset';
+export const DROP_ZONE_DESKTOP_MESSAGE = 'Drag and drop a COLMAP dataset or image-only folder here.\nOr click the box above to browse.';
 export const DROP_ZONE_TOUCH_TITLE = 'ColmapView';
-export const DROP_ZONE_TOUCH_SUBTITLE = 'View COLMAP 3D reconstructions';
+export const DROP_ZONE_TOUCH_SUBTITLE = 'View COLMAP reconstructions and image galleries';
 export const DROP_ZONE_TOUCH_FOOTER = 'Load a URL or try a sample dataset';
 
 export const DROP_ZONE_INFO_LINES: DropZoneInfoLine[] = [
   { label: 'Drop folder or ZIP file', text: '- subfolders are scanned automatically' },
-  { label: 'Required:', text: 'cameras, images, points3D (.bin or .txt preferred)' },
+  { label: 'COLMAP:', text: 'cameras, images, points3D (.bin or .txt preferred)' },
+  { label: 'Image-only:', text: 'jpg, png, webp, tiff folders are supported' },
   { label: 'Auto-detected:', text: 'sparse/0/, sparse/, or any subfolder' },
-  { label: 'Optional:', text: 'source images (jpg, png, webp, tiff), config (.yaml), masks/' },
+  { label: 'Optional:', text: 'source images, masks/, splats (.spz, .ply), config (.yaml)' },
   { text: 'ZIP: max 2GB, images loaded lazily on-demand', muted: true },
 ];
 

@@ -31,7 +31,7 @@ blocker.
 3. Bicycle dataset validation now proves selected-image smoke behavior and
    offscreen isolation on installed Chrome. Offline numerical comparison remains
    calibration work, not a blocker for the functional feature.
-4. Large `.ply/.spz` files must request WebGPU device limits from decoded cloud
+4. Large `.spz/.ply` files must request WebGPU device limits from decoded cloud
    requirements. The bicycle `splat_30000.ply` requires buffers larger than the
    default portable limits, so loading must use `requiredLimits` when the
    adapter advertises enough capacity.
@@ -73,7 +73,7 @@ Landed or mostly landed:
 - WebGPU buffer-limit policy exists in `src/splat/webgpu/webGpuSplatLimits.ts`.
   It computes `maxBufferSize` and `maxStorageBufferBindingSize` from Gaussian
   count and SH degree instead of relying on default portable limits.
-- Visible WebGPU `.ply/.spz` loading decodes the cloud before `requestDevice()`.
+- Visible WebGPU `.spz/.ply` loading decodes the cloud before `requestDevice()`.
   The loaded-renderer factory owns the decoded cloud shape, computes the exact
   required limits, requests the visible device, and uploads that same cloud as a
   single operation. This keeps large-cloud loading from accidentally creating a
@@ -337,10 +337,10 @@ support is unavailable, PSNR should be unavailable with a clear status.
 
 ### Supported Splat Formats
 
-The app WebGPU splat path supports decoded Gaussian `.ply` and `.spz` files.
-When a dataset has multiple splat candidates, automatic selection prefers the
-largest `.spz` file, then the largest `.ply` file. The point-cloud menu still
-allows explicitly choosing among available `.ply` and `.spz` candidates.
+The app WebGPU splat path supports `.spz` and `.ply` files. When a dataset has
+multiple splat candidates, automatic selection prefers the largest `.spz` file,
+then the largest `.ply` file. The point-cloud menu still allows explicitly
+choosing among available `.spz` and `.ply` candidates.
 
 The legacy `.splat` format remains Spark-only unless a separate WebGPU loader is
 implemented.
@@ -349,9 +349,9 @@ implemented.
 
 Large Gaussian files can exceed WebGPU's portable defaults: 256 MiB
 `maxBufferSize` and 128 MiB `maxStorageBufferBindingSize`. The WebGPU path now
-decodes `.ply`/`.spz` metadata before device creation, computes the required
-Gaussian, SH, and renderer storage sizes, and requests elevated
-`requiredLimits` only when the decoded cloud needs them.
+preflights adapter availability before decoding splats, computes the required
+Gaussian, SH, and renderer storage sizes for the decoded `.spz`/`.ply` cloud,
+and requests elevated `requiredLimits` only when that runtime cloud needs them.
 
 If the adapter advertises enough capacity, device creation should opt into the
 larger limits and continue. If it does not, loading must fail clearly before
@@ -635,7 +635,7 @@ bicycle gate now exercises the same hardware render-to-texture path through
       cached default-limit metric devices.
 - [x] Fail before `requestDevice()` with a clear adapter-limit message when the
       adapter cannot satisfy the required limits.
-- [x] Decode visible `.ply/.spz` clouds before visible `requestDevice()` so the
+- [x] Decode visible `.spz/.ply` clouds before visible `requestDevice()` so the
       device request is sized from the actual file.
 - [x] Keep visible large-cloud device creation and cloud upload in
       `createLoadedVisibleWebGpuSplatRendererAdapter`, so the cloud shape that

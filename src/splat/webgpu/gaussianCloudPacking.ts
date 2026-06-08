@@ -101,16 +101,21 @@ export function createPackedWebGpuGaussianCloud(cloud: GaussianCloud): PackedWeb
 
   validateGaussianCloud(cloud);
   const shData = getHigherOrderShData(cloud);
+  const { gaussianData, bounds } = packGaussianCloudForWebGpuWithBounds(cloud);
 
   const packed = {
     count: cloud.count,
     shDegree: cloud.shDegree,
-    gaussianData: packGaussianCloudForWebGpu(cloud),
+    gaussianData,
     shData,
-    bounds: computeGaussianCloudBounds(cloud),
+    bounds,
   };
   packedGaussianCloudCache.set(cloud, packed);
   return packed;
+}
+
+export function getCachedPackedWebGpuGaussianCloud(cloud: GaussianCloud): PackedWebGpuGaussianCloud | null {
+  return packedGaussianCloudCache.get(cloud) ?? null;
 }
 
 export function cachePackedWebGpuGaussianCloud(
@@ -156,6 +161,95 @@ function getHigherOrderShData(cloud: GaussianCloud): Float32Array | null {
   }
 
   return cloud.shN;
+}
+
+function packGaussianCloudForWebGpuWithBounds(cloud: GaussianCloud): {
+  gaussianData: Float32Array;
+  bounds: WebGpuGaussianCloudBounds;
+} {
+  const gaussianData = new Float32Array(cloud.count * WEBGPU_GAUSSIAN_STRIDE_FLOATS);
+  if (cloud.count === 0) {
+    return {
+      gaussianData,
+      bounds: createEmptyBounds(),
+    };
+  }
+
+  const { positions, scales, rotations, opacities, sh0 } = cloud;
+  let minX = Infinity;
+  let minY = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let maxZ = -Infinity;
+
+  for (let i = 0; i < cloud.count; i++) {
+    const positionOffset = i * 3;
+    const rotationOffset = i * 4;
+    const outputOffset = i * WEBGPU_GAUSSIAN_STRIDE_FLOATS;
+    const x = requireFinitePosition(positions[positionOffset], i, 'x');
+    const y = requireFinitePosition(positions[positionOffset + 1], i, 'y');
+    const z = requireFinitePosition(positions[positionOffset + 2], i, 'z');
+
+    gaussianData[outputOffset + 0] = x;
+    gaussianData[outputOffset + 1] = y;
+    gaussianData[outputOffset + 2] = z;
+    gaussianData[outputOffset + 3] = opacities[i];
+    gaussianData[outputOffset + 4] = scales[positionOffset];
+    gaussianData[outputOffset + 5] = scales[positionOffset + 1];
+    gaussianData[outputOffset + 6] = scales[positionOffset + 2];
+    gaussianData[outputOffset + 7] = 0;
+    gaussianData[outputOffset + 8] = rotations[rotationOffset];
+    gaussianData[outputOffset + 9] = rotations[rotationOffset + 1];
+    gaussianData[outputOffset + 10] = rotations[rotationOffset + 2];
+    gaussianData[outputOffset + 11] = rotations[rotationOffset + 3];
+    gaussianData[outputOffset + 12] = sh0[positionOffset];
+    gaussianData[outputOffset + 13] = sh0[positionOffset + 1];
+    gaussianData[outputOffset + 14] = sh0[positionOffset + 2];
+    gaussianData[outputOffset + 15] = 0;
+
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    minZ = Math.min(minZ, z);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+    maxZ = Math.max(maxZ, z);
+  }
+
+  return {
+    gaussianData,
+    bounds: createBoundsFromMinMax(minX, minY, minZ, maxX, maxY, maxZ),
+  };
+}
+
+function createEmptyBounds(): WebGpuGaussianCloudBounds {
+  return {
+    min: [0, 0, 0],
+    max: [0, 0, 0],
+    center: [0, 0, 0],
+    size: 1,
+  };
+}
+
+function createBoundsFromMinMax(
+  minX: number,
+  minY: number,
+  minZ: number,
+  maxX: number,
+  maxY: number,
+  maxZ: number
+): WebGpuGaussianCloudBounds {
+  const size = Math.max(maxX - minX, maxY - minY, maxZ - minZ);
+  return {
+    min: [minX, minY, minZ],
+    max: [maxX, maxY, maxZ],
+    center: [
+      (minX + maxX) / 2,
+      (minY + maxY) / 2,
+      (minZ + maxZ) / 2,
+    ],
+    size: Number.isFinite(size) && size > 0 ? size : 1,
+  };
 }
 
 export function clearPackedWebGpuGaussianCloudCacheForTests(): void {

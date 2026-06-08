@@ -10,6 +10,23 @@ export interface LoadedGaussianCloud {
   cloud: GaussianCloud;
 }
 
+export function createSh0OnlyGaussianCloud(cloud: GaussianCloud): GaussianCloud {
+  if (cloud.shDegree <= 0 && !cloud.shN) {
+    return cloud;
+  }
+
+  const { shN: _shN, ...sh0Cloud } = cloud;
+  return {
+    ...sh0Cloud,
+    shDegree: 0,
+    metadata: {
+      ...cloud.metadata,
+      originalShDegree: cloud.shDegree,
+      shFallback: 'sh0-only',
+    },
+  };
+}
+
 export function validateGaussianCloud(cloud: GaussianCloud): void {
   if (!Number.isInteger(cloud.count) || cloud.count < 0) {
     throw new Error(`Invalid Gaussian cloud count: ${cloud.count}`);

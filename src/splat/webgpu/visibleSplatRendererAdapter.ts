@@ -18,8 +18,17 @@ import {
   getWebGpuSplatDefaultBackgroundColor,
 } from './splatRenderBackground';
 import { getWebGpuSplatRequiredLimitsForCloud } from './webGpuSplatLimits';
+import {
+  createWebGpuSh0FallbackCloud,
+  getWebGpuCloudFallbackErrorMessage,
+  shouldRetryWebGpuCloudWithSh0,
+} from './webGpuCloudFallback';
+import {
+  registerVisibleWebGpuSplatSharedRuntime,
+} from './visibleSplatRuntimeRegistry';
 
 const MAX_VISIBLE_SPLAT_IN_FLIGHT_RENDERS = 2;
+const VISIBLE_SPLAT_UPLOAD_CHUNK_BYTES = 64 * 1024 * 1024;
 const VISIBLE_SPLAT_SORT_ALGORITHM: NonNullable<SplatRenderSessionOptions['sortAlgorithm']> = 'radix-16bit';
 const VISIBLE_SPLAT_OUTPUT_ALGORITHM: NonNullable<SplatRenderSessionOptions['outputAlgorithm']> = 'composite';
 
@@ -36,6 +45,7 @@ export interface VisibleWebGpuSplatRendererAdapter {
 }
 
 export interface VisibleWebGpuSplatRendererAdapterDeps {
+  adapter?: WebGpuSplatDeviceOptions['adapter'];
   initializeDevice?: (
     canvas: HTMLCanvasElement,
     options?: WebGpuSplatDeviceOptions
@@ -45,6 +55,7 @@ export interface VisibleWebGpuSplatRendererAdapterDeps {
   requiredLimits?: Partial<WebGpuSplatRequiredLimits> | null;
   onFirstFrame?: () => void;
   onError?: (reason: string) => void;
+  onShFallback?: (reason: string) => void;
 }
 
 export type LoadedVisibleWebGpuSplatRendererAdapterDeps =
@@ -55,6 +66,36 @@ export async function createLoadedVisibleWebGpuSplatRendererAdapter(
   cloud: GaussianCloud,
   cloudOptions: VisibleWebGpuSplatCloudOptions,
   deps: LoadedVisibleWebGpuSplatRendererAdapterDeps = {}
+): Promise<VisibleWebGpuSplatRendererAdapter> {
+  try {
+    return await createLoadedVisibleWebGpuSplatRendererAdapterForCloud(
+      canvas,
+      cloud,
+      cloudOptions,
+      deps
+    );
+  } catch (error) {
+    if (!shouldRetryWebGpuCloudWithSh0(error, cloud)) {
+      throw error;
+    }
+
+    const fallbackCloud = createWebGpuSh0FallbackCloud(cloud);
+    const reason = getWebGpuCloudFallbackErrorMessage(error);
+    deps.onShFallback?.(reason);
+    return createLoadedVisibleWebGpuSplatRendererAdapterForCloud(
+      canvas,
+      fallbackCloud,
+      cloudOptions,
+      deps
+    );
+  }
+}
+
+async function createLoadedVisibleWebGpuSplatRendererAdapterForCloud(
+  canvas: HTMLCanvasElement,
+  cloud: GaussianCloud,
+  cloudOptions: VisibleWebGpuSplatCloudOptions,
+  deps: LoadedVisibleWebGpuSplatRendererAdapterDeps
 ): Promise<VisibleWebGpuSplatRendererAdapter> {
   const adapter = await createVisibleWebGpuSplatRendererAdapter(canvas, {
     ...deps,
@@ -78,6 +119,7 @@ export async function createVisibleWebGpuSplatRendererAdapter(
   const initializeDevice = deps.initializeDevice ?? initializeWebGpuSplatDevice;
   let adapter: DefaultVisibleWebGpuSplatRendererAdapter | null = null;
   const deviceHandle = await initializeDevice(canvas, {
+    adapter: deps.adapter,
     alphaMode: 'opaque',
     requiredLimits: deps.requiredLimits,
     onDeviceLost: (info) => {
@@ -119,6 +161,7 @@ class DefaultVisibleWebGpuSplatRendererAdapter implements VisibleWebGpuSplatRend
   private inFlightViewport: SplatViewportSize | null = null;
   private renderQueued = false;
   private rendering = false;
+  private unregisterSharedRuntime: (() => void) | null = null;
   private disposed = false;
   private failed = false;
 
@@ -161,7 +204,7 @@ class DefaultVisibleWebGpuSplatRendererAdapter implements VisibleWebGpuSplatRend
         sortAlgorithm: VISIBLE_SPLAT_SORT_ALGORITHM,
       });
 
-      this.replaceSession(session);
+      this.replaceSession(session, options.sceneId);
       if (this.frame) {
         this.render();
       }
@@ -184,6 +227,7 @@ class DefaultVisibleWebGpuSplatRendererAdapter implements VisibleWebGpuSplatRend
     if (typeof this.sceneResourceManager.acquireAsync === 'function') {
       return this.sceneResourceManager.acquireAsync(this.deviceHandle.device, resource, {
         labelPrefix: options.labelPrefix,
+        maxChunkBytes: VISIBLE_SPLAT_UPLOAD_CHUNK_BYTES,
       });
     }
 
@@ -234,11 +278,18 @@ class DefaultVisibleWebGpuSplatRendererAdapter implements VisibleWebGpuSplatRend
     this.fail(getDeviceLostReason(info));
   }
 
-  private replaceSession(session: SplatRenderSession): void {
+  private replaceSession(session: SplatRenderSession, sceneId: string): void {
+    this.unregisterSharedRuntime?.();
+    this.unregisterSharedRuntime = null;
     this.unsubscribeFirstFrame?.();
     this.unsubscribeFirstFrame = null;
     this.session?.dispose();
     this.session = session;
+    this.unregisterSharedRuntime = registerVisibleWebGpuSplatSharedRuntime({
+      sceneId,
+      device: this.deviceHandle.device,
+      sceneResourceManager: this.sceneResourceManager,
+    });
     this.unsubscribeFirstFrame = session.onFirstFrame(() => {
       this.onFirstFrame?.();
     });
@@ -342,11 +393,12 @@ class DefaultVisibleWebGpuSplatRendererAdapter implements VisibleWebGpuSplatRend
   }
 
   private disposeRendererResources(): void {
+    this.unregisterSharedRuntime?.();
+    this.unregisterSharedRuntime = null;
     this.unsubscribeFirstFrame?.();
     this.unsubscribeFirstFrame = null;
     this.session?.dispose();
     this.session = null;
-    this.sceneResourceManager.dispose();
   }
 
   private assertUsable(): void {

@@ -28,7 +28,7 @@ describe('camera display panel view-model helpers', () => {
     ]);
   });
 
-  it('adds PSNR and SSIM color only when a splat frame is ready', () => {
+  it('adds PSNR and SSIM color when splat camera coloring is available', () => {
     expect(getFrustumColorModeOptions({ hasRigData: false, hasSplatPsnr: true })).toEqual([
       { value: 'single', label: 'Single' },
       { value: 'byCamera', label: 'By Cam' },

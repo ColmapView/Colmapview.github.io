@@ -269,7 +269,9 @@ describe('URL loader manifest fetch helpers', () => {
     const log = vi.fn();
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === 'HEAD') {
-        const size = url.endsWith('/output/model.spz') ? 50 : 200;
+        const size = url.endsWith('/output/model.spz')
+            ? 50
+            : 200;
         return new Response(null, { headers: { 'content-length': String(size) } });
       }
 

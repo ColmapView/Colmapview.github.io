@@ -3,7 +3,7 @@
  * Extracted from useFileDropzone.ts for better organization.
  */
 
-import type { Reconstruction, Camera, Image as ColmapImage } from '../types/colmap';
+import type { Reconstruction, Camera, GlobalStats, Image as ColmapImage } from '../types/colmap';
 import { CameraModelId } from '../types/colmap';
 import {
   compareSplatCandidates,
@@ -171,7 +171,7 @@ function getLocalSplatCandidates(files: Map<string, File>): LocalSplatCandidate[
 
 /**
  * Find all splat files in a scanned dataset, sorted by default preference:
- * largest SPZ first, falling back to largest PLY when no SPZ exists.
+ * largest SPZ first, then largest PLY.
  */
 export function findSplatFiles(files: Map<string, File>): File[] {
   return getLocalSplatCandidates(files)
@@ -215,6 +215,30 @@ export function hasImageFiles(files: Map<string, File>): boolean {
     }
   }
   return false;
+}
+
+function createEmptyGlobalStats(): GlobalStats {
+  return {
+    minError: 0,
+    maxError: 0,
+    avgError: 0,
+    minTrackLength: 0,
+    maxTrackLength: 0,
+    avgTrackLength: 0,
+    totalObservations: 0,
+    totalPoints: 0,
+  };
+}
+
+export function createEmptyReconstruction(): Reconstruction {
+  return {
+    cameras: new Map(),
+    images: new Map(),
+    imageStats: new Map(),
+    connectedImagesIndex: new Map(),
+    globalStats: createEmptyGlobalStats(),
+    imageToPoint3DIds: new Map(),
+  };
 }
 
 /**
@@ -271,24 +295,12 @@ export function createImagesOnlyReconstruction(imageFiles: Map<string, File>): R
     imageId++;
   }
 
-  // Create minimal global stats
-  const globalStats = {
-    minError: 0,
-    maxError: 0,
-    avgError: 0,
-    minTrackLength: 0,
-    maxTrackLength: 0,
-    avgTrackLength: 0,
-    totalObservations: 0,
-    totalPoints: 0,
-  };
-
   return {
     cameras,
     images,
     imageStats,
     connectedImagesIndex: new Map(),
-    globalStats,
+    globalStats: createEmptyGlobalStats(),
     imageToPoint3DIds: new Map(),
   };
 }

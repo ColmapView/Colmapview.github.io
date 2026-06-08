@@ -26,10 +26,23 @@ workerSelf.onmessage = (event: MessageEvent<GaussianCloudWorkerDecodeRequest>) =
     return;
   }
 
+  void decodeGaussianCloudInWorker(request)
+    .catch((error: unknown) => {
+      workerSelf.postMessage({
+        type: 'error',
+        id: request.id,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      } satisfies GaussianCloudWorkerResponse);
+    });
+};
+
+async function decodeGaussianCloudInWorker(request: GaussianCloudWorkerDecodeRequest): Promise<void> {
+  const cloud = request.format === 'spz'
+    ? loadSPZFromBuffer(request.buffer)
+    : loadPLYFromBuffer(request.buffer);
+
   try {
-    const cloud = request.format === 'spz'
-      ? loadSPZFromBuffer(request.buffer)
-      : loadPLYFromBuffer(request.buffer);
     validateGaussianCloud(cloud);
     const packed = createPackedWebGpuGaussianCloud(cloud);
     const response: GaussianCloudWorkerLoadedResponse = {
@@ -47,7 +60,7 @@ workerSelf.onmessage = (event: MessageEvent<GaussianCloudWorkerDecodeRequest>) =
       stack: error instanceof Error ? error.stack : undefined,
     } satisfies GaussianCloudWorkerResponse);
   }
-};
+}
 
 function collectTransferList(
   cloud: GaussianCloud,

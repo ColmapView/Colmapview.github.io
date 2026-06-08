@@ -3,6 +3,7 @@ import type { Camera, Image, ImageId, Reconstruction } from '../../types/colmap'
 import type { Sim3dEuler } from '../../types/sim3d';
 import type { DatasetManager } from '../../dataset';
 import type { ImageMetricsState, SplatPsnrComputeRequest } from '../../store';
+import type { LoadedGaussianCloud } from '../../splat/gaussianCloud';
 import { prefetchFrustumTexturesInBackground } from '../../hooks/useFrustumTexture';
 import { useLatestRef } from '../../hooks/useLatestRef';
 import { appLogger } from '../../utils/logger';
@@ -18,10 +19,21 @@ import {
 } from './SplatPsnrEvaluatorStoreFacade';
 import { getWebGpuSplatRequiredLimitsForCloud } from '../../splat/webgpu/webGpuSplatLimits';
 import { getWebGpuSplatDefaultBackgroundColor } from '../../splat/webgpu/splatRenderBackground';
+import {
+  createWebGpuSh0FallbackCloud,
+  getWebGpuCloudFallbackErrorMessage,
+  shouldRetryWebGpuCloudWithSh0,
+} from '../../splat/webgpu/webGpuCloudFallback';
+import {
+  createVisibleWebGpuSplatSceneId,
+  getVisibleWebGpuSplatSharedRuntime,
+} from '../../splat/webgpu/visibleSplatRuntimeRegistry';
+import { getImagePlaneTextureSourceFile } from './imagePlaneTexturePrefetch';
 
 interface SplatPsnrRenderSession {
   computeImageMetric: (options: {
     imageFile: File;
+    maskFile?: File | null;
     image: Image;
     camera: Camera;
     width: number;
@@ -30,6 +42,7 @@ interface SplatPsnrRenderSession {
   }) => Promise<PsnrResult>;
   submitImageMetric?: (options: {
     imageFile: File;
+    maskFile?: File | null;
     image: Image;
     camera: Camera;
     width: number;
@@ -99,6 +112,7 @@ const ALL_IMAGE_PSNR_METRIC_BATCH_SIZE = 16;
 const ALL_IMAGE_PSNR_METRIC_FLUSH_DELAY_MS = 32;
 const BACKGROUND_PSNR_START_DELAY_MS = 1500;
 const BACKGROUND_IMAGE_PLANE_TEXTURE_COLLECT_BATCH_SIZE = 32;
+const WEBGPU_METRIC_ADAPTER_RETRY_DELAY_MS = 5000;
 
 function getSplatPsnrDataIdentity(snapshot: {
   reconstruction: Reconstruction;
@@ -173,6 +187,56 @@ async function createSplatPsnrRenderSession({
     import('../../splat/webgpu/psnrSplatSession'),
   ]);
   const loadedCloud = await loadGaussianCloudFromFile(splatFile);
+
+  try {
+    return await createSplatPsnrRenderSessionForLoadedCloud({
+      splatFile,
+      loadedCloud,
+      createWebGpuSplatPsnrSession,
+    });
+  } catch (error) {
+    if (!shouldRetryWebGpuCloudWithSh0(error, loadedCloud.cloud)) {
+      throw error;
+    }
+
+    const reason = getWebGpuCloudFallbackErrorMessage(error);
+    const fallbackLoadedCloud = {
+      ...loadedCloud,
+      cloud: createWebGpuSh0FallbackCloud(loadedCloud.cloud),
+    };
+    appLogger.warn(
+      `[PSNR] Retrying ${splatFile.name} with SH0-only data after full-SH WebGPU initialization failed: ${reason}`
+    );
+    return createSplatPsnrRenderSessionForLoadedCloud({
+      splatFile,
+      loadedCloud: fallbackLoadedCloud,
+      createWebGpuSplatPsnrSession,
+    });
+  }
+}
+
+async function createSplatPsnrRenderSessionForLoadedCloud({
+  splatFile,
+  loadedCloud,
+  createWebGpuSplatPsnrSession,
+}: {
+  splatFile: File;
+  loadedCloud: LoadedGaussianCloud;
+  createWebGpuSplatPsnrSession: typeof import('../../splat/webgpu/psnrSplatSession')['createWebGpuSplatPsnrSession'];
+}): Promise<SplatPsnrRenderSession> {
+  const sharedRuntime = getVisibleWebGpuSplatSharedRuntime(createVisibleWebGpuSplatSceneId(splatFile));
+  if (sharedRuntime) {
+    return createWebGpuSplatPsnrSession({
+      device: sharedRuntime.device,
+      splatFile,
+      loadedCloud,
+      sharedScene: {
+        sceneId: sharedRuntime.sceneId,
+        resourceManager: sharedRuntime.sceneResourceManager,
+      },
+    });
+  }
+
   const device = await ensureSplatPsnrWebGpuDevice(getWebGpuSplatRequiredLimitsForCloud(loadedCloud.cloud));
   return createWebGpuSplatPsnrSession({ device, splatFile, loadedCloud });
 }
@@ -258,6 +322,7 @@ interface PreparedSplatPsnrImage {
   image: Image;
   camera: Camera;
   imageFile: File;
+  maskFile: File | null;
   width: number;
   height: number;
 }
@@ -294,6 +359,8 @@ async function prepareSplatPsnrImage(
     setSplatPsnrImageError(imageId, 'Missing image file');
     return null;
   }
+  const maskFile = dataset.hasMasks() ? await dataset.getMask(image.name) : null;
+  if (task.cancelled) return null;
   warmSplatPsnrImagePlaneTexture({
     image,
     imageFile,
@@ -311,6 +378,7 @@ async function prepareSplatPsnrImage(
     image,
     camera,
     imageFile,
+    maskFile,
     width: size.width,
     height: size.height,
   };
@@ -382,6 +450,7 @@ async function runSplatPsnrTask(
 
         const metric = await task.renderSession.computeImageMetric({
           imageFile: prepared.imageFile,
+          maskFile: prepared.maskFile,
           image: prepared.image,
           camera: prepared.camera,
           width: prepared.width,
@@ -454,6 +523,7 @@ async function runBatchedAllImageSplatPsnrTask(
 
         const submitted = await renderSession.submitImageMetric?.({
           imageFile: prepared.imageFile,
+          maskFile: prepared.maskFile,
           image: prepared.image,
           camera: prepared.camera,
           width: prepared.width,
@@ -589,16 +659,7 @@ async function prefetchSplatPsnrImagePlaneTextures({
       return;
     }
 
-    const metricImageFile = await dataset.getMetricImage(image.name);
-    const cachedImageFile = typeof dataset.getImageSync === 'function'
-      ? dataset.getImageSync(image.name)
-      : undefined;
-    const displayImageFile = cachedImageFile ?? (
-      typeof dataset.getImage === 'function'
-        ? await dataset.getImage(image.name)
-        : null
-    );
-    const imageFile = metricImageFile ?? displayImageFile;
+    const imageFile = await getImagePlaneTextureSourceFile(dataset, image.name);
     if (shouldCancel()) {
       return;
     }
@@ -624,6 +685,7 @@ export function SplatPsnrEvaluator() {
       splatFile,
       splatPsnrFrameReady,
       splatPsnrComputeRequest,
+      splatBackendResolution,
       splatMetricCapability,
       transform,
     },
@@ -645,7 +707,9 @@ export function SplatPsnrEvaluator() {
   const autoPsnrDataIdentityRef = useRef<SplatPsnrDataIdentity | null>(null);
   const imagePlaneTexturePrefetchIdentityRef = useRef<SplatPsnrDataIdentity | null>(null);
   const imagePlaneTexturePrefetchRunRef = useRef(0);
-  const gpuPsnrAvailable = splatMetricCapability.gpuPsnr;
+  const visibleWebGpuSplatReady = splatBackendResolution.status === 'resolved'
+    && splatBackendResolution.backend === 'webgpu';
+  const gpuPsnrAvailable = visibleWebGpuSplatReady && splatMetricCapability.gpuPsnr;
   const currentActions = useMemo<SplatPsnrTaskActions>(() => ({
     setSplatPsnrPending,
     setSplatPsnrComputingImage,
@@ -704,7 +768,12 @@ export function SplatPsnrEvaluator() {
   });
 
   const requestId = splatPsnrComputeRequest?.id ?? 0;
-  const featureReady = Boolean(reconstruction && splatFile && splatPsnrFrameReady && gpuPsnrAvailable);
+  const featureReady = Boolean(
+    reconstruction
+    && splatFile
+    && splatPsnrFrameReady
+    && gpuPsnrAvailable
+  );
 
   useEffect(() => {
     const unsubscribe = subscribeSplatPsnrWebGpuDeviceLoss((info) => {
@@ -724,33 +793,51 @@ export function SplatPsnrEvaluator() {
 
   useEffect(() => {
     let cancelled = false;
+    let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    let adapterRetryLogged = false;
 
-    if (!reconstruction || !splatFile || splatMetricCapability.status !== 'unavailable') {
+    if (
+      !reconstruction
+      || !splatFile
+      || !visibleWebGpuSplatReady
+      || splatMetricCapability.status !== 'unavailable'
+    ) {
       return () => {
         cancelled = true;
+        if (retryTimeoutId) {
+          clearTimeout(retryTimeoutId);
+        }
       };
     }
 
-    void ensureSplatPsnrWebGpuDevice()
-      .then(() => {
+    const probeMetricDevice = () => {
+      if (getVisibleWebGpuSplatSharedRuntime(createVisibleWebGpuSplatSceneId(splatFile))) {
         if (!cancelled) {
           setWebGpuMetricState('ready');
         }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          const reason = error instanceof Error ? error.message : String(error);
-          setWebGpuMetricState('failed', reason);
-        }
-      });
+        return;
+      }
+
+      if (!adapterRetryLogged) {
+        adapterRetryLogged = true;
+        appLogger.info('[PSNR] Waiting for visible WebGPU splat resources before enabling metrics');
+      }
+      retryTimeoutId = setTimeout(probeMetricDevice, WEBGPU_METRIC_ADAPTER_RETRY_DELAY_MS);
+    };
+
+    probeMetricDevice();
 
     return () => {
       cancelled = true;
+      if (retryTimeoutId) {
+        clearTimeout(retryTimeoutId);
+      }
     };
   }, [
     reconstruction,
     setWebGpuMetricState,
     splatFile,
+    visibleWebGpuSplatReady,
     splatMetricCapability.status,
   ]);
 
@@ -775,7 +862,12 @@ export function SplatPsnrEvaluator() {
       cancelled = true;
       setSplatPsnrFrameReady(false);
     };
-  }, [gpuPsnrAvailable, reconstruction, setSplatPsnrFrameReady, splatFile]);
+  }, [
+    gpuPsnrAvailable,
+    reconstruction,
+    setSplatPsnrFrameReady,
+    splatFile,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -798,7 +890,11 @@ export function SplatPsnrEvaluator() {
     if (!task) return;
 
     const snapshot = latestSnapshotRef.current;
-    if (!snapshot?.reconstruction || !snapshot.splatFile || !gpuPsnrAvailable) {
+    if (
+      !snapshot?.reconstruction
+      || !snapshot.splatFile
+      || !gpuPsnrAvailable
+    ) {
       cancelSplatPsnrTask(
         task,
         snapshot?.actions ?? currentActions,
@@ -973,7 +1069,13 @@ export function SplatPsnrEvaluator() {
       return;
     }
 
-    if (!snapshot?.reconstruction || !snapshot.splatFile || !snapshot.splatPsnrFrameReady || !request) {
+    if (
+      !featureReady
+      || !snapshot?.reconstruction
+      || !snapshot.splatFile
+      || !snapshot.splatPsnrFrameReady
+      || !request
+    ) {
       return;
     }
 

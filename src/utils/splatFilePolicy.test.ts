@@ -15,7 +15,7 @@ describe('splat file policy', () => {
     expect(isSplatFilePath('folder/model.txt')).toBe(false);
   });
 
-  it('prefers largest SPZ over any PLY, then largest PLY as fallback', () => {
+  it('prefers largest SPZ, then largest PLY as fallback', () => {
     const smallSpz = { path: 'small.spz', size: 10 };
     const largeSpz = { path: 'large.spz', size: 20 };
     const hugePly = { path: 'huge.ply', size: 1_000 };

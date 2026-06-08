@@ -3,6 +3,7 @@ import {
   parseSplatBackendPreference,
   resolveSplatBackend,
   resolveSplatMetricCapability,
+  shouldPreloadSparkSplatRuntime,
   type SplatBackendAvailability,
   type SplatMetricAvailability,
 } from './splatBackendPolicy';
@@ -32,6 +33,40 @@ describe('splat backend policy', () => {
       backend: 'spark',
       gpuPsnr: false,
       reason: 'Spark fallback selected because WebGPU is unsupported',
+    });
+  });
+
+  it('does not use Spark while auto WebGPU is still preparing', () => {
+    expect(resolveSplatBackend('auto', {
+      webGpu: 'unavailable',
+      spark: true,
+    })).toMatchObject({
+      status: 'unavailable',
+      backend: null,
+      gpuPsnr: false,
+      reason: 'Preparing WebGPU splat renderer',
+    });
+  });
+
+  it('preloads Spark only when it is requested or WebGPU can no longer be used in auto mode', () => {
+    expect(shouldPreloadSparkSplatRuntime('auto', { webGpu: 'unavailable' })).toBe(false);
+    expect(shouldPreloadSparkSplatRuntime('auto', { webGpu: 'ready' })).toBe(false);
+    expect(shouldPreloadSparkSplatRuntime('auto', { webGpu: 'unsupported' })).toBe(true);
+    expect(shouldPreloadSparkSplatRuntime('auto', { webGpu: 'failed' })).toBe(true);
+    expect(shouldPreloadSparkSplatRuntime('spark', { webGpu: 'ready' })).toBe(true);
+    expect(shouldPreloadSparkSplatRuntime('webgpu', { webGpu: 'unsupported' })).toBe(false);
+  });
+
+  it('reports concrete auto WebGPU unavailability without selecting Spark', () => {
+    expect(resolveSplatBackend('auto', {
+      webGpu: 'unavailable',
+      webGpuFailureReason: 'WebGPU adapter is unavailable',
+      spark: true,
+    })).toMatchObject({
+      status: 'unavailable',
+      backend: null,
+      gpuPsnr: false,
+      reason: 'WebGPU adapter is unavailable',
     });
   });
 

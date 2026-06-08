@@ -9,26 +9,29 @@ type ImagePlaneTexturePrefetch = (
   options: { shouldCancel?: () => boolean }
 ) => Promise<void>;
 
+export type ImagePlaneTextureDataset =
+  Partial<Pick<DatasetManager, 'getImage' | 'getImageSync' | 'getMetricImage'>>;
+
 interface ImagePlaneTexturePrefetchOptions {
   reconstruction: Reconstruction;
-  dataset: Pick<DatasetManager, 'getImage' | 'getImageSync'> & Partial<Pick<DatasetManager, 'getMetricImage'>>;
+  dataset: ImagePlaneTextureDataset;
   shouldCancel: () => boolean;
   onBatchPrefetched?: () => void;
   prefetch?: ImagePlaneTexturePrefetch;
 }
 
-async function getImagePlaneTextureSourceFile(
-  dataset: ImagePlaneTexturePrefetchOptions['dataset'],
+export async function getImagePlaneTextureSourceFile(
+  dataset: ImagePlaneTextureDataset,
   imageName: string
 ): Promise<File | null> {
-  const metricImageFile = await (dataset.getMetricImage?.(imageName) ?? Promise.resolve(null));
-  if (metricImageFile) return metricImageFile;
-
-  const cachedImageFile = dataset.getImageSync(imageName);
+  const cachedImageFile = dataset.getImageSync?.(imageName);
   if (cachedImageFile) return cachedImageFile;
 
-  const displayImageFile = await dataset.getImage(imageName);
+  const displayImageFile = await (dataset.getImage?.(imageName) ?? Promise.resolve(null));
   if (displayImageFile) return displayImageFile;
+
+  const metricImageFile = await (dataset.getMetricImage?.(imageName) ?? Promise.resolve(null));
+  if (metricImageFile) return metricImageFile;
 
   return null;
 }

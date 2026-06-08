@@ -91,12 +91,20 @@ describe('WebGPU Gaussian cloud packing', () => {
     expect(payload.count).toBe(2);
     expect(payload.shDegree).toBe(1);
     expect(payload.gaussianData.length).toBe(2 * WEBGPU_GAUSSIAN_STRIDE_FLOATS);
+    expect(payload.gaussianData).toEqual(packGaussianCloudForWebGpu(cloud));
+    expect(payload.bounds).toEqual(computeGaussianCloudBounds(cloud));
     expect(payload.shData).toBe(shN);
     expect(cached).toBe(payload);
   });
 
   it('rejects non-finite positions before they can corrupt renderer bounds', () => {
     expect(() => computeGaussianCloudBounds(makeCloud({
+      positions: new Float32Array([
+        1, Number.NaN, 3,
+        -4, 5, -6,
+      ]),
+    }))).toThrow('Invalid Gaussian cloud position y at index 0: expected finite number');
+    expect(() => createPackedWebGpuGaussianCloud(makeCloud({
       positions: new Float32Array([
         1, Number.NaN, 3,
         -4, 5, -6,

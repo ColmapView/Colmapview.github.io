@@ -23,6 +23,7 @@ import {
   fetchZipImage,
   fetchZipMask,
   getImageFile,
+  getMaskFile,
   getZipImageCacheStats,
   removeZipMaskCacheEntries,
   getZipMaskCacheStats,
@@ -219,5 +220,48 @@ describe('local image lookup', () => {
     ]));
 
     expect(getImageFile(imageFiles, 'photo.jpg')).toBe(image);
+  });
+
+  it('does not let masks satisfy plain image filename lookups', () => {
+    const mask = buildFile('photo.jpg', 'mask');
+    const image = buildFile('photo.jpg', 'image');
+    const imageFiles = collectImageFiles(new Map([
+      ['dataset/masks/photo.jpg', mask],
+      ['photo.jpg', image],
+    ]));
+
+    expect(getImageFile(imageFiles, 'photo.jpg')).toBe(image);
+  });
+
+  it('does not let auxiliary images satisfy camera image lookups', () => {
+    const depth = buildFile('photo.jpg', 'depth');
+    const segmentation = buildFile('photo.jpg', 'segmentation');
+    const imageFiles = collectImageFiles(new Map([
+      ['dataset/depth/cam1/photo.jpg', depth],
+      ['dataset/segmentation/photo.jpg', segmentation],
+    ]));
+
+    expect(getImageFile(imageFiles, 'cam1/photo.jpg')).toBeUndefined();
+    expect(getImageFile(imageFiles, 'photo.jpg')).toBeUndefined();
+  });
+
+  it('keeps real image folders aliasable even when a camera folder has an auxiliary name', () => {
+    const image = buildFile('photo.jpg', 'image');
+    const imageFiles = collectImageFiles(new Map([
+      ['dataset/images_4/depth/photo.jpg', image],
+    ]));
+
+    expect(getImageFile(imageFiles, 'depth/photo.jpg')).toBe(image);
+    expect(getImageFile(imageFiles, 'photo.jpg')).toBe(image);
+  });
+
+  it('keeps masks available through mask-specific lookups', () => {
+    const mask = buildFile('photo.jpg', 'mask');
+    const imageFiles = collectImageFiles(new Map([
+      ['dataset/masks/photo.jpg', mask],
+    ]));
+
+    expect(getImageFile(imageFiles, 'photo.jpg')).toBeUndefined();
+    expect(getMaskFile(imageFiles, 'photo.jpg')).toBe(mask);
   });
 });

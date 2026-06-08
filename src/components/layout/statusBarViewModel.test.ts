@@ -36,7 +36,7 @@ describe('status bar view model', () => {
     expect(getDesktopEmptyStatusText({
       hasReconstruction: false,
       urlLoading: false,
-    })).toBe('Drop COLMAP folder to load');
+    })).toBe('Drop dataset or images to load');
   });
 
   it('preserves the compact touch loading message behavior', () => {

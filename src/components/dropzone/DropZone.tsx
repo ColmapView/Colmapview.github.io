@@ -185,10 +185,10 @@ export function DropZone({ children }: DropZoneProps) {
           <div className={dragOverlayStyles.content}>
             <div className={dragOverlayStyles.icon}>+</div>
             <div className={dragOverlayStyles.title}>
-              Drop COLMAP folder or ZIP here
+              Drop dataset folder or ZIP here
             </div>
             <div className={dragOverlayStyles.subtitle}>
-              Expected: cameras.bin, images.bin, points3D.bin (or .zip containing them)
+              COLMAP binaries, image-only folders, and optional splats are supported
             </div>
           </div>
         </div>

@@ -5,7 +5,7 @@ import {
   isGaussianCloudFile,
   loadGaussianCloudFromFile,
 } from './gaussianCloudLoader';
-import { validateGaussianCloud, type GaussianCloud } from './gaussianCloud';
+import { createSh0OnlyGaussianCloud, validateGaussianCloud, type GaussianCloud } from './gaussianCloud';
 import {
   getWebGpuSplatTelemetryEvents,
   resetWebGpuSplatTelemetryEventsForTests,
@@ -112,8 +112,23 @@ describe('gaussian cloud loader', () => {
     expect(getGaussianCloudFormatForFile(new File(['x'], 'scene.ply'))).toBe('ply');
     expect(() => getGaussianCloudFormatForFile(new File(['x'], 'scene.splat')))
       .toThrow('Unsupported Gaussian splat format: scene.splat');
+    expect(isGaussianCloudFile(new File(['x'], 'points3D.bin'))).toBe(false);
     expect(isGaussianCloudFile(new File(['x'], 'scene.ply'))).toBe(true);
     expect(isGaussianCloudFile(new File(['x'], 'scene.splat'))).toBe(false);
+  });
+
+  it('creates SH0-only views without mutating higher-order SH clouds', () => {
+    const cloud = makeShCloud(2);
+    const sh0Only = createSh0OnlyGaussianCloud(cloud);
+
+    expect(sh0Only).not.toBe(cloud);
+    expect(sh0Only.shDegree).toBe(0);
+    expect(sh0Only.shN).toBeUndefined();
+    expect(sh0Only.positions).toBe(cloud.positions);
+    expect(sh0Only.sh0).toBe(cloud.sh0);
+    expect(cloud.shDegree).toBe(3);
+    expect(cloud.shN).toBeInstanceOf(Float32Array);
+    expect(createSh0OnlyGaussianCloud(makeCloud())).toEqual(makeCloud());
   });
 
   it('routes SPZ and PLY files through format-specific loaders', async () => {

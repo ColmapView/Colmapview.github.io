@@ -104,7 +104,6 @@ export const FrustumPlane = memo(function FrustumPlane({
   const { camera: threeCamera } = useThree();
   const controls = useTrackballControlsApi();
   const isDragging = useTrackballDraggingReader();
-  const materialRef = useRef<THREE.MeshBasicMaterial>(null);
   const groupRef = useRef<THREE.Group>(null);
 
   useSelectedFrustumFovWheel({
@@ -115,11 +114,10 @@ export const FrustumPlane = memo(function FrustumPlane({
     controls,
   });
 
-  const { displayTexture, shouldShowTexture } = useFrustumPlaneDisplayTexture({
+  const { displayTexture, shouldShowTexture, textureHiddenByViewAngle } = useFrustumPlaneDisplayTexture({
     imageFile,
     imageName: image.name,
     isSelected,
-    materialRef,
     showImagePlane,
     viewAngleOk,
   });
@@ -174,7 +172,17 @@ export const FrustumPlane = memo(function FrustumPlane({
       <mesh
         position={[planeSize.offsetX, planeSize.offsetY, planeSize.depth]}
         renderOrder={isSelected ? 100 : 0}
-        userData={{ isSelectedPlane: isSelected }}
+        userData={{
+          isFrustumPlane: true,
+          isSelectedPlane: isSelected,
+          imageId: image.imageId,
+          imageName: image.name,
+          viewAngleOk,
+          shouldShowTexture,
+          textureHiddenByViewAngle,
+          hasDisplayTexture: displayTexture !== null,
+          displayTextureUuid: displayTexture?.uuid ?? null,
+        }}
         raycast={disableInteraction ? () => {} : undefined}
         onPointerDown={touchMode ? touchHandlers.onPointerDown : clickHandlers.onPointerDown}
         onPointerUp={touchHandlers.onPointerUp}
@@ -190,10 +198,10 @@ export const FrustumPlane = memo(function FrustumPlane({
           displayTexture={displayTexture}
           isSelected={isSelected}
           isTransparent={isTransparent}
-          materialRef={materialRef}
           planeSize={planeSize}
           selectionPlaneOpacity={selectionPlaneOpacity}
           shouldShowTexture={shouldShowTexture}
+          textureHiddenByViewAngle={textureHiddenByViewAngle}
           undistortionEnabled={undistortionEnabled}
           undistortionMode={undistortionMode}
         />

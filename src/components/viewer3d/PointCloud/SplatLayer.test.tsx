@@ -94,12 +94,16 @@ function createFacade(overrides: Partial<SplatLayerStoreFacade['data']> = {}): S
       showSplats: true,
       splatFile: new File(['splat'], 'scene.ply'),
       requestedBackend: 'auto',
+      splatBackendAvailability: {
+        webGpu: 'unsupported',
+        spark: true,
+      },
       splatBackendResolution: {
         status: 'resolved',
         requested: 'auto',
         backend: 'spark',
         gpuPsnr: false,
-        reason: 'Spark fallback selected until the WebGPU renderer is available',
+        reason: 'Spark fallback selected because WebGPU is unsupported',
       },
       ...overrides,
     },
@@ -180,5 +184,27 @@ describe('SplatLayer', () => {
 
     expect(facade.actions.addNotification).not.toHaveBeenCalled();
     expect(preloadSparkModuleMock).not.toHaveBeenCalled();
+  });
+
+  it('does not preload Spark while auto mode is preparing WebGPU', () => {
+    const facade = createFacade({
+      splatBackendAvailability: {
+        webGpu: 'unavailable',
+        spark: true,
+      },
+      splatBackendResolution: {
+        status: 'unavailable',
+        requested: 'auto',
+        backend: null,
+        gpuPsnr: false,
+        reason: 'Preparing WebGPU splat renderer',
+      },
+    });
+    useSplatLayerStoreFacadeMock.mockReturnValue(facade);
+
+    render(<SplatLayer />);
+
+    expect(preloadSparkModuleMock).not.toHaveBeenCalled();
+    expect(facade.actions.addNotification).not.toHaveBeenCalled();
   });
 });

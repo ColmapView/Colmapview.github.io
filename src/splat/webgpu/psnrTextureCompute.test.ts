@@ -190,8 +190,10 @@ describe('WebGPU PSNR texture compute', () => {
     expect(fake.shaderCodes.join('\n')).toContain('textureLoad');
     expect(fake.shaderCodes.join('\n')).toContain('MetricPartial');
     expect(fake.shaderCodes.join('\n')).toContain('computeWindowSsim');
+    expect(fake.shaderCodes.join('\n')).toContain('isSampleValid');
     expect(fake.bindGroups[0].entries[0].resource).toEqual({ kind: 'texture-view' });
     expect(fake.bindGroups[0].entries[1].resource).toEqual({ kind: 'texture-view' });
+    expect(fake.bindGroups[0].entries[2].resource).toEqual({ kind: 'texture-view' });
     expect(getWebGpuSplatDebugCounters().buffers).toBe(0);
     expect(getWebGpuSplatTelemetryEvents()).toEqual([
       expect.objectContaining({
@@ -202,6 +204,7 @@ describe('WebGPU PSNR texture compute', () => {
           width: 1,
           height: 1,
           pixelCount: 1,
+          masked: false,
           compareWorkgroups: 1,
         }),
       }),
@@ -259,7 +262,15 @@ describe('WebGPU PSNR texture compute', () => {
     expect(fake.dispatches).toEqual([[3, 1, undefined], [1, 1, undefined]]);
     expect(fake.copySizes).toEqual([32]);
     expect(fake.writeBuffers.length).toBe(2);
-    expect(new Uint32Array(fake.writeBuffers[0])).toEqual(new Uint32Array([129, 1, 2, 3, 4, 5, 3, 3]));
+    expect(new Uint32Array(fake.writeBuffers[0])).toEqual(new Uint32Array([
+      129, 1,
+      2, 3,
+      4, 5,
+      4, 5,
+      0,
+      3, 3,
+      0,
+    ]));
     expect(new Uint32Array(fake.writeBuffers[1])).toEqual(new Uint32Array([3, 1, 1, 0]));
     expect(getWebGpuSplatDebugCounters().buffers).toBe(0);
     expect(getWebGpuSplatTelemetryEvents()).toContainEqual(expect.objectContaining({
@@ -287,7 +298,15 @@ describe('WebGPU PSNR texture compute', () => {
     });
 
     expect(fake.dispatches).toEqual([[3, 2, undefined], [1, 1, undefined]]);
-    expect(new Uint32Array(fake.writeBuffers[0])).toEqual(new Uint32Array([257, 1, 0, 0, 0, 0, 3, 5]));
+    expect(new Uint32Array(fake.writeBuffers[0])).toEqual(new Uint32Array([
+      257, 1,
+      0, 0,
+      0, 0,
+      0, 0,
+      0,
+      3, 5,
+      0,
+    ]));
     expect(new Uint32Array(fake.writeBuffers[1])).toEqual(new Uint32Array([5, 1, 1, 0]));
     expect(getWebGpuSplatTelemetryEvents()).toContainEqual(expect.objectContaining({
       name: 'psnr-reduction',
@@ -295,6 +314,44 @@ describe('WebGPU PSNR texture compute', () => {
         compareWorkgroups: 5,
         compareDispatchX: 3,
         compareDispatchY: 2,
+      }),
+    }));
+  });
+
+  it('uses an optional mask texture for both PSNR and SSIM valid-pixel selection', async () => {
+    const fake = makeFakeDevice(metricReadback(0, 2, 0.9, 2));
+    const renderedTexture = makeTexture();
+    const groundTruthTexture = makeTexture();
+    const maskTexture = makeTexture();
+
+    const result = await computePsnrFromRgbaTexturesWebGpu({
+      device: fake.device,
+      renderedTexture,
+      groundTruthTexture,
+      maskTexture,
+      width: 4,
+      height: 1,
+      maskOrigin: { x: 7, y: 8 },
+    });
+
+    expect(result.validPixelCount).toBe(2);
+    expect(result.ssim).toBeCloseTo(0.9);
+    expect(fake.bindGroups[0].entries[2].resource).toEqual({ kind: 'texture-view' });
+    expect(maskTexture.createView).toHaveBeenCalledTimes(1);
+    expect(new Uint32Array(fake.writeBuffers[0])).toEqual(new Uint32Array([
+      4, 1,
+      0, 0,
+      0, 0,
+      7, 8,
+      1,
+      1, 1,
+      0,
+    ]));
+    expect(getWebGpuSplatTelemetryEvents()).toContainEqual(expect.objectContaining({
+      name: 'psnr-reduction',
+      details: expect.objectContaining({
+        masked: true,
+        compareWorkgroups: 1,
       }),
     }));
   });

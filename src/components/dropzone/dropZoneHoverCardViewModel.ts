@@ -18,7 +18,8 @@ export const LOAD_URL_DIRECT_EXAMPLE = `Direct URL expects:
   <baseUrl>/sparse/0/images.bin
   <baseUrl>/sparse/0/points3D.bin
   <baseUrl>/images/  (optional)
-  <baseUrl>/masks/   (optional)`;
+  <baseUrl>/masks/   (optional)
+  <baseUrl>/splats/  (optional .spz/.ply)`;
 export const LOAD_URL_SUPPORTED_SOURCES = 'Supports: S3, GCS, R2, Dropbox, HuggingFace, GitHub';
 export const LOAD_URL_LOCAL_SERVER_HINT = 'Local server: npx http-server --cors -p 8080';
 export const LOAD_URL_HINT_ROWS: DropZoneHoverCardHintRow[] = [
@@ -36,7 +37,8 @@ export const LOAD_JSON_MANIFEST_EXAMPLE = `{
     "points3D": "sparse/0/points3D.bin"
   },
   "imagesPath": "images/",
-  "masksPath": "masks/"
+  "masksPath": "masks/",
+  "splats": ["splats/model.spz"]
 }`;
 export const LOAD_JSON_HINT_ROWS: DropZoneHoverCardHintRow[] = [
   { icon: 'mouse-left', label: 'Left: browse manifest file' },

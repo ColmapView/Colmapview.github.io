@@ -533,7 +533,7 @@ function copyMatrix(matrix: ArrayLike<number>, name: string): Float32Array {
   if (matrix.length !== 16) {
     throw new Error(`Invalid splat renderer ${name}: expected 16 values, got ${matrix.length}`);
   }
-  return new Float32Array(Array.from(matrix));
+  return new Float32Array(matrix);
 }
 
 function copyBackgroundColor(backgroundColor: WebGpuSplatBackgroundColor): WebGpuSplatBackgroundColor {

@@ -2,7 +2,6 @@
 import { loadPLY, loadPLYFromBuffer } from './ply';
 import { loadSplat, loadSplatFromBuffer } from './splat';
 import { loadSPZ, loadSPZFromBuffer } from './spz';
-import { isSOGMetadata, loadSOG } from './sog';
 import { loadSparkRAD } from './spark';
 /** Detect format from filename/URL or magic bytes */
 export function detectFormat(source) {
@@ -15,10 +14,6 @@ export function detectFormat(source) {
             return 'splat';
         if (lower.endsWith('.spz'))
             return 'spz';
-        if (lower.endsWith('.sog'))
-            return 'sog';
-        if (lower.endsWith('/meta.json') || lower.endsWith('meta.json'))
-            return 'sog';
         if (lower.endsWith('.rad') || lower.endsWith('.radc'))
             return 'rad';
         return 'unknown';
@@ -33,15 +28,10 @@ export function detectFormat(source) {
     // Gzip: starts with 0x1F 0x8B (could be SPZ)
     if (bytes[0] === 0x1F && bytes[1] === 0x8B)
         return 'spz';
-    // ZIP (SOG): starts with PK\x03\x04
-    if (bytes[0] === 0x50 && bytes[1] === 0x4B && bytes[2] === 0x03 && bytes[3] === 0x04)
-        return 'sog';
     // Spark RAD/RADC: starts with "RAD0" or "RADC"
     if (bytes[0] === 0x52 && bytes[1] === 0x41 && bytes[2] === 0x44 &&
         (bytes[3] === 0x30 || bytes[3] === 0x43))
         return 'rad';
-    if (looksLikeJSON(source) && isSOGMetadata(source))
-        return 'sog';
     // .splat has no magic — check if file size is multiple of 32
     if (source.byteLength > 0 && source.byteLength % 32 === 0)
         return 'splat';
@@ -67,7 +57,6 @@ export async function load(source, options) {
             case 'ply': return loadPLYFromBuffer(buffer);
             case 'splat': return loadSplatFromBuffer(buffer);
             case 'spz': return loadSPZFromBuffer(buffer);
-            case 'sog': return loadSOG(buffer);
             default:
                 throw new Error(formatErrorMessage());
         }
@@ -76,22 +65,12 @@ export async function load(source, options) {
         case 'ply': return loadPLY(source);
         case 'splat': return loadSplat(source);
         case 'spz': return loadSPZ(source);
-        case 'sog': return loadSOG(source);
         default:
             throw new Error(formatErrorMessage());
     }
 }
 function formatErrorMessage() {
-    return 'Cannot detect Gaussian format. Provide a file with .ply, .splat, .spz, .sog, .rad/.radc, or PlayCanvas SOG meta.json extension.';
-}
-function looksLikeJSON(buffer) {
-    const bytes = new Uint8Array(buffer);
-    for (const byte of bytes.subarray(0, Math.min(bytes.length, 32))) {
-        if (byte === 0x20 || byte === 0x09 || byte === 0x0A || byte === 0x0D)
-            continue;
-        return byte === 0x7B;
-    }
-    return false;
+    return 'Cannot detect Gaussian format. Provide a file with .ply, .splat, .spz, or .rad/.radc extension.';
 }
 /** Fetch a URL with progress reporting via ReadableStream. */
 async function fetchWithProgress(url, onProgress) {

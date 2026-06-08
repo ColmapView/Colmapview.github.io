@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   buildImageUrl,
   buildMaskUrlCandidates,
+  getImagePathLookupSuffixes,
   getImageLookupKeys,
   getMaskLookupPaths,
   getMaskPathVariants,
+  isAuxiliaryImagePath,
   isImageFile,
+  isMaskImagePath,
   normalizeImagePath,
 } from './imageFileLookupPolicy';
 
@@ -26,6 +29,26 @@ describe('image file lookup policy', () => {
       'cam1/photo.jpg',
       'Photo.JPG',
       'photo.jpg',
+    ]);
+  });
+
+  it('keeps auxiliary image files out of plain camera lookup aliases', () => {
+    expect(isAuxiliaryImagePath('project/depth/cam1/photo.jpg')).toBe(true);
+    expect(isAuxiliaryImagePath('project/mask/cam1/photo.jpg')).toBe(true);
+    expect(isMaskImagePath('project/mask/cam1/photo.jpg')).toBe(false);
+    expect(isMaskImagePath('project/masks/cam1/photo.jpg')).toBe(true);
+    expect(isAuxiliaryImagePath('project/images_4/depth/photo.jpg')).toBe(false);
+    expect(isMaskImagePath('project/images/mask/photo.jpg')).toBe(false);
+
+    expect(getImagePathLookupSuffixes('project/depth/cam1/photo.jpg')).toEqual([
+      'project/depth/cam1/photo.jpg',
+      'depth/cam1/photo.jpg',
+    ]);
+    expect(getImageLookupKeys('project\\Segmentation\\Cam1\\Photo.JPG')).toEqual([
+      'project/Segmentation/Cam1/Photo.JPG',
+      'project/segmentation/cam1/photo.jpg',
+      'Segmentation/Cam1/Photo.JPG',
+      'segmentation/cam1/photo.jpg',
     ]);
   });
 

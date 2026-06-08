@@ -6,6 +6,7 @@ import {
 } from '../../../store';
 import type { NotificationState, SplatBackendState } from '../../../store';
 import type {
+  SplatBackendAvailability,
   SplatBackendPreference,
   SplatBackendResolution,
 } from '../../../utils/splatBackendPolicy';
@@ -14,6 +15,7 @@ interface SplatLayerDataFacade {
   showSplats: boolean;
   splatFile?: File;
   requestedBackend: SplatBackendPreference;
+  splatBackendAvailability: SplatBackendAvailability;
   splatBackendResolution: SplatBackendResolution;
 }
 
@@ -34,6 +36,7 @@ export function useSplatLayerStoreFacade(): SplatLayerStoreFacade {
   const addNotification = useNotificationStore((s) => s.addNotification);
   const removeNotification = useNotificationStore((s) => s.removeNotification);
   const requestedBackend = useSplatBackendStore((s) => s.requestedBackend);
+  const splatBackendAvailability = useSplatBackendStore((s) => s.availability);
   const splatBackendResolution = useSplatBackendStore((s) => s.resolution);
   const setSparkBackendAvailable = useSplatBackendStore((s) => s.setSparkBackendAvailable);
 
@@ -42,6 +45,7 @@ export function useSplatLayerStoreFacade(): SplatLayerStoreFacade {
       showSplats: points.splatsVisible,
       splatFile,
       requestedBackend,
+      splatBackendAvailability,
       splatBackendResolution,
     },
     actions: {

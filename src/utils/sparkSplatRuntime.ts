@@ -1,4 +1,5 @@
 import type { SplatMeshOptions } from '@sparkjsdev/spark';
+import { isSplatFilePath } from './splatFilePolicy';
 
 export type SparkModule = typeof import('@sparkjsdev/spark');
 
@@ -18,6 +19,10 @@ export function preloadSparkModule(): Promise<SparkModule> {
 export async function getSplatMeshSourceOptions(
   sourceFile: File
 ): Promise<Pick<SplatMeshOptions, 'fileBytes' | 'stream' | 'streamLength'>> {
+  if (!isSplatFilePath(sourceFile.name)) {
+    throw new Error(`Unsupported splat format: ${sourceFile.name}`);
+  }
+
   if (typeof sourceFile.stream === 'function') {
     return {
       stream: sourceFile.stream(),

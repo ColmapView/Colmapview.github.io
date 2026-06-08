@@ -32,6 +32,7 @@ interface SceneContentDataFacade {
   viewTrigger: UIState['viewTrigger'];
   transform: TransformState['transform'];
   requestedSplatBackend: SplatBackendPreference;
+  splatBackendAvailability: SplatBackendAvailability;
   splatBackendResolution: SplatBackendResolution;
   splatsVisible: boolean;
 }
@@ -54,8 +55,10 @@ interface SceneContainerDataFacade {
 
 interface SceneContainerActionsFacade {
   addNotification: NotificationState['addNotification'];
+  removeNotification: NotificationState['removeNotification'];
   setSelectedImageId: CameraState['setSelectedImageId'];
   setWebGpuBackendState: SplatBackendState['setWebGpuBackendState'];
+  setWebGpuMetricState: SplatBackendState['setWebGpuMetricState'];
 }
 
 export interface SceneContentStoreFacade {
@@ -80,6 +83,7 @@ export function useSceneContentStoreFacade(): SceneContentStoreFacade {
   const viewTrigger = useUIStore((s) => s.viewTrigger);
   const transform = useTransformStore((s) => s.transform);
   const requestedSplatBackend = useSplatBackendStore((s) => s.requestedBackend);
+  const splatBackendAvailability = useSplatBackendStore((s) => s.availability);
   const splatBackendResolution = useSplatBackendStore((s) => s.resolution);
   const setSparkBackendAvailable = useSplatBackendStore((s) => s.setSparkBackendAvailable);
   const points = usePointsNode();
@@ -97,6 +101,7 @@ export function useSceneContentStoreFacade(): SceneContentStoreFacade {
       viewTrigger,
       transform,
       requestedSplatBackend,
+      splatBackendAvailability,
       splatBackendResolution,
       splatsVisible: points.splatsVisible,
     },
@@ -113,11 +118,13 @@ export function useSceneContainerStoreFacade(): SceneContainerStoreFacade {
   const backgroundColor = useUIStore((s) => s.backgroundColor);
   const showAutoHideEditor = useUIStore((s) => s.showAutoHideEditor);
   const addNotification = useNotificationStore((s) => s.addNotification);
+  const removeNotification = useNotificationStore((s) => s.removeNotification);
   const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
   const requestedSplatBackend = useSplatBackendStore((s) => s.requestedBackend);
   const splatBackendAvailability = useSplatBackendStore((s) => s.availability);
   const splatBackendResolution = useSplatBackendStore((s) => s.resolution);
   const setWebGpuBackendState = useSplatBackendStore((s) => s.setWebGpuBackendState);
+  const setWebGpuMetricState = useSplatBackendStore((s) => s.setWebGpuMetricState);
   const points = usePointsNode();
 
   return {
@@ -134,8 +141,10 @@ export function useSceneContainerStoreFacade(): SceneContainerStoreFacade {
     },
     actions: {
       addNotification,
+      removeNotification,
       setSelectedImageId,
       setWebGpuBackendState,
+      setWebGpuMetricState,
     },
   };
 }

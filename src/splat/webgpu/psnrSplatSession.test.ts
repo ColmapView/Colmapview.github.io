@@ -226,6 +226,46 @@ describe('WebGPU splat PSNR session', () => {
     resetWebGpuSplatTelemetryEventsForTests();
   });
 
+  it('can create an isolated metric render session on shared visible scene resources', async () => {
+    const fakeDevice = makeDevice();
+    const harness = createHarness({ device: fakeDevice.device });
+    const sharedDispose = vi.fn();
+    const sharedResourceManager = {
+      acquire: vi.fn(() => harness.sceneRef),
+      dispose: sharedDispose,
+    };
+
+    const session = await createWebGpuSplatPsnrSession({
+      device: fakeDevice.device,
+      splatFile: harness.splatFile,
+      loadedCloud: harness.loadedCloud,
+      sharedScene: {
+        sceneId: 'visible-scene',
+        resourceManager: sharedResourceManager,
+      },
+      deps: harness.deps,
+    });
+
+    expect(harness.deps.createSceneResourceManager).not.toHaveBeenCalled();
+    expect(sharedResourceManager.acquire).toHaveBeenCalledWith(fakeDevice.device, {
+      sceneId: 'visible-scene',
+      cloud: harness.loadedCloud.cloud,
+      labelPrefix: 'psnr scene.spz',
+    });
+    expect(harness.deps.createRenderSession).toHaveBeenCalledWith(expect.objectContaining({
+      device: fakeDevice.device,
+      scene: harness.sceneRef,
+      format: 'rgba8unorm',
+      width: 1,
+      height: 1,
+    }));
+
+    session.dispose();
+
+    expect(harness.renderSession.dispose).toHaveBeenCalledTimes(1);
+    expect(sharedDispose).not.toHaveBeenCalled();
+  });
+
   it('renders pinhole image metrics through offscreen textures and tiny texture reduction', async () => {
     const fakeDevice = makeDevice();
     const harness = createHarness({ device: fakeDevice.device });
@@ -385,6 +425,77 @@ describe('WebGPU splat PSNR session', () => {
     });
     expect(renderedTexture.destroy).toHaveBeenCalledTimes(1);
     expect(harness.groundTruthTexture.dispose).toHaveBeenCalledTimes(1);
+
+    session.dispose();
+  });
+
+  it('uploads an image mask texture and applies it to PSNR and SSIM reduction', async () => {
+    const fakeDevice = makeDevice();
+    const harness = createHarness({ device: fakeDevice.device });
+    const maskFile = buildFile('image.jpg.png', 'mask');
+    const maskBitmap = makeBitmap();
+    const maskTexture = {
+      texture: makeTexture('mask'),
+      width: 4,
+      height: 3,
+      dispose: vi.fn(),
+    };
+    harness.deps.createBitmap
+      .mockResolvedValueOnce(harness.bitmap)
+      .mockResolvedValueOnce(maskBitmap);
+    harness.deps.createGroundTruthTexture
+      .mockReturnValueOnce(harness.groundTruthTexture)
+      .mockReturnValueOnce(maskTexture);
+    const session = await createWebGpuSplatPsnrSession({
+      device: fakeDevice.device,
+      splatFile: harness.splatFile,
+      deps: harness.deps,
+    });
+    const image = buildImage();
+    const camera = buildCamera({ width: 4, height: 3 });
+    const imageFile = buildFile('image.jpg');
+
+    const metric = await session.computeImageMetric({
+      imageFile,
+      maskFile,
+      image,
+      camera,
+      width: 4,
+      height: 3,
+    });
+
+    expect(metric).toEqual(harness.metric);
+    expect(harness.deps.createBitmap).toHaveBeenNthCalledWith(1, imageFile, {
+      colorSpaceConversion: 'none',
+      premultiplyAlpha: 'none',
+    });
+    expect(harness.deps.createBitmap).toHaveBeenNthCalledWith(2, maskFile, {
+      colorSpaceConversion: 'none',
+      premultiplyAlpha: 'none',
+    });
+    expect(harness.deps.createGroundTruthTexture).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      source: harness.bitmap,
+      targetWidth: 4,
+      targetHeight: 3,
+    }));
+    expect(harness.deps.createGroundTruthTexture).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      source: maskBitmap,
+      targetWidth: 4,
+      targetHeight: 3,
+    }));
+    const renderedTexture = vi.mocked(harness.renderSession.renderToTexture).mock.calls[0][0];
+    expect(harness.deps.computePsnrFromTextures).toHaveBeenCalledWith({
+      device: fakeDevice.device,
+      renderedTexture,
+      groundTruthTexture: harness.groundTruthTexture.texture,
+      maskTexture: maskTexture.texture,
+      width: 4,
+      height: 3,
+    });
+    expect(harness.groundTruthTexture.dispose).toHaveBeenCalledTimes(1);
+    expect(maskTexture.dispose).toHaveBeenCalledTimes(1);
+    expect(harness.bitmap.close).toHaveBeenCalledTimes(1);
+    expect(maskBitmap.close).toHaveBeenCalledTimes(1);
 
     session.dispose();
   });

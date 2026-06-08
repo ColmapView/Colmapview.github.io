@@ -1,5 +1,5 @@
 import type { GaussianCloud } from '../../types';
-export type GaussianFormat = 'ply' | 'splat' | 'spz' | 'sog' | 'rad' | 'unknown';
+export type GaussianFormat = 'ply' | 'splat' | 'spz' | 'rad' | 'unknown';
 export interface LoadOptions {
     /** Called with (bytesLoaded, totalBytes) during fetch. totalBytes may be 0 if unknown. */
     onProgress?: (loaded: number, total: number) => void;

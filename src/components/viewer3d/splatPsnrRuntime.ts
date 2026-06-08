@@ -28,7 +28,7 @@ export interface PsnrResult {
 
 type SplatPsnrWebGpuDeviceLossListener = (info: GPUDeviceLostInfo, device: GPUDevice) => void;
 
-export type SplatPsnrWebGpuDeviceProvider = Pick<WebGpuSplatGpuProvider, 'requestAdapter'>;
+export type SplatPsnrWebGpuDeviceProvider = Pick<WebGpuSplatGpuProvider, 'requestAdapter' | 'getPlatform'>;
 
 let webGpuPsnrDevicePromise: Promise<GPUDevice> | null = null;
 let webGpuPsnrDeviceProvider: SplatPsnrWebGpuDeviceProvider | null = null;
@@ -169,6 +169,14 @@ function getSplatPsnrWebGpuDeviceProvider(): SplatPsnrWebGpuDeviceProvider | nul
     requestAdapter: (adapterOptions) => adapterOptions
       ? gpu.requestAdapter(adapterOptions)
       : gpu.requestAdapter(),
+    getPlatform: () => {
+      const navigatorWithUserAgentData = navigator as Navigator & {
+        userAgentData?: { platform?: string };
+      };
+      return navigatorWithUserAgentData.userAgentData?.platform
+        ?? navigator.platform
+        ?? navigator.userAgent;
+    },
   };
 }
 

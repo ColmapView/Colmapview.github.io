@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildFile } from '../test/builders';
 import {
+  createEmptyReconstruction,
   createImagesOnlyReconstruction,
   findColmapFiles,
   findLargestPlyFile,
@@ -80,7 +81,7 @@ describe('file classification helpers', () => {
     expect(result).toBe(largest);
   });
 
-  it('finds all splat files with largest SPZ preferred over largest PLY fallback', () => {
+  it('finds all splat files with largest SPZ preferred over PLY fallback', () => {
     const smallSpz = buildFile('small.spz', 'x');
     const largestSpz = buildFile('large.spz', 'xx');
     const largestPly = buildFile('large.ply', 'xxxxx');
@@ -127,5 +128,15 @@ describe('file classification helpers', () => {
     expect(reconstruction.images.size).toBe(1);
     expect(reconstruction.cameras.size).toBe(1);
     expect(reconstruction.connectedImagesIndex.size).toBe(0);
+  });
+
+  it('creates an empty reconstruction for splat-only scenes', () => {
+    const reconstruction = createEmptyReconstruction();
+
+    expect(reconstruction.cameras.size).toBe(0);
+    expect(reconstruction.images.size).toBe(0);
+    expect(reconstruction.points3D).toBeUndefined();
+    expect(reconstruction.globalStats.totalPoints).toBe(0);
+    expect(reconstruction.imageToPoint3DIds.size).toBe(0);
   });
 });

@@ -21,28 +21,20 @@ const useSelectedImageTextureMock = useSelectedImageTexture as MockedFunction<ty
 let lowResTexture: THREE.Texture | null;
 let highResTexture: THREE.Texture | null;
 
-function createMaterialRef() {
-  return { current: new THREE.MeshBasicMaterial() };
-}
-
 function renderDisplayTexture(props: HookProps = {
   isSelected: false,
   showImagePlane: true,
   viewAngleOk: true,
 }) {
-  const materialRef = createMaterialRef();
-  const rendered = renderHook(
+  return renderHook(
     (hookProps: HookProps) => useFrustumPlaneDisplayTexture({
       imageName: 'image.jpg',
       isSelected: hookProps.isSelected,
-      materialRef,
       showImagePlane: hookProps.showImagePlane,
       viewAngleOk: hookProps.viewAngleOk,
     }),
     { initialProps: props }
   );
-
-  return { ...rendered, materialRef };
 }
 
 beforeEach(() => {
@@ -53,12 +45,12 @@ beforeEach(() => {
 });
 
 describe('useFrustumPlaneDisplayTexture', () => {
-  it('keeps the last loaded texture visible while the source texture refreshes', () => {
+  it('uses only the current source texture', () => {
     lowResTexture = createRenderableTexture();
-    const { result, rerender, materialRef } = renderDisplayTexture();
+    const { result, rerender } = renderDisplayTexture();
 
     expect(result.current.displayTexture).toBe(lowResTexture);
-    expect(materialRef.current.map).toBe(lowResTexture);
+    expect(result.current.shouldShowTexture).toBe(true);
 
     lowResTexture = null;
     rerender({
@@ -67,24 +59,22 @@ describe('useFrustumPlaneDisplayTexture', () => {
       viewAngleOk: true,
     });
 
-    expect(result.current.displayTexture).toBe(materialRef.current.map);
-    expect(result.current.shouldShowTexture).toBe(true);
+    expect(result.current.displayTexture).toBeNull();
+    expect(result.current.shouldShowTexture).toBe(false);
   });
 
   it('uses the selected high-res texture as the latest display texture', () => {
     lowResTexture = createRenderableTexture();
     highResTexture = createRenderableTexture();
-    const { result, materialRef } = renderDisplayTexture({ isSelected: true, showImagePlane: true, viewAngleOk: true });
+    const { result } = renderDisplayTexture({ isSelected: true, showImagePlane: true, viewAngleOk: true });
 
     expect(result.current.displayTexture).toBe(highResTexture);
-    expect(materialRef.current.map).toBe(highResTexture);
+    expect(result.current.shouldShowTexture).toBe(true);
   });
 
-  it('clears the material map when texture display is hidden', () => {
+  it('keeps the texture reference but does not show it when image planes are disabled', () => {
     lowResTexture = createRenderableTexture();
-    const { result, rerender, materialRef } = renderDisplayTexture();
-
-    expect(materialRef.current.map).toBe(lowResTexture);
+    const { result, rerender } = renderDisplayTexture();
 
     rerender({
       isSelected: false,
@@ -94,16 +84,29 @@ describe('useFrustumPlaneDisplayTexture', () => {
 
     expect(result.current.displayTexture).toBe(lowResTexture);
     expect(result.current.shouldShowTexture).toBe(false);
-    expect(materialRef.current.map).toBeNull();
+    expect(result.current.textureHiddenByViewAngle).toBe(false);
+  });
+
+  it('keeps a renderable texture available when it is hidden by view-angle culling', () => {
+    lowResTexture = createRenderableTexture();
+    const { result } = renderDisplayTexture({
+      isSelected: false,
+      showImagePlane: true,
+      viewAngleOk: false,
+    });
+
+    expect(result.current.displayTexture).toBe(lowResTexture);
+    expect(result.current.shouldShowTexture).toBe(false);
+    expect(result.current.textureHiddenByViewAngle).toBe(true);
   });
 
   it('does not show an invalid texture object as an image-plane preview', () => {
     lowResTexture = new THREE.Texture();
-    const { result, materialRef } = renderDisplayTexture();
+    const { result } = renderDisplayTexture();
 
     expect(result.current.displayTexture).toBe(lowResTexture);
     expect(result.current.shouldShowTexture).toBe(false);
-    expect(materialRef.current.map).toBeNull();
+    expect(result.current.textureHiddenByViewAngle).toBe(false);
   });
 });
 

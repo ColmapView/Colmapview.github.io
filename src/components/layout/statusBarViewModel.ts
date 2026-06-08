@@ -72,7 +72,7 @@ export function getDesktopEmptyStatusText({
   urlLoading: boolean;
 }): string | null {
   if (hasReconstruction) return null;
-  return urlLoading ? 'Loading...' : 'Drop COLMAP folder to load';
+  return urlLoading ? 'Loading...' : 'Drop dataset or images to load';
 }
 
 export function getTouchEmptyStatusText({

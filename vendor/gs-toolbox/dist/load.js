@@ -2,7 +2,6 @@
 import { loadPLY } from './ply';
 import { loadSplat } from './splat';
 import { loadSPZ } from './spz';
-import { loadSOG } from './sog';
 /** Detect format from filename/URL or magic bytes */
 export function detectFormat(source) {
     if (typeof source === 'string') {
@@ -13,8 +12,6 @@ export function detectFormat(source) {
             return 'splat';
         if (lower.endsWith('.spz'))
             return 'spz';
-        if (lower.endsWith('.sog'))
-            return 'sog';
         // Check URL query params
         const url = lower.split('?')[0];
         if (url.endsWith('.ply'))
@@ -23,8 +20,6 @@ export function detectFormat(source) {
             return 'splat';
         if (url.endsWith('.spz'))
             return 'spz';
-        if (url.endsWith('.sog'))
-            return 'sog';
         return 'unknown';
     }
     // Check magic bytes
@@ -37,9 +32,6 @@ export function detectFormat(source) {
     // Gzip: starts with 0x1F 0x8B (could be SPZ)
     if (bytes[0] === 0x1F && bytes[1] === 0x8B)
         return 'spz';
-    // ZIP (SOG): starts with PK\x03\x04
-    if (bytes[0] === 0x50 && bytes[1] === 0x4B && bytes[2] === 0x03 && bytes[3] === 0x04)
-        return 'sog';
     // .splat has no magic — check if file size is multiple of 32
     if (source.byteLength > 0 && source.byteLength % 32 === 0)
         return 'splat';
@@ -62,8 +54,7 @@ export async function load(source) {
         case 'ply': return loadPLY(source);
         case 'splat': return loadSplat(source);
         case 'spz': return loadSPZ(source);
-        case 'sog': return loadSOG(source);
         default:
-            throw new Error(`Cannot detect Gaussian format. Provide a file with .ply, .splat, .spz, or .sog extension.`);
+            throw new Error(`Cannot detect Gaussian format. Provide a file with .ply, .splat, or .spz extension.`);
     }
 }

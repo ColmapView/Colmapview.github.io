@@ -29,8 +29,10 @@ describe('drop zone hover card view model', () => {
   it('exposes direct URL and manifest examples', () => {
     expect(LOAD_URL_DIRECT_EXAMPLE).toContain('<baseUrl>/sparse/0/cameras.bin');
     expect(LOAD_URL_DIRECT_EXAMPLE).toContain('<baseUrl>/masks/   (optional)');
+    expect(LOAD_URL_DIRECT_EXAMPLE).toContain('<baseUrl>/splats/  (optional .spz/.ply)');
     expect(LOAD_JSON_MANIFEST_EXAMPLE).toContain('"version": 1');
     expect(LOAD_JSON_MANIFEST_EXAMPLE).toContain('"points3D": "sparse/0/points3D.bin"');
+    expect(LOAD_JSON_MANIFEST_EXAMPLE).toContain('"splats": ["splats/model.spz"]');
   });
 
   it('keeps URL support and local server copy together', () => {

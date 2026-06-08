@@ -23,6 +23,7 @@ import {
   shouldSkipMissingImageDiagnosticForSource,
 } from './fileDropzoneDiagnostics';
 import { runImagesOnlyLoad } from './fileDropzoneImagesOnly';
+import { runSplatOnlyLoad } from './fileDropzoneSplatOnly';
 import { parseColmapFiles } from './fileDropzoneColmapParser';
 import { buildColmapReconstruction } from './fileDropzoneReconstruction';
 
@@ -114,6 +115,40 @@ function getProcessingErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Unknown error';
 }
 
+function runNewSplatOnlyLoad(
+  files: Map<string, File>,
+  splatFile: File,
+  splatFiles: File[],
+  deps: Pick<
+    FileDropzoneWorkflowDeps,
+    'addNotification'
+      | 'clearSplatPsnr'
+      | 'setDroppedFiles'
+      | 'setLoadedFiles'
+      | 'setReconstruction'
+      | 'setUrlProgress'
+      | 'resetView'
+  >,
+  clearCaches: ClearCaches,
+  mapProgress: (localPercent: number) => number,
+  log: (message: string) => void
+): void {
+  deps.setDroppedFiles(files);
+  runSplatOnlyLoad({
+    splatFile,
+    splatFiles,
+    mapProgress,
+    setUrlProgress: deps.setUrlProgress,
+    setLoadedFiles: deps.setLoadedFiles,
+    clearSplatPsnr: deps.clearSplatPsnr,
+    clearCaches,
+    setReconstruction: deps.setReconstruction,
+    resetView: deps.resetView,
+    addNotification: deps.addNotification,
+    log,
+  });
+}
+
 export async function processFileDropzoneFiles(
   files: Map<string, File>,
   deps: FileDropzoneWorkflowDeps,
@@ -160,7 +195,9 @@ export async function processFileDropzoneFiles(
 
       if (!hasColmapFiles(files) && !hasImageFiles(files)) {
         if (splatFile) {
-          updateLoadedSplatFile(splatFile, splatFiles, deps, mapProgress, logger.info);
+          if (!updateLoadedSplatFile(splatFile, splatFiles, deps, mapProgress, logger.info)) {
+            runNewSplatOnlyLoad(files, splatFile, splatFiles, deps, clearCaches, mapProgress, logger.info);
+          }
         }
         if (configErrorMessage && throwOnError) {
           throw new Error(configErrorMessage);
@@ -197,6 +234,11 @@ export async function processFileDropzoneFiles(
           addNotification: deps.addNotification,
           log: logger.info,
         });
+        return true;
+      }
+
+      if (splatFile) {
+        runNewSplatOnlyLoad(files, splatFile, splatFiles, deps, clearCaches, mapProgress, logger.info);
         return true;
       }
 

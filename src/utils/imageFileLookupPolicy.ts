@@ -1,5 +1,47 @@
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'];
 
+const AUXILIARY_IMAGE_SEGMENTS = new Set([
+  'alpha',
+  'alphas',
+  'confidence',
+  'confidences',
+  'depth',
+  'depths',
+  'mask',
+  'masks',
+  'normal',
+  'normals',
+  'segmentation',
+  'segmentations',
+  'semantic',
+  'semantics',
+]);
+
+function isCanonicalImageRootSegment(segment: string): boolean {
+  const lowerSegment = segment.toLowerCase();
+  return (
+    lowerSegment === 'image'
+    || lowerSegment === 'images'
+    || /^images[_-]\d+$/.test(lowerSegment)
+    || lowerSegment === 'rgb'
+    || lowerSegment === 'color'
+    || lowerSegment === 'frames'
+  );
+}
+
+function getSegmentIndex(
+  segments: string[],
+  predicate: (segment: string) => boolean
+): number {
+  for (let i = 0; i < segments.length; i++) {
+    if (predicate(segments[i])) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
 export interface UrlCandidate {
   url: string;
   filename: string;
@@ -25,10 +67,53 @@ export function getPathSuffixes(path: string): string[] {
   return suffixes;
 }
 
+export function isAuxiliaryImagePath(path: string): boolean {
+  const segments = normalizeImagePath(path)
+    .split('/')
+    .filter(Boolean);
+  const firstAuxiliarySegment = getSegmentIndex(
+    segments,
+    segment => AUXILIARY_IMAGE_SEGMENTS.has(segment.toLowerCase())
+  );
+
+  if (firstAuxiliarySegment === -1) {
+    return false;
+  }
+
+  const firstImageRootSegment = getSegmentIndex(segments, isCanonicalImageRootSegment);
+  return firstImageRootSegment === -1 || firstAuxiliarySegment < firstImageRootSegment;
+}
+
+export function isMaskImagePath(path: string): boolean {
+  const segments = normalizeImagePath(path)
+    .split('/')
+    .filter(Boolean);
+  const firstMaskSegment = getSegmentIndex(
+    segments,
+    segment => segment.toLowerCase() === 'masks'
+  );
+
+  if (firstMaskSegment === -1) {
+    return false;
+  }
+
+  const firstImageRootSegment = getSegmentIndex(segments, isCanonicalImageRootSegment);
+  return firstImageRootSegment === -1 || firstMaskSegment < firstImageRootSegment;
+}
+
+export function getImagePathLookupSuffixes(path: string): string[] {
+  const suffixes = getPathSuffixes(path);
+  if (!isAuxiliaryImagePath(path)) {
+    return suffixes;
+  }
+
+  return suffixes.filter(isAuxiliaryImagePath);
+}
+
 export function getImageLookupKeys(path: string): string[] {
   const keys: string[] = [];
 
-  for (const suffix of getPathSuffixes(path)) {
+  for (const suffix of getImagePathLookupSuffixes(path)) {
     keys.push(suffix);
 
     const lowerSuffix = suffix.toLowerCase();

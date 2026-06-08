@@ -42,7 +42,7 @@ export interface ColmapManifest {
   images?: string[];
   /** Optional explicit array of mask file paths (overrides masksPath inference) */
   masks?: string[];
-  /** Optional explicit array of splat `.spz`/`.ply` file paths; SPZ is preferred over PLY */
+  /** Optional explicit array of splat `.spz`/`.ply` file paths; SPZ is preferred over PLY. */
   splats?: string[];
 }
 

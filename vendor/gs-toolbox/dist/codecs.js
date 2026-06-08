@@ -26,7 +26,7 @@ export function decodeSmallestThree32(packed) {
     }
 }
 /**
- * Decode smallest-three quaternion from 3×8-bit RGB + 2-bit mode (SOG format).
+ * Decode smallest-three quaternion from 3x8-bit RGB + 2-bit mode.
  * Returns [w, x, y, z].
  */
 export function decodeSmallestThree888(r, g, b, mode) {

@@ -19,6 +19,7 @@ import {
   getImageLookupKeys,
   getMaskLookupPaths,
   isImageFile,
+  isMaskImagePath,
   normalizeImagePath,
 } from './imageFileLookupPolicy';
 import {
@@ -52,8 +53,7 @@ export {
  */
 export function hasMaskFiles(files: Map<string, File>): boolean {
   for (const path of files.keys()) {
-    const normalized = path.replace(/\\/g, '/').toLowerCase();
-    if (normalized.includes('/masks/') || normalized.startsWith('masks/')) {
+    if (isMaskImagePath(path)) {
       return true;
     }
   }
