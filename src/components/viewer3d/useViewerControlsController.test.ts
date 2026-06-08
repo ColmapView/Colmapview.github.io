@@ -86,7 +86,7 @@ describe('useViewerControlsController', () => {
 
     renderHook(() => useViewerControlsController());
 
-    expect(usePointCloudStore.getState().colorMode).toBe('splats');
+    expect(usePointCloudStore.getState().colorMode).toBe('splatPoints');
     expect(useCameraStore.getState().frustumColorMode).toBe('splatPsnr');
   });
 

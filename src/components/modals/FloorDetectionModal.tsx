@@ -23,6 +23,7 @@ import {
   getFloorDetectedPlaneActionState,
   getFloorDetectionActionState,
   getFloorDetectionStatusInfo,
+  getFloorNormalFlippedForCameraDownSide,
   getFloorModalHeaderDragStyle,
   getFloorModalOverlayStyle,
   getFloorPlaneControlState,
@@ -58,6 +59,7 @@ export const FloorDetectionModal = memo(function FloorDetectionModal({
       setPointDistances,
       setIsDetecting,
       toggleNormalFlipped,
+      setNormalFlipped,
       cycleTargetAxis,
       reset,
     },
@@ -110,6 +112,13 @@ export const FloorDetectionModal = memo(function FloorDetectionModal({
       });
       setDetectedPlane(result.plane);
       setPointDistances(result.distances);
+      setNormalFlipped(
+        getFloorNormalFlippedForCameraDownSide(
+          result.plane,
+          reconstruction?.images.values() ?? [],
+          transform
+        )
+      );
 
       const nextFloorColorMode = getFloorColorModeAfterDetection(floorColorMode, result.plane);
       if (nextFloorColorMode !== floorColorMode) {
@@ -118,7 +127,19 @@ export const FloorDetectionModal = memo(function FloorDetectionModal({
 
       setIsDetecting(false);
     }, 10);
-  }, [wasmReconstruction, distanceThreshold, sampleCount, transform, setDetectedPlane, setPointDistances, setIsDetecting, floorColorMode, setFloorColorMode]);
+  }, [
+    wasmReconstruction,
+    reconstruction,
+    distanceThreshold,
+    sampleCount,
+    transform,
+    setDetectedPlane,
+    setPointDistances,
+    setNormalFlipped,
+    setIsDetecting,
+    floorColorMode,
+    setFloorColorMode,
+  ]);
 
   const handleClear = useCallback(() => {
     reset();

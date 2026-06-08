@@ -7,12 +7,15 @@ import {
 } from '../../theme';
 import type {
   CameraFilter,
+  GalleryBorderColorMode,
   SortDirection,
   SortField,
   ViewMode,
 } from './useImageGalleryViewModel';
 import {
+  GALLERY_BORDER_COLOR_OPTIONS,
   getGalleryCameraFilterValue,
+  getGalleryBorderColorModeValue,
   getGallerySortFieldOptions,
   getGallerySortFieldValue,
 } from './imageGalleryToolbarViewModel';
@@ -25,6 +28,7 @@ type GalleryToolbarCamera = {
 
 interface ImageGalleryToolbarProps {
   cameraFilter: CameraFilter;
+  borderColorMode: GalleryBorderColorMode;
   cameras: GalleryToolbarCamera[];
   sortDirection: SortDirection;
   sortField: SortField;
@@ -32,6 +36,7 @@ interface ImageGalleryToolbarProps {
   touchMode: boolean;
   viewMode: ViewMode;
   onCameraFilterChange: (cameraFilter: CameraFilter) => void;
+  onBorderColorModeChange: (borderColorMode: GalleryBorderColorMode) => void;
   onSortDirectionToggle: () => void;
   onSortFieldChange: (sortField: SortField) => void;
   onViewModeChange: (viewMode: ViewMode) => void;
@@ -46,6 +51,7 @@ function getViewModeButtonClass(isActive: boolean): string {
 
 export function ImageGalleryToolbar({
   cameraFilter,
+  borderColorMode,
   cameras,
   sortDirection,
   sortField,
@@ -53,6 +59,7 @@ export function ImageGalleryToolbar({
   touchMode,
   viewMode,
   onCameraFilterChange,
+  onBorderColorModeChange,
   onSortDirectionToggle,
   onSortFieldChange,
   onViewModeChange,
@@ -110,6 +117,23 @@ export function ImageGalleryToolbar({
         >
           {sortDirection === 'asc' ? <SortAscIcon className="w-4 h-4" /> : <SortDescIcon className="w-4 h-4" />}
         </button>
+        <select
+          aria-label="Border color"
+          value={borderColorMode}
+          onChange={(e) => {
+            const nextBorderColorMode = getGalleryBorderColorModeValue(e.target.value);
+            if (nextBorderColorMode !== null) {
+              onBorderColorModeChange(nextBorderColorMode);
+            }
+          }}
+          className={`${inputStyles.select} ${inputStyles.sizes.sm}`}
+        >
+          {GALLERY_BORDER_COLOR_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
       {!touchMode && (
         <div className={`${toolbarStyles.group} ml-auto`}>

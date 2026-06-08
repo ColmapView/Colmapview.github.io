@@ -36,6 +36,7 @@ describe('useImageGalleryStoreFacade', () => {
   it('collects gallery dependencies from owning stores and dataset state', () => {
     const reconstruction = buildReconstruction();
     const imageFile = buildFile('image.jpg');
+    const splatFile = buildFile('scene.spz', 'splat');
     const pendingDeletions = new Set([3, 4]);
     const viewState = buildViewState(10);
     const navigationEntry: NavigationHistoryEntry = {
@@ -46,7 +47,7 @@ describe('useImageGalleryStoreFacade', () => {
 
     useReconstructionStore.setState({
       reconstruction,
-      loadedFiles: buildLoadedFiles({ imageFiles: [imageFile] }),
+      loadedFiles: buildLoadedFiles({ imageFiles: [imageFile], splatFile }),
       sourceType: 'local',
     });
     useDeletionStore.setState({ pendingDeletions });
@@ -85,6 +86,7 @@ describe('useImageGalleryStoreFacade', () => {
       isIdle: true,
       showAutoHideEditor: true,
       pendingDeletions,
+      activeSplatFile: splatFile,
       selectedImageId: 2,
       currentViewState: viewState,
       navigationHistory: [navigationEntry],

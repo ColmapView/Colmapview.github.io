@@ -8,6 +8,7 @@ vi.mock('./ImageGalleryItems', () => ({
     <div
       data-testid={`gallery-item-${props.img.imageId}`}
       data-back={String(props.wouldGoBack)}
+      data-border-mode={props.borderColorMode}
       data-blink={String(props.matchesBlink)}
       data-color={props.matchesColor}
       data-deleted={String(props.isMarkedForDeletion)}
@@ -17,6 +18,7 @@ vi.mock('./ImageGalleryItems', () => ({
       data-selected={String(props.isSelected)}
       data-settling={String(props.isSettling)}
       data-hide-overlay={String(props.hideOverlay)}
+      data-metric-min={String(props.metricBorderColorScale?.min ?? '')}
       data-touch={String(props.touchMode)}
     />
   )),
@@ -24,6 +26,7 @@ vi.mock('./ImageGalleryItems', () => ({
     <div
       data-testid={`list-item-${props.img.imageId}`}
       data-back={String(props.wouldGoBack)}
+      data-border-mode={props.borderColorMode}
       data-blink={String(props.matchesBlink)}
       data-color={props.matchesColor}
       data-deleted={String(props.isMarkedForDeletion)}
@@ -32,6 +35,7 @@ vi.mock('./ImageGalleryItems', () => ({
       data-scrolling={String(props.isScrolling)}
       data-selected={String(props.isSelected)}
       data-settling={String(props.isSettling)}
+      data-metric-min={String(props.metricBorderColorScale?.min ?? '')}
       data-touch={String(props.touchMode)}
     />
   )),
@@ -41,11 +45,13 @@ import { ImageGalleryVirtualizedContent } from './ImageGalleryVirtualizedContent
 
 interface ItemProps {
   img: ImageData;
+  borderColorMode: string;
   isSelected: boolean;
   isMatched: boolean;
   isMarkedForDeletion: boolean;
   matchesColor: string;
   matchesBlink: boolean;
+  metricBorderColorScale: { min: number; max: number } | null;
   isScrolling: boolean;
   isSettling: boolean;
   isResizing: boolean;
@@ -61,6 +67,7 @@ function createImage(imageId: number, name = `${imageId}.jpg`): ImageData {
     numPoints2D: 10,
     numPoints3D: 5,
     cameraId: 1,
+    cameraColorIndex: 0,
     cameraWidth: 800,
     cameraHeight: 600,
     covisibleCount: 2,
@@ -90,10 +97,12 @@ function renderContent(overrides = {}) {
     rowVirtualizer: createVirtualizer([{ index: 0, key: 'row-0', start: 24 }]),
     listVirtualizer: createVirtualizer([{ index: 1, key: 'list-1', start: 48 }]),
     selectedImageId: 2,
+    borderColorMode: 'psnr' as const,
     matchedImageIds: new Set([1]),
     pendingDeletions: new Set([2]),
     matchesColor: '#ff00aa',
     matchesBlink: true,
+    metricBorderColorScale: { min: 20, max: 30 },
     debouncedIsScrolling: true,
     isSettling: false,
     isResizing: true,
@@ -124,6 +133,8 @@ describe('ImageGalleryVirtualizedContent', () => {
     expect(screen.getByTestId('gallery-item-2')).toHaveAttribute('data-selected', 'true');
     expect(screen.getByTestId('gallery-item-2')).toHaveAttribute('data-deleted', 'true');
     expect(screen.getByTestId('gallery-item-2')).toHaveAttribute('data-blink', 'true');
+    expect(screen.getByTestId('gallery-item-2')).toHaveAttribute('data-border-mode', 'psnr');
+    expect(screen.getByTestId('gallery-item-2')).toHaveAttribute('data-metric-min', '20');
     expect(screen.getByTestId('gallery-item-2')).toHaveAttribute('data-scrolling', 'true');
     expect(screen.getByTestId('gallery-item-2')).toHaveAttribute('data-resizing', 'true');
     expect(screen.getByTestId('gallery-item-2')).toHaveAttribute('data-touch', 'true');
@@ -154,6 +165,8 @@ describe('ImageGalleryVirtualizedContent', () => {
     expect(item).toHaveAttribute('data-matched', 'true');
     expect(item).toHaveAttribute('data-deleted', 'false');
     expect(item).toHaveAttribute('data-back', 'true');
+    expect(item).toHaveAttribute('data-border-mode', 'psnr');
+    expect(item).toHaveAttribute('data-metric-min', '20');
     expect(item).toHaveAttribute('data-settling', 'true');
     expect(item).toHaveAttribute('data-touch', 'false');
     expect(screen.queryByTestId('gallery-item-2')).toBeNull();

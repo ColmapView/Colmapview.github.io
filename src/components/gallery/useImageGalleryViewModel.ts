@@ -7,11 +7,16 @@ import { useImageGalleryStoreFacade } from './useImageGalleryStoreFacade';
 import { useImageGalleryThumbnailSettling } from './useImageGalleryThumbnailSettling';
 import { getImageGalleryRightClickAction } from './imageGalleryRightClickPolicy';
 import {
+  getDefaultGalleryBorderColorMode,
+  getGalleryMetricBorderColorScale,
+} from './imageGalleryBorderColorViewModel';
+import {
   buildGalleryCameras,
   buildGalleryImages,
   buildMatchedImageIds,
   getLastNavigationToImageId,
   type CameraFilter,
+  type GalleryBorderColorMode,
   type SortDirection,
   type SortField,
   type ViewMode,
@@ -24,6 +29,7 @@ export {
   buildMatchedImageIds,
   getLastNavigationToImageId,
   type CameraFilter,
+  type GalleryBorderColorMode,
   type ImageData,
   type SortDirection,
   type SortField,
@@ -49,6 +55,7 @@ export function useImageGalleryViewModel() {
       isIdle,
       showAutoHideEditor,
       pendingDeletions,
+      activeSplatFile,
       splatPsnrFrameReady,
       splatPsnrByImage,
       selectedImageId,
@@ -70,6 +77,14 @@ export function useImageGalleryViewModel() {
   const [viewMode, setViewMode] = useState<ViewMode>(touchMode ? 'list' : 'gallery');
   const [galleryColumns, setGalleryColumns] = useState<number>(COLUMNS.default);
   const [cameraFilter, setCameraFilter] = useResetKeyedState<CameraFilter>(reconstruction, 'all');
+  const borderColorResetKey = useMemo(
+    () => ({ reconstruction, activeSplatFile }),
+    [reconstruction, activeSplatFile]
+  );
+  const [borderColorMode, setBorderColorMode] = useResetKeyedState<GalleryBorderColorMode>(
+    borderColorResetKey,
+    getDefaultGalleryBorderColorMode(Boolean(activeSplatFile))
+  );
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [imageCacheVersion, setImageCacheVersion] = useState(0);
@@ -182,6 +197,10 @@ export function useImageGalleryViewModel() {
     sortDirection,
     imageCacheVersion,
   ]);
+  const metricBorderColorScale = useMemo(
+    () => getGalleryMetricBorderColorScale(images, borderColorMode),
+    [images, borderColorMode]
+  );
 
   const refreshImageCacheVersion = useCallback(() => {
     setImageCacheVersion(v => v + 1);
@@ -195,6 +214,7 @@ export function useImageGalleryViewModel() {
 
   return {
     cameraFilter,
+    borderColorMode,
     cameras,
     dataset,
     galleryColumns,
@@ -207,10 +227,12 @@ export function useImageGalleryViewModel() {
     matchedImageIds,
     matchesColor,
     matchesDisplayMode,
+    metricBorderColorScale,
     pendingDeletions,
     reconstruction,
     refreshImageCacheVersion,
     selectedImageId,
+    setBorderColorMode,
     setCameraFilter,
     setGalleryColumns,
     setSortDirection,

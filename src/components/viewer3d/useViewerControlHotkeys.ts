@@ -31,6 +31,7 @@ export interface ViewerControlHotkeysArgs {
   cycleColorMode: () => void;
   cycleCameraDisplayMode: () => void;
   cycleMatchesDisplayMode: () => void;
+  cycleHorizonLock: () => void;
   toggleUndistortion: () => void;
 }
 
@@ -43,6 +44,7 @@ export function useViewerControlHotkeys({
   cycleColorMode,
   cycleCameraDisplayMode,
   cycleMatchesDisplayMode,
+  cycleHorizonLock,
   toggleUndistortion,
 }: ViewerControlHotkeysArgs): void {
   const {
@@ -106,6 +108,13 @@ export function useViewerControlHotkeys({
     toggleCameraMode,
     { scopes: HOTKEYS.toggleCameraMode.scopes },
     [toggleCameraMode]
+  );
+
+  useHotkeys(
+    HOTKEYS.cycleHorizonLock.keys,
+    cycleHorizonLock,
+    { scopes: HOTKEYS.cycleHorizonLock.scopes },
+    [cycleHorizonLock]
   );
 
   useHotkeys(

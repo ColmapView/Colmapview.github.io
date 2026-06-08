@@ -10,8 +10,10 @@ import {
   listStyles,
   galleryStyles,
 } from '../../theme';
+import type { SplatMetricColorScale } from '../viewer3d/splatPsnrMetric';
 import { ImageGalleryDeletedOverlay } from './ImageGalleryDeletedOverlay';
 import { ImageGalleryItemHoverCard } from './ImageGalleryItemHoverCard';
+import { getGalleryImageBorderColor } from './imageGalleryBorderColorViewModel';
 import {
   getDeletionImageStyle,
   getDeletionPlaceholderStyle,
@@ -21,15 +23,17 @@ import {
 } from './imageGalleryStyleViewModel';
 import { useImageGalleryItemInteractions } from './useImageGalleryItemInteractions';
 import { useImageGalleryItemStoreFacade } from './useImageGalleryItemStoreFacade';
-import type { ImageData } from './useImageGalleryViewModel';
+import type { GalleryBorderColorMode, ImageData } from './useImageGalleryViewModel';
 
 export interface GalleryItemProps {
   img: ImageData;
+  borderColorMode: GalleryBorderColorMode;
   isSelected: boolean;
   isMatched: boolean;
   isMarkedForDeletion: boolean;
   matchesColor: string;
   matchesBlink: boolean;
+  metricBorderColorScale: SplatMetricColorScale | null;
   onClick: (id: number) => void;
   onDoubleClick: (id: number) => void;
   onRightClick: (id: number) => void;
@@ -44,11 +48,13 @@ export interface GalleryItemProps {
 
 export const GalleryItem = memo(function GalleryItem({
   img,
+  borderColorMode,
   isSelected,
   isMatched,
   isMarkedForDeletion,
   matchesColor,
   matchesBlink,
+  metricBorderColorScale,
   onClick,
   onDoubleClick,
   onRightClick,
@@ -77,10 +83,11 @@ export const GalleryItem = memo(function GalleryItem({
     : isMatched
       ? `${matchesBlink ? 'matches-blink' : ''}`
       : galleryStyles.itemHover;
+  const itemBorderColor = getGalleryImageBorderColor(img, borderColorMode, metricBorderColorScale);
   return (
     <div
       className={`${galleryStyles.itemAspect} group ${galleryStyles.item} ${borderClass}`}
-      style={getGalleryItemFrameStyle({ isMatched, isSelected, matchesColor })}
+      style={getGalleryItemFrameStyle({ isMatched, isSelected, itemBorderColor, matchesColor })}
       {...itemHandlers}
     >
       <div className={galleryStyles.itemInner}>
@@ -129,11 +136,13 @@ export const GalleryItem = memo(function GalleryItem({
 
 export const ListItem = memo(function ListItem({
   img,
+  borderColorMode,
   isSelected,
   isMatched,
   isMarkedForDeletion,
   matchesColor,
   matchesBlink,
+  metricBorderColorScale,
   onClick,
   onDoubleClick,
   onRightClick,
@@ -161,26 +170,27 @@ export const ListItem = memo(function ListItem({
     : isMatched
       ? `${matchesBlink ? 'matches-blink' : ''}`
       : listStyles.itemHover;
+  const itemBorderColor = getGalleryImageBorderColor(img, borderColorMode, metricBorderColorScale);
   const hasPsnr = hasSplatPsnrValue(img.splatPsnr);
   const hasSsim = hasSplatSsimValue(img.splatSsim);
+  const hasSplatMetrics = hasPsnr || hasSsim;
+  const splatMetricPairValue = `${formatSplatPsnrValue(img.splatPsnr)}/${formatSplatSsimValue(img.splatSsim)}`;
   const compactValues = [
     `${img.numPoints3D}/${img.numPoints2D}`,
     String(img.covisibleCount),
     img.avgError.toFixed(2),
-    ...(hasPsnr ? [formatSplatPsnrValue(img.splatPsnr)] : []),
-    ...(hasSsim ? [formatSplatSsimValue(img.splatSsim)] : []),
+    ...(hasSplatMetrics ? [splatMetricPairValue] : []),
   ];
   const compactLabels = [
     'pts',
     'covis',
     'err',
-    ...(hasPsnr ? ['psnr'] : []),
-    ...(hasSsim ? ['ssim'] : []),
+    ...(hasSplatMetrics ? ['psnr/ssim'] : []),
   ];
 
   return (
     <div
-      style={getListItemFrameStyle({ isMatched, isSelected, matchesColor })}
+      style={getListItemFrameStyle({ isMatched, isSelected, itemBorderColor, matchesColor })}
       className={`${listStyles.item} px-3 list-stats-container ${borderClass}`}
       {...itemHandlers}
     >
@@ -223,22 +233,10 @@ export const ListItem = memo(function ListItem({
         <div className="text-ds-primary text-sm">{img.avgError.toFixed(2)}</div>
         <div className="text-ds-muted text-xs">avg err</div>
       </div>
-      {hasPsnr && (
-        <div className="flex-shrink-0 text-right w-16 list-stats-full">
-          <div className="text-ds-primary text-sm">{formatSplatPsnrValue(img.splatPsnr)}</div>
-          <div className="text-ds-muted text-xs">PSNR</div>
-          {hasSsim && (
-            <>
-              <div className="text-ds-primary text-sm mt-1">{formatSplatSsimValue(img.splatSsim)}</div>
-              <div className="text-ds-muted text-xs">SSIM</div>
-            </>
-          )}
-        </div>
-      )}
-      {!hasPsnr && hasSsim && (
-        <div className="flex-shrink-0 text-right w-16 list-stats-full">
-          <div className="text-ds-primary text-sm">{formatSplatSsimValue(img.splatSsim)}</div>
-          <div className="text-ds-muted text-xs">SSIM</div>
+      {hasSplatMetrics && (
+        <div className="flex-shrink-0 text-right w-24 list-stats-full">
+          <div className="text-ds-primary text-sm whitespace-nowrap">{splatMetricPairValue}</div>
+          <div className="text-ds-muted text-xs whitespace-nowrap">PSNR/SSIM</div>
         </div>
       )}
       {!touchMode && hovered && mousePos && (

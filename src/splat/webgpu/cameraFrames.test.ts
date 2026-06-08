@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { buildCamera, buildImage } from '../../test/builders';
-import { createSim3dFromEuler, sim3dToMatrix4 } from '../../utils/sim3dTransforms';
+import { buildCamera, buildImage, buildReconstruction } from '../../test/builders';
+import { createSim3dFromEuler, sim3dToMatrix4, transformReconstruction } from '../../utils/sim3dTransforms';
 import {
   createColmapMetricThreeCamera,
   createColmapMetricWebGpuSplatFrame,
@@ -296,6 +296,53 @@ describe('WebGPU splat camera frames', () => {
         modelPoint.z,
       ])
     );
+  });
+
+  it('keeps raw splat model points aligned with baked COLMAP metric views', () => {
+    const camera = buildCamera({
+      width: 800,
+      height: 400,
+      params: [200, 400, 410, 190],
+    });
+    const image = buildImage({ cameraId: camera.cameraId });
+    const transform = {
+      scale: 2,
+      rotationX: 0.15,
+      rotationY: -0.2,
+      rotationZ: 0.35,
+      translationX: 3,
+      translationY: -2,
+      translationZ: 5,
+    };
+    const bakedReconstruction = transformReconstruction(
+      createSim3dFromEuler(transform),
+      buildReconstruction({ cameras: [camera], images: [image] })
+    );
+    const bakedImage = bakedReconstruction.images.get(image.imageId);
+    if (!bakedImage) {
+      throw new Error('Expected transformed image');
+    }
+    const frame = createColmapMetricWebGpuSplatFrame({
+      image: bakedImage,
+      camera,
+      width: camera.width,
+      height: camera.height,
+      modelTransform: transform,
+    });
+
+    const projectPixel = (u: number, v: number): [number, number] => {
+      const z = 2;
+      const point: [number, number, number] = [
+        (u - 410) / 200 * z,
+        (v - 190) / 400 * z,
+        z,
+      ];
+      return projectWebGpuSplatFramePointToPixel(frame, point);
+    };
+
+    expectPixelClose(projectPixel(410, 190), [410, 190]);
+    expectPixelClose(projectPixel(0, 0), [0, 0]);
+    expectPixelClose(projectPixel(800, 400), [800, 400]);
   });
 
   it('matches analytic COLMAP pinhole projection for arbitrary pose, Sim3D, and tile origin', () => {

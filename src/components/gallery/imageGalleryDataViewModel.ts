@@ -6,6 +6,7 @@ export {
 } from '../../utils/imageNavigationPolicy';
 
 export type ViewMode = 'gallery' | 'list';
+export type GalleryBorderColorMode = 'none' | 'camera' | 'psnr' | 'ssim';
 export type SortField =
   | 'name'
   | 'imageId'
@@ -25,6 +26,7 @@ export interface ImageData {
   numPoints2D: number;
   numPoints3D: number;
   cameraId: number;
+  cameraColorIndex: number;
   cameraWidth: number;
   cameraHeight: number;
   covisibleCount: number;
@@ -73,6 +75,11 @@ export function buildGalleryImages({
 }: BuildGalleryImagesOptions): ImageData[] {
   if (!reconstruction) return [];
 
+  const cameraColorIndexById = new Map(
+    Array.from(reconstruction.cameras.keys())
+      .sort((a, b) => a - b)
+      .map((cameraId, index) => [cameraId, index])
+  );
   const mapped = Array.from(reconstruction.images.values())
     .filter((img) => cameraFilter === 'all' || img.cameraId === cameraFilter)
     .map((img) => {
@@ -86,6 +93,7 @@ export function buildGalleryImages({
         numPoints2D: img.numPoints2D ?? img.points2D.length,
         numPoints3D: stats?.numPoints3D ?? 0,
         cameraId: img.cameraId,
+        cameraColorIndex: cameraColorIndexById.get(img.cameraId) ?? 0,
         cameraWidth: camera?.width ?? 0,
         cameraHeight: camera?.height ?? 0,
         covisibleCount: stats?.covisibleCount ?? 0,

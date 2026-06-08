@@ -156,6 +156,30 @@ describe('global context menu action executor', () => {
     expect(deps.applyTransformToData).toHaveBeenCalled();
   });
 
+  it('makes point display pickable before enabling transform picking from context menu', async () => {
+    const hiddenDeps = createDeps({
+      pickingMode: 'off',
+      showPointCloud: false,
+      colorMode: 'trackLength',
+    });
+
+    await executeGlobalContextMenuAction('onePointOrigin', hiddenDeps);
+    expect(hiddenDeps.setShowPointCloud).toHaveBeenCalledWith(true);
+    expect(hiddenDeps.setColorMode).toHaveBeenCalledWith('rgb');
+    expect(hiddenDeps.setPickingMode).toHaveBeenCalledWith('origin-1pt');
+
+    const splatOnlyDeps = createDeps({
+      pickingMode: 'off',
+      showPointCloud: true,
+      colorMode: 'splats',
+    });
+
+    await executeGlobalContextMenuAction('threePointAlign', splatOnlyDeps);
+    expect(splatOnlyDeps.setShowPointCloud).not.toHaveBeenCalled();
+    expect(splatOnlyDeps.setColorMode).toHaveBeenCalledWith('splatPoints');
+    expect(splatOnlyDeps.setPickingMode).toHaveBeenCalledWith('normal-3pt');
+  });
+
   it('reloads dropped files only after confirmation', async () => {
     const files = new Map<string, File>();
     const deniedDeps = createDeps({

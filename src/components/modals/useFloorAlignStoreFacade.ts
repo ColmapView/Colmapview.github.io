@@ -7,9 +7,11 @@ import {
   type TransformState,
   type UIState,
 } from '../../store';
+import type { Reconstruction } from '../../types/colmap';
 import type { WasmReconstructionWrapper } from '../../wasm/reconstruction';
 
 interface FloorAlignDataFacade {
+  reconstruction: Reconstruction | null;
   wasmReconstruction: WasmReconstructionWrapper | null;
 }
 
@@ -26,6 +28,7 @@ interface FloorAlignFloorFacade {
   setDetectedPlane: FloorPlaneState['setDetectedPlane'];
   setPointDistances: FloorPlaneState['setPointDistances'];
   setIsDetecting: FloorPlaneState['setIsDetecting'];
+  setNormalFlipped: FloorPlaneState['setNormalFlipped'];
   reset: FloorPlaneState['reset'];
 }
 
@@ -46,6 +49,7 @@ export interface FloorAlignStoreFacade {
 }
 
 export function useFloorAlignStoreFacade(): FloorAlignStoreFacade {
+  const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
 
   const showFloorModal = useFloorPlaneStore((s) => s.showFloorModal);
@@ -60,6 +64,7 @@ export function useFloorAlignStoreFacade(): FloorAlignStoreFacade {
   const setDetectedPlane = useFloorPlaneStore((s) => s.setDetectedPlane);
   const setPointDistances = useFloorPlaneStore((s) => s.setPointDistances);
   const setIsDetecting = useFloorPlaneStore((s) => s.setIsDetecting);
+  const setNormalFlipped = useFloorPlaneStore((s) => s.setNormalFlipped);
   const reset = useFloorPlaneStore((s) => s.reset);
 
   const transform = useTransformStore((s) => s.transform);
@@ -68,7 +73,7 @@ export function useFloorAlignStoreFacade(): FloorAlignStoreFacade {
   const axesCoordinateSystem = useUIStore((s) => s.axesCoordinateSystem);
 
   return {
-    data: { wasmReconstruction },
+    data: { reconstruction, wasmReconstruction },
     floor: {
       showFloorModal,
       modalPosition,
@@ -82,6 +87,7 @@ export function useFloorAlignStoreFacade(): FloorAlignStoreFacade {
       setDetectedPlane,
       setPointDistances,
       setIsDetecting,
+      setNormalFlipped,
       reset,
     },
     transform: { transform, setTransform },

@@ -61,6 +61,7 @@ describe('image gallery data view-model', () => {
       file: cachedFile,
       numPoints2D: 12,
       numPoints3D: 4,
+      cameraColorIndex: 0,
       cameraWidth: 640,
       cameraHeight: 480,
       covisibleCount: 9,

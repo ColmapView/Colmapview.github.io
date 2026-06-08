@@ -25,20 +25,34 @@ export interface TransformState {
   /** Current transform in Euler angle representation */
   transform: Sim3dEuler;
 
+  /** Transform already baked into reconstruction data but still needed for raw splat geometry */
+  splatTransform: Sim3dEuler;
+
   /** Set transform (partial update) */
   setTransform: (transform: Partial<Sim3dEuler>) => void;
 
+  /** Set accumulated splat model transform */
+  setSplatTransform: (transform: Sim3dEuler) => void;
+
   /** Reset transform to identity */
   resetTransform: () => void;
+
+  /** Reset accumulated splat model transform to identity */
+  resetSplatTransform: () => void;
 }
 
 export const useTransformStore = create<TransformState>()((set) => ({
   transform: createIdentityEuler(),
+  splatTransform: createIdentityEuler(),
 
   setTransform: (partial) =>
     set((state) => ({
       transform: { ...state.transform, ...partial },
     })),
 
+  setSplatTransform: (splatTransform) => set({ splatTransform }),
+
   resetTransform: () => set({ transform: createIdentityEuler() }),
+
+  resetSplatTransform: () => set({ splatTransform: createIdentityEuler() }),
 }));

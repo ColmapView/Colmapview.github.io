@@ -30,6 +30,7 @@ interface FloorDetectionFloorFacade {
   setPointDistances: FloorPlaneState['setPointDistances'];
   setIsDetecting: FloorPlaneState['setIsDetecting'];
   toggleNormalFlipped: FloorPlaneState['toggleNormalFlipped'];
+  setNormalFlipped: FloorPlaneState['setNormalFlipped'];
   cycleTargetAxis: FloorPlaneState['cycleTargetAxis'];
   reset: FloorPlaneState['reset'];
 }
@@ -68,6 +69,7 @@ export function useFloorDetectionStoreFacade(): FloorDetectionStoreFacade {
   const setPointDistances = useFloorPlaneStore((s) => s.setPointDistances);
   const setIsDetecting = useFloorPlaneStore((s) => s.setIsDetecting);
   const toggleNormalFlipped = useFloorPlaneStore((s) => s.toggleNormalFlipped);
+  const setNormalFlipped = useFloorPlaneStore((s) => s.setNormalFlipped);
   const cycleTargetAxis = useFloorPlaneStore((s) => s.cycleTargetAxis);
   const reset = useFloorPlaneStore((s) => s.reset);
 
@@ -93,6 +95,7 @@ export function useFloorDetectionStoreFacade(): FloorDetectionStoreFacade {
       setPointDistances,
       setIsDetecting,
       toggleNormalFlipped,
+      setNormalFlipped,
       cycleTargetAxis,
       reset,
     },

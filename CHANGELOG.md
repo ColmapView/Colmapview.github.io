@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-06-08
+
+### Added
+
+- Add `H` hotkey support for cycling horizon lock modes.
+- Add gallery/list border coloring options for none, camera, PSNR, and SSIM.
+- Add splat-aware transform persistence for applied transforms, share URLs, reload prompts, and export warnings.
+
+### Changed
+
+- Default splat datasets to Splats + Points mode with smaller, translucent points.
+- Default floor detection down direction toward the side with fewer cameras.
+- Hide the gallery header unless the pointer is over the top of the gallery.
+- Combine PSNR and SSIM into one PSNR/SSIM column in gallery list view.
+- Include axes, grid, and gizmo in the default idle auto-hide set.
+
+### Fixed
+
+- Fix image plane thumbnails rendering as white rectangles by aligning local texture loading with the published release behavior.
+- Apply transforms correctly to splat rendering and PSNR evaluation paths.
+- Preserve splat state while switching active splat files in the same dataset.
+- Switch point-picking transform tools to a point-visible display mode when the current display lacks points.
+
 ## [0.7.1] - 2026-06-04
 
 ### Fixed

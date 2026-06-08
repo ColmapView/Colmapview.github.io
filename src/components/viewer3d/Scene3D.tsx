@@ -37,7 +37,13 @@ import { useIdleTimer } from '../../hooks/useIdleTimer';
 import { preloadSparkModule } from '../../utils/sparkSplatRuntime';
 import { shouldPreloadSparkSplatRuntime } from '../../utils/splatBackendPolicy';
 import type { SplatBackendAvailability } from '../../utils/splatBackendPolicy';
-import { createSim3dFromEuler, sim3dToMatrix4, isIdentityEuler, transformPoint } from '../../utils/sim3dTransforms';
+import {
+  composeSim3d,
+  createSim3dFromEuler,
+  sim3dToMatrix4,
+  isIdentityEuler,
+  transformPoint,
+} from '../../utils/sim3dTransforms';
 import { syncSceneBackgroundColor, syncSceneBackgroundTransparent } from '../../utils/threeObjectMutations';
 import { CAMERA, VIZ_COLORS, OPACITY } from '../../theme';
 import {
@@ -98,6 +104,7 @@ function SceneContent() {
       viewDirection,
       viewTrigger,
       transform,
+      splatTransform,
       requestedSplatBackend,
       splatBackendAvailability,
       splatBackendResolution,
@@ -136,16 +143,30 @@ function SceneContent() {
   const sparkSplatLayerNeeded = splatFile
     && shouldPreloadSparkSplatRuntime(requestedSplatBackend, splatBackendAvailability);
 
-  // Compute transform for visual preview
-  const { transformMatrix, transformedCenter } = useMemo(() => {
-    if (isIdentityEuler(transform)) {
-      return { transformMatrix: null, transformedCenter: bounds.center };
-    }
-    const sim3d = createSim3dFromEuler(transform);
-    const matrix = sim3dToMatrix4(sim3d);
-    const newCenter = transformPoint(sim3d, bounds.center);
-    return { transformMatrix: matrix, transformedCenter: newCenter as [number, number, number] };
-  }, [transform, bounds.center]);
+  // Compute transforms for visual preview. The active transform wraps COLMAP
+  // content, while the splat transform is persisted after Apply because raw
+  // splat geometry cannot be baked into the source file.
+  const {
+    transformMatrix,
+    splatTransformMatrix,
+    webGpuSplatModelMatrix,
+    transformedCenter,
+  } = useMemo(() => {
+    const sim3d = isIdentityEuler(transform) ? null : createSim3dFromEuler(transform);
+    const splatSim3d = isIdentityEuler(splatTransform) ? null : createSim3dFromEuler(splatTransform);
+    const matrix = sim3d ? sim3dToMatrix4(sim3d) : null;
+    const splatMatrix = splatSim3d ? sim3dToMatrix4(splatSim3d) : null;
+    const webGpuMatrix = sim3d && splatSim3d
+      ? sim3dToMatrix4(composeSim3d(sim3d, splatSim3d))
+      : matrix ?? splatMatrix;
+    const newCenter = sim3d ? transformPoint(sim3d, bounds.center) : bounds.center;
+    return {
+      transformMatrix: matrix,
+      splatTransformMatrix: splatMatrix,
+      webGpuSplatModelMatrix: webGpuMatrix,
+      transformedCenter: newCenter as [number, number, number],
+    };
+  }, [transform, splatTransform, bounds.center]);
 
   const visibleLayers = useMemo(() => getSceneLayerVisibility({
     isAlignmentMode,
@@ -174,7 +195,7 @@ function SceneContent() {
       {visibleLayers.points && <PointCloud />}
       {visibleLayers.points && sparkSplatLayerNeeded && (
         <Suspense fallback={null}>
-          <LazySplatLayer />
+          <LazySplatLayer modelMatrix={splatTransformMatrix} />
         </Suspense>
       )}
       {visibleLayers.cameras && <CameraFrustums />}
@@ -200,7 +221,7 @@ function SceneContent() {
         setSparkBackendAvailable={setSparkBackendAvailable}
         splatFile={splatFile}
       />
-      <WebGpuSplatCanvasBridge enabled={webGpuSplatCanvasBridgeEnabled} modelMatrix={transformMatrix} />
+      <WebGpuSplatCanvasBridge enabled={webGpuSplatCanvasBridgeEnabled} modelMatrix={webGpuSplatModelMatrix} />
       {transformMatrix ? (
         <group matrixAutoUpdate={false} matrix={transformMatrix}>
           {transformableContent}

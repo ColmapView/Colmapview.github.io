@@ -24,8 +24,9 @@ import { requestConfirmation } from '../../utils/confirmation.js';
  * early-skip for the confirm prompt.
  */
 export function hasUnsavedReloadState(): boolean {
-  const transform = useTransformStore.getState().transform;
+  const { transform, splatTransform } = useTransformStore.getState();
   if (!isIdentityEuler(transform)) return true;
+  if (!isIdentityEuler(splatTransform)) return true;
   const pending = useDeletionStore.getState().pendingDeletions;
   if (pending && pending.size > 0) return true;
   return false;
@@ -39,7 +40,7 @@ export async function confirmReload(): Promise<boolean> {
   if (!hasUnsavedReloadState()) return true;
   return requestConfirmation({
     title: 'Reload data?',
-    message: 'Reloading will discard your current transform and any pending deletions.',
+    message: 'Reloading will discard current/applied transforms and any pending deletions.',
     confirmLabel: 'Reload',
     tone: 'danger',
   });
@@ -58,7 +59,9 @@ export function resetSession(): void {
   useImageMetricsStore.getState().clearSplatPsnr();
 
   // Reset transform state
-  useTransformStore.getState().resetTransform();
+  const transformStore = useTransformStore.getState();
+  transformStore.resetTransform();
+  transformStore.resetSplatTransform();
 
   // Reset point picking state
   usePointPickingStore.getState().reset();
@@ -129,7 +132,9 @@ export function clearTransientState(): void {
   usePointPickingStore.getState().reset();
 
   // Reset transform
-  useTransformStore.getState().resetTransform();
+  const transformStore = useTransformStore.getState();
+  transformStore.resetTransform();
+  transformStore.resetSplatTransform();
 
   // Close modals
   const uiStore = useUIStore.getState();

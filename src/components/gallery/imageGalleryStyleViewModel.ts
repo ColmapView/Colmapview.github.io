@@ -10,6 +10,7 @@ import {
 interface GalleryBorderStyleOptions {
   isMatched: boolean;
   isSelected: boolean;
+  itemBorderColor?: string;
   matchesColor: string;
 }
 
@@ -26,23 +27,36 @@ interface MousePosition {
 export function getGalleryItemFrameStyle({
   isMatched,
   isSelected,
+  itemBorderColor,
   matchesColor,
 }: GalleryBorderStyleOptions): CSSProperties {
   return {
     position: 'relative',
-    ...(isMatched && !isSelected ? { borderColor: matchesColor } : {}),
+    ...getItemBorderStyle({ isMatched, isSelected, itemBorderColor, matchesColor }),
   };
 }
 
 export function getListItemFrameStyle({
   isMatched,
   isSelected,
+  itemBorderColor,
   matchesColor,
 }: GalleryBorderStyleOptions): CSSProperties {
   return {
     height: SIZE.listRowHeight,
-    ...(isMatched && !isSelected ? { borderColor: matchesColor } : {}),
+    ...getItemBorderStyle({ isMatched, isSelected, itemBorderColor, matchesColor }),
   };
+}
+
+function getItemBorderStyle({
+  isMatched,
+  isSelected,
+  itemBorderColor,
+  matchesColor,
+}: GalleryBorderStyleOptions): CSSProperties {
+  if (isSelected) return {};
+  if (isMatched) return { borderColor: matchesColor };
+  return itemBorderColor ? { borderColor: itemBorderColor } : {};
 }
 
 export function getDeletionImageStyle(

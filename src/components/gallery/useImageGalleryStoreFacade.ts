@@ -24,6 +24,7 @@ interface ImageGalleryDataFacade {
   pendingDeletions: DeletionState['pendingDeletions'];
   splatPsnrFrameReady: ReturnType<typeof useImageMetricsStore.getState>['splatPsnrFrameReady'];
   splatPsnrByImage: ReturnType<typeof useImageMetricsStore.getState>['splatPsnrMetrics'];
+  activeSplatFile?: File;
   selectedImageId: CameraState['selectedImageId'];
   currentViewState: CameraState['currentViewState'];
   navigationHistory: CameraState['navigationHistory'];
@@ -60,6 +61,7 @@ export function useImageGalleryStoreFacade(): ImageGalleryStoreFacade {
   const isIdle = useUIStore((s) => s.isIdle);
   const showAutoHideEditor = useUIStore((s) => s.showAutoHideEditor);
   const pendingDeletions = useDeletionStore((s) => s.pendingDeletions);
+  const activeSplatFile = useReconstructionStore((s) => s.loadedFiles?.splatFile);
   const splatPsnrFrameReady = useImageMetricsStore((s) => s.splatPsnrFrameReady);
   const splatPsnrByImage = useImageMetricsStore((s) => s.splatPsnrMetrics);
   const selectedImageId = useCameraStore((s) => s.selectedImageId);
@@ -86,6 +88,7 @@ export function useImageGalleryStoreFacade(): ImageGalleryStoreFacade {
       pendingDeletions,
       splatPsnrFrameReady,
       splatPsnrByImage,
+      activeSplatFile,
       selectedImageId,
       currentViewState,
       navigationHistory,

@@ -2,8 +2,10 @@ import type { CSSProperties } from 'react';
 import * as THREE from 'three';
 import type { FloorColorMode, FloorTargetAxis } from '../../store/stores/floorPlaneStore';
 import type { AxesCoordinateSystem } from '../../store/types';
+import type { Image } from '../../types/colmap';
 import type { Sim3dEuler } from '../../types/sim3d';
 import { Z_INDEX } from '../../theme';
+import { getImageWorldPosition } from '../../utils/colmapTransforms';
 import { getCoordinateSystemAxisDirection } from '../../utils/coordinateSystems';
 import {
   computeDistancesToPlane,
@@ -129,6 +131,44 @@ export function detectFloorPlaneFromPositions(
     plane,
     distances: plane ? computeDistancesToPlane(transformedPositions, plane) : null,
   };
+}
+
+export function getFloorNormalFlippedForCameraDownSide(
+  plane: Plane | null,
+  images: Iterable<Image>,
+  transform: Sim3dEuler,
+  epsilon = 1e-6
+): boolean {
+  if (!plane) return false;
+
+  const sideEpsilon = Math.max(0, epsilon);
+  const normal = new THREE.Vector3(...plane.normal);
+  const sim3d = isIdentityEuler(transform) ? null : createSim3dFromEuler(transform);
+  let positiveSideCameraCount = 0;
+  let negativeSideCameraCount = 0;
+
+  for (const image of images) {
+    const position = getImageWorldPosition(image);
+    if (sim3d) {
+      position
+        .applyQuaternion(sim3d.rotation)
+        .multiplyScalar(sim3d.scale)
+        .add(sim3d.translation);
+    }
+
+    if (!Number.isFinite(position.x) || !Number.isFinite(position.y) || !Number.isFinite(position.z)) {
+      continue;
+    }
+
+    const signedDistance = normal.dot(position) + plane.d;
+    if (signedDistance > sideEpsilon) {
+      positiveSideCameraCount++;
+    } else if (signedDistance < -sideEpsilon) {
+      negativeSideCameraCount++;
+    }
+  }
+
+  return positiveSideCameraCount < negativeSideCameraCount;
 }
 
 export function computeFloorAlignmentTransform(

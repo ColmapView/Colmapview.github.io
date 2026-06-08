@@ -23,6 +23,7 @@ describe('image gallery style view model', () => {
     expect(getGalleryItemFrameStyle({
       isMatched: true,
       isSelected: false,
+      itemBorderColor: '#00ffaa',
       matchesColor: '#ff00aa',
     })).toEqual({
       position: 'relative',
@@ -31,13 +32,24 @@ describe('image gallery style view model', () => {
     expect(getGalleryItemFrameStyle({
       isMatched: true,
       isSelected: true,
+      itemBorderColor: '#00ffaa',
       matchesColor: '#ff00aa',
     })).toEqual({
       position: 'relative',
     });
+    expect(getGalleryItemFrameStyle({
+      isMatched: false,
+      isSelected: false,
+      itemBorderColor: '#00ffaa',
+      matchesColor: '#ff00aa',
+    })).toEqual({
+      position: 'relative',
+      borderColor: '#00ffaa',
+    });
     expect(getListItemFrameStyle({
       isMatched: true,
       isSelected: false,
+      itemBorderColor: '#ff00aa',
       matchesColor: '#00ffaa',
     })).toEqual({
       height: SIZE.listRowHeight,

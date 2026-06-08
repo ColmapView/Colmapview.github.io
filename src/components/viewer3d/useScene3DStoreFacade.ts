@@ -31,6 +31,7 @@ interface SceneContentDataFacade {
   viewDirection: UIState['viewDirection'];
   viewTrigger: UIState['viewTrigger'];
   transform: TransformState['transform'];
+  splatTransform: TransformState['splatTransform'];
   requestedSplatBackend: SplatBackendPreference;
   splatBackendAvailability: SplatBackendAvailability;
   splatBackendResolution: SplatBackendResolution;
@@ -82,6 +83,7 @@ export function useSceneContentStoreFacade(): SceneContentStoreFacade {
   const viewDirection = useUIStore((s) => s.viewDirection);
   const viewTrigger = useUIStore((s) => s.viewTrigger);
   const transform = useTransformStore((s) => s.transform);
+  const splatTransform = useTransformStore((s) => s.splatTransform);
   const requestedSplatBackend = useSplatBackendStore((s) => s.requestedBackend);
   const splatBackendAvailability = useSplatBackendStore((s) => s.availability);
   const splatBackendResolution = useSplatBackendStore((s) => s.resolution);
@@ -100,6 +102,7 @@ export function useSceneContentStoreFacade(): SceneContentStoreFacade {
       viewDirection,
       viewTrigger,
       transform,
+      splatTransform,
       requestedSplatBackend,
       splatBackendAvailability,
       splatBackendResolution,

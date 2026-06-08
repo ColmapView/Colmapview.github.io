@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { emptyStateStyles } from '../../theme';
 import { ImageGalleryToolbar } from './ImageGalleryToolbar';
 import { ImageGalleryVirtualizedContent } from './ImageGalleryVirtualizedContent';
@@ -20,6 +20,7 @@ interface ImageGalleryProps {
 
 export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
   const {
+    borderColorMode,
     cameraFilter,
     cameras,
     dataset,
@@ -35,10 +36,12 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
     matchedImageIds,
     matchesColor,
     matchesDisplayMode,
+    metricBorderColorScale,
     pendingDeletions,
     reconstruction,
     refreshImageCacheVersion,
     selectedImageId,
+    setBorderColorMode,
     setCameraFilter,
     setGalleryColumns,
     setSortDirection,
@@ -52,6 +55,16 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
     viewMode,
   } = useImageGalleryViewModel();
   const containerRef = useRef<HTMLDivElement>(null);
+  const [galleryHeaderHovered, setGalleryHeaderHovered] = useState(false);
+  const showToolbar = !hideToolbar && (touchMode || galleryHeaderHovered);
+
+  const handleGalleryHeaderMouseEnter = useCallback(() => {
+    setGalleryHeaderHovered(true);
+  }, []);
+
+  const handleGalleryHeaderMouseLeave = useCallback(() => {
+    setGalleryHeaderHovered(false);
+  }, []);
 
   useImageGalleryColumnResize({
     containerRef,
@@ -122,17 +135,24 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
 
   return (
     <div
-      className="h-full flex flex-col bg-ds-secondary"
+      className="relative h-full flex flex-col bg-ds-secondary"
       data-idle-ignore="true"
       data-testid="image-gallery"
     >
       <div
-        className="h-10 flex-shrink-0 overflow-hidden bg-ds-secondary"
+        className={
+          touchMode
+            ? 'h-10 overflow-hidden bg-ds-secondary'
+            : 'absolute left-0 right-0 top-0 z-30 h-10 overflow-hidden bg-transparent'
+        }
         data-testid="image-gallery-toolbar-slot"
-        aria-hidden={hideToolbar}
+        aria-hidden={!showToolbar}
+        onMouseEnter={handleGalleryHeaderMouseEnter}
+        onMouseLeave={handleGalleryHeaderMouseLeave}
       >
-        {!hideToolbar && (
+        {showToolbar && (
           <ImageGalleryToolbar
+            borderColorMode={borderColorMode}
             cameraFilter={cameraFilter}
             cameras={cameras}
             sortDirection={sortDirection}
@@ -140,6 +160,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
             showSplatMetricSort={showSplatMetrics}
             touchMode={touchMode}
             viewMode={viewMode}
+            onBorderColorModeChange={setBorderColorMode}
             onCameraFilterChange={setCameraFilter}
             onSortDirectionToggle={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
             onSortFieldChange={setSortField}
@@ -157,10 +178,12 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
         rowVirtualizer={rowVirtualizer}
         listVirtualizer={listVirtualizer}
         selectedImageId={selectedImageId}
+        borderColorMode={borderColorMode}
         matchedImageIds={matchedImageIds}
         pendingDeletions={pendingDeletions}
         matchesColor={matchesColor}
         matchesBlink={showMatches && matchesDisplayMode === 'blink'}
+        metricBorderColorScale={metricBorderColorScale}
         debouncedIsScrolling={debouncedIsScrolling}
         isSettling={isSettling}
         isResizing={isResizing}

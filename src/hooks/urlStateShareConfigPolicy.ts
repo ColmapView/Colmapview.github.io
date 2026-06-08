@@ -1,6 +1,11 @@
 import type { Sim3dEuler } from '../types/sim3d';
 import type { ShareConfig } from '../utils/shareDataCodec';
-import { isIdentityEuler } from '../utils/sim3dTransforms';
+import {
+  composeSim3d,
+  createSim3dFromEuler,
+  isIdentityEuler,
+  sim3dToEuler,
+} from '../utils/sim3dTransforms';
 
 export interface ShareableFieldSets {
   pointCloud?: ReadonlySet<string>;
@@ -19,6 +24,7 @@ export interface ShareConfigStoreStates {
   camera: object & CameraShareState;
   rig: object;
   transform: Sim3dEuler;
+  splatTransform?: Sim3dEuler;
 }
 
 export function extractShareableFields(
@@ -81,9 +87,26 @@ export function buildShareConfigFromStoreStates(
     extractShareableFields(states.rig, shareableFields.rig)
   );
 
-  if (!isIdentityEuler(states.transform)) {
-    config.transform = states.transform;
+  const transform = getShareTransform(states.transform, states.splatTransform);
+  if (!isIdentityEuler(transform)) {
+    config.transform = transform;
   }
 
   return config;
+}
+
+export function getShareTransform(
+  transform: Sim3dEuler,
+  splatTransform?: Sim3dEuler
+): Sim3dEuler {
+  if (!splatTransform || isIdentityEuler(splatTransform)) {
+    return transform;
+  }
+  if (isIdentityEuler(transform)) {
+    return splatTransform;
+  }
+  return sim3dToEuler(composeSim3d(
+    createSim3dFromEuler(transform),
+    createSim3dFromEuler(splatTransform)
+  ));
 }

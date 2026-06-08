@@ -1,11 +1,12 @@
 import type { Key, RefObject } from 'react';
+import type { SplatMetricColorScale } from '../viewer3d/splatPsnrMetric';
 import { GalleryItem, ListItem } from './ImageGalleryItems';
 import {
   getGalleryVirtualizerSizerStyle,
   getGalleryVirtualRowStyle,
   getListVirtualRowStyle,
 } from './imageGalleryStyleViewModel';
-import type { ImageData, ViewMode } from './useImageGalleryViewModel';
+import type { GalleryBorderColorMode, ImageData, ViewMode } from './useImageGalleryViewModel';
 
 type GalleryVirtualItem = {
   index: number;
@@ -28,10 +29,12 @@ interface ImageGalleryVirtualizedContentProps {
   rowVirtualizer: GalleryContentVirtualizer;
   listVirtualizer: GalleryContentVirtualizer;
   selectedImageId: number | null;
+  borderColorMode: GalleryBorderColorMode;
   matchedImageIds: Set<number>;
   pendingDeletions: Set<number>;
   matchesColor: string;
   matchesBlink: boolean;
+  metricBorderColorScale: SplatMetricColorScale | null;
   debouncedIsScrolling: boolean;
   isSettling: boolean;
   isResizing: boolean;
@@ -52,10 +55,12 @@ export function ImageGalleryVirtualizedContent({
   rowVirtualizer,
   listVirtualizer,
   selectedImageId,
+  borderColorMode,
   matchedImageIds,
   pendingDeletions,
   matchesColor,
   matchesBlink,
+  metricBorderColorScale,
   debouncedIsScrolling,
   isSettling,
   isResizing,
@@ -91,11 +96,13 @@ export function ImageGalleryVirtualizedContent({
                   <GalleryItem
                     key={img.imageId}
                     img={img}
+                    borderColorMode={borderColorMode}
                     isSelected={selectedImageId === img.imageId}
                     isMatched={matchedImageIds.has(img.imageId)}
                     isMarkedForDeletion={pendingDeletions.has(img.imageId)}
                     matchesColor={matchesColor}
                     matchesBlink={matchesBlink}
+                    metricBorderColorScale={metricBorderColorScale}
                     onClick={onClick}
                     onDoubleClick={onDoubleClick}
                     onRightClick={onRightClick}
@@ -125,11 +132,13 @@ export function ImageGalleryVirtualizedContent({
               >
                 <ListItem
                   img={img}
+                  borderColorMode={borderColorMode}
                   isSelected={selectedImageId === img.imageId}
                   isMatched={matchedImageIds.has(img.imageId)}
                   isMarkedForDeletion={pendingDeletions.has(img.imageId)}
                   matchesColor={matchesColor}
                   matchesBlink={matchesBlink}
+                  metricBorderColorScale={metricBorderColorScale}
                   onClick={onClick}
                   onDoubleClick={onDoubleClick}
                   onRightClick={onRightClick}

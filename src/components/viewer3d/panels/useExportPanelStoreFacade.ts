@@ -27,6 +27,7 @@ interface ExportPanelDataFacade {
 interface ExportPanelTransformFacade {
   resetTransform: TransformState['resetTransform'];
   getTransform: () => TransformState['transform'];
+  getSplatTransform: () => TransformState['splatTransform'];
 }
 
 interface ExportPanelDeletionFacade {
@@ -71,6 +72,7 @@ export function useExportPanelStoreFacade(): ExportPanelStoreFacade {
     transform: {
       resetTransform,
       getTransform: () => useTransformStore.getState().transform,
+      getSplatTransform: () => useTransformStore.getState().splatTransform,
     },
     deletion: {
       pendingDeletions,

@@ -1,5 +1,6 @@
 import { act, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as THREE from 'three';
 import { SplatLayer } from './SplatLayer';
 import type { SplatLayerStoreFacade } from './SplatLayerStoreFacade';
 
@@ -39,6 +40,34 @@ function createDeferred<T>() {
     resolve = nextResolve;
   });
   return { promise, resolve };
+}
+
+interface TestSplatMesh {
+  initialized: Promise<void>;
+  dispose: () => void;
+  matrix: {
+    copy: (matrix: THREE.Matrix4) => void;
+    identity: () => void;
+  };
+  matrixAutoUpdate: boolean;
+  updateMatrixWorld: (force?: boolean) => void;
+}
+
+function createSplatMeshConstructor(initialized: Promise<void>, dispose = vi.fn()) {
+  const instances: TestSplatMesh[] = [];
+  const SplatMesh = vi.fn(function SplatMesh(this: TestSplatMesh) {
+    this.initialized = initialized;
+    this.dispose = dispose;
+    this.matrix = {
+      copy: vi.fn(),
+      identity: vi.fn(),
+    };
+    this.matrixAutoUpdate = true;
+    this.updateMatrixWorld = vi.fn();
+    instances.push(this);
+  });
+
+  return { SplatMesh, instances, dispose };
 }
 
 function installAnimationFrameStub() {
@@ -125,14 +154,10 @@ describe('SplatLayer', () => {
     const initialized = createDeferred<void>();
     const animationFrame = installAnimationFrameStub();
     const sparkRendererDispose = vi.fn();
-    const splatMeshDispose = vi.fn();
     const SparkRenderer = vi.fn(function SparkRenderer(this: { dispose: () => void }) {
       this.dispose = sparkRendererDispose;
     });
-    const SplatMesh = vi.fn(function SplatMesh(this: { initialized: Promise<void>; dispose: () => void }) {
-      this.initialized = initialized.promise;
-      this.dispose = splatMeshDispose;
-    });
+    const { SplatMesh } = createSplatMeshConstructor(initialized.promise);
     preloadSparkModuleMock.mockResolvedValue({ SparkRenderer, SplatMesh });
     useSplatLayerStoreFacadeMock.mockReturnValue(createFacade());
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -165,6 +190,33 @@ describe('SplatLayer', () => {
       animationFrame.restore();
       consoleError.mockRestore();
     }
+  });
+
+  it('applies the splat model matrix to an initialized Spark mesh', async () => {
+    const initialized = createDeferred<void>();
+    const modelMatrix = new THREE.Matrix4().makeTranslation(1, 2, 3);
+    const SparkRenderer = vi.fn(function SparkRenderer(this: { dispose: () => void }) {
+      this.dispose = vi.fn();
+    });
+    const { SplatMesh, instances } = createSplatMeshConstructor(initialized.promise);
+    preloadSparkModuleMock.mockResolvedValue({ SparkRenderer, SplatMesh });
+    useSplatLayerStoreFacadeMock.mockReturnValue(createFacade({ showSplats: false }));
+
+    render(<SplatLayer modelMatrix={modelMatrix} />);
+
+    await waitFor(() => {
+      expect(SplatMesh).toHaveBeenCalledTimes(1);
+    });
+    act(() => {
+      initialized.resolve();
+    });
+
+    await waitFor(() => {
+      expect(instances[0].matrix.copy).toHaveBeenCalledWith(modelMatrix);
+    });
+    expect(instances[0].matrix.identity).not.toHaveBeenCalled();
+    expect(instances[0].matrixAutoUpdate).toBe(false);
+    expect(instances[0].updateMatrixWorld).toHaveBeenCalledWith(true);
   });
 
   it('does not show Spark loading notifications when WebGPU is forced', () => {

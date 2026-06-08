@@ -8,6 +8,12 @@ import { prefetchFrustumTexturesInBackground } from '../../hooks/useFrustumTextu
 import { useLatestRef } from '../../hooks/useLatestRef';
 import { appLogger } from '../../utils/logger';
 import {
+  composeSim3d,
+  createSim3dFromEuler,
+  isIdentityEuler,
+  sim3dToEuler,
+} from '../../utils/sim3dTransforms';
+import {
   ensureSplatPsnrWebGpuDevice,
   getSplatPsnrRenderSize,
   subscribeSplatPsnrWebGpuDeviceLoss,
@@ -39,6 +45,7 @@ interface SplatPsnrRenderSession {
     width: number;
     height: number;
     transform?: Sim3dEuler;
+    modelTransform?: Sim3dEuler;
   }) => Promise<PsnrResult>;
   submitImageMetric?: (options: {
     imageFile: File;
@@ -48,6 +55,7 @@ interface SplatPsnrRenderSession {
     width: number;
     height: number;
     transform?: Sim3dEuler;
+    modelTransform?: Sim3dEuler;
   }) => Promise<SplatPsnrSubmittedMetric>;
   dispose: () => void;
 }
@@ -79,6 +87,7 @@ interface SplatPsnrTaskSnapshot {
   splatFile: File;
   request: SplatPsnrComputeRequest;
   transform: Sim3dEuler;
+  splatTransform: Sim3dEuler;
   actions: SplatPsnrTaskActions;
   getRenderSession: (dataIdentity: SplatPsnrDataIdentity, splatFile: File) => Promise<SplatPsnrRenderSession>;
   releaseRenderSession: (renderSession: SplatPsnrRenderSession) => void;
@@ -98,6 +107,7 @@ interface SplatPsnrEvaluatorSnapshot {
   splatPsnrFrameReady: boolean;
   splatPsnrComputeRequest: SplatPsnrComputeRequest | null;
   transform: Sim3dEuler;
+  splatTransform: Sim3dEuler;
   actions: SplatPsnrTaskActions;
   releaseRenderSession: (renderSession: SplatPsnrRenderSession) => void;
 }
@@ -113,6 +123,21 @@ const ALL_IMAGE_PSNR_METRIC_FLUSH_DELAY_MS = 32;
 const BACKGROUND_PSNR_START_DELAY_MS = 1500;
 const BACKGROUND_IMAGE_PLANE_TEXTURE_COLLECT_BATCH_SIZE = 32;
 const WEBGPU_METRIC_ADAPTER_RETRY_DELAY_MS = 5000;
+
+function getSplatModelTransform(
+  transform: Sim3dEuler,
+  splatTransform: Sim3dEuler
+): Sim3dEuler | undefined {
+  const hasTransform = !isIdentityEuler(transform);
+  const hasSplatTransform = !isIdentityEuler(splatTransform);
+  if (!hasTransform && !hasSplatTransform) return undefined;
+  if (!hasTransform) return splatTransform;
+  if (!hasSplatTransform) return transform;
+  return sim3dToEuler(composeSim3d(
+    createSim3dFromEuler(transform),
+    createSim3dFromEuler(splatTransform)
+  ));
+}
 
 function getSplatPsnrDataIdentity(snapshot: {
   reconstruction: Reconstruction;
@@ -413,6 +438,7 @@ async function runSplatPsnrTask(
     splatFile,
     request,
     transform,
+    splatTransform,
     actions: {
       setSplatPsnrPending,
       setSplatPsnrMetric,
@@ -420,6 +446,7 @@ async function runSplatPsnrTask(
     },
   } = snapshot;
   const imageIds = getRequestedSplatPsnrImageIds(request, reconstruction);
+  const modelTransform = getSplatModelTransform(transform, splatTransform);
 
   try {
     if (imageIds.length === 0) {
@@ -456,6 +483,7 @@ async function runSplatPsnrTask(
           width: prepared.width,
           height: prepared.height,
           transform,
+          modelTransform,
         });
         if (task.cancelled) return;
 
@@ -498,11 +526,13 @@ async function runBatchedAllImageSplatPsnrTask(
 
   const {
     transform,
+    splatTransform,
     actions: {
       setSplatPsnrMetrics,
       setSplatPsnrImageError,
     },
   } = snapshot;
+  const modelTransform = getSplatModelTransform(transform, splatTransform);
   const inFlight = new Set<Promise<void>>();
   const metricBatcher = createAllImageSplatPsnrMetricBatcher({
     task,
@@ -529,6 +559,7 @@ async function runBatchedAllImageSplatPsnrTask(
           width: prepared.width,
           height: prepared.height,
           transform,
+          modelTransform,
         });
         if (!submitted) {
           return false;
@@ -688,6 +719,7 @@ export function SplatPsnrEvaluator() {
       splatBackendResolution,
       splatMetricCapability,
       transform,
+      splatTransform,
     },
     actions: {
       setWebGpuMetricState,
@@ -763,6 +795,7 @@ export function SplatPsnrEvaluator() {
     splatPsnrFrameReady,
     splatPsnrComputeRequest,
     transform,
+    splatTransform,
     actions: currentActions,
     releaseRenderSession: releaseCachedRenderSession,
   });
@@ -1104,6 +1137,7 @@ export function SplatPsnrEvaluator() {
       splatFile: snapshot.splatFile,
       request,
       transform: snapshot.transform,
+      splatTransform: snapshot.splatTransform,
       actions: snapshot.actions,
       getRenderSession: getCachedRenderSession,
       releaseRenderSession: releaseCachedRenderSession,

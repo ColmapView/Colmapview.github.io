@@ -277,13 +277,43 @@ describe('persistedStoreMigrations', () => {
       });
     });
 
-    it('adds the auto-hide buttons default for existing persisted UI settings', () => {
+    it('adds the auto-hide defaults for existing persisted UI settings', () => {
       expect(
         migrateUIPersistedState({ autoHideElements: { axes: false } }, 9, defaultActions)
       ).toMatchObject({
         autoHideElements: {
-          axes: false,
+          axes: true,
+          grid: true,
+          gizmo: true,
           buttons: true,
+        },
+      });
+    });
+
+    it('enables axes, grid, and gizmo auto-hide for the previous persisted UI version', () => {
+      expect(
+        migrateUIPersistedState({
+          autoHideElements: {
+            buttons: true,
+            axes: false,
+            grid: false,
+            gizmo: false,
+            points: false,
+            cameras: false,
+            matches: false,
+            rigs: false,
+          },
+        }, 11, defaultActions)
+      ).toMatchObject({
+        autoHideElements: {
+          buttons: true,
+          axes: true,
+          grid: true,
+          gizmo: true,
+          points: false,
+          cameras: false,
+          matches: false,
+          rigs: false,
         },
       });
     });

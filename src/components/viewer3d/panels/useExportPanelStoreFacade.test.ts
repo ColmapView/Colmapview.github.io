@@ -68,12 +68,19 @@ describe('useExportPanelStoreFacade', () => {
           scale: 3,
           translationX: 4,
         },
+        splatTransform: {
+          ...createIdentityEuler(),
+          translationY: 5,
+        },
       });
     });
 
     expect(result.current.transform.getTransform()).toMatchObject({
       scale: 3,
       translationX: 4,
+    });
+    expect(result.current.transform.getSplatTransform()).toMatchObject({
+      translationY: 5,
     });
 
     act(() => {

@@ -48,6 +48,8 @@ export interface ColmapMetricWebGpuSplatFrameOptions {
   width: number;
   height: number;
   transform?: Sim3dEuler;
+  modelTransform?: Sim3dEuler;
+  modelMatrix?: THREE.Matrix4 | null;
   near?: number;
   far?: number;
   tile?: ColmapMetricWebGpuSplatTile;
@@ -115,18 +117,26 @@ export function createColmapMetricWebGpuSplatFrame({
   width,
   height,
   transform,
+  modelTransform,
+  modelMatrix,
   near = 0.001,
   far = 10000,
   tile,
 }: ColmapMetricWebGpuSplatFrameOptions): WebGpuSplatCameraFrame {
   const metricCamera = createColmapMetricThreeCamera(image, camera, width, height, transform, near, far, tile);
-  const modelMatrix = transform ? sim3dToMatrix4(createSim3dFromEuler(transform)) : null;
+  const resolvedModelMatrix = modelMatrix !== undefined
+    ? modelMatrix
+    : modelTransform
+      ? sim3dToMatrix4(createSim3dFromEuler(modelTransform))
+      : transform
+        ? sim3dToMatrix4(createSim3dFromEuler(transform))
+        : null;
   return createWebGpuSplatFrameFromThreeCamera({
     camera: metricCamera,
     width,
     height,
     dpr: 1,
-    modelMatrix,
+    modelMatrix: resolvedModelMatrix,
   });
 }
 

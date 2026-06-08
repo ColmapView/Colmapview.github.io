@@ -32,6 +32,15 @@ describe('useSplatPsnrEvaluatorStoreFacade', () => {
       loadedFiles: buildLoadedFiles({ imageFiles: [imageFile], splatFile }),
     });
     useTransformStore.getState().setTransform({ scale: 2 });
+    useTransformStore.getState().setSplatTransform({
+      scale: 3,
+      rotationX: 0,
+      rotationY: 0,
+      rotationZ: 0,
+      translationX: 1,
+      translationY: 0,
+      translationZ: 0,
+    });
     useImageMetricsStore.setState({
       splatPsnrFrameReady: true,
       splatPsnrComputeRequest: { id: 3, scope: 'selected', selectedImageId: 1 },
@@ -49,6 +58,7 @@ describe('useSplatPsnrEvaluatorStoreFacade', () => {
       splatBackendResolution: expect.objectContaining({ backend: 'webgpu', gpuPsnr: true }),
       splatMetricCapability: expect.objectContaining({ status: 'available', gpuPsnr: true }),
       transform: expect.objectContaining({ scale: 2 }),
+      splatTransform: expect.objectContaining({ scale: 3, translationX: 1 }),
     });
     expect(result.current.data.dataset.getImageSync('image.jpg')).toBe(imageFile);
   });

@@ -40,13 +40,15 @@ const SHAREABLE_FIELDS = buildShareableFieldsFromRegistry();
  * Uses explicit field lists to ensure only visual state is shared.
  */
 export function collectShareConfig(): ShareConfig {
+  const transformStore = useTransformStore.getState();
   return buildShareConfigFromStoreStates(
     {
       pointCloud: usePointCloudStore.getState(),
       ui: useUIStore.getState(),
       camera: useCameraStore.getState(),
       rig: useRigStore.getState(),
-      transform: useTransformStore.getState().transform,
+      transform: transformStore.transform,
+      splatTransform: transformStore.splatTransform,
     },
     SHAREABLE_FIELDS
   );

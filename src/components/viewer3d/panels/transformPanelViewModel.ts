@@ -1,4 +1,4 @@
-import type { PointPickingMode } from '../../../store';
+import type { ColorMode, PointPickingMode } from '../../../store';
 import type { Sim3dEuler } from '../../../types/sim3d';
 import { isIdentityEuler } from '../../../utils/sim3dTransforms';
 
@@ -23,6 +23,11 @@ export interface TransformPanelStateInput {
 export interface TransformPickingButtonState {
   isActive: boolean;
   nextMode: PointPickingMode;
+}
+
+export interface PointCloudPickingVisibilityState {
+  showPointCloud: boolean;
+  colorMode: ColorMode;
 }
 
 export function radiansToDegrees(radians: number): number {
@@ -79,4 +84,19 @@ export function getTransformPickingButtonState(
     isActive: currentMode === targetMode,
     nextMode: getNextTransformPickingMode(currentMode, targetMode),
   };
+}
+
+export function getPointCloudStateForPickingMode({
+  showPointCloud,
+  colorMode,
+}: PointCloudPickingVisibilityState): PointCloudPickingVisibilityState {
+  if (!showPointCloud) {
+    return { showPointCloud: true, colorMode: 'rgb' };
+  }
+
+  if (colorMode === 'splats') {
+    return { showPointCloud: true, colorMode: 'splatPoints' };
+  }
+
+  return { showPointCloud, colorMode };
 }

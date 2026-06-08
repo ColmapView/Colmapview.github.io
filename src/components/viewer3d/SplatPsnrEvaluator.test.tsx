@@ -151,6 +151,15 @@ function createFacade(overrides: Partial<SplatPsnrEvaluatorStoreFacade['data']> 
       translationY: 0,
       translationZ: 0,
     },
+    splatTransform: {
+      scale: 1,
+      rotationX: 0,
+      rotationY: 0,
+      rotationZ: 0,
+      translationX: 0,
+      translationY: 0,
+      translationZ: 0,
+    },
     ...overrides,
   };
 
@@ -516,6 +525,65 @@ describe('SplatPsnrEvaluator', () => {
     expect(dispose).not.toHaveBeenCalled();
     view.unmount();
     expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes the composed splat model transform into PSNR requests', async () => {
+    const deferredMetric = createDeferredMetric();
+    const computeImageMetric = vi.fn(() => deferredMetric.promise);
+    createWebGpuSplatPsnrSessionMock.mockResolvedValue({
+      computeImageMetric,
+      dispose: vi.fn(),
+    });
+    const { facade, image } = createFacade({
+      transform: {
+        scale: 2,
+        rotationX: 0,
+        rotationY: 0,
+        rotationZ: 0,
+        translationX: 1,
+        translationY: 0,
+        translationZ: 0,
+      },
+      splatTransform: {
+        scale: 1,
+        rotationX: 0,
+        rotationY: 0,
+        rotationZ: 0,
+        translationX: 0,
+        translationY: 2,
+        translationZ: 0,
+      },
+    });
+    useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
+
+    render(<SplatPsnrEvaluator />);
+
+    await waitFor(() => {
+      expect(computeImageMetric).toHaveBeenCalledTimes(1);
+    });
+    expect(computeImageMetric).toHaveBeenCalledWith(expect.objectContaining({
+      transform: expect.objectContaining({
+        scale: 2,
+        translationX: 1,
+        translationY: 0,
+      }),
+      modelTransform: expect.objectContaining({
+        scale: 2,
+        translationX: 1,
+        translationY: 4,
+      }),
+    }));
+
+    await act(async () => {
+      deferredMetric.resolve({ psnr: 31, ssim: 0.94, mse: 12, validPixelCount: 12 });
+      await deferredMetric.promise;
+    });
+
+    await waitFor(() => {
+      expect(facade.actions.setSplatPsnrMetric).toHaveBeenCalledWith(expect.objectContaining({
+        imageId: image.imageId,
+      }));
+    });
   });
 
   it('publishes only the latest metric request when an older request resolves late', async () => {

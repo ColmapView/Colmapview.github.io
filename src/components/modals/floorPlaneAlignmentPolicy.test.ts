@@ -23,12 +23,14 @@ import {
   getFloorDetectionPositions,
   getFloorDetectionStatusInfo,
   getFloorInlierPercentage,
+  getFloorNormalFlippedForCameraDownSide,
   getFloorModalHeaderDragStyle,
   getFloorModalOverlayStyle,
   getFloorPlaneControlState,
   getFloorTargetUpVector,
 } from './floorPlaneAlignmentPolicy';
 import { Z_INDEX } from '../../theme';
+import { buildImage } from '../../test/builders';
 
 function expectVectorClose(actual: THREE.Vector3, expected: [number, number, number]): void {
   expect(actual.x).toBeCloseTo(expected[0]);
@@ -113,6 +115,51 @@ describe('floor plane alignment policy', () => {
 
     expect(transformedNormal.dot(targetUp)).toBeCloseTo(1);
     expect(applyEulerTransform(aligned, new THREE.Vector3(...plane.centroid)).dot(targetUp)).toBeCloseTo(0);
+  });
+
+  it('defaults the floor down side to the side with fewer cameras', () => {
+    const plane: Plane = {
+      normal: [0, 1, 0],
+      d: 0,
+      centroid: [0, 0, 0],
+      inlierCount: 4,
+      radius: 1,
+    };
+    const identity = createIdentityEuler();
+    const cameraAt = (imageId: number, position: [number, number, number]) => buildImage({
+      imageId,
+      tvec: [-position[0], -position[1], -position[2]],
+    });
+
+    expect(getFloorNormalFlippedForCameraDownSide(plane, [
+      cameraAt(1, [0, 2, 0]),
+      cameraAt(2, [1, 3, 0]),
+      cameraAt(3, [0, -2, 0]),
+    ], identity)).toBe(false);
+
+    expect(getFloorNormalFlippedForCameraDownSide(plane, [
+      cameraAt(1, [0, 2, 0]),
+      cameraAt(2, [1, -3, 0]),
+      cameraAt(3, [0, -2, 0]),
+    ], identity)).toBe(true);
+
+    expect(getFloorNormalFlippedForCameraDownSide(plane, [
+      cameraAt(1, [0, 2, 0]),
+      cameraAt(2, [0, -2, 0]),
+    ], identity)).toBe(false);
+
+    expect(getFloorNormalFlippedForCameraDownSide({
+      ...plane,
+      d: -10,
+      centroid: [0, 10, 0],
+    }, [
+      cameraAt(1, [0, 9, 0]),
+      cameraAt(2, [0, 8, 0]),
+      cameraAt(3, [0, 30, 0]),
+    ], {
+      ...identity,
+      translationY: 10,
+    })).toBe(false);
   });
 
   it('formats floor detection view state', () => {

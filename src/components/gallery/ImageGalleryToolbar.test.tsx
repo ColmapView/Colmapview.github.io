@@ -9,6 +9,7 @@ const cameras = [
 
 function renderToolbar(overrides = {}) {
   const props = {
+    borderColorMode: 'none' as const,
     cameraFilter: 'all' as const,
     cameras,
     sortDirection: 'asc' as const,
@@ -16,6 +17,7 @@ function renderToolbar(overrides = {}) {
     showSplatMetricSort: false,
     touchMode: false,
     viewMode: 'gallery' as const,
+    onBorderColorModeChange: vi.fn(),
     onCameraFilterChange: vi.fn(),
     onSortDirectionToggle: vi.fn(),
     onSortFieldChange: vi.fn(),
@@ -72,6 +74,25 @@ describe('ImageGalleryToolbar', () => {
     expect(props.onSortFieldChange).toHaveBeenCalledWith('avgError');
     expect(props.onSortDirectionToggle).toHaveBeenCalledOnce();
     expect(screen.getByRole('button', { name: 'Toggle sort direction' })).toHaveAttribute('data-tooltip', 'Descending');
+  });
+
+  it('reports border color mode changes', () => {
+    const props = renderToolbar();
+
+    expect(screen.getByRole('option', { name: 'Border: None' })).toBeVisible();
+    expect(screen.getByRole('option', { name: 'Border: Camera' })).toBeVisible();
+    expect(screen.getByRole('option', { name: 'Border: PSNR' })).toBeVisible();
+    expect(screen.getByRole('option', { name: 'Border: SSIM' })).toBeVisible();
+
+    fireEvent.change(screen.getByLabelText('Border color'), {
+      target: { value: 'camera' },
+    });
+    fireEvent.change(screen.getByLabelText('Border color'), {
+      target: { value: 'psnr' },
+    });
+
+    expect(props.onBorderColorModeChange).toHaveBeenNthCalledWith(1, 'camera');
+    expect(props.onBorderColorModeChange).toHaveBeenNthCalledWith(2, 'psnr');
   });
 
   it('exposes PSNR and SSIM sorting only after splat metrics are available', () => {

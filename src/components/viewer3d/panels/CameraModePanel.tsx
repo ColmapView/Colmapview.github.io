@@ -116,7 +116,7 @@ export function CameraModePanel({
           <ToggleSwitch checked={pointerLock} onChange={setPointerLock} />
         </div>
         <SelectRow
-          label="Horizon Lock"
+          label="Horizon Lock (H)"
           value={horizonLock}
           onChange={setHorizonLock}
           options={HORIZON_LOCK_OPTIONS}

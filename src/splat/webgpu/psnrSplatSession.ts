@@ -61,6 +61,7 @@ export interface WebGpuSplatPsnrImageMetricOptions {
   width: number;
   height: number;
   transform?: Sim3dEuler;
+  modelTransform?: Sim3dEuler;
 }
 
 export interface WebGpuSplatPsnrSessionOptions {
@@ -199,6 +200,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
     width,
     height,
     transform,
+    modelTransform,
   }: WebGpuSplatPsnrImageMetricOptions): Promise<WebGpuPsnrTextureResult> {
     const submitted = await this.submitImageMetric({
       imageFile,
@@ -208,6 +210,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
       width,
       height,
       transform,
+      modelTransform,
     });
     try {
       return await submitted.result;
@@ -224,6 +227,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
     width,
     height,
     transform,
+    modelTransform,
   }: WebGpuSplatPsnrImageMetricOptions): Promise<WebGpuSubmittedSplatPsnrImageMetric> {
     this.assertNotDisposed();
     const safeWidth = requirePositiveInteger(width, 'width');
@@ -283,6 +287,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
           width: safeWidth,
           height: safeHeight,
           transform,
+          modelTransform,
         });
       }
 
@@ -303,6 +308,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
         width: safeWidth,
         height: safeHeight,
         transform,
+        modelTransform,
         maxTextureDimension2D,
       });
       this.recordImageTelemetry({
@@ -351,6 +357,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
     width,
     height,
     transform,
+    modelTransform,
   }: {
     resources: ActivePsnrImageResources;
     bitmap: ImageBitmap;
@@ -362,6 +369,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
     width: number;
     height: number;
     transform?: Sim3dEuler;
+    modelTransform?: Sim3dEuler;
   }): WebGpuSubmittedSplatPsnrImageMetric {
     let renderedTexture: TrackedGpuTexture | null = null;
     let groundTruthTexture: WebGpuPsnrGroundTruthTexture | null = null;
@@ -395,6 +403,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
         width,
         height,
         transform,
+        modelTransform,
       });
 
       const renderPromise = this.renderMetricFrameToTexture({
@@ -482,6 +491,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
     width,
     height,
     transform,
+    modelTransform,
     maxTextureDimension2D,
   }: {
     resources: ActivePsnrImageResources;
@@ -492,6 +502,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
     width: number;
     height: number;
     transform?: Sim3dEuler;
+    modelTransform?: Sim3dEuler;
     maxTextureDimension2D: number;
   }): Promise<WebGpuPsnrTextureResult> {
     const reductions: WebGpuPsnrTextureReduction[] = [];
@@ -532,6 +543,7 @@ class DefaultWebGpuSplatPsnrSession implements WebGpuSplatPsnrSession {
           width: tile.width,
           height: tile.height,
           transform,
+          modelTransform,
           tile: {
             fullWidth: width,
             fullHeight: height,

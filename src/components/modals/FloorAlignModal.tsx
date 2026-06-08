@@ -8,6 +8,7 @@ import {
   computeFloorAlignmentTransform,
   detectFloorPlaneFromPositions,
   getFloorAlignModalPanelStyle,
+  getFloorNormalFlippedForCameraDownSide,
   getFloorTargetUpVector,
 } from './floorPlaneAlignmentPolicy';
 import { useFloorAlignStoreFacade } from './useFloorAlignStoreFacade';
@@ -18,7 +19,7 @@ import { useFloorAlignStoreFacade } from './useFloorAlignStoreFacade';
  */
 export function FloorAlignModal() {
   const {
-    data: { wasmReconstruction },
+    data: { reconstruction, wasmReconstruction },
     floor: {
       showFloorModal,
       modalPosition,
@@ -32,6 +33,7 @@ export function FloorAlignModal() {
       setDetectedPlane,
       setPointDistances,
       setIsDetecting,
+      setNormalFlipped,
       reset,
     },
     transform: { transform, setTransform },
@@ -85,10 +87,28 @@ export function FloorAlignModal() {
       });
       setDetectedPlane(result.plane);
       setPointDistances(result.distances);
+      setNormalFlipped(
+        getFloorNormalFlippedForCameraDownSide(
+          result.plane,
+          reconstruction?.images.values() ?? [],
+          transform
+        )
+      );
 
       setIsDetecting(false);
     }, 10);
-  }, [wasmReconstruction, distanceThreshold, maxIterations, sampleCount, transform, setDetectedPlane, setPointDistances, setIsDetecting]);
+  }, [
+    wasmReconstruction,
+    reconstruction,
+    distanceThreshold,
+    maxIterations,
+    sampleCount,
+    transform,
+    setDetectedPlane,
+    setPointDistances,
+    setNormalFlipped,
+    setIsDetecting,
+  ]);
 
   // Apply: compute and apply the alignment transform
   const handleApply = useCallback(() => {

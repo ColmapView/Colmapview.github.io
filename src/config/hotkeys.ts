@@ -136,6 +136,12 @@ export const HOTKEYS: HotkeyRegistry = {
     category: 'camera',
     scopes: ['viewer'],
   },
+  cycleHorizonLock: {
+    keys: 'h',
+    description: 'Cycle horizon lock',
+    category: 'camera',
+    scopes: ['viewer'],
+  },
   toggleBackground: {
     keys: 'b',
     description: 'Toggle background',

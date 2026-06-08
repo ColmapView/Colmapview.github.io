@@ -52,6 +52,7 @@ export const ExportPanel = memo(function ExportPanel({
     transform: {
       resetTransform,
       getTransform,
+      getSplatTransform,
     },
     deletion: {
       pendingDeletions,
@@ -169,7 +170,14 @@ export const ExportPanel = memo(function ExportPanel({
     if (!splatFile) return;
 
     downloadBlob(splatFile, splatFile.name);
-  }, [loadedFiles]);
+    if (!isIdentityEuler(getTransform()) || !isIdentityEuler(getSplatTransform())) {
+      addNotification(
+        'warning',
+        'Downloaded original splat file; transforms are not baked into splat exports.',
+        6000
+      );
+    }
+  }, [addNotification, getSplatTransform, getTransform, loadedFiles]);
 
   // Reload data from original files
   const handleReload = useCallback(async () => {

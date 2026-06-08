@@ -389,5 +389,14 @@ export function migrateUIPersistedState(
     }
   }
 
+  if (version < 12) {
+    const autoHideElements = state.autoHideElements;
+    if (isRecord(autoHideElements)) {
+      autoHideElements.axes = true;
+      autoHideElements.grid = true;
+      autoHideElements.gizmo = true;
+    }
+  }
+
   return state;
 }

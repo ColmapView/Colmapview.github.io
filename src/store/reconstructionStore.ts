@@ -4,7 +4,11 @@ import type { WasmReconstructionWrapper } from '../wasm/reconstruction';
 import type { UrlLoadProgress, UrlLoadError, ColmapManifest } from '../types/manifest';
 import { useUIStore } from './stores/uiStore';
 import { usePointCloudStore } from './stores/pointCloudStore';
+import { useTransformStore } from './stores/transformStore';
 import { getDefaultBackgroundColorForSplatLoad } from './splatBackgroundPolicy';
+
+const SPLAT_POINT_CLOUD_DEFAULT_SIZE = 1;
+const SPLAT_POINT_CLOUD_DEFAULT_OPACITY = 0.2;
 
 /** Source type for loaded reconstruction */
 export type ReconstructionSourceType = 'local' | 'url' | 'manifest' | 'zip' | null;
@@ -116,7 +120,13 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   },
 
   setLoadedFiles: (loadedFiles) => {
+    const previousLoadedFiles = get().loadedFiles;
     const hasSplatFile = Boolean(loadedFiles.splatFile);
+    const isActiveSplatFileSwitch = Boolean(
+      previousLoadedFiles?.splatFile
+      && loadedFiles.splatFile
+      && isSplatFileSwitchWithinLoadedDataset(previousLoadedFiles, loadedFiles)
+    );
     const uiStore = useUIStore.getState();
     const nextBackgroundColor = getDefaultBackgroundColorForSplatLoad(
       uiStore.backgroundColor,
@@ -126,7 +136,15 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       uiStore.setBackgroundColor(nextBackgroundColor);
     }
     if (hasSplatFile) {
-      usePointCloudStore.getState().setColorMode('splats');
+      const pointCloudStore = usePointCloudStore.getState();
+      pointCloudStore.setColorMode('splatPoints');
+      if (!isActiveSplatFileSwitch) {
+        pointCloudStore.setPointSize(SPLAT_POINT_CLOUD_DEFAULT_SIZE);
+        pointCloudStore.setPointOpacity(SPLAT_POINT_CLOUD_DEFAULT_OPACITY);
+      }
+    }
+    if (!isActiveSplatFileSwitch) {
+      useTransformStore.getState().resetSplatTransform();
     }
 
     set({ loadedFiles });
@@ -186,6 +204,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       urlProgress: null,
       urlError: null,
     });
+    useTransformStore.getState().resetSplatTransform();
   },
 }));
 
@@ -202,3 +221,18 @@ export const selectImageCount = (state: ReconstructionState) =>
 
 export const selectCameraCount = (state: ReconstructionState) =>
   state.reconstruction?.cameras.size ?? 0;
+
+function isSplatFileSwitchWithinLoadedDataset(
+  previousLoadedFiles: LoadedFiles | null,
+  nextLoadedFiles: LoadedFiles
+): boolean {
+  if (!previousLoadedFiles) return false;
+  return previousLoadedFiles.camerasFile === nextLoadedFiles.camerasFile
+    && previousLoadedFiles.imagesFile === nextLoadedFiles.imagesFile
+    && previousLoadedFiles.points3DFile === nextLoadedFiles.points3DFile
+    && previousLoadedFiles.databaseFile === nextLoadedFiles.databaseFile
+    && previousLoadedFiles.rigsFile === nextLoadedFiles.rigsFile
+    && previousLoadedFiles.framesFile === nextLoadedFiles.framesFile
+    && previousLoadedFiles.imageFiles === nextLoadedFiles.imageFiles
+    && previousLoadedFiles.hasMasks === nextLoadedFiles.hasMasks;
+}

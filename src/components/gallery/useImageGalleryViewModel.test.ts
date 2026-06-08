@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useImageGalleryViewModel } from './useImageGalleryViewModel';
 import {
   buildCamera,
+  buildFile,
   buildImage,
+  buildLoadedFiles,
   buildReconstruction,
 } from '../../test/builders';
 import {
@@ -174,6 +176,42 @@ describe('useImageGalleryViewModel', () => {
     expect(result.current.showSplatMetrics).toBe(true);
     expect(result.current.sortField).toBe('splatSsim');
     expect(result.current.images.map((image) => image.name)).toEqual(['high.jpg', 'low.jpg']);
+
+    unmount();
+  });
+
+  it('defaults border coloring to PSNR only while a splat is active', () => {
+    const reconstruction = buildReconstruction({
+      cameras: [buildCamera({ cameraId: 1 })],
+      images: [buildImage({ imageId: 10, cameraId: 1, name: 'a.jpg' })],
+    });
+    const splatFile = buildFile('scene.spz', 'splat');
+
+    act(() => {
+      useReconstructionStore.getState().setReconstruction(reconstruction);
+    });
+
+    const { result, unmount } = renderHook(() => useImageGalleryViewModel());
+
+    expect(result.current.borderColorMode).toBe('none');
+
+    act(() => {
+      useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles({ splatFile }));
+    });
+
+    expect(result.current.borderColorMode).toBe('psnr');
+
+    act(() => {
+      result.current.setBorderColorMode('ssim');
+    });
+
+    expect(result.current.borderColorMode).toBe('ssim');
+
+    act(() => {
+      useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles());
+    });
+
+    expect(result.current.borderColorMode).toBe('none');
 
     unmount();
   });

@@ -7,7 +7,7 @@ describe('reload confirmation gating', () => {
   let confirmSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    useTransformStore.getState().resetTransform();
+    useTransformStore.setState(useTransformStore.getInitialState(), true);
     useDeletionStore.getState().clearPendingDeletions();
     confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
@@ -22,6 +22,20 @@ describe('reload confirmation gating', () => {
 
   it('detects a non-identity transform', () => {
     useTransformStore.getState().setTransform({ rotationY: Math.PI / 4 });
+    expect(hasUnsavedReloadState()).toBe(true);
+  });
+
+  it('detects an applied splat transform', () => {
+    useTransformStore.getState().setSplatTransform({
+      scale: 1,
+      rotationX: 0,
+      rotationY: 0,
+      rotationZ: 0,
+      translationX: 2,
+      translationY: 0,
+      translationZ: 0,
+    });
+
     expect(hasUnsavedReloadState()).toBe(true);
   });
 

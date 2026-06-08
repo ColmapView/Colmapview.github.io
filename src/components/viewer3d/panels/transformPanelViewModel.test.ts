@@ -6,6 +6,7 @@ import {
   formatTransformScaleValue,
   formatTransformTranslationValue,
   getNextTransformPickingMode,
+  getPointCloudStateForPickingMode,
   getTransformPanelState,
   getTransformPickingButtonState,
   radiansToDegrees,
@@ -82,6 +83,37 @@ describe('transform panel view-model helpers', () => {
     expect(getTransformPickingButtonState('distance-2pt', 'origin-1pt')).toEqual({
       isActive: false,
       nextMode: 'origin-1pt',
+    });
+  });
+
+  it('makes point cloud state pickable when entering point-picking modes', () => {
+    expect(getPointCloudStateForPickingMode({
+      showPointCloud: false,
+      colorMode: 'trackLength',
+    })).toEqual({
+      showPointCloud: true,
+      colorMode: 'rgb',
+    });
+    expect(getPointCloudStateForPickingMode({
+      showPointCloud: true,
+      colorMode: 'splats',
+    })).toEqual({
+      showPointCloud: true,
+      colorMode: 'splatPoints',
+    });
+    expect(getPointCloudStateForPickingMode({
+      showPointCloud: true,
+      colorMode: 'splatPoints',
+    })).toEqual({
+      showPointCloud: true,
+      colorMode: 'splatPoints',
+    });
+    expect(getPointCloudStateForPickingMode({
+      showPointCloud: true,
+      colorMode: 'rgb',
+    })).toEqual({
+      showPointCloud: true,
+      colorMode: 'rgb',
     });
   });
 });

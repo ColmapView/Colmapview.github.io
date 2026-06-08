@@ -12,6 +12,8 @@ function createOptions(overrides: Partial<Parameters<typeof useViewerControlCycl
     setBackgroundHsl: vi.fn(),
     cameraMode: 'orbit' as const,
     setCameraMode: vi.fn(),
+    horizonLock: 'off' as const,
+    setHorizonLock: vi.fn(),
     undistortionEnabled: true,
     setUndistortionEnabled: vi.fn(),
     showPointCloud: false,
@@ -84,6 +86,9 @@ describe('viewer control cycle actions', () => {
 
     act(() => result.current.toggleCameraMode());
     expect(options.setCameraMode).toHaveBeenCalledWith('fly');
+
+    act(() => result.current.cycleHorizonLock());
+    expect(options.setHorizonLock).toHaveBeenCalledWith('on');
 
     act(() => result.current.toggleUndistortion());
     expect(options.setUndistortionEnabled).toHaveBeenCalledWith(false);

@@ -178,7 +178,7 @@ describe('useViewerControlsStoreFacade', () => {
     });
 
     expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(fallbackSplatFile);
-    expect(usePointCloudStore.getState().colorMode).toBe('splats');
+    expect(usePointCloudStore.getState().colorMode).toBe('splatPoints');
     expect(usePointCloudStore.getState().showSplats).toBe(true);
     expect(useImageMetricsStore.getState().splatPsnrFrameReady).toBe(false);
     expect(useImageMetricsStore.getState().splatPsnrMetrics.size).toBe(0);

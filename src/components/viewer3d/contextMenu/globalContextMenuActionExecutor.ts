@@ -32,6 +32,7 @@ import {
   getNextPointSize,
   getNextSelectionColorMenuState,
 } from './globalContextMenuViewModel';
+import { getPointCloudStateForPickingMode } from '../panels/transformPanelViewModel';
 
 type MaybePromise<T> = T | Promise<T>;
 type Setter<T> = (value: T) => void;
@@ -126,6 +127,26 @@ export interface GlobalContextMenuActionExecutorDeps {
   openFloorDetectionModal: () => void;
   openCameraConversionModal: () => void;
   openEditPopup: () => void;
+}
+
+function setPickingModeWithPickablePoints(
+  deps: GlobalContextMenuActionExecutorDeps,
+  nextMode: PointPickingMode
+): void {
+  if (nextMode !== 'off') {
+    const nextPointState = getPointCloudStateForPickingMode({
+      showPointCloud: deps.showPointCloud,
+      colorMode: deps.colorMode,
+    });
+    if (nextPointState.showPointCloud !== deps.showPointCloud) {
+      deps.setShowPointCloud(nextPointState.showPointCloud);
+    }
+    if (nextPointState.colorMode !== deps.colorMode) {
+      deps.setColorMode(nextPointState.colorMode);
+    }
+  }
+
+  deps.setPickingMode(nextMode);
 }
 
 export async function executeGlobalContextMenuAction(
@@ -244,13 +265,13 @@ export async function executeGlobalContextMenuAction(
       deps.applyTransformPreset('centerAtOrigin');
       break;
     case 'onePointOrigin':
-      deps.setPickingMode(getNextPickingMode(deps.pickingMode, 'origin-1pt'));
+      setPickingModeWithPickablePoints(deps, getNextPickingMode(deps.pickingMode, 'origin-1pt'));
       break;
     case 'twoPointScale':
-      deps.setPickingMode(getNextPickingMode(deps.pickingMode, 'distance-2pt'));
+      setPickingModeWithPickablePoints(deps, getNextPickingMode(deps.pickingMode, 'distance-2pt'));
       break;
     case 'threePointAlign':
-      deps.setPickingMode(getNextPickingMode(deps.pickingMode, 'normal-3pt'));
+      setPickingModeWithPickablePoints(deps, getNextPickingMode(deps.pickingMode, 'normal-3pt'));
       break;
     case 'resetTransform':
       deps.resetTransform();

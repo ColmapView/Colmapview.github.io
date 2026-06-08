@@ -10,6 +10,7 @@ function createImage(imageId: number): ImageData {
     numPoints2D: 0,
     numPoints3D: 0,
     cameraId: 1,
+    cameraColorIndex: 0,
     cameraWidth: 640,
     cameraHeight: 480,
     covisibleCount: 0,

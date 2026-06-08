@@ -3,6 +3,7 @@ import { createIdentityEuler } from '../utils/sim3dTransforms';
 import {
   buildShareConfigFromStoreStates,
   extractShareableFields,
+  getShareTransform,
   type ShareConfigStoreStates,
 } from './urlStateShareConfigPolicy';
 
@@ -81,6 +82,42 @@ describe('urlStateShareConfigPolicy', () => {
 
     expect(buildShareConfigFromStoreStates(states, {})).toEqual({
       transform: states.transform,
+    });
+  });
+
+  it('shares the accumulated splat transform when the active transform has been applied', () => {
+    const states: ShareConfigStoreStates = {
+      pointCloud: {},
+      ui: {},
+      camera: { selectedImageId: null },
+      rig: {},
+      transform: identityTransform,
+      splatTransform: {
+        ...identityTransform,
+        translationX: 2,
+      },
+    };
+
+    expect(buildShareConfigFromStoreStates(states, {})).toEqual({
+      transform: states.splatTransform,
+    });
+  });
+
+  it('shares the active transform composed after the accumulated splat transform', () => {
+    const activeTransform = {
+      ...identityTransform,
+      scale: 2,
+      translationX: 1,
+    };
+    const splatTransform = {
+      ...identityTransform,
+      translationY: 3,
+    };
+
+    expect(getShareTransform(activeTransform, splatTransform)).toMatchObject({
+      scale: 2,
+      translationX: 1,
+      translationY: 6,
     });
   });
 });

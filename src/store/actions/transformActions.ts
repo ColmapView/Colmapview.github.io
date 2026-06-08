@@ -80,7 +80,7 @@ export function applyTransformToData(): boolean {
   if (!reconstruction) return false;
 
   const transformStore = useTransformStore.getState();
-  const { transform } = transformStore;
+  const { transform, splatTransform } = transformStore;
 
   const sim3d = createSim3dFromEuler(transform);
   const transformed = transformReconstruction(sim3d, reconstruction, wasmReconstruction);
@@ -104,6 +104,10 @@ export function applyTransformToData(): boolean {
   }
 
   reconstructionStore.setReconstruction(transformed);
+  if (!isIdentityEuler(transform)) {
+    const nextSplatTransform = composeSim3d(sim3d, createSim3dFromEuler(splatTransform));
+    transformStore.setSplatTransform(sim3dToEuler(nextSplatTransform));
+  }
   transformStore.resetTransform();
 
   // Floor plane data (normal, offset, per-point distances) was computed in the

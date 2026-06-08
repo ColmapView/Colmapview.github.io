@@ -1,10 +1,12 @@
 import {
   applyTransformPreset,
   applyTransformToData,
+  usePointCloudStore,
   usePointPickingStore,
   useReconstructionStore,
   useTransformStore,
   useUIStore,
+  type PointCloudState,
   type PointPickingState,
   type TransformState,
   type UIState,
@@ -34,6 +36,13 @@ interface TransformPanelPointPickingFacade {
   setPickingMode: PointPickingState['setPickingMode'];
 }
 
+interface TransformPanelPointCloudFacade {
+  showPointCloud: boolean;
+  colorMode: PointCloudState['colorMode'];
+  setShowPointCloud: PointCloudState['setShowPointCloud'];
+  setColorMode: PointCloudState['setColorMode'];
+}
+
 interface TransformPanelActionFacade {
   applyTransformPreset: typeof applyTransformPreset;
   applyTransformToData: typeof applyTransformToData;
@@ -44,6 +53,7 @@ export interface TransformPanelStoreFacade {
   transform: TransformPanelTransformFacade;
   ui: TransformPanelUiFacade;
   pointPicking: TransformPanelPointPickingFacade;
+  pointCloud: TransformPanelPointCloudFacade;
   actions: TransformPanelActionFacade;
 }
 
@@ -61,6 +71,11 @@ export function useTransformPanelStoreFacade(): TransformPanelStoreFacade {
 
   const pickingMode = usePointPickingStore((s) => s.pickingMode);
   const setPickingMode = usePointPickingStore((s) => s.setPickingMode);
+
+  const showPointCloud = usePointCloudStore((s) => s.showPointCloud);
+  const colorMode = usePointCloudStore((s) => s.colorMode);
+  const setShowPointCloud = usePointCloudStore((s) => s.setShowPointCloud);
+  const setColorMode = usePointCloudStore((s) => s.setColorMode);
 
   return {
     data: {
@@ -80,6 +95,12 @@ export function useTransformPanelStoreFacade(): TransformPanelStoreFacade {
     pointPicking: {
       pickingMode,
       setPickingMode,
+    },
+    pointCloud: {
+      showPointCloud,
+      colorMode,
+      setShowPointCloud,
+      setColorMode,
     },
     actions: {
       applyTransformPreset,

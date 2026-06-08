@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   GALLERY_SORT_FIELD_OPTIONS,
+  GALLERY_BORDER_COLOR_OPTIONS,
   getGalleryCameraFilterValue,
+  getGalleryBorderColorModeValue,
   getGallerySortFieldOptions,
   getGallerySortFieldValue,
 } from './imageGalleryToolbarViewModel';
@@ -48,6 +50,18 @@ describe('image gallery toolbar view model', () => {
     expect(getGallerySortFieldValue('splatPsnr', true)).toBe('splatPsnr');
     expect(getGallerySortFieldValue('splatSsim', true)).toBe('splatSsim');
     expect(getGallerySortFieldValue('unknown')).toBeNull();
+  });
+
+  it('defines and narrows gallery border color modes', () => {
+    expect(GALLERY_BORDER_COLOR_OPTIONS.map(option => option.value)).toEqual([
+      'none',
+      'camera',
+      'psnr',
+      'ssim',
+    ]);
+    expect(getGalleryBorderColorModeValue('none')).toBe('none');
+    expect(getGalleryBorderColorModeValue('psnr')).toBe('psnr');
+    expect(getGalleryBorderColorModeValue('unexpected')).toBeNull();
   });
 
   it('narrows raw camera filter values to all or known camera ids', () => {

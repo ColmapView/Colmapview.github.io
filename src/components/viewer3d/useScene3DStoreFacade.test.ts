@@ -49,7 +49,18 @@ describe('useScene3DStoreFacade', () => {
       reconstruction,
       loadedFiles: buildLoadedFiles({ splatFile }),
     });
-    useTransformStore.setState({ transform });
+    useTransformStore.setState({
+      transform,
+      splatTransform: {
+        scale: 3,
+        rotationX: 0,
+        rotationY: 0,
+        rotationZ: 0,
+        translationX: 4,
+        translationY: 5,
+        translationZ: 6,
+      },
+    });
     useUIStore.setState({
       isIdle: true,
       autoHideElements,
@@ -74,6 +85,7 @@ describe('useScene3DStoreFacade', () => {
       viewDirection: 'z',
       viewTrigger: 5,
       transform,
+      splatTransform: expect.objectContaining({ scale: 3, translationX: 4 }),
       requestedSplatBackend: 'webgpu',
       splatsVisible: false,
     });

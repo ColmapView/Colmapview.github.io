@@ -234,7 +234,7 @@ export const useUIStore = create<UIState>()(
       backgroundColor: '#ffffff',
       showGizmo: false,
       idleHideTimeout: 3,
-      autoHideElements: { axes: false, grid: false, gizmo: false, points: false, cameras: false, matches: false, rigs: false, buttons: true },
+      autoHideElements: { axes: true, grid: true, gizmo: true, points: false, cameras: false, matches: false, rigs: false, buttons: true },
       isIdle: false,
       galleryCollapsed: false,
       touchUI: {
@@ -334,7 +334,7 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: STORAGE_KEYS.ui,
-      version: 11,
+      version: 12,
       migrate: (persistedState, version) =>
         migrateUIPersistedState(persistedState, version, DEFAULT_CONTEXT_MENU_ACTIONS),
       partialize: (state) => ({

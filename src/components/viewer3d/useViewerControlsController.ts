@@ -140,6 +140,7 @@ export function useViewerControlsController(): ViewerControlsController {
     cycleColorMode,
     cycleCameraDisplayMode,
     cycleMatchesDisplayMode,
+    cycleHorizonLock,
     cycleSelectionColorMode,
     cycleRigDisplayMode,
     handleResetView,
@@ -149,6 +150,8 @@ export function useViewerControlsController(): ViewerControlsController {
     setBackgroundHsl: setHslColor,
     cameraMode: navNode.mode,
     setCameraMode: navActions.setMode,
+    horizonLock: navNode.horizonLock,
+    setHorizonLock: navActions.setHorizonLock,
     undistortionEnabled: camerasNode.undistortionEnabled,
     setUndistortionEnabled: camerasActions.setUndistortionEnabled,
     showPointCloud: pointsNode.visible,
@@ -188,6 +191,7 @@ export function useViewerControlsController(): ViewerControlsController {
     cycleColorMode,
     cycleCameraDisplayMode,
     cycleMatchesDisplayMode,
+    cycleHorizonLock,
     toggleUndistortion,
   });
 

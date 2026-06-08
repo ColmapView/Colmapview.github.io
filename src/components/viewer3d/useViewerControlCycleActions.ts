@@ -1,14 +1,17 @@
 import { useCallback } from 'react';
-import type {
-  CameraDisplayMode,
-  CameraMode,
-  CameraProjection,
-  ColorMode,
-  MatchesDisplayMode,
-  RigDisplayMode,
-  SelectionColorMode,
+import {
+  HORIZON_LOCK_MODES,
+  type CameraDisplayMode,
+  type CameraMode,
+  type CameraProjection,
+  type ColorMode,
+  type HorizonLockMode,
+  type MatchesDisplayMode,
+  type RigDisplayMode,
+  type SelectionColorMode,
 } from '../../store/types';
 import type { ViewDirection } from '../../store';
+import { getNextCycleValue } from './contextMenu/globalContextMenuActionPolicy';
 import {
   getNextAxesGridState,
   getNextCameraDisplayState,
@@ -59,6 +62,8 @@ interface ViewerControlCycleActionsOptions {
   setBackgroundHsl: Setter<HslColor>;
   cameraMode: CameraMode;
   setCameraMode: Setter<CameraMode>;
+  horizonLock: HorizonLockMode;
+  setHorizonLock: Setter<HorizonLockMode>;
   undistortionEnabled: boolean;
   setUndistortionEnabled: Setter<boolean>;
   showPointCloud: boolean;
@@ -94,6 +99,8 @@ export function useViewerControlCycleActions({
   setBackgroundHsl,
   cameraMode,
   setCameraMode,
+  horizonLock,
+  setHorizonLock,
   undistortionEnabled,
   setUndistortionEnabled,
   showPointCloud,
@@ -130,6 +137,10 @@ export function useViewerControlCycleActions({
   const toggleCameraMode = useCallback(() => {
     setCameraMode(cameraMode === 'orbit' ? 'fly' : 'orbit');
   }, [cameraMode, setCameraMode]);
+
+  const cycleHorizonLock = useCallback(() => {
+    setHorizonLock(getNextCycleValue(HORIZON_LOCK_MODES, horizonLock));
+  }, [horizonLock, setHorizonLock]);
 
   const toggleUndistortion = useCallback(() => {
     setUndistortionEnabled(!undistortionEnabled);
@@ -197,6 +208,7 @@ export function useViewerControlCycleActions({
   return {
     toggleBackground,
     toggleCameraMode,
+    cycleHorizonLock,
     toggleUndistortion,
     cycleColorMode,
     cycleCameraDisplayMode,

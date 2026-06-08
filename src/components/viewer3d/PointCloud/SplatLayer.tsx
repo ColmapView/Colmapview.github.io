@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import { useThree } from '@react-three/fiber';
+import type { Matrix4 } from 'three';
 import { appLogger } from '../../../utils/logger';
 import {
   getSplatMeshSourceOptions,
@@ -56,7 +57,7 @@ function SparkRendererBridge({ SparkRenderer }: { SparkRenderer: SparkModule['Sp
   return null;
 }
 
-export function SplatLayer(): JSX.Element | null {
+export function SplatLayer({ modelMatrix = null }: { modelMatrix?: Matrix4 | null }): JSX.Element | null {
   const {
     data: {
       showSplats,
@@ -273,6 +274,24 @@ export function SplatLayer(): JSX.Element | null {
     replaceLoadedSplat,
     startSplatLoadingNotification,
   ]);
+
+  useEffect(() => {
+    const currentLoadedSplat = loadedSplatRef.current;
+    if (!currentLoadedSplat || currentLoadedSplat.file !== splatFile) {
+      return;
+    }
+
+    const { mesh } = currentLoadedSplat;
+    if (modelMatrix) {
+      mesh.matrix.copy(modelMatrix);
+      mesh.matrixAutoUpdate = false;
+    } else {
+      mesh.matrix.identity();
+      mesh.matrixAutoUpdate = true;
+    }
+    mesh.updateMatrixWorld(true);
+    invalidate();
+  }, [invalidate, loadedSplat, modelMatrix, splatFile]);
 
   if (!splatFile || !sparkModule || !shouldUseSparkBackend) {
     return null;

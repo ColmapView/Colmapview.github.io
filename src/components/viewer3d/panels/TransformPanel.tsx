@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useFileDropzone } from '../../../hooks/useFileDropzone';
 import { TransformIcon } from '../../../icons';
@@ -14,6 +14,7 @@ import {
   formatTransformDegreesValue,
   formatTransformScaleValue,
   formatTransformTranslationValue,
+  getPointCloudStateForPickingMode,
   getTransformPanelState,
   getTransformPickingButtonState,
   radiansToDegrees,
@@ -52,6 +53,12 @@ export const TransformPanel = memo(function TransformPanel({
       pickingMode,
       setPickingMode,
     },
+    pointCloud: {
+      showPointCloud,
+      colorMode,
+      setShowPointCloud,
+      setColorMode,
+    },
     actions: {
       applyTransformPreset,
       applyTransformToData,
@@ -69,6 +76,22 @@ export const TransformPanel = memo(function TransformPanel({
   const onePointOriginButton = getTransformPickingButtonState(pickingMode, 'origin-1pt');
   const twoPointScaleButton = getTransformPickingButtonState(pickingMode, 'distance-2pt');
   const threePointAlignButton = getTransformPickingButtonState(pickingMode, 'normal-3pt');
+  const handlePickingModeClick = useCallback((nextMode: typeof pickingMode) => {
+    if (nextMode !== 'off') {
+      const nextPointState = getPointCloudStateForPickingMode({
+        showPointCloud,
+        colorMode,
+      });
+      if (nextPointState.showPointCloud !== showPointCloud) {
+        setShowPointCloud(nextPointState.showPointCloud);
+      }
+      if (nextPointState.colorMode !== colorMode) {
+        setColorMode(nextPointState.colorMode);
+      }
+    }
+
+    setPickingMode(nextMode);
+  }, [colorMode, setColorMode, setPickingMode, setShowPointCloud, showPointCloud]);
 
   useHotkeys(
     HOTKEYS.toggleGizmo.keys,
@@ -171,7 +194,7 @@ export const TransformPanel = memo(function TransformPanel({
 
         <div className={styles.presetGroup}>
           <button
-            onClick={() => setPickingMode(onePointOriginButton.nextMode)}
+            onClick={() => handlePickingModeClick(onePointOriginButton.nextMode)}
             className={onePointOriginButton.isActive ? styles.actionButtonPrimary : styles.presetButton}
             data-tooltip="{LMB} Click 1 point to set as origin (0,0,0)"
             data-tooltip-pos="bottom"
@@ -179,7 +202,7 @@ export const TransformPanel = memo(function TransformPanel({
             1-Point Origin
           </button>
           <button
-            onClick={() => setPickingMode(twoPointScaleButton.nextMode)}
+            onClick={() => handlePickingModeClick(twoPointScaleButton.nextMode)}
             className={twoPointScaleButton.isActive ? styles.actionButtonPrimary : styles.presetButton}
             data-tooltip="{LMB} Click 2 points, set target distance"
             data-tooltip-pos="bottom"
@@ -187,7 +210,7 @@ export const TransformPanel = memo(function TransformPanel({
             2-Point Scale
           </button>
           <button
-            onClick={() => setPickingMode(threePointAlignButton.nextMode)}
+            onClick={() => handlePickingModeClick(threePointAlignButton.nextMode)}
             className={threePointAlignButton.isActive ? styles.actionButtonPrimary : styles.presetButton}
             data-tooltip="{LMB} Click 3 points clockwise to align plane with Y-up"
             data-tooltip-pos="bottom"

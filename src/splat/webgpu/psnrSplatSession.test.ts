@@ -329,6 +329,7 @@ describe('WebGPU splat PSNR session', () => {
       width: 4,
       height: 3,
       transform,
+      modelTransform: undefined,
     });
     expect(harness.renderSession.setCamera).toHaveBeenCalledTimes(1);
     expect(harness.renderSession.renderToTexture).toHaveBeenCalledTimes(1);
@@ -641,6 +642,7 @@ describe('WebGPU splat PSNR session', () => {
       width: 4,
       height: 3,
       transform: undefined,
+      modelTransform: undefined,
     });
     expect(harness.deps.computePsnrFromTextures).toHaveBeenCalledTimes(1);
   });

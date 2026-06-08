@@ -32,6 +32,7 @@ interface SplatPsnrEvaluatorDataFacade {
   splatBackendResolution: SplatBackendResolution;
   splatMetricCapability: SplatMetricCapability;
   transform: Sim3dEuler;
+  splatTransform: Sim3dEuler;
 }
 
 interface SplatPsnrEvaluatorActionsFacade {
@@ -60,6 +61,7 @@ export function useSplatPsnrEvaluatorStoreFacade(): SplatPsnrEvaluatorStoreFacad
   const splatFile = useReconstructionStore((s) => s.loadedFiles?.splatFile);
   const dataset = useDataset();
   const transform = useTransformStore((s) => s.transform);
+  const splatTransform = useTransformStore((s) => s.splatTransform);
   const splatBackendResolution = useSplatBackendStore((s) => s.resolution);
   const splatMetricCapability = useSplatBackendStore((s) => s.metricCapability);
   const setWebGpuMetricState = useSplatBackendStore((s) => s.setWebGpuMetricState);
@@ -90,6 +92,7 @@ export function useSplatPsnrEvaluatorStoreFacade(): SplatPsnrEvaluatorStoreFacad
       splatBackendResolution,
       splatMetricCapability,
       transform,
+      splatTransform,
     },
     actions: {
       setWebGpuMetricState,

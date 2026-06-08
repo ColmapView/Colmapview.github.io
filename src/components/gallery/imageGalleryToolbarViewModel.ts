@@ -1,5 +1,14 @@
 import { parseSafeIntegerString } from '../../utils/numberParsing';
 import type { CameraFilter, SortField } from './imageGalleryDataViewModel';
+import {
+  GALLERY_BORDER_COLOR_OPTIONS,
+  getGalleryBorderColorModeValue,
+} from './imageGalleryBorderColorViewModel';
+
+export {
+  GALLERY_BORDER_COLOR_OPTIONS,
+  getGalleryBorderColorModeValue,
+};
 
 interface GalleryCameraFilterOption {
   cameraId: number;

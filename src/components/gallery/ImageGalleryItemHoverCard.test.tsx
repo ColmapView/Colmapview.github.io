@@ -11,6 +11,7 @@ function createImage(overrides: Partial<ImageData> = {}): ImageData {
     numPoints2D: 23,
     numPoints3D: 11,
     cameraId: 3,
+    cameraColorIndex: 0,
     cameraWidth: 1024,
     cameraHeight: 768,
     covisibleCount: 5,
