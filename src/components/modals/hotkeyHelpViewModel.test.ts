@@ -41,6 +41,7 @@ describe('hotkey help view model', () => {
     const sections = getHotkeyHelpSections();
     const generalRows = sections.find((section) => section.category === 'general')?.rows;
     const modalRows = sections.find((section) => section.category === 'modal')?.rows;
+    const cameraRows = sections.find((section) => section.category === 'camera')?.rows;
 
     expect(generalRows).toContainEqual({
       id: 'showHelp',
@@ -51,6 +52,11 @@ describe('hotkey help view model', () => {
       id: 'prevImage',
       description: 'Previous image',
       keyCombo: '←',
+    });
+    expect(cameraRows).toContainEqual({
+      id: 'cycleSplatFile',
+      description: 'Switch to next splat file',
+      keyCombo: 'n',
     });
   });
 

@@ -29,6 +29,7 @@ export interface ViewerControlHotkeysArgs {
   toggleCameraMode: () => void;
   toggleBackground: () => void;
   cycleColorMode: () => void;
+  cycleSplatFile: () => void;
   cycleCameraDisplayMode: () => void;
   cycleMatchesDisplayMode: () => void;
   cycleHorizonLock: () => void;
@@ -42,6 +43,7 @@ export function useViewerControlHotkeys({
   toggleCameraMode,
   toggleBackground,
   cycleColorMode,
+  cycleSplatFile,
   cycleCameraDisplayMode,
   cycleMatchesDisplayMode,
   cycleHorizonLock,
@@ -129,6 +131,13 @@ export function useViewerControlHotkeys({
     cycleColorMode,
     { scopes: HOTKEYS.cyclePointSize.scopes },
     [cycleColorMode]
+  );
+
+  useHotkeys(
+    HOTKEYS.cycleSplatFile.keys,
+    cycleSplatFile,
+    { scopes: HOTKEYS.cycleSplatFile.scopes },
+    [cycleSplatFile]
   );
 
   useHotkeys(

@@ -49,6 +49,18 @@ export function getShareActiveSplatSourceId(loadedFiles: LoadedFiles | null): st
   return getActiveSplatSourceId(loadedFiles);
 }
 
+export function getNextSplatFile(
+  splatFiles: readonly File[],
+  activeSplatFile: File | undefined
+): File | null {
+  if (splatFiles.length <= 1) {
+    return null;
+  }
+
+  const activeIndex = activeSplatFile ? splatFiles.indexOf(activeSplatFile) : -1;
+  return splatFiles[(activeIndex + 1) % splatFiles.length] ?? null;
+}
+
 function getLoadedSplatFiles(loadedFiles: LoadedFiles): readonly File[] {
   return loadedFiles.splatFiles ?? (loadedFiles.splatFile ? [loadedFiles.splatFile] : []);
 }

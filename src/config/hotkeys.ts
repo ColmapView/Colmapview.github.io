@@ -160,6 +160,12 @@ export const HOTKEYS: HotkeyRegistry = {
     category: 'camera',
     scopes: ['viewer'],
   },
+  cycleSplatFile: {
+    keys: 'n',
+    description: 'Switch to next splat file',
+    category: 'camera',
+    scopes: ['viewer'],
+  },
   cycleCameraDisplay: {
     keys: 'f',
     description: 'Cycle frustum display',

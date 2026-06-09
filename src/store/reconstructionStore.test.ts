@@ -93,7 +93,7 @@ describe('reconstruction store URL load lifecycle', () => {
     expect(usePointCloudStore.getState().pointOpacity).toBe(0.2);
   });
 
-  it('preserves point size and opacity when only the active splat file changes', () => {
+  it('preserves point rendering mode, size, and opacity when only the active splat file changes', () => {
     const camerasFile = new File([''], 'cameras.bin');
     const imagesFile = new File([''], 'images.bin');
     const points3DFile = new File([''], 'points3D.bin');
@@ -110,7 +110,12 @@ describe('reconstruction store URL load lifecycle', () => {
       imageFiles,
       hasMasks: false,
     });
-    usePointCloudStore.setState({ pointSize: 5, pointOpacity: 0.65 });
+    usePointCloudStore.setState({
+      colorMode: 'rgb',
+      showSplats: false,
+      pointSize: 5,
+      pointOpacity: 0.65,
+    });
 
     useReconstructionStore.getState().setLoadedFiles({
       camerasFile,
@@ -122,7 +127,8 @@ describe('reconstruction store URL load lifecycle', () => {
       hasMasks: false,
     });
 
-    expect(usePointCloudStore.getState().colorMode).toBe('splatPoints');
+    expect(usePointCloudStore.getState().colorMode).toBe('rgb');
+    expect(usePointCloudStore.getState().showSplats).toBe(false);
     expect(usePointCloudStore.getState().pointSize).toBe(5);
     expect(usePointCloudStore.getState().pointOpacity).toBe(0.65);
   });

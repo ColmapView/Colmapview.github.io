@@ -143,13 +143,11 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     if (nextBackgroundColor !== uiStore.backgroundColor) {
       uiStore.setBackgroundColor(nextBackgroundColor);
     }
-    if (hasSplatFile) {
+    if (hasSplatFile && !isActiveSplatFileSwitch) {
       const pointCloudStore = usePointCloudStore.getState();
       pointCloudStore.setColorMode('splatPoints');
-      if (!isActiveSplatFileSwitch) {
-        pointCloudStore.setPointSize(SPLAT_POINT_CLOUD_DEFAULT_SIZE);
-        pointCloudStore.setPointOpacity(SPLAT_POINT_CLOUD_DEFAULT_OPACITY);
-      }
+      pointCloudStore.setPointSize(SPLAT_POINT_CLOUD_DEFAULT_SIZE);
+      pointCloudStore.setPointOpacity(SPLAT_POINT_CLOUD_DEFAULT_OPACITY);
     }
     if (!isActiveSplatFileSwitch) {
       useTransformStore.getState().resetSplatTransform();

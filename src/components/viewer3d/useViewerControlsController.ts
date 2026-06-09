@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { controlPanelStyles } from '../../theme';
 import { isSplatColorMode, type ColorMode } from '../../store/types';
+import { getNextSplatFile } from '../../utils/splatFileSourcePolicy';
 import type {
   AxesGridPanelProps,
   BackgroundPanelProps,
@@ -77,6 +78,11 @@ export function useViewerControlsController(): ViewerControlsController {
     rig: rigNode,
   } = nodes;
   const {
+    activeSplatFile,
+    splatFiles,
+    setActiveSplatFile,
+  } = splats;
+  const {
     points: pointsActions,
     cameras: camerasActions,
     selection: selectionActions,
@@ -132,6 +138,13 @@ export function useViewerControlsController(): ViewerControlsController {
     pointsActions.setColorMode(nextColorMode);
     requestDefaultSplatCameraColor(nextColorMode);
   }, [pointsActions, requestDefaultSplatCameraColor]);
+
+  const cycleSplatFile = useCallback(() => {
+    const nextSplatFile = getNextSplatFile(splatFiles, activeSplatFile);
+    if (nextSplatFile) {
+      setActiveSplatFile(nextSplatFile);
+    }
+  }, [activeSplatFile, setActiveSplatFile, splatFiles]);
 
   const {
     toggleBackground,
@@ -189,6 +202,7 @@ export function useViewerControlsController(): ViewerControlsController {
     toggleCameraMode,
     toggleBackground,
     cycleColorMode,
+    cycleSplatFile,
     cycleCameraDisplayMode,
     cycleMatchesDisplayMode,
     cycleHorizonLock,

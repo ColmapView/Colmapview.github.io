@@ -178,8 +178,8 @@ describe('useViewerControlsStoreFacade', () => {
     });
 
     expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(fallbackSplatFile);
-    expect(usePointCloudStore.getState().colorMode).toBe('splatPoints');
-    expect(usePointCloudStore.getState().showSplats).toBe(true);
+    expect(usePointCloudStore.getState().colorMode).toBe('rgb');
+    expect(usePointCloudStore.getState().showSplats).toBe(false);
     expect(useImageMetricsStore.getState().splatPsnrFrameReady).toBe(false);
     expect(useImageMetricsStore.getState().splatPsnrMetrics.size).toBe(0);
   });
