@@ -6,6 +6,7 @@ import {
   getDefaultUrlManifestLogMessage,
   getDirectoryListingLinks,
   getDirectoryListingRootUrl,
+  getHuggingFaceSplatPaths,
   getHuggingFaceDatasetTreeRequest,
   getInlineManifestLoadLogMessage,
   getPreferredHuggingFaceSplatPath,
@@ -122,15 +123,9 @@ describe('url loader policy helpers', () => {
     });
   });
 
-  it('recursively chooses the preferred splat path from Hugging Face tree entries relative to the loaded dataset', () => {
+  it('recursively lists splat paths from Hugging Face tree entries relative to the loaded dataset', () => {
     const treePath = 'objects/scan';
-
-    expect(getRelativeHuggingFaceTreePath('objects/scan/splats/surface_gaussians.ply', treePath))
-      .toBe('splats/surface_gaussians.ply');
-    expect(getRelativeHuggingFaceTreePath('objects/other/surface_gaussians.ply', treePath))
-      .toBeNull();
-
-    expect(getPreferredHuggingFaceSplatPath([
+    const entries = [
       { type: 'directory', path: 'objects/scan/splats', size: 0 },
       { type: 'file', path: 'objects/scan/inside_gaussians.ply', size: 100 },
       { type: 'file', path: 'objects/scan/output/surface_gaussians.ply', size: 250 },
@@ -140,7 +135,22 @@ describe('url loader policy helpers', () => {
       { type: 'file', path: 'objects/scan/compressed/larger.spz', size: 50 },
       { type: 'file', path: 'objects/scan/points3D.bin', size: 500 },
       { type: 'file', path: 'objects/other/larger.ply', size: 1000 },
-    ], treePath)).toEqual({
+    ];
+
+    expect(getRelativeHuggingFaceTreePath('objects/scan/splats/surface_gaussians.ply', treePath))
+      .toBe('splats/surface_gaussians.ply');
+    expect(getRelativeHuggingFaceTreePath('objects/other/surface_gaussians.ply', treePath))
+      .toBeNull();
+
+    expect(getHuggingFaceSplatPaths(entries, treePath)).toEqual([
+      { path: 'compressed/larger.spz', size: 50 },
+      { path: 'compressed/surface_gaussians.spz', size: 25 },
+      { path: 'folder/folder/folder/deep_gaussians.ply', size: 750 },
+      { path: '3dgs/surface_gaussians.ply', size: 500 },
+      { path: 'output/surface_gaussians.ply', size: 250 },
+      { path: 'inside_gaussians.ply', size: 100 },
+    ]);
+    expect(getPreferredHuggingFaceSplatPath(entries, treePath)).toEqual({
       path: 'compressed/larger.spz',
       size: 50,
     });

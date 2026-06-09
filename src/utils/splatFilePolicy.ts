@@ -39,3 +39,9 @@ export function getPreferredSplatCandidate<TCandidate extends SplatCandidate>(
   if (!current) return candidate;
   return compareSplatCandidates(candidate, current) > 0 ? candidate : current;
 }
+
+export function sortSplatCandidatesByPreference<TCandidate extends SplatCandidate>(
+  candidates: readonly TCandidate[]
+): TCandidate[] {
+  return [...candidates].sort((a, b) => compareSplatCandidates(b, a));
+}

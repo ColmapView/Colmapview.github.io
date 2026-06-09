@@ -16,10 +16,10 @@ import {
   getDirectoryListingLinks,
   getDirectoryListingRootUrl,
   getHuggingFaceDatasetTreeRequest,
-  getLargestRemoteSplatCandidate,
-  getPreferredHuggingFaceSplatPath,
+  getHuggingFaceSplatPaths,
   getManifestColmapFileEntries,
   joinManifestUrlPath,
+  sortRemoteSplatCandidates,
   type RemoteSplatCandidate,
 } from './urlLoaderPolicy';
 import { isUrlLoadError } from './urlLoaderErrorHandling';
@@ -63,13 +63,13 @@ export interface DiscoverDirectoryListingSplatDeps {
   maxDirectories?: number;
 }
 
-export async function discoverHuggingFaceSplatPath(
+export async function discoverHuggingFaceSplatPaths(
   baseUrl: string,
   deps: DiscoverHuggingFaceSplatDeps = {}
-): Promise<RemoteSplatCandidate | null> {
+): Promise<RemoteSplatCandidate[]> {
   const request = getHuggingFaceDatasetTreeRequest(baseUrl);
   if (!request) {
-    return null;
+    return [];
   }
 
   const fetchImpl = deps.fetchImpl ?? defaultFetchUrl;
@@ -80,10 +80,17 @@ export async function discoverHuggingFaceSplatPath(
 
   const entries: unknown = await response.json();
   if (!Array.isArray(entries)) {
-    return null;
+    return [];
   }
 
-  return getPreferredHuggingFaceSplatPath(entries, request.treePath);
+  return getHuggingFaceSplatPaths(entries, request.treePath);
+}
+
+export async function discoverHuggingFaceSplatPath(
+  baseUrl: string,
+  deps: DiscoverHuggingFaceSplatDeps = {}
+): Promise<RemoteSplatCandidate | null> {
+  return (await discoverHuggingFaceSplatPaths(baseUrl, deps))[0] ?? null;
 }
 
 async function getRemoteFileContentLength(url: string, fetchImpl: FetchUrl): Promise<number | null> {
@@ -107,13 +114,13 @@ async function getRemoteFileContentLength(url: string, fetchImpl: FetchUrl): Pro
   return Number.isFinite(size) && size >= 0 ? size : null;
 }
 
-export async function discoverDirectoryListingSplatPath(
+export async function discoverDirectoryListingSplatPaths(
   baseUrl: string,
   deps: DiscoverDirectoryListingSplatDeps = {}
-): Promise<RemoteSplatCandidate | null> {
+): Promise<RemoteSplatCandidate[]> {
   const rootUrl = getDirectoryListingRootUrl(baseUrl);
   if (!rootUrl) {
-    return null;
+    return [];
   }
 
   const fetchImpl = deps.fetchImpl ?? defaultFetchUrl;
@@ -123,7 +130,7 @@ export async function discoverDirectoryListingSplatPath(
   const queue: Array<{ url: string; depth: number }> = [{ url: rootUrl, depth: 0 }];
   const visitedDirectories = new Set<string>();
   let checkedCandidates = 0;
-  let largest: RemoteSplatCandidate | null = null;
+  const candidatesByPath = new Map<string, RemoteSplatCandidate>();
 
   while (queue.length > 0 && visitedDirectories.size < maxDirectories) {
     const current = queue.shift();
@@ -153,7 +160,7 @@ export async function discoverDirectoryListingSplatPath(
 
     for (const link of getDirectoryListingLinks(current.url, rootUrl, html)) {
       if (link.isSplat) {
-        if (checkedCandidates >= maxCandidates) {
+        if (checkedCandidates >= maxCandidates || candidatesByPath.has(link.relativePath)) {
           continue;
         }
 
@@ -163,7 +170,7 @@ export async function discoverDirectoryListingSplatPath(
           continue;
         }
 
-        largest = getLargestRemoteSplatCandidate(largest, {
+        candidatesByPath.set(link.relativePath, {
           path: link.relativePath,
           size,
         });
@@ -176,7 +183,25 @@ export async function discoverDirectoryListingSplatPath(
     }
   }
 
-  return largest;
+  return sortRemoteSplatCandidates([...candidatesByPath.values()]);
+}
+
+export async function discoverDirectoryListingSplatPath(
+  baseUrl: string,
+  deps: DiscoverDirectoryListingSplatDeps = {}
+): Promise<RemoteSplatCandidate | null> {
+  return (await discoverDirectoryListingSplatPaths(baseUrl, deps))[0] ?? null;
+}
+
+function getDiscoveredSplatLogMessage(
+  source: 'Hugging Face' | 'directory',
+  candidates: readonly RemoteSplatCandidate[]
+): string {
+  const label = source === 'Hugging Face' ? 'Hugging Face splat' : 'directory splat';
+  const candidateList = candidates.map((candidate) => `${candidate.path} (${candidate.size} bytes)`).join(', ');
+  return candidates.length === 1
+    ? `[URL Loader] Discovered ${label} file: ${candidateList}`
+    : `[URL Loader] Discovered ${candidates.length} ${label} files: ${candidateList}`;
 }
 
 async function withDiscoveredRemoteSplats(
@@ -188,14 +213,14 @@ async function withDiscoveredRemoteSplats(
   }
 
   try {
-    const candidate = await discoverHuggingFaceSplatPath(manifest.baseUrl, {
+    const candidates = await discoverHuggingFaceSplatPaths(manifest.baseUrl, {
       fetchImpl: deps.fetchImpl,
     });
-    if (candidate) {
-      deps.log?.(`[URL Loader] Discovered Hugging Face splat file: ${candidate.path} (${candidate.size} bytes)`);
+    if (candidates.length > 0) {
+      deps.log?.(getDiscoveredSplatLogMessage('Hugging Face', candidates));
       return {
         ...manifest,
-        splats: [candidate.path],
+        splats: candidates.map((candidate) => candidate.path),
       };
     }
   } catch (err) {
@@ -204,14 +229,14 @@ async function withDiscoveredRemoteSplats(
   }
 
   try {
-    const candidate = await discoverDirectoryListingSplatPath(manifest.baseUrl, {
+    const candidates = await discoverDirectoryListingSplatPaths(manifest.baseUrl, {
       fetchImpl: deps.fetchImpl,
     });
-    if (candidate) {
-      deps.log?.(`[URL Loader] Discovered directory splat file: ${candidate.path} (${candidate.size} bytes)`);
+    if (candidates.length > 0) {
+      deps.log?.(getDiscoveredSplatLogMessage('directory', candidates));
       return {
         ...manifest,
-        splats: [candidate.path],
+        splats: candidates.map((candidate) => candidate.path),
       };
     }
   } catch (err) {

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.7] - 2026-06-09
+
+### Fixed
+
+- Load all discovered remote `.spz` and `.ply` splat files from Hugging Face and directory URLs instead of only the preferred candidate.
+
 ## [0.7.6] - 2026-06-09
 
 ### Added
@@ -235,7 +241,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript for type safety
 - Deno native test runner for testing
 
-[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.6...HEAD
+[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.7...HEAD
+[0.7.7]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.6...v0.7.7
 [0.7.6]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.1...v0.7.5
 [0.7.1]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.0...v0.7.1

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildFile } from '../test/builders';
 import type { ColmapManifest, UrlLoadError } from '../types/manifest';
 import {
-  discoverDirectoryListingSplatPath,
+  discoverDirectoryListingSplatPaths,
   fetchManifestColmapFiles,
   fetchManifestFile,
   fetchUrlManifest,
@@ -170,7 +170,7 @@ describe('URL loader manifest fetch helpers', () => {
     expect(log).toHaveBeenCalledWith('[URL Loader] Optional file loaded: splats/large.ply');
   });
 
-  it('discovers the preferred Hugging Face splat for direct dataset manifests', async () => {
+  it('discovers all Hugging Face splats for direct dataset manifests', async () => {
     const setUrlProgress = vi.fn();
     const log = vi.fn();
     const baseUrl = 'https://huggingface.co/datasets/OpsiClear/NGS/resolve/main/objects/scan_toy';
@@ -201,18 +201,23 @@ describe('URL loader manifest fetch helpers', () => {
       'https://huggingface.co/api/datasets/OpsiClear/NGS/tree/main/objects/scan_toy?recursive=true'
     );
     expect(fetchFile).toHaveBeenCalledWith(baseUrl, 'splats/surface_gaussians.spz');
-    expect(fetchFile).not.toHaveBeenCalledWith(baseUrl, 'inside_gaussians.ply');
-    expect(fetchFile).not.toHaveBeenCalledWith(baseUrl, 'output/surface_gaussians.ply');
-    expect(fetchFile).not.toHaveBeenCalledWith(baseUrl, '3dgs/surface_gaussians.ply');
-    expect(fetchFile).not.toHaveBeenCalledWith(baseUrl, 'folder/folder/folder/surface_gaussians.ply');
+    expect(fetchFile).toHaveBeenCalledWith(baseUrl, 'inside_gaussians.ply');
+    expect(fetchFile).toHaveBeenCalledWith(baseUrl, 'output/surface_gaussians.ply');
+    expect(fetchFile).toHaveBeenCalledWith(baseUrl, '3dgs/surface_gaussians.ply');
+    expect(fetchFile).toHaveBeenCalledWith(baseUrl, 'folder/folder/folder/surface_gaussians.ply');
     expect([...files.keys()]).toContain('splats/surface_gaussians.spz');
+    expect([...files.keys()]).toContain('inside_gaussians.ply');
+    expect([...files.keys()]).toContain('output/surface_gaussians.ply');
+    expect([...files.keys()]).toContain('3dgs/surface_gaussians.ply');
+    expect([...files.keys()]).toContain('folder/folder/folder/surface_gaussians.ply');
     expect(log).toHaveBeenCalledWith(
-      '[URL Loader] Discovered Hugging Face splat file: splats/surface_gaussians.spz (40000000 bytes)'
+      '[URL Loader] Discovered 5 Hugging Face splat files: splats/surface_gaussians.spz (40000000 bytes), folder/folder/folder/surface_gaussians.ply (228935787 bytes), 3dgs/surface_gaussians.ply (178935787 bytes), output/surface_gaussians.ply (128935787 bytes), inside_gaussians.ply (52347387 bytes)'
     );
     expect(log).toHaveBeenCalledWith('[URL Loader] Optional file loaded: splats/surface_gaussians.spz');
+    expect(log).toHaveBeenCalledWith('[URL Loader] Optional file loaded: folder/folder/folder/surface_gaussians.ply');
   });
 
-  it('discovers the preferred generic directory-listing splat recursively', async () => {
+  it('discovers all generic directory-listing splats recursively', async () => {
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === 'HEAD') {
         const sizes = new Map([
@@ -256,12 +261,15 @@ describe('URL loader manifest fetch helpers', () => {
       return missingResponse();
     });
 
-    await expect(discoverDirectoryListingSplatPath('https://example.com/dataset', {
+    await expect(discoverDirectoryListingSplatPaths('https://example.com/dataset', {
       fetchImpl,
-    })).resolves.toEqual({
-      path: 'root_gaussians.spz',
-      size: 5,
-    });
+    })).resolves.toEqual([
+      { path: 'root_gaussians.spz', size: 5 },
+      { path: 'folder/folder/folder/deep_gaussians.ply', size: 300 },
+      { path: '3dgs/model.ply', size: 200 },
+      { path: 'output/surface_gaussians.ply', size: 100 },
+      { path: 'root_gaussians.ply', size: 10 },
+    ]);
   });
 
   it('adds the generic directory-listing splat to downloaded manifest files', async () => {
@@ -307,10 +315,14 @@ describe('URL loader manifest fetch helpers', () => {
     });
 
     expect(fetchFile).toHaveBeenCalledWith('https://example.com/dataset', 'output/model.spz');
-    expect(fetchFile).not.toHaveBeenCalledWith('https://example.com/dataset', '3dgs/model.ply');
+    expect(fetchFile).toHaveBeenCalledWith('https://example.com/dataset', '3dgs/model.ply');
     expect([...files.keys()]).toContain('output/model.spz');
-    expect(log).toHaveBeenCalledWith('[URL Loader] Discovered directory splat file: output/model.spz (50 bytes)');
+    expect([...files.keys()]).toContain('3dgs/model.ply');
+    expect(log).toHaveBeenCalledWith(
+      '[URL Loader] Discovered 2 directory splat files: output/model.spz (50 bytes), 3dgs/model.ply (200 bytes)'
+    );
     expect(log).toHaveBeenCalledWith('[URL Loader] Optional file loaded: output/model.spz');
+    expect(log).toHaveBeenCalledWith('[URL Loader] Optional file loaded: 3dgs/model.ply');
   });
 
   it('keeps explicit manifest splats instead of querying Hugging Face discovery', async () => {

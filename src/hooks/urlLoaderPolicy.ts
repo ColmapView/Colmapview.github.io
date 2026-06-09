@@ -2,6 +2,7 @@ import type { ColmapManifest } from '../types/manifest';
 import {
   getPreferredSplatCandidate,
   isSplatFilePath,
+  sortSplatCandidatesByPreference,
 } from '../utils/splatFilePolicy';
 import {
   normalizeCloudStorageUrl,
@@ -297,11 +298,11 @@ export function getRelativeHuggingFaceTreePath(entryPath: string, treePath: stri
   return relativePath || null;
 }
 
-export function getPreferredHuggingFaceSplatPath(
+export function getHuggingFaceSplatPaths(
   entries: readonly HuggingFaceDatasetTreeEntry[],
   treePath: string
-): RemoteSplatCandidate | null {
-  let largest: RemoteSplatCandidate | null = null;
+): RemoteSplatCandidate[] {
+  const candidates: RemoteSplatCandidate[] = [];
 
   for (const entry of entries) {
     if (entry.type !== 'file' || typeof entry.path !== 'string' || typeof entry.size !== 'number') {
@@ -317,10 +318,17 @@ export function getPreferredHuggingFaceSplatPath(
       continue;
     }
 
-    largest = getPreferredSplatCandidate(largest, { path: relativePath, size: entry.size });
+    candidates.push({ path: relativePath, size: entry.size });
   }
 
-  return largest;
+  return sortRemoteSplatCandidates(candidates);
+}
+
+export function getPreferredHuggingFaceSplatPath(
+  entries: readonly HuggingFaceDatasetTreeEntry[],
+  treePath: string
+): RemoteSplatCandidate | null {
+  return getHuggingFaceSplatPaths(entries, treePath)[0] ?? null;
 }
 
 export const getLargestHuggingFacePlyPath = getPreferredHuggingFaceSplatPath;
@@ -330,6 +338,12 @@ export function getLargestRemoteSplatCandidate(
   candidate: RemoteSplatCandidate
 ): RemoteSplatCandidate {
   return getPreferredSplatCandidate(current, candidate);
+}
+
+export function sortRemoteSplatCandidates(
+  candidates: readonly RemoteSplatCandidate[]
+): RemoteSplatCandidate[] {
+  return sortSplatCandidatesByPreference(candidates);
 }
 
 export function getManifestColmapFileEntries(manifest: ColmapManifest): ManifestColmapFileEntries {
