@@ -32,6 +32,8 @@ export interface WebGpuSplatFrameFromThreeCameraOptions {
   width: number;
   height: number;
   dpr: number;
+  pixelWidth?: number;
+  pixelHeight?: number;
   modelMatrix?: THREE.Matrix4 | null;
 }
 
@@ -58,7 +60,11 @@ export interface ColmapMetricWebGpuSplatFrameOptions {
 export function createWebGpuSplatViewportFrame(
   width: number,
   height: number,
-  dpr: number
+  dpr: number,
+  pixelSize: {
+    pixelWidth?: number;
+    pixelHeight?: number;
+  } = {}
 ): WebGpuSplatViewportFrame {
   const safeWidth = Math.max(1, width);
   const safeHeight = Math.max(1, height);
@@ -66,8 +72,8 @@ export function createWebGpuSplatViewportFrame(
   return {
     cssWidth: safeWidth,
     cssHeight: safeHeight,
-    pixelWidth: Math.max(1, Math.round(safeWidth * safeDpr)),
-    pixelHeight: Math.max(1, Math.round(safeHeight * safeDpr)),
+    pixelWidth: getViewportPixelSize(pixelSize.pixelWidth, safeWidth, safeDpr),
+    pixelHeight: getViewportPixelSize(pixelSize.pixelHeight, safeHeight, safeDpr),
     dpr: safeDpr,
   };
 }
@@ -77,6 +83,8 @@ export function createWebGpuSplatFrameFromThreeCamera({
   width,
   height,
   dpr,
+  pixelWidth,
+  pixelHeight,
   modelMatrix = null,
 }: WebGpuSplatFrameFromThreeCameraOptions): WebGpuSplatCameraFrame {
   camera.updateMatrixWorld();
@@ -94,7 +102,7 @@ export function createWebGpuSplatFrameFromThreeCamera({
   const modelCameraPosition = threeCameraModelPosition.setFromMatrixPosition(modelCameraWorld);
 
   return {
-    viewport: createWebGpuSplatViewportFrame(width, height, dpr),
+    viewport: createWebGpuSplatViewportFrame(width, height, dpr, { pixelWidth, pixelHeight }),
     camera: {
       kind: projectionCamera.isPerspectiveCamera
         ? 'perspective'
@@ -109,6 +117,17 @@ export function createWebGpuSplatFrameFromThreeCamera({
       far: typeof projectionCamera.far === 'number' ? projectionCamera.far : null,
     },
   };
+}
+
+function getViewportPixelSize(explicitPixelSize: number | undefined, cssSize: number, dpr: number): number {
+  if (
+    typeof explicitPixelSize === 'number' &&
+    Number.isInteger(explicitPixelSize) &&
+    explicitPixelSize > 0
+  ) {
+    return explicitPixelSize;
+  }
+  return Math.max(1, Math.round(cssSize * dpr));
 }
 
 export function createColmapMetricWebGpuSplatFrame({

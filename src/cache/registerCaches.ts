@@ -15,6 +15,7 @@ import { CacheManager, CacheDisposalPriority } from './CacheManager';
 // Cache clear and stats functions
 import { clearFrustumTextureCache, getFrustumTextureCacheStats } from '../hooks/useFrustumTexture';
 import { clearThumbnailCache, getThumbnailCacheStats } from '../hooks/useThumbnail';
+import { clearMaskedThumbnailCache, getMaskedThumbnailCacheStats } from '../hooks/useMaskedThumbnail';
 import { clearSharedDecodeCache } from '../hooks/useAsyncImageCache';
 import {
   clearZipCache,
@@ -23,7 +24,9 @@ import {
 } from '../utils/zipImageFiles';
 import {
   clearUrlImageCache,
+  clearUrlMaskCache,
   getUrlImageCacheStats,
+  getUrlMaskCacheStats,
 } from '../utils/urlImageFiles';
 import { appLogger } from '../utils/logger';
 import { getActiveZipStats } from '../utils/zipLoader';
@@ -109,6 +112,23 @@ export function registerAllCaches(): void {
     showInStats: true,
   });
 
+  CacheManager.register({
+    name: 'maskedThumbnails',
+    label: 'Masked Thumbnails',
+    priority: CacheDisposalPriority.BLOB_URL,
+    clear: clearMaskedThumbnailCache,
+    getStats: () => {
+      const stats = getMaskedThumbnailCacheStats();
+      return {
+        count: stats.count,
+        sizeBytes: stats.count * 100000,
+      };
+    },
+    strategy: 'lazy',
+    memoryType: 'js',
+    showInStats: true,
+  });
+
   // ========================================================================
   // Priority 30: Simple file/Map caches
   // ========================================================================
@@ -126,6 +146,17 @@ export function registerAllCaches(): void {
     priority: CacheDisposalPriority.FILE_CACHE,
     clear: clearUrlImageCache,
     getStats: getUrlImageCacheStats,
+    strategy: 'lazy',
+    memoryType: 'js',
+    showInStats: true,
+  });
+
+  CacheManager.register({
+    name: 'urlMasks',
+    label: 'URL Masks',
+    priority: CacheDisposalPriority.FILE_CACHE,
+    clear: clearUrlMaskCache,
+    getStats: getUrlMaskCacheStats,
     strategy: 'lazy',
     memoryType: 'js',
     showInStats: true,

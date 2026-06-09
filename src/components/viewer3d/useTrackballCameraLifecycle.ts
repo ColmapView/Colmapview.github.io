@@ -165,6 +165,7 @@ interface ViewStateSyncOptions extends CameraRefs {
   enabledRef: MutableRefObject<boolean>;
   draggingRef: MutableRefObject<boolean>;
   wheelHandledRef: MutableRefObject<boolean>;
+  isAnimatingRef?: MutableRefObject<unknown>;
   getCurrentViewState: () => CameraViewState;
   setTrackballState: TrackballStateSetter;
   navActions: {
@@ -178,6 +179,7 @@ export function useTrackballViewStateSync({
   enabledRef,
   draggingRef,
   wheelHandledRef,
+  isAnimatingRef,
   getCurrentViewState,
   setTrackballState,
   navActions,
@@ -211,6 +213,8 @@ export function useTrackballViewStateSync({
 
   useEffect(() => {
     const syncViewState = () => {
+      if (isAnimatingRef?.current) return;
+
       const state = getCurrentViewState();
       const stateHash = buildCameraViewStateHash(state);
       if (stateHash !== lastSyncedStateRef.current) {
@@ -225,5 +229,5 @@ export function useTrackballViewStateSync({
     return () => {
       clearInterval(interval);
     };
-  }, [getCurrentViewState, navActions]);
+  }, [getCurrentViewState, isAnimatingRef, navActions]);
 }

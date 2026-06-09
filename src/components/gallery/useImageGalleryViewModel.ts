@@ -1,15 +1,12 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useResetKeyedState } from '../../hooks/useResetKeyedState';
 import { prioritizeFrustumTexture } from '../../hooks/useFrustumTexture';
 import { COLUMNS } from '../../theme';
+import { parseSafeIntegerString } from '../../utils/numberParsing';
 import { shouldHideChromeWithButtons } from '../layout/autoHideChromePolicy';
 import { useImageGalleryStoreFacade } from './useImageGalleryStoreFacade';
 import { useImageGalleryThumbnailSettling } from './useImageGalleryThumbnailSettling';
 import { getImageGalleryRightClickAction } from './imageGalleryRightClickPolicy';
-import {
-  getDefaultGalleryBorderColorMode,
-  getGalleryMetricBorderColorScale,
-} from './imageGalleryBorderColorViewModel';
+import { getGalleryMetricBorderColorScale } from './imageGalleryBorderColorViewModel';
 import {
   buildGalleryCameras,
   buildGalleryImages,
@@ -17,10 +14,12 @@ import {
   getLastNavigationToImageId,
   type CameraFilter,
   type GalleryBorderColorMode,
-  type SortDirection,
-  type SortField,
   type ViewMode,
 } from './imageGalleryDataViewModel';
+import type {
+  GalleryBorderColorModeSetting,
+  GalleryViewModeSetting,
+} from '../../types/gallery';
 export {
   buildGalleryCameras,
   buildGalleryImages,
@@ -30,6 +29,7 @@ export {
   getLastNavigationToImageId,
   type CameraFilter,
   type GalleryBorderColorMode,
+  type GalleryThumbnailDisplayMode,
   type ImageData,
   type SortDirection,
   type SortField,
@@ -42,6 +42,43 @@ export {
   type GalleryNavigationKey,
 } from './imageGalleryKeyboardNavigationPolicy';
 
+function normalizeGalleryColumns(columns: number): number {
+  if (!Number.isFinite(columns)) return COLUMNS.default;
+  return Math.min(COLUMNS.max, Math.max(COLUMNS.min, Math.round(columns)));
+}
+
+function getEffectiveViewMode(
+  viewMode: GalleryViewModeSetting,
+  touchMode: boolean
+): ViewMode {
+  return viewMode === 'auto' ? (touchMode ? 'list' : 'gallery') : viewMode;
+}
+
+function getEffectiveCameraFilter(
+  cameraFilter: string,
+  cameras: readonly { cameraId: number }[]
+): CameraFilter {
+  if (cameraFilter === 'all') return 'all';
+
+  const parsedCameraId = parseSafeIntegerString(String(cameraFilter));
+  if (parsedCameraId === null) return 'all';
+
+  return cameras.some(camera => camera.cameraId === parsedCameraId) ? parsedCameraId : 'all';
+}
+
+function getEffectiveBorderColorMode(
+  borderColorMode: GalleryBorderColorModeSetting,
+  hasActiveSplatFile: boolean
+): GalleryBorderColorMode {
+  if (borderColorMode === 'auto') {
+    return hasActiveSplatFile ? 'psnr' : 'none';
+  }
+  if (!hasActiveSplatFile && (borderColorMode === 'psnr' || borderColorMode === 'ssim')) {
+    return 'none';
+  }
+  return borderColorMode;
+}
+
 export function useImageGalleryViewModel() {
   const {
     data: {
@@ -50,6 +87,13 @@ export function useImageGalleryViewModel() {
       showMatches,
       matchesDisplayMode,
       matchesColor,
+      galleryViewMode,
+      galleryColumns,
+      galleryCameraFilter,
+      gallerySortField,
+      gallerySortDirection,
+      galleryBorderColorMode,
+      galleryThumbnailDisplayMode,
       touchMode,
       autoHideButtons,
       isIdle,
@@ -66,6 +110,13 @@ export function useImageGalleryViewModel() {
       openImageDetail,
       setMatchedImageId,
       setShowMatchesInModal,
+      setGalleryViewMode,
+      setGalleryColumns,
+      setGalleryCameraFilter,
+      setGallerySortField,
+      setGallerySortDirection,
+      setGalleryBorderColorMode,
+      setGalleryThumbnailDisplayMode,
       setSelectedImageId,
       flyToImage,
       pushNavigationHistory,
@@ -74,23 +125,39 @@ export function useImageGalleryViewModel() {
       flyToState,
     },
   } = useImageGalleryStoreFacade();
-  const [viewMode, setViewMode] = useState<ViewMode>(touchMode ? 'list' : 'gallery');
-  const [galleryColumns, setGalleryColumns] = useState<number>(COLUMNS.default);
-  const [cameraFilter, setCameraFilter] = useResetKeyedState<CameraFilter>(reconstruction, 'all');
-  const borderColorResetKey = useMemo(
-    () => ({ reconstruction, activeSplatFile }),
-    [reconstruction, activeSplatFile]
+  const cameras = useMemo(() => buildGalleryCameras(reconstruction), [reconstruction]);
+  const viewMode = getEffectiveViewMode(galleryViewMode, touchMode);
+  const effectiveGalleryColumns = normalizeGalleryColumns(galleryColumns);
+  const cameraFilter = useMemo(
+    () => getEffectiveCameraFilter(galleryCameraFilter, cameras),
+    [galleryCameraFilter, cameras]
   );
-  const [borderColorMode, setBorderColorMode] = useResetKeyedState<GalleryBorderColorMode>(
-    borderColorResetKey,
-    getDefaultGalleryBorderColorMode(Boolean(activeSplatFile))
+  const hasMasks = dataset.hasMasks();
+  const effectiveThumbnailDisplayMode = hasMasks ? galleryThumbnailDisplayMode : 'image';
+  const borderColorMode = getEffectiveBorderColorMode(
+    galleryBorderColorMode,
+    Boolean(activeSplatFile)
   );
-  const [sortField, setSortField] = useState<SortField>('name');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [imageCacheVersion, setImageCacheVersion] = useState(0);
   const showSplatMetrics = splatPsnrFrameReady && splatPsnrByImage.size > 0;
-  const isSplatMetricSort = sortField === 'splatPsnr' || sortField === 'splatSsim';
-  const effectiveSortField = showSplatMetrics || !isSplatMetricSort ? sortField : 'name';
+  const isSplatMetricSort = gallerySortField === 'splatPsnr' || gallerySortField === 'splatSsim';
+  const effectiveSortField = showSplatMetrics || !isSplatMetricSort ? gallerySortField : 'name';
+
+  const setViewMode = useCallback((nextViewMode: ViewMode) => {
+    setGalleryViewMode(nextViewMode);
+  }, [setGalleryViewMode]);
+
+  const setEffectiveGalleryColumns = useCallback((nextColumns: number) => {
+    setGalleryColumns(normalizeGalleryColumns(nextColumns));
+  }, [setGalleryColumns]);
+
+  const setCameraFilter = useCallback((nextCameraFilter: CameraFilter) => {
+    setGalleryCameraFilter(String(nextCameraFilter));
+  }, [setGalleryCameraFilter]);
+
+  const setBorderColorMode = useCallback((nextBorderColorMode: GalleryBorderColorMode) => {
+    setGalleryBorderColorMode(nextBorderColorMode);
+  }, [setGalleryBorderColorMode]);
 
   const matchedImageIds = useMemo(
     () => buildMatchedImageIds(reconstruction, selectedImageId, showMatches),
@@ -122,11 +189,16 @@ export function useImageGalleryViewModel() {
       return;
     }
 
+    if (action.type === 'deselect') {
+      setSelectedImageId(null);
+      return;
+    }
+
     if (action.type === 'restoreNavigation') {
       const entry = popNavigationHistory();
       if (entry) {
         flyToState(entry.fromState);
-        setSelectedImageId(entry.fromImageId);
+        setSelectedImageId(null);
       }
       return;
     }
@@ -169,32 +241,33 @@ export function useImageGalleryViewModel() {
   const isSettling = useImageGalleryThumbnailSettling({
     cameraFilter,
     selectedImageId,
-    sortDirection,
+    sortDirection: gallerySortDirection,
     sortField: effectiveSortField,
   }, 50);
 
-  const cameras = useMemo(() => buildGalleryCameras(reconstruction), [reconstruction]);
-
   const images = useMemo(() => {
     void imageCacheVersion;
+    void hasMasks;
     return buildGalleryImages({
       reconstruction,
       imageSource: {
         getImageSync: (imageName) => dataset.getImageSync(imageName),
+        getMaskSync: (imageName) => dataset.getMaskSync(imageName),
       },
       splatPsnrByImage: showSplatMetrics ? splatPsnrByImage : undefined,
       cameraFilter,
       sortField: effectiveSortField,
-      sortDirection,
+      sortDirection: gallerySortDirection,
     });
   }, [
     reconstruction,
     dataset,
+    hasMasks,
     showSplatMetrics,
     splatPsnrByImage,
     cameraFilter,
     effectiveSortField,
-    sortDirection,
+    gallerySortDirection,
     imageCacheVersion,
   ]);
   const metricBorderColorScale = useMemo(
@@ -217,10 +290,11 @@ export function useImageGalleryViewModel() {
     borderColorMode,
     cameras,
     dataset,
-    galleryColumns,
+    galleryColumns: effectiveGalleryColumns,
     handleClick,
     handleDoubleClick,
     handleRightClick,
+    hasMasks,
     images,
     isSettling,
     lastNavigationToImageId,
@@ -234,16 +308,18 @@ export function useImageGalleryViewModel() {
     selectedImageId,
     setBorderColorMode,
     setCameraFilter,
-    setGalleryColumns,
-    setSortDirection,
-    setSortField,
+    setGalleryColumns: setEffectiveGalleryColumns,
+    setSortDirection: setGallerySortDirection,
+    setSortField: setGallerySortField,
+    setThumbnailDisplayMode: setGalleryThumbnailDisplayMode,
     setViewMode,
     hideImageOverlay,
     hideToolbar: false,
     showSplatMetrics,
     showMatches,
-    sortDirection,
+    sortDirection: gallerySortDirection,
     sortField: effectiveSortField,
+    thumbnailDisplayMode: effectiveThumbnailDisplayMode,
     touchMode,
     viewMode,
   };

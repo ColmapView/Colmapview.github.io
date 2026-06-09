@@ -10,12 +10,23 @@ import { appLogger } from './logger';
 /** Cache for images fetched from URLs (stored as compressed JPEG, resized) */
 const urlImageState = createImageFileRequestState();
 
+/** Cache for masks fetched from URLs (stored as original mask files) */
+const urlMaskState = createImageFileRequestState();
+
 /**
- * Clear the URL image cache.
+ * Clear the URL image and mask caches.
  * Call this when loading a new reconstruction.
  */
 export function clearUrlImageCache(): void {
   urlImageState.clear();
+  clearUrlMaskCache();
+}
+
+/**
+ * Clear the URL mask cache.
+ */
+export function clearUrlMaskCache(): void {
+  urlMaskState.clear();
 }
 
 /**
@@ -24,6 +35,14 @@ export function clearUrlImageCache(): void {
  */
 export function getUrlImageCached(imageName: string): File | undefined {
   return urlImageState.getCached(imageName);
+}
+
+/**
+ * Get a cached URL mask (synchronous).
+ * Returns undefined if not yet fetched.
+ */
+export function getUrlMaskCached(imageName: string): File | undefined {
+  return urlMaskState.getCached(imageName);
 }
 
 /**
@@ -100,7 +119,7 @@ export async function fetchUrlImageRaw(
 }
 
 /**
- * Fetch a mask from URL (lazy loaded, no cache).
+ * Fetch a mask from URL.
  * Tries both same-name masks and COLMAP-style ".png" mask suffixes.
  *
  * @param maskUrlBase - Base URL for masks (e.g., "https://example.com/dataset/masks/")
@@ -111,21 +130,40 @@ export async function fetchUrlMask(
   maskUrlBase: string,
   imageName: string
 ): Promise<File | null> {
-  for (const { url: maskUrl, filename } of buildMaskUrlCandidates(maskUrlBase, imageName)) {
-    try {
-      const response = await fetch(maskUrl);
-      if (response.ok) {
-        const blob = await response.blob();
-        appLogger.debug(`[URL Mask] Found mask for ${imageName}`);
-        return new File([blob], filename, { type: blob.type || 'image/png' });
-      }
-    } catch (err) {
-      appLogger.debug(`[URL Mask] Error trying ${maskUrl}:`, err);
-    }
+  const cached = urlMaskState.getCached(imageName);
+  if (cached) {
+    return cached;
   }
 
-  appLogger.debug(`[URL Mask] No mask found for ${imageName}`);
-  return null;
+  if (urlMaskState.isRequestPending(imageName)) {
+    return urlMaskState.waitForRequest(imageName);
+  }
+
+  urlMaskState.startRequest(imageName);
+  let result: File | null = null;
+
+  try {
+    for (const { url: maskUrl, filename } of buildMaskUrlCandidates(maskUrlBase, imageName)) {
+      try {
+        const response = await fetch(maskUrl);
+        if (response.ok) {
+          const blob = await response.blob();
+          const file = new File([blob], filename, { type: blob.type || 'image/png' });
+          urlMaskState.setCached(imageName, file);
+          result = file;
+          appLogger.debug(`[URL Mask] Found mask for ${imageName}`);
+          return file;
+        }
+      } catch (err) {
+        appLogger.debug(`[URL Mask] Error trying ${maskUrl}:`, err);
+      }
+    }
+
+    appLogger.debug(`[URL Mask] No mask found for ${imageName}`);
+    return null;
+  } finally {
+    urlMaskState.completeRequest(imageName, result);
+  }
 }
 
 /**
@@ -151,4 +189,11 @@ export async function prefetchUrlImages(
  */
 export function getUrlImageCacheStats(): CacheInfo {
   return urlImageState.getStats();
+}
+
+/**
+ * Get URL mask cache statistics.
+ */
+export function getUrlMaskCacheStats(): CacheInfo {
+  return urlMaskState.getStats();
 }

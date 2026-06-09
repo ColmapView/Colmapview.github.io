@@ -3,9 +3,11 @@ import { buildImageBitmap } from '../test/builders';
 import {
   clearFailedImages,
   createImageBitmapWithTimeout,
+  resizeImageBitmapToMaxSizeWithTimeout,
   getFailedImageCount,
   hasImageFailed,
   markImageFailed,
+  shouldResizeImageBitmap,
   shouldLogDecodeFailure,
   shouldLogDecodeFailureSuppression,
 } from './asyncImageDecode';
@@ -80,5 +82,70 @@ describe('async image decode helpers', () => {
 
     clearFailedImages();
     expect(getFailedImageCount()).toBe(0);
+  });
+
+  it('resizes oversized bitmaps with high-quality createImageBitmap options', async () => {
+    const source = buildImageBitmap({ width: 4000, height: 2000, close: vi.fn() });
+    const resized = buildImageBitmap({ width: 256, height: 128, close: vi.fn() });
+    const resize = vi.fn().mockResolvedValue(resized);
+
+    await expect(resizeImageBitmapToMaxSizeWithTimeout(source, 256, 1000, {
+      resize,
+    })).resolves.toBe(resized);
+
+    expect(resize).toHaveBeenCalledWith(source, 0, 0, 4000, 2000, {
+      resizeWidth: 256,
+      resizeHeight: 128,
+      resizeQuality: 'high',
+    });
+    expect(source.close).toHaveBeenCalledOnce();
+    expect(resized.close).not.toHaveBeenCalled();
+  });
+
+  it('keeps already-small bitmaps without resizing', async () => {
+    const source = buildImageBitmap({ width: 128, height: 64, close: vi.fn() });
+    const resize = vi.fn();
+
+    await expect(resizeImageBitmapToMaxSizeWithTimeout(source, 256, 1000, {
+      resize,
+    })).resolves.toBe(source);
+
+    expect(shouldResizeImageBitmap(source, 256)).toBe(false);
+    expect(resize).not.toHaveBeenCalled();
+    expect(source.close).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the original bitmap if async resizing fails', async () => {
+    const source = buildImageBitmap({ width: 4000, height: 2000, close: vi.fn() });
+    const resize = vi.fn().mockRejectedValue(new Error('resize unsupported'));
+
+    await expect(resizeImageBitmapToMaxSizeWithTimeout(source, 256, 1000, {
+      resize,
+    })).resolves.toBe(source);
+
+    expect(resize).toHaveBeenCalledOnce();
+    expect(source.close).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the original bitmap and closes late resize results after timeout', async () => {
+    vi.useFakeTimers();
+    const source = buildImageBitmap({ width: 4000, height: 2000, close: vi.fn() });
+    const resized = buildImageBitmap({ width: 256, height: 128, close: vi.fn() });
+    const deferred = createDeferred<ImageBitmap>();
+    const resize = vi.fn(() => deferred.promise);
+
+    const promise = resizeImageBitmapToMaxSizeWithTimeout(source, 256, 100, {
+      resize,
+    });
+
+    const resolved = expect(promise).resolves.toBe(source);
+    vi.advanceTimersByTime(100);
+    await resolved;
+
+    deferred.resolve(resized);
+    await Promise.resolve();
+
+    expect(source.close).not.toHaveBeenCalled();
+    expect(resized.close).toHaveBeenCalledOnce();
   });
 });

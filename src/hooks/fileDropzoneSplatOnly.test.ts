@@ -7,6 +7,10 @@ describe('file dropzone splat-only load helper', () => {
     const splatFile = buildFile('scene.spz', 'splat');
     const fallbackSplat = buildFile('fallback.spz', 'splat');
     const splatFiles = [splatFile, fallbackSplat];
+    const splatFileSources = [
+      { id: 'scene.spz', path: 'scene.spz', file: splatFile },
+      { id: 'fallback.spz', path: 'fallback.spz', file: fallbackSplat },
+    ];
     const calls: string[] = [];
     const setUrlProgress = vi.fn((progress) => calls.push(`progress:${progress.message}`));
     const setLoadedFiles = vi.fn(() => calls.push('loadedFiles'));
@@ -20,6 +24,7 @@ describe('file dropzone splat-only load helper', () => {
     const reconstruction = runSplatOnlyLoad({
       splatFile,
       splatFiles,
+      splatFileSources,
       mapProgress: (percent) => percent + 5,
       setUrlProgress,
       setLoadedFiles,
@@ -38,12 +43,18 @@ describe('file dropzone splat-only load helper', () => {
       message: 'Loading splat scene...',
       currentFile: 'scene.spz',
     });
+    expect(setUrlProgress).toHaveBeenNthCalledWith(2, {
+      percent: 65,
+      message: 'Preparing splat renderer...',
+      currentFile: 'scene.spz',
+    });
     expect(setLoadedFiles).toHaveBeenCalledWith({
       camerasFile: undefined,
       imagesFile: undefined,
       points3DFile: undefined,
       splatFile,
       splatFiles,
+      splatFileSources,
       databaseFile: undefined,
       rigsFile: undefined,
       framesFile: undefined,
@@ -58,7 +69,7 @@ describe('file dropzone splat-only load helper', () => {
       'clearSplatPsnr',
       'loadedFiles',
       'clearCaches',
-      'progress:Finalizing...',
+      'progress:Preparing splat renderer...',
       'reconstruction',
       'resetView',
       'notification',

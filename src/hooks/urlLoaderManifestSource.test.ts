@@ -85,6 +85,19 @@ describe('URL loader manifest source helpers', () => {
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Successfully loaded 3 files from manifest');
   });
 
+  it('leaves completion progress to the renderer when a manifest contains a splat', async () => {
+    const files = new Map([
+      ...makeFiles(),
+      ['splats/scene.spz', buildFile('scene.spz', 'splat')],
+    ]);
+    const deps = makeDeps(files);
+
+    await expect(loadManifestSource(manifest, { type: 'manifest' }, deps)).resolves.toBe(true);
+
+    expect(deps.processFiles).toHaveBeenCalledWith(files, { start: 80, end: 100 }, { throwOnError: true });
+    expect(deps.setUrlProgress).not.toHaveBeenCalledWith({ percent: 100, message: 'Complete' });
+  });
+
   it('propagates COLMAP fetch failures before mutating source state', async () => {
     const error = new Error('missing cameras');
     const deps = makeDeps();

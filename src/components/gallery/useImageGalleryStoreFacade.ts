@@ -17,6 +17,13 @@ interface ImageGalleryDataFacade {
   showMatches: UIState['showMatches'];
   matchesDisplayMode: UIState['matchesDisplayMode'];
   matchesColor: UIState['matchesColor'];
+  galleryViewMode: UIState['galleryViewMode'];
+  galleryColumns: UIState['galleryColumns'];
+  galleryCameraFilter: UIState['galleryCameraFilter'];
+  gallerySortField: UIState['gallerySortField'];
+  gallerySortDirection: UIState['gallerySortDirection'];
+  galleryBorderColorMode: UIState['galleryBorderColorMode'];
+  galleryThumbnailDisplayMode: UIState['galleryThumbnailDisplayMode'];
   touchMode: UIState['touchMode'];
   autoHideButtons: UIState['autoHideElements']['buttons'];
   isIdle: UIState['isIdle'];
@@ -34,6 +41,13 @@ interface ImageGalleryActionsFacade {
   openImageDetail: UIState['openImageDetail'];
   setMatchedImageId: UIState['setMatchedImageId'];
   setShowMatchesInModal: UIState['setShowMatchesInModal'];
+  setGalleryViewMode: UIState['setGalleryViewMode'];
+  setGalleryColumns: UIState['setGalleryColumns'];
+  setGalleryCameraFilter: UIState['setGalleryCameraFilter'];
+  setGallerySortField: UIState['setGallerySortField'];
+  setGallerySortDirection: UIState['setGallerySortDirection'];
+  setGalleryBorderColorMode: UIState['setGalleryBorderColorMode'];
+  setGalleryThumbnailDisplayMode: UIState['setGalleryThumbnailDisplayMode'];
   setSelectedImageId: CameraState['setSelectedImageId'];
   flyToImage: CameraState['flyToImage'];
   pushNavigationHistory: CameraState['pushNavigationHistory'];
@@ -56,6 +70,20 @@ export function useImageGalleryStoreFacade(): ImageGalleryStoreFacade {
   const showMatches = useUIStore((s) => s.showMatches);
   const matchesDisplayMode = useUIStore((s) => s.matchesDisplayMode);
   const matchesColor = useUIStore((s) => s.matchesColor);
+  const galleryViewMode = useUIStore((s) => s.galleryViewMode);
+  const galleryColumns = useUIStore((s) => s.galleryColumns);
+  const galleryCameraFilter = useUIStore((s) => s.galleryCameraFilter);
+  const gallerySortField = useUIStore((s) => s.gallerySortField);
+  const gallerySortDirection = useUIStore((s) => s.gallerySortDirection);
+  const galleryBorderColorMode = useUIStore((s) => s.galleryBorderColorMode);
+  const galleryThumbnailDisplayMode = useUIStore((s) => s.galleryThumbnailDisplayMode);
+  const setGalleryViewMode = useUIStore((s) => s.setGalleryViewMode);
+  const setGalleryColumns = useUIStore((s) => s.setGalleryColumns);
+  const setGalleryCameraFilter = useUIStore((s) => s.setGalleryCameraFilter);
+  const setGallerySortField = useUIStore((s) => s.setGallerySortField);
+  const setGallerySortDirection = useUIStore((s) => s.setGallerySortDirection);
+  const setGalleryBorderColorMode = useUIStore((s) => s.setGalleryBorderColorMode);
+  const setGalleryThumbnailDisplayMode = useUIStore((s) => s.setGalleryThumbnailDisplayMode);
   const touchMode = useUIStore((s) => s.touchMode);
   const autoHideButtons = useUIStore((s) => s.autoHideElements.buttons);
   const isIdle = useUIStore((s) => s.isIdle);
@@ -81,6 +109,13 @@ export function useImageGalleryStoreFacade(): ImageGalleryStoreFacade {
       showMatches,
       matchesDisplayMode,
       matchesColor,
+      galleryViewMode,
+      galleryColumns,
+      galleryCameraFilter,
+      gallerySortField,
+      gallerySortDirection,
+      galleryBorderColorMode,
+      galleryThumbnailDisplayMode,
       touchMode,
       autoHideButtons,
       isIdle,
@@ -97,6 +132,13 @@ export function useImageGalleryStoreFacade(): ImageGalleryStoreFacade {
       openImageDetail,
       setMatchedImageId,
       setShowMatchesInModal,
+      setGalleryViewMode,
+      setGalleryColumns,
+      setGalleryCameraFilter,
+      setGallerySortField,
+      setGallerySortDirection,
+      setGalleryBorderColorMode,
+      setGalleryThumbnailDisplayMode,
       setSelectedImageId,
       flyToImage,
       pushNavigationHistory,

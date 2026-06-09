@@ -10,6 +10,7 @@ vi.mock('../utils/imageFileUtils', () => ({
 vi.mock('../utils/urlImageFiles', () => ({
   fetchUrlImageRaw: vi.fn(),
   getUrlImageCached: vi.fn(),
+  getUrlMaskCached: vi.fn(),
   fetchUrlImage: vi.fn(),
   fetchUrlMask: vi.fn(),
   prefetchUrlImages: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock('../utils/urlImageFiles', () => ({
 vi.mock('../utils/zipImageFiles', () => ({
   fetchZipImageRaw: vi.fn(),
   getZipImageCached: vi.fn(),
+  getZipMaskCached: vi.fn(),
   fetchZipImage: vi.fn(),
   fetchZipMask: vi.fn(),
   isZipLoadingAvailable: vi.fn(),
@@ -30,12 +32,14 @@ import {
 import {
   fetchUrlImageRaw,
   getUrlImageCached,
+  getUrlMaskCached,
   fetchUrlImage,
   fetchUrlMask,
 } from '../utils/urlImageFiles';
 import {
   fetchZipImageRaw,
   getZipImageCached,
+  getZipMaskCached,
   fetchZipImage,
   fetchZipMask,
   isZipLoadingAvailable,
@@ -256,6 +260,15 @@ describe('DatasetManager', () => {
       expect(fetchUrlMask).toHaveBeenCalledWith('https://example.com/masks/', 'test.jpg');
     });
 
+    it('returns cached URL mask synchronously', () => {
+      mockState.sourceType = 'url';
+      mockState.maskUrlBase = 'https://example.com/masks/';
+      const maskFile = new File([], 'mask.png');
+      vi.mocked(getUrlMaskCached).mockReturnValue(maskFile);
+
+      expect(manager.getMaskSync('test.jpg')).toBe(maskFile);
+    });
+
     it('returns null when no maskUrlBase for URL source', async () => {
       mockState.sourceType = 'url';
       mockState.maskUrlBase = null;
@@ -272,6 +285,14 @@ describe('DatasetManager', () => {
 
       const result = await manager.getMask('test.jpg');
       expect(result).toBe(maskFile);
+    });
+
+    it('returns cached ZIP mask synchronously', () => {
+      mockState.sourceType = 'zip';
+      const maskFile = new File([], 'mask.png');
+      vi.mocked(getZipMaskCached).mockReturnValue(maskFile);
+
+      expect(manager.getMaskSync('test.jpg')).toBe(maskFile);
     });
   });
 

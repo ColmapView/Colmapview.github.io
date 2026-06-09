@@ -30,7 +30,7 @@ interface UseImageGallerySelectedImageScrollOptions extends SelectedImageScrollT
 
 const SELECTED_IMAGE_SCROLL_OPTIONS: ScrollToOptions = {
   align: 'center',
-  behavior: 'smooth',
+  behavior: 'auto',
 };
 
 export function getSelectedImageScrollTarget({

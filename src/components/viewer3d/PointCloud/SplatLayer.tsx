@@ -10,6 +10,13 @@ import {
 import { shouldPreloadSparkSplatRuntime } from '../../../utils/splatBackendPolicy';
 import { SPARK_SPLAT_RENDER_ORDER } from './pointCloudRenderPolicy';
 import { useSplatLayerStoreFacade } from './SplatLayerStoreFacade';
+import {
+  getSplatLoadedProgress,
+  getSplatLoadingProgress,
+  getSplatPhaseProgress,
+  getSplatProgressStartPercent,
+  type SplatLoadingPhase,
+} from '../../../utils/splatLoadingProgressPolicy';
 
 type SplatMeshInstance = InstanceType<SparkModule['SplatMesh']>;
 
@@ -70,6 +77,9 @@ export function SplatLayer({ modelMatrix = null }: { modelMatrix?: Matrix4 | nul
       addNotification,
       removeNotification,
       setSparkBackendAvailable,
+      getUrlProgress,
+      setUrlLoading,
+      setUrlProgress,
     },
   } = useSplatLayerStoreFacade();
   const { invalidate } = useThree();
@@ -77,6 +87,7 @@ export function SplatLayer({ modelMatrix = null }: { modelMatrix?: Matrix4 | nul
   const [loadedSplat, setLoadedSplat] = useState<LoadedSplatMesh | null>(null);
   const loadedSplatRef = useRef<LoadedSplatMesh | null>(null);
   const loadingNotificationRef = useRef<SplatLoadingNotification | null>(null);
+  const progressStartRef = useRef<{ file: File; percent: number } | null>(null);
   const shouldUseSparkBackend = splatBackendResolution.status === 'resolved'
     && splatBackendResolution.backend === 'spark';
   const activeLoadedSplat = loadedSplat?.file === splatFile ? loadedSplat : null;
@@ -91,7 +102,8 @@ export function SplatLayer({ modelMatrix = null }: { modelMatrix?: Matrix4 | nul
 
     removeNotification(current.id);
     loadingNotificationRef.current = null;
-  }, [removeNotification]);
+    setUrlLoading(false);
+  }, [removeNotification, setUrlLoading]);
 
   const startSplatLoadingNotification = useCallback((file: File) => {
     const current = loadingNotificationRef.current;
@@ -103,9 +115,47 @@ export function SplatLayer({ modelMatrix = null }: { modelMatrix?: Matrix4 | nul
       removeNotification(current.id);
     }
 
+    setUrlLoading(true);
+    progressStartRef.current = {
+      file,
+      percent: getSplatProgressStartPercent(getUrlProgress()),
+    };
+    setUrlProgress(getSplatLoadingProgress(file, {
+      startPercent: progressStartRef.current.percent,
+    }));
     const id = addNotification('info', `Loading splat: ${file.name}`, 0);
     loadingNotificationRef.current = { file, id };
-  }, [addNotification, removeNotification]);
+  }, [addNotification, getUrlProgress, removeNotification, setUrlLoading, setUrlProgress]);
+
+  const getProgressStartPercent = useCallback((file: File) => {
+    const current = progressStartRef.current;
+    if (current?.file === file) {
+      return current.percent;
+    }
+
+    const percent = getSplatProgressStartPercent(getUrlProgress());
+    progressStartRef.current = { file, percent };
+    return percent;
+  }, [getUrlProgress]);
+
+  const setSplatPhaseProgress = useCallback((file: File, phase: SplatLoadingPhase) => {
+    setUrlProgress(getSplatPhaseProgress(file, phase, {
+      startPercent: getProgressStartPercent(file),
+    }));
+  }, [getProgressStartPercent, setUrlProgress]);
+
+  const finishSplatLoading = useCallback((file: File) => {
+    clearSplatLoadingNotification(file);
+    setUrlProgress(getSplatLoadedProgress(file));
+    setUrlLoading(false);
+    addNotification('info', `Loaded splat: ${file.name}`, 3000);
+  }, [addNotification, clearSplatLoadingNotification, setUrlLoading, setUrlProgress]);
+
+  const failSplatLoading = useCallback((file: File) => {
+    clearSplatLoadingNotification(file);
+    setUrlLoading(false);
+    addNotification('warning', `Failed to load splat: ${file.name}`);
+  }, [addNotification, clearSplatLoadingNotification, setUrlLoading]);
 
   const replaceLoadedSplat = useCallback((nextLoadedSplat: LoadedSplatMesh | null) => {
     const previousLoadedSplat = loadedSplatRef.current;
@@ -163,8 +213,7 @@ export function SplatLayer({ modelMatrix = null }: { modelMatrix?: Matrix4 | nul
       .catch((error: unknown) => {
         setSparkBackendAvailable(false);
         if (!cancelled) {
-          clearSplatLoadingNotification(splatFile);
-          addNotification('warning', `Failed to initialize splat renderer: ${splatFile.name}`);
+          failSplatLoading(splatFile);
           appLogger.warn(
             `[Splats] Failed to preload Spark runtime: ${error instanceof Error ? error.message : String(error)}`
           );
@@ -175,8 +224,8 @@ export function SplatLayer({ modelMatrix = null }: { modelMatrix?: Matrix4 | nul
       cancelled = true;
     };
   }, [
-    addNotification,
     clearSplatLoadingNotification,
+    failSplatLoading,
     requestedBackend,
     setSparkBackendAvailable,
     splatBackendAvailability,
@@ -209,6 +258,7 @@ export function SplatLayer({ modelMatrix = null }: { modelMatrix?: Matrix4 | nul
     let committed = false;
 
     startSplatLoadingNotification(sourceFile);
+    setSplatPhaseProgress(sourceFile, 'readingFile');
 
     if (loadedSplatRef.current && loadedSplatRef.current.file !== sourceFile) {
       queueMicrotask(() => {
@@ -225,6 +275,7 @@ export function SplatLayer({ modelMatrix = null }: { modelMatrix?: Matrix4 | nul
         return;
       }
 
+      setSplatPhaseProgress(sourceFile, 'initializingSpark');
       mesh = new SplatMesh({
         ...sourceOptions,
         fileName: sourceFile.name,
@@ -240,8 +291,8 @@ export function SplatLayer({ modelMatrix = null }: { modelMatrix?: Matrix4 | nul
 
       committed = true;
       replaceLoadedSplat({ file: sourceFile, mesh });
-      clearSplatLoadingNotification(sourceFile);
-      addNotification('info', `Loaded splat: ${sourceFile.name}`, 3000);
+      setSplatPhaseProgress(sourceFile, 'renderingFirstFrame');
+      finishSplatLoading(sourceFile);
       invalidate();
     }
 
@@ -249,8 +300,7 @@ export function SplatLayer({ modelMatrix = null }: { modelMatrix?: Matrix4 | nul
       mesh?.dispose();
       mesh = null;
       if (!cancelled) {
-        clearSplatLoadingNotification(sourceFile);
-        addNotification('warning', `Failed to load splat: ${sourceFile.name}`);
+        failSplatLoading(sourceFile);
         appLogger.warn(
           `[Splats] Failed to load ${sourceFile.name}: ${error instanceof Error ? error.message : String(error)}`
         );
@@ -265,13 +315,15 @@ export function SplatLayer({ modelMatrix = null }: { modelMatrix?: Matrix4 | nul
       }
     };
   }, [
-    addNotification,
     clearSplatLoadingNotification,
+    failSplatLoading,
+    finishSplatLoading,
     splatFile,
     sparkModule,
     shouldUseSparkBackend,
     invalidate,
     replaceLoadedSplat,
+    setSplatPhaseProgress,
     startSplatLoadingNotification,
   ]);
 

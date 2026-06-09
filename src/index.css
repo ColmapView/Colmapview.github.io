@@ -1478,6 +1478,83 @@ legend {
   }
 }
 
+/* Container-balanced gallery toolbar rows */
+.image-gallery-toolbar-slot {
+  container-type: inline-size;
+}
+
+.image-gallery-toolbar {
+  display: grid;
+  grid-template-columns:
+    minmax(7rem, 1fr)
+    minmax(9.5rem, 1.35fr)
+    minmax(7rem, 1fr)
+    minmax(9rem, 1.15fr)
+    auto;
+  grid-template-areas: "camera sort border display view";
+  align-items: center;
+  justify-items: start;
+  gap: var(--sp-1);
+}
+
+.image-gallery-toolbar--touch {
+  grid-template-columns:
+    minmax(7rem, 1fr)
+    minmax(9.5rem, 1.35fr)
+    minmax(7rem, 1fr)
+    minmax(9rem, 1.15fr);
+  grid-template-areas: "camera sort border display";
+}
+
+.image-gallery-toolbar__select {
+  width: auto;
+  max-width: none;
+  justify-self: start;
+}
+
+.image-gallery-toolbar__camera { grid-area: camera; }
+.image-gallery-toolbar__sort-group {
+  grid-area: sort;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  justify-self: start;
+}
+.image-gallery-toolbar__sort {
+  flex: 0 0 auto;
+}
+.image-gallery-toolbar__direction {
+  flex: 0 0 var(--control-btn-size);
+}
+.image-gallery-toolbar__border { grid-area: border; }
+.image-gallery-toolbar__display { grid-area: display; }
+.image-gallery-toolbar__view {
+  grid-area: view;
+  justify-self: end;
+}
+
+@container (max-width: 720px) {
+  .image-gallery-toolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "camera sort view"
+      "border display display";
+  }
+
+  .image-gallery-toolbar__view {
+    justify-self: end;
+  }
+}
+
+@container (max-width: 620px) {
+  .image-gallery-toolbar--touch {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "camera sort"
+      "border display";
+  }
+}
+
 /* ============================================
    RESIZE HANDLE
    ============================================ */

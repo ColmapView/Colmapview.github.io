@@ -34,6 +34,7 @@ import {
   createImageBitmapWithTimeout,
   hasImageFailed,
   markImageFailed,
+  resizeImageBitmapToMaxSizeWithTimeout,
   shouldLogDecodeFailure,
   shouldLogDecodeFailureSuppression,
 } from './asyncImageDecode';
@@ -138,7 +139,8 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
 
       let bitmap: ImageBitmap;
       try {
-        bitmap = await createImageBitmapWithTimeout(imageFile, DECODE_TIMEOUT);
+        const decodedBitmap = await createImageBitmapWithTimeout(imageFile, DECODE_TIMEOUT);
+        bitmap = await resizeImageBitmapToMaxSizeWithTimeout(decodedBitmap, maxSize, DECODE_TIMEOUT);
       } catch (bitmapErr) {
         // Mark as failed so we don't retry (causes OOM with many failures)
         const failedCount = markImageFailed(cacheKey);
@@ -163,7 +165,7 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
         // Backpressure: if too many pending items, process some synchronously
         // to prevent OOM from accumulating full-resolution bitmaps
         if (shouldApplyPendingBackpressure(state.pendingItems.length)) {
-          // Process only 10 items to reduce memory without blocking too long
+          // Process a bounded slice to reduce memory without blocking too long.
           processPendingItems(undefined, PENDING_BACKPRESSURE_BATCH_SIZE);
         }
 
@@ -298,7 +300,7 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
 
     /**
      * Prefetch items for a list of images.
-     * Uses bulk mode for faster initial loading (skips idle callbacks).
+     * Uses bulk mode for faster initial loading with bounded yielding batches.
      * Uses batched progress updates to avoid excessive re-renders.
      */
     async prefetch(

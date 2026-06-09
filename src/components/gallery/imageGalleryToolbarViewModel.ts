@@ -1,5 +1,9 @@
 import { parseSafeIntegerString } from '../../utils/numberParsing';
-import type { CameraFilter, SortField } from './imageGalleryDataViewModel';
+import type {
+  CameraFilter,
+  GalleryThumbnailDisplayMode,
+  SortField,
+} from './imageGalleryDataViewModel';
 import {
   GALLERY_BORDER_COLOR_OPTIONS,
   getGalleryBorderColorModeValue,
@@ -19,6 +23,11 @@ interface GallerySortFieldOption {
   label: string;
 }
 
+interface GalleryThumbnailDisplayOption {
+  value: GalleryThumbnailDisplayMode;
+  label: string;
+}
+
 export const GALLERY_SORT_FIELD_OPTIONS: GallerySortFieldOption[] = [
   { value: 'name', label: 'Sort: Name' },
   { value: 'imageId', label: 'Sort: Image ID' },
@@ -26,6 +35,14 @@ export const GALLERY_SORT_FIELD_OPTIONS: GallerySortFieldOption[] = [
   { value: 'covisibleCount', label: 'Sort: Covisible' },
   { value: 'numPoints3D', label: 'Sort: 3D Points' },
   { value: 'numPoints2D', label: 'Sort: 2D Points' },
+];
+
+export const GALLERY_THUMBNAIL_DISPLAY_OPTIONS: GalleryThumbnailDisplayOption[] = [
+  { value: 'image', label: 'Show: Image' },
+  { value: 'maskedImage', label: 'Show: Masked Image' },
+  { value: 'inverseMaskedImage', label: 'Show: Inverse Masked' },
+  { value: 'mask', label: 'Show: Mask' },
+  { value: 'hoverMask', label: 'Show: Hover Mask' },
 ];
 
 const SPLAT_PSNR_SORT_FIELD_OPTION: GallerySortFieldOption = {
@@ -47,6 +64,10 @@ export function getGallerySortFieldOptions(hasSplatMetrics: boolean): GallerySor
 
 export function getGallerySortFieldValue(value: string, hasSplatMetrics = false): SortField | null {
   return getGallerySortFieldOptions(hasSplatMetrics).find(option => option.value === value)?.value ?? null;
+}
+
+export function getGalleryThumbnailDisplayModeValue(value: string): GalleryThumbnailDisplayMode | null {
+  return GALLERY_THUMBNAIL_DISPLAY_OPTIONS.find(option => option.value === value)?.value ?? null;
 }
 
 export function getGalleryCameraFilterValue(

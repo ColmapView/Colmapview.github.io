@@ -3,7 +3,10 @@ import { appLogger } from '../utils/logger';
 import { processAsyncImagePendingItem, type ProcessAsyncImagePendingItemDeps } from './asyncImageCachePendingItem';
 import type { AsyncImageCachePendingItem, AsyncImageCacheState } from './asyncImageCacheState';
 import {
+  BULK_PENDING_PROCESSING_BATCH_SIZE,
   createIdleProcessingLogger,
+  IDLE_PENDING_PROCESSING_BATCH_SIZE,
+  PENDING_PROCESSING_TIME_SLICE_MS,
   shouldProcessNextPendingItem,
   shouldScheduleIdleProcessing,
   type IdleProcessingLogger,
@@ -33,8 +36,10 @@ export interface AsyncImageCacheSchedulerOptions<T> {
   now?: () => number;
   log?: (message: string) => void;
   requestIdleCallback?: RequestIdleCallback;
-  scheduleMicrotask?: (callback: () => void) => void;
   scheduleTimeout?: (callback: () => void, delay: number) => void;
+  maxIdleItems?: number;
+  maxBulkItems?: number;
+  maxProcessingMs?: number;
 }
 
 export function createAsyncImageCacheScheduler<T>({
@@ -48,8 +53,10 @@ export function createAsyncImageCacheScheduler<T>({
   now = Date.now,
   log = appLogger.info,
   requestIdleCallback,
-  scheduleMicrotask = queueMicrotask,
   scheduleTimeout = setTimeout,
+  maxIdleItems = IDLE_PENDING_PROCESSING_BATCH_SIZE,
+  maxBulkItems = BULK_PENDING_PROCESSING_BATCH_SIZE,
+  maxProcessingMs = PENDING_PROCESSING_TIME_SLICE_MS,
 }: AsyncImageCacheSchedulerOptions<T>): AsyncImageCacheScheduler {
   function processPendingItems(deadline?: IdleDeadline, maxItems?: number): void {
     if (state.paused) {
@@ -58,11 +65,14 @@ export function createAsyncImageCacheScheduler<T>({
     }
 
     let processedCount = 0;
+    const startedAt = now();
 
     while (state.pendingItems.length > 0) {
       if (!shouldProcessNextPendingItem({
         processedCount,
         maxItems,
+        elapsedMs: now() - startedAt,
+        maxElapsedMs: maxProcessingMs,
         timeRemaining: deadline?.timeRemaining(),
         idleDeadlineBuffer: TIMING.idleDeadlineBuffer,
       })) {
@@ -91,9 +101,9 @@ export function createAsyncImageCacheScheduler<T>({
     state.idleCallbackScheduled = true;
 
     if (state.bulkMode) {
-      scheduleMicrotask(() => {
-        processPendingItems();
-      });
+      scheduleTimeout(() => {
+        processPendingItems(undefined, maxBulkItems);
+      }, 0);
       return;
     }
 
@@ -109,13 +119,13 @@ export function createAsyncImageCacheScheduler<T>({
         if (logMessage) {
           log(logMessage);
         }
-        processPendingItems(deadline);
+        processPendingItems(deadline, maxIdleItems);
       }, { timeout: idleTimeout });
       return;
     }
 
     scheduleTimeout(() => {
-      processPendingItems();
+      processPendingItems(undefined, maxIdleItems);
     }, idleFallback);
   }
 

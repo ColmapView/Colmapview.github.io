@@ -6,6 +6,7 @@ import {
 import {
   fetchUrlImageRaw,
   getUrlImageCached,
+  getUrlMaskCached,
   fetchUrlImage,
   fetchUrlMask,
   prefetchUrlImages,
@@ -13,6 +14,7 @@ import {
 import {
   fetchZipImageRaw,
   getZipImageCached,
+  getZipMaskCached,
   fetchZipImage,
   fetchZipMask,
   isZipLoadingAvailable,
@@ -72,8 +74,8 @@ const remoteSourceAdapter: DatasetSourceAdapter = {
     if (!state.maskUrlBase) return null;
     return await fetchUrlMask(state.maskUrlBase, imageName);
   },
-  getMaskSync() {
-    return undefined;
+  getMaskSync(_state, imageName) {
+    return getUrlMaskCached(imageName);
   },
   async prefetchImages(state, imageNames, concurrency) {
     if (!state.imageUrlBase) return;
@@ -103,8 +105,8 @@ const zipSourceAdapter: DatasetSourceAdapter = {
     if (!isZipLoadingAvailable()) return null;
     return await fetchZipMask(imageName);
   },
-  getMaskSync() {
-    return undefined;
+  getMaskSync(_state, imageName) {
+    return getZipMaskCached(imageName);
   },
   async prefetchImages(_state, imageNames, concurrency) {
     if (!isZipLoadingAvailable()) return;

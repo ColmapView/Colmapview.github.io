@@ -7,6 +7,7 @@ interface WebGpuPsnrBrowserResult {
     basic: BrowserPsnrMetric;
     identical: BrowserPsnrMetric;
     alphaZero: BrowserPsnrMetric;
+    alphaMask: BrowserPsnrMetric;
     multiWorkgroup: BrowserPsnrMetric;
     carry64: BrowserPsnrMetric;
     tiledFull: BrowserPsnrMetric;
@@ -33,17 +34,21 @@ interface BrowserPsnrModule {
     device: BrowserGpuDevice;
     renderedTexture: BrowserGpuTexture;
     groundTruthTexture: BrowserGpuTexture;
+    maskTexture?: BrowserGpuTexture;
     width: number;
     height: number;
+    maskOrigin?: { x: number; y: number };
   }): Promise<BrowserPsnrMetric>;
   computePsnrTextureReductionFromRgbaTexturesWebGpu(options: {
     device: BrowserGpuDevice;
     renderedTexture: BrowserGpuTexture;
     groundTruthTexture: BrowserGpuTexture;
+    maskTexture?: BrowserGpuTexture;
     width: number;
     height: number;
     renderedOrigin?: { x: number; y: number };
     groundTruthOrigin?: { x: number; y: number };
+    maskOrigin?: { x: number; y: number };
   }): Promise<BrowserPsnrReduction>;
   accumulatePsnrTextureReductions(reductions: BrowserPsnrReduction[]): BrowserPsnrReduction;
   computePsnrFromTextureReduction(reduction: BrowserPsnrReduction): BrowserPsnrMetric;
@@ -165,7 +170,8 @@ test.describe('WebGPU PSNR validation', () => {
         width: number,
         height: number,
         renderedPixels: Uint8Array,
-        groundTruthPixels: Uint8Array
+        groundTruthPixels: Uint8Array,
+        maskPixels?: Uint8Array
       ): Promise<BrowserPsnrMetric> => {
         const renderedTexture = device.createTexture({
           size: { width, height },
@@ -177,17 +183,29 @@ test.describe('WebGPU PSNR validation', () => {
           format: 'rgba8unorm',
           usage: textureUsageCopyDst | textureUsageTextureBinding,
         });
+        const maskTexture = maskPixels
+          ? device.createTexture({
+            size: { width, height },
+            format: 'rgba8unorm',
+            usage: textureUsageCopyDst | textureUsageTextureBinding,
+          })
+          : undefined;
         try {
           uploadTexture(renderedTexture, width, height, renderedPixels);
           uploadTexture(groundTruthTexture, width, height, groundTruthPixels);
+          if (maskTexture && maskPixels) {
+            uploadTexture(maskTexture, width, height, maskPixels);
+          }
           return await computePsnrFromRgbaTexturesWebGpu({
             device: trackedDevice,
             renderedTexture,
             groundTruthTexture,
+            ...(maskTexture ? { maskTexture } : {}),
             width,
             height,
           });
         } finally {
+          maskTexture?.destroy();
           renderedTexture.destroy();
           groundTruthTexture.destroy();
         }
@@ -274,6 +292,21 @@ test.describe('WebGPU PSNR validation', () => {
         0, 0, 0, 0,
         4, 5, 6, 0,
       ]);
+      const alphaMaskRendered = new Uint8Array([
+        10, 20, 30, 255,
+        255, 255, 255, 255,
+        8, 9, 10, 255,
+      ]);
+      const alphaMaskGroundTruth = new Uint8Array([
+        10, 20, 30, 255,
+        0, 0, 0, 255,
+        8, 9, 10, 255,
+      ]);
+      const alphaMask = new Uint8Array([
+        255, 255, 255, 255,
+        0, 0, 0, 0,
+        255, 255, 255, 0,
+      ]);
       const multiWorkgroupRendered = new Uint8Array(129 * 4);
       const multiWorkgroupGroundTruth = new Uint8Array(129 * 4);
       for (let pixel = 0; pixel < 129; pixel++) {
@@ -303,6 +336,7 @@ test.describe('WebGPU PSNR validation', () => {
           basic: await runCase(2, 1, basicRendered, basicGroundTruth),
           identical: await runCase(2, 1, identicalPixels, identicalPixels),
           alphaZero: await runCase(2, 1, alphaZeroRendered, alphaZeroGroundTruth),
+          alphaMask: await runCase(3, 1, alphaMaskRendered, alphaMaskGroundTruth, alphaMask),
           multiWorkgroup: await runCase(129, 1, multiWorkgroupRendered, multiWorkgroupGroundTruth),
           carry64: await runCase(carryWidth, carryHeight, carryRendered, carryGroundTruth),
           tiledFull: tiledParity.full,
@@ -335,6 +369,11 @@ test.describe('WebGPU PSNR validation', () => {
     expect(Number.isNaN(result.cases?.alphaZero.psnr)).toBe(true);
     expect(Number.isNaN(result.cases?.alphaZero.mse)).toBe(true);
     expect(result.cases?.alphaZero.validPixelCount).toBe(0);
+    expect(result.cases?.alphaMask).toMatchObject({
+      psnr: Infinity,
+      mse: 0,
+      validPixelCount: 1,
+    });
     expect(result.cases?.multiWorkgroup.validPixelCount).toBe(129);
     expect(result.cases?.multiWorkgroup.mse).toBeCloseTo(WHITE_SQUARED_ERROR / (129 * 3), 5);
     expect(result.cases?.carry64.validPixelCount).toBe(256 * 100);
@@ -345,6 +384,6 @@ test.describe('WebGPU PSNR validation', () => {
     expect(result.cases?.tiledAccumulated.validPixelCount).toBe(result.cases?.tiledFull.validPixelCount);
     expect(result.cases?.tiledAccumulated.mse).toBeCloseTo(result.cases?.tiledFull.mse ?? Number.NaN, 5);
     expect(result.cases?.tiledAccumulated.psnr).toBeCloseTo(result.cases?.tiledFull.psnr ?? Number.NaN, 5);
-    expect(result.mapReadBufferSizes).toEqual([16, 16, 16, 16, 16, 16, 16, 16]);
+    expect(result.mapReadBufferSizes).toEqual([32, 32, 32, 32, 32, 32, 32, 32, 32]);
   });
 });

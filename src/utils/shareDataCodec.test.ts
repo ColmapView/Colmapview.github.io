@@ -86,6 +86,7 @@ describe('share data codec', () => {
       ui: { backgroundColor: '#101010' },
       camera: { selectedImageId: 42 },
       pointCloud: { pointSize: 3 },
+      splat: { activeSourceId: 'splats/active.spz' },
     };
 
     const decoded = await decodeShareData(`#${encodeShareData('https://example.com/manifest.json', viewState, config)}`);

@@ -38,12 +38,23 @@ workerSelf.onmessage = (event: MessageEvent<GaussianCloudWorkerDecodeRequest>) =
 };
 
 async function decodeGaussianCloudInWorker(request: GaussianCloudWorkerDecodeRequest): Promise<void> {
+  workerSelf.postMessage({
+    type: 'progress',
+    id: request.id,
+    phase: 'decoding',
+  } satisfies GaussianCloudWorkerResponse);
+
   const cloud = request.format === 'spz'
     ? loadSPZFromBuffer(request.buffer)
     : loadPLYFromBuffer(request.buffer);
 
   try {
     validateGaussianCloud(cloud);
+    workerSelf.postMessage({
+      type: 'progress',
+      id: request.id,
+      phase: 'packing',
+    } satisfies GaussianCloudWorkerResponse);
     const packed = createPackedWebGpuGaussianCloud(cloud);
     const response: GaussianCloudWorkerLoadedResponse = {
       type: 'loaded',

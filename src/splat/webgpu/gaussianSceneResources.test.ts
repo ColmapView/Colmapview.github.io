@@ -152,6 +152,7 @@ describe('WebGPU Gaussian scene resources', () => {
   it('can upload packed Gaussian buffers in yielded chunks', async () => {
     const { uploader, writes } = createFakeUploader();
     const yieldToMainThread = vi.fn(async () => undefined);
+    const onProgress = vi.fn();
 
     const resources = await uploadPackedWebGpuGaussianSceneResourcesAsync(uploader, {
       count: 3,
@@ -168,11 +169,22 @@ describe('WebGPU Gaussian scene resources', () => {
       labelPrefix: 'chunked',
       maxChunkBytes: 16,
       yieldToMainThread,
+      onProgress,
     });
 
     expect(writes.map((write) => write.data.byteLength)).toEqual([16, 16, 16, 16, 16]);
     expect(writes.map((write) => write.offsetBytes)).toEqual([0, 16, 32, 0, 16]);
     expect(yieldToMainThread).toHaveBeenCalledTimes(3);
+    expect(onProgress).toHaveBeenCalledWith({
+      phase: 'uploading',
+      uploadedBytes: 0,
+      totalBytes: 80,
+    });
+    expect(onProgress).toHaveBeenLastCalledWith({
+      phase: 'uploading',
+      uploadedBytes: 80,
+      totalBytes: 80,
+    });
 
     resources.dispose();
   });

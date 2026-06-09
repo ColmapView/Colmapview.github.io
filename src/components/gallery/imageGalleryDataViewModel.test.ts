@@ -49,6 +49,7 @@ describe('image gallery data view-model', () => {
       reconstruction,
       imageSource: {
         getImageSync: (name) => name === cachedFile.name ? cachedFile : undefined,
+        getMaskSync: (name) => name === 'a.jpg' ? buildFile('a.jpg.png') : undefined,
       },
       splatPsnrByImage: new Map([[frameA.imageId, { psnr: 31.2, ssim: 0.943 }]]),
       cameraFilter: 'all',
@@ -69,6 +70,7 @@ describe('image gallery data view-model', () => {
       splatPsnr: 31.2,
       splatSsim: 0.943,
     });
+    expect(images[0].maskFile?.name).toBe('a.jpg.png');
 
     const camera2Only = buildGalleryImages({
       reconstruction,

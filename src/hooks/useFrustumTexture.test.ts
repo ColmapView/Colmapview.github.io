@@ -27,6 +27,7 @@ afterEach(() => {
   cleanup();
   clearFrustumTextureCache();
   clearSelectedImageTexture();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   restoreCanvasContext?.();
@@ -48,8 +49,8 @@ describe('useFrustumTexture', () => {
     expect(createBitmap).not.toHaveBeenCalled();
   });
 
-  it('publishes a low-resolution texture after URL and bitmap caches resolve', async () => {
-    const decodedBitmap = createBitmapStub({ width: 128, height: 64 });
+  it('publishes a low-resolution texture after bitmap cache resize resolves', async () => {
+    const decodedBitmap = createBitmapStub({ width: 256, height: 128 });
     const textureBitmap = createBitmapStub({ width: 96, height: 48 });
     const createBitmap = vi.fn()
       .mockResolvedValueOnce(decodedBitmap)
@@ -67,8 +68,8 @@ describe('useFrustumTexture', () => {
     expect(createBitmap).toHaveBeenCalledTimes(2);
   });
 
-  it('uses a prefetched image-plane URL even when the frustum has no file attached yet', async () => {
-    const prefetchedBitmap = createBitmapStub({ width: 128, height: 64 });
+  it('uses a prefetched image-plane bitmap even when the frustum has no file attached yet', async () => {
+    const prefetchedBitmap = createBitmapStub({ width: 256, height: 128 });
     const textureBitmap = createBitmapStub({ width: 96, height: 48 });
     const createBitmap = vi.fn()
       .mockResolvedValueOnce(prefetchedBitmap)
@@ -88,8 +89,8 @@ describe('useFrustumTexture', () => {
     expect(createBitmap).toHaveBeenCalledTimes(2);
   });
 
-  it('updates a mounted image-plane texture when background prefetch fills the URL cache', async () => {
-    const prefetchedBitmap = createBitmapStub({ width: 128, height: 64 });
+  it('updates a mounted image-plane texture when background prefetch fills the bitmap cache', async () => {
+    const prefetchedBitmap = createBitmapStub({ width: 256, height: 128 });
     const textureBitmap = createBitmapStub({ width: 96, height: 48 });
     const createBitmap = vi.fn()
       .mockResolvedValueOnce(prefetchedBitmap)
@@ -154,6 +155,35 @@ describe('useSelectedImageTexture', () => {
       expect(result.current).toBe(firstTexture);
     });
     expect(createBitmap).toHaveBeenCalledOnce();
+  });
+
+  it('delays selected high-resolution texture loading until fly-to can settle', async () => {
+    vi.useFakeTimers();
+    const bitmap = createBitmapStub();
+    const createBitmap = vi.fn(async () => bitmap);
+    vi.stubGlobal('createImageBitmap', createBitmap);
+    const file = createFile();
+
+    const { result } = renderHook(() => useSelectedImageTexture(file, 'selected.jpg', true, 600));
+
+    expect(result.current).toBeNull();
+    expect(createBitmap).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(599);
+      await Promise.resolve();
+    });
+    expect(createBitmap).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current).toBeInstanceOf(THREE.Texture);
+    expect(result.current?.image).toBe(bitmap);
+    expect(createBitmap).toHaveBeenCalledWith(file);
   });
 
   it('closes stale selected-image bitmaps after deselection', async () => {

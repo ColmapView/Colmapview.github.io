@@ -1,5 +1,16 @@
 export const FRUSTUM_PLANE_CULL_CHECK_INTERVAL = 5;
 
+export function getInitialFrustumPlaneCullFrame({
+  seed,
+  interval,
+}: {
+  seed: number;
+  interval: number;
+}): number {
+  if (!Number.isFinite(seed) || interval <= 1) return 0;
+  return Math.abs(Math.trunc(seed)) % interval;
+}
+
 export function getNextFrustumPlaneCullFrame({
   frameCount,
   interval,

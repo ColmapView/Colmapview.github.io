@@ -140,6 +140,9 @@ function createFacade(overrides: Partial<SplatLayerStoreFacade['data']> = {}): S
       addNotification: vi.fn(() => 'notice-id'),
       removeNotification: vi.fn(),
       setSparkBackendAvailable: vi.fn(),
+      getUrlProgress: vi.fn(() => null),
+      setUrlLoading: vi.fn(),
+      setUrlProgress: vi.fn(),
     },
   };
 }
@@ -159,7 +162,8 @@ describe('SplatLayer', () => {
     });
     const { SplatMesh } = createSplatMeshConstructor(initialized.promise);
     preloadSparkModuleMock.mockResolvedValue({ SparkRenderer, SplatMesh });
-    useSplatLayerStoreFacadeMock.mockReturnValue(createFacade());
+    const facade = createFacade();
+    useSplatLayerStoreFacadeMock.mockReturnValue(facade);
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     try {
@@ -167,6 +171,17 @@ describe('SplatLayer', () => {
 
       await waitFor(() => {
         expect(SplatMesh).toHaveBeenCalledTimes(1);
+      });
+      expect(facade.actions.setUrlLoading).toHaveBeenCalledWith(true);
+      expect(facade.actions.setUrlProgress).toHaveBeenCalledWith({
+        percent: 92,
+        message: 'Preparing splat renderer...',
+        currentFile: 'scene.ply',
+      });
+      expect(facade.actions.setUrlProgress).toHaveBeenCalledWith({
+        percent: 93,
+        message: 'Reading splat file...',
+        currentFile: 'scene.ply',
       });
       expect(SparkRenderer).not.toHaveBeenCalled();
 
@@ -186,6 +201,12 @@ describe('SplatLayer', () => {
       await waitFor(() => {
         expect(SparkRenderer).toHaveBeenCalledTimes(1);
       });
+      expect(facade.actions.setUrlProgress).toHaveBeenCalledWith({
+        percent: 100,
+        message: 'Complete',
+        currentFile: 'scene.ply',
+      });
+      expect(facade.actions.setUrlLoading).toHaveBeenLastCalledWith(false);
     } finally {
       animationFrame.restore();
       consoleError.mockRestore();

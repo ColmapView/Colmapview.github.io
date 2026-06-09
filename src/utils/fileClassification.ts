@@ -3,7 +3,7 @@
  * Extracted from useFileDropzone.ts for better organization.
  */
 
-import type { Reconstruction, Camera, GlobalStats, Image as ColmapImage } from '../types/colmap';
+import type { Reconstruction, Camera, GlobalStats, Image as ColmapImage, SplatFileSource } from '../types/colmap';
 import { CameraModelId } from '../types/colmap';
 import {
   compareSplatCandidates,
@@ -148,12 +148,16 @@ interface LocalSplatCandidate extends SplatCandidate {
   file: File;
 }
 
+function normalizeSplatSourcePath(path: string): string {
+  return path.replace(/\\/g, '/').replace(/^\/+/, '');
+}
+
 function getLocalSplatCandidates(files: Map<string, File>): LocalSplatCandidate[] {
   const seen = new Set<File>();
   const candidates: LocalSplatCandidate[] = [];
 
   for (const [path, file] of files) {
-    const candidatePath = isSplatFilePath(path) ? path : file.name;
+    const candidatePath = normalizeSplatSourcePath(isSplatFilePath(path) ? path : file.name);
     if (!isSplatFilePath(candidatePath) || seen.has(file)) {
       continue;
     }
@@ -174,9 +178,18 @@ function getLocalSplatCandidates(files: Map<string, File>): LocalSplatCandidate[
  * largest SPZ first, then largest PLY.
  */
 export function findSplatFiles(files: Map<string, File>): File[] {
+  return findSplatFileSources(files)
+    .map((candidate) => candidate.file);
+}
+
+export function findSplatFileSources(files: Map<string, File>): SplatFileSource[] {
   return getLocalSplatCandidates(files)
     .sort((a, b) => compareSplatCandidates(b, a))
-    .map((candidate) => candidate.file);
+    .map((candidate) => ({
+      id: candidate.path,
+      path: candidate.path,
+      file: candidate.file,
+    }));
 }
 
 /**

@@ -75,6 +75,7 @@ function createImageGalleryViewModel(overrides: Record<string, unknown> = {}) {
     handleClick: vi.fn(),
     handleDoubleClick: vi.fn(),
     handleRightClick: vi.fn(),
+    hasMasks: false,
     hideImageOverlay: false,
     hideToolbar: false,
     images: [{
@@ -104,11 +105,13 @@ function createImageGalleryViewModel(overrides: Record<string, unknown> = {}) {
     setGalleryColumns: vi.fn(),
     setSortDirection: vi.fn(),
     setSortField: vi.fn(),
+    setThumbnailDisplayMode: vi.fn(),
     setViewMode: vi.fn(),
     showMatches: false,
     showSplatMetrics: false,
     sortDirection: 'asc',
     sortField: 'name',
+    thumbnailDisplayMode: 'image',
     touchMode: false,
     viewMode: 'gallery',
     ...overrides,
@@ -144,7 +147,8 @@ describe('ImageGallery', () => {
     expect(screen.getByTestId('image-gallery')).toHaveAttribute('data-idle-ignore', 'true');
     const toolbarSlot = screen.getByTestId('image-gallery-toolbar-slot');
     expect(toolbarSlot).toHaveAttribute('aria-hidden', 'true');
-    expect(toolbarSlot).toHaveClass('absolute', 'top-0', 'h-10');
+    expect(toolbarSlot).toHaveClass('absolute', 'top-0', 'h-auto', 'overflow-visible');
+    expect(toolbarSlot).toHaveStyle({ minHeight: '40px' });
     expect(screen.queryByTestId('image-gallery-toolbar')).toBeNull();
 
     fireEvent.mouseEnter(toolbarSlot);
@@ -184,7 +188,8 @@ describe('ImageGallery', () => {
     render(<ImageGallery />);
 
     expect(screen.getByTestId('image-gallery-toolbar-slot')).toHaveAttribute('aria-hidden', 'false');
-    expect(screen.getByTestId('image-gallery-toolbar-slot')).toHaveClass('h-10');
+    expect(screen.getByTestId('image-gallery-toolbar-slot')).toHaveClass('h-auto', 'overflow-visible');
+    expect(screen.getByTestId('image-gallery-toolbar-slot')).toHaveStyle({ minHeight: '40px' });
     expect(screen.getByTestId('image-gallery-toolbar')).toBeVisible();
   });
 });

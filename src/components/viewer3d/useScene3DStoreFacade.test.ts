@@ -116,7 +116,8 @@ describe('useScene3DStoreFacade', () => {
     useSplatBackendStore.getState().setSparkBackendAvailable(true);
     usePointCloudStore.getState().setColorMode('splats');
 
-    const { result } = renderHook(() => useSceneContainerStoreFacade());
+    const { result, rerender } = renderHook(() => useSceneContainerStoreFacade());
+    const initialGetUrlProgress = result.current.actions.getUrlProgress;
 
     expect(result.current.data).toMatchObject({
       reconstruction,
@@ -135,6 +136,7 @@ describe('useScene3DStoreFacade', () => {
       result.current.actions.setSelectedImageId(42);
       result.current.actions.setWebGpuBackendState('failed', 'adapter lost');
     });
+    rerender();
 
     expect(useCameraStore.getState().selectedImageId).toBe(42);
     expect(useNotificationStore.getState().notifications).toMatchObject([
@@ -142,5 +144,6 @@ describe('useScene3DStoreFacade', () => {
     ]);
     expect(useSplatBackendStore.getState().availability.webGpu).toBe('failed');
     expect(useSplatBackendStore.getState().availability.webGpuFailureReason).toBe('adapter lost');
+    expect(result.current.actions.getUrlProgress).toBe(initialGetUrlProgress);
   });
 });

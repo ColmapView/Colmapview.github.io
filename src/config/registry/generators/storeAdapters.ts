@@ -22,6 +22,13 @@ import { useExportStore } from '../../../store/stores/exportStore';
 import { usePointCloudStore } from '../../../store/stores/pointCloudStore';
 import { useRigStore } from '../../../store/stores/rigStore';
 import { useUIStore } from '../../../store/stores/uiStore';
+import {
+  GALLERY_BORDER_COLOR_MODE_SETTINGS,
+  GALLERY_SORT_DIRECTIONS,
+  GALLERY_SORT_FIELDS,
+  GALLERY_THUMBNAIL_DISPLAY_MODES,
+  GALLERY_VIEW_MODE_SETTINGS,
+} from '../../../types/gallery';
 import type { StoreHook } from '../types';
 
 const MODEL_EXPORT_FORMATS = ['text', 'binary', 'ply', 'zip'] as const;
@@ -253,6 +260,13 @@ const uiAdapter: StoreConfigAdapter = {
       case 'axisLabelMode': return state.axisLabelMode;
       case 'showGizmo': return state.showGizmo;
       case 'galleryCollapsed': return state.galleryCollapsed;
+      case 'galleryViewMode': return state.galleryViewMode;
+      case 'galleryColumns': return state.galleryColumns;
+      case 'galleryCameraFilter': return state.galleryCameraFilter;
+      case 'gallerySortField': return state.gallerySortField;
+      case 'gallerySortDirection': return state.gallerySortDirection;
+      case 'galleryBorderColorMode': return state.galleryBorderColorMode;
+      case 'galleryThumbnailDisplayMode': return state.galleryThumbnailDisplayMode;
       default: return unsupportedStoreKey('useUIStore', storeKey);
     }
   },
@@ -312,6 +326,27 @@ const uiAdapter: StoreConfigAdapter = {
         return;
       case 'galleryCollapsed':
         state.setGalleryCollapsed(requireBoolean(storeKey, value));
+        return;
+      case 'galleryViewMode':
+        state.setGalleryViewMode(requireEnum(storeKey, value, GALLERY_VIEW_MODE_SETTINGS));
+        return;
+      case 'galleryColumns':
+        state.setGalleryColumns(requireNumber(storeKey, value));
+        return;
+      case 'galleryCameraFilter':
+        state.setGalleryCameraFilter(requireString(storeKey, value));
+        return;
+      case 'gallerySortField':
+        state.setGallerySortField(requireEnum(storeKey, value, GALLERY_SORT_FIELDS));
+        return;
+      case 'gallerySortDirection':
+        state.setGallerySortDirection(requireEnum(storeKey, value, GALLERY_SORT_DIRECTIONS));
+        return;
+      case 'galleryBorderColorMode':
+        state.setGalleryBorderColorMode(requireEnum(storeKey, value, GALLERY_BORDER_COLOR_MODE_SETTINGS));
+        return;
+      case 'galleryThumbnailDisplayMode':
+        state.setGalleryThumbnailDisplayMode(requireEnum(storeKey, value, GALLERY_THUMBNAIL_DISPLAY_MODES));
         return;
       default:
         return unsupportedStoreKey('useUIStore', storeKey);

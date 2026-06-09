@@ -15,6 +15,7 @@ import {
   useReconstructionStore,
   useUIStore,
 } from '../../store';
+import type { CameraViewState } from '../../store/types';
 
 afterEach(() => {
   useReconstructionStore.getState().clear();
@@ -30,6 +31,13 @@ afterEach(() => {
   useUIStore.setState({
     autoHideElements: { ...useUIStore.getInitialState().autoHideElements },
     isIdle: false,
+    galleryViewMode: 'auto',
+    galleryColumns: 2,
+    galleryCameraFilter: 'all',
+    gallerySortField: 'name',
+    gallerySortDirection: 'asc',
+    galleryBorderColorMode: 'auto',
+    galleryThumbnailDisplayMode: 'image',
     matchesColor: '#ff00ff',
     matchesDisplayMode: 'static',
     showAutoHideEditor: false,
@@ -215,4 +223,149 @@ describe('useImageGalleryViewModel', () => {
 
     unmount();
   });
+
+  it('right-clicks unselected images to fly there, then right-clicks the selected target to go back and deselect', () => {
+    const camera = buildCamera({ cameraId: 1 });
+    const image = buildImage({ imageId: 10, cameraId: camera.cameraId, name: 'a.jpg' });
+    const fromState = buildCameraViewState(1);
+    const currentTargetState = buildCameraViewState(2);
+    const reconstruction = buildReconstruction({
+      cameras: [camera],
+      images: [image],
+    });
+
+    act(() => {
+      useReconstructionStore.getState().setReconstruction(reconstruction);
+      useCameraStore.setState({
+        currentViewState: fromState,
+      });
+    });
+
+    const { result, unmount } = renderHook(() => useImageGalleryViewModel());
+
+    act(() => {
+      result.current.handleRightClick(image.imageId);
+    });
+
+    expect(useCameraStore.getState().selectedImageId).toBe(image.imageId);
+    expect(useCameraStore.getState().flyToImageId).toBe(image.imageId);
+    expect(useCameraStore.getState().navigationHistory).toEqual([{
+      fromState,
+      fromImageId: null,
+      toImageId: image.imageId,
+    }]);
+
+    act(() => {
+      useCameraStore.setState({ currentViewState: currentTargetState });
+    });
+
+    act(() => {
+      result.current.handleRightClick(image.imageId);
+    });
+
+    expect(useCameraStore.getState().selectedImageId).toBeNull();
+    expect(useCameraStore.getState().flyToViewState).toBe(fromState);
+    expect(useCameraStore.getState().navigationHistory).toEqual([]);
+
+    unmount();
+  });
+
+  it('right-clicks a selected image without matching navigation history to deselect only', () => {
+    const camera = buildCamera({ cameraId: 1 });
+    const image = buildImage({ imageId: 10, cameraId: camera.cameraId, name: 'a.jpg' });
+    const currentViewState = buildCameraViewState(1);
+    const reconstruction = buildReconstruction({
+      cameras: [camera],
+      images: [image],
+    });
+
+    act(() => {
+      useReconstructionStore.getState().setReconstruction(reconstruction);
+      useCameraStore.setState({
+        currentViewState,
+        selectedImageId: image.imageId,
+      });
+    });
+
+    const { result, unmount } = renderHook(() => useImageGalleryViewModel());
+
+    act(() => {
+      result.current.handleRightClick(image.imageId);
+    });
+
+    expect(useCameraStore.getState().selectedImageId).toBeNull();
+    expect(useCameraStore.getState().flyToViewState).toBeNull();
+
+    unmount();
+  });
+
+  it('keeps thumbnail display on images when masks are unavailable', () => {
+    const reconstruction = buildReconstruction({
+      cameras: [buildCamera({ cameraId: 1 })],
+      images: [buildImage({ imageId: 10, cameraId: 1, name: 'a.jpg' })],
+    });
+
+    act(() => {
+      useReconstructionStore.getState().setSourceInfo('local');
+      useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles({
+        imageFiles: [buildFile('a.jpg')],
+        hasMasks: false,
+      }));
+      useReconstructionStore.getState().setReconstruction(reconstruction);
+    });
+
+    const { result, unmount } = renderHook(() => useImageGalleryViewModel());
+
+    act(() => {
+      result.current.setThumbnailDisplayMode('mask');
+    });
+
+    expect(result.current.hasMasks).toBe(false);
+    expect(result.current.thumbnailDisplayMode).toBe('image');
+
+    unmount();
+  });
+
+  it('exposes cached mask files when masks are available', () => {
+    const imageFile = buildFile('a.jpg');
+    const maskFile = buildFile('a.jpg.png');
+    const reconstruction = buildReconstruction({
+      cameras: [buildCamera({ cameraId: 1 })],
+      images: [buildImage({ imageId: 10, cameraId: 1, name: imageFile.name })],
+    });
+
+    act(() => {
+      useReconstructionStore.getState().setSourceInfo('local');
+      useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles({
+        imageFiles: new Map([
+          [imageFile.name, imageFile],
+          [`masks/${imageFile.name}.png`, maskFile],
+        ]),
+        hasMasks: true,
+      }));
+      useReconstructionStore.getState().setReconstruction(reconstruction);
+    });
+
+    const { result, unmount } = renderHook(() => useImageGalleryViewModel());
+
+    act(() => {
+      result.current.setThumbnailDisplayMode('maskedImage');
+    });
+
+    expect(result.current.hasMasks).toBe(true);
+    expect(result.current.thumbnailDisplayMode).toBe('maskedImage');
+    expect(result.current.images[0].file).toBe(imageFile);
+    expect(result.current.images[0].maskFile).toBe(maskFile);
+
+    unmount();
+  });
 });
+
+function buildCameraViewState(offset: number): CameraViewState {
+  return {
+    position: [offset, 0, 0],
+    quaternion: [1, 0, 0, 0],
+    target: [0, 0, 0],
+    distance: 1,
+  };
+}

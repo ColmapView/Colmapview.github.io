@@ -64,18 +64,58 @@ describe('async image cache scheduler', () => {
     expect(requestIdleCallback).toHaveBeenCalledOnce();
   });
 
-  it('schedules bulk-mode processing on the microtask queue', () => {
-    const scheduleMicrotask = vi.fn((callback: () => void) => callback());
-    const { state, processPendingItem, scheduler } = createScheduler({ scheduleMicrotask });
+  it('schedules bulk-mode processing on a yielding timer', () => {
+    const scheduleTimeout = vi.fn((callback: () => void) => callback());
+    const { state, processPendingItem, scheduler } = createScheduler({ scheduleTimeout });
     state.bulkMode = true;
     state.pendingItems.push(createPending('bulk'));
 
     scheduler.scheduleIdleProcessing();
 
-    expect(scheduleMicrotask).toHaveBeenCalledOnce();
+    expect(scheduleTimeout).toHaveBeenCalledWith(expect.any(Function), 0);
     expect(processPendingItem).toHaveBeenCalledOnce();
     expect(state.pendingItems).toEqual([]);
     expect(state.idleCallbackScheduled).toBe(false);
+  });
+
+  it('bounds bulk-mode work and reschedules leftovers', () => {
+    const scheduledCallbacks: Array<() => void> = [];
+    const scheduleTimeout = vi.fn((callback: () => void) => {
+      scheduledCallbacks.push(callback);
+    });
+    const { state, processPendingItem, scheduler } = createScheduler({
+      scheduleTimeout,
+      maxBulkItems: 2,
+    });
+    state.bulkMode = true;
+    state.pendingItems.push(createPending('first'), createPending('second'), createPending('third'));
+
+    scheduler.scheduleIdleProcessing();
+    scheduledCallbacks.shift()?.();
+
+    expect(processPendingItem).toHaveBeenCalledTimes(2);
+    expect(state.pendingItems.map((item) => item.cacheKey)).toEqual(['third']);
+    expect(state.idleCallbackScheduled).toBe(true);
+    expect(scheduledCallbacks).toHaveLength(1);
+  });
+
+  it('stops a batch after the processing time slice is consumed', () => {
+    const nowValues = [0, 0, 12];
+    const now = vi.fn(() => nowValues.shift() ?? 12);
+    const requestIdleCallback = vi.fn<(callback: IdleRequestCallback, options?: IdleRequestOptions) => number>();
+    const { state, processPendingItem, scheduler } = createScheduler({
+      now,
+      requestIdleCallback,
+      maxProcessingMs: 8,
+    });
+    state.pendingItems.push(createPending('first'), createPending('second'));
+
+    scheduler.processPendingItems();
+
+    expect(processPendingItem).toHaveBeenCalledTimes(1);
+    expect(state.pendingItems.map((item) => item.cacheKey)).toEqual(['second']);
+    expect(state.idleCallbackScheduled).toBe(true);
+    expect(requestIdleCallback).toHaveBeenCalledOnce();
   });
 
   it('uses idle callbacks when available and logs throttled idle diagnostics', () => {

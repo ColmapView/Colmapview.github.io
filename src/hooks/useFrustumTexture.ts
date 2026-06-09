@@ -1,22 +1,20 @@
 /**
  * Texture loading for camera frustum image planes.
  *
- * Strategy: Cache PNG blob URLs (compressed, alpha-safe, small at 128px) instead of
- * THREE.Texture objects (uncompressed, ~4MB each). Create textures on-demand.
- * This allows caching thousands of images without running out of memory.
+ * Strategy: Cache resized ImageBitmaps for image planes and create textures
+ * on-demand. This avoids the expensive canvas -> PNG blob -> bitmap round trip
+ * while keeping the GPU texture lifecycle separate from decoded bitmap storage.
  */
 
 import * as THREE from 'three';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { createImageCache } from './useAsyncImageCache';
-import { SIZE, TIMING } from '../theme';
+import { SIZE } from '../theme';
 import {
   clearActiveFrustumTextures,
   clearFrustumBitmapCache,
   createFrustumTextureFromBitmap,
   getActiveFrustumTexture,
   getCachedFrustumBitmap,
-  getOrLoadFrustumBitmap,
   touchActiveFrustumTexture,
   type FrustumBitmapCache,
   type FrustumTextureCache,
@@ -35,11 +33,17 @@ import {
   type FrustumTextureResource,
   type SelectedImageTextureResource,
 } from './frustumTextureResources';
-import { isOffscreenCanvas } from '../utils/canvasTypeGuards';
+import {
+  createImageBitmapWithTimeout,
+  resizeImageBitmapToMaxSizeWithTimeout,
+} from './asyncImageDecode';
 
 const BACKGROUND_FRUSTUM_TEXTURE_PREFETCH_BATCH_SIZE = 4;
+const FRUSTUM_BITMAP_DECODE_TIMEOUT = 3000;
 let frustumTextureCacheVersion = 0;
+let frustumBitmapCacheGeneration = 0;
 const frustumTextureCacheListeners = new Set<() => void>();
+const frustumBitmapLoads = new Map<string, Promise<ImageBitmap | null>>();
 
 function notifyFrustumTextureCacheChanged(): void {
   frustumTextureCacheVersion++;
@@ -55,35 +59,12 @@ export function subscribeFrustumTextureCacheChanges(listener: () => void): () =>
   };
 }
 
+const bitmapCache: FrustumBitmapCache = new Map();
+const activeTextures: FrustumTextureCache = new Map();
+
 export function getFrustumTextureCacheVersion(): number {
   return frustumTextureCacheVersion;
 }
-
-/**
- * Process canvas to an alpha-preserving PNG blob URL.
- */
-async function canvasToPngUrl(canvas: HTMLCanvasElement | OffscreenCanvas): Promise<string | null> {
-  try {
-    const blob = isOffscreenCanvas(canvas)
-      ? await canvas.convertToBlob({ type: 'image/png' })
-      : await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
-    return blob ? URL.createObjectURL(blob) : null;
-  } catch {
-    return null;
-  }
-}
-
-// Cache stores small PNG blob URLs instead of textures (uncompressed)
-const frustumUrlCache = createImageCache<string>({
-  maxSize: SIZE.frustumMaxSize,
-  processCanvas: canvasToPngUrl,
-  dispose: (url) => URL.revokeObjectURL(url),
-  idleTimeout: TIMING.textureUploadTimeout,
-  idleFallback: TIMING.textureUploadFallback,
-});
-
-const bitmapCache: FrustumBitmapCache = new Map();
-const activeTextures: FrustumTextureCache = new Map();
 
 function getCachedFrustumTexture(imageName: string): THREE.Texture | null {
   const existing = getActiveFrustumTexture(activeTextures, imageName);
@@ -93,12 +74,47 @@ function getCachedFrustumTexture(imageName: string): THREE.Texture | null {
   return cachedBitmap ? createTextureFromBitmap(cachedBitmap, imageName) : null;
 }
 
+async function loadFrustumBitmapFromFile(
+  imageFile: File,
+  imageName: string
+): Promise<ImageBitmap | null> {
+  const cached = getCachedFrustumBitmap(bitmapCache, imageName);
+  if (cached) return cached;
+
+  const existingLoad = frustumBitmapLoads.get(imageName);
+  if (existingLoad) return existingLoad;
+
+  const loadGeneration = frustumBitmapCacheGeneration;
+  const load = createImageBitmapWithTimeout(imageFile, FRUSTUM_BITMAP_DECODE_TIMEOUT)
+    .then((decodedBitmap) => resizeImageBitmapToMaxSizeWithTimeout(
+      decodedBitmap,
+      SIZE.frustumMaxSize,
+      FRUSTUM_BITMAP_DECODE_TIMEOUT
+    ))
+    .then((bitmap) => {
+      if (loadGeneration !== frustumBitmapCacheGeneration) {
+        bitmap.close();
+        return null;
+      }
+
+      bitmapCache.set(imageName, { bitmap, lastUsed: Date.now() });
+      notifyFrustumTextureCacheChanged();
+      return bitmap;
+    })
+    .catch(() => null)
+    .finally(() => {
+      frustumBitmapLoads.delete(imageName);
+    });
+
+  frustumBitmapLoads.set(imageName, load);
+  return load;
+}
+
 /**
- * Load and cache an ImageBitmap from a blob URL.
- * Returns cached bitmap if available, otherwise loads and caches it.
+ * Return a cached resized bitmap for image-plane texture creation.
  */
-async function getOrLoadBitmap(url: string, imageName: string): Promise<ImageBitmap | null> {
-  return getOrLoadFrustumBitmap(url, imageName, bitmapCache);
+async function getOrLoadBitmap(_cacheKey: string, imageName: string): Promise<ImageBitmap | null> {
+  return getCachedFrustumBitmap(bitmapCache, imageName);
 }
 
 /**
@@ -114,8 +130,8 @@ function createTextureFromBitmap(bitmap: ImageBitmap, imageName: string): THREE.
  * Call this when loading a new reconstruction.
  */
 export function clearFrustumTextureCache(): void {
-  // Clear the PNG URL cache
-  frustumUrlCache.clear();
+  frustumBitmapCacheGeneration++;
+  frustumBitmapLoads.clear();
 
   // IMPORTANT: Dispose textures BEFORE closing bitmaps to prevent WebGL errors
   // When a texture has needsUpdate=true, Three.js will try to upload the bitmap data
@@ -135,14 +151,14 @@ export function clearFrustumTextureCache(): void {
  * Pause frustum texture processing (e.g., during camera movement).
  */
 export function pauseFrustumTextureCache(): void {
-  frustumUrlCache.pause();
+  return undefined;
 }
 
 /**
  * Resume frustum texture processing after pause.
  */
 export function resumeFrustumTextureCache(): void {
-  frustumUrlCache.resume();
+  return undefined;
 }
 
 /**
@@ -155,7 +171,11 @@ export function getFrustumTextureCacheStats(): {
   textures: number;
 } {
   return {
-    urlCache: frustumUrlCache.getStats(),
+    urlCache: {
+      count: bitmapCache.size,
+      loading: frustumBitmapLoads.size,
+      pending: 0,
+    },
     bitmaps: bitmapCache.size,
     textures: activeTextures.size,
   };
@@ -163,13 +183,23 @@ export function getFrustumTextureCacheStats(): {
 
 /**
  * Prefetch frustum textures for a list of images.
- * This caches PNG blob URLs, not actual textures.
+ * This caches resized bitmaps, not actual GPU textures.
  */
 export async function prefetchFrustumTextures(
   images: Array<{ file: File; name: string }>,
   onProgress?: (progress: number) => void
 ): Promise<void> {
-  await frustumUrlCache.prefetch(images, onProgress);
+  if (images.length === 0) {
+    onProgress?.(1);
+    return;
+  }
+
+  let completed = 0;
+  for (const { file, name } of images) {
+    await loadFrustumBitmapFromFile(file, name);
+    completed++;
+    onProgress?.(completed / images.length);
+  }
   notifyFrustumTextureCacheChanged();
 }
 
@@ -179,7 +209,7 @@ export interface BackgroundFrustumTexturePrefetchOptions {
 }
 
 /**
- * Gently prefetch the low-resolution PNG URL cache used by image-plane display.
+ * Gently prefetch the low-resolution bitmap cache used by image-plane display.
  */
 export async function prefetchFrustumTexturesInBackground(
   images: Array<{ file: File; name: string }>,
@@ -192,7 +222,7 @@ export async function prefetchFrustumTexturesInBackground(
     }
 
     const batch = images.slice(i, i + batchSize);
-    await Promise.all(batch.map(({ file, name }) => frustumUrlCache.load(file, name)));
+    await Promise.all(batch.map(({ file, name }) => loadFrustumBitmapFromFile(file, name)));
     notifyFrustumTextureCacheChanged();
     await new Promise<void>((resolve) => {
       setTimeout(resolve, 0);
@@ -208,8 +238,8 @@ export async function prioritizeFrustumTexture(
   imageFile: File,
   imageName: string
 ): Promise<THREE.Texture | null> {
-  const url = await frustumUrlCache.prioritize(imageFile, imageName);
-  if (!url) return null;
+  const bitmap = await loadFrustumBitmapFromFile(imageFile, imageName);
+  if (!bitmap) return null;
 
   // Check if texture already exists
   const existing = activeTextures.get(imageName);
@@ -218,9 +248,6 @@ export async function prioritizeFrustumTexture(
     return existing.texture;
   }
 
-  // Load bitmap and create texture
-  const bitmap = await getOrLoadBitmap(url, imageName);
-  if (!bitmap) return null;
   return createTextureFromBitmap(bitmap, imageName);
 }
 
@@ -228,9 +255,8 @@ export async function prioritizeFrustumTexture(
  * Hook to get a frustum texture with caching and optimization.
  *
  * Strategy:
- * 1. Cache stores PNG blob URLs (compressed, alpha-safe, small at 128px)
- * 2. Small bitmap cache for fast texture recreation (MAX_CACHED_BITMAPS)
- * 3. Keep active Three textures valid while mounted image planes may reference them
+ * 1. Cache resized ImageBitmaps for fast low-resolution image-plane display
+ * 2. Keep active Three textures valid while mounted image planes may reference them
  *
  * @param imageFile - The image file to load
  * @param imageName - Unique identifier for caching
@@ -249,8 +275,14 @@ export function useFrustumTexture(
   );
   void cacheVersion;
 
-  // Get the cached PNG blob URL
-  const cachedUrl = frustumUrlCache.useCache(imageFile, imageName, enabled);
+  useEffect(() => {
+    if (!enabled || !imageFile) return;
+    if (getCachedFrustumBitmap(bitmapCache, imageName)) return;
+    void loadFrustumBitmapFromFile(imageFile, imageName);
+  }, [enabled, imageFile, imageName]);
+
+  const cachedBitmap = enabled ? getCachedFrustumBitmap(bitmapCache, imageName) : null;
+  const cacheToken = cachedBitmap ? `bitmap:${imageName}` : null;
   const resourceRef = useRef<FrustumTextureResource | null>(null);
   resourceRef.current ??= createFrustumTextureResource({
     getCachedTexture: getCachedFrustumTexture,
@@ -263,15 +295,15 @@ export function useFrustumTexture(
     resource.getSnapshot,
     resource.getSnapshot
   );
-  const cacheKey = getFrustumTextureCacheKey(cachedUrl, imageName, enabled);
+  const cacheKey = getFrustumTextureCacheKey(cacheToken, imageName, enabled);
 
   useEffect(() => {
     resource.sync({
-      cachedUrl,
+      cachedUrl: cacheToken,
       enabled,
       imageName,
     });
-  }, [cachedUrl, enabled, imageName, resource]);
+  }, [cacheToken, enabled, imageName, resource]);
 
   const texture = snapshot.cacheKey === cacheKey ? snapshot.texture : null;
 
@@ -298,7 +330,8 @@ export function useFrustumTexture(
 export function useSelectedImageTexture(
   imageFile: File | undefined,
   imageName: string,
-  isSelected: boolean
+  isSelected: boolean,
+  delayMs = 0
 ): THREE.Texture | null {
   const resourceRef = useRef<SelectedImageTextureResource | null>(null);
   resourceRef.current ??= createSelectedImageTextureResource({
@@ -317,12 +350,47 @@ export function useSelectedImageTexture(
   const cacheKey = getSelectedImageTextureCacheKey(imageFile, imageName, isSelected);
 
   useEffect(() => {
+    if (!isSelected || !imageFile) {
+      resource.sync({
+        imageFile,
+        imageName,
+        isSelected: false,
+      });
+      return;
+    }
+
+    if (delayMs <= 0 || getSelectedImageTexture(imageName)) {
+      resource.sync({
+        imageFile,
+        imageName,
+        isSelected,
+      });
+      return;
+    }
+
     resource.sync({
-      imageFile,
+      imageFile: undefined,
       imageName,
-      isSelected,
+      isSelected: false,
     });
-  }, [imageFile, imageName, isSelected, resource]);
+
+    const timeoutId = setTimeout(() => {
+      resource.sync({
+        imageFile,
+        imageName,
+        isSelected,
+      });
+    }, delayMs);
+
+    return () => {
+      clearTimeout(timeoutId);
+      resource.sync({
+        imageFile,
+        imageName,
+        isSelected: false,
+      });
+    };
+  }, [delayMs, imageFile, imageName, isSelected, resource]);
 
   return snapshot.cacheKey === cacheKey ? snapshot.texture : null;
 }

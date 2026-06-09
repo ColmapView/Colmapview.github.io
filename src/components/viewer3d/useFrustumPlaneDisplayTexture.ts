@@ -11,6 +11,7 @@ interface FrustumPlaneDisplayTextureOptions {
   isSelected: boolean;
   showImagePlane: boolean;
   viewAngleOk: boolean;
+  selectedTextureDelayMs?: number;
 }
 
 export function useFrustumPlaneDisplayTexture({
@@ -19,9 +20,15 @@ export function useFrustumPlaneDisplayTexture({
   isSelected,
   showImagePlane,
   viewAngleOk,
+  selectedTextureDelayMs = 0,
 }: FrustumPlaneDisplayTextureOptions) {
   const lowResTexture = useFrustumTexture(imageFile, imageName, showImagePlane);
-  const highResTexture = useSelectedImageTexture(imageFile, imageName, isSelected && showImagePlane);
+  const highResTexture = useSelectedImageTexture(
+    imageFile,
+    imageName,
+    isSelected && showImagePlane,
+    selectedTextureDelayMs
+  );
   const sourceTexture = getFrustumPlaneSourceTexture({
     isSelected,
     highResTexture,

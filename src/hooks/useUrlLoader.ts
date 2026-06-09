@@ -6,6 +6,7 @@ import { isManifestUrl } from '../utils/urlUtils';
 import { isArchiveUrl } from '../utils/zipLoader';
 import { clearAllCaches } from '../cache';
 import { appLogger, type AppLogger } from '../utils/logger';
+import { isSplatLoadingProgressForFile } from '../utils/splatLoadingProgressPolicy';
 import {
   createDefaultManifest,
   getArchiveUrlDetectedLogMessage,
@@ -45,6 +46,10 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
   const setUrlError = useReconstructionStore((s) => s.setUrlError);
   const tryStartUrlLoad = useReconstructionStore((s) => s.tryStartUrlLoad);
   const finishUrlLoad = useReconstructionStore((s) => s.finishUrlLoad);
+  const shouldKeepUrlLoadingForSplatRenderer = useCallback(() => {
+    const state = useReconstructionStore.getState();
+    return isSplatLoadingProgressForFile(state.urlProgress, state.loadedFiles?.splatFile);
+  }, []);
 
   /**
    * Fetch and validate the manifest file
@@ -145,7 +150,9 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
       return false;
     } finally {
       finishUrlLoad();
-      setUrlLoading(false);
+      if (!shouldKeepUrlLoadingForSplatRenderer()) {
+        setUrlLoading(false);
+      }
     }
   }, [
     fetchManifest,
@@ -156,6 +163,7 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
     logInfo,
     processFiles,
     setError,
+    shouldKeepUrlLoadingForSplatRenderer,
     setSourceInfo,
     setUrlError,
     setUrlLoading,
@@ -202,7 +210,9 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
       return false;
     } finally {
       finishUrlLoad();
-      setUrlLoading(false);
+      if (!shouldKeepUrlLoadingForSplatRenderer()) {
+        setUrlLoading(false);
+      }
     }
   }, [
     finishUrlLoad,
@@ -210,6 +220,7 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
     logInfo,
     processFiles,
     setError,
+    shouldKeepUrlLoadingForSplatRenderer,
     setSourceInfo,
     setUrlError,
     setUrlLoading,

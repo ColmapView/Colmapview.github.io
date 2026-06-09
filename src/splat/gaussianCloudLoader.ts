@@ -23,10 +23,27 @@ import {
   recordWebGpuSplatTelemetryEvent,
 } from './webgpu/webGpuSplatTelemetry';
 
+export type GaussianCloudLoadProgress =
+  | {
+      phase: 'reading';
+      loadedBytes: number;
+      totalBytes: number;
+    }
+  | {
+      phase: 'decoding' | 'packing';
+    }
+  | {
+      phase: 'decoded';
+      byteLength: number;
+      count: number;
+      shDegree: number;
+    };
+
 export interface GaussianCloudLoaderDeps {
   loadPLYFromBuffer?: (buffer: ArrayBuffer) => GaussianCloud;
   loadSPZFromBuffer?: (buffer: ArrayBuffer) => GaussianCloud;
   createWorker?: (() => Worker | null) | null;
+  onProgress?: (progress: GaussianCloudLoadProgress) => void;
 }
 
 let gaussianCloudLoadCache = new WeakMap<File, Promise<LoadedGaussianCloud>>();
@@ -60,7 +77,15 @@ export async function loadGaussianCloudFromFile(
   if (shouldUseGaussianCloudLoadCache(deps)) {
     const cached = gaussianCloudLoadCache.get(file);
     if (cached) {
-      return cached;
+      return cached.then((loaded) => {
+        deps.onProgress?.({
+          phase: 'decoded',
+          byteLength: loaded.byteLength,
+          count: loaded.cloud.count,
+          shDegree: loaded.cloud.shDegree,
+        });
+        return loaded;
+      });
     }
 
     const loaded = loadGaussianCloudFromFileUncached(file, deps)
@@ -87,8 +112,25 @@ async function loadGaussianCloudFromFileUncached(
 ): Promise<LoadedGaussianCloud> {
   const telemetryStart = nowWebGpuSplatTelemetryMs();
   const format = getGaussianCloudFormatForFile(file);
-  const buffer = await readFileAsArrayBuffer(file);
+  deps.onProgress?.({
+    phase: 'reading',
+    loadedBytes: 0,
+    totalBytes: file.size,
+  });
+  const buffer = await readFileAsArrayBuffer(file, (loadedBytes, totalBytes) => {
+    deps.onProgress?.({
+      phase: 'reading',
+      loadedBytes,
+      totalBytes,
+    });
+  });
   const byteLength = buffer.byteLength;
+  deps.onProgress?.({
+    phase: 'reading',
+    loadedBytes: byteLength,
+    totalBytes: byteLength,
+  });
+  deps.onProgress?.({ phase: 'decoding' });
   const loaded = await decodeGaussianCloud(format, buffer, deps);
   const cloud = loaded.cloud;
 
@@ -106,6 +148,12 @@ async function loadGaussianCloudFromFileUncached(
       count: cloud.count,
       shDegree: cloud.shDegree,
     },
+  });
+  deps.onProgress?.({
+    phase: 'decoded',
+    byteLength,
+    count: cloud.count,
+    shDegree: cloud.shDegree,
   });
   return {
     file,
@@ -144,7 +192,7 @@ async function decodeGaussianCloud(
     };
   }
 
-  return decodeGaussianCloudInWorker(worker, format, buffer);
+  return decodeGaussianCloudInWorker(worker, format, buffer, deps.onProgress);
 }
 
 async function decodeGaussianCloudInProcess(
@@ -178,7 +226,8 @@ function createDefaultGaussianCloudLoaderWorker(): Worker | null {
 function decodeGaussianCloudInWorker(
   worker: Worker,
   format: GaussianCloudFormat,
-  buffer: ArrayBuffer
+  buffer: ArrayBuffer,
+  onProgress?: GaussianCloudLoaderDeps['onProgress']
 ): Promise<{ cloud: GaussianCloud; packed: PackedWebGpuGaussianCloud }> {
   const id = nextWorkerRequestId++;
   return new Promise((resolve, reject) => {
@@ -209,6 +258,11 @@ function decodeGaussianCloudInWorker(
         return;
       }
 
+      if (response.type === 'progress') {
+        onProgress?.({ phase: response.phase });
+        return;
+      }
+
       settle(() => {
         const error = new Error(response.message);
         if (response.stack) {
@@ -231,14 +285,27 @@ function decodeGaussianCloudInWorker(
   });
 }
 
-function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
-  if (typeof file.arrayBuffer === 'function') {
+function readFileAsArrayBuffer(
+  file: File,
+  onProgress?: (loadedBytes: number, totalBytes: number) => void
+): Promise<ArrayBuffer> {
+  if (!onProgress && typeof file.arrayBuffer === 'function') {
+    return file.arrayBuffer();
+  }
+
+  if (typeof FileReader !== 'function') {
     return file.arrayBuffer();
   }
 
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(reader.error ?? new Error(`Failed to read ${file.name}`));
+    reader.onprogress = (event) => {
+      onProgress?.(
+        event.loaded,
+        event.lengthComputable ? event.total : file.size
+      );
+    };
     reader.onload = () => {
       if (reader.result instanceof ArrayBuffer) {
         resolve(reader.result);

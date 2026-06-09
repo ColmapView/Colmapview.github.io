@@ -40,6 +40,8 @@ export interface CacheEntryStats {
 export interface CacheStats {
   /** URL image cache (for 'url' and 'manifest' sources) */
   urlImages: CacheEntryStats;
+  /** URL mask cache (for 'url' and 'manifest' sources) */
+  urlMasks: CacheEntryStats;
   /** ZIP image cache (for 'zip' source) */
   zipImages: CacheEntryStats;
   /** ZIP mask cache (for 'zip' source) */

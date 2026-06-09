@@ -240,4 +240,29 @@ describe('camera frustum geometry helpers', () => {
       2,
     ]);
   });
+
+  it('places frustum image-plane edges on the matching COLMAP pinhole rays', () => {
+    const camera = buildCamera({
+      width: 800,
+      height: 400,
+      params: [200, 400, 410, 190],
+    });
+    const planeSize = getFrustumPlaneSize(camera, 2);
+
+    const getPlanePointForPixel = (u: number, v: number) => ({
+      x: planeSize.offsetX - planeSize.width / 2 + planeSize.width * u / camera.width,
+      y: planeSize.offsetY + planeSize.height / 2 - planeSize.height * v / camera.height,
+      z: planeSize.depth,
+    });
+
+    expect(getPlanePointForPixel(0, 0).x).toBeCloseTo(-4.1);
+    expect(getPlanePointForPixel(0, 0).y).toBeCloseTo(0.95);
+    expect(getPlanePointForPixel(0, 0).z).toBeCloseTo(2);
+    expect(getPlanePointForPixel(410, 190).x).toBeCloseTo(0);
+    expect(getPlanePointForPixel(410, 190).y).toBeCloseTo(0);
+    expect(getPlanePointForPixel(410, 190).z).toBeCloseTo(2);
+    expect(getPlanePointForPixel(800, 400).x).toBeCloseTo(3.9);
+    expect(getPlanePointForPixel(800, 400).y).toBeCloseTo(-1.05);
+    expect(getPlanePointForPixel(800, 400).z).toBeCloseTo(2);
+  });
 });

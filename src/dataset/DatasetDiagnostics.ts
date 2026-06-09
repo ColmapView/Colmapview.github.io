@@ -12,7 +12,7 @@ import { getDatasetSourceAdapter } from './datasetSourceAdapters';
 import type { Reconstruction } from '../types/colmap';
 import type { WasmReconstructionWrapper } from '../wasm/reconstruction';
 import { getLocalImageStats } from '../utils/imageFileUtils';
-import { getUrlImageCacheStats } from '../utils/urlImageFiles';
+import { getUrlImageCacheStats, getUrlMaskCacheStats } from '../utils/urlImageFiles';
 import { getZipImageCacheStats, getZipMaskCacheStats } from '../utils/zipImageFiles';
 import { getActiveZipStats } from '../utils/zipLoader';
 import { getThumbnailCacheStats } from '../hooks/useThumbnail';
@@ -57,15 +57,17 @@ export class DatasetDiagnostics {
     const { sourceType, loadedFiles } = this.getState();
 
     const urlImages = getUrlImageCacheStats();
+    const urlMasks = getUrlMaskCacheStats();
     const zipImages = getZipImageCacheStats();
     const zipMasks = getZipMaskCacheStats();
     const localImages = getLocalImageStats(loadedFiles?.imageFiles);
 
-    const totalCount = urlImages.count + zipImages.count + zipMasks.count + localImages.count;
-    const totalBytes = urlImages.sizeBytes + zipImages.sizeBytes + zipMasks.sizeBytes + localImages.sizeBytes;
+    const totalCount = urlImages.count + urlMasks.count + zipImages.count + zipMasks.count + localImages.count;
+    const totalBytes = urlImages.sizeBytes + urlMasks.sizeBytes + zipImages.sizeBytes + zipMasks.sizeBytes + localImages.sizeBytes;
 
     return {
       urlImages: this.formatCacheEntry(urlImages),
+      urlMasks: this.formatCacheEntry(urlMasks),
       zipImages: this.formatCacheEntry(zipImages),
       zipMasks: this.formatCacheEntry(zipMasks),
       localImages: this.formatCacheEntry(localImages),
@@ -114,8 +116,13 @@ export class DatasetDiagnostics {
       ? cacheStats.localImages.sizeBytes
       : cacheStats.urlImages.sizeBytes + cacheStats.zipImages.sizeBytes;
 
-    const maskFilesCount = cacheStats.zipMasks.count;
-    const maskFilesBytes = cacheStats.zipMasks.sizeBytes;
+    const isUrlSource = sourceType === 'url' || sourceType === 'manifest';
+    const maskFilesCount = sourceType === 'zip'
+      ? cacheStats.zipMasks.count
+      : isUrlSource ? cacheStats.urlMasks.count : 0;
+    const maskFilesBytes = sourceType === 'zip'
+      ? cacheStats.zipMasks.sizeBytes
+      : isUrlSource ? cacheStats.urlMasks.sizeBytes : 0;
 
     const thumbnailStats = this.cacheReaders.getThumbnailCacheStats();
     const frustumStats = this.cacheReaders.getFrustumTextureCacheStats();

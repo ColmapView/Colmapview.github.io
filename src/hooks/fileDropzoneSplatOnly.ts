@@ -1,6 +1,7 @@
-import type { LoadedFiles, Reconstruction } from '../types/colmap';
+import type { LoadedFiles, Reconstruction, SplatFileSource } from '../types/colmap';
 import { createEmptyReconstruction } from '../utils/fileClassification';
 import { appLogger } from '../utils/logger';
+import { getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
 
 interface ProgressUpdate {
   percent: number;
@@ -11,6 +12,7 @@ interface ProgressUpdate {
 interface RunSplatOnlyLoadOptions {
   splatFile: File;
   splatFiles: File[];
+  splatFileSources: SplatFileSource[];
   mapProgress: (localPercent: number) => number;
   setUrlProgress: (progress: ProgressUpdate) => void;
   setLoadedFiles: (files: LoadedFiles) => void;
@@ -25,6 +27,7 @@ interface RunSplatOnlyLoadOptions {
 export function runSplatOnlyLoad({
   splatFile,
   splatFiles,
+  splatFileSources,
   mapProgress,
   setUrlProgress,
   setLoadedFiles,
@@ -52,6 +55,7 @@ export function runSplatOnlyLoad({
     points3DFile: undefined,
     splatFile,
     splatFiles,
+    splatFileSources,
     databaseFile: undefined,
     rigsFile: undefined,
     framesFile: undefined,
@@ -61,7 +65,7 @@ export function runSplatOnlyLoad({
 
   clearCaches({ preserveZip: true });
 
-  setUrlProgress({ percent: mapProgress(95), message: 'Finalizing...' });
+  setUrlProgress(getSplatLoadingProgress(splatFile, { startPercent: mapProgress(60) }));
   setReconstruction(reconstruction);
   resetView();
 

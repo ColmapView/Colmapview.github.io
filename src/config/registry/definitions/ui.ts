@@ -7,6 +7,14 @@ import {
   AXES_COORDINATE_SYSTEMS,
   AXIS_LABEL_MODES,
 } from '../../../store/types';
+import {
+  DEFAULT_GALLERY_COLUMNS,
+  GALLERY_BORDER_COLOR_MODE_SETTINGS,
+  GALLERY_SORT_DIRECTIONS,
+  GALLERY_SORT_FIELDS,
+  GALLERY_THUMBNAIL_DISPLAY_MODES,
+  GALLERY_VIEW_MODE_SETTINGS,
+} from '../../../types/gallery';
 import { OPACITY } from '../../../theme/opacity';
 import { LINE_WIDTH } from '../../../theme/opacity';
 import { VIZ_COLORS } from '../../../theme/colors';
@@ -159,6 +167,63 @@ export const uiSection = defineSection({
       default: false,
       persist: true,
       description: 'Start with gallery panel collapsed',
+    },
+    {
+      key: 'galleryViewMode',
+      type: 'enum',
+      enumValues: GALLERY_VIEW_MODE_SETTINGS,
+      default: 'auto',
+      persist: true,
+      description: 'auto | gallery | list',
+    },
+    {
+      key: 'galleryColumns',
+      type: 'number',
+      min: 1,
+      max: 10,
+      isInt: true,
+      default: DEFAULT_GALLERY_COLUMNS,
+      persist: true,
+      description: 'Gallery grid columns (1 - 10)',
+    },
+    {
+      key: 'galleryCameraFilter',
+      type: 'string',
+      default: 'all',
+      persist: true,
+      description: 'all or camera id',
+    },
+    {
+      key: 'gallerySortField',
+      type: 'enum',
+      enumValues: GALLERY_SORT_FIELDS,
+      default: 'name',
+      persist: true,
+      description: 'name | imageId | avgError | covisibleCount | numPoints3D | numPoints2D | splatPsnr | splatSsim',
+    },
+    {
+      key: 'gallerySortDirection',
+      type: 'enum',
+      enumValues: GALLERY_SORT_DIRECTIONS,
+      default: 'asc',
+      persist: true,
+      description: 'asc | desc',
+    },
+    {
+      key: 'galleryBorderColorMode',
+      type: 'enum',
+      enumValues: GALLERY_BORDER_COLOR_MODE_SETTINGS,
+      default: 'auto',
+      persist: true,
+      description: 'auto | none | camera | psnr | ssim',
+    },
+    {
+      key: 'galleryThumbnailDisplayMode',
+      type: 'enum',
+      enumValues: GALLERY_THUMBNAIL_DISPLAY_MODES,
+      default: 'image',
+      persist: true,
+      description: 'image | maskedImage | inverseMaskedImage | mask | hoverMask',
     },
     // Transient properties (not persisted)
     {

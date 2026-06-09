@@ -15,17 +15,26 @@ function createVirtualizer(visibleIndexes: number[]) {
 
 function createDataset({
   hasImages = true,
+  hasMasks = false,
   cachedNames = [],
+  cachedMaskNames = [],
   getImage = vi.fn(async (imageName: string) => buildFile(imageName)),
+  getMask = vi.fn(async (imageName: string) => buildFile(`${imageName}.png`)),
 }: {
   hasImages?: boolean;
+  hasMasks?: boolean;
   cachedNames?: string[];
+  cachedMaskNames?: string[];
   getImage?: (imageName: string) => Promise<File | null>;
+  getMask?: (imageName: string) => Promise<File | null>;
 } = {}) {
   return {
     hasImages: vi.fn(() => hasImages),
+    hasMasks: vi.fn(() => hasMasks),
     getImageSync: vi.fn((imageName: string) => cachedNames.includes(imageName) ? buildFile(imageName) : undefined),
+    getMaskSync: vi.fn((imageName: string) => cachedMaskNames.includes(imageName) ? buildFile(`${imageName}.png`) : undefined),
     getImage,
+    getMask,
   };
 }
 
@@ -46,6 +55,7 @@ function createOptions(overrides: Partial<HookOptions> = {}): HookOptions {
     rowVirtualizer: createVirtualizer([0, 1]),
     listVirtualizer: createVirtualizer([]),
     refreshImageCacheVersion: vi.fn(),
+    thumbnailDisplayMode: 'image',
     ...overrides,
   };
 }
@@ -69,6 +79,7 @@ describe('useImageGalleryVisibleImageFetch', () => {
       'load-a.jpg',
       'load-b.jpg',
     ]);
+    expect(options.dataset.getMask).not.toHaveBeenCalled();
   });
 
   it('fetches visible list images by list virtualizer index', async () => {
@@ -134,6 +145,63 @@ describe('useImageGalleryVisibleImageFetch', () => {
     expect(options.rowVirtualizer.getVirtualItems).not.toHaveBeenCalled();
     expect(options.listVirtualizer.getVirtualItems).not.toHaveBeenCalled();
     expect(options.dataset.getImage).not.toHaveBeenCalled();
+    expect(options.dataset.getMask).not.toHaveBeenCalled();
+  });
+
+  it('fetches uncached masks only in mask thumbnail mode', async () => {
+    const dataset = createDataset({
+      hasMasks: true,
+      cachedMaskNames: ['cached.jpg'],
+    });
+    const options = createOptions({
+      dataset,
+      thumbnailDisplayMode: 'mask',
+    });
+
+    renderHook((hookOptions: HookOptions) => useImageGalleryVisibleImageFetch(hookOptions), {
+      initialProps: options,
+    });
+
+    await waitFor(() => {
+      expect(options.refreshImageCacheVersion).toHaveBeenCalledOnce();
+    });
+
+    expect(dataset.getImage).not.toHaveBeenCalled();
+    expect(dataset.getMask).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(dataset.getMask).mock.calls.map(([name]) => name)).toEqual([
+      'load-a.jpg',
+      'load-b.jpg',
+    ]);
+  });
+
+  it.each(['maskedImage', 'inverseMaskedImage', 'hoverMask'] as const)('fetches uncached images and masks in %s thumbnail mode', async (thumbnailDisplayMode) => {
+    const dataset = createDataset({
+      hasMasks: true,
+      cachedNames: ['cached.jpg'],
+      cachedMaskNames: ['cached.jpg'],
+    });
+    const options = createOptions({
+      dataset,
+      thumbnailDisplayMode,
+    });
+
+    renderHook((hookOptions: HookOptions) => useImageGalleryVisibleImageFetch(hookOptions), {
+      initialProps: options,
+    });
+
+    await waitFor(() => {
+      expect(dataset.getImage).toHaveBeenCalledTimes(2);
+      expect(dataset.getMask).toHaveBeenCalledTimes(2);
+    });
+
+    expect(vi.mocked(dataset.getImage).mock.calls.map(([name]) => name)).toEqual([
+      'load-a.jpg',
+      'load-b.jpg',
+    ]);
+    expect(vi.mocked(dataset.getMask).mock.calls.map(([name]) => name)).toEqual([
+      'load-a.jpg',
+      'load-b.jpg',
+    ]);
   });
 
   it('cancels pending refresh callbacks when inputs change', async () => {

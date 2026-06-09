@@ -1,5 +1,12 @@
 import type { ColorMode } from '../../types/colmap';
 import type {
+  GalleryBorderColorModeSetting,
+  GallerySortDirection,
+  GallerySortField,
+  GalleryThumbnailDisplayMode,
+  GalleryViewModeSetting,
+} from '../../types/gallery';
+import type {
   CameraMode,
   CameraProjection,
   AutoRotateMode,
@@ -83,6 +90,13 @@ export interface UIConfig {
   axisLabelMode?: AxisLabelMode;
   showGizmo?: boolean;
   galleryCollapsed?: boolean;
+  galleryViewMode?: GalleryViewModeSetting;
+  galleryColumns?: number;
+  galleryCameraFilter?: string;
+  gallerySortField?: GallerySortField;
+  gallerySortDirection?: GallerySortDirection;
+  galleryBorderColorMode?: GalleryBorderColorModeSetting;
+  galleryThumbnailDisplayMode?: GalleryThumbnailDisplayMode;
 }
 
 export interface ExportConfig {

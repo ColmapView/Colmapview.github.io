@@ -194,6 +194,13 @@ describe('persistedStoreMigrations', () => {
         showGrid: true,
         showGizmo: false,
         showMatches: false,
+        galleryViewMode: 'auto',
+        galleryColumns: 2,
+        galleryCameraFilter: 'all',
+        gallerySortField: 'name',
+        gallerySortDirection: 'asc',
+        galleryBorderColorMode: 'auto',
+        galleryThumbnailDisplayMode: 'image',
       });
     });
 
@@ -317,6 +324,26 @@ describe('persistedStoreMigrations', () => {
         },
       });
     });
+
+    it('normalizes stale gallery settings from persisted UI stores', () => {
+      expect(migrateUIPersistedState({
+        galleryViewMode: 'wide',
+        galleryColumns: 99.2,
+        galleryCameraFilter: 7,
+        gallerySortField: 'score',
+        gallerySortDirection: 'down',
+        galleryBorderColorMode: 'metric',
+        galleryThumbnailDisplayMode: 'alpha',
+      }, 13, defaultActions)).toMatchObject({
+        galleryViewMode: 'auto',
+        galleryColumns: 10,
+        galleryCameraFilter: '7',
+        gallerySortField: 'name',
+        gallerySortDirection: 'asc',
+        galleryBorderColorMode: 'auto',
+        galleryThumbnailDisplayMode: 'image',
+      });
+    });
   });
 
   it('handles malformed persisted states without throwing', () => {
@@ -325,6 +352,14 @@ describe('persistedStoreMigrations', () => {
       showSelectionHighlight: true,
     });
     expect(migrateRigPersistedState('invalid', 0)).toEqual({ showRig: true });
-    expect(migrateUIPersistedState(undefined, 10, [])).toEqual({});
+    expect(migrateUIPersistedState(undefined, 10, [])).toEqual({
+      galleryViewMode: 'auto',
+      galleryColumns: 2,
+      galleryCameraFilter: 'all',
+      gallerySortField: 'name',
+      gallerySortDirection: 'asc',
+      galleryBorderColorMode: 'auto',
+      galleryThumbnailDisplayMode: 'image',
+    });
   });
 });

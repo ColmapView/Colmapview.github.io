@@ -1,11 +1,21 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildFile } from '../../test/builders';
 import { getCameraColor } from '../../theme';
 import type { ImageData } from './useImageGalleryViewModel';
 
+const { useThumbnailMock, useMaskedThumbnailMock } = vi.hoisted(() => ({
+  useThumbnailMock: vi.fn(),
+  useMaskedThumbnailMock: vi.fn(),
+}));
+
 vi.mock('../../hooks/useThumbnail', () => ({
-  useThumbnail: () => undefined,
+  useThumbnail: (...args: unknown[]) => useThumbnailMock(...args),
+}));
+
+vi.mock('../../hooks/useMaskedThumbnail', () => ({
+  useMaskedThumbnail: (...args: unknown[]) => useMaskedThumbnailMock(...args),
 }));
 
 vi.mock('./useImageGalleryItemStoreFacade', () => ({
@@ -43,6 +53,7 @@ function renderListItem(
     matchesColor: '#ff00ff',
     matchesBlink: false,
     metricBorderColorScale: null,
+    thumbnailDisplayMode: 'image',
     onClick: vi.fn(),
     onDoubleClick: vi.fn(),
     onRightClick: vi.fn(),
@@ -64,6 +75,8 @@ function renderListItem(
 
 afterEach(() => {
   cleanup();
+  useThumbnailMock.mockReset();
+  useMaskedThumbnailMock.mockReset();
 });
 
 describe('ImageGallery list item', () => {
@@ -116,5 +129,83 @@ describe('ImageGallery list item', () => {
     expect(selected.container.firstElementChild).not.toHaveStyle({
       borderColor: getCameraColor(1),
     });
+  });
+
+  it('renders the cached mask thumbnail in mask display mode', () => {
+    const imageFile = buildFile('frame.jpg');
+    const maskFile = buildFile('frame.jpg.png');
+    const image = createImage({ file: imageFile, maskFile });
+    useThumbnailMock.mockImplementation((_file: File | undefined, key: string) => {
+      if (key === 'frame.jpg') return 'image-url';
+      if (key === 'mask:frame.jpg') return 'mask-url';
+      return undefined;
+    });
+
+    renderListItem(image, { thumbnailDisplayMode: 'mask' });
+
+    expect(screen.getByAltText('frame.jpg mask')).toHaveAttribute('src', 'mask-url');
+    expect(screen.queryByAltText('frame.jpg')).toBeNull();
+    expect(useThumbnailMock).toHaveBeenCalledWith(imageFile, 'frame.jpg', false);
+    expect(useThumbnailMock).toHaveBeenCalledWith(maskFile, 'mask:frame.jpg', true);
+  });
+
+  it('renders the generated masked thumbnail in masked image display mode', () => {
+    const imageFile = buildFile('frame.jpg');
+    const maskFile = buildFile('frame.jpg.png');
+    const image = createImage({ file: imageFile, maskFile });
+    useThumbnailMock.mockImplementation((_file: File | undefined, key: string) => {
+      if (key === 'frame.jpg') return 'image-url';
+      if (key === 'mask:frame.jpg') return 'mask-url';
+      return undefined;
+    });
+    useMaskedThumbnailMock.mockReturnValue('masked-url');
+
+    renderListItem(image, { thumbnailDisplayMode: 'maskedImage' });
+
+    const thumbnail = screen.getByAltText('frame.jpg');
+    expect(thumbnail).toHaveAttribute('src', 'masked-url');
+    expect(screen.queryByAltText('frame.jpg mask')).toBeNull();
+    expect(useThumbnailMock).toHaveBeenCalledWith(imageFile, 'frame.jpg', false);
+    expect(useThumbnailMock).toHaveBeenCalledWith(maskFile, 'mask:frame.jpg', false);
+    expect(useMaskedThumbnailMock).toHaveBeenCalledWith(imageFile, maskFile, 'frame.jpg', true, false);
+  });
+
+  it('renders the generated inverse masked thumbnail in inverse masked display mode', () => {
+    const imageFile = buildFile('frame.jpg');
+    const maskFile = buildFile('frame.jpg.png');
+    const image = createImage({ file: imageFile, maskFile });
+    useThumbnailMock.mockImplementation((_file: File | undefined, key: string) => {
+      if (key === 'frame.jpg') return 'image-url';
+      if (key === 'mask:frame.jpg') return 'mask-url';
+      return undefined;
+    });
+    useMaskedThumbnailMock.mockReturnValue('inverse-masked-url');
+
+    renderListItem(image, { thumbnailDisplayMode: 'inverseMaskedImage' });
+
+    const thumbnail = screen.getByAltText('frame.jpg');
+    expect(thumbnail).toHaveAttribute('src', 'inverse-masked-url');
+    expect(screen.queryByAltText('frame.jpg mask')).toBeNull();
+    expect(useThumbnailMock).toHaveBeenCalledWith(imageFile, 'frame.jpg', false);
+    expect(useThumbnailMock).toHaveBeenCalledWith(maskFile, 'mask:frame.jpg', false);
+    expect(useMaskedThumbnailMock).toHaveBeenCalledWith(imageFile, maskFile, 'frame.jpg', true, true);
+  });
+
+  it('overlays the cached mask thumbnail in hover mask display mode', () => {
+    const image = createImage({
+      file: buildFile('frame.jpg'),
+      maskFile: buildFile('frame.jpg.png'),
+    });
+    useThumbnailMock.mockImplementation((_file: File | undefined, key: string) => {
+      if (key === 'frame.jpg') return 'image-url';
+      if (key === 'mask:frame.jpg') return 'mask-url';
+      return undefined;
+    });
+
+    renderListItem(image, { thumbnailDisplayMode: 'hoverMask' });
+
+    expect(screen.getByAltText('frame.jpg')).toHaveAttribute('src', 'image-url');
+    expect(screen.getByAltText('frame.jpg mask')).toHaveAttribute('src', 'mask-url');
+    expect(screen.getByAltText('frame.jpg mask')).toHaveClass('group-hover:opacity-50');
   });
 });

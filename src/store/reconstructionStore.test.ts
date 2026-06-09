@@ -127,6 +127,34 @@ describe('reconstruction store URL load lifecycle', () => {
     expect(usePointCloudStore.getState().pointOpacity).toBe(0.65);
   });
 
+  it('resolves a requested active splat source when loaded files arrive', () => {
+    const camerasFile = new File([''], 'cameras.bin');
+    const imagesFile = new File([''], 'images.bin');
+    const points3DFile = new File([''], 'points3D.bin');
+    const defaultSplatFile = new File(['splat-a'], 'scene-a.spz');
+    const requestedSplatFile = new File(['splat-b'], 'scene-b.spz');
+    const imageFiles = new Map<string, File>();
+
+    useReconstructionStore.getState().setRequestedSplatSourceId('splats/scene-b.spz');
+
+    useReconstructionStore.getState().setLoadedFiles({
+      camerasFile,
+      imagesFile,
+      points3DFile,
+      splatFile: defaultSplatFile,
+      splatFiles: [defaultSplatFile, requestedSplatFile],
+      splatFileSources: [
+        { id: 'splats/scene-a.spz', path: 'splats/scene-a.spz', file: defaultSplatFile },
+        { id: 'splats/scene-b.spz', path: 'splats/scene-b.spz', file: requestedSplatFile },
+      ],
+      imageFiles,
+      hasMasks: false,
+    });
+
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(requestedSplatFile);
+    expect(useReconstructionStore.getState().requestedSplatSourceId).toBeNull();
+  });
+
   it('applies splat point defaults when a splat is added to an already loaded dataset', () => {
     const camerasFile = new File([''], 'cameras.bin');
     const imagesFile = new File([''], 'images.bin');

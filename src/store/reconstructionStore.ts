@@ -6,6 +6,7 @@ import { useUIStore } from './stores/uiStore';
 import { usePointCloudStore } from './stores/pointCloudStore';
 import { useTransformStore } from './stores/transformStore';
 import { getDefaultBackgroundColorForSplatLoad } from './splatBackgroundPolicy';
+import { getLoadedFilesWithActiveSplatSource } from '../utils/splatFileSourcePolicy';
 
 const SPLAT_POINT_CLOUD_DEFAULT_SIZE = 1;
 const SPLAT_POINT_CLOUD_DEFAULT_OPACITY = 0.2;
@@ -57,6 +58,7 @@ interface ReconstructionState {
   maskUrlBase: string | null;
   /** Manifest object (only set when sourceType is 'manifest', for inline embedding in URLs) */
   sourceManifest: ColmapManifest | null;
+  requestedSplatSourceId: string | null;
   /** URL loading state (shared across components) */
   urlLoading: boolean;
   urlLoadActive: boolean;
@@ -71,6 +73,7 @@ interface ReconstructionState {
   setError: (error: string | null) => void;
   setProgress: (progress: number) => void;
   setSourceInfo: (type: ReconstructionSourceType, url?: string | null, imageUrlBase?: string | null, maskUrlBase?: string | null, manifest?: ColmapManifest | null) => void;
+  setRequestedSplatSourceId: (sourceId: string | null) => void;
   tryStartUrlLoad: () => boolean;
   finishUrlLoad: () => void;
   setUrlLoading: (loading: boolean) => void;
@@ -92,6 +95,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   imageUrlBase: null,
   maskUrlBase: null,
   sourceManifest: null,
+  requestedSplatSourceId: null,
   // Initialize loading state based on URL params so indicator shows immediately
   urlLoading: initialUrlLoading,
   urlLoadActive: false,
@@ -121,11 +125,15 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
 
   setLoadedFiles: (loadedFiles) => {
     const previousLoadedFiles = get().loadedFiles;
-    const hasSplatFile = Boolean(loadedFiles.splatFile);
+    const requestedSplatSourceId = get().requestedSplatSourceId;
+    const resolvedLoadedFiles = requestedSplatSourceId
+      ? getLoadedFilesWithActiveSplatSource(loadedFiles, requestedSplatSourceId)
+      : loadedFiles;
+    const hasSplatFile = Boolean(resolvedLoadedFiles.splatFile);
     const isActiveSplatFileSwitch = Boolean(
       previousLoadedFiles?.splatFile
-      && loadedFiles.splatFile
-      && isSplatFileSwitchWithinLoadedDataset(previousLoadedFiles, loadedFiles)
+      && resolvedLoadedFiles.splatFile
+      && isSplatFileSwitchWithinLoadedDataset(previousLoadedFiles, resolvedLoadedFiles)
     );
     const uiStore = useUIStore.getState();
     const nextBackgroundColor = getDefaultBackgroundColorForSplatLoad(
@@ -147,7 +155,10 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       useTransformStore.getState().resetSplatTransform();
     }
 
-    set({ loadedFiles });
+    set({
+      loadedFiles: resolvedLoadedFiles,
+      requestedSplatSourceId: requestedSplatSourceId ? null : get().requestedSplatSourceId,
+    });
   },
 
   setDroppedFiles: (droppedFiles) => set({ droppedFiles }),
@@ -162,6 +173,22 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   setProgress: (progress) => set({ progress }),
 
   setSourceInfo: (sourceType, sourceUrl = null, imageUrlBase = null, maskUrlBase = null, sourceManifest = null) => set({ sourceType, sourceUrl, imageUrlBase, maskUrlBase, sourceManifest }),
+
+  setRequestedSplatSourceId: (requestedSplatSourceId) => {
+    if (!requestedSplatSourceId) {
+      set({ requestedSplatSourceId: null });
+      return;
+    }
+
+    const loadedFiles = get().loadedFiles;
+    if (!loadedFiles) {
+      set({ requestedSplatSourceId });
+      return;
+    }
+
+    set({ requestedSplatSourceId });
+    get().setLoadedFiles(loadedFiles);
+  },
 
   tryStartUrlLoad: () => {
     if (get().urlLoadActive) {
@@ -199,6 +226,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       imageUrlBase: null,
       maskUrlBase: null,
       sourceManifest: null,
+      requestedSplatSourceId: null,
       urlLoading: false,
       urlLoadActive: false,
       urlProgress: null,

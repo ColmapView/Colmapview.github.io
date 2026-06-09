@@ -19,6 +19,7 @@ vi.mock('./ImageGalleryItems', () => ({
       data-settling={String(props.isSettling)}
       data-hide-overlay={String(props.hideOverlay)}
       data-metric-min={String(props.metricBorderColorScale?.min ?? '')}
+      data-thumbnail-display={props.thumbnailDisplayMode}
       data-touch={String(props.touchMode)}
     />
   )),
@@ -36,6 +37,7 @@ vi.mock('./ImageGalleryItems', () => ({
       data-selected={String(props.isSelected)}
       data-settling={String(props.isSettling)}
       data-metric-min={String(props.metricBorderColorScale?.min ?? '')}
+      data-thumbnail-display={props.thumbnailDisplayMode}
       data-touch={String(props.touchMode)}
     />
   )),
@@ -52,6 +54,7 @@ interface ItemProps {
   matchesColor: string;
   matchesBlink: boolean;
   metricBorderColorScale: { min: number; max: number } | null;
+  thumbnailDisplayMode: string;
   isScrolling: boolean;
   isSettling: boolean;
   isResizing: boolean;
@@ -103,6 +106,7 @@ function renderContent(overrides = {}) {
     matchesColor: '#ff00aa',
     matchesBlink: true,
     metricBorderColorScale: { min: 20, max: 30 },
+    thumbnailDisplayMode: 'hoverMask' as const,
     debouncedIsScrolling: true,
     isSettling: false,
     isResizing: true,
@@ -137,6 +141,7 @@ describe('ImageGalleryVirtualizedContent', () => {
     expect(screen.getByTestId('gallery-item-2')).toHaveAttribute('data-metric-min', '20');
     expect(screen.getByTestId('gallery-item-2')).toHaveAttribute('data-scrolling', 'true');
     expect(screen.getByTestId('gallery-item-2')).toHaveAttribute('data-resizing', 'true');
+    expect(screen.getByTestId('gallery-item-2')).toHaveAttribute('data-thumbnail-display', 'hoverMask');
     expect(screen.getByTestId('gallery-item-2')).toHaveAttribute('data-touch', 'true');
     expect(screen.getByTestId('gallery-item-2')).toHaveAttribute('data-hide-overlay', 'true');
     expect(screen.queryByTestId('gallery-item-3')).toBeNull();
@@ -156,6 +161,7 @@ describe('ImageGalleryVirtualizedContent', () => {
       debouncedIsScrolling: false,
       isSettling: true,
       isResizing: false,
+      thumbnailDisplayMode: 'mask',
       lastNavigationToImageId: 2,
       touchMode: false,
     });
@@ -168,6 +174,7 @@ describe('ImageGalleryVirtualizedContent', () => {
     expect(item).toHaveAttribute('data-border-mode', 'psnr');
     expect(item).toHaveAttribute('data-metric-min', '20');
     expect(item).toHaveAttribute('data-settling', 'true');
+    expect(item).toHaveAttribute('data-thumbnail-display', 'mask');
     expect(item).toHaveAttribute('data-touch', 'false');
     expect(screen.queryByTestId('gallery-item-2')).toBeNull();
 

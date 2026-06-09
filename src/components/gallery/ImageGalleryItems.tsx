@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { useThumbnail } from '../../hooks/useThumbnail';
+import { useMaskedThumbnail } from '../../hooks/useMaskedThumbnail';
 import {
   formatSplatPsnrValue,
   formatSplatSsimValue,
@@ -23,7 +24,11 @@ import {
 } from './imageGalleryStyleViewModel';
 import { useImageGalleryItemInteractions } from './useImageGalleryItemInteractions';
 import { useImageGalleryItemStoreFacade } from './useImageGalleryItemStoreFacade';
-import type { GalleryBorderColorMode, ImageData } from './useImageGalleryViewModel';
+import type {
+  GalleryBorderColorMode,
+  GalleryThumbnailDisplayMode,
+  ImageData,
+} from './useImageGalleryViewModel';
 
 export interface GalleryItemProps {
   img: ImageData;
@@ -34,6 +39,7 @@ export interface GalleryItemProps {
   matchesColor: string;
   matchesBlink: boolean;
   metricBorderColorScale: SplatMetricColorScale | null;
+  thumbnailDisplayMode: GalleryThumbnailDisplayMode;
   onClick: (id: number) => void;
   onDoubleClick: (id: number) => void;
   onRightClick: (id: number) => void;
@@ -55,6 +61,7 @@ export const GalleryItem = memo(function GalleryItem({
   matchesColor,
   matchesBlink,
   metricBorderColorScale,
+  thumbnailDisplayMode,
   onClick,
   onDoubleClick,
   onRightClick,
@@ -67,7 +74,26 @@ export const GalleryItem = memo(function GalleryItem({
   hideOverlay = false,
 }: GalleryItemProps) {
   const { multiCamera } = useImageGalleryItemStoreFacade();
-  const src = useThumbnail(img.file, img.name, !isScrolling && !skipImages && !isSettling && !isResizing);
+  const canLoadThumbnail = !isScrolling && !skipImages && !isSettling && !isResizing;
+  const isGeneratedMaskedImage = thumbnailDisplayMode === 'maskedImage' || thumbnailDisplayMode === 'inverseMaskedImage';
+  const imageSrc = useThumbnail(img.file, img.name, canLoadThumbnail && thumbnailDisplayMode !== 'mask' && !isGeneratedMaskedImage);
+  const maskSrc = useThumbnail(img.maskFile, `mask:${img.name}`, canLoadThumbnail && thumbnailDisplayMode !== 'image' && !isGeneratedMaskedImage);
+  const maskedImageSrc = useMaskedThumbnail(
+    img.file,
+    img.maskFile,
+    img.name,
+    canLoadThumbnail && isGeneratedMaskedImage,
+    thumbnailDisplayMode === 'inverseMaskedImage'
+  );
+  const src = thumbnailDisplayMode === 'mask'
+    ? maskSrc
+    : isGeneratedMaskedImage
+      ? maskedImageSrc
+      : imageSrc;
+  const showMaskOverlay = thumbnailDisplayMode === 'hoverMask' && Boolean(maskSrc);
+  const maskOverlayClass = thumbnailDisplayMode === 'hoverMask'
+    ? `${galleryStyles.itemImage} pointer-events-none opacity-0 transition-opacity group-hover:opacity-50`
+    : `${galleryStyles.itemImage} pointer-events-none opacity-50`;
   const { hovered, mousePos, itemHandlers } = useImageGalleryItemInteractions({
     imageId: img.imageId,
     isSelected,
@@ -94,7 +120,7 @@ export const GalleryItem = memo(function GalleryItem({
         {src ? (
           <img
             src={src}
-            alt={img.name}
+            alt={thumbnailDisplayMode === 'mask' ? `${img.name} mask` : img.name}
             className={galleryStyles.itemImage}
             style={getDeletionImageStyle(isMarkedForDeletion)}
             draggable={false}
@@ -106,6 +132,15 @@ export const GalleryItem = memo(function GalleryItem({
           >
             {isScrolling ? '...' : img.name}
           </div>
+        )}
+        {showMaskOverlay && (
+          <img
+            src={maskSrc ?? ''}
+            alt={`${img.name} mask`}
+            className={maskOverlayClass}
+            style={getDeletionImageStyle(isMarkedForDeletion)}
+            draggable={false}
+          />
         )}
         {isMarkedForDeletion && <ImageGalleryDeletedOverlay className="absolute inset-0 pointer-events-none z-20" strokeWidth={1.5} />}
         {!isSelected && !isMarkedForDeletion && (
@@ -143,6 +178,7 @@ export const ListItem = memo(function ListItem({
   matchesColor,
   matchesBlink,
   metricBorderColorScale,
+  thumbnailDisplayMode,
   onClick,
   onDoubleClick,
   onRightClick,
@@ -154,7 +190,26 @@ export const ListItem = memo(function ListItem({
   touchMode = false,
 }: GalleryItemProps) {
   const { multiCamera } = useImageGalleryItemStoreFacade();
-  const src = useThumbnail(img.file, img.name, !isScrolling && !skipImages && !isSettling && !isResizing);
+  const canLoadThumbnail = !isScrolling && !skipImages && !isSettling && !isResizing;
+  const isGeneratedMaskedImage = thumbnailDisplayMode === 'maskedImage' || thumbnailDisplayMode === 'inverseMaskedImage';
+  const imageSrc = useThumbnail(img.file, img.name, canLoadThumbnail && thumbnailDisplayMode !== 'mask' && !isGeneratedMaskedImage);
+  const maskSrc = useThumbnail(img.maskFile, `mask:${img.name}`, canLoadThumbnail && thumbnailDisplayMode !== 'image' && !isGeneratedMaskedImage);
+  const maskedImageSrc = useMaskedThumbnail(
+    img.file,
+    img.maskFile,
+    img.name,
+    canLoadThumbnail && isGeneratedMaskedImage,
+    thumbnailDisplayMode === 'inverseMaskedImage'
+  );
+  const src = thumbnailDisplayMode === 'mask'
+    ? maskSrc
+    : isGeneratedMaskedImage
+      ? maskedImageSrc
+      : imageSrc;
+  const showMaskOverlay = thumbnailDisplayMode === 'hoverMask' && Boolean(maskSrc);
+  const maskOverlayClass = thumbnailDisplayMode === 'hoverMask'
+    ? 'absolute inset-0 w-full h-full object-cover pointer-events-none opacity-0 transition-opacity group-hover:opacity-50'
+    : 'absolute inset-0 w-full h-full object-cover pointer-events-none opacity-50';
   const { hovered, mousePos, itemHandlers } = useImageGalleryItemInteractions({
     imageId: img.imageId,
     isSelected,
@@ -191,14 +246,14 @@ export const ListItem = memo(function ListItem({
   return (
     <div
       style={getListItemFrameStyle({ isMatched, isSelected, itemBorderColor, matchesColor })}
-      className={`${listStyles.item} px-3 list-stats-container ${borderClass}`}
+      className={`${listStyles.item} group px-3 list-stats-container ${borderClass}`}
       {...itemHandlers}
     >
       <div className={`${listStyles.thumbnail} ${listStyles.thumbnailSize} relative`}>
         {src ? (
           <img
             src={src}
-            alt={img.name}
+            alt={thumbnailDisplayMode === 'mask' ? `${img.name} mask` : img.name}
             className="w-full h-full object-cover"
             style={getDeletionImageStyle(isMarkedForDeletion)}
             draggable={false}
@@ -210,6 +265,15 @@ export const ListItem = memo(function ListItem({
           >
             {img.imageId}
           </div>
+        )}
+        {showMaskOverlay && (
+          <img
+            src={maskSrc ?? ''}
+            alt={`${img.name} mask`}
+            className={maskOverlayClass}
+            style={getDeletionImageStyle(isMarkedForDeletion)}
+            draggable={false}
+          />
         )}
         {isMarkedForDeletion && <ImageGalleryDeletedOverlay />}
       </div>

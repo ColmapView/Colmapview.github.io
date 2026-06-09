@@ -15,6 +15,8 @@ import {
   fetchUrlMask,
   getUrlImageCacheStats,
   getUrlImageCached,
+  getUrlMaskCacheStats,
+  getUrlMaskCached,
   prefetchUrlImages,
 } from './urlImageFiles';
 
@@ -102,11 +104,16 @@ describe('url image files', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const mask = await fetchUrlMask('https://example.test/masks', 'images/cam1/photo.jpg');
+    const cachedMask = await fetchUrlMask('https://example.test/masks', 'images/cam1/photo.jpg');
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://example.test/masks/cam1/photo.jpg');
     expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://example.test/masks/cam1/photo.jpg.png');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(mask?.name).toBe('photo.jpg.png');
     expect(mask?.type).toBe('image/png');
+    expect(cachedMask).toBe(mask);
+    expect(getUrlMaskCached('images/cam1/photo.jpg')).toBe(mask);
+    expect(getUrlMaskCacheStats()).toEqual({ count: 1, sizeBytes: mask?.size ?? 0 });
 
     debug.mockRestore();
   });

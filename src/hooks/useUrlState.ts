@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useThree } from '@react-three/fiber';
-import { useCameraStore, useReconstructionStore, usePointCloudStore, useUIStore, useTransformStore, useRigStore } from '../store';
+import { useCameraStore, useImageMetricsStore, useReconstructionStore, usePointCloudStore, useUIStore, useTransformStore, useRigStore } from '../store';
 import type { CameraViewState } from '../store/types';
 import type { ColmapManifest } from '../types/manifest';
 import { buildShareableFieldsFromRegistry } from '../config/registry';
@@ -13,6 +13,7 @@ import {
   getShareBaseUrl,
 } from '../utils/shareUrl';
 import { appLogger } from '../utils/logger';
+import { getShareActiveSplatSourceId } from '../utils/splatFileSourcePolicy';
 import { getControlsViewState } from './urlStateControlsPolicy';
 import {
   decodeCameraStateFromHash,
@@ -41,7 +42,7 @@ const SHAREABLE_FIELDS = buildShareableFieldsFromRegistry();
  */
 export function collectShareConfig(): ShareConfig {
   const transformStore = useTransformStore.getState();
-  return buildShareConfigFromStoreStates(
+  const config = buildShareConfigFromStoreStates(
     {
       pointCloud: usePointCloudStore.getState(),
       ui: useUIStore.getState(),
@@ -52,6 +53,11 @@ export function collectShareConfig(): ShareConfig {
     },
     SHAREABLE_FIELDS
   );
+  const activeSplatSourceId = getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles);
+  if (activeSplatSourceId) {
+    config.splat = { activeSourceId: activeSplatSourceId };
+  }
+  return config;
 }
 
 /**
@@ -59,6 +65,11 @@ export function collectShareConfig(): ShareConfig {
  * Automatically applies all fields using setState.
  */
 export function applyShareConfig(config: ShareConfig): void {
+  if (config.splat?.activeSourceId) {
+    useReconstructionStore.getState().setRequestedSplatSourceId(config.splat.activeSourceId);
+    useImageMetricsStore.getState().clearSplatPsnr();
+  }
+
   // Point cloud store
   if (config.pointCloud) {
     usePointCloudStore.setState(config.pointCloud);

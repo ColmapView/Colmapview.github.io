@@ -39,7 +39,8 @@ describe('useSplatLayerStoreFacade', () => {
   });
 
   it('routes splat loading notifications to the notification store', () => {
-    const { result } = renderHook(() => useSplatLayerStoreFacade());
+    const { result, rerender } = renderHook(() => useSplatLayerStoreFacade());
+    const initialGetUrlProgress = result.current.actions.getUrlProgress;
 
     const id = result.current.actions.addNotification('info', 'Loading splat: scene.ply', 0);
 
@@ -61,5 +62,7 @@ describe('useSplatLayerStoreFacade', () => {
     });
 
     expect(useSplatBackendStore.getState().availability.spark).toBe(true);
+    rerender();
+    expect(result.current.actions.getUrlProgress).toBe(initialGetUrlProgress);
   });
 });

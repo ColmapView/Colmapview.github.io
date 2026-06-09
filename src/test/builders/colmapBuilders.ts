@@ -11,6 +11,7 @@ import {
   type Point3D,
   type Point3DId,
   type Reconstruction,
+  type SplatFileSource,
 } from '../../types/colmap';
 import { SensorType, type Frame, type Rig, type RigData, type RigSensor } from '../../types/rig';
 
@@ -36,6 +37,7 @@ interface LoadedFilesBuilderOptions {
   rigsFile?: File;
   framesFile?: File;
   splatFiles?: File[];
+  splatFileSources?: SplatFileSource[];
 }
 
 interface RigDataBuilderOptions {
@@ -188,6 +190,7 @@ export function buildLoadedFiles(options: LoadedFilesBuilderOptions = {}): Loade
     rigsFile: options.rigsFile,
     framesFile: options.framesFile,
     splatFiles: options.splatFiles ?? (options.splatFile ? [options.splatFile] : undefined),
+    splatFileSources: options.splatFileSources,
     imageFiles: normalizeImageFiles(options.imageFiles),
     hasMasks: options.hasMasks ?? false,
   };

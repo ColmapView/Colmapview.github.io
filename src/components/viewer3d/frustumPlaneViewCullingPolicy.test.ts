@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   FRUSTUM_PLANE_CULL_CHECK_INTERVAL,
+  getInitialFrustumPlaneCullFrame,
   getFrustumPlaneViewAngleOk,
   getNextFrustumPlaneCullFrame,
   shouldMeasureFrustumPlaneViewAngle,
@@ -8,6 +9,21 @@ import {
 } from './frustumPlaneViewCullingPolicy';
 
 describe('frustum plane view culling policy', () => {
+  it('stagger-initializes culling frames from a stable seed', () => {
+    expect(getInitialFrustumPlaneCullFrame({
+      seed: 12,
+      interval: FRUSTUM_PLANE_CULL_CHECK_INTERVAL,
+    })).toBe(2);
+    expect(getInitialFrustumPlaneCullFrame({
+      seed: -12,
+      interval: FRUSTUM_PLANE_CULL_CHECK_INTERVAL,
+    })).toBe(2);
+    expect(getInitialFrustumPlaneCullFrame({
+      seed: Number.NaN,
+      interval: FRUSTUM_PLANE_CULL_CHECK_INTERVAL,
+    })).toBe(0);
+  });
+
   it('advances culling frames and wraps at the configured interval', () => {
     expect(getNextFrustumPlaneCullFrame({
       frameCount: 0,

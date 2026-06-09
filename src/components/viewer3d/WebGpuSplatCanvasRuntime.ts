@@ -87,13 +87,25 @@ export function createWebGpuSplatFrameSnapshot({
   width,
   height,
   dpr,
+  pixelWidth,
+  pixelHeight,
   modelMatrix,
 }: {
   camera: THREE.Camera;
   width: number;
   height: number;
   dpr: number;
+  pixelWidth?: number;
+  pixelHeight?: number;
   modelMatrix?: THREE.Matrix4 | null;
 }): WebGpuSplatFrameSnapshot {
-  return createWebGpuSplatFrameFromThreeCamera({ camera, width, height, dpr, modelMatrix });
+  return createWebGpuSplatFrameFromThreeCamera({
+    camera,
+    width,
+    height,
+    dpr,
+    pixelWidth,
+    pixelHeight,
+    modelMatrix,
+  });
 }

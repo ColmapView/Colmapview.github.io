@@ -15,6 +15,12 @@ export interface GaussianCloudWorkerLoadedResponse {
   packed: PackedWebGpuGaussianCloud;
 }
 
+export interface GaussianCloudWorkerProgressResponse {
+  type: 'progress';
+  id: number;
+  phase: 'decoding' | 'packing';
+}
+
 export interface GaussianCloudWorkerErrorResponse {
   type: 'error';
   id: number;
@@ -24,4 +30,5 @@ export interface GaussianCloudWorkerErrorResponse {
 
 export type GaussianCloudWorkerResponse =
   | GaussianCloudWorkerLoadedResponse
+  | GaussianCloudWorkerProgressResponse
   | GaussianCloudWorkerErrorResponse;

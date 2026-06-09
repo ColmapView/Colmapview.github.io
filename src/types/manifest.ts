@@ -82,6 +82,10 @@ export interface UrlLoadProgress {
   filesDownloaded?: number;
   /** Total number of files to download */
   totalFiles?: number;
+  /** Bytes loaded for the current large file operation, if available */
+  bytesLoaded?: number;
+  /** Total bytes for the current large file operation, if available */
+  bytesTotal?: number;
 }
 
 /**

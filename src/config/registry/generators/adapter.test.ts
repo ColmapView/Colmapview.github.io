@@ -27,6 +27,11 @@ describe('configuration store adapter', () => {
     useCameraStore.getState().setCameraDisplayMode('arrow');
     useCameraStore.getState().setCameraScale(1.25);
     useUIStore.getState().setShowMaskOverlay(true);
+    useUIStore.getState().setGalleryViewMode('list');
+    useUIStore.getState().setGalleryColumns(5);
+    useUIStore.getState().setGallerySortField('splatPsnr');
+    useUIStore.getState().setGalleryBorderColorMode('psnr');
+    useUIStore.getState().setGalleryThumbnailDisplayMode('inverseMaskedImage');
     useExportStore.getState().setExportFormat('ply');
     useRigStore.getState().setShowRig(false);
 
@@ -38,6 +43,11 @@ describe('configuration store adapter', () => {
     expect(config.camera.displayMode).toBe('arrow');
     expect(config.camera.scale).toBe(1.25);
     expect(config.ui.maskOverlay).toBe(true);
+    expect(config.ui.galleryViewMode).toBe('list');
+    expect(config.ui.galleryColumns).toBe(5);
+    expect(config.ui.gallerySortField).toBe('splatPsnr');
+    expect(config.ui.galleryBorderColorMode).toBe('psnr');
+    expect(config.ui.galleryThumbnailDisplayMode).toBe('inverseMaskedImage');
     expect(config.export.modelFormat).toBe('ply');
     expect(config.rig.showRig).toBe(false);
   });
@@ -56,6 +66,13 @@ describe('configuration store adapter', () => {
       ui: {
         maskOverlay: true,
         galleryCollapsed: true,
+        galleryViewMode: 'list',
+        galleryColumns: 4,
+        galleryCameraFilter: '2',
+        gallerySortField: 'splatSsim',
+        gallerySortDirection: 'desc',
+        galleryBorderColorMode: 'ssim',
+        galleryThumbnailDisplayMode: 'mask',
       },
       export: {
         modelFormat: 'zip',
@@ -75,6 +92,13 @@ describe('configuration store adapter', () => {
     expect(useCameraStore.getState().cameraScale).toBe(0.75);
     expect(useUIStore.getState().showMaskOverlay).toBe(true);
     expect(useUIStore.getState().galleryCollapsed).toBe(true);
+    expect(useUIStore.getState().galleryViewMode).toBe('list');
+    expect(useUIStore.getState().galleryColumns).toBe(4);
+    expect(useUIStore.getState().galleryCameraFilter).toBe('2');
+    expect(useUIStore.getState().gallerySortField).toBe('splatSsim');
+    expect(useUIStore.getState().gallerySortDirection).toBe('desc');
+    expect(useUIStore.getState().galleryBorderColorMode).toBe('ssim');
+    expect(useUIStore.getState().galleryThumbnailDisplayMode).toBe('mask');
     expect(useExportStore.getState().exportFormat).toBe('zip');
     expect(useRigStore.getState().showRig).toBe(false);
     expect(useRigStore.getState().rigLineOpacity).toBe(0.25);
@@ -111,6 +135,13 @@ describe('configuration store adapter', () => {
     expect(useCameraStore.getState().cameraDisplayMode).toBe('frustum');
     expect(useCameraStore.getState().cameraScale).toBe(0.25);
     expect(useUIStore.getState().showMaskOverlay).toBe(false);
+    expect(useUIStore.getState().galleryViewMode).toBe('auto');
+    expect(useUIStore.getState().galleryColumns).toBe(2);
+    expect(useUIStore.getState().galleryCameraFilter).toBe('all');
+    expect(useUIStore.getState().gallerySortField).toBe('name');
+    expect(useUIStore.getState().gallerySortDirection).toBe('asc');
+    expect(useUIStore.getState().galleryBorderColorMode).toBe('auto');
+    expect(useUIStore.getState().galleryThumbnailDisplayMode).toBe('image');
     expect(useExportStore.getState().exportFormat).toBe('binary');
     expect(useRigStore.getState().showRig).toBe(true);
   });

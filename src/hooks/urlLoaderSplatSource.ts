@@ -88,7 +88,6 @@ export async function loadSplatUrlSource(
 
   await deps.processFiles(files, { start: 80, end: 100 }, { throwOnError: true });
 
-  deps.setUrlProgress({ percent: 100, message: 'Complete' });
   log(`[URL Loader] Successfully loaded splat from URL: ${splatFile.name}`);
 
   return true;

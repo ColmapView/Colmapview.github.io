@@ -262,6 +262,11 @@ export function DropZone({ children }: DropZoneProps) {
                 {urlProgress.filesDownloaded} / {urlProgress.totalFiles} files
               </div>
             )}
+            {urlProgress.bytesLoaded !== undefined && urlProgress.bytesTotal !== undefined && (
+              <div className="text-white/70 text-xs mt-1">
+                {formatByteProgress(urlProgress.bytesLoaded)} / {formatByteProgress(urlProgress.bytesTotal)}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -291,4 +296,19 @@ export function DropZone({ children }: DropZoneProps) {
 
     </div>
   );
+}
+
+function formatByteProgress(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return '0 B';
+  }
+
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(value >= 100 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }

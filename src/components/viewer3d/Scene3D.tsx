@@ -303,6 +303,9 @@ export function Scene3D() {
       setSelectedImageId,
       setWebGpuBackendState,
       setWebGpuMetricState,
+      getUrlProgress,
+      setUrlLoading,
+      setUrlProgress,
     },
   } = useSceneContainerStoreFacade();
   const sceneContextMenu = useSceneContextMenuController();
@@ -366,6 +369,9 @@ export function Scene3D() {
         splatFile={splatFile}
         addNotification={addNotification}
         removeNotification={removeNotification}
+        getUrlProgress={getUrlProgress}
+        setUrlLoading={setUrlLoading}
+        setUrlProgress={setUrlProgress}
         onRuntimeReady={handleWebGpuSplatRuntimeReady}
         onMetricRuntimeReady={handleWebGpuSplatMetricRuntimeReady}
         onRuntimeFailed={handleWebGpuSplatRuntimeFailed}

@@ -1,20 +1,21 @@
-import { startTransition, useEffect, useRef, type RefObject } from 'react';
+import { startTransition, useEffect, useRef } from 'react';
 import { COLUMNS, TIMING } from '../../theme';
 import {
+  getGalleryColumnWheelDelta,
   getNextGalleryColumnCount,
   shouldHandleGalleryColumnWheel,
   type ImageGalleryColumnResizeViewMode,
 } from './imageGalleryColumnResizePolicy';
 
 interface UseImageGalleryColumnResizeOptions {
-  containerRef: RefObject<HTMLDivElement | null>;
+  container: HTMLDivElement | null;
   galleryColumns: number;
   setGalleryColumns: (columns: number) => void;
   viewMode: ImageGalleryColumnResizeViewMode;
 }
 
 export function useImageGalleryColumnResize({
-  containerRef,
+  container,
   galleryColumns,
   setGalleryColumns,
   viewMode,
@@ -23,16 +24,18 @@ export function useImageGalleryColumnResize({
   const wheelTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const container = containerRef.current;
     if (!container || viewMode !== 'gallery') return;
 
     const handleWheel = (event: WheelEvent) => {
       if (!shouldHandleGalleryColumnWheel(viewMode, event.shiftKey)) return;
 
+      const wheelDelta = getGalleryColumnWheelDelta(event.deltaX, event.deltaY);
+      if (wheelDelta === 0) return;
+
       event.preventDefault();
       pendingColumnChange.current = getNextGalleryColumnCount({
         currentColumns: galleryColumns,
-        deltaY: event.deltaY,
+        deltaY: wheelDelta,
         minColumns: COLUMNS.min,
         maxColumns: COLUMNS.max,
         pendingColumns: pendingColumnChange.current,
@@ -62,5 +65,5 @@ export function useImageGalleryColumnResize({
         clearTimeout(wheelTimeoutRef.current);
       }
     };
-  }, [containerRef, galleryColumns, setGalleryColumns, viewMode]);
+  }, [container, galleryColumns, setGalleryColumns, viewMode]);
 }

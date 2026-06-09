@@ -1,6 +1,7 @@
 import type { ReconstructionSourceType } from '../store/reconstructionStore';
 import type { ArchiveEntry, ArchiveReader } from '../types/libarchive';
 import type { UrlLoadProgress } from '../types/manifest';
+import { findSplatFileSources } from '../utils/fileClassification';
 import { appLogger } from '../utils/logger';
 import {
   loadZipFromUrl,
@@ -72,7 +73,9 @@ export async function loadZipUrlSource(
 
   await deps.processFiles(colmapFiles, { start: 80, end: 100 }, { throwOnError: true });
 
-  deps.setUrlProgress({ percent: 100, message: 'Complete' });
+  if (findSplatFileSources(colmapFiles).length === 0) {
+    deps.setUrlProgress({ percent: 100, message: 'Complete' });
+  }
   log('[URL Loader] Successfully loaded reconstruction from ZIP');
 
   return true;

@@ -23,6 +23,9 @@ interface SplatLayerActionsFacade {
   addNotification: NotificationState['addNotification'];
   removeNotification: NotificationState['removeNotification'];
   setSparkBackendAvailable: SplatBackendState['setSparkBackendAvailable'];
+  getUrlProgress: () => ReturnType<typeof useReconstructionStore.getState>['urlProgress'];
+  setUrlLoading: ReturnType<typeof useReconstructionStore.getState>['setUrlLoading'];
+  setUrlProgress: ReturnType<typeof useReconstructionStore.getState>['setUrlProgress'];
 }
 
 export interface SplatLayerStoreFacade {
@@ -30,11 +33,15 @@ export interface SplatLayerStoreFacade {
   actions: SplatLayerActionsFacade;
 }
 
+const getCurrentUrlProgress = () => useReconstructionStore.getState().urlProgress;
+
 export function useSplatLayerStoreFacade(): SplatLayerStoreFacade {
   const points = usePointsNode();
   const splatFile = useReconstructionStore((s) => s.loadedFiles?.splatFile);
   const addNotification = useNotificationStore((s) => s.addNotification);
   const removeNotification = useNotificationStore((s) => s.removeNotification);
+  const setUrlLoading = useReconstructionStore((s) => s.setUrlLoading);
+  const setUrlProgress = useReconstructionStore((s) => s.setUrlProgress);
   const requestedBackend = useSplatBackendStore((s) => s.requestedBackend);
   const splatBackendAvailability = useSplatBackendStore((s) => s.availability);
   const splatBackendResolution = useSplatBackendStore((s) => s.resolution);
@@ -52,6 +59,9 @@ export function useSplatLayerStoreFacade(): SplatLayerStoreFacade {
       addNotification,
       removeNotification,
       setSparkBackendAvailable,
+      getUrlProgress: getCurrentUrlProgress,
+      setUrlLoading,
+      setUrlProgress,
     },
   };
 }

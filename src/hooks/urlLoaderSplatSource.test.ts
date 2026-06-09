@@ -59,7 +59,7 @@ describe('URL loader splat source helpers', () => {
       { start: 80, end: 100 },
       { throwOnError: true }
     );
-    expect(deps.setUrlProgress).toHaveBeenLastCalledWith({ percent: 100, message: 'Complete' });
+    expect(deps.setUrlProgress).not.toHaveBeenCalledWith({ percent: 100, message: 'Complete' });
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Successfully loaded splat from URL: scene.spz');
   });
 

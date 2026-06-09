@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
   FRUSTUM_PLANE_CULL_CHECK_INTERVAL,
+  getInitialFrustumPlaneCullFrame,
   getFrustumPlaneViewAngleOk,
   getNextFrustumPlaneCullFrame,
   shouldMeasureFrustumPlaneViewAngle,
@@ -23,6 +24,7 @@ interface FrustumPlaneViewAngleCullingOptions {
   cullAngleThreshold: number;
   viewAngleOk: boolean;
   setViewAngleOk: Dispatch<SetStateAction<boolean>>;
+  frameSeed?: number;
 }
 
 export function useFrustumPlaneViewAngleCulling({
@@ -34,8 +36,12 @@ export function useFrustumPlaneViewAngleCulling({
   cullAngleThreshold,
   viewAngleOk,
   setViewAngleOk,
+  frameSeed = 0,
 }: FrustumPlaneViewAngleCullingOptions) {
-  const frameCountRef = useRef(0);
+  const frameCountRef = useRef(getInitialFrustumPlaneCullFrame({
+    seed: frameSeed,
+    interval: FRUSTUM_PLANE_CULL_CHECK_INTERVAL,
+  }));
 
   useFrame(() => {
     if (!enabled || !groupRef.current) return;

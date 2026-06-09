@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-06-09
+
+### Added
+
+- Add gallery/list thumbnail display options for image, masked image, inverse masked image, mask, and hover mask.
+
+### Changed
+
+- Include gallery view, sort, border, thumbnail, column, and camera-filter settings in copied share and embed URLs.
+- Treat mask files as alpha masks for gallery masked-image thumbnails and splat PSNR/SSIM metrics.
+- Include WebGPU splat loading in the initial loading progress flow with calibrated read, decode, upload, and first-frame phases.
+- Reduce image-plane thumbnail and frustum texture main-thread spikes by processing decode/resize/cache work in smaller batches.
+
+### Fixed
+
+- Fix WebGPU splat loading notification cleanup causing recursive React updates.
+- Fix WebGPU splat overlay sizing to use the actual Three canvas backing buffer, avoiding subpixel image-frustum/splat misalignment at fractional viewport sizes.
+- Avoid smooth virtual-gallery scroll warnings when selecting cameras in dynamically sized list layouts.
+
 ## [0.7.5] - 2026-06-08
 
 ### Added
@@ -216,7 +235,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript for type safety
 - Deno native test runner for testing
 
-[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.6...HEAD
+[0.7.6]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.5...v0.7.6
+[0.7.5]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.1...v0.7.5
+[0.7.1]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/ColmapView/colmapview.github.io/compare/v0.6.1...v0.7.0
 [0.3.0]: https://github.com/ColmapView/colmapview.github.io/compare/v0.2.5...v0.3.0
 [0.2.5]: https://github.com/ColmapView/colmapview.github.io/compare/v0.2.4...v0.2.5

@@ -80,6 +80,9 @@ function App() {
       if (loadPlan.kind === 'inline-manifest') {
         appLogger.info(loadPlan.logMessage);
         const loaded = await loadFromManifest(loadPlan.manifest);
+        if (loaded && loadPlan.config) {
+          applyShareConfig(loadPlan.config);
+        }
         if (loaded && loadPlan.selectedImageId !== null) {
           useCameraStore.getState().setSelectedImageId(loadPlan.selectedImageId);
         }
@@ -89,6 +92,9 @@ function App() {
       if (loadPlan.kind === 'manifest-url') {
         appLogger.info(loadPlan.logMessage);
         const loaded = await loadFromUrl(loadPlan.manifestUrl);
+        if (loaded && loadPlan.config) {
+          applyShareConfig(loadPlan.config);
+        }
         if (loaded && loadPlan.selectedImageId !== null) {
           useCameraStore.getState().setSelectedImageId(loadPlan.selectedImageId);
         }

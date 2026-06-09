@@ -6,7 +6,12 @@ import {
   getGalleryVirtualRowStyle,
   getListVirtualRowStyle,
 } from './imageGalleryStyleViewModel';
-import type { GalleryBorderColorMode, ImageData, ViewMode } from './useImageGalleryViewModel';
+import type {
+  GalleryBorderColorMode,
+  GalleryThumbnailDisplayMode,
+  ImageData,
+  ViewMode,
+} from './useImageGalleryViewModel';
 
 type GalleryVirtualItem = {
   index: number;
@@ -35,6 +40,7 @@ interface ImageGalleryVirtualizedContentProps {
   matchesColor: string;
   matchesBlink: boolean;
   metricBorderColorScale: SplatMetricColorScale | null;
+  thumbnailDisplayMode: GalleryThumbnailDisplayMode;
   debouncedIsScrolling: boolean;
   isSettling: boolean;
   isResizing: boolean;
@@ -61,6 +67,7 @@ export function ImageGalleryVirtualizedContent({
   matchesColor,
   matchesBlink,
   metricBorderColorScale,
+  thumbnailDisplayMode,
   debouncedIsScrolling,
   isSettling,
   isResizing,
@@ -103,6 +110,7 @@ export function ImageGalleryVirtualizedContent({
                     matchesColor={matchesColor}
                     matchesBlink={matchesBlink}
                     metricBorderColorScale={metricBorderColorScale}
+                    thumbnailDisplayMode={thumbnailDisplayMode}
                     onClick={onClick}
                     onDoubleClick={onDoubleClick}
                     onRightClick={onRightClick}
@@ -139,6 +147,7 @@ export function ImageGalleryVirtualizedContent({
                   matchesColor={matchesColor}
                   matchesBlink={matchesBlink}
                   metricBorderColorScale={metricBorderColorScale}
+                  thumbnailDisplayMode={thumbnailDisplayMode}
                   onClick={onClick}
                   onDoubleClick={onDoubleClick}
                   onRightClick={onRightClick}

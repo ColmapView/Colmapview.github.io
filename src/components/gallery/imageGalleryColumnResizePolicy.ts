@@ -15,6 +15,10 @@ export function shouldHandleGalleryColumnWheel(
   return viewMode === 'gallery' && shiftKey;
 }
 
+export function getGalleryColumnWheelDelta(deltaX: number, deltaY: number): number {
+  return Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY;
+}
+
 export function getNextGalleryColumnCount({
   currentColumns,
   deltaY,

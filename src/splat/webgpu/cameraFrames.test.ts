@@ -100,6 +100,26 @@ describe('WebGPU splat camera frames', () => {
     expect(frame.camera.position).toEqual([1, 2, 3]);
   });
 
+  it('uses explicit renderer backing dimensions when they differ from size*dpr rounding', () => {
+    const camera = new THREE.PerspectiveCamera(50, 2, 0.2, 200);
+    const frame = createWebGpuSplatFrameFromThreeCamera({
+      camera,
+      width: 320.4,
+      height: 180.4,
+      dpr: 2,
+      pixelWidth: 640,
+      pixelHeight: 360,
+    });
+
+    expect(frame.viewport).toEqual({
+      cssWidth: 320.4,
+      cssHeight: 180.4,
+      pixelWidth: 640,
+      pixelHeight: 360,
+      dpr: 2,
+    });
+  });
+
   it('bakes a Sim3D model transform into viewFromModel so WebGPU matches transformed Three content', () => {
     const width = 800;
     const height = 400;

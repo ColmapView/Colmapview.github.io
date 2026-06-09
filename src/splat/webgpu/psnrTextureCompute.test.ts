@@ -318,7 +318,7 @@ describe('WebGPU PSNR texture compute', () => {
     }));
   });
 
-  it('uses an optional mask texture for both PSNR and SSIM valid-pixel selection', async () => {
+  it('uses optional alpha masks for both PSNR and SSIM valid-pixel selection', async () => {
     const fake = makeFakeDevice(metricReadback(0, 2, 0.9, 2));
     const renderedTexture = makeTexture();
     const groundTruthTexture = makeTexture();
@@ -336,6 +336,7 @@ describe('WebGPU PSNR texture compute', () => {
 
     expect(result.validPixelCount).toBe(2);
     expect(result.ssim).toBeCloseTo(0.9);
+    expect(fake.shaderCodes.join('\n')).toContain('maskValue.a > 0.0 && maskBrightness > 0.5');
     expect(fake.bindGroups[0].entries[2].resource).toEqual({ kind: 'texture-view' });
     expect(maskTexture.createView).toHaveBeenCalledTimes(1);
     expect(new Uint32Array(fake.writeBuffers[0])).toEqual(new Uint32Array([

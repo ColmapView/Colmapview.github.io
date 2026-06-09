@@ -10,6 +10,7 @@ interface FrustumPlaneDataFacade {
   cameraFov: CameraState['cameraFov'];
   cameraProjection: CameraState['cameraProjection'];
   dataset: DatasetManager;
+  flyTransitionDuration: CameraState['flyTransitionDuration'];
   multiCamera: boolean;
   selectionAnimationSpeed: CameraState['selectionAnimationSpeed'];
   selectionColorMode: CameraState['selectionColorMode'];
@@ -29,6 +30,7 @@ export function useFrustumPlaneStoreFacade(): FrustumPlaneStoreFacade {
   const dataset = useDataset();
   const cameraProjection = useCameraStore((s) => s.cameraProjection);
   const cameraFov = useCameraStore((s) => s.cameraFov);
+  const flyTransitionDuration = useCameraStore((s) => s.flyTransitionDuration);
   const setCameraFov = useCameraStore((s) => s.setCameraFov);
   const selectionColorMode = useCameraStore((s) => s.selectionColorMode);
   const selectionAnimationSpeed = useCameraStore((s) => s.selectionAnimationSpeed);
@@ -38,6 +40,7 @@ export function useFrustumPlaneStoreFacade(): FrustumPlaneStoreFacade {
       cameraFov,
       cameraProjection,
       dataset,
+      flyTransitionDuration,
       multiCamera: cameraCount > 1,
       selectionAnimationSpeed,
       selectionColorMode,

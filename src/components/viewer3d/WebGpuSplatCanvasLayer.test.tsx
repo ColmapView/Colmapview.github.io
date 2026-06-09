@@ -282,6 +282,8 @@ describe('WebGpuSplatCanvasLayer', () => {
     const onRuntimeReady = vi.fn();
     const addNotification = vi.fn(() => 'loading-notice');
     const removeNotification = vi.fn();
+    const setUrlLoading = vi.fn();
+    const setUrlProgress = vi.fn();
 
     render(
       <WebGpuSplatCanvasLayer
@@ -290,6 +292,8 @@ describe('WebGpuSplatCanvasLayer', () => {
         splatFile={file}
         addNotification={addNotification}
         removeNotification={removeNotification}
+        setUrlLoading={setUrlLoading}
+        setUrlProgress={setUrlProgress}
         onRuntimeReady={onRuntimeReady}
       />
     );
@@ -298,6 +302,12 @@ describe('WebGpuSplatCanvasLayer', () => {
       expect(renderer.loadCloud).toHaveBeenCalledTimes(1);
     });
     expect(addNotification).toHaveBeenCalledWith('info', 'Loading splat: scene.spz', 0);
+    expect(setUrlLoading).toHaveBeenCalledWith(true);
+    expect(setUrlProgress).toHaveBeenCalledWith({
+      percent: 92,
+      message: 'Preparing splat renderer...',
+      currentFile: 'scene.spz',
+    });
     expect(removeNotification).not.toHaveBeenCalled();
     expect(createLoadedVisibleWebGpuSplatRendererAdapter).toHaveBeenCalledWith(
       expect.any(HTMLCanvasElement),
@@ -334,6 +344,12 @@ describe('WebGpuSplatCanvasLayer', () => {
     });
     expect(removeNotification).toHaveBeenCalledWith('loading-notice');
     expect(addNotification).toHaveBeenCalledWith('info', 'Loaded splat: scene.spz', 3000);
+    expect(setUrlProgress).toHaveBeenCalledWith({
+      percent: 100,
+      message: 'Complete',
+      currentFile: 'scene.spz',
+    });
+    expect(setUrlLoading).toHaveBeenLastCalledWith(false);
     onFirstFrame?.();
     expect(onRuntimeReady).toHaveBeenCalledTimes(1);
     expect(addNotification).toHaveBeenCalledTimes(2);

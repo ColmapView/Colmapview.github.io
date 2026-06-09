@@ -1,28 +1,32 @@
 import type { Camera, Reconstruction } from '../../types/colmap';
+import type {
+  GalleryBorderColorMode,
+  GalleryCameraFilter as CameraFilter,
+  GallerySortDirection as SortDirection,
+  GallerySortField as SortField,
+  GalleryThumbnailDisplayMode,
+  GalleryViewMode as ViewMode,
+} from '../../types/gallery';
 
 export {
   buildMatchedImageIds,
   getLastNavigationToImageId,
 } from '../../utils/imageNavigationPolicy';
 
-export type ViewMode = 'gallery' | 'list';
-export type GalleryBorderColorMode = 'none' | 'camera' | 'psnr' | 'ssim';
-export type SortField =
-  | 'name'
-  | 'imageId'
-  | 'avgError'
-  | 'covisibleCount'
-  | 'numPoints3D'
-  | 'numPoints2D'
-  | 'splatPsnr'
-  | 'splatSsim';
-export type SortDirection = 'asc' | 'desc';
-export type CameraFilter = number | 'all';
+export type {
+  CameraFilter,
+  GalleryBorderColorMode,
+  GalleryThumbnailDisplayMode,
+  SortDirection,
+  SortField,
+  ViewMode,
+};
 
 export interface ImageData {
   imageId: number;
   name: string;
   file?: File;
+  maskFile?: File;
   numPoints2D: number;
   numPoints3D: number;
   cameraId: number;
@@ -37,6 +41,7 @@ export interface ImageData {
 
 interface GalleryImageSource {
   getImageSync: (imageName: string) => File | undefined;
+  getMaskSync?: (imageName: string) => File | undefined;
 }
 
 interface BuildGalleryImagesOptions {
@@ -90,6 +95,7 @@ export function buildGalleryImages({
         imageId: img.imageId,
         name: img.name,
         file: imageSource.getImageSync(img.name),
+        maskFile: imageSource.getMaskSync?.(img.name),
         numPoints2D: img.numPoints2D ?? img.points2D.length,
         numPoints3D: stats?.numPoints3D ?? 0,
         cameraId: img.cameraId,

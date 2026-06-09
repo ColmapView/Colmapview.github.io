@@ -60,6 +60,9 @@ interface SceneContainerActionsFacade {
   setSelectedImageId: CameraState['setSelectedImageId'];
   setWebGpuBackendState: SplatBackendState['setWebGpuBackendState'];
   setWebGpuMetricState: SplatBackendState['setWebGpuMetricState'];
+  getUrlProgress: () => ReturnType<typeof useReconstructionStore.getState>['urlProgress'];
+  setUrlLoading: ReturnType<typeof useReconstructionStore.getState>['setUrlLoading'];
+  setUrlProgress: ReturnType<typeof useReconstructionStore.getState>['setUrlProgress'];
 }
 
 export interface SceneContentStoreFacade {
@@ -71,6 +74,8 @@ export interface SceneContainerStoreFacade {
   data: SceneContainerDataFacade;
   actions: SceneContainerActionsFacade;
 }
+
+const getCurrentUrlProgress = () => useReconstructionStore.getState().urlProgress;
 
 export function useSceneContentStoreFacade(): SceneContentStoreFacade {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
@@ -128,6 +133,8 @@ export function useSceneContainerStoreFacade(): SceneContainerStoreFacade {
   const splatBackendResolution = useSplatBackendStore((s) => s.resolution);
   const setWebGpuBackendState = useSplatBackendStore((s) => s.setWebGpuBackendState);
   const setWebGpuMetricState = useSplatBackendStore((s) => s.setWebGpuMetricState);
+  const setUrlLoading = useReconstructionStore((s) => s.setUrlLoading);
+  const setUrlProgress = useReconstructionStore((s) => s.setUrlProgress);
   const points = usePointsNode();
 
   return {
@@ -148,6 +155,9 @@ export function useSceneContainerStoreFacade(): SceneContainerStoreFacade {
       setSelectedImageId,
       setWebGpuBackendState,
       setWebGpuMetricState,
+      getUrlProgress: getCurrentUrlProgress,
+      setUrlLoading,
+      setUrlProgress,
     },
   };
 }

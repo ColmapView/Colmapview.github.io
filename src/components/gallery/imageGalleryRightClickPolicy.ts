@@ -2,6 +2,9 @@ import type { CameraViewState, NavigationHistoryEntry } from '../../store/types'
 
 export type ImageGalleryRightClickAction =
   | {
+    type: 'deselect';
+  }
+  | {
     type: 'openMatchedImageDetail';
     selectedImageId: number;
     matchedImageId: number;
@@ -30,6 +33,12 @@ export function getImageGalleryRightClickAction({
   currentViewState,
   lastNavigationEntry,
 }: ImageGalleryRightClickActionOptions): ImageGalleryRightClickAction {
+  if (imageId === selectedImageId) {
+    return currentViewState !== null && lastNavigationEntry?.toImageId === imageId
+      ? { type: 'restoreNavigation' }
+      : { type: 'deselect' };
+  }
+
   if (selectedImageId !== null && isMatchedImage) {
     return {
       type: 'openMatchedImageDetail',

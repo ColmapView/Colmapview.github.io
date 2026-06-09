@@ -34,6 +34,7 @@ import {
   getZipImageCacheStats,
   getZipImageCached,
   getZipMaskCacheStats,
+  getZipMaskCached,
   isZipLoadingAvailable,
   removeZipMaskCacheEntries,
 } from './zipImageFiles';
@@ -118,9 +119,11 @@ describe('zip image files', () => {
 
     expect(await fetchZipMask('cam1/photo1.jpg')).toBe(maskFile);
     expect(await fetchZipMask('cam1/photo2.jpg')).toBe(maskFile);
+    expect(getZipMaskCached('cam1/photo1.jpg')).toBe(maskFile);
     expect(getZipMaskCacheStats()).toEqual({ count: 2, sizeBytes: 6 });
 
     removeZipMaskCacheEntries(['cam1/photo1.jpg']);
+    expect(getZipMaskCached('cam1/photo1.jpg')).toBeUndefined();
     expect(getZipMaskCacheStats()).toEqual({ count: 1, sizeBytes: 3 });
 
     vi.mocked(findZipEntry).mockClear();

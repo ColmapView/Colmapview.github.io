@@ -67,7 +67,16 @@ export interface WebGpuGaussianSceneUploadAsyncOptions {
   labelPrefix?: string;
   maxChunkBytes?: number;
   yieldToMainThread?: () => Promise<void>;
+  onProgress?: (progress: WebGpuGaussianSceneUploadProgress) => void;
 }
+
+export type WebGpuGaussianSceneUploadProgress =
+  | { phase: 'packing' }
+  | {
+      phase: 'uploading';
+      uploadedBytes: number;
+      totalBytes: number;
+    };
 
 export function uploadWebGpuGaussianSceneResources(
   uploader: WebGpuGaussianBufferUploader,
@@ -85,6 +94,7 @@ export async function uploadWebGpuGaussianSceneResourcesAsync(
   options: WebGpuGaussianSceneUploadAsyncOptions = {}
 ): Promise<WebGpuGaussianSceneResources> {
   assertUploaderMeetsCloudLimits(uploader, cloud);
+  options.onProgress?.({ phase: 'packing' });
   const packed = createPackedWebGpuGaussianCloud(cloud);
   return uploadPackedWebGpuGaussianSceneResourcesAsync(uploader, packed, options);
 }
@@ -168,15 +178,36 @@ export async function uploadPackedWebGpuGaussianSceneResourcesAsync(
   let shBuffer: WebGpuUploadedBuffer | null = null;
   let releaseGaussianBufferCounter = noopWebGpuSplatDebugCounterRelease;
   let releaseShBufferCounter = noopWebGpuSplatDebugCounterRelease;
+  const totalUploadBytes = packed.gaussianData.byteLength + (packed.shData?.byteLength ?? 0);
+  let uploadedBytes = 0;
+  const reportUploadedBytes = (byteLength: number) => {
+    uploadedBytes = Math.min(totalUploadBytes, uploadedBytes + byteLength);
+    options.onProgress?.({
+      phase: 'uploading',
+      uploadedBytes,
+      totalBytes: totalUploadBytes,
+    });
+  };
 
   try {
+    options.onProgress?.({
+      phase: 'uploading',
+      uploadedBytes: 0,
+      totalBytes: totalUploadBytes,
+    });
     gaussianBuffer = uploader.createBuffer({
       label: `${labelPrefix}: gaussians`,
       size: storageBufferSize(packed.gaussianData.byteLength),
       usage: WEBGPU_BUFFER_USAGE_STORAGE | WEBGPU_BUFFER_USAGE_COPY_DST,
     });
     releaseGaussianBufferCounter = trackWebGpuSplatDebugCounter('buffers');
-    await writeBufferInChunksIfNotEmpty(uploader, gaussianBuffer, packed.gaussianData, options);
+    await writeBufferInChunksIfNotEmpty(
+      uploader,
+      gaussianBuffer,
+      packed.gaussianData,
+      options,
+      reportUploadedBytes
+    );
 
     shBuffer = uploader.createBuffer({
       label: `${labelPrefix}: sh`,
@@ -187,7 +218,13 @@ export async function uploadPackedWebGpuGaussianSceneResourcesAsync(
     });
     releaseShBufferCounter = trackWebGpuSplatDebugCounter('buffers');
     if (packed.shData) {
-      await writeBufferInChunksIfNotEmpty(uploader, shBuffer, packed.shData, options);
+      await writeBufferInChunksIfNotEmpty(
+        uploader,
+        shBuffer,
+        packed.shData,
+        options,
+        reportUploadedBytes
+      );
     }
   } catch (error) {
     gaussianBuffer?.destroy();
@@ -281,13 +318,15 @@ async function writeBufferInChunksIfNotEmpty(
   uploader: WebGpuGaussianBufferUploader,
   buffer: WebGpuUploadedBuffer,
   data: Float32Array,
-  options: WebGpuGaussianSceneUploadAsyncOptions
+  options: WebGpuGaussianSceneUploadAsyncOptions,
+  onChunkUploaded?: (byteLength: number) => void
 ): Promise<void> {
   if (data.byteLength === 0) return;
 
   const chunkBytes = getUploadChunkBytes(options.maxChunkBytes);
   if (data.byteLength <= chunkBytes) {
     uploader.writeBuffer(buffer, data);
+    onChunkUploaded?.(data.byteLength);
     return;
   }
 
@@ -300,6 +339,7 @@ async function writeBufferInChunksIfNotEmpty(
       data.subarray(start, end),
       start * Float32Array.BYTES_PER_ELEMENT
     );
+    onChunkUploaded?.((end - start) * Float32Array.BYTES_PER_ELEMENT);
     if (end < data.length) {
       await yieldToMainThread();
     }

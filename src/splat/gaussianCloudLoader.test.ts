@@ -176,6 +176,22 @@ describe('gaussian cloud loader', () => {
     ]);
   });
 
+  it('reports read and decode progress for large-file loading', async () => {
+    const progress: string[] = [];
+    const loadPLYFromBuffer = vi.fn(() => makeCloud(2));
+
+    await loadGaussianCloudFromFile(new File(['ply-data'], 'scene.ply'), {
+      loadPLYFromBuffer,
+      onProgress: (event) => {
+        progress.push(event.phase);
+      },
+    });
+
+    expect(progress).toContain('reading');
+    expect(progress).toContain('decoding');
+    expect(progress).toContain('decoded');
+  });
+
   it('reuses the decoded Gaussian cloud for repeated default loads of the same File', async () => {
     const file = makeBinaryPlyFile();
 

@@ -9,6 +9,7 @@ vi.mock('../utils/imageFileUtils', () => ({
 
 vi.mock('../utils/urlImageFiles', () => ({
   getUrlImageCacheStats: vi.fn(),
+  getUrlMaskCacheStats: vi.fn(),
 }));
 
 vi.mock('../utils/zipImageFiles', () => ({
@@ -17,7 +18,7 @@ vi.mock('../utils/zipImageFiles', () => ({
 }));
 
 import { getLocalImageStats } from '../utils/imageFileUtils';
-import { getUrlImageCacheStats } from '../utils/urlImageFiles';
+import { getUrlImageCacheStats, getUrlMaskCacheStats } from '../utils/urlImageFiles';
 import { getZipImageCacheStats, getZipMaskCacheStats } from '../utils/zipImageFiles';
 
 describe('DatasetDiagnostics', () => {
@@ -27,6 +28,7 @@ describe('DatasetDiagnostics', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getUrlImageCacheStats).mockReturnValue({ count: 0, sizeBytes: 0 });
+    vi.mocked(getUrlMaskCacheStats).mockReturnValue({ count: 0, sizeBytes: 0 });
     vi.mocked(getZipImageCacheStats).mockReturnValue({ count: 0, sizeBytes: 0 });
     vi.mocked(getZipMaskCacheStats).mockReturnValue({ count: 0, sizeBytes: 0 });
     vi.mocked(getLocalImageStats).mockReturnValue({ count: 0, sizeBytes: 0 });
@@ -50,6 +52,7 @@ describe('DatasetDiagnostics', () => {
   it('returns cache stats without requiring dataset access APIs', () => {
     state.sourceType = 'zip';
     vi.mocked(getUrlImageCacheStats).mockReturnValue({ count: 10, sizeBytes: 1024 * 1024 });
+    vi.mocked(getUrlMaskCacheStats).mockReturnValue({ count: 3, sizeBytes: 256 * 1024 });
     vi.mocked(getZipImageCacheStats).mockReturnValue({ count: 20, sizeBytes: 2 * 1024 * 1024 });
     vi.mocked(getZipMaskCacheStats).mockReturnValue({ count: 5, sizeBytes: 512 * 1024 });
     vi.mocked(getLocalImageStats).mockReturnValue({ count: 50, sizeBytes: 5 * 1024 * 1024 });
@@ -57,9 +60,10 @@ describe('DatasetDiagnostics', () => {
     const stats = diagnostics.getCacheStats();
 
     expect(stats.sourceType).toBe('zip');
+    expect(stats.urlMasks.sizeFormatted).toBe('256 KB');
     expect(stats.zipImages.sizeFormatted).toBe('2.00 MB');
-    expect(stats.total.count).toBe(85);
-    expect(stats.total.sizeBytes).toBe(1024 * 1024 + 2 * 1024 * 1024 + 512 * 1024 + 5 * 1024 * 1024);
+    expect(stats.total.count).toBe(88);
+    expect(stats.total.sizeBytes).toBe(1024 * 1024 + 256 * 1024 + 2 * 1024 * 1024 + 512 * 1024 + 5 * 1024 * 1024);
   });
 
   it('builds memory stats from reconstruction, source, and cache readers', () => {

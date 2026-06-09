@@ -155,11 +155,22 @@ describe('file dropzone workflow', () => {
         expect.objectContaining({ name: 'large.ply' }),
         expect.objectContaining({ name: 'small.ply' }),
       ],
+      splatFileSources: [
+        expect.objectContaining({ id: 'splats/model.spz', file: expect.objectContaining({ name: 'model.spz' }) }),
+        expect.objectContaining({ id: 'splats/large.ply', file: expect.objectContaining({ name: 'large.ply' }) }),
+        expect.objectContaining({ id: 'splats/small.ply', file: expect.objectContaining({ name: 'small.ply' }) }),
+      ],
     }));
     expect(deps.clearCaches).toHaveBeenCalledWith({ preserveZip: true });
     expect(deps.setReconstruction).toHaveBeenCalledWith(reconstruction);
     expect(deps.resetView).toHaveBeenCalled();
-    expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
+    expect(deps.setUrlProgress).toHaveBeenCalledWith({
+      percent: 92,
+      message: 'Preparing splat renderer...',
+      currentFile: 'model.spz',
+    });
+    expect(deps.setUrlLoading).toHaveBeenCalledWith(true);
+    expect(deps.setUrlLoading).not.toHaveBeenCalledWith(false);
     expect(logger.error).not.toHaveBeenCalled();
   });
 
@@ -189,6 +200,10 @@ describe('file dropzone workflow', () => {
       ...currentLoadedFiles,
       splatFile: largestSplat,
       splatFiles: [largestSplat, smallSplat],
+      splatFileSources: [
+        { id: 'folder/folder/folder/replacement.ply', path: 'folder/folder/folder/replacement.ply', file: largestSplat },
+        { id: 'output/small.ply', path: 'output/small.ply', file: smallSplat },
+      ],
     });
     expect(deps.setUrlProgress).toHaveBeenCalledWith({
       percent: 100,
@@ -234,6 +249,7 @@ describe('file dropzone workflow', () => {
       points3DFile: undefined,
       splatFile: spz,
       splatFiles: [spz],
+      splatFileSources: [{ id: 'backup.spz', path: 'backup.spz', file: spz }],
       databaseFile: undefined,
       rigsFile: undefined,
       framesFile: undefined,
@@ -253,7 +269,13 @@ describe('file dropzone workflow', () => {
     expect(deps.addNotification).toHaveBeenCalledWith('info', 'Loaded splat: backup.spz', 5000);
     expect(parseFiles).not.toHaveBeenCalled();
     expect(deps.setError).not.toHaveBeenCalled();
-    expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
+    expect(deps.setUrlProgress).toHaveBeenCalledWith({
+      percent: 60,
+      message: 'Preparing splat renderer...',
+      currentFile: 'backup.spz',
+    });
+    expect(deps.setUrlLoading).toHaveBeenCalledWith(true);
+    expect(deps.setUrlLoading).not.toHaveBeenCalledWith(false);
   });
 
   it('throws processing errors for URL-loader style calls that request propagation', async () => {

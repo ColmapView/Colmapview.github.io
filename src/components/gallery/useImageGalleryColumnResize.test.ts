@@ -14,7 +14,7 @@ describe('useImageGalleryColumnResize', () => {
     const setGalleryColumns = vi.fn();
 
     renderHook(() => useImageGalleryColumnResize({
-      containerRef: { current: container },
+      container,
       galleryColumns: 4,
       setGalleryColumns,
       viewMode: 'gallery',
@@ -30,6 +30,54 @@ describe('useImageGalleryColumnResize', () => {
     expect(setGalleryColumns).toHaveBeenCalledWith(6);
   });
 
+  it('handles shift-wheel events with horizontal deltas', () => {
+    vi.useFakeTimers();
+    const container = document.createElement('div');
+    const setGalleryColumns = vi.fn();
+
+    renderHook(() => useImageGalleryColumnResize({
+      container,
+      galleryColumns: 4,
+      setGalleryColumns,
+      viewMode: 'gallery',
+    }));
+
+    container.dispatchEvent(new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      deltaX: -10,
+      deltaY: 0,
+      shiftKey: true,
+    }));
+    vi.advanceTimersByTime(TIMING.wheelDebounce);
+
+    expect(setGalleryColumns).toHaveBeenCalledOnce();
+    expect(setGalleryColumns).toHaveBeenCalledWith(3);
+  });
+
+  it('attaches when the gallery element appears after the initial render', () => {
+    vi.useFakeTimers();
+    const container = document.createElement('div');
+    const setGalleryColumns = vi.fn();
+
+    const { rerender } = renderHook(
+      ({ container: nextContainer }: { container: HTMLDivElement | null }) => useImageGalleryColumnResize({
+        container: nextContainer,
+        galleryColumns: 4,
+        setGalleryColumns,
+        viewMode: 'gallery',
+      }),
+      { initialProps: { container: null } }
+    );
+
+    rerender({ container });
+    container.dispatchEvent(createWheelEvent(1, true));
+    vi.advanceTimersByTime(TIMING.wheelDebounce);
+
+    expect(setGalleryColumns).toHaveBeenCalledOnce();
+    expect(setGalleryColumns).toHaveBeenCalledWith(5);
+  });
+
   it('ignores non-shift wheel and list-mode wheel events', () => {
     vi.useFakeTimers();
     const galleryContainer = document.createElement('div');
@@ -37,13 +85,13 @@ describe('useImageGalleryColumnResize', () => {
     const setGalleryColumns = vi.fn();
 
     renderHook(() => useImageGalleryColumnResize({
-      containerRef: { current: galleryContainer },
+      container: galleryContainer,
       galleryColumns: 4,
       setGalleryColumns,
       viewMode: 'gallery',
     }));
     renderHook(() => useImageGalleryColumnResize({
-      containerRef: { current: listContainer },
+      container: listContainer,
       galleryColumns: 4,
       setGalleryColumns,
       viewMode: 'list',

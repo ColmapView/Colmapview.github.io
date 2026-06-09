@@ -40,6 +40,26 @@ describe('WebGPU splat canvas runtime', () => {
     expect(resizeWebGpuSplatCanvas(canvas, viewport)).toBe(false);
   });
 
+  it('keeps runtime snapshots on the renderer backing-pixel grid when provided', () => {
+    const camera = new THREE.PerspectiveCamera();
+    const snapshot = createWebGpuSplatFrameSnapshot({
+      camera,
+      width: 320.4,
+      height: 180.4,
+      dpr: 2,
+      pixelWidth: 640,
+      pixelHeight: 360,
+    });
+
+    expect(snapshot.viewport).toEqual({
+      cssWidth: 320.4,
+      cssHeight: 180.4,
+      pixelWidth: 640,
+      pixelHeight: 360,
+      dpr: 2,
+    });
+  });
+
   it('captures camera matrices without aliasing mutable Three arrays', () => {
     const camera = new THREE.PerspectiveCamera(60, 2, 0.1, 100);
     camera.position.set(1, 2, 3);

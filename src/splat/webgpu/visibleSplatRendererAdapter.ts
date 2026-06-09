@@ -2,6 +2,7 @@ import type { GaussianCloud } from '../gaussianCloud';
 import {
   GaussianSceneResourceManager,
 } from './gaussianSceneResourceManager';
+import type { WebGpuGaussianSceneUploadAsyncOptions } from './gaussianSceneResources';
 import {
   createSplatRenderSession,
   type SplatCameraFrame,
@@ -35,6 +36,7 @@ const VISIBLE_SPLAT_OUTPUT_ALGORITHM: NonNullable<SplatRenderSessionOptions['out
 export interface VisibleWebGpuSplatCloudOptions {
   sceneId: string;
   labelPrefix?: string;
+  onUploadProgress?: WebGpuGaussianSceneUploadAsyncOptions['onProgress'];
 }
 
 export interface VisibleWebGpuSplatRendererAdapter {
@@ -228,6 +230,7 @@ class DefaultVisibleWebGpuSplatRendererAdapter implements VisibleWebGpuSplatRend
       return this.sceneResourceManager.acquireAsync(this.deviceHandle.device, resource, {
         labelPrefix: options.labelPrefix,
         maxChunkBytes: VISIBLE_SPLAT_UPLOAD_CHUNK_BYTES,
+        onProgress: options.onUploadProgress,
       });
     }
 

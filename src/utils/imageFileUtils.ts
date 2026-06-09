@@ -30,10 +30,13 @@ import {
 export { getMaskPathVariants } from './imageFileLookupPolicy';
 export {
   clearUrlImageCache,
+  clearUrlMaskCache,
   fetchUrlImage,
   fetchUrlMask,
   getUrlImageCached,
   getUrlImageCacheStats,
+  getUrlMaskCached,
+  getUrlMaskCacheStats,
   prefetchUrlImages,
 } from './urlImageFiles';
 export {
@@ -42,6 +45,7 @@ export {
   fetchZipMask,
   getZipImageCached,
   getZipImageCacheStats,
+  getZipMaskCached,
   getZipMaskCacheStats,
   isZipLoadingAvailable,
   removeZipMaskCacheEntries,

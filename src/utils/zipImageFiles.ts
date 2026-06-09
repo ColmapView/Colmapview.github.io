@@ -26,6 +26,14 @@ export function getZipImageCached(imageName: string): File | undefined {
 }
 
 /**
+ * Get a cached ZIP mask (synchronous).
+ * Returns undefined if not yet extracted.
+ */
+export function getZipMaskCached(imageName: string): File | undefined {
+  return zipMaskState.getCached(imageName);
+}
+
+/**
  * Check if ZIP loading is available.
  */
 export function isZipLoadingAvailable(): boolean {
@@ -93,25 +101,37 @@ export async function fetchZipMask(imageName: string): Promise<File | null> {
 
   if (!hasActiveZipArchive()) return null;
 
+  if (zipMaskState.isRequestPending(imageName)) {
+    return zipMaskState.waitForRequest(imageName);
+  }
+
   const imageIndex = getActiveZipImageIndex();
   if (!imageIndex) return null;
 
-  for (const maskPath of getMaskPathVariants(imageName)) {
-    const entry = findZipEntry(maskPath, imageIndex);
-    if (entry) {
-      try {
-        const file = await entry.extract();
-        zipMaskState.setCached(imageName, file);
-        appLogger.info(`[ZIP Mask] Found mask for ${imageName}`);
-        return file;
-      } catch (err) {
-        appLogger.debug(`[ZIP Mask] Error extracting ${maskPath}:`, err);
+  zipMaskState.startRequest(imageName);
+  let result: File | null = null;
+
+  try {
+    for (const maskPath of getMaskPathVariants(imageName)) {
+      const entry = findZipEntry(maskPath, imageIndex);
+      if (entry) {
+        try {
+          const file = await entry.extract();
+          zipMaskState.setCached(imageName, file);
+          result = file;
+          appLogger.info(`[ZIP Mask] Found mask for ${imageName}`);
+          return file;
+        } catch (err) {
+          appLogger.debug(`[ZIP Mask] Error extracting ${maskPath}:`, err);
+        }
       }
     }
-  }
 
-  appLogger.debug(`[ZIP Mask] No mask found for ${imageName}`);
-  return null;
+    appLogger.debug(`[ZIP Mask] No mask found for ${imageName}`);
+    return null;
+  } finally {
+    zipMaskState.completeRequest(imageName, result);
+  }
 }
 
 /**

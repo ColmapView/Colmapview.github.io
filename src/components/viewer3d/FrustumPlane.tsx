@@ -80,6 +80,7 @@ export const FrustumPlane = memo(function FrustumPlane({
       cameraFov,
       cameraProjection,
       dataset,
+      flyTransitionDuration,
       multiCamera,
       selectionAnimationSpeed,
       selectionColorMode,
@@ -120,6 +121,7 @@ export const FrustumPlane = memo(function FrustumPlane({
     isSelected,
     showImagePlane,
     viewAngleOk,
+    selectedTextureDelayMs: isSelected ? flyTransitionDuration : 0,
   });
 
   const planeSize = useMemo(() => {
@@ -135,6 +137,7 @@ export const FrustumPlane = memo(function FrustumPlane({
     cullAngleThreshold,
     viewAngleOk,
     setViewAngleOk,
+    frameSeed: image.imageId,
   });
 
   const displayColor = hovered ? VIZ_COLORS.frustum.hover : color;

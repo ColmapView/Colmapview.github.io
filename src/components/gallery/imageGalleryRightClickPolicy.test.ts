@@ -3,6 +3,30 @@ import type { CameraViewState, NavigationHistoryEntry } from '../../store/types'
 import { getImageGalleryRightClickAction } from './imageGalleryRightClickPolicy';
 
 describe('image gallery right-click policy', () => {
+  it('deselects when right-clicking the selected image without navigation history', () => {
+    expect(getImageGalleryRightClickAction({
+      imageId: 10,
+      selectedImageId: 10,
+      isMatchedImage: false,
+      currentViewState: buildViewState(1),
+      lastNavigationEntry: buildNavigationEntry(20),
+    })).toEqual({
+      type: 'deselect',
+    });
+  });
+
+  it('restores navigation before matched-image handling when right-clicking the selected navigation target', () => {
+    expect(getImageGalleryRightClickAction({
+      imageId: 10,
+      selectedImageId: 10,
+      isMatchedImage: true,
+      currentViewState: buildViewState(1),
+      lastNavigationEntry: buildNavigationEntry(10),
+    })).toEqual({
+      type: 'restoreNavigation',
+    });
+  });
+
   it('opens the selected image detail modal when clicking a matched image', () => {
     expect(getImageGalleryRightClickAction({
       imageId: 20,

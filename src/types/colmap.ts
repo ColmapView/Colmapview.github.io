@@ -129,6 +129,12 @@ export interface Reconstruction {
   rigData?: RigData;
 }
 
+export interface SplatFileSource {
+  id: string;
+  path: string;
+  file: File;
+}
+
 // File structure for loaded data
 export interface LoadedFiles {
   camerasFile?: File;
@@ -140,6 +146,7 @@ export interface LoadedFiles {
   framesFile?: File;
   imageFiles: Map<string, File>;
   splatFiles?: File[];
+  splatFileSources?: SplatFileSource[];
   hasMasks: boolean;
 }
 

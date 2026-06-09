@@ -3,6 +3,14 @@ import { persist } from 'zustand/middleware';
 import { STORAGE_KEYS } from '../migration';
 import { migrateUIPersistedState } from '../persistedStoreMigrations';
 import type { MatchesDisplayMode, AxesCoordinateSystem, AxisLabelMode } from '../types';
+import {
+  DEFAULT_GALLERY_COLUMNS,
+  type GalleryBorderColorModeSetting,
+  type GallerySortDirection,
+  type GallerySortField,
+  type GalleryThumbnailDisplayMode,
+  type GalleryViewModeSetting,
+} from '../../types/gallery';
 
 export type ViewDirection = 'reset' | 'x' | 'y' | 'z' | '-x' | '-y' | '-z';
 
@@ -120,6 +128,13 @@ export interface UIState {
 
   // Layout
   galleryCollapsed: boolean;
+  galleryViewMode: GalleryViewModeSetting;
+  galleryColumns: number;
+  galleryCameraFilter: string;
+  gallerySortField: GallerySortField;
+  gallerySortDirection: GallerySortDirection;
+  galleryBorderColorMode: GalleryBorderColorModeSetting;
+  galleryThumbnailDisplayMode: GalleryThumbnailDisplayMode;
 
   // Touch UI visibility (not persisted - transient UI state)
   touchUI: TouchUIVisibility;
@@ -184,6 +199,13 @@ export interface UIState {
   setView: (direction: ViewDirection) => void;
   setGalleryCollapsed: (collapsed: boolean) => void;
   toggleGalleryCollapsed: () => void;
+  setGalleryViewMode: (viewMode: GalleryViewModeSetting) => void;
+  setGalleryColumns: (columns: number) => void;
+  setGalleryCameraFilter: (cameraFilter: string) => void;
+  setGallerySortField: (sortField: GallerySortField) => void;
+  setGallerySortDirection: (sortDirection: GallerySortDirection) => void;
+  setGalleryBorderColorMode: (borderColorMode: GalleryBorderColorModeSetting) => void;
+  setGalleryThumbnailDisplayMode: (thumbnailDisplayMode: GalleryThumbnailDisplayMode) => void;
   setTouchUIVisible: (element: keyof TouchUIVisibility, visible: boolean) => void;
   toggleTouchUI: (element: keyof TouchUIVisibility) => void;
   setTouchUI: (visibility: Partial<TouchUIVisibility>) => void;
@@ -237,6 +259,13 @@ export const useUIStore = create<UIState>()(
       autoHideElements: { axes: true, grid: true, gizmo: true, points: false, cameras: false, matches: false, rigs: false, buttons: true },
       isIdle: false,
       galleryCollapsed: false,
+      galleryViewMode: 'auto',
+      galleryColumns: DEFAULT_GALLERY_COLUMNS,
+      galleryCameraFilter: 'all',
+      gallerySortField: 'name',
+      gallerySortDirection: 'asc',
+      galleryBorderColorMode: 'auto',
+      galleryThumbnailDisplayMode: 'image',
       touchUI: {
         statusBar: true,
         galleryFAB: true,
@@ -295,6 +324,13 @@ export const useUIStore = create<UIState>()(
       })),
       setGalleryCollapsed: (galleryCollapsed) => set({ galleryCollapsed }),
       toggleGalleryCollapsed: () => set((state) => ({ galleryCollapsed: !state.galleryCollapsed })),
+      setGalleryViewMode: (galleryViewMode) => set({ galleryViewMode }),
+      setGalleryColumns: (galleryColumns) => set({ galleryColumns }),
+      setGalleryCameraFilter: (galleryCameraFilter) => set({ galleryCameraFilter }),
+      setGallerySortField: (gallerySortField) => set({ gallerySortField }),
+      setGallerySortDirection: (gallerySortDirection) => set({ gallerySortDirection }),
+      setGalleryBorderColorMode: (galleryBorderColorMode) => set({ galleryBorderColorMode }),
+      setGalleryThumbnailDisplayMode: (galleryThumbnailDisplayMode) => set({ galleryThumbnailDisplayMode }),
       setTouchUIVisible: (element, visible) => set((state) => ({
         touchUI: { ...state.touchUI, [element]: visible },
       })),
@@ -334,7 +370,7 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: STORAGE_KEYS.ui,
-      version: 12,
+      version: 13,
       migrate: (persistedState, version) =>
         migrateUIPersistedState(persistedState, version, DEFAULT_CONTEXT_MENU_ACTIONS),
       partialize: (state) => ({
@@ -358,6 +394,13 @@ export const useUIStore = create<UIState>()(
         idleHideTimeout: state.idleHideTimeout,
         autoHideElements: state.autoHideElements,
         galleryCollapsed: state.galleryCollapsed,
+        galleryViewMode: state.galleryViewMode,
+        galleryColumns: state.galleryColumns,
+        galleryCameraFilter: state.galleryCameraFilter,
+        gallerySortField: state.gallerySortField,
+        gallerySortDirection: state.gallerySortDirection,
+        galleryBorderColorMode: state.galleryBorderColorMode,
+        galleryThumbnailDisplayMode: state.galleryThumbnailDisplayMode,
         contextMenuActions: state.contextMenuActions,
       }),
     }

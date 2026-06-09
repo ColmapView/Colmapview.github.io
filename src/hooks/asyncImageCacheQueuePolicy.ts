@@ -1,12 +1,17 @@
 export const MAX_PENDING_IMAGE_ITEMS = 50;
 export const PENDING_BACKPRESSURE_BATCH_SIZE = 10;
 export const MIN_PENDING_ITEMS_PER_IDLE_CALLBACK = 1;
+export const PENDING_PROCESSING_TIME_SLICE_MS = 8;
+export const IDLE_PENDING_PROCESSING_BATCH_SIZE = 2;
+export const BULK_PENDING_PROCESSING_BATCH_SIZE = 2;
 export const IDLE_LOG_CALL_INTERVAL = 100;
 export const IDLE_LOG_INTERVAL_MS = 10_000;
 
 export interface PendingProcessingDecision {
   processedCount: number;
   maxItems?: number;
+  elapsedMs?: number;
+  maxElapsedMs?: number;
   timeRemaining?: number;
   idleDeadlineBuffer: number;
   minItemsPerCallback?: number;
@@ -32,11 +37,22 @@ export function shouldScheduleIdleProcessing(isScheduled: boolean, isPaused: boo
 export function shouldProcessNextPendingItem({
   processedCount,
   maxItems,
+  elapsedMs,
+  maxElapsedMs,
   timeRemaining,
   idleDeadlineBuffer,
   minItemsPerCallback = MIN_PENDING_ITEMS_PER_IDLE_CALLBACK,
 }: PendingProcessingDecision): boolean {
   if (maxItems !== undefined && processedCount >= maxItems) {
+    return false;
+  }
+
+  if (
+    processedCount >= minItemsPerCallback &&
+    maxElapsedMs !== undefined &&
+    elapsedMs !== undefined &&
+    elapsedMs >= maxElapsedMs
+  ) {
     return false;
   }
 

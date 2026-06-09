@@ -1,4 +1,17 @@
 import type { PointCloudState } from './stores/pointCloudStore';
+import {
+  DEFAULT_GALLERY_COLUMNS,
+  GALLERY_BORDER_COLOR_MODE_SETTINGS,
+  GALLERY_SORT_DIRECTIONS,
+  GALLERY_SORT_FIELDS,
+  GALLERY_THUMBNAIL_DISPLAY_MODES,
+  GALLERY_VIEW_MODE_SETTINGS,
+  type GalleryBorderColorModeSetting,
+  type GallerySortDirection,
+  type GallerySortField,
+  type GalleryThumbnailDisplayMode,
+  type GalleryViewModeSetting,
+} from '../types/gallery';
 import { isSplatColorMode } from './types';
 import type {
   AxesCoordinateSystem,
@@ -36,6 +49,15 @@ function getBoolean(value: unknown): boolean | undefined {
 
 function getNumber(value: unknown): number | undefined {
   return typeof value === 'number' ? value : undefined;
+}
+
+function getStringEnum<T extends readonly string[]>(
+  value: unknown,
+  values: T
+): T[number] | undefined {
+  return typeof value === 'string' && values.some(candidate => candidate === value)
+    ? value
+    : undefined;
 }
 
 function getColorMode(value: unknown): ColorMode | undefined {
@@ -206,6 +228,40 @@ function getAxisLabelMode(value: unknown): AxisLabelMode | undefined {
     default:
       return undefined;
   }
+}
+
+function getGalleryViewModeSetting(value: unknown): GalleryViewModeSetting | undefined {
+  return getStringEnum(value, GALLERY_VIEW_MODE_SETTINGS);
+}
+
+function getGallerySortField(value: unknown): GallerySortField | undefined {
+  return getStringEnum(value, GALLERY_SORT_FIELDS);
+}
+
+function getGallerySortDirection(value: unknown): GallerySortDirection | undefined {
+  return getStringEnum(value, GALLERY_SORT_DIRECTIONS);
+}
+
+function getGalleryBorderColorModeSetting(value: unknown): GalleryBorderColorModeSetting | undefined {
+  return getStringEnum(value, GALLERY_BORDER_COLOR_MODE_SETTINGS);
+}
+
+function getGalleryThumbnailDisplayMode(value: unknown): GalleryThumbnailDisplayMode | undefined {
+  return getStringEnum(value, GALLERY_THUMBNAIL_DISPLAY_MODES);
+}
+
+function getGalleryColumns(value: unknown): number | undefined {
+  const columns = getNumber(value);
+  if (columns === undefined || !Number.isFinite(columns)) return undefined;
+  return Math.min(10, Math.max(1, Math.round(columns)));
+}
+
+function getGalleryCameraFilter(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(Math.trunc(value));
+  }
+  return undefined;
 }
 
 function getMaxReprojectionError(value: unknown, fallback: number): number {
@@ -397,6 +453,14 @@ export function migrateUIPersistedState(
       autoHideElements.gizmo = true;
     }
   }
+
+  state.galleryViewMode = getGalleryViewModeSetting(state.galleryViewMode) ?? 'auto';
+  state.galleryColumns = getGalleryColumns(state.galleryColumns) ?? DEFAULT_GALLERY_COLUMNS;
+  state.galleryCameraFilter = getGalleryCameraFilter(state.galleryCameraFilter) ?? 'all';
+  state.gallerySortField = getGallerySortField(state.gallerySortField) ?? 'name';
+  state.gallerySortDirection = getGallerySortDirection(state.gallerySortDirection) ?? 'asc';
+  state.galleryBorderColorMode = getGalleryBorderColorModeSetting(state.galleryBorderColorMode) ?? 'auto';
+  state.galleryThumbnailDisplayMode = getGalleryThumbnailDisplayMode(state.galleryThumbnailDisplayMode) ?? 'image';
 
   return state;
 }

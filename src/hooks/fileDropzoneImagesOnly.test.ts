@@ -7,6 +7,7 @@ describe('file dropzone images-only load helper', () => {
     const image = buildFile('frame.jpg');
     const splatFile = buildFile('scene.ply', 'splat');
     const splatFiles = [splatFile];
+    const splatFileSources = [{ id: 'scene.ply', path: 'scene.ply', file: splatFile }];
     const imageFiles = new Map([['frame.jpg', image]]);
     const calls: string[] = [];
     const setUrlProgress = vi.fn((progress) => calls.push(`progress:${progress.message}`));
@@ -23,6 +24,7 @@ describe('file dropzone images-only load helper', () => {
       hasMasks: true,
       splatFile,
       splatFiles,
+      splatFileSources,
       mapProgress: (percent) => percent + 10,
       setUrlProgress,
       setLoadedFiles,
@@ -41,8 +43,9 @@ describe('file dropzone images-only load helper', () => {
       message: 'Creating image gallery...',
     });
     expect(setUrlProgress).toHaveBeenNthCalledWith(2, {
-      percent: 105,
-      message: 'Finalizing...',
+      percent: 70,
+      message: 'Preparing splat renderer...',
+      currentFile: 'scene.ply',
     });
     expect(setLoadedFiles).toHaveBeenCalledWith({
       camerasFile: undefined,
@@ -50,6 +53,7 @@ describe('file dropzone images-only load helper', () => {
       points3DFile: undefined,
       splatFile,
       splatFiles,
+      splatFileSources,
       databaseFile: undefined,
       rigsFile: undefined,
       framesFile: undefined,
@@ -69,7 +73,7 @@ describe('file dropzone images-only load helper', () => {
       'clearSplatPsnr',
       'loadedFiles',
       'clearCaches',
-      'progress:Finalizing...',
+      'progress:Preparing splat renderer...',
       'reconstruction',
       'resetView',
       'notification',

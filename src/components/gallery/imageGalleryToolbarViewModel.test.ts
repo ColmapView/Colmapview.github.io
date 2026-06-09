@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   GALLERY_SORT_FIELD_OPTIONS,
   GALLERY_BORDER_COLOR_OPTIONS,
+  GALLERY_THUMBNAIL_DISPLAY_OPTIONS,
   getGalleryCameraFilterValue,
   getGalleryBorderColorModeValue,
   getGallerySortFieldOptions,
   getGallerySortFieldValue,
+  getGalleryThumbnailDisplayModeValue,
 } from './imageGalleryToolbarViewModel';
 
 const cameras = [
@@ -62,6 +64,22 @@ describe('image gallery toolbar view model', () => {
     expect(getGalleryBorderColorModeValue('none')).toBe('none');
     expect(getGalleryBorderColorModeValue('psnr')).toBe('psnr');
     expect(getGalleryBorderColorModeValue('unexpected')).toBeNull();
+  });
+
+  it('defines and narrows gallery thumbnail display modes', () => {
+    expect(GALLERY_THUMBNAIL_DISPLAY_OPTIONS.map(option => option.value)).toEqual([
+      'image',
+      'maskedImage',
+      'inverseMaskedImage',
+      'mask',
+      'hoverMask',
+    ]);
+    expect(getGalleryThumbnailDisplayModeValue('image')).toBe('image');
+    expect(getGalleryThumbnailDisplayModeValue('maskedImage')).toBe('maskedImage');
+    expect(getGalleryThumbnailDisplayModeValue('inverseMaskedImage')).toBe('inverseMaskedImage');
+    expect(getGalleryThumbnailDisplayModeValue('mask')).toBe('mask');
+    expect(getGalleryThumbnailDisplayModeValue('hoverMask')).toBe('hoverMask');
+    expect(getGalleryThumbnailDisplayModeValue('unexpected')).toBeNull();
   });
 
   it('narrows raw camera filter values to all or known camera ids', () => {

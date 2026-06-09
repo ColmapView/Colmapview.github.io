@@ -37,6 +37,29 @@ describe('async image cache queue policy', () => {
     })).toBe(true);
   });
 
+  it('keeps one pending item per callback before honoring elapsed time pressure', () => {
+    expect(shouldProcessNextPendingItem({
+      processedCount: 0,
+      elapsedMs: 12,
+      maxElapsedMs: 8,
+      idleDeadlineBuffer: 5,
+    })).toBe(true);
+
+    expect(shouldProcessNextPendingItem({
+      processedCount: 1,
+      elapsedMs: 8,
+      maxElapsedMs: 8,
+      idleDeadlineBuffer: 5,
+    })).toBe(false);
+
+    expect(shouldProcessNextPendingItem({
+      processedCount: 1,
+      elapsedMs: 7,
+      maxElapsedMs: 8,
+      idleDeadlineBuffer: 5,
+    })).toBe(true);
+  });
+
   it('stops pending processing at the explicit backpressure batch limit', () => {
     expect(shouldProcessNextPendingItem({
       processedCount: PENDING_BACKPRESSURE_BATCH_SIZE - 1,

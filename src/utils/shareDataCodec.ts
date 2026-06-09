@@ -40,6 +40,9 @@ export interface ShareConfig {
   ui?: Record<string, unknown>;
   camera?: Record<string, unknown>;
   rig?: Record<string, unknown>;
+  splat?: {
+    activeSourceId?: string;
+  };
   transform?: Sim3dEuler;
 }
 
@@ -76,6 +79,12 @@ function isSim3dEuler(value: unknown): value is Sim3dEuler {
   );
 }
 
+function isShareSplatConfig(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isObjectRecord(value)) return false;
+  return value.activeSourceId === undefined || typeof value.activeSourceId === 'string';
+}
+
 function isShareConfig(value: unknown): value is ShareConfig {
   if (!isObjectRecord(value)) return false;
   return (
@@ -83,6 +92,7 @@ function isShareConfig(value: unknown): value is ShareConfig {
     isOptionalConfigRecord(value.ui) &&
     isOptionalConfigRecord(value.camera) &&
     isOptionalConfigRecord(value.rig) &&
+    isShareSplatConfig(value.splat) &&
     (value.transform === undefined || isSim3dEuler(value.transform))
   );
 }

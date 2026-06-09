@@ -68,6 +68,31 @@ describe('URL loader ZIP source helpers', () => {
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Successfully loaded reconstruction from ZIP');
   });
 
+  it('leaves completion progress to the renderer when a ZIP contains a splat', async () => {
+    const archive = buildArchiveReader();
+    const imageIndex = new Map<string, ReturnType<typeof buildArchiveEntry>>();
+    const splatFile = buildFile('scene.spz', 'splat');
+    const colmapFiles = new Map([
+      ['sparse/0/cameras.bin', buildFile('cameras.bin')],
+      ['sparse/0/images.bin', buildFile('images.bin')],
+      ['sparse/0/points3D.bin', buildFile('points3D.bin')],
+      ['splats/scene.spz', splatFile],
+    ]);
+    const deps = {
+      loadZip: vi.fn(async () => ({ colmapFiles, imageIndex, archive, fileSize: 1024, imageCount: 0 })),
+      log: vi.fn(),
+      processFiles: vi.fn(async () => {}),
+      setActiveArchive: vi.fn(),
+      setSourceInfo: vi.fn(),
+      setUrlProgress: vi.fn(),
+    };
+
+    await expect(loadZipUrlSource('https://example.com/scene.zip', deps)).resolves.toBe(true);
+
+    expect(deps.processFiles).toHaveBeenCalledWith(colmapFiles, { start: 80, end: 100 }, { throwOnError: true });
+    expect(deps.setUrlProgress).not.toHaveBeenCalledWith({ percent: 100, message: 'Complete' });
+  });
+
   it('propagates ZIP load failures before activating archive state', async () => {
     const error = new Error('download failed');
     const deps = {

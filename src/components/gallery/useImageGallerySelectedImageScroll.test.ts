@@ -77,7 +77,7 @@ describe('useImageGallerySelectedImageScroll', () => {
 
     expect(rowVirtualizer.scrollToIndex).toHaveBeenCalledWith(2, {
       align: 'center',
-      behavior: 'smooth',
+      behavior: 'auto',
     });
     expect(listVirtualizer.scrollToIndex).not.toHaveBeenCalled();
   });
@@ -97,7 +97,7 @@ describe('useImageGallerySelectedImageScroll', () => {
 
     expect(listVirtualizer.scrollToIndex).toHaveBeenCalledWith(2, {
       align: 'center',
-      behavior: 'smooth',
+      behavior: 'auto',
     });
     expect(rowVirtualizer.scrollToIndex).not.toHaveBeenCalled();
   });

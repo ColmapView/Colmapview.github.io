@@ -1,4 +1,5 @@
 import type { ColmapManifest, UrlLoadProgress } from '../types/manifest';
+import { findSplatFileSources } from '../utils/fileClassification';
 import { appLogger } from '../utils/logger';
 import {
   getManifestLoadSourceInfo,
@@ -63,7 +64,9 @@ export async function loadManifestSource(
   log('[URL Loader] Calling processFiles...');
   await deps.processFiles(files, { start: 80, end: 100 }, { throwOnError: true });
 
-  deps.setUrlProgress({ percent: 100, message: 'Complete' });
+  if (findSplatFileSources(files).length === 0) {
+    deps.setUrlProgress({ percent: 100, message: 'Complete' });
+  }
   log(`[URL Loader] Successfully loaded ${files.size} files from ${sourceInfo.successLabel}`);
 
   return true;
