@@ -166,6 +166,33 @@ describe('URL loader manifest fetch helpers', () => {
     expect([...files.keys()]).toContain('splats/large.ply');
     expect(fetchFile).toHaveBeenCalledWith('https://example.com/dataset', 'splats/small.ply');
     expect(fetchFile).toHaveBeenCalledWith('https://example.com/dataset', 'splats/large.ply');
+    expect(setUrlProgress).toHaveBeenCalledWith({
+      percent: 30,
+      message: 'Downloading splat files...',
+      filesDownloaded: 0,
+      totalFiles: 2,
+    });
+    const splatProgressUpdates = setUrlProgress.mock.calls
+      .map(([progress]) => progress)
+      .filter((progress) =>
+        progress?.message === 'Downloading splat files...' && progress.currentFile
+      );
+    expect(splatProgressUpdates).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        percent: 55,
+        filesDownloaded: 1,
+        totalFiles: 2,
+      }),
+      expect.objectContaining({
+        percent: 80,
+        filesDownloaded: 2,
+        totalFiles: 2,
+      }),
+    ]));
+    expect(splatProgressUpdates.map((progress) => progress.currentFile).sort()).toEqual([
+      'splats/large.ply',
+      'splats/small.ply',
+    ]);
     expect(log).toHaveBeenCalledWith('[URL Loader] Optional file loaded: splats/small.ply');
     expect(log).toHaveBeenCalledWith('[URL Loader] Optional file loaded: splats/large.ply');
   });

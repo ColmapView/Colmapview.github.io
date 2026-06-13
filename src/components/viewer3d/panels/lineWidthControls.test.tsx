@@ -54,8 +54,7 @@ describe('viewer line width controls', () => {
         setUndistortionEnabled={vi.fn()}
         autoFovEnabled={true}
         setAutoFovEnabled={vi.fn()}
-        hasActiveSplat={false}
-        splatPsnrFrameReady={false}
+        splatMetricVisualizationsAvailable={false}
         onCycleCameraDisplayMode={vi.fn()}
       />
     );

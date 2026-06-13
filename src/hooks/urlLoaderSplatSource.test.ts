@@ -42,25 +42,28 @@ describe('URL loader splat source helpers', () => {
 
     await expect(loadSplatUrlSource('https://example.com/scene.spz', deps)).resolves.toBe(true);
 
-    expect(deps.log).toHaveBeenNthCalledWith(1, '[URL Loader] Loading splat from URL: https://example.com/scene.spz');
+    expect(deps.log).toHaveBeenNthCalledWith(1, '[URL Loader] Loading splat or point cloud from URL: https://example.com/scene.spz');
     expect(deps.fetchSplatFile).toHaveBeenCalledWith('https://example.com/scene.spz');
     expect(deps.setUrlProgress).toHaveBeenNthCalledWith(1, {
       percent: 5,
-      message: 'Downloading splat file...',
+      message: 'Downloading 3D file...',
     });
     expect(deps.setUrlProgress).toHaveBeenNthCalledWith(2, {
       percent: 80,
-      message: 'Parsing splat scene...',
+      message: 'Parsing 3D scene...',
       currentFile: 'scene.spz',
     });
     expect(deps.setSourceInfo).toHaveBeenCalledWith('url', 'https://example.com/scene.spz', null, null);
     expect(deps.processFiles).toHaveBeenCalledWith(
       new Map([['scene.spz', splatFile]]),
       { start: 80, end: 100 },
-      { throwOnError: true }
+      {
+        replaceSplatScene: true,
+        throwOnError: true,
+      }
     );
     expect(deps.setUrlProgress).not.toHaveBeenCalledWith({ percent: 100, message: 'Complete' });
-    expect(deps.log).toHaveBeenCalledWith('[URL Loader] Successfully loaded splat from URL: scene.spz');
+    expect(deps.log).toHaveBeenCalledWith('[URL Loader] Successfully loaded 3D file from URL: scene.spz');
   });
 
   it('propagates direct splat fetch failures before processing files', async () => {

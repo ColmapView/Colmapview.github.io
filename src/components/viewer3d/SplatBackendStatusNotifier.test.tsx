@@ -31,7 +31,7 @@ describe('SplatBackendStatusNotifier', () => {
     expect(addNotification).toHaveBeenCalledTimes(1);
     expect(addNotification).toHaveBeenLastCalledWith(
       'warning',
-      'WebGPU splat renderer unavailable: WebGPU is unsupported in this browser'
+      'WebGPU splat renderer unavailable: WebGPU is unsupported in this browser. Enable WebGPU in your browser, or use a WebGPU-capable browser, for full features.'
     );
 
     rerender(
@@ -96,6 +96,32 @@ describe('SplatBackendStatusNotifier', () => {
     expect(addNotification).toHaveBeenCalledWith(
       'warning',
       'Using Spark fallback: WebGPU splat renderer failed to initialize: adapter lost'
+    );
+  });
+
+  it('adds a full-features warning when auto mode uses Spark because WebGPU is unsupported', () => {
+    const addNotification = vi.fn(() => 'notification-1');
+    const fallbackResolution: SplatBackendResolution = {
+      status: 'resolved',
+      requested: 'auto',
+      backend: 'spark',
+      gpuPsnr: false,
+      reason: 'Spark fallback selected because WebGPU is unsupported',
+    };
+
+    render(
+      <SplatBackendStatusNotifier
+        addNotification={addNotification}
+        requestedBackend="auto"
+        splatBackendResolution={fallbackResolution}
+        splatFile={new File(['x'], 'scene.spz')}
+        webGpuSplatCanvasMounted={false}
+      />
+    );
+
+    expect(addNotification).toHaveBeenCalledWith(
+      'warning',
+      'Using Spark fallback: WebGPU is unsupported. Enable WebGPU in your browser, or use a WebGPU-capable browser, for full features.'
     );
   });
 });

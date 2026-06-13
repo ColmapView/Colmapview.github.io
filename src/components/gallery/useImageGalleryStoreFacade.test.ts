@@ -5,6 +5,7 @@ import {
   useDeletionStore,
   useImageMetricsStore,
   useReconstructionStore,
+  useSplatBackendStore,
   useUIStore,
 } from '../../store';
 import type { CameraViewState, NavigationHistoryEntry } from '../../store/types';
@@ -30,6 +31,7 @@ describe('useImageGalleryStoreFacade', () => {
     useCameraStore.setState(useCameraStore.getInitialState(), true);
     useDeletionStore.setState(useDeletionStore.getInitialState(), true);
     useImageMetricsStore.setState(useImageMetricsStore.getInitialState(), true);
+    useSplatBackendStore.setState(useSplatBackendStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
   });
 

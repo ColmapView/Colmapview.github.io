@@ -4,11 +4,13 @@ import {
   useDeletionStore,
   useImageMetricsStore,
   useReconstructionStore,
+  useSplatBackendStore,
   useUIStore,
   type CameraState,
   type DeletionState,
   type UIState,
 } from '../../store';
+import { shouldExposeSplatMetricVisualizations } from '../../utils/splatBackendPolicy';
 import type { Reconstruction } from '../../types/colmap';
 
 interface ImageGalleryDataFacade {
@@ -29,6 +31,7 @@ interface ImageGalleryDataFacade {
   isIdle: UIState['isIdle'];
   showAutoHideEditor: UIState['showAutoHideEditor'];
   pendingDeletions: DeletionState['pendingDeletions'];
+  splatMetricVisualizationsAvailable: boolean;
   splatPsnrFrameReady: ReturnType<typeof useImageMetricsStore.getState>['splatPsnrFrameReady'];
   splatPsnrByImage: ReturnType<typeof useImageMetricsStore.getState>['splatPsnrMetrics'];
   activeSplatFile?: File;
@@ -90,8 +93,17 @@ export function useImageGalleryStoreFacade(): ImageGalleryStoreFacade {
   const showAutoHideEditor = useUIStore((s) => s.showAutoHideEditor);
   const pendingDeletions = useDeletionStore((s) => s.pendingDeletions);
   const activeSplatFile = useReconstructionStore((s) => s.loadedFiles?.splatFile);
+  const splatBackendResolution = useSplatBackendStore((s) => s.resolution);
+  const splatMetricAvailability = useSplatBackendStore((s) => s.metricAvailability);
+  const splatMetricCapability = useSplatBackendStore((s) => s.metricCapability);
   const splatPsnrFrameReady = useImageMetricsStore((s) => s.splatPsnrFrameReady);
   const splatPsnrByImage = useImageMetricsStore((s) => s.splatPsnrMetrics);
+  const splatMetricVisualizationsAvailable = shouldExposeSplatMetricVisualizations({
+    activeSplatFile,
+    resolution: splatBackendResolution,
+    metricAvailability: splatMetricAvailability,
+    metricCapability: splatMetricCapability,
+  });
   const selectedImageId = useCameraStore((s) => s.selectedImageId);
   const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
   const flyToImage = useCameraStore((s) => s.flyToImage);
@@ -121,6 +133,7 @@ export function useImageGalleryStoreFacade(): ImageGalleryStoreFacade {
       isIdle,
       showAutoHideEditor,
       pendingDeletions,
+      splatMetricVisualizationsAvailable,
       splatPsnrFrameReady,
       splatPsnrByImage,
       activeSplatFile,

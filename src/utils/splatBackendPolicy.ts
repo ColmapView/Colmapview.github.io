@@ -38,12 +38,14 @@ export type SplatBackendResolution = ResolvedSplatBackend | UnavailableSplatBack
 
 export interface AvailableSplatMetricCapability {
   status: 'available';
-  gpuPsnr: true;
+  backend: SplatRenderBackend;
+  gpuPsnr: boolean;
   reason: string;
 }
 
 export interface UnavailableSplatMetricCapability {
   status: 'unavailable';
+  backend: null;
   gpuPsnr: false;
   reason: string;
 }
@@ -62,6 +64,18 @@ export const DEFAULT_SPLAT_METRIC_AVAILABILITY: SplatMetricAvailability = {
   webGpu: 'unavailable',
   webGpuFailureReason: null,
 };
+
+export const FIREFOX_LINUX_WEBGPU_UNSUPPORTED_REASON =
+  'Firefox on Linux does not provide reliable WebGPU support for splat rendering';
+
+export interface BrowserWebGpuCompatibilityNavigator {
+  gpu?: unknown;
+  platform?: string;
+  userAgent?: string;
+  userAgentData?: {
+    platform?: string;
+  };
+}
 
 export function isSplatBackendPreference(value: string | null | undefined): value is SplatBackendPreference {
   return SPLAT_BACKEND_PREFERENCES.includes(value as SplatBackendPreference);
@@ -82,8 +96,33 @@ export function getInitialSplatBackendPreference(): SplatBackendPreference {
   return parseSplatBackendPreference(window.location.search);
 }
 
+export function getBrowserWebGpuCompatibilityBlockReason(
+  navigatorLike: BrowserWebGpuCompatibilityNavigator | null | undefined = getCurrentBrowserNavigator()
+): string | null {
+  if (!navigatorLike) {
+    return null;
+  }
+
+  const userAgent = navigatorLike.userAgent ?? '';
+  const platform = [
+    navigatorLike.userAgentData?.platform,
+    navigatorLike.platform,
+    userAgent,
+  ].filter(Boolean).join(' ');
+
+  if (isFirefox(userAgent) && isDesktopLinux(platform)) {
+    return FIREFOX_LINUX_WEBGPU_UNSUPPORTED_REASON;
+  }
+
+  return null;
+}
+
 export function getBrowserWebGpuBackendState(): WebGpuSplatBackendState {
-  if (typeof navigator === 'undefined' || !navigator.gpu) {
+  const browserNavigator = getCurrentBrowserNavigator();
+  if (
+    !browserNavigator?.gpu ||
+    getBrowserWebGpuCompatibilityBlockReason(browserNavigator)
+  ) {
     return 'unsupported';
   }
 
@@ -93,7 +132,11 @@ export function getBrowserWebGpuBackendState(): WebGpuSplatBackendState {
 }
 
 export function getBrowserWebGpuMetricState(): WebGpuSplatMetricState {
-  if (typeof navigator === 'undefined' || !navigator.gpu) {
+  const browserNavigator = getCurrentBrowserNavigator();
+  if (
+    !browserNavigator?.gpu ||
+    getBrowserWebGpuCompatibilityBlockReason(browserNavigator)
+  ) {
     return 'unsupported';
   }
 
@@ -154,10 +197,7 @@ export function resolveSplatBackend(
     };
   }
 
-  if (
-    availability.spark
-    && (availability.webGpu === 'unsupported' || availability.webGpu === 'failed')
-  ) {
+  if (availability.spark) {
     return {
       status: 'resolved',
       requested,
@@ -187,16 +227,27 @@ export function shouldPreloadSparkSplatRuntime(
   return requested === 'spark'
     || (
       requested === 'auto'
-      && (availability.webGpu === 'unsupported' || availability.webGpu === 'failed')
+      && availability.webGpu !== 'ready'
     );
 }
 
 export function resolveSplatMetricCapability(
-  availability: SplatMetricAvailability
+  availability: SplatMetricAvailability,
+  resolution?: SplatBackendResolution
 ): SplatMetricCapability {
+  if (resolution?.status === 'resolved' && resolution.backend === 'spark') {
+    return {
+      status: 'available',
+      backend: 'spark',
+      gpuPsnr: false,
+      reason: 'Spark PSNR/SSIM metric capability is ready',
+    };
+  }
+
   if (availability.webGpu === 'ready') {
     return {
       status: 'available',
+      backend: 'webgpu',
       gpuPsnr: true,
       reason: 'WebGPU PSNR metric capability is ready',
     };
@@ -204,29 +255,68 @@ export function resolveSplatMetricCapability(
 
   return {
     status: 'unavailable',
+    backend: null,
     gpuPsnr: false,
     reason: getWebGpuMetricUnavailableReason(availability),
   };
 }
 
+export function shouldExposeSplatMetricVisualizations({
+  activeSplatFile,
+  resolution,
+  metricAvailability,
+  metricCapability,
+}: {
+  activeSplatFile?: unknown | null;
+  resolution: SplatBackendResolution;
+  metricAvailability?: SplatMetricAvailability;
+  metricCapability: SplatMetricCapability;
+}): boolean {
+  if (!activeSplatFile) {
+    return false;
+  }
+
+  if (
+    resolution.requested === 'spark'
+    || (resolution.status === 'resolved' && resolution.backend === 'spark')
+  ) {
+    return false;
+  }
+
+  if (metricCapability.gpuPsnr) {
+    return true;
+  }
+
+  return metricCapability.status === 'unavailable'
+    && (
+      metricAvailability?.webGpu === 'unavailable'
+      || metricCapability.reason === 'Preparing WebGPU PSNR'
+    );
+}
+
 function getAutoSparkFallbackReason(availability: SplatBackendAvailability): string {
   switch (availability.webGpu) {
     case 'unsupported':
-      return 'Spark fallback selected because WebGPU is unsupported';
+      return availability.webGpuFailureReason
+        ? `Spark fallback selected because ${availability.webGpuFailureReason}`
+        : 'Spark fallback selected because WebGPU is unsupported';
     case 'failed':
       return availability.webGpuFailureReason
         ? `Spark fallback selected because WebGPU splat renderer failed to initialize: ${availability.webGpuFailureReason}`
         : 'Spark fallback selected because WebGPU splat renderer failed to initialize';
     case 'unavailable':
+      return availability.webGpuFailureReason
+        ? `Spark compatibility renderer active because ${availability.webGpuFailureReason}`
+        : 'Spark compatibility renderer active while WebGPU initializes';
     case 'ready':
-      return 'Spark fallback selected because WebGPU splat renderer is unavailable';
+      return 'Spark compatibility renderer active';
   }
 }
 
 function getWebGpuUnavailableReason(availability: SplatBackendAvailability): string {
   switch (availability.webGpu) {
     case 'unsupported':
-      return 'WebGPU is unsupported in this browser';
+      return availability.webGpuFailureReason ?? 'WebGPU is unsupported in this browser';
     case 'failed':
       return availability.webGpuFailureReason
         ? `WebGPU splat renderer failed to initialize: ${availability.webGpuFailureReason}`
@@ -241,7 +331,7 @@ function getWebGpuUnavailableReason(availability: SplatBackendAvailability): str
 function getWebGpuMetricUnavailableReason(availability: SplatMetricAvailability): string {
   switch (availability.webGpu) {
     case 'unsupported':
-      return 'WebGPU is unsupported in this browser';
+      return availability.webGpuFailureReason ?? 'WebGPU is unsupported in this browser';
     case 'failed':
       return availability.webGpuFailureReason
         ? `WebGPU PSNR failed to initialize: ${availability.webGpuFailureReason}`
@@ -251,4 +341,20 @@ function getWebGpuMetricUnavailableReason(availability: SplatMetricAvailability)
     case 'ready':
       return 'WebGPU PSNR metric capability is ready';
   }
+}
+
+function getCurrentBrowserNavigator(): BrowserWebGpuCompatibilityNavigator | null {
+  if (typeof navigator === 'undefined') {
+    return null;
+  }
+
+  return navigator as BrowserWebGpuCompatibilityNavigator;
+}
+
+function isFirefox(userAgent: string): boolean {
+  return /\bFirefox\/\d+/i.test(userAgent);
+}
+
+function isDesktopLinux(platform: string): boolean {
+  return /(\bLinux\b|\bUbuntu\b|\bX11\b)/i.test(platform) && !/\bAndroid\b/i.test(platform);
 }

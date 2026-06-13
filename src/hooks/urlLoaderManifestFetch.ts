@@ -12,6 +12,7 @@ import {
   getFilenameFromUrl,
 } from '../utils/urlUtils';
 import { appLogger } from '../utils/logger';
+import { isSplatFilePath } from '../utils/splatFilePolicy';
 import {
   getDirectoryListingLinks,
   getDirectoryListingRootUrl,
@@ -325,6 +326,8 @@ export async function fetchManifestColmapFiles(
 
   const totalFiles = requiredFiles.length;
   let downloadedCount = 0;
+  const optionalSplatFileTotal = optionalFiles.filter(({ path }) => isSplatFilePath(path)).length;
+  let optionalSplatDownloadedCount = 0;
 
   deps.setUrlProgress({
     percent: 5,
@@ -363,8 +366,18 @@ export async function fetchManifestColmapFiles(
   }
 
   if (optionalFiles.length > 0) {
+    if (optionalSplatFileTotal > 0) {
+      deps.setUrlProgress({
+        percent: 30,
+        message: 'Downloading splat files...',
+        filesDownloaded: 0,
+        totalFiles: optionalSplatFileTotal,
+      });
+    }
+
     const optionalResults = await Promise.all(
       optionalFiles.map(async ({ key, path }) => {
+        const isSplatFile = isSplatFilePath(path);
         try {
           const file = await fetchFile(baseUrl, path);
           log(`[URL Loader] Optional file loaded: ${path}`);
@@ -372,6 +385,17 @@ export async function fetchManifestColmapFiles(
         } catch {
           log(`[URL Loader] Optional file not found: ${path}`);
           return null;
+        } finally {
+          if (isSplatFile) {
+            optionalSplatDownloadedCount += 1;
+            deps.setUrlProgress({
+              percent: 30 + Math.round((optionalSplatDownloadedCount / optionalSplatFileTotal) * 50),
+              message: 'Downloading splat files...',
+              currentFile: path,
+              filesDownloaded: optionalSplatDownloadedCount,
+              totalFiles: optionalSplatFileTotal,
+            });
+          }
         }
       })
     );

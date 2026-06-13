@@ -115,14 +115,19 @@ export function useViewerControlsController(): ViewerControlsController {
   } = useSyncedHslColor(camerasNode.singleColor, camerasActions.setSingleColor);
 
   const requestSplatCameraColorDefault = useCallback(() => {
+    if (!metrics.splatMetricVisualizationsAvailable) {
+      return;
+    }
+
     camerasActions.setColorMode('splatPsnr');
-  }, [camerasActions]);
+  }, [camerasActions, metrics.splatMetricVisualizationsAvailable]);
 
   const requestDefaultSplatCameraColor = useCallback((nextColorMode: ColorMode) => {
     if (
       !isSplatColorMode(nextColorMode) ||
       isSplatColorMode(pointsNode.colorMode) ||
-      !splats.activeSplatFile
+      !splats.activeSplatFile ||
+      !metrics.splatMetricVisualizationsAvailable
     ) {
       return;
     }
@@ -131,6 +136,7 @@ export function useViewerControlsController(): ViewerControlsController {
   }, [
     pointsNode.colorMode,
     requestSplatCameraColorDefault,
+    metrics.splatMetricVisualizationsAvailable,
     splats.activeSplatFile,
   ]);
 
@@ -215,7 +221,11 @@ export function useViewerControlsController(): ViewerControlsController {
 
   useEffect(() => {
     const activeSplatFile = splats.activeSplatFile ?? null;
-    if (!activeSplatFile || !isSplatColorMode(pointsNode.colorMode)) {
+    if (
+      !activeSplatFile ||
+      !isSplatColorMode(pointsNode.colorMode) ||
+      !metrics.splatMetricVisualizationsAvailable
+    ) {
       initialSplatCameraColorDefaultFileRef.current = null;
       return;
     }
@@ -232,23 +242,24 @@ export function useViewerControlsController(): ViewerControlsController {
     requestSplatCameraColorDefault();
   }, [
     camerasNode.colorMode,
+    metrics.splatMetricVisualizationsAvailable,
     pointsNode.colorMode,
     requestSplatCameraColorDefault,
     splats.activeSplatFile,
   ]);
 
   useEffect(() => {
-    const activeSplatFile = splats.activeSplatFile ?? null;
     if (
-      !activeSplatFile &&
+      !metrics.splatMetricVisualizationsAvailable &&
       (camerasNode.colorMode === 'splatPsnr' || camerasNode.colorMode === 'splatSsim')
     ) {
+      initialSplatCameraColorDefaultFileRef.current = null;
       camerasActions.setColorMode('byCamera');
     }
   }, [
     camerasActions,
     camerasNode.colorMode,
-    splats.activeSplatFile,
+    metrics.splatMetricVisualizationsAvailable,
   ]);
 
   return {
@@ -371,8 +382,7 @@ export function useViewerControlsController(): ViewerControlsController {
       setUndistortionEnabled: camerasActions.setUndistortionEnabled,
       autoFovEnabled: navNode.autoFovEnabled,
       setAutoFovEnabled: navActions.setAutoFovEnabled,
-      hasActiveSplat: Boolean(splats.activeSplatFile),
-      splatPsnrFrameReady: metrics.splatPsnrFrameReady,
+      splatMetricVisualizationsAvailable: metrics.splatMetricVisualizationsAvailable,
       onCycleCameraDisplayMode: cycleCameraDisplayMode,
     },
     matchesPanel: {

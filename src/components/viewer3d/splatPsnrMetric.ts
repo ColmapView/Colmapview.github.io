@@ -39,6 +39,12 @@ interface SampledColor {
   a: number;
 }
 
+interface RgbaMetricOptions {
+  width: number;
+  height: number;
+  maskPixels?: Uint8Array | Uint8ClampedArray | null;
+}
+
 const keepColor = new THREE.Color();
 const WEBGPU_PSNR_WORKGROUP_SIZE = 64;
 const GPU_BUFFER_USAGE_MAP_READ = 0x0001;
@@ -47,6 +53,22 @@ const GPU_BUFFER_USAGE_COPY_DST = 0x0008;
 const GPU_BUFFER_USAGE_UNIFORM = 0x0040;
 const GPU_BUFFER_USAGE_STORAGE = 0x0080;
 const GPU_MAP_MODE_READ = 0x0001;
+const SSIM_GAUSSIAN_WEIGHTS = [
+  0.00102838008448,
+  0.00759875813524,
+  0.0360007721284,
+  0.109360689510,
+  0.213005537711,
+  0.266011724862,
+  0.213005537711,
+  0.109360689510,
+  0.0360007721284,
+  0.00759875813524,
+  0.00102838008448,
+];
+const SSIM_WINDOW_RADIUS = 5;
+const SSIM_C1 = 6.5025;
+const SSIM_C2 = 58.5225;
 const webGpuPsnrPipelines = new WeakMap<GPUDevice, GPUComputePipeline>();
 
 subscribeSplatPsnrWebGpuDeviceLoss((_info, device) => {
@@ -192,6 +214,53 @@ export function computePsnrFromRgba(
   return computePsnrFromSquaredError(squaredError, validPixelCount);
 }
 
+export function computePsnrAndSsimFromRgba(
+  renderedPixels: Uint8Array | Uint8ClampedArray,
+  groundTruthPixels: Uint8Array | Uint8ClampedArray,
+  { width, height, maskPixels = null }: RgbaMetricOptions
+): PsnrResult {
+  const safeWidth = requirePositiveInteger(width, 'width');
+  const safeHeight = requirePositiveInteger(height, 'height');
+  const pixelCount = safeWidth * safeHeight;
+  const requiredLength = pixelCount * 4;
+  if (renderedPixels.length < requiredLength || groundTruthPixels.length < requiredLength) {
+    throw new Error('RGBA metric buffers are smaller than the requested image dimensions');
+  }
+  if (maskPixels && maskPixels.length < requiredLength) {
+    throw new Error('RGBA metric mask buffer is smaller than the requested image dimensions');
+  }
+
+  let squaredError = 0;
+  let validPixelCount = 0;
+  let ssimSum = 0;
+  let ssimWindowCount = 0;
+
+  for (let pixel = 0; pixel < pixelCount; pixel++) {
+    const offset = pixel * 4;
+    if (!isMetricPixelValid(groundTruthPixels, maskPixels, offset)) {
+      continue;
+    }
+
+    const dr = renderedPixels[offset] - groundTruthPixels[offset];
+    const dg = renderedPixels[offset + 1] - groundTruthPixels[offset + 1];
+    const db = renderedPixels[offset + 2] - groundTruthPixels[offset + 2];
+    squaredError += dr * dr + dg * dg + db * db;
+    validPixelCount++;
+
+    const x = pixel % safeWidth;
+    const y = Math.floor(pixel / safeWidth);
+    ssimSum += computeWindowSsim(renderedPixels, groundTruthPixels, maskPixels, safeWidth, safeHeight, x, y);
+    ssimWindowCount++;
+  }
+
+  const result = validPixelCount === 0
+    ? { psnr: NaN, mse: NaN, validPixelCount: 0 }
+    : computePsnrFromSquaredError(squaredError, validPixelCount);
+  return ssimWindowCount > 0
+    ? { ...result, ssim: Math.max(-1, Math.min(1, ssimSum / ssimWindowCount)) }
+    : result;
+}
+
 function computePsnrFromSquaredError(squaredError: number, validPixelCount: number): PsnrResult {
   const mse = squaredError / (validPixelCount * 3);
   if (mse === 0) {
@@ -203,6 +272,95 @@ function computePsnrFromSquaredError(squaredError: number, validPixelCount: numb
     mse,
     validPixelCount,
   };
+}
+
+function isMetricPixelValid(
+  groundTruthPixels: Uint8Array | Uint8ClampedArray,
+  maskPixels: Uint8Array | Uint8ClampedArray | null,
+  offset: number
+): boolean {
+  if (groundTruthPixels[offset + 3] === 0) {
+    return false;
+  }
+  if (!maskPixels) {
+    return true;
+  }
+
+  return maskPixels[offset + 3] > 0
+    && Math.max(maskPixels[offset], maskPixels[offset + 1], maskPixels[offset + 2]) > 127;
+}
+
+function computeWindowSsim(
+  renderedPixels: Uint8Array | Uint8ClampedArray,
+  groundTruthPixels: Uint8Array | Uint8ClampedArray,
+  maskPixels: Uint8Array | Uint8ClampedArray | null,
+  width: number,
+  height: number,
+  x: number,
+  y: number
+): number {
+  let weightSum = 0;
+  const renderedSum = [0, 0, 0];
+  const groundTruthSum = [0, 0, 0];
+  const renderedSquaredSum = [0, 0, 0];
+  const groundTruthSquaredSum = [0, 0, 0];
+  const productSum = [0, 0, 0];
+
+  for (let dy = -SSIM_WINDOW_RADIUS; dy <= SSIM_WINDOW_RADIUS; dy++) {
+    const sampleY = y + dy;
+    if (sampleY < 0 || sampleY >= height) {
+      continue;
+    }
+    const yWeight = SSIM_GAUSSIAN_WEIGHTS[dy + SSIM_WINDOW_RADIUS];
+    for (let dx = -SSIM_WINDOW_RADIUS; dx <= SSIM_WINDOW_RADIUS; dx++) {
+      const sampleX = x + dx;
+      if (sampleX < 0 || sampleX >= width) {
+        continue;
+      }
+      const offset = (sampleY * width + sampleX) * 4;
+      if (!isMetricPixelValid(groundTruthPixels, maskPixels, offset)) {
+        continue;
+      }
+
+      const weight = yWeight * SSIM_GAUSSIAN_WEIGHTS[dx + SSIM_WINDOW_RADIUS];
+      weightSum += weight;
+      for (let channel = 0; channel < 3; channel++) {
+        const rendered = renderedPixels[offset + channel];
+        const groundTruth = groundTruthPixels[offset + channel];
+        renderedSum[channel] += rendered * weight;
+        groundTruthSum[channel] += groundTruth * weight;
+        renderedSquaredSum[channel] += rendered * rendered * weight;
+        groundTruthSquaredSum[channel] += groundTruth * groundTruth * weight;
+        productSum[channel] += rendered * groundTruth * weight;
+      }
+    }
+  }
+
+  if (weightSum <= 0) {
+    return 0;
+  }
+
+  let ssim = 0;
+  for (let channel = 0; channel < 3; channel++) {
+    const renderedMean = renderedSum[channel] / weightSum;
+    const groundTruthMean = groundTruthSum[channel] / weightSum;
+    const renderedVariance = Math.max(0, renderedSquaredSum[channel] / weightSum - renderedMean * renderedMean);
+    const groundTruthVariance = Math.max(0, groundTruthSquaredSum[channel] / weightSum - groundTruthMean * groundTruthMean);
+    const covariance = productSum[channel] / weightSum - renderedMean * groundTruthMean;
+    const numerator = (2 * renderedMean * groundTruthMean + SSIM_C1) * (2 * covariance + SSIM_C2);
+    const denominator = (renderedMean * renderedMean + groundTruthMean * groundTruthMean + SSIM_C1)
+      * (renderedVariance + groundTruthVariance + SSIM_C2);
+    ssim += denominator === 0 ? 1 : numerator / denominator;
+  }
+
+  return Math.max(-1, Math.min(1, ssim / 3));
+}
+
+function requirePositiveInteger(value: number, name: string): number {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`Invalid RGBA metric ${name}: expected a positive integer`);
+  }
+  return value;
 }
 
 function getWebGpuPsnrPipeline(device: GPUDevice): GPUComputePipeline {

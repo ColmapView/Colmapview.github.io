@@ -14,7 +14,7 @@ type ProcessFiles = (
   files: Map<string, File>,
   progressRange?: { start: number; end: number },
   options?: { throwOnError?: boolean }
-) => Promise<void>;
+) => Promise<void | boolean>;
 type SetSourceInfo = (type: ReconstructionSourceType, url?: string | null) => void;
 type SetUrlProgress = (progress: UrlLoadProgress | null) => void;
 type LoadZipFromUrl = (

@@ -18,12 +18,14 @@ import {
   useDeletionStore,
   useImageMetricsStore,
   useReconstructionStore,
+  useSplatBackendStore,
   useUIStore,
   type DeletionState,
   type ImageMetricsState,
   type UIState,
 } from '../../store';
 import { useIsAlignmentMode } from '../../hooks/useAlignmentMode';
+import { shouldExposeSplatMetricVisualizations } from '../../utils/splatBackendPolicy';
 import type { Reconstruction } from '../../types/colmap';
 import type { FrustumPsnrMetricSource } from './cameraFrustumViewModel';
 
@@ -57,13 +59,24 @@ export interface CameraFrustumsStoreFacade {
 
 export function useCameraFrustumsStoreFacade(): CameraFrustumsStoreFacade {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
+  const activeSplatFile = useReconstructionStore((s) => s.loadedFiles?.splatFile);
   const dataset = useDataset();
   const cameras = useCamerasNode();
+  const splatBackendResolution = useSplatBackendStore((s) => s.resolution);
+  const splatMetricAvailability = useSplatBackendStore((s) => s.metricAvailability);
+  const splatMetricCapability = useSplatBackendStore((s) => s.metricCapability);
+  const splatMetricVisualizationsAvailable = shouldExposeSplatMetricVisualizations({
+    activeSplatFile,
+    resolution: splatBackendResolution,
+    metricAvailability: splatMetricAvailability,
+    metricCapability: splatMetricCapability,
+  });
   const splatPsnrByImage = useImageMetricsStore(useCallback(
-    (state: ImageMetricsState) => cameras.colorMode === 'splatPsnr' || cameras.colorMode === 'splatSsim'
+    (state: ImageMetricsState) => splatMetricVisualizationsAvailable
+      && (cameras.colorMode === 'splatPsnr' || cameras.colorMode === 'splatSsim')
       ? state.splatPsnrMetrics
       : EMPTY_SPLAT_PSNR_BY_IMAGE,
-    [cameras.colorMode]
+    [cameras.colorMode, splatMetricVisualizationsAvailable]
   ));
   const selection = useSelectionNode();
   const matches = useMatchesNode();

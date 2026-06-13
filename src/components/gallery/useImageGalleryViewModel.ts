@@ -68,12 +68,12 @@ function getEffectiveCameraFilter(
 
 function getEffectiveBorderColorMode(
   borderColorMode: GalleryBorderColorModeSetting,
-  hasActiveSplatFile: boolean
+  splatMetricVisualizationsAvailable: boolean
 ): GalleryBorderColorMode {
   if (borderColorMode === 'auto') {
-    return hasActiveSplatFile ? 'psnr' : 'none';
+    return splatMetricVisualizationsAvailable ? 'psnr' : 'none';
   }
-  if (!hasActiveSplatFile && (borderColorMode === 'psnr' || borderColorMode === 'ssim')) {
+  if (!splatMetricVisualizationsAvailable && (borderColorMode === 'psnr' || borderColorMode === 'ssim')) {
     return 'none';
   }
   return borderColorMode;
@@ -99,7 +99,7 @@ export function useImageGalleryViewModel() {
       isIdle,
       showAutoHideEditor,
       pendingDeletions,
-      activeSplatFile,
+      splatMetricVisualizationsAvailable,
       splatPsnrFrameReady,
       splatPsnrByImage,
       selectedImageId,
@@ -136,10 +136,13 @@ export function useImageGalleryViewModel() {
   const effectiveThumbnailDisplayMode = hasMasks ? galleryThumbnailDisplayMode : 'image';
   const borderColorMode = getEffectiveBorderColorMode(
     galleryBorderColorMode,
-    Boolean(activeSplatFile)
+    splatMetricVisualizationsAvailable
   );
   const [imageCacheVersion, setImageCacheVersion] = useState(0);
-  const showSplatMetrics = splatPsnrFrameReady && splatPsnrByImage.size > 0;
+  const showSplatMetricBorder = splatMetricVisualizationsAvailable;
+  const showSplatMetrics = splatMetricVisualizationsAvailable
+    && splatPsnrFrameReady
+    && splatPsnrByImage.size > 0;
   const isSplatMetricSort = gallerySortField === 'splatPsnr' || gallerySortField === 'splatSsim';
   const effectiveSortField = showSplatMetrics || !isSplatMetricSort ? gallerySortField : 'name';
 
@@ -156,8 +159,11 @@ export function useImageGalleryViewModel() {
   }, [setGalleryCameraFilter]);
 
   const setBorderColorMode = useCallback((nextBorderColorMode: GalleryBorderColorMode) => {
-    setGalleryBorderColorMode(nextBorderColorMode);
-  }, [setGalleryBorderColorMode]);
+    setGalleryBorderColorMode(getEffectiveBorderColorMode(
+      nextBorderColorMode,
+      splatMetricVisualizationsAvailable
+    ));
+  }, [setGalleryBorderColorMode, splatMetricVisualizationsAvailable]);
 
   const matchedImageIds = useMemo(
     () => buildMatchedImageIds(reconstruction, selectedImageId, showMatches),
@@ -315,6 +321,7 @@ export function useImageGalleryViewModel() {
     setViewMode,
     hideImageOverlay,
     hideToolbar: false,
+    showSplatMetricBorder,
     showSplatMetrics,
     showMatches,
     sortDirection: gallerySortDirection,

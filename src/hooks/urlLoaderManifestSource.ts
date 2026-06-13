@@ -11,7 +11,7 @@ type ProcessFiles = (
   files: Map<string, File>,
   progressRange?: { start: number; end: number },
   options?: { throwOnError?: boolean }
-) => Promise<void>;
+) => Promise<void | boolean>;
 type FetchColmapFiles = (manifest: ColmapManifest) => Promise<Map<string, File>>;
 type SetSourceInfo = (
   type: ManifestLoadSource['type'],

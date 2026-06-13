@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.8] - 2026-06-13
+
+### Added
+
+- Add Spark splat rendering fallback for browsers without reliable WebGPU support.
+- Add WebGPU unsupported warnings that point users toward WebGPU-capable browsers for full features.
+- Detect generic PLY point clouds separately from Gaussian-splat PLY files and load them as 3D points.
+
+### Changed
+
+- Keep WebGPU PSNR/SSIM computation on the WebGPU path only, avoiding Spark/frontend renderer crosstalk.
+- Hide PSNR/SSIM camera-frustum and gallery visualization paths while Spark is the active splat backend.
+
+### Fixed
+
+- Fix WebGPU PSNR/SSIM startup regressions and stale metric UI after Spark fallback.
+- Avoid Spark teardown errors during renderer disposal and backend switching.
+- Fix Three shader include resolution for Spark splat rendering.
+
 ## [0.7.7] - 2026-06-09
 
 ### Fixed
@@ -241,7 +260,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript for type safety
 - Deno native test runner for testing
 
-[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.7...HEAD
+[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.8...HEAD
+[0.7.8]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.7...v0.7.8
 [0.7.7]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.6...v0.7.7
 [0.7.6]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.1...v0.7.5

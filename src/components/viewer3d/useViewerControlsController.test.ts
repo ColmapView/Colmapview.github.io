@@ -12,6 +12,23 @@ import {
 import { buildFile, buildLoadedFiles } from '../../test/builders';
 import { useViewerControlsController } from './useViewerControlsController';
 
+function setWebGpuSplatMetricsReady() {
+  useSplatBackendStore.getState().setRequestedBackend('webgpu');
+  useSplatBackendStore.getState().setWebGpuBackendState('ready');
+  useSplatBackendStore.getState().setWebGpuMetricState('ready');
+}
+
+function setWebGpuSplatMetricsPreparing() {
+  useSplatBackendStore.getState().setRequestedBackend('webgpu');
+  useSplatBackendStore.getState().setWebGpuBackendState('ready');
+  useSplatBackendStore.getState().setWebGpuMetricState('unavailable');
+}
+
+function setSparkSplatBackendActive() {
+  useSplatBackendStore.getState().setSparkBackendAvailable(true);
+  useSplatBackendStore.getState().setRequestedBackend('spark');
+}
+
 describe('useViewerControlsController', () => {
   beforeEach(() => {
     useImageMetricsStore.setState(useImageMetricsStore.getInitialState(), true);
@@ -25,6 +42,7 @@ describe('useViewerControlsController', () => {
 
   it('defaults camera frustum coloring to PSNR when points switch into Gaussian mode', () => {
     const splatFile = buildFile('scene.spz', 'splat');
+    setWebGpuSplatMetricsReady();
     useImageMetricsStore.setState({ splatPsnrFrameReady: true });
     usePointCloudStore.setState({ showPointCloud: true, colorMode: 'rgb', showSplats: false });
     useCameraStore.setState({ frustumColorMode: 'byCamera' });
@@ -41,6 +59,7 @@ describe('useViewerControlsController', () => {
 
   it('defaults camera frustum coloring to PSNR when the point button cycles into Gaussian mode', () => {
     const splatFile = buildFile('scene.spz', 'splat');
+    setWebGpuSplatMetricsReady();
     useImageMetricsStore.setState({ splatPsnrFrameReady: true });
     usePointCloudStore.setState({ showPointCloud: true, colorMode: 'trackLength', showSplats: false });
     useCameraStore.setState({ frustumColorMode: 'single' });
@@ -57,6 +76,7 @@ describe('useViewerControlsController', () => {
 
   it('defaults camera frustum coloring to PSNR before metric coloring is ready', () => {
     const splatFile = buildFile('scene.spz', 'splat');
+    setWebGpuSplatMetricsPreparing();
     useImageMetricsStore.setState({ splatPsnrFrameReady: false });
     usePointCloudStore.setState({ showPointCloud: true, colorMode: 'rgb', showSplats: false });
     useCameraStore.setState({ frustumColorMode: 'byCamera' });
@@ -78,6 +98,7 @@ describe('useViewerControlsController', () => {
 
   it('defaults initial loaded splat camera frustum coloring to PSNR when metrics are ready', () => {
     const splatFile = buildFile('scene.spz', 'splat');
+    setWebGpuSplatMetricsReady();
     useImageMetricsStore.setState({ splatPsnrFrameReady: true });
     useCameraStore.setState({ frustumColorMode: 'byCamera' });
     act(() => {
@@ -92,6 +113,7 @@ describe('useViewerControlsController', () => {
 
   it('defaults initial loaded splat camera frustum coloring to PSNR before metrics are ready', () => {
     const splatFile = buildFile('scene.spz', 'splat');
+    setWebGpuSplatMetricsPreparing();
     useImageMetricsStore.setState({ splatPsnrFrameReady: false });
     useCameraStore.setState({ frustumColorMode: 'byCamera' });
     act(() => {
@@ -110,6 +132,7 @@ describe('useViewerControlsController', () => {
 
   it('keeps a user camera color choice made after the initial loaded splat default', () => {
     const splatFile = buildFile('scene.spz', 'splat');
+    setWebGpuSplatMetricsPreparing();
     useImageMetricsStore.setState({ splatPsnrFrameReady: false });
     useCameraStore.setState({ frustumColorMode: 'byCamera' });
     act(() => {
@@ -134,6 +157,25 @@ describe('useViewerControlsController', () => {
     useCameraStore.setState({ frustumColorMode: 'splatPsnr' });
 
     renderHook(() => useViewerControlsController());
+
+    expect(useCameraStore.getState().frustumColorMode).toBe('byCamera');
+  });
+
+  it('disables stale splat metric camera coloring while Spark is active', () => {
+    const splatFile = buildFile('scene.spz', 'splat');
+    setSparkSplatBackendActive();
+    useImageMetricsStore.setState({ splatPsnrFrameReady: true });
+    useCameraStore.setState({ frustumColorMode: 'splatSsim' });
+    useReconstructionStore.setState({ loadedFiles: buildLoadedFiles({ splatFile }) });
+
+    const { result } = renderHook(() => useViewerControlsController());
+
+    expect(useCameraStore.getState().frustumColorMode).toBe('byCamera');
+    expect(result.current.cameraDisplayPanel.splatMetricVisualizationsAvailable).toBe(false);
+
+    act(() => {
+      result.current.pointCloudPanel.setColorMode('splats');
+    });
 
     expect(useCameraStore.getState().frustumColorMode).toBe('byCamera');
   });

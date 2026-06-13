@@ -62,8 +62,7 @@ export interface CameraDisplayPanelProps {
   setUndistortionEnabled: (enabled: boolean) => void;
   autoFovEnabled: boolean;
   setAutoFovEnabled: (enabled: boolean) => void;
-  hasActiveSplat: boolean;
-  splatPsnrFrameReady: boolean;
+  splatMetricVisualizationsAvailable: boolean;
   onCycleCameraDisplayMode: () => void;
 }
 
@@ -99,14 +98,13 @@ export function CameraDisplayPanel({
   setUndistortionEnabled,
   autoFovEnabled,
   setAutoFovEnabled,
-  hasActiveSplat,
-  splatPsnrFrameReady,
+  splatMetricVisualizationsAvailable,
   onCycleCameraDisplayMode,
 }: CameraDisplayPanelProps) {
   const buttonState = getCameraDisplayButtonState(showCameras, cameraDisplayMode);
   const frustumColorModeOptions = getFrustumColorModeOptions({
     hasRigData,
-    hasSplatPsnr: hasActiveSplat || splatPsnrFrameReady,
+    hasSplatPsnr: splatMetricVisualizationsAvailable,
   });
   const hint = getCameraDisplayHint(cameraDisplayMode);
 

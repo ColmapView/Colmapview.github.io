@@ -123,9 +123,34 @@ describe('file dropzone local source loading', () => {
 
     expect(deps.setUrlLoading).toHaveBeenCalledWith(true);
     expect(deps.setUrlProgress).toHaveBeenCalledWith({ percent: 0, message: 'Scanning files...' });
+    expect(deps.clearCaches).not.toHaveBeenCalled();
+    expect(deps.setSourceInfo).not.toHaveBeenCalled();
+    expect(deps.processFiles).toHaveBeenCalledWith(files, undefined, {
+      onSceneReplaced: expect.any(Function),
+    });
+  });
+
+  it('commits dropped files as a local source only when the workflow replaces the scene', async () => {
+    const files = new Map([['images/a.jpg', buildFile('a.jpg')]]);
+    const deps = {
+      ...makeBaseDeps(),
+      collectDroppedFiles: vi.fn(async () => files),
+      isArchiveFile: vi.fn(() => false),
+      processZipFile: vi.fn(),
+      scanEntry: vi.fn(),
+    };
+    deps.processFiles.mockImplementation(async (_files, _progress, options) => {
+      options?.onSceneReplaced?.();
+    });
+
+    await expect(loadDropPayload({
+      singleFile: null,
+      entries: [],
+      fallbackFiles: [],
+    }, deps)).resolves.toBe(true);
+
     expect(deps.clearCaches).toHaveBeenCalledTimes(1);
     expect(deps.setSourceInfo).toHaveBeenCalledWith('local', null);
-    expect(deps.processFiles).toHaveBeenCalledWith(files);
   });
 
   it('reports non-archive dropped-file load failures', async () => {
@@ -181,9 +206,31 @@ describe('file dropzone local source loading', () => {
     expect(deps.setUrlLoading).toHaveBeenCalledWith(true);
     expect(deps.setUrlProgress).toHaveBeenCalledWith({ percent: 0, message: 'Scanning folder...' });
     expect(deps.scanDirectoryHandle).toHaveBeenCalledWith(dirHandle, '', expect.any(Map));
+    expect(deps.clearCaches).not.toHaveBeenCalled();
+    expect(deps.setSourceInfo).not.toHaveBeenCalled();
+    expect(deps.processFiles).toHaveBeenCalledWith(new Map([['cameras.bin', browsedFile]]), undefined, {
+      onSceneReplaced: expect.any(Function),
+    });
+  });
+
+  it('commits browsed directories as a local source only when the workflow replaces the scene', async () => {
+    const dirHandle = buildFileSystemDirectoryHandle();
+    const browsedFile = buildFile('cameras.bin');
+    const deps = {
+      ...makeBaseDeps(),
+      pickDirectory: vi.fn(async () => dirHandle),
+      scanDirectoryHandle: vi.fn(async (_handle: FileSystemDirectoryHandle, _path: string, files: Map<string, File>) => {
+        files.set('cameras.bin', browsedFile);
+      }),
+    };
+    deps.processFiles.mockImplementation(async (_files, _progress, options) => {
+      options?.onSceneReplaced?.();
+    });
+
+    await expect(loadBrowsedDirectory(deps)).resolves.toBe(true);
+
     expect(deps.clearCaches).toHaveBeenCalledTimes(1);
     expect(deps.setSourceInfo).toHaveBeenCalledWith('local', null);
-    expect(deps.processFiles).toHaveBeenCalledWith(new Map([['cameras.bin', browsedFile]]));
   });
 
   it('treats cancelled directory browsing as a no-op', async () => {

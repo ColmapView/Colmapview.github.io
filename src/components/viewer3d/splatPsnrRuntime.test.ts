@@ -19,6 +19,14 @@ function createLostDevice(
   } as unknown as GPUDevice;
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
 describe('splat PSNR WebGPU runtime', () => {
   const originalGpu = (navigator as Navigator & { gpu?: unknown }).gpu;
 
@@ -149,6 +157,51 @@ describe('splat PSNR WebGPU runtime', () => {
       },
     });
     expect(device.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('times out hung metric device requests and allows a later retry', async () => {
+    vi.useFakeTimers();
+    const lateDevice = createNeverLostDevice();
+    const retryDevice = createNeverLostDevice();
+    const pendingDeviceRequest = createDeferred<GPUDevice>();
+    const adapter = {
+      limits: {} as GPUSupportedLimits,
+      requestDevice: vi.fn()
+        .mockReturnValueOnce(pendingDeviceRequest.promise)
+        .mockResolvedValueOnce(retryDevice),
+    };
+    Object.defineProperty(navigator, 'gpu', {
+      configurable: true,
+      value: {
+        requestAdapter: vi.fn().mockResolvedValue(adapter),
+      },
+    });
+    const {
+      ensureSplatPsnrWebGpuDevice,
+      resetSplatPsnrWebGpuDeviceProvider,
+    } = await import('./splatPsnrRuntime');
+
+    try {
+      const firstRequest = ensureSplatPsnrWebGpuDevice();
+      const firstRejection = expect(firstRequest)
+        .rejects.toThrow('WebGPU device request timed out');
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      await firstRejection;
+      expect(adapter.requestDevice).toHaveBeenCalledTimes(1);
+
+      pendingDeviceRequest.resolve(lateDevice);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(lateDevice.destroy).toHaveBeenCalledTimes(1);
+
+      await expect(ensureSplatPsnrWebGpuDevice()).resolves.toBe(retryDevice);
+      expect(adapter.requestDevice).toHaveBeenCalledTimes(2);
+    } finally {
+      resetSplatPsnrWebGpuDeviceProvider();
+      await Promise.resolve();
+      vi.useRealTimers();
+    }
   });
 
   it('uses an injected WebGPU provider instead of navigator.gpu', async () => {
@@ -337,6 +390,55 @@ describe('splat PSNR WebGPU runtime', () => {
       },
     });
     expect(getWebGpuSplatDebugCounters().devices).toBe(0);
+  });
+
+  it('shares a single high-limit replacement across concurrent metric device upgrades', async () => {
+    const lowLimitDevice = createNeverLostDevice({
+      maxBufferSize: 268_435_456,
+      maxStorageBufferBindingSize: 134_217_728,
+    });
+    const highLimitDevice = createNeverLostDevice({
+      maxBufferSize: 2_147_483_648,
+      maxStorageBufferBindingSize: 2_147_483_644,
+    });
+    const adapter = {
+      limits: {
+        maxBufferSize: 2_147_483_648,
+        maxStorageBufferBindingSize: 2_147_483_644,
+      } as GPUSupportedLimits,
+      requestDevice: vi.fn()
+        .mockResolvedValueOnce(lowLimitDevice)
+        .mockResolvedValueOnce(highLimitDevice),
+    };
+    Object.defineProperty(navigator, 'gpu', {
+      configurable: true,
+      value: {
+        requestAdapter: vi.fn().mockResolvedValue(adapter),
+      },
+    });
+    const {
+      ensureSplatPsnrWebGpuDevice,
+      resetSplatPsnrWebGpuDeviceProvider,
+    } = await import('./splatPsnrRuntime');
+
+    try {
+      await expect(ensureSplatPsnrWebGpuDevice()).resolves.toBe(lowLimitDevice);
+
+      const requiredLimits = {
+        maxBufferSize: 900_000_000,
+        maxStorageBufferBindingSize: 900_000_000,
+      };
+      await expect(Promise.all([
+        ensureSplatPsnrWebGpuDevice(requiredLimits),
+        ensureSplatPsnrWebGpuDevice(requiredLimits),
+      ])).resolves.toEqual([highLimitDevice, highLimitDevice]);
+    } finally {
+      resetSplatPsnrWebGpuDeviceProvider();
+      await Promise.resolve();
+    }
+
+    expect(lowLimitDevice.destroy).toHaveBeenCalledTimes(1);
+    expect(adapter.requestDevice).toHaveBeenCalledTimes(2);
   });
 });
 

@@ -78,6 +78,7 @@ function createDeferredMetric() {
 
 function createMetricCapability(): SplatMetricCapability {
   return {
+    backend: 'webgpu',
     gpuPsnr: true,
     status: 'available',
     reason: 'WebGPU PSNR is available',
@@ -206,7 +207,7 @@ describe('SplatPsnrEvaluator', () => {
     });
   });
 
-  it('automatically requests all-image metrics for SPZ splats once the scene is metric-ready', async () => {
+  it('automatically requests all-image metrics for SPZ splats once the WebGPU scene is metric-ready', async () => {
     vi.useFakeTimers();
     const { facade, actions } = createFacade({
       splatPsnrComputeRequest: null,
@@ -251,8 +252,13 @@ describe('SplatPsnrEvaluator', () => {
     act(() => {
       vi.advanceTimersByTime(1500);
     });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
     expect(actions.requestSplatPsnrCompute).not.toHaveBeenCalled();
+    expect(prefetchFrustumTexturesInBackgroundMock).not.toHaveBeenCalled();
   });
 
   it('does not probe the PSNR WebGPU device before the visible WebGPU renderer is ready', async () => {
@@ -265,6 +271,7 @@ describe('SplatPsnrEvaluator', () => {
         gpuPsnr: false,
       },
       splatMetricCapability: {
+        backend: null,
         gpuPsnr: false,
         status: 'unavailable',
         reason: 'WebGPU PSNR is not ready',
@@ -276,11 +283,13 @@ describe('SplatPsnrEvaluator', () => {
 
     await act(async () => {
       await Promise.resolve();
+      await Promise.resolve();
     });
 
     expect(ensureSplatPsnrWebGpuDeviceMock).not.toHaveBeenCalled();
     expect(loadGaussianCloudFromFileMock).not.toHaveBeenCalled();
     expect(createWebGpuSplatPsnrSessionMock).not.toHaveBeenCalled();
+    expect(prefetchFrustumTexturesInBackgroundMock).not.toHaveBeenCalled();
   });
 
   it('does not request background metrics for splat-only scenes without ground truth images', async () => {
@@ -487,6 +496,7 @@ describe('SplatPsnrEvaluator', () => {
       width: 4,
       height: 3,
       transform: expect.objectContaining({ scale: 1 }),
+      modelTransform: undefined,
     }));
 
     facade.data.transform = {
@@ -527,7 +537,7 @@ describe('SplatPsnrEvaluator', () => {
     expect(dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('passes the composed splat model transform into PSNR requests', async () => {
+  it('passes the published composed splat model transform into PSNR requests', async () => {
     const deferredMetric = createDeferredMetric();
     const computeImageMetric = vi.fn(() => deferredMetric.promise);
     createWebGpuSplatPsnrSessionMock.mockResolvedValue({
@@ -571,6 +581,55 @@ describe('SplatPsnrEvaluator', () => {
         scale: 2,
         translationX: 1,
         translationY: 4,
+      }),
+    }));
+
+    await act(async () => {
+      deferredMetric.resolve({ psnr: 31, ssim: 0.94, mse: 12, validPixelCount: 12 });
+      await deferredMetric.promise;
+    });
+
+    await waitFor(() => {
+      expect(facade.actions.setSplatPsnrMetric).toHaveBeenCalledWith(expect.objectContaining({
+        imageId: image.imageId,
+      }));
+    });
+  });
+
+  it('passes the scene transform as the model transform when no splat transform exists', async () => {
+    const deferredMetric = createDeferredMetric();
+    const computeImageMetric = vi.fn(() => deferredMetric.promise);
+    createWebGpuSplatPsnrSessionMock.mockResolvedValue({
+      computeImageMetric,
+      dispose: vi.fn(),
+    });
+    const { facade, image } = createFacade({
+      transform: {
+        scale: 2,
+        rotationX: 0,
+        rotationY: 0,
+        rotationZ: 0,
+        translationX: 1,
+        translationY: 0,
+        translationZ: 0,
+      },
+    });
+    useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
+
+    render(<SplatPsnrEvaluator />);
+
+    await waitFor(() => {
+      expect(computeImageMetric).toHaveBeenCalledTimes(1);
+    });
+    expect(computeImageMetric).toHaveBeenCalledWith(expect.objectContaining({
+      transform: expect.objectContaining({
+        scale: 2,
+        translationX: 1,
+      }),
+      modelTransform: expect.objectContaining({
+        scale: 2,
+        translationX: 1,
+        translationY: 0,
       }),
     }));
 
@@ -1096,6 +1155,7 @@ describe('SplatPsnrEvaluator', () => {
 
     facade.data.splatMetricCapability = {
       status: 'unavailable',
+      backend: null,
       gpuPsnr: false,
       reason: 'WebGPU PSNR failed to initialize: adapter reset',
     };

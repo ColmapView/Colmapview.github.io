@@ -984,7 +984,8 @@ export function SplatPsnrEvaluator() {
   ]);
 
   useEffect(() => {
-    if (!reconstruction || !splatFile || reconstruction.images.size === 0) {
+    if (!reconstruction || !splatFile || !gpuPsnrAvailable || reconstruction.images.size === 0) {
+      imagePlaneTexturePrefetchIdentityRef.current = null;
       return;
     }
 
@@ -1021,6 +1022,7 @@ export function SplatPsnrEvaluator() {
   }, [
     dataset,
     datasetIdentity,
+    gpuPsnrAvailable,
     reconstruction,
     splatFile,
   ]);

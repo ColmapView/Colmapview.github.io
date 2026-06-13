@@ -15,6 +15,7 @@ function renderToolbar(overrides = {}) {
     hasMasks: true,
     sortDirection: 'asc' as const,
     sortField: 'name' as const,
+    showSplatMetricBorder: false,
     showSplatMetricSort: false,
     thumbnailDisplayMode: 'image' as const,
     touchMode: false,
@@ -107,8 +108,8 @@ describe('ImageGalleryToolbar', () => {
 
     expect(screen.getByRole('option', { name: 'Border: None' })).toBeVisible();
     expect(screen.getByRole('option', { name: 'Border: Camera' })).toBeVisible();
-    expect(screen.getByRole('option', { name: 'Border: PSNR' })).toBeVisible();
-    expect(screen.getByRole('option', { name: 'Border: SSIM' })).toBeVisible();
+    expect(screen.queryByRole('option', { name: 'Border: PSNR' })).toBeNull();
+    expect(screen.queryByRole('option', { name: 'Border: SSIM' })).toBeNull();
 
     fireEvent.change(screen.getByLabelText('Border color'), {
       target: { value: 'camera' },
@@ -118,7 +119,7 @@ describe('ImageGalleryToolbar', () => {
     });
 
     expect(props.onBorderColorModeChange).toHaveBeenNthCalledWith(1, 'camera');
-    expect(props.onBorderColorModeChange).toHaveBeenNthCalledWith(2, 'psnr');
+    expect(props.onBorderColorModeChange).toHaveBeenCalledTimes(1);
   });
 
   it('reports thumbnail display mode changes', () => {
@@ -164,6 +165,8 @@ describe('ImageGalleryToolbar', () => {
 
     expect(screen.getByRole('option', { name: 'Sort: PSNR' })).toBeVisible();
     expect(screen.getByRole('option', { name: 'Sort: SSIM' })).toBeVisible();
+    expect(screen.queryByRole('option', { name: 'Border: PSNR' })).toBeNull();
+    expect(screen.queryByRole('option', { name: 'Border: SSIM' })).toBeNull();
 
     fireEvent.change(screen.getByLabelText('Sort field'), {
       target: { value: 'splatPsnr' },
@@ -174,6 +177,26 @@ describe('ImageGalleryToolbar', () => {
 
     expect(props.onSortFieldChange).toHaveBeenCalledWith('splatPsnr');
     expect(props.onSortFieldChange).toHaveBeenCalledWith('splatSsim');
+    expect(props.onBorderColorModeChange).not.toHaveBeenCalled();
+  });
+
+  it('exposes PSNR and SSIM border colors independently from metric sorting', () => {
+    const props = renderToolbar({ showSplatMetricBorder: true });
+
+    expect(screen.queryByRole('option', { name: 'Sort: PSNR' })).toBeNull();
+    expect(screen.queryByRole('option', { name: 'Sort: SSIM' })).toBeNull();
+    expect(screen.getByRole('option', { name: 'Border: PSNR' })).toBeVisible();
+    expect(screen.getByRole('option', { name: 'Border: SSIM' })).toBeVisible();
+
+    fireEvent.change(screen.getByLabelText('Sort field'), {
+      target: { value: 'splatPsnr' },
+    });
+    fireEvent.change(screen.getByLabelText('Border color'), {
+      target: { value: 'psnr' },
+    });
+
+    expect(props.onSortFieldChange).not.toHaveBeenCalled();
+    expect(props.onBorderColorModeChange).toHaveBeenCalledWith('psnr');
   });
 
   it('renders desktop view mode controls and hides them in touch mode', () => {

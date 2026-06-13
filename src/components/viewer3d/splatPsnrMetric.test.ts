@@ -4,6 +4,7 @@ import { buildCamera, buildImage } from '../../test/builders';
 import { createSim3dFromEuler } from '../../utils/sim3dTransforms';
 import {
   computeSplatMetricColorScale,
+  computePsnrAndSsimFromRgba,
   computePsnrFromRgba,
   computePsnrFromRgbaWebGpu,
   createColmapPsnrCamera,
@@ -228,6 +229,73 @@ describe('splatPsnrMetric helpers', () => {
     expect(blackVsWhite.psnr).toBeCloseTo(0);
     expect(blackVsWhite.mse).toBe(255 * 255);
     expect(blackVsWhite.validPixelCount).toBe(1);
+  });
+
+  it('computes CPU PSNR and SSIM for RGBA metric buffers', () => {
+    const exact = computePsnrAndSsimFromRgba(
+      new Uint8Array([
+        10, 20, 30, 255,
+        40, 50, 60, 255,
+        70, 80, 90, 255,
+        100, 110, 120, 255,
+      ]),
+      new Uint8Array([
+        10, 20, 30, 255,
+        40, 50, 60, 255,
+        70, 80, 90, 255,
+        100, 110, 120, 255,
+      ]),
+      { width: 2, height: 2 }
+    );
+
+    expect(exact.psnr).toBe(Infinity);
+    expect(exact.mse).toBe(0);
+    expect(exact.validPixelCount).toBe(4);
+    expect(exact.ssim).toBeCloseTo(1);
+
+    const different = computePsnrAndSsimFromRgba(
+      new Uint8Array([
+        0, 0, 0, 255,
+        0, 0, 0, 255,
+        0, 0, 0, 255,
+        0, 0, 0, 255,
+      ]),
+      new Uint8Array([
+        255, 255, 255, 255,
+        255, 255, 255, 255,
+        255, 255, 255, 255,
+        255, 255, 255, 255,
+      ]),
+      { width: 2, height: 2 }
+    );
+
+    expect(different.psnr).toBeCloseTo(0);
+    expect(different.ssim).toBeLessThan(0.01);
+  });
+
+  it('applies masks to CPU PSNR and SSIM metrics', () => {
+    const result = computePsnrAndSsimFromRgba(
+      new Uint8Array([
+        10, 10, 10, 255,
+        255, 255, 255, 255,
+      ]),
+      new Uint8Array([
+        10, 10, 10, 255,
+        0, 0, 0, 255,
+      ]),
+      {
+        width: 2,
+        height: 1,
+        maskPixels: new Uint8Array([
+          255, 255, 255, 255,
+          0, 0, 0, 255,
+        ]),
+      }
+    );
+
+    expect(result.psnr).toBe(Infinity);
+    expect(result.validPixelCount).toBe(1);
+    expect(result.ssim).toBeCloseTo(1);
   });
 
   it('requires WebGPU for the GPU PSNR path', async () => {

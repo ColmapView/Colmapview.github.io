@@ -102,7 +102,7 @@ describe('useViewerControlsStoreFacade', () => {
     expect(result.current.reconstruction).toBe(reconstruction);
   });
 
-  it('does not hide PSNR while Spark is visible if metric WebGPU is ready', () => {
+  it('hides PSNR while only Spark CPU metrics are available', () => {
     const activeSplatFile = buildFile('model.spz');
     useReconstructionStore.setState({
       loadedFiles: buildLoadedFiles({ splatFile: activeSplatFile }),
@@ -112,7 +112,9 @@ describe('useViewerControlsStoreFacade', () => {
 
     const { result } = renderHook(() => useViewerControlsStoreFacade());
 
-    expect(result.current.metrics.splatPsnrUnavailableReason).toBeNull();
+    expect(result.current.metrics.splatPsnrUnavailableReason)
+      .toBe('Spark PSNR/SSIM metric capability is ready');
+    expect(result.current.metrics.splatMetricVisualizationsAvailable).toBe(false);
   });
 
   it('reports metric PSNR unavailability from metric capability state', () => {
@@ -120,7 +122,7 @@ describe('useViewerControlsStoreFacade', () => {
     useReconstructionStore.setState({
       loadedFiles: buildLoadedFiles({ splatFile: activeSplatFile }),
     });
-    useSplatBackendStore.getState().setSparkBackendAvailable(true);
+    useSplatBackendStore.getState().setWebGpuBackendState('ready');
     useSplatBackendStore.getState().setWebGpuMetricState('failed', 'adapter unavailable');
 
     const { result } = renderHook(() => useViewerControlsStoreFacade());

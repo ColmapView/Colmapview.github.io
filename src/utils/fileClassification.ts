@@ -79,6 +79,17 @@ export function findConfigFile(files: Map<string, File>): File | null {
  * Prefers complete sparse/0 directories and binary files over text files.
  */
 export function findColmapFiles(files: Map<string, File>): ColmapFileSelection {
+  return findColmapFilesInternal(files, { requirePoints3D: true });
+}
+
+export function findColmapCameraImageFiles(files: Map<string, File>): ColmapFileSelection {
+  return findColmapFilesInternal(files, { requirePoints3D: false });
+}
+
+function findColmapFilesInternal(
+  files: Map<string, File>,
+  options: { requirePoints3D: boolean }
+): ColmapFileSelection {
   const colmapDirs = new Map<string, ColmapDirectoryFiles>();
 
   for (const [path, file] of files) {
@@ -105,7 +116,11 @@ export function findColmapFiles(files: Map<string, File>): ColmapFileSelection {
 
   const validDirs: { dir: string; files: ColmapDirectoryFiles }[] = [];
   for (const [dir, dirFiles] of colmapDirs) {
-    if (dirFiles.cameras && dirFiles.images && dirFiles.points3D) {
+    if (
+      dirFiles.cameras &&
+      dirFiles.images &&
+      (dirFiles.points3D || !options.requirePoints3D)
+    ) {
       validDirs.push({ dir, files: dirFiles });
     }
   }

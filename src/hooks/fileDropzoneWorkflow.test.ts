@@ -8,6 +8,23 @@ function file(name: string): File {
   return new File([''], name);
 }
 
+function genericPointCloudPly(name = 'points.ply'): File {
+  return new File([[
+    'ply',
+    'format ascii 1.0',
+    'element vertex 1',
+    'property float x',
+    'property float y',
+    'property float z',
+    'property uchar red',
+    'property uchar green',
+    'property uchar blue',
+    'end_header',
+    '1 2 3 10 20 30',
+    '',
+  ].join('\n')], name);
+}
+
 function loadedFiles(overrides: Partial<NonNullable<ReturnType<FileDropzoneWorkflowDeps['getLoadedFiles']>>> = {}) {
   return {
     camerasFile: file('cameras.bin'),
@@ -181,6 +198,7 @@ describe('file dropzone workflow', () => {
     const largestSplat = new File(['xxxx'], 'replacement.ply');
     const currentLoadedFiles = loadedFiles({ splatFile: oldSplat });
     const parseFiles = vi.fn();
+    const onSceneReplaced = vi.fn();
     const deps = createDeps({
       getLoadedFiles: vi.fn(() => currentLoadedFiles),
       logger,
@@ -191,7 +209,7 @@ describe('file dropzone workflow', () => {
       ['folder/folder/folder/replacement.ply', largestSplat],
     ]);
 
-    const result = await processFileDropzoneFiles(files, deps);
+    const result = await processFileDropzoneFiles(files, deps, { onSceneReplaced });
 
     expect(result).toBe(true);
     expect(deps.preloadSplatRuntime).toHaveBeenCalledTimes(1);
@@ -219,9 +237,65 @@ describe('file dropzone workflow', () => {
     expect(parseFiles).not.toHaveBeenCalled();
     expect(deps.setReconstruction).not.toHaveBeenCalled();
     expect(deps.resetView).not.toHaveBeenCalled();
+    expect(onSceneReplaced).not.toHaveBeenCalled();
     expect(deps.setError).not.toHaveBeenCalled();
     expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
     expect(logger.info).toHaveBeenCalledWith('[Splats] Updated splat file: replacement.ply');
+  });
+
+  it('replaces the scene for direct splat URL loads even when a dataset is already loaded', async () => {
+    const logger = createLogger();
+    const oldSplat = new File(['x'], 'old.ply');
+    const directSplat = new File(['xxxx'], 'replacement.spz');
+    const currentLoadedFiles = loadedFiles({ splatFile: oldSplat });
+    const parseFiles = vi.fn();
+    const onSceneReplaced = vi.fn();
+    const deps = createDeps({
+      getLoadedFiles: vi.fn(() => currentLoadedFiles),
+      logger,
+      parseFiles,
+    });
+    const files = new Map([
+      ['replacement.spz', directSplat],
+    ]);
+
+    const result = await processFileDropzoneFiles(files, deps, {
+      progressRange: { start: 80, end: 100 },
+      onSceneReplaced,
+      replaceSplatScene: true,
+      throwOnError: true,
+    });
+
+    expect(result).toBe(true);
+    expect(onSceneReplaced).toHaveBeenCalledTimes(1);
+    expect(deps.clearSplatPsnr).toHaveBeenCalledTimes(1);
+    expect(deps.setLoadedFiles).toHaveBeenCalledWith({
+      camerasFile: undefined,
+      imagesFile: undefined,
+      points3DFile: undefined,
+      splatFile: directSplat,
+      splatFiles: [directSplat],
+      splatFileSources: [{ id: 'replacement.spz', path: 'replacement.spz', file: directSplat }],
+      databaseFile: undefined,
+      rigsFile: undefined,
+      framesFile: undefined,
+      imageFiles: new Map(),
+      hasMasks: false,
+    });
+    expect(deps.setDroppedFiles).toHaveBeenCalledWith(files);
+    expect(deps.setReconstruction).toHaveBeenCalledWith(expect.objectContaining({
+      cameras: new Map(),
+      images: new Map(),
+    }));
+    expect(deps.addNotification).not.toHaveBeenCalledWith(
+      'info',
+      'Updated splat file: replacement.spz',
+      expect.any(Number)
+    );
+    expect(parseFiles).not.toHaveBeenCalled();
+    expect(deps.resetView).toHaveBeenCalledTimes(1);
+    expect(deps.setUrlLoading).not.toHaveBeenCalledWith(false);
+    expect(logger.info).toHaveBeenCalledWith('[Splats] Creating splat-only scene from replacement.spz');
   });
 
   it('loads a splat-only scene when no dataset is loaded', async () => {
@@ -266,13 +340,177 @@ describe('file dropzone workflow', () => {
       images: new Map(),
     }));
     expect(deps.resetView).toHaveBeenCalledTimes(1);
-    expect(deps.addNotification).toHaveBeenCalledWith('info', 'Loaded splat: backup.spz', 5000);
+    expect(deps.addNotification).not.toHaveBeenCalled();
     expect(parseFiles).not.toHaveBeenCalled();
     expect(deps.setError).not.toHaveBeenCalled();
     expect(deps.setUrlProgress).toHaveBeenCalledWith({
       percent: 60,
       message: 'Preparing splat renderer...',
       currentFile: 'backup.spz',
+    });
+    expect(deps.setUrlLoading).toHaveBeenCalledWith(true);
+    expect(deps.setUrlLoading).not.toHaveBeenCalledWith(false);
+  });
+
+  it('loads a generic PLY point cloud as points3D instead of a splat', async () => {
+    const logger = createLogger();
+    const parseFiles = vi.fn();
+    const pointsPly = genericPointCloudPly();
+    const deps = createDeps({
+      getLoadedFiles: vi.fn(() => null),
+      logger,
+      parseFiles,
+    });
+
+    const result = await processFileDropzoneFiles(new Map([
+      ['points.ply', pointsPly],
+    ]), deps);
+
+    expect(result).toBe(true);
+    expect(deps.preloadSplatRuntime).not.toHaveBeenCalled();
+    expect(deps.clearSplatPsnr).toHaveBeenCalledTimes(1);
+    expect(deps.setLoadedFiles).toHaveBeenCalledWith({
+      camerasFile: undefined,
+      imagesFile: undefined,
+      points3DFile: pointsPly,
+      splatFile: undefined,
+      splatFiles: [],
+      splatFileSources: [],
+      databaseFile: undefined,
+      rigsFile: undefined,
+      framesFile: undefined,
+      imageFiles: new Map(),
+      hasMasks: false,
+    });
+    expect(deps.setDroppedFiles).toHaveBeenCalledWith(new Map([
+      ['points.ply', pointsPly],
+    ]));
+    expect(deps.setReconstruction).toHaveBeenCalledWith(expect.objectContaining({
+      points3D: expect.any(Map),
+      cameras: new Map(),
+      images: new Map(),
+    }));
+    const reconstruction = vi.mocked(deps.setReconstruction).mock.calls[0][0] as Reconstruction;
+    expect(reconstruction.points3D?.get(1n)).toMatchObject({
+      xyz: [1, 2, 3],
+      rgb: [10, 20, 30],
+      track: [],
+    });
+    expect(parseFiles).not.toHaveBeenCalled();
+    expect(deps.addNotification).toHaveBeenCalledWith('info', 'Loaded 1 points', 5000);
+    expect(deps.setUrlProgress).not.toHaveBeenCalledWith(expect.objectContaining({
+      message: 'Preparing splat renderer...',
+    }));
+    expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
+    expect(logger.info).toHaveBeenCalledWith('[PointCloud] Loaded 1 points from points.ply');
+  });
+
+  it('uses a generic PLY point cloud as points3D when COLMAP cameras and images are present', async () => {
+    const logger = createLogger();
+    const reconstruction = createReconstruction();
+    const camerasFile = file('cameras.bin');
+    const imagesFile = file('images.bin');
+    const pointsPly = genericPointCloudPly();
+    const parseResult = {
+      cameras: new Map(),
+      images: reconstruction.images,
+      points3D: new Map(),
+      wasmWrapper: null,
+      usedWasmPath: false,
+    };
+    const parseFiles = vi.fn(async () => parseResult);
+    const buildReconstruction = vi.fn(async ({ afterStatsComputed }) => {
+      afterStatsComputed?.();
+      return { reconstruction, pointCount: 1 };
+    });
+    const deps = createDeps({
+      buildReconstruction,
+      logger,
+      parseFiles,
+    });
+    const files = new Map([
+      ['sparse/0/cameras.bin', camerasFile],
+      ['sparse/0/images.bin', imagesFile],
+      ['points.ply', pointsPly],
+    ]);
+
+    const result = await processFileDropzoneFiles(files, deps);
+
+    expect(result).toBe(true);
+    expect(deps.preloadSplatRuntime).not.toHaveBeenCalled();
+    expect(deps.clearSplatPsnr).toHaveBeenCalledTimes(1);
+    expect(deps.setLoadedFiles).toHaveBeenCalledWith(expect.objectContaining({
+      camerasFile,
+      imagesFile,
+      points3DFile: pointsPly,
+      splatFile: undefined,
+      splatFiles: [],
+      splatFileSources: [],
+    }));
+    expect(parseFiles).toHaveBeenCalledWith(expect.objectContaining({
+      camerasFile,
+      imagesFile,
+      points3DFile: pointsPly,
+      addNotification: deps.addNotification,
+      log: logger.info,
+    }));
+    expect(buildReconstruction).toHaveBeenCalledWith(expect.objectContaining({
+      parseResult,
+    }));
+    expect(deps.setReconstruction).toHaveBeenCalledWith(reconstruction);
+    expect(deps.resetView).toHaveBeenCalledTimes(1);
+    expect(deps.setUrlProgress).not.toHaveBeenCalledWith(expect.objectContaining({
+      message: 'Preparing splat renderer...',
+    }));
+    expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('applies config with a new splat-only scene and hands loading to the splat renderer', async () => {
+    const logger = createLogger();
+    const importConfig = vi.fn(async () => ({ applied: true }));
+    const parseFiles = vi.fn();
+    const config = file('viewer.yaml');
+    const spz = new File(['xx'], 'scene.spz');
+    const deps = createDeps({
+      getLoadedFiles: vi.fn(() => null),
+      importConfig,
+      logger,
+      parseFiles,
+    });
+    const files = new Map([
+      ['viewer.yaml', config],
+      ['scene.spz', spz],
+    ]);
+
+    const result = await processFileDropzoneFiles(files, deps);
+
+    expect(result).toBe(true);
+    expect(importConfig).toHaveBeenCalledWith(config, { logErrors: true });
+    expect(deps.preloadSplatRuntime).toHaveBeenCalledTimes(1);
+    expect(deps.clearSplatPsnr).toHaveBeenCalledTimes(1);
+    expect(deps.setLoadedFiles).toHaveBeenCalledWith({
+      camerasFile: undefined,
+      imagesFile: undefined,
+      points3DFile: undefined,
+      splatFile: spz,
+      splatFiles: [spz],
+      splatFileSources: [{ id: 'scene.spz', path: 'scene.spz', file: spz }],
+      databaseFile: undefined,
+      rigsFile: undefined,
+      framesFile: undefined,
+      imageFiles: new Map(),
+      hasMasks: false,
+    });
+    expect(deps.setDroppedFiles).toHaveBeenCalledWith(files);
+    expect(deps.clearCaches).toHaveBeenCalledWith({ preserveZip: true });
+    expect(deps.resetView).toHaveBeenCalledTimes(1);
+    expect(parseFiles).not.toHaveBeenCalled();
+    expect(deps.addNotification).not.toHaveBeenCalled();
+    expect(deps.setUrlProgress).toHaveBeenCalledWith({
+      percent: 60,
+      message: 'Preparing splat renderer...',
+      currentFile: 'scene.spz',
     });
     expect(deps.setUrlLoading).toHaveBeenCalledWith(true);
     expect(deps.setUrlLoading).not.toHaveBeenCalledWith(false);

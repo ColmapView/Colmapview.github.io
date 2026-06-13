@@ -5,8 +5,13 @@ import type { UrlLoadProgress } from '../types/manifest';
 import { appLogger } from '../utils/logger';
 import type { ZipLoadResult, ZipProgress } from '../utils/zipLoader';
 import type { FileDropPayload } from './fileDropzoneDropPayload';
+import type { FileDropzoneWorkflowOptions } from './fileDropzoneWorkflow';
 
-type ProcessFiles = (files: Map<string, File>) => Promise<void>;
+type ProcessFiles = (
+  files: Map<string, File>,
+  progressRange?: { start: number; end: number },
+  options?: Pick<FileDropzoneWorkflowOptions, 'onSceneReplaced'>
+) => Promise<void | boolean>;
 type ClearCaches = (options?: ClearAllOptions) => void;
 type SetSourceInfo = (type: ReconstructionSourceType, url?: string | null) => void;
 type SetActiveZipArchive = (
@@ -74,6 +79,11 @@ function getErrorMessage(error: unknown, fallback: string): string {
 
 async function yieldToPaint(deps: Pick<LocalSourceBaseDeps, 'waitForPaint'>): Promise<void> {
   await (deps.waitForPaint ?? waitForBrowserPaint)();
+}
+
+function commitLocalSceneSource(deps: Pick<LocalSourceBaseDeps, 'clearCaches' | 'setSourceInfo'>): void {
+  deps.clearCaches();
+  deps.setSourceInfo('local', null);
 }
 
 export async function loadLocalZipFile(
@@ -145,9 +155,9 @@ export async function loadDropPayload(
   try {
     const files = await deps.collectDroppedFiles(payload, deps.scanEntry);
 
-    deps.clearCaches();
-    deps.setSourceInfo('local', null);
-    await deps.processFiles(files);
+    await deps.processFiles(files, undefined, {
+      onSceneReplaced: () => commitLocalSceneSource(deps),
+    });
     return true;
   } catch (error) {
     errorLog('[File Dropzone] Error processing drop:', error);
@@ -182,9 +192,9 @@ export async function loadBrowsedDirectory(
     const files = new Map<string, File>();
     await deps.scanDirectoryHandle(dirHandle, '', files);
 
-    deps.clearCaches();
-    deps.setSourceInfo('local', null);
-    await deps.processFiles(files);
+    await deps.processFiles(files, undefined, {
+      onSceneReplaced: () => commitLocalSceneSource(deps),
+    });
     return true;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {

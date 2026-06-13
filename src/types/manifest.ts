@@ -86,6 +86,8 @@ export interface UrlLoadProgress {
   bytesLoaded?: number;
   /** Total bytes for the current large file operation, if available */
   bytesTotal?: number;
+  /** Renderer that currently owns splat loading, if a renderer has taken over. */
+  splatRenderer?: 'spark' | 'webgpu';
 }
 
 /**

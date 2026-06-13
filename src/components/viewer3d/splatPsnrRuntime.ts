@@ -7,6 +7,7 @@ import {
 } from '../../splat/webgpu/webGpuSplatLimits';
 import {
   requestPreferredWebGpuSplatAdapter,
+  requestWebGpuSplatDevice,
   type WebGpuSplatGpuProvider,
 } from '../../splat/webgpu/webGpuSplatDevice';
 import { trackWebGpuSplatDebugCounter } from '../../splat/webgpu/webGpuSplatDebugCounters';
@@ -68,9 +69,14 @@ async function getWebGpuPsnrDevice(
   }
 
   if (webGpuPsnrDevicePromise) {
-    const device = await webGpuPsnrDevicePromise;
+    const cachedDevicePromise = webGpuPsnrDevicePromise;
+    const device = await cachedDevicePromise;
     if (webGpuDeviceMeetsSplatRequiredLimits(device, requiredLimits)) {
       return device;
+    }
+
+    if (webGpuPsnrDevicePromise !== cachedDevicePromise) {
+      return getWebGpuPsnrDevice(requiredLimits);
     }
 
     releaseGpuDeviceWithoutLossNotification(device);
@@ -83,7 +89,10 @@ async function getWebGpuPsnrDevice(
       if (!adapter) {
         throw new Error('WebGPU adapter is unavailable for PSNR computation');
       }
-      return adapter.requestDevice(createWebGpuRequiredLimitsDescriptor(adapter, requiredLimits));
+      return requestWebGpuSplatDevice(
+        adapter,
+        createWebGpuRequiredLimitsDescriptor(adapter, requiredLimits)
+      );
     })
     .then((device) => {
       try {

@@ -17,8 +17,10 @@ import type {
   SplatBackendPreference,
   SplatBackendResolution,
 } from '../../utils/splatBackendPolicy';
+import type { UrlLoadProgress } from '../../types/manifest';
 import type { Reconstruction } from '../../types/colmap';
 import type { WasmReconstructionWrapper } from '../../wasm/reconstruction';
+import { shouldHideSceneAutoHideElement } from './scene3dViewModel';
 
 interface SceneContentDataFacade {
   reconstruction: Reconstruction | null;
@@ -36,6 +38,7 @@ interface SceneContentDataFacade {
   splatBackendAvailability: SplatBackendAvailability;
   splatBackendResolution: SplatBackendResolution;
   splatsVisible: boolean;
+  urlProgress: UrlLoadProgress | null;
 }
 
 interface SceneContentActionsFacade {
@@ -52,6 +55,7 @@ interface SceneContainerDataFacade {
   splatBackendAvailability: SplatBackendAvailability;
   splatBackendResolution: SplatBackendResolution;
   splatsVisible: boolean;
+  pointsLayerVisible: boolean;
 }
 
 interface SceneContainerActionsFacade {
@@ -92,6 +96,7 @@ export function useSceneContentStoreFacade(): SceneContentStoreFacade {
   const requestedSplatBackend = useSplatBackendStore((s) => s.requestedBackend);
   const splatBackendAvailability = useSplatBackendStore((s) => s.availability);
   const splatBackendResolution = useSplatBackendStore((s) => s.resolution);
+  const urlProgress = useReconstructionStore((s) => s.urlProgress);
   const setSparkBackendAvailable = useSplatBackendStore((s) => s.setSparkBackendAvailable);
   const points = usePointsNode();
 
@@ -112,6 +117,7 @@ export function useSceneContentStoreFacade(): SceneContentStoreFacade {
       splatBackendAvailability,
       splatBackendResolution,
       splatsVisible: points.splatsVisible,
+      urlProgress,
     },
     actions: {
       setSparkBackendAvailable,
@@ -124,6 +130,8 @@ export function useSceneContainerStoreFacade(): SceneContainerStoreFacade {
   const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
   const splatFile = useReconstructionStore((s) => s.loadedFiles?.splatFile);
   const backgroundColor = useUIStore((s) => s.backgroundColor);
+  const isIdle = useUIStore((s) => s.isIdle);
+  const autoHideElements = useUIStore((s) => s.autoHideElements);
   const showAutoHideEditor = useUIStore((s) => s.showAutoHideEditor);
   const addNotification = useNotificationStore((s) => s.addNotification);
   const removeNotification = useNotificationStore((s) => s.removeNotification);
@@ -136,6 +144,11 @@ export function useSceneContainerStoreFacade(): SceneContainerStoreFacade {
   const setUrlLoading = useReconstructionStore((s) => s.setUrlLoading);
   const setUrlProgress = useReconstructionStore((s) => s.setUrlProgress);
   const points = usePointsNode();
+  const pointsLayerVisible = !shouldHideSceneAutoHideElement(
+    isIdle,
+    showAutoHideEditor,
+    autoHideElements.points
+  );
 
   return {
     data: {
@@ -148,6 +161,7 @@ export function useSceneContainerStoreFacade(): SceneContainerStoreFacade {
       splatBackendAvailability,
       splatBackendResolution,
       splatsVisible: points.splatsVisible,
+      pointsLayerVisible,
     },
     actions: {
       addNotification,

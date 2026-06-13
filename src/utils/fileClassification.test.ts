@@ -3,6 +3,7 @@ import { buildFile } from '../test/builders';
 import {
   createEmptyReconstruction,
   createImagesOnlyReconstruction,
+  findColmapCameraImageFiles,
   findColmapFiles,
   findLargestPlyFile,
   findPreferredSplatFile,
@@ -59,6 +60,28 @@ describe('file classification helpers', () => {
     ]));
 
     expect(result).toEqual({});
+  });
+
+  it('can select cameras and images without requiring a COLMAP points3D file', () => {
+    const cameras = buildFile('cameras.bin');
+    const images = buildFile('images.bin');
+    const rigs = buildFile('rigs.bin');
+
+    const files = fileMap([
+      ['sparse/0/cameras.bin', cameras],
+      ['sparse/0/images.bin', images],
+      ['sparse/0/rigs.bin', rigs],
+    ]);
+
+    expect(findColmapFiles(files)).toEqual({});
+    expect(findColmapCameraImageFiles(files)).toEqual({
+      camerasFile: cameras,
+      imagesFile: images,
+      points3DFile: undefined,
+      databaseFile: undefined,
+      rigsFile: rigs,
+      framesFile: undefined,
+    });
   });
 
   it('finds the largest PLY file without treating non-PLY files as splats', () => {

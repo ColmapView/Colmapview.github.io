@@ -24,11 +24,11 @@ describe('splat backend notice policy', () => {
 
     expect(getForcedWebGpuSplatFailureNotice(options)).toEqual({
       key: 'scene.spz:WebGPU is unsupported in this browser',
-      message: 'WebGPU splat renderer unavailable: WebGPU is unsupported in this browser',
+      message: 'WebGPU splat renderer unavailable: WebGPU is unsupported in this browser. Enable WebGPU in your browser, or use a WebGPU-capable browser, for full features.',
     });
     expect(getWebGpuSplatBackendNotice(options)).toEqual({
       key: 'scene.spz:WebGPU is unsupported in this browser',
-      message: 'WebGPU splat renderer unavailable: WebGPU is unsupported in this browser',
+      message: 'WebGPU splat renderer unavailable: WebGPU is unsupported in this browser. Enable WebGPU in your browser, or use a WebGPU-capable browser, for full features.',
     });
   });
 
@@ -86,6 +86,46 @@ describe('splat backend notice policy', () => {
     })).toEqual({
       key: 'scene.spz:Spark fallback selected because WebGPU splat renderer failed to initialize: adapter lost',
       message: 'Using Spark fallback: WebGPU splat renderer failed to initialize: adapter lost',
+    });
+  });
+
+  it('creates an auto-mode Spark fallback warning when WebGPU is unsupported', () => {
+    const fallbackResolution: SplatBackendResolution = {
+      status: 'resolved',
+      requested: 'auto',
+      backend: 'spark',
+      gpuPsnr: false,
+      reason: 'Spark fallback selected because WebGPU is unsupported',
+    };
+
+    expect(getWebGpuSplatBackendNotice({
+      requestedBackend: 'auto',
+      splatFile: new File(['x'], 'scene.spz'),
+      splatBackendResolution: fallbackResolution,
+      webGpuSplatCanvasMounted: false,
+    })).toEqual({
+      key: 'scene.spz:Spark fallback selected because WebGPU is unsupported',
+      message: 'Using Spark fallback: WebGPU is unsupported. Enable WebGPU in your browser, or use a WebGPU-capable browser, for full features.',
+    });
+  });
+
+  it('creates an auto-mode Spark fallback warning for browser-policy WebGPU blocks', () => {
+    const fallbackResolution: SplatBackendResolution = {
+      status: 'resolved',
+      requested: 'auto',
+      backend: 'spark',
+      gpuPsnr: false,
+      reason: 'Spark fallback selected because Firefox on Linux does not provide reliable WebGPU support for splat rendering',
+    };
+
+    expect(getWebGpuSplatBackendNotice({
+      requestedBackend: 'auto',
+      splatFile: new File(['x'], 'scene.spz'),
+      splatBackendResolution: fallbackResolution,
+      webGpuSplatCanvasMounted: false,
+    })).toEqual({
+      key: 'scene.spz:Spark fallback selected because Firefox on Linux does not provide reliable WebGPU support for splat rendering',
+      message: 'Using Spark fallback: Firefox on Linux does not provide reliable WebGPU support for splat rendering. Enable WebGPU in your browser, or use a WebGPU-capable browser, for full features.',
     });
   });
 

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import {
   DEFAULT_SPLAT_BACKEND_AVAILABILITY,
   DEFAULT_SPLAT_METRIC_AVAILABILITY,
+  getBrowserWebGpuCompatibilityBlockReason,
   getBrowserWebGpuBackendState,
   getBrowserWebGpuMetricState,
   getInitialSplatBackendPreference,
@@ -34,20 +35,24 @@ function createInitialSplatBackendState(): Pick<
   'requestedBackend' | 'availability' | 'resolution' | 'metricAvailability' | 'metricCapability'
 > {
   const requestedBackend = getInitialSplatBackendPreference();
+  const webGpuFailureReason = getBrowserWebGpuCompatibilityBlockReason();
   const availability = {
     ...DEFAULT_SPLAT_BACKEND_AVAILABILITY,
     webGpu: getBrowserWebGpuBackendState(),
+    webGpuFailureReason,
   };
   const metricAvailability = {
     ...DEFAULT_SPLAT_METRIC_AVAILABILITY,
     webGpu: getBrowserWebGpuMetricState(),
+    webGpuFailureReason,
   };
+  const resolution = resolveSplatBackend(requestedBackend, availability);
   return {
     requestedBackend,
     availability,
-    resolution: resolveSplatBackend(requestedBackend, availability),
+    resolution,
     metricAvailability,
-    metricCapability: resolveSplatMetricCapability(metricAvailability),
+    metricCapability: resolveSplatMetricCapability(metricAvailability, resolution),
   };
 }
 
@@ -59,12 +64,13 @@ function resolveNextState(
   SplatBackendState,
   'requestedBackend' | 'availability' | 'resolution' | 'metricAvailability' | 'metricCapability'
 > {
+  const resolution = resolveSplatBackend(requestedBackend, availability);
   return {
     requestedBackend,
     availability,
-    resolution: resolveSplatBackend(requestedBackend, availability),
+    resolution,
     metricAvailability,
-    metricCapability: resolveSplatMetricCapability(metricAvailability),
+    metricCapability: resolveSplatMetricCapability(metricAvailability, resolution),
   };
 }
 
@@ -99,11 +105,13 @@ export const useSplatBackendStore = create<SplatBackendState>()((set) => ({
     )
   ),
   setSparkBackendAvailable: (spark) => set((state) =>
-    resolveNextState(
-      state.requestedBackend,
-      { ...state.availability, spark },
-      state.metricAvailability
-    )
+    state.availability.spark === spark
+      ? state
+      : resolveNextState(
+        state.requestedBackend,
+        { ...state.availability, spark },
+        state.metricAvailability
+      )
   ),
   resetSplatBackendState: () => set(createInitialSplatBackendState()),
 }));

@@ -56,7 +56,7 @@ describe('useSplatPsnrEvaluatorStoreFacade', () => {
       splatPsnrFrameReady: true,
       splatPsnrComputeRequest: { id: 3, scope: 'selected', selectedImageId: 1 },
       splatBackendResolution: expect.objectContaining({ backend: 'webgpu', gpuPsnr: true }),
-      splatMetricCapability: expect.objectContaining({ status: 'available', gpuPsnr: true }),
+      splatMetricCapability: expect.objectContaining({ status: 'available', backend: 'webgpu', gpuPsnr: true }),
       transform: expect.objectContaining({ scale: 2 }),
       splatTransform: expect.objectContaining({ scale: 3, translationX: 1 }),
     });

@@ -7,6 +7,7 @@ import {
   useImageMetricsStore,
   usePointPickingStore,
   useReconstructionStore,
+  useSplatBackendStore,
   useUIStore,
 } from '../../store';
 import type { CameraViewState, NavigationHistoryEntry } from '../../store/types';
@@ -33,6 +34,7 @@ describe('useCameraFrustumsStoreFacade', () => {
     useDeletionStore.setState(useDeletionStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
     useImageMetricsStore.setState(useImageMetricsStore.getInitialState(), true);
+    useSplatBackendStore.setState(useSplatBackendStore.getInitialState(), true);
     usePointPickingStore.setState(usePointPickingStore.getInitialState(), true);
     useFloorPlaneStore.setState(useFloorPlaneStore.getInitialState(), true);
   });
@@ -126,6 +128,11 @@ describe('useCameraFrustumsStoreFacade', () => {
   });
 
   it('exposes splat metrics when camera frustum color mode needs them', () => {
+    const splatFile = buildFile('scene.spz', 'splat');
+    useReconstructionStore.setState({ loadedFiles: buildLoadedFiles({ splatFile }) });
+    useSplatBackendStore.getState().setRequestedBackend('webgpu');
+    useSplatBackendStore.getState().setWebGpuBackendState('ready');
+    useSplatBackendStore.getState().setWebGpuMetricState('ready');
     useCameraStore.setState({ frustumColorMode: 'splatPsnr' });
     useImageMetricsStore.getState().setSplatPsnrMetric({
       imageId: 1,
@@ -142,6 +149,28 @@ describe('useCameraFrustumsStoreFacade', () => {
 
     expect(result.current.data.splatPsnrByImage.get(1)?.psnr).toBe(30.5);
     expect(result.current.data.splatPsnrByImage.get(1)?.ssim).toBe(0.94);
+  });
+
+  it('does not expose stale splat metrics while Spark is active', () => {
+    const splatFile = buildFile('scene.spz', 'splat');
+    useReconstructionStore.setState({ loadedFiles: buildLoadedFiles({ splatFile }) });
+    useSplatBackendStore.getState().setSparkBackendAvailable(true);
+    useSplatBackendStore.getState().setRequestedBackend('spark');
+    useCameraStore.setState({ frustumColorMode: 'splatPsnr' });
+    useImageMetricsStore.getState().setSplatPsnrMetric({
+      imageId: 1,
+      psnr: 30.5,
+      ssim: 0.94,
+      mse: 58,
+      validPixelCount: 128,
+      width: 80,
+      height: 60,
+      computedAt: 321,
+    });
+
+    const { result } = renderHook(() => useCameraFrustumsStoreFacade());
+
+    expect(result.current.data.splatPsnrByImage.size).toBe(0);
   });
 
   it('exposes alignment state and routes frustum actions to owning stores', () => {

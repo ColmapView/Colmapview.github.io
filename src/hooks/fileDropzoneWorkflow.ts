@@ -6,12 +6,14 @@ import type { LoadedFiles, Reconstruction, SplatFileSource } from '../types/colm
 import type { UrlLoadProgress } from '../types/manifest';
 import { collectImageFiles, findMissingImageFiles, hasMaskFiles } from '../utils/imageFileUtils';
 import {
+  findColmapCameraImageFiles,
   findColmapFiles,
   findConfigFile,
   findSplatFileSources,
   hasColmapFiles,
   hasImageFiles,
 } from '../utils/fileClassification';
+import { classifyPlyFile, type PlyCloudKind } from '../parsers';
 import type { AppLogger } from '../utils/logger';
 import { appLogger } from '../utils/logger';
 import { preloadSparkModule } from '../utils/sparkSplatRuntime';
@@ -24,6 +26,7 @@ import {
   shouldSkipMissingImageDiagnosticForSource,
 } from './fileDropzoneDiagnostics';
 import { runImagesOnlyLoad } from './fileDropzoneImagesOnly';
+import { runPointCloudOnlyLoad } from './fileDropzonePointCloudOnly';
 import { runSplatOnlyLoad } from './fileDropzoneSplatOnly';
 import { parseColmapFiles } from './fileDropzoneColmapParser';
 import { buildColmapReconstruction } from './fileDropzoneReconstruction';
@@ -39,6 +42,11 @@ type ParseColmapFiles = typeof parseColmapFiles;
 type BuildColmapReconstruction = typeof buildColmapReconstruction;
 type ClearCaches = (options?: ClearAllOptions) => void;
 type PreloadSplatRuntime = () => Promise<unknown>;
+type ClassifyPlyFile = typeof classifyPlyFile;
+
+interface PointCloudPlySource extends SplatFileSource {
+  kind: 'point-cloud';
+}
 
 export interface FileDropzoneWorkflowDeps {
   addNotification: (type: 'info' | 'warning', message: string, duration?: number) => void;
@@ -54,6 +62,7 @@ export interface FileDropzoneWorkflowDeps {
   importConfig?: ImportConfigFile;
   logger?: AppLogger;
   parseFiles?: ParseColmapFiles;
+  classifyPlyFile?: ClassifyPlyFile;
   preloadSplatRuntime?: PreloadSplatRuntime;
   resetView: () => void;
   setDroppedFiles: (files: Map<string, File>) => void;
@@ -67,7 +76,9 @@ export interface FileDropzoneWorkflowDeps {
 
 export interface FileDropzoneWorkflowOptions {
   progressRange?: { start: number; end: number };
+  replaceSplatScene?: boolean;
   throwOnError?: boolean;
+  onSceneReplaced?: () => void;
 }
 
 function updateLoadedSplatFile(
@@ -125,8 +136,7 @@ function runNewSplatOnlyLoad(
   splatFileSources: SplatFileSource[],
   deps: Pick<
     FileDropzoneWorkflowDeps,
-    'addNotification'
-      | 'clearSplatPsnr'
+    'clearSplatPsnr'
       | 'setDroppedFiles'
       | 'setLoadedFiles'
       | 'setReconstruction'
@@ -149,9 +159,69 @@ function runNewSplatOnlyLoad(
     clearCaches,
     setReconstruction: deps.setReconstruction,
     resetView: deps.resetView,
+    log,
+  });
+}
+
+async function runNewPointCloudOnlyLoad(
+  files: Map<string, File>,
+  pointCloudFile: File,
+  deps: Pick<
+    FileDropzoneWorkflowDeps,
+    'addNotification'
+      | 'clearSplatPsnr'
+      | 'setDroppedFiles'
+      | 'setLoadedFiles'
+      | 'setReconstruction'
+      | 'setUrlProgress'
+      | 'resetView'
+  >,
+  clearCaches: ClearCaches,
+  mapProgress: (localPercent: number) => number,
+  log: (message: string) => void
+): Promise<void> {
+  deps.setDroppedFiles(files);
+  await runPointCloudOnlyLoad({
+    pointCloudFile,
+    mapProgress,
+    setUrlProgress: deps.setUrlProgress,
+    setLoadedFiles: deps.setLoadedFiles,
+    clearSplatPsnr: deps.clearSplatPsnr,
+    clearCaches,
+    setReconstruction: deps.setReconstruction,
+    resetView: deps.resetView,
     addNotification: deps.addNotification,
     log,
   });
+}
+
+async function splitSplatAndPointCloudPlySources(
+  files: Map<string, File>,
+  classify: ClassifyPlyFile
+): Promise<{
+  splatFileSources: SplatFileSource[];
+  pointCloudPlySources: PointCloudPlySource[];
+}> {
+  const candidateSources = findSplatFileSources(files);
+  const splatFileSources: SplatFileSource[] = [];
+  const pointCloudPlySources: PointCloudPlySource[] = [];
+
+  for (const source of candidateSources) {
+    if (!source.path.toLowerCase().endsWith('.ply')) {
+      splatFileSources.push(source);
+      continue;
+    }
+
+    const kind: PlyCloudKind = await classify(source.file);
+    if (kind === 'point-cloud') {
+      pointCloudPlySources.push({ ...source, kind });
+      continue;
+    }
+
+    splatFileSources.push(source);
+  }
+
+  return { splatFileSources, pointCloudPlySources };
 }
 
 export async function processFileDropzoneFiles(
@@ -165,16 +235,35 @@ export async function processFileDropzoneFiles(
   const parseFiles = deps.parseFiles ?? parseColmapFiles;
   const buildReconstruction = deps.buildReconstruction ?? buildColmapReconstruction;
   const preloadSplatRuntime = deps.preloadSplatRuntime ?? preloadSparkModule;
+  const classifyPly = deps.classifyPlyFile ?? classifyPlyFile;
   const getDecodeFailureCount = deps.getFailedImageCount ?? getFailedImageCount;
   const delay = deps.delay ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)));
-  const { progressRange, throwOnError = false } = normalizeWorkflowOptions(options);
+  const {
+    progressRange,
+    replaceSplatScene = false,
+    throwOnError = false,
+    onSceneReplaced,
+  } = normalizeWorkflowOptions(options);
 
   const pStart = progressRange?.start ?? 0;
   const pEnd = progressRange?.end ?? 100;
   const mapProgress = (localPercent: number) => Math.round(pStart + (localPercent / 100) * (pEnd - pStart));
-  const splatFileSources = findSplatFileSources(files);
+  let sceneReplacementReported = false;
+  const reportSceneReplacement = () => {
+    if (sceneReplacementReported) {
+      return;
+    }
+
+    sceneReplacementReported = true;
+    onSceneReplaced?.();
+  };
+  const {
+    splatFileSources,
+    pointCloudPlySources,
+  } = await splitSplatAndPointCloudPlySources(files, classifyPly);
   const splatFiles = splatFileSources.map((source) => source.file);
   const splatFile = splatFiles[0];
+  const pointCloudFile = pointCloudPlySources[0]?.file;
   const splatRendererStartPercent = mapProgress(60);
   let keepLoadingForInitialSplat = false;
   const handOffLoadingToSplatRenderer = () => {
@@ -213,10 +302,16 @@ export async function processFileDropzoneFiles(
       if (!hasColmapFiles(files) && !hasImageFiles(files)) {
         let startedNewSplatScene = false;
         if (splatFile) {
-          if (!updateLoadedSplatFile(splatFile, splatFiles, splatFileSources, deps, mapProgress, logger.info)) {
+          const updatedExistingSplat = !replaceSplatScene
+            && updateLoadedSplatFile(splatFile, splatFiles, splatFileSources, deps, mapProgress, logger.info);
+          if (!updatedExistingSplat) {
+            reportSceneReplacement();
             runNewSplatOnlyLoad(files, splatFile, splatFiles, splatFileSources, deps, clearCaches, mapProgress, logger.info);
             startedNewSplatScene = true;
           }
+        } else if (pointCloudFile) {
+          reportSceneReplacement();
+          await runNewPointCloudOnlyLoad(files, pointCloudFile, deps, clearCaches, mapProgress, logger.info);
         }
         if (configErrorMessage && throwOnError) {
           throw new Error(configErrorMessage);
@@ -228,14 +323,35 @@ export async function processFileDropzoneFiles(
       }
     }
 
-    const { camerasFile, imagesFile, points3DFile, databaseFile, rigsFile, framesFile } = findColmapFiles(files);
+    let { camerasFile, imagesFile, points3DFile, databaseFile, rigsFile, framesFile } = findColmapFiles(files);
+    if ((!camerasFile || !imagesFile || !points3DFile) && pointCloudFile) {
+      const cameraImageFiles = findColmapCameraImageFiles(files);
+      if (cameraImageFiles.camerasFile && cameraImageFiles.imagesFile) {
+        camerasFile = cameraImageFiles.camerasFile;
+        imagesFile = cameraImageFiles.imagesFile;
+        points3DFile = pointCloudFile;
+        databaseFile = cameraImageFiles.databaseFile;
+        rigsFile = cameraImageFiles.rigsFile;
+        framesFile = cameraImageFiles.framesFile;
+      }
+    }
 
     deps.setUrlProgress({ percent: mapProgress(5), message: 'Scanning image files...' });
     const imageFiles = collectImageFiles(files);
     const hasMasks = hasMaskFiles(files);
 
     if (!camerasFile || !imagesFile || !points3DFile) {
-      if (splatFile && updateLoadedSplatFile(splatFile, splatFiles, splatFileSources, deps, mapProgress, logger.info)) {
+      if (
+        splatFile
+        && !replaceSplatScene
+        && updateLoadedSplatFile(splatFile, splatFiles, splatFileSources, deps, mapProgress, logger.info)
+      ) {
+        return true;
+      }
+
+      if (pointCloudFile && !splatFile) {
+        reportSceneReplacement();
+        await runNewPointCloudOnlyLoad(files, pointCloudFile, deps, clearCaches, mapProgress, logger.info);
         return true;
       }
 
@@ -257,6 +373,7 @@ export async function processFileDropzoneFiles(
           addNotification: deps.addNotification,
           log: logger.info,
         });
+        reportSceneReplacement();
         if (splatFile) {
           handOffLoadingToSplatRenderer();
         }
@@ -264,6 +381,7 @@ export async function processFileDropzoneFiles(
       }
 
       if (splatFile) {
+        reportSceneReplacement();
         runNewSplatOnlyLoad(files, splatFile, splatFiles, splatFileSources, deps, clearCaches, mapProgress, logger.info);
         handOffLoadingToSplatRenderer();
         return true;
@@ -274,6 +392,7 @@ export async function processFileDropzoneFiles(
       );
     }
 
+    reportSceneReplacement();
     deps.setDroppedFiles(files);
 
     logger.info(`Scanned ${files.size} total files, ${imageFiles.size} image lookup keys`);

@@ -12,7 +12,7 @@ import { scanDirectoryHandle, scanEntry } from '../utils/fileScanning';
 import { appLogger } from '../utils/logger';
 import { collectDroppedFiles, collectFileDropPayload, isFileDrop } from './fileDropzoneDropPayload';
 import { loadBrowsedDirectory, loadDropPayload, loadLocalZipFile } from './fileDropzoneLocalSources';
-import { processFileDropzoneFiles } from './fileDropzoneWorkflow';
+import { processFileDropzoneFiles, type FileDropzoneWorkflowOptions } from './fileDropzoneWorkflow';
 
 export function useFileDropzone() {
   const {
@@ -36,7 +36,7 @@ export function useFileDropzone() {
   const processFiles = useCallback(async (
     files: Map<string, File>,
     progressRange?: { start: number; end: number },
-    options: { throwOnError?: boolean } = {}
+    options: Pick<FileDropzoneWorkflowOptions, 'onSceneReplaced' | 'replaceSplatScene' | 'throwOnError'> = {}
   ) => {
     await processFileDropzoneFiles(files, {
       addNotification: useNotificationStore.getState().addNotification,
@@ -59,6 +59,8 @@ export function useFileDropzone() {
       setWasmReconstruction,
     }, {
       progressRange,
+      onSceneReplaced: options.onSceneReplaced,
+      replaceSplatScene: options.replaceSplatScene ?? false,
       throwOnError: options.throwOnError ?? false,
     });
   }, [

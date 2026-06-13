@@ -4,6 +4,7 @@ import {
   parseImagesBinary,
   parseImagesText,
   parsePoints3DBinary,
+  parsePointCloudPlyBuffer,
   parsePoints3DText,
   parseWithWasm,
 } from '../parsers';
@@ -36,6 +37,7 @@ export interface ColmapParserDeps {
   parseImagesBinary: typeof parseImagesBinary;
   parseImagesText: typeof parseImagesText;
   parsePoints3DBinary: typeof parsePoints3DBinary;
+  parsePointCloudPlyBuffer: typeof parsePointCloudPlyBuffer;
   parsePoints3DText: typeof parsePoints3DText;
 }
 
@@ -52,6 +54,7 @@ const defaultParsers: ColmapParserDeps = {
   parseImagesBinary,
   parseImagesText,
   parsePoints3DBinary,
+  parsePointCloudPlyBuffer,
   parsePoints3DText,
 };
 
@@ -102,6 +105,8 @@ export async function parseColmapFiles({
       : imagesFile.text().then(parsers.parseImagesText),
     points3DFile.name.endsWith('.bin')
       ? points3DFile.arrayBuffer().then(parsers.parsePoints3DBinary)
+      : points3DFile.name.toLowerCase().endsWith('.ply')
+      ? points3DFile.arrayBuffer().then(parsers.parsePointCloudPlyBuffer)
       : points3DFile.text().then(parsers.parsePoints3DText),
   ]);
 

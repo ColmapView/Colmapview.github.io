@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  WEBGPU_SPLAT_DEVICE_REQUEST_TIMEOUT_REASON,
   initializeWebGpuSplatDevice,
   requestPreferredWebGpuSplatAdapter,
   type WebGpuSplatGpuProvider,
@@ -25,6 +26,14 @@ function createDeferredLost(): {
     }),
     resolve: resolveLost,
   };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
 }
 
 function createDeviceHarness(options: {
@@ -98,6 +107,7 @@ describe('WebGPU splat device initialization', () => {
     handle.dispose();
     handle.dispose();
     expect(context?.unconfigure).toHaveBeenCalledTimes(1);
+    expect(device.destroy).toHaveBeenCalledTimes(1);
     expect(getWebGpuSplatDebugCounters()).toMatchObject({
       devices: 0,
       canvases: 0,
@@ -165,6 +175,57 @@ describe('WebGPU splat device initialization', () => {
     handle.dispose();
   });
 
+  it('continues adapter fallback when high-performance adapter requests time out', async () => {
+    vi.useFakeTimers();
+    try {
+      const { adapter: fallbackAdapter } = createDeviceHarness();
+      const pendingAdapterRequest = new Promise<Pick<GPUAdapter, 'limits' | 'requestDevice'> | null>(() => {
+        // Simulate a browser adapter probe that never settles.
+      });
+      const gpu: WebGpuSplatGpuProvider = {
+        requestAdapter: vi.fn()
+          .mockReturnValueOnce(pendingAdapterRequest)
+          .mockResolvedValueOnce(fallbackAdapter),
+        getPreferredCanvasFormat: vi.fn(() => 'rgba8unorm'),
+      };
+
+      const adapterPromise = requestPreferredWebGpuSplatAdapter(gpu, undefined, 10);
+      await vi.advanceTimersByTimeAsync(10);
+
+      await expect(adapterPromise).resolves.toBe(fallbackAdapter);
+      expect(gpu.requestAdapter).toHaveBeenNthCalledWith(1, { powerPreference: 'high-performance' });
+      expect(gpu.requestAdapter).toHaveBeenNthCalledWith(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('redistributes unused adapter timeout budget to later fallback attempts', async () => {
+    vi.useFakeTimers();
+    try {
+      const { adapter: lowPowerAdapter } = createDeviceHarness();
+      const gpu: WebGpuSplatGpuProvider = {
+        requestAdapter: vi.fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce(null)
+          .mockImplementationOnce(() => new Promise((resolve) => {
+            setTimeout(() => resolve(lowPowerAdapter), 20);
+          })),
+        getPreferredCanvasFormat: vi.fn(() => 'rgba8unorm'),
+      };
+
+      const adapterPromise = requestPreferredWebGpuSplatAdapter(gpu, undefined, 30);
+      await vi.advanceTimersByTimeAsync(20);
+
+      await expect(adapterPromise).resolves.toBe(lowPowerAdapter);
+      expect(gpu.requestAdapter).toHaveBeenNthCalledWith(1, { powerPreference: 'high-performance' });
+      expect(gpu.requestAdapter).toHaveBeenNthCalledWith(2);
+      expect(gpu.requestAdapter).toHaveBeenNthCalledWith(3, { powerPreference: 'low-power' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('uses a single default adapter request on Windows because powerPreference is ignored', async () => {
     const { adapter } = createDeviceHarness();
     const gpu: WebGpuSplatGpuProvider = {
@@ -177,6 +238,22 @@ describe('WebGPU splat device initialization', () => {
     expect(requestedAdapter).toBe(adapter);
     expect(gpu.requestAdapter).toHaveBeenCalledTimes(1);
     expect(gpu.requestAdapter).toHaveBeenCalledWith();
+  });
+
+  it('does not treat Darwin as Windows when choosing adapter fallback requests', async () => {
+    const { adapter } = createDeviceHarness();
+    const gpu: WebGpuSplatGpuProvider = {
+      requestAdapter: vi.fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(adapter),
+      getPlatform: vi.fn(() => 'Darwin'),
+    };
+
+    const requestedAdapter = await requestPreferredWebGpuSplatAdapter(gpu);
+
+    expect(requestedAdapter).toBe(adapter);
+    expect(gpu.requestAdapter).toHaveBeenNthCalledWith(1, { powerPreference: 'high-performance' });
+    expect(gpu.requestAdapter).toHaveBeenNthCalledWith(2);
   });
 
   it('fails when WebGPU support or canvas context is unavailable', async () => {
@@ -243,6 +320,38 @@ describe('WebGPU splat device initialization', () => {
     expect(adapter?.requestDevice).toHaveBeenCalledWith(undefined);
   });
 
+  it('fails device initialization when requestDevice times out and destroys a late device', async () => {
+    vi.useFakeTimers();
+    try {
+      const { adapter, canvas, context, device, gpu } = createDeviceHarness();
+      const pendingDeviceRequest = createDeferred<GPUDevice>();
+      vi.mocked(adapter?.requestDevice).mockReturnValue(pendingDeviceRequest.promise);
+
+      const initializePromise = initializeWebGpuSplatDevice(canvas, {
+        gpu,
+        deviceRequestTimeoutMs: 10,
+      });
+      const initializeRejection = expect(initializePromise)
+        .rejects.toThrow(WEBGPU_SPLAT_DEVICE_REQUEST_TIMEOUT_REASON);
+      await vi.advanceTimersByTimeAsync(10);
+
+      await initializeRejection;
+      expect(context?.configure).not.toHaveBeenCalled();
+      expect(getWebGpuSplatDebugCounters()).toMatchObject({
+        devices: 0,
+        canvases: 0,
+      });
+
+      pendingDeviceRequest.resolve(device);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(device.destroy).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('fails before device creation when required splat limits exceed the adapter', async () => {
     const device = {
       lost: createDeferredLost().lost,
@@ -304,6 +413,27 @@ describe('WebGPU splat device initialization', () => {
     });
     expect(context?.configure).not.toHaveBeenCalled();
     expect(device.destroy).toHaveBeenCalledTimes(1);
+    expect(getWebGpuSplatDebugCounters()).toMatchObject({
+      devices: 0,
+      canvases: 0,
+    });
+  });
+
+  it('destroys the device when canvas configuration fails', async () => {
+    const configureError = new Error('configure failed');
+    const context = {
+      configure: vi.fn(() => {
+        throw configureError;
+      }),
+      unconfigure: vi.fn(),
+    };
+    const { canvas, device, gpu } = createDeviceHarness({ context });
+
+    await expect(initializeWebGpuSplatDevice(canvas, { gpu }))
+      .rejects.toBe(configureError);
+
+    expect(device.destroy).toHaveBeenCalledTimes(1);
+    expect(context.unconfigure).not.toHaveBeenCalled();
     expect(getWebGpuSplatDebugCounters()).toMatchObject({
       devices: 0,
       canvases: 0,

@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
+import { useCallback } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import {
@@ -7,6 +8,7 @@ import {
 } from '../../splat/webgpu/visibleSplatRendererAdapter';
 import { loadGaussianCloudFromFile } from '../../splat/gaussianCloudLoader';
 import {
+  shouldClearUnavailableForcedWebGpuSplatLoading,
   shouldMountWebGpuSplatCanvas,
   shouldRenderWebGpuSplatCanvas,
   shouldSyncWebGpuSplatCanvasFrame,
@@ -24,6 +26,9 @@ import type {
   SplatBackendResolution,
 } from '../../utils/splatBackendPolicy';
 import type { GaussianCloud } from '../../splat';
+import type { LoadedGaussianCloud } from '../../splat/gaussianCloud';
+import type { UrlLoadProgress } from '../../types/manifest';
+import type { NotificationState } from '../../store';
 import type {
   LoadedVisibleWebGpuSplatRendererAdapterDeps,
   VisibleWebGpuSplatCloudOptions,
@@ -62,6 +67,16 @@ function makeLargeShCloud(options: { shByteLength?: number } = {}): GaussianClou
       ? undefined
       : { byteLength: options.shByteLength } as Float32Array,
   };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, resolve, reject };
 }
 
 function makePreflightAdapter(
@@ -119,13 +134,41 @@ function WebGpuFailureHarness({ splatFile }: { splatFile: File }) {
   );
 }
 
-function WebGpuAutoTransitionHarness({ splatFile }: { splatFile: File }) {
+function WebGpuAutoTransitionHarness({
+  splatFile,
+  addNotification,
+  removeNotification,
+  getUrlProgress,
+  setUrlLoading,
+  setUrlProgress,
+}: {
+  splatFile: File;
+  addNotification?: NotificationState['addNotification'];
+  removeNotification?: NotificationState['removeNotification'];
+  getUrlProgress?: () => UrlLoadProgress | null;
+  setUrlLoading?: (loading: boolean) => void;
+  setUrlProgress?: (progress: UrlLoadProgress | null) => void;
+}) {
   const requestedBackend = useSplatBackendStore((s) => s.requestedBackend);
   const availability = useSplatBackendStore((s) => s.availability);
   const resolution = useSplatBackendStore((s) => s.resolution);
   const setWebGpuBackendState = useSplatBackendStore((s) => s.setWebGpuBackendState);
   const mounted = shouldMountWebGpuSplatCanvas(requestedBackend, availability, splatFile);
   const visible = shouldRenderWebGpuSplatCanvas(resolution, splatFile);
+  const webGpuBackendSelected = resolution.status === 'resolved'
+    && resolution.backend === 'webgpu';
+  const reportLoadingProgress = requestedBackend === 'webgpu'
+    || webGpuBackendSelected
+    || (
+      requestedBackend === 'auto'
+      && !availability.spark
+    );
+  const handleRuntimeReady = useCallback(() => {
+    setWebGpuBackendState('ready');
+  }, [setWebGpuBackendState]);
+  const handleRuntimeFailed = useCallback((reason: string) => {
+    setWebGpuBackendState('failed', reason);
+  }, [setWebGpuBackendState]);
 
   return (
     <>
@@ -138,8 +181,14 @@ function WebGpuAutoTransitionHarness({ splatFile }: { splatFile: File }) {
         mounted={mounted}
         visible={visible}
         splatFile={splatFile}
-        onRuntimeReady={() => setWebGpuBackendState('ready')}
-        onRuntimeFailed={(reason) => setWebGpuBackendState('failed', reason)}
+        addNotification={addNotification}
+        removeNotification={removeNotification}
+        getUrlProgress={getUrlProgress}
+        setUrlLoading={setUrlLoading}
+        setUrlProgress={setUrlProgress}
+        reportLoadingProgress={reportLoadingProgress}
+        onRuntimeReady={handleRuntimeReady}
+        onRuntimeFailed={handleRuntimeFailed}
       />
     </>
   );
@@ -224,11 +273,84 @@ describe('WebGpuSplatCanvasLayer', () => {
       gpuPsnr: false,
       reason: 'Preparing WebGPU splat renderer',
     };
+    const sparkFallbackResolution: SplatBackendResolution = {
+      status: 'resolved',
+      requested: 'auto',
+      backend: 'spark',
+      gpuPsnr: false,
+      reason: 'Spark compatibility renderer active while WebGPU initializes',
+    };
 
     expect(shouldSyncWebGpuSplatCanvasFrame(true, false, preparingResolution)).toBe(true);
+    expect(shouldSyncWebGpuSplatCanvasFrame(true, false, sparkFallbackResolution)).toBe(true);
     expect(shouldSyncWebGpuSplatCanvasFrame(true, true, webGpuResolution)).toBe(true);
     expect(shouldSyncWebGpuSplatCanvasFrame(true, false, webGpuResolution)).toBe(false);
+    expect(shouldSyncWebGpuSplatCanvasFrame(true, false, webGpuResolution, true)).toBe(true);
     expect(shouldSyncWebGpuSplatCanvasFrame(false, true, webGpuResolution)).toBe(false);
+  });
+
+  it('clears forced WebGPU loading only when the unavailable state belongs to the active splat file', () => {
+    const file = new File(['x'], 'scene.spz');
+    const unavailableResolution: SplatBackendResolution = {
+      status: 'unavailable',
+      requested: 'webgpu',
+      backend: null,
+      gpuPsnr: false,
+      reason: 'WebGPU splat renderer is not available',
+    };
+
+    expect(shouldClearUnavailableForcedWebGpuSplatLoading(
+      'webgpu',
+      unavailableResolution,
+      file,
+      false,
+      {
+        percent: 60,
+        message: 'Preparing splat renderer...',
+        currentFile: 'scene.spz',
+        splatRenderer: 'webgpu',
+      }
+    )).toBe(true);
+    expect(shouldClearUnavailableForcedWebGpuSplatLoading(
+      'webgpu',
+      unavailableResolution,
+      file,
+      true,
+      { percent: 60, message: 'Preparing splat renderer...', currentFile: 'scene.spz' }
+    )).toBe(false);
+    expect(shouldClearUnavailableForcedWebGpuSplatLoading(
+      'auto',
+      unavailableResolution,
+      file,
+      false,
+      { percent: 60, message: 'Preparing splat renderer...', currentFile: 'scene.spz' }
+    )).toBe(false);
+    expect(shouldClearUnavailableForcedWebGpuSplatLoading(
+      'webgpu',
+      unavailableResolution,
+      file,
+      false,
+      { percent: 60, message: 'Preparing splat renderer...', currentFile: 'other.spz' }
+    )).toBe(false);
+    expect(shouldClearUnavailableForcedWebGpuSplatLoading(
+      'webgpu',
+      unavailableResolution,
+      file,
+      false,
+      { percent: 60, message: 'Preparing splat renderer...', currentFile: 'scene.spz' }
+    )).toBe(true);
+    expect(shouldClearUnavailableForcedWebGpuSplatLoading(
+      'webgpu',
+      unavailableResolution,
+      file,
+      false,
+      {
+        percent: 60,
+        message: 'Preparing splat renderer...',
+        currentFile: 'scene.spz',
+        splatRenderer: 'spark',
+      }
+    )).toBe(false);
   });
 
   it('creates a pointer-transparent canvas layer when visible', () => {
@@ -307,6 +429,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       percent: 92,
       message: 'Preparing splat renderer...',
       currentFile: 'scene.spz',
+      splatRenderer: 'webgpu',
     });
     expect(removeNotification).not.toHaveBeenCalled();
     expect(createLoadedVisibleWebGpuSplatRendererAdapter).toHaveBeenCalledWith(
@@ -348,11 +471,297 @@ describe('WebGpuSplatCanvasLayer', () => {
       percent: 100,
       message: 'Complete',
       currentFile: 'scene.spz',
+      splatRenderer: 'webgpu',
     });
     expect(setUrlLoading).toHaveBeenLastCalledWith(false);
     onFirstFrame?.();
     expect(onRuntimeReady).toHaveBeenCalledTimes(1);
     expect(addNotification).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps hidden background warm-up silent when loading progress reporting is disabled', async () => {
+    const file = new File(['x'], 'scene.spz');
+    const renderer = {
+      loadCloud: vi.fn(),
+      setFrameSnapshot: vi.fn(),
+      render: vi.fn(),
+      dispose: vi.fn(),
+    };
+    let onFirstFrame: (() => void) | undefined;
+    vi.mocked(createLoadedVisibleWebGpuSplatRendererAdapter).mockImplementation(async (
+      _canvas,
+      cloud,
+      cloudOptions,
+      deps?: LoadedVisibleWebGpuSplatRendererAdapterDeps
+    ) => {
+      onFirstFrame = deps?.onFirstFrame;
+      renderer.loadCloud(cloud, cloudOptions);
+      return renderer;
+    });
+    vi.mocked(loadGaussianCloudFromFile).mockResolvedValue({
+      file,
+      format: 'spz',
+      byteLength: 1,
+      cloud: makeCloud(),
+    });
+    const onRuntimeReady = vi.fn();
+    const addNotification = vi.fn(() => 'loading-notice');
+    const removeNotification = vi.fn();
+    const setUrlLoading = vi.fn();
+    const setUrlProgress = vi.fn();
+
+    render(
+      <WebGpuSplatCanvasLayer
+        mounted
+        visible={false}
+        splatFile={file}
+        addNotification={addNotification}
+        removeNotification={removeNotification}
+        setUrlLoading={setUrlLoading}
+        setUrlProgress={setUrlProgress}
+        reportLoadingProgress={false}
+        onRuntimeReady={onRuntimeReady}
+      />
+    );
+
+    await waitFor(() => {
+      expect(renderer.loadCloud).toHaveBeenCalledTimes(1);
+    });
+    expect(addNotification).not.toHaveBeenCalled();
+    expect(removeNotification).not.toHaveBeenCalled();
+    expect(setUrlLoading).not.toHaveBeenCalled();
+    expect(setUrlProgress).not.toHaveBeenCalled();
+
+    onFirstFrame?.();
+
+    await waitFor(() => {
+      expect(onRuntimeReady).toHaveBeenCalledTimes(1);
+    });
+    expect(addNotification).not.toHaveBeenCalled();
+    expect(removeNotification).not.toHaveBeenCalled();
+    expect(setUrlLoading).not.toHaveBeenCalled();
+    expect(setUrlProgress).not.toHaveBeenCalled();
+  });
+
+  it('loads each new WebGPU splat file without resetting metric state', async () => {
+    const firstFile = new File(['x'], 'first.spz');
+    const secondFile = new File(['x'], 'second.spz');
+    const firstRenderer = {
+      loadCloud: vi.fn(),
+      setFrameSnapshot: vi.fn(),
+      render: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const secondRenderer = {
+      loadCloud: vi.fn(),
+      setFrameSnapshot: vi.fn(),
+      render: vi.fn(),
+      dispose: vi.fn(),
+    };
+    vi.mocked(createLoadedVisibleWebGpuSplatRendererAdapter)
+      .mockImplementationOnce(async () => firstRenderer)
+      .mockImplementationOnce(async () => secondRenderer);
+    vi.mocked(loadGaussianCloudFromFile)
+      .mockResolvedValueOnce({
+        file: firstFile,
+        format: 'spz',
+        byteLength: 1,
+        cloud: makeCloud(),
+      })
+      .mockResolvedValueOnce({
+        file: secondFile,
+        format: 'spz',
+        byteLength: 1,
+        cloud: makeCloud(),
+      });
+
+    const view = render(
+      <WebGpuSplatCanvasLayer
+        mounted
+        visible={false}
+        splatFile={firstFile}
+      />
+    );
+
+    await waitFor(() => {
+      expect(createLoadedVisibleWebGpuSplatRendererAdapter).toHaveBeenCalledTimes(1);
+    });
+
+    view.rerender(
+      <WebGpuSplatCanvasLayer
+        mounted
+        visible={false}
+        splatFile={secondFile}
+      />
+    );
+
+    await waitFor(() => {
+      expect(createLoadedVisibleWebGpuSplatRendererAdapter).toHaveBeenCalledTimes(2);
+    });
+    expect(firstRenderer.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops reporting loading progress without clearing shared loading state when ownership is revoked', async () => {
+    const file = new File(['x'], 'scene.spz');
+    const renderer = {
+      loadCloud: vi.fn(),
+      setFrameSnapshot: vi.fn(),
+      render: vi.fn(),
+      dispose: vi.fn(),
+    };
+    let onFirstFrame: (() => void) | undefined;
+    vi.mocked(createLoadedVisibleWebGpuSplatRendererAdapter).mockImplementation(async (
+      _canvas,
+      cloud,
+      cloudOptions,
+      deps?: LoadedVisibleWebGpuSplatRendererAdapterDeps
+    ) => {
+      onFirstFrame = deps?.onFirstFrame;
+      renderer.loadCloud(cloud, cloudOptions);
+      return renderer;
+    });
+    vi.mocked(loadGaussianCloudFromFile).mockResolvedValue({
+      file,
+      format: 'spz',
+      byteLength: 1,
+      cloud: makeCloud(),
+    });
+    const addNotification = vi.fn(() => 'loading-notice');
+    const removeNotification = vi.fn();
+    const getUrlProgress = vi.fn<() => UrlLoadProgress | null>(() => null);
+    const setUrlLoading = vi.fn();
+    const setUrlProgress = vi.fn();
+
+    const view = render(
+      <WebGpuSplatCanvasLayer
+        mounted
+        visible={false}
+        splatFile={file}
+        addNotification={addNotification}
+        removeNotification={removeNotification}
+        getUrlProgress={getUrlProgress}
+        setUrlLoading={setUrlLoading}
+        setUrlProgress={setUrlProgress}
+        reportLoadingProgress
+      />
+    );
+
+    await waitFor(() => {
+      expect(renderer.loadCloud).toHaveBeenCalledTimes(1);
+    });
+    expect(addNotification).toHaveBeenCalledWith('info', 'Loading splat: scene.spz', 0);
+    expect(setUrlLoading).toHaveBeenCalledWith(true);
+    getUrlProgress.mockReturnValue({
+      percent: 92,
+      message: 'Preparing splat renderer...',
+      currentFile: 'scene.spz',
+      splatRenderer: 'spark',
+    });
+
+    view.rerender(
+      <WebGpuSplatCanvasLayer
+        mounted
+        visible={false}
+        splatFile={file}
+        addNotification={addNotification}
+        removeNotification={removeNotification}
+        getUrlProgress={getUrlProgress}
+        setUrlLoading={setUrlLoading}
+        setUrlProgress={setUrlProgress}
+        reportLoadingProgress={false}
+      />
+    );
+
+    await waitFor(() => {
+      expect(removeNotification).toHaveBeenCalledWith('loading-notice');
+    });
+    expect(setUrlLoading).not.toHaveBeenCalledWith(false);
+
+    act(() => {
+      onFirstFrame?.();
+    });
+
+    await Promise.resolve();
+    expect(addNotification).toHaveBeenCalledTimes(1);
+    expect(setUrlProgress).not.toHaveBeenCalledWith({
+      percent: 100,
+      message: 'Complete',
+      currentFile: 'scene.spz',
+      splatRenderer: 'webgpu',
+    });
+    expect(setUrlLoading).not.toHaveBeenCalledWith(false);
+    expect(renderer.dispose).not.toHaveBeenCalled();
+  });
+
+  it('clears explicit WebGPU loading when a disabled reporting load fails', async () => {
+    const file = new File(['x'], 'scene.spz');
+    const loadDeferred = createDeferred<LoadedGaussianCloud>();
+    vi.mocked(loadGaussianCloudFromFile).mockReturnValue(loadDeferred.promise);
+    const addNotification = vi.fn(() => 'loading-notice');
+    const removeNotification = vi.fn();
+    const getUrlProgress = vi.fn<() => UrlLoadProgress | null>(() => null);
+    const setUrlLoading = vi.fn();
+    const setUrlProgress = vi.fn();
+    const onRuntimeFailed = vi.fn();
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
+
+    try {
+      const view = render(
+        <WebGpuSplatCanvasLayer
+          mounted
+          visible={false}
+          splatFile={file}
+          addNotification={addNotification}
+          removeNotification={removeNotification}
+          getUrlProgress={getUrlProgress}
+          setUrlLoading={setUrlLoading}
+          setUrlProgress={setUrlProgress}
+          reportLoadingProgress
+          onRuntimeFailed={onRuntimeFailed}
+        />
+      );
+
+      await waitFor(() => {
+        expect(addNotification).toHaveBeenCalledWith('info', 'Loading splat: scene.spz', 0);
+      });
+      getUrlProgress.mockReturnValue({
+        percent: 93,
+        message: 'Reading splat file...',
+        currentFile: 'scene.spz',
+        splatRenderer: 'webgpu',
+      });
+      view.rerender(
+        <WebGpuSplatCanvasLayer
+          mounted
+          visible={false}
+          splatFile={file}
+          addNotification={addNotification}
+          removeNotification={removeNotification}
+          getUrlProgress={getUrlProgress}
+          setUrlLoading={setUrlLoading}
+          setUrlProgress={setUrlProgress}
+          reportLoadingProgress={false}
+          onRuntimeFailed={onRuntimeFailed}
+        />
+      );
+
+      await waitFor(() => {
+        expect(removeNotification).toHaveBeenCalledWith('loading-notice');
+      });
+      setUrlLoading.mockClear();
+
+      await act(async () => {
+        loadDeferred.reject(new Error('decode failed'));
+      });
+
+      await waitFor(() => {
+        expect(onRuntimeFailed).toHaveBeenCalledWith('decode failed');
+      });
+      expect(setUrlLoading).toHaveBeenCalledWith(false);
+      expect(addNotification).not.toHaveBeenCalledWith('warning', 'Failed to load splat: scene.spz');
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('reports app renderer async failures once', async () => {
@@ -594,9 +1003,19 @@ describe('WebGpuSplatCanvasLayer', () => {
       cloud: makeLargeShCloud(),
     });
     vi.mocked(createVisibleWebGpuSplatRendererAdapter).mockRejectedValue(new Error(reason));
-    vi.mocked(createLoadedVisibleWebGpuSplatRendererAdapter).mockImplementation(resolveLoadedRenderer(renderer));
+    vi.mocked(createLoadedVisibleWebGpuSplatRendererAdapter).mockImplementation(async (
+      _canvas,
+      cloud,
+      cloudOptions,
+      deps?: LoadedVisibleWebGpuSplatRendererAdapterDeps
+    ) => {
+      renderer.loadCloud(cloud, cloudOptions);
+      deps?.onFirstFrame?.();
+      return renderer;
+    });
     const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
     const onRuntimeFailed = vi.fn();
+    const onMetricRuntimeReady = vi.fn();
 
     try {
       render(
@@ -604,6 +1023,7 @@ describe('WebGpuSplatCanvasLayer', () => {
           mounted
           visible={false}
           splatFile={file}
+          onMetricRuntimeReady={onMetricRuntimeReady}
           onRuntimeFailed={onRuntimeFailed}
         />
       );
@@ -643,6 +1063,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       });
 
       expect(onRuntimeFailed).not.toHaveBeenCalled();
+      expect(onMetricRuntimeReady).toHaveBeenCalledTimes(1);
       expect(screen.getByTestId('webgpu-splat-canvas')).toBeInTheDocument();
       expect(createVisibleWebGpuSplatRendererAdapter).toHaveBeenCalledTimes(1);
       expect(createLoadedVisibleWebGpuSplatRendererAdapter).toHaveBeenCalledTimes(1);
@@ -747,8 +1168,15 @@ describe('WebGpuSplatCanvasLayer', () => {
     ) => {
       onFirstFrame = deps?.onFirstFrame;
       // Resolve the preview first frame so the progressive upgrade proceeds.
-      renderer.loadCloud.mockImplementation(async () => {
-        onFirstFrame?.();
+      renderer.loadCloud.mockImplementation(async (_cloud, cloudOptions: VisibleWebGpuSplatCloudOptions) => {
+        if (renderer.loadCloud.mock.calls.length === 1) {
+          onFirstFrame?.();
+          return;
+        }
+        expect(cloudOptions).not.toHaveProperty('onSessionReady');
+        setTimeout(() => {
+          onFirstFrame?.();
+        }, 0);
       });
       return renderer;
     });
@@ -796,8 +1224,127 @@ describe('WebGpuSplatCanvasLayer', () => {
         labelPrefix: 'webgpu splat splat_30000.ply',
       })
     );
-    expect(onMetricRuntimeReady).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(onMetricRuntimeReady).toHaveBeenCalledTimes(1);
+    });
     expect(createLoadedVisibleWebGpuSplatRendererAdapter).not.toHaveBeenCalled();
+  });
+
+  it('reports metric readiness after the full progressive first frame renders', async () => {
+    const file = new File(['x'], 'splat_30000.ply');
+    const fullUpload = createDeferred<void>();
+    const renderer = {
+      loadCloud: vi.fn(),
+      setFrameSnapshot: vi.fn(),
+      render: vi.fn(),
+      dispose: vi.fn(),
+    };
+    installWebGpuPreflightProvider(
+      vi.fn().mockResolvedValue(makePreflightAdapter({
+        maxBufferSize: 2_000_000_000,
+        maxStorageBufferBindingSize: 2_000_000_000,
+      }))
+    );
+    let onFirstFrame: (() => void) | undefined;
+    vi.mocked(createVisibleWebGpuSplatRendererAdapter).mockImplementation(async (
+      _canvas,
+      deps
+    ) => {
+      onFirstFrame = deps?.onFirstFrame;
+      renderer.loadCloud.mockImplementation((_cloud, cloudOptions: VisibleWebGpuSplatCloudOptions) => {
+        if (renderer.loadCloud.mock.calls.length === 1) {
+          onFirstFrame?.();
+          return Promise.resolve();
+        }
+        expect(cloudOptions).not.toHaveProperty('onSessionReady');
+        return fullUpload.promise;
+      });
+      return renderer;
+    });
+    vi.mocked(loadGaussianCloudFromFile).mockResolvedValue({
+      file,
+      format: 'ply',
+      byteLength: 1,
+      cloud: makeLargeShCloud({ shByteLength: 900_000_000 }),
+    });
+    const onRuntimeReady = vi.fn();
+    const onMetricRuntimeReady = vi.fn();
+
+    render(
+      <WebGpuSplatCanvasLayer
+        mounted
+        visible={false}
+        splatFile={file}
+        onRuntimeReady={onRuntimeReady}
+        onMetricRuntimeReady={onMetricRuntimeReady}
+      />
+    );
+
+    await waitFor(() => {
+      expect(renderer.loadCloud).toHaveBeenCalledTimes(2);
+    });
+    expect(onRuntimeReady).toHaveBeenCalledTimes(1);
+    expect(onMetricRuntimeReady).not.toHaveBeenCalled();
+
+    act(() => {
+      onFirstFrame?.();
+    });
+    expect(onRuntimeReady).toHaveBeenCalledTimes(1);
+    expect(onMetricRuntimeReady).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      onFirstFrame?.();
+    });
+    expect(onRuntimeReady).toHaveBeenCalledTimes(1);
+    expect(onMetricRuntimeReady).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      fullUpload.resolve();
+      await fullUpload.promise;
+    });
+    expect(onRuntimeReady).toHaveBeenCalledTimes(1);
+    expect(onMetricRuntimeReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('disposes a progressive renderer when preview upload fails', async () => {
+    const file = new File(['x'], 'splat_30000.ply');
+    const uploadError = new Error('preview upload failed');
+    const renderer = {
+      loadCloud: vi.fn(async () => {
+        throw uploadError;
+      }),
+      setFrameSnapshot: vi.fn(),
+      render: vi.fn(),
+      dispose: vi.fn(),
+    };
+    vi.mocked(createVisibleWebGpuSplatRendererAdapter).mockResolvedValue(renderer);
+    vi.mocked(loadGaussianCloudFromFile).mockResolvedValue({
+      file,
+      format: 'ply',
+      byteLength: 1,
+      cloud: makeLargeShCloud({ shByteLength: 900_000_000 }),
+    });
+    const onRuntimeFailed = vi.fn();
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
+
+    try {
+      render(
+        <WebGpuSplatCanvasLayer
+          mounted
+          visible={false}
+          splatFile={file}
+          onRuntimeFailed={onRuntimeFailed}
+        />
+      );
+
+      await waitFor(() => {
+        expect(onRuntimeFailed).toHaveBeenCalledWith('preview upload failed');
+      });
+      expect(renderer.loadCloud).toHaveBeenCalledTimes(1);
+      expect(renderer.dispose).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('marks WebGPU failed and unmounts the canvas after visible device loss', async () => {
@@ -859,7 +1406,7 @@ describe('WebGpuSplatCanvasLayer', () => {
     }
   });
 
-  it('keeps auto mode unavailable until the hidden WebGPU renderer reports its first frame', async () => {
+  it('keeps Spark visible until the hidden WebGPU renderer reports its first frame', async () => {
     const file = new File(['x'], 'scene.spz');
     const renderer = {
       loadCloud: vi.fn(),
@@ -887,13 +1434,29 @@ describe('WebGpuSplatCanvasLayer', () => {
     useSplatBackendStore.getState().setRequestedBackend('auto');
     useSplatBackendStore.getState().setSparkBackendAvailable(true);
     useSplatBackendStore.getState().setWebGpuBackendState('unavailable');
+    const addNotification = vi.fn(() => 'loading-notice');
+    const removeNotification = vi.fn();
+    const setUrlLoading = vi.fn();
+    const setUrlProgress = vi.fn();
 
-    render(<WebGpuAutoTransitionHarness splatFile={file} />);
+    render(
+      <WebGpuAutoTransitionHarness
+        splatFile={file}
+        addNotification={addNotification}
+        removeNotification={removeNotification}
+        setUrlLoading={setUrlLoading}
+        setUrlProgress={setUrlProgress}
+      />
+    );
 
     await waitFor(() => {
       expect(renderer.loadCloud).toHaveBeenCalledTimes(1);
     });
-    expect(screen.getByTestId('auto-backend-state')).toHaveTextContent('unavailable');
+    expect(addNotification).not.toHaveBeenCalled();
+    expect(removeNotification).not.toHaveBeenCalled();
+    expect(setUrlLoading).not.toHaveBeenCalled();
+    expect(setUrlProgress).not.toHaveBeenCalled();
+    expect(screen.getByTestId('auto-backend-state')).toHaveTextContent('spark');
     expect(screen.getByTestId('auto-webgpu-mounted-state')).toHaveTextContent('true');
     expect(screen.getByTestId('auto-webgpu-visible-state')).toHaveTextContent('false');
     expect(screen.getByTestId('webgpu-splat-canvas').className).toContain('opacity-0');
@@ -908,6 +1471,249 @@ describe('WebGpuSplatCanvasLayer', () => {
     expect(screen.getByTestId('auto-webgpu-mounted-state')).toHaveTextContent('true');
     expect(screen.getByTestId('auto-webgpu-visible-state')).toHaveTextContent('true');
     expect(screen.getByTestId('webgpu-splat-canvas').className).toContain('opacity-100');
+    expect(renderer.dispose).not.toHaveBeenCalled();
+    expect(renderer.loadCloud).toHaveBeenCalledTimes(1);
+    expect(createLoadedVisibleWebGpuSplatRendererAdapter).toHaveBeenCalledTimes(1);
+    expect(addNotification).not.toHaveBeenCalled();
+    expect(removeNotification).not.toHaveBeenCalled();
+    expect(setUrlLoading).not.toHaveBeenCalled();
+    expect(setUrlProgress).not.toHaveBeenCalled();
+  });
+
+  it('clears untagged URL handoff progress when hidden auto WebGPU wins first', async () => {
+    const file = new File(['x'], 'scene.spz');
+    const renderer = {
+      loadCloud: vi.fn(),
+      setFrameSnapshot: vi.fn(),
+      render: vi.fn(),
+      dispose: vi.fn(),
+    };
+    let onFirstFrame: (() => void) | undefined;
+    vi.mocked(createLoadedVisibleWebGpuSplatRendererAdapter).mockImplementation(async (
+      _canvas,
+      cloud,
+      cloudOptions,
+      deps?: LoadedVisibleWebGpuSplatRendererAdapterDeps
+    ) => {
+      onFirstFrame = deps?.onFirstFrame;
+      renderer.loadCloud(cloud, cloudOptions);
+      return renderer;
+    });
+    vi.mocked(loadGaussianCloudFromFile).mockResolvedValue({
+      file,
+      format: 'spz',
+      byteLength: 1,
+      cloud: makeCloud(),
+    });
+    useSplatBackendStore.getState().setRequestedBackend('auto');
+    useSplatBackendStore.getState().setSparkBackendAvailable(true);
+    useSplatBackendStore.getState().setWebGpuBackendState('unavailable');
+    const addNotification = vi.fn(() => 'loading-notice');
+    const removeNotification = vi.fn();
+    const getUrlProgress = vi.fn<() => UrlLoadProgress | null>(() => ({
+      percent: 92,
+      message: 'Preparing splat renderer...',
+      currentFile: 'scene.spz',
+    }));
+    const setUrlLoading = vi.fn();
+    const setUrlProgress = vi.fn();
+
+    render(
+      <WebGpuAutoTransitionHarness
+        splatFile={file}
+        addNotification={addNotification}
+        removeNotification={removeNotification}
+        getUrlProgress={getUrlProgress}
+        setUrlLoading={setUrlLoading}
+        setUrlProgress={setUrlProgress}
+      />
+    );
+
+    await waitFor(() => {
+      expect(renderer.loadCloud).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByTestId('auto-backend-state')).toHaveTextContent('spark');
+    expect(addNotification).not.toHaveBeenCalled();
+    expect(setUrlLoading).not.toHaveBeenCalled();
+    expect(setUrlProgress).not.toHaveBeenCalled();
+
+    act(() => {
+      onFirstFrame?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('auto-backend-state')).toHaveTextContent('webgpu');
+    });
+    expect(removeNotification).not.toHaveBeenCalled();
+    expect(addNotification).not.toHaveBeenCalled();
+    expect(setUrlProgress).toHaveBeenCalledWith({
+      percent: 100,
+      message: 'Complete',
+      currentFile: 'scene.spz',
+      splatRenderer: 'webgpu',
+    });
+    expect(setUrlLoading).toHaveBeenLastCalledWith(false);
+    expect(renderer.dispose).not.toHaveBeenCalled();
+  });
+
+  it('takes over loading progress when a hidden auto WebGPU warm-up is forced before its first frame', async () => {
+    const file = new File(['x'], 'scene.spz');
+    const renderer = {
+      loadCloud: vi.fn(),
+      setFrameSnapshot: vi.fn(),
+      render: vi.fn(),
+      dispose: vi.fn(),
+    };
+    let onFirstFrame: (() => void) | undefined;
+    vi.mocked(createLoadedVisibleWebGpuSplatRendererAdapter).mockImplementation(async (
+      _canvas,
+      cloud,
+      cloudOptions,
+      deps?: LoadedVisibleWebGpuSplatRendererAdapterDeps
+    ) => {
+      onFirstFrame = deps?.onFirstFrame;
+      renderer.loadCloud(cloud, cloudOptions);
+      return renderer;
+    });
+    vi.mocked(loadGaussianCloudFromFile).mockResolvedValue({
+      file,
+      format: 'spz',
+      byteLength: 1,
+      cloud: makeCloud(),
+    });
+    useSplatBackendStore.getState().setRequestedBackend('auto');
+    useSplatBackendStore.getState().setSparkBackendAvailable(true);
+    useSplatBackendStore.getState().setWebGpuBackendState('unavailable');
+    const addNotification = vi.fn(() => 'loading-notice');
+    const removeNotification = vi.fn();
+    const setUrlLoading = vi.fn();
+    const setUrlProgress = vi.fn();
+
+    render(
+      <WebGpuAutoTransitionHarness
+        splatFile={file}
+        addNotification={addNotification}
+        removeNotification={removeNotification}
+        setUrlLoading={setUrlLoading}
+        setUrlProgress={setUrlProgress}
+      />
+    );
+
+    await waitFor(() => {
+      expect(renderer.loadCloud).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByTestId('auto-backend-state')).toHaveTextContent('spark');
+    expect(addNotification).not.toHaveBeenCalled();
+    expect(setUrlLoading).not.toHaveBeenCalled();
+    expect(setUrlProgress).not.toHaveBeenCalled();
+
+    act(() => {
+      useSplatBackendStore.getState().setRequestedBackend('webgpu');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('auto-backend-state')).toHaveTextContent('unavailable');
+    });
+    expect(screen.getByTestId('auto-webgpu-mounted-state')).toHaveTextContent('true');
+    expect(screen.getByTestId('auto-webgpu-visible-state')).toHaveTextContent('false');
+    expect(addNotification).toHaveBeenCalledWith('info', 'Loading splat: scene.spz', 0);
+    expect(setUrlLoading).toHaveBeenCalledWith(true);
+    expect(setUrlProgress).toHaveBeenCalledWith({
+      percent: 92,
+      message: 'Preparing splat renderer...',
+      currentFile: 'scene.spz',
+      splatRenderer: 'webgpu',
+    });
+    expect(renderer.dispose).not.toHaveBeenCalled();
+    expect(renderer.loadCloud).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      onFirstFrame?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('auto-backend-state')).toHaveTextContent('webgpu');
+    });
+    expect(removeNotification).toHaveBeenCalledWith('loading-notice');
+    expect(addNotification).toHaveBeenCalledWith('info', 'Loaded splat: scene.spz', 3000);
+    expect(setUrlProgress).toHaveBeenCalledWith({
+      percent: 100,
+      message: 'Complete',
+      currentFile: 'scene.spz',
+      splatRenderer: 'webgpu',
+    });
+    expect(setUrlLoading).toHaveBeenLastCalledWith(false);
+    expect(renderer.dispose).not.toHaveBeenCalled();
+    expect(createLoadedVisibleWebGpuSplatRendererAdapter).toHaveBeenCalledTimes(1);
+  });
+
+  it('completes loading when hidden auto WebGPU wins before Spark becomes available', async () => {
+    const file = new File(['x'], 'scene.spz');
+    const renderer = {
+      loadCloud: vi.fn(),
+      setFrameSnapshot: vi.fn(),
+      render: vi.fn(),
+      dispose: vi.fn(),
+    };
+    let onFirstFrame: (() => void) | undefined;
+    vi.mocked(createLoadedVisibleWebGpuSplatRendererAdapter).mockImplementation(async (
+      _canvas,
+      cloud,
+      cloudOptions,
+      deps?: LoadedVisibleWebGpuSplatRendererAdapterDeps
+    ) => {
+      onFirstFrame = deps?.onFirstFrame;
+      renderer.loadCloud(cloud, cloudOptions);
+      return renderer;
+    });
+    vi.mocked(loadGaussianCloudFromFile).mockResolvedValue({
+      file,
+      format: 'spz',
+      byteLength: 1,
+      cloud: makeCloud(),
+    });
+    useSplatBackendStore.getState().setRequestedBackend('auto');
+    useSplatBackendStore.getState().setSparkBackendAvailable(false);
+    useSplatBackendStore.getState().setWebGpuBackendState('unavailable');
+    const addNotification = vi.fn(() => 'loading-notice');
+    const removeNotification = vi.fn();
+    const setUrlLoading = vi.fn();
+    const setUrlProgress = vi.fn();
+
+    render(
+      <WebGpuAutoTransitionHarness
+        splatFile={file}
+        addNotification={addNotification}
+        removeNotification={removeNotification}
+        setUrlLoading={setUrlLoading}
+        setUrlProgress={setUrlProgress}
+      />
+    );
+
+    await waitFor(() => {
+      expect(renderer.loadCloud).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByTestId('auto-backend-state')).toHaveTextContent('unavailable');
+    expect(addNotification).toHaveBeenCalledWith('info', 'Loading splat: scene.spz', 0);
+    expect(setUrlLoading).toHaveBeenCalledWith(true);
+
+    act(() => {
+      onFirstFrame?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('auto-backend-state')).toHaveTextContent('webgpu');
+    });
+    expect(removeNotification).toHaveBeenCalledWith('loading-notice');
+    expect(setUrlProgress).toHaveBeenCalledWith({
+      percent: 100,
+      message: 'Complete',
+      currentFile: 'scene.spz',
+      splatRenderer: 'webgpu',
+    });
+    expect(setUrlLoading).toHaveBeenLastCalledWith(false);
+    expect(renderer.dispose).not.toHaveBeenCalled();
+    expect(renderer.loadCloud).toHaveBeenCalledTimes(1);
   });
 
   it('disposes the active WebGPU renderer when the splat file changes', async () => {

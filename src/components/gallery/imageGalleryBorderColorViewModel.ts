@@ -8,19 +8,39 @@ import {
 } from '../viewer3d/splatPsnrMetric';
 import type { GalleryBorderColorMode, ImageData } from './imageGalleryDataViewModel';
 
-export const GALLERY_BORDER_COLOR_OPTIONS: Array<{ value: GalleryBorderColorMode; label: string }> = [
+const BASE_GALLERY_BORDER_COLOR_OPTIONS: Array<{ value: GalleryBorderColorMode; label: string }> = [
   { value: 'none', label: 'Border: None' },
   { value: 'camera', label: 'Border: Camera' },
+];
+
+const SPLAT_METRIC_BORDER_COLOR_OPTIONS: Array<{ value: GalleryBorderColorMode; label: string }> = [
   { value: 'psnr', label: 'Border: PSNR' },
   { value: 'ssim', label: 'Border: SSIM' },
 ];
+
+export const GALLERY_BORDER_COLOR_OPTIONS: Array<{ value: GalleryBorderColorMode; label: string }> = [
+  ...BASE_GALLERY_BORDER_COLOR_OPTIONS,
+  ...SPLAT_METRIC_BORDER_COLOR_OPTIONS,
+];
+
+export function getGalleryBorderColorOptions(
+  hasSplatMetrics = true
+): Array<{ value: GalleryBorderColorMode; label: string }> {
+  return [
+    ...BASE_GALLERY_BORDER_COLOR_OPTIONS,
+    ...(hasSplatMetrics ? SPLAT_METRIC_BORDER_COLOR_OPTIONS : []),
+  ];
+}
 
 export function getDefaultGalleryBorderColorMode(hasSplatFile: boolean): GalleryBorderColorMode {
   return hasSplatFile ? 'psnr' : 'none';
 }
 
-export function getGalleryBorderColorModeValue(value: string): GalleryBorderColorMode | null {
-  return GALLERY_BORDER_COLOR_OPTIONS.find(option => option.value === value)?.value ?? null;
+export function getGalleryBorderColorModeValue(
+  value: string,
+  hasSplatMetrics = true
+): GalleryBorderColorMode | null {
+  return getGalleryBorderColorOptions(hasSplatMetrics).find(option => option.value === value)?.value ?? null;
 }
 
 export function getGalleryMetricBorderColorScale(

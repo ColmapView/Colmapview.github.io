@@ -72,9 +72,13 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
     });
   }, [logInfo, processFiles, setSourceInfo, setUrlProgress]);
 
-  const loadFromSplatUrl = useCallback(async (url: string): Promise<boolean> => {
+  const loadFromSplatUrl = useCallback(async (
+    url: string,
+    options: { onSplatFileFetched?: (file: File) => void } = {}
+  ): Promise<boolean> => {
     return loadSplatUrlSource(url, {
       log: logInfo,
+      onSplatFileFetched: options.onSplatFileFetched,
       processFiles,
       setSourceInfo,
       setUrlProgress,
@@ -105,9 +109,16 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
       logInfo(getUrlNormalizationLogMessage(step));
     }
 
+    let clearCachesOnFailure = true;
     try {
       if (isSplatUrl(normalizedUrl)) {
-        return await loadFromSplatUrl(normalizedUrl);
+        clearCachesOnFailure = false;
+        return await loadFromSplatUrl(normalizedUrl, {
+          onSplatFileFetched: () => {
+            clearAllCaches();
+            clearCachesOnFailure = true;
+          },
+        });
       }
 
       // Clear any previous ZIP/URL cache state before loading new data
@@ -141,7 +152,7 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
       });
     } catch (err) {
       handleUrlLoadFailure(err, {
-        clearCaches: clearAllCaches,
+        clearCaches: clearCachesOnFailure ? clearAllCaches : () => undefined,
         contextUrl: normalizedUrl,
         errorLog: logError,
         setError,

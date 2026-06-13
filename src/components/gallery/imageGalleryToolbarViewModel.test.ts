@@ -4,6 +4,7 @@ import {
   GALLERY_BORDER_COLOR_OPTIONS,
   GALLERY_THUMBNAIL_DISPLAY_OPTIONS,
   getGalleryCameraFilterValue,
+  getGalleryBorderColorOptions,
   getGalleryBorderColorModeValue,
   getGallerySortFieldOptions,
   getGallerySortFieldValue,
@@ -61,8 +62,19 @@ describe('image gallery toolbar view model', () => {
       'psnr',
       'ssim',
     ]);
+    expect(getGalleryBorderColorOptions(false).map(option => option.value)).toEqual([
+      'none',
+      'camera',
+    ]);
+    expect(getGalleryBorderColorOptions(true).map(option => option.value)).toEqual([
+      'none',
+      'camera',
+      'psnr',
+      'ssim',
+    ]);
     expect(getGalleryBorderColorModeValue('none')).toBe('none');
-    expect(getGalleryBorderColorModeValue('psnr')).toBe('psnr');
+    expect(getGalleryBorderColorModeValue('psnr', false)).toBeNull();
+    expect(getGalleryBorderColorModeValue('psnr', true)).toBe('psnr');
     expect(getGalleryBorderColorModeValue('unexpected')).toBeNull();
   });
 

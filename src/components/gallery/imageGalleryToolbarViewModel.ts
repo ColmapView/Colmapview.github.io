@@ -7,10 +7,12 @@ import type {
 import {
   GALLERY_BORDER_COLOR_OPTIONS,
   getGalleryBorderColorModeValue,
+  getGalleryBorderColorOptions,
 } from './imageGalleryBorderColorViewModel';
 
 export {
   GALLERY_BORDER_COLOR_OPTIONS,
+  getGalleryBorderColorOptions,
   getGalleryBorderColorModeValue,
 };
 

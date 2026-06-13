@@ -20,7 +20,6 @@ interface RunSplatOnlyLoadOptions {
   clearCaches: (options: { preserveZip: true }) => void;
   setReconstruction: (reconstruction: Reconstruction) => void;
   resetView: () => void;
-  addNotification: (type: 'info', message: string, duration?: number) => void;
   log?: (message: string) => void;
 }
 
@@ -35,7 +34,6 @@ export function runSplatOnlyLoad({
   clearCaches,
   setReconstruction,
   resetView,
-  addNotification,
   log = appLogger.info,
 }: RunSplatOnlyLoadOptions): Reconstruction {
   log(`[Splats] Creating splat-only scene from ${splatFile.name}`);
@@ -69,7 +67,6 @@ export function runSplatOnlyLoad({
   setReconstruction(reconstruction);
   resetView();
 
-  addNotification('info', `Loaded splat: ${splatFile.name}`, 5000);
   log(`[Splats] Loaded splat-only scene: ${splatFile.name}`);
 
   return reconstruction;

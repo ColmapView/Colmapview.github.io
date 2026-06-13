@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import fs from 'node:fs';
+import * as path from 'node:path';
 import pkg from './package.json';
 import { resolveViteLocalAliasPolicy } from './viteLocalAliasPolicy';
 
@@ -12,6 +13,7 @@ export default defineConfig(({ command, mode }) => {
     rootDir: __dirname,
     pathExists: fs.existsSync,
   });
+  const topLevelThreePath = path.resolve(__dirname, 'node_modules/three').replace(/\\/g, '/');
 
   return {
     plugins: [react()],
@@ -42,7 +44,18 @@ export default defineConfig(({ command, mode }) => {
     base: process.env.VITE_BASE || '/',
 
     resolve: {
-      alias: localAliasPolicy.aliases,
+      alias: [
+        ...Object.entries(localAliasPolicy.aliases).map(([find, replacement]) => ({ find, replacement })),
+        { find: /^three$/, replacement: `${topLevelThreePath}/build/three.module.js` },
+        { find: /^three\/addons$/, replacement: `${topLevelThreePath}/examples/jsm/Addons.js` },
+        { find: /^three\/addons\/(.*)$/, replacement: `${topLevelThreePath}/examples/jsm/$1` },
+        { find: /^three\/examples\/fonts\/(.*)$/, replacement: `${topLevelThreePath}/examples/fonts/$1` },
+        { find: /^three\/examples\/jsm\/(.*)$/, replacement: `${topLevelThreePath}/examples/jsm/$1` },
+        { find: /^three\/src\/(.*)$/, replacement: `${topLevelThreePath}/src/$1` },
+        { find: /^three\/tsl$/, replacement: `${topLevelThreePath}/build/three.tsl.js` },
+        { find: /^three\/webgpu$/, replacement: `${topLevelThreePath}/build/three.webgpu.js` },
+      ],
+      dedupe: ['three'],
     },
 
     server: {

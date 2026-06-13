@@ -3,6 +3,13 @@ export { BinaryWriter } from './BinaryWriter';
 export { parseCamerasBinary, parseCamerasText } from './cameras';
 export { parseImagesBinary, parseImagesText } from './images';
 export { parsePoints3DBinary, parsePoints3DText } from './points3d';
+export {
+  classifyPlyFile,
+  classifyPlyHeaderText,
+  parsePointCloudPlyBuffer,
+  parsePointCloudPlyFile,
+  type PlyCloudKind,
+} from './plyPointCloud';
 export { parseRigsBinary, parseRigsText } from './rigs';
 export { parseFramesBinary, parseFramesText } from './frames';
 export { computeImageStats, computeImageStatsFromWasm } from './imageStats';

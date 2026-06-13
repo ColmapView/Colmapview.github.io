@@ -13,6 +13,7 @@ import {
   useDeletionStore,
   useImageMetricsStore,
   useReconstructionStore,
+  useSplatBackendStore,
   useUIStore,
 } from '../../store';
 import type { CameraViewState } from '../../store/types';
@@ -20,6 +21,7 @@ import type { CameraViewState } from '../../store/types';
 afterEach(() => {
   useReconstructionStore.getState().clear();
   useImageMetricsStore.setState(useImageMetricsStore.getInitialState(), true);
+  useSplatBackendStore.setState(useSplatBackendStore.getInitialState(), true);
   useCameraStore.setState({
     currentViewState: null,
     flyToImageId: null,
@@ -48,6 +50,17 @@ afterEach(() => {
 });
 
 describe('useImageGalleryViewModel', () => {
+  function setWebGpuSplatMetricsReady() {
+    useSplatBackendStore.getState().setRequestedBackend('webgpu');
+    useSplatBackendStore.getState().setWebGpuBackendState('ready');
+    useSplatBackendStore.getState().setWebGpuMetricState('ready');
+  }
+
+  function setSparkSplatBackendActive() {
+    useSplatBackendStore.getState().setSparkBackendAvailable(true);
+    useSplatBackendStore.getState().setRequestedBackend('spark');
+  }
+
   it('resets stale camera filters when the reconstruction changes', () => {
     vi.useFakeTimers();
     const camera1 = buildCamera({ cameraId: 1 });
@@ -142,6 +155,7 @@ describe('useImageGalleryViewModel', () => {
 
   it('sorts by SSIM when splat metrics are ready', () => {
     const camera = buildCamera({ cameraId: 1 });
+    const splatFile = buildFile('scene.spz', 'splat');
     const lowSsim = buildImage({ imageId: 10, cameraId: camera.cameraId, name: 'low.jpg' });
     const highSsim = buildImage({ imageId: 20, cameraId: camera.cameraId, name: 'high.jpg' });
     const reconstruction = buildReconstruction({
@@ -150,7 +164,9 @@ describe('useImageGalleryViewModel', () => {
     });
 
     act(() => {
+      setWebGpuSplatMetricsReady();
       useReconstructionStore.getState().setReconstruction(reconstruction);
+      useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles({ splatFile }));
       useImageMetricsStore.setState({ splatPsnrFrameReady: true });
       useImageMetricsStore.getState().setSplatPsnrMetric({
         imageId: lowSsim.imageId,
@@ -182,6 +198,7 @@ describe('useImageGalleryViewModel', () => {
     });
 
     expect(result.current.showSplatMetrics).toBe(true);
+    expect(result.current.showSplatMetricBorder).toBe(true);
     expect(result.current.sortField).toBe('splatSsim');
     expect(result.current.images.map((image) => image.name)).toEqual(['high.jpg', 'low.jpg']);
 
@@ -196,18 +213,21 @@ describe('useImageGalleryViewModel', () => {
     const splatFile = buildFile('scene.spz', 'splat');
 
     act(() => {
+      setWebGpuSplatMetricsReady();
       useReconstructionStore.getState().setReconstruction(reconstruction);
     });
 
     const { result, unmount } = renderHook(() => useImageGalleryViewModel());
 
     expect(result.current.borderColorMode).toBe('none');
+    expect(result.current.showSplatMetricBorder).toBe(false);
 
     act(() => {
       useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles({ splatFile }));
     });
 
     expect(result.current.borderColorMode).toBe('psnr');
+    expect(result.current.showSplatMetricBorder).toBe(true);
 
     act(() => {
       result.current.setBorderColorMode('ssim');
@@ -220,6 +240,80 @@ describe('useImageGalleryViewModel', () => {
     });
 
     expect(result.current.borderColorMode).toBe('none');
+    expect(result.current.showSplatMetricBorder).toBe(false);
+
+    unmount();
+  });
+
+  it('keeps splat metric border controls available while WebGPU metrics are preparing', () => {
+    const reconstruction = buildReconstruction({
+      cameras: [buildCamera({ cameraId: 1 })],
+      images: [buildImage({ imageId: 10, cameraId: 1, name: 'a.jpg' })],
+    });
+    const splatFile = buildFile('scene.spz', 'splat');
+
+    act(() => {
+      useSplatBackendStore.getState().setRequestedBackend('webgpu');
+      useSplatBackendStore.getState().setWebGpuBackendState('ready');
+      useSplatBackendStore.getState().setWebGpuMetricState('unavailable');
+      useReconstructionStore.getState().setReconstruction(reconstruction);
+      useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles({ splatFile }));
+    });
+
+    const { result, unmount } = renderHook(() => useImageGalleryViewModel());
+
+    expect(result.current.borderColorMode).toBe('psnr');
+    expect(result.current.showSplatMetricBorder).toBe(true);
+    expect(result.current.showSplatMetrics).toBe(false);
+
+    act(() => {
+      result.current.setSortField('splatPsnr');
+    });
+
+    expect(result.current.sortField).toBe('name');
+    expect(result.current.images[0].splatPsnr).toBeUndefined();
+
+    unmount();
+  });
+
+  it('hides stale splat metric gallery paths while Spark is active', () => {
+    const camera = buildCamera({ cameraId: 1 });
+    const image = buildImage({ imageId: 10, cameraId: camera.cameraId, name: 'a.jpg' });
+    const reconstruction = buildReconstruction({
+      cameras: [camera],
+      images: [image],
+    });
+    const splatFile = buildFile('scene.spz', 'splat');
+
+    act(() => {
+      setSparkSplatBackendActive();
+      useReconstructionStore.getState().setReconstruction(reconstruction);
+      useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles({ splatFile }));
+      useUIStore.setState({
+        gallerySortField: 'splatPsnr',
+        galleryBorderColorMode: 'psnr',
+      });
+      useImageMetricsStore.setState({ splatPsnrFrameReady: true });
+      useImageMetricsStore.getState().setSplatPsnrMetric({
+        imageId: image.imageId,
+        psnr: 31,
+        ssim: 0.95,
+        mse: 4,
+        validPixelCount: 100,
+        width: 10,
+        height: 10,
+        computedAt: 1,
+      });
+    });
+
+    const { result, unmount } = renderHook(() => useImageGalleryViewModel());
+
+    expect(result.current.showSplatMetrics).toBe(false);
+    expect(result.current.showSplatMetricBorder).toBe(false);
+    expect(result.current.sortField).toBe('name');
+    expect(result.current.borderColorMode).toBe('none');
+    expect(result.current.images[0].splatPsnr).toBeUndefined();
+    expect(result.current.images[0].splatSsim).toBeUndefined();
 
     unmount();
   });

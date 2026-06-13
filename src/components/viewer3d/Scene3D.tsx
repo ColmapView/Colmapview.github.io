@@ -17,6 +17,7 @@ import { FooterBranding } from './FooterBranding';
 import { SplatPsnrEvaluator } from './SplatPsnrEvaluator';
 import { SplatBackendStatusNotifier } from './SplatBackendStatusNotifier';
 import {
+  shouldClearUnavailableForcedWebGpuSplatLoading,
   shouldMountWebGpuSplatCanvas,
   shouldRenderWebGpuSplatCanvas,
   shouldSyncWebGpuSplatCanvasFrame,
@@ -36,6 +37,7 @@ import { useIsAlignmentMode } from '../../hooks/useAlignmentMode';
 import { useIdleTimer } from '../../hooks/useIdleTimer';
 import { preloadSparkModule } from '../../utils/sparkSplatRuntime';
 import { shouldPreloadSparkSplatRuntime } from '../../utils/splatBackendPolicy';
+import { isSplatLoadingProgressForFile } from '../../utils/splatLoadingProgressPolicy';
 import type { SplatBackendAvailability } from '../../utils/splatBackendPolicy';
 import {
   composeSim3d,
@@ -109,6 +111,7 @@ function SceneContent() {
       splatBackendAvailability,
       splatBackendResolution,
       splatsVisible,
+      urlProgress,
     },
     actions: {
       setSparkBackendAvailable,
@@ -129,16 +132,6 @@ function SceneContent() {
     requestedSplatBackend,
     splatBackendAvailability,
     splatFile
-  );
-  const webGpuSplatCanvasVisible = shouldRenderWebGpuSplatCanvas(
-    splatBackendResolution,
-    splatFile,
-    splatsVisible
-  );
-  const webGpuSplatCanvasBridgeEnabled = shouldSyncWebGpuSplatCanvasFrame(
-    webGpuSplatCanvasMounted,
-    webGpuSplatCanvasVisible,
-    splatBackendResolution
   );
   const sparkSplatLayerNeeded = splatFile
     && shouldPreloadSparkSplatRuntime(requestedSplatBackend, splatBackendAvailability);
@@ -190,12 +183,26 @@ function SceneContent() {
     autoHideElements,
   ]);
 
+  const webGpuSplatBackendVisible = shouldRenderWebGpuSplatCanvas(
+    splatBackendResolution,
+    splatFile,
+    splatsVisible
+  );
+  const webGpuSplatCanvasVisible = webGpuSplatBackendVisible && visibleLayers.points;
+  const webGpuSplatCanvasLoading = isSplatLoadingProgressForFile(urlProgress, splatFile);
+  const webGpuSplatCanvasBridgeEnabled = shouldSyncWebGpuSplatCanvasFrame(
+    webGpuSplatCanvasMounted,
+    webGpuSplatCanvasVisible,
+    splatBackendResolution,
+    webGpuSplatCanvasLoading
+  );
+
   const transformableContent = (
     <>
       {visibleLayers.points && <PointCloud />}
-      {visibleLayers.points && sparkSplatLayerNeeded && (
+      {sparkSplatLayerNeeded && (
         <Suspense fallback={null}>
-          <LazySplatLayer modelMatrix={splatTransformMatrix} />
+          <LazySplatLayer modelMatrix={splatTransformMatrix} visible={visibleLayers.points} />
         </Suspense>
       )}
       {visibleLayers.cameras && <CameraFrustums />}
@@ -296,6 +303,7 @@ export function Scene3D() {
       splatBackendAvailability,
       splatBackendResolution,
       splatsVisible,
+      pointsLayerVisible,
     },
     actions: {
       addNotification,
@@ -324,7 +332,15 @@ export function Scene3D() {
     splatBackendResolution,
     splatFile,
     splatsVisible
-  );
+  ) && pointsLayerVisible;
+  const webGpuSplatBackendSelected = splatBackendResolution.status === 'resolved'
+    && splatBackendResolution.backend === 'webgpu';
+  const webGpuSplatCanvasReportsLoading = requestedSplatBackend === 'webgpu'
+    || webGpuSplatBackendSelected
+    || (
+      requestedSplatBackend === 'auto'
+      && !splatBackendAvailability.spark
+    );
   const handleWebGpuSplatRuntimeReady = useCallback(() => {
     setWebGpuBackendState('ready');
   }, [setWebGpuBackendState]);
@@ -349,6 +365,27 @@ export function Scene3D() {
     setWebGpuMetricState('failed', reason);
   }, [setWebGpuBackendState, setWebGpuMetricState]);
 
+  useEffect(() => {
+    if (shouldClearUnavailableForcedWebGpuSplatLoading(
+      requestedSplatBackend,
+      splatBackendResolution,
+      splatFile,
+      webGpuSplatCanvasMounted,
+      getUrlProgress()
+    )) {
+      setUrlProgress(null);
+      setUrlLoading(false);
+    }
+  }, [
+    getUrlProgress,
+    requestedSplatBackend,
+    setUrlLoading,
+    setUrlProgress,
+    splatBackendResolution,
+    splatFile,
+    webGpuSplatCanvasMounted,
+  ]);
+
   return (
     <div
       ref={idleRef}
@@ -372,6 +409,7 @@ export function Scene3D() {
         getUrlProgress={getUrlProgress}
         setUrlLoading={setUrlLoading}
         setUrlProgress={setUrlProgress}
+        reportLoadingProgress={webGpuSplatCanvasReportsLoading}
         onRuntimeReady={handleWebGpuSplatRuntimeReady}
         onMetricRuntimeReady={handleWebGpuSplatMetricRuntimeReady}
         onRuntimeFailed={handleWebGpuSplatRuntimeFailed}

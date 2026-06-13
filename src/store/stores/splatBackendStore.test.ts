@@ -9,26 +9,35 @@ describe('splat backend store', () => {
     useSplatBackendStore.getState().setSparkBackendAvailable(false);
   });
 
-  it('keeps auto mode unavailable while WebGPU is still preparing', () => {
+  it('uses Spark in auto mode while WebGPU is still preparing', () => {
     useSplatBackendStore.getState().setSparkBackendAvailable(true);
 
     expect(useSplatBackendStore.getState().resolution).toMatchObject({
-      status: 'unavailable',
-      backend: null,
+      status: 'resolved',
+      backend: 'spark',
       gpuPsnr: false,
-      reason: 'Preparing WebGPU splat renderer',
+      reason: 'Spark compatibility renderer active while WebGPU initializes',
     });
   });
 
-  it('preserves adapter-unavailable details without selecting Spark in auto mode', () => {
+  it('ignores redundant Spark availability updates', () => {
+    useSplatBackendStore.getState().setSparkBackendAvailable(true);
+    const readyState = useSplatBackendStore.getState();
+
+    useSplatBackendStore.getState().setSparkBackendAvailable(true);
+
+    expect(useSplatBackendStore.getState()).toBe(readyState);
+  });
+
+  it('preserves adapter-unavailable details while selecting Spark in auto mode', () => {
     useSplatBackendStore.getState().setSparkBackendAvailable(true);
     useSplatBackendStore.getState().setWebGpuBackendState('unavailable', 'WebGPU adapter is unavailable');
 
     expect(useSplatBackendStore.getState().resolution).toMatchObject({
-      status: 'unavailable',
-      backend: null,
+      status: 'resolved',
+      backend: 'spark',
       gpuPsnr: false,
-      reason: 'WebGPU adapter is unavailable',
+      reason: 'Spark compatibility renderer active because WebGPU adapter is unavailable',
     });
     expect(useSplatBackendStore.getState().availability.webGpuFailureReason)
       .toBe('WebGPU adapter is unavailable');
@@ -74,7 +83,9 @@ describe('splat backend store', () => {
     });
     expect(useSplatBackendStore.getState().metricCapability).toMatchObject({
       status: 'available',
-      gpuPsnr: true,
+      backend: 'spark',
+      gpuPsnr: false,
+      reason: 'Spark PSNR/SSIM metric capability is ready',
     });
   });
 
@@ -118,7 +129,7 @@ describe('splat backend store', () => {
     });
   });
 
-  it('tracks metric PSNR capability independently from visible WebGPU readiness', () => {
+  it('uses Spark metric capability while Spark is the visible backend', () => {
     useSplatBackendStore.getState().setSparkBackendAvailable(true);
     useSplatBackendStore.getState().setWebGpuBackendState('unsupported');
     useSplatBackendStore.getState().setWebGpuMetricState('ready');
@@ -130,8 +141,9 @@ describe('splat backend store', () => {
     });
     expect(useSplatBackendStore.getState().metricCapability).toMatchObject({
       status: 'available',
-      gpuPsnr: true,
-      reason: 'WebGPU PSNR metric capability is ready',
+      backend: 'spark',
+      gpuPsnr: false,
+      reason: 'Spark PSNR/SSIM metric capability is ready',
     });
   });
 
@@ -140,6 +152,7 @@ describe('splat backend store', () => {
 
     expect(useSplatBackendStore.getState().metricCapability).toMatchObject({
       status: 'unavailable',
+      backend: null,
       gpuPsnr: false,
       reason: 'WebGPU PSNR failed to initialize: device lost',
     });

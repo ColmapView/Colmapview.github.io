@@ -4,6 +4,7 @@ import type {
   SplatBackendPreference,
   SplatBackendResolution,
 } from '../../utils/splatBackendPolicy';
+import type { UrlLoadProgress } from '../../types/manifest';
 
 export function shouldRenderWebGpuSplatCanvas(
   resolution: SplatBackendResolution,
@@ -35,9 +36,32 @@ export function shouldMountWebGpuSplatCanvas(
 export function shouldSyncWebGpuSplatCanvasFrame(
   mounted: boolean,
   visible: boolean,
-  resolution: SplatBackendResolution
+  resolution: SplatBackendResolution,
+  loading = false
 ): boolean {
-  return mounted && (visible || resolution.status !== 'resolved');
+  return mounted && (
+    visible ||
+    loading ||
+    resolution.status !== 'resolved' ||
+    resolution.backend !== 'webgpu'
+  );
+}
+
+export function shouldClearUnavailableForcedWebGpuSplatLoading(
+  requestedBackend: SplatBackendPreference,
+  resolution: SplatBackendResolution,
+  splatFile: File | undefined,
+  webGpuSplatCanvasMounted: boolean,
+  progress: UrlLoadProgress | null
+): boolean {
+  return Boolean(
+    requestedBackend === 'webgpu' &&
+    splatFile &&
+    !webGpuSplatCanvasMounted &&
+    resolution.status === 'unavailable' &&
+    progress?.currentFile === splatFile.name &&
+    progress.splatRenderer !== 'spark'
+  );
 }
 
 export function isWebGpuGaussianCloudFile(file: File): boolean {

@@ -50,6 +50,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
     setThumbnailDisplayMode,
     setViewMode,
     showMatches,
+    showSplatMetricBorder,
     showSplatMetrics,
     sortDirection,
     sortField,
@@ -169,6 +170,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
             hasMasks={hasMasks}
             sortDirection={sortDirection}
             sortField={sortField}
+            showSplatMetricBorder={showSplatMetricBorder}
             showSplatMetricSort={showSplatMetrics}
             thumbnailDisplayMode={thumbnailDisplayMode}
             touchMode={touchMode}

@@ -44,6 +44,7 @@ function createParserDeps() {
     parseImagesBinary: vi.fn(() => images),
     parseImagesText: vi.fn(() => images),
     parsePoints3DBinary: vi.fn(() => points3D),
+    parsePointCloudPlyBuffer: vi.fn(() => points3D),
     parsePoints3DText: vi.fn(() => points3D),
   };
 
@@ -136,5 +137,22 @@ describe('file dropzone COLMAP parser helper', () => {
       '2D point data not loaded. Keypoint overlay may be limited.',
       5000
     );
+  });
+
+  it('routes PLY points3D files through the point-cloud PLY parser', async () => {
+    const { parsers } = createParserDeps();
+
+    await parseColmapFiles({
+      ...createFiles({
+        points3DFile: binaryFile('points.ply', 'ply bytes'),
+      }),
+      parsers,
+      addNotification: vi.fn(),
+      log: vi.fn(),
+    });
+
+    expect(vi.mocked(parsers.parsePointCloudPlyBuffer).mock.calls[0][0].byteLength)
+      .toBeGreaterThan(0);
+    expect(parsers.parsePoints3DText).not.toHaveBeenCalled();
   });
 });

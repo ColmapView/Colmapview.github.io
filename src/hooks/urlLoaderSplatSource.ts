@@ -14,8 +14,8 @@ type FetchUrl = (url: string) => Promise<Response>;
 type ProcessFiles = (
   files: Map<string, File>,
   progressRange?: { start: number; end: number },
-  options?: { throwOnError?: boolean }
-) => Promise<void>;
+  options?: { replaceSplatScene?: boolean; throwOnError?: boolean }
+) => Promise<void | boolean>;
 type SetSourceInfo = (
   type: ReconstructionSourceType,
   url?: string | null,
@@ -27,6 +27,7 @@ type SetUrlProgress = (progress: UrlLoadProgress | null) => void;
 export interface LoadSplatUrlSourceDeps {
   fetchSplatFile?: (url: string) => Promise<File>;
   log?: (message: string) => void;
+  onSplatFileFetched?: (file: File) => void;
   processFiles: ProcessFiles;
   setSourceInfo: SetSourceInfo;
   setUrlProgress: SetUrlProgress;
@@ -73,22 +74,26 @@ export async function loadSplatUrlSource(
   const log = deps.log ?? appLogger.info;
   const fetchSplatFile = deps.fetchSplatFile ?? fetchSplatUrlFile;
 
-  log(`[URL Loader] Loading splat from URL: ${url}`);
-  deps.setUrlProgress({ percent: 5, message: 'Downloading splat file...' });
+  log(`[URL Loader] Loading splat or point cloud from URL: ${url}`);
+  deps.setUrlProgress({ percent: 5, message: 'Downloading 3D file...' });
 
   const splatFile = await fetchSplatFile(url);
+  deps.onSplatFileFetched?.(splatFile);
   const files = new Map([[splatFile.name, splatFile]]);
 
   deps.setUrlProgress({
     percent: 80,
-    message: 'Parsing splat scene...',
+    message: 'Parsing 3D scene...',
     currentFile: splatFile.name,
   });
   deps.setSourceInfo('url', url, null, null);
 
-  await deps.processFiles(files, { start: 80, end: 100 }, { throwOnError: true });
+  await deps.processFiles(files, { start: 80, end: 100 }, {
+    replaceSplatScene: true,
+    throwOnError: true,
+  });
 
-  log(`[URL Loader] Successfully loaded splat from URL: ${splatFile.name}`);
+  log(`[URL Loader] Successfully loaded 3D file from URL: ${splatFile.name}`);
 
   return true;
 }

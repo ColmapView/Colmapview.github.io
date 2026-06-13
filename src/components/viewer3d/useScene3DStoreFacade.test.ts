@@ -127,6 +127,7 @@ describe('useScene3DStoreFacade', () => {
       showAutoHideEditor: true,
       requestedSplatBackend: 'auto',
       splatsVisible: true,
+      pointsLayerVisible: true,
     });
     expect(result.current.data.splatBackendAvailability.spark).toBe(true);
     expect(result.current.data.splatBackendResolution.backend).toBe('spark');
@@ -145,5 +146,19 @@ describe('useScene3DStoreFacade', () => {
     expect(useSplatBackendStore.getState().availability.webGpu).toBe('failed');
     expect(useSplatBackendStore.getState().availability.webGpuFailureReason).toBe('adapter lost');
     expect(result.current.actions.getUrlProgress).toBe(initialGetUrlProgress);
+  });
+
+  it('exposes point-layer auto-hide visibility for the outer WebGPU canvas', () => {
+    useUIStore.setState({
+      isIdle: true,
+      autoHideElements: {
+        ...useUIStore.getInitialState().autoHideElements,
+        points: true,
+      },
+    });
+
+    const { result } = renderHook(() => useSceneContainerStoreFacade());
+
+    expect(result.current.data.pointsLayerVisible).toBe(false);
   });
 });

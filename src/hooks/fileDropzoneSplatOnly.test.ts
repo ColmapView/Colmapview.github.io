@@ -18,7 +18,6 @@ describe('file dropzone splat-only load helper', () => {
     const clearCaches = vi.fn(() => calls.push('clearCaches'));
     const setReconstruction = vi.fn(() => calls.push('reconstruction'));
     const resetView = vi.fn(() => calls.push('resetView'));
-    const addNotification = vi.fn(() => calls.push('notification'));
     const log = vi.fn((message: string) => calls.push(`log:${message}`));
 
     const reconstruction = runSplatOnlyLoad({
@@ -32,7 +31,6 @@ describe('file dropzone splat-only load helper', () => {
       clearCaches,
       setReconstruction,
       resetView,
-      addNotification,
       log,
     });
 
@@ -62,7 +60,6 @@ describe('file dropzone splat-only load helper', () => {
       hasMasks: false,
     });
     expect(setReconstruction).toHaveBeenCalledWith(reconstruction);
-    expect(addNotification).toHaveBeenCalledWith('info', 'Loaded splat: scene.spz', 5000);
     expect(calls).toEqual([
       'log:[Splats] Creating splat-only scene from scene.spz',
       'progress:Loading splat scene...',
@@ -72,7 +69,6 @@ describe('file dropzone splat-only load helper', () => {
       'progress:Preparing splat renderer...',
       'reconstruction',
       'resetView',
-      'notification',
       'log:[Splats] Loaded splat-only scene: scene.spz',
     ]);
   });

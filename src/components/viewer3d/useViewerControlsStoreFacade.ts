@@ -39,7 +39,10 @@ import {
   useUIStore,
   type UIState,
 } from '../../store';
-import type { SplatMetricCapability } from '../../utils/splatBackendPolicy';
+import {
+  shouldExposeSplatMetricVisualizations,
+  type SplatMetricCapability,
+} from '../../utils/splatBackendPolicy';
 import type { Reconstruction } from '../../types/colmap';
 
 interface ViewerControlsUiFacade {
@@ -78,6 +81,7 @@ interface ViewerControlsMetricsFacade {
   splatPsnrReadyCount: number;
   splatPsnrTotalCount: number;
   splatPsnrUnavailableReason: string | null;
+  splatMetricVisualizationsAvailable: boolean;
 }
 
 interface ViewerControlsSplatFacade {
@@ -119,10 +123,18 @@ export function useViewerControlsStoreFacade(): ViewerControlsStoreFacade {
   const splatPsnrFrameReady = useImageMetricsStore((s) => s.splatPsnrFrameReady);
   const splatPsnrComputing = useImageMetricsStore((s) => s.splatPsnrComputing);
   const splatPsnrReadyCount = useImageMetricsStore((s) => s.splatPsnrMetrics.size);
+  const splatBackendResolution = useSplatBackendStore((s) => s.resolution);
+  const splatMetricAvailability = useSplatBackendStore((s) => s.metricAvailability);
   const splatMetricCapability = useSplatBackendStore((s) => s.metricCapability);
   const activeSplatFile = loadedFiles?.splatFile;
   const splatFiles = loadedFiles?.splatFiles ?? (activeSplatFile ? [activeSplatFile] : EMPTY_SPLAT_FILES);
   const splatPsnrUnavailableReason = getSplatPsnrUnavailableReason(activeSplatFile, splatMetricCapability);
+  const splatMetricVisualizationsAvailable = shouldExposeSplatMetricVisualizations({
+    activeSplatFile,
+    resolution: splatBackendResolution,
+    metricAvailability: splatMetricAvailability,
+    metricCapability: splatMetricCapability,
+  });
 
   const setActiveSplatFile = (file: File) => {
     const state = useReconstructionStore.getState();
@@ -176,6 +188,7 @@ export function useViewerControlsStoreFacade(): ViewerControlsStoreFacade {
       splatPsnrReadyCount,
       splatPsnrTotalCount: reconstruction?.images.size ?? 0,
       splatPsnrUnavailableReason,
+      splatMetricVisualizationsAvailable,
     },
     splats: {
       activeSplatFile,

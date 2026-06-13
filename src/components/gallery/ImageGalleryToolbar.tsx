@@ -13,10 +13,10 @@ import type {
   ViewMode,
 } from './useImageGalleryViewModel';
 import {
-  GALLERY_BORDER_COLOR_OPTIONS,
   GALLERY_THUMBNAIL_DISPLAY_OPTIONS,
   getGalleryCameraFilterValue,
   getGalleryBorderColorModeValue,
+  getGalleryBorderColorOptions,
   getGallerySortFieldOptions,
   getGallerySortFieldValue,
   getGalleryThumbnailDisplayModeValue,
@@ -35,6 +35,7 @@ interface ImageGalleryToolbarProps {
   hasMasks: boolean;
   sortDirection: SortDirection;
   sortField: SortField;
+  showSplatMetricBorder: boolean;
   showSplatMetricSort: boolean;
   thumbnailDisplayMode: GalleryThumbnailDisplayMode;
   touchMode: boolean;
@@ -61,6 +62,7 @@ export function ImageGalleryToolbar({
   hasMasks,
   sortDirection,
   sortField,
+  showSplatMetricBorder,
   showSplatMetricSort,
   thumbnailDisplayMode,
   touchMode,
@@ -73,6 +75,7 @@ export function ImageGalleryToolbar({
   onViewModeChange,
 }: ImageGalleryToolbarProps) {
   const sortFieldOptions = getGallerySortFieldOptions(showSplatMetricSort);
+  const borderColorModeOptions = getGalleryBorderColorOptions(showSplatMetricBorder);
   const toolbarSelectClass = `${inputStyles.select} ${inputStyles.sizes.sm} image-gallery-toolbar__select`;
 
   return (
@@ -129,14 +132,14 @@ export function ImageGalleryToolbar({
         aria-label="Border color"
         value={borderColorMode}
         onChange={(e) => {
-          const nextBorderColorMode = getGalleryBorderColorModeValue(e.target.value);
+          const nextBorderColorMode = getGalleryBorderColorModeValue(e.target.value, showSplatMetricBorder);
           if (nextBorderColorMode !== null) {
             onBorderColorModeChange(nextBorderColorMode);
           }
         }}
         className={`${toolbarSelectClass} image-gallery-toolbar__border`}
       >
-        {GALLERY_BORDER_COLOR_OPTIONS.map((option) => (
+        {borderColorModeOptions.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
           </option>
