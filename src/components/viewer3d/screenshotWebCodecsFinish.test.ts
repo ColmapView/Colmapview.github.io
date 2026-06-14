@@ -15,8 +15,9 @@ function createOptions(overrides: Partial<Parameters<typeof finishScreenshotWebC
   });
   const muxer: WebCodecsMuxer = {
     target: { buffer },
-    addVideoChunk: vi.fn(),
-    finalize: vi.fn(),
+    start: vi.fn().mockResolvedValue(undefined),
+    addVideoChunk: vi.fn().mockResolvedValue(undefined),
+    finalize: vi.fn().mockResolvedValue(undefined),
   };
   const resolve = vi.fn();
 
@@ -88,6 +89,26 @@ describe('screenshot WebCodecs finish helper', () => {
     expect(options.webCodecsCanvasRef.current).toBeNull();
     expect(options.isRecordingWebCodecsRef.current).toBe(false);
     expect(options.errorLog).toHaveBeenCalledWith('Error finalizing WebCodecs recording:', error);
+    expect(options.setIsRecordingGif).toHaveBeenCalledWith(false);
+    expect(resolve).toHaveBeenCalledWith(null);
+  });
+
+  it('resolves null when finalized muxer has no output buffer', async () => {
+    const { options, resolve } = createOptions({
+      muxerRef: ref<WebCodecsMuxer | null>({
+        target: { buffer: null },
+        start: vi.fn().mockResolvedValue(undefined),
+        addVideoChunk: vi.fn().mockResolvedValue(undefined),
+        finalize: vi.fn().mockResolvedValue(undefined),
+      }),
+    });
+
+    await finishScreenshotWebCodecsRecording(options);
+
+    expect(options.errorLog).toHaveBeenCalledWith(
+      'Error finalizing WebCodecs recording:',
+      expect.any(Error)
+    );
     expect(options.setIsRecordingGif).toHaveBeenCalledWith(false);
     expect(resolve).toHaveBeenCalledWith(null);
   });

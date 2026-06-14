@@ -4,6 +4,7 @@ import type GifEncoder from 'gif.js';
 import { appLogger } from '../../utils/logger';
 import { publicAsset } from '../../utils/paths';
 import {
+  RECORDING_FPS,
   getRecordingBackend,
   getRecordingProgressMessage,
   isWebCodecsRuntimeSupported,
@@ -137,7 +138,13 @@ export function ScreenshotCapture() {
 
   // Start WebCodecs-based video recording (preferred for MP4 with proper speed control)
   const startWebCodecsRecording = useCallback(async (): Promise<Blob | null> => {
-    const { Muxer, ArrayBufferTarget } = await import('mp4-muxer');
+    const {
+      BufferTarget,
+      EncodedPacket,
+      EncodedVideoPacketSource,
+      Mp4OutputFormat,
+      Output,
+    } = await import('mediabunny');
 
     return startScreenshotWebCodecsRecording({
       sourceWidth: gl.domElement.width,
@@ -158,15 +165,38 @@ export function ScreenshotCapture() {
       webCodecsResolveRef: webCodecsResolve,
       lastProgressNotificationTimeRef: lastProgressNotificationTime,
       setIsRecordingGif,
-      createMuxer: ({ width, height }) => new Muxer({
-        target: new ArrayBufferTarget(),
-        video: {
-          codec: 'avc',
-          width,
-          height,
-        },
-        fastStart: 'in-memory',
-      }),
+      createMuxer: () => {
+        const target = new BufferTarget();
+        const output = new Output({
+          format: new Mp4OutputFormat({ fastStart: 'in-memory' }),
+          target,
+        });
+        const videoSource = new EncodedVideoPacketSource('avc');
+        output.addVideoTrack(videoSource, { frameRate: RECORDING_FPS });
+        let pendingVideoWrites = Promise.resolve();
+        let videoWriteError: unknown = null;
+
+        return {
+          target,
+          start: () => output.start(),
+          addVideoChunk: (chunk, meta) => {
+            const write = pendingVideoWrites.then(() =>
+              videoSource.add(EncodedPacket.fromEncodedChunk(chunk), meta)
+            );
+            pendingVideoWrites = write.catch((error: unknown) => {
+              videoWriteError ??= error;
+            });
+            return write;
+          },
+          finalize: async () => {
+            await pendingVideoWrites;
+            if (videoWriteError) {
+              throw videoWriteError;
+            }
+            await output.finalize();
+          },
+        };
+      },
     });
   }, [gl, gifDuration, gifDownsample, gifSpeed, recordingQuality, setIsRecordingGif]);
 

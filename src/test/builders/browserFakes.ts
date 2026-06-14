@@ -238,7 +238,7 @@ class TestMediaStream extends EventTarget implements MediaStream {
     });
   }
 
-  getAudioTracks(): MediaStreamTrack[] {
+  getAudioTracks(): MediaStreamAudioTrack[] {
     return [];
   }
 
@@ -250,7 +250,7 @@ class TestMediaStream extends EventTarget implements MediaStream {
     return [];
   }
 
-  getVideoTracks(): MediaStreamTrack[] {
+  getVideoTracks(): MediaStreamVideoTrack[] {
     return [];
   }
 

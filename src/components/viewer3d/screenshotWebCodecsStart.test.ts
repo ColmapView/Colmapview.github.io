@@ -20,8 +20,9 @@ function createOptions(overrides: Partial<Parameters<typeof startScreenshotWebCo
   const canvas = buildImageCacheCanvas();
   const muxer: WebCodecsMuxer = {
     target: { buffer: new ArrayBuffer(0) },
-    addVideoChunk: vi.fn(),
-    finalize: vi.fn(),
+    start: vi.fn().mockResolvedValue(undefined),
+    addVideoChunk: vi.fn().mockResolvedValue(undefined),
+    finalize: vi.fn().mockResolvedValue(undefined),
   };
 
   return {
@@ -46,7 +47,7 @@ function createOptions(overrides: Partial<Parameters<typeof startScreenshotWebCo
       setIsRecordingGif: vi.fn(),
       createMuxer: vi.fn(() => muxer),
       createEncoder: vi.fn((init: VideoEncoderInit) => {
-        encoder = buildVideoEncoder({ init, configure: vi.fn() });
+        encoder = buildVideoEncoder({ init, configure: vi.fn(), close: vi.fn() });
         return encoder;
       }),
       createCanvas: vi.fn(() => canvas),
@@ -64,12 +65,14 @@ function createOptions(overrides: Partial<Parameters<typeof startScreenshotWebCo
 }
 
 describe('screenshot WebCodecs start helper', () => {
-  it('configures encoder, creates muxer/canvas, and initializes refs', () => {
+  it('configures encoder, starts muxer, creates canvas, and initializes refs', async () => {
     const fixture = createOptions();
 
     void startScreenshotWebCodecsRecording(fixture.options);
+    await Promise.resolve();
 
     expect(fixture.options.createMuxer).toHaveBeenCalledWith({ width: 960, height: 540 });
+    expect(fixture.muxer.start).toHaveBeenCalledOnce();
     expect(fixture.encoder?.configure).toHaveBeenCalledWith({
       codec: 'avc1.64001f',
       width: 960,
@@ -92,9 +95,10 @@ describe('screenshot WebCodecs start helper', () => {
     expect(fixture.options.setIsRecordingGif).toHaveBeenCalledWith(true);
   });
 
-  it('forwards encoded chunks to the muxer', () => {
+  it('forwards encoded chunks to the muxer', async () => {
     const fixture = createOptions();
     void startScreenshotWebCodecsRecording(fixture.options);
+    await Promise.resolve();
     const chunk = buildEncodedVideoChunk({ byteLength: 12, timestamp: 42 });
     const meta = buildEncodedVideoChunkMetadata();
 
@@ -110,6 +114,7 @@ describe('screenshot WebCodecs start helper', () => {
     });
 
     const promise = startScreenshotWebCodecsRecording(fixture.options);
+    await Promise.resolve();
     fixture.encoder?.init?.error(error);
 
     await expect(promise).rejects.toBe(error);
@@ -137,5 +142,19 @@ describe('screenshot WebCodecs start helper', () => {
     expect(options.muxerRef.current).toBeNull();
     expect(options.webCodecsCanvasRef.current).toBeNull();
     expect(options.setIsRecordingGif).not.toHaveBeenCalled();
+  });
+
+  it('rejects and avoids ref initialization when muxer start fails', async () => {
+    const error = new Error('muxer failed');
+    const fixture = createOptions();
+    vi.mocked(fixture.muxer.start).mockRejectedValue(error);
+
+    await expect(startScreenshotWebCodecsRecording(fixture.options)).rejects.toBe(error);
+    expect(fixture.options.errorLog).toHaveBeenCalledWith('MP4 muxer start failed:', error);
+    expect(fixture.encoder?.close).toHaveBeenCalledOnce();
+    expect(fixture.options.videoEncoderRef.current).toBeNull();
+    expect(fixture.options.muxerRef.current).toBeNull();
+    expect(fixture.options.webCodecsCanvasRef.current).toBeNull();
+    expect(fixture.options.setIsRecordingGif).not.toHaveBeenCalled();
   });
 });

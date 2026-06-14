@@ -12,10 +12,11 @@ import { createRecordingCanvas } from './screenshotRecordingCanvas';
 
 export interface WebCodecsMuxer {
   target: {
-    buffer: ArrayBuffer;
+    buffer: ArrayBuffer | null;
   };
-  addVideoChunk(chunk: EncodedVideoChunk, meta?: EncodedVideoChunkMetadata): void;
-  finalize(): void;
+  start(): Promise<void>;
+  addVideoChunk(chunk: EncodedVideoChunk, meta?: EncodedVideoChunkMetadata): Promise<void>;
+  finalize(): Promise<void>;
 }
 
 interface CreateWebCodecsMuxerOptions {
@@ -50,7 +51,7 @@ interface ScreenshotWebCodecsStartOptions {
   errorLog?: (message: string, error: unknown) => void;
 }
 
-export function startScreenshotWebCodecsRecording({
+export async function startScreenshotWebCodecsRecording({
   sourceWidth,
   sourceHeight,
   downsample,
@@ -76,55 +77,73 @@ export function startScreenshotWebCodecsRecording({
   log = appLogger.info,
   errorLog = appLogger.error,
 }: ScreenshotWebCodecsStartOptions): Promise<Blob | null> {
-  return new Promise((resolve, reject) => {
-    const { width, height } = getEvenDownsampledDimensions(sourceWidth, sourceHeight, downsample);
-    const bitrate = getVideoBitrate(width, height, recordingQuality);
-    log(`WebCodecs recording: ${width}x${height}, bitrate=${formatBitrateMbps(bitrate)}Mbps`);
-
-    const muxer = createMuxer({ width, height });
-    const encoder = createEncoder({
-      output: (chunk, meta) => {
-        muxer.addVideoChunk(chunk, meta ?? undefined);
-      },
-      error: (error) => {
-        errorLog('VideoEncoder error:', error);
-        setIsRecordingGif(false);
-        isRecordingWebCodecsRef.current = false;
-        reject(error);
-      },
-    });
-
-    const codec = getAvcCodecForDimensions(width, height);
-
-    try {
-      encoder.configure({
-        codec,
-        width,
-        height,
-        bitrate,
-        framerate: RECORDING_FPS,
-      });
-      log(`VideoEncoder configured: ${codec}, ${width}x${height}, ${formatBitrateMbps(bitrate)}Mbps`);
-    } catch (error) {
-      errorLog('VideoEncoder configure failed:', error);
-      reject(error);
-      return;
-    }
-
-    const canvas = createCanvas(width, height);
-
-    videoEncoderRef.current = encoder;
-    muxerRef.current = muxer;
-    webCodecsCanvasRef.current = canvas;
-    webCodecsStartTimeRef.current = now();
-    webCodecsDurationMsRef.current = durationMs;
-    webCodecsSpeedFactorRef.current = speedFactor;
-    webCodecsFrameCountRef.current = 0;
-    webCodecsLastFrameTimeRef.current = 0;
-    isRecordingWebCodecsRef.current = true;
-    webCodecsResolveRef.current = resolve;
-    lastProgressNotificationTimeRef.current = 0;
-
-    setIsRecordingGif(true);
+  let resolveRecording: (blob: Blob | null) => void = () => {};
+  let rejectRecording: (error: unknown) => void = () => {};
+  const completion = new Promise<Blob | null>((resolve, reject) => {
+    resolveRecording = resolve;
+    rejectRecording = reject;
   });
+
+  const { width, height } = getEvenDownsampledDimensions(sourceWidth, sourceHeight, downsample);
+  const bitrate = getVideoBitrate(width, height, recordingQuality);
+  log(`WebCodecs recording: ${width}x${height}, bitrate=${formatBitrateMbps(bitrate)}Mbps`);
+
+  const muxer = createMuxer({ width, height });
+  const handleRecordingError = (message: string, error: unknown) => {
+    errorLog(message, error);
+    setIsRecordingGif(false);
+    isRecordingWebCodecsRef.current = false;
+    rejectRecording(error);
+  };
+  const encoder = createEncoder({
+    output: (chunk, meta) => {
+      void muxer.addVideoChunk(chunk, meta ?? undefined).catch((error: unknown) => {
+        handleRecordingError('Video muxer write failed:', error);
+      });
+    },
+    error: (error) => {
+      handleRecordingError('VideoEncoder error:', error);
+    },
+  });
+
+  const codec = getAvcCodecForDimensions(width, height);
+
+  try {
+    encoder.configure({
+      codec,
+      width,
+      height,
+      bitrate,
+      framerate: RECORDING_FPS,
+    });
+    log(`VideoEncoder configured: ${codec}, ${width}x${height}, ${formatBitrateMbps(bitrate)}Mbps`);
+  } catch (error) {
+    errorLog('VideoEncoder configure failed:', error);
+    throw error;
+  }
+
+  try {
+    await muxer.start();
+  } catch (error) {
+    errorLog('MP4 muxer start failed:', error);
+    encoder.close();
+    throw error;
+  }
+
+  const canvas = createCanvas(width, height);
+
+  videoEncoderRef.current = encoder;
+  muxerRef.current = muxer;
+  webCodecsCanvasRef.current = canvas;
+  webCodecsStartTimeRef.current = now();
+  webCodecsDurationMsRef.current = durationMs;
+  webCodecsSpeedFactorRef.current = speedFactor;
+  webCodecsFrameCountRef.current = 0;
+  webCodecsLastFrameTimeRef.current = 0;
+  isRecordingWebCodecsRef.current = true;
+  webCodecsResolveRef.current = resolveRecording;
+  lastProgressNotificationTimeRef.current = 0;
+
+  setIsRecordingGif(true);
+  return completion;
 }

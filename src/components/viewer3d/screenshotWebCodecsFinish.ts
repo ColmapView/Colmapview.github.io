@@ -52,9 +52,12 @@ export async function finishScreenshotWebCodecsRecording({
     log('Flushing encoder...');
     await encoder.flush();
     log('Finalizing muxer...');
-    muxer.finalize();
+    await muxer.finalize();
 
     const { buffer } = muxer.target;
+    if (!buffer) {
+      throw new Error('MP4 muxer did not produce a finalized buffer.');
+    }
     log(`MP4 blob size: ${buffer.byteLength}`);
     const blob = createBlob(buffer);
     const url = createObjectUrl(blob);

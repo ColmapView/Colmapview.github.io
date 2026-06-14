@@ -32,7 +32,7 @@
     "gs-toolbox": "file:vendor/gs-toolbox",
     "js-yaml": "^4.1.1",
     "libarchive.js": "^2.0.2",
-    "mp4-muxer": "^5.2.2",
+    "mediabunny": "^1.46.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-hotkeys-hook": "^5.2.3",
