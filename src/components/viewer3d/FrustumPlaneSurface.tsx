@@ -8,6 +8,7 @@ import {
   syncFrustumPlaneMaterialMap,
 } from './frustumPlaneMaterialPolicy';
 import { UndistortedImageMaterial } from './UndistortedImageMaterial';
+import { resolveUndistortionMode } from '../../utils/undistortionMode';
 
 const TESSELLATION_SEGMENTS = 32;
 
@@ -51,10 +52,15 @@ export function FrustumPlaneSurface({
     previousMaterialTextureRef.current = materialTexture;
   }, [materialTexture]);
 
+  // Fisheye cameras can exceed 180° FOV, which cannot be represented in
+  // fullFrame mode (the fisheye→pinhole map folds past θ=90°). Resolve to the
+  // safe cropped path for fisheye models so geometry and material agree.
+  const effectiveMode = resolveUndistortionMode(undistortionMode, camera.modelId);
+
   if (undistortionEnabled && shouldShowTexture && displayTexture) {
     return (
       <>
-        {undistortionMode === 'fullFrame' ? (
+        {effectiveMode === 'fullFrame' ? (
           <planeGeometry args={[planeSize.width, planeSize.height, TESSELLATION_SEGMENTS, TESSELLATION_SEGMENTS]} />
         ) : (
           <planeGeometry args={[planeSize.width, planeSize.height]} />
@@ -63,7 +69,7 @@ export function FrustumPlaneSurface({
           map={displayTexture}
           camera={camera}
           undistortionEnabled={undistortionEnabled}
-          undistortionMode={undistortionMode}
+          undistortionMode={effectiveMode}
           planeWidth={planeSize.width}
           planeHeight={planeSize.height}
           opacity={isTransparent ? selectionPlaneOpacity * 0.5 : selectionPlaneOpacity}

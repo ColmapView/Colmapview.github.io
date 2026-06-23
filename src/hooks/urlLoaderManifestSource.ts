@@ -4,6 +4,7 @@ import { appLogger } from '../utils/logger';
 import {
   getManifestLoadSourceInfo,
   type ManifestLoadSource,
+  type RemoteSplatCandidate,
 } from './urlLoaderPolicy';
 import { fetchManifestColmapFiles } from './urlLoaderManifestFetch';
 
@@ -29,6 +30,8 @@ export interface LoadManifestSourceDeps {
   processFiles: ProcessFiles;
   setSourceInfo: SetSourceInfo;
   setUrlProgress: SetUrlProgress;
+  /** Receives the full discovered remote splat catalog for lazy on-demand loading. */
+  onRemoteSplatCatalog?: (catalog: RemoteSplatCandidate[]) => void;
 }
 
 export async function loadManifestSource(
@@ -41,6 +44,7 @@ export async function loadManifestSource(
     ?? ((targetManifest: ColmapManifest) => fetchManifestColmapFiles(targetManifest, {
       log: (message) => log(message),
       setUrlProgress: deps.setUrlProgress,
+      onRemoteSplatCatalog: deps.onRemoteSplatCatalog,
     }));
 
   const files = await fetchColmapFiles(manifest);

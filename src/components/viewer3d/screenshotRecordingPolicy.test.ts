@@ -16,6 +16,7 @@ import {
   getRecordingStopAction,
   getRenderingFramesMessage,
   getVideoBitrate,
+  getVideoTrackOptions,
   getWebCodecsFrameTimestamp,
   isRecordingFrameDue,
   isWebCodecsRuntimeSupported,
@@ -164,5 +165,43 @@ describe('screenshot recording policy', () => {
     vi.stubGlobal('VideoEncoder', class TestVideoEncoder {});
     vi.stubGlobal('VideoFrame', class TestVideoFrame {});
     expect(isWebCodecsRuntimeSupported()).toBe(true);
+  });
+});
+
+describe('getVideoTrackOptions (sped-up MP4 frame collapse)', () => {
+  // Mirrors mediabunny: it derives the MP4 timescale from frameRate and snaps
+  // each frame's timestamp to round(tsSeconds * frameRate) ticks. Two frames
+  // landing on the same tick are dropped/coalesced.
+  const muxerTick = (frameCount: number, speedFactor: number): number => {
+    const tsSeconds = getWebCodecsFrameTimestamp(frameCount, speedFactor) / 1e6;
+    return Math.round(tsSeconds * getVideoTrackOptions(speedFactor).frameRate);
+  };
+
+  it('scales the output frame rate by the speed factor', () => {
+    expect(getVideoTrackOptions(1)).toEqual({ frameRate: 30 });
+    expect(getVideoTrackOptions(2)).toEqual({ frameRate: 60 });
+    expect(getVideoTrackOptions(3)).toEqual({ frameRate: 90 });
+    expect(getVideoTrackOptions(4)).toEqual({ frameRate: 120 });
+  });
+
+  it('produces strictly increasing muxer ticks at every speed (no dropped frames)', () => {
+    for (const speed of [1, 2, 3, 4]) {
+      const ticks = Array.from({ length: 30 }, (_, n) => muxerTick(n, speed));
+      for (let i = 1; i < ticks.length; i++) {
+        expect(ticks[i]).toBeGreaterThan(ticks[i - 1]);
+      }
+    }
+  });
+
+  it('regression: a fixed 30fps timescale WOULD collapse sped-up frames', () => {
+    // Demonstrates the original bug (frameRate hardcoded to 30): adjacent frames
+    // at speed 2 round to the same tick. The fix above avoids this.
+    const fixedTick = (n: number, speed: number) =>
+      Math.round((getWebCodecsFrameTimestamp(n, speed) / 1e6) * 30);
+    expect(fixedTick(1, 2)).toBe(fixedTick(2, 2));
+  });
+
+  it('never returns a zero/negative frame rate for a degenerate speed', () => {
+    expect(getVideoTrackOptions(0).frameRate).toBeGreaterThan(0);
   });
 });

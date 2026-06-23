@@ -4,7 +4,9 @@ import {
   isSplatFilePath,
   sortSplatCandidatesByPreference,
 } from '../utils/splatFilePolicy';
+import { resolveColmapPaths, resolveImagesDir } from '../utils/colmapPathResolver';
 import {
+  encodeUrlPath,
   normalizeCloudStorageUrl,
   normalizeGitHostingUrl,
 } from '../utils/urlUtils';
@@ -74,9 +76,10 @@ export interface UrlNormalizationResult {
 }
 
 export function joinManifestUrlPath(baseUrl: string, relativePath: string): string {
+  const encodedPath = encodeUrlPath(relativePath);
   return baseUrl.endsWith('/')
-    ? `${baseUrl}${relativePath}`
-    : `${baseUrl}/${relativePath}`;
+    ? `${baseUrl}${encodedPath}`
+    : `${baseUrl}/${encodedPath}`;
 }
 
 export function createDefaultManifest(baseUrl: string): ColmapManifest {
@@ -153,7 +156,15 @@ function getRelativeUrlPath(rootUrl: URL, targetUrl: URL): string | null {
     return null;
   }
 
-  return normalizePath(relativePath);
+  // URL.pathname keeps segments percent-encoded; decode them so the stored
+  // relative path matches the decoded form HuggingFace paths use. Callers
+  // re-encode exactly once (encodeUrlPath/joinManifestUrlPath); leaving it
+  // encoded here would double-encode tiles with '#'/spaces (e.g. 5x5#-5.ply)
+  // and 404 the fetch.
+  return normalizePath(relativePath)
+    .split('/')
+    .map(decodePathSegment)
+    .join('/');
 }
 
 function shouldSkipDirectoryHref(href: string): boolean {
@@ -296,6 +307,78 @@ export function getRelativeHuggingFaceTreePath(entryPath: string, treePath: stri
 
   const relativePath = normalizedEntryPath.slice(normalizedTreePath.length + 1);
   return relativePath || null;
+}
+
+export interface HuggingFaceColmapPaths {
+  cameras: string;
+  images: string;
+  points3D: string;
+  rigs?: string;
+  frames?: string;
+}
+
+/**
+ * Locate a complete COLMAP model within a HuggingFace dataset tree, returning
+ * the file paths relative to the tree root. Uses the shared path resolver, so
+ * it finds the model wherever it lives (colmap/, sparse/0/, the root, ...),
+ * not just the conventional sparse/0 location.
+ */
+export function getHuggingFaceColmapPaths(
+  entries: readonly HuggingFaceDatasetTreeEntry[],
+  treePath: string
+): HuggingFaceColmapPaths | null {
+  const relativePaths: string[] = [];
+  for (const entry of entries) {
+    if (entry.type !== 'file' || typeof entry.path !== 'string') {
+      continue;
+    }
+    const relativePath = getRelativeHuggingFaceTreePath(entry.path, treePath);
+    if (relativePath) {
+      relativePaths.push(relativePath);
+    }
+  }
+
+  const selection = resolveColmapPaths(relativePaths, { requirePoints3D: true });
+  if (!selection || !selection.cameras || !selection.images || !selection.points3D) {
+    return null;
+  }
+
+  return {
+    cameras: selection.cameras,
+    images: selection.images,
+    points3D: selection.points3D,
+    rigs: selection.rigs,
+    frames: selection.frames,
+  };
+}
+
+/**
+ * Locate the images directory within a HuggingFace dataset tree, relative to the
+ * tree root and with a trailing slash (e.g. 'corrected/images/'). `modelDir` is
+ * the relative directory of the COLMAP model, used to prefer a nearby images
+ * folder. Returns null when no images are present.
+ */
+export function getHuggingFaceImagesPath(
+  entries: readonly HuggingFaceDatasetTreeEntry[],
+  treePath: string,
+  modelDir?: string
+): string | null {
+  const relativePaths: string[] = [];
+  for (const entry of entries) {
+    if (entry.type !== 'file' || typeof entry.path !== 'string') {
+      continue;
+    }
+    const relativePath = getRelativeHuggingFaceTreePath(entry.path, treePath);
+    if (relativePath) {
+      relativePaths.push(relativePath);
+    }
+  }
+
+  const dir = resolveImagesDir(relativePaths, { modelDir });
+  if (dir === null) {
+    return null;
+  }
+  return dir === '' ? '' : `${dir}/`;
 }
 
 export function getHuggingFaceSplatPaths(

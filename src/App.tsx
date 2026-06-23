@@ -4,6 +4,7 @@ import { DropZone } from './components/dropzone';
 import { AppLayout } from './components/layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { HotkeyHelpModal } from './components/modals/HotkeyHelpModal';
+import { SplatPickerModal } from './components/modals/SplatPickerModal';
 import { ConfirmationHost } from './components/ui/ConfirmationHost';
 import { MouseTooltip } from './components/ui/MouseTooltip';
 import { NotificationContainer } from './components/ui/NotificationContainer';
@@ -117,6 +118,7 @@ function App() {
           <AppLayout />
         </DropZone>
         <HotkeyHelpModal />
+        <SplatPickerModal />
         <ConfirmationHost />
         <MouseTooltip />
         <NotificationContainer />

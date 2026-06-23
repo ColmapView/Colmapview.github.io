@@ -1,4 +1,4 @@
-import type { ColorMode } from '../../../types/colmap';
+import type { ColorMode, SplatFileSource } from '../../../types/colmap';
 
 interface SelectOption<T extends string> {
   value: T;
@@ -82,6 +82,48 @@ export function getActiveSplatFileSelectValue(
 ): string {
   const activeIndex = activeFile ? files.indexOf(activeFile) : -1;
   return String(activeIndex >= 0 ? activeIndex : 0);
+}
+
+function getSplatSourceLabel(source: SplatFileSource, index: number, total: number): string {
+  const name = source.path.split('/').pop() || source.path;
+  return total > 1 ? `${index + 1}. ${name}` : name;
+}
+
+/**
+ * Build splat selector options keyed by source id, covering every tile
+ * (including lazy ones not yet downloaded). Selecting a lazy tile triggers an
+ * on-demand fetch.
+ */
+export function getSplatSourceSelectOptions(
+  sources: readonly SplatFileSource[]
+): SelectOption<string>[] {
+  return sources.map((source, index) => ({
+    value: source.id,
+    label: getSplatSourceLabel(source, index, sources.length),
+  }));
+}
+
+export function getActiveSplatSourceSelectValue(
+  sources: readonly SplatFileSource[],
+  activeSourceId: string | null
+): string {
+  if (activeSourceId && sources.some((source) => source.id === activeSourceId)) {
+    return activeSourceId;
+  }
+  // No active splat -> empty value selects the "COLMAP only" option.
+  return '';
+}
+
+const COLMAP_ONLY_SPLAT_OPTION: SelectOption<string> = { value: '', label: 'None - COLMAP only' };
+
+/**
+ * Splat selector options with a leading "COLMAP only" entry so the user can
+ * display the COLMAP scene without a splat (or unload the current one).
+ */
+export function getSplatSourceSelectOptionsWithNone(
+  sources: readonly SplatFileSource[]
+): SelectOption<string>[] {
+  return [COLMAP_ONLY_SPLAT_OPTION, ...getSplatSourceSelectOptions(sources)];
 }
 
 export function getSplatFileFromSelectValue(

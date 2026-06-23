@@ -132,7 +132,12 @@ export interface Reconstruction {
 export interface SplatFileSource {
   id: string;
   path: string;
-  file: File;
+  /** Downloaded splat bytes. Absent for lazy remote sources until fetched. */
+  file?: File;
+  /** Remote URL for lazy on-demand fetch. Present for remote sources. */
+  url?: string;
+  /** Byte size from discovery (used for ordering / UX), when known. */
+  size?: number;
 }
 
 // File structure for loaded data

@@ -116,8 +116,11 @@ describe('url loader policy helpers', () => {
       'https://example.com/dataset',
       '<a href="folder%20name/model%23a.ply">encoded</a>'
     )[0]).toEqual({
+      // url stays percent-encoded (used directly to fetch); relativePath is decoded
+      // so downstream encodeUrlPath re-encodes it exactly once instead of
+      // double-encoding (%2520 / %2523) and 404-ing.
       url: 'https://example.com/dataset/folder%20name/model%23a.ply',
-      relativePath: 'folder%20name/model%23a.ply',
+      relativePath: 'folder name/model#a.ply',
       isDirectory: false,
       isSplat: true,
     });

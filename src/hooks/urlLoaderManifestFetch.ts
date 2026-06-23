@@ -10,23 +10,34 @@ import {
   classifyFetchError,
   fetchWithTimeout,
   getFilenameFromUrl,
+  readResponseToBlob,
+  type DownloadProgressCallback,
 } from '../utils/urlUtils';
 import { appLogger } from '../utils/logger';
 import { isSplatFilePath } from '../utils/splatFilePolicy';
+import { classifyPlyHeaderText } from '../parsers';
 import {
   getDirectoryListingLinks,
   getDirectoryListingRootUrl,
+  getHuggingFaceColmapPaths,
   getHuggingFaceDatasetTreeRequest,
+  getHuggingFaceImagesPath,
   getHuggingFaceSplatPaths,
   getManifestColmapFileEntries,
   joinManifestUrlPath,
   sortRemoteSplatCandidates,
+  type HuggingFaceColmapPaths,
+  type HuggingFaceDatasetTreeEntry,
   type RemoteSplatCandidate,
 } from './urlLoaderPolicy';
 import { isUrlLoadError } from './urlLoaderErrorHandling';
 
 type FetchUrl = (url: string, init?: RequestInit) => Promise<Response>;
-type FetchManifestFile = (baseUrl: string, relativePath: string) => Promise<File>;
+type FetchManifestFile = (
+  baseUrl: string,
+  relativePath: string,
+  onProgress?: DownloadProgressCallback
+) => Promise<File>;
 type SetUrlProgress = (progress: UrlLoadProgress | null) => void;
 
 const DIRECTORY_LISTING_DISCOVERY_MAX_DEPTH = 8;
@@ -44,6 +55,7 @@ export interface FetchUrlManifestDeps {
 
 export interface FetchManifestFileOptions {
   fetchImpl?: FetchUrl;
+  onProgress?: DownloadProgressCallback;
 }
 
 export interface FetchManifestColmapFilesDeps {
@@ -51,10 +63,105 @@ export interface FetchManifestColmapFilesDeps {
   fetchFile?: FetchManifestFile;
   log?: (message: string) => void;
   setUrlProgress: SetUrlProgress;
+  /**
+   * Receives the full discovered remote splat catalog (all tiles, with sizes)
+   * so the caller can list every tile as a lazy, on-demand source. Only the
+   * first splat is eager-downloaded.
+   */
+  onRemoteSplatCatalog?: (catalog: RemoteSplatCandidate[]) => void;
+  /** Override splat classification (defaults to reading the PLY header). */
+  classifySplatUrl?: ClassifySplatUrl;
 }
+
+/**
+ * Classify a remote splat candidate URL as a true Gaussian splat. Used to drop
+ * raw point-cloud .ply files (e.g. a COLMAP `point_cloud.ply`) that share the
+ * .ply extension with splats. Returns true for non-.ply splat formats and keeps
+ * candidates on any classification error (so a transient failure never hides a
+ * real splat).
+ */
+export type ClassifySplatUrl = (url: string) => Promise<boolean>;
 
 export interface DiscoverHuggingFaceSplatDeps {
   fetchImpl?: FetchUrl;
+  classifySplatUrl?: ClassifySplatUrl;
+}
+
+const SPLAT_HEADER_RANGE_BYTES = 65536;
+// Cap on simultaneous header-classification fetches. Tiled datasets can have
+// hundreds of .ply candidates; classifying them all at once would flood the
+// connection pool (and, with a Range-ignoring server, pull many full bodies).
+const SPLAT_CLASSIFY_CONCURRENCY = 6;
+
+function safeUrlOrigin(url: string): string | null {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
+/** Map over items with a bounded number of concurrent async calls. */
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index], index);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+/**
+ * Read at most maxBytes of text from a response. A 206 already returns only the
+ * requested range, so reading it whole is bounded. A 200 means the server ignored
+ * the Range header and is sending the entire file; stream at most maxBytes and
+ * stop, instead of buffering a multi-GB body into a string just to sniff a header.
+ */
+async function readBoundedResponseText(response: Response, maxBytes: number): Promise<string> {
+  if (response.status === 206 || !response.body) {
+    return response.text();
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  let received = 0;
+  try {
+    while (received < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.length;
+      text += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+  return text + decoder.decode();
+}
+
+async function defaultClassifySplatUrl(url: string, fetchImpl: FetchUrl): Promise<boolean> {
+  // Non-PLY splat formats (.spz / .splat) are always splats.
+  const pathname = url.split('?')[0].toLowerCase();
+  if (!pathname.endsWith('.ply')) {
+    return true;
+  }
+  try {
+    const response = await fetchImpl(url, { headers: { Range: `bytes=0-${SPLAT_HEADER_RANGE_BYTES - 1}` } });
+    if (!response.ok) {
+      return true; // cannot classify -> keep (do not hide a real splat on error)
+    }
+    const headerText = await readBoundedResponseText(response, SPLAT_HEADER_RANGE_BYTES);
+    return classifyPlyHeaderText(headerText) === 'gaussian-splat';
+  } catch {
+    return true;
+  }
 }
 
 export interface DiscoverDirectoryListingSplatDeps {
@@ -62,6 +169,71 @@ export interface DiscoverDirectoryListingSplatDeps {
   maxCandidates?: number;
   maxDepth?: number;
   maxDirectories?: number;
+}
+
+const HUGGINGFACE_TREE_MAX_PAGES = 50;
+
+function parseHuggingFaceNextLink(linkHeader: string | null): string | null {
+  if (!linkHeader) {
+    return null;
+  }
+  for (const part of linkHeader.split(',')) {
+    const match = part.match(/<([^>]+)>\s*;\s*rel\s*=\s*"?next"?/i);
+    if (match) {
+      return match[1];
+    }
+  }
+  return null;
+}
+
+/**
+ * Fetch a HuggingFace dataset tree, following the `Link: rel="next"` header so
+ * datasets larger than one page (thousands of images plus splat tiles) are fully
+ * enumerated. Without pagination, files on later pages (e.g. a splats/ folder
+ * after thousands of images) would be invisible to discovery.
+ */
+async function fetchHuggingFaceTreeEntries(
+  apiUrl: string,
+  fetchImpl: FetchUrl
+): Promise<HuggingFaceDatasetTreeEntry[]> {
+  const entries: HuggingFaceDatasetTreeEntry[] = [];
+  const seenPaths = new Set<string>();
+  const visitedUrls = new Set<string>();
+  const apiOrigin = safeUrlOrigin(apiUrl);
+  let nextUrl: string | null = apiUrl;
+  let pages = 0;
+
+  while (nextUrl && pages < HUGGINGFACE_TREE_MAX_PAGES) {
+    // Break a cyclic/repeated pagination cursor instead of re-fetching forever.
+    if (visitedUrls.has(nextUrl)) {
+      break;
+    }
+    visitedUrls.add(nextUrl);
+    pages += 1;
+    const response = await fetchImpl(nextUrl);
+    if (!response.ok) {
+      throw new Error(`Hugging Face tree request failed (${response.status})`);
+    }
+    const page: unknown = await response.json();
+    if (Array.isArray(page)) {
+      // De-duplicate by path so a repeated entry can't make a single splat look
+      // like several (which would suppress auto-load and force the picker).
+      for (const entry of page as HuggingFaceDatasetTreeEntry[]) {
+        if (entry && typeof entry.path === 'string' && !seenPaths.has(entry.path)) {
+          seenPaths.add(entry.path);
+          entries.push(entry);
+        }
+      }
+    }
+    const candidateNext = parseHuggingFaceNextLink(
+      response.headers.get('Link') ?? response.headers.get('link')
+    );
+    // Only follow pagination that stays on the original origin (defense against a
+    // tampered/compromised Link header redirecting the crawl off-site).
+    nextUrl = candidateNext && safeUrlOrigin(candidateNext) === apiOrigin ? candidateNext : null;
+  }
+
+  return entries;
 }
 
 export async function discoverHuggingFaceSplatPaths(
@@ -74,17 +246,18 @@ export async function discoverHuggingFaceSplatPaths(
   }
 
   const fetchImpl = deps.fetchImpl ?? defaultFetchUrl;
-  const response = await fetchImpl(request.apiUrl);
-  if (!response.ok) {
-    throw new Error(`Hugging Face tree request failed (${response.status})`);
-  }
+  const entries = await fetchHuggingFaceTreeEntries(request.apiUrl, fetchImpl);
+  const candidates = getHuggingFaceSplatPaths(entries, request.treePath);
 
-  const entries: unknown = await response.json();
-  if (!Array.isArray(entries)) {
-    return [];
-  }
-
-  return getHuggingFaceSplatPaths(entries, request.treePath);
+  // Drop .ply candidates that are raw point clouds rather than Gaussian splats
+  // (the .ply extension alone is ambiguous - 3DGS even names splats
+  // point_cloud.ply, while this dataset uses point_cloud.ply for a point cloud).
+  const classify = deps.classifySplatUrl ?? ((url: string) => defaultClassifySplatUrl(url, fetchImpl));
+  const classified = await mapWithConcurrency(candidates, SPLAT_CLASSIFY_CONCURRENCY, async (candidate) => ({
+    candidate,
+    isSplat: await classify(joinManifestUrlPath(baseUrl, candidate.path)),
+  }));
+  return classified.filter((entry) => entry.isSplat).map((entry) => entry.candidate);
 }
 
 export async function discoverHuggingFaceSplatPath(
@@ -92,6 +265,125 @@ export async function discoverHuggingFaceSplatPath(
   deps: DiscoverHuggingFaceSplatDeps = {}
 ): Promise<RemoteSplatCandidate | null> {
   return (await discoverHuggingFaceSplatPaths(baseUrl, deps))[0] ?? null;
+}
+
+export interface HuggingFaceLayout {
+  colmap: HuggingFaceColmapPaths | null;
+  imagesPath: string | null;
+}
+
+function dirnameOf(path: string): string {
+  const slash = path.lastIndexOf('/');
+  return slash >= 0 ? path.slice(0, slash) : '';
+}
+
+/**
+ * Discover a HuggingFace dataset's COLMAP model location and images directory in
+ * a single (paginated) tree read. Returns null when the base URL is not a
+ * HuggingFace dataset.
+ */
+export async function discoverHuggingFaceLayout(
+  baseUrl: string,
+  deps: DiscoverHuggingFaceSplatDeps = {}
+): Promise<HuggingFaceLayout | null> {
+  const request = getHuggingFaceDatasetTreeRequest(baseUrl);
+  if (!request) {
+    return null;
+  }
+
+  const fetchImpl = deps.fetchImpl ?? defaultFetchUrl;
+  const entries = await fetchHuggingFaceTreeEntries(request.apiUrl, fetchImpl);
+  const colmap = getHuggingFaceColmapPaths(entries, request.treePath);
+  const modelDir = colmap ? dirnameOf(colmap.cameras) : undefined;
+  const imagesPath = getHuggingFaceImagesPath(entries, request.treePath, modelDir);
+  return { colmap, imagesPath };
+}
+
+/**
+ * Discover where the COLMAP bins actually live in a HuggingFace dataset by
+ * reading its file tree, rather than assuming the conventional sparse/0 layout.
+ * Returns paths relative to the dataset base URL, or null when the base URL is
+ * not a HuggingFace dataset or no complete model is present.
+ */
+export async function discoverHuggingFaceColmapPaths(
+  baseUrl: string,
+  deps: DiscoverHuggingFaceSplatDeps = {}
+): Promise<HuggingFaceColmapPaths | null> {
+  return (await discoverHuggingFaceLayout(baseUrl, deps))?.colmap ?? null;
+}
+
+/**
+ * Derive the masks directory as a sibling of a discovered images directory
+ * (e.g. `corrected/images` -> `corrected/masks`). Returns null when the path
+ * doesn't end in an `images` segment, so we don't guess for unusual layouts.
+ */
+export function deriveMasksPathFromImages(imagesPath: string): string | null {
+  const trimmed = imagesPath.replace(/\/+$/, '');
+  const slash = trimmed.lastIndexOf('/');
+  const leaf = (slash >= 0 ? trimmed.slice(slash + 1) : trimmed).toLowerCase();
+  if (leaf !== 'images') {
+    return null;
+  }
+  const parent = slash >= 0 ? trimmed.slice(0, slash + 1) : '';
+  return `${parent}masks`;
+}
+
+/**
+ * Best-effort rewrite of a manifest's COLMAP file paths to the locations
+ * actually present in the remote dataset. Falls back to the original manifest
+ * (e.g. the sparse/0 defaults) when discovery is unavailable or finds nothing,
+ * so explicit manifests and conventional layouts are unaffected.
+ */
+export async function withDiscoveredColmapPaths(
+  manifest: ColmapManifest,
+  deps: Pick<FetchManifestColmapFilesDeps, 'fetchImpl' | 'log'> = {}
+): Promise<ColmapManifest> {
+  try {
+    const layout = await discoverHuggingFaceLayout(manifest.baseUrl, {
+      fetchImpl: deps.fetchImpl,
+    });
+    if (!layout) {
+      return manifest;
+    }
+
+    let result = manifest;
+    if (layout.colmap) {
+      const { cameras, images, points3D, rigs, frames } = layout.colmap;
+      deps.log?.(
+        `[URL Loader] Discovered COLMAP files: cameras=${cameras}, images=${images}, points3D=${points3D}`
+      );
+      result = {
+        ...result,
+        files: {
+          ...result.files,
+          cameras,
+          images,
+          points3D,
+          // Use the optional files from the discovered model dir (undefined when
+          // absent), not the sparse/0 defaults which won't exist there.
+          rigs,
+          frames,
+        },
+      };
+    }
+    if (layout.imagesPath !== null && layout.imagesPath !== result.imagesPath) {
+      deps.log?.(`[URL Loader] Discovered images directory: ${layout.imagesPath}`);
+      result = { ...result, imagesPath: layout.imagesPath };
+      // Masks conventionally sit beside images; without this they'd stay at the
+      // sparse/0 default `masks/` and 404 for relocated layouts.
+      const masksPath = deriveMasksPathFromImages(layout.imagesPath);
+      if (masksPath && masksPath !== result.masksPath) {
+        deps.log?.(`[URL Loader] Using masks directory alongside images: ${masksPath}`);
+        result = { ...result, masksPath };
+      }
+    }
+    return result;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    deps.log?.(`[URL Loader] COLMAP layout discovery skipped: ${message}`);
+  }
+
+  return manifest;
 }
 
 async function getRemoteFileContentLength(url: string, fetchImpl: FetchUrl): Promise<number | null> {
@@ -166,14 +458,14 @@ export async function discoverDirectoryListingSplatPaths(
         }
 
         checkedCandidates++;
+        // Keep the splat even when the size is unknown (HEAD blocked/405, or no
+        // Content-Length): the file exists and is a valid splat; dropping it would
+        // make it silently vanish on static hosts. Unknown size sorts last and
+        // shows no size label.
         const size = await getRemoteFileContentLength(link.url, fetchImpl);
-        if (size === null) {
-          continue;
-        }
-
         candidatesByPath.set(link.relativePath, {
           path: link.relativePath,
-          size,
+          size: size ?? 0,
         });
         continue;
       }
@@ -205,9 +497,33 @@ function getDiscoveredSplatLogMessage(
     : `[URL Loader] Discovered ${candidates.length} ${label} files: ${candidateList}`;
 }
 
+function applyDiscoveredSplats(
+  manifest: ColmapManifest,
+  candidates: readonly RemoteSplatCandidate[],
+  source: 'Hugging Face' | 'directory',
+  deps: Pick<FetchManifestColmapFilesDeps, 'log' | 'onRemoteSplatCatalog'>
+): ColmapManifest {
+  deps.log?.(getDiscoveredSplatLogMessage(source, candidates));
+  // Surface the full catalog so the loader can list every tile as a lazy,
+  // on-demand source. Only the first (preferred) splat is eager-downloaded; the
+  // rest are fetched when the user switches to them, which keeps large tiled
+  // datasets (tens of GB) from downloading everything up front.
+  deps.onRemoteSplatCatalog?.([...candidates]);
+  // A single splat auto-loads. With multiple, don't auto-download any (they can
+  // be huge, e.g. a multi-GB point_cloud.ply); the user picks one from the
+  // catalog dropdown, or stays on the COLMAP scene.
+  if (candidates.length === 1) {
+    return { ...manifest, splats: [candidates[0].path] };
+  }
+  deps.log?.(
+    `[URL Loader] ${candidates.length} splats found; none auto-loaded - select one to display`
+  );
+  return { ...manifest, splats: [] };
+}
+
 async function withDiscoveredRemoteSplats(
   manifest: ColmapManifest,
-  deps: Pick<FetchManifestColmapFilesDeps, 'fetchImpl' | 'log'>
+  deps: Pick<FetchManifestColmapFilesDeps, 'fetchImpl' | 'log' | 'onRemoteSplatCatalog' | 'classifySplatUrl'>
 ): Promise<ColmapManifest> {
   if (manifest.splats?.length) {
     return manifest;
@@ -216,13 +532,10 @@ async function withDiscoveredRemoteSplats(
   try {
     const candidates = await discoverHuggingFaceSplatPaths(manifest.baseUrl, {
       fetchImpl: deps.fetchImpl,
+      classifySplatUrl: deps.classifySplatUrl,
     });
     if (candidates.length > 0) {
-      deps.log?.(getDiscoveredSplatLogMessage('Hugging Face', candidates));
-      return {
-        ...manifest,
-        splats: candidates.map((candidate) => candidate.path),
-      };
+      return applyDiscoveredSplats(manifest, candidates, 'Hugging Face', deps);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -234,11 +547,7 @@ async function withDiscoveredRemoteSplats(
       fetchImpl: deps.fetchImpl,
     });
     if (candidates.length > 0) {
-      deps.log?.(getDiscoveredSplatLogMessage('directory', candidates));
-      return {
-        ...manifest,
-        splats: candidates.map((candidate) => candidate.path),
-      };
+      return applyDiscoveredSplats(manifest, candidates, 'directory', deps);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -304,7 +613,7 @@ export async function fetchManifestFile(
     throw error;
   }
 
-  const blob = await response.blob();
+  const blob = await readResponseToBlob(response, options.onProgress);
   const filename = getFilenameFromUrl(fullUrl);
   return blobToFile(blob, filename);
 }
@@ -315,11 +624,14 @@ export async function fetchManifestColmapFiles(
 ): Promise<Map<string, File>> {
   const files = new Map<string, File>();
   const fetchFile = deps.fetchFile
-    ?? ((baseUrl, relativePath) => fetchManifestFile(baseUrl, relativePath, { fetchImpl: deps.fetchImpl }));
+    ?? ((baseUrl, relativePath, onProgress) =>
+      fetchManifestFile(baseUrl, relativePath, { fetchImpl: deps.fetchImpl, onProgress }));
   const log = deps.log ?? appLogger.info;
   const manifestWithDiscoveredSplats = await withDiscoveredRemoteSplats(manifest, {
     fetchImpl: deps.fetchImpl,
     log,
+    onRemoteSplatCatalog: deps.onRemoteSplatCatalog,
+    classifySplatUrl: deps.classifySplatUrl,
   });
   const { baseUrl } = manifestWithDiscoveredSplats;
   const { requiredFiles, optionalFiles } = getManifestColmapFileEntries(manifestWithDiscoveredSplats);
@@ -328,6 +640,43 @@ export async function fetchManifestColmapFiles(
   let downloadedCount = 0;
   const optionalSplatFileTotal = optionalFiles.filter(({ path }) => isSplatFilePath(path)).length;
   let optionalSplatDownloadedCount = 0;
+
+  // Aggregate byte progress across the (parallel) required COLMAP downloads so the
+  // loading overlay can show "X MB / Y MB" like splats. Bytes are only surfaced
+  // once every required file's size is known (Content-Length); otherwise we fall
+  // back to file-count progress so an unsized response can't skew the total.
+  const requiredBytesLoaded: Record<string, number> = {};
+  const requiredBytesTotal: Record<string, number> = {};
+  const reportRequiredProgress = (currentFile: string) => {
+    let bytesLoaded = 0;
+    let bytesTotal = 0;
+    let allTotalsKnown = true;
+    for (const { path } of requiredFiles) {
+      bytesLoaded += requiredBytesLoaded[path] ?? 0;
+      const total = requiredBytesTotal[path];
+      if (total === undefined) {
+        allTotalsKnown = false;
+      } else {
+        bytesTotal += total;
+      }
+    }
+    const showBytes = allTotalsKnown && bytesTotal > 0;
+    // Clamp loaded to total: Content-Length is the compressed size for gzip/br
+    // responses while the stream yields decompressed bytes, so loaded can exceed
+    // total — never overshoot the bar or show "X / Y" with X > Y.
+    const reportedLoaded = showBytes ? Math.min(bytesLoaded, bytesTotal) : bytesLoaded;
+    const percent = showBytes
+      ? 5 + Math.round((reportedLoaded / bytesTotal) * 25)
+      : 5 + Math.round((downloadedCount / totalFiles) * 25);
+    deps.setUrlProgress({
+      percent,
+      message: 'Downloading COLMAP files...',
+      currentFile,
+      filesDownloaded: downloadedCount,
+      totalFiles,
+      ...(showBytes ? { bytesLoaded: reportedLoaded, bytesTotal } : {}),
+    });
+  };
 
   deps.setUrlProgress({
     percent: 5,
@@ -339,17 +688,15 @@ export async function fetchManifestColmapFiles(
   const requiredResults = await Promise.all(
     requiredFiles.map(async ({ key, path }) => {
       try {
-        const file = await fetchFile(baseUrl, path);
-        downloadedCount++;
-
-        const percent = 5 + Math.round((downloadedCount / totalFiles) * 25);
-        deps.setUrlProgress({
-          percent,
-          message: 'Downloading COLMAP files...',
-          currentFile: path,
-          filesDownloaded: downloadedCount,
-          totalFiles,
+        const file = await fetchFile(baseUrl, path, (loaded, total) => {
+          requiredBytesLoaded[path] = loaded;
+          if (total > 0) {
+            requiredBytesTotal[path] = total;
+          }
+          reportRequiredProgress(path);
         });
+        downloadedCount++;
+        reportRequiredProgress(path);
 
         return { key, file };
       } catch (err) {
@@ -366,6 +713,42 @@ export async function fetchManifestColmapFiles(
   }
 
   if (optionalFiles.length > 0) {
+    // Aggregate byte progress across the (parallel) eager manifest-splat downloads
+    // the same way the required phase does, so this phase also shows "X MB / Y MB"
+    // when every splat size is known. rigs/frames are tiny non-splat metadata and
+    // keep the simple blob() path (no progress phase of their own).
+    const optionalSplatPaths = optionalFiles.filter(({ path }) => isSplatFilePath(path)).map(({ path }) => path);
+    const optionalSplatBytesLoaded: Record<string, number> = {};
+    const optionalSplatBytesTotal: Record<string, number> = {};
+    const reportOptionalSplatProgress = (currentFile: string) => {
+      let bytesLoaded = 0;
+      let bytesTotal = 0;
+      let allTotalsKnown = true;
+      for (const path of optionalSplatPaths) {
+        bytesLoaded += optionalSplatBytesLoaded[path] ?? 0;
+        const total = optionalSplatBytesTotal[path];
+        if (total === undefined) {
+          allTotalsKnown = false;
+        } else {
+          bytesTotal += total;
+        }
+      }
+      const showBytes = allTotalsKnown && bytesTotal > 0;
+      // Clamp loaded to total (compressed Content-Length vs decompressed stream).
+      const reportedLoaded = showBytes ? Math.min(bytesLoaded, bytesTotal) : bytesLoaded;
+      const percent = showBytes
+        ? 30 + Math.round((reportedLoaded / bytesTotal) * 50)
+        : 30 + Math.round((optionalSplatDownloadedCount / optionalSplatFileTotal) * 50);
+      deps.setUrlProgress({
+        percent,
+        message: 'Downloading splat files...',
+        currentFile,
+        filesDownloaded: optionalSplatDownloadedCount,
+        totalFiles: optionalSplatFileTotal,
+        ...(showBytes ? { bytesLoaded: reportedLoaded, bytesTotal } : {}),
+      });
+    };
+
     if (optionalSplatFileTotal > 0) {
       deps.setUrlProgress({
         percent: 30,
@@ -379,7 +762,19 @@ export async function fetchManifestColmapFiles(
       optionalFiles.map(async ({ key, path }) => {
         const isSplatFile = isSplatFilePath(path);
         try {
-          const file = await fetchFile(baseUrl, path);
+          const file = await fetchFile(
+            baseUrl,
+            path,
+            isSplatFile
+              ? (loaded, total) => {
+                  optionalSplatBytesLoaded[path] = loaded;
+                  if (total > 0) {
+                    optionalSplatBytesTotal[path] = total;
+                  }
+                  reportOptionalSplatProgress(path);
+                }
+              : undefined
+          );
           log(`[URL Loader] Optional file loaded: ${path}`);
           return { key, file };
         } catch {
@@ -388,13 +783,7 @@ export async function fetchManifestColmapFiles(
         } finally {
           if (isSplatFile) {
             optionalSplatDownloadedCount += 1;
-            deps.setUrlProgress({
-              percent: 30 + Math.round((optionalSplatDownloadedCount / optionalSplatFileTotal) * 50),
-              message: 'Downloading splat files...',
-              currentFile: path,
-              filesDownloaded: optionalSplatDownloadedCount,
-              totalFiles: optionalSplatFileTotal,
-            });
+            reportOptionalSplatProgress(path);
           }
         }
       })

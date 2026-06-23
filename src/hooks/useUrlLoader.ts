@@ -17,7 +17,7 @@ import {
   normalizeLoadUrl,
 } from './urlLoaderPolicy';
 import { URL_LOAD_GUARD_MESSAGE } from './urlLoaderLoadGuard';
-import { fetchUrlManifest } from './urlLoaderManifestFetch';
+import { fetchUrlManifest, withDiscoveredColmapPaths } from './urlLoaderManifestFetch';
 import { handleUrlLoadFailure } from './urlLoaderErrorHandling';
 import { loadZipUrlSource } from './urlLoaderZipSource';
 import { loadManifestSource } from './urlLoaderManifestSource';
@@ -36,6 +36,7 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
   const logInfo = logger.info;
   const setError = useReconstructionStore((s) => s.setError);
   const setSourceInfo = useReconstructionStore((s) => s.setSourceInfo);
+  const mergeRemoteSplatCatalog = useReconstructionStore((s) => s.mergeRemoteSplatCatalog);
 
   // Use store state for URL loading (shared across components)
   const urlLoading = useReconstructionStore((s) => s.urlLoading);
@@ -139,17 +140,30 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
         manifest = await fetchManifest(normalizedUrl);
         logInfo(getManifestLoadedLogMessage(manifest));
       } else {
-        // Treat as direct base URL with standard COLMAP structure
+        // Treat as direct base URL. Start from the conventional sparse/0 layout,
+        // then let remote discovery rewrite the COLMAP paths to wherever the bins
+        // actually live (e.g. a colmap/ folder on HuggingFace).
         manifest = createDefaultManifest(normalizedUrl);
+        manifest = await withDiscoveredColmapPaths(manifest, { log: logInfo });
         logInfo(getDefaultUrlManifestLogMessage(normalizedUrl));
       }
 
-      return await loadManifestSource(manifest, { type: 'url', sourceUrl: normalizedUrl }, {
+      const catalogHolder: { value: { path: string; size: number }[] } = { value: [] };
+      const loaded = await loadManifestSource(manifest, { type: 'url', sourceUrl: normalizedUrl }, {
         log: logInfo,
         processFiles,
         setSourceInfo,
         setUrlProgress,
+        onRemoteSplatCatalog: (catalog) => {
+          catalogHolder.value = catalog.map((candidate) => ({ path: candidate.path, size: candidate.size }));
+        },
       });
+      // List all discovered tiles as lazy, on-demand sources (the loader only
+      // eager-downloaded the first); selecting another fetches it on demand.
+      if (loaded && catalogHolder.value.length > 1) {
+        mergeRemoteSplatCatalog(catalogHolder.value, manifest.baseUrl);
+      }
+      return loaded;
     } catch (err) {
       handleUrlLoadFailure(err, {
         clearCaches: clearCachesOnFailure ? clearAllCaches : () => undefined,
@@ -172,6 +186,7 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
     loadFromSplatUrl,
     logError,
     logInfo,
+    mergeRemoteSplatCatalog,
     processFiles,
     setError,
     shouldKeepUrlLoadingForSplatRenderer,

@@ -4,6 +4,14 @@ export const SPLAT_LOADING_PROGRESS_PERCENT = 92;
 export const SPLAT_LOADING_PROGRESS_MESSAGE = 'Preparing splat renderer...';
 const SPLAT_PROGRESS_COMPLETE_GATE_PERCENT = 99;
 
+/**
+ * Percent range the network download occupies. The remaining range (end..100) is
+ * left for the GPU-processing phases (SplatLayer continues from the last percent,
+ * see getSplatProgressStartPercent), keeping the bar monotonic across both stages.
+ */
+export const SPLAT_DOWNLOAD_START_PERCENT = 5;
+export const SPLAT_DOWNLOAD_END_PERCENT = 90;
+
 export type SplatLoadingPhase =
   | 'preparingRenderer'
   | 'readingFile'
@@ -53,6 +61,30 @@ interface SplatByteProgressOptions extends SplatProgressOptions {
 
 export function getSplatLoadingProgress(file: File, options: SplatProgressOptions = {}): UrlLoadProgress {
   return getSplatPhaseProgress(file, 'preparingRenderer', options);
+}
+
+/**
+ * Progress for the on-demand network download of a splat tile. Maps loaded/total
+ * bytes onto [SPLAT_DOWNLOAD_START_PERCENT, SPLAT_DOWNLOAD_END_PERCENT] and exposes
+ * byte counts so the overlay can show "X MB / Y MB". When the total is unknown
+ * (no Content-Length) the percent stays at the start and only loaded bytes show.
+ */
+export function getSplatDownloadProgress(
+  fileName: string,
+  loadedBytes: number,
+  totalBytes: number,
+  options: { startPercent?: number; endPercent?: number } = {}
+): UrlLoadProgress {
+  const start = options.startPercent ?? SPLAT_DOWNLOAD_START_PERCENT;
+  const end = options.endPercent ?? SPLAT_DOWNLOAD_END_PERCENT;
+  const ratio = totalBytes > 0 ? clamp(loadedBytes / totalBytes, 0, 1) : 0;
+  return {
+    percent: Math.round(start + (end - start) * ratio),
+    message: `Downloading splat: ${fileName}`,
+    currentFile: fileName,
+    bytesLoaded: Math.max(0, Math.round(loadedBytes)),
+    ...(totalBytes > 0 ? { bytesTotal: Math.round(totalBytes) } : {}),
+  };
 }
 
 export function getSplatPhaseProgress(

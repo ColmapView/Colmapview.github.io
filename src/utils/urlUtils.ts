@@ -5,6 +5,10 @@
 
 import type { UrlLoadError } from '../types/manifest';
 import { detectCloudProvider, getCorsInstructions } from './urlCloudStorage';
+import { parseSafeIntegerString } from './numberParsing';
+
+/** Reports download progress as bytes arrive. totalBytes is 0 when unknown. */
+export type DownloadProgressCallback = (loadedBytes: number, totalBytes: number) => void;
 
 export {
   detectCloudProvider,
@@ -94,11 +98,104 @@ export function blobToFile(blob: Blob, filename: string): File {
 }
 
 /**
- * Extract filename from URL path.
+ * Percent-encode each segment of a relative URL path, preserving slashes.
+ * Splat tile filenames can contain characters like '#' (e.g.
+ * `splats/5x5#-5_-10.ply`); left raw, the browser treats `#...` as a URL
+ * fragment and the request 404s. Already-safe paths (e.g. `sparse/0/cameras.bin`)
+ * are unchanged.
+ */
+export function encodeUrlPath(path: string): string {
+  return path
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+}
+
+/**
+ * Fetch a splat file from a URL on demand (e.g. when switching to a lazy tile).
+ * Uses a plain fetch with no timeout because splat tiles can be very large
+ * (hundreds of MB) and would otherwise be aborted by the default timeout.
+ *
+ * When an onProgress callback is given and the response is streamable, the body
+ * is read incrementally so the caller can report real download progress. Without
+ * it (or without a readable body), falls back to response.blob().
+ */
+export async function fetchRemoteSplatFile(
+  url: string,
+  onProgress?: DownloadProgressCallback
+): Promise<File> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch splat (${response.status})`);
+  }
+  return blobToFile(await readResponseToBlob(response, onProgress), getFilenameFromUrl(url));
+}
+
+/**
+ * Read a successful response into a Blob. When an onProgress callback is given and
+ * the body is streamable, reports bytes (vs Content-Length) as they arrive;
+ * otherwise falls back to response.blob(). Shared by remote splat and COLMAP-file
+ * downloads so both can drive the byte counter in the loading overlay.
+ */
+export async function readResponseToBlob(
+  response: Response,
+  onProgress?: DownloadProgressCallback
+): Promise<Blob> {
+  if (!onProgress || !response.body) {
+    return response.blob();
+  }
+  const total = parseSafeIntegerString(response.headers.get('content-length') ?? '') ?? 0;
+  return readResponseStreamToBlob(response.body, total, onProgress);
+}
+
+/**
+ * Read a fetch response body to a Blob, reporting bytes as they arrive. Builds
+ * the Blob directly from the chunk array (no intermediate full-buffer copy) to
+ * keep peak memory near one copy of the file.
+ */
+async function readResponseStreamToBlob(
+  body: ReadableStream<Uint8Array>,
+  total: number,
+  onProgress: DownloadProgressCallback
+): Promise<Blob> {
+  const reader = body.getReader();
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  let loaded = 0;
+  onProgress(0, total);
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      // Copy into an ArrayBuffer-backed view: detaches from the stream buffer and
+      // satisfies the BlobPart type (the raw chunk is Uint8Array<ArrayBufferLike>).
+      chunks.push(new Uint8Array(value));
+      loaded += value.length;
+      onProgress(loaded, total);
+    }
+  } finally {
+    // Tear down the stream if the loop exits abnormally (read rejection, or a
+    // throwing progress callback) so the underlying connection isn't left open.
+    // A no-op once the stream is fully drained or already errored.
+    reader.cancel().catch(() => {});
+  }
+  return new Blob(chunks);
+}
+
+/**
+ * Extract filename from a URL path, percent-decoded so it matches the
+ * human-readable path (e.g. a tile URL `.../5x5%23-5.ply` yields `5x5#-5.ply`).
+ * URL.pathname keeps segments percent-encoded; without decoding, the resulting
+ * File.name would not match the decoded name used elsewhere (download progress,
+ * splat-loading ownership checks), breaking those matches for tiles whose names
+ * contain `#`, spaces, etc. Falls back to the raw segment on malformed escapes.
  */
 export function getFilenameFromUrl(url: string): string {
-  const pathname = new URL(url).pathname;
-  return pathname.split('/').pop() || 'unknown';
+  const segment = new URL(url).pathname.split('/').pop() || 'unknown';
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
 }
 
 /**

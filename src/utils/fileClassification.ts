@@ -11,6 +11,7 @@ import {
   isSplatFilePath,
   type SplatCandidate,
 } from './splatFilePolicy';
+import { resolveColmapPaths } from './colmapPathResolver';
 
 export interface ColmapFileSelection {
   camerasFile?: File;
@@ -19,46 +20,6 @@ export interface ColmapFileSelection {
   databaseFile?: File;
   rigsFile?: File;
   framesFile?: File;
-}
-
-interface ColmapDirectoryFiles {
-  cameras?: File;
-  images?: File;
-  points3D?: File;
-  database?: File;
-  rigs?: File;
-  frames?: File;
-}
-
-function getParentDir(path: string): string {
-  const lastSlash = path.lastIndexOf('/');
-  return lastSlash >= 0 ? path.substring(0, lastSlash) : '';
-}
-
-function choosePreferredColmapFile(current: File | undefined, candidate: File): File {
-  if (!current) {
-    return candidate;
-  }
-
-  const candidateIsBinary = candidate.name.toLowerCase().endsWith('.bin');
-  const currentIsBinary = current.name.toLowerCase().endsWith('.bin');
-
-  if (candidateIsBinary || !currentIsBinary) {
-    return candidate;
-  }
-
-  return current;
-}
-
-function getColmapDirectoryScore(dir: string): number {
-  const lower = dir.toLowerCase();
-
-  if (lower.endsWith('/sparse/0') || lower === 'sparse/0') return 0;
-  if (lower.endsWith('/sparse') || lower === 'sparse') return 1;
-  if (lower.includes('/sparse/')) return 2;
-  if (lower.includes('/sparse')) return 3;
-
-  return 4 + dir.length;
 }
 
 /**
@@ -90,55 +51,23 @@ function findColmapFilesInternal(
   files: Map<string, File>,
   options: { requirePoints3D: boolean }
 ): ColmapFileSelection {
-  const colmapDirs = new Map<string, ColmapDirectoryFiles>();
-
-  for (const [path, file] of files) {
-    const name = file.name.toLowerCase();
-    const dir = getParentDir(path);
-    const dirFiles = colmapDirs.get(dir) ?? {};
-
-    if (name === 'cameras.bin' || name === 'cameras.txt') {
-      dirFiles.cameras = choosePreferredColmapFile(dirFiles.cameras, file);
-    } else if (name === 'images.bin' || name === 'images.txt') {
-      dirFiles.images = choosePreferredColmapFile(dirFiles.images, file);
-    } else if (name === 'points3d.bin' || name === 'points3d.txt') {
-      dirFiles.points3D = choosePreferredColmapFile(dirFiles.points3D, file);
-    } else if (name === 'database.db' || name === 'colmap.db') {
-      dirFiles.database = file;
-    } else if (name === 'rigs.bin' || name === 'rigs.txt') {
-      dirFiles.rigs = choosePreferredColmapFile(dirFiles.rigs, file);
-    } else if (name === 'frames.bin' || name === 'frames.txt') {
-      dirFiles.frames = choosePreferredColmapFile(dirFiles.frames, file);
-    }
-
-    colmapDirs.set(dir, dirFiles);
-  }
-
-  const validDirs: { dir: string; files: ColmapDirectoryFiles }[] = [];
-  for (const [dir, dirFiles] of colmapDirs) {
-    if (
-      dirFiles.cameras &&
-      dirFiles.images &&
-      (dirFiles.points3D || !options.requirePoints3D)
-    ) {
-      validDirs.push({ dir, files: dirFiles });
-    }
-  }
-
-  if (validDirs.length === 0) {
+  // Resolve the best COLMAP model directory from the dropped/scanned paths.
+  // The resolver returns the exact map keys it selected, so each maps straight
+  // back to its File. Works for sparse/0, colmap/, the root, or nested layouts.
+  const selection = resolveColmapPaths(files.keys(), {
+    requirePoints3D: options.requirePoints3D,
+  });
+  if (!selection) {
     return {};
   }
 
-  validDirs.sort((a, b) => getColmapDirectoryScore(a.dir) - getColmapDirectoryScore(b.dir));
-
-  const best = validDirs[0].files;
   return {
-    camerasFile: best.cameras,
-    imagesFile: best.images,
-    points3DFile: best.points3D,
-    databaseFile: best.database,
-    rigsFile: best.rigs,
-    framesFile: best.frames,
+    camerasFile: selection.cameras ? files.get(selection.cameras) : undefined,
+    imagesFile: selection.images ? files.get(selection.images) : undefined,
+    points3DFile: selection.points3D ? files.get(selection.points3D) : undefined,
+    databaseFile: selection.database ? files.get(selection.database) : undefined,
+    rigsFile: selection.rigs ? files.get(selection.rigs) : undefined,
+    framesFile: selection.frames ? files.get(selection.frames) : undefined,
   };
 }
 
@@ -194,7 +123,8 @@ function getLocalSplatCandidates(files: Map<string, File>): LocalSplatCandidate[
  */
 export function findSplatFiles(files: Map<string, File>): File[] {
   return findSplatFileSources(files)
-    .map((candidate) => candidate.file);
+    .map((candidate) => candidate.file)
+    .filter((file): file is File => Boolean(file));
 }
 
 export function findSplatFileSources(files: Map<string, File>): SplatFileSource[] {

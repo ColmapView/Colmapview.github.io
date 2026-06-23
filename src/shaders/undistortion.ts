@@ -48,6 +48,7 @@ uniform float sx1;
 uniform float sy1;
 
 varying vec2 vUv;
+varying float vValid;
 
 // Camera model constants
 const int SIMPLE_PINHOLE = 0;
@@ -69,13 +70,26 @@ vec2 uvToDistortedNormalized(vec2 uv) {
   return vec2((px - cx) / fx, (py - cy) / fy);
 }
 
-// Compute inverse distortion: distorted -> undistorted
-// Uses iterative approach for accurate inversion
-//
-// For fisheye models, follows COLMAP's two-step approach:
-// 1. Remove polynomial distortion in fisheye θ-space (iteratively)
-// 2. Convert from fisheye to pinhole via tan(θ)/θ scaling
-vec2 inverseDistort(vec2 distorted) {
+// Fisheye angle-space coord (radius == theta) -> pinhole-normalized coord.
+// valid=false for theta >= ~90deg: tan(theta) diverges at 90deg and flips sign
+// beyond it, so such rays cannot be placed on a flat pinhole plane. Mirrors
+// COLMAP NormalFromFisheye's domain guard. See src/utils/cameraUndistortion.ts.
+vec2 fisheyeToPinhole(vec2 uu, out bool valid) {
+  valid = true;
+  float theta = length(uu);
+  if (theta < 0.00001) {
+    return uu; // near optical axis, scale ~ 1
+  }
+  if (cos(theta) <= 0.001) {
+    valid = false; // theta >= ~90deg: unrepresentable on a flat plane
+    return uu;
+  }
+  return uu * (tan(theta) / theta);
+}
+
+vec2 inverseDistort(vec2 distorted, out bool valid) {
+  valid = true;
+
   if (modelId == SIMPLE_PINHOLE || modelId == PINHOLE) {
     return distorted;
   }
@@ -111,13 +125,7 @@ vec2 inverseDistort(vec2 distorted) {
     // Step 2: Convert from fisheye to pinhole (NormalFromFisheye in COLMAP)
     // In fisheye space, θ = length(fisheyeUndist) represents the angle from optical axis
     // To convert to pinhole: scale by tan(θ)/θ
-    float theta = sqrt(fisheyeUndist.x * fisheyeUndist.x + fisheyeUndist.y * fisheyeUndist.y);
-    if (theta < 0.00001) {
-      return fisheyeUndist;
-    }
-    // scale = sin(θ)/(θ*cos(θ)) = tan(θ)/θ
-    float scale = tan(theta) / theta;
-    return fisheyeUndist * scale;
+    return fisheyeToPinhole(fisheyeUndist, valid);
   }
 
   // THIN_PRISM_FISHEYE: fisheye + tangential + thin prism
@@ -146,65 +154,89 @@ vec2 inverseDistort(vec2 distorted) {
       fisheyeUndist = withoutTangential / (1.0 + radial);
     }
 
-    // Convert from fisheye to pinhole
-    float theta = sqrt(fisheyeUndist.x * fisheyeUndist.x + fisheyeUndist.y * fisheyeUndist.y);
-    if (theta < 0.00001) {
-      return fisheyeUndist;
-    }
-    float scale = tan(theta) / theta;
-    return fisheyeUndist * scale;
+    return fisheyeToPinhole(fisheyeUndist, valid);
   }
 
-  // For non-fisheye models: standard iterative undistortion
-  // Initial guess: the distorted point itself
-  vec2 undistorted = distorted;
+  // FOV model: exact closed-form inverse (COLMAP FOVCameraModel::Undistortion).
+  if (modelId == FOV) {
+    float rd = length(distorted);
+    // omega -> 0 is the no-distortion limit; guard the 0/0 division.
+    if (rd < 0.00001 || abs(omega) < 0.00001) {
+      return distorted;
+    }
+    float arg = rd * omega;
+    if (arg >= 1.5707963 - 0.00001) {
+      valid = false; // past the tan() singularity
+      return distorted;
+    }
+    return distorted * (tan(arg) / (rd * 2.0 * tan(omega / 2.0)));
+  }
 
-  // Newton-Raphson iteration to find undistorted point
-  // We're solving: distorted = undistorted + delta(undistorted)
-  // So: undistorted = distorted - delta(undistorted)
-  for (int i = 0; i < 10; i++) {
-    float x = undistorted.x;
-    float y = undistorted.y;
+  // Perspective radial/tangential models: Newton's method on
+  // f(u) = u + delta(u) = distorted, with Jacobian J = I + d(delta)/du.
+  // (A plain fixed-point iteration converges only linearly and diverges for
+  // strong barrel distortion; Newton is quadratic and stays accurate.)
+  vec2 u = distorted;
+  float resid = 1.0; // |f(u) - distorted| at the latest evaluated u
+  for (int i = 0; i < 15; i++) {
+    float x = u.x;
+    float y = u.y;
     float r2 = x * x + y * y;
-    float r = sqrt(r2);
 
-    vec2 delta = vec2(0.0);
-
+    float R = 0.0;   // radial factor: delta_radial = u * R
+    float Rp = 0.0;  // dR/d(r2)
     if (modelId == SIMPLE_RADIAL) {
-      float radial = k1 * r2;
-      delta = undistorted * radial;
+      R = k1 * r2;
+      Rp = k1;
     } else if (modelId == RADIAL) {
-      float r4 = r2 * r2;
-      float radial = k1 * r2 + k2 * r4;
-      delta = undistorted * radial;
+      R = k1 * r2 + k2 * r2 * r2;
+      Rp = k1 + 2.0 * k2 * r2;
     } else if (modelId == OPENCV) {
-      float r4 = r2 * r2;
-      float radial = k1 * r2 + k2 * r4;
-      float dx = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x);
-      float dy = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y;
-      delta = vec2(x * radial + dx, y * radial + dy);
+      R = k1 * r2 + k2 * r2 * r2;
+      Rp = k1 + 2.0 * k2 * r2;
     } else if (modelId == FULL_OPENCV) {
       float r4 = r2 * r2;
       float r6 = r4 * r2;
       float num = 1.0 + k1 * r2 + k2 * r4 + k3 * r6;
-      float denom = 1.0 + k4 * r2 + k5 * r4 + k6 * r6;
-      float radial = num / denom - 1.0;
-      float dx = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x);
-      float dy = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y;
-      delta = vec2(x * radial + dx, y * radial + dy);
-    } else if (modelId == FOV) {
-      if (r > 0.00001) {
-        float rd = atan(r * 2.0 * tan(omega / 2.0)) / omega;
-        float factor = rd / r - 1.0;
-        delta = undistorted * factor;
-      }
+      float den = 1.0 + k4 * r2 + k5 * r4 + k6 * r6;
+      R = num / den - 1.0;
+      float numP = k1 + 2.0 * k2 * r2 + 3.0 * k3 * r4;
+      float denP = k4 + 2.0 * k5 * r2 + 3.0 * k6 * r4;
+      Rp = (numP * den - num * denP) / (den * den);
     }
 
-    // Update: undistorted = distorted - delta
-    undistorted = distorted - delta;
+    float dx = x * R;
+    float dy = y * R;
+    float j11 = 1.0 + R + 2.0 * x * x * Rp;
+    float j12 = 2.0 * x * y * Rp;
+    float j21 = 2.0 * x * y * Rp;
+    float j22 = 1.0 + R + 2.0 * y * y * Rp;
+
+    if (modelId == OPENCV || modelId == FULL_OPENCV) {
+      dx += 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x);
+      dy += p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y;
+      j11 += 2.0 * p1 * y + 6.0 * p2 * x;
+      j12 += 2.0 * p1 * x + 2.0 * p2 * y;
+      j21 += 2.0 * p1 * x + 2.0 * p2 * y;
+      j22 += 6.0 * p1 * y + 2.0 * p2 * x;
+    }
+
+    vec2 g = vec2(x + dx, y + dy) - distorted;
+    resid = length(g);
+    float det = j11 * j22 - j12 * j21;
+    if (abs(det) > 0.000001) {
+      vec2 stepv = vec2(j22 * g.x - j12 * g.y, j11 * g.y - j21 * g.x) / det;
+      u -= stepv;
+    }
   }
 
-  return undistorted;
+  // Reject a non-physical root: strong barrel distortion can fold the forward map
+  // so Newton converges to a wrong root. A large residual means u is not a true
+  // inverse -> blank the ray (matches the CPU reference).
+  if (resid > 0.001) {
+    valid = false;
+  }
+  return u;
 }
 
 void main() {
@@ -213,8 +245,11 @@ void main() {
   // Get this vertex's position in distorted normalized coordinates
   vec2 distortedNorm = uvToDistortedNormalized(uv);
 
-  // Compute undistorted position
-  vec2 undistortedNorm = inverseDistort(distortedNorm);
+  // Compute undistorted position. valid=false marks rays that cannot live on a
+  // flat plane (wide fisheye / FOV singularity); the fragment shader discards them.
+  bool valid;
+  vec2 undistortedNorm = inverseDistort(distortedNorm, valid);
+  vValid = valid ? 1.0 : 0.0;
 
   // Convert back to UV space
   float undistortedPx = undistortedNorm.x * fx + cx;
@@ -363,7 +398,8 @@ vec2 distortFullOpenCV(vec2 p) {
 // FOV model distortion
 vec2 distortFOV(vec2 p) {
   float r = length(p);
-  if (r < 0.00001) return vec2(0.0);
+  // omega -> 0 is the no-distortion limit; guard the 0/0 division.
+  if (r < 0.00001 || abs(omega) < 0.00001) return vec2(0.0);
 
   float rd = atan(r * 2.0 * tan(omega / 2.0)) / omega;
   float factor = rd / r - 1.0;
@@ -419,32 +455,29 @@ vec2 distortRadialFisheye(vec2 p) {
   return p * factor;
 }
 
-// THIN_PRISM_FISHEYE: fisheye + radial + tangential + thin prism
+// THIN_PRISM_FISHEYE: fisheye + radial + tangential + thin prism.
+// COLMAP evaluates the radial, tangential AND thin-prism terms in angle space
+// (on the fisheye coords uu, radius == theta), not on the radially-scaled
+// coords. Mirrors src/utils/cameraUndistortion.ts applyFisheyeDistortion.
 vec2 distortThinPrismFisheye(vec2 p) {
   float r = length(p);
   if (r < 0.00001) return vec2(0.0);
 
   float theta = atan(r);
-  float theta2 = theta * theta;
+  vec2 uu = p * (theta / r); // angle-space coords (FisheyeFromNormal), radius theta
+  float theta2 = dot(uu, uu);
   float theta4 = theta2 * theta2;
   float theta6 = theta4 * theta2;
   float theta8 = theta4 * theta4;
+  float radial = k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8;
 
-  float thetad = theta * (1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8);
+  float x = uu.x;
+  float y = uu.y;
+  float dx = x * radial + 2.0 * p1 * x * y + p2 * (theta2 + 2.0 * x * x) + sx1 * theta2;
+  float dy = y * radial + p1 * (theta2 + 2.0 * y * y) + 2.0 * p2 * x * y + sy1 * theta2;
 
-  // Scale to distorted radius
-  vec2 pd = p * (thetad / r);
-
-  // Add tangential and thin prism distortion
-  float x = pd.x;
-  float y = pd.y;
-  float r2d = x * x + y * y;
-
-  float dx = 2.0 * p1 * x * y + p2 * (r2d + 2.0 * x * x) + sx1 * r2d;
-  float dy = p1 * (r2d + 2.0 * y * y) + 2.0 * p2 * x * y + sy1 * r2d;
-
-  // Return delta from original point
-  return vec2(pd.x + dx - p.x, pd.y + dy - p.y);
+  // Return delta from original perspective point p
+  return vec2(uu.x + dx - p.x, uu.y + dy - p.y);
 }
 
 // Apply distortion based on model ID
@@ -528,6 +561,18 @@ void main() {
 `;
 
 /**
+ * Discard threshold for the interpolated per-vertex validity flag. vValid is 1.0
+ * at valid vertices and 0.0 at invalid ones (rays past the FOV/fisheye
+ * singularity), and interpolates across a triangle. A triangle that straddles the
+ * validity boundary would otherwise stretch toward the invalid vertex's bogus
+ * undistorted position. Requiring vValid ~ 1.0 blanks every fragment with any
+ * meaningful contribution from an invalid vertex, so those mixed triangles are
+ * dropped entirely rather than rendered stretched. Cost: a ~1-triangle-thick band
+ * at the boundary is also blanked (sub-pixel at the 32x32 tessellation).
+ */
+export const FULLFRAME_VALID_DISCARD_THRESHOLD = 0.999;
+
+/**
  * Fragment shader for full-frame undistortion mode.
  * Simply samples the texture at the original UV (distorted space).
  * The vertex shader has already moved vertices to undistorted positions.
@@ -540,8 +585,17 @@ uniform float opacity;
 uniform vec3 color;
 
 varying vec2 vUv;
+varying float vValid;
 
 void main() {
+  // Blank any fragment that draws on (or near) an invalid vertex. Using a
+  // near-1.0 threshold discards whole triangles straddling the validity boundary
+  // instead of cutting them along an arbitrary interpolated line and stretching
+  // geometry toward the invalid vertex's bogus position.
+  if (vValid < ${FULLFRAME_VALID_DISCARD_THRESHOLD}) {
+    gl_FragColor = vec4(color, 0.0);
+    return;
+  }
   vec4 texColor = texture2D(map, vUv);
   gl_FragColor = vec4(texColor.rgb, opacity);
   #include <colorspace_fragment>

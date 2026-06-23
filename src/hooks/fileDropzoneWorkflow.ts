@@ -207,7 +207,7 @@ async function splitSplatAndPointCloudPlySources(
   const pointCloudPlySources: PointCloudPlySource[] = [];
 
   for (const source of candidateSources) {
-    if (!source.path.toLowerCase().endsWith('.ply')) {
+    if (!source.file || !source.path.toLowerCase().endsWith('.ply')) {
       splatFileSources.push(source);
       continue;
     }
@@ -261,7 +261,9 @@ export async function processFileDropzoneFiles(
     splatFileSources,
     pointCloudPlySources,
   } = await splitSplatAndPointCloudPlySources(files, classifyPly);
-  const splatFiles = splatFileSources.map((source) => source.file);
+  const splatFiles = splatFileSources
+    .map((source) => source.file)
+    .filter((file): file is File => Boolean(file));
   const splatFile = splatFiles[0];
   const pointCloudFile = pointCloudPlySources[0]?.file;
   const splatRendererStartPercent = mapProgress(60);

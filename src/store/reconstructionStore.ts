@@ -6,10 +6,48 @@ import { useUIStore } from './stores/uiStore';
 import { usePointCloudStore } from './stores/pointCloudStore';
 import { useTransformStore } from './stores/transformStore';
 import { getDefaultBackgroundColorForSplatLoad } from './splatBackgroundPolicy';
-import { getLoadedFilesWithActiveSplatSource } from '../utils/splatFileSourcePolicy';
+import {
+  applyActiveSplatFile,
+  clearActiveSplatFile,
+  findSplatSourceById,
+  getLoadedFilesWithActiveSplatSource,
+  mergeRemoteSplatCatalog as mergeRemoteSplatCatalogIntoLoadedFiles,
+} from '../utils/splatFileSourcePolicy';
+import { fetchRemoteSplatFile } from '../utils/urlUtils';
+import { getSplatDownloadProgress } from '../utils/splatLoadingProgressPolicy';
 
 const SPLAT_POINT_CLOUD_DEFAULT_SIZE = 1;
 const SPLAT_POINT_CLOUD_DEFAULT_OPACITY = 0.2;
+
+// Monotonic token for lazy splat selection. Each selectSplatSource call claims a
+// new id; an in-flight fetch only applies its result if it is still the latest
+// (latest-wins), so out-of-order resolutions can't show a stale tile or let a
+// superseded fetch's failure clobber the winner's state.
+let activeSplatRequestId = 0;
+
+/** Switch the point cloud into a splat-visible display mode with splat defaults. */
+function applySplatPointDisplayDefaults(): void {
+  const pointCloudStore = usePointCloudStore.getState();
+  pointCloudStore.setColorMode('splatPoints');
+  pointCloudStore.setPointSize(SPLAT_POINT_CLOUD_DEFAULT_SIZE);
+  pointCloudStore.setPointOpacity(SPLAT_POINT_CLOUD_DEFAULT_OPACITY);
+}
+
+/**
+ * When a splat first becomes active (picked from the splat picker, or a lazy tile
+ * selected from COLMAP-only), switch the viewer to a splat-visible mode and dark
+ * background so the splat actually shows. Mirrors the first-load behavior in
+ * setLoadedFiles; callers skip this for tile-to-tile switches so a display mode
+ * the user chose is preserved.
+ */
+function applySplatActivationVisuals(): void {
+  const uiStore = useUIStore.getState();
+  const nextBackgroundColor = getDefaultBackgroundColorForSplatLoad(uiStore.backgroundColor, true);
+  if (nextBackgroundColor !== uiStore.backgroundColor) {
+    uiStore.setBackgroundColor(nextBackgroundColor);
+  }
+  applySplatPointDisplayDefaults();
+}
 
 /** Source type for loaded reconstruction */
 export type ReconstructionSourceType = 'local' | 'url' | 'manifest' | 'zip' | null;
@@ -59,6 +97,8 @@ interface ReconstructionState {
   /** Manifest object (only set when sourceType is 'manifest', for inline embedding in URLs) */
   sourceManifest: ColmapManifest | null;
   requestedSplatSourceId: string | null;
+  /** Whether to show the "select a splat" popup (set when >1 splat is discovered). */
+  showSplatPicker: boolean;
   /** URL loading state (shared across components) */
   urlLoading: boolean;
   urlLoadActive: boolean;
@@ -74,6 +114,12 @@ interface ReconstructionState {
   setProgress: (progress: number) => void;
   setSourceInfo: (type: ReconstructionSourceType, url?: string | null, imageUrlBase?: string | null, maskUrlBase?: string | null, manifest?: ColmapManifest | null) => void;
   setRequestedSplatSourceId: (sourceId: string | null) => void;
+  /** Merge a discovered remote splat catalog so all tiles are listed (lazy). */
+  mergeRemoteSplatCatalog: (catalog: { path: string; size: number }[], baseUrl: string) => void;
+  /** Activate a splat source by id, fetching it on demand if not yet downloaded. */
+  selectSplatSource: (sourceId: string) => Promise<void>;
+  /** Show or hide the splat picker popup. */
+  setShowSplatPicker: (show: boolean) => void;
   tryStartUrlLoad: () => boolean;
   finishUrlLoad: () => void;
   setUrlLoading: (loading: boolean) => void;
@@ -96,6 +142,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   maskUrlBase: null,
   sourceManifest: null,
   requestedSplatSourceId: null,
+  showSplatPicker: false,
   // Initialize loading state based on URL params so indicator shows immediately
   urlLoading: initialUrlLoading,
   urlLoadActive: false,
@@ -144,10 +191,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       uiStore.setBackgroundColor(nextBackgroundColor);
     }
     if (hasSplatFile && !isActiveSplatFileSwitch) {
-      const pointCloudStore = usePointCloudStore.getState();
-      pointCloudStore.setColorMode('splatPoints');
-      pointCloudStore.setPointSize(SPLAT_POINT_CLOUD_DEFAULT_SIZE);
-      pointCloudStore.setPointOpacity(SPLAT_POINT_CLOUD_DEFAULT_OPACITY);
+      applySplatPointDisplayDefaults();
     }
     if (!isActiveSplatFileSwitch) {
       useTransformStore.getState().resetSplatTransform();
@@ -188,6 +232,113 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     get().setLoadedFiles(loadedFiles);
   },
 
+  mergeRemoteSplatCatalog: (catalog, baseUrl) => {
+    const loadedFiles = get().loadedFiles;
+    if (!loadedFiles) {
+      return;
+    }
+    set({ loadedFiles: mergeRemoteSplatCatalogIntoLoadedFiles(loadedFiles, catalog, baseUrl) });
+    // Multiple splats are not auto-loaded; pop up the picker so the user chooses
+    // one (or stays on COLMAP) as part of finishing the load.
+    if (catalog.length > 1 && !get().loadedFiles?.splatFile) {
+      set({ showSplatPicker: true });
+    }
+  },
+
+  selectSplatSource: async (sourceId) => {
+    const loadedFiles = get().loadedFiles;
+    if (!loadedFiles) {
+      return;
+    }
+    // Every selection supersedes any in-flight lazy fetch (latest-wins).
+    const requestId = ++activeSplatRequestId;
+    // Whether a splat was already showing: a fresh activation (COLMAP-only -> splat)
+    // switches the viewer into a splat display mode; a tile-to-tile switch keeps the
+    // user's current mode.
+    const hadSplatBefore = Boolean(loadedFiles.splatFile);
+
+    // Empty selection -> "COLMAP only": unload the active splat. Also clear any
+    // in-flight download indicator so a superseded lazy fetch can't leave the
+    // loading overlay stuck (there is nothing left to render that would reset it).
+    if (!sourceId) {
+      set({
+        requestedSplatSourceId: null,
+        loadedFiles: clearActiveSplatFile(loadedFiles),
+        urlLoading: false,
+        urlProgress: null,
+      });
+      return;
+    }
+    const source = findSplatSourceById(loadedFiles, sourceId);
+    if (!source) {
+      return;
+    }
+
+    // Already downloaded: activate immediately (and offload the previous tile).
+    // Clear any download indicator left by a superseded in-flight fetch — this
+    // switch is instant, so no "Downloading…" overlay should linger.
+    if (source.file) {
+      set({
+        requestedSplatSourceId: source.id,
+        loadedFiles: applyActiveSplatFile(loadedFiles, source.id, source.file),
+        urlLoading: false,
+        urlProgress: null,
+      });
+      if (!hadSplatBefore) {
+        applySplatActivationVisuals();
+      }
+      return;
+    }
+
+    // Lazy: fetch the tile on demand, then activate. The renderer disposes the
+    // previous SplatMesh when splatFile changes, and applyActiveSplatFile drops
+    // the previous tile's bytes so memory stays bounded.
+    if (!source.url) {
+      return;
+    }
+    const splatName = source.path.split('/').pop() ?? source.path;
+    set({ urlLoading: true, urlProgress: getSplatDownloadProgress(splatName, 0, 0) });
+    try {
+      const file = await fetchRemoteSplatFile(source.url, (loaded, total) => {
+        // Ignore progress from a fetch a newer selection has superseded.
+        if (requestId !== activeSplatRequestId) {
+          return;
+        }
+        set({ urlProgress: getSplatDownloadProgress(splatName, loaded, total) });
+      });
+      // A newer selection won the race: drop this stale result and leave the
+      // winner's state untouched.
+      if (requestId !== activeSplatRequestId) {
+        return;
+      }
+      const latest = get().loadedFiles ?? loadedFiles;
+      set({
+        requestedSplatSourceId: source.id,
+        loadedFiles: applyActiveSplatFile(latest, source.id, file),
+      });
+      if (!hadSplatBefore) {
+        applySplatActivationVisuals();
+      }
+    } catch (err) {
+      // A superseded fetch's failure must not clobber the winner's state.
+      if (requestId !== activeSplatRequestId) {
+        return;
+      }
+      set({
+        urlLoading: false,
+        urlProgress: null,
+        urlError: {
+          type: 'network',
+          message: 'Failed to load splat',
+          details: err instanceof Error ? err.message : String(err),
+          failedFile: source.url,
+        },
+      });
+    }
+  },
+
+  setShowSplatPicker: (showSplatPicker) => set({ showSplatPicker }),
+
   tryStartUrlLoad: () => {
     if (get().urlLoadActive) {
       return false;
@@ -225,6 +376,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       maskUrlBase: null,
       sourceManifest: null,
       requestedSplatSourceId: null,
+      showSplatPicker: false,
       urlLoading: false,
       urlLoadActive: false,
       urlProgress: null,

@@ -7,8 +7,11 @@ import {
   getMaxReprojectionErrorSliderValue,
   getPointCloudColorHint,
   getPointCloudMaxErrorLimit,
+  getActiveSplatSourceSelectValue,
   getSplatFileFromSelectValue,
   getSplatFileSelectOptions,
+  getSplatSourceSelectOptions,
+  getSplatSourceSelectOptionsWithNone,
   getSupportedPointColorMode,
   shouldShowSplatPointOverlayColorControl,
   shouldShowSplatPointOverlaySpeedControl,
@@ -85,6 +88,30 @@ describe('point cloud panel view-model helpers', () => {
     expect(getSplatFileFromSelectValue(files, '0')).toBe(spz);
     expect(getSplatFileFromSelectValue(files, '1')).toBe(ply);
     expect(getSplatFileFromSelectValue(files, '2')).toBeNull();
+  });
+
+  it('builds splat SOURCE options (lazy catalog) keyed by id, numbered only when many', () => {
+    const sources = [
+      { id: 'splats/a.ply', path: 'splats/a.ply', url: 'u/a' },
+      { id: 'splats/b.spz', path: 'splats/b.spz', file: new File(['b'], 'b.spz') },
+    ];
+
+    expect(getSplatSourceSelectOptions(sources)).toEqual([
+      { value: 'splats/a.ply', label: '1. a.ply' },
+      { value: 'splats/b.spz', label: '2. b.spz' },
+    ]);
+    // A single source is not numbered.
+    expect(getSplatSourceSelectOptions([sources[0]])).toEqual([
+      { value: 'splats/a.ply', label: 'a.ply' },
+    ]);
+
+    const withNone = getSplatSourceSelectOptionsWithNone(sources);
+    expect(withNone[0]).toEqual({ value: '', label: 'None - COLMAP only' });
+    expect(withNone.slice(1).map((o) => o.value)).toEqual(['splats/a.ply', 'splats/b.spz']);
+
+    expect(getActiveSplatSourceSelectValue(sources, 'splats/b.spz')).toBe('splats/b.spz');
+    expect(getActiveSplatSourceSelectValue(sources, null)).toBe(''); // COLMAP only
+    expect(getActiveSplatSourceSelectValue(sources, 'missing')).toBe('');
   });
 
   it('uses the reconstruction max error when available and keeps the fallback otherwise', () => {

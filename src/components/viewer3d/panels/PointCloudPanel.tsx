@@ -1,4 +1,4 @@
-import type { ColorMode, Reconstruction } from '../../../types/colmap';
+import type { ColorMode, Reconstruction, SplatFileSource } from '../../../types/colmap';
 import { HoverIcon } from '../../../icons';
 import { controlPanelStyles } from '../../../theme';
 import {
@@ -15,13 +15,12 @@ import { getPointCloudButtonState } from '../viewerControlsViewModel';
 import {
   POINT_COLOR_MODE_OPTIONS,
   formatMaxReprojectionError,
-  getActiveSplatFileSelectValue,
+  getActiveSplatSourceSelectValue,
   getMaxReprojectionErrorFromSliderValue,
   getMaxReprojectionErrorSliderValue,
   getPointCloudColorHint,
   getPointCloudMaxErrorLimit,
-  getSplatFileFromSelectValue,
-  getSplatFileSelectOptions,
+  getSplatSourceSelectOptionsWithNone,
   shouldShowSplatPointOverlayColorControl,
   shouldShowSplatPointOverlaySpeedControl,
 } from './pointCloudPanelViewModel';
@@ -46,9 +45,9 @@ export interface PointCloudPanelProps {
   maxReprojectionError: number | null;
   setMaxReprojectionError: (error: number | null) => void;
   reconstruction: Reconstruction | null;
-  splatFiles: readonly File[];
-  activeSplatFile?: File;
-  setActiveSplatFile: (file: File) => void;
+  splatFileSources: readonly SplatFileSource[];
+  activeSplatSourceId: string | null;
+  onSelectSplatSource: (sourceId: string) => void;
   selectionColor: string;
   setSelectionColor: (color: string) => void;
   selectionAnimationSpeed: number;
@@ -74,9 +73,9 @@ export function PointCloudPanel({
   maxReprojectionError,
   setMaxReprojectionError,
   reconstruction,
-  splatFiles,
-  activeSplatFile,
-  setActiveSplatFile,
+  splatFileSources,
+  activeSplatSourceId,
+  onSelectSplatSource,
   selectionColor,
   setSelectionColor,
   selectionAnimationSpeed,
@@ -88,8 +87,8 @@ export function PointCloudPanel({
   const colorHint = getPointCloudColorHint(colorMode);
   const showSplatPointOverlayColorControl = shouldShowSplatPointOverlayColorControl(colorMode);
   const showSplatPointOverlaySpeedControl = shouldShowSplatPointOverlaySpeedControl(colorMode);
-  const splatFileOptions = getSplatFileSelectOptions(splatFiles);
-  const activeSplatFileValue = getActiveSplatFileSelectValue(splatFiles, activeSplatFile);
+  const splatSourceOptions = getSplatSourceSelectOptionsWithNone(splatFileSources);
+  const activeSplatSourceValue = getActiveSplatSourceSelectValue(splatFileSources, activeSplatSourceId);
 
   return (
     <ControlButton
@@ -115,17 +114,12 @@ export function PointCloudPanel({
           onChange={setColorMode}
           options={POINT_COLOR_MODE_OPTIONS}
         />
-        {splatFiles.length > 1 && (
+        {splatFileSources.length >= 1 && (
           <SelectRow
             label="Splat File"
-            value={activeSplatFileValue}
-            onChange={(value) => {
-              const nextFile = getSplatFileFromSelectValue(splatFiles, value);
-              if (nextFile) {
-                setActiveSplatFile(nextFile);
-              }
-            }}
-            options={splatFileOptions}
+            value={activeSplatSourceValue}
+            onChange={(value) => onSelectSplatSource(value)}
+            options={splatSourceOptions}
           />
         )}
         <SliderRow

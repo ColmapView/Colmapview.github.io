@@ -177,6 +177,23 @@ export function getWebCodecsFrameTimestamp(frameCount: number, speedFactor: numb
   return Math.round((frameCount * 1e6 / RECORDING_FPS) / speedFactor);
 }
 
+export interface VideoTrackOptions {
+  frameRate: number;
+}
+
+/**
+ * Track options for the WebCodecs MP4 muxer. The muxer derives its MP4 timescale
+ * from `frameRate` and snaps each frame's timestamp to round(ts * frameRate).
+ * Sped-up recordings compress per-frame timestamps to 1/(RECORDING_FPS*speed)s
+ * (see getWebCodecsFrameTimestamp), so a fixed 30fps timescale rounds multiple
+ * frames onto the same tick and silently drops them. Scaling the declared frame
+ * rate by the speed factor keeps every frame on a distinct tick — and matches
+ * the true output frame rate of the sped-up clip (capture fps * speed).
+ */
+export function getVideoTrackOptions(speedFactor: number): VideoTrackOptions {
+  return { frameRate: RECORDING_FPS * Math.max(1, speedFactor) };
+}
+
 export function getMediaRecorderTotalDurationMs(durationMs: number, speedFactor: number): number {
   return durationMs / speedFactor;
 }

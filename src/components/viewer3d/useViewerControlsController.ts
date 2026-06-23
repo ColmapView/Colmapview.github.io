@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { controlPanelStyles } from '../../theme';
 import { isSplatColorMode, type ColorMode } from '../../store/types';
-import { getNextSplatFile } from '../../utils/splatFileSourcePolicy';
+import { getNextSplatSourceId } from '../../utils/splatFileSourcePolicy';
 import type {
   AxesGridPanelProps,
   BackgroundPanelProps,
@@ -78,9 +78,9 @@ export function useViewerControlsController(): ViewerControlsController {
     rig: rigNode,
   } = nodes;
   const {
-    activeSplatFile,
-    splatFiles,
-    setActiveSplatFile,
+    splatFileSources,
+    activeSplatSourceId,
+    selectSplatSource,
   } = splats;
   const {
     points: pointsActions,
@@ -146,11 +146,11 @@ export function useViewerControlsController(): ViewerControlsController {
   }, [pointsActions, requestDefaultSplatCameraColor]);
 
   const cycleSplatFile = useCallback(() => {
-    const nextSplatFile = getNextSplatFile(splatFiles, activeSplatFile);
-    if (nextSplatFile) {
-      setActiveSplatFile(nextSplatFile);
+    const nextSourceId = getNextSplatSourceId(splatFileSources, activeSplatSourceId);
+    if (nextSourceId) {
+      selectSplatSource(nextSourceId);
     }
-  }, [activeSplatFile, setActiveSplatFile, splatFiles]);
+  }, [activeSplatSourceId, selectSplatSource, splatFileSources]);
 
   const {
     toggleBackground,
@@ -342,9 +342,9 @@ export function useViewerControlsController(): ViewerControlsController {
       maxReprojectionError: pointsNode.maxReprojectionError,
       setMaxReprojectionError: pointsActions.setMaxReprojectionError,
       reconstruction,
-      splatFiles: splats.splatFiles,
-      activeSplatFile: splats.activeSplatFile,
-      setActiveSplatFile: splats.setActiveSplatFile,
+      splatFileSources: splats.splatFileSources,
+      activeSplatSourceId: splats.activeSplatSourceId,
+      onSelectSplatSource: splats.selectSplatSource,
       selectionColor: selectionNode.color,
       setSelectionColor: selectionActions.setColor,
       selectionAnimationSpeed: selectionNode.animationSpeed,

@@ -355,12 +355,12 @@ export const notificationStyles = {
 
 export const loadingStyles = {
   overlay: 'absolute inset-0 bg-black/50 backdrop-blur-sm z-[500] flex items-center justify-center',
-  container: 'text-center',
+  container: 'flex flex-col items-center text-center',
   dots: 'flex justify-center mb-4 space-x-2',
   dot: 'w-3 h-3 rounded-full bg-white animate-bounce',
   progressBar: 'w-64 h-2 bg-ds-tertiary rounded-full overflow-hidden',
   progressFill: 'h-full bg-white transition-all duration-300',
-  text: 'text-xl mb-4 text-white',
+  text: 'text-xl mb-4 text-white max-w-md break-words',
   percentage: 'text-base text-white mt-2',
 } as const;
 

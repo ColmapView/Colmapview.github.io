@@ -89,6 +89,10 @@ export function startRecordingCountdown({
     recordGif().then(() => {
       addNotification('info', 'Recording complete! Downloading...', 3000);
       schedule(downloadGif, 100);
+    }).catch(() => {
+      // The recording promise can reject (e.g. a muxer/encoder write failure);
+      // surface it instead of leaving an unhandled rejection and no feedback.
+      addNotification('warning', 'Recording failed. Please try again.', 4000);
     });
   };
 

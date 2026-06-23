@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   detectCloudProvider,
   isPreSignedUrl,
@@ -6,6 +6,8 @@ import {
   normalizeGitHostingUrl,
   isManifestUrl,
   getCorsInstructions,
+  fetchRemoteSplatFile,
+  getFilenameFromUrl,
 } from './urlUtils';
 
 describe('detectCloudProvider', () => {
@@ -335,5 +337,99 @@ describe('getCorsInstructions', () => {
     const instructions = getCorsInstructions('dropbox');
     expect(instructions).toContain('Dropbox');
     expect(instructions).toContain('Anyone with the link');
+  });
+});
+
+describe('getFilenameFromUrl', () => {
+  it('returns the last path segment', () => {
+    expect(getFilenameFromUrl('https://host/dir/scene.ply')).toBe('scene.ply');
+  });
+
+  it('percent-decodes the segment so it matches the human-readable name', () => {
+    // Tile names contain '#' which is percent-encoded in the fetch URL.
+    expect(getFilenameFromUrl('https://host/splats/5x5%23-5_-10.ply')).toBe('5x5#-5_-10.ply');
+    expect(getFilenameFromUrl('https://host/d/my%20splat.ply')).toBe('my splat.ply');
+  });
+
+  it('falls back to the raw segment on a malformed escape', () => {
+    expect(getFilenameFromUrl('https://host/d/bad%ZZname.ply')).toBe('bad%ZZname.ply');
+  });
+});
+
+describe('fetchRemoteSplatFile', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function streamingResponse(chunks: Uint8Array[], total: number): Response {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+        controller.close();
+      },
+    });
+    return new Response(body, { status: 200, headers: { 'content-length': String(total) } });
+  }
+
+  it('streams the body and reports cumulative byte progress with the total', async () => {
+    const chunks = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5]), new Uint8Array([6, 7, 8, 9])];
+    vi.stubGlobal('fetch', vi.fn(async () => streamingResponse(chunks, 9)));
+
+    const progress: Array<[number, number]> = [];
+    const file = await fetchRemoteSplatFile('https://host/dir/tile.ply', (loaded, total) =>
+      progress.push([loaded, total])
+    );
+
+    expect(file.name).toBe('tile.ply');
+    expect(file.size).toBe(9);
+    // Begins at 0 and ends at the full size; every report carries the known total.
+    expect(progress[0]).toEqual([0, 9]);
+    expect(progress[progress.length - 1]).toEqual([9, 9]);
+    expect(progress.every(([, total]) => total === 9)).toBe(true);
+    // Loaded bytes never decrease.
+    const loaded = progress.map(([n]) => n);
+    expect(loaded).toEqual([...loaded].sort((a, b) => a - b));
+  });
+
+  it('falls back to blob() (no streaming) when no progress callback is given', async () => {
+    // jsdom's Response.blob() is not byte-faithful, so assert the branch returns a
+    // correctly-named File rather than an env-dependent size. The byte-accurate
+    // path is covered by the streaming test above.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('ten-bytes!', { status: 200 })));
+    const file = await fetchRemoteSplatFile('https://host/dir/scene.ply');
+    expect(file).toBeInstanceOf(File);
+    expect(file.name).toBe('scene.ply');
+  });
+
+  it('throws when the response is not ok', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 404 })));
+    await expect(
+      fetchRemoteSplatFile('https://host/dir/missing.ply', () => {})
+    ).rejects.toThrow(/404/);
+  });
+
+  it('cancels the underlying stream when the read loop aborts', async () => {
+    const cancel = vi.fn(() => {});
+    const body = new ReadableStream<Uint8Array>({
+      // Never closes the stream, so a cancel has something real to tear down.
+      pull(controller) {
+        controller.enqueue(new Uint8Array([1, 2, 3]));
+      },
+      cancel,
+    });
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      new Response(body, { status: 200, headers: { 'content-length': '100' } })
+    ));
+
+    // A progress callback that throws aborts the loop while the stream is open.
+    let calls = 0;
+    await expect(
+      fetchRemoteSplatFile('https://host/dir/tile.ply', () => {
+        calls += 1;
+        if (calls >= 2) throw new Error('callback failed');
+      })
+    ).rejects.toThrow('callback failed');
+
+    expect(cancel).toHaveBeenCalled();
   });
 });

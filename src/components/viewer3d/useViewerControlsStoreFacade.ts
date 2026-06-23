@@ -43,7 +43,8 @@ import {
   shouldExposeSplatMetricVisualizations,
   type SplatMetricCapability,
 } from '../../utils/splatBackendPolicy';
-import type { Reconstruction } from '../../types/colmap';
+import type { Reconstruction, SplatFileSource } from '../../types/colmap';
+import { getActiveSplatSourceId } from '../../utils/splatFileSourcePolicy';
 
 interface ViewerControlsUiFacade {
   touchMode: boolean;
@@ -87,7 +88,10 @@ interface ViewerControlsMetricsFacade {
 interface ViewerControlsSplatFacade {
   activeSplatFile?: File;
   splatFiles: readonly File[];
+  splatFileSources: readonly SplatFileSource[];
+  activeSplatSourceId: string | null;
   setActiveSplatFile: (file: File) => void;
+  selectSplatSource: (sourceId: string) => void;
 }
 
 export interface ViewerControlsStoreFacade {
@@ -100,6 +104,7 @@ export interface ViewerControlsStoreFacade {
 }
 
 const EMPTY_SPLAT_FILES: readonly File[] = [];
+const EMPTY_SPLAT_SOURCES: readonly SplatFileSource[] = [];
 
 function getSplatPsnrUnavailableReason(
   activeSplatFile: File | undefined,
@@ -128,6 +133,8 @@ export function useViewerControlsStoreFacade(): ViewerControlsStoreFacade {
   const splatMetricCapability = useSplatBackendStore((s) => s.metricCapability);
   const activeSplatFile = loadedFiles?.splatFile;
   const splatFiles = loadedFiles?.splatFiles ?? (activeSplatFile ? [activeSplatFile] : EMPTY_SPLAT_FILES);
+  const splatFileSources = loadedFiles?.splatFileSources ?? EMPTY_SPLAT_SOURCES;
+  const activeSplatSourceId = getActiveSplatSourceId(loadedFiles ?? null);
   const splatPsnrUnavailableReason = getSplatPsnrUnavailableReason(activeSplatFile, splatMetricCapability);
   const splatMetricVisualizationsAvailable = shouldExposeSplatMetricVisualizations({
     activeSplatFile,
@@ -151,6 +158,11 @@ export function useViewerControlsStoreFacade(): ViewerControlsStoreFacade {
       splatFile: file,
       splatFiles: availableSplatFiles,
     });
+    useImageMetricsStore.getState().clearSplatPsnr();
+  };
+
+  const selectSplatSource = (sourceId: string) => {
+    void useReconstructionStore.getState().selectSplatSource(sourceId);
     useImageMetricsStore.getState().clearSplatPsnr();
   };
 
@@ -193,7 +205,10 @@ export function useViewerControlsStoreFacade(): ViewerControlsStoreFacade {
     splats: {
       activeSplatFile,
       splatFiles,
+      splatFileSources,
+      activeSplatSourceId,
       setActiveSplatFile,
+      selectSplatSource,
     },
     reconstruction,
   };

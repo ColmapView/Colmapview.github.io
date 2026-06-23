@@ -4,9 +4,9 @@ import type GifEncoder from 'gif.js';
 import { appLogger } from '../../utils/logger';
 import { publicAsset } from '../../utils/paths';
 import {
-  RECORDING_FPS,
   getRecordingBackend,
   getRecordingProgressMessage,
+  getVideoTrackOptions,
   isWebCodecsRuntimeSupported,
 } from './screenshotRecordingPolicy';
 import { useScreenshotBlobCapture } from './useScreenshotBlobCapture';
@@ -172,7 +172,10 @@ export function ScreenshotCapture() {
           target,
         });
         const videoSource = new EncodedVideoPacketSource('avc');
-        output.addVideoTrack(videoSource, { frameRate: RECORDING_FPS });
+        // Scale the muxer timescale by speed so sped-up frames stay on distinct
+        // ticks (see getVideoTrackOptions). A fixed 30fps timescale dropped frames
+        // at 2x/3x/4x.
+        output.addVideoTrack(videoSource, getVideoTrackOptions(gifSpeed));
         let pendingVideoWrites = Promise.resolve();
         let videoWriteError: unknown = null;
 

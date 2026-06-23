@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { LoadedFiles } from '../types/colmap';
 import { useReconstructionStore } from './reconstructionStore';
 import { usePointCloudStore } from './stores/pointCloudStore';
 import { useTransformStore } from './stores/transformStore';
@@ -259,5 +260,262 @@ describe('reconstruction store URL load lifecycle', () => {
       scale: 2,
       translationX: 1,
     });
+  });
+});
+
+describe('reconstruction store lazy splat source switching', () => {
+  beforeEach(() => {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
+    useTransformStore.setState(useTransformStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function baseLoadedFiles(overrides: Partial<LoadedFiles>): LoadedFiles {
+    return {
+      camerasFile: new File([''], 'cameras.bin'),
+      imagesFile: new File([''], 'images.bin'),
+      points3DFile: new File([''], 'points3D.bin'),
+      imageFiles: new Map(),
+      hasMasks: false,
+      ...overrides,
+    };
+  }
+
+  it('activates a downloaded splat source and offloads the previous one', async () => {
+    const fileA = new File(['a'], 'a.ply');
+    const fileB = new File(['b'], 'b.ply');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFile: fileA,
+      splatFiles: [fileA, fileB],
+      splatFileSources: [
+        { id: 'splats/a.ply', path: 'splats/a.ply', url: 'https://x/splats/a.ply', file: fileA },
+        { id: 'splats/b.ply', path: 'splats/b.ply', url: 'https://x/splats/b.ply', file: fileB },
+      ],
+    }));
+
+    await useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+
+    const loadedFiles = useReconstructionStore.getState().loadedFiles;
+    expect(loadedFiles?.splatFile).toBe(fileB);
+    expect(loadedFiles?.splatFileSources?.find((s) => s.id === 'splats/a.ply')?.file).toBeUndefined();
+  });
+
+  it('fetches a lazy splat source on demand, activates it, and offloads the previous tile', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Blob(['splat-bytes']), { status: 200 })));
+    const fileA = new File(['a'], 'a.ply');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFile: fileA,
+      splatFiles: [fileA],
+      splatFileSources: [
+        { id: 'splats/a.ply', path: 'splats/a.ply', url: 'https://x/splats/a.ply', file: fileA },
+        { id: 'splats/b.ply', path: 'splats/b.ply', url: 'https://x/splats/b.ply' },
+      ],
+    }));
+
+    await useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+
+    const loadedFiles = useReconstructionStore.getState().loadedFiles;
+    expect(loadedFiles?.splatFile?.name).toBe('b.ply');
+    expect(loadedFiles?.splatFileSources?.find((s) => s.id === 'splats/b.ply')?.file).toBeDefined();
+    expect(loadedFiles?.splatFileSources?.find((s) => s.id === 'splats/a.ply')?.file).toBeUndefined();
+  });
+
+  // Registers a controllable fetch per URL so tests can resolve/reject lazy
+  // splat downloads out of order.
+  function stubDeferredFetch(): Map<string, { resolve: (r: Response) => void; reject: (e: unknown) => void }> {
+    const deferreds = new Map<string, { resolve: (r: Response) => void; reject: (e: unknown) => void }>();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (url: string) =>
+          new Promise<Response>((resolve, reject) => {
+            deferreds.set(url, { resolve, reject });
+          })
+      )
+    );
+    return deferreds;
+  }
+
+  function threeLazySources() {
+    const fileA = new File(['a'], 'a.ply');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFile: fileA,
+      splatFiles: [fileA],
+      splatFileSources: [
+        { id: 'splats/a.ply', path: 'splats/a.ply', url: 'https://x/splats/a.ply', file: fileA },
+        { id: 'splats/b.ply', path: 'splats/b.ply', url: 'https://x/splats/b.ply' },
+        { id: 'splats/c.ply', path: 'splats/c.ply', url: 'https://x/splats/c.ply' },
+      ],
+    }));
+  }
+
+  it('latest-wins: an out-of-order lazy fetch does not overwrite a newer selection', async () => {
+    const deferreds = stubDeferredFetch();
+    threeLazySources();
+
+    // Click B (slow), then C (fast).
+    const pB = useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+    const pC = useReconstructionStore.getState().selectSplatSource('splats/c.ply');
+
+    // C resolves first and wins; B resolves later and must be ignored.
+    deferreds.get('https://x/splats/c.ply')!.resolve(new Response(new Blob(['c']), { status: 200 }));
+    await pC;
+    deferreds.get('https://x/splats/b.ply')!.resolve(new Response(new Blob(['b']), { status: 200 }));
+    await pB;
+
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile?.name).toBe('c.ply');
+    expect(useReconstructionStore.getState().requestedSplatSourceId).toBe('splats/c.ply');
+  });
+
+  it('latest-wins: a superseded fetch failure does not clobber the winner', async () => {
+    const deferreds = stubDeferredFetch();
+    threeLazySources();
+
+    const pB = useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+    const pC = useReconstructionStore.getState().selectSplatSource('splats/c.ply');
+
+    deferreds.get('https://x/splats/c.ply')!.resolve(new Response(new Blob(['c']), { status: 200 }));
+    await pC;
+    // B (already superseded) fails late — must not surface an error over C.
+    deferreds.get('https://x/splats/b.ply')!.reject(new Error('network down'));
+    await pB;
+
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile?.name).toBe('c.ply');
+    expect(useReconstructionStore.getState().urlError).toBeNull();
+  });
+
+  it('COLMAP-only supersedes an in-flight lazy fetch and clears the loading indicator', async () => {
+    const deferreds = stubDeferredFetch();
+    threeLazySources();
+
+    const pB = useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+    expect(useReconstructionStore.getState().urlLoading).toBe(true);
+
+    // Switch to COLMAP-only while B is still downloading.
+    await useReconstructionStore.getState().selectSplatSource('');
+    expect(useReconstructionStore.getState().urlLoading).toBe(false);
+    expect(useReconstructionStore.getState().urlProgress).toBeNull();
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+
+    // B resolves late — must not re-activate or re-show the loading overlay.
+    deferreds.get('https://x/splats/b.ply')!.resolve(new Response(new Blob(['b']), { status: 200 }));
+    await pB;
+    expect(useReconstructionStore.getState().urlLoading).toBe(false);
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+  });
+
+  it('sets an error and stops loading when a (non-superseded) lazy fetch fails', async () => {
+    const deferreds = stubDeferredFetch();
+    threeLazySources();
+
+    const pB = useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+    deferreds.get('https://x/splats/b.ply')!.reject(new Error('boom'));
+    await pB;
+
+    expect(useReconstructionStore.getState().urlLoading).toBe(false);
+    expect(useReconstructionStore.getState().urlProgress).toBeNull();
+    expect(useReconstructionStore.getState().urlError?.message).toBe('Failed to load splat');
+    // The previously active tile is left intact.
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile?.name).toBe('a.ply');
+  });
+
+  it('clears the active splat (COLMAP only) when selecting the empty source', async () => {
+    const fileA = new File(['a'], 'a.ply');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFile: fileA,
+      splatFiles: [fileA],
+      splatFileSources: [{ id: 'a', path: 'a.ply', url: 'u/a', file: fileA }],
+    }));
+
+    await useReconstructionStore.getState().selectSplatSource('');
+
+    const loadedFiles = useReconstructionStore.getState().loadedFiles;
+    expect(loadedFiles?.splatFile).toBeUndefined();
+    expect(loadedFiles?.splatFileSources?.find((s) => s.id === 'a')?.file).toBeUndefined();
+  });
+
+  it('switches to a splat display mode when activating a downloaded splat from COLMAP-only', async () => {
+    const fileB = new File(['b'], 'b.ply');
+    // COLMAP-only: the source has a downloaded file but no active splatFile yet.
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFileSources: [{ id: 'splats/b.ply', path: 'splats/b.ply', file: fileB }],
+    }));
+    usePointCloudStore.setState({ colorMode: 'rgb', showSplats: false });
+
+    await useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+
+    expect(usePointCloudStore.getState().colorMode).toBe('splatPoints');
+    expect(usePointCloudStore.getState().showSplats).toBe(true);
+  });
+
+  it('switches to a splat display mode when a lazy splat is activated', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Blob(['b']), { status: 200 })));
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFileSources: [{ id: 'splats/b.ply', path: 'splats/b.ply', url: 'https://x/splats/b.ply' }],
+    }));
+    usePointCloudStore.setState({ colorMode: 'rgb', showSplats: false });
+
+    await useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+
+    expect(usePointCloudStore.getState().colorMode).toBe('splatPoints');
+    expect(usePointCloudStore.getState().showSplats).toBe(true);
+  });
+
+  it('preserves the display mode when switching between splat tiles', async () => {
+    const fileA = new File(['a'], 'a.ply');
+    const fileB = new File(['b'], 'b.ply');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFile: fileA,
+      splatFiles: [fileA, fileB],
+      splatFileSources: [
+        { id: 'splats/a.ply', path: 'splats/a.ply', file: fileA },
+        { id: 'splats/b.ply', path: 'splats/b.ply', file: fileB },
+      ],
+    }));
+    // A splat is already active; the user has since chosen a non-splat mode.
+    usePointCloudStore.setState({ colorMode: 'rgb' });
+
+    await useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+
+    expect(usePointCloudStore.getState().colorMode).toBe('rgb');
+  });
+
+  it('merges a remote splat catalog into lazy sources', () => {
+    const fileA = new File(['a'], 'a.ply');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFile: fileA,
+      splatFiles: [fileA],
+      splatFileSources: [{ id: 'splats/a.ply', path: 'splats/a.ply', file: fileA }],
+    }));
+
+    useReconstructionStore.getState().mergeRemoteSplatCatalog(
+      [{ path: 'splats/a.ply', size: 10 }, { path: 'splats/b.ply', size: 20 }],
+      'https://x/ds'
+    );
+
+    const sources = useReconstructionStore.getState().loadedFiles?.splatFileSources ?? [];
+    expect(sources.map((s) => s.id)).toEqual(['splats/a.ply', 'splats/b.ply']);
+    expect(sources.find((s) => s.id === 'splats/a.ply')?.file).toBe(fileA);
+    expect(sources.find((s) => s.id === 'splats/b.ply')?.url).toBe('https://x/ds/splats/b.ply');
+    expect(sources.find((s) => s.id === 'splats/b.ply')?.file).toBeUndefined();
+  });
+
+  it('opens the splat picker when multiple splats are merged with none active', () => {
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({ splatFileSources: [] }));
+    expect(useReconstructionStore.getState().showSplatPicker).toBe(false);
+
+    useReconstructionStore.getState().mergeRemoteSplatCatalog(
+      [{ path: 'splats/a.ply', size: 10 }, { path: 'splats/b.ply', size: 20 }],
+      'https://x/ds'
+    );
+
+    expect(useReconstructionStore.getState().showSplatPicker).toBe(true);
+    useReconstructionStore.getState().setShowSplatPicker(false);
+    expect(useReconstructionStore.getState().showSplatPicker).toBe(false);
   });
 });

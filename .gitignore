@@ -59,3 +59,4 @@ playwright/.cache/
 
 # WASM build source (private - only built assets in public/wasm/ are committed)
 colmap-wasm/
+.gstack/

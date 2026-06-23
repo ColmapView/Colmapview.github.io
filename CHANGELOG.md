@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-23
+
+### Added
+
+- Lazy on-demand loading for remote datasets with many splats: discover every splat tile, pick one in a new Splat Picker (or stay on the COLMAP scene), and download the selected tile on demand while previous tiles are offloaded to bound memory.
+- COLMAP model discovery for Hugging Face and direct URLs that finds the reconstruction wherever it lives (`colmap/`, repo root, `sparse/0/`, …) and locates the images directory, instead of requiring `sparse/0/`.
+- Byte-level download progress (e.g. "45 MB / 120 MB") for COLMAP files and splats in the loading overlay.
+- Automatically switch to a splat display mode when a splat is selected or loaded.
+
+### Changed
+
+- Replace the deprecated mp4-muxer library with Mediabunny for WebCodecs MP4 recording.
+- Default fisheye cameras to cropped undistortion mode.
+- Update GitHub Actions runtime actions (checkout/setup-node to v6).
+
+### Fixed
+
+- Fix OpenCV-fisheye and OpenCV camera undistortion (≥90°/FOV-singularity guard, Newton inverse with Jacobian, degenerate-parameter guards, and full-frame validity culling).
+- Load splat tiles whose filenames contain `#`, spaces, or other special characters instead of failing with 404 (URL path segments are encoded once, and double-encoding on directory-listing hosts is avoided).
+- Fix MP4 recordings dropping frames at 2×/3×/4× playback speeds.
+- Fix lazy splat-selection race conditions, a stuck loading overlay, and unbounded reads while classifying remote splats.
+
 ## [0.7.8] - 2026-06-13
 
 ### Added
@@ -260,7 +282,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript for type safety
 - Deno native test runner for testing
 
-[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.8...HEAD
+[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.8...v0.8.0
 [0.7.8]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.7...v0.7.8
 [0.7.7]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.6...v0.7.7
 [0.7.6]: https://github.com/ColmapView/colmapview.github.io/compare/v0.7.5...v0.7.6
