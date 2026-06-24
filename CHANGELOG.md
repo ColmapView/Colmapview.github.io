@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-06-23
+
+### Added
+
+- Resolve images for datasets that renamed them to sequential placeholders (e.g. `0.jpg`) before running COLMAP and ship an `image_mapping.csv` mapping those names back to the original files (such as wildflow coral datasets). A pluggable image-source resolver maps each COLMAP image name to its real path — including images split across multiple folders — and falls back to the discovered images directory for any unmapped names.
+
 ## [0.8.0] - 2026-06-23
 
 ### Added
