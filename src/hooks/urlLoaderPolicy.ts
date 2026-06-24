@@ -49,6 +49,12 @@ export interface ManifestColmapFileEntries {
 export interface ManifestLazySourceBases {
   imageUrlBase: string;
   maskUrlBase: string;
+  /**
+   * Absolute, already-encoded per-image URLs (COLMAP image name -> URL) for
+   * datasets that ship an explicit mapping. Each value is a finished URL and
+   * must be used verbatim — never re-encoded or passed through buildImageUrl.
+   */
+  imageNameToUrl?: Record<string, string>;
 }
 
 export type ManifestLoadSource =
@@ -309,6 +315,27 @@ export function getRelativeHuggingFaceTreePath(entryPath: string, treePath: stri
   return relativePath || null;
 }
 
+/**
+ * Collect each file entry's path from a HuggingFace tree listing as paths
+ * relative to the tree root (skipping directories and malformed entries).
+ */
+export function getRelativeHuggingFaceTreePaths(
+  entries: readonly HuggingFaceDatasetTreeEntry[],
+  treePath: string
+): string[] {
+  const relativePaths: string[] = [];
+  for (const entry of entries) {
+    if (entry.type !== 'file' || typeof entry.path !== 'string') {
+      continue;
+    }
+    const relativePath = getRelativeHuggingFaceTreePath(entry.path, treePath);
+    if (relativePath) {
+      relativePaths.push(relativePath);
+    }
+  }
+  return relativePaths;
+}
+
 export interface HuggingFaceColmapPaths {
   cameras: string;
   images: string;
@@ -327,17 +354,7 @@ export function getHuggingFaceColmapPaths(
   entries: readonly HuggingFaceDatasetTreeEntry[],
   treePath: string
 ): HuggingFaceColmapPaths | null {
-  const relativePaths: string[] = [];
-  for (const entry of entries) {
-    if (entry.type !== 'file' || typeof entry.path !== 'string') {
-      continue;
-    }
-    const relativePath = getRelativeHuggingFaceTreePath(entry.path, treePath);
-    if (relativePath) {
-      relativePaths.push(relativePath);
-    }
-  }
-
+  const relativePaths = getRelativeHuggingFaceTreePaths(entries, treePath);
   const selection = resolveColmapPaths(relativePaths, { requirePoints3D: true });
   if (!selection || !selection.cameras || !selection.images || !selection.points3D) {
     return null;
@@ -363,17 +380,7 @@ export function getHuggingFaceImagesPath(
   treePath: string,
   modelDir?: string
 ): string | null {
-  const relativePaths: string[] = [];
-  for (const entry of entries) {
-    if (entry.type !== 'file' || typeof entry.path !== 'string') {
-      continue;
-    }
-    const relativePath = getRelativeHuggingFaceTreePath(entry.path, treePath);
-    if (relativePath) {
-      relativePaths.push(relativePath);
-    }
-  }
-
+  const relativePaths = getRelativeHuggingFaceTreePaths(entries, treePath);
   const dir = resolveImagesDir(relativePaths, { modelDir });
   if (dir === null) {
     return null;
@@ -455,10 +462,21 @@ export function getManifestLazySourceBases(manifest: ColmapManifest): ManifestLa
   const imagesPath = manifest.imagesPath ?? 'images/';
   const masksPath = manifest.masksPath ?? 'masks/';
 
-  return {
+  const bases: ManifestLazySourceBases = {
     imageUrlBase: joinManifestUrlPath(manifest.baseUrl, imagesPath),
     maskUrlBase: joinManifestUrlPath(manifest.baseUrl, masksPath),
   };
+
+  // joinManifestUrlPath encodes each path exactly once; the resulting URLs are
+  // final and used by the adapter verbatim (never re-encoded via buildImageUrl).
+  const mappings = Object.entries(manifest.imageNameToPath ?? {});
+  if (mappings.length > 0) {
+    bases.imageNameToUrl = Object.fromEntries(
+      mappings.map(([name, relativePath]) => [name, joinManifestUrlPath(manifest.baseUrl, relativePath)])
+    );
+  }
+
+  return bases;
 }
 
 export function getManifestLoadSourceInfo(

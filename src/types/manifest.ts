@@ -38,6 +38,12 @@ export interface ColmapManifest {
    * Default: false
    */
   skipImages?: boolean;
+  /**
+   * Optional per-image override map: COLMAP image name -> path relative to
+   * baseUrl. Resolves datasets that renamed images before COLMAP and ship a
+   * mapping (e.g. image_mapping.csv); unmapped names fall back to imagesPath.
+   */
+  imageNameToPath?: Record<string, string>;
   /** Optional explicit array of image file paths (overrides imagesPath inference) */
   images?: string[];
   /** Optional explicit array of mask file paths (overrides masksPath inference) */
@@ -63,6 +69,7 @@ export const ColmapManifestSchema = z.object({
   imagesPath: z.string().optional(),
   masksPath: z.string().optional(),
   skipImages: z.boolean().optional(),
+  imageNameToPath: z.record(z.string(), z.string()).optional(),
   images: z.array(z.string()).optional(),
   masks: z.array(z.string()).optional(),
   splats: z.array(z.string().min(1)).optional(),

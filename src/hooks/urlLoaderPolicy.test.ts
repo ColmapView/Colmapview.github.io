@@ -213,6 +213,37 @@ describe('url loader policy helpers', () => {
     });
   });
 
+  it('builds per-image URLs from a mapping, encoding each path exactly once', () => {
+    const bases = getManifestLazySourceBases({
+      ...manifest,
+      baseUrl: 'https://example.com/dataset',
+      imageNameToPath: {
+        '0.jpg': 'raw/10.07.25 LHS/G0019585.JPG',
+        '1.jpg': 'raw/10.07.25 RHS/G0019586.JPG',
+      },
+    });
+    expect(bases.imageNameToUrl).toEqual({
+      '0.jpg': 'https://example.com/dataset/raw/10.07.25%20LHS/G0019585.JPG',
+      '1.jpg': 'https://example.com/dataset/raw/10.07.25%20RHS/G0019586.JPG',
+    });
+    // Space encoded exactly once (%20), never double-encoded to %2520.
+    expect(bases.imageNameToUrl?.['0.jpg']).not.toContain('%2520');
+  });
+
+  it('omits imageNameToUrl when the manifest has no mapping', () => {
+    expect(getManifestLazySourceBases(manifest).imageNameToUrl).toBeUndefined();
+  });
+
+  it('threads imageNameToUrl through manifest load source info', () => {
+    const info = getManifestLoadSourceInfo(
+      { ...manifest, imageNameToPath: { '0.jpg': 'raw/a b/c.jpg' } },
+      { type: 'url' }
+    );
+    expect(info.imageNameToUrl).toEqual({
+      '0.jpg': 'https://example.com/dataset/raw/a%20b/c.jpg',
+    });
+  });
+
   it('plans source info for manifest URL loads', () => {
     expect(getManifestLoadSourceInfo(manifest, {
       type: 'url',

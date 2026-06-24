@@ -5,6 +5,7 @@ export function buildDatasetState(overrides: Partial<DatasetState> = {}): Datase
     sourceType: null,
     imageUrlBase: null,
     maskUrlBase: null,
+    imageNameToUrl: null,
     loadedFiles: null,
     ...overrides,
   };

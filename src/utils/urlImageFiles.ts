@@ -5,6 +5,7 @@ import {
 import { compressAndResizeToJpeg } from './imageFileCompression';
 import { createImageFileRequestState } from './imageFileRequestState';
 import type { CacheInfo } from './imageFileCachePolicy';
+import { getFilenameFromUrl } from './urlUtils';
 import { appLogger } from './logger';
 
 /** Cache for images fetched from URLs (stored as compressed JPEG, resized) */
@@ -46,23 +47,50 @@ export function getUrlMaskCached(imageName: string): File | undefined {
 }
 
 /**
+ * Resolve the request URL and display filename for an image. When an explicit
+ * URL is given (a per-image mapping), it is used verbatim — already absolute and
+ * encoded — and must not pass through buildImageUrl again. Otherwise the URL is
+ * built from the base + COLMAP name. Returns null when neither is available.
+ */
+function resolveImageRequestUrl(
+  imageUrlBase: string | null,
+  imageName: string,
+  explicitUrl?: string
+): { url: string; filename: string } | null {
+  if (explicitUrl) {
+    return { url: explicitUrl, filename: getFilenameFromUrl(explicitUrl) };
+  }
+  if (!imageUrlBase) {
+    return null;
+  }
+  return buildImageUrl(imageUrlBase, imageName);
+}
+
+/**
  * Fetch an image from URL and cache it.
  * Returns the cached File if already fetched, otherwise fetches and caches.
  *
  * @param imageUrlBase - Base URL for images (e.g., "https://example.com/dataset/images/")
  * @param imageName - Image name from COLMAP (e.g., "camera_123/00.png")
+ * @param explicitUrl - Optional absolute, pre-encoded URL for this exact image
+ *   (per-image mapping); bypasses imageUrlBase + buildImageUrl when provided.
  * @returns The fetched File or null if fetch failed
  */
 export async function fetchUrlImage(
-  imageUrlBase: string,
-  imageName: string
+  imageUrlBase: string | null,
+  imageName: string,
+  explicitUrl?: string
 ): Promise<File | null> {
   const cached = urlImageState.getCached(imageName);
   if (cached) {
     return cached;
   }
 
-  const { url: imageUrl, filename } = buildImageUrl(imageUrlBase, imageName);
+  const resolved = resolveImageRequestUrl(imageUrlBase, imageName, explicitUrl);
+  if (!resolved) {
+    return null;
+  }
+  const { url: imageUrl, filename } = resolved;
 
   if (urlImageState.isRequestPending(imageUrl)) {
     return urlImageState.waitForRequest(imageUrl);
@@ -98,10 +126,15 @@ export async function fetchUrlImage(
  * Metric computations use this path because lossy cached images bias PSNR.
  */
 export async function fetchUrlImageRaw(
-  imageUrlBase: string,
-  imageName: string
+  imageUrlBase: string | null,
+  imageName: string,
+  explicitUrl?: string
 ): Promise<File | null> {
-  const { url: imageUrl, filename } = buildImageUrl(imageUrlBase, imageName);
+  const resolved = resolveImageRequestUrl(imageUrlBase, imageName, explicitUrl);
+  if (!resolved) {
+    return null;
+  }
+  const { url: imageUrl, filename } = resolved;
 
   try {
     const response = await fetch(imageUrl);
@@ -171,16 +204,17 @@ export async function fetchUrlMask(
  * Useful for preloading visible frustum images.
  */
 export async function prefetchUrlImages(
-  imageUrlBase: string,
+  imageUrlBase: string | null,
   imageNames: string[],
-  concurrency: number = 5
+  concurrency: number = 5,
+  imageNameToUrl?: Record<string, string>
 ): Promise<void> {
   const toFetch = imageNames.filter(name => !urlImageState.hasCached(name));
   if (toFetch.length === 0) return;
 
   for (let i = 0; i < toFetch.length; i += concurrency) {
     const batch = toFetch.slice(i, i + concurrency);
-    await Promise.all(batch.map(name => fetchUrlImage(imageUrlBase, name)));
+    await Promise.all(batch.map(name => fetchUrlImage(imageUrlBase, name, imageNameToUrl?.[name])));
   }
 }
 

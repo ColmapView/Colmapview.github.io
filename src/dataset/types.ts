@@ -15,6 +15,11 @@ export interface DatasetState {
   imageUrlBase: string | null;
   /** Base URL for fetching masks (for 'url' and 'manifest' sources) */
   maskUrlBase: string | null;
+  /**
+   * Per-image absolute URLs (COLMAP name -> URL) for datasets with an explicit
+   * mapping; preferred over imageUrlBase + name, with imageUrlBase as fallback.
+   */
+  imageNameToUrl: Record<string, string> | null;
   /** Loaded files from local drop (for 'local' source) */
   loadedFiles: LoadedFiles | null;
 }

@@ -50,6 +50,7 @@ const baseState: DatasetState = {
   sourceType: null,
   imageUrlBase: null,
   maskUrlBase: null,
+  imageNameToUrl: null,
   loadedFiles: null,
 };
 
@@ -106,17 +107,57 @@ describe('dataset source adapters', () => {
     vi.mocked(fetchUrlMask).mockResolvedValue(maskFile);
 
     await expect(manifestAdapter.getImage(state, 'image.jpg')).resolves.toBe(fetchedImage);
-    expect(fetchUrlImage).toHaveBeenCalledWith('https://example.test/images/', 'image.jpg');
+    expect(fetchUrlImage).toHaveBeenCalledWith('https://example.test/images/', 'image.jpg', undefined);
     await expect(manifestAdapter.getMetricImage(state, 'image.jpg')).resolves.toBe(rawImage);
-    expect(fetchUrlImageRaw).toHaveBeenCalledWith('https://example.test/images/', 'image.jpg');
+    expect(fetchUrlImageRaw).toHaveBeenCalledWith('https://example.test/images/', 'image.jpg', undefined);
     await expect(manifestAdapter.getMask(state, 'image.jpg')).resolves.toBe(maskFile);
     expect(fetchUrlMask).toHaveBeenCalledWith('https://example.test/masks/', 'image.jpg');
     expect(manifestAdapter.getMaskSync(state, 'image.jpg')).toBe(maskFile);
 
     await manifestAdapter.prefetchImages(state, ['a.jpg', 'b.jpg'], 2);
-    expect(prefetchUrlImages).toHaveBeenCalledWith('https://example.test/images/', ['a.jpg', 'b.jpg'], 2);
+    expect(prefetchUrlImages).toHaveBeenCalledWith('https://example.test/images/', ['a.jpg', 'b.jpg'], 2, undefined);
     expect(manifestAdapter.hasImages(state)).toBe(true);
     expect(manifestAdapter.hasMasks(state)).toBe(true);
+  });
+
+  it('prefers a per-image mapped URL over the base, falling back when unmapped', async () => {
+    const mappedImage = new File(['mapped'], 'G0019585.JPG');
+    const base = 'https://example.test/raw/10.07.25%20LHS/';
+    const mappedUrl = 'https://example.test/raw/10.07.25%20LHS/G0019585.JPG';
+    const state: DatasetState = {
+      ...baseState,
+      sourceType: 'url',
+      imageUrlBase: base,
+      maskUrlBase: 'https://example.test/masks/',
+      imageNameToUrl: { '0.jpg': mappedUrl },
+    };
+    const adapter = getDatasetSourceAdapter('url')!;
+
+    vi.mocked(getUrlImageCached).mockReturnValue(undefined);
+    vi.mocked(fetchUrlImage).mockResolvedValue(mappedImage);
+    vi.mocked(fetchUrlImageRaw).mockResolvedValue(mappedImage);
+
+    // Mapped COLMAP name -> explicit URL threaded to the fetch helper verbatim.
+    await expect(adapter.getImage(state, '0.jpg')).resolves.toBe(mappedImage);
+    expect(fetchUrlImage).toHaveBeenCalledWith(base, '0.jpg', mappedUrl);
+    await adapter.getMetricImage(state, '0.jpg');
+    expect(fetchUrlImageRaw).toHaveBeenCalledWith(base, '0.jpg', mappedUrl);
+
+    // Unmapped name -> no explicit URL, falls back to the base directory.
+    await adapter.getImage(state, '999.jpg');
+    expect(fetchUrlImage).toHaveBeenCalledWith(base, '999.jpg', undefined);
+
+    // Prefetch threads the whole map through for per-name resolution.
+    await adapter.prefetchImages(state, ['0.jpg', '999.jpg'], 4);
+    expect(prefetchUrlImages).toHaveBeenCalledWith(base, ['0.jpg', '999.jpg'], 4, state.imageNameToUrl);
+  });
+
+  it('reports images available from a mapping alone, with no base URL', () => {
+    const adapter = getDatasetSourceAdapter('url')!;
+    expect(
+      adapter.hasImages({ ...baseState, imageNameToUrl: { '0.jpg': 'https://example.test/x.jpg' } })
+    ).toBe(true);
+    expect(adapter.hasImages(baseState)).toBe(false);
   });
 
   it('adapts ZIP source availability, cached reads, extraction, and prefetch batching', async () => {

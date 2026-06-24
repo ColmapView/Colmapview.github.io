@@ -19,7 +19,8 @@ type SetSourceInfo = (
   url?: string | null,
   imageUrlBase?: string | null,
   maskUrlBase?: string | null,
-  manifest?: ColmapManifest | null
+  manifest?: ColmapManifest | null,
+  imageNameToUrl?: Record<string, string> | null
 ) => void;
 type SetUrlProgress = (progress: UrlLoadProgress | null) => void;
 type Log = (...args: unknown[]) => void;
@@ -60,10 +61,16 @@ export async function loadManifestSource(
     sourceInfo.sourceUrl,
     sourceInfo.imageUrlBase,
     sourceInfo.maskUrlBase,
-    sourceInfo.sourceManifest
+    sourceInfo.sourceManifest,
+    sourceInfo.imageNameToUrl ?? null
   );
   log(`[URL Loader] Image URL base for lazy loading: ${sourceInfo.imageUrlBase}`);
   log(`[URL Loader] Mask URL base for lazy loading: ${sourceInfo.maskUrlBase}`);
+  if (sourceInfo.imageNameToUrl) {
+    log(
+      `[URL Loader] Per-image URL mapping active for ${Object.keys(sourceInfo.imageNameToUrl).length} images`
+    );
+  }
 
   log('[URL Loader] Calling processFiles...');
   await deps.processFiles(files, { start: 80, end: 100 }, { throwOnError: true });

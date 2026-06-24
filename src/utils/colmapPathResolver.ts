@@ -21,13 +21,13 @@ type ColmapRole = 'cameras' | 'images' | 'points3D' | 'database' | 'rigs' | 'fra
 
 type ColmapDirectory = Partial<Record<ColmapRole, string>>;
 
-function getParentDir(path: string): string {
+export function getParentDir(path: string): string {
   const normalized = path.replace(/\\/g, '/');
   const lastSlash = normalized.lastIndexOf('/');
   return lastSlash >= 0 ? normalized.substring(0, lastSlash) : '';
 }
 
-function getBasename(path: string): string {
+export function getBasename(path: string): string {
   const normalized = path.replace(/\\/g, '/');
   const lastSlash = normalized.lastIndexOf('/');
   return lastSlash >= 0 ? normalized.substring(lastSlash + 1) : normalized;

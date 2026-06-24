@@ -60,12 +60,14 @@ const localSourceAdapter: DatasetSourceAdapter = {
 
 const remoteSourceAdapter: DatasetSourceAdapter = {
   async getImage(state, imageName) {
-    if (!state.imageUrlBase) return null;
-    return getUrlImageCached(imageName) ?? await fetchUrlImage(state.imageUrlBase, imageName);
+    const explicitUrl = state.imageNameToUrl?.[imageName];
+    if (!state.imageUrlBase && !explicitUrl) return null;
+    return getUrlImageCached(imageName) ?? await fetchUrlImage(state.imageUrlBase, imageName, explicitUrl);
   },
   async getMetricImage(state, imageName) {
-    if (!state.imageUrlBase) return null;
-    return await fetchUrlImageRaw(state.imageUrlBase, imageName);
+    const explicitUrl = state.imageNameToUrl?.[imageName];
+    if (!state.imageUrlBase && !explicitUrl) return null;
+    return await fetchUrlImageRaw(state.imageUrlBase, imageName, explicitUrl);
   },
   getImageSync(_state, imageName) {
     return getUrlImageCached(imageName);
@@ -78,11 +80,11 @@ const remoteSourceAdapter: DatasetSourceAdapter = {
     return getUrlMaskCached(imageName);
   },
   async prefetchImages(state, imageNames, concurrency) {
-    if (!state.imageUrlBase) return;
-    await prefetchUrlImages(state.imageUrlBase, imageNames, concurrency);
+    if (!state.imageUrlBase && !state.imageNameToUrl) return;
+    await prefetchUrlImages(state.imageUrlBase, imageNames, concurrency, state.imageNameToUrl ?? undefined);
   },
   hasImages(state) {
-    return state.imageUrlBase !== null;
+    return state.imageUrlBase !== null || Object.keys(state.imageNameToUrl ?? {}).length > 0;
   },
   hasMasks(state) {
     return state.maskUrlBase !== null;

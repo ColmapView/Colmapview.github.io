@@ -138,4 +138,49 @@ describe('url image files', () => {
       'https://example.test/images/third.jpg',
     ]);
   });
+
+  it('fetches an explicit per-image URL verbatim and caches it by COLMAP name', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okImageResponse('mapped'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const explicitUrl = 'https://example.test/raw/10.07.25%20LHS/G0019585.JPG';
+    const file = await fetchUrlImage('https://example.test/images/', '0.jpg', explicitUrl);
+
+    // Explicit URL used as-is: no re-encoding, no join with the images base.
+    expect(fetchMock).toHaveBeenCalledWith(explicitUrl);
+    // Display filename derived (decoded) from the explicit URL.
+    expect(compressAndResizeToJpeg).toHaveBeenCalledWith(expect.any(Blob), 'G0019585.JPG');
+    expect(file?.name).toBe('G0019585.jpg');
+    // Cached under the COLMAP name, so getImageSync(name) finds it.
+    expect(getUrlImageCached('0.jpg')).toBe(file);
+  });
+
+  it('fetches a raw explicit per-image URL for metric use', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okImageResponse('raw-mapped', 'image/jpeg'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const explicitUrl = 'https://example.test/raw/10.07.25%20RHS/G0019586.JPG';
+    const file = await fetchUrlImageRaw('https://example.test/images/', '1.jpg', explicitUrl);
+
+    expect(fetchMock).toHaveBeenCalledWith(explicitUrl);
+    expect(file?.name).toBe('G0019586.JPG');
+    expect(file?.type).toBe('image/jpeg');
+  });
+
+  it('prefetch uses per-image mapped URLs when provided, falling back otherwise', async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => okImageResponse(url));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await prefetchUrlImages(
+      'https://example.test/images/',
+      ['0.jpg', '1.jpg'],
+      2,
+      { '0.jpg': 'https://example.test/raw/a/0.JPG' } // 1.jpg unmapped -> falls back to base
+    );
+
+    expect(fetchMock.mock.calls.map(([url]) => url).sort()).toEqual([
+      'https://example.test/images/1.jpg',
+      'https://example.test/raw/a/0.JPG',
+    ]);
+  });
 });

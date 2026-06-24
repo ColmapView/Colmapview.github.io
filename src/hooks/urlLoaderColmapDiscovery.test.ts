@@ -174,3 +174,56 @@ describe('withDiscoveredColmapPaths', () => {
     expect(updated.files).toEqual(manifest.files);
   });
 });
+
+// Mirrors the wildflow/soneva-corals Maldives dataset: images were renamed to
+// 0.jpg..N.jpg before COLMAP, and colmap/image_mapping.csv maps them back to the
+// real raw/ paths (split across two dated folders, names contain spaces).
+const MALDIVES_BASE =
+  'https://huggingface.co/datasets/wildflow/soneva-corals/resolve/main/maldives_soneva_hb_20250710';
+const MALDIVES_TREE_PATH = 'maldives_soneva_hb_20250710';
+const maldivesTree = [
+  { type: 'file', path: `${MALDIVES_TREE_PATH}/colmap/cameras.bin`, size: 100 },
+  { type: 'file', path: `${MALDIVES_TREE_PATH}/colmap/images.bin`, size: 200 },
+  { type: 'file', path: `${MALDIVES_TREE_PATH}/colmap/points3D.bin`, size: 300 },
+  { type: 'file', path: `${MALDIVES_TREE_PATH}/colmap/image_mapping.csv`, size: 50 },
+  { type: 'file', path: `${MALDIVES_TREE_PATH}/raw/10.07.25 LHS/G0019585.JPG`, size: 1000 },
+  { type: 'file', path: `${MALDIVES_TREE_PATH}/raw/10.07.25 RHS/G0019586.JPG`, size: 1000 },
+];
+const maldivesCsv =
+  'colmap_id,colmap_image,raw_path\n' +
+  '0,0.jpg,raw/10.07.25 LHS/G0019585.JPG\n' +
+  '1,1.jpg,raw/10.07.25 RHS/G0019586.JPG\n';
+
+function maldivesFetchImpl() {
+  return vi.fn(async (url: string) => {
+    if (url.includes('/api/datasets/')) return jsonResponse(maldivesTree);
+    if (url.endsWith('/colmap/image_mapping.csv')) {
+      return new Response(maldivesCsv, { status: 200 });
+    }
+    return new Response('not found', { status: 404 });
+  });
+}
+
+const MALDIVES_MAPPING = {
+  '0.jpg': 'raw/10.07.25 LHS/G0019585.JPG',
+  '1.jpg': 'raw/10.07.25 RHS/G0019586.JPG',
+};
+
+describe('discoverHuggingFaceLayout with an image_mapping.csv add-on', () => {
+  it('resolves COLMAP placeholder names to real dataset-relative paths', async () => {
+    const layout = await discoverHuggingFaceLayout(MALDIVES_BASE, { fetchImpl: maldivesFetchImpl() });
+    expect(layout?.imageNameToPath).toEqual(MALDIVES_MAPPING);
+  });
+
+  it('writes the per-image mapping onto the manifest', async () => {
+    const manifest = createDefaultManifest(MALDIVES_BASE);
+    const updated = await withDiscoveredColmapPaths(manifest, { fetchImpl: maldivesFetchImpl() });
+    expect(updated.imageNameToPath).toEqual(MALDIVES_MAPPING);
+  });
+
+  it('leaves imageNameToPath null when no mapping CSV is present', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(sweetCoralsTree));
+    const layout = await discoverHuggingFaceLayout(RESOLVE_BASE, { fetchImpl });
+    expect(layout?.imageNameToPath).toBeNull();
+  });
+});

@@ -15,6 +15,8 @@ import {
 } from '../utils/urlUtils';
 import { appLogger } from '../utils/logger';
 import { isSplatFilePath } from '../utils/splatFilePolicy';
+import { resolveImageSource } from '../utils/imageSourceResolution';
+import { IMAGE_SOURCE_STRATEGIES } from '../utils/imageSourceStrategies';
 import { classifyPlyHeaderText } from '../parsers';
 import {
   getDirectoryListingLinks,
@@ -24,6 +26,7 @@ import {
   getHuggingFaceImagesPath,
   getHuggingFaceSplatPaths,
   getManifestColmapFileEntries,
+  getRelativeHuggingFaceTreePaths,
   joinManifestUrlPath,
   sortRemoteSplatCandidates,
   type HuggingFaceColmapPaths,
@@ -270,6 +273,8 @@ export async function discoverHuggingFaceSplatPath(
 export interface HuggingFaceLayout {
   colmap: HuggingFaceColmapPaths | null;
   imagesPath: string | null;
+  /** Per-image override map (COLMAP name -> dataset-relative path), or null. */
+  imageNameToPath: Record<string, string> | null;
 }
 
 function dirnameOf(path: string): string {
@@ -296,7 +301,26 @@ export async function discoverHuggingFaceLayout(
   const colmap = getHuggingFaceColmapPaths(entries, request.treePath);
   const modelDir = colmap ? dirnameOf(colmap.cameras) : undefined;
   const imagesPath = getHuggingFaceImagesPath(entries, request.treePath, modelDir);
-  return { colmap, imagesPath };
+
+  // Run the pluggable image-source resolver for special conventions (e.g. an
+  // image_mapping.csv that renamed images before COLMAP). Only the per-image
+  // override map is taken here; the base directory stays sourced from
+  // getHuggingFaceImagesPath so there is a single source of truth for it.
+  const relativePaths = getRelativeHuggingFaceTreePaths(entries, request.treePath);
+  const fetchText = async (relativePath: string): Promise<string | null> => {
+    try {
+      const response = await fetchImpl(joinManifestUrlPath(baseUrl, relativePath));
+      return response.ok ? await response.text() : null;
+    } catch {
+      return null;
+    }
+  };
+  const imageSource = await resolveImageSource(
+    { filePaths: relativePaths, modelDir: modelDir ?? '', fetchText },
+    IMAGE_SOURCE_STRATEGIES
+  );
+
+  return { colmap, imagesPath, imageNameToPath: imageSource?.imageNameToPath ?? null };
 }
 
 /**
@@ -376,6 +400,12 @@ export async function withDiscoveredColmapPaths(
         deps.log?.(`[URL Loader] Using masks directory alongside images: ${masksPath}`);
         result = { ...result, masksPath };
       }
+    }
+    if (layout.imageNameToPath && Object.keys(layout.imageNameToPath).length > 0) {
+      deps.log?.(
+        `[URL Loader] Discovered per-image path mapping for ${Object.keys(layout.imageNameToPath).length} images`
+      );
+      result = { ...result, imageNameToPath: layout.imageNameToPath };
     }
     return result;
   } catch (err) {

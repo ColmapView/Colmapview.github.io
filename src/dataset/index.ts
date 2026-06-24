@@ -57,6 +57,7 @@ export function getDatasetManager(): DatasetManager {
         sourceType: state.sourceType,
         imageUrlBase: state.imageUrlBase,
         maskUrlBase: state.maskUrlBase,
+        imageNameToUrl: state.imageNameToUrl,
         loadedFiles: state.loadedFiles,
       } satisfies DatasetState;
     });
@@ -72,6 +73,7 @@ export function getDatasetDiagnostics(): DatasetDiagnostics {
         sourceType: state.sourceType,
         imageUrlBase: state.imageUrlBase,
         maskUrlBase: state.maskUrlBase,
+        imageNameToUrl: state.imageNameToUrl,
         loadedFiles: state.loadedFiles,
         reconstruction: state.reconstruction,
         wasmReconstruction: state.wasmReconstruction,
@@ -97,6 +99,7 @@ export function useDataset(): DatasetManager {
   const sourceType = useReconstructionStore((s) => s.sourceType);
   const imageUrlBase = useReconstructionStore((s) => s.imageUrlBase);
   const maskUrlBase = useReconstructionStore((s) => s.maskUrlBase);
+  const imageNameToUrl = useReconstructionStore((s) => s.imageNameToUrl);
   const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
 
   return useMemo(
@@ -104,9 +107,10 @@ export function useDataset(): DatasetManager {
       sourceType,
       imageUrlBase,
       maskUrlBase,
+      imageNameToUrl,
       loadedFiles,
     })),
-    [sourceType, imageUrlBase, maskUrlBase, loadedFiles]
+    [sourceType, imageUrlBase, maskUrlBase, imageNameToUrl, loadedFiles]
   );
 }
 
@@ -114,6 +118,7 @@ export function useDatasetDiagnostics(): DatasetDiagnostics {
   const sourceType = useReconstructionStore((s) => s.sourceType);
   const imageUrlBase = useReconstructionStore((s) => s.imageUrlBase);
   const maskUrlBase = useReconstructionStore((s) => s.maskUrlBase);
+  const imageNameToUrl = useReconstructionStore((s) => s.imageNameToUrl);
   const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
@@ -123,11 +128,12 @@ export function useDatasetDiagnostics(): DatasetDiagnostics {
       sourceType,
       imageUrlBase,
       maskUrlBase,
+      imageNameToUrl,
       loadedFiles,
       reconstruction,
       wasmReconstruction,
     })),
-    [sourceType, imageUrlBase, maskUrlBase, loadedFiles, reconstruction, wasmReconstruction]
+    [sourceType, imageUrlBase, maskUrlBase, imageNameToUrl, loadedFiles, reconstruction, wasmReconstruction]
   );
 }
 

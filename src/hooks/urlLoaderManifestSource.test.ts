@@ -60,6 +60,7 @@ describe('URL loader manifest source helpers', () => {
       'https://example.com/manifest.json',
       'https://example.com/dataset/rgb/',
       'https://example.com/dataset/segmentation/',
+      null,
       null
     );
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Image URL base for lazy loading: https://example.com/dataset/rgb/');
@@ -80,7 +81,8 @@ describe('URL loader manifest source helpers', () => {
       null,
       'https://example.com/dataset/rgb/',
       'https://example.com/dataset/segmentation/',
-      manifest
+      manifest,
+      null
     );
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Successfully loaded 3 files from manifest');
   });

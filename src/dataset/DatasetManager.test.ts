@@ -138,7 +138,7 @@ describe('DatasetManager', () => {
 
       const result = await manager.getImage('test.jpg');
       expect(result).toBe(fetchedFile);
-      expect(fetchUrlImage).toHaveBeenCalledWith('https://example.com/images/', 'test.jpg');
+      expect(fetchUrlImage).toHaveBeenCalledWith('https://example.com/images/', 'test.jpg', undefined);
     });
 
     it('returns null when no imageUrlBase', async () => {
@@ -155,7 +155,7 @@ describe('DatasetManager', () => {
       const result = await manager.getMetricImage('test.jpg');
 
       expect(result).toBe(rawFile);
-      expect(fetchUrlImageRaw).toHaveBeenCalledWith('https://example.com/images/', 'test.jpg');
+      expect(fetchUrlImageRaw).toHaveBeenCalledWith('https://example.com/images/', 'test.jpg', undefined);
       expect(fetchUrlImage).not.toHaveBeenCalled();
     });
   });

@@ -94,6 +94,12 @@ interface ReconstructionState {
   imageUrlBase: string | null;
   /** Base URL for fetching masks (baseUrl + masksPath, only set when sourceType is 'url' or 'manifest') */
   maskUrlBase: string | null;
+  /**
+   * Per-image absolute image URLs (COLMAP name -> URL) for datasets with an
+   * explicit mapping. Used in preference to imageUrlBase + name; unmapped names
+   * fall back to imageUrlBase. Each value is final and used verbatim.
+   */
+  imageNameToUrl: Record<string, string> | null;
   /** Manifest object (only set when sourceType is 'manifest', for inline embedding in URLs) */
   sourceManifest: ColmapManifest | null;
   requestedSplatSourceId: string | null;
@@ -112,7 +118,7 @@ interface ReconstructionState {
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   setProgress: (progress: number) => void;
-  setSourceInfo: (type: ReconstructionSourceType, url?: string | null, imageUrlBase?: string | null, maskUrlBase?: string | null, manifest?: ColmapManifest | null) => void;
+  setSourceInfo: (type: ReconstructionSourceType, url?: string | null, imageUrlBase?: string | null, maskUrlBase?: string | null, manifest?: ColmapManifest | null, imageNameToUrl?: Record<string, string> | null) => void;
   setRequestedSplatSourceId: (sourceId: string | null) => void;
   /** Merge a discovered remote splat catalog so all tiles are listed (lazy). */
   mergeRemoteSplatCatalog: (catalog: { path: string; size: number }[], baseUrl: string) => void;
@@ -140,6 +146,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   sourceUrl: null,
   imageUrlBase: null,
   maskUrlBase: null,
+  imageNameToUrl: null,
   sourceManifest: null,
   requestedSplatSourceId: null,
   showSplatPicker: false,
@@ -214,7 +221,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
 
   setProgress: (progress) => set({ progress }),
 
-  setSourceInfo: (sourceType, sourceUrl = null, imageUrlBase = null, maskUrlBase = null, sourceManifest = null) => set({ sourceType, sourceUrl, imageUrlBase, maskUrlBase, sourceManifest }),
+  setSourceInfo: (sourceType, sourceUrl = null, imageUrlBase = null, maskUrlBase = null, sourceManifest = null, imageNameToUrl = null) => set({ sourceType, sourceUrl, imageUrlBase, maskUrlBase, sourceManifest, imageNameToUrl }),
 
   setRequestedSplatSourceId: (requestedSplatSourceId) => {
     if (!requestedSplatSourceId) {
@@ -374,6 +381,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       sourceUrl: null,
       imageUrlBase: null,
       maskUrlBase: null,
+      imageNameToUrl: null,
       sourceManifest: null,
       requestedSplatSourceId: null,
       showSplatPicker: false,
