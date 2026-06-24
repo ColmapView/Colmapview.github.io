@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-06-24
+
+### Fixed
+
+- Stop flooding the console and network when a dataset's ground-truth images don't match the sparse model (e.g. raw frames vs the undistorted set COLMAP was solved on): WebGPU PSNR now detects the systematic metric-image/camera size mismatch once, logs a single summary, and skips the remaining images instead of failing every one. Mask probing also stops after repeated misses on a maskless dataset rather than firing two 404s per image.
+
 ## [0.8.1] - 2026-06-23
 
 ### Added
