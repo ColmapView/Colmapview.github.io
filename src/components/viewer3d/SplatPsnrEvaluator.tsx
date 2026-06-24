@@ -25,6 +25,7 @@ import {
 } from './SplatPsnrEvaluatorStoreFacade';
 import { getWebGpuSplatRequiredLimitsForCloud } from '../../splat/webgpu/webGpuSplatLimits';
 import { getWebGpuSplatDefaultBackgroundColor } from '../../splat/webgpu/splatRenderBackground';
+import { isPsnrMetricImageDimensionMismatchError } from '../../splat/webgpu/psnrMetricImageError';
 import {
   createWebGpuSh0FallbackCloud,
   getWebGpuCloudFallbackErrorMessage,
@@ -70,6 +71,12 @@ interface SplatPsnrTaskControl {
   dataIdentity: SplatPsnrDataIdentity;
   cancelled: boolean;
   renderSession: SplatPsnrRenderSession | null;
+  /**
+   * Set once a metric-image/camera size mismatch is seen. The mismatch is
+   * systematic for the whole dataset, so the remaining images are skipped
+   * instead of failing (and refetching masks for) every one.
+   */
+  metricImagesIncompatible: boolean;
 }
 
 interface SplatPsnrTaskActions {
@@ -428,6 +435,43 @@ function warmSplatPsnrImagePlaneTexture({
   });
 }
 
+const SPLAT_PSNR_INCOMPATIBLE_METRIC_IMAGES_MESSAGE =
+  'Ground-truth images do not match the sparse model resolution; PSNR is unavailable for this dataset.';
+
+/**
+ * Handle a per-image PSNR compute failure. A metric-image/camera size mismatch
+ * is systematic for the whole dataset, so the first occurrence flips a task flag
+ * and logs a single summary; callers then skip the remaining images. Every other
+ * failure keeps its per-image warning.
+ */
+function handleSplatPsnrComputeError(
+  task: SplatPsnrTaskControl,
+  imageId: ImageId,
+  error: unknown,
+  setSplatPsnrImageError: ImageMetricsState['setSplatPsnrImageError']
+): void {
+  const message = error instanceof Error ? error.message : String(error);
+  setSplatPsnrImageError(imageId, message);
+  if (isPsnrMetricImageDimensionMismatchError(error)) {
+    if (!task.metricImagesIncompatible) {
+      task.metricImagesIncompatible = true;
+      appLogger.warn(
+        `[PSNR] ${SPLAT_PSNR_INCOMPATIBLE_METRIC_IMAGES_MESSAGE} Skipping the remaining images. (${message})`
+      );
+    }
+    return;
+  }
+  appLogger.warn(`[PSNR] Failed to compute image ${imageId}: ${message}`);
+}
+
+/** Mark an image skipped because the dataset's metric images are incompatible. */
+function skipSplatPsnrImageAsIncompatible(
+  imageId: ImageId,
+  setSplatPsnrImageError: ImageMetricsState['setSplatPsnrImageError']
+): void {
+  setSplatPsnrImageError(imageId, SPLAT_PSNR_INCOMPATIBLE_METRIC_IMAGES_MESSAGE);
+}
+
 async function runSplatPsnrTask(
   task: SplatPsnrTaskControl,
   snapshot: SplatPsnrTaskSnapshot,
@@ -468,6 +512,10 @@ async function runSplatPsnrTask(
 
     for (const imageId of imageIds) {
       if (task.cancelled) return;
+      if (task.metricImagesIncompatible) {
+        skipSplatPsnrImageAsIncompatible(imageId, setSplatPsnrImageError);
+        continue;
+      }
 
       try {
         const prepared = await prepareSplatPsnrImage(task, snapshot, imageId);
@@ -497,9 +545,7 @@ async function runSplatPsnrTask(
         });
       } catch (error) {
         if (task.cancelled) return;
-        const message = error instanceof Error ? error.message : String(error);
-        appLogger.warn(`[PSNR] Failed to compute image ${imageId}: ${message}`);
-        setSplatPsnrImageError(imageId, message);
+        handleSplatPsnrComputeError(task, imageId, error, setSplatPsnrImageError);
       }
     }
   } catch (error) {
@@ -543,6 +589,10 @@ async function runBatchedAllImageSplatPsnrTask(
   const startNext = async (): Promise<boolean> => {
     while (nextIndex < imageIds.length && !task.cancelled) {
       const imageId = imageIds[nextIndex++];
+      if (task.metricImagesIncompatible) {
+        skipSplatPsnrImageAsIncompatible(imageId, setSplatPsnrImageError);
+        continue;
+      }
       try {
         const prepared = await prepareSplatPsnrImage(task, snapshot, imageId, {
           markComputing: false,
@@ -585,9 +635,7 @@ async function runBatchedAllImageSplatPsnrTask(
           })
           .catch((error: unknown) => {
             if (task.cancelled) return;
-            const message = error instanceof Error ? error.message : String(error);
-            appLogger.warn(`[PSNR] Failed to compute image ${imageId}: ${message}`);
-            setSplatPsnrImageError(imageId, message);
+            handleSplatPsnrComputeError(task, imageId, error, setSplatPsnrImageError);
           })
           .finally(() => {
             submitted.dispose();
@@ -597,9 +645,7 @@ async function runBatchedAllImageSplatPsnrTask(
         return true;
       } catch (error) {
         if (task.cancelled) return false;
-        const message = error instanceof Error ? error.message : String(error);
-        appLogger.warn(`[PSNR] Failed to compute image ${imageId}: ${message}`);
-        setSplatPsnrImageError(imageId, message);
+        handleSplatPsnrComputeError(task, imageId, error, setSplatPsnrImageError);
       }
     }
 
@@ -1132,6 +1178,7 @@ export function SplatPsnrEvaluator() {
       dataIdentity,
       cancelled: false,
       renderSession: null,
+      metricImagesIncompatible: false,
     };
     const taskSnapshot: SplatPsnrTaskSnapshot = {
       reconstruction: snapshot.reconstruction,

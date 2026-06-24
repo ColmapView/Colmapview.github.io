@@ -183,4 +183,38 @@ describe('url image files', () => {
       'https://example.test/raw/a/0.JPG',
     ]);
   });
+
+  it('stops probing masks after consecutive misses on a maskless source', async () => {
+    const fetchMock = vi.fn(async () => buildResponse({ status: 404 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    // Probe more images than the absence threshold (8). Each miss is two
+    // requests (the name and a .png suffix).
+    for (let i = 0; i < 12; i++) {
+      expect(await fetchUrlMask('https://example.test/masks/', `${i}.jpg`)).toBeNull();
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(8 * 2);
+
+    // Clearing the cache (a new dataset) resumes probing.
+    fetchMock.mockClear();
+    clearUrlImageCache();
+    expect(await fetchUrlMask('https://example.test/masks/', 'fresh.jpg')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps probing masks once any mask is found (partially-masked source)', async () => {
+    // First image has a mask (on the .png candidate); subsequent images miss but
+    // must still be probed because the source clearly ships masks.
+    const fetchMock = vi.fn(async (url: string) =>
+      url.endsWith('0.jpg.png') ? okImageResponse('mask', 'image/png') : buildResponse({ status: 404 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(await fetchUrlMask('https://example.test/masks/', '0.jpg')).toBeInstanceOf(File);
+    for (let i = 1; i < 12; i++) {
+      await fetchUrlMask('https://example.test/masks/', `${i}.jpg`);
+    }
+    // 2 (image 0) + 2 * 11 (images 1..11) — no short-circuit after a hit.
+    expect(fetchMock).toHaveBeenCalledTimes(2 + 11 * 2);
+  });
 });

@@ -15,6 +15,17 @@ const urlImageState = createImageFileRequestState();
 const urlMaskState = createImageFileRequestState();
 
 /**
+ * Stop probing for masks once a source has clearly shipped none. Every miss is
+ * two 404s (the name + a `.png` suffix), so on a maskless dataset that is ~2N
+ * wasted requests (e.g. 1142 for 571 images). After this many consecutive misses
+ * with no hit, short-circuit further probes. Reset by clearUrlMaskCache(), and
+ * disabled the moment any mask is found (so partially-masked sets still work).
+ */
+const URL_MASK_ABSENCE_THRESHOLD = 8;
+let urlMaskConsecutiveMisses = 0;
+let urlMaskFoundAny = false;
+
+/**
  * Clear the URL image and mask caches.
  * Call this when loading a new reconstruction.
  */
@@ -28,6 +39,8 @@ export function clearUrlImageCache(): void {
  */
 export function clearUrlMaskCache(): void {
   urlMaskState.clear();
+  urlMaskConsecutiveMisses = 0;
+  urlMaskFoundAny = false;
 }
 
 /**
@@ -168,6 +181,12 @@ export async function fetchUrlMask(
     return cached;
   }
 
+  // The source has shipped no masks (enough consecutive misses, never a hit):
+  // stop probing instead of firing two more doomed 404s for every image.
+  if (!urlMaskFoundAny && urlMaskConsecutiveMisses >= URL_MASK_ABSENCE_THRESHOLD) {
+    return null;
+  }
+
   if (urlMaskState.isRequestPending(imageName)) {
     return urlMaskState.waitForRequest(imageName);
   }
@@ -196,6 +215,17 @@ export async function fetchUrlMask(
     return null;
   } finally {
     urlMaskState.completeRequest(imageName, result);
+    if (result) {
+      urlMaskFoundAny = true;
+      urlMaskConsecutiveMisses = 0;
+    } else {
+      urlMaskConsecutiveMisses += 1;
+      if (!urlMaskFoundAny && urlMaskConsecutiveMisses === URL_MASK_ABSENCE_THRESHOLD) {
+        appLogger.debug(
+          `[URL Mask] No masks found after ${URL_MASK_ABSENCE_THRESHOLD} images; skipping further mask probes for this source.`
+        );
+      }
+    }
   }
 }
 

@@ -6,6 +6,10 @@ import {
 } from '../gaussianCloudLoader';
 import type { LoadedGaussianCloud } from '../gaussianCloud';
 import {
+  PSNR_METRIC_IMAGE_MISMATCH_MARKER,
+  PsnrMetricImageDimensionMismatchError,
+} from './psnrMetricImageError';
+import {
   createColmapMetricWebGpuSplatFrame as defaultCreateMetricFrame,
 } from './cameraFrames';
 import {
@@ -810,8 +814,8 @@ function assertMetricBitmapSizeMatchesCamera({
     return;
   }
 
-  throw new Error(
-    `WebGPU PSNR requires an undistorted metric image matching the PINHOLE camera for ${imageName}: decoded ${sourceWidth}x${sourceHeight}, camera is ${camera.width}x${camera.height}. Load the image set that belongs to the sparse model.`
+  throw new PsnrMetricImageDimensionMismatchError(
+    `WebGPU PSNR requires an ${PSNR_METRIC_IMAGE_MISMATCH_MARKER} for ${imageName}: decoded ${sourceWidth}x${sourceHeight}, camera is ${camera.width}x${camera.height}. Load the image set that belongs to the sparse model.`
   );
 }
 

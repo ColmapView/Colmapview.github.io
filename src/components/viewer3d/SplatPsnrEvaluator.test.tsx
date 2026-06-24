@@ -10,6 +10,8 @@ import {
 } from '../../test/builders';
 import type { SplatPsnrEvaluatorStoreFacade } from './SplatPsnrEvaluatorStoreFacade';
 import { SplatPsnrEvaluator } from './SplatPsnrEvaluator';
+import { PsnrMetricImageDimensionMismatchError } from '../../splat/webgpu/psnrMetricImageError';
+import { appLogger } from '../../utils/logger';
 import {
   clearVisibleWebGpuSplatSharedRuntimesForTests,
   createVisibleWebGpuSplatSceneId,
@@ -205,6 +207,64 @@ describe('SplatPsnrEvaluator', () => {
         }
       };
     });
+  });
+
+  it('stops PSNR after a systematic metric-image size mismatch instead of failing every image', async () => {
+    const camera = buildCamera({ cameraId: 7, width: 4, height: 3 });
+    const firstImage = buildImage({ imageId: 11, cameraId: camera.cameraId, name: 'first.jpg' });
+    const secondImage = buildImage({ imageId: 12, cameraId: camera.cameraId, name: 'second.jpg' });
+    const mismatch = new PsnrMetricImageDimensionMismatchError(
+      'WebGPU PSNR requires an undistorted metric image matching the PINHOLE camera for first.jpg: decoded 5568x4176, camera is 4x3. Load the image set that belongs to the sparse model.'
+    );
+    // No submitImageMetric -> sequential path; the first image fails the size check.
+    const session = {
+      computeImageMetric: vi.fn().mockRejectedValue(mismatch),
+      dispose: vi.fn(),
+    };
+    createWebGpuSplatPsnrSessionMock.mockResolvedValue(session);
+
+    const files = new Map([
+      [firstImage.name, buildFile(firstImage.name)],
+      [secondImage.name, buildFile(secondImage.name)],
+    ]);
+    const { facade, actions } = createFacade({
+      reconstruction: buildReconstruction({ cameras: [camera], images: [firstImage, secondImage] }),
+      dataset: {
+        getMetricImage: vi.fn(async (name: string) => files.get(name) ?? null),
+        hasMasks: vi.fn(() => false),
+        getMask: vi.fn(async () => null),
+        getMaskSync: vi.fn(() => undefined),
+      } as unknown as SplatPsnrEvaluatorStoreFacade['data']['dataset'],
+      splatPsnrComputeRequest: { id: 1, scope: 'all' },
+    });
+    useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
+    const warnSpy = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
+
+    render(<SplatPsnrEvaluator />);
+
+    await waitFor(() => {
+      expect(actions.setSplatPsnrImageError).toHaveBeenCalledWith(secondImage.imageId, expect.any(String));
+    });
+
+    // The second image is skipped (never computed) once the first mismatch is seen.
+    expect(session.computeImageMetric).toHaveBeenCalledTimes(1);
+    expect(actions.setSplatPsnrImageError).toHaveBeenCalledWith(
+      firstImage.imageId,
+      expect.stringContaining('undistorted metric image')
+    );
+    expect(actions.setSplatPsnrImageError).toHaveBeenCalledWith(
+      secondImage.imageId,
+      expect.stringContaining('do not match the sparse model')
+    );
+
+    // The per-image flood collapses to a single summary warning.
+    const psnrWarnings = warnSpy.mock.calls.filter(
+      ([message]) => typeof message === 'string' && message.includes('[PSNR]')
+    );
+    expect(psnrWarnings).toHaveLength(1);
+    expect(psnrWarnings[0][0]).toContain('Skipping the remaining images');
+
+    warnSpy.mockRestore();
   });
 
   it('automatically requests all-image metrics for SPZ splats once the WebGPU scene is metric-ready', async () => {
