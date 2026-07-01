@@ -1,135 +1,51 @@
 import type { Camera, CameraIntrinsics } from '../types/colmap';
-import { CameraModelId } from '../types/colmap';
+import { getCameraModelParamNames, cameraModelHasPinholeIntrinsics } from './cameraModelRegistry';
+
+/** Maps a COLMAP param name to the intrinsics field(s) it populates. */
+const INTRINSIC_PARAM_SETTERS: Record<string, (i: CameraIntrinsics, v: number) => void> = {
+  f: (i, v) => { i.fx = v; i.fy = v; },
+  fx: (i, v) => { i.fx = v; },
+  fy: (i, v) => { i.fy = v; },
+  cx: (i, v) => { i.cx = v; },
+  cy: (i, v) => { i.cy = v; },
+  k: (i, v) => { i.k1 = v; },
+  k1: (i, v) => { i.k1 = v; },
+  k2: (i, v) => { i.k2 = v; },
+  k3: (i, v) => { i.k3 = v; },
+  k4: (i, v) => { i.k4 = v; },
+  k5: (i, v) => { i.k5 = v; },
+  k6: (i, v) => { i.k6 = v; },
+  p1: (i, v) => { i.p1 = v; },
+  p2: (i, v) => { i.p2 = v; },
+  'ω': (i, v) => { i.omega = v; },
+  sx1: (i, v) => { i.sx1 = v; },
+  sy1: (i, v) => { i.sy1 = v; },
+};
 
 /**
- * Extract camera intrinsics from COLMAP camera parameters.
- * Handles all 11 camera models with their different parameter layouts.
+ * Extract pinhole intrinsics from a COLMAP camera by mapping the model's
+ * declared parameter names onto the intrinsics struct. Params with no pinhole
+ * meaning (EUCM alpha/beta, division k beyond k1, prism sx2/sy2) are ignored.
+ * Models without pinhole intrinsics (spherical) return the unit defaults —
+ * callers MUST gate on `cameraModelHasPinholeIntrinsics` before using these.
  */
 export function getCameraIntrinsics(camera: Camera): CameraIntrinsics {
-  const params = camera.params;
-  const modelId = camera.modelId;
-
-  // Default all distortion parameters to 0
   const intrinsics: CameraIntrinsics = {
     fx: 1, fy: 1, cx: 0, cy: 0,
     k1: 0, k2: 0, k3: 0, k4: 0, k5: 0, k6: 0,
     p1: 0, p2: 0, omega: 0, sx1: 0, sy1: 0,
   };
 
-  switch (modelId) {
-    case CameraModelId.SIMPLE_PINHOLE:
-      // f, cx, cy
-      intrinsics.fx = intrinsics.fy = params[0];
-      intrinsics.cx = params[1];
-      intrinsics.cy = params[2];
-      break;
+  if (!cameraModelHasPinholeIntrinsics(camera.modelId)) {
+    return intrinsics;
+  }
 
-    case CameraModelId.PINHOLE:
-      // fx, fy, cx, cy
-      intrinsics.fx = params[0];
-      intrinsics.fy = params[1];
-      intrinsics.cx = params[2];
-      intrinsics.cy = params[3];
-      break;
-
-    case CameraModelId.SIMPLE_RADIAL:
-      // f, cx, cy, k
-      intrinsics.fx = intrinsics.fy = params[0];
-      intrinsics.cx = params[1];
-      intrinsics.cy = params[2];
-      intrinsics.k1 = params[3];
-      break;
-
-    case CameraModelId.RADIAL:
-      // f, cx, cy, k1, k2
-      intrinsics.fx = intrinsics.fy = params[0];
-      intrinsics.cx = params[1];
-      intrinsics.cy = params[2];
-      intrinsics.k1 = params[3];
-      intrinsics.k2 = params[4];
-      break;
-
-    case CameraModelId.OPENCV:
-      // fx, fy, cx, cy, k1, k2, p1, p2
-      intrinsics.fx = params[0];
-      intrinsics.fy = params[1];
-      intrinsics.cx = params[2];
-      intrinsics.cy = params[3];
-      intrinsics.k1 = params[4];
-      intrinsics.k2 = params[5];
-      intrinsics.p1 = params[6];
-      intrinsics.p2 = params[7];
-      break;
-
-    case CameraModelId.OPENCV_FISHEYE:
-      // fx, fy, cx, cy, k1, k2, k3, k4
-      intrinsics.fx = params[0];
-      intrinsics.fy = params[1];
-      intrinsics.cx = params[2];
-      intrinsics.cy = params[3];
-      intrinsics.k1 = params[4];
-      intrinsics.k2 = params[5];
-      intrinsics.k3 = params[6];
-      intrinsics.k4 = params[7];
-      break;
-
-    case CameraModelId.FULL_OPENCV:
-      // fx, fy, cx, cy, k1, k2, p1, p2, k3, k4, k5, k6
-      intrinsics.fx = params[0];
-      intrinsics.fy = params[1];
-      intrinsics.cx = params[2];
-      intrinsics.cy = params[3];
-      intrinsics.k1 = params[4];
-      intrinsics.k2 = params[5];
-      intrinsics.p1 = params[6];
-      intrinsics.p2 = params[7];
-      intrinsics.k3 = params[8];
-      intrinsics.k4 = params[9];
-      intrinsics.k5 = params[10];
-      intrinsics.k6 = params[11];
-      break;
-
-    case CameraModelId.FOV:
-      // fx, fy, cx, cy, omega
-      intrinsics.fx = params[0];
-      intrinsics.fy = params[1];
-      intrinsics.cx = params[2];
-      intrinsics.cy = params[3];
-      intrinsics.omega = params[4];
-      break;
-
-    case CameraModelId.SIMPLE_RADIAL_FISHEYE:
-      // f, cx, cy, k
-      intrinsics.fx = intrinsics.fy = params[0];
-      intrinsics.cx = params[1];
-      intrinsics.cy = params[2];
-      intrinsics.k1 = params[3];
-      break;
-
-    case CameraModelId.RADIAL_FISHEYE:
-      // f, cx, cy, k1, k2
-      intrinsics.fx = intrinsics.fy = params[0];
-      intrinsics.cx = params[1];
-      intrinsics.cy = params[2];
-      intrinsics.k1 = params[3];
-      intrinsics.k2 = params[4];
-      break;
-
-    case CameraModelId.THIN_PRISM_FISHEYE:
-      // fx, fy, cx, cy, k1, k2, p1, p2, k3, k4, sx1, sy1
-      intrinsics.fx = params[0];
-      intrinsics.fy = params[1];
-      intrinsics.cx = params[2];
-      intrinsics.cy = params[3];
-      intrinsics.k1 = params[4];
-      intrinsics.k2 = params[5];
-      intrinsics.p1 = params[6];
-      intrinsics.p2 = params[7];
-      intrinsics.k3 = params[8];
-      intrinsics.k4 = params[9];
-      intrinsics.sx1 = params[10];
-      intrinsics.sy1 = params[11];
-      break;
+  const paramNames = getCameraModelParamNames(camera.modelId);
+  for (let i = 0; i < paramNames.length; i++) {
+    const setter = INTRINSIC_PARAM_SETTERS[paramNames[i]];
+    if (setter !== undefined) {
+      setter(intrinsics, camera.params[i] ?? 0);
+    }
   }
 
   return intrinsics;
