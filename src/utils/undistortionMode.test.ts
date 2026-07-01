@@ -28,7 +28,7 @@ describe('resolveUndistortionMode', () => {
     expect(resolveUndistortionMode('fullFrame', CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE)).toBe('cropped');
   });
 
-  it('leaves spherical and pinhole-family new models in their requested mode', () => {
+  it('leaves spherical (EQUIRECTANGULAR) and pinhole-equivalent (EUCM) new models in their requested mode', () => {
     expect(resolveUndistortionMode('fullFrame', CameraModelId.EQUIRECTANGULAR)).toBe('fullFrame');
     expect(resolveUndistortionMode('fullFrame', CameraModelId.EUCM)).toBe('fullFrame');
   });

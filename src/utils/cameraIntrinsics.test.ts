@@ -39,6 +39,8 @@ describe('getCameraIntrinsics (registry-driven)', () => {
     const cam = buildCamera({ modelId: CameraModelId.EUCM, params: [900, 900, 640, 360, 0.6, 1.1] });
     const intr = getCameraIntrinsics(cam);
     expect(intr.fx).toBe(900);
+    expect(intr.fy).toBe(900);
+    expect(intr.cx).toBe(640);
     expect(intr.cy).toBe(360);
   });
 
@@ -53,5 +55,7 @@ describe('getCameraIntrinsics (registry-driven)', () => {
     const intr = getCameraIntrinsics(buildCamera({ modelId: CameraModelId.EQUIRECTANGULAR, params: [4096, 2048] }));
     expect(intr.fx).toBe(1);
     expect(intr.fy).toBe(1);
+    expect(intr.cx).toBe(0);
+    expect(intr.cy).toBe(0);
   });
 });

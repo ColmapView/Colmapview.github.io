@@ -150,6 +150,7 @@ describe('parseCamerasBinary', () => {
   it('parses EQUIRECTANGULAR binary cameras with exactly 2 params', () => {
     const result = parseCamerasBinary(createBinaryCameraBuffer(CameraModelId.EQUIRECTANGULAR, [4096, 2048]));
     const camera = result.get(1);
+    expect(camera).toBeDefined();
     expect(camera!.modelId).toBe(CameraModelId.EQUIRECTANGULAR);
     expect(camera!.params).toEqual([4096, 2048]);
   });

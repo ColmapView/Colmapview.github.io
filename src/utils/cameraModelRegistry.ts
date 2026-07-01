@@ -34,6 +34,12 @@ export const CAMERA_MODEL_DESCRIPTORS: Record<CameraModelId, CameraModelDescript
   [CameraModelId.EQUIRECTANGULAR]: { id: CameraModelId.EQUIRECTANGULAR, colmapName: 'EQUIRECTANGULAR', displayName: 'Equirectangular', paramNames: ['w', 'h'], family: 'spherical' },
 };
 
+Object.values(CAMERA_MODEL_DESCRIPTORS).forEach((descriptor) => {
+  Object.freeze(descriptor);
+  Object.freeze(descriptor.paramNames);
+});
+Object.freeze(CAMERA_MODEL_DESCRIPTORS);
+
 export function getCameraModelDescriptor(id: CameraModelId): CameraModelDescriptor {
   return CAMERA_MODEL_DESCRIPTORS[id];
 }
