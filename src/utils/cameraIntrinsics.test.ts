@@ -25,6 +25,29 @@ describe('getCameraIntrinsics parity (existing models 0-10)', () => {
   });
 });
 
+describe('getCameraIntrinsics (EUCM/DIVISION new fields)', () => {
+  it('EUCM: alpha and beta are extracted into alpha/beta fields', () => {
+    const cam = buildCamera({ modelId: CameraModelId.EUCM, params: [900, 900, 640, 360, 0.6, 1.1] });
+    const intr = getCameraIntrinsics(cam);
+    expect(intr.alpha).toBe(0.6);
+    expect(intr.beta).toBe(1.1);
+  });
+
+  it('DIVISION: k goes to kDiv, NOT k1', () => {
+    const cam = buildCamera({ modelId: CameraModelId.DIVISION, params: [800, 810, 320, 240, -0.05] });
+    const intr = getCameraIntrinsics(cam);
+    expect(intr.kDiv).toBe(-0.05);
+    expect(intr.k1).toBe(0);
+  });
+
+  it('SIMPLE_RADIAL: k still goes to k1 (unchanged behaviour)', () => {
+    const cam = buildCamera({ modelId: CameraModelId.SIMPLE_RADIAL, params: [100, 50, 60, 0.1] });
+    const intr = getCameraIntrinsics(cam);
+    expect(intr.k1).toBe(0.1);
+    expect(intr.kDiv).toBe(0);
+  });
+});
+
 describe('getCameraIntrinsics (registry-driven)', () => {
   it('extracts fx/fy/cx/cy for the newly-wired DIVISION model', () => {
     const cam = buildCamera({ modelId: CameraModelId.DIVISION, params: [800, 810, 320, 240, -0.05] });

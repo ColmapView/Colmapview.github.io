@@ -602,23 +602,4 @@ void main() {
 }
 `;
 
-/**
- * Camera intrinsics extracted from COLMAP camera parameters
- */
-export interface CameraIntrinsics {
-  fx: number;
-  fy: number;
-  cx: number;
-  cy: number;
-  k1: number;
-  k2: number;
-  k3: number;
-  k4: number;
-  k5: number;
-  k6: number;
-  p1: number;
-  p2: number;
-  omega: number;
-  sx1: number;
-  sy1: number;
-}
+export type { CameraIntrinsics } from '../types/colmap';
