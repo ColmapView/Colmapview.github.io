@@ -3,6 +3,7 @@ import type { Camera, Image, ImageId, Reconstruction } from '../../types/colmap'
 import { getCameraColor } from '../../theme';
 import { getImageWorldPose } from '../../utils/colmapTransforms';
 import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
+import { cameraModelHasPinholeIntrinsics } from '../../utils/cameraModelRegistry';
 import {
   computeSplatMetricColorScale,
   getSplatMetricScaleColor,
@@ -132,6 +133,11 @@ export function buildImageFrameIndexMap(reconstruction: Reconstruction | null): 
 
 export function getFrustumPlaneSize(camera: Camera, scale: number): FrustumPlaneSize {
   const invalidPlaneSize = { width: 0, height: 0, depth: scale, offsetX: 0, offsetY: 0 };
+
+  if (!cameraModelHasPinholeIntrinsics(camera.modelId)) {
+    return invalidPlaneSize;
+  }
+
   if (
     camera.width <= 0 ||
     camera.height <= 0 ||

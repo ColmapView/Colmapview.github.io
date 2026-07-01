@@ -16,6 +16,7 @@ import {
   buildImageStats,
   buildReconstruction,
 } from '../../test/builders';
+import { CameraModelId } from '../../types/colmap';
 
 describe('camera frustum geometry helpers', () => {
   it('builds camera and rig-frame color indexes used for frustum coloring', () => {
@@ -264,5 +265,21 @@ describe('camera frustum geometry helpers', () => {
     expect(getPlanePointForPixel(800, 400).x).toBeCloseTo(3.9);
     expect(getPlanePointForPixel(800, 400).y).toBeCloseTo(-1.05);
     expect(getPlanePointForPixel(800, 400).z).toBeCloseTo(2);
+  });
+});
+
+describe('getFrustumPlaneSize spherical guard', () => {
+  it('returns a zero-size plane for spherical cameras (no garbage frustum)', () => {
+    const cam = buildCamera({ modelId: CameraModelId.EQUIRECTANGULAR, width: 4096, height: 2048, params: [4096, 2048] });
+    const size = getFrustumPlaneSize(cam, 1);
+    expect(size.width).toBe(0);
+    expect(size.height).toBe(0);
+  });
+
+  it('still sizes a normal pinhole frustum', () => {
+    const cam = buildCamera({ modelId: CameraModelId.PINHOLE, width: 640, height: 480, params: [500, 500, 320, 240] });
+    const size = getFrustumPlaneSize(cam, 1);
+    expect(size.width).toBeCloseTo(640 / 500);
+    expect(size.height).toBeCloseTo(480 / 500);
   });
 });
