@@ -49,6 +49,7 @@ tmpclaude-*
 
 # Local agent scratch space
 .tmp/
+.superpowers/
 
 # Playwright
 .playwright-cli/
