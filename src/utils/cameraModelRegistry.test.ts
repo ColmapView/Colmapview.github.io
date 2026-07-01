@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { CameraModelId, CAMERA_MODEL_NUM_PARAMS } from '../types/colmap';
-import { PARAM_NAMES, CAMERA_MODEL_COLMAP_NAMES, isPerspectiveCameraModel, isFisheyeCameraModel, isSphericalCameraModel } from './cameraModelPolicy';
-import { CAMERA_MODEL_NAMES } from './cameraModelNames';
+import { CameraModelId } from '../types/colmap';
+import { isPerspectiveCameraModel, isFisheyeCameraModel, isSphericalCameraModel, PERSPECTIVE_CAMERA_MODELS, FISHEYE_CAMERA_MODELS } from './cameraModelPolicy';
 import {
   type CameraModelFamily,
   CAMERA_MODEL_DESCRIPTORS,
@@ -12,7 +11,6 @@ import {
   colmapNameToModelId,
   getCameraModelFamily,
   cameraModelHasPinholeIntrinsics,
-  isSphericalCameraModel,
 } from './cameraModelRegistry';
 
 describe('cameraModelRegistry', () => {
@@ -23,10 +21,9 @@ describe('cameraModelRegistry', () => {
     }
   });
 
-  it('param count equals paramNames length and matches the legacy table', () => {
+  it('param count equals paramNames length', () => {
     for (const id of Object.values(CameraModelId)) {
       expect(getCameraModelNumParams(id)).toBe(getCameraModelParamNames(id).length);
-      expect(getCameraModelNumParams(id)).toBe(CAMERA_MODEL_NUM_PARAMS[id]);
     }
   });
 
@@ -63,11 +60,27 @@ describe('cameraModelRegistry', () => {
     }
   });
 
-  it('registry paramNames, colmap names, and display names match the legacy tables', () => {
+  it('registry data matches known COLMAP values (independent of derived tables)', () => {
+    const EXPECTED: Record<number, { colmapName: string; displayName: string; paramNames: string[] }> = {
+      [CameraModelId.SIMPLE_PINHOLE]: { colmapName: 'SIMPLE_PINHOLE', displayName: 'Simple Pinhole', paramNames: ['f', 'cx', 'cy'] },
+      [CameraModelId.PINHOLE]: { colmapName: 'PINHOLE', displayName: 'Pinhole', paramNames: ['fx', 'fy', 'cx', 'cy'] },
+      [CameraModelId.SIMPLE_RADIAL]: { colmapName: 'SIMPLE_RADIAL', displayName: 'Simple Radial', paramNames: ['f', 'cx', 'cy', 'k'] },
+      [CameraModelId.RADIAL]: { colmapName: 'RADIAL', displayName: 'Radial', paramNames: ['f', 'cx', 'cy', 'k1', 'k2'] },
+      [CameraModelId.OPENCV]: { colmapName: 'OPENCV', displayName: 'OpenCV', paramNames: ['fx', 'fy', 'cx', 'cy', 'k1', 'k2', 'p1', 'p2'] },
+      [CameraModelId.OPENCV_FISHEYE]: { colmapName: 'OPENCV_FISHEYE', displayName: 'OpenCV Fisheye', paramNames: ['fx', 'fy', 'cx', 'cy', 'k1', 'k2', 'k3', 'k4'] },
+      [CameraModelId.FULL_OPENCV]: { colmapName: 'FULL_OPENCV', displayName: 'Full OpenCV', paramNames: ['fx', 'fy', 'cx', 'cy', 'k1', 'k2', 'p1', 'p2', 'k3', 'k4', 'k5', 'k6'] },
+      [CameraModelId.FOV]: { colmapName: 'FOV', displayName: 'FOV', paramNames: ['fx', 'fy', 'cx', 'cy', 'ω'] },
+      [CameraModelId.SIMPLE_RADIAL_FISHEYE]: { colmapName: 'SIMPLE_RADIAL_FISHEYE', displayName: 'Simple Radial Fisheye', paramNames: ['f', 'cx', 'cy', 'k'] },
+      [CameraModelId.RADIAL_FISHEYE]: { colmapName: 'RADIAL_FISHEYE', displayName: 'Radial Fisheye', paramNames: ['f', 'cx', 'cy', 'k1', 'k2'] },
+      [CameraModelId.THIN_PRISM_FISHEYE]: { colmapName: 'THIN_PRISM_FISHEYE', displayName: 'Thin Prism Fisheye', paramNames: ['fx', 'fy', 'cx', 'cy', 'k1', 'k2', 'p1', 'p2', 'k3', 'k4', 'sx1', 'sy1'] },
+      [CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE]: { colmapName: 'RAD_TAN_THIN_PRISM_FISHEYE', displayName: 'Rad-Tan Thin Prism', paramNames: ['fx', 'fy', 'cx', 'cy', 'k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'p1', 'p2', 'sx1', 'sy1', 'sx2', 'sy2'] },
+    };
     for (const id of Object.values(CameraModelId)) {
-      expect(getCameraModelParamNames(id)).toEqual(PARAM_NAMES[id]);
-      expect(getCameraModelColmapName(id)).toBe(CAMERA_MODEL_COLMAP_NAMES[id]);
-      expect(getCameraModelDisplayName(id)).toBe(CAMERA_MODEL_NAMES[id]);
+      const expected = EXPECTED[id];
+      expect(getCameraModelColmapName(id)).toBe(expected.colmapName);
+      expect(getCameraModelDisplayName(id)).toBe(expected.displayName);
+      expect(getCameraModelParamNames(id)).toEqual(expected.paramNames);
+      expect(getCameraModelNumParams(id)).toBe(expected.paramNames.length);
     }
   });
 });
@@ -84,5 +97,10 @@ describe('registry-derived classification parity', () => {
     expect(isFisheyeCameraModel(CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE)).toBe(true);
     expect(isPerspectiveCameraModel(CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE)).toBe(false);
     expect(isSphericalCameraModel(CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE)).toBe(false);
+  });
+
+  it('perspective/fisheye membership matches the expected COLMAP grouping', () => {
+    expect([...PERSPECTIVE_CAMERA_MODELS].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 6, 7]);
+    expect([...FISHEYE_CAMERA_MODELS].sort((a, b) => a - b)).toEqual([5, 8, 9, 10, 11]);
   });
 });
