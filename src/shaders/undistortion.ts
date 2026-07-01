@@ -904,3 +904,146 @@ export function glslForwardReference(cls: ProjectionClass, p: Vec2, i: CameraInt
     case 'spherical':          return { x: p.x, y: p.y };
   }
 }
+
+// ── Paired TS transcription of GLSL inverseDistort() active paths ──────────────
+// KEEP IN SYNC WITH THE GLSL inverseDistort ABOVE (fullFrameVertexShader). Each
+// helper below mirrors the corresponding GLSL branch line-for-line.
+//
+// Active paths covered (non-fisheye cameras in full-frame mode only):
+//   perspective-radial: Newton's method, 15 iterations (FULL_OPENCV rational formula
+//                        covers SIMPLE_RADIAL/RADIAL/OPENCV via zero-coeff reduction;
+//                        tangential terms always included, they vanish when p1=p2=0).
+//   fov:       exact closed-form
+//   division:  exact closed-form
+//   eucm:      exact closed-form
+//
+// EXPLICITLY EXCLUDED: fisheye / fisheye-radtan vertex inverse.
+// resolveUndistortionMode() always forces fisheye cameras to cropped mode, so the
+// full-frame vertex shader (and its fisheye inverseDistort branches) are DEAD CODE
+// for those camera families. Testing dead branches adds noise without catching real
+// active-path divergences.
+
+// Mirrors the perspective-radial Newton loop in inverseDistort() — 15 iterations,
+// FULL_OPENCV rational formula (covers SIMPLE_RADIAL, RADIAL, OPENCV, FULL_OPENCV
+// via zero higher-order coefficients; tangential block always applied — it vanishes
+// exactly when p1=p2=0, matching the GLSL "if (modelId == OPENCV || FULL_OPENCV)"
+// guard for those sub-models).
+function _glslInverseDistortPerspectiveRadial(
+  distorted: Vec2,
+  i: CameraIntrinsics,
+): { x: number; y: number; valid: boolean } {
+  let ux = distorted.x;
+  let uy = distorted.y;
+  let resid = 1.0;
+  for (let iter = 0; iter < 15; iter++) {
+    const x = ux, y = uy;
+    const r2 = x * x + y * y;
+    const r4 = r2 * r2;
+    const r6 = r4 * r2;
+    const num = 1.0 + i.k1 * r2 + i.k2 * r4 + i.k3 * r6;
+    const den = 1.0 + i.k4 * r2 + i.k5 * r4 + i.k6 * r6;
+    const R = num / den - 1.0;
+    const numP = i.k1 + 2.0 * i.k2 * r2 + 3.0 * i.k3 * r4;
+    const denP = i.k4 + 2.0 * i.k5 * r2 + 3.0 * i.k6 * r4;
+    const Rp = (numP * den - num * denP) / (den * den);
+    let dx = x * R;
+    let dy = y * R;
+    let j11 = 1.0 + R + 2.0 * x * x * Rp;
+    let j12 = 2.0 * x * y * Rp;
+    let j21 = 2.0 * x * y * Rp;
+    let j22 = 1.0 + R + 2.0 * y * y * Rp;
+    // Tangential — mirrors GLSL "if (modelId == OPENCV || modelId == FULL_OPENCV)";
+    // vanishes exactly when p1=p2=0 (SIMPLE_RADIAL, RADIAL sub-models).
+    dx += 2.0 * i.p1 * x * y + i.p2 * (r2 + 2.0 * x * x);
+    dy += i.p1 * (r2 + 2.0 * y * y) + 2.0 * i.p2 * x * y;
+    j11 += 2.0 * i.p1 * y + 6.0 * i.p2 * x;
+    j12 += 2.0 * i.p1 * x + 2.0 * i.p2 * y;
+    j21 += 2.0 * i.p1 * x + 2.0 * i.p2 * y;
+    j22 += 6.0 * i.p1 * y + 2.0 * i.p2 * x;
+    const gx = x + dx - distorted.x;
+    const gy = y + dy - distorted.y;
+    resid = Math.hypot(gx, gy);
+    const det = j11 * j22 - j12 * j21;
+    if (Math.abs(det) > 0.000001) {
+      const stepX = (j22 * gx - j12 * gy) / det;
+      const stepY = (j11 * gy - j21 * gx) / det;
+      ux -= stepX;
+      uy -= stepY;
+    }
+  }
+  return { x: ux, y: uy, valid: resid <= 0.001 };
+}
+
+// Mirrors the FOV branch of inverseDistort().
+function _glslInverseDistortFOV(
+  distorted: Vec2,
+  i: CameraIntrinsics,
+): { x: number; y: number; valid: boolean } {
+  const rd = Math.hypot(distorted.x, distorted.y);
+  if (rd < 0.00001 || Math.abs(i.omega) < 0.00001) {
+    return { x: distorted.x, y: distorted.y, valid: true };
+  }
+  const arg = rd * i.omega;
+  if (arg >= 1.5707963 - 0.00001) {
+    return { x: distorted.x, y: distorted.y, valid: false }; // past the tan() singularity
+  }
+  const scale = Math.tan(arg) / (rd * 2.0 * Math.tan(i.omega / 2.0));
+  return { x: distorted.x * scale, y: distorted.y * scale, valid: true };
+}
+
+// Mirrors the DIVISION / SIMPLE_DIVISION branch of inverseDistort().
+function _glslInverseDistortDivision(
+  distorted: Vec2,
+  i: CameraIntrinsics,
+): { x: number; y: number; valid: boolean } {
+  const r2 = distorted.x * distorted.x + distorted.y * distorted.y;
+  const denom = 1.0 + i.kDiv * r2;
+  return { x: distorted.x / denom, y: distorted.y / denom, valid: true };
+}
+
+// Mirrors the EUCM branch of inverseDistort().
+function _glslInverseDistortEUCM(
+  distorted: Vec2,
+  i: CameraIntrinsics,
+): { x: number; y: number; valid: boolean } {
+  const r2 = distorted.x * distorted.x + distorted.y * distorted.y;
+  const radicand = 1.0 - (2.0 * i.alpha - 1.0) * i.beta * r2;
+  if (radicand < 0.0) {
+    return { x: distorted.x, y: distorted.y, valid: false };
+  }
+  const gamma = 1.0 - i.alpha;
+  const helperDen = i.alpha * Math.sqrt(radicand) + gamma;
+  const helper = (1.0 - i.alpha * i.alpha * i.beta * r2) / helperDen;
+  if (helper <= 0.0) {
+    return { x: distorted.x, y: distorted.y, valid: false };
+  }
+  return { x: distorted.x / helper, y: distorted.y / helper, valid: true };
+}
+
+/**
+ * TS transcription of the vertex-shader `inverseDistort()` active paths for
+ * non-fisheye cameras in full-frame mode, dispatched by projectionClass.
+ * Returns { x, y, valid } matching the `DISTORTION_STRATEGIES[cls].inverse` API.
+ *
+ * KEEP IN SYNC WITH THE GLSL inverseDistort ABOVE (fullFrameVertexShader).
+ *
+ * NOTE: fisheye / fisheye-radtan return identity here — resolveUndistortionMode()
+ * always forces fisheye cameras to cropped mode, making those vertex-shader inverse
+ * branches dead code at runtime. They are intentionally not transcribed.
+ */
+export function glslInverseReference(
+  cls: ProjectionClass,
+  d: Vec2,
+  i: CameraIntrinsics,
+): { x: number; y: number; valid: boolean } {
+  switch (cls) {
+    case 'perspective-radial': return _glslInverseDistortPerspectiveRadial(d, i);
+    case 'fov':                return _glslInverseDistortFOV(d, i);
+    case 'division':           return _glslInverseDistortDivision(d, i);
+    case 'eucm':               return _glslInverseDistortEUCM(d, i);
+    case 'none':
+    case 'fisheye':
+    case 'fisheye-radtan':
+    case 'spherical':          return { x: d.x, y: d.y, valid: true };
+  }
+}
