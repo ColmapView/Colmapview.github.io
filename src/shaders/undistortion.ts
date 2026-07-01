@@ -1,3 +1,7 @@
+import type { Vec2 } from '../utils/cameraUndistortion';
+import type { CameraIntrinsics } from '../types/colmap';
+import type { ProjectionClass } from '../utils/cameraModelRegistry';
+
 /**
  * GLSL shaders for real-time image undistortion.
  * Implements all 11 COLMAP camera distortion models.
@@ -174,7 +178,11 @@ vec2 inverseDistort(vec2 distorted, out bool valid) {
 
   // RAD_TAN_THIN_PRISM_FISHEYE: 6-coeff radial scale in angle space, then
   // tangential + thin-prism on the radially-scaled (x,y).
-  // Inverse: iterative solve in angle space then NormalFromFisheye.
+  // NOTE: RAD_TAN_THIN_PRISM_FISHEYE is a fisheye model. resolveUndistortionMode()
+  // always forces fisheye cameras to cropped mode, so this full-frame vertex-shader
+  // branch is intentionally dead at runtime. The fixed-point inverse here is
+  // deliberately simplified; see fisheyeRadTanStrategy.inverse in
+  // src/utils/cameraUndistortion.ts for the accurate 2D Newton implementation.
   if (modelId == RAD_TAN_THIN_PRISM_FISHEYE) {
     vec2 uu = distorted; // initial guess
 
@@ -768,3 +776,131 @@ void main() {
 `;
 
 export type { CameraIntrinsics } from '../types/colmap';
+
+// ── Paired TS transcription of GLSL applyDistortion() active paths ─────────────
+// KEEP IN SYNC WITH THE GLSL ABOVE (undistortionFragmentShader). Each helper
+// below mirrors the corresponding GLSL distortion function line-for-line.
+// applyDistortion() returns a delta (distorted − undistorted); each helper returns
+// the full distorted point (p + delta) to match the DISTORTION_STRATEGIES API.
+//
+// Used exclusively by undistortionParity.test.ts to detect canonical↔GLSL
+// divergence without requiring real WebGL (jsdom has no WebGL).
+//
+// RESIDUAL RISK: this is a transcription of the shader *string*, not the executed
+// GLSL. Bugs present identically in both the shader and this transcription, or
+// GLSL driver-specific behaviour, are not caught here. The structural exhaustiveness
+// test (Part 1 of undistortionParity.test.ts) + a manual GPU check (Task 11) cover
+// the remaining gap.
+//
+// 'perspective-radial' uses FULL_OPENCV (simpler sub-models reduce to it with zero
+// higher-order coefficients). 'fisheye' uses THIN_PRISM_FISHEYE (simpler sub-models
+// reduce to it with zero coefficients).
+// The RAD_TAN vertex-shader inverse is intentionally out-of-scope: the full-frame
+// path is disabled for fisheye cameras by resolveUndistortionMode().
+
+// Mirrors distortFullOpenCV() — covers all perspective-radial sub-models.
+function _glslFullOpenCV(p: Vec2, i: CameraIntrinsics): Vec2 {
+  const x = p.x, y = p.y;
+  const r2 = x * x + y * y;
+  const r4 = r2 * r2;
+  const r6 = r4 * r2;
+  const num   = 1.0 + i.k1 * r2 + i.k2 * r4 + i.k3 * r6;
+  const denom = 1.0 + i.k4 * r2 + i.k5 * r4 + i.k6 * r6;
+  const radial = num / denom - 1.0;
+  const dx = 2.0 * i.p1 * x * y + i.p2 * (r2 + 2.0 * x * x);
+  const dy = i.p1 * (r2 + 2.0 * y * y) + 2.0 * i.p2 * x * y;
+  return { x: x + x * radial + dx, y: y + y * radial + dy };
+}
+
+// Mirrors distortFOV().
+function _glslFOV(p: Vec2, i: CameraIntrinsics): Vec2 {
+  const r = Math.hypot(p.x, p.y);
+  if (r < 0.00001 || Math.abs(i.omega) < 0.00001) return { x: p.x, y: p.y };
+  const rd = Math.atan(r * 2.0 * Math.tan(i.omega / 2.0)) / i.omega;
+  const factor = rd / r - 1.0;
+  return { x: p.x + p.x * factor, y: p.y + p.y * factor };
+}
+
+// Mirrors distortThinPrismFisheye() — covers all fisheye-class sub-models.
+function _glslThinPrismFisheye(p: Vec2, i: CameraIntrinsics): Vec2 {
+  const r = Math.hypot(p.x, p.y);
+  if (r < 0.00001) return { x: p.x, y: p.y };
+  const theta = Math.atan(r);
+  const uux   = p.x * (theta / r);
+  const uuy   = p.y * (theta / r);
+  const theta2 = uux * uux + uuy * uuy; // = theta²
+  const theta4 = theta2 * theta2;
+  const theta6 = theta4 * theta2;
+  const theta8 = theta4 * theta4;
+  const radial = i.k1 * theta2 + i.k2 * theta4 + i.k3 * theta6 + i.k4 * theta8;
+  const x = uux, y = uuy;
+  const dx = x * radial + 2.0 * i.p1 * x * y + i.p2 * (theta2 + 2.0 * x * x) + i.sx1 * theta2;
+  const dy = y * radial + i.p1 * (theta2 + 2.0 * y * y) + 2.0 * i.p2 * x * y + i.sy1 * theta2;
+  // p + delta, where delta = vec2(uux + dx − p.x, uuy + dy − p.y)
+  return { x: x + dx, y: y + dy };
+}
+
+// Mirrors distortRadTanFisheye().
+function _glslRadTanFisheye(p: Vec2, i: CameraIntrinsics): Vec2 {
+  const r = Math.hypot(p.x, p.y);
+  if (r < 0.00001) return { x: p.x, y: p.y };
+  const theta = Math.atan(r);
+  const uux   = p.x * (theta / r);
+  const uuy   = p.y * (theta / r);
+  const theta2  = uux * uux + uuy * uuy; // = theta²
+  const theta4  = theta2 * theta2;
+  const theta6  = theta4 * theta2;
+  const theta8  = theta4 * theta4;
+  const theta10 = theta8 * theta2;
+  const theta12 = theta10 * theta2;
+  const thRadial = 1.0 + i.k1 * theta2 + i.k2 * theta4 + i.k3 * theta6
+                       + i.k4 * theta8 + i.k5 * theta10 + i.k6 * theta12;
+  const x  = thRadial * uux;
+  const y  = thRadial * uuy;
+  const x2 = x * x, y2 = y * y;
+  const xy = x * y;
+  const r2 = x2 + y2;
+  const r4 = r2 * r2;
+  const dxTang = 2.0 * i.p1 * xy + i.p2 * (r2 + 2.0 * x2);
+  const dyTang = i.p1 * (r2 + 2.0 * y2) + 2.0 * i.p2 * xy;
+  const dxTp = i.sx1 * r2 + i.sy1 * r4;
+  const dyTp = i.sx2 * r2 + i.sy2 * r4;
+  // p + delta, where delta = vec2(x + dxTang + dxTp − p.x, y + dyTang + dyTp − p.y)
+  return { x: x + dxTang + dxTp, y: y + dyTang + dyTp };
+}
+
+// Mirrors distortDivision().
+function _glslDivision(p: Vec2, i: CameraIntrinsics): Vec2 {
+  const rho2 = p.x * p.x + p.y * p.y;
+  const disc2 = 1.0 - 4.0 * rho2 * i.kDiv;
+  if (disc2 < 0.0) return { x: p.x, y: p.y }; // disc2 < 0 → GLSL delta = vec2(0) → distorted = p
+  const r = 2.0 / (1.0 + Math.sqrt(disc2));
+  return { x: p.x * r, y: p.y * r };
+}
+
+// Mirrors distortEUCM().
+function _glslEUCM(p: Vec2, i: CameraIntrinsics): Vec2 {
+  const r2  = p.x * p.x + p.y * p.y;
+  const den = i.alpha * Math.sqrt(i.beta * r2 + 1.0) + (1.0 - i.alpha);
+  return { x: p.x / den, y: p.y / den };
+}
+
+/**
+ * TS transcription of the fragment-shader `applyDistortion()` active path,
+ * dispatched by projectionClass. Returns the full distorted coordinate
+ * (undistorted + delta), matching the `DISTORTION_STRATEGIES[cls].forward` API.
+ *
+ * KEEP IN SYNC WITH THE GLSL ABOVE (undistortionFragmentShader).
+ */
+export function glslForwardReference(cls: ProjectionClass, p: Vec2, i: CameraIntrinsics): Vec2 {
+  switch (cls) {
+    case 'perspective-radial': return _glslFullOpenCV(p, i);
+    case 'fov':                return _glslFOV(p, i);
+    case 'fisheye':            return _glslThinPrismFisheye(p, i);
+    case 'fisheye-radtan':     return _glslRadTanFisheye(p, i);
+    case 'division':           return _glslDivision(p, i);
+    case 'eucm':               return _glslEUCM(p, i);
+    case 'none':
+    case 'spherical':          return { x: p.x, y: p.y };
+  }
+}

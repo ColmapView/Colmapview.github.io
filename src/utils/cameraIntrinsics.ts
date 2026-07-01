@@ -29,8 +29,10 @@ const INTRINSIC_PARAM_SETTERS: Record<string, (i: CameraIntrinsics, v: number) =
 
 /**
  * Extract pinhole intrinsics from a COLMAP camera by mapping the model's
- * declared parameter names onto the intrinsics struct. Params with no pinhole
- * meaning (EUCM alpha/beta, division k beyond k1, prism sx2/sy2) are ignored.
+ * declared parameter names onto the intrinsics struct. All recognized parameter
+ * names (including EUCM alpha/beta and prism sx1/sy1/sx2/sy2) are extracted
+ * through `INTRINSIC_PARAM_SETTERS`; the bare 'k' parameter routes to `kDiv`
+ * for division models and `k1` for all others.
  * Models without pinhole intrinsics (spherical) return the unit defaults —
  * callers MUST gate on `cameraModelHasPinholeIntrinsics` before using these.
  */
