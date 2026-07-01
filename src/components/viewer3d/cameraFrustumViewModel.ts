@@ -1,6 +1,7 @@
 import type { Camera, ImageId } from '../../types/colmap';
 import type { CameraScaleFactor } from '../../store/types';
 import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
+import { isSphericalCameraModel } from '../../utils/cameraModelRegistry';
 
 export {
   buildMatchedImageIds,
@@ -95,16 +96,55 @@ export function getAutoAdjustedFov({
   minFov = 5,
   maxFov = 120,
 }: AutoFovAdjustmentOptions): number | null {
+  // Common guards shared by both paths
+  if (cameraScale <= 0 || viewportWidth <= 0 || viewportHeight <= 0 || currentFov <= 0) {
+    return null;
+  }
+
+  const viewportAspect = viewportWidth / viewportHeight;
+  const currentFovRad = currentFov * Math.PI / 180;
+
+  // Spherical cameras have no real focal length; getCameraIntrinsics returns fx=fy=1 (unit
+  // default), so the pinhole plane formula produces a degenerate plane of width=cameraScale*width.
+  // Instead, frame the rendered sphere (radius = cameraScale) as a square target.
+  if (isSphericalCameraModel(camera.modelId)) {
+    const sphereDiameter = 2 * cameraScale;
+    const planeDistance = cameraScale;
+    const currentVisibleHeight = 2 * planeDistance * Math.tan(currentFovRad / 2);
+    const currentVisibleWidth = currentVisibleHeight * viewportAspect;
+    const heightRatio = sphereDiameter / currentVisibleHeight;
+    const widthRatio = sphereDiameter / currentVisibleWidth;
+    const maxRatio = Math.max(heightRatio, widthRatio);
+
+    if (!Number.isFinite(maxRatio) || (maxRatio <= maxVisibleRatio && maxRatio >= minVisibleRatio)) {
+      return null;
+    }
+
+    // The sphere is square (aspect 1:1). For a landscape viewport the height axis constrains;
+    // for a portrait/square viewport the width axis constrains.
+    let targetFov: number;
+    if (1.0 < viewportAspect) {
+      // Landscape: height constrains
+      const targetVisibleHeight = sphereDiameter / targetFillRatio;
+      targetFov = 2 * Math.atan(targetVisibleHeight / (2 * planeDistance)) * 180 / Math.PI;
+    } else {
+      // Portrait/square: width constrains
+      const targetVisibleWidth = sphereDiameter / targetFillRatio;
+      const targetVisibleHeight = targetVisibleWidth / viewportAspect;
+      targetFov = 2 * Math.atan(targetVisibleHeight / (2 * planeDistance)) * 180 / Math.PI;
+    }
+
+    if (!Number.isFinite(targetFov)) return null;
+    return Math.max(minFov, Math.min(maxFov, targetFov));
+  }
+
+  // Pinhole / fisheye cameras: frame the image plane projected at depth=cameraScale
   const { fx, fy } = getCameraIntrinsics(camera);
   if (
     camera.width <= 0 ||
     camera.height <= 0 ||
     fx <= 0 ||
     fy <= 0 ||
-    cameraScale <= 0 ||
-    viewportWidth <= 0 ||
-    viewportHeight <= 0 ||
-    currentFov <= 0 ||
     !Number.isFinite(fx) ||
     !Number.isFinite(fy)
   ) {
@@ -114,8 +154,6 @@ export function getAutoAdjustedFov({
   const planeWidth = cameraScale * camera.width / fx;
   const planeHeight = cameraScale * camera.height / fy;
   const planeDistance = cameraScale;
-  const viewportAspect = viewportWidth / viewportHeight;
-  const currentFovRad = currentFov * Math.PI / 180;
   const currentVisibleHeight = 2 * planeDistance * Math.tan(currentFovRad / 2);
   const currentVisibleWidth = currentVisibleHeight * viewportAspect;
   const heightRatio = planeHeight / currentVisibleHeight;

@@ -12,6 +12,7 @@ import {
   getWheelAdjustedFov,
   shouldFetchSelectedFrustumImageFile,
 } from './cameraFrustumViewModel';
+import { CameraModelId } from '../../types/colmap';
 import {
   buildCamera,
   buildFile,
@@ -210,6 +211,37 @@ describe('camera frustum view-model helpers', () => {
       showImagePlane: true,
       hasImageFile: true,
     })).toBe(false);
+  });
+
+  it('frames the sphere diameter for spherical cameras, not the degenerate pinhole plane', () => {
+    // EQUIRECTANGULAR: getCameraIntrinsics returns fx=fy=1 (unit default, no real focal length).
+    // The old pinhole path would compute planeWidth = cameraScale * 3840 / 1 = 7680, which is
+    // degenerate and causes the FOV to clamp to maxFov=120. The spherical branch should instead
+    // frame the sphere of radius=cameraScale, yielding ~102.68° for a landscape viewport.
+    const sphericalCamera = buildCamera({
+      modelId: CameraModelId.EQUIRECTANGULAR,
+      width: 3840,
+      height: 1920,
+      params: [3840, 1920],
+    });
+    const baseOptions = {
+      camera: sphericalCamera,
+      cameraScale: 2,
+      viewportWidth: 1000,
+      viewportHeight: 500,
+    };
+
+    // FOV too small → adjusts to frame the sphere (not the degenerate 120° the pinhole path gives)
+    expect(getAutoAdjustedFov({ ...baseOptions, currentFov: 60 })).toBeCloseTo(102.68, 2);
+
+    // FOV too large → also adjusts
+    expect(getAutoAdjustedFov({ ...baseOptions, currentFov: 150 })).toBeCloseTo(102.68, 2);
+
+    // FOV already in-range for sphere viewing (heightRatio ≈ 0.84 ∈ [0.5, 1.0]) → no adjustment
+    expect(getAutoAdjustedFov({ ...baseOptions, currentFov: 100 })).toBeNull();
+
+    // Degenerate: zero cameraScale → null
+    expect(getAutoAdjustedFov({ ...baseOptions, cameraScale: 0, currentFov: 60 })).toBeNull();
   });
 
 });
