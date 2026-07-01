@@ -8,6 +8,7 @@ import {
   buildLoadedFiles,
   buildReconstruction,
 } from '../../test/builders';
+import { CameraModelId } from '../../types/colmap';
 import type { SplatPsnrEvaluatorStoreFacade } from './SplatPsnrEvaluatorStoreFacade';
 import { SplatPsnrEvaluator } from './SplatPsnrEvaluator';
 import { PsnrMetricImageDimensionMismatchError } from '../../splat/webgpu/psnrMetricImageError';
@@ -1270,5 +1271,66 @@ describe('SplatPsnrEvaluator', () => {
     expect(secondSession.dispose).not.toHaveBeenCalled();
     view.unmount();
     expect(secondSession.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips EQUIRECTANGULAR (spherical) cameras in scope=all without setting any PSNR error for them', async () => {
+    const pinholeCamera = buildCamera({ cameraId: 1, width: 4, height: 3 });
+    const sphericalCamera = buildCamera({
+      cameraId: 2,
+      modelId: CameraModelId.EQUIRECTANGULAR,
+      width: 3840,
+      height: 1920,
+      params: [3840, 1920],
+    });
+    const pinholeImage = buildImage({ imageId: 10, cameraId: pinholeCamera.cameraId, name: 'pinhole.jpg' });
+    const sphericalImage = buildImage({ imageId: 20, cameraId: sphericalCamera.cameraId, name: 'equirect.jpg' });
+    const reconstruction = buildReconstruction({
+      cameras: [pinholeCamera, sphericalCamera],
+      images: [pinholeImage, sphericalImage],
+    });
+    const pinholeFile = buildFile(pinholeImage.name);
+    const session = {
+      computeImageMetric: vi.fn().mockResolvedValue({ psnr: 30, mse: 10, validPixelCount: 12 }),
+      dispose: vi.fn(),
+    };
+    createWebGpuSplatPsnrSessionMock.mockResolvedValue(session);
+
+    const { facade, actions } = createFacade({
+      reconstruction,
+      dataset: {
+        getImageSync: vi.fn((name: string) => (name === pinholeImage.name ? pinholeFile : undefined)),
+        getImage: vi.fn(async (name: string) => (name === pinholeImage.name ? pinholeFile : null)),
+        getMetricImage: vi.fn(async (name: string) => (name === pinholeImage.name ? pinholeFile : null)),
+        hasMasks: vi.fn(() => false),
+        getMask: vi.fn(async () => null),
+        getMaskSync: vi.fn(() => undefined),
+      } as unknown as SplatPsnrEvaluatorStoreFacade['data']['dataset'],
+      splatPsnrComputeRequest: { id: 1, scope: 'all' },
+    });
+    useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
+
+    render(<SplatPsnrEvaluator />);
+
+    await waitFor(() => {
+      expect(actions.finishSplatPsnrCompute).toHaveBeenCalledTimes(1);
+    });
+
+    // Only the pinhole image enters the pending queue — the spherical image is filtered upstream.
+    expect(actions.setSplatPsnrPending).toHaveBeenCalledWith([pinholeImage.imageId]);
+    expect(actions.setSplatPsnrPending).not.toHaveBeenCalledWith(
+      expect.arrayContaining([sphericalImage.imageId])
+    );
+
+    // The pinhole image gets a metric; the spherical image gets neither metric nor error.
+    expect(actions.setSplatPsnrMetric).toHaveBeenCalledWith(
+      expect.objectContaining({ imageId: pinholeImage.imageId })
+    );
+    expect(actions.setSplatPsnrMetric).not.toHaveBeenCalledWith(
+      expect.objectContaining({ imageId: sphericalImage.imageId })
+    );
+    expect(actions.setSplatPsnrImageError).not.toHaveBeenCalledWith(
+      sphericalImage.imageId,
+      expect.any(String)
+    );
   });
 });

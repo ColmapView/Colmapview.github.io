@@ -36,6 +36,7 @@ import {
   getVisibleWebGpuSplatSharedRuntime,
 } from '../../splat/webgpu/visibleSplatRuntimeRegistry';
 import { getImagePlaneTextureSourceFile } from './imagePlaneTexturePrefetch';
+import { getRequestedSplatPsnrImageIds } from './splatPsnrImageIds';
 
 interface SplatPsnrRenderSession {
   computeImageMetric: (options: {
@@ -271,19 +272,6 @@ async function createSplatPsnrRenderSessionForLoadedCloud({
 
   const device = await ensureSplatPsnrWebGpuDevice(getWebGpuSplatRequiredLimitsForCloud(loadedCloud.cloud));
   return createWebGpuSplatPsnrSession({ device, splatFile, loadedCloud });
-}
-
-function getRequestedSplatPsnrImageIds(
-  request: SplatPsnrComputeRequest,
-  reconstruction: Reconstruction
-): ImageId[] {
-  if (request.scope === 'selected') {
-    return request.selectedImageId !== undefined && request.selectedImageId !== null
-      ? [request.selectedImageId]
-      : [];
-  }
-
-  return Array.from(reconstruction.images.keys());
 }
 
 function publishSplatPsnrMetric({
