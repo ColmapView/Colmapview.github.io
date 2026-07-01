@@ -6,6 +6,11 @@ import { COS_90_DEG } from './cameraFrustumConstants';
 import type { CameraFrustumItem, FrustumPsnrMetricSource } from './cameraFrustumViewModel';
 import { buildImagePlaneRenderItems, type BuildImagePlaneRenderItemsOptions } from './cameraFrustumPlaneLayerPolicy';
 import { FrustumPlane } from './FrustumPlane';
+import { isSphericalCameraModel } from '../../utils/cameraModelRegistry';
+import { Photosphere } from './Photosphere';
+import { useFrustumPlaneStoreFacade } from './useFrustumPlaneStoreFacade';
+import { useSelectedFrustumImageFile } from './useSelectedFrustumImageFile';
+import { useFrustumPlaneDisplayTexture } from './useFrustumPlaneDisplayTexture';
 
 interface SharedPlaneLayerProps {
   cameraScale: number;
@@ -27,6 +32,45 @@ interface SelectedCameraPlaneProps extends SharedPlaneLayerProps {
   selectionPlaneOpacity: number;
 }
 
+/**
+ * Loads the image texture for a selected spherical camera and renders it as a Photosphere.
+ * Uses the same two hooks as FrustumPlane so image loading/caching is shared.
+ */
+function SelectedSphericalPhotosphere({
+  frustum,
+  cameraScale,
+}: {
+  frustum: CameraFrustumItem;
+  cameraScale: number;
+}) {
+  const { data: { dataset } } = useFrustumPlaneStoreFacade();
+  const imageFile = useSelectedFrustumImageFile({
+    dataset,
+    imageName: frustum.image.name,
+    imageFile: frustum.imageFile,
+    isSelected: true,
+    showImagePlane: true,
+  });
+  const { displayTexture } = useFrustumPlaneDisplayTexture({
+    imageFile,
+    imageName: frustum.image.name,
+    isSelected: true,
+    showImagePlane: true,
+    viewAngleOk: true,
+    selectedTextureDelayMs: 0,
+  });
+  // Grid sphere from SphericalCameraLines is already visible; photosphere fades in once loaded.
+  if (!displayTexture) return null;
+  return (
+    <Photosphere
+      position={frustum.position}
+      quaternion={frustum.quaternion}
+      radius={cameraScale}
+      texture={displayTexture}
+    />
+  );
+}
+
 export function SelectedCameraFrustumPlane({
   frustum,
   cameraScale,
@@ -44,6 +88,11 @@ export function SelectedCameraFrustumPlane({
   undistortionMode,
 }: SelectedCameraPlaneProps) {
   if (!frustum) return null;
+
+  // Spherical cameras: show a photosphere instead of a flat image plane.
+  if (isSphericalCameraModel(frustum.camera.modelId)) {
+    return <SelectedSphericalPhotosphere frustum={frustum} cameraScale={cameraScale} />;
+  }
 
   return (
     <FrustumPlane

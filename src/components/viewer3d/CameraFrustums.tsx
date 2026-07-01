@@ -22,6 +22,9 @@ import {
   getLastNavigationToImageId,
 } from './cameraFrustumViewModel';
 import { prefetchImagePlaneTexturesForReconstruction } from './imagePlaneTexturePrefetch';
+import { partitionFrustumsByFamily } from './cameraFamilyPartition';
+import { SphericalCameraLines } from './SphericalCameraLines';
+import { SphericalCameraHitTargets } from './SphericalCameraHitTargets';
 
 export function CameraFrustums() {
   const {
@@ -135,6 +138,11 @@ export function CameraFrustums() {
     });
   }, [reconstruction, dataset, cameraIdToIndex, imageCacheVersion, pendingDeletions]);
 
+  const { spherical: sphericalFrustums, nonSpherical: pinholeFrustums } = useMemo(
+    () => partitionFrustumsByFamily(frustums),
+    [frustums]
+  );
+
   const handleSelectedImageLoaded = useCallback(() => {
     setImageCacheVersion(v => v + 1);
   }, []);
@@ -228,13 +236,39 @@ export function CameraFrustums() {
     />
   );
 
+  // Spherical layer: grid lines + hit targets for all spherical cameras (shared across modes)
+  const sphericalLayer = (
+    <>
+      <SphericalCameraLines
+        frustums={sphericalFrustums}
+        selectedImageId={selectedImageId}
+        cameraScale={cameraScale}
+        frustumColorMode={frustumColorMode}
+        frustumSingleColor={frustumSingleColor}
+        frustumLineWidth={frustumLineWidth}
+        selectionColor={selectionColor}
+        imageFrameIndexMap={imageFrameIndexMap}
+        splatPsnrByImage={splatPsnrByImage}
+      />
+      <SphericalCameraHitTargets
+        frustums={sphericalFrustums}
+        cameraScale={cameraScale}
+        onHover={setHoveredImageId}
+        onClick={handleArrowClick}
+        onContextMenu={handleArrowContextMenu}
+        onLongPress={openImageDetail}
+        touchMode={touchMode}
+      />
+    </>
+  );
+
   // Arrow mode: use batched rendering for efficiency
   if (cameraDisplayMode === 'arrow') {
     return (
       <group>
         {/* Instanced meshes for all cone arrows (with batched raycasting) */}
         <BatchedArrowMeshes
-          frustums={frustums}
+          frustums={pinholeFrustums}
           cameraScale={cameraScale}
           selectedImageId={selectedImageId}
           hoveredImageId={hoveredImageId}
@@ -259,6 +293,8 @@ export function CameraFrustums() {
           touchMode={touchMode}
           pendingDeletions={pendingDeletions}
         />
+        {/* Spherical cameras: grid lines + hit targets */}
+        {sphericalLayer}
         {/* Image plane for selected camera (replaces arrow) */}
         {selectedCameraPlane}
         <CameraFrustumContextMenuOverlay
@@ -278,7 +314,7 @@ export function CameraFrustums() {
       <group>
         {/* Batched invisible hit targets for efficient raycasting */}
         <BatchedPlaneHitTargets
-          frustums={frustums}
+          frustums={pinholeFrustums}
           cameraScale={cameraScale}
           selectedImageId={selectedImageId}
           matchedImageIds={matchedImageIds}
@@ -291,7 +327,7 @@ export function CameraFrustums() {
         />
         {/* Per-frustum planes for texture rendering (non-selected only, interaction handled by BatchedPlaneHitTargets) */}
         <ImagePlaneFrustumPlanes
-          frustums={frustums}
+          frustums={pinholeFrustums}
           selectedImageId={selectedImageId}
           matchedImageIds={matchedImageIds}
           pendingDeletions={pendingDeletions}
@@ -313,6 +349,8 @@ export function CameraFrustums() {
           undistortionMode={undistortionMode}
           splatPsnrByImage={splatPsnrByImage}
         />
+        {/* Spherical cameras: grid lines + hit targets */}
+        {sphericalLayer}
         {/* Selected camera image plane (source of truth) */}
         {selectedCameraPlane}
         <CameraFrustumContextMenuOverlay
@@ -331,7 +369,7 @@ export function CameraFrustums() {
     <group>
       {/* Single batched geometry for all frustum wireframes */}
       <BatchedFrustumLines
-        frustums={frustums}
+        frustums={pinholeFrustums}
         cameraScale={cameraScale}
         selectedImageId={selectedImageId}
         hoveredImageId={hoveredImageId}
@@ -354,7 +392,7 @@ export function CameraFrustums() {
       />
       {/* Batched invisible hit targets for frustum selection */}
       <BatchedPlaneHitTargets
-        frustums={frustums}
+        frustums={pinholeFrustums}
         cameraScale={cameraScale}
         selectedImageId={selectedImageId}
         matchedImageIds={matchedImageIds}
@@ -365,6 +403,8 @@ export function CameraFrustums() {
         lastNavigationToImageId={lastNavigationToImageId}
         touchMode={touchMode}
       />
+      {/* Spherical cameras: grid lines + hit targets */}
+      {sphericalLayer}
       {/* Selected camera image plane (source of truth) */}
       {selectedCameraPlane}
       <CameraFrustumContextMenuOverlay
