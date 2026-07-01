@@ -111,6 +111,24 @@ describe('parseCamerasText', () => {
 
     expect([...result.keys()]).toEqual([3]);
   });
+
+  it('parses EQUIRECTANGULAR (spherical) cameras', () => {
+    const input = '5 EQUIRECTANGULAR 4096 2048 4096 2048';
+    const result = parseCamerasText(input);
+    const camera = result.get(5);
+    expect(camera).toBeDefined();
+    expect(camera!.modelId).toBe(CameraModelId.EQUIRECTANGULAR);
+    expect(camera!.params).toEqual([4096, 2048]);
+  });
+
+  it('parses EUCM cameras', () => {
+    const input = '6 EUCM 1920 1080 1000 1000 960 540 0.6 1.1';
+    const result = parseCamerasText(input);
+    const camera = result.get(6);
+    expect(camera).toBeDefined();
+    expect(camera!.modelId).toBe(CameraModelId.EUCM);
+    expect(camera!.params).toHaveLength(6);
+  });
 });
 
 describe('parseCamerasBinary', () => {
@@ -127,6 +145,13 @@ describe('parseCamerasBinary', () => {
     expect(() => parseCamerasBinary(createBinaryCameraBuffer(999, []))).toThrow(
       'Unsupported camera model id 999 in binary camera 1'
     );
+  });
+
+  it('parses EQUIRECTANGULAR binary cameras with exactly 2 params', () => {
+    const result = parseCamerasBinary(createBinaryCameraBuffer(CameraModelId.EQUIRECTANGULAR, [4096, 2048]));
+    const camera = result.get(1);
+    expect(camera!.modelId).toBe(CameraModelId.EQUIRECTANGULAR);
+    expect(camera!.params).toEqual([4096, 2048]);
   });
 });
 

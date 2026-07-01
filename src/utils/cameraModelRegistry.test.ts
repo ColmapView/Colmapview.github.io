@@ -47,16 +47,23 @@ describe('cameraModelRegistry', () => {
       [CameraModelId.RADIAL_FISHEYE]: 'fisheye',
       [CameraModelId.THIN_PRISM_FISHEYE]: 'fisheye',
       [CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE]: 'fisheye',
+      [CameraModelId.SIMPLE_DIVISION]: 'pinhole',
+      [CameraModelId.DIVISION]: 'pinhole',
+      [CameraModelId.SIMPLE_FISHEYE]: 'fisheye',
+      [CameraModelId.FISHEYE]: 'fisheye',
+      [CameraModelId.EUCM]: 'pinhole',
+      [CameraModelId.EQUIRECTANGULAR]: 'spherical',
     };
     for (const id of Object.values(CameraModelId)) {
       expect(getCameraModelFamily(id)).toBe(expectedFamily[id]);
     }
   });
 
-  it('every current model has pinhole intrinsics and none is spherical yet', () => {
+  it('only EQUIRECTANGULAR is spherical / lacks pinhole intrinsics', () => {
     for (const id of Object.values(CameraModelId)) {
-      expect(cameraModelHasPinholeIntrinsics(id)).toBe(true);
-      expect(isSphericalCameraModel(id)).toBe(false);
+      const isSpherical = id === CameraModelId.EQUIRECTANGULAR;
+      expect(isSphericalCameraModel(id)).toBe(isSpherical);
+      expect(cameraModelHasPinholeIntrinsics(id)).toBe(!isSpherical);
     }
   });
 
@@ -74,6 +81,12 @@ describe('cameraModelRegistry', () => {
       [CameraModelId.RADIAL_FISHEYE]: { colmapName: 'RADIAL_FISHEYE', displayName: 'Radial Fisheye', paramNames: ['f', 'cx', 'cy', 'k1', 'k2'] },
       [CameraModelId.THIN_PRISM_FISHEYE]: { colmapName: 'THIN_PRISM_FISHEYE', displayName: 'Thin Prism Fisheye', paramNames: ['fx', 'fy', 'cx', 'cy', 'k1', 'k2', 'p1', 'p2', 'k3', 'k4', 'sx1', 'sy1'] },
       [CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE]: { colmapName: 'RAD_TAN_THIN_PRISM_FISHEYE', displayName: 'Rad-Tan Thin Prism', paramNames: ['fx', 'fy', 'cx', 'cy', 'k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'p1', 'p2', 'sx1', 'sy1', 'sx2', 'sy2'] },
+      [CameraModelId.SIMPLE_DIVISION]: { colmapName: 'SIMPLE_DIVISION', displayName: 'Simple Division', paramNames: ['f', 'cx', 'cy', 'k'] },
+      [CameraModelId.DIVISION]: { colmapName: 'DIVISION', displayName: 'Division', paramNames: ['fx', 'fy', 'cx', 'cy', 'k'] },
+      [CameraModelId.SIMPLE_FISHEYE]: { colmapName: 'SIMPLE_FISHEYE', displayName: 'Simple Fisheye', paramNames: ['f', 'cx', 'cy'] },
+      [CameraModelId.FISHEYE]: { colmapName: 'FISHEYE', displayName: 'Fisheye', paramNames: ['fx', 'fy', 'cx', 'cy'] },
+      [CameraModelId.EUCM]: { colmapName: 'EUCM', displayName: 'EUCM', paramNames: ['fx', 'fy', 'cx', 'cy', 'alpha', 'beta'] },
+      [CameraModelId.EQUIRECTANGULAR]: { colmapName: 'EQUIRECTANGULAR', displayName: 'Equirectangular', paramNames: ['w', 'h'] },
     };
     for (const id of Object.values(CameraModelId)) {
       const expected = EXPECTED[id];
@@ -100,7 +113,7 @@ describe('registry-derived classification parity', () => {
   });
 
   it('perspective/fisheye membership matches the expected COLMAP grouping', () => {
-    expect([...PERSPECTIVE_CAMERA_MODELS].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 6, 7]);
-    expect([...FISHEYE_CAMERA_MODELS].sort((a, b) => a - b)).toEqual([5, 8, 9, 10, 11]);
+    expect([...PERSPECTIVE_CAMERA_MODELS].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 6, 7, 12, 13, 16]);
+    expect([...FISHEYE_CAMERA_MODELS].sort((a, b) => a - b)).toEqual([5, 8, 9, 10, 11, 14, 15]);
   });
 });

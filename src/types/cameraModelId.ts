@@ -14,6 +14,12 @@ export const CameraModelId = {
   RADIAL_FISHEYE: 9,
   THIN_PRISM_FISHEYE: 10,
   RAD_TAN_THIN_PRISM_FISHEYE: 11,
+  SIMPLE_DIVISION: 12,
+  DIVISION: 13,
+  SIMPLE_FISHEYE: 14,
+  FISHEYE: 15,
+  EUCM: 16,
+  EQUIRECTANGULAR: 17,
 } as const;
 
 export type CameraModelId = (typeof CameraModelId)[keyof typeof CameraModelId];

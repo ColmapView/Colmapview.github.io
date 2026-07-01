@@ -26,6 +26,12 @@ export const CAMERA_MODEL_DESCRIPTORS: Record<CameraModelId, CameraModelDescript
   [CameraModelId.RADIAL_FISHEYE]: { id: CameraModelId.RADIAL_FISHEYE, colmapName: 'RADIAL_FISHEYE', displayName: 'Radial Fisheye', paramNames: ['f', 'cx', 'cy', 'k1', 'k2'], family: 'fisheye' },
   [CameraModelId.THIN_PRISM_FISHEYE]: { id: CameraModelId.THIN_PRISM_FISHEYE, colmapName: 'THIN_PRISM_FISHEYE', displayName: 'Thin Prism Fisheye', paramNames: ['fx', 'fy', 'cx', 'cy', 'k1', 'k2', 'p1', 'p2', 'k3', 'k4', 'sx1', 'sy1'], family: 'fisheye' },
   [CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE]: { id: CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE, colmapName: 'RAD_TAN_THIN_PRISM_FISHEYE', displayName: 'Rad-Tan Thin Prism', paramNames: ['fx', 'fy', 'cx', 'cy', 'k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'p1', 'p2', 'sx1', 'sy1', 'sx2', 'sy2'], family: 'fisheye' },
+  [CameraModelId.SIMPLE_DIVISION]: { id: CameraModelId.SIMPLE_DIVISION, colmapName: 'SIMPLE_DIVISION', displayName: 'Simple Division', paramNames: ['f', 'cx', 'cy', 'k'], family: 'pinhole' },
+  [CameraModelId.DIVISION]: { id: CameraModelId.DIVISION, colmapName: 'DIVISION', displayName: 'Division', paramNames: ['fx', 'fy', 'cx', 'cy', 'k'], family: 'pinhole' },
+  [CameraModelId.SIMPLE_FISHEYE]: { id: CameraModelId.SIMPLE_FISHEYE, colmapName: 'SIMPLE_FISHEYE', displayName: 'Simple Fisheye', paramNames: ['f', 'cx', 'cy'], family: 'fisheye' },
+  [CameraModelId.FISHEYE]: { id: CameraModelId.FISHEYE, colmapName: 'FISHEYE', displayName: 'Fisheye', paramNames: ['fx', 'fy', 'cx', 'cy'], family: 'fisheye' },
+  [CameraModelId.EUCM]: { id: CameraModelId.EUCM, colmapName: 'EUCM', displayName: 'EUCM', paramNames: ['fx', 'fy', 'cx', 'cy', 'alpha', 'beta'], family: 'pinhole' },
+  [CameraModelId.EQUIRECTANGULAR]: { id: CameraModelId.EQUIRECTANGULAR, colmapName: 'EQUIRECTANGULAR', displayName: 'Equirectangular', paramNames: ['w', 'h'], family: 'spherical' },
 };
 
 export function getCameraModelDescriptor(id: CameraModelId): CameraModelDescriptor {
