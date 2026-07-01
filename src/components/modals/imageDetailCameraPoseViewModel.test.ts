@@ -74,4 +74,30 @@ describe('image detail camera pose view model', () => {
       parameters: [{ name: 'p0', value: '0.5000' }],
     });
   });
+
+  it('omits camera parameters for a spherical (equirectangular) camera', () => {
+    const camera = buildCamera({
+      modelId: CameraModelId.EQUIRECTANGULAR,
+      width: 4096,
+      height: 2048,
+      params: [4096, 2048],
+    });
+
+    const result = buildCameraPoseDisplayModel(
+      camera,
+      [0.5, 0.5, 0.5, 0.5],
+      [1.0, -2.0, 3.0]
+    );
+
+    expect(result.modelName).toBe('Equirectangular');
+    expect(result.modelTitle).toBe('EQUIRECTANGULAR');
+    expect(result.width).toBe(4096);
+    expect(result.height).toBe(2048);
+    // Spherical cameras have no pinhole intrinsics — parameters are omitted rather
+    // than showing the raw [w, h] params or dummy fx=1/fy=1/cx=0/cy=0 values.
+    expect(result.parameters).toEqual([]);
+    // Pose fields are still populated correctly.
+    expect(result.rotation).toHaveLength(4);
+    expect(result.translation).toHaveLength(3);
+  });
 });

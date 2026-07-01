@@ -1,4 +1,6 @@
 import { CAMERA_MODEL_COLMAP_NAMES, CAMERA_MODEL_NAMES } from '../../utils/cameraModelNames';
+import { CAMERA_MODEL_DESCRIPTORS, cameraModelHasPinholeIntrinsics } from '../../utils/cameraModelRegistry';
+import type { CameraModelId } from '../../types/cameraModelId';
 
 const CAMERA_PARAM_NAMES: Record<number, string> = {
   0: 'f, cx, cy',
@@ -70,18 +72,31 @@ export function buildCameraPoseDisplayModel(
   qvec: readonly number[],
   tvec: readonly number[]
 ): CameraPoseDisplayModel {
-  const paramNames = (CAMERA_PARAM_NAMES[camera.modelId] ?? '').split(', ');
+  const modelId = camera.modelId as CameraModelId;
 
-  return {
+  const base = {
     modelName: CAMERA_MODEL_NAMES[camera.modelId] ?? `MODEL_${camera.modelId}`,
     modelTitle: CAMERA_MODEL_COLMAP_NAMES[camera.modelId] ?? `MODEL_${camera.modelId}`,
     width: camera.width,
     height: camera.height,
+    rotation: [qvec[1], qvec[2], qvec[3], qvec[0]].map((value) => formatSignedPoseValue(value, 3)),
+    translation: tvec.map((value) => formatSignedPoseValue(value, 2)),
+  };
+
+  // Spherical cameras have no pinhole intrinsics (getCameraIntrinsics returns dummy
+  // fx=1/fy=1/cx=0/cy=0). Omit parameters entirely rather than showing the raw [w, h]
+  // params or the meaningless defaults. Check modelId in CAMERA_MODEL_DESCRIPTORS first
+  // so unknown model IDs (test fixtures, future models) fall through safely.
+  if (modelId in CAMERA_MODEL_DESCRIPTORS && !cameraModelHasPinholeIntrinsics(modelId)) {
+    return { ...base, parameters: [] };
+  }
+
+  const paramNames = (CAMERA_PARAM_NAMES[camera.modelId] ?? '').split(', ');
+  return {
+    ...base,
     parameters: camera.params.map((param, index) => ({
       name: paramNames[index] || `p${index}`,
       value: formatImageDetailCameraParam(param),
     })),
-    rotation: [qvec[1], qvec[2], qvec[3], qvec[0]].map((value) => formatSignedPoseValue(value, 3)),
-    translation: tvec.map((value) => formatSignedPoseValue(value, 2)),
   };
 }
