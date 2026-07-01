@@ -1,40 +1,23 @@
 import { CameraModelId } from '../types/colmap';
 import { CAMERA_MODEL_COLMAP_NAMES } from './cameraModelNames';
+import { CAMERA_MODEL_DESCRIPTORS, getCameraModelFamily } from './cameraModelRegistry';
 
 export type ConversionCompatibility = 'exact' | 'approximate' | 'incompatible';
 export { CAMERA_MODEL_COLMAP_NAMES } from './cameraModelNames';
 
-export const PARAM_NAMES: Record<CameraModelId, string[]> = {
-  [CameraModelId.SIMPLE_PINHOLE]: ['f', 'cx', 'cy'],
-  [CameraModelId.PINHOLE]: ['fx', 'fy', 'cx', 'cy'],
-  [CameraModelId.SIMPLE_RADIAL]: ['f', 'cx', 'cy', 'k'],
-  [CameraModelId.RADIAL]: ['f', 'cx', 'cy', 'k1', 'k2'],
-  [CameraModelId.OPENCV]: ['fx', 'fy', 'cx', 'cy', 'k1', 'k2', 'p1', 'p2'],
-  [CameraModelId.OPENCV_FISHEYE]: ['fx', 'fy', 'cx', 'cy', 'k1', 'k2', 'k3', 'k4'],
-  [CameraModelId.FULL_OPENCV]: ['fx', 'fy', 'cx', 'cy', 'k1', 'k2', 'p1', 'p2', 'k3', 'k4', 'k5', 'k6'],
-  [CameraModelId.FOV]: ['fx', 'fy', 'cx', 'cy', 'ω'],
-  [CameraModelId.SIMPLE_RADIAL_FISHEYE]: ['f', 'cx', 'cy', 'k'],
-  [CameraModelId.RADIAL_FISHEYE]: ['f', 'cx', 'cy', 'k1', 'k2'],
-  [CameraModelId.THIN_PRISM_FISHEYE]: ['fx', 'fy', 'cx', 'cy', 'k1', 'k2', 'p1', 'p2', 'k3', 'k4', 'sx1', 'sy1'],
-  [CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE]: ['fx', 'fy', 'cx', 'cy', 'k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'p1', 'p2', 'sx1', 'sy1', 'sx2', 'sy2'],
-};
+export const PARAM_NAMES: Record<CameraModelId, string[]> = Object.fromEntries(
+  Object.values(CAMERA_MODEL_DESCRIPTORS).map((d) => [d.id, [...d.paramNames]])
+) as Record<CameraModelId, string[]>;
 
-export const PERSPECTIVE_CAMERA_MODELS: readonly CameraModelId[] = [
-  CameraModelId.SIMPLE_PINHOLE,
-  CameraModelId.PINHOLE,
-  CameraModelId.SIMPLE_RADIAL,
-  CameraModelId.RADIAL,
-  CameraModelId.OPENCV,
-  CameraModelId.FULL_OPENCV,
-  CameraModelId.FOV,
-];
+export const PERSPECTIVE_CAMERA_MODELS: readonly CameraModelId[] =
+  Object.values(CAMERA_MODEL_DESCRIPTORS).filter((d) => d.family === 'pinhole').map((d) => d.id);
 
-export const FISHEYE_CAMERA_MODELS: readonly CameraModelId[] = [
-  CameraModelId.SIMPLE_RADIAL_FISHEYE,
-  CameraModelId.RADIAL_FISHEYE,
-  CameraModelId.OPENCV_FISHEYE,
-  CameraModelId.THIN_PRISM_FISHEYE,
-];
+export const FISHEYE_CAMERA_MODELS: readonly CameraModelId[] =
+  Object.values(CAMERA_MODEL_DESCRIPTORS).filter((d) => d.family === 'fisheye').map((d) => d.id);
+
+export function isSphericalCameraModel(modelId: CameraModelId): boolean {
+  return getCameraModelFamily(modelId) === 'spherical';
+}
 
 const CAMERA_MODEL_ID_VALUES: ReadonlySet<number> = new Set(Object.values(CameraModelId));
 

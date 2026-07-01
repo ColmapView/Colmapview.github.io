@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CameraModelId, CAMERA_MODEL_NUM_PARAMS } from '../types/colmap';
-import { PARAM_NAMES, CAMERA_MODEL_COLMAP_NAMES } from './cameraModelPolicy';
+import { PARAM_NAMES, CAMERA_MODEL_COLMAP_NAMES, isPerspectiveCameraModel, isFisheyeCameraModel, isSphericalCameraModel } from './cameraModelPolicy';
 import { CAMERA_MODEL_NAMES } from './cameraModelNames';
 import {
   type CameraModelFamily,
@@ -69,5 +69,20 @@ describe('cameraModelRegistry', () => {
       expect(getCameraModelColmapName(id)).toBe(CAMERA_MODEL_COLMAP_NAMES[id]);
       expect(getCameraModelDisplayName(id)).toBe(CAMERA_MODEL_NAMES[id]);
     }
+  });
+});
+
+describe('registry-derived classification parity', () => {
+  it('reproduces perspective membership for the original models', () => {
+    expect(isPerspectiveCameraModel(CameraModelId.PINHOLE)).toBe(true);
+    expect(isPerspectiveCameraModel(CameraModelId.FULL_OPENCV)).toBe(true);
+    expect(isPerspectiveCameraModel(CameraModelId.FOV)).toBe(true);
+    expect(isPerspectiveCameraModel(CameraModelId.OPENCV_FISHEYE)).toBe(false);
+  });
+
+  it('classifies the previously-unwired RAD_TAN_THIN_PRISM_FISHEYE as fisheye', () => {
+    expect(isFisheyeCameraModel(CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE)).toBe(true);
+    expect(isPerspectiveCameraModel(CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE)).toBe(false);
+    expect(isSphericalCameraModel(CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE)).toBe(false);
   });
 });

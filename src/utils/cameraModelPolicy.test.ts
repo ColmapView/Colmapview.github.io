@@ -34,7 +34,7 @@ describe('cameraModelPolicy', () => {
     expect(isPerspectiveCameraModel(CameraModelId.RADIAL)).toBe(true);
     expect(isFisheyeCameraModel(CameraModelId.RADIAL_FISHEYE)).toBe(true);
     expect(isPerspectiveCameraModel(CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE)).toBe(false);
-    expect(isFisheyeCameraModel(CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE)).toBe(false);
+    expect(isFisheyeCameraModel(CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE)).toBe(true); // model 11 is fisheye per registry
   });
 
   it('returns exact compatibility for same-model and expansion conversions', () => {

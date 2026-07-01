@@ -1,7 +1,7 @@
 import { BinaryReader } from './BinaryReader';
 import type { Camera } from '../types/colmap';
-import { CameraModelId, CAMERA_MODEL_NUM_PARAMS } from '../types/colmap';
 import { parseCameraModelId } from '../utils/cameraModelPolicy';
+import { getCameraModelNumParams, colmapNameToModelId } from '../utils/cameraModelRegistry';
 import { appLogger } from '../utils/logger';
 import {
   parseColmapIntegerToken,
@@ -33,7 +33,7 @@ export function parseCamerasBinary(buffer: ArrayBuffer): Map<number, Camera> {
     const height = reader.readUint64AsNumber();
 
     // Get number of parameters for this camera model
-    const numParams = CAMERA_MODEL_NUM_PARAMS[modelId] ?? 0;
+    const numParams = getCameraModelNumParams(modelId);
     const params: number[] = [];
     for (let j = 0; j < numParams; j++) {
       params.push(reader.readFloat64());
@@ -64,21 +64,6 @@ export function parseCamerasText(text: string): Map<number, Camera> {
   const cameras = new Map<number, Camera>();
   const lines = text.split('\n');
 
-  const modelNameToId: Record<string, CameraModelId> = {
-    'SIMPLE_PINHOLE': CameraModelId.SIMPLE_PINHOLE,
-    'PINHOLE': CameraModelId.PINHOLE,
-    'SIMPLE_RADIAL': CameraModelId.SIMPLE_RADIAL,
-    'RADIAL': CameraModelId.RADIAL,
-    'OPENCV': CameraModelId.OPENCV,
-    'OPENCV_FISHEYE': CameraModelId.OPENCV_FISHEYE,
-    'FULL_OPENCV': CameraModelId.FULL_OPENCV,
-    'FOV': CameraModelId.FOV,
-    'SIMPLE_RADIAL_FISHEYE': CameraModelId.SIMPLE_RADIAL_FISHEYE,
-    'RADIAL_FISHEYE': CameraModelId.RADIAL_FISHEYE,
-    'THIN_PRISM_FISHEYE': CameraModelId.THIN_PRISM_FISHEYE,
-    'RAD_TAN_THIN_PRISM_FISHEYE': CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE,
-  };
-
   for (const line of lines) {
     // Skip comments and empty lines
     if (line.startsWith('#') || line.trim() === '') continue;
@@ -90,7 +75,7 @@ export function parseCamerasText(text: string): Map<number, Camera> {
     if (cameraId === null) continue;
 
     const modelName = parts[1];
-    const modelId = modelNameToId[modelName];
+    const modelId = colmapNameToModelId(modelName);
 
     if (modelId === undefined) {
       appLogger.warn(`Unknown camera model: ${modelName}`);

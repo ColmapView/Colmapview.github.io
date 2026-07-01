@@ -9,38 +9,13 @@ export type Point3DId = bigint;
 // Special value indicating an unmatched 2D point (no corresponding 3D point)
 export const UNMATCHED_POINT3D_ID = BigInt(-1);
 
-// Camera model constants matching COLMAP
-export const CameraModelId = {
-  SIMPLE_PINHOLE: 0,
-  PINHOLE: 1,
-  SIMPLE_RADIAL: 2,
-  RADIAL: 3,
-  OPENCV: 4,
-  OPENCV_FISHEYE: 5,
-  FULL_OPENCV: 6,
-  FOV: 7,
-  SIMPLE_RADIAL_FISHEYE: 8,
-  RADIAL_FISHEYE: 9,
-  THIN_PRISM_FISHEYE: 10,
-  RAD_TAN_THIN_PRISM_FISHEYE: 11,
-} as const;
+// Camera model constants matching COLMAP — re-exported from the dependency-free leaf module.
+// The import type is for local use in this file's interfaces; the export makes it available to consumers.
+import type { CameraModelId } from './cameraModelId';
+export { CameraModelId } from './cameraModelId';
 
-export type CameraModelId = (typeof CameraModelId)[keyof typeof CameraModelId];
-
-export const CAMERA_MODEL_NUM_PARAMS: Record<CameraModelId, number> = {
-  [CameraModelId.SIMPLE_PINHOLE]: 3,
-  [CameraModelId.PINHOLE]: 4,
-  [CameraModelId.SIMPLE_RADIAL]: 4,
-  [CameraModelId.RADIAL]: 5,
-  [CameraModelId.OPENCV]: 8,
-  [CameraModelId.OPENCV_FISHEYE]: 8,
-  [CameraModelId.FULL_OPENCV]: 12,
-  [CameraModelId.FOV]: 5,
-  [CameraModelId.SIMPLE_RADIAL_FISHEYE]: 4,
-  [CameraModelId.RADIAL_FISHEYE]: 5,
-  [CameraModelId.THIN_PRISM_FISHEYE]: 12,
-  [CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE]: 16,
-};
+// Param counts now derive from the registry (single source of truth).
+export { CAMERA_MODEL_NUM_PARAMS } from '../utils/cameraModelNumParams';
 
 export interface Camera {
   cameraId: CameraId;

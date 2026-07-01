@@ -1,4 +1,4 @@
-import { CameraModelId } from '../types/colmap';
+import { CameraModelId } from '../types/cameraModelId';
 
 export type CameraModelFamily = 'pinhole' | 'fisheye' | 'spherical';
 
