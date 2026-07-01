@@ -202,10 +202,10 @@ vec2 inverseDistort(vec2 distorted, out bool valid) {
       float xy = x * y;
       float r2 = x2 + y2;
       float r4 = r2 * r2;
-      // Tangential + thin-prism delta on (x,y)
+      // Tangential + thin-prism delta on (x,y) — COLMAP convention: p1=COLMAP p0, p2=COLMAP p1
       vec2 delta = vec2(
-        2.0 * p1 * xy + p2 * (r2 + 2.0 * x2) + sx1 * r2 + sy1 * r4,
-        p1 * (r2 + 2.0 * y2) + 2.0 * p2 * xy + sx2 * r2 + sy2 * r4
+        p1 * (r2 + 2.0 * x2) + 2.0 * p2 * xy + sx1 * r2 + sy1 * r4,
+        2.0 * p1 * xy + p2 * (r2 + 2.0 * y2) + sx2 * r2 + sy2 * r4
       );
       // Solve: distorted = thRadial * uu + delta  =>  uu = (distorted - delta) / thRadial
       uu = (distorted - delta) / thRadial;
@@ -608,9 +608,10 @@ vec2 distortRadTanFisheye(vec2 p) {
   float r2 = x2 + y2;
   float r4 = r2 * r2;
 
-  // Tangential on (x,y)
-  float dxTang = 2.0 * p1 * xy + p2 * (r2 + 2.0 * x2);
-  float dyTang = p1 * (r2 + 2.0 * y2) + 2.0 * p2 * xy;
+  // Tangential on (x,y) — COLMAP convention: p1=COLMAP p0, p2=COLMAP p1
+  // COLMAP: dx=2*p1*xy+p0*(r2+2*x2), dy=2*p0*xy+p1*(r2+2*y2)
+  float dxTang = p1 * (r2 + 2.0 * x2) + 2.0 * p2 * xy;
+  float dyTang = 2.0 * p1 * xy + p2 * (r2 + 2.0 * y2);
 
   // Thin-prism: x-direction (sx1, sy1), y-direction (sx2, sy2)
   float dxTp = sx1 * r2 + sy1 * r4;
@@ -861,8 +862,9 @@ function _glslRadTanFisheye(p: Vec2, i: CameraIntrinsics): Vec2 {
   const xy = x * y;
   const r2 = x2 + y2;
   const r4 = r2 * r2;
-  const dxTang = 2.0 * i.p1 * xy + i.p2 * (r2 + 2.0 * x2);
-  const dyTang = i.p1 * (r2 + 2.0 * y2) + 2.0 * i.p2 * xy;
+  // COLMAP convention: i.p1=COLMAP p0, i.p2=COLMAP p1
+  const dxTang = i.p1 * (r2 + 2.0 * x2) + 2.0 * i.p2 * xy;
+  const dyTang = 2.0 * i.p1 * xy + i.p2 * (r2 + 2.0 * y2);
   const dxTp = i.sx1 * r2 + i.sy1 * r4;
   const dyTp = i.sx2 * r2 + i.sy2 * r4;
   // p + delta, where delta = vec2(x + dxTang + dxTp − p.x, y + dyTang + dyTp − p.y)

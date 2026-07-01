@@ -54,11 +54,13 @@ const FISHEYE_COS_GUARD = 1e-3;
 // ── 'perspective-radial' strategy ────────────────────────────────────────────
 // Unified FULL_OPENCV rational radial form:
 //   R(r²) = (1 + k1·r² + k2·r⁴ + k3·r⁶) / (1 + k4·r² + k5·r⁴ + k6·r⁶) − 1
-// With zero higher-order coefficients this reduces EXACTLY (IEEE 754) to:
-//   SIMPLE_RADIAL  k2=k3=k4=k5=k6=p1=p2=0  →  R = k1·r²
-//   RADIAL/OPENCV  k3=k4=k5=k6=0             →  R = k1·r² + k2·r⁴
+// With zero higher-order coefficients this reduces to within ~1e-14 of the
+// simpler polynomial form. Tangential terms with p1=p2=0 vanish exactly
+// (IEEE 754). The radial num/den−1 matches the old polynomial to ~1e-14
+// (not bit-exact — the extra division costs a few ULP):
+//   SIMPLE_RADIAL  k2=k3=k4=k5=k6=p1=p2=0  →  R ≈ k1·r²  (~1e-14)
+//   RADIAL/OPENCV  k3=k4=k5=k6=0             →  R ≈ k1·r² + k2·r⁴
 //   FULL_OPENCV    all coefficients           →  full rational form + tangential
-// Tangential terms with p1=p2=0 contribute nothing (IEEE 754 exact).
 
 function _prFactor(r2: number, i: CameraIntrinsics): number {
   const r4 = r2 * r2;
@@ -283,9 +285,11 @@ function _radTanApplyDistortion(uu: Vec2, i: CameraIntrinsics): Vec2 {
   const xy = x * y;
   const r2 = x2 + y2;
   const r4 = r2 * r2;
-  // Tangential on (x, y)
-  const dxTang = 2 * i.p1 * xy + i.p2 * (r2 + 2 * x2);
-  const dyTang = i.p1 * (r2 + 2 * y2) + 2 * i.p2 * xy;
+  // Tangential on (x, y) — COLMAP convention: i.p1 = COLMAP p0, i.p2 = COLMAP p1
+  // COLMAP: dx = 2*p1*xy + p0*(r2+2*x2), dy = 2*p0*xy + p1*(r2+2*y2)
+  // Substituting our names: dxTang = i.p1*(r2+2*x2) + 2*i.p2*xy
+  const dxTang = i.p1 * (r2 + 2 * x2) + 2 * i.p2 * xy;
+  const dyTang = 2 * i.p1 * xy + i.p2 * (r2 + 2 * y2);
   // Thin-prism: x-direction uses sx1,sy1; y-direction uses sx2,sy2
   const dxTp = i.sx1 * r2 + i.sy1 * r4;
   const dyTp = i.sx2 * r2 + i.sy2 * r4;
