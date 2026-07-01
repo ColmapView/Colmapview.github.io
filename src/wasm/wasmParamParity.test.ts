@@ -55,7 +55,6 @@ describe.skipIf(wasmAbsent)('WASM getNumCameraParams ↔ registry parity', () =>
       expect(enumVal, `embind missing enum value for ${descriptor.colmapName}`).toBeDefined();
 
       // Pass the enum object (not a raw integer) — Emscripten enum_<> requires it.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect(module.getNumCameraParams(enumVal as any)).toBe(descriptor.paramNames.length);
     },
   );
