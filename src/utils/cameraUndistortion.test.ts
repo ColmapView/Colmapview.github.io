@@ -210,6 +210,25 @@ describe('characterization: model 3 RADIAL – forward spot-check (k1·r²+k2·r
   });
 });
 
+describe('characterization: model 4 OPENCV – forward spot-check (k1·r²+k2·r⁴ + tangential)', () => {
+  it('distortNormalized matches radial+tangential formula at (0.4,0.3)', () => {
+    const x = 0.4, y = 0.3;
+    const i = intr({ k1: 0.1, k2: 0.01, p1: 0.002, p2: -0.001 });
+    const d = distortNormalized({ x, y }, i, CameraModelId.OPENCV);
+    const r2 = x * x + y * y;
+    const r4 = r2 * r2;
+    const R = i.k1 * r2 + i.k2 * r4;
+    const ex = x + x * R + 2 * i.p1 * x * y + i.p2 * (r2 + 2 * x * x);
+    const ey = y + y * R + i.p1 * (r2 + 2 * y * y) + 2 * i.p2 * x * y;
+    expect(d.x).toBeCloseTo(ex, 12);
+    expect(d.y).toBeCloseTo(ey, 12);
+  });
+  it('round-trip: undistortNormalized(distortNormalized(p)) ≈ p', () => {
+    const i = intr({ k1: 0.1, k2: 0.01, p1: 0.002, p2: -0.001 });
+    expect(maxRoundTripError(CameraModelId.OPENCV, i, disc(0.5))).toBeLessThan(1e-9);
+  });
+});
+
 describe('characterization: model 6 FULL_OPENCV – forward spot-check (rational + tangential)', () => {
   it('matches (1+k1r²+k2r⁴+k3r⁶)/(1+k4r²+k5r⁴+k6r⁶)−1 + tangential at (0.3,0.2)', () => {
     const x = 0.3, y = 0.2;
@@ -255,9 +274,9 @@ describe('characterization: model 8 SIMPLE_RADIAL_FISHEYE – forward spot-check
     expect(d.x).toBeCloseTo(theta * (1 + i.k1 * t2), 10);
     expect(d.y).toBeCloseTo(0, 12);
   });
-  it('round-trip', () => {
+  it('round-trip (scalar Newton → machine precision)', () => {
     const pts = disc(Math.tan((70 * Math.PI) / 180));
-    expect(maxRoundTripError(CameraModelId.SIMPLE_RADIAL_FISHEYE, intr({ k1: 0.05 }), pts)).toBeLessThan(1e-6);
+    expect(maxRoundTripError(CameraModelId.SIMPLE_RADIAL_FISHEYE, intr({ k1: 0.05 }), pts)).toBeLessThan(1e-9);
   });
 });
 
@@ -270,9 +289,9 @@ describe('characterization: model 9 RADIAL_FISHEYE – forward spot-check', () =
     expect(d.x).toBeCloseTo(theta * (1 + i.k1 * t2 + i.k2 * t2 * t2), 10);
     expect(d.y).toBeCloseTo(0, 12);
   });
-  it('round-trip', () => {
+  it('round-trip (scalar Newton → machine precision)', () => {
     const pts = disc(Math.tan((70 * Math.PI) / 180));
-    expect(maxRoundTripError(CameraModelId.RADIAL_FISHEYE, intr({ k1: -0.02, k2: 0.003 }), pts)).toBeLessThan(1e-6);
+    expect(maxRoundTripError(CameraModelId.RADIAL_FISHEYE, intr({ k1: -0.02, k2: 0.003 }), pts)).toBeLessThan(1e-9);
   });
 });
 
@@ -291,10 +310,10 @@ describe('characterization: model 5 OPENCV_FISHEYE – forward spot-check', () =
     expect(d.x).toBeCloseTo(uux + uux * radial, 10);
     expect(d.y).toBeCloseTo(uuy + uuy * radial, 10);
   });
-  it('round-trip', () => {
+  it('round-trip (scalar Newton → machine precision)', () => {
     const i = intr({ k1: -0.02, k2: 0.003, k3: -1e-4, k4: 1e-5 });
     const pts = disc(Math.tan((75 * Math.PI) / 180));
-    expect(maxRoundTripError(CameraModelId.OPENCV_FISHEYE, i, pts)).toBeLessThan(1e-6);
+    expect(maxRoundTripError(CameraModelId.OPENCV_FISHEYE, i, pts)).toBeLessThan(1e-9);
   });
 });
 

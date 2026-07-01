@@ -158,8 +158,10 @@ const fovStrategy: DistortionStrategy = {
 //   RADIAL_FISHEYE         k3=k4=p1=p2=sx1=sy1=0      →  k1·θ² + k2·θ⁴
 //   OPENCV_FISHEYE         p1=p2=sx1=sy1=0             →  k1-k4 polynomial
 //   THIN_PRISM_FISHEYE     all coefficients             →  k1-k4 + tangential + thin-prism
-// Inverse uses 2D Newton (numeric Jacobian) for all variants; for pure-radial
-// models the 2D Newton is solving a radial problem and converges identically.
+// Inverse branches on whether tangential/thin-prism terms are present:
+//   pure-radial (p1=p2=sx1=sy1=0): scalar analytic Newton on the 1D equation
+//     theta*(1 + Rf(theta²)) = thetaD, converges to machine precision.
+//   tangential/prism: 2D Newton (numeric Jacobian).
 
 function _fisheyeApplyDistortion(uu: Vec2, i: CameraIntrinsics): Vec2 {
   const r2 = uu.x * uu.x + uu.y * uu.y;
@@ -214,7 +216,33 @@ const fisheyeStrategy: DistortionStrategy = {
 
     // Step 1: remove polynomial (+ tangential/thin-prism) distortion in angle
     // space, recovering uu whose radius is the true angle theta.
-    const uu = _fisheyeRemoveDistortion2D(p, i);
+    let uu: Vec2;
+    if (i.p1 === 0 && i.p2 === 0 && i.sx1 === 0 && i.sy1 === 0) {
+      // Pure-radial fisheye: solve theta*(1 + Rf(theta²)) = thetaD via scalar
+      // analytic Newton (converges to machine precision, vs ~1e-7 for 2D numeric).
+      // Rf(t²) = k1·t² + k2·t⁴ + k3·t⁶ + k4·t⁸ + k5·t¹⁰ + k6·t¹²
+      // Rf'(t²) (deriv wrt t²) = k1 + 2k2·t² + 3k3·t⁴ + 4k4·t⁶ + 5k5·t⁸ + 6k6·t¹⁰
+      let theta = thetaD;
+      for (let iter = 0; iter < 20; iter++) {
+        const t2 = theta * theta;
+        const t4 = t2 * t2;
+        const t6 = t4 * t2;
+        const t8 = t4 * t4;
+        const t10 = t8 * t2;
+        const Rf = i.k1 * t2 + i.k2 * t4 + i.k3 * t6 + i.k4 * t8 + i.k5 * t10 + i.k6 * t10 * t2;
+        const RfP = i.k1 + 2 * i.k2 * t2 + 3 * i.k3 * t4 + 4 * i.k4 * t6 + 5 * i.k5 * t8 + 6 * i.k6 * t10;
+        const f = theta * (1 + Rf) - thetaD;
+        const fp = 1 + Rf + theta * RfP * 2 * theta;
+        if (Math.abs(fp) < 1e-15) break;
+        const step = f / fp;
+        theta -= step;
+        if (step * step < 1e-22) break;
+      }
+      uu = { x: p.x * (theta / thetaD), y: p.y * (theta / thetaD) };
+    } else {
+      // Tangential/thin-prism present: 2D Newton with numeric Jacobian.
+      uu = _fisheyeRemoveDistortion2D(p, i);
+    }
 
     // Step 2: NormalFromFisheye (fisheye angle -> pinhole), guarding the domain.
     const theta = Math.hypot(uu.x, uu.y);
