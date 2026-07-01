@@ -382,6 +382,47 @@ const divisionStrategy: DistortionStrategy = {
   },
 };
 
+// ── 'eucm' strategy ───────────────────────────────────────────────────────────
+// Extended Unified Camera Model (COLMAP id=16, params: fx,fy,cx,cy,alpha,beta).
+//
+// Forward (undistorted pinhole → distorted), COLMAP ImgFromCam with w=1:
+//   den = alpha * sqrt(beta*(x²+y²) + 1) + (1 - alpha)
+//   distorted = { x/den, y/den }
+//
+// Inverse (distorted → undistorted), COLMAP CamFromImg (exact closed form):
+//   r2 = m.x²+m.y²
+//   gamma = 1 - alpha
+//   radicand = 1 - (2·alpha−1)·beta·r2
+//   if radicand < 0 → ray beyond EUCM FOV (valid: false)
+//   helperDen = alpha·sqrt(radicand) + gamma
+//   helper = (1 - alpha²·beta·r2) / helperDen
+//   if helper <= 0 → invalid
+//   undistorted = { m.x/helper, m.y/helper }
+
+const eucmStrategy: DistortionStrategy = {
+  forward(p: Vec2, i: CameraIntrinsics): Vec2 {
+    const r2 = p.x * p.x + p.y * p.y;
+    const den = i.alpha * Math.sqrt(i.beta * r2 + 1) + (1 - i.alpha);
+    // den > 0 for valid EUCM params (alpha in (0,1], beta ≥ 0)
+    return { x: p.x / den, y: p.y / den };
+  },
+
+  inverse(m: Vec2, i: CameraIntrinsics): UndistortResult {
+    const r2 = m.x * m.x + m.y * m.y;
+    const gamma = 1 - i.alpha;
+    const radicand = 1 - (2 * i.alpha - 1) * i.beta * r2;
+    if (radicand < 0) {
+      return { x: m.x, y: m.y, valid: false }; // ray beyond the EUCM FOV
+    }
+    const helperDen = i.alpha * Math.sqrt(radicand) + gamma;
+    const helper = (1 - i.alpha * i.alpha * i.beta * r2) / helperDen;
+    if (helper <= 0) {
+      return { x: m.x, y: m.y, valid: false };
+    }
+    return { x: m.x / helper, y: m.y / helper, valid: true };
+  },
+};
+
 // ── identity strategy (used for 'none', stubs, and 'spherical') ───────────────
 
 const identityStrategy: DistortionStrategy = {
@@ -398,8 +439,7 @@ export const DISTORTION_STRATEGIES: Record<ProjectionClass, DistortionStrategy> 
   'fisheye': fisheyeStrategy,
   'fisheye-radtan': fisheyeRadTanStrategy,
   'division': divisionStrategy,
-  // TODO(T8): implement EUCM (un)distortion.
-  'eucm': identityStrategy,
+  'eucm': eucmStrategy,
   // Spherical (equirectangular) has no flat-plane undistortion step.
   'spherical': identityStrategy,
 };

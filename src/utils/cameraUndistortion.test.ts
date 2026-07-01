@@ -429,3 +429,40 @@ describe('SIMPLE_DIVISION (id=12) – closed-form distortion', () => {
     expect(maxRoundTripError(modelId, i, disc(0.7))).toBeLessThan(1e-9);
   });
 });
+
+// ── Task 8: EUCM (Extended Unified Camera Model) ─────────────────────────────
+// COLMAP id=16, params: fx,fy,cx,cy,alpha,beta.
+// forward: den = alpha*sqrt(beta*r²+1) + (1-alpha); distorted = p/den
+// inverse: closed-form CamFromImg (see cameraUndistortion.ts)
+
+describe('EUCM (id=16) – closed-form distortion', () => {
+  const alpha = 0.6, beta = 1.1;
+  const modelId = CameraModelId.EUCM;
+  const i = intr({ alpha, beta });
+
+  it('forward is NOT identity for a non-origin point (RED while stub is identity)', () => {
+    const p = { x: 0.3, y: 0.2 };
+    const d = distortNormalized(p, i, modelId);
+    expect(Math.hypot(d.x - p.x, d.y - p.y)).toBeGreaterThan(1e-6);
+  });
+
+  it('forward spot-check: matches COLMAP ImgFromCam EUCM formula at (0.3, 0.2)', () => {
+    const p = { x: 0.3, y: 0.2 };
+    const d = distortNormalized(p, i, modelId);
+    const r2 = p.x * p.x + p.y * p.y;
+    const den = alpha * Math.sqrt(beta * r2 + 1) + (1 - alpha);
+    expect(d.x).toBeCloseTo(p.x / den, 12);
+    expect(d.y).toBeCloseTo(p.y / den, 12);
+  });
+
+  it('round-trip: undistortNormalized(distortNormalized(p)) ≈ p within 1e-9', () => {
+    expect(maxRoundTripError(modelId, i, disc(0.5))).toBeLessThan(1e-9);
+  });
+
+  it('inverse returns valid:false when radicand < 0 (ray beyond EUCM FOV)', () => {
+    // With alpha=0.6, beta=1.1: radicand = 1 - (2*0.6-1)*1.1*r2 = 1 - 0.22*r2
+    // For r=3.0: radicand = 1 - 0.22*9 = -0.98 < 0 → invalid
+    const result = undistortNormalized({ x: 3.0, y: 0 }, i, modelId);
+    expect(result.valid).toBe(false);
+  });
+});

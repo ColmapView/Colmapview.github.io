@@ -49,6 +49,8 @@ uniform float sy1;
 uniform float sx2;
 uniform float sy2;
 uniform float kDiv;
+uniform float alpha;  // EUCM parameter
+uniform float beta;   // EUCM parameter
 
 varying vec2 vUv;
 varying float vValid;
@@ -68,6 +70,7 @@ const int THIN_PRISM_FISHEYE = 10;
 const int RAD_TAN_THIN_PRISM_FISHEYE = 11;
 const int SIMPLE_DIVISION = 12;
 const int DIVISION = 13;
+const int EUCM = 16;
 
 // Convert UV to normalized camera coordinates (distorted space)
 vec2 uvToDistortedNormalized(vec2 uv) {
@@ -220,6 +223,29 @@ vec2 inverseDistort(vec2 distorted, out bool valid) {
     return distorted / denom;
   }
 
+  // EUCM (id=16): exact closed-form inverse (COLMAP CamFromImg with w=1).
+  //   radicand = 1 - (2·alpha - 1)·beta·r²
+  //   helperDen = alpha·sqrt(radicand) + (1 - alpha)
+  //   helper = (1 - alpha²·beta·r²) / helperDen
+  //   undistorted = distorted / helper
+  // Rays where radicand < 0 or helper <= 0 are beyond the EUCM FOV.
+  if (modelId == EUCM) {
+    float r2 = dot(distorted, distorted);
+    float radicand = 1.0 - (2.0 * alpha - 1.0) * beta * r2;
+    if (radicand < 0.0) {
+      valid = false;
+      return distorted;
+    }
+    float gamma = 1.0 - alpha;
+    float helperDen = alpha * sqrt(radicand) + gamma;
+    float helper = (1.0 - alpha * alpha * beta * r2) / helperDen;
+    if (helper <= 0.0) {
+      valid = false;
+      return distorted;
+    }
+    return distorted / helper;
+  }
+
   // Perspective radial/tangential models: Newton's method on
   // f(u) = u + delta(u) = distorted, with Jacobian J = I + d(delta)/du.
   // (A plain fixed-point iteration converges only linearly and diverges for
@@ -349,6 +375,8 @@ uniform float sy1;
 uniform float sx2;    // RAD_TAN thin prism y-direction coefficients
 uniform float sy2;
 uniform float kDiv;   // Division model distortion coefficient
+uniform float alpha;  // EUCM parameter
+uniform float beta;   // EUCM parameter
 
 varying vec2 vUv;
 
@@ -367,6 +395,7 @@ const int THIN_PRISM_FISHEYE = 10;
 const int RAD_TAN_THIN_PRISM_FISHEYE = 11;
 const int SIMPLE_DIVISION = 12;
 const int DIVISION = 13;
+const int EUCM = 16;
 
 // Convert UV (0-1) to normalized camera coordinates
 vec2 uvToNormalized(vec2 uv) {
@@ -587,6 +616,16 @@ vec2 distortDivision(vec2 p) {
   return p * (r - 1.0);
 }
 
+// EUCM (id=16): exact closed-form forward (COLMAP ImgFromCam with w=1).
+//   den = alpha * sqrt(beta * r² + 1) + (1 - alpha)
+//   distorted = p / den
+// Returns the distortion delta (distorted − undistorted) = p * (1/den − 1).
+vec2 distortEUCM(vec2 p) {
+  float r2 = dot(p, p);
+  float den = alpha * sqrt(beta * r2 + 1.0) + (1.0 - alpha);
+  return p * (1.0 / den - 1.0);
+}
+
 // Apply distortion based on model ID
 vec2 applyDistortion(vec2 p) {
   if (modelId == SIMPLE_PINHOLE || modelId == PINHOLE) {
@@ -613,6 +652,8 @@ vec2 applyDistortion(vec2 p) {
     return distortRadTanFisheye(p);
   } else if (modelId == SIMPLE_DIVISION || modelId == DIVISION) {
     return distortDivision(p);
+  } else if (modelId == EUCM) {
+    return distortEUCM(p);
   }
   return vec2(0.0);
 }
