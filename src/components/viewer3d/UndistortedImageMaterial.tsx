@@ -54,6 +54,12 @@ export function UndistortedImageMaterial({
 }: UndistortedImageMaterialProps) {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
 
+  // Invariant: only pinhole-family cameras reach this material. Spherical
+  // (EQUIRECTANGULAR) cameras render a Photosphere, never a FrustumPlane, so
+  // getCameraIntrinsics here is never called with a non-pinhole model. If a
+  // future path routes a spherical camera here, gate it with
+  // cameraModelHasPinholeIntrinsics(camera.modelId) first (it returns fx=1).
+
   // Extract camera intrinsics
   const intrinsics = useMemo(() => getCameraIntrinsics(camera), [camera]);
 

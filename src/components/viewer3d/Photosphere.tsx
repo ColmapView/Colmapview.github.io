@@ -7,9 +7,10 @@ interface PhotosphereProps {
   radius: number;
   texture: THREE.Texture;
   /**
-   * Which face(s) to render. Defaults to THREE.FrontSide so the photosphere is visible
-   * from inside (immersive mode). Pass THREE.BackSide for outside-in viewing.
-   * Use THREE.DoubleSide if both orientations are needed.
+   * Which face(s) to render. Defaults to THREE.FrontSide which renders outward faces
+   * (visible from OUTSIDE — current object view, default/correct).
+   * Pass THREE.BackSide to render inner faces (visible from INSIDE — future immersive
+   * "enter the sphere" mode). Use THREE.DoubleSide if both orientations are needed.
    */
   side?: THREE.Side;
 }

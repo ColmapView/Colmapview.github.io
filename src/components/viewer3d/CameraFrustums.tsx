@@ -237,7 +237,8 @@ export function CameraFrustums() {
   );
 
   // Spherical layer: grid lines + hit targets for all spherical cameras (shared across modes)
-  const sphericalLayer = (
+  // Only mount when there are spherical cameras to avoid allocating empty geometry.
+  const sphericalLayer = sphericalFrustums.length > 0 ? (
     <>
       <SphericalCameraLines
         frustums={sphericalFrustums}
@@ -260,7 +261,7 @@ export function CameraFrustums() {
         touchMode={touchMode}
       />
     </>
-  );
+  ) : null;
 
   // Arrow mode: use batched rendering for efficiency
   if (cameraDisplayMode === 'arrow') {

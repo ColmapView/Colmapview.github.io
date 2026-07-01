@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Camera, Image } from '../../types/colmap';
 import type { Sim3dEuler } from '../../types/sim3d';
 import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
+import { cameraModelHasPinholeIntrinsics } from '../../utils/cameraModelRegistry';
 import { getImageWorldPose } from '../../utils/colmapTransforms';
 import { createSim3dFromEuler, sim3dToMatrix4 } from '../../utils/sim3dTransforms';
 import type { WebGpuSplatUniformFrame } from './cameraUniforms';
@@ -169,6 +170,9 @@ export function createColmapMetricThreeCamera(
   far = 10000,
   tile?: ColmapMetricWebGpuSplatTile
 ): THREE.PerspectiveCamera {
+  if (!cameraModelHasPinholeIntrinsics(camera.modelId)) {
+    throw new Error(`createColmapMetricThreeCamera requires a pinhole camera (got model ${camera.modelId})`);
+  }
   const intrinsics = getCameraIntrinsics(camera);
   const fullWidth = tile ? requirePositiveInteger(tile.fullWidth, 'tile fullWidth') : width;
   const fullHeight = tile ? requirePositiveInteger(tile.fullHeight, 'tile fullHeight') : height;

@@ -96,8 +96,19 @@ describe('image detail camera pose view model', () => {
     // Spherical cameras have no pinhole intrinsics — parameters are omitted rather
     // than showing the raw [w, h] params or dummy fx=1/fy=1/cx=0/cy=0 values.
     expect(result.parameters).toEqual([]);
-    // Pose fields are still populated correctly.
-    expect(result.rotation).toHaveLength(4);
-    expect(result.translation).toHaveLength(3);
+    // Pose fields are still populated correctly with concrete formatted values.
+    // rotation = [qvec[1], qvec[2], qvec[3], qvec[0]] = [0.5, 0.5, 0.5, 0.5] (3dp)
+    expect(result.rotation).toEqual([
+      { className: 'text-ds-primary', value: '0.500', isNegative: false },
+      { className: 'text-ds-primary', value: '0.500', isNegative: false },
+      { className: 'text-ds-primary', value: '0.500', isNegative: false },
+      { className: 'text-ds-primary', value: '0.500', isNegative: false },
+    ]);
+    // translation = [1.0, -2.0, 3.0] (2dp)
+    expect(result.translation).toEqual([
+      { className: 'text-ds-primary', value: '1.00', isNegative: false },
+      { className: 'text-ds-error', value: '-2.00', isNegative: true },
+      { className: 'text-ds-primary', value: '3.00', isNegative: false },
+    ]);
   });
 });
