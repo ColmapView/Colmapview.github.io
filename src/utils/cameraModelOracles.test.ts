@@ -60,7 +60,7 @@ function intr(partial: Partial<CameraIntrinsics>): CameraIntrinsics {
 //
 //   r²       = 0.3² + (−0.2)² = 0.09 + 0.04 = 0.13
 //   β·r²+1  = 1.2·0.13 + 1   = 0.156 + 1    = 1.156
-//   √1.156   = 17/(5√10) = 17/15.81138830...  ≈ 1.07517442
+//   √1.156   = 17/(5√10) = 17/15.81138830...  ≈ 1.07517440
 //              [Newton verify: 1.075174² = 1.155999; correction +4e-7 → 1.07517442]
 //   den      = 0.6·1.07517442 + 0.4 = 0.64510465 + 0.4 = 1.04510465
 //   u        = 0.3  / 1.04510465  ≈ 0.28705263
@@ -190,5 +190,70 @@ describe('SIMPLE_DIVISION oracle (independent, same formula as DIVISION, model i
     const d = distortNormalized({ x: ux, y: uy }, SDIV_INTR, CameraModelId.SIMPLE_DIVISION);
     expect(d.x).toBeCloseTo(dx, TOL);
     expect(d.y).toBeCloseTo(dy, TOL);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// OPENCV_FISHEYE equidistant-fisheye oracle
+//
+// Model: COLMAP id=5, params (fx, fy, cx, cy, k1, k2, k3, k4).
+//
+// Forward (ImgFromCam) — COLMAP sensor/models.h (OpenCVFisheyeCameraModel):
+//   r   = sqrt(x² + y²)                    [perspective/pinhole radius]
+//   θ   = atan(r)                           [half-angle of the incoming ray]
+//   θd  = θ · (1 + k1·θ² + k2·θ⁴ + k3·θ⁶ + k4·θ⁸)
+//   distorted = (x, y) · (θd / r)
+//
+// Inverse (CamFromImg) — solved by scalar Newton on θ·(1+Rf(θ²)) = θd.
+// The canonical undistortNormalized handles this numerically; we verify the
+// round-trip back to the original undistorted point.
+//
+// ── Hand-computation for a=0.5, b=0.2, k1=0.05, k2=−0.01, k3=k4=0 ──────────
+//
+//   r       = sqrt(0.5² + 0.2²) = sqrt(0.29)
+//                                          ≈ 0.53851648071345
+//   θ       = atan(r)                     ≈ 0.49398396078939
+//             [Independently verified: Python math.atan(math.sqrt(0.29))]
+//             [NOTE: plan document erroneously stated θ=0.4941053 (delta 1.2e-4)]
+//   θ²      = θ²                          ≈ 0.24402015351718
+//   θ⁴      = (θ²)²                       ≈ 0.05954583532255
+//   k1·θ²   = 0.05 · 0.24402015          ≈  0.01220100767586
+//   k2·θ⁴   = −0.01 · 0.05954583         ≈ −0.00059545835323
+//   poly    = 1 + 0.01220101 − 0.00059546 ≈ 1.01160554932263
+//   θd      = θ · poly                    ≈ 0.49971691601092
+//   scale   = θd / r                      ≈ 0.92795101711442
+//   out.x   = 0.5 · scale                 ≈ 0.46397550855721  → oracle: 0.46397551
+//   out.y   = 0.2 · scale                 ≈ 0.18559020342288  → oracle: 0.18559020
+//
+// ── Non-tautological proof (oracle has teeth) ──────────────────────────────────
+//   If k2 term were dropped (plausible omission — maps to SIMPLE_RADIAL_FISHEYE
+//   if the k2 branch were accidentally dead):
+//     θd' = θ*(1 + k1*θ²) ≈ 0.4939839*(1 + 0.01220101) ≈ 0.49998780
+//     out.x' = 0.5*(0.49998780/0.53851648) ≈ 0.46424864
+//     Δ    ≈ 0.46424864 − 0.46397551 = 2.73e−4   >>>  5e−6 tolerance → test would FAIL
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('OPENCV_FISHEYE oracle (independent COLMAP-derived, equidistant fisheye, model id=5)', () => {
+  // k3=k4=0 keeps the arithmetic tractable while exercising both k1 and k2.
+  const FE_INTR = intr({ k1: 0.05, k2: -0.01 });
+
+  const a = 0.5, b = 0.2;
+  // Oracle values from independently-computed Python arithmetic above (8 decimal places).
+  const x_expected = 0.46397551;  // 0.5 * (thetad/r)
+  const y_expected = 0.18559020;  // 0.2 * (thetad/r)
+  // Tolerance: 5e-6 (toBeCloseTo digit=5). Δ from dropping k2 ≈ 2.73e-4 → 55× headroom.
+  const TOL = 5;
+
+  it('forward distortNormalized: undistorted → distorted matches COLMAP equidistant-fisheye formula', () => {
+    const d = distortNormalized({ x: a, y: b }, FE_INTR, CameraModelId.OPENCV_FISHEYE);
+    expect(d.x).toBeCloseTo(x_expected, TOL);
+    expect(d.y).toBeCloseTo(y_expected, TOL);
+  });
+
+  it('inverse undistortNormalized: hand-computed distorted point → recovers original undistorted', () => {
+    const ud = undistortNormalized({ x: x_expected, y: y_expected }, FE_INTR, CameraModelId.OPENCV_FISHEYE);
+    expect(ud.valid).toBe(true);
+    expect(ud.x).toBeCloseTo(a, TOL);
+    expect(ud.y).toBeCloseTo(b, TOL);
   });
 });

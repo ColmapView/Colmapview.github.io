@@ -46,6 +46,61 @@ const BASE_I: CameraIntrinsics = {
   alpha: 0, beta: 0, kDiv: 0,
 };
 
+// ── Local TS transcriptions of GLSL per-sub-model fisheye functions ───────────
+// These mirror the specific GLSL functions in undistortionFragmentShader that
+// are dispatched per model, NOT the generic _glslThinPrismFisheye used by
+// glslForwardReference. Keeping them separate ensures each test exercises the
+// actual GLSL code path for that sub-model.
+//
+// Each returns the full distorted coordinate (undistorted + delta), matching
+// the DISTORTION_STRATEGIES['fisheye'].forward API.
+// The GLSL functions return a delta; the fragment shader adds it to the input
+// in perspectiveToDistorted. The net result is the same: p * (thetad/r).
+//
+// KEEP IN SYNC WITH THE GLSL distortOpenCVFisheye / distortSimpleRadialFisheye
+// / distortRadialFisheye functions in undistortionFragmentShader.
+
+// Mirrors distortOpenCVFisheye() — dispatched for OPENCV_FISHEYE (5),
+// SIMPLE_FISHEYE (14), FISHEYE (15). With zero k coefficients reduces to pure
+// equidistant projection (thetad=theta, scale=atan(r)/r).
+function _localOpenCVFisheye(p: Vec2, i: CameraIntrinsics): Vec2 {
+  const r = Math.hypot(p.x, p.y);
+  if (r < 0.00001) return { x: p.x, y: p.y };
+  const theta  = Math.atan(r);
+  const theta2 = theta * theta;
+  const theta4 = theta2 * theta2;
+  const theta6 = theta4 * theta2;
+  const theta8 = theta4 * theta4;
+  const thetad = theta * (1.0 + i.k1 * theta2 + i.k2 * theta4 + i.k3 * theta6 + i.k4 * theta8);
+  const scale  = thetad / r;
+  return { x: p.x * scale, y: p.y * scale };
+}
+
+// Mirrors distortSimpleRadialFisheye() — dispatched for SIMPLE_RADIAL_FISHEYE (8).
+// Polynomial: theta*(1 + k1*theta2). Equivalent to _localOpenCVFisheye with k2=k3=k4=0.
+function _localSimpleRadialFisheye(p: Vec2, i: CameraIntrinsics): Vec2 {
+  const r = Math.hypot(p.x, p.y);
+  if (r < 0.00001) return { x: p.x, y: p.y };
+  const theta  = Math.atan(r);
+  const theta2 = theta * theta;
+  const thetad = theta * (1.0 + i.k1 * theta2);
+  const scale  = thetad / r;
+  return { x: p.x * scale, y: p.y * scale };
+}
+
+// Mirrors distortRadialFisheye() — dispatched for RADIAL_FISHEYE (9).
+// Polynomial: theta*(1 + k1*theta2 + k2*theta4). Equivalent to _localOpenCVFisheye with k3=k4=0.
+function _localRadialFisheye(p: Vec2, i: CameraIntrinsics): Vec2 {
+  const r = Math.hypot(p.x, p.y);
+  if (r < 0.00001) return { x: p.x, y: p.y };
+  const theta  = Math.atan(r);
+  const theta2 = theta * theta;
+  const theta4 = theta2 * theta2;
+  const thetad = theta * (1.0 + i.k1 * theta2 + i.k2 * theta4);
+  const scale  = thetad / r;
+  return { x: p.x * scale, y: p.y * scale };
+}
+
 // ── Part 1 — Structural exhaustiveness ───────────────────────────────────────
 
 describe('GLSL distortion structural exhaustiveness', () => {
@@ -362,6 +417,93 @@ describe('CPU↔GLSL inverse parity (vertex shader inverseDistort)', () => {
 
   it("'eucm' closed-form inverse matches canonical within 1e-4", () => {
     assertInverseParity('eucm', { alpha: 0.5, beta: 0.8 }, 1e-4);
+  });
+
+});
+
+// ── Part 4 — Per-fisheye-sub-model GLSL forward parity ───────────────────────
+
+describe('fisheye sub-model GLSL forward parity (per-model GLSL function vs canonical)', () => {
+  /**
+   * Part 2 tests the 'fisheye' projection class via glslForwardReference, which
+   * dispatches to _glslThinPrismFisheye (the most general formula). However, the
+   * GLSL fragment shader dispatches to DISTINCT functions for specific sub-models:
+   *   • distortOpenCVFisheye    → OPENCV_FISHEYE (5), SIMPLE_FISHEYE (14), FISHEYE (15)
+   *   • distortSimpleRadialFisheye → SIMPLE_RADIAL_FISHEYE (8)
+   *   • distortRadialFisheye    → RADIAL_FISHEYE (9)
+   *   • distortThinPrismFisheye → THIN_PRISM_FISHEYE (10) — covered by Part 2
+   *
+   * This section verifies each distinct GLSL function via its own independent TS
+   * transcription (the _local* helpers defined above) against the canonical
+   * DISTORTION_STRATEGIES['fisheye'].forward, using coefficient patterns
+   * appropriate to each sub-model.
+   *
+   * These tests catch bugs in the sub-model-specific GLSL function that the generic
+   * class-level test in Part 2 cannot detect (e.g., an off-by-one in the k3 term of
+   * distortRadialFisheye while distortThinPrismFisheye remains correct).
+   *
+   * INVERSE NOTE: The fisheye vertex-shader inverseDistort branches are dead code
+   * at runtime — resolveUndistortionMode() always forces fisheye cameras to cropped
+   * mode, so the full-frame vertex shader is never used for fisheye models. Inverse
+   * GLSL parity for fisheye sub-models is intentionally excluded (see Parts 2/3 scope
+   * notes). The forward GLSL path (fragment shader) IS active for all fisheye models.
+   */
+
+  // Same 5×5 grid as Part 2, defined locally to keep Part 4 self-contained.
+  const FISHEYE_GRID: Vec2[] = [];
+  for (let ix = -2; ix <= 2; ix++) {
+    for (let iy = -2; iy <= 2; iy++) {
+      if (ix === 0 && iy === 0) continue;
+      FISHEYE_GRID.push({ x: ix * 0.1, y: iy * 0.1 });
+    }
+  }
+
+  const TOL = 1e-4;
+
+  function assertSubModelParity(
+    label: string,
+    glslFn: (p: Vec2, i: CameraIntrinsics) => Vec2,
+    overrides: Partial<CameraIntrinsics>,
+  ): void {
+    const i: CameraIntrinsics = { ...BASE_I, ...overrides };
+    for (const p of FISHEYE_GRID) {
+      const canonical = DISTORTION_STRATEGIES['fisheye'].forward(p, i);
+      const glslRef   = glslFn(p, i);
+      const errX = Math.abs(glslRef.x - canonical.x);
+      const errY = Math.abs(glslRef.y - canonical.y);
+      expect(
+        errX,
+        `${label} p={${p.x},${p.y}} glslRef.x=${glslRef.x.toFixed(8)} canonical.x=${canonical.x.toFixed(8)} errX=${errX.toExponential(2)}`,
+      ).toBeLessThan(TOL);
+      expect(
+        errY,
+        `${label} p={${p.x},${p.y}} glslRef.y=${glslRef.y.toFixed(8)} canonical.y=${canonical.y.toFixed(8)} errY=${errY.toExponential(2)}`,
+      ).toBeLessThan(TOL);
+    }
+  }
+
+  it('OPENCV_FISHEYE (5): distortOpenCVFisheye with k1-k4 non-zero matches canonical', () => {
+    // Uses all four polynomial coefficients; zero k3/k4 would reduce to RADIAL_FISHEYE.
+    assertSubModelParity('OPENCV_FISHEYE(5)', _localOpenCVFisheye, {
+      k1: 0.05, k2: -0.01, k3: 0.003, k4: -0.001,
+    });
+  });
+
+  it('SIMPLE_RADIAL_FISHEYE (8): distortSimpleRadialFisheye with k1-only matches canonical', () => {
+    // Single radial coefficient; k2-k4=0 is the defining constraint of this sub-model.
+    assertSubModelParity('SIMPLE_RADIAL_FISHEYE(8)', _localSimpleRadialFisheye, { k1: 0.1 });
+  });
+
+  it('RADIAL_FISHEYE (9): distortRadialFisheye with k1,k2 matches canonical', () => {
+    // Two radial coefficients; k3=k4=0.
+    assertSubModelParity('RADIAL_FISHEYE(9)', _localRadialFisheye, { k1: 0.1, k2: -0.05 });
+  });
+
+  it('SIMPLE_FISHEYE (14) + FISHEYE (15): distortOpenCVFisheye with zero poly matches canonical', () => {
+    // Pure equidistant: all k=0, thetad=theta, distorted = p * (theta/r) = p * atan(r)/r.
+    // SIMPLE_FISHEYE has one focal length (f), FISHEYE has two (fx,fy); both share the
+    // same distortOpenCVFisheye GLSL function with k1=k2=k3=k4=0.
+    assertSubModelParity('SIMPLE_FISHEYE/FISHEYE(14,15)', _localOpenCVFisheye, {});
   });
 
 });
