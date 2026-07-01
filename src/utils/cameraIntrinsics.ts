@@ -21,6 +21,8 @@ const INTRINSIC_PARAM_SETTERS: Record<string, (i: CameraIntrinsics, v: number) =
   'ω': (i, v) => { i.omega = v; },
   sx1: (i, v) => { i.sx1 = v; },
   sy1: (i, v) => { i.sy1 = v; },
+  sx2: (i, v) => { i.sx2 = v; },
+  sy2: (i, v) => { i.sy2 = v; },
   alpha: (i, v) => { i.alpha = v; },
   beta: (i, v) => { i.beta = v; },
 };
@@ -36,7 +38,7 @@ export function getCameraIntrinsics(camera: Camera): CameraIntrinsics {
   const intrinsics: CameraIntrinsics = {
     fx: 1, fy: 1, cx: 0, cy: 0,
     k1: 0, k2: 0, k3: 0, k4: 0, k5: 0, k6: 0,
-    p1: 0, p2: 0, omega: 0, sx1: 0, sy1: 0,
+    p1: 0, p2: 0, omega: 0, sx1: 0, sy1: 0, sx2: 0, sy2: 0,
     alpha: 0, beta: 0, kDiv: 0,
   };
 

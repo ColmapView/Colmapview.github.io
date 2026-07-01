@@ -46,6 +46,8 @@ uniform float p2;
 uniform float omega;
 uniform float sx1;
 uniform float sy1;
+uniform float sx2;
+uniform float sy2;
 
 varying vec2 vUv;
 varying float vValid;
@@ -62,6 +64,7 @@ const int FOV = 7;
 const int SIMPLE_RADIAL_FISHEYE = 8;
 const int RADIAL_FISHEYE = 9;
 const int THIN_PRISM_FISHEYE = 10;
+const int RAD_TAN_THIN_PRISM_FISHEYE = 11;
 
 // Convert UV to normalized camera coordinates (distorted space)
 vec2 uvToDistortedNormalized(vec2 uv) {
@@ -155,6 +158,40 @@ vec2 inverseDistort(vec2 distorted, out bool valid) {
     }
 
     return fisheyeToPinhole(fisheyeUndist, valid);
+  }
+
+  // RAD_TAN_THIN_PRISM_FISHEYE: 6-coeff radial scale in angle space, then
+  // tangential + thin-prism on the radially-scaled (x,y).
+  // Inverse: iterative solve in angle space then NormalFromFisheye.
+  if (modelId == RAD_TAN_THIN_PRISM_FISHEYE) {
+    vec2 uu = distorted; // initial guess
+
+    for (int i = 0; i < 20; i++) {
+      float theta2 = dot(uu, uu);
+      float theta4 = theta2 * theta2;
+      float theta6 = theta4 * theta2;
+      float theta8 = theta4 * theta4;
+      float theta10 = theta8 * theta2;
+      float theta12 = theta10 * theta2;
+      float thRadial = 1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6
+                           + k4 * theta8 + k5 * theta10 + k6 * theta12;
+      float x = thRadial * uu.x;
+      float y = thRadial * uu.y;
+      float x2 = x * x;
+      float y2 = y * y;
+      float xy = x * y;
+      float r2 = x2 + y2;
+      float r4 = r2 * r2;
+      // Tangential + thin-prism delta on (x,y)
+      vec2 delta = vec2(
+        2.0 * p1 * xy + p2 * (r2 + 2.0 * x2) + sx1 * r2 + sy1 * r4,
+        p1 * (r2 + 2.0 * y2) + 2.0 * p2 * xy + sx2 * r2 + sy2 * r4
+      );
+      // Solve: distorted = thRadial * uu + delta  =>  uu = (distorted - delta) / thRadial
+      uu = (distorted - delta) / thRadial;
+    }
+
+    return fisheyeToPinhole(uu, valid);
   }
 
   // FOV model: exact closed-form inverse (COLMAP FOVCameraModel::Undistortion).
@@ -298,6 +335,8 @@ uniform float p2;
 uniform float omega;  // FOV model parameter
 uniform float sx1;    // Thin prism parameters
 uniform float sy1;
+uniform float sx2;    // RAD_TAN thin prism y-direction coefficients
+uniform float sy2;
 
 varying vec2 vUv;
 
@@ -313,6 +352,7 @@ const int FOV = 7;
 const int SIMPLE_RADIAL_FISHEYE = 8;
 const int RADIAL_FISHEYE = 9;
 const int THIN_PRISM_FISHEYE = 10;
+const int RAD_TAN_THIN_PRISM_FISHEYE = 11;
 
 // Convert UV (0-1) to normalized camera coordinates
 vec2 uvToNormalized(vec2 uv) {
@@ -480,6 +520,47 @@ vec2 distortThinPrismFisheye(vec2 p) {
   return vec2(uu.x + dx - p.x, uu.y + dy - p.y);
 }
 
+// RAD_TAN_THIN_PRISM_FISHEYE: fisheye projection + 6-coeff radial scale in
+// angle space + tangential + thin-prism on the radially-scaled coords.
+// Matches COLMAP's RAD_TAN_THIN_PRISM_FISHEYE::Distortion().
+vec2 distortRadTanFisheye(vec2 p) {
+  float r = length(p);
+  if (r < 0.00001) return vec2(0.0);
+
+  float theta = atan(r);  // FisheyeFromNormal
+  vec2 uu = p * (theta / r);  // angle-space coord, radius = theta
+
+  float theta2 = dot(uu, uu);  // = theta^2
+  float theta4 = theta2 * theta2;
+  float theta6 = theta4 * theta2;
+  float theta8 = theta4 * theta4;
+  float theta10 = theta8 * theta2;
+  float theta12 = theta10 * theta2;
+
+  float thRadial = 1.0 + k1 * theta2 + k2 * theta4 + k3 * theta6
+                       + k4 * theta8 + k5 * theta10 + k6 * theta12;
+
+  // Radially-scaled coords
+  float x = thRadial * uu.x;
+  float y = thRadial * uu.y;
+  float x2 = x * x;
+  float y2 = y * y;
+  float xy = x * y;
+  float r2 = x2 + y2;
+  float r4 = r2 * r2;
+
+  // Tangential on (x,y)
+  float dxTang = 2.0 * p1 * xy + p2 * (r2 + 2.0 * x2);
+  float dyTang = p1 * (r2 + 2.0 * y2) + 2.0 * p2 * xy;
+
+  // Thin-prism: x-direction (sx1, sy1), y-direction (sx2, sy2)
+  float dxTp = sx1 * r2 + sy1 * r4;
+  float dyTp = sx2 * r2 + sy2 * r4;
+
+  // Return delta from original perspective point p
+  return vec2(x + dxTang + dxTp - p.x, y + dyTang + dyTp - p.y);
+}
+
 // Apply distortion based on model ID
 vec2 applyDistortion(vec2 p) {
   if (modelId == SIMPLE_PINHOLE || modelId == PINHOLE) {
@@ -502,6 +583,8 @@ vec2 applyDistortion(vec2 p) {
     return distortRadialFisheye(p);
   } else if (modelId == THIN_PRISM_FISHEYE) {
     return distortThinPrismFisheye(p);
+  } else if (modelId == RAD_TAN_THIN_PRISM_FISHEYE) {
+    return distortRadTanFisheye(p);
   }
   return vec2(0.0);
 }

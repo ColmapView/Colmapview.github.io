@@ -257,6 +257,96 @@ const fisheyeStrategy: DistortionStrategy = {
   },
 };
 
+// ── 'fisheye-radtan' strategy ─────────────────────────────────────────────────
+// RAD_TAN_THIN_PRISM_FISHEYE (model 11) — COLMAP's Distortion() for this model
+// applies distortion in angle space in two stages:
+//   1. 6-coefficient radial scale of uu → (x, y)
+//   2. Tangential + thin-prism applied on the radially-scaled (x, y) — NOT on uu
+// Thin-prism splits into x-direction (sx1, sy1) and y-direction (sx2, sy2):
+//   dx_tp = sx1·r² + sy1·r⁴,  dy_tp = sx2·r² + sy2·r⁴
+// This differs structurally from THIN_PRISM_FISHEYE (k1–k4 only; prism on uu).
+
+function _radTanApplyDistortion(uu: Vec2, i: CameraIntrinsics): Vec2 {
+  const theta2 = uu.x * uu.x + uu.y * uu.y;
+  const theta4 = theta2 * theta2;
+  const theta6 = theta4 * theta2;
+  const theta8 = theta4 * theta4;
+  const theta10 = theta8 * theta2;
+  const theta12 = theta10 * theta2;
+  // 6-coeff radial scale
+  const thRadial = 1 + i.k1 * theta2 + i.k2 * theta4 + i.k3 * theta6
+                     + i.k4 * theta8 + i.k5 * theta10 + i.k6 * theta12;
+  const x = thRadial * uu.x;
+  const y = thRadial * uu.y;
+  const x2 = x * x;
+  const y2 = y * y;
+  const xy = x * y;
+  const r2 = x2 + y2;
+  const r4 = r2 * r2;
+  // Tangential on (x, y)
+  const dxTang = 2 * i.p1 * xy + i.p2 * (r2 + 2 * x2);
+  const dyTang = i.p1 * (r2 + 2 * y2) + 2 * i.p2 * xy;
+  // Thin-prism: x-direction uses sx1,sy1; y-direction uses sx2,sy2
+  const dxTp = i.sx1 * r2 + i.sy1 * r4;
+  const dyTp = i.sx2 * r2 + i.sy2 * r4;
+  return { x: x + dxTang + dxTp, y: y + dyTang + dyTp };
+}
+
+/** 2D Newton to solve `_radTanApplyDistortion(uu) = p` for `uu` (numeric Jacobian). */
+function _radTanRemoveDistortion2D(p: Vec2, i: CameraIntrinsics): Vec2 {
+  let x = p.x;
+  let y = p.y;
+  const h = 1e-7;
+  for (let iter = 0; iter < 30; iter++) {
+    const f  = _radTanApplyDistortion({ x, y }, i);
+    const gx = f.x - p.x;
+    const gy = f.y - p.y;
+    const fx = _radTanApplyDistortion({ x: x + h, y }, i);
+    const fy = _radTanApplyDistortion({ x, y: y + h }, i);
+    const j11 = (fx.x - f.x) / h;
+    const j21 = (fx.y - f.y) / h;
+    const j12 = (fy.x - f.x) / h;
+    const j22 = (fy.y - f.y) / h;
+    const det = j11 * j22 - j12 * j21;
+    if (Math.abs(det) < 1e-15) break;
+    const stepX = (j22 * gx - j12 * gy) / det;
+    const stepY = (j11 * gy - j21 * gx) / det;
+    x -= stepX;
+    y -= stepY;
+    if (stepX * stepX + stepY * stepY < 1e-22) break;
+  }
+  return { x, y };
+}
+
+const fisheyeRadTanStrategy: DistortionStrategy = {
+  forward(p: Vec2, i: CameraIntrinsics): Vec2 {
+    const r = Math.hypot(p.x, p.y);
+    if (r < EPS) return { x: p.x, y: p.y };
+    const theta = Math.atan(r); // FisheyeFromNormal: r → theta
+    const s = theta / r;
+    return _radTanApplyDistortion({ x: p.x * s, y: p.y * s }, i);
+  },
+
+  inverse(p: Vec2, i: CameraIntrinsics): UndistortResult {
+    const thetaD = Math.hypot(p.x, p.y);
+    if (thetaD < EPS) return { x: p.x, y: p.y, valid: true };
+
+    // Remove RAD_TAN distortion in angle space via 2D Newton.
+    const uu = _radTanRemoveDistortion2D(p, i);
+
+    // NormalFromFisheye (fisheye angle → pinhole), guarding the domain.
+    const theta = Math.hypot(uu.x, uu.y);
+    if (theta < FISHEYE_CENTER_EPS) {
+      return { x: uu.x, y: uu.y, valid: true };
+    }
+    if (Math.cos(theta) <= FISHEYE_COS_GUARD) {
+      return { x: uu.x, y: uu.y, valid: false };
+    }
+    const scale = Math.tan(theta) / theta;
+    return { x: uu.x * scale, y: uu.y * scale, valid: true };
+  },
+};
+
 // ── identity strategy (used for 'none', stubs, and 'spherical') ───────────────
 
 const identityStrategy: DistortionStrategy = {
@@ -271,6 +361,7 @@ export const DISTORTION_STRATEGIES: Record<ProjectionClass, DistortionStrategy> 
   'perspective-radial': perspectiveRadialStrategy,
   'fov': fovStrategy,
   'fisheye': fisheyeStrategy,
+  'fisheye-radtan': fisheyeRadTanStrategy,
   // TODO(T7): implement division-model (un)distortion.
   'division': identityStrategy,
   // TODO(T8): implement EUCM (un)distortion.

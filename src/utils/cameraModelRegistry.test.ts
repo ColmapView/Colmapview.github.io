@@ -82,7 +82,7 @@ describe('cameraModelRegistry', () => {
       [CameraModelId.SIMPLE_RADIAL_FISHEYE]: 'fisheye',
       [CameraModelId.RADIAL_FISHEYE]: 'fisheye',
       [CameraModelId.THIN_PRISM_FISHEYE]: 'fisheye',
-      [CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE]: 'fisheye',
+      [CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE]: 'fisheye-radtan',
       [CameraModelId.SIMPLE_DIVISION]: 'division',
       [CameraModelId.DIVISION]: 'division',
       [CameraModelId.SIMPLE_FISHEYE]: 'fisheye',

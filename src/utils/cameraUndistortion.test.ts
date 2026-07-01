@@ -6,7 +6,8 @@ function intr(partial: Partial<CameraIntrinsics>): CameraIntrinsics {
   return {
     fx: 1, fy: 1, cx: 0, cy: 0,
     k1: 0, k2: 0, k3: 0, k4: 0, k5: 0, k6: 0,
-    p1: 0, p2: 0, omega: 0, sx1: 0, sy1: 0,
+    p1: 0, p2: 0, omega: 0, sx1: 0, sy1: 0, sx2: 0, sy2: 0,
+    alpha: 0, beta: 0, kDiv: 0,
     ...partial,
   };
 }
@@ -314,6 +315,46 @@ describe('characterization: model 5 OPENCV_FISHEYE – forward spot-check', () =
     const i = intr({ k1: -0.02, k2: 0.003, k3: -1e-4, k4: 1e-5 });
     const pts = disc(Math.tan((75 * Math.PI) / 180));
     expect(maxRoundTripError(CameraModelId.OPENCV_FISHEYE, i, pts)).toBeLessThan(1e-9);
+  });
+});
+
+describe('characterization: model 11 RAD_TAN_THIN_PRISM_FISHEYE – forward + round-trip', () => {
+  // Representative 16-param lens: k1..k6, p1,p2, sx1,sy1,sx2,sy2 all nonzero.
+  // Verified against COLMAP Distortion() math from the task brief.
+  const i = intr({
+    k1: 0.03, k2: -0.01, k3: 5e-4, k4: -1e-5, k5: 2e-6, k6: -1e-7,
+    p1: 1e-3, p2: -5e-4,
+    sx1: 2e-4, sy1: -3e-5, sx2: 1e-4, sy2: -2e-5,
+  });
+
+  it('distortNormalized changes a non-center point (not identity)', () => {
+    const p = { x: 0.3, y: 0.2 };
+    const d = distortNormalized(p, i, CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE);
+    // The output must differ from the input (distortion is not identity).
+    expect(Math.hypot(d.x - p.x, d.y - p.y)).toBeGreaterThan(1e-6);
+  });
+
+  it('spot-check: forward matches COLMAP RAD_TAN Distortion formula at (0.2, 0.15)', () => {
+    const x = 0.2, y = 0.15;
+    const d = distortNormalized({ x, y }, i, CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE);
+    const r = Math.hypot(x, y);
+    const theta = Math.atan(r);
+    const s = theta / r;
+    const uux = x * s, uuy = y * s;
+    const t2 = uux * uux + uuy * uuy;
+    const t4 = t2 * t2, t6 = t4 * t2, t8 = t4 * t4, t10 = t8 * t2, t12 = t10 * t2;
+    const thR = 1 + i.k1 * t2 + i.k2 * t4 + i.k3 * t6 + i.k4 * t8 + i.k5 * t10 + i.k6 * t12;
+    const rx = thR * uux, ry = thR * uuy;
+    const x2 = rx * rx, y2 = ry * ry, xy = rx * ry, r2 = x2 + y2, r4 = r2 * r2;
+    const ex = rx + 2 * i.p1 * xy + i.p2 * (r2 + 2 * x2) + i.sx1 * r2 + i.sy1 * r4;
+    const ey = ry + i.p1 * (r2 + 2 * y2) + 2 * i.p2 * xy + i.sx2 * r2 + i.sy2 * r4;
+    expect(d.x).toBeCloseTo(ex, 10);
+    expect(d.y).toBeCloseTo(ey, 10);
+  });
+
+  it('round-trip: undistortNormalized(distortNormalized(p)) ≈ p within 1e-5', () => {
+    const pts = disc(Math.tan((65 * Math.PI) / 180));
+    expect(maxRoundTripError(CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE, i, pts)).toBeLessThan(1e-5);
   });
 });
 
