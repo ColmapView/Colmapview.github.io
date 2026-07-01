@@ -168,3 +168,156 @@ describe('fisheye >= 90 deg guard (the nonsense fix)', () => {
     expect(inside.y).toBeCloseTo(0, 9);
   });
 });
+
+// ── Characterization tests: parity guard for projectionClass strategy refactor ──
+// These tests lock in the numeric behavior of the CURRENT implementation.
+// They must be GREEN before the refactor and remain GREEN after.
+
+describe('characterization: model 0 SIMPLE_PINHOLE – identity forward/inverse', () => {
+  it('forward is identity at a non-origin point', () => {
+    const d = distortNormalized({ x: 0.3, y: -0.2 }, intr({}), CameraModelId.SIMPLE_PINHOLE);
+    expect(d.x).toBeCloseTo(0.3, 12);
+    expect(d.y).toBeCloseTo(-0.2, 12);
+  });
+  it('round-trip is identity', () => {
+    expect(maxRoundTripError(CameraModelId.SIMPLE_PINHOLE, intr({}), disc(0.8))).toBeLessThan(1e-12);
+  });
+});
+
+describe('characterization: model 2 SIMPLE_RADIAL – forward spot-check (k1·r²)', () => {
+  it('distorted x = x*(1+k1·r²), y=0 at (0.3,0)', () => {
+    const i = intr({ k1: 0.1 });
+    const d = distortNormalized({ x: 0.3, y: 0 }, i, CameraModelId.SIMPLE_RADIAL);
+    const r2 = 0.3 * 0.3;
+    expect(d.x).toBeCloseTo(0.3 * (1 + i.k1 * r2), 12);
+    expect(d.y).toBeCloseTo(0, 12);
+  });
+  it('round-trip', () => {
+    expect(maxRoundTripError(CameraModelId.SIMPLE_RADIAL, intr({ k1: 0.1 }), disc(0.5))).toBeLessThan(1e-9);
+  });
+});
+
+describe('characterization: model 3 RADIAL – forward spot-check (k1·r²+k2·r⁴)', () => {
+  it('distorted x = x*(1+k1·r²+k2·r⁴) at (0.3,0)', () => {
+    const i = intr({ k1: 0.1, k2: 0.01 });
+    const d = distortNormalized({ x: 0.3, y: 0 }, i, CameraModelId.RADIAL);
+    const r2 = 0.3 * 0.3;
+    expect(d.x).toBeCloseTo(0.3 * (1 + i.k1 * r2 + i.k2 * r2 * r2), 12);
+    expect(d.y).toBeCloseTo(0, 12);
+  });
+  it('round-trip', () => {
+    expect(maxRoundTripError(CameraModelId.RADIAL, intr({ k1: 0.1, k2: 0.01 }), disc(0.5))).toBeLessThan(1e-9);
+  });
+});
+
+describe('characterization: model 6 FULL_OPENCV – forward spot-check (rational + tangential)', () => {
+  it('matches (1+k1r²+k2r⁴+k3r⁶)/(1+k4r²+k5r⁴+k6r⁶)−1 + tangential at (0.3,0.2)', () => {
+    const x = 0.3, y = 0.2;
+    const i = intr({ k1: 0.1, k2: 0.01, k3: 0.001, k4: 0.0001, p1: 0.001, p2: -0.001 });
+    const d = distortNormalized({ x, y }, i, CameraModelId.FULL_OPENCV);
+    const r2 = x * x + y * y;
+    const r4 = r2 * r2;
+    const r6 = r4 * r2;
+    const num = 1 + i.k1 * r2 + i.k2 * r4 + i.k3 * r6;
+    const den = 1 + i.k4 * r2 + i.k5 * r4 + i.k6 * r6;
+    const R = num / den - 1;
+    const ex = x + x * R + 2 * i.p1 * x * y + i.p2 * (r2 + 2 * x * x);
+    const ey = y + y * R + i.p1 * (r2 + 2 * y * y) + 2 * i.p2 * x * y;
+    expect(d.x).toBeCloseTo(ex, 10);
+    expect(d.y).toBeCloseTo(ey, 10);
+  });
+  it('round-trip', () => {
+    const i = intr({ k1: 0.1, k2: 0.01, k3: 0.001, k4: 0.0001, p1: 0.001, p2: -0.001 });
+    expect(maxRoundTripError(CameraModelId.FULL_OPENCV, i, disc(0.5))).toBeLessThan(1e-7);
+  });
+});
+
+describe('characterization: model 7 FOV – forward spot-check', () => {
+  it('matches atan(r·2tan(ω/2))/ω formula at (0.3,0)', () => {
+    const i = intr({ omega: 0.5 });
+    const d = distortNormalized({ x: 0.3, y: 0 }, i, CameraModelId.FOV);
+    const r = 0.3;
+    const rd = Math.atan(r * 2 * Math.tan(i.omega / 2)) / i.omega;
+    expect(d.x).toBeCloseTo(rd, 12);
+    expect(d.y).toBeCloseTo(0, 12);
+  });
+  it('round-trip', () => {
+    expect(maxRoundTripError(CameraModelId.FOV, intr({ omega: 0.5 }), disc(0.5))).toBeLessThan(1e-9);
+  });
+});
+
+describe('characterization: model 8 SIMPLE_RADIAL_FISHEYE – forward spot-check', () => {
+  it('matches theta*(1+k1·theta²) formula at (0.3,0)', () => {
+    const i = intr({ k1: 0.05 });
+    const d = distortNormalized({ x: 0.3, y: 0 }, i, CameraModelId.SIMPLE_RADIAL_FISHEYE);
+    const theta = Math.atan(0.3);
+    const t2 = theta * theta;
+    expect(d.x).toBeCloseTo(theta * (1 + i.k1 * t2), 10);
+    expect(d.y).toBeCloseTo(0, 12);
+  });
+  it('round-trip', () => {
+    const pts = disc(Math.tan((70 * Math.PI) / 180));
+    expect(maxRoundTripError(CameraModelId.SIMPLE_RADIAL_FISHEYE, intr({ k1: 0.05 }), pts)).toBeLessThan(1e-6);
+  });
+});
+
+describe('characterization: model 9 RADIAL_FISHEYE – forward spot-check', () => {
+  it('matches theta*(1+k1·t²+k2·t⁴) formula at (0.3,0)', () => {
+    const i = intr({ k1: -0.02, k2: 0.003 });
+    const d = distortNormalized({ x: 0.3, y: 0 }, i, CameraModelId.RADIAL_FISHEYE);
+    const theta = Math.atan(0.3);
+    const t2 = theta * theta;
+    expect(d.x).toBeCloseTo(theta * (1 + i.k1 * t2 + i.k2 * t2 * t2), 10);
+    expect(d.y).toBeCloseTo(0, 12);
+  });
+  it('round-trip', () => {
+    const pts = disc(Math.tan((70 * Math.PI) / 180));
+    expect(maxRoundTripError(CameraModelId.RADIAL_FISHEYE, intr({ k1: -0.02, k2: 0.003 }), pts)).toBeLessThan(1e-6);
+  });
+});
+
+describe('characterization: model 5 OPENCV_FISHEYE – forward spot-check', () => {
+  it('matches full 4-coeff fisheye polynomial at (0.3,0.2)', () => {
+    const x = 0.3, y = 0.2;
+    const i = intr({ k1: -0.02, k2: 0.003, k3: -1e-4, k4: 1e-5 });
+    const d = distortNormalized({ x, y }, i, CameraModelId.OPENCV_FISHEYE);
+    const r = Math.hypot(x, y);
+    const theta = Math.atan(r);
+    const s = theta / r;
+    const uux = x * s, uuy = y * s;
+    const t2 = uux * uux + uuy * uuy;
+    const t4 = t2 * t2, t6 = t4 * t2, t8 = t4 * t4;
+    const radial = i.k1 * t2 + i.k2 * t4 + i.k3 * t6 + i.k4 * t8;
+    expect(d.x).toBeCloseTo(uux + uux * radial, 10);
+    expect(d.y).toBeCloseTo(uuy + uuy * radial, 10);
+  });
+  it('round-trip', () => {
+    const i = intr({ k1: -0.02, k2: 0.003, k3: -1e-4, k4: 1e-5 });
+    const pts = disc(Math.tan((75 * Math.PI) / 180));
+    expect(maxRoundTripError(CameraModelId.OPENCV_FISHEYE, i, pts)).toBeLessThan(1e-6);
+  });
+});
+
+describe('characterization: model 10 THIN_PRISM_FISHEYE – forward spot-check', () => {
+  it('matches fisheye radial + tangential + thin-prism in angle space at (0.2,0.1)', () => {
+    const x = 0.2, y = 0.1;
+    const i = intr({ k1: -0.02, k2: 0.003, k3: -1e-4, k4: 1e-5, p1: 5e-4, p2: -5e-4, sx1: 3e-4, sy1: -3e-4 });
+    const d = distortNormalized({ x, y }, i, CameraModelId.THIN_PRISM_FISHEYE);
+    const r = Math.hypot(x, y);
+    const theta = Math.atan(r);
+    const s = theta / r;
+    const uux = x * s, uuy = y * s;
+    const t2 = uux * uux + uuy * uuy;
+    const t4 = t2 * t2, t6 = t4 * t2, t8 = t4 * t4;
+    const radial = i.k1 * t2 + i.k2 * t4 + i.k3 * t6 + i.k4 * t8;
+    const ex = uux + uux * radial + 2 * i.p1 * uux * uuy + i.p2 * (t2 + 2 * uux * uux) + i.sx1 * t2;
+    const ey = uuy + uuy * radial + i.p1 * (t2 + 2 * uuy * uuy) + 2 * i.p2 * uux * uuy + i.sy1 * t2;
+    expect(d.x).toBeCloseTo(ex, 10);
+    expect(d.y).toBeCloseTo(ey, 10);
+  });
+  it('round-trip', () => {
+    const i = intr({ k1: -0.02, k2: 0.003, k3: -1e-4, k4: 1e-5, p1: 5e-4, p2: -5e-4, sx1: 3e-4, sy1: -3e-4 });
+    const pts = disc(Math.tan((65 * Math.PI) / 180));
+    expect(maxRoundTripError(CameraModelId.THIN_PRISM_FISHEYE, i, pts)).toBeLessThan(1e-5);
+  });
+});
