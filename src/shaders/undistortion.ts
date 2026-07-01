@@ -48,6 +48,7 @@ uniform float sx1;
 uniform float sy1;
 uniform float sx2;
 uniform float sy2;
+uniform float kDiv;
 
 varying vec2 vUv;
 varying float vValid;
@@ -65,6 +66,8 @@ const int SIMPLE_RADIAL_FISHEYE = 8;
 const int RADIAL_FISHEYE = 9;
 const int THIN_PRISM_FISHEYE = 10;
 const int RAD_TAN_THIN_PRISM_FISHEYE = 11;
+const int SIMPLE_DIVISION = 12;
+const int DIVISION = 13;
 
 // Convert UV to normalized camera coordinates (distorted space)
 vec2 uvToDistortedNormalized(vec2 uv) {
@@ -209,6 +212,14 @@ vec2 inverseDistort(vec2 distorted, out bool valid) {
     return distorted * (tan(arg) / (rd * 2.0 * tan(omega / 2.0)));
   }
 
+  // DIVISION / SIMPLE_DIVISION: exact closed-form inverse (COLMAP CamFromImg w=1).
+  //   undistorted = distorted / (1 + kDiv · |distorted|²)
+  if (modelId == SIMPLE_DIVISION || modelId == DIVISION) {
+    float r2 = dot(distorted, distorted);
+    float denom = 1.0 + kDiv * r2;
+    return distorted / denom;
+  }
+
   // Perspective radial/tangential models: Newton's method on
   // f(u) = u + delta(u) = distorted, with Jacobian J = I + d(delta)/du.
   // (A plain fixed-point iteration converges only linearly and diverges for
@@ -337,6 +348,7 @@ uniform float sx1;    // Thin prism parameters
 uniform float sy1;
 uniform float sx2;    // RAD_TAN thin prism y-direction coefficients
 uniform float sy2;
+uniform float kDiv;   // Division model distortion coefficient
 
 varying vec2 vUv;
 
@@ -353,6 +365,8 @@ const int SIMPLE_RADIAL_FISHEYE = 8;
 const int RADIAL_FISHEYE = 9;
 const int THIN_PRISM_FISHEYE = 10;
 const int RAD_TAN_THIN_PRISM_FISHEYE = 11;
+const int SIMPLE_DIVISION = 12;
+const int DIVISION = 13;
 
 // Convert UV (0-1) to normalized camera coordinates
 vec2 uvToNormalized(vec2 uv) {
@@ -561,6 +575,18 @@ vec2 distortRadTanFisheye(vec2 p) {
   return vec2(x + dxTang + dxTp - p.x, y + dyTang + dyTp - p.y);
 }
 
+// DIVISION / SIMPLE_DIVISION: exact closed-form forward (COLMAP ImgFromCam w=1).
+//   distorted = r·p,  r = 2 / (1 + sqrt(1 − 4·rho2·kDiv))
+// Returns the distortion delta (distorted − undistorted) = (r − 1)·p.
+// If disc2 < 0 (outside the model's valid domain), returns vec2(0.0) (no distortion).
+vec2 distortDivision(vec2 p) {
+  float rho2 = dot(p, p);
+  float disc2 = 1.0 - 4.0 * rho2 * kDiv;
+  if (disc2 < 0.0) return vec2(0.0);
+  float r = 2.0 / (1.0 + sqrt(disc2));
+  return p * (r - 1.0);
+}
+
 // Apply distortion based on model ID
 vec2 applyDistortion(vec2 p) {
   if (modelId == SIMPLE_PINHOLE || modelId == PINHOLE) {
@@ -585,6 +611,8 @@ vec2 applyDistortion(vec2 p) {
     return distortThinPrismFisheye(p);
   } else if (modelId == RAD_TAN_THIN_PRISM_FISHEYE) {
     return distortRadTanFisheye(p);
+  } else if (modelId == SIMPLE_DIVISION || modelId == DIVISION) {
+    return distortDivision(p);
   }
   return vec2(0.0);
 }

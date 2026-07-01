@@ -347,6 +347,41 @@ const fisheyeRadTanStrategy: DistortionStrategy = {
   },
 };
 
+// ── 'division' strategy ───────────────────────────────────────────────────────
+// Implements COLMAP's one-parameter division model (SIMPLE_DIVISION id=12 and
+// DIVISION id=13). Both share the same closed-form forward/inverse; SIMPLE_DIVISION
+// just sets fx=fy=f. The distortion coefficient is `intrinsics.kDiv` (mapped
+// from the `k` parameter by getCameraIntrinsics via the 'division' projectionClass).
+//
+// Forward (undistorted → distorted), COLMAP ImgFromCam for division model (w=1):
+//   rho2 = p.x²+p.y²
+//   disc2 = 1 - 4·rho2·kDiv
+//   if disc2 < 0: outside valid domain, fall back to identity
+//   r = 2 / (1 + sqrt(disc2))
+//   distorted = r·p
+//
+// Inverse (distorted → undistorted), COLMAP CamFromImg for division model (w=1):
+//   denom = 1 + kDiv·(d.x²+d.y²)
+//   undistorted = d / denom
+//
+// These are exact mathematical inverses (verified by the round-trip test).
+
+const divisionStrategy: DistortionStrategy = {
+  forward(p: Vec2, i: CameraIntrinsics): Vec2 {
+    const rho2 = p.x * p.x + p.y * p.y;
+    const disc2 = 1 - 4 * rho2 * i.kDiv;
+    if (disc2 < 0) return { x: p.x, y: p.y }; // outside valid disc; fall back to identity
+    const r = 2 / (1 + Math.sqrt(disc2));
+    return { x: r * p.x, y: r * p.y };
+  },
+
+  inverse(d: Vec2, i: CameraIntrinsics): UndistortResult {
+    const r2 = d.x * d.x + d.y * d.y;
+    const denom = 1 + i.kDiv * r2;
+    return { x: d.x / denom, y: d.y / denom, valid: true };
+  },
+};
+
 // ── identity strategy (used for 'none', stubs, and 'spherical') ───────────────
 
 const identityStrategy: DistortionStrategy = {
@@ -362,8 +397,7 @@ export const DISTORTION_STRATEGIES: Record<ProjectionClass, DistortionStrategy> 
   'fov': fovStrategy,
   'fisheye': fisheyeStrategy,
   'fisheye-radtan': fisheyeRadTanStrategy,
-  // TODO(T7): implement division-model (un)distortion.
-  'division': identityStrategy,
+  'division': divisionStrategy,
   // TODO(T8): implement EUCM (un)distortion.
   'eucm': identityStrategy,
   // Spherical (equirectangular) has no flat-plane undistortion step.

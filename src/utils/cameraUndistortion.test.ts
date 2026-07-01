@@ -381,3 +381,51 @@ describe('characterization: model 10 THIN_PRISM_FISHEYE – forward spot-check',
     expect(maxRoundTripError(CameraModelId.THIN_PRISM_FISHEYE, i, pts)).toBeLessThan(1e-5);
   });
 });
+
+// ── Task 7: DIVISION / SIMPLE_DIVISION ────────────────────────────────────────
+// kDiv=-0.05 (barrel-like distortion). disc2=1-4·rho2·kDiv>1 for all kDiv<0,
+// so no valid-disc guard is ever triggered in these tests.
+
+describe('DIVISION (id=13) – closed-form distortion', () => {
+  const kDiv = -0.05;
+  const modelId = CameraModelId.DIVISION;
+  const i = intr({ kDiv });
+
+  it('forward is NOT identity for a non-origin point', () => {
+    // This FAILS (RED) while the identity stub is in place.
+    const p = { x: 0.3, y: 0.2 };
+    const d = distortNormalized(p, i, modelId);
+    expect(Math.hypot(d.x - p.x, d.y - p.y)).toBeGreaterThan(1e-6);
+  });
+
+  it('inverse spot-check: undistortNormalized(m) = m / (1 + kDiv·|m|²)', () => {
+    const m = { x: 0.3, y: 0.0 };
+    const r2 = m.x * m.x + m.y * m.y;
+    const denom = 1 + kDiv * r2;
+    const u = undistortNormalized(m, i, modelId);
+    expect(u.valid).toBe(true);
+    expect(u.x).toBeCloseTo(m.x / denom, 12);
+    expect(u.y).toBeCloseTo(m.y / denom, 12);
+  });
+
+  it('round-trip: undistortNormalized(distortNormalized(p)) ≈ p within 1e-9', () => {
+    expect(maxRoundTripError(modelId, i, disc(0.7))).toBeLessThan(1e-9);
+  });
+});
+
+describe('SIMPLE_DIVISION (id=12) – closed-form distortion', () => {
+  const kDiv = -0.05;
+  const modelId = CameraModelId.SIMPLE_DIVISION;
+  const i = intr({ kDiv });
+
+  it('forward is NOT identity for a non-origin point', () => {
+    // This FAILS (RED) while the identity stub is in place.
+    const p = { x: 0.3, y: 0.2 };
+    const d = distortNormalized(p, i, modelId);
+    expect(Math.hypot(d.x - p.x, d.y - p.y)).toBeGreaterThan(1e-6);
+  });
+
+  it('round-trip: undistortNormalized(distortNormalized(p)) ≈ p within 1e-9', () => {
+    expect(maxRoundTripError(modelId, i, disc(0.7))).toBeLessThan(1e-9);
+  });
+});
