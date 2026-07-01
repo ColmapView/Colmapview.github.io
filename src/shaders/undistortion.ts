@@ -70,6 +70,8 @@ const int THIN_PRISM_FISHEYE = 10;
 const int RAD_TAN_THIN_PRISM_FISHEYE = 11;
 const int SIMPLE_DIVISION = 12;
 const int DIVISION = 13;
+const int SIMPLE_FISHEYE = 14;
+const int FISHEYE = 15;
 const int EUCM = 16;
 
 // Convert UV to normalized camera coordinates (distorted space)
@@ -103,8 +105,12 @@ vec2 inverseDistort(vec2 distorted, out bool valid) {
     return distorted;
   }
 
-  // Handle fisheye models separately - they need special two-step inversion
-  if (modelId == OPENCV_FISHEYE || modelId == SIMPLE_RADIAL_FISHEYE || modelId == RADIAL_FISHEYE) {
+  // Handle fisheye models separately - they need special two-step inversion.
+  // SIMPLE_FISHEYE (14) and FISHEYE (15) are pure equidistant (zero poly
+  // coefficients): radial stays 0.0 in the loop → fisheyeUndist = distorted →
+  // fisheyeToPinhole applies the equidistant → pinhole conversion exactly.
+  if (modelId == OPENCV_FISHEYE || modelId == SIMPLE_RADIAL_FISHEYE || modelId == RADIAL_FISHEYE
+      || modelId == SIMPLE_FISHEYE || modelId == FISHEYE) {
     // Input is already in fisheye normalized space: (x-cx)/fx, (y-cy)/fy
     // Step 1: Iteratively remove polynomial distortion in fisheye space
     // The distortion is: distorted = undistorted * (1 + k1*θ² + k2*θ⁴ + ...)
@@ -395,6 +401,8 @@ const int THIN_PRISM_FISHEYE = 10;
 const int RAD_TAN_THIN_PRISM_FISHEYE = 11;
 const int SIMPLE_DIVISION = 12;
 const int DIVISION = 13;
+const int SIMPLE_FISHEYE = 14;
+const int FISHEYE = 15;
 const int EUCM = 16;
 
 // Convert UV (0-1) to normalized camera coordinates
@@ -652,6 +660,11 @@ vec2 applyDistortion(vec2 p) {
     return distortRadTanFisheye(p);
   } else if (modelId == SIMPLE_DIVISION || modelId == DIVISION) {
     return distortDivision(p);
+  } else if (modelId == SIMPLE_FISHEYE || modelId == FISHEYE) {
+    // Pure equidistant fisheye (no polynomial distortion coefficients).
+    // distortOpenCVFisheye with k1=k2=k3=k4=0 reduces to thetad=theta,
+    // i.e. distorted_radius = atan(r) — the pure equidistant projection.
+    return distortOpenCVFisheye(p);
   } else if (modelId == EUCM) {
     return distortEUCM(p);
   }

@@ -430,6 +430,62 @@ describe('SIMPLE_DIVISION (id=12) – closed-form distortion', () => {
   });
 });
 
+// ── Task 9: SIMPLE_FISHEYE (id=14) and FISHEYE (id=15) ──────────────────────
+// Pure equidistant fisheye — no polynomial distortion coefficients.
+// Forward (FisheyeFromNormal): theta = atan(r); distorted_radius = theta.
+// For a point at pinhole-normalized radius r, distorting yields radius atan(r),
+// which differs from r for any off-axis ray (atan(r) < r for r > 0).
+// Both models dispatch to the 'fisheye' projectionClass strategy with all-zero
+// k/p/sx1/sy1 coefficients — the polynomial and tangential/prism terms vanish
+// exactly (IEEE 754), leaving only the atan projection.
+// SIMPLE_FISHEYE params: f, cx, cy.
+// FISHEYE params:        fx, fy, cx, cy.
+
+describe('characterization: model 14 SIMPLE_FISHEYE – pure equidistant fisheye', () => {
+  const i = intr({}); // all k=0, p=0, sx=0 — pure equidistant
+
+  it('forward is NOT identity for a non-origin point (atan(r) ≠ r for r > 0)', () => {
+    const p = { x: 0.3, y: 0.2 };
+    const d = distortNormalized(p, i, CameraModelId.SIMPLE_FISHEYE);
+    // pure equidistant: distorted_radius = atan(r) < r, so output differs from input
+    expect(Math.hypot(d.x - p.x, d.y - p.y)).toBeGreaterThan(1e-6);
+  });
+
+  it('forward maps perspective radius r to distorted radius atan(r)', () => {
+    const p = { x: 0.3, y: 0 };
+    const d = distortNormalized(p, i, CameraModelId.SIMPLE_FISHEYE);
+    expect(Math.hypot(d.x, d.y)).toBeCloseTo(Math.atan(0.3), 10);
+  });
+
+  it('round-trip: undistortNormalized(distortNormalized(p)) ≈ p within 1e-9', () => {
+    const pts = disc(Math.tan((70 * Math.PI) / 180)); // up to ~70 deg half-angle
+    expect(maxRoundTripError(CameraModelId.SIMPLE_FISHEYE, i, pts)).toBeLessThan(1e-9);
+  });
+});
+
+describe('characterization: model 15 FISHEYE – pure equidistant fisheye (fx≠fy form)', () => {
+  const i = intr({}); // all k=0, p=0, sx=0 — pure equidistant
+
+  it('forward is NOT identity for a non-origin point (atan(r) ≠ r for r > 0)', () => {
+    const p = { x: 0.3, y: 0.2 };
+    const d = distortNormalized(p, i, CameraModelId.FISHEYE);
+    // pure equidistant: distorted_radius = atan(r) < r, so output differs from input
+    expect(Math.hypot(d.x - p.x, d.y - p.y)).toBeGreaterThan(1e-6);
+  });
+
+  it('forward maps perspective radius r to distorted radius atan(r)', () => {
+    const p = { x: 0.4, y: 0.3 };
+    const r = Math.hypot(p.x, p.y);
+    const d = distortNormalized(p, i, CameraModelId.FISHEYE);
+    expect(Math.hypot(d.x, d.y)).toBeCloseTo(Math.atan(r), 10);
+  });
+
+  it('round-trip: undistortNormalized(distortNormalized(p)) ≈ p within 1e-9', () => {
+    const pts = disc(Math.tan((70 * Math.PI) / 180)); // up to ~70 deg half-angle
+    expect(maxRoundTripError(CameraModelId.FISHEYE, i, pts)).toBeLessThan(1e-9);
+  });
+});
+
 // ── Task 8: EUCM (Extended Unified Camera Model) ─────────────────────────────
 // COLMAP id=16, params: fx,fy,cx,cy,alpha,beta.
 // forward: den = alpha*sqrt(beta*r²+1) + (1-alpha); distorted = p/den
