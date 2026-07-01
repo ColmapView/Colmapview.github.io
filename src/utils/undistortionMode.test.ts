@@ -21,4 +21,15 @@ describe('resolveUndistortionMode', () => {
     expect(resolveUndistortionMode('cropped', CameraModelId.OPENCV)).toBe('cropped');
     expect(resolveUndistortionMode('cropped', CameraModelId.OPENCV_FISHEYE)).toBe('cropped');
   });
+
+  it('downgrades the new fisheye models from fullFrame to cropped', () => {
+    expect(resolveUndistortionMode('fullFrame', CameraModelId.FISHEYE)).toBe('cropped');
+    expect(resolveUndistortionMode('fullFrame', CameraModelId.SIMPLE_FISHEYE)).toBe('cropped');
+    expect(resolveUndistortionMode('fullFrame', CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE)).toBe('cropped');
+  });
+
+  it('leaves spherical and pinhole-family new models in their requested mode', () => {
+    expect(resolveUndistortionMode('fullFrame', CameraModelId.EQUIRECTANGULAR)).toBe('fullFrame');
+    expect(resolveUndistortionMode('fullFrame', CameraModelId.EUCM)).toBe('fullFrame');
+  });
 });

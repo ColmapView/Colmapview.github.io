@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CameraModelId } from '../types/colmap';
-import { isPerspectiveCameraModel, isFisheyeCameraModel, isSphericalCameraModel, PERSPECTIVE_CAMERA_MODELS, FISHEYE_CAMERA_MODELS } from './cameraModelPolicy';
+import { isPerspectiveCameraModel, isFisheyeCameraModel, isSphericalCameraModel, PERSPECTIVE_CAMERA_MODELS, FISHEYE_CAMERA_MODELS, getCameraModelCompatibility } from './cameraModelPolicy';
 import {
   type CameraModelFamily,
   CAMERA_MODEL_DESCRIPTORS,
@@ -115,5 +115,13 @@ describe('registry-derived classification parity', () => {
   it('perspective/fisheye membership matches the expected COLMAP grouping', () => {
     expect([...PERSPECTIVE_CAMERA_MODELS].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 6, 7, 12, 13, 16]);
     expect([...FISHEYE_CAMERA_MODELS].sort((a, b) => a - b)).toEqual([5, 8, 9, 10, 11, 14, 15]);
+  });
+
+  it('treats new + spherical models as not convertible (incompatible)', () => {
+    for (const id of [CameraModelId.SIMPLE_DIVISION, CameraModelId.DIVISION, CameraModelId.SIMPLE_FISHEYE,
+                      CameraModelId.FISHEYE, CameraModelId.EUCM, CameraModelId.EQUIRECTANGULAR]) {
+      expect(getCameraModelCompatibility(CameraModelId.PINHOLE, id)).toBe('incompatible');
+      expect(getCameraModelCompatibility(id, CameraModelId.PINHOLE)).toBe('incompatible');
+    }
   });
 });
