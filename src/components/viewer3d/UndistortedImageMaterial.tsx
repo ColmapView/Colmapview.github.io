@@ -93,6 +93,11 @@ export function UndistortedImageMaterial({
       omega: { value: intrinsics.omega },
       sx1: { value: intrinsics.sx1 },
       sy1: { value: intrinsics.sy1 },
+      sx2: { value: intrinsics.sx2 },
+      sy2: { value: intrinsics.sy2 },
+      kDiv: { value: intrinsics.kDiv },
+      alpha: { value: intrinsics.alpha },
+      beta: { value: intrinsics.beta },
     };
 
     // Mode-specific uniforms
@@ -165,6 +170,11 @@ export function UndistortedImageMaterial({
     mat.uniforms.omega.value = intrinsics.omega;
     mat.uniforms.sx1.value = intrinsics.sx1;
     mat.uniforms.sy1.value = intrinsics.sy1;
+    mat.uniforms.sx2.value = intrinsics.sx2;
+    mat.uniforms.sy2.value = intrinsics.sy2;
+    mat.uniforms.kDiv.value = intrinsics.kDiv;
+    mat.uniforms.alpha.value = intrinsics.alpha;
+    mat.uniforms.beta.value = intrinsics.beta;
 
     // Update material properties using centralized transparency logic, with overrides
     const { transparent, depthWrite } = getMaterialTransparency(opacity);

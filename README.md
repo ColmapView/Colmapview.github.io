@@ -24,7 +24,7 @@ View point clouds, camera frustums, and image matches directly in your browser. 
 - **Gallery View** - Grid or list layout with virtual scrolling for large datasets.
 - **Image Detail Modal** - Full camera intrinsics, pose data, and matched image browsing.
 - **Match Visualization** - Animated feature connections between images.
-- **Lens Undistortion** - Real-time preview for all 11 COLMAP camera models.
+- **Lens Undistortion** - Real-time preview for COLMAP's projective and fisheye camera models.
 
 ### Export & Sharing
 - **Multiple Export Formats** - COLMAP binary/text, PLY point clouds, config YAML, ZIP archives.
@@ -106,7 +106,7 @@ View point clouds, camera frustums, and image matches directly in your browser. 
 
 ## Supported Camera Models
 
-ColmapView supports all 11 COLMAP camera models with real-time undistortion:
+ColmapView supports all 18 COLMAP camera models (ids 0-17), with real-time undistortion for the projective and fisheye models:
 
 - SIMPLE_PINHOLE, PINHOLE
 - SIMPLE_RADIAL, RADIAL
@@ -114,6 +114,16 @@ ColmapView supports all 11 COLMAP camera models with real-time undistortion:
 - FOV
 - SIMPLE_RADIAL_FISHEYE, RADIAL_FISHEYE
 - THIN_PRISM_FISHEYE
+- RAD_TAN_THIN_PRISM_FISHEYE
+- SIMPLE_DIVISION, DIVISION
+- SIMPLE_FISHEYE, FISHEYE
+- EUCM
+- EQUIRECTANGULAR
+
+Notes:
+
+- Models 11-16 (RAD_TAN_THIN_PRISM_FISHEYE, SIMPLE_DIVISION, DIVISION, SIMPLE_FISHEYE, FISHEYE, EUCM) render image previews in cropped mode.
+- EQUIRECTANGULAR (id 17) is a spherical model with no planar undistortion. On the current build these cameras are parsed and shown but excluded from the pinhole rendering paths; full photosphere rendering ships separately.
 
 ## Links
 

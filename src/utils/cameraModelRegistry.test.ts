@@ -3,6 +3,7 @@ import { CameraModelId } from '../types/colmap';
 import { isPerspectiveCameraModel, isFisheyeCameraModel, isSphericalCameraModel, PERSPECTIVE_CAMERA_MODELS, FISHEYE_CAMERA_MODELS, getCameraModelCompatibility } from './cameraModelPolicy';
 import {
   type CameraModelFamily,
+  type ProjectionClass,
   CAMERA_MODEL_DESCRIPTORS,
   getCameraModelNumParams,
   getCameraModelParamNames,
@@ -11,6 +12,7 @@ import {
   colmapNameToModelId,
   getCameraModelFamily,
   cameraModelHasPinholeIntrinsics,
+  getCameraModelProjectionClass,
 } from './cameraModelRegistry';
 
 describe('cameraModelRegistry', () => {
@@ -64,6 +66,32 @@ describe('cameraModelRegistry', () => {
       const isSpherical = id === CameraModelId.EQUIRECTANGULAR;
       expect(isSphericalCameraModel(id)).toBe(isSpherical);
       expect(cameraModelHasPinholeIntrinsics(id)).toBe(!isSpherical);
+    }
+  });
+
+  it('classifies every model into its expected projectionClass', () => {
+    const expectedProjectionClass: Record<number, ProjectionClass> = {
+      [CameraModelId.SIMPLE_PINHOLE]: 'none',
+      [CameraModelId.PINHOLE]: 'none',
+      [CameraModelId.SIMPLE_RADIAL]: 'perspective-radial',
+      [CameraModelId.RADIAL]: 'perspective-radial',
+      [CameraModelId.OPENCV]: 'perspective-radial',
+      [CameraModelId.OPENCV_FISHEYE]: 'fisheye',
+      [CameraModelId.FULL_OPENCV]: 'perspective-radial',
+      [CameraModelId.FOV]: 'fov',
+      [CameraModelId.SIMPLE_RADIAL_FISHEYE]: 'fisheye',
+      [CameraModelId.RADIAL_FISHEYE]: 'fisheye',
+      [CameraModelId.THIN_PRISM_FISHEYE]: 'fisheye',
+      [CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE]: 'fisheye-radtan',
+      [CameraModelId.SIMPLE_DIVISION]: 'division',
+      [CameraModelId.DIVISION]: 'division',
+      [CameraModelId.SIMPLE_FISHEYE]: 'fisheye',
+      [CameraModelId.FISHEYE]: 'fisheye',
+      [CameraModelId.EUCM]: 'eucm',
+      [CameraModelId.EQUIRECTANGULAR]: 'spherical',
+    };
+    for (const id of Object.values(CameraModelId)) {
+      expect(getCameraModelProjectionClass(id)).toBe(expectedProjectionClass[id]);
     }
   });
 

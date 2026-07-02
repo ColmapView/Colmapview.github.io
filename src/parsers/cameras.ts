@@ -51,6 +51,23 @@ export function parseCamerasBinary(buffer: ArrayBuffer): Map<number, Camera> {
   return cameras;
 }
 
+/** A camera record skipped by {@link parseCamerasText} because its model is unknown. */
+export interface SkippedCameraRecord {
+  /** 1-based line number within the source text where the camera was declared. */
+  line: number;
+  /** The unrecognized COLMAP model name, verbatim from the file. */
+  modelName: string;
+}
+
+export interface ParseCamerasTextOptions {
+  /**
+   * Called once per camera skipped due to an unknown model. The camera is still
+   * omitted from the returned map (partial loads stay useful); callers can use
+   * these records to surface an aggregate notification to the user.
+   */
+  onSkip?: (record: SkippedCameraRecord) => void;
+}
+
 /**
  * Parse cameras.txt text file
  *
@@ -59,12 +76,18 @@ export function parseCamerasBinary(buffer: ArrayBuffer): Map<number, Camera> {
  * #   CAMERA_ID, MODEL, WIDTH, HEIGHT, PARAMS[]
  * # Number of cameras: N
  * 1 SIMPLE_PINHOLE 3072 2304 2559.81 1536 1152
+ *
+ * Cameras with an unknown model name are skipped (so partial reconstructions
+ * still load); each skip is logged and reported through `options.onSkip`.
  */
-export function parseCamerasText(text: string): Map<number, Camera> {
+export function parseCamerasText(
+  text: string,
+  options?: ParseCamerasTextOptions
+): Map<number, Camera> {
   const cameras = new Map<number, Camera>();
   const lines = text.split('\n');
 
-  for (const line of lines) {
+  for (const [lineIndex, line] of lines.entries()) {
     // Skip comments and empty lines
     if (line.startsWith('#') || line.trim() === '') continue;
 
@@ -79,6 +102,7 @@ export function parseCamerasText(text: string): Map<number, Camera> {
 
     if (modelId === undefined) {
       appLogger.warn(`Unknown camera model: ${modelName}`);
+      options?.onSkip?.({ line: lineIndex + 1, modelName });
       continue;
     }
 

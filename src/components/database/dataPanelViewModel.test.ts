@@ -64,6 +64,32 @@ describe('data panel view model', () => {
     ]);
   });
 
+  it('shows a placeholder focal for spherical cameras but the real focal for pinhole cameras', () => {
+    const reconstruction = buildReconstruction({
+      cameras: [
+        buildCamera({
+          cameraId: 1,
+          modelId: CameraModelId.PINHOLE,
+          width: 640,
+          height: 480,
+          params: [1000.5, 1000, 320, 240],
+        }),
+        buildCamera({
+          cameraId: 2,
+          modelId: CameraModelId.EQUIRECTANGULAR,
+          width: 2000,
+          height: 1000,
+          // For EQUIRECTANGULAR params[0] is the panorama width, not a focal length.
+          params: [2000, 1000],
+        }),
+      ],
+    });
+
+    const rows = getDataPanelCameraRows(reconstruction);
+    expect(rows[0].focal).toBe('1000.50');
+    expect(rows[1].focal).toBe('—');
+  });
+
   it('builds limited image rows and prefers stored point counts', () => {
     const reconstruction = buildReconstruction({
       images: [

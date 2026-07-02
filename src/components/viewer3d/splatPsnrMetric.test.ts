@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { buildCamera, buildImage } from '../../test/builders';
+import { CameraModelId } from '../../types/colmap';
 import { createSim3dFromEuler } from '../../utils/sim3dTransforms';
+import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
+import { distortNormalized } from '../../utils/cameraUndistortion';
 import {
   computeSplatMetricColorScale,
   computePsnrAndSsimFromRgba,
@@ -125,6 +128,89 @@ describe('splatPsnrMetric helpers', () => {
     expect(Array.from(target.slice((1 * 4 + 3) * 4, (1 * 4 + 4) * 4))).toEqual([
       65, 50, 100, 255,
     ]);
+  });
+
+  it('OPENCV distortion in createUndistortedGroundTruthPixelsFromImageData delegates to canonical distortNormalized', () => {
+    // Parity test: verify the ground-truth undistortion path for an OPENCV camera
+    // produces the same pixel mapping as distortNormalized from cameraUndistortion.ts.
+    // This is a characterization/regression guard after the refactor that replaced the
+    // private applyDistortion copy with a direct call to the canonical.
+    const cameraWidth = 10;
+    const cameraHeight = 10;
+    const fx = 10;
+    const fy = 10;
+    const cx = 5;
+    const cy = 5;
+    // OPENCV params order: fx, fy, cx, cy, k1, k2, p1, p2
+    const camera = buildCamera({
+      modelId: CameraModelId.OPENCV,
+      width: cameraWidth,
+      height: cameraHeight,
+      params: [fx, fy, cx, cy, 0.5, 0.05, 0.01, -0.005],
+    });
+
+    // Source image: R encodes x column (x * 25), G encodes y row, so bilinear
+    // sampling reveals exactly which source coordinate was looked up.
+    const sourcePixels = new Uint8ClampedArray(cameraWidth * cameraHeight * 4);
+    for (let sy = 0; sy < cameraHeight; sy++) {
+      for (let sx = 0; sx < cameraWidth; sx++) {
+        const off = (sy * cameraWidth + sx) * 4;
+        sourcePixels[off] = sx * 25;      // R: 0–225
+        sourcePixels[off + 1] = sy * 25;  // G: 0–225
+        sourcePixels[off + 2] = 128;
+        sourcePixels[off + 3] = 255;
+      }
+    }
+
+    const result = createUndistortedGroundTruthPixelsFromImageData(
+      sourcePixels, cameraWidth, cameraHeight, camera, cameraWidth, cameraHeight
+    );
+
+    // For target pixel (8, 5), compute the expected source sample via distortNormalized.
+    const intrinsics = getCameraIntrinsics(camera);
+    const targetX = 8;
+    const targetY = 5;
+
+    // Mirror the coordinate derivation from createUndistortedGroundTruthPixelsFromImageData:
+    // scaleX = targetWidth / camera.width = 1, sourceScaleX = sourceWidth / camera.width = 1
+    const px = (targetX + 0.5) / (cameraWidth / camera.width);
+    const py = (targetY + 0.5) / (cameraHeight / camera.height);
+    const xn = (px - cx) / fx;
+    const yn = (py - cy) / fy;
+    const distorted = distortNormalized({ x: xn, y: yn }, intrinsics, camera.modelId);
+    const sourceScaleX = cameraWidth / camera.width;  // 1
+    const sourceScaleY = cameraHeight / camera.height; // 1
+    const sampleX = (distorted.x * fx + cx) * sourceScaleX - 0.5;
+    const sampleY = (distorted.y * fy + cy) * sourceScaleY - 0.5;
+
+    // Bilinear sample (mirrors sampleImageBilinear) to get expected R and G values.
+    const x0 = Math.floor(sampleX);
+    const y0 = Math.floor(sampleY);
+    const x1 = Math.min(cameraWidth - 1, x0 + 1);
+    const y1 = Math.min(cameraHeight - 1, y0 + 1);
+    const tx = sampleX - x0;
+    const ty = sampleY - y0;
+    const i00 = (y0 * cameraWidth + x0) * 4;
+    const i10 = (y0 * cameraWidth + x1) * 4;
+    const i01 = (y1 * cameraWidth + x0) * 4;
+    const i11 = (y1 * cameraWidth + x1) * 4;
+    const expectedR =
+      sourcePixels[i00] * (1 - tx) * (1 - ty) +
+      sourcePixels[i10] * tx * (1 - ty) +
+      sourcePixels[i01] * (1 - tx) * ty +
+      sourcePixels[i11] * tx * ty;
+    const expectedG =
+      sourcePixels[i00 + 1] * (1 - tx) * (1 - ty) +
+      sourcePixels[i10 + 1] * tx * (1 - ty) +
+      sourcePixels[i01 + 1] * (1 - tx) * ty +
+      sourcePixels[i11 + 1] * tx * ty;
+
+    const outOffset = (targetY * cameraWidth + targetX) * 4;
+    // Allow ±0.5 rounding when the float is stored in Uint8ClampedArray.
+    expect(result[outOffset]).toBeCloseTo(expectedR, 0);
+    expect(result[outOffset + 1]).toBeCloseTo(expectedG, 0);
+    // Confirm we're actually testing a distorted pixel (xd !== xn).
+    expect(distorted.x).toBeGreaterThan(xn);
   });
 
   it('builds a viewer-aligned camera that projects COLMAP pixels back to image coordinates', () => {

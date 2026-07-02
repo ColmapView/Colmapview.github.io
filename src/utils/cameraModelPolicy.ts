@@ -1,6 +1,9 @@
 import { CameraModelId } from '../types/colmap';
-import { CAMERA_MODEL_COLMAP_NAMES } from './cameraModelNames';
-import { CAMERA_MODEL_DESCRIPTORS, getCameraModelFamily } from './cameraModelRegistry';
+import {
+  CAMERA_MODEL_DESCRIPTORS,
+  getCameraModelColmapName as getRegistryCameraModelColmapName,
+  isSphericalCameraModel as isSphericalCameraModelFromRegistry,
+} from './cameraModelRegistry';
 
 export type ConversionCompatibility = 'exact' | 'approximate' | 'incompatible';
 export { CAMERA_MODEL_COLMAP_NAMES } from './cameraModelNames';
@@ -15,8 +18,9 @@ export const PERSPECTIVE_CAMERA_MODELS: readonly CameraModelId[] =
 export const FISHEYE_CAMERA_MODELS: readonly CameraModelId[] =
   Object.values(CAMERA_MODEL_DESCRIPTORS).filter((d) => d.family === 'fisheye').map((d) => d.id);
 
+// Delegates to the registry (single source of truth); behavior is identical.
 export function isSphericalCameraModel(modelId: CameraModelId): boolean {
-  return getCameraModelFamily(modelId) === 'spherical';
+  return isSphericalCameraModelFromRegistry(modelId);
 }
 
 const CAMERA_MODEL_ID_VALUES: ReadonlySet<number> = new Set(Object.values(CameraModelId));
@@ -76,7 +80,12 @@ function hasConversionPair(
 }
 
 export function getCameraModelColmapName(modelId: CameraModelId): string {
-  return CAMERA_MODEL_COLMAP_NAMES[modelId] ?? `Unknown(${modelId})`;
+  // Delegates to the registry (single source of truth), but preserves this
+  // module's historical non-throwing fallback for out-of-registry ids — the
+  // registry's getCameraModelColmapName throws on an unknown id.
+  return isCameraModelId(modelId)
+    ? getRegistryCameraModelColmapName(modelId)
+    : `Unknown(${modelId})`;
 }
 
 export function isCameraModelId(value: unknown): value is CameraModelId {

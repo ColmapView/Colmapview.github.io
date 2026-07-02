@@ -3,6 +3,7 @@ import type { Camera, Image } from '../../types/colmap';
 import { CameraModelId } from '../../types/colmap';
 import type { Sim3dEuler } from '../../types/sim3d';
 import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
+import { distortNormalized } from '../../utils/cameraUndistortion';
 import { createColmapMetricThreeCamera } from '../../splat/webgpu/cameraFrames';
 import {
   ensureSplatPsnrWebGpuDevice,
@@ -547,102 +548,6 @@ export function createColmapPsnrCamera(
   return createColmapMetricThreeCamera(image, camera, width, height, transform, near, far);
 }
 
-function applyDistortion(camera: Camera, x: number, y: number): [number, number] {
-  const intrinsics = getCameraIntrinsics(camera);
-  const {
-    k1,
-    k2,
-    k3,
-    k4,
-    k5,
-    k6,
-    p1,
-    p2,
-    omega,
-    sx1,
-    sy1,
-  } = intrinsics;
-  const modelId = camera.modelId;
-
-  if (modelId === CameraModelId.SIMPLE_PINHOLE || modelId === CameraModelId.PINHOLE) {
-    return [x, y];
-  }
-
-  const r2 = x * x + y * y;
-  const r = Math.sqrt(r2);
-
-  if (modelId === CameraModelId.SIMPLE_RADIAL) {
-    const radial = k1 * r2;
-    return [x * (1 + radial), y * (1 + radial)];
-  }
-
-  if (modelId === CameraModelId.RADIAL) {
-    const r4 = r2 * r2;
-    const radial = k1 * r2 + k2 * r4;
-    return [x * (1 + radial), y * (1 + radial)];
-  }
-
-  if (modelId === CameraModelId.OPENCV || modelId === CameraModelId.FULL_OPENCV) {
-    const r4 = r2 * r2;
-    const r6 = r4 * r2;
-    const radial = modelId === CameraModelId.OPENCV
-      ? k1 * r2 + k2 * r4
-      : (1 + k1 * r2 + k2 * r4 + k3 * r6) / (1 + k4 * r2 + k5 * r4 + k6 * r6) - 1;
-    const dx = 2 * p1 * x * y + p2 * (r2 + 2 * x * x);
-    const dy = p1 * (r2 + 2 * y * y) + 2 * p2 * x * y;
-    return [x * (1 + radial) + dx, y * (1 + radial) + dy];
-  }
-
-  if (modelId === CameraModelId.FOV && r > 0.00001) {
-    const rd = Math.atan(r * 2 * Math.tan(omega / 2)) / omega;
-    const factor = rd / r;
-    return [x * factor, y * factor];
-  }
-
-  if (
-    modelId === CameraModelId.OPENCV_FISHEYE ||
-    modelId === CameraModelId.SIMPLE_RADIAL_FISHEYE ||
-    modelId === CameraModelId.RADIAL_FISHEYE ||
-    modelId === CameraModelId.THIN_PRISM_FISHEYE ||
-    modelId === CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE
-  ) {
-    if (r < 0.00001) return [x, y];
-
-    const theta = Math.atan(r);
-    const theta2 = theta * theta;
-    const theta4 = theta2 * theta2;
-    const theta6 = theta4 * theta2;
-    const theta8 = theta4 * theta4;
-    let thetaDistorted = theta;
-
-    if (modelId === CameraModelId.SIMPLE_RADIAL_FISHEYE) {
-      thetaDistorted = theta * (1 + k1 * theta2);
-    } else if (modelId === CameraModelId.RADIAL_FISHEYE) {
-      thetaDistorted = theta * (1 + k1 * theta2 + k2 * theta4);
-    } else {
-      thetaDistorted = theta * (1 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8);
-    }
-
-    let xd = x * thetaDistorted / r;
-    let yd = y * thetaDistorted / r;
-
-    if (
-      modelId === CameraModelId.THIN_PRISM_FISHEYE ||
-      modelId === CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE
-    ) {
-      const r2d = xd * xd + yd * yd;
-      const dx = 2 * p1 * xd * yd + p2 * (r2d + 2 * xd * xd) + sx1 * r2d;
-      const dy = p1 * (r2d + 2 * yd * yd) + 2 * p2 * xd * yd + sy1 * r2d;
-      xd += dx;
-      yd += dy;
-    }
-
-    return [xd, yd];
-  }
-
-  return [x, y];
-}
-
 function sampleImageBilinear(
   source: Uint8ClampedArray,
   width: number,
@@ -711,7 +616,7 @@ export function createUndistortedGroundTruthPixelsFromImageData(
       const py = (y + 0.5) / scaleY;
       const xn = (px - intrinsics.cx) / intrinsics.fx;
       const yn = (py - intrinsics.cy) / intrinsics.fy;
-      const [xd, yd] = applyDistortion(camera, xn, yn);
+      const { x: xd, y: yd } = distortNormalized({ x: xn, y: yn }, intrinsics, camera.modelId);
       const sampleX = imageCoordinateToImageDataSampleCoordinate(
         xd * intrinsics.fx + intrinsics.cx,
         sourceScaleX

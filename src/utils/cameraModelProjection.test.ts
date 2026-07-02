@@ -64,4 +64,37 @@ describe('validateCameraModelProjectionConversion', () => {
       sampleCount: 0,
     });
   });
+
+  it('THIN_PRISM_FISHEYE applies tangential p1/p2 terms (were silently dropped before refactor)', () => {
+    // THIN_PRISM_FISHEYE: [fx, fy, cx, cy, k1, k2, p1, p2, k3, k4, sx1, sy1]
+    const camWithP1 = makeCamera(CameraModelId.THIN_PRISM_FISHEYE, [
+      1000, 1000, 960, 540,   // fx, fy, cx, cy
+      0.05, 0,                // k1, k2
+      5e-3, 0,                // p1, p2 — tangential distortion being tested
+      0, 0,                   // k3, k4
+      0, 0,                   // sx1, sy1
+    ]);
+    const camNoP1 = makeCamera(CameraModelId.THIN_PRISM_FISHEYE, [
+      1000, 1000, 960, 540,
+      0.05, 0,
+      0, 0,                   // p1=0, p2=0
+      0, 0,
+      0, 0,
+    ]);
+
+    // Cross-camera check: unproject from the p1-camera, then re-project through the
+    // no-p1-camera.  When p1 is correctly applied during unproject, the recovered
+    // undistorted ray differs from what a no-p1 camera would see, so re-projection
+    // produces a measurable pixel error.
+    // Pre-fix (p1/p2 silently dropped): both cameras are treated identically →
+    // error ≈ 0 → assertion FAILS.
+    // Post-fix (delegation to canonical): tangential term is applied → error ≥ ~1 px →
+    // assertion PASSES.
+    const crossResult = validateCameraModelProjectionConversion(camWithP1, camNoP1, 4);
+    expect(crossResult.maxError).toBeGreaterThan(0.5);
+
+    // Round-trip through the same camera must be accurate to < 1e-6 pixels.
+    const rtResult = validateCameraModelProjectionConversion(camWithP1, camWithP1, 4);
+    expect(rtResult.maxError).toBeLessThan(1e-6);
+  });
 });

@@ -1,20 +1,10 @@
 import { CAMERA_MODEL_COLMAP_NAMES, CAMERA_MODEL_NAMES } from '../../utils/cameraModelNames';
-import { CAMERA_MODEL_DESCRIPTORS, cameraModelHasPinholeIntrinsics } from '../../utils/cameraModelRegistry';
+import {
+  CAMERA_MODEL_DESCRIPTORS,
+  cameraModelHasPinholeIntrinsics,
+  getCameraModelParamNames,
+} from '../../utils/cameraModelRegistry';
 import type { CameraModelId } from '../../types/cameraModelId';
-
-const CAMERA_PARAM_NAMES: Record<number, string> = {
-  0: 'f, cx, cy',
-  1: 'fx, fy, cx, cy',
-  2: 'f, cx, cy, k',
-  3: 'f, cx, cy, k1, k2',
-  4: 'fx, fy, cx, cy, k1, k2, p1, p2',
-  5: 'fx, fy, cx, cy, k1, k2, k3, k4',
-  6: 'fx, fy, cx, cy, k1, k2, p1, p2, k3, k4, k5, k6',
-  7: 'fx, fy, cx, cy, omega',
-  8: 'f, cx, cy, k',
-  9: 'f, cx, cy, k1, k2',
-  10: 'fx, fy, cx, cy, k1, k2, p1, p2, k3, k4, sx1, sy1',
-};
 
 export interface CameraPoseParameterDisplay {
   name: string;
@@ -91,7 +81,11 @@ export function buildCameraPoseDisplayModel(
     return { ...base, parameters: [] };
   }
 
-  const paramNames = (CAMERA_PARAM_NAMES[camera.modelId] ?? '').split(', ');
+  // Param labels come from the registry (single source of truth); unknown /
+  // out-of-registry ids fall through to the `p${index}` fallback below.
+  const paramNames: readonly string[] =
+    modelId in CAMERA_MODEL_DESCRIPTORS ? getCameraModelParamNames(modelId) : [];
+
   return {
     ...base,
     parameters: camera.params.map((param, index) => ({

@@ -153,6 +153,11 @@ export interface CameraIntrinsics {
   omega: number;  // FOV model parameter
   sx1: number;    // Thin prism parameters
   sy1: number;
+  sx2: number;    // RAD_TAN thin prism y-direction coefficients
+  sy2: number;
+  alpha: number;  // EUCM parameter
+  beta: number;   // EUCM parameter
+  kDiv: number;   // Division model distortion coefficient
 }
 
 // Re-export for backwards compatibility (moved to utils/cameraIntrinsics.ts)
