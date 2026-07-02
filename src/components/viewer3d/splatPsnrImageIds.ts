@@ -105,9 +105,13 @@ export function getRequestedSplatPsnrImageIds(
 export const SPLAT_PSNR_SELECTED_SPHERICAL_MESSAGE =
   'PSNR is not available for spherical cameras. Select a pinhole camera to compute PSNR.';
 
-/** Info shown when some (but not all) images are dropped from a compute-all. */
+/**
+ * Info shown when some (but not all) images are dropped from a compute-all.
+ * The count is per IMAGE (one spherical camera is often shared by many
+ * panorama images), so the message must say "image(s)", not "camera(s)".
+ */
 export function formatSplatPsnrExcludedSphericalMessage(count: number): string {
-  return `Skipped ${count} spherical camera(s) for PSNR; only pinhole cameras are supported.`;
+  return `Skipped ${count} spherical image(s) for PSNR; only pinhole cameras are supported.`;
 }
 
 /**
