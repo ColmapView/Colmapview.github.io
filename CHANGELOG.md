@@ -17,12 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fly-to for spherical cameras stops outside the sphere and orbits its center (auto-FOV frames the sphere), and fly-to no longer re-orients the view to an assumed world-up — the current roll is preserved (COLMAP gravity is often +Y, which used to flip the scene on go-to).
 - Distortion support for the new models on both CPU and GPU: EUCM, DIVISION/SIMPLE_DIVISION, SIMPLE_FISHEYE/FISHEYE, and the previously-broken RAD_TAN_THIN_PRISM_FISHEYE now render undistorted image previews correctly, guarded by a structural-exhaustiveness + CPU/GLSL numerical parity contract and independent COLMAP-derived oracle tests.
 - Notify when cameras are skipped or excluded: loading a cameras.txt with unknown model names now shows an aggregate warning (previously silent console-only), and splat-PSNR computes report how many spherical images were excluded (PSNR is pinhole-only).
+- Selecting a spherical camera shows a one-time "Press U to toggle the panorama overlay" tip, so the portal view is discoverable (the pinhole undistortion tip is gated on distortion coefficients, which spherical cameras don't have).
 
 ### Changed
 
 - Camera parameter labels in the image-detail modal come from the model registry (EUCM shows alpha/beta, all COLMAP 4.1 models labeled; FOV's fifth parameter now displays as ω).
 - The Data panel no longer shows a spherical camera's panorama width as its "Focal" value.
-- Spherical grid spheres dim with the same standby/unselected opacity rules as pinhole frustums, and their invisible hit targets are instanced (the camera-size slider no longer rebuilds per-camera geometry).
+- Spherical grid spheres dim with the same standby/unselected opacity rules as pinhole frustums — and brighten on hover like them; their invisible hit targets are instanced (the camera-size slider no longer rebuilds per-camera geometry).
+- The image-detail modal shows a spherical camera's entry as `panorama=W×H` instead of an empty parameter list, and the (U) hotkey description now reads "Toggle undistorted view (panorama overlay for 360 cameras)".
 
 ### Fixed
 
