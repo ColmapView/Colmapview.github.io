@@ -128,7 +128,8 @@ export function getImageFlyToPose(
   worldUpVec: THREE.Vector3,
   distance: number,
   cameraScale: number,
-  currentViewerPos: THREE.Vector3
+  currentViewerPos: THREE.Vector3,
+  currentViewerQuat?: THREE.Quaternion
 ): FlyToPose | null {
   const image = reconstruction.images.get(imageId);
   if (!image) return null;
@@ -153,10 +154,20 @@ export function getImageFlyToPose(
       currentViewerPos,
       worldRadius
     );
-    // Look at the center with worldUpVec: the panorama stays upright (poles vertical). This is
-    // the horizon-lock result, and the sensible default when horizon-lock is off — an external
-    // orbit view has no camera-roll reference of its own.
-    const lookMatrix = new THREE.Matrix4().lookAt(position, lookAt, worldUpVec);
+    // Do NOT re-orient the scene: preserve the viewer's CURRENT up/roll. COLMAP world-up
+    // is unreliable (gravity is often +Y, i.e. three.js "down"), so locking the look-at to
+    // worldUpVec can flip the whole scene on fly-to (visual check 2026-07-02). Fall back to
+    // worldUpVec only when the current up is unavailable or degenerate (parallel to the new
+    // view direction).
+    const viewDir = lookAt.clone().sub(position).normalize();
+    let upForLook = worldUpVec;
+    if (currentViewerQuat) {
+      const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(currentViewerQuat);
+      if (Math.abs(currentUp.dot(viewDir)) < 0.999) {
+        upForLook = currentUp;
+      }
+    }
+    const lookMatrix = new THREE.Matrix4().lookAt(position, lookAt, upForLook);
     const quaternion = new THREE.Quaternion().setFromRotationMatrix(lookMatrix);
     return { position, quaternion, target: lookAt, distance: orbitDistance };
   }
@@ -222,7 +233,8 @@ export function useTrackballFlyTo({
       worldUpVec,
       distanceRef.current,
       cameraScale,
-      camera.position
+      camera.position,
+      camera.quaternion
     );
 
     if (!pose) {

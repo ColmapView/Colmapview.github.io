@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import * as THREE from 'three';
 import { VIZ_COLORS } from '../../theme';
 import type { ImageId } from '../../types/colmap';
 import type { SelectionColorMode } from '../../store/types';
@@ -67,6 +68,13 @@ function SelectedSphericalPhotosphere({
       quaternion={frustum.quaternion}
       radius={cameraScale}
       texture={displayTexture}
+      // BackSide from OUTSIDE = look "through" the sphere at its far inner wall:
+      // the visible cap is always the slice of panorama aligned with the world
+      // beyond it, it reads un-mirrored, and it tracks the view while orbiting
+      // (visual-check decision 2026-07-02). FrontSide showed the near hemisphere
+      // mirrored (back of the image). BackSide is also the future inside/
+      // immersive orientation.
+      side={THREE.BackSide}
     />
   );
 }

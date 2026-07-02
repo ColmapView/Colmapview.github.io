@@ -87,6 +87,47 @@ describe('getImageFlyToPose', () => {
     expect(pose!.position.distanceTo(center)).toBeCloseTo(D, 6);
   });
 
+  it('spherical fly-to preserves the current viewer roll instead of re-orienting to world up', () => {
+    const camera = buildCamera({ cameraId: 8, modelId: CameraModelId.EQUIRECTANGULAR, params: [3840, 1920] });
+    const image = buildImage({ imageId: 4, cameraId: 8, tvec: [0, 0, 0] });
+    const reconstruction = buildReconstruction({ cameras: [camera], images: [image] });
+    const viewer = new THREE.Vector3(100, 0, 0);
+
+    // Current viewer is rolled 180° (its up is world -Y) — e.g. a COLMAP scene whose
+    // gravity is +Y. Fly-to must NOT flip the view back to world +Y.
+    const rolledQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI);
+    const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(rolledQuat); // (0,-1,0)
+
+    const pose = getImageFlyToPose(
+      reconstruction, 4, IDENTITY, 'off', WORLD_UP, ORBIT_DISTANCE, CAMERA_SCALE, viewer, rolledQuat
+    );
+
+    expect(pose).not.toBeNull();
+    const resultUp = new THREE.Vector3(0, 1, 0).applyQuaternion(pose!.quaternion);
+    // Up stays on the viewer's side of the horizon (dot > 0 with the CURRENT up,
+    // i.e. NOT re-locked to world +Y which would make this dot ≈ -1).
+    expect(resultUp.dot(currentUp)).toBeGreaterThan(0.9);
+    // Still looks at the center.
+    const lookDir = new THREE.Vector3(0, 0, -1).applyQuaternion(pose!.quaternion);
+    const toCenter = new THREE.Vector3(0, 0, 0).sub(pose!.position).normalize();
+    expect(lookDir.dot(toCenter)).toBeCloseTo(1, 6);
+  });
+
+  it('spherical fly-to falls back to world up when no viewer quaternion is provided', () => {
+    const camera = buildCamera({ cameraId: 8, modelId: CameraModelId.EQUIRECTANGULAR, params: [3840, 1920] });
+    const image = buildImage({ imageId: 4, cameraId: 8, tvec: [0, 0, 0] });
+    const reconstruction = buildReconstruction({ cameras: [camera], images: [image] });
+    const viewer = new THREE.Vector3(100, 0, 0);
+
+    const pose = getImageFlyToPose(
+      reconstruction, 4, IDENTITY, 'off', WORLD_UP, ORBIT_DISTANCE, CAMERA_SCALE, viewer
+    );
+
+    expect(pose).not.toBeNull();
+    const resultUp = new THREE.Vector3(0, 1, 0).applyQuaternion(pose!.quaternion);
+    expect(resultUp.dot(WORLD_UP)).toBeGreaterThan(0.9);
+  });
+
   it('returns null when the image is missing', () => {
     const reconstruction = buildReconstruction({ cameras: [buildCamera()], images: [] });
     const viewer = new THREE.Vector3(1, 0, 0);
