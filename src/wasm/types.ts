@@ -37,24 +37,23 @@ export interface ImageInfo {
   translation?: [number, number, number];
 }
 
-/**
- * Camera model IDs matching COLMAP's enum
- */
-export const CameraModelId = {
-  SIMPLE_PINHOLE: 0,
-  PINHOLE: 1,
-  SIMPLE_RADIAL: 2,
-  RADIAL: 3,
-  OPENCV: 4,
-  OPENCV_FISHEYE: 5,
-  FULL_OPENCV: 6,
-  FOV: 7,
-  SIMPLE_RADIAL_FISHEYE: 8,
-  RADIAL_FISHEYE: 9,
-  THIN_PRISM_FISHEYE: 10,
-} as const;
+declare const embindEnumBrand: unique symbol;
 
-export type CameraModelId = (typeof CameraModelId)[keyof typeof CameraModelId];
+/**
+ * Opaque handle to an Emscripten embind enum value.
+ *
+ * Embind `enum_<>` bindings expose each enumerator as a tagged wrapper object,
+ * NOT a plain integer, and the wrapper must be handed back to embind APIs
+ * verbatim. Treat this as opaque — obtain a value only by indexing the runtime
+ * enum object (e.g. `module.CameraModelId.PINHOLE`); never construct one or pass
+ * a raw integer, which embind silently misinterprets.
+ *
+ * (The canonical numeric camera-model ids live in `src/types/cameraModelId.ts`;
+ * this module deliberately does not mirror them.)
+ */
+export interface EmbindEnumValue {
+  readonly [embindEnumBrand]: never;
+}
 
 /**
  * Sensor types matching COLMAP's enum (for rigs)
@@ -217,12 +216,17 @@ export interface ColmapWasmModule {
   // Reconstruction class
   Reconstruction: WasmReconstructionConstructor;
 
-  // Enums
-  CameraModelId: typeof CameraModelId;
+  // Enums — runtime embind enum objects keyed by COLMAP model name.
+  // e.g. module.CameraModelId["PINHOLE"] -> an opaque EmbindEnumValue.
+  CameraModelId: Readonly<Record<string, EmbindEnumValue>>;
   SensorType: typeof WasmSensorType;
 
-  // Helper function
-  getNumCameraParams(modelId: CameraModelId): number;
+  /**
+   * Number of intrinsic parameters for a camera model.
+   * Pass `module.CameraModelId.<NAME>` (the embind enum object) — raw integers
+   * are silently misinterpreted by embind.
+   */
+  getNumCameraParams(modelId: EmbindEnumValue): number;
 
   // Emscripten memory (for memory monitoring)
   HEAPU8: Uint8Array;

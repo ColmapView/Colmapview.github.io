@@ -51,11 +51,11 @@ describe.skipIf(wasmAbsent)('WASM getNumCameraParams ↔ registry parity', () =>
       // Resolve the Emscripten enum object for this model by its COLMAP name.
       // This also asserts that embind has registered the name — a missing
       // .value("EUCM", ...) in main.cpp would fail here before the count check.
-      const enumVal = (module.CameraModelId as Record<string, unknown>)[descriptor.colmapName];
+      const enumVal = module.CameraModelId[descriptor.colmapName];
       expect(enumVal, `embind missing enum value for ${descriptor.colmapName}`).toBeDefined();
 
       // Pass the enum object (not a raw integer) — Emscripten enum_<> requires it.
-      expect(module.getNumCameraParams(enumVal as any)).toBe(descriptor.paramNames.length);
+      expect(module.getNumCameraParams(enumVal)).toBe(descriptor.paramNames.length);
     },
   );
 });
