@@ -1,24 +1,37 @@
 import * as THREE from 'three';
 
 /**
- * Unit sphere for equirectangular panoramas — STOCK three.js UV mapping.
+ * Unit sphere for equirectangular panoramas, following COLMAP's convention.
  *
- * Orientation was verified against the labeled synthetic dataset AND a real
- * spherical SfM reconstruction (2026-07-02): with the COLMAP camera quaternion
- * applied, the stock mapping already aligns the panorama with the world
- * (pano sky toward world up, azimuth bands toward the matching points).
+ * Frame facts (all verified in code + live checks 2026-07-02):
+ * - The photosphere mesh wears the RAW COLMAP cam-to-world quaternion
+ *   (getImageWorldQuaternion has no axis flip), so mesh-local axes ARE the
+ *   COLMAP camera axes: x right, y DOWN, z forward.
+ * - Frustum textures load with flipY = false (frustumTextureCache), so
+ *   uv.y = 0 is the image TOP row.
+ * - COLMAP's equirect convention: image center column = camera forward (+z),
+ *   u increases toward camera right (+x); the image's left/right edges (the
+ *   seam) are camera-back (−z).
  *
- * DO NOT flip V here. That was tried and it inverted the true alignment
- * (pano sky ended up facing the floor points). The "upside down" impression
- * that motivated it came from the fly-to re-orienting the VIEWER to a wrong
- * world-up (COLMAP gravity is often +Y = three.js down) — fixed in
- * useTrackballFlyTo by preserving the viewer's current roll instead.
+ * A STOCK three.js SphereGeometry places the image-center column on its +X
+ * meridian — a 90° azimuth rotation relative to COLMAP's center-forward
+ * convention (this is what the live check exposed: sky correct, content
+ * rotated). Constructing the sphere with phiStart = −π/2 rotates the
+ * parameterization so texel u sits at azimuth φ = 2πu − π from +z:
+ * u=0.5 → +z (forward), u=0.75 → +x (right), u=0/1 → −z (seam at back).
+ * Derivation: three.js places vertex(u) at x = −cos(phiStart + 2πu)·sinθ,
+ * z = sin(phiStart + 2πu)·sinθ; phiStart = −π/2 gives x = sin(2πu−π)·sinθ,
+ * z = cos(2πu−π)·sinθ. The vertical axis is untouched (uv.y = 1 − θ/π; with
+ * flipY=false the image top lands at the −y pole = camera up) — it was
+ * correct all along and stays byte-identical.
  *
- * Note on the outside view: a world-aligned panorama viewed from OUTSIDE a
- * FrontSide sphere necessarily reads mirrored (you are looking at the back of
- * the image). That is inherent, accepted by design (alignment-to-points wins);
- * BackSide (looking through at the far inner wall) reads normally.
+ * DO NOT "fix" orientation by flipping V or mirroring U: the vertical axis is
+ * validated, and the azimuth error was a pure rotation (det +1), not a mirror.
+ * directionToEquirectUV (sphericalUndistortion.ts) is the exact inverse of
+ * this mapping; its unit test cross-validates against every vertex of this
+ * geometry, which also guarantees the photosphere and the (U) undistorted
+ * billboard display identically per direction.
  */
 export function createPhotosphereGeometry(): THREE.SphereGeometry {
-  return new THREE.SphereGeometry(1, 64, 32);
+  return new THREE.SphereGeometry(1, 64, 32, -Math.PI / 2);
 }

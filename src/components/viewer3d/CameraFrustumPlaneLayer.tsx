@@ -9,6 +9,7 @@ import { buildImagePlaneRenderItems, type BuildImagePlaneRenderItemsOptions } fr
 import { FrustumPlane } from './FrustumPlane';
 import { isSphericalCameraModel } from '../../utils/cameraModelRegistry';
 import { Photosphere } from './Photosphere';
+import { SphericalUndistortedView } from './SphericalUndistortedView';
 import { useFrustumPlaneStoreFacade } from './useFrustumPlaneStoreFacade';
 import { useSelectedFrustumImageFile } from './useSelectedFrustumImageFile';
 import { useFrustumPlaneDisplayTexture } from './useFrustumPlaneDisplayTexture';
@@ -40,9 +41,11 @@ interface SelectedCameraPlaneProps extends SharedPlaneLayerProps {
 function SelectedSphericalPhotosphere({
   frustum,
   cameraScale,
+  undistortionEnabled,
 }: {
   frustum: CameraFrustumItem;
   cameraScale: number;
+  undistortionEnabled: boolean;
 }) {
   const { data: { dataset } } = useFrustumPlaneStoreFacade();
   const imageFile = useSelectedFrustumImageFile({
@@ -62,6 +65,21 @@ function SelectedSphericalPhotosphere({
   });
   // Grid sphere from SphericalCameraLines is already visible; photosphere fades in once loaded.
   if (!displayTexture) return null;
+
+  // (U) undistortion: a view-tracking billboard showing the panorama
+  // re-projected as a virtual PINHOLE at the capture center — flat
+  // perspective, aligned with the 3D points (see sphericalUndistortion.ts).
+  if (undistortionEnabled) {
+    return (
+      <SphericalUndistortedView
+        position={frustum.position}
+        quaternion={frustum.quaternion}
+        radius={cameraScale}
+        texture={displayTexture}
+      />
+    );
+  }
+
   return (
     <Photosphere
       position={frustum.position}
@@ -99,7 +117,13 @@ export function SelectedCameraFrustumPlane({
 
   // Spherical cameras: show a photosphere instead of a flat image plane.
   if (isSphericalCameraModel(frustum.camera.modelId)) {
-    return <SelectedSphericalPhotosphere frustum={frustum} cameraScale={cameraScale} />;
+    return (
+      <SelectedSphericalPhotosphere
+        frustum={frustum}
+        cameraScale={cameraScale}
+        undistortionEnabled={undistortionEnabled}
+      />
+    );
   }
 
   return (

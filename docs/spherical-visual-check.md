@@ -25,25 +25,44 @@ The registered images should be 2:1 equirectangular panoramas.
 
 The photosphere textures the selected camera's equirect image onto the sphere,
 viewed from outside (`THREE.FrontSide`). The mapping convention has **not** been
-verified against a real dataset. Check, with a panorama whose content you know:
+verified against a real dataset. Check, with a panorama whose content you know.
 
-- [ ] **Upright:** sky/ceiling at the top pole, ground at the bottom pole (not
-      upside-down).
-- [ ] **Not mirror-flipped:** text or signage in the panorama reads correctly.
-      (An outside view of a FrontSide sphere can show the image mirrored
-      depending on UV handedness — this is the most likely defect.)
-- [ ] **Azimuth plausible:** the panorama's forward direction roughly agrees with
-      the camera's orientation relative to the reconstruction (e.g. what the
-      camera "faced" lines up with the point cloud).
-- [ ] **Seam:** the equirect wrap seam is a single vertical line, not a smear or
-      a gap.
-- [ ] **Colors match:** the photosphere's colors match the flat image previews of
-      pinhole cameras (same tone mapping / color space; no washed-out or
-      double-gamma look).
+STATUS 2026-07-02: all items below were verified live (campus parterre, 37
+panos, + the labeled synthetic card) after two convention fixes — the sphere
+is built with `phiStart = −π/2` so the image-center column faces camera
+forward (COLMAP convention; stock three.js puts it at +X, a 90° azimuth
+rotation), and the selected photosphere renders BackSide (look through at the
+far inner wall — reads un-mirrored, tracks the view). Keep this list for
+regressions:
 
-**If orientation is wrong:** the fix point is documented in
-`src/components/viewer3d/Photosphere.tsx` (JSDoc) — rotation / UV flip is a
-one-spot change there.
+- [x] **Upright:** sky/ceiling toward scene-up, ground toward scene-down
+      (validated; the vertical mapping is algebraically identical to COLMAP's
+      latitude convention under flipY=false textures).
+- [x] **Azimuth:** the panorama's content directions match the points (image
+      center = camera forward; verified with the labeled synthetic card —
+      bands land on the matching colored axis points).
+- [x] **Seam:** a single clean vertical line at camera-back.
+- [x] **Colors match** the flat pinhole previews (same color-space handling).
+
+### (U) undistorted portal view
+
+Pressing **U** with a spherical camera selected swaps the photosphere for a
+flat disk cropped to the sphere's silhouette, sampled by VIEWER ray (a
+"portal": what you'd see if the panorama were painted on the world). This is
+the point-cloud-overlay mode:
+
+- [x] Imagery through the disk stays glued to the point cloud while orbiting
+      and zooming (exact for distant content; nearby content can drift by the
+      small sphere-radius parallax — same physical limit as pinhole planes).
+- [x] Text reads forward; U on/off swaps between overlay (portal) and
+      panorama-inspection (BackSide sphere) views, which intentionally differ
+      slightly near the rim.
+
+**Convention anchors (do not "fix" without re-running this check):**
+`getImageWorldQuaternion` returns the RAW COLMAP cam-to-world rotation (no
+axis flip); frustum textures load with `flipY=false`; the sampling formula
+and sphere geometry are pinned to each other vertex-for-vertex by
+`sphericalUndistortion.test.ts`.
 
 ## 3. Grid spheres in a mixed scene
 
