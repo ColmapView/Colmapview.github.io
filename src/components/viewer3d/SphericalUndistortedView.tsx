@@ -76,6 +76,11 @@ export function SphericalUndistortedView({
     const parent = mesh?.parent;
     if (!mesh || !parent) return;
 
+    // Refresh the parent's world matrix once so the layout (worldToLocal) and
+    // the sampling frame (getWorldQuaternion) read the same-frame transform
+    // during an active sim3d drag.
+    parent.updateWorldMatrix(true, false);
+
     // Viewer position in the sim3d group's space (position/quaternion live there).
     camera.getWorldPosition(tmp.viewerWorld);
     tmp.viewerGroup.copy(tmp.viewerWorld);
@@ -119,6 +124,9 @@ export function SphericalUndistortedView({
       ref={meshRef}
       geometry={geometry}
       material={material}
+      // Invisible until the first useFrame places/aims it (useFrame runs before
+      // render, so no flash occurs — this just makes that guarantee explicit).
+      visible={false}
       // The crop radius is applied in the vertex shader (uS), so the geometry's
       // unit bounding sphere is meaningless for culling.
       frustumCulled={false}

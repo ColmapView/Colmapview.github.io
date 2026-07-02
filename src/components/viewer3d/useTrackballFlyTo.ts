@@ -142,8 +142,9 @@ export function getImageFlyToPose(
     .multiplyScalar(sim3d.scale)
     .add(sim3d.translation);
 
-  // Spherical (360°) cameras render as a FrontSide photosphere: a viewer AT the camera center
-  // sees only back-face-culled grid lines. Stop OUTSIDE the sphere and orbit its center instead.
+  // Spherical (360°) cameras render as a photosphere meant to be viewed from OUTSIDE
+  // (BackSide inspection view / silhouette-cropped portal disk in (U) mode). Stop
+  // outside the sphere and orbit its center instead of flying into it like a pinhole.
   // The photosphere lives inside the sim3d transform group, so its world radius is
   // cameraScale * sim3d.scale and its center is transformedPosition.
   const camera = reconstruction.cameras.get(image.cameraId);

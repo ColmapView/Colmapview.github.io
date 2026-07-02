@@ -4,9 +4,10 @@ import * as THREE from 'three';
  * Distance from a spherical camera's photosphere CENTER at which the fly-to stops,
  * expressed as a multiple of the sphere's world radius.
  *
- * The photosphere is rendered THREE.FrontSide (outward faces), so a viewer AT the
- * center sees every face back-face-culled — nothing but the grid lines. The fly-to
- * must therefore stop OUTSIDE the sphere looking in.
+ * The photosphere is designed to be viewed from OUTSIDE: the selected camera shows
+ * a BackSide sphere (look through at the far inner wall) or, in (U) undistortion
+ * mode, a portal disk cropped to the sphere's silhouette — both need an exterior
+ * viewpoint, so the fly-to stops OUTSIDE the sphere looking in.
  *
  * This constant is the single source of truth for that viewing distance: the auto-FOV
  * fit (getAutoAdjustedFov, spherical branch) frames the sphere from this exact distance
