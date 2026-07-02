@@ -74,11 +74,12 @@ export function buildCameraPoseDisplayModel(
   };
 
   // Spherical cameras have no pinhole intrinsics (getCameraIntrinsics returns dummy
-  // fx=1/fy=1/cx=0/cy=0). Omit parameters entirely rather than showing the raw [w, h]
-  // params or the meaningless defaults. Check modelId in CAMERA_MODEL_DESCRIPTORS first
-  // so unknown model IDs (test fixtures, future models) fall through safely.
+  // fx=1/fy=1/cx=0/cy=0). Instead of the raw [w, h] params or those meaningless
+  // defaults, surface a single friendly "panorama" entry carrying the resolution.
+  // Check modelId in CAMERA_MODEL_DESCRIPTORS first so unknown model IDs (test
+  // fixtures, future models) fall through safely.
   if (modelId in CAMERA_MODEL_DESCRIPTORS && !cameraModelHasPinholeIntrinsics(modelId)) {
-    return { ...base, parameters: [] };
+    return { ...base, parameters: [{ name: 'panorama', value: `${base.width}×${base.height}` }] };
   }
 
   // Param labels come from the registry (single source of truth); unknown /

@@ -76,7 +76,7 @@ describe('image detail camera pose view model', () => {
     });
   });
 
-  it('omits camera parameters for a spherical (equirectangular) camera', () => {
+  it('shows a friendly panorama entry for a spherical (equirectangular) camera', () => {
     const camera = buildCamera({
       modelId: CameraModelId.EQUIRECTANGULAR,
       width: 4096,
@@ -94,9 +94,10 @@ describe('image detail camera pose view model', () => {
     expect(result.modelTitle).toBe('EQUIRECTANGULAR');
     expect(result.width).toBe(4096);
     expect(result.height).toBe(2048);
-    // Spherical cameras have no pinhole intrinsics — parameters are omitted rather
-    // than showing the raw [w, h] params or dummy fx=1/fy=1/cx=0/cy=0 values.
-    expect(result.parameters).toEqual([]);
+    // Spherical cameras have no pinhole intrinsics — instead of the raw [w, h] params
+    // or dummy fx=1/fy=1/cx=0/cy=0 values, show one friendly "panorama" entry carrying
+    // the camera's resolution.
+    expect(result.parameters).toEqual([{ name: 'panorama', value: '4096×2048' }]);
     // Pose fields are still populated correctly with concrete formatted values.
     // rotation = [qvec[1], qvec[2], qvec[3], qvec[0]] = [0.5, 0.5, 0.5, 0.5] (3dp)
     expect(result.rotation).toEqual([
@@ -136,8 +137,8 @@ describe('image detail camera pose view model', () => {
       'p1', 'p2', 'sx1', 'sy1', 'sx2', 'sy2',
     ]);
 
-    // EQUIRECTANGULAR (17) is spherical: parameters are omitted entirely —
-    // covered by the dedicated spherical test above.
+    // EQUIRECTANGULAR (17) is spherical: a single friendly 'panorama' entry replaces
+    // the raw params — covered by the dedicated spherical test above.
 
     // FOV (7): the registry spells this 'ω' (the legacy table said 'omega').
     expect(
