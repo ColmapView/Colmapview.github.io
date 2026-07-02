@@ -592,3 +592,59 @@ describe('EUCM (id=16) – closed-form distortion', () => {
     expect(result.valid).toBe(false);
   });
 });
+
+// ── Task 2: DIVISION inverse horizon guard ───────────────────────────────────
+// The division inverse is undistorted = d / (1 + kDiv·|d|²). For barrel
+// distortion (kDiv < 0) the denominator hits zero at the horizon radius
+// r_d = 1/√|kDiv| and goes negative beyond it, producing Inf / sign-flipped
+// coordinates. Sibling strategies (EUCM, FOV) return valid:false at their domain
+// edges; division must too. All boundary values hand-derived (kDiv=-2.5,
+// horizon r_d = 1/√2.5 = √0.4 ≈ 0.6324555).
+
+describe('DIVISION inverse horizon guard (Task 2)', () => {
+  const i = intr({ kDiv: -2.5 });
+
+  it('stays valid just inside the horizon: d=(0.6,0) → denom=0.1 → u=(6.0,0)', () => {
+    // r_d² = 0.36; denom = 1 + (-2.5)(0.36) = 1 - 0.9 = 0.1; u = 0.6/0.1 = 6.0.
+    const u = undistortNormalized({ x: 0.6, y: 0 }, i, CameraModelId.DIVISION);
+    expect(u.valid).toBe(true);
+    expect(u.x).toBeCloseTo(6.0, 6);
+    expect(u.y).toBeCloseTo(0, 12);
+  });
+
+  it('rejects the exact horizon r_d = 1/√2.5 (denom=0 → Inf) as invalid', () => {
+    // Pre-fix: returned { x: Infinity, valid: true }.
+    const rd = 1 / Math.sqrt(2.5); // 0.6324555320336759
+    const u = undistortNormalized({ x: rd, y: 0 }, i, CameraModelId.DIVISION);
+    expect(u.valid).toBe(false);
+    expect(Number.isFinite(u.x)).toBe(true); // convention returns input coords, not Inf
+  });
+
+  it('rejects points past the horizon r_d=0.7 (denom=-0.225 → sign-flipped) as invalid', () => {
+    // r_d² = 0.49; denom = 1 + (-2.5)(0.49) = -0.225; pre-fix u = -3.111 (wrong sign), valid:true.
+    const u = undistortNormalized({ x: 0.7, y: 0 }, i, CameraModelId.SIMPLE_DIVISION);
+    expect(u.valid).toBe(false);
+  });
+
+  it('does not over-reject pincushion (kDiv>0): denom always > 0', () => {
+    const pin = intr({ kDiv: 0.5 });
+    const u = undistortNormalized({ x: 0.7, y: 0 }, pin, CameraModelId.DIVISION);
+    expect(u.valid).toBe(true);
+  });
+});
+
+// ── Task 2: EUCM inverse NaN boundary guard ──────────────────────────────────
+// At alpha=1, beta=1, |m|=1 the radicand is exactly 0 (passes the `<0` guard),
+// helperDen = alpha·√0 + (1-alpha) = 0, so helper = 0/0 = NaN. The old
+// `helper <= 0` test is false for NaN, so the inverse returned {NaN, NaN,
+// valid:true}. The NaN-safe rejection must return valid:false with no NaN.
+
+describe('EUCM inverse NaN boundary guard (Task 2)', () => {
+  it('rejects the alpha=1, radicand=0 singularity instead of returning NaN', () => {
+    const i = intr({ alpha: 1, beta: 1 });
+    const u = undistortNormalized({ x: 1, y: 0 }, i, CameraModelId.EUCM);
+    expect(Number.isNaN(u.x)).toBe(false);
+    expect(Number.isNaN(u.y)).toBe(false);
+    expect(u.valid).toBe(false);
+  });
+});

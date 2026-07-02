@@ -231,9 +231,16 @@ vec2 inverseDistort(vec2 distorted, out bool valid) {
 
   // DIVISION / SIMPLE_DIVISION: exact closed-form inverse (COLMAP CamFromImg w=1).
   //   undistorted = distorted / (1 + kDiv · |distorted|²)
+  // Domain guard: for barrel distortion (kDiv < 0) denom vanishes at the horizon
+  // r_d = 1/sqrt(|kDiv|) and turns negative beyond it — such rays have no flat-plane
+  // pre-image, so blank them (mirrors the EUCM/FOV validity mechanism).
   if (modelId == SIMPLE_DIVISION || modelId == DIVISION) {
     float r2 = dot(distorted, distorted);
     float denom = 1.0 + kDiv * r2;
+    if (denom <= 0.0) {
+      valid = false;
+      return distorted;
+    }
     return distorted / denom;
   }
 
@@ -242,7 +249,9 @@ vec2 inverseDistort(vec2 distorted, out bool valid) {
   //   helperDen = alpha·sqrt(radicand) + (1 - alpha)
   //   helper = (1 - alpha²·beta·r²) / helperDen
   //   undistorted = distorted / helper
-  // Rays where radicand < 0 or helper <= 0 are beyond the EUCM FOV.
+  // Rays where radicand < 0 or !(helper > 0) are beyond the EUCM FOV. The
+  // !(helper > 0) form also rejects the alpha=1, radicand=0 singularity where
+  // helperDen=0 makes helper = 0/0 = NaN (helper <= 0 would pass NaN through).
   if (modelId == EUCM) {
     float r2 = dot(distorted, distorted);
     float radicand = 1.0 - (2.0 * alpha - 1.0) * beta * r2;
@@ -253,7 +262,7 @@ vec2 inverseDistort(vec2 distorted, out bool valid) {
     float gamma = 1.0 - alpha;
     float helperDen = alpha * sqrt(radicand) + gamma;
     float helper = (1.0 - alpha * alpha * beta * r2) / helperDen;
-    if (helper <= 0.0) {
+    if (!(helper > 0.0)) {
       valid = false;
       return distorted;
     }
@@ -1000,6 +1009,11 @@ function _glslInverseDistortDivision(
 ): { x: number; y: number; valid: boolean } {
   const r2 = distorted.x * distorted.x + distorted.y * distorted.y;
   const denom = 1.0 + i.kDiv * r2;
+  // Domain guard: denom <= 0 is the division-model horizon (barrel kDiv < 0);
+  // blank the ray to match the GLSL branch and the canonical strategy.
+  if (denom <= 0.0) {
+    return { x: distorted.x, y: distorted.y, valid: false };
+  }
   return { x: distorted.x / denom, y: distorted.y / denom, valid: true };
 }
 
@@ -1016,7 +1030,9 @@ function _glslInverseDistortEUCM(
   const gamma = 1.0 - i.alpha;
   const helperDen = i.alpha * Math.sqrt(radicand) + gamma;
   const helper = (1.0 - i.alpha * i.alpha * i.beta * r2) / helperDen;
-  if (helper <= 0.0) {
+  // NaN-safe rejection: !(helper > 0) rejects the alpha=1, radicand=0 singularity
+  // (helperDen=0 → helper = 0/0 = NaN) that `helper <= 0` passes through.
+  if (!(helper > 0.0)) {
     return { x: distorted.x, y: distorted.y, valid: false };
   }
   return { x: distorted.x / helper, y: distorted.y / helper, valid: true };

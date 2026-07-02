@@ -257,3 +257,51 @@ describe('OPENCV_FISHEYE oracle (independent COLMAP-derived, equidistant fisheye
     expect(ud.y).toBeCloseTo(b, TOL);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// DIVISION inverse horizon oracle (barrel kDiv < 0, model id=13/12)
+//
+// Inverse (CamFromImg): undistorted = d / (1 + k·|d|²).
+// For barrel distortion (k < 0) the denominator 1 + k·r_d² vanishes at the
+// horizon radius r_d = 1/√|k| and turns negative beyond it, so distorted points
+// at/past the horizon have NO real flat-plane pre-image (the inverse would give
+// Inf / sign-flipped coords). The inverse must report valid:false there, matching
+// the domain-edge behavior of EUCM (radicand<0) and FOV (tan singularity).
+//
+// ── Hand-computation, k = −2.5 (horizon r_d = 1/√2.5 = √0.4 ≈ 0.63245553) ──
+//   Inside  d=(0.6, 0):    r_d² = 0.36;  denom = 1 + (−2.5)(0.36) = 1 − 0.9   = 0.1
+//                          u = 0.6 / 0.1 = 6.0                         → valid
+//   Horizon d=(√0.4, 0):   r_d² = 0.4;   denom = 1 + (−2.5)(0.4)  = 1 − 1.0   = 0.0
+//                          u = 0.6324.../0 = Inf                       → invalid
+//   Beyond  d=(0.7, 0):    r_d² = 0.49;  denom = 1 + (−2.5)(0.49) = 1 − 1.225 = −0.225
+//                          u = 0.7/(−0.225) = −3.111 (sign-flipped)    → invalid
+//
+// ── Non-tautological proof (oracle has teeth) ─────────────────────────────────
+//   The valid-side value 6.0 is derived from denom=0.1 alone; an off-by sign in
+//   the denom (1 − k·r² instead of 1 + k·r²) would give denom = 1 + 0.9 = 1.9,
+//   u = 0.6/1.9 ≈ 0.3158 — Δ ≈ 5.7 ≫ 5e-6 tolerance → forward test would FAIL.
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('DIVISION horizon oracle (independent COLMAP-derived, barrel kDiv<0, model id=13/12)', () => {
+  const DIV_BARREL = intr({ kDiv: -2.5 });
+  const TOL = 6;
+
+  it('inside the horizon: distorted (0.6,0) → undistorted (6.0, 0), valid', () => {
+    const ud = undistortNormalized({ x: 0.6, y: 0 }, DIV_BARREL, CameraModelId.DIVISION);
+    expect(ud.valid).toBe(true);
+    expect(ud.x).toBeCloseTo(6.0, TOL);
+    expect(ud.y).toBeCloseTo(0, 12);
+  });
+
+  it('at the exact horizon (denom=0): valid:false, output finite (no Infinity)', () => {
+    const rd = 1 / Math.sqrt(2.5); // 0.6324555320336759
+    const ud = undistortNormalized({ x: rd, y: 0 }, DIV_BARREL, CameraModelId.DIVISION);
+    expect(ud.valid).toBe(false);
+    expect(Number.isFinite(ud.x)).toBe(true);
+  });
+
+  it('past the horizon (denom<0): valid:false (no sign-flipped output)', () => {
+    const ud = undistortNormalized({ x: 0.7, y: 0 }, DIV_BARREL, CameraModelId.SIMPLE_DIVISION);
+    expect(ud.valid).toBe(false);
+  });
+});

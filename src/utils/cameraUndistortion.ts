@@ -367,6 +367,7 @@ const fisheyeRadTanStrategy: DistortionStrategy = {
 // Inverse (distorted → undistorted), COLMAP CamFromImg for division model (w=1):
 //   denom = 1 + kDiv·(d.x²+d.y²)
 //   undistorted = d / denom
+//   if denom <= 0 → distorted point at/past the model horizon (valid: false)
 //
 // These are exact mathematical inverses (verified by the round-trip test).
 
@@ -382,6 +383,13 @@ const divisionStrategy: DistortionStrategy = {
   inverse(d: Vec2, i: CameraIntrinsics): UndistortResult {
     const r2 = d.x * d.x + d.y * d.y;
     const denom = 1 + i.kDiv * r2;
+    // Domain guard: for barrel distortion (kDiv < 0) denom vanishes at the horizon
+    // radius r_d = 1/√|kDiv| and turns negative beyond it — the inverse would then
+    // return Inf / sign-flipped coords. Such distorted points have no flat-plane
+    // pre-image, so mark them invalid (mirroring EUCM/FOV domain-edge behavior).
+    if (denom <= 0) {
+      return { x: d.x, y: d.y, valid: false };
+    }
     return { x: d.x / denom, y: d.y / denom, valid: true };
   },
 };
@@ -400,7 +408,7 @@ const divisionStrategy: DistortionStrategy = {
 //   if radicand < 0 → ray beyond EUCM FOV (valid: false)
 //   helperDen = alpha·sqrt(radicand) + gamma
 //   helper = (1 - alpha²·beta·r2) / helperDen
-//   if helper <= 0 → invalid
+//   if !(helper > 0) → invalid (rejects helper ≤ 0 AND the NaN singularity below)
 //   undistorted = { m.x/helper, m.y/helper }
 
 const eucmStrategy: DistortionStrategy = {
@@ -420,7 +428,11 @@ const eucmStrategy: DistortionStrategy = {
     }
     const helperDen = i.alpha * Math.sqrt(radicand) + gamma;
     const helper = (1 - i.alpha * i.alpha * i.beta * r2) / helperDen;
-    if (helper <= 0) {
+    // NaN-safe rejection. At alpha=1, |m|=1/√beta the radicand is exactly 0 (so it
+    // passes the `< 0` guard above) and helperDen = alpha·√0 + (1−alpha) = 0, making
+    // helper = 0/0 = NaN. `helper <= 0` is false for NaN, so the old guard leaked a
+    // {NaN, NaN, valid:true} result. `!(helper > 0)` rejects NaN, 0 and negatives.
+    if (!(helper > 0)) {
       return { x: m.x, y: m.y, valid: false };
     }
     return { x: m.x / helper, y: m.y / helper, valid: true };
