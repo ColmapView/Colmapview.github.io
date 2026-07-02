@@ -1,10 +1,12 @@
 import { useDataset, type DatasetManager } from '../../dataset';
 import {
   useImageMetricsStore,
+  useNotificationStore,
   useReconstructionStore,
   useSplatBackendStore,
   useTransformStore,
   type ImageMetricsState,
+  type NotificationState,
 } from '../../store';
 import type {
   SplatBackendResolution,
@@ -45,6 +47,7 @@ interface SplatPsnrEvaluatorActionsFacade {
   setSplatPsnrImageError: ImageMetricsState['setSplatPsnrImageError'];
   requestSplatPsnrCompute: ImageMetricsState['requestSplatPsnrCompute'];
   finishSplatPsnrCompute: ImageMetricsState['finishSplatPsnrCompute'];
+  addNotification: NotificationState['addNotification'];
 }
 
 export interface SplatPsnrEvaluatorStoreFacade {
@@ -75,6 +78,7 @@ export function useSplatPsnrEvaluatorStoreFacade(): SplatPsnrEvaluatorStoreFacad
   const setSplatPsnrImageError = useImageMetricsStore((s) => s.setSplatPsnrImageError);
   const requestSplatPsnrCompute = useImageMetricsStore((s) => s.requestSplatPsnrCompute);
   const finishSplatPsnrCompute = useImageMetricsStore((s) => s.finishSplatPsnrCompute);
+  const addNotification = useNotificationStore((s) => s.addNotification);
 
   return {
     data: {
@@ -104,6 +108,7 @@ export function useSplatPsnrEvaluatorStoreFacade(): SplatPsnrEvaluatorStoreFacad
       setSplatPsnrImageError,
       requestSplatPsnrCompute,
       finishSplatPsnrCompute,
+      addNotification,
     },
   };
 }

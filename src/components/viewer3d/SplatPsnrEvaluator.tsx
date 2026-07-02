@@ -36,7 +36,11 @@ import {
   getVisibleWebGpuSplatSharedRuntime,
 } from '../../splat/webgpu/visibleSplatRuntimeRegistry';
 import { getImagePlaneTextureSourceFile } from './imagePlaneTexturePrefetch';
-import { getRequestedSplatPsnrImageIds } from './splatPsnrImageIds';
+import {
+  getRequestedSplatPsnrImageIds,
+  getSplatPsnrExclusionNotice,
+  getSplatPsnrImageSelection,
+} from './splatPsnrImageIds';
 
 interface SplatPsnrRenderSession {
   computeImageMetric: (options: {
@@ -117,6 +121,7 @@ interface SplatPsnrEvaluatorSnapshot {
   transform: Sim3dEuler;
   splatTransform: Sim3dEuler;
   actions: SplatPsnrTaskActions;
+  addNotification: (type: 'info' | 'warning', message: string, duration?: number) => string;
   releaseRenderSession: (renderSession: SplatPsnrRenderSession) => void;
 }
 
@@ -765,6 +770,7 @@ export function SplatPsnrEvaluator() {
       setSplatPsnrImageError,
       requestSplatPsnrCompute,
       finishSplatPsnrCompute,
+      addNotification,
     },
   } = useSplatPsnrEvaluatorStoreFacade();
   const lastHandledRequestRef = useRef(0);
@@ -831,6 +837,7 @@ export function SplatPsnrEvaluator() {
     transform,
     splatTransform,
     actions: currentActions,
+    addNotification,
     releaseRenderSession: releaseCachedRenderSession,
   });
 
@@ -1154,6 +1161,22 @@ export function SplatPsnrEvaluator() {
 
     if (activeTaskRef.current) {
       cancelSplatPsnrTask(activeTaskRef.current, snapshot.actions, false, snapshot.releaseRenderSession);
+    }
+
+    // Surface spherical exclusions once per user-triggered compute (this effect
+    // runs at most once per request id). A compute-all over a mixed dataset
+    // emits an info notice and still proceeds over the pinhole images; a
+    // spherical selection emits a warning and starts no pointless compute.
+    const selection = getSplatPsnrImageSelection(request, snapshot.reconstruction);
+    const exclusionNotice = getSplatPsnrExclusionNotice(selection);
+    if (exclusionNotice) {
+      snapshot.addNotification(exclusionNotice.type, exclusionNotice.message);
+    }
+    if (selection.selectedIsSpherical) {
+      activeTaskRef.current = null;
+      lastHandledRequestRef.current = nextRequestId;
+      snapshot.actions.finishSplatPsnrCompute();
+      return;
     }
 
     const dataIdentity = getSplatPsnrDataIdentity({

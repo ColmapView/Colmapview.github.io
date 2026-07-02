@@ -1,7 +1,39 @@
 import { describe, expect, it } from 'vitest';
 import { CameraModelId } from '../../types/colmap';
 import { buildCamera, buildImage, buildReconstruction } from '../../test/builders';
-import { getRequestedSplatPsnrImageIds } from './splatPsnrImageIds';
+import {
+  getRequestedSplatPsnrImageIds,
+  getSplatPsnrImageSelection,
+  getSplatPsnrExclusionNotice,
+} from './splatPsnrImageIds';
+
+function buildMixedReconstruction(pinholeCount: number, sphericalCount: number) {
+  const cameras = [];
+  const images = [];
+  let cameraId = 1;
+  let imageId = 1;
+  for (let i = 0; i < pinholeCount; i++) {
+    cameras.push(buildCamera({ cameraId }));
+    images.push(buildImage({ imageId, cameraId }));
+    cameraId++;
+    imageId++;
+  }
+  for (let i = 0; i < sphericalCount; i++) {
+    cameras.push(
+      buildCamera({
+        cameraId,
+        modelId: CameraModelId.EQUIRECTANGULAR,
+        width: 3840,
+        height: 1920,
+        params: [3840, 1920],
+      })
+    );
+    images.push(buildImage({ imageId, cameraId }));
+    cameraId++;
+    imageId++;
+  }
+  return buildReconstruction({ cameras, images });
+}
 
 describe('getRequestedSplatPsnrImageIds', () => {
   describe('scope=all', () => {
@@ -120,5 +152,114 @@ describe('getRequestedSplatPsnrImageIds', () => {
       expect(getRequestedSplatPsnrImageIds({ id: 1, scope: 'selected' }, reconstruction)).toEqual([]);
       expect(getRequestedSplatPsnrImageIds({ id: 1, scope: 'selected', selectedImageId: null }, reconstruction)).toEqual([]);
     });
+  });
+});
+
+describe('getSplatPsnrImageSelection', () => {
+  it('scope=all surfaces the excluded spherical count on a mixed dataset', () => {
+    const reconstruction = buildMixedReconstruction(2, 3);
+
+    const selection = getSplatPsnrImageSelection({ id: 1, scope: 'all' }, reconstruction);
+
+    // Two pinhole images (ids 1, 2) proceed; three spherical (ids 3, 4, 5) are excluded.
+    expect(selection.imageIds).toEqual([1, 2]);
+    expect(selection.excludedSphericalCount).toBe(3);
+    expect(selection.selectedIsSpherical).toBe(false);
+  });
+
+  it('scope=all reports zero exclusions for an all-pinhole dataset', () => {
+    const reconstruction = buildMixedReconstruction(3, 0);
+
+    const selection = getSplatPsnrImageSelection({ id: 1, scope: 'all' }, reconstruction);
+
+    expect(selection.imageIds).toEqual([1, 2, 3]);
+    expect(selection.excludedSphericalCount).toBe(0);
+    expect(selection.selectedIsSpherical).toBe(false);
+  });
+
+  it('scope=all reports every image excluded for an all-spherical dataset', () => {
+    const reconstruction = buildMixedReconstruction(0, 4);
+
+    const selection = getSplatPsnrImageSelection({ id: 1, scope: 'all' }, reconstruction);
+
+    expect(selection.imageIds).toEqual([]);
+    expect(selection.excludedSphericalCount).toBe(4);
+    expect(selection.selectedIsSpherical).toBe(false);
+  });
+
+  it('scope=selected flags a spherical selection and yields no image ids', () => {
+    const reconstruction = buildMixedReconstruction(1, 1);
+
+    const selection = getSplatPsnrImageSelection(
+      { id: 1, scope: 'selected', selectedImageId: 2 },
+      reconstruction
+    );
+
+    expect(selection.imageIds).toEqual([]);
+    expect(selection.selectedIsSpherical).toBe(true);
+    expect(selection.excludedSphericalCount).toBe(0);
+  });
+
+  it('scope=selected keeps a pinhole selection and does not flag spherical', () => {
+    const reconstruction = buildMixedReconstruction(1, 1);
+
+    const selection = getSplatPsnrImageSelection(
+      { id: 1, scope: 'selected', selectedImageId: 1 },
+      reconstruction
+    );
+
+    expect(selection.imageIds).toEqual([1]);
+    expect(selection.selectedIsSpherical).toBe(false);
+    expect(selection.excludedSphericalCount).toBe(0);
+  });
+
+  it('mirrors getRequestedSplatPsnrImageIds exactly for every scope', () => {
+    const mixed = buildMixedReconstruction(2, 3);
+    expect(getSplatPsnrImageSelection({ id: 1, scope: 'all' }, mixed).imageIds).toEqual(
+      getRequestedSplatPsnrImageIds({ id: 1, scope: 'all' }, mixed)
+    );
+    expect(
+      getSplatPsnrImageSelection({ id: 1, scope: 'selected', selectedImageId: 3 }, mixed).imageIds
+    ).toEqual(getRequestedSplatPsnrImageIds({ id: 1, scope: 'selected', selectedImageId: 3 }, mixed));
+    expect(
+      getSplatPsnrImageSelection({ id: 1, scope: 'selected', selectedImageId: 1 }, mixed).imageIds
+    ).toEqual(getRequestedSplatPsnrImageIds({ id: 1, scope: 'selected', selectedImageId: 1 }, mixed));
+  });
+});
+
+describe('getSplatPsnrExclusionNotice', () => {
+  it('returns an info notice naming the spherical count for partial exclusion', () => {
+    const notice = getSplatPsnrExclusionNotice({
+      imageIds: [1, 2],
+      excludedSphericalCount: 3,
+      selectedIsSpherical: false,
+    });
+
+    expect(notice).not.toBeNull();
+    expect(notice?.type).toBe('info');
+    expect(notice?.message).toContain('spherical');
+    expect(notice?.message).toContain('3');
+  });
+
+  it('returns a warning notice for a spherical selection', () => {
+    const notice = getSplatPsnrExclusionNotice({
+      imageIds: [],
+      excludedSphericalCount: 0,
+      selectedIsSpherical: true,
+    });
+
+    expect(notice).not.toBeNull();
+    expect(notice?.type).toBe('warning');
+    expect(notice?.message).toContain('spherical');
+  });
+
+  it('returns null when nothing is excluded', () => {
+    expect(
+      getSplatPsnrExclusionNotice({
+        imageIds: [1, 2, 3],
+        excludedSphericalCount: 0,
+        selectedIsSpherical: false,
+      })
+    ).toBeNull();
   });
 });

@@ -118,6 +118,7 @@ function createFacade(overrides: Partial<SplatPsnrEvaluatorStoreFacade['data']> 
     setSplatPsnrImageError: vi.fn(),
     requestSplatPsnrCompute: vi.fn(),
     finishSplatPsnrCompute: vi.fn(),
+    addNotification: vi.fn(),
   };
   const data: SplatPsnrEvaluatorStoreFacade['data'] = {
     reconstruction,
@@ -1332,5 +1333,139 @@ describe('SplatPsnrEvaluator', () => {
       sphericalImage.imageId,
       expect.any(String)
     );
+  });
+
+  it('notifies once when a compute-all excludes spherical cameras and proceeds over the pinhole images', async () => {
+    const pinholeCameraA = buildCamera({ cameraId: 1, width: 4, height: 3 });
+    const pinholeCameraB = buildCamera({ cameraId: 2, width: 4, height: 3 });
+    const sphericalCamera = buildCamera({
+      cameraId: 3,
+      modelId: CameraModelId.EQUIRECTANGULAR,
+      width: 3840,
+      height: 1920,
+      params: [3840, 1920],
+    });
+    const pinholeA = buildImage({ imageId: 10, cameraId: 1, name: 'p1.jpg' });
+    const pinholeB = buildImage({ imageId: 11, cameraId: 2, name: 'p2.jpg' });
+    const spherical1 = buildImage({ imageId: 20, cameraId: 3, name: 's1.jpg' });
+    const spherical2 = buildImage({ imageId: 21, cameraId: 3, name: 's2.jpg' });
+    const spherical3 = buildImage({ imageId: 22, cameraId: 3, name: 's3.jpg' });
+    const reconstruction = buildReconstruction({
+      cameras: [pinholeCameraA, pinholeCameraB, sphericalCamera],
+      images: [pinholeA, pinholeB, spherical1, spherical2, spherical3],
+    });
+    const pinholeFiles = new Map([
+      [pinholeA.name, buildFile(pinholeA.name)],
+      [pinholeB.name, buildFile(pinholeB.name)],
+    ]);
+    const session = {
+      computeImageMetric: vi.fn().mockResolvedValue({ psnr: 30, mse: 10, validPixelCount: 12 }),
+      dispose: vi.fn(),
+    };
+    createWebGpuSplatPsnrSessionMock.mockResolvedValue(session);
+
+    const { facade, actions } = createFacade({
+      reconstruction,
+      dataset: {
+        getImageSync: vi.fn((name: string) => pinholeFiles.get(name)),
+        getImage: vi.fn(async (name: string) => pinholeFiles.get(name) ?? null),
+        getMetricImage: vi.fn(async (name: string) => pinholeFiles.get(name) ?? null),
+        hasMasks: vi.fn(() => false),
+        getMask: vi.fn(async () => null),
+        getMaskSync: vi.fn(() => undefined),
+      } as unknown as SplatPsnrEvaluatorStoreFacade['data']['dataset'],
+      splatPsnrComputeRequest: { id: 1, scope: 'all' },
+    });
+    useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
+
+    render(<SplatPsnrEvaluator />);
+
+    await waitFor(() => {
+      expect(actions.finishSplatPsnrCompute).toHaveBeenCalledTimes(1);
+    });
+
+    // The compute proceeds over the two pinhole images only.
+    expect(actions.setSplatPsnrPending).toHaveBeenCalledWith([pinholeA.imageId, pinholeB.imageId]);
+    expect(actions.setSplatPsnrPending).not.toHaveBeenCalledWith(
+      expect.arrayContaining([spherical1.imageId])
+    );
+
+    // Exactly one info notification, naming the count and "spherical".
+    const notifications = actions.addNotification.mock.calls;
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0][0]).toBe('info');
+    expect(notifications[0][1]).toContain('spherical');
+    expect(notifications[0][1]).toContain('3');
+  });
+
+  it('warns and starts no compute when the selected camera is spherical', async () => {
+    const sphericalCamera = buildCamera({
+      cameraId: 1,
+      modelId: CameraModelId.EQUIRECTANGULAR,
+      width: 3840,
+      height: 1920,
+      params: [3840, 1920],
+    });
+    const sphericalImage = buildImage({ imageId: 30, cameraId: 1, name: 'equirect.jpg' });
+    const reconstruction = buildReconstruction({
+      cameras: [sphericalCamera],
+      images: [sphericalImage],
+    });
+    const { facade, actions } = createFacade({
+      reconstruction,
+      splatPsnrComputeRequest: { id: 1, scope: 'selected', selectedImageId: sphericalImage.imageId },
+    });
+    useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
+
+    render(<SplatPsnrEvaluator />);
+
+    await waitFor(() => {
+      expect(actions.addNotification).toHaveBeenCalledTimes(1);
+    });
+    expect(actions.addNotification).toHaveBeenCalledWith(
+      'warning',
+      expect.stringContaining('spherical')
+    );
+
+    // No pointless compute is started for a spherical selection.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(createWebGpuSplatPsnrSessionMock).not.toHaveBeenCalled();
+    expect(actions.setSplatPsnrPending).not.toHaveBeenCalled();
+  });
+
+  it('does not notify for an all-pinhole compute-all', async () => {
+    const camera = buildCamera({ cameraId: 1, width: 4, height: 3 });
+    const image = buildImage({ imageId: 40, cameraId: 1, name: 'pin.jpg' });
+    const imageFile = buildFile(image.name);
+    const session = {
+      computeImageMetric: vi.fn().mockResolvedValue({ psnr: 30, mse: 10, validPixelCount: 12 }),
+      dispose: vi.fn(),
+    };
+    createWebGpuSplatPsnrSessionMock.mockResolvedValue(session);
+
+    const { facade, actions } = createFacade({
+      reconstruction: buildReconstruction({ cameras: [camera], images: [image] }),
+      dataset: {
+        getImageSync: vi.fn(() => imageFile),
+        getImage: vi.fn(async () => imageFile),
+        getMetricImage: vi.fn(async () => imageFile),
+        hasMasks: vi.fn(() => false),
+        getMask: vi.fn(async () => null),
+        getMaskSync: vi.fn(() => undefined),
+      } as unknown as SplatPsnrEvaluatorStoreFacade['data']['dataset'],
+      splatPsnrComputeRequest: { id: 1, scope: 'all' },
+    });
+    useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
+
+    render(<SplatPsnrEvaluator />);
+
+    await waitFor(() => {
+      expect(actions.finishSplatPsnrCompute).toHaveBeenCalledTimes(1);
+    });
+
+    expect(actions.addNotification).not.toHaveBeenCalled();
   });
 });
