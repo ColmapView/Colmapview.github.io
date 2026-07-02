@@ -6,8 +6,8 @@ import type { ProjectionClass } from '../utils/cameraModelRegistry';
  * GLSL shaders for real-time image undistortion.
  * Implements distortion for COLMAP's 17 projective and fisheye camera models
  * (ids 0-16). The spherical model EQUIRECTANGULAR (id 17) has no planar
- * distortion and is treated as identity here; it renders as a photosphere
- * elsewhere.
+ * distortion and is treated as identity here; dedicated photosphere
+ * rendering ships separately.
  *
  * Two modes:
  * 1. Cropped mode (fullFrame=false): Output is rectangular perspective projection.
