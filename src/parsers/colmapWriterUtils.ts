@@ -8,9 +8,20 @@ export const COLMAP_INVALID_POINT3D_ID = BigInt('18446744073709551615');
 
 /**
  * Format number with 17 significant digits (matches COLMAP's stream.precision(17)).
+ *
+ * toPrecision(17) is lossless for every finite float64, so `parseFloat(formatDouble(v)) === v`
+ * must hold for all finite `v`. We only trim redundant trailing zeros of a *fractional*
+ * mantissa. The trailing zeros must never be stripped from:
+ *  - an exponent (`5e-10` -> the final "0" is significant; stripping it yields `5e-1` = 0.5), or
+ *  - a bare integer with no decimal point (`1e16` renders as "10000000000000000"; stripping
+ *    the zeros yields "1").
+ * Both cases are guarded by only trimming when the mantissa contains a '.'.
  */
 export function formatDouble(value: number): string {
-  return value.toPrecision(17).replace(/\.?0+$/, '');
+  const str = value.toPrecision(17);
+  const [mantissa, exponent] = str.split(/e/i);
+  const trimmed = mantissa.includes('.') ? mantissa.replace(/\.?0+$/, '') : mantissa;
+  return exponent !== undefined ? `${trimmed}e${exponent}` : trimmed;
 }
 
 /**
