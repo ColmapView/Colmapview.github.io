@@ -5,6 +5,7 @@ import {
   buildCameraPoseDisplayModel,
   formatImageDetailCameraParam,
   getCameraPoseSignedValueClassName,
+  type CameraPoseSource,
 } from './imageDetailCameraPoseViewModel';
 
 describe('image detail camera pose view model', () => {
@@ -73,5 +74,48 @@ describe('image detail camera pose view model', () => {
       modelTitle: 'MODEL_99',
       parameters: [{ name: 'p0', value: '0.5000' }],
     });
+  });
+
+  it('derives parameter names from the camera model registry (not the legacy 0-10 table)', () => {
+    const paramNamesFor = (camera: CameraPoseSource) =>
+      buildCameraPoseDisplayModel(camera, [1, 0, 0, 0], [0, 0, 0]).parameters.map((p) => p.name);
+
+    // EUCM (16): real names, not the legacy p4/p5 fallback.
+    expect(
+      paramNamesFor(buildCamera({ modelId: CameraModelId.EUCM, params: [1000, 1000, 500, 400, 0.5, 1.1] }))
+    ).toEqual(['fx', 'fy', 'cx', 'cy', 'alpha', 'beta']);
+
+    // RAD_TAN_THIN_PRISM_FISHEYE (11): all 16 real names, not p0..p15.
+    expect(
+      paramNamesFor(
+        buildCamera({
+          modelId: CameraModelId.RAD_TAN_THIN_PRISM_FISHEYE,
+          params: Array.from({ length: 16 }, (_, i) => i),
+        })
+      )
+    ).toEqual([
+      'fx', 'fy', 'cx', 'cy',
+      'k1', 'k2', 'k3', 'k4', 'k5', 'k6',
+      'p1', 'p2', 'sx1', 'sy1', 'sx2', 'sy2',
+    ]);
+
+    // EQUIRECTANGULAR (17): width/height, not p0/p1.
+    expect(
+      paramNamesFor(
+        buildCamera({ modelId: CameraModelId.EQUIRECTANGULAR, width: 2000, height: 1000, params: [2000, 1000] })
+      )
+    ).toEqual(['w', 'h']);
+
+    // FOV (7): the registry spells this 'ω' (the legacy table said 'omega').
+    expect(
+      paramNamesFor(buildCamera({ modelId: CameraModelId.FOV, params: [1000, 1000, 500, 400, 0.9] }))
+    ).toEqual(['fx', 'fy', 'cx', 'cy', 'ω']);
+
+    // Unknown / out-of-registry model: p${index} fallback preserved for every param.
+    expect(paramNamesFor({ modelId: 99, width: 800, height: 600, params: [1, 2, 3] })).toEqual([
+      'p0',
+      'p1',
+      'p2',
+    ]);
   });
 });

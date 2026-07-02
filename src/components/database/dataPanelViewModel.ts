@@ -1,5 +1,6 @@
 import type { Camera, Image, Reconstruction } from '../../types/colmap';
 import { CAMERA_MODEL_COLMAP_NAMES, CAMERA_MODEL_NAMES } from '../../utils/cameraModelNames';
+import { cameraModelHasPinholeIntrinsics } from '../../utils/cameraModelRegistry';
 
 export type DataPanelTabId = 'cameras' | 'images' | 'points';
 
@@ -50,7 +51,9 @@ export function getDataPanelCameraRows(
     modelName: CAMERA_MODEL_NAMES[camera.modelId] ?? `Unknown (${camera.modelId})`,
     colmapModelName: CAMERA_MODEL_COLMAP_NAMES[camera.modelId] ?? `MODEL_${camera.modelId}`,
     size: `${camera.width}x${camera.height}`,
-    focal: camera.params[0]?.toFixed(2),
+    // Spherical cameras store the panorama width in params[0], not a focal
+    // length — show a placeholder instead of mislabeling it as "Focal".
+    focal: cameraModelHasPinholeIntrinsics(camera.modelId) ? camera.params[0]?.toFixed(2) : '—',
   }));
 }
 
