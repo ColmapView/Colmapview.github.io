@@ -13,9 +13,10 @@ The registered images should be 2:1 equirectangular panoramas.
 
 - [ ] Click a spherical camera (its grid sphere / hit sphere). The viewer must fly
       to a point **outside** the sphere (2.5× its radius), looking at its center —
-      you should see the whole sphere framed at roughly ~89% of the viewport height.
-      **Regression to watch:** landing *inside* an invisible sphere (only grid
-      lines visible, panorama nowhere) — that was the bug; it must not reproduce.
+      with auto-FOV enabled the sphere frames at roughly ~87–89% of the viewport
+      height. **Regression to watch:** landing *inside* an invisible sphere (only
+      grid lines visible, panorama nowhere) — that was the bug; it must not
+      reproduce.
 - [ ] Orbiting after selection pivots around the sphere's center.
 - [ ] Selecting a *pinhole* camera still flies into it exactly as before (see
       through the camera). Nothing about pinhole fly-to may have changed.
@@ -50,7 +51,9 @@ one-spot change there.
       pinhole frustums; poles look clean (no spikes), sphere size follows the
       camera-size slider.
 - [ ] Dragging the camera-size slider is smooth with many spherical cameras
-      (T10 made this matrices-only — no per-tick geometry rebuild).
+      (hit-target geometry no longer rebuilds per tick; the visible grid lines
+      still rebuild — pre-existing, matching pinhole — so judge smoothness
+      directly).
 - [ ] With a camera selected, unselected grid spheres **dim** to the same
       opacity as unselected pinhole frustums; with nothing selected they use the
       standby opacity (T11). Known nuance: a one-frame full-opacity flash on
