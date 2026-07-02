@@ -14,6 +14,7 @@ import { syncMaterialLineWidth } from './threeMaterialMutations';
 interface SphericalCameraLinesProps {
   frustums: CameraFrustumItem[];
   selectedImageId: ImageId | null;
+  hoveredImageId: ImageId | null;
   cameraScale: number;
   frustumColorMode: FrustumColorMode;
   frustumSingleColor: string;
@@ -26,7 +27,7 @@ interface SphericalCameraLinesProps {
 }
 
 export function SphericalCameraLines({
-  frustums, selectedImageId, cameraScale, frustumColorMode, frustumSingleColor,
+  frustums, selectedImageId, hoveredImageId, cameraScale, frustumColorMode, frustumSingleColor,
   frustumLineWidth, frustumStandbyOpacity, selectionColor, unselectedCameraOpacity,
   imageFrameIndexMap, splatPsnrByImage,
 }: SphericalCameraLinesProps) {
@@ -64,10 +65,10 @@ export function SphericalCameraLines({
         colors[base + v * 3] = c.r; colors[base + v * 3 + 1] = c.g; colors[base + v * 3 + 2] = c.b;
       }
     });
-    writeSphereLineAlphas(alphas, frustums, selectedImageId, frustumStandbyOpacity, unselectedCameraOpacity);
+    writeSphereLineAlphas(alphas, frustums, selectedImageId, hoveredImageId, frustumStandbyOpacity, unselectedCameraOpacity);
     markFatLineColorsNeedUpdate(fatLines.geometry);
     markFatLineAlphasNeedUpdate(fatLines.geometry);
-  }, [fatLines, frustums, selectedImageId, selectionColor, frustumColorMode, frustumSingleColor, imageFrameIndexMap, splatPsnrByImage, frustumStandbyOpacity, unselectedCameraOpacity]);
+  }, [fatLines, frustums, selectedImageId, hoveredImageId, selectionColor, frustumColorMode, frustumSingleColor, imageFrameIndexMap, splatPsnrByImage, frustumStandbyOpacity, unselectedCameraOpacity]);
 
   if (frustums.length === 0) return null;
   return <primitive object={fatLines.object} />;

@@ -243,6 +243,7 @@ export function CameraFrustums() {
       <SphericalCameraLines
         frustums={sphericalFrustums}
         selectedImageId={selectedImageId}
+        hoveredImageId={hoveredImageId}
         cameraScale={cameraScale}
         frustumColorMode={frustumColorMode}
         frustumSingleColor={frustumSingleColor}

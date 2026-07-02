@@ -75,32 +75,47 @@ describe('buildSphereLineGeometryData', () => {
 
 // Expected values are derived from the SETTINGS passed in, mirroring the pinhole
 // line-opacity semantics in getFrustumLineStyle (cameraFrustumStylePolicy.ts):
-//   no selection            -> frustumStandbyOpacity
-//   selection, unselected   -> unselectedCameraOpacity
+//   no selection             -> frustumStandbyOpacity (hover ignored)
 //   selection, this selected -> 1.0 (pinhole-equivalent selected value, pre image-plane override)
+//   selection, this hovered  -> 1.0 (pinhole hover-brighten parity)
+//   selection, unselected    -> unselectedCameraOpacity
 describe('getSphereLineAlpha — pinhole opacity parity', () => {
   const STANDBY = 0.35;
   const UNSELECTED = 0.15;
 
   it('no selection active -> standby opacity', () => {
     expect(getSphereLineAlpha({
-      isSelected: false, hasSelectedImage: false,
+      isSelected: false, isHovered: false, hasSelectedImage: false,
       frustumStandbyOpacity: STANDBY, unselectedCameraOpacity: UNSELECTED,
     })).toBe(STANDBY);
   });
 
   it('selection active, this camera unselected -> unselected opacity', () => {
     expect(getSphereLineAlpha({
-      isSelected: false, hasSelectedImage: true,
+      isSelected: false, isHovered: false, hasSelectedImage: true,
       frustumStandbyOpacity: STANDBY, unselectedCameraOpacity: UNSELECTED,
     })).toBe(UNSELECTED);
   });
 
   it('selection active, this camera selected -> 1.0', () => {
     expect(getSphereLineAlpha({
-      isSelected: true, hasSelectedImage: true,
+      isSelected: true, isHovered: false, hasSelectedImage: true,
       frustumStandbyOpacity: STANDBY, unselectedCameraOpacity: UNSELECTED,
     })).toBe(1.0);
+  });
+
+  it('selection active, this camera hovered (not selected) -> 1.0 (hover brighten parity)', () => {
+    expect(getSphereLineAlpha({
+      isSelected: false, isHovered: true, hasSelectedImage: true,
+      frustumStandbyOpacity: STANDBY, unselectedCameraOpacity: UNSELECTED,
+    })).toBe(1.0);
+  });
+
+  it('no selection active, hovered -> standby opacity (hover ignored without a selection, mirroring pinhole !hasSelectedImage-first ordering)', () => {
+    expect(getSphereLineAlpha({
+      isSelected: false, isHovered: true, hasSelectedImage: false,
+      frustumStandbyOpacity: STANDBY, unselectedCameraOpacity: UNSELECTED,
+    })).toBe(STANDBY);
   });
 });
 
@@ -113,18 +128,29 @@ describe('writeSphereLineAlphas — per-camera alpha attribute values', () => {
   it('no selection: every vertex of every sphere gets the standby opacity', () => {
     const items = [sphericalItemWithId(1), sphericalItemWithId(2)];
     const target = new Float32Array(items.length * VERTS_PER_SPHERE);
-    writeSphereLineAlphas(target, items, null, STANDBY, UNSELECTED);
+    writeSphereLineAlphas(target, items, null, null, STANDBY, UNSELECTED);
     for (let i = 0; i < target.length; i++) expect(target[i]).toBe(STANDBY);
   });
 
   it('selection active: selected sphere = 1.0, unselected spheres = unselected opacity', () => {
     const items = [sphericalItemWithId(1), sphericalItemWithId(2)];
     const target = new Float32Array(items.length * VERTS_PER_SPHERE);
-    // Select image id 2 (items[1]).
-    writeSphereLineAlphas(target, items, 2, STANDBY, UNSELECTED);
+    // Select image id 2 (items[1]), nothing hovered.
+    writeSphereLineAlphas(target, items, 2, null, STANDBY, UNSELECTED);
     // items[0] (unselected) occupies vertex range [0, VERTS_PER_SPHERE).
     for (let v = 0; v < VERTS_PER_SPHERE; v++) expect(target[v]).toBe(UNSELECTED);
     // items[1] (selected) occupies [VERTS_PER_SPHERE, 2*VERTS_PER_SPHERE).
+    for (let v = 0; v < VERTS_PER_SPHERE; v++) expect(target[VERTS_PER_SPHERE + v]).toBe(1.0);
+  });
+
+  it('selection active: a hovered non-selected sphere brightens to 1.0', () => {
+    const items = [sphericalItemWithId(1), sphericalItemWithId(2)];
+    const target = new Float32Array(items.length * VERTS_PER_SPHERE);
+    // Select image id 1 (items[0]); hover image id 2 (items[1], not selected).
+    writeSphereLineAlphas(target, items, 1, 2, STANDBY, UNSELECTED);
+    // items[0] (selected) occupies [0, VERTS_PER_SPHERE).
+    for (let v = 0; v < VERTS_PER_SPHERE; v++) expect(target[v]).toBe(1.0);
+    // items[1] (hovered, not selected) brightens to 1.0.
     for (let v = 0; v < VERTS_PER_SPHERE; v++) expect(target[VERTS_PER_SPHERE + v]).toBe(1.0);
   });
 });

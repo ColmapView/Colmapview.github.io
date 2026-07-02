@@ -93,7 +93,7 @@ export function buildSphereLineGeometryData(
       baseColors[floatOffset + v * 3 + 2] = color.b;
       // Placeholder: build-time alpha is 1.0, exactly as the pinhole
       // buildFrustumLineGeometryData does. SphericalCameraLines overwrites this
-      // per-camera via writeSphereLineAlphas once the selection state is known.
+      // per-camera via writeSphereLineAlphas once the selection/hover state is known.
       baseAlphas[vertOffset + v] = 1.0;
     }
   });
@@ -103,6 +103,7 @@ export function buildSphereLineGeometryData(
 
 export interface SphereLineAlphaOptions {
   isSelected: boolean;
+  isHovered: boolean;
   hasSelectedImage: boolean;
   frustumStandbyOpacity: number;
   unselectedCameraOpacity: number;
@@ -112,24 +113,27 @@ export interface SphereLineAlphaOptions {
  * Per-camera grid-line alpha, mirroring the pinhole frustum-line opacity
  * semantics in getFrustumLineStyle (cameraFrustumStylePolicy.ts) for the states
  * the v1 spherical renderer supports:
- *   - no selection active      -> frustumStandbyOpacity
- *   - selection, unselected     -> unselectedCameraOpacity
+ *   - no selection active       -> frustumStandbyOpacity (hover ignored, matching
+ *                                  the pinhole !hasSelectedImage-first ordering)
  *   - selection, this selected  -> 1.0 (the pinhole-equivalent selected value,
  *                                  i.e. the pre-override selected opacity; the
  *                                  pinhole `isSelected -> 0` override is the
  *                                  image-plane swap and is intentionally not
  *                                  mirrored here).
- * Hover / matches / pending-deletion are not tracked by the spherical v1
- * renderer, so those pinhole branches are intentionally omitted.
+ *   - selection, this hovered   -> 1.0 (pinhole hover-brighten parity)
+ *   - selection, unselected     -> unselectedCameraOpacity
+ * Matches / pending-deletion are not tracked by the spherical v1 renderer, so
+ * those pinhole branches are intentionally omitted.
  */
 export function getSphereLineAlpha({
   isSelected,
+  isHovered,
   hasSelectedImage,
   frustumStandbyOpacity,
   unselectedCameraOpacity,
 }: SphereLineAlphaOptions): number {
   if (!hasSelectedImage) return frustumStandbyOpacity;
-  if (isSelected) return 1.0;
+  if (isSelected || isHovered) return 1.0;
   return unselectedCameraOpacity;
 }
 
@@ -142,6 +146,7 @@ export function writeSphereLineAlphas(
   target: Float32Array,
   items: CameraFrustumItem[],
   selectedImageId: ImageId | null,
+  hoveredImageId: ImageId | null,
   frustumStandbyOpacity: number,
   unselectedCameraOpacity: number
 ): void {
@@ -149,6 +154,7 @@ export function writeSphereLineAlphas(
   items.forEach((item, index) => {
     const alpha = getSphereLineAlpha({
       isSelected: item.image.imageId === selectedImageId,
+      isHovered: item.image.imageId === hoveredImageId,
       hasSelectedImage,
       frustumStandbyOpacity,
       unselectedCameraOpacity,
