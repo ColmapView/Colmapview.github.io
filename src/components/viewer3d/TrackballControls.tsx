@@ -1,8 +1,9 @@
 import { useRef, useEffect, useMemo, useCallback } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useNavigationNode, useAxesNode } from '../../nodes';
+import { useNavigationNode, useAxesNode, useCamerasNode } from '../../nodes';
 import { useNavigationNodeActions, useCamerasNodeActions, usePointsNodeActions } from '../../nodes';
+import { getCameraScaleValue } from './cameraFrustumViewModel';
 import type { CameraViewState } from '../../store/types';
 import { getWorldUp } from '../../utils/coordinateSystems';
 import { CONTROLS } from '../../theme';
@@ -45,9 +46,13 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
   // Node hooks for reading state
   const nav = useNavigationNode();
   const axesNode = useAxesNode();
+  const camerasNode = useCamerasNode();
   const navActions = useNavigationNodeActions();
   const camerasActions = useCamerasNodeActions();
   const pointsActions = usePointsNodeActions();
+
+  // World-space frustum/photosphere scale (base × factor); drives the spherical outside-stop fly-to.
+  const cameraScale = getCameraScaleValue(camerasNode.scale, camerasNode.scaleFactor);
 
   // Extract navigation state for convenience
   const {
@@ -193,6 +198,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
     horizonLock,
     worldUpVec,
     flyTransitionDuration,
+    cameraScale,
     camera,
     targetVecRef: targetVec,
     cameraQuatRef: cameraQuat,

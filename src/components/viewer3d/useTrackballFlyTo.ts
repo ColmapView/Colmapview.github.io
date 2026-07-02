@@ -5,6 +5,8 @@ import type { Sim3dEuler } from '../../types/sim3d';
 import type { CameraViewState, HorizonLockMode } from '../../store/types';
 import { getImageWorldPose } from '../../utils/colmapTransforms';
 import { createSim3dFromEuler } from '../../utils/sim3dTransforms';
+import { isSphericalCameraModel } from '../../utils/cameraModelRegistry';
+import { computeSphericalFlyToPose } from './sphericalFlyTo';
 
 export interface TrackballAnimationTarget {
   startPosition: THREE.Vector3;
@@ -32,6 +34,7 @@ interface TrackballFlyToOptions {
   horizonLock: HorizonLockMode;
   worldUpVec: THREE.Vector3;
   flyTransitionDuration: number;
+  cameraScale: number;
   camera: THREE.Camera;
   targetVecRef: MutableRefObject<THREE.Vector3>;
   cameraQuatRef: MutableRefObject<THREE.Quaternion>;
@@ -117,13 +120,15 @@ function applyPoseTransition(
   setInstantPose(camera, pose, targetVecRef, cameraQuatRef, distanceRef, targetDistanceRef);
 }
 
-function getImageFlyToPose(
+export function getImageFlyToPose(
   reconstruction: Reconstruction,
   imageId: number,
   transform: Sim3dEuler,
   horizonLock: HorizonLockMode,
   worldUpVec: THREE.Vector3,
-  distance: number
+  distance: number,
+  cameraScale: number,
+  currentViewerPos: THREE.Vector3
 ): FlyToPose | null {
   const image = reconstruction.images.get(imageId);
   if (!image) return null;
@@ -135,6 +140,26 @@ function getImageFlyToPose(
     .applyQuaternion(sim3d.rotation)
     .multiplyScalar(sim3d.scale)
     .add(sim3d.translation);
+
+  // Spherical (360°) cameras render as a FrontSide photosphere: a viewer AT the camera center
+  // sees only back-face-culled grid lines. Stop OUTSIDE the sphere and orbit its center instead.
+  // The photosphere lives inside the sim3d transform group, so its world radius is
+  // cameraScale * sim3d.scale and its center is transformedPosition.
+  const camera = reconstruction.cameras.get(image.cameraId);
+  if (camera && isSphericalCameraModel(camera.modelId)) {
+    const worldRadius = cameraScale * sim3d.scale;
+    const { position, lookAt, distance: orbitDistance } = computeSphericalFlyToPose(
+      transformedPosition,
+      currentViewerPos,
+      worldRadius
+    );
+    // Look at the center with worldUpVec: the panorama stays upright (poles vertical). This is
+    // the horizon-lock result, and the sensible default when horizon-lock is off — an external
+    // orbit view has no camera-roll reference of its own.
+    const lookMatrix = new THREE.Matrix4().lookAt(position, lookAt, worldUpVec);
+    const quaternion = new THREE.Quaternion().setFromRotationMatrix(lookMatrix);
+    return { position, quaternion, target: lookAt, distance: orbitDistance };
+  }
 
   const transformedQuaternion = sim3d.rotation.clone().multiply(worldFromCameraQuaternion);
   const flipRotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
@@ -175,6 +200,7 @@ export function useTrackballFlyTo({
   horizonLock,
   worldUpVec,
   flyTransitionDuration,
+  cameraScale,
   camera,
   targetVecRef,
   cameraQuatRef,
@@ -194,7 +220,9 @@ export function useTrackballFlyTo({
       transform,
       horizonLock,
       worldUpVec,
-      distanceRef.current
+      distanceRef.current,
+      cameraScale,
+      camera.position
     );
 
     if (!pose) {
@@ -222,6 +250,7 @@ export function useTrackballFlyTo({
     horizonLock,
     worldUpVec,
     flyTransitionDuration,
+    cameraScale,
     camera,
     targetVecRef,
     cameraQuatRef,

@@ -213,11 +213,13 @@ describe('camera frustum view-model helpers', () => {
     })).toBe(false);
   });
 
-  it('frames the sphere diameter for spherical cameras, not the degenerate pinhole plane', () => {
-    // EQUIRECTANGULAR: getCameraIntrinsics returns fx=fy=1 (unit default, no real focal length).
-    // The old pinhole path would compute planeWidth = cameraScale * 3840 / 1 = 7680, which is
-    // degenerate and causes the FOV to clamp to maxFov=120. The spherical branch should instead
-    // frame the sphere of radius=cameraScale, yielding ~102.68° for a landscape viewport.
+  it('frames the sphere from the outside-stop distance for spherical cameras', () => {
+    // EQUIRECTANGULAR: getCameraIntrinsics returns fx=fy=1 (unit default, no real focal length),
+    // so the pinhole plane formula is degenerate. The spherical branch instead frames the sphere
+    // (radius=cameraScale) as seen from the fly-to outside-stop distance
+    // planeDistance = SPHERICAL_FLYTO_DISTANCE_FACTOR(2.5) * cameraScale — the same viewpoint the
+    // spherical fly-to produces. For a landscape 1000x500 viewport this yields targetFov 53.13°
+    // (node: 2*atan((2*cameraScale/0.8)/(2*2.5*cameraScale))*180/PI = 2*atan(0.5)*180/PI).
     const sphericalCamera = buildCamera({
       modelId: CameraModelId.EQUIRECTANGULAR,
       width: 3840,
@@ -231,14 +233,14 @@ describe('camera frustum view-model helpers', () => {
       viewportHeight: 500,
     };
 
-    // FOV too small → adjusts to frame the sphere (not the degenerate 120° the pinhole path gives)
-    expect(getAutoAdjustedFov({ ...baseOptions, currentFov: 60 })).toBeCloseTo(102.68, 2);
+    // FOV too tight (< ~43.6°) → widen to frame the sphere at fill 0.8
+    expect(getAutoAdjustedFov({ ...baseOptions, currentFov: 40 })).toBeCloseTo(53.13, 2);
 
-    // FOV too large → also adjusts
-    expect(getAutoAdjustedFov({ ...baseOptions, currentFov: 150 })).toBeCloseTo(102.68, 2);
+    // FOV too wide (> ~77.3°) → narrow to the same target
+    expect(getAutoAdjustedFov({ ...baseOptions, currentFov: 100 })).toBeCloseTo(53.13, 2);
 
-    // FOV already in-range for sphere viewing (heightRatio ≈ 0.84 ∈ [0.5, 1.0]) → no adjustment
-    expect(getAutoAdjustedFov({ ...baseOptions, currentFov: 100 })).toBeNull();
+    // FOV already in-range for the outside view (maxRatio ≈ 0.69 ∈ [0.5, 1.0]) → no adjustment
+    expect(getAutoAdjustedFov({ ...baseOptions, currentFov: 60 })).toBeNull();
 
     // Degenerate: zero cameraScale → null
     expect(getAutoAdjustedFov({ ...baseOptions, cameraScale: 0, currentFov: 60 })).toBeNull();

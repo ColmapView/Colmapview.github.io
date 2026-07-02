@@ -2,6 +2,7 @@ import type { Camera, ImageId } from '../../types/colmap';
 import type { CameraScaleFactor } from '../../store/types';
 import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
 import { isSphericalCameraModel } from '../../utils/cameraModelRegistry';
+import { SPHERICAL_FLYTO_DISTANCE_FACTOR } from './sphericalFlyTo';
 
 export {
   buildMatchedImageIds,
@@ -106,10 +107,13 @@ export function getAutoAdjustedFov({
 
   // Spherical cameras have no real focal length; getCameraIntrinsics returns fx=fy=1 (unit
   // default), so the pinhole plane formula produces a degenerate plane of width=cameraScale*width.
-  // Instead, frame the rendered sphere (radius = cameraScale) as a square target.
+  // Instead, frame the rendered sphere (radius = cameraScale) as a square target, viewed from the
+  // SAME outside-stop distance the spherical fly-to lands at (planeDistance = factor * cameraScale).
+  // Sharing SPHERICAL_FLYTO_DISTANCE_FACTOR keeps this fit and the fly-to in agreement (one source
+  // of truth). The sphere subtends 2*asin(1/factor) ≈ 47.16° at factor 2.5.
   if (isSphericalCameraModel(camera.modelId)) {
     const sphereDiameter = 2 * cameraScale;
-    const planeDistance = cameraScale;
+    const planeDistance = SPHERICAL_FLYTO_DISTANCE_FACTOR * cameraScale;
     const currentVisibleHeight = 2 * planeDistance * Math.tan(currentFovRad / 2);
     const currentVisibleWidth = currentVisibleHeight * viewportAspect;
     const heightRatio = sphereDiameter / currentVisibleHeight;
