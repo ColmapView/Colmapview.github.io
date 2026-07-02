@@ -8,6 +8,7 @@ import {
   parsePoints3DText,
   parseWithWasm,
 } from '../parsers';
+import type { SkippedCameraRecord } from '../parsers';
 import type { Camera, Image as ColmapImage, Point3D } from '../types/colmap';
 import { appLogger } from '../utils/logger';
 import type { RigData } from '../types/rig';
@@ -43,7 +44,7 @@ export interface ColmapParserDeps {
 
 interface ParseColmapFilesOptions extends ColmapParserFiles {
   parsers?: ColmapParserDeps;
-  addNotification: (type: 'info', message: string, duration?: number) => void;
+  addNotification: (type: 'info' | 'warning', message: string, duration?: number) => void;
   log?: (message: string) => void;
 }
 
@@ -96,10 +97,16 @@ export async function parseColmapFiles({
   log('[Parser] WASM failed, falling back to JS parser (without 2D points)');
   const useLiteImages = imagesFile.name.endsWith('.bin');
 
+  // Unknown-model cameras in cameras.txt are skipped (partial loads stay
+  // useful); collect them so we can surface a single aggregate notification.
+  const skippedCameras: SkippedCameraRecord[] = [];
+
   const [cameras, images, points3D] = await Promise.all([
     camerasFile.name.endsWith('.bin')
       ? camerasFile.arrayBuffer().then(parsers.parseCamerasBinary)
-      : camerasFile.text().then(parsers.parseCamerasText),
+      : camerasFile.text().then(text =>
+          parsers.parseCamerasText(text, { onSkip: record => skippedCameras.push(record) })
+        ),
     imagesFile.name.endsWith('.bin')
       ? imagesFile.arrayBuffer().then(buf => parsers.parseImagesBinary(buf, true))
       : imagesFile.text().then(parsers.parseImagesText),
@@ -109,6 +116,14 @@ export async function parseColmapFiles({
       ? points3DFile.arrayBuffer().then(parsers.parsePointCloudPlyBuffer)
       : points3DFile.text().then(parsers.parsePoints3DText),
   ]);
+
+  if (skippedCameras.length > 0) {
+    const uniqueModels = [...new Set(skippedCameras.map(s => s.modelName))];
+    addNotification(
+      'warning',
+      `Skipped ${skippedCameras.length} camera(s) with unsupported model(s): ${uniqueModels.join(', ')}`
+    );
+  }
 
   if (useLiteImages) {
     addNotification(

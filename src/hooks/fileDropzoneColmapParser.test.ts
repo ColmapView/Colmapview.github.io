@@ -108,10 +108,36 @@ describe('file dropzone COLMAP parser helper', () => {
       usedWasmPath: false,
     });
 
-    expect(parsers.parseCamerasText).toHaveBeenCalledWith('camera text');
+    expect(parsers.parseCamerasText).toHaveBeenCalledWith(
+      'camera text',
+      expect.objectContaining({ onSkip: expect.any(Function) })
+    );
     expect(parsers.parseImagesText).toHaveBeenCalledWith('image text');
     expect(parsers.parsePoints3DText).toHaveBeenCalledWith('point text');
     expect(addNotification).not.toHaveBeenCalled();
+  });
+
+  it('warns with unique model names and count when the text parser skips unknown-model cameras', async () => {
+    const { parsers, cameras } = createParserDeps();
+    vi.mocked(parsers.parseCamerasText).mockImplementation((_text, options) => {
+      options?.onSkip?.({ line: 2, modelName: 'FUTURE_A' });
+      options?.onSkip?.({ line: 3, modelName: 'FUTURE_A' });
+      options?.onSkip?.({ line: 4, modelName: 'FUTURE_B' });
+      return cameras;
+    });
+    const addNotification = vi.fn();
+
+    await parseColmapFiles({
+      ...createFiles(),
+      parsers,
+      addNotification,
+      log: vi.fn(),
+    });
+
+    expect(addNotification).toHaveBeenCalledWith(
+      'warning',
+      'Skipped 3 camera(s) with unsupported model(s): FUTURE_A, FUTURE_B'
+    );
   });
 
   it('routes binary JS parsing through lite image parsing and notifies about 2D points', async () => {
