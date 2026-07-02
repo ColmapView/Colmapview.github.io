@@ -91,9 +91,71 @@ export function buildSphereLineGeometryData(
       baseColors[floatOffset + v * 3] = color.r;
       baseColors[floatOffset + v * 3 + 1] = color.g;
       baseColors[floatOffset + v * 3 + 2] = color.b;
+      // Placeholder: build-time alpha is 1.0, exactly as the pinhole
+      // buildFrustumLineGeometryData does. SphericalCameraLines overwrites this
+      // per-camera via writeSphereLineAlphas once the selection state is known.
       baseAlphas[vertOffset + v] = 1.0;
     }
   });
 
   return { positions, baseColors, baseAlphas };
+}
+
+export interface SphereLineAlphaOptions {
+  isSelected: boolean;
+  hasSelectedImage: boolean;
+  frustumStandbyOpacity: number;
+  unselectedCameraOpacity: number;
+}
+
+/**
+ * Per-camera grid-line alpha, mirroring the pinhole frustum-line opacity
+ * semantics in getFrustumLineStyle (cameraFrustumStylePolicy.ts) for the states
+ * the v1 spherical renderer supports:
+ *   - no selection active      -> frustumStandbyOpacity
+ *   - selection, unselected     -> unselectedCameraOpacity
+ *   - selection, this selected  -> 1.0 (the pinhole-equivalent selected value,
+ *                                  i.e. the pre-override selected opacity; the
+ *                                  pinhole `isSelected -> 0` override is the
+ *                                  image-plane swap and is intentionally not
+ *                                  mirrored here).
+ * Hover / matches / pending-deletion are not tracked by the spherical v1
+ * renderer, so those pinhole branches are intentionally omitted.
+ */
+export function getSphereLineAlpha({
+  isSelected,
+  hasSelectedImage,
+  frustumStandbyOpacity,
+  unselectedCameraOpacity,
+}: SphereLineAlphaOptions): number {
+  if (!hasSelectedImage) return frustumStandbyOpacity;
+  if (isSelected) return 1.0;
+  return unselectedCameraOpacity;
+}
+
+/**
+ * Fill a fat-line alpha attribute array (VERTS_PER_SPHERE entries per camera,
+ * laid out in the same order as buildSphereLineGeometryData) with the
+ * per-camera opacity from getSphereLineAlpha. Mutates `target` in place.
+ */
+export function writeSphereLineAlphas(
+  target: Float32Array,
+  items: CameraFrustumItem[],
+  selectedImageId: ImageId | null,
+  frustumStandbyOpacity: number,
+  unselectedCameraOpacity: number
+): void {
+  const hasSelectedImage = selectedImageId !== null;
+  items.forEach((item, index) => {
+    const alpha = getSphereLineAlpha({
+      isSelected: item.image.imageId === selectedImageId,
+      hasSelectedImage,
+      frustumStandbyOpacity,
+      unselectedCameraOpacity,
+    });
+    const vertOffset = index * VERTS_PER_SPHERE;
+    for (let v = 0; v < VERTS_PER_SPHERE; v++) {
+      target[vertOffset + v] = alpha;
+    }
+  });
 }

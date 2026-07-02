@@ -3,10 +3,11 @@ import * as THREE from 'three';
 import type { ImageId } from '../../types/colmap';
 import type { CameraFrustumItem, FrustumColorMode, FrustumPsnrMetricSource } from './cameraFrustumGeometry';
 import { getFrustumBaseColor, getFrustumMetricColorScale } from './cameraFrustumGeometry';
-import { buildSphereLineGeometryData, VERTS_PER_SPHERE, FLOATS_PER_SPHERE } from './sphericalCameraGeometry';
+import { buildSphereLineGeometryData, writeSphereLineAlphas, VERTS_PER_SPHERE, FLOATS_PER_SPHERE } from './sphericalCameraGeometry';
 import {
   createFatLineSegmentsObject, disposeFatLineSegmentsObject,
-  getFatLineColorArray, markFatLineColorsNeedUpdate,
+  getFatLineAlphaArray, getFatLineColorArray,
+  markFatLineAlphasNeedUpdate, markFatLineColorsNeedUpdate,
 } from './fatLineSegments';
 import { syncMaterialLineWidth } from './threeMaterialMutations';
 
@@ -17,14 +18,17 @@ interface SphericalCameraLinesProps {
   frustumColorMode: FrustumColorMode;
   frustumSingleColor: string;
   frustumLineWidth: number;
+  frustumStandbyOpacity: number;
   selectionColor: string;
+  unselectedCameraOpacity: number;
   imageFrameIndexMap: Map<ImageId, number>;
   splatPsnrByImage: FrustumPsnrMetricSource;
 }
 
 export function SphericalCameraLines({
   frustums, selectedImageId, cameraScale, frustumColorMode, frustumSingleColor,
-  frustumLineWidth, selectionColor, imageFrameIndexMap, splatPsnrByImage,
+  frustumLineWidth, frustumStandbyOpacity, selectionColor, unselectedCameraOpacity,
+  imageFrameIndexMap, splatPsnrByImage,
 }: SphericalCameraLinesProps) {
   const { positions, baseColors, baseAlphas } = useMemo(
     () => buildSphereLineGeometryData(frustums, cameraScale, { frustumColorMode, frustumSingleColor, imageFrameIndexMap, splatPsnrByImage }),
@@ -43,10 +47,13 @@ export function SphericalCameraLines({
   useLayoutEffect(() => { syncMaterialLineWidth(fatLines.material, frustumLineWidth); }, [fatLines, frustumLineWidth]);
   useEffect(() => () => disposeFatLineSegmentsObject(fatLines), [fatLines]);
 
-  // Recolor selected sphere on selection change (no per-frame animation in v1).
+  // Recolor + re-alpha spheres on selection / opacity change (no per-frame animation in v1).
+  // Alpha mirrors the pinhole line semantics (standby / unselected / selected) so that in a
+  // mixed dataset the grid spheres dim in lockstep with the pinhole frustums.
   useEffect(() => {
     const colors = getFatLineColorArray(fatLines.geometry);
-    if (!colors) return;
+    const alphas = getFatLineAlphaArray(fatLines.geometry);
+    if (!colors || !alphas) return;
     const metricColorScale = getFrustumMetricColorScale(frustumColorMode, frustums.map((f) => f.image.imageId), splatPsnrByImage);
     const c = new THREE.Color();
     frustums.forEach((frustum, index) => {
@@ -57,8 +64,10 @@ export function SphericalCameraLines({
         colors[base + v * 3] = c.r; colors[base + v * 3 + 1] = c.g; colors[base + v * 3 + 2] = c.b;
       }
     });
+    writeSphereLineAlphas(alphas, frustums, selectedImageId, frustumStandbyOpacity, unselectedCameraOpacity);
     markFatLineColorsNeedUpdate(fatLines.geometry);
-  }, [fatLines, frustums, selectedImageId, selectionColor, frustumColorMode, frustumSingleColor, imageFrameIndexMap, splatPsnrByImage]);
+    markFatLineAlphasNeedUpdate(fatLines.geometry);
+  }, [fatLines, frustums, selectedImageId, selectionColor, frustumColorMode, frustumSingleColor, imageFrameIndexMap, splatPsnrByImage, frustumStandbyOpacity, unselectedCameraOpacity]);
 
   if (frustums.length === 0) return null;
   return <primitive object={fatLines.object} />;

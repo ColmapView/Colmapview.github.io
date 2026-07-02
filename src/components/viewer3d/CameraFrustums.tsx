@@ -247,7 +247,9 @@ export function CameraFrustums() {
         frustumColorMode={frustumColorMode}
         frustumSingleColor={frustumSingleColor}
         frustumLineWidth={frustumLineWidth}
+        frustumStandbyOpacity={frustumStandbyOpacity}
         selectionColor={selectionColor}
+        unselectedCameraOpacity={unselectedCameraOpacity}
         imageFrameIndexMap={imageFrameIndexMap}
         splatPsnrByImage={splatPsnrByImage}
       />
