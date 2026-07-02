@@ -3,6 +3,7 @@ import type { Camera, ImageId } from '../../types/colmap';
 import type { CameraViewState } from '../../store/types';
 import type { NavigationNodeActions, SelectionNodeActions } from '../../nodes';
 import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
+import { isSphericalCameraModel } from '../../utils/cameraModelRegistry';
 import { useGuideStore } from '../../store/stores/guideStore';
 import { prioritizeFrustumTexture } from '../../hooks/useFrustumTexture';
 import { clearBodyCursor } from '../../utils/bodyCursor';
@@ -56,6 +57,18 @@ interface CameraFrustumNavigationHandlers {
 }
 
 function showUndistortionTipForCamera(camera: Camera): void {
+  // Spherical intrinsics are all zeros, so the distortion check below never fires
+  // for panoramas. Branch first with its own tip id so this once-only hint is
+  // independent of the pinhole 'undistortion' tip (a dataset may have only
+  // spherical cameras, and the two describe different features).
+  if (isSphericalCameraModel(camera.modelId)) {
+    useGuideStore.getState().showTip(
+      'sphericalOverlay',
+      'Press U to toggle the panorama overlay'
+    );
+    return;
+  }
+
   const intrinsics = getCameraIntrinsics(camera);
   const hasDistortion = intrinsics.k1 !== 0 || intrinsics.k2 !== 0 ||
                         intrinsics.k3 !== 0 || intrinsics.k4 !== 0 ||

@@ -1,8 +1,11 @@
 import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import type { NavigationNodeActions, SelectionNodeActions } from '../../nodes';
 import type { CameraViewState, NavigationHistoryEntry } from '../../store/types';
+import { useGuideStore } from '../../store/stores/guideStore';
+import { useNotificationStore } from '../../store/stores/notificationStore';
+import { CameraModelId, type Camera } from '../../types/colmap';
 import { buildCamera, buildFile, buildImage } from '../../test/builders';
 import { CAMERA_FRUSTUM_CURSOR_OWNER } from './cameraFrustumConstants';
 import type { CameraFrustumItem } from './cameraFrustumViewModel';
@@ -69,6 +72,19 @@ function buildFrustum(imageId: number, imageFile?: File): CameraFrustumItem {
     position: new THREE.Vector3(),
     quaternion: new THREE.Quaternion(),
     imageFile,
+    cameraIndex: 0,
+    numPoints3D: 0,
+  };
+}
+
+function buildFrustumForCamera(imageId: number, camera: Camera): CameraFrustumItem {
+  const image = buildImage({ imageId, cameraId: camera.cameraId, name: `image-${imageId}.jpg` });
+
+  return {
+    image,
+    camera,
+    position: new THREE.Vector3(),
+    quaternion: new THREE.Quaternion(),
     cameraIndex: 0,
     numPoints3D: 0,
   };
@@ -209,5 +225,70 @@ describe('useCameraFrustumNavigationHandlers', () => {
     });
     expect(navActions.flyToImage).toHaveBeenCalledWith(20);
     expect(result.current.contextMenu).toBeNull();
+  });
+
+  describe('spherical camera discoverability tip', () => {
+    beforeEach(() => {
+      // tipShownCounts is persisted and process-global; reset so once-only tips fire.
+      useGuideStore.setState(useGuideStore.getInitialState(), true);
+      useNotificationStore.setState(useNotificationStore.getInitialState(), true);
+    });
+
+    function buildSphericalOptions() {
+      const sphericalFrustum = buildFrustumForCamera(20, buildCamera({
+        modelId: CameraModelId.EQUIRECTANGULAR,
+        width: 800,
+        height: 400,
+        params: [800, 400],
+      }));
+      // Pass showUndistortionTip: undefined so the real showUndistortionTipForCamera default runs.
+      return createOptions({
+        frustums: [sphericalFrustum],
+        showUndistortionTip: undefined,
+      });
+    }
+
+    it('shows the panorama overlay tip when navigating to a spherical camera', () => {
+      const { options } = buildSphericalOptions();
+      const { result } = renderHook(() => useCameraFrustumNavigationHandlers(options));
+
+      act(() => result.current.handleArrowContextMenu(20));
+
+      expect(useGuideStore.getState().tipShownCounts.sphericalOverlay).toBe(1);
+      const notifications = useNotificationStore.getState().notifications;
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0].message).toBe('Press U to toggle the panorama overlay');
+    });
+
+    it('shows the spherical overlay tip only once', () => {
+      const { options } = buildSphericalOptions();
+      const { result } = renderHook(() => useCameraFrustumNavigationHandlers(options));
+
+      act(() => result.current.handleArrowContextMenu(20));
+      act(() => result.current.handleArrowContextMenu(20));
+
+      expect(useGuideStore.getState().tipShownCounts.sphericalOverlay).toBe(1);
+      expect(useNotificationStore.getState().notifications).toHaveLength(1);
+    });
+
+    it('still shows the lens undistortion tip for a distorted pinhole camera', () => {
+      const distortedFrustum = buildFrustumForCamera(20, buildCamera({
+        modelId: CameraModelId.OPENCV,
+        width: 800,
+        height: 400,
+        params: [200, 200, 400, 200, 0.1, 0, 0, 0],
+      }));
+      const { options } = createOptions({
+        frustums: [distortedFrustum],
+        showUndistortionTip: undefined,
+      });
+      const { result } = renderHook(() => useCameraFrustumNavigationHandlers(options));
+
+      act(() => result.current.handleArrowContextMenu(20));
+
+      expect(useGuideStore.getState().tipShownCounts.undistortion).toBe(1);
+      expect(useGuideStore.getState().tipShownCounts.sphericalOverlay).toBeUndefined();
+      expect(useNotificationStore.getState().notifications[0].message).toBe('Press U to toggle lens undistortion');
+    });
   });
 });
