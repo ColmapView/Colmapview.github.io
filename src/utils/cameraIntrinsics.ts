@@ -3,8 +3,11 @@ import { getCameraModelParamNames, cameraModelHasPinholeIntrinsics, getCameraMod
 
 /** Maps a COLMAP param name to the intrinsics field(s) it populates.
  * NOTE: 'k' is intentionally absent here — it is ambiguous (SIMPLE_RADIAL→k1,
- * DIVISION→kDiv) and is routed by projectionClass in getCameraIntrinsics. */
-const INTRINSIC_PARAM_SETTERS: Record<string, (i: CameraIntrinsics, v: number) => void> = {
+ * DIVISION→kDiv) and is routed by projectionClass in getCameraIntrinsics.
+ * Exported so a registry-driven exhaustiveness test can assert every registry
+ * param name (except the documented 'k'/'w'/'h' cases) has a setter here —
+ * an unmatched name is silently skipped by the loop below. */
+export const INTRINSIC_PARAM_SETTERS: Record<string, (i: CameraIntrinsics, v: number) => void> = {
   f: (i, v) => { i.fx = v; i.fy = v; },
   fx: (i, v) => { i.fx = v; },
   fy: (i, v) => { i.fy = v; },
