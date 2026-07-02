@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-02
+
+### Added
+
+- Support all 18 COLMAP camera models (ids 0-17), including the models new in COLMAP 4.1: RAD_TAN_THIN_PRISM_FISHEYE, SIMPLE_DIVISION, DIVISION, SIMPLE_FISHEYE, FISHEYE, EUCM, and the spherical EQUIRECTANGULAR panorama model. A single camera-model registry drives parsing, display names, parameter labels, and distortion dispatch; the WASM fast-path parser accepts the new models too.
+- Spherical (360°) camera rendering: EQUIRECTANGULAR cameras draw as lat/long grid spheres alongside pinhole frustums; selecting one shows its panorama as a photosphere (look-through inspection view) aligned to COLMAP's convention (image center = camera forward, validated against real spherical SfM reconstructions).
+- (U) undistortion for spherical cameras: a view-tracking portal disk cropped to the sphere's silhouette, sampled by viewer ray so the panorama content overlays the point cloud from any viewpoint — the spherical equivalent of the pinhole undistorted image planes.
+- Fly-to for spherical cameras stops outside the sphere and orbits its center (auto-FOV frames the sphere), and fly-to no longer re-orients the view to an assumed world-up — the current roll is preserved (COLMAP gravity is often +Y, which used to flip the scene on go-to).
+- Distortion support for the new models on both CPU and GPU: EUCM, DIVISION/SIMPLE_DIVISION, SIMPLE_FISHEYE/FISHEYE, and the previously-broken RAD_TAN_THIN_PRISM_FISHEYE now render undistorted image previews correctly, guarded by a structural-exhaustiveness + CPU/GLSL numerical parity contract and independent COLMAP-derived oracle tests.
+- Notify when cameras are skipped or excluded: loading a cameras.txt with unknown model names now shows an aggregate warning (previously silent console-only), and splat-PSNR computes report how many spherical images were excluded (PSNR is pinhole-only).
+
+### Changed
+
+- Camera parameter labels in the image-detail modal come from the model registry (EUCM shows alpha/beta, all COLMAP 4.1 models labeled; FOV's fifth parameter now displays as ω).
+- The Data panel no longer shows a spherical camera's panorama width as its "Focal" value.
+- Spherical grid spheres dim with the same standby/unselected opacity rules as pinhole frustums, and their invisible hit targets are instanced (the camera-size slider no longer rebuilds per-camera geometry).
+
+### Fixed
+
+- Text export corrupted values in scientific notation and large integers (e.g. a 5e-10 distortion coefficient exported as 0.5, 1e16 as "1") — camera params, quaternions, and point coordinates now round-trip exactly through cameras/images/points3D .txt.
+- Model 11 (RAD_TAN_THIN_PRISM_FISHEYE) reconstructions rendered with no distortion applied at all.
+- Division-model undistortion returned invalid results past the model's horizon for strong barrel coefficients, and EUCM had a NaN hole at an exact FOV boundary — both now report invalid samples like their sibling models.
+
 ## [0.8.2] - 2026-06-24
 
 ### Fixed
