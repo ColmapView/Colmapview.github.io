@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { createPhotosphereGeometry } from './Photosphere';
+import { createPhotosphereGeometry } from './photosphereGeometry';
 
 /**
  * Pins the photosphere's UV mapping to the STOCK three.js SphereGeometry.
