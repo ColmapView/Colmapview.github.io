@@ -142,6 +142,12 @@ export const HOTKEYS: HotkeyRegistry = {
     category: 'camera',
     scopes: ['viewer'],
   },
+  cycleAutoRotate: {
+    keys: 'o',
+    description: 'Cycle auto orbit',
+    category: 'camera',
+    scopes: ['viewer'],
+  },
   toggleBackground: {
     keys: 'b',
     description: 'Toggle background',

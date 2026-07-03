@@ -155,7 +155,7 @@ export const cameraSection = defineSection({
       max: 2,
       default: 0.5,
       persist: true,
-      description: 'Auto-rotate speed in radians per second (0.1 - 2)',
+      description: 'Auto-orbit speed in radians per second (0.1 - 2)',
     },
     {
       key: 'flySpeed',

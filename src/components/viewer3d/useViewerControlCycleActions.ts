@@ -1,6 +1,8 @@
 import { useCallback } from 'react';
 import {
+  AUTO_ROTATE_MODES,
   HORIZON_LOCK_MODES,
+  type AutoRotateMode,
   type CameraDisplayMode,
   type CameraMode,
   type CameraProjection,
@@ -64,6 +66,8 @@ interface ViewerControlCycleActionsOptions {
   setCameraMode: Setter<CameraMode>;
   horizonLock: HorizonLockMode;
   setHorizonLock: Setter<HorizonLockMode>;
+  autoRotateMode: AutoRotateMode;
+  setAutoRotateMode: Setter<AutoRotateMode>;
   undistortionEnabled: boolean;
   setUndistortionEnabled: Setter<boolean>;
   showPointCloud: boolean;
@@ -101,6 +105,8 @@ export function useViewerControlCycleActions({
   setCameraMode,
   horizonLock,
   setHorizonLock,
+  autoRotateMode,
+  setAutoRotateMode,
   undistortionEnabled,
   setUndistortionEnabled,
   showPointCloud,
@@ -141,6 +147,10 @@ export function useViewerControlCycleActions({
   const cycleHorizonLock = useCallback(() => {
     setHorizonLock(getNextCycleValue(HORIZON_LOCK_MODES, horizonLock));
   }, [horizonLock, setHorizonLock]);
+
+  const cycleAutoRotate = useCallback(() => {
+    setAutoRotateMode(getNextCycleValue(AUTO_ROTATE_MODES, autoRotateMode));
+  }, [autoRotateMode, setAutoRotateMode]);
 
   const toggleUndistortion = useCallback(() => {
     setUndistortionEnabled(!undistortionEnabled);
@@ -209,6 +219,7 @@ export function useViewerControlCycleActions({
     toggleBackground,
     toggleCameraMode,
     cycleHorizonLock,
+    cycleAutoRotate,
     toggleUndistortion,
     cycleColorMode,
     cycleCameraDisplayMode,

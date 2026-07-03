@@ -40,6 +40,7 @@ describe('viewer control hotkey helpers', () => {
       cycleCameraDisplayMode: vi.fn(),
       cycleMatchesDisplayMode: vi.fn(),
       cycleHorizonLock: vi.fn(),
+      cycleAutoRotate: vi.fn(),
       toggleUndistortion: vi.fn(),
     }), { wrapper: hotkeyWrapper });
 
@@ -48,5 +49,30 @@ describe('viewer control hotkey helpers', () => {
     });
 
     expect(cycleSplatFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes O to auto orbit cycling', () => {
+    const cycleAutoRotate = vi.fn();
+
+    renderHook(() => useViewerControlHotkeys({
+      handleResetView: vi.fn(),
+      setView: vi.fn(),
+      cycleAxesGrid: vi.fn(),
+      toggleCameraMode: vi.fn(),
+      toggleBackground: vi.fn(),
+      cycleColorMode: vi.fn(),
+      cycleSplatFile: vi.fn(),
+      cycleCameraDisplayMode: vi.fn(),
+      cycleMatchesDisplayMode: vi.fn(),
+      cycleHorizonLock: vi.fn(),
+      cycleAutoRotate,
+      toggleUndistortion: vi.fn(),
+    }), { wrapper: hotkeyWrapper });
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', code: 'KeyO', bubbles: true }));
+    });
+
+    expect(cycleAutoRotate).toHaveBeenCalledTimes(1);
   });
 });

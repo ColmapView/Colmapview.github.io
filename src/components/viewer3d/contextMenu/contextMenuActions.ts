@@ -30,7 +30,7 @@ export const CONTEXT_MENU_ACTIONS: ActionDef[] = [
   { id: 'toggleProjection', label: 'Persp/Ortho', section: 'view', icon: ProjectionIcon },
   { id: 'toggleCameraMode', label: 'Camera Mode', section: 'view', hotkey: HOTKEYS.toggleCameraMode.keys, icon: CameraModeIcon },
   { id: 'toggleHorizonLock', label: 'Horizon Lock', section: 'view', icon: HorizonLockIcon },
-  { id: 'cycleAutoRotate', label: 'Auto Rotate', section: 'view', icon: AutoRotateIcon },
+  { id: 'cycleAutoRotate', label: 'Auto Orbit', section: 'view', icon: AutoRotateIcon },
   { id: 'toggleBackground', label: 'Background', section: 'display', hotkey: HOTKEYS.toggleBackground.keys, icon: createElement(BgIcon) },
   { id: 'toggleAxes', label: 'Toggle Axes', section: 'display', icon: createElement(AxesIcon) },
   { id: 'toggleGallery', label: 'Gallery Panel', section: 'display', icon: GalleryPanelIcon },

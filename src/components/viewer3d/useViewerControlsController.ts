@@ -165,6 +165,7 @@ export function useViewerControlsController(): ViewerControlsController {
     cycleCameraDisplayMode,
     cycleMatchesDisplayMode,
     cycleHorizonLock,
+    cycleAutoRotate,
     cycleSelectionColorMode,
     cycleRigDisplayMode,
     handleResetView,
@@ -176,6 +177,8 @@ export function useViewerControlsController(): ViewerControlsController {
     setCameraMode: navActions.setMode,
     horizonLock: navNode.horizonLock,
     setHorizonLock: navActions.setHorizonLock,
+    autoRotateMode: navNode.autoRotateMode,
+    setAutoRotateMode: navActions.setAutoRotateMode,
     undistortionEnabled: camerasNode.undistortionEnabled,
     setUndistortionEnabled: camerasActions.setUndistortionEnabled,
     showPointCloud: pointsNode.visible,
@@ -217,6 +220,7 @@ export function useViewerControlsController(): ViewerControlsController {
     cycleCameraDisplayMode,
     cycleMatchesDisplayMode,
     cycleHorizonLock,
+    cycleAutoRotate,
     toggleUndistortion,
   });
 

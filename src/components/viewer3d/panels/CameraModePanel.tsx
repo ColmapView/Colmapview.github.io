@@ -124,7 +124,7 @@ export function CameraModePanel({
         {showAutoRotateControls && (
           <>
             <SelectRow
-              label="Auto Rotate"
+              label="Auto Orbit"
               value={autoRotateMode}
               onChange={setAutoRotateMode}
               options={AUTO_ROTATE_MODE_OPTIONS}

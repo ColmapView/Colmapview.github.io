@@ -14,6 +14,8 @@ function createOptions(overrides: Partial<Parameters<typeof useViewerControlCycl
     setCameraMode: vi.fn(),
     horizonLock: 'off' as const,
     setHorizonLock: vi.fn(),
+    autoRotateMode: 'off' as const,
+    setAutoRotateMode: vi.fn(),
     undistortionEnabled: true,
     setUndistortionEnabled: vi.fn(),
     showPointCloud: false,
@@ -89,6 +91,9 @@ describe('viewer control cycle actions', () => {
 
     act(() => result.current.cycleHorizonLock());
     expect(options.setHorizonLock).toHaveBeenCalledWith('on');
+
+    act(() => result.current.cycleAutoRotate());
+    expect(options.setAutoRotateMode).toHaveBeenCalledWith('cw');
 
     act(() => result.current.toggleUndistortion());
     expect(options.setUndistortionEnabled).toHaveBeenCalledWith(false);
