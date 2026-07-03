@@ -195,6 +195,24 @@ describe('viewer controls view-model helpers', () => {
     expect(getNextPointColorState(true, 'splats', false)).toEqual({ visible: true, mode: 'rgb' });
   });
 
+  it('toggles only visibility and preserves the mode when there are no pinhole cameras', () => {
+    // With pinhole cameras (default), the camera display cycles through the modes.
+    expect(getNextCameraDisplayState(true, 'frustum', true)).toEqual({ visible: true, mode: 'arrow' });
+    expect(getNextCameraDisplayState(true, 'arrow', true)).toEqual({ visible: true, mode: 'imageplane' });
+    expect(getNextCameraDisplayState(true, 'imageplane', true)).toEqual({ visible: false, mode: 'imageplane' });
+    expect(getNextCameraDisplayState(false, 'imageplane', true)).toEqual({ visible: true, mode: 'frustum' });
+
+    // Spherical-only (no pinhole cameras): frustum/arrow/image-plane are visual no-ops,
+    // so the cycle only toggles visibility and preserves the persisted mode.
+    expect(getNextCameraDisplayState(true, 'frustum', false)).toEqual({ visible: false, mode: 'frustum' });
+    expect(getNextCameraDisplayState(false, 'frustum', false)).toEqual({ visible: true, mode: 'frustum' });
+    expect(getNextCameraDisplayState(true, 'arrow', false)).toEqual({ visible: false, mode: 'arrow' });
+    expect(getNextCameraDisplayState(false, 'arrow', false)).toEqual({ visible: true, mode: 'arrow' });
+    // A persisted 'imageplane' mode is preserved across the visibility toggle.
+    expect(getNextCameraDisplayState(true, 'imageplane', false)).toEqual({ visible: false, mode: 'imageplane' });
+    expect(getNextCameraDisplayState(false, 'imageplane', false)).toEqual({ visible: true, mode: 'imageplane' });
+  });
+
   it('derives compact toolbar button state', () => {
     expect(getAxesGridButtonState(true, true)).toMatchObject({
       icon: 'axesGrid',

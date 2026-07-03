@@ -188,6 +188,7 @@ export function useViewerControlsController(): ViewerControlsController {
     setColorMode: setPointColorMode,
     showCameras: camerasNode.visible,
     cameraDisplayMode: camerasNode.displayMode,
+    hasPinholeCameras,
     setShowCameras: camerasActions.setVisible,
     setCameraDisplayMode: camerasActions.setDisplayMode,
     showMatches: matchesNode.visible,

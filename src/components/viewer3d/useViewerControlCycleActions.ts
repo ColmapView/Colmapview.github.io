@@ -77,6 +77,7 @@ interface ViewerControlCycleActionsOptions {
   setColorMode: Setter<ColorMode>;
   showCameras: boolean;
   cameraDisplayMode: CameraDisplayMode;
+  hasPinholeCameras: boolean;
   setShowCameras: Setter<boolean>;
   setCameraDisplayMode: Setter<CameraDisplayMode>;
   showMatches: boolean;
@@ -117,6 +118,7 @@ export function useViewerControlCycleActions({
   setColorMode,
   showCameras,
   cameraDisplayMode,
+  hasPinholeCameras,
   setShowCameras,
   setCameraDisplayMode,
   showMatches,
@@ -170,11 +172,11 @@ export function useViewerControlCycleActions({
   const cycleCameraDisplayMode = useCallback(() => {
     applyVisibleModeState({
       current: { visible: showCameras, mode: cameraDisplayMode },
-      next: getNextCameraDisplayState(showCameras, cameraDisplayMode),
+      next: getNextCameraDisplayState(showCameras, cameraDisplayMode, hasPinholeCameras),
       setVisible: setShowCameras,
       setMode: setCameraDisplayMode,
     });
-  }, [cameraDisplayMode, setCameraDisplayMode, setShowCameras, showCameras]);
+  }, [cameraDisplayMode, hasPinholeCameras, setCameraDisplayMode, setShowCameras, showCameras]);
 
   const cycleMatchesDisplayMode = useCallback(() => {
     applyVisibleModeState({

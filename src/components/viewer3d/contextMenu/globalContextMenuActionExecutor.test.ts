@@ -40,6 +40,7 @@ function createDeps(
     colorMode: 'trackLength',
     setColorMode: vi.fn(),
     hasSplatData: true,
+    hasPinholeCameras: true,
     pointSize: 2,
     setPointSize: vi.fn(),
     minTrackLength: 2,
@@ -142,6 +143,31 @@ describe('global context menu action executor', () => {
 
     await executeGlobalContextMenuAction('flySpeedDown', deps);
     expect(deps.setFlySpeed).toHaveBeenCalledWith(2);
+  });
+
+  it('cycles the camera display mode from the menu with pinhole cameras', async () => {
+    const deps = createDeps({
+      showCameras: true,
+      cameraDisplayMode: 'frustum',
+      hasPinholeCameras: true,
+    });
+
+    await executeGlobalContextMenuAction('cycleCameraDisplay', deps);
+    expect(deps.setCameraDisplayMode).toHaveBeenCalledWith('arrow');
+    expect(deps.setShowCameras).not.toHaveBeenCalled();
+  });
+
+  it('toggles camera visibility instead of cycling the display mode without pinhole cameras', async () => {
+    const deps = createDeps({
+      showCameras: true,
+      cameraDisplayMode: 'imageplane',
+      hasPinholeCameras: false,
+    });
+
+    await executeGlobalContextMenuAction('cycleCameraDisplay', deps);
+    // Spherical-only: mode cycling is a visual no-op, so visibility toggles and the mode is preserved.
+    expect(deps.setShowCameras).toHaveBeenCalledWith(false);
+    expect(deps.setCameraDisplayMode).not.toHaveBeenCalled();
   });
 
   it('skips splat modes when cycling point color without splat data', async () => {

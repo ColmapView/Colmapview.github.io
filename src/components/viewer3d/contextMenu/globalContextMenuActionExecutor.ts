@@ -89,6 +89,7 @@ export interface GlobalContextMenuActionExecutorDeps {
   colorMode: ColorMode;
   setColorMode: Setter<ColorMode>;
   hasSplatData: boolean;
+  hasPinholeCameras: boolean;
   pointSize: number;
   setPointSize: Setter<number>;
   minTrackLength: number;
@@ -224,7 +225,13 @@ export async function executeGlobalContextMenuAction(
       deps.setMinTrackLength(getNextMinTrackLength(deps.minTrackLength));
       break;
     case 'cycleCameraDisplay':
-      deps.setCameraDisplayMode(getNextCycleValue(CAMERA_DISPLAY_MODES, deps.cameraDisplayMode));
+      if (deps.hasPinholeCameras) {
+        deps.setCameraDisplayMode(getNextCycleValue(CAMERA_DISPLAY_MODES, deps.cameraDisplayMode));
+      } else {
+        // Spherical-only: cycling frustum/arrow/imageplane is a visual no-op for grid
+        // spheres, so toggle camera visibility and preserve the mode instead.
+        deps.setShowCameras(!deps.showCameras);
+      }
       break;
     case 'cycleMatchesDisplay': {
       const nextState = getNextMatchesMenuState({

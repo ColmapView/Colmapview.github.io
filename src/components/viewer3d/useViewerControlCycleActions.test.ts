@@ -25,6 +25,7 @@ function createOptions(overrides: Partial<Parameters<typeof useViewerControlCycl
     setColorMode: vi.fn(),
     showCameras: true,
     cameraDisplayMode: 'frustum' as const,
+    hasPinholeCameras: true,
     setShowCameras: vi.fn(),
     setCameraDisplayMode: vi.fn(),
     showMatches: true,
@@ -131,6 +132,31 @@ describe('viewer control cycle actions', () => {
     act(() => result.current.cycleRigDisplayMode());
     expect(options.setShowRig).not.toHaveBeenCalled();
     expect(options.setRigDisplayMode).toHaveBeenCalledWith('blink');
+  });
+
+  it('toggles only camera visibility when cycling display without pinhole cameras', () => {
+    // From visible: cycling hides the cameras and preserves the mode (no cycle to 'arrow').
+    const visibleOptions = createOptions({
+      showCameras: true,
+      cameraDisplayMode: 'frustum',
+      hasPinholeCameras: false,
+    });
+    const { result: visibleResult } = renderHook(() => useViewerControlCycleActions(visibleOptions));
+    act(() => visibleResult.current.cycleCameraDisplayMode());
+    expect(visibleOptions.setShowCameras).toHaveBeenCalledWith(false);
+    expect(visibleOptions.setCameraDisplayMode).not.toHaveBeenCalled();
+
+    // From hidden: cycling shows the cameras and preserves a persisted 'imageplane' mode
+    // (instead of resetting it to the default 'frustum').
+    const hiddenOptions = createOptions({
+      showCameras: false,
+      cameraDisplayMode: 'imageplane',
+      hasPinholeCameras: false,
+    });
+    const { result: hiddenResult } = renderHook(() => useViewerControlCycleActions(hiddenOptions));
+    act(() => hiddenResult.current.cycleCameraDisplayMode());
+    expect(hiddenOptions.setShowCameras).toHaveBeenCalledWith(true);
+    expect(hiddenOptions.setCameraDisplayMode).not.toHaveBeenCalled();
   });
 
   it('skips splat color modes when cycling point color without splat data', () => {

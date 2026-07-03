@@ -11,6 +11,7 @@ import {
 } from '../../../store';
 import { useFileDropzone } from '../../../hooks/useFileDropzone';
 import { loadedFilesHaveSplatData } from '../../../utils/splatFileSourcePolicy';
+import { reconstructionHasPinholeCameras } from '../viewerControlsViewModel';
 import type { GlobalContextMenuActionExecutorDeps } from './globalContextMenuActionExecutor';
 
 type GlobalContextMenuActionStoreFacade = Pick<
@@ -35,6 +36,7 @@ type GlobalContextMenuActionStoreFacade = Pick<
   | 'openFloorDetectionModal'
   | 'openCameraConversionModal'
   | 'hasSplatData'
+  | 'hasPinholeCameras'
 >;
 
 export function useGlobalContextMenuActionStoreFacade(): GlobalContextMenuActionStoreFacade {
@@ -50,7 +52,9 @@ export function useGlobalContextMenuActionStoreFacade(): GlobalContextMenuAction
   const resetTransform = useTransformStore((s) => s.resetTransform);
   const droppedFiles = useReconstructionStore((s) => s.droppedFiles);
   const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
+  const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const hasSplatData = loadedFilesHaveSplatData(loadedFiles);
+  const hasPinholeCameras = reconstructionHasPinholeCameras(reconstruction);
   const { processFiles } = useFileDropzone();
 
   const takeScreenshot = useExportStore((s) => s.takeScreenshot);
@@ -94,6 +98,7 @@ export function useGlobalContextMenuActionStoreFacade(): GlobalContextMenuAction
       openFloorDetectionModal,
       openCameraConversionModal,
       hasSplatData,
+      hasPinholeCameras,
     }),
     [
       resetView,
@@ -113,6 +118,7 @@ export function useGlobalContextMenuActionStoreFacade(): GlobalContextMenuAction
       openFloorDetectionModal,
       openCameraConversionModal,
       hasSplatData,
+      hasPinholeCameras,
     ]
   );
 }

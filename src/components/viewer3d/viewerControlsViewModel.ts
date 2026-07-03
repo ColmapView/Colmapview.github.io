@@ -280,8 +280,15 @@ export function getNextPointColorState(
 
 export function getNextCameraDisplayState(
   visible: boolean,
-  mode: CameraDisplayMode
+  mode: CameraDisplayMode,
+  hasPinholeCameras = true
 ): VisibleModeState<CameraDisplayMode> {
+  // Without pinhole cameras the dataset is spherical-only, where frustum/arrow/image-plane
+  // all render as identical grid spheres. Cycling the mode is a visual no-op, so the cycle
+  // only toggles visibility and preserves the persisted mode: (true, m) → (false, m) → (true, m).
+  if (!hasPinholeCameras) {
+    return { visible: !visible, mode };
+  }
   return getNextVisibleModeState(CAMERA_DISPLAY_MODE_CONTROL, visible, mode);
 }
 

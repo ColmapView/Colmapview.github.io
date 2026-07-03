@@ -20,7 +20,11 @@ export function shouldShowCameraDependentPanels(showCameras: boolean): boolean {
 
 export function shouldShowMatchesPanel(
   showCameras: boolean,
-  cameraDisplayMode: CameraDisplayMode
+  cameraDisplayMode: CameraDisplayMode,
+  hasPinholeCameras: boolean
 ): boolean {
-  return showCameras && cameraDisplayMode !== 'imageplane';
+  // The 'imageplane' mode hides Matches only when image planes actually exist. For a
+  // spherical-only dataset (no pinhole cameras) image planes are meaningless, so a
+  // persisted 'imageplane' mode must not trap the Matches panel hidden.
+  return showCameras && (cameraDisplayMode !== 'imageplane' || !hasPinholeCameras);
 }
