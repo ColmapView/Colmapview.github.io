@@ -1,11 +1,12 @@
 import { useRef, useEffect, useMemo, useCallback } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useNavigationNode, useAxesNode, useCamerasNode } from '../../nodes';
+import { useNavigationNode, useAxesNode, useCamerasNode, useSelectionNode } from '../../nodes';
 import { useNavigationNodeActions, useCamerasNodeActions, usePointsNodeActions } from '../../nodes';
 import { getCameraScaleValue } from './cameraFrustumViewModel';
 import type { CameraViewState } from '../../store/types';
 import { getWorldUp } from '../../utils/coordinateSystems';
+import { isSphericalCameraModel } from '../../utils/cameraModelRegistry';
 import { CONTROLS } from '../../theme';
 import type { ViewDirection } from '../../store/stores/uiStore';
 import {
@@ -47,12 +48,17 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
   const nav = useNavigationNode();
   const axesNode = useAxesNode();
   const camerasNode = useCamerasNode();
+  const selectionNode = useSelectionNode();
   const navActions = useNavigationNodeActions();
   const camerasActions = useCamerasNodeActions();
   const pointsActions = usePointsNodeActions();
 
-  // World-space frustum/photosphere scale (base × factor); drives the spherical outside-stop fly-to.
+  // World-space frustum/photosphere scale (base × factor); drives the spherical fly-to stops.
   const cameraScale = getCameraScaleValue(camerasNode.scale, camerasNode.scaleFactor);
+
+  // (U) undistortion: spherical fly-to steps inside the panorama to the capture center.
+  const undistortionEnabled = camerasNode.undistortionEnabled;
+  const selectedImageId = selectionNode.selectedImageId;
 
   // Extract navigation state for convenience
   const {
@@ -199,6 +205,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
     worldUpVec,
     flyTransitionDuration,
     cameraScale,
+    undistortionEnabled,
     camera,
     targetVecRef: targetVec,
     cameraQuatRef: cameraQuat,
@@ -209,6 +216,30 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
     animationTargetRef: animationTarget,
     navActions,
   });
+
+  // Re-fly when U (undistortion) toggles while a spherical camera is selected:
+  // entering (U on) dives to the capture center, exiting (U off) pops back to the
+  // outside inspection stop — both re-run the SAME fly-to path (getImageFlyToPose
+  // reads undistortionEnabled). A ref pins the previous U value so this fires ONLY on
+  // a real U transition, not when the selection changes: selecting a camera already
+  // flies via the normal selection flow (and picks up the current U flag there), so
+  // firing on selection too would double-animate. Pinhole selections never re-fly
+  // (selectedSphericalImageId is null) — U only swaps their plane material.
+  const selectedSphericalImageId = useMemo(() => {
+    if (selectedImageId === null || !reconstruction) return null;
+    const image = reconstruction.images.get(selectedImageId);
+    if (!image) return null;
+    const cam = reconstruction.cameras.get(image.cameraId);
+    return cam && isSphericalCameraModel(cam.modelId) ? selectedImageId : null;
+  }, [selectedImageId, reconstruction]);
+
+  const prevUndistortionEnabled = useRef(undistortionEnabled);
+  useEffect(() => {
+    const toggled = prevUndistortionEnabled.current !== undistortionEnabled;
+    prevUndistortionEnabled.current = undistortionEnabled;
+    if (!toggled || selectedSphericalImageId === null) return;
+    navActions.flyToImage(selectedSphericalImageId);
+  }, [undistortionEnabled, selectedSphericalImageId, navActions]);
 
   useTrackballModeSync({
     cameraMode,

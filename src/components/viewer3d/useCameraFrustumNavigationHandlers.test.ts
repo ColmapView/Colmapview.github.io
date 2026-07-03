@@ -257,7 +257,7 @@ describe('useCameraFrustumNavigationHandlers', () => {
       expect(useGuideStore.getState().tipShownCounts.sphericalOverlay).toBe(1);
       const notifications = useNotificationStore.getState().notifications;
       expect(notifications).toHaveLength(1);
-      expect(notifications[0].message).toBe('Press U to toggle the panorama overlay');
+      expect(notifications[0].message).toBe('Press U to step inside the panorama');
     });
 
     it('shows the spherical overlay tip only once', () => {

@@ -3,15 +3,12 @@ import * as THREE from 'three';
 import { VIZ_COLORS } from '../../theme';
 import type { ImageId } from '../../types/colmap';
 import type { SelectionColorMode } from '../../store/types';
-import { useReconstructionStore } from '../../store';
 import { COS_90_DEG } from './cameraFrustumConstants';
 import type { CameraFrustumItem, FrustumPsnrMetricSource } from './cameraFrustumViewModel';
 import { buildImagePlaneRenderItems, type BuildImagePlaneRenderItemsOptions } from './cameraFrustumPlaneLayerPolicy';
 import { FrustumPlane } from './FrustumPlane';
 import { isSphericalCameraModel } from '../../utils/cameraModelRegistry';
 import { Photosphere } from './Photosphere';
-import { SphericalUndistortedView } from './SphericalUndistortedView';
-import { computeMedianObservedPointDepth } from './sphericalAnchorDepth';
 import { useFrustumPlaneStoreFacade } from './useFrustumPlaneStoreFacade';
 import { useSelectedFrustumImageFile } from './useSelectedFrustumImageFile';
 import { useFrustumPlaneDisplayTexture } from './useFrustumPlaneDisplayTexture';
@@ -50,8 +47,6 @@ function SelectedSphericalPhotosphere({
   undistortionEnabled: boolean;
 }) {
   const { data: { dataset } } = useFrustumPlaneStoreFacade();
-  const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const wasmReconstruction = useReconstructionStore((s) => s.wasmReconstruction);
   const imageFile = useSelectedFrustumImageFile({
     dataset,
     imageName: frustum.image.name,
@@ -68,48 +63,8 @@ function SelectedSphericalPhotosphere({
     selectedTextureDelayMs: 0,
   });
 
-  // Depth anchor L* for the undistort disk: median distance from this camera's
-  // center to the 3D points it observes (group space — the space frustum.position
-  // and the raw reconstruction positions share). Memoized per selected image so
-  // the single scan over the point set only reruns on selection/data change.
-  const imageId = frustum.image.imageId;
-  const cameraCenter = frustum.position;
-  const anchorDepth = useMemo(() => {
-    const observedPointIds = reconstruction?.imageToPoint3DIds.get(imageId) ?? null;
-    const wasm = wasmReconstruction?.hasPoints()
-      ? {
-          positions: wasmReconstruction.getPositions(),
-          point3DIds: wasmReconstruction.getPoint3DIds(),
-          pointCount: wasmReconstruction.pointCount,
-        }
-      : null;
-    return computeMedianObservedPointDepth({
-      observedPointIds,
-      wasm,
-      points3D: reconstruction?.points3D ?? null,
-      cameraCenter,
-      radius: cameraScale,
-    });
-  }, [imageId, cameraCenter, reconstruction, wasmReconstruction, cameraScale]);
-
   // Grid sphere from SphericalCameraLines is already visible; photosphere fades in once loaded.
   if (!displayTexture) return null;
-
-  // (U) undistortion: a view-tracking billboard showing the panorama
-  // re-projected as a virtual PINHOLE at the capture center, with the disk
-  // anchored at the observed points' median depth so the points overlay without
-  // drift while orbiting (see sphericalUndistortion.ts).
-  if (undistortionEnabled) {
-    return (
-      <SphericalUndistortedView
-        position={frustum.position}
-        quaternion={frustum.quaternion}
-        radius={cameraScale}
-        anchorDepth={anchorDepth}
-        texture={displayTexture}
-      />
-    );
-  }
 
   return (
     <Photosphere
@@ -121,9 +76,13 @@ function SelectedSphericalPhotosphere({
       // the visible cap is always the slice of panorama aligned with the world
       // beyond it, it reads un-mirrored, and it tracks the view while orbiting
       // (visual-check decision 2026-07-02). FrontSide showed the near hemisphere
-      // mirrored (back of the image). BackSide is also the future inside/
-      // immersive orientation.
+      // mirrored (back of the image). BackSide is ALSO the correct orientation
+      // from INSIDE, so U (undistortion) reuses it — validated.
       side={THREE.BackSide}
+      // (U) undistortion flies the viewer INSIDE to the capture center. From there
+      // the BackSide sphere must not occlude the points/scene, so render it as a
+      // non-occluding background. U-off keeps the opaque outside inspection sphere.
+      background={undistortionEnabled}
     />
   );
 }

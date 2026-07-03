@@ -64,7 +64,7 @@ function showUndistortionTipForCamera(camera: Camera): void {
   if (isSphericalCameraModel(camera.modelId)) {
     useGuideStore.getState().showTip(
       'sphericalOverlay',
-      'Press U to toggle the panorama overlay'
+      'Press U to step inside the panorama'
     );
     return;
   }

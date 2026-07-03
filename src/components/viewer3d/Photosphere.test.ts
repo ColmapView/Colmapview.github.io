@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { createPhotosphereGeometry } from './photosphereGeometry';
+import { getPhotosphereRenderConfig } from './photosphereRenderConfig';
 
 /**
  * Pins the photosphere geometry to COLMAP's panorama convention (2026-07-02
@@ -65,5 +66,27 @@ describe('createPhotosphereGeometry', () => {
     expect(minV).toBe(0);
     expect(yAtMinV).toBeLessThan(0); // −y pole = camera up (COLMAP y is down)
     geo.dispose();
+  });
+});
+
+describe('getPhotosphereRenderConfig', () => {
+  it('renders a normal opaque, depth-tested sphere when NOT a background (U off, outside view)', () => {
+    // U off: the inspection sphere is viewed from outside and must occlude/depth-test
+    // like normal geometry.
+    expect(getPhotosphereRenderConfig(false)).toEqual({
+      renderOrder: 0,
+      depthWrite: true,
+      depthTest: true,
+    });
+  });
+
+  it('renders a non-occluding background when true (U on, viewer inside the panorama)', () => {
+    // U on: the viewer sits at the capture center INSIDE the sphere, so the photosphere
+    // must never hide the points/scene — draw first (renderOrder −1) and ignore depth.
+    expect(getPhotosphereRenderConfig(true)).toEqual({
+      renderOrder: -1,
+      depthWrite: false,
+      depthTest: false,
+    });
   });
 });

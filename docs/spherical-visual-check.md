@@ -44,23 +44,33 @@ regressions:
 - [x] **Seam:** a single clean vertical line at camera-back.
 - [x] **Colors match** the flat pinhole previews (same color-space handling).
 
-### (U) undistorted portal view
+### (U) step inside the panorama
 
-Pressing **U** with a spherical camera selected swaps the photosphere for a
-flat disk cropped to the sphere's silhouette, sampled by VIEWER ray (a
-"portal": what you'd see if the panorama were painted on the world). This is
-the point-cloud-overlay mode:
+Pressing **U** with a spherical camera selected flies the viewer INSIDE the
+photosphere to the capture center C and renders the panorama as a non-occluding
+background (BackSide sphere, depth test/write off, drawn first). At C the eye
+coincides with the camera that captured the panorama, so every 3D point overlays
+its imagery **exactly** — at every depth and every look direction — with zero
+parallax. This is the point-cloud-overlay mode, and it is exact where the old
+portal disk could only be exact at one anchor depth. Check:
 
-- [x] Imagery through the disk stays glued to the point cloud while orbiting
-      and zooming (exact for distant content; nearby content can drift by the
-      small sphere-radius parallax — same physical limit as pinhole planes).
-- [x] Text reads forward; U on/off swaps between overlay (portal) and
-      panorama-inspection (BackSide sphere) views, which intentionally differ
-      slightly near the rim.
+- [ ] On U (spherical selected) the viewer dives to the sphere center; the
+      panorama surrounds the scene and the points sit exactly on their imagery,
+      staying glued while you look around (orbit) from the center.
+- [ ] Zooming OUT while inside pulls the eye off-center and **progressively
+      reintroduces parallax** (points begin to drift off their imagery) —
+      expected; it is the single-viewpoint limit. Zoom back in / re-press U to
+      recenter.
+- [ ] U off pops back to the outside inspection stop (2.5× radius, opaque
+      BackSide sphere). Toggling U with a spherical camera selected re-flies
+      between inside/outside; pinhole cameras are unaffected by U's fly-to (U
+      only swaps their plane material).
+- [ ] The panorama background never occludes the point cloud or scene from
+      inside; the grid sphere lines stay visible (fine).
 
 **Convention anchors (do not "fix" without re-running this check):**
 `getImageWorldQuaternion` returns the RAW COLMAP cam-to-world rotation (no
-axis flip); frustum textures load with `flipY=false`; the sampling formula
+axis flip); frustum textures load with `flipY=false`; the equirect UV formula
 and sphere geometry are pinned to each other vertex-for-vertex by
 `sphericalUndistortion.test.ts`.
 
@@ -101,7 +111,8 @@ and sphere geometry are pinned to each other vertex-for-vertex by
 
 ## Explicitly deferred (do not fail the check for these)
 
-- Immersive inside-the-sphere view (seam documented in `Photosphere.tsx`).
+- Panorama seam: a single hairline column at camera-back can show when looking
+  across the seam from inside (documented in `Photosphere.tsx`); accepted for v1.
 - Hover-brightening of grid spheres.
 - Ultra-narrow portrait windows (aspect < 0.25) can clip the sphere's silhouette
   via the pre-existing FOV clamp.

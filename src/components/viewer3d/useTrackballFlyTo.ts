@@ -6,7 +6,11 @@ import type { CameraViewState, HorizonLockMode } from '../../store/types';
 import { getImageWorldPose } from '../../utils/colmapTransforms';
 import { createSim3dFromEuler } from '../../utils/sim3dTransforms';
 import { isSphericalCameraModel } from '../../utils/cameraModelRegistry';
-import { computeSphericalFlyToPose } from './sphericalFlyTo';
+import {
+  computeSphericalFlyToPose,
+  SPHERICAL_FLYTO_DISTANCE_FACTOR,
+  SPHERICAL_INSIDE_ORBIT_DISTANCE_FACTOR,
+} from './sphericalFlyTo';
 
 export interface TrackballAnimationTarget {
   startPosition: THREE.Vector3;
@@ -35,6 +39,8 @@ interface TrackballFlyToOptions {
   worldUpVec: THREE.Vector3;
   flyTransitionDuration: number;
   cameraScale: number;
+  /** (U) undistortion: spherical fly-to steps INSIDE to the capture center instead of the outside stop. */
+  undistortionEnabled: boolean;
   camera: THREE.Camera;
   targetVecRef: MutableRefObject<THREE.Vector3>;
   cameraQuatRef: MutableRefObject<THREE.Quaternion>;
@@ -129,7 +135,8 @@ export function getImageFlyToPose(
   distance: number,
   cameraScale: number,
   currentViewerPos: THREE.Vector3,
-  currentViewerQuat?: THREE.Quaternion
+  currentViewerQuat?: THREE.Quaternion,
+  undistortionEnabled = false
 ): FlyToPose | null {
   const image = reconstruction.images.get(imageId);
   if (!image) return null;
@@ -142,18 +149,27 @@ export function getImageFlyToPose(
     .multiplyScalar(sim3d.scale)
     .add(sim3d.translation);
 
-  // Spherical (360°) cameras render as a photosphere meant to be viewed from OUTSIDE
-  // (BackSide inspection view / silhouette-cropped portal disk in (U) mode). Stop
-  // outside the sphere and orbit its center instead of flying into it like a pinhole.
+  // Spherical (360°) cameras render as a photosphere. Two fly-to stops, chosen by U:
+  //  - U off: stop OUTSIDE at 2.5·radius and orbit the center — inspect the panorama
+  //    from outside (BackSide sphere), never flying into it like a pinhole.
+  //  - U on: step INSIDE to the capture center C (epsilon orbit radius). At C the eye
+  //    coincides with the capturing camera, so every 3D point overlays its imagery at
+  //    every depth with zero parallax — the exact-overlay mode (a single reprojection
+  //    plane cannot do this off-center; eye-at-center can).
   // The photosphere lives inside the sim3d transform group, so its world radius is
-  // cameraScale * sim3d.scale and its center is transformedPosition.
+  // cameraScale * sim3d.scale and its center is transformedPosition. Only the orbit
+  // radius differs between the two stops; direction/look/horizon handling is shared.
   const camera = reconstruction.cameras.get(image.cameraId);
   if (camera && isSphericalCameraModel(camera.modelId)) {
     const worldRadius = cameraScale * sim3d.scale;
+    const distanceFactor = undistortionEnabled
+      ? SPHERICAL_INSIDE_ORBIT_DISTANCE_FACTOR
+      : SPHERICAL_FLYTO_DISTANCE_FACTOR;
     const { position, lookAt, distance: orbitDistance } = computeSphericalFlyToPose(
       transformedPosition,
       currentViewerPos,
-      worldRadius
+      worldRadius,
+      distanceFactor
     );
     // Horizon lock OFF (the default): do NOT re-orient the scene — preserve the viewer's
     // CURRENT up/roll. COLMAP world-up is unreliable (gravity is often +Y, i.e. three.js
@@ -215,6 +231,7 @@ export function useTrackballFlyTo({
   worldUpVec,
   flyTransitionDuration,
   cameraScale,
+  undistortionEnabled,
   camera,
   targetVecRef,
   cameraQuatRef,
@@ -237,7 +254,8 @@ export function useTrackballFlyTo({
       distanceRef.current,
       cameraScale,
       camera.position,
-      camera.quaternion
+      camera.quaternion,
+      undistortionEnabled
     );
 
     if (!pose) {
@@ -266,6 +284,7 @@ export function useTrackballFlyTo({
     worldUpVec,
     flyTransitionDuration,
     cameraScale,
+    undistortionEnabled,
     camera,
     targetVecRef,
     cameraQuatRef,

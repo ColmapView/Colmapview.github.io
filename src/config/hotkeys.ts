@@ -192,7 +192,7 @@ export const HOTKEYS: HotkeyRegistry = {
   },
   toggleUndistortion: {
     keys: 'u',
-    description: 'Toggle undistorted view (panorama overlay for 360 cameras)',
+    description: 'Toggle undistorted view (steps inside the panorama for 360 cameras)',
     category: 'camera',
     scopes: ['viewer'],
   },

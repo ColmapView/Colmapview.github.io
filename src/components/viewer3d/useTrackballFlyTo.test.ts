@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { getImageFlyToPose } from './useTrackballFlyTo';
-import { SPHERICAL_FLYTO_DISTANCE_FACTOR } from './sphericalFlyTo';
+import { SPHERICAL_FLYTO_DISTANCE_FACTOR, SPHERICAL_INSIDE_ORBIT_DISTANCE_FACTOR } from './sphericalFlyTo';
 import { buildCamera, buildImage, buildReconstruction } from '../../test/builders';
 import { CameraModelId } from '../../types/colmap';
 import { getImageWorldPose } from '../../utils/colmapTransforms';
@@ -64,6 +64,40 @@ describe('getImageFlyToPose', () => {
     expect(pose!.target.distanceTo(center)).toBeCloseTo(0, 6);
     expect(pose!.distance).toBeCloseTo(D, 6);
     // Camera looks toward the sphere center (-Z axis aligned with position->center).
+    const lookDir = new THREE.Vector3(0, 0, -1).applyQuaternion(pose!.quaternion);
+    const toCenter = center.clone().sub(pose!.position).normalize();
+    expect(lookDir.dot(toCenter)).toBeCloseTo(1, 6);
+  });
+
+  it('U-on spherical cameras step INSIDE to the capture center (exact-overlay mode)', () => {
+    const camera = buildCamera({
+      cameraId: 8,
+      modelId: CameraModelId.EQUIRECTANGULAR,
+      width: 3840,
+      height: 1920,
+      params: [3840, 1920],
+    });
+    const image = buildImage({ imageId: 4, cameraId: 8, tvec: [-1, -2, -3] });
+    const reconstruction = buildReconstruction({ cameras: [camera], images: [image] });
+    const center = getImageWorldPose(image).position;
+    const viewer = new THREE.Vector3(center.x + 100, center.y, center.z);
+
+    // Last arg = undistortionEnabled: true => step inside the panorama.
+    const pose = getImageFlyToPose(
+      reconstruction, 4, IDENTITY, 'off', WORLD_UP, ORBIT_DISTANCE, CAMERA_SCALE, viewer, undefined, true
+    );
+
+    expect(pose).not.toBeNull();
+    // scale=1 => world radius = cameraScale; the inside orbit radius is a tiny epsilon.
+    const epsilon = SPHERICAL_INSIDE_ORBIT_DISTANCE_FACTOR * CAMERA_SCALE;
+    // Position ≈ C (only the epsilon orbit radius away), orbit target = C, distance = epsilon.
+    expect(pose!.position.distanceTo(center)).toBeCloseTo(epsilon, 6);
+    expect(pose!.target.distanceTo(center)).toBeCloseTo(0, 6);
+    expect(pose!.distance).toBeCloseTo(epsilon, 6);
+    // Far nearer the center than the outside inspection stop (this is INSIDE).
+    const outside = SPHERICAL_FLYTO_DISTANCE_FACTOR * CAMERA_SCALE;
+    expect(pose!.position.distanceTo(center)).toBeLessThan(outside);
+    // Dives straight in: still looks toward the center along the current view direction.
     const lookDir = new THREE.Vector3(0, 0, -1).applyQuaternion(pose!.quaternion);
     const toCenter = center.clone().sub(pose!.position).normalize();
     expect(lookDir.dot(toCenter)).toBeCloseTo(1, 6);
