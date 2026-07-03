@@ -75,23 +75,27 @@ export function Photosphere({
     true
   );
 
-  // Crop-lens uniforms (see photosphereCropShader): stable objects wired into the material
-  // shader once via onBeforeCompile, then mutated each frame. Held in a ref (the mutable
-  // escape hatch) since useFrame writes them; lazily initialized so the factory doesn't
-  // run on every render. The shader always carries the crop code; uCropEnabled gates it,
-  // so toggling background needs no material recompile.
-  const cropUniformsRef = useRef<ReturnType<typeof createPhotosphereCropUniforms> | null>(null);
-  if (cropUniformsRef.current === null) {
-    cropUniformsRef.current = createPhotosphereCropUniforms();
-    cropUniformsRef.current.uCropEnabled.value = background ? 1 : 0;
-  }
-  const handleBeforeCompile = useCallback((shader: THREE.WebGLProgramParametersWithUniforms) => {
-    const uniforms = cropUniformsRef.current!;
-    shader.uniforms.uCropEnabled = uniforms.uCropEnabled;
-    shader.uniforms.uResolution = uniforms.uResolution;
-    shader.uniforms.uCropRadiusFrac = uniforms.uCropRadiusFrac;
-    shader.fragmentShader = injectPhotosphereCropShader(shader.fragmentShader);
-  }, []);
+  // Crop-lens uniforms (see photosphereCropShader): one stable set of objects per
+  // component instance (useMemo, like the tmp vectors below — NOT a ref written during
+  // render, which react-hooks/refs forbids), wired into the material shader via
+  // onBeforeCompile and mutated each frame. Seeded disabled; the useFrame below sets the
+  // real value before the first render (frame callbacks run before gl.render). The shader
+  // always carries the crop code; uCropEnabled gates it, so toggling background needs no
+  // material recompile.
+  const cropUniforms = useMemo(() => createPhotosphereCropUniforms(), []);
+  // Ref bridge for the per-frame mutations: react-hooks/immutability allows writes only
+  // through ref-derived bindings, and react-hooks/refs forbids writing a ref during
+  // render — useRef(initialValue) with the memoized object satisfies both.
+  const cropUniformsRef = useRef(cropUniforms);
+  const handleBeforeCompile = useCallback(
+    (shader: THREE.WebGLProgramParametersWithUniforms) => {
+      shader.uniforms.uCropEnabled = cropUniforms.uCropEnabled;
+      shader.uniforms.uResolution = cropUniforms.uResolution;
+      shader.uniforms.uCropRadiusFrac = cropUniforms.uCropRadiusFrac;
+      shader.fragmentShader = injectPhotosphereCropShader(shader.fragmentShader);
+    },
+    [cropUniforms]
+  );
 
   // Per-frame temporaries for the inside-the-sphere test (no allocations in useFrame).
   const tmp = useMemo(
@@ -104,7 +108,7 @@ export function Photosphere({
   // is on must fall back to the non-occluding backdrop instead of leaving a screen-locked
   // photo disk floating over the scene; zooming back in re-engages the lens.
   useFrame(({ gl, camera, pointer }) => {
-    const uniforms = cropUniformsRef.current!;
+    const uniforms = cropUniformsRef.current;
     uniforms.uResolution.value.set(gl.domElement.width, gl.domElement.height);
 
     const mesh = meshRef.current;
