@@ -289,7 +289,7 @@ async function installLowLimitWebGpuMock(page: Page): Promise<void> {
           },
         };
       }
-      return getContext.call(this, contextId, ...args as []) as RenderingContext | null;
+      return (getContext as (this: HTMLCanvasElement, id: string, ...rest: unknown[]) => ReturnType<typeof getContext>).call(this, contextId, ...args) as RenderingContext | null;
     } as typeof HTMLCanvasElement.prototype.getContext;
   });
 }

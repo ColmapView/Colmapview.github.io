@@ -90,7 +90,7 @@ interface BrowserGpuAdapter {
   requestDevice(): Promise<BrowserGpuDevice>;
 }
 
-interface BrowserNavigatorWithWebGpu extends Navigator {
+interface BrowserNavigatorWithWebGpu extends Omit<Navigator, 'gpu'> {
   gpu?: {
     requestAdapter(): Promise<BrowserGpuAdapter | null>;
   };

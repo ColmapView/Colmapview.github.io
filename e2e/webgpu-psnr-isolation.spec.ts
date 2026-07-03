@@ -102,7 +102,7 @@ interface BrowserGpuAdapter {
   requestDevice(): Promise<BrowserGpuDevice>;
 }
 
-interface BrowserNavigatorWithWebGpu extends Navigator {
+interface BrowserNavigatorWithWebGpu extends Omit<Navigator, 'gpu'> {
   gpu?: {
     requestAdapter(options?: { powerPreference?: 'high-performance' | 'low-power' }): Promise<BrowserGpuAdapter | null>;
   };
