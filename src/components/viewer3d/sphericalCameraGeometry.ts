@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {
   getFrustumBaseColor,
   getFrustumMetricColorScale,
+  getSphericalEffectiveColorMode,
   type CameraFrustumItem,
   type FrustumColorMode,
   type FrustumPsnrMetricSource,
@@ -41,8 +42,11 @@ export function buildSphereLineGeometryData(
   const baseColors = new Float32Array(items.length * FLOATS_PER_SPHERE);
   const baseAlphas = new Float32Array(items.length * VERTS_PER_SPHERE);
   const color = new THREE.Color();
+  // Spherical cameras have no PSNR/SSIM, so a splat-metric mode falls back to byCamera
+  // (never the "metric unavailable" gray). See getSphericalEffectiveColorMode.
+  const effectiveColorMode = getSphericalEffectiveColorMode(frustumColorMode);
   const metricColorScale = getFrustumMetricColorScale(
-    frustumColorMode,
+    effectiveColorMode,
     items.map((item) => item.image.imageId),
     splatPsnrByImage
   );
@@ -84,7 +88,7 @@ export function buildSphereLineGeometryData(
     }
 
     color.set(getFrustumBaseColor(
-      frustumColorMode, item.cameraIndex, item.image.imageId,
+      effectiveColorMode, item.cameraIndex, item.image.imageId,
       imageFrameIndexMap, frustumSingleColor, splatPsnrByImage, metricColorScale
     ));
     for (let v = 0; v < VERTS_PER_SPHERE; v++) {

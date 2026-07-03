@@ -3,7 +3,9 @@ import * as THREE from 'three';
 import { buildCamera, buildImage } from '../../test/builders/colmapBuilders';
 import { getImageWorldPose } from '../../utils/colmapTransforms';
 import { CameraModelId } from '../../types/colmap';
+import { getCameraColor } from '../../theme';
 import type { CameraFrustumItem } from './cameraFrustumGeometry';
+import { SPLAT_PSNR_UNAVAILABLE_COLOR } from './splatPsnrMetric';
 import {
   buildSphereLineGeometryData,
   getSphereLineAlpha,
@@ -62,6 +64,26 @@ describe('buildSphereLineGeometryData', () => {
     const { baseColors, baseAlphas } = buildSphereLineGeometryData([sphericalItem()], 1, opts);
     for (let v = 0; v < VERTS_PER_SPHERE; v++) expect(baseAlphas[v]).toBe(1);
     expect(baseColors[0]).toBeCloseTo(1); expect(baseColors[1]).toBeCloseTo(1); expect(baseColors[2]).toBeCloseTo(1);
+  });
+
+  it('falls back to the per-camera color (not the metric-unavailable gray) under a splat-metric mode', () => {
+    // Spherical cameras never have PSNR/SSIM computed. In a metric color mode with no metric for
+    // this image the color must be the byCamera color — NOT SPLAT_PSNR_UNAVAILABLE_COLOR, which
+    // would misleadingly read as a bad/unknown score.
+    const item = sphericalItemWithId(1, 0); // cameraIndex 0
+    const { baseColors } = buildSphereLineGeometryData([item], 1, {
+      frustumColorMode: 'splatPsnr',
+      frustumSingleColor: '#ffffff',
+      imageFrameIndexMap: new Map<number, number>(),
+      splatPsnrByImage: new Map(), // empty: no metric for the spherical image
+    });
+    const expected = new THREE.Color(getCameraColor(item.cameraIndex));
+    const unavailableGray = new THREE.Color(SPLAT_PSNR_UNAVAILABLE_COLOR);
+    expect(baseColors[0]).toBeCloseTo(expected.r);
+    expect(baseColors[1]).toBeCloseTo(expected.g);
+    expect(baseColors[2]).toBeCloseTo(expected.b);
+    // Explicitly NOT the unavailable gray (the pre-fix behavior).
+    expect(baseColors[0]).not.toBeCloseTo(unavailableGray.r);
   });
 
   it('translates with the camera position', () => {

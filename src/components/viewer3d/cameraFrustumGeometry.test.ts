@@ -8,6 +8,8 @@ import {
   getFrustumBaseColor,
   getFrustumMetricColorScale,
   getFrustumPlaneSize,
+  getSphericalEffectiveColorMode,
+  isSplatMetricColorMode,
 } from './cameraFrustumGeometry';
 import {
   buildCamera,
@@ -281,5 +283,25 @@ describe('getFrustumPlaneSize spherical guard', () => {
     const size = getFrustumPlaneSize(cam, 1);
     expect(size.width).toBeCloseTo(640 / 500);
     expect(size.height).toBeCloseTo(480 / 500);
+  });
+});
+
+describe('splat-metric color mode helpers', () => {
+  it('isSplatMetricColorMode is true only for the PSNR/SSIM metric modes', () => {
+    expect(isSplatMetricColorMode('splatPsnr')).toBe(true);
+    expect(isSplatMetricColorMode('splatSsim')).toBe(true);
+    expect(isSplatMetricColorMode('single')).toBe(false);
+    expect(isSplatMetricColorMode('byCamera')).toBe(false);
+    expect(isSplatMetricColorMode('byRigFrame')).toBe(false);
+  });
+
+  it('getSphericalEffectiveColorMode maps the metric modes to byCamera and passes the rest through', () => {
+    // Spherical cameras have no PSNR/SSIM, so a metric mode falls back to per-camera color.
+    expect(getSphericalEffectiveColorMode('splatPsnr')).toBe('byCamera');
+    expect(getSphericalEffectiveColorMode('splatSsim')).toBe('byCamera');
+    // Non-metric modes are unchanged.
+    expect(getSphericalEffectiveColorMode('single')).toBe('single');
+    expect(getSphericalEffectiveColorMode('byCamera')).toBe('byCamera');
+    expect(getSphericalEffectiveColorMode('byRigFrame')).toBe('byRigFrame');
   });
 });

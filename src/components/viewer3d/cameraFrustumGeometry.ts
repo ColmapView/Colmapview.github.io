@@ -15,6 +15,20 @@ import {
 export type FrustumColorMode = 'single' | 'byCamera' | 'byRigFrame' | 'splatPsnr' | 'splatSsim';
 export type FrustumPsnrMetricSource = ReadonlyMap<ImageId, { psnr: number; ssim?: number }>;
 
+export function isSplatMetricColorMode(mode: FrustumColorMode): boolean {
+  return mode === 'splatPsnr' || mode === 'splatSsim';
+}
+
+/**
+ * Spherical cameras have no splat PSNR/SSIM computed, so the metric color modes don't
+ * apply to them — fall back to the default per-camera coloring instead of the
+ * "metric unavailable" gray (which reads as a bad/unknown score). Pinhole frustums are
+ * unaffected. See SphericalCameraLines / buildSphereLineGeometryData.
+ */
+export function getSphericalEffectiveColorMode(mode: FrustumColorMode): FrustumColorMode {
+  return isSplatMetricColorMode(mode) ? 'byCamera' : mode;
+}
+
 export interface FrustumImageSource {
   getImageSync(name: string): File | null | undefined;
 }
