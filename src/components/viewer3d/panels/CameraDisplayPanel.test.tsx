@@ -56,11 +56,11 @@ describe('CameraDisplayPanel spherical-only controls', () => {
     expect(screen.queryByText('Selection α')).not.toBeNull();
   });
 
-  it('hides the Mode and Selection α rows for spherical-only datasets', () => {
+  it('hides only the Mode row for spherical-only datasets — Selection α stays (the panorama lens consumes it)', () => {
     renderPanel({ hasPinholeCameras: false });
 
     expect(screen.queryByText('Mode')).toBeNull();
-    expect(screen.queryByText('Selection α')).toBeNull();
+    expect(screen.queryByText('Selection α')).not.toBeNull();
   });
 
   it('keeps other camera controls visible for spherical-only datasets', () => {

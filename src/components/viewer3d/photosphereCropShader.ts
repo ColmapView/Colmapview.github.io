@@ -103,3 +103,42 @@ export function createPhotosphereCropUniforms(): PhotosphereCropUniforms {
     uCropRadiusFrac: { value: PANORAMA_CROP_RADIUS_FRACTION },
   };
 }
+
+/**
+ * Hover halves the configured plane opacity — the SAME design as the pinhole image
+ * planes (FrustumPlaneSurface.tsx: `isTransparent ? selectionPlaneOpacity * 0.5 :
+ * selectionPlaneOpacity`), so hovering the panorama lens feels identical to hovering
+ * a regular camera's image plane.
+ */
+export const LENS_HOVER_OPACITY_FACTOR = 0.5;
+
+/**
+ * Photo opacity for the panorama lens, mirroring the pinhole image-plane rule:
+ * the user's Selection α setting, halved while the pointer hovers the lens.
+ */
+export function getPanoramaLensOpacity(hovered: boolean, selectionPlaneOpacity: number): number {
+  return hovered ? selectionPlaneOpacity * LENS_HOVER_OPACITY_FACTOR : selectionPlaneOpacity;
+}
+
+/**
+ * Whether the pointer is inside the lens circle — hovering the photo fades it so the
+ * reconstruction shows through. MUST mirror PHOTOSPHERE_CROP_DISCARD_GLSL's circle:
+ * center = resolution/2, radius = radiusFrac·min(resolution). `pointerNdc*` are the
+ * three/R3F normalized pointer coords (-1..1); `resolution*` is the drawing buffer in
+ * device px (same units as gl_FragCoord), so DPR cancels out of the comparison. The
+ * circle is centered, so the NDC-vs-gl_FragCoord y-direction difference is irrelevant.
+ */
+export function isPointerInsideLens(
+  pointerNdcX: number,
+  pointerNdcY: number,
+  resolutionX: number,
+  resolutionY: number,
+  radiusFrac: number = PANORAMA_CROP_RADIUS_FRACTION
+): boolean {
+  const px = (pointerNdcX * 0.5 + 0.5) * resolutionX;
+  const py = (pointerNdcY * 0.5 + 0.5) * resolutionY;
+  const dx = px - resolutionX * 0.5;
+  const dy = py - resolutionY * 0.5;
+  const radius = radiusFrac * Math.min(resolutionX, resolutionY);
+  return dx * dx + dy * dy <= radius * radius;
+}

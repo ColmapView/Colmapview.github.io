@@ -214,17 +214,18 @@ export function CameraDisplayPanel({
               onChange={setFrustumLineWidth}
               formatValue={(v) => v.toFixed(1)}
             />
-            {hasPinholeCameras && (
-              <SliderRow
-                label="Selection α"
-                value={selectionPlaneOpacity}
-                min={0}
-                max={1}
-                step={0.05}
-                onChange={setSelectionPlaneOpacity}
-                formatValue={(v) => v.toFixed(2)}
-              />
-            )}
+            {/* Selection α applies to spherical cameras too: the panorama lens photo
+                renders at this opacity (halved on hover), same rule as the pinhole
+                planes — so unlike the Mode row it stays visible for spherical-only. */}
+            <SliderRow
+              label="Selection α"
+              value={selectionPlaneOpacity}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={setSelectionPlaneOpacity}
+              formatValue={(v) => v.toFixed(2)}
+            />
             <SliderRow
               label="Unselected α"
               value={unselectedCameraOpacity}

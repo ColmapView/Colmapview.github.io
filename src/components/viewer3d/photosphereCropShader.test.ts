@@ -8,6 +8,9 @@ import {
   PHOTOSPHERE_CROP_UNIFORMS_GLSL,
   createPhotosphereCropUniforms,
   injectPhotosphereCropShader,
+  getPanoramaLensOpacity,
+  isPointerInsideLens,
+  LENS_HOVER_OPACITY_FACTOR,
 } from './photosphereCropShader';
 
 /**
@@ -82,5 +85,37 @@ describe('createPhotosphereCropUniforms', () => {
     expect(uniforms.uCropEnabled.value).toBe(0);
     expect(uniforms.uCropRadiusFrac.value).toBe(PANORAMA_CROP_RADIUS_FRACTION);
     expect(uniforms.uResolution.value).toBeInstanceOf(THREE.Vector2);
+  });
+});
+
+describe('isPointerInsideLens (hover peek-through)', () => {
+  // Mirrors PHOTOSPHERE_CROP_DISCARD_GLSL: center = res/2, radius = frac*min(res).
+  // For a 1000x800 buffer at the default fraction: radius = 0.35*800 = 280 device px.
+  it('is true at the viewport center and false in a corner', () => {
+    expect(isPointerInsideLens(0, 0, 1000, 800)).toBe(true);
+    expect(isPointerInsideLens(1, 1, 1000, 800)).toBe(false);
+    expect(isPointerInsideLens(-1, -1, 1000, 800)).toBe(false);
+  });
+
+  it('matches the shader radius formula at the boundary (radius = frac*min(res))', () => {
+    // Along +x from the center of a 1000x800 buffer: device x = 500 + 280 = 780
+    // => NDC x = (780/1000)*2 - 1 = 0.56 exactly on the rim (inclusive)...
+    expect(isPointerInsideLens(0.56, 0, 1000, 800)).toBe(true);
+    // ...one device px beyond is outside.
+    expect(isPointerInsideLens(0.562, 0, 1000, 800)).toBe(false);
+  });
+
+  it('uses the smaller dimension in tall (portrait) buffers', () => {
+    // 800x1000: radius = 0.35*800 = 280 along x => NDC x on-rim = (400+280)/800*2-1 = 0.7
+    expect(isPointerInsideLens(0.7, 0, 800, 1000)).toBe(true);
+    expect(isPointerInsideLens(0.705, 0, 800, 1000)).toBe(false);
+  });
+
+  it('halves the Selection α on hover — identical rule to the pinhole image planes', () => {
+    // FrustumPlaneSurface: isTransparent ? selectionPlaneOpacity * 0.5 : selectionPlaneOpacity
+    expect(LENS_HOVER_OPACITY_FACTOR).toBe(0.5);
+    expect(getPanoramaLensOpacity(false, 0.8)).toBe(0.8);
+    expect(getPanoramaLensOpacity(true, 0.8)).toBeCloseTo(0.4, 12);
+    expect(getPanoramaLensOpacity(true, 1)).toBe(0.5);
   });
 });

@@ -5,7 +5,9 @@ import { createPhotosphereGeometry } from './photosphereGeometry';
 import { getPhotosphereRenderConfig } from './photosphereRenderConfig';
 import {
   createPhotosphereCropUniforms,
+  getPanoramaLensOpacity,
   injectPhotosphereCropShader,
+  isPointerInsideLens,
 } from './photosphereCropShader';
 
 interface PhotosphereProps {
@@ -30,6 +32,12 @@ interface PhotosphereProps {
    * opaque depth-tested inspection sphere used from outside, with the lens shader gated off.
    */
   background?: boolean;
+  /**
+   * The user's Selection α setting — the same value the pinhole image planes use. In lens
+   * mode the photo renders at this opacity, halved while the pointer hovers the circle
+   * (identical rule to FrustumPlaneSurface). Ignored outside lens mode.
+   */
+  selectionPlaneOpacity?: number;
 }
 
 /**
@@ -50,6 +58,7 @@ export function Photosphere({
   texture,
   side = THREE.FrontSide,
   background = false,
+  selectionPlaneOpacity = 1,
 }: PhotosphereProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const geometry = useMemo(() => createPhotosphereGeometry(), []);
@@ -94,7 +103,7 @@ export function Photosphere({
   // eye ACTUALLY being inside the sphere. U is a persistent toggle — zooming out while it
   // is on must fall back to the non-occluding backdrop instead of leaving a screen-locked
   // photo disk floating over the scene; zooming back in re-engages the lens.
-  useFrame(({ gl, camera }) => {
+  useFrame(({ gl, camera, pointer }) => {
     const uniforms = cropUniformsRef.current!;
     uniforms.uResolution.value.set(gl.domElement.width, gl.domElement.height);
 
@@ -108,8 +117,9 @@ export function Photosphere({
     camera.getWorldPosition(tmp.eye);
     const worldRadius = mesh.getWorldScale(tmp.scale).x; // unit sphere scaled by radius*0.99
     const insideSphere = tmp.eye.distanceTo(tmp.center) < worldRadius;
+    const lensActive = background && insideSphere;
 
-    uniforms.uCropEnabled.value = background && insideSphere ? 1 : 0;
+    uniforms.uCropEnabled.value = lensActive ? 1 : 0;
 
     const config = getPhotosphereRenderConfig(background, insideSphere);
     mesh.renderOrder = config.renderOrder;
@@ -117,6 +127,14 @@ export function Photosphere({
     material.transparent = config.transparent;
     material.depthTest = config.depthTest;
     material.depthWrite = config.depthWrite;
+
+    // Hover peek-through, same design as the pinhole image planes: the photo renders at
+    // the user's Selection α, halved while the pointer hovers the lens circle (instant
+    // switch, mirroring FrustumPlaneSurface). Outside lens mode the photo stays opaque.
+    const hovered =
+      lensActive
+      && isPointerInsideLens(pointer.x, pointer.y, gl.domElement.width, gl.domElement.height);
+    material.opacity = lensActive ? getPanoramaLensOpacity(hovered, selectionPlaneOpacity) : 1;
   });
 
   return (
