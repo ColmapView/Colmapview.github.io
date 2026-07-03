@@ -72,6 +72,29 @@ describe('global context menu action policy', () => {
     });
   });
 
+  it('skips splat color modes in the menu cycle without splat data', () => {
+    // With splat data (default) trackLength reaches the splat modes.
+    expect(getNextPointColorMenuState({ showPointCloud: true, colorMode: 'trackLength' }, true)).toEqual({
+      showPointCloud: true,
+      colorMode: 'splats',
+    });
+
+    // Without splat data the splat modes are skipped and trackLength wraps to rgb.
+    expect(getNextPointColorMenuState({ showPointCloud: true, colorMode: 'error' }, false)).toEqual({
+      showPointCloud: true,
+      colorMode: 'trackLength',
+    });
+    expect(getNextPointColorMenuState({ showPointCloud: true, colorMode: 'trackLength' }, false)).toEqual({
+      showPointCloud: true,
+      colorMode: 'rgb',
+    });
+    // A stale splat mode with no splat data rejoins the cycle at rgb.
+    expect(getNextPointColorMenuState({ showPointCloud: true, colorMode: 'splats' }, false)).toEqual({
+      showPointCloud: true,
+      colorMode: 'rgb',
+    });
+  });
+
   it('cycles match, selection, image-plane, and picking states', () => {
     expect(getNextMatchesMenuState({ showMatches: false, displayMode: 'blink' })).toEqual({
       showMatches: true,

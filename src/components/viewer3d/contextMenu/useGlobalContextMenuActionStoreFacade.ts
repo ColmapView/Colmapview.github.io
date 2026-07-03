@@ -10,6 +10,7 @@ import {
   useUIStore,
 } from '../../../store';
 import { useFileDropzone } from '../../../hooks/useFileDropzone';
+import { loadedFilesHaveSplatData } from '../../../utils/splatFileSourcePolicy';
 import type { GlobalContextMenuActionExecutorDeps } from './globalContextMenuActionExecutor';
 
 type GlobalContextMenuActionStoreFacade = Pick<
@@ -33,6 +34,7 @@ type GlobalContextMenuActionStoreFacade = Pick<
   | 'openDeletionModal'
   | 'openFloorDetectionModal'
   | 'openCameraConversionModal'
+  | 'hasSplatData'
 >;
 
 export function useGlobalContextMenuActionStoreFacade(): GlobalContextMenuActionStoreFacade {
@@ -47,6 +49,8 @@ export function useGlobalContextMenuActionStoreFacade(): GlobalContextMenuAction
 
   const resetTransform = useTransformStore((s) => s.resetTransform);
   const droppedFiles = useReconstructionStore((s) => s.droppedFiles);
+  const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
+  const hasSplatData = loadedFilesHaveSplatData(loadedFiles);
   const { processFiles } = useFileDropzone();
 
   const takeScreenshot = useExportStore((s) => s.takeScreenshot);
@@ -89,6 +93,7 @@ export function useGlobalContextMenuActionStoreFacade(): GlobalContextMenuAction
       openDeletionModal,
       openFloorDetectionModal,
       openCameraConversionModal,
+      hasSplatData,
     }),
     [
       resetView,
@@ -107,6 +112,7 @@ export function useGlobalContextMenuActionStoreFacade(): GlobalContextMenuAction
       openDeletionModal,
       openFloorDetectionModal,
       openCameraConversionModal,
+      hasSplatData,
     ]
   );
 }

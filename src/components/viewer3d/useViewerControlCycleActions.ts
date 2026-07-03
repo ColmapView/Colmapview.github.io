@@ -72,6 +72,7 @@ interface ViewerControlCycleActionsOptions {
   setUndistortionEnabled: Setter<boolean>;
   showPointCloud: boolean;
   colorMode: ColorMode;
+  hasSplatData: boolean;
   setShowPointCloud: Setter<boolean>;
   setColorMode: Setter<ColorMode>;
   showCameras: boolean;
@@ -111,6 +112,7 @@ export function useViewerControlCycleActions({
   setUndistortionEnabled,
   showPointCloud,
   colorMode,
+  hasSplatData,
   setShowPointCloud,
   setColorMode,
   showCameras,
@@ -159,11 +161,11 @@ export function useViewerControlCycleActions({
   const cycleColorMode = useCallback(() => {
     applyVisibleModeState({
       current: { visible: showPointCloud, mode: colorMode },
-      next: getNextPointColorState(showPointCloud, colorMode),
+      next: getNextPointColorState(showPointCloud, colorMode, hasSplatData),
       setVisible: setShowPointCloud,
       setMode: setColorMode,
     });
-  }, [colorMode, setColorMode, setShowPointCloud, showPointCloud]);
+  }, [colorMode, hasSplatData, setColorMode, setShowPointCloud, showPointCloud]);
 
   const cycleCameraDisplayMode = useCallback(() => {
     applyVisibleModeState({

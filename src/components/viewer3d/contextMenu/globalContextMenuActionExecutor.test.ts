@@ -39,6 +39,7 @@ function createDeps(
     setShowPointCloud: vi.fn(),
     colorMode: 'trackLength',
     setColorMode: vi.fn(),
+    hasSplatData: true,
     pointSize: 2,
     setPointSize: vi.fn(),
     minTrackLength: 2,
@@ -141,6 +142,18 @@ describe('global context menu action executor', () => {
 
     await executeGlobalContextMenuAction('flySpeedDown', deps);
     expect(deps.setFlySpeed).toHaveBeenCalledWith(2);
+  });
+
+  it('skips splat modes when cycling point color without splat data', async () => {
+    const deps = createDeps({
+      showPointCloud: true,
+      colorMode: 'trackLength',
+      hasSplatData: false,
+    });
+
+    await executeGlobalContextMenuAction('cyclePointColor', deps);
+    expect(deps.setShowPointCloud).toHaveBeenCalledWith(true);
+    expect(deps.setColorMode).toHaveBeenCalledWith('rgb');
   });
 
   it('executes transform and picking actions', async () => {

@@ -20,6 +20,7 @@ function createOptions(overrides: Partial<Parameters<typeof useViewerControlCycl
     setUndistortionEnabled: vi.fn(),
     showPointCloud: false,
     colorMode: 'trackLength' as const,
+    hasSplatData: true,
     setShowPointCloud: vi.fn(),
     setColorMode: vi.fn(),
     showCameras: true,
@@ -130,5 +131,18 @@ describe('viewer control cycle actions', () => {
     act(() => result.current.cycleRigDisplayMode());
     expect(options.setShowRig).not.toHaveBeenCalled();
     expect(options.setRigDisplayMode).toHaveBeenCalledWith('blink');
+  });
+
+  it('skips splat color modes when cycling point color without splat data', () => {
+    const options = createOptions({
+      showPointCloud: true,
+      colorMode: 'trackLength',
+      hasSplatData: false,
+    });
+    const { result } = renderHook(() => useViewerControlCycleActions(options));
+
+    act(() => result.current.cycleColorMode());
+    expect(options.setShowPointCloud).not.toHaveBeenCalled();
+    expect(options.setColorMode).toHaveBeenCalledWith('rgb');
   });
 });

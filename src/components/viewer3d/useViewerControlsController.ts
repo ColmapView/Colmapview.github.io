@@ -183,6 +183,7 @@ export function useViewerControlsController(): ViewerControlsController {
     setUndistortionEnabled: camerasActions.setUndistortionEnabled,
     showPointCloud: pointsNode.visible,
     colorMode: pointsNode.colorMode,
+    hasSplatData: splats.hasSplatData,
     setShowPointCloud: pointsActions.setVisible,
     setColorMode: setPointColorMode,
     showCameras: camerasNode.visible,

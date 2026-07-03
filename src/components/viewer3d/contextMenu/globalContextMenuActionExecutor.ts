@@ -88,6 +88,7 @@ export interface GlobalContextMenuActionExecutorDeps {
   setShowPointCloud: Setter<boolean>;
   colorMode: ColorMode;
   setColorMode: Setter<ColorMode>;
+  hasSplatData: boolean;
   pointSize: number;
   setPointSize: Setter<number>;
   minTrackLength: number;
@@ -208,7 +209,7 @@ export async function executeGlobalContextMenuAction(
       const nextState = getNextPointColorMenuState({
         showPointCloud: deps.showPointCloud,
         colorMode: deps.colorMode,
-      });
+      }, deps.hasSplatData);
       deps.setShowPointCloud(nextState.showPointCloud);
       deps.setColorMode(nextState.colorMode);
       break;

@@ -80,10 +80,10 @@ export function getNextBackgroundColor(
   return isLight ? darkColor : lightColor;
 }
 
-export function getNextPointColorMenuState({
-  showPointCloud,
-  colorMode,
-}: PointColorMenuState): PointColorMenuState {
+export function getNextPointColorMenuState(
+  { showPointCloud, colorMode }: PointColorMenuState,
+  hasSplatData = true
+): PointColorMenuState {
   if (!showPointCloud) {
     return { showPointCloud: true, colorMode: 'rgb' };
   }
@@ -94,6 +94,12 @@ export function getNextPointColorMenuState({
 
   if (colorMode === 'error') {
     return { showPointCloud: true, colorMode: 'trackLength' };
+  }
+
+  if (!hasSplatData) {
+    // Without splat data the splat modes render nothing, so trackLength (or any
+    // stale splat mode) wraps back to rgb instead of cycling into a splat view.
+    return { showPointCloud: true, colorMode: 'rgb' };
   }
 
   if (colorMode === 'trackLength') {

@@ -1,11 +1,12 @@
 import type { Reconstruction } from '../../types/colmap';
-import type {
-  CameraDisplayMode,
-  CameraMode,
-  ColorMode,
-  MatchesDisplayMode,
-  RigDisplayMode,
-  SelectionColorMode,
+import {
+  isSplatColorMode,
+  type CameraDisplayMode,
+  type CameraMode,
+  type ColorMode,
+  type MatchesDisplayMode,
+  type RigDisplayMode,
+  type SelectionColorMode,
 } from '../../store/types';
 import { hexToHsl, hslToHex } from '../../utils/colorUtils';
 import { cameraModelHasPinholeIntrinsics } from '../../utils/cameraModelRegistry';
@@ -256,9 +257,25 @@ export function getToggledBackgroundHsl(currentHsl: HslColor): HslColor {
 
 export function getNextPointColorState(
   visible: boolean,
-  mode: ColorMode
+  mode: ColorMode,
+  hasSplatData = true
 ): VisibleModeState<ColorMode> {
-  return getNextVisibleModeState(POINT_CLOUD_MODE_CONTROL, visible, mode);
+  if (hasSplatData) {
+    return getNextVisibleModeState(POINT_CLOUD_MODE_CONTROL, visible, mode);
+  }
+
+  // Without splat data the splat color modes render nothing, so cycle only the
+  // non-splat modes and wrap back to the first (rgb) instead of ever landing on
+  // (or a stale) splat mode.
+  const nonSplatButtons = POINT_CLOUD_MODE_CONTROL.activeButtons.filter(
+    (button) => !isSplatColorMode(button.mode)
+  );
+  if (!visible) {
+    return { visible: true, mode: nonSplatButtons[0].mode };
+  }
+  const currentIndex = nonSplatButtons.findIndex((button) => button.mode === mode);
+  const nextButton = nonSplatButtons[(currentIndex + 1) % nonSplatButtons.length];
+  return { visible: true, mode: nextButton.mode };
 }
 
 export function getNextCameraDisplayState(

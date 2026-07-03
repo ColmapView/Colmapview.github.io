@@ -182,6 +182,19 @@ describe('viewer controls view-model helpers', () => {
     expect(getNextAxesGridState(false, false)).toEqual({ showAxes: true, showGrid: true });
   });
 
+  it('skips splat color modes when the dataset has no splat data', () => {
+    // With splat data (default), the point cloud cycle reaches the splat modes.
+    expect(getNextPointColorState(true, 'trackLength', true)).toEqual({ visible: true, mode: 'splats' });
+
+    // Without splat data, the splat modes are skipped and the cycle wraps to rgb.
+    expect(getNextPointColorState(true, 'rgb', false)).toEqual({ visible: true, mode: 'error' });
+    expect(getNextPointColorState(true, 'error', false)).toEqual({ visible: true, mode: 'trackLength' });
+    expect(getNextPointColorState(true, 'trackLength', false)).toEqual({ visible: true, mode: 'rgb' });
+    expect(getNextPointColorState(false, 'trackLength', false)).toEqual({ visible: true, mode: 'rgb' });
+    // A stale splat mode with no splat data rejoins the cycle at rgb.
+    expect(getNextPointColorState(true, 'splats', false)).toEqual({ visible: true, mode: 'rgb' });
+  });
+
   it('derives compact toolbar button state', () => {
     expect(getAxesGridButtonState(true, true)).toMatchObject({
       icon: 'axesGrid',
