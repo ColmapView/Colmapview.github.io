@@ -123,7 +123,7 @@ ColmapView supports all 18 COLMAP camera models (ids 0-17), with real-time undis
 Notes:
 
 - Models 11-16 (RAD_TAN_THIN_PRISM_FISHEYE, SIMPLE_DIVISION, DIVISION, SIMPLE_FISHEYE, FISHEYE, EUCM) render image previews in cropped mode.
-- EQUIRECTANGULAR (id 17) is a spherical model with no planar undistortion. On the current build these cameras are parsed and shown but excluded from the pinhole rendering paths; full photosphere rendering ships separately.
+- EQUIRECTANGULAR (id 17) is a spherical (360°) model with no planar undistortion. These cameras render as lat/long grid spheres; selecting one shows its panorama as a photosphere, and (U) toggles a view-tracking portal overlay aligned with the point cloud.
 
 ## Links
 

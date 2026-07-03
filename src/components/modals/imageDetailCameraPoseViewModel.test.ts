@@ -97,7 +97,7 @@ describe('image detail camera pose view model', () => {
     // Spherical cameras have no pinhole intrinsics — instead of the raw [w, h] params
     // or dummy fx=1/fy=1/cx=0/cy=0 values, show one friendly "panorama" entry carrying
     // the camera's resolution.
-    expect(result.parameters).toEqual([{ name: 'panorama', value: '4096×2048' }]);
+    expect(result.parameters).toEqual([{ name: 'panorama', value: '4096x2048' }]);
     // Pose fields are still populated correctly with concrete formatted values.
     // rotation = [qvec[1], qvec[2], qvec[3], qvec[0]] = [0.5, 0.5, 0.5, 0.5] (3dp)
     expect(result.rotation).toEqual([

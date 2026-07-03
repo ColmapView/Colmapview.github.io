@@ -5,12 +5,17 @@ import {
   fullFrameVertexShader,
   fullFrameFragmentShader,
 } from '../src/shaders/undistortion';
+import {
+  SPHERICAL_UNDISTORT_VERTEX_SHADER,
+  SPHERICAL_UNDISTORT_FRAGMENT_SHADER,
+} from '../src/components/viewer3d/sphericalUndistortion';
 
 /**
- * Compiles + links the undistortion shaders in a real WebGL1 context (ANGLE).
- * The shader sources are plain strings, so neither tsc, vite, nor the unit
- * tests ever validate that they actually compile on a GPU. ANGLE's translator
- * is strict, so this catches GLSL ES 1.00 errors that permissive drivers miss.
+ * Compiles + links the undistortion shaders (pinhole image planes + the
+ * spherical portal disk) in a real WebGL1 context (ANGLE). The shader sources
+ * are plain strings, so neither tsc, vite, nor the unit tests ever validate
+ * that they actually compile on a GPU. ANGLE's translator is strict, so this
+ * catches GLSL ES 1.00 errors that permissive drivers miss.
  */
 
 // Three.js injects these for ShaderMaterial (GLSL ES 1.00); declare the subset
@@ -18,8 +23,18 @@ import {
 const VERTEX_BUILTINS = `
 uniform mat4 modelViewMatrix;
 uniform mat4 projectionMatrix;
+uniform mat4 modelMatrix;
+uniform mat4 viewMatrix;
 attribute vec3 position;
 attribute vec2 uv;
+`;
+
+// Three.js also injects these into fragment shaders; the spherical portal
+// fragment samples by viewer ray (cameraPosition) and declares no precision
+// of its own (three prepends the precision header at runtime).
+const FRAGMENT_BUILTINS = `
+precision highp float;
+uniform vec3 cameraPosition;
 `;
 
 const prepVertex = (src: string) => VERTEX_BUILTINS + src;
@@ -65,6 +80,11 @@ test('undistortion shaders compile and link in WebGL', async ({ page }) => {
       programs: [
         { name: 'cropped', vert: prepVertex(undistortionVertexShader), frag: prepFragment(undistortionFragmentShader) },
         { name: 'fullFrame', vert: prepVertex(fullFrameVertexShader), frag: prepFragment(fullFrameFragmentShader) },
+        {
+          name: 'sphericalPortal',
+          vert: prepVertex(SPHERICAL_UNDISTORT_VERTEX_SHADER),
+          frag: FRAGMENT_BUILTINS + prepFragment(SPHERICAL_UNDISTORT_FRAGMENT_SHADER),
+        },
       ],
     }
   );

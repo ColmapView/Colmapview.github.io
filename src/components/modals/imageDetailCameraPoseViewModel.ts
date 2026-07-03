@@ -79,7 +79,7 @@ export function buildCameraPoseDisplayModel(
   // Check modelId in CAMERA_MODEL_DESCRIPTORS first so unknown model IDs (test
   // fixtures, future models) fall through safely.
   if (modelId in CAMERA_MODEL_DESCRIPTORS && !cameraModelHasPinholeIntrinsics(modelId)) {
-    return { ...base, parameters: [{ name: 'panorama', value: `${base.width}×${base.height}` }] };
+    return { ...base, parameters: [{ name: 'panorama', value: `${base.width}x${base.height}` }] };
   }
 
   // Param labels come from the registry (single source of truth); unknown /

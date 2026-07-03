@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Camera parameter labels in the image-detail modal come from the model registry (EUCM shows alpha/beta, all COLMAP 4.1 models labeled; FOV's fifth parameter now displays as ω).
 - The Data panel no longer shows a spherical camera's panorama width as its "Focal" value.
 - Spherical grid spheres dim with the same standby/unselected opacity rules as pinhole frustums — and brighten on hover like them; their invisible hit targets are instanced (the camera-size slider no longer rebuilds per-camera geometry).
-- The image-detail modal shows a spherical camera's entry as `panorama=W×H` instead of an empty parameter list, and the (U) hotkey description now reads "Toggle undistorted view (panorama overlay for 360 cameras)".
+- The image-detail modal shows a spherical camera's entry as `panorama=WxH` instead of an empty parameter list, and the (U) hotkey description now reads "Toggle undistorted view (panorama overlay for 360 cameras)".
 - The Camera Display panel hides its pinhole-only controls (display Mode, Selection α) when a reconstruction contains only spherical cameras — those controls have no effect on grid spheres; mixed datasets keep them.
 
 ### Fixed
