@@ -20,6 +20,8 @@ export const pointCloudSection = defineSection({
       type: 'number',
       min: 0.1,
       max: 50,
+      // Mirrors POINT_CLOUD_DEFAULT_SIZE in store/stores/pointCloudStore.ts (kept a
+      // literal here so the config-definition modules stay free of store imports).
       default: 2,
       persist: true,
       description: 'Point size (0.1 - 50)',
@@ -29,6 +31,7 @@ export const pointCloudSection = defineSection({
       type: 'number',
       min: 0,
       max: 1,
+      // Mirrors POINT_CLOUD_DEFAULT_OPACITY in store/stores/pointCloudStore.ts.
       default: 1,
       persist: true,
       description: 'Point opacity (0 - 1)',

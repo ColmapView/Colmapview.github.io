@@ -112,6 +112,56 @@ describe('reconstruction store URL load lifecycle', () => {
     expect(usePointCloudStore.getState().showSplats).toBe(false);
   });
 
+  it('restores the plain point size and opacity when a splat-less dataset loads over a splat preset', () => {
+    // applySplatPointDisplayDefaults shrinks points to the splat-visible preset
+    // (size 1, opacity 0.2) and persists it. Loading a splat-less dataset must undo
+    // that preset, not just the color mode, or the COLMAP points render as tiny,
+    // near-invisible dots carried over from the previous splat session.
+    usePointCloudStore.setState({
+      colorMode: 'splats',
+      showSplats: true,
+      pointSize: 1,
+      pointOpacity: 0.2,
+    });
+
+    useReconstructionStore.getState().setLoadedFiles({
+      camerasFile: new File([''], 'cameras.bin'),
+      imagesFile: new File([''], 'images.bin'),
+      points3DFile: new File([''], 'points3D.bin'),
+      imageFiles: new Map(),
+      hasMasks: false,
+    });
+
+    expect(usePointCloudStore.getState().colorMode).toBe('rgb');
+    expect(usePointCloudStore.getState().showSplats).toBe(false);
+    expect(usePointCloudStore.getState().pointSize).toBe(2);
+    expect(usePointCloudStore.getState().pointOpacity).toBe(1);
+  });
+
+  it('preserves a user point size and opacity on a splat-less load when the prior mode is not a splat mode', () => {
+    // The restore is gated on a splat color mode: when the user is already on a
+    // non-splat mode with their own size/opacity, a splat-less load must not clobber
+    // their choices back to the defaults.
+    usePointCloudStore.setState({
+      colorMode: 'rgb',
+      showSplats: false,
+      pointSize: 5,
+      pointOpacity: 0.9,
+    });
+
+    useReconstructionStore.getState().setLoadedFiles({
+      camerasFile: new File([''], 'cameras.bin'),
+      imagesFile: new File([''], 'images.bin'),
+      points3DFile: new File([''], 'points3D.bin'),
+      imageFiles: new Map(),
+      hasMasks: false,
+    });
+
+    expect(usePointCloudStore.getState().colorMode).toBe('rgb');
+    expect(usePointCloudStore.getState().pointSize).toBe(5);
+    expect(usePointCloudStore.getState().pointOpacity).toBe(0.9);
+  });
+
   it('keeps a splat color mode when the loaded dataset still has a selectable splat source', () => {
     const fileB = new File(['b'], 'b.ply');
     usePointCloudStore.setState({ colorMode: 'splats', showSplats: true });

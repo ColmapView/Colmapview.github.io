@@ -3,7 +3,11 @@ import type { Reconstruction, LoadedFiles } from '../types/colmap';
 import type { WasmReconstructionWrapper } from '../wasm/reconstruction';
 import type { UrlLoadProgress, UrlLoadError, ColmapManifest } from '../types/manifest';
 import { useUIStore } from './stores/uiStore';
-import { usePointCloudStore } from './stores/pointCloudStore';
+import {
+  usePointCloudStore,
+  POINT_CLOUD_DEFAULT_SIZE,
+  POINT_CLOUD_DEFAULT_OPACITY,
+} from './stores/pointCloudStore';
 import { useTransformStore } from './stores/transformStore';
 import { getDefaultBackgroundColorForSplatLoad } from './splatBackgroundPolicy';
 import {
@@ -37,16 +41,21 @@ function applySplatPointDisplayDefaults(): void {
 
 /**
  * Inverse of applySplatPointDisplayDefaults: when a dataset without any splat loads,
- * drop a splat color mode carried over from a previous splat dataset (colorMode is
- * persisted across sessions) back to RGB. Otherwise the COLMAP points stay hidden
- * behind a splat that will never render, leaving a near-blank view. No-op unless the
- * current mode is actually a splat mode. setShowSplats(false) maps a splat mode to
- * 'rgb' and keeps showSplats in sync.
+ * undo the splat-visible preset carried over from a previous splat dataset. That
+ * preset — a splat color mode AND the shrunken point size/opacity (1 / 0.2) — is
+ * persisted across sessions, so without this restore it leaks into a later splat-less
+ * dataset: the COLMAP points render as tiny, near-invisible dots behind a splat that
+ * will never appear, leaving a near-blank view. Drops the splat color mode back to RGB
+ * (setShowSplats(false) maps a splat mode to 'rgb' and keeps showSplats in sync) and
+ * restores the plain point size/opacity defaults. No-op unless the current mode is
+ * actually a splat mode, so a user's own non-splat size/opacity choices are preserved.
  */
-function downgradeSplatColorModeForSplatlessDataset(): void {
+function restorePointDisplayForSplatlessDataset(): void {
   const pointCloudStore = usePointCloudStore.getState();
   if (isSplatColorMode(pointCloudStore.colorMode)) {
     pointCloudStore.setShowSplats(false);
+    pointCloudStore.setPointSize(POINT_CLOUD_DEFAULT_SIZE);
+    pointCloudStore.setPointOpacity(POINT_CLOUD_DEFAULT_OPACITY);
   }
 }
 
@@ -217,11 +226,12 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     if (hasSplatFile && !isActiveSplatFileSwitch) {
       applySplatPointDisplayDefaults();
     } else if (!loadedFilesHaveSplatData(resolvedLoadedFiles)) {
-      // Splat-less dataset (not even a lazy/pickable source): drop a leftover splat
-      // color mode so the points stay visible. Mirrors applySplatPointDisplayDefaults
-      // for the no-splat case; unreachable when a splat file is present (that hits the
-      // branch above), and pickable-but-inactive sources still count as having splats.
-      downgradeSplatColorModeForSplatlessDataset();
+      // Splat-less dataset (not even a lazy/pickable source): undo a leftover splat
+      // preset (color mode + shrunken point size/opacity) so the points stay visible.
+      // Inverse of applySplatPointDisplayDefaults for the no-splat case; unreachable
+      // when a splat file is present (that hits the branch above), and
+      // pickable-but-inactive sources still count as having splats.
+      restorePointDisplayForSplatlessDataset();
     }
     if (!isActiveSplatFileSwitch) {
       useTransformStore.getState().resetSplatTransform();

@@ -4,6 +4,16 @@ import { STORAGE_KEYS } from '../migration';
 import { mergePointCloudPersistedState } from '../persistedStoreMigrations';
 import { isSplatColorMode, type ColorMode } from '../types';
 
+/**
+ * Canonical point-display defaults for a plain (non-splat) dataset. The store's
+ * initial state below and the splat-less restore in reconstructionStore.ts both
+ * consume these so the two stay in lockstep. The registry default in
+ * config/registry/definitions/pointCloud.ts mirrors these values as literals (kept
+ * literal there to keep the pure config-definition modules free of store imports).
+ */
+export const POINT_CLOUD_DEFAULT_SIZE = 2;
+export const POINT_CLOUD_DEFAULT_OPACITY = 1;
+
 export interface PointCloudState {
   showPointCloud: boolean;
   showSplats: boolean;
@@ -33,8 +43,8 @@ export const usePointCloudStore = create<PointCloudState>()(
     (set) => ({
       showPointCloud: true,
       showSplats: false,
-      pointSize: 2,
-      pointOpacity: 1,
+      pointSize: POINT_CLOUD_DEFAULT_SIZE,
+      pointOpacity: POINT_CLOUD_DEFAULT_OPACITY,
       colorMode: 'rgb',
       minTrackLength: 2,
       maxReprojectionError: Infinity,
