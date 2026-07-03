@@ -99,6 +99,26 @@ describe('useSphericalLensFovWheel', () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
+  it('ignores wheels over a sibling panel outside the canvas (the literal panel-scroll case)', () => {
+    // The real-world hijack: a wheel whose target IS a Node but sits outside the canvas
+    // subtree (a side panel / modal div). This exercises the `!domElement.contains(e.target)`
+    // clause specifically, complementing the window test above (which trips `instanceof Node`).
+    const panel = document.createElement('div');
+    document.body.appendChild(panel);
+    const options = createOptions({
+      lensPointerStateRef: ref({ pointerInsideLens: true }),
+    });
+    renderHook(() => useSphericalLensFovWheel(options));
+
+    const event = dispatchWheelOn(panel, 10);
+
+    expect(options.setCameraFov).not.toHaveBeenCalled();
+    expect(options.controls?.wheelHandled?.current).toBe(false);
+    expect(event.defaultPrevented).toBe(false);
+
+    panel.remove();
+  });
+
   it('does nothing (attaches no listener) under orthographic projection', () => {
     const addEventListener = vi.spyOn(window, 'addEventListener');
     const options = createOptions({ cameraProjection: 'orthographic' });

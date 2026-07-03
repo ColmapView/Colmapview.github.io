@@ -112,8 +112,8 @@ export function Photosphere({
 
   // Each frame: feed the drawing-buffer size (DPR/resize-proof) and gate the lens on the
   // eye ACTUALLY being inside the sphere. U is a persistent toggle — zooming out while it
-  // is on must fall back to the non-occluding backdrop instead of leaving a screen-locked
-  // photo disk floating over the scene; zooming back in re-engages the lens.
+  // is on hides the photosphere entirely (config.visible below) so no uncropped panorama
+  // shows on the surface; zooming back in re-engages the crop lens.
   useFrame(({ gl, camera, pointer }) => {
     const uniforms = cropUniformsRef.current;
     uniforms.uResolution.value.set(gl.domElement.width, gl.domElement.height);
