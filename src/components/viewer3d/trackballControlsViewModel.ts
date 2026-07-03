@@ -206,7 +206,14 @@ export function getPerspectiveWheelDistance(
   minDistance: number
 ): number {
   const zoomFactor = 1 + deltaY * zoomSpeed;
-  return Math.max(minDistance, currentDistance * zoomFactor);
+  // The floor stops zoom-IN from collapsing the orbit — it must never clamp
+  // UPWARD. A fly-to may legitimately land closer than minDistance (e.g. the
+  // spherical U-mode orbits at 0.02x the sphere radius, well under the global
+  // floor); snapping up on the first wheel tick would eject the eye from the
+  // panorama. Cap the floor at the current distance so zoom-out always grows
+  // smoothly from wherever the camera actually is.
+  const effectiveMinDistance = Math.min(minDistance, currentDistance);
+  return Math.max(effectiveMinDistance, currentDistance * zoomFactor);
 }
 
 export function getPinchScale(initialDistance: number, currentDistance: number): number {

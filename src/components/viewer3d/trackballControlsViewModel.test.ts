@@ -143,6 +143,14 @@ describe('trackball controls view-model helpers', () => {
     expect(getFlyWheelMoveAmount(2, 10, 0.01, 3)).toBeCloseTo(-0.6);
     expect(getOrthoWheelZoom(2, 10, 0.01)).toBeCloseTo(2 / 1.1);
     expect(getPerspectiveWheelDistance(10, 10, 0.01, 2)).toBe(11);
+    // Zoom-in still floors at minDistance on the normal path.
+    expect(getPerspectiveWheelDistance(2.1, -10, 0.01, 2)).toBe(2);
+    // The floor never clamps UPWARD: a fly-to landing closer than minDistance
+    // (spherical U-mode orbits at 0.02x sphere radius) must zoom out smoothly,
+    // not snap to the global floor on the first tick...
+    expect(getPerspectiveWheelDistance(0.005, 10, 0.01, 0.1)).toBeCloseTo(0.0055, 10);
+    // ...and zoom-in from below the floor holds position instead of jumping up.
+    expect(getPerspectiveWheelDistance(0.005, -10, 0.01, 0.1)).toBe(0.005);
     expect(getPinchScale(100, 50)).toBe(2);
     expect(getPinchScale(100, 0)).toBe(1);
     expect(shouldApplyPinchScale(1.2, 0.1)).toBe(true);

@@ -248,7 +248,7 @@ describe('useCameraFrustumNavigationHandlers', () => {
       });
     }
 
-    it('shows the panorama overlay tip when navigating to a spherical camera', () => {
+    it('shows the step-inside-the-panorama tip when navigating to a spherical camera', () => {
       const { options } = buildSphericalOptions();
       const { result } = renderHook(() => useCameraFrustumNavigationHandlers(options));
 
