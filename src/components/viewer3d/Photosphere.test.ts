@@ -78,6 +78,7 @@ describe('getPhotosphereRenderConfig', () => {
     // U off: the inspection sphere is viewed from outside and must occlude/depth-test
     // like normal geometry.
     expect(getPhotosphereRenderConfig(false, true)).toEqual({
+      visible: true,
       renderOrder: 0,
       depthWrite: true,
       depthTest: true,
@@ -96,6 +97,7 @@ describe('getPhotosphereRenderConfig', () => {
     // (Spark) splats INSIDE the circle; the shader discards fragments OUTSIDE the circle
     // so the live scene shows through there.
     expect(getPhotosphereRenderConfig(true, true)).toEqual({
+      visible: true,
       renderOrder: PANORAMA_CROP_RENDER_ORDER,
       depthWrite: false,
       depthTest: false,
@@ -103,12 +105,14 @@ describe('getPhotosphereRenderConfig', () => {
     });
   });
 
-  it('falls back to the non-occluding backdrop when U is on but the eye zoomed OUT of the sphere', () => {
-    // U is a persistent toggle: zooming out from inside must never leave a screen-locked
-    // photo disk floating over the scene. Drawn first (renderOrder -1) with no depth
-    // writes, the panorama cannot cover anything from outside; zooming back in
-    // re-engages the lens.
+  it('hides the photosphere when U is on but the eye is OUTSIDE the sphere', () => {
+    // U is a persistent toggle, and the crop lens only makes sense from inside. Whenever the
+    // eye is outside — during a right-click fly-to (camera outside the target sphere the whole
+    // flight) or after zooming out — the mesh is HIDDEN (visible: false), so the full uncropped
+    // panorama never flashes on the sphere surface. Only the circular crop shows, only from
+    // inside; flying/zooming back in re-engages the lens.
     expect(getPhotosphereRenderConfig(true, false)).toEqual({
+      visible: false,
       renderOrder: PANORAMA_BACKDROP_RENDER_ORDER,
       depthWrite: false,
       depthTest: false,

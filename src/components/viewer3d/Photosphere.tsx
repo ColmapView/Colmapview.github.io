@@ -134,6 +134,11 @@ export function Photosphere({
 
     const config = getPhotosphereRenderConfig(background, insideSphere);
     mesh.renderOrder = config.renderOrder;
+    // In U (undistorted) mode the sphere is hidden whenever the eye is outside it, so a
+    // right-click fly-to (camera outside the target sphere the whole flight) and a zoom-out
+    // never flash the full uncropped panorama on the surface — only the circular crop shows,
+    // only from inside. (The ref write and uniform updates below still run every frame.)
+    mesh.visible = config.visible;
     const material = mesh.material as THREE.MeshBasicMaterial;
     if (material.transparent !== config.transparent) {
       material.transparent = config.transparent;

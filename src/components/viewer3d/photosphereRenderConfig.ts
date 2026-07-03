@@ -6,6 +6,8 @@
  * so the component file only exports a component (react-refresh constraint).
  */
 export interface PhotosphereRenderConfig {
+  /** Whether the mesh is rendered this frame. false = the mesh is skipped (mesh.visible = false). */
+  visible: boolean;
   /** Mesh draw order. */
   renderOrder: number;
   /** Depth write: the crop lens writes no depth so it never occludes via the depth buffer. */
@@ -47,9 +49,13 @@ export const PANORAMA_BACKDROP_RENDER_ORDER = -1;
  *   so the live scene (gaussian splats / points) shows through — the circle boundary is
  *   a direct ground-truth-vs-reconstruction seam. Draws late (above the splats), ignores
  *   depth, and is transparent so it can cover the transparent-pass Spark splats.
- * - `background && !insideSphere` — U still on but the eye zoomed OUT of the sphere:
- *   fall back to the non-occluding backdrop (crop shader gated off by the caller) so
- *   nothing floats over the scene; zooming back in re-engages the lens.
+ * - `background && !insideSphere` — U (undistorted) still on but the eye is OUTSIDE the
+ *   sphere: the photosphere is HIDDEN (visible: false). Because a right-click fly-to keeps
+ *   the camera outside the target sphere for the whole flight — and a zoom-out leaves it
+ *   outside too — hiding here means neither ever flashes the full uncropped panorama on the
+ *   sphere surface. Only the circular crop shows, and only from inside; zooming/flying back
+ *   in re-engages the lens. (This intentionally replaces the previous non-occluding-backdrop
+ *   behavior.) The other returned fields are moot while hidden and kept as-is to avoid churn.
  * - `!background` — the opaque, depth-tested inspection sphere seen from outside.
  */
 export function getPhotosphereRenderConfig(
@@ -57,10 +63,11 @@ export function getPhotosphereRenderConfig(
   insideSphere: boolean
 ): PhotosphereRenderConfig {
   if (!background) {
-    return { renderOrder: 0, depthWrite: true, depthTest: true, transparent: false };
+    return { visible: true, renderOrder: 0, depthWrite: true, depthTest: true, transparent: false };
   }
   if (insideSphere) {
     return {
+      visible: true,
       renderOrder: PANORAMA_CROP_RENDER_ORDER,
       depthWrite: false,
       depthTest: false,
@@ -68,6 +75,7 @@ export function getPhotosphereRenderConfig(
     };
   }
   return {
+    visible: false,
     renderOrder: PANORAMA_BACKDROP_RENDER_ORDER,
     depthWrite: false,
     depthTest: false,
