@@ -130,7 +130,7 @@ export function CameraModePanel({
               options={AUTO_ROTATE_MODE_OPTIONS}
             />
             <SliderRow
-              label="Rotate Speed"
+              label="Orbit Speed"
               value={autoRotateSpeed}
               min={0.1}
               max={2}
