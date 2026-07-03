@@ -57,7 +57,7 @@ describe('Property Registry', () => {
       const defaults = generateDefaultConfiguration();
       expect(defaults.ui.backgroundColor).toBe('#ffffff');
       expect(defaults.ui.matchesLineWidth).toBe(1);
-      expect(defaults.ui.showAxes).toBe(true);
+      expect(defaults.ui.showAxes).toBe(false);
       expect(defaults.ui.showGrid).toBe(true);
     });
 

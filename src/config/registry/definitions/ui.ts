@@ -107,8 +107,10 @@ export const uiSection = defineSection({
     // Axes and grid
     {
       key: 'showAxes',
+      // Default off: a fresh load shows only the grid. Mirrored by the uiStore initial
+      // state and the persisted-store migration fallback.
       type: 'boolean',
-      default: true,
+      default: false,
       persist: true,
       description: 'Show origin axes',
     },

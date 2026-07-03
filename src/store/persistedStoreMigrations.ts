@@ -400,7 +400,7 @@ export function migrateUIPersistedState(
   if (version < 7) {
     const mode = getString(state.axesDisplayMode);
     if (mode === undefined) {
-      state.showAxes = getBoolean(state.showAxes) ?? true;
+      state.showAxes = getBoolean(state.showAxes) ?? false;
       state.showGrid = getBoolean(state.showGrid) ?? true;
     } else {
       state.showAxes = mode === 'axes' || mode === 'both';

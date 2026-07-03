@@ -190,7 +190,7 @@ describe('persistedStoreMigrations', () => {
         )
       ).toEqual({
         contextMenuActions: defaultActions,
-        showAxes: true,
+        showAxes: false,
         showGrid: true,
         showGizmo: false,
         showMatches: false,

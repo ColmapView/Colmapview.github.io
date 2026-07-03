@@ -247,7 +247,10 @@ export const useUIStore = create<UIState>()(
       matchesLineWidth: 1,
       showMaskOverlay: false,
       maskOpacity: 0.7,
-      showAxes: true,
+      // Axes default off, grid on: a fresh load shows only the grid (see the matching
+      // registry default in config/registry/definitions/ui.ts and the persisted-store
+      // migration fallback in persistedStoreMigrations.ts).
+      showAxes: false,
       showGrid: true,
       axesCoordinateSystem: 'colmap',
       axesScale: 1,
