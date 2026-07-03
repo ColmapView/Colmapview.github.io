@@ -47,16 +47,21 @@ regressions:
 ### (U) step inside the panorama
 
 Pressing **U** with a spherical camera selected flies the viewer INSIDE the
-photosphere to the capture center C and renders the panorama as a non-occluding
-background (BackSide sphere, depth test/write off, drawn first). At C the eye
-coincides with the camera that captured the panorama, so every 3D point overlays
-its imagery **exactly** — at every depth and every look direction — with zero
-parallax. This is the point-cloud-overlay mode, and it is exact where the old
-portal disk could only be exact at one anchor depth. Check:
+photosphere to the capture center C and renders the panorama as a **viewport-centered
+circular ground-truth lens**: INSIDE the circle you see the photo (panorama); OUTSIDE it
+the crop shader discards so the live scene (gaussian splats / points) shows through — the
+circle boundary (a subtle dark rim) is a direct ground-truth-vs-reconstruction comparison
+seam. At C the eye coincides with the camera that captured the panorama, so every 3D point
+overlays its imagery **exactly** — at every depth and every look direction — with zero
+parallax. This is the point-cloud-overlay mode, and it is exact where the old portal disk
+could only be exact at one anchor depth. Check:
 
 - [ ] On U (spherical selected) the viewer dives to the sphere center; the
-      panorama surrounds the scene and the points sit exactly on their imagery,
-      staying glued while you look around (orbit) from the center.
+      panorama fills a centered circle with the points sitting exactly on their
+      imagery inside it, staying glued while you look around (orbit) from the center.
+- [ ] Inside the circle you see the photo; outside it the live scene (splats /
+      points) shows through — the boundary is the comparison lens. Works with both
+      the WebGPU and Spark splat backends and with the point cloud.
 - [ ] Zooming OUT while inside pulls the eye off-center and **progressively
       reintroduces parallax** (points begin to drift off their imagery) —
       expected; it is the single-viewpoint limit. Zoom back in / re-press U to
@@ -65,8 +70,10 @@ portal disk could only be exact at one anchor depth. Check:
       BackSide sphere). Toggling U with a spherical camera selected re-flies
       between inside/outside; pinhole cameras are unaffected by U's fly-to (U
       only swaps their plane material).
-- [ ] The panorama background never occludes the point cloud or scene from
-      inside; the grid sphere lines stay visible (fine).
+- [ ] OUTSIDE the lens circle the panorama never occludes the point cloud or
+      scene. INSIDE the circle the photo intentionally covers in-circle scene
+      content (points, grid lines, splats) — that is the clean ground-truth lens,
+      not a bug. Camera-match overlays still draw on top of the lens.
 
 **Convention anchors (do not "fix" without re-running this check):**
 `getImageWorldQuaternion` returns the RAW COLMAP cam-to-world rotation (no
