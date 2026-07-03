@@ -32,21 +32,45 @@ export interface PhotosphereRenderConfig {
 export const PANORAMA_CROP_RENDER_ORDER = 4;
 
 /**
- * When `background` is true the viewer is INSIDE the photosphere (U undistortion flew to
- * the capture center): the sphere renders as a viewport-centered circular ground-truth
- * lens. INSIDE the circle the panorama photo wins; OUTSIDE, the crop shader discards so
- * the live scene (gaussian splats / points) shows through — the circle boundary is a
- * direct ground-truth-vs-reconstruction seam. The lens draws late (renderOrder above the
- * splats), ignores depth, and is transparent so it can cover the transparent-pass splats.
- * Off (default) is the opaque, depth-tested inspection sphere seen from outside.
+ * Draw order for the non-occluding backdrop: U mode is on but the eye has moved OUTSIDE
+ * the sphere (e.g. zoomed out from inside). Drawn before everything and writing no depth,
+ * the panorama can never cover scene content from out there — the lens would otherwise
+ * float as a screen-locked photo disk over the scene.
  */
-export function getPhotosphereRenderConfig(background: boolean): PhotosphereRenderConfig {
-  return background
-    ? {
-        renderOrder: PANORAMA_CROP_RENDER_ORDER,
-        depthWrite: false,
-        depthTest: false,
-        transparent: true,
-      }
-    : { renderOrder: 0, depthWrite: true, depthTest: true, transparent: false };
+export const PANORAMA_BACKDROP_RENDER_ORDER = -1;
+
+/**
+ * Three states:
+ * - `background && insideSphere` — the viewer stands at/near the capture center
+ *   (U undistortion flew inside): render the viewport-centered circular ground-truth
+ *   lens. INSIDE the circle the panorama photo wins; OUTSIDE, the crop shader discards
+ *   so the live scene (gaussian splats / points) shows through — the circle boundary is
+ *   a direct ground-truth-vs-reconstruction seam. Draws late (above the splats), ignores
+ *   depth, and is transparent so it can cover the transparent-pass Spark splats.
+ * - `background && !insideSphere` — U still on but the eye zoomed OUT of the sphere:
+ *   fall back to the non-occluding backdrop (crop shader gated off by the caller) so
+ *   nothing floats over the scene; zooming back in re-engages the lens.
+ * - `!background` — the opaque, depth-tested inspection sphere seen from outside.
+ */
+export function getPhotosphereRenderConfig(
+  background: boolean,
+  insideSphere: boolean
+): PhotosphereRenderConfig {
+  if (!background) {
+    return { renderOrder: 0, depthWrite: true, depthTest: true, transparent: false };
+  }
+  if (insideSphere) {
+    return {
+      renderOrder: PANORAMA_CROP_RENDER_ORDER,
+      depthWrite: false,
+      depthTest: false,
+      transparent: true,
+    };
+  }
+  return {
+    renderOrder: PANORAMA_BACKDROP_RENDER_ORDER,
+    depthWrite: false,
+    depthTest: false,
+    transparent: false,
+  };
 }

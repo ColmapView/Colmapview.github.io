@@ -51,36 +51,77 @@ export function Photosphere({
   side = THREE.FrontSide,
   background = false,
 }: PhotosphereProps) {
+  const meshRef = useRef<THREE.Mesh>(null);
   const geometry = useMemo(() => createPhotosphereGeometry(), []);
   useEffect(() => () => geometry.dispose(), [geometry]);
 
   // Slightly inside (0.99) so the photosphere doesn't z-fight with outer cage geometry
   const scale = radius * 0.99;
 
-  const { renderOrder, depthWrite, depthTest, transparent } = getPhotosphereRenderConfig(background);
+  // Initial flags assume the eye is inside (U flies to the center); the per-frame
+  // inside-test below owns the truth and downgrades to the backdrop when the eye
+  // zooms out of the sphere.
+  const { renderOrder, depthWrite, depthTest, transparent } = getPhotosphereRenderConfig(
+    background,
+    true
+  );
 
   // Crop-lens uniforms (see photosphereCropShader): stable objects wired into the material
   // shader once via onBeforeCompile, then mutated each frame. Held in a ref (the mutable
-  // escape hatch) since useFrame writes them. The shader always carries the crop code;
-  // uCropEnabled gates it, so toggling background needs no material recompile.
-  const cropUniformsRef = useRef(createPhotosphereCropUniforms());
+  // escape hatch) since useFrame writes them; lazily initialized so the factory doesn't
+  // run on every render. The shader always carries the crop code; uCropEnabled gates it,
+  // so toggling background needs no material recompile.
+  const cropUniformsRef = useRef<ReturnType<typeof createPhotosphereCropUniforms> | null>(null);
+  if (cropUniformsRef.current === null) {
+    cropUniformsRef.current = createPhotosphereCropUniforms();
+    cropUniformsRef.current.uCropEnabled.value = background ? 1 : 0;
+  }
   const handleBeforeCompile = useCallback((shader: THREE.WebGLProgramParametersWithUniforms) => {
-    const uniforms = cropUniformsRef.current;
+    const uniforms = cropUniformsRef.current!;
     shader.uniforms.uCropEnabled = uniforms.uCropEnabled;
     shader.uniforms.uResolution = uniforms.uResolution;
     shader.uniforms.uCropRadiusFrac = uniforms.uCropRadiusFrac;
     shader.fragmentShader = injectPhotosphereCropShader(shader.fragmentShader);
   }, []);
 
-  // Feed the crop toggle + drawing-buffer size (DPR/resize-proof) every frame.
-  useFrame(({ gl }) => {
-    const uniforms = cropUniformsRef.current;
-    uniforms.uCropEnabled.value = background ? 1 : 0;
+  // Per-frame temporaries for the inside-the-sphere test (no allocations in useFrame).
+  const tmp = useMemo(
+    () => ({ center: new THREE.Vector3(), eye: new THREE.Vector3(), scale: new THREE.Vector3() }),
+    []
+  );
+
+  // Each frame: feed the drawing-buffer size (DPR/resize-proof) and gate the lens on the
+  // eye ACTUALLY being inside the sphere. U is a persistent toggle — zooming out while it
+  // is on must fall back to the non-occluding backdrop instead of leaving a screen-locked
+  // photo disk floating over the scene; zooming back in re-engages the lens.
+  useFrame(({ gl, camera }) => {
+    const uniforms = cropUniformsRef.current!;
     uniforms.uResolution.value.set(gl.domElement.width, gl.domElement.height);
+
+    const mesh = meshRef.current;
+    if (!mesh) {
+      uniforms.uCropEnabled.value = background ? 1 : 0;
+      return;
+    }
+
+    mesh.getWorldPosition(tmp.center);
+    camera.getWorldPosition(tmp.eye);
+    const worldRadius = mesh.getWorldScale(tmp.scale).x; // unit sphere scaled by radius*0.99
+    const insideSphere = tmp.eye.distanceTo(tmp.center) < worldRadius;
+
+    uniforms.uCropEnabled.value = background && insideSphere ? 1 : 0;
+
+    const config = getPhotosphereRenderConfig(background, insideSphere);
+    mesh.renderOrder = config.renderOrder;
+    const material = mesh.material as THREE.MeshBasicMaterial;
+    material.transparent = config.transparent;
+    material.depthTest = config.depthTest;
+    material.depthWrite = config.depthWrite;
   });
 
   return (
     <mesh
+      ref={meshRef}
       position={position}
       quaternion={quaternion}
       scale={[scale, scale, scale]}

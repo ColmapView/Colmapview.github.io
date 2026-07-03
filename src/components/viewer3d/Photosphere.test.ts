@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { createPhotosphereGeometry } from './photosphereGeometry';
-import { getPhotosphereRenderConfig, PANORAMA_CROP_RENDER_ORDER } from './photosphereRenderConfig';
+import { getPhotosphereRenderConfig, PANORAMA_BACKDROP_RENDER_ORDER, PANORAMA_CROP_RENDER_ORDER } from './photosphereRenderConfig';
 import {
   SPARK_SPLAT_RENDER_ORDER,
   SPLAT_POINT_OVERLAY_RENDER_ORDER,
@@ -77,25 +77,42 @@ describe('getPhotosphereRenderConfig', () => {
   it('renders a normal opaque, depth-tested sphere when NOT a background (U off, outside view)', () => {
     // U off: the inspection sphere is viewed from outside and must occlude/depth-test
     // like normal geometry.
-    expect(getPhotosphereRenderConfig(false)).toEqual({
+    expect(getPhotosphereRenderConfig(false, true)).toEqual({
       renderOrder: 0,
       depthWrite: true,
       depthTest: true,
       transparent: false,
     });
+    // insideSphere is irrelevant when U is off.
+    expect(getPhotosphereRenderConfig(false, false)).toEqual(
+      getPhotosphereRenderConfig(false, true)
+    );
   });
 
-  it('renders the circular ground-truth lens when true (U on, viewer inside the panorama)', () => {
-    // U on: the photosphere becomes a viewport-centered circular ground-truth lens.
+  it('renders the circular ground-truth lens when U is on AND the eye is inside the sphere', () => {
+    // U on + inside: the photosphere becomes a viewport-centered circular ground-truth lens.
     // It must draw AFTER the splats/points (renderOrder above them) and ignore depth,
     // and be transparent so it joins the transparent pass and thereby covers in-scene
     // (Spark) splats INSIDE the circle; the shader discards fragments OUTSIDE the circle
     // so the live scene shows through there.
-    expect(getPhotosphereRenderConfig(true)).toEqual({
+    expect(getPhotosphereRenderConfig(true, true)).toEqual({
       renderOrder: PANORAMA_CROP_RENDER_ORDER,
       depthWrite: false,
       depthTest: false,
       transparent: true,
+    });
+  });
+
+  it('falls back to the non-occluding backdrop when U is on but the eye zoomed OUT of the sphere', () => {
+    // U is a persistent toggle: zooming out from inside must never leave a screen-locked
+    // photo disk floating over the scene. Drawn first (renderOrder -1) with no depth
+    // writes, the panorama cannot cover anything from outside; zooming back in
+    // re-engages the lens.
+    expect(getPhotosphereRenderConfig(true, false)).toEqual({
+      renderOrder: PANORAMA_BACKDROP_RENDER_ORDER,
+      depthWrite: false,
+      depthTest: false,
+      transparent: false,
     });
   });
 
