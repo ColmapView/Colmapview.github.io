@@ -1,4 +1,5 @@
 import { useMemo, useRef } from 'react';
+import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { VIZ_COLORS } from '../../theme';
 import type { ImageId } from '../../types/colmap';
@@ -53,6 +54,10 @@ function SelectedSphericalPhotosphere({
     actions: { setCameraFov },
   } = useFrustumPlaneStoreFacade();
   const controls = useTrackballControlsApi();
+  // The R3F canvas: the wheel hook rejects wheels whose target isn't the canvas (or a
+  // descendant), so scrolling a side panel / modal is never hijacked. Valid here because this
+  // component renders inside the Canvas (like FrustumPlane, which also calls useThree()).
+  const domElement = useThree((s) => s.gl.domElement);
   // Written each frame by Photosphere; gates the wheel handler below.
   const lensPointerStateRef = useRef({ pointerInsideLens: false });
   const imageFile = useSelectedFrustumImageFile({
@@ -80,6 +85,7 @@ function SelectedSphericalPhotosphere({
     cameraProjection,
     cameraFov,
     setCameraFov,
+    domElement,
     lensPointerStateRef,
     controls,
   });

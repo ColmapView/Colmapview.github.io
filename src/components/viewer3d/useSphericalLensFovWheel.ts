@@ -12,6 +12,14 @@ interface SphericalLensFovWheelOptions {
   cameraFov: number;
   setCameraFov: (fov: number) => void;
   /**
+   * The R3F canvas element. The capture-phase listener lives on `window` (an ancestor of the
+   * whole document), so it also sees wheels over side panels, modals and browser chrome. Those
+   * must never be hijacked: R3F leaves state.pointer stale after the cursor leaves the canvas,
+   * so the pointerInsideLens gate below can still read true. We therefore reject any wheel whose
+   * target is not the canvas (or a descendant of it).
+   */
+  domElement: HTMLElement;
+  /**
    * Live pointer-in-lens gate, written each frame by the Photosphere's useFrame. True ONLY
    * while the eye is inside the sphere AND the pointer is inside the lens circle — so a wheel
    * INSIDE the circle changes fov in place, while a wheel OUTSIDE it falls through to the
@@ -41,6 +49,7 @@ export function useSphericalLensFovWheel({
   cameraProjection,
   cameraFov,
   setCameraFov,
+  domElement,
   lensPointerStateRef,
   controls,
 }: SphericalLensFovWheelOptions): void {
@@ -48,6 +57,12 @@ export function useSphericalLensFovWheel({
     if (!enabled || cameraProjection !== 'perspective') return;
 
     const handleWheel = (e: WheelEvent) => {
+      // Off-canvas wheels (side panels, modals, browser chrome) must never be hijacked:
+      // R3F leaves state.pointer stale after the cursor leaves the canvas, so the
+      // pointerInsideLens gate can read true even when scrolling a panel. Only act on
+      // wheels whose target is the canvas (or a descendant).
+      if (!(e.target instanceof Node) || !domElement.contains(e.target)) return;
+
       // Outside the lens circle: let the event fall through to the trackball canvas
       // handler so it dollies / exits the sphere exactly as before (no preventDefault,
       // no stopPropagation, no wheelHandled flag).
@@ -63,5 +78,5 @@ export function useSphericalLensFovWheel({
 
     window.addEventListener('wheel', handleWheel, { passive: false, capture: true });
     return () => window.removeEventListener('wheel', handleWheel, { capture: true });
-  }, [enabled, cameraProjection, cameraFov, setCameraFov, lensPointerStateRef, controls]);
+  }, [enabled, cameraProjection, cameraFov, setCameraFov, domElement, lensPointerStateRef, controls]);
 }

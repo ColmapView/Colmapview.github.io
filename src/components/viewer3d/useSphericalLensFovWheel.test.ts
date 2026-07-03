@@ -1,7 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MutableRefObject } from 'react';
-import { buildWheelEvent } from '../../test/builders';
 import { getWheelAdjustedFov } from './cameraFrustumViewModel';
 import { useSphericalLensFovWheel } from './useSphericalLensFovWheel';
 
@@ -11,44 +10,59 @@ function ref<T>(current: T): MutableRefObject<T> {
 
 type Options = Parameters<typeof useSphericalLensFovWheel>[0];
 
+// A real canvas in the document: the hook's guard only acts on wheels whose target is the
+// canvas (or a descendant), so tests must dispatch through a live element to reach the
+// capture-phase window listener.
+let canvas: HTMLCanvasElement;
+
+beforeEach(() => {
+  canvas = document.createElement('canvas');
+  document.body.appendChild(canvas);
+});
+
+afterEach(() => {
+  canvas.remove();
+  vi.restoreAllMocks();
+});
+
 function createOptions(overrides: Partial<Options> = {}): Options {
   return {
     enabled: true,
     cameraProjection: 'perspective',
     cameraFov: 60,
     setCameraFov: vi.fn(),
+    domElement: canvas,
     lensPointerStateRef: ref({ pointerInsideLens: true }),
     controls: { wheelHandled: ref(false) },
     ...overrides,
   };
 }
 
-function dispatchWheel(deltaY = 10): WheelEvent {
-  const preventDefault = vi.fn();
-  const event = buildWheelEvent({ deltaY, preventDefault });
+// Dispatch a real, cancelable wheel event on `target` and return it. Dispatching on the
+// canvas (in the document) propagates up to the capture-phase window listener with
+// `target === canvas`; `event.defaultPrevented` then reflects whether the handler acted.
+function dispatchWheelOn(target: EventTarget, deltaY = 10): WheelEvent {
+  const event = new WheelEvent('wheel', { deltaY, cancelable: true, bubbles: true });
   act(() => {
-    window.dispatchEvent(event);
+    target.dispatchEvent(event);
   });
   return event;
 }
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 describe('useSphericalLensFovWheel', () => {
   it('changes FOV in place when the pointer is inside the lens (no camera move)', () => {
     const options = createOptions();
     renderHook(() => useSphericalLensFovWheel(options));
 
-    const event = dispatchWheel(10);
+    const event = dispatchWheelOn(canvas, 10);
 
     // FOV is adjusted with the SAME contract the pinhole frustum wheel uses.
     expect(options.setCameraFov).toHaveBeenCalledTimes(1);
     expect(options.setCameraFov).toHaveBeenCalledWith(getWheelAdjustedFov(60, 10));
     // Marks the event handled so the trackball canvas wheel handler bails (no dolly).
     expect(options.controls?.wheelHandled?.current).toBe(true);
-    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    // The cancelable wheel was preventDefault'd, so the page/panel never scrolls.
+    expect(event.defaultPrevented).toBe(true);
   });
 
   it('passes the wheel through untouched when the pointer is OUTSIDE the lens (dolly path)', () => {
@@ -57,13 +71,32 @@ describe('useSphericalLensFovWheel', () => {
     });
     renderHook(() => useSphericalLensFovWheel(options));
 
-    const event = dispatchWheel(10);
+    const event = dispatchWheelOn(canvas, 10);
 
     // No FOV change, no handled-flag, no preventDefault: the event falls through
     // to the trackball canvas listener, which dollies / exits the sphere as before.
     expect(options.setCameraFov).not.toHaveBeenCalled();
     expect(options.controls?.wheelHandled?.current).toBe(false);
-    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('ignores off-canvas wheels even when the stale pointerInsideLens gate reads true', () => {
+    // Regression lock: R3F leaves state.pointer stale after the cursor leaves the canvas,
+    // so pointerInsideLens can still be true while the user scrolls a side panel or modal.
+    // The window capture listener sees those wheels (window is an ancestor of everything),
+    // but their target is NOT the canvas, so the FOV must not change and the panel/modal
+    // must be free to scroll (no preventDefault).
+    const options = createOptions({
+      lensPointerStateRef: ref({ pointerInsideLens: true }),
+    });
+    renderHook(() => useSphericalLensFovWheel(options));
+
+    // Dispatched on window: target is not the canvas (nor a descendant of it).
+    const event = dispatchWheelOn(window, 10);
+
+    expect(options.setCameraFov).not.toHaveBeenCalled();
+    expect(options.controls?.wheelHandled?.current).toBe(false);
+    expect(event.defaultPrevented).toBe(false);
   });
 
   it('does nothing (attaches no listener) under orthographic projection', () => {
@@ -73,11 +106,11 @@ describe('useSphericalLensFovWheel', () => {
 
     expect(addEventListener).not.toHaveBeenCalledWith('wheel', expect.anything(), expect.anything());
 
-    const event = dispatchWheel(10);
+    const event = dispatchWheelOn(canvas, 10);
 
     expect(options.setCameraFov).not.toHaveBeenCalled();
     expect(options.controls?.wheelHandled?.current).toBe(false);
-    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
   });
 
   it('does nothing (attaches no listener) when disabled (undistortion off)', () => {
@@ -87,11 +120,11 @@ describe('useSphericalLensFovWheel', () => {
 
     expect(addEventListener).not.toHaveBeenCalledWith('wheel', expect.anything(), expect.anything());
 
-    const event = dispatchWheel(10);
+    const event = dispatchWheelOn(canvas, 10);
 
     expect(options.setCameraFov).not.toHaveBeenCalled();
     expect(options.controls?.wheelHandled?.current).toBe(false);
-    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
   });
 
   it('removes the window wheel listener on unmount', () => {
@@ -103,9 +136,9 @@ describe('useSphericalLensFovWheel', () => {
 
     expect(removeEventListener).toHaveBeenCalledWith('wheel', expect.anything(), { capture: true });
 
-    // After unmount a wheel event has no effect.
-    const event = dispatchWheel(10);
+    // After unmount an on-canvas wheel (which WOULD zoom while mounted) has no effect.
+    const event = dispatchWheelOn(canvas, 10);
     expect(options.setCameraFov).not.toHaveBeenCalled();
-    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
   });
 });
