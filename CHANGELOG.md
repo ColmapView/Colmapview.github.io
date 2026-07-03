@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-07-03
+
+### Added
+
+- Hotkey (O) cycles auto orbit (off / clockwise / counter-clockwise), matching the context-menu action; listed in the hotkey help.
+
+### Changed
+
+- "Auto Rotate" is now called "Auto Orbit" across the UI (context menu, camera panel, settings description; the speed slider reads "Orbit Speed"). Saved settings are unaffected.
+
+### Fixed
+
+- Loading a dataset without any splat no longer leaves the point cloud stuck in a splat color mode from a previous session (which hid the points behind a nonexistent splat): the mode drops to RGB on load, the splat options disappear from the point panel, and the color-mode cycle (hotkey/menu) skips them too. Datasets with pickable splat tiles keep the splat modes.
+- Go-to animations no longer roll the horizon mid-flight when horizon lock is on: every interpolated frame stays level instead of tilting through the shortest 3D arc and re-leveling at the end.
+- Flying to a spherical (360°) camera now honors horizon lock — previously it always preserved the current roll, which could land the view sideways or upside down with the lock enabled. With the lock off, the current roll is still preserved.
+
 ## [0.9.0] - 2026-07-02
 
 ### Added
