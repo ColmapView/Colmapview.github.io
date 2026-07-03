@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { createPhotosphereGeometry } from './photosphereGeometry';
@@ -38,6 +38,12 @@ interface PhotosphereProps {
    * (identical rule to FrustumPlaneSurface). Ignored outside lens mode.
    */
   selectionPlaneOpacity?: number;
+  /**
+   * Written each frame with whether the pointer is inside the lens circle (only true when the
+   * lens is actually active — eye inside the sphere). It is the gate for useSphericalLensFovWheel:
+   * scroll INSIDE the circle changes fov in place, scroll OUTSIDE falls through to the dolly.
+   */
+  lensPointerStateRef?: MutableRefObject<{ pointerInsideLens: boolean }>;
 }
 
 /**
@@ -59,6 +65,7 @@ export function Photosphere({
   side = THREE.FrontSide,
   background = false,
   selectionPlaneOpacity = 1,
+  lensPointerStateRef,
 }: PhotosphereProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const geometry = useMemo(() => createPhotosphereGeometry(), []);
@@ -147,6 +154,14 @@ export function Photosphere({
       lensActive
       && isPointerInsideLens(pointer.x, pointer.y, gl.domElement.width, gl.domElement.height);
     material.opacity = lensActive ? getPanoramaLensOpacity(hovered, selectionPlaneOpacity) : 1;
+
+    // Publish the lens-hover state for the wheel handler's gate (a ref write in useFrame is
+    // allowed — not render scope). `hovered` is already false whenever the lens is inactive,
+    // so this is true ONLY inside the sphere AND inside the circle — exactly where scroll
+    // should change fov instead of dollying (see useSphericalLensFovWheel).
+    if (lensPointerStateRef) {
+      lensPointerStateRef.current.pointerInsideLens = hovered;
+    }
   });
 
   return (

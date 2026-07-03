@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { VIZ_COLORS } from '../../theme';
 import type { ImageId } from '../../types/colmap';
@@ -12,6 +12,8 @@ import { Photosphere } from './Photosphere';
 import { useFrustumPlaneStoreFacade } from './useFrustumPlaneStoreFacade';
 import { useSelectedFrustumImageFile } from './useSelectedFrustumImageFile';
 import { useFrustumPlaneDisplayTexture } from './useFrustumPlaneDisplayTexture';
+import { useTrackballControlsApi } from './trackballControlsApi';
+import { useSphericalLensFovWheel } from './useSphericalLensFovWheel';
 
 interface SharedPlaneLayerProps {
   cameraScale: number;
@@ -46,7 +48,13 @@ function SelectedSphericalPhotosphere({
   cameraScale: number;
   undistortionEnabled: boolean;
 }) {
-  const { data: { dataset } } = useFrustumPlaneStoreFacade();
+  const {
+    data: { dataset, cameraProjection, cameraFov },
+    actions: { setCameraFov },
+  } = useFrustumPlaneStoreFacade();
+  const controls = useTrackballControlsApi();
+  // Written each frame by Photosphere; gates the wheel handler below.
+  const lensPointerStateRef = useRef({ pointerInsideLens: false });
   const imageFile = useSelectedFrustumImageFile({
     dataset,
     imageName: frustum.image.name,
@@ -61,6 +69,19 @@ function SelectedSphericalPhotosphere({
     showImagePlane: true,
     viewAngleOk: true,
     selectedTextureDelayMs: 0,
+  });
+
+  // Inside the (U) lens, scroll changes fov in place instead of dollying — keeping the
+  // panorama circle and the splats/points aligned (the eye must stay at the capture center).
+  // Called unconditionally (before the early return) to satisfy the rules of hooks; the
+  // per-event pointer-in-lens gate leaves scroll OUTSIDE the circle on the dolly/exit path.
+  useSphericalLensFovWheel({
+    enabled: undistortionEnabled,
+    cameraProjection,
+    cameraFov,
+    setCameraFov,
+    lensPointerStateRef,
+    controls,
   });
 
   // Grid sphere from SphericalCameraLines is already visible; photosphere fades in once loaded.
@@ -83,6 +104,7 @@ function SelectedSphericalPhotosphere({
       // the BackSide sphere must not occlude the points/scene, so render it as a
       // non-occluding background. U-off keeps the opaque outside inspection sphere.
       background={undistortionEnabled}
+      lensPointerStateRef={lensPointerStateRef}
     />
   );
 }
