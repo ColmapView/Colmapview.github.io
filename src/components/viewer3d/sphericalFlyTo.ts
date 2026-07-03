@@ -9,14 +9,16 @@ import * as THREE from 'three';
  * mode, a portal disk cropped to the sphere's silhouette — both need an exterior
  * viewpoint, so the fly-to stops OUTSIDE the sphere looking in.
  *
- * This constant is the single source of truth for that viewing distance: the auto-FOV
- * fit (getAutoAdjustedFov, spherical branch) frames the sphere from this exact distance
- * (planeDistance = SPHERICAL_FLYTO_DISTANCE_FACTOR * cameraScale), so the fit and the
- * fly-to always agree.
+ * This constant is the single source of truth for that OUTSIDE viewing distance
+ * (position = center + factor * radius). It sets WHERE the fly-to stops; the FOV is NOT
+ * auto-framed from it. (getAutoAdjustedFov used to re-frame the sphere from this exact
+ * distance, but that clobbered the user's manual panorama-lens zoom every time they flew
+ * between spherical cameras, so its spherical branch now returns null and the lens FOV
+ * stays under manual control.)
  *
  * At factor 2.5 the sphere subtends 2*asin(1/2.5) = 2*asin(0.4) ≈ 47.16°
- * (node: 2*Math.asin(0.4)*180/Math.PI = 47.1564), comfortably framed at fill 0.8
- * (landscape target FOV = 2*atan((2r/0.8)/(2*2.5r))*180/PI = 2*atan(0.5)*180/PI ≈ 53.13°).
+ * (node: 2*Math.asin(0.4)*180/Math.PI = 47.1564), comfortably framed inside the default
+ * 60° lens FOV.
  */
 export const SPHERICAL_FLYTO_DISTANCE_FACTOR = 2.5;
 

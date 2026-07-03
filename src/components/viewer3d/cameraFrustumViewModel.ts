@@ -2,7 +2,6 @@ import type { Camera, ImageId } from '../../types/colmap';
 import type { CameraScaleFactor } from '../../store/types';
 import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
 import { isSphericalCameraModel } from '../../utils/cameraModelRegistry';
-import { SPHERICAL_FLYTO_DISTANCE_FACTOR } from './sphericalFlyTo';
 
 export {
   buildMatchedImageIds,
@@ -105,41 +104,13 @@ export function getAutoAdjustedFov({
   const viewportAspect = viewportWidth / viewportHeight;
   const currentFovRad = currentFov * Math.PI / 180;
 
-  // Spherical cameras have no real focal length; getCameraIntrinsics returns fx=fy=1 (unit
-  // default), so the pinhole plane formula produces a degenerate plane of width=cameraScale*width.
-  // Instead, frame the rendered sphere (radius = cameraScale) as a square target, viewed from the
-  // SAME outside-stop distance the spherical fly-to lands at (planeDistance = factor * cameraScale).
-  // Sharing SPHERICAL_FLYTO_DISTANCE_FACTOR keeps this fit and the fly-to in agreement (one source
-  // of truth). The sphere subtends 2*asin(1/factor) ≈ 47.16° at factor 2.5.
+  // Spherical cameras have no pinhole FOV. They are framed by the fly-to DISTANCE
+  // (SPHERICAL_FLYTO_DISTANCE_FACTOR) plus the user's manual panorama-lens FOV zoom, so
+  // auto-fov must NOT re-frame them: doing so would discard a manual lens zoom every time
+  // the user flies from one spherical camera to another. Return null (the fly-to call site
+  // skips setFov on null) and leave the FOV under manual control.
   if (isSphericalCameraModel(camera.modelId)) {
-    const sphereDiameter = 2 * cameraScale;
-    const planeDistance = SPHERICAL_FLYTO_DISTANCE_FACTOR * cameraScale;
-    const currentVisibleHeight = 2 * planeDistance * Math.tan(currentFovRad / 2);
-    const currentVisibleWidth = currentVisibleHeight * viewportAspect;
-    const heightRatio = sphereDiameter / currentVisibleHeight;
-    const widthRatio = sphereDiameter / currentVisibleWidth;
-    const maxRatio = Math.max(heightRatio, widthRatio);
-
-    if (!Number.isFinite(maxRatio) || (maxRatio <= maxVisibleRatio && maxRatio >= minVisibleRatio)) {
-      return null;
-    }
-
-    // The sphere is square (aspect 1:1). For a landscape viewport the height axis constrains;
-    // for a portrait/square viewport the width axis constrains.
-    let targetFov: number;
-    if (1.0 < viewportAspect) {
-      // Landscape: height constrains
-      const targetVisibleHeight = sphereDiameter / targetFillRatio;
-      targetFov = 2 * Math.atan(targetVisibleHeight / (2 * planeDistance)) * 180 / Math.PI;
-    } else {
-      // Portrait/square: width constrains
-      const targetVisibleWidth = sphereDiameter / targetFillRatio;
-      const targetVisibleHeight = targetVisibleWidth / viewportAspect;
-      targetFov = 2 * Math.atan(targetVisibleHeight / (2 * planeDistance)) * 180 / Math.PI;
-    }
-
-    if (!Number.isFinite(targetFov)) return null;
-    return Math.max(minFov, Math.min(maxFov, targetFov));
+    return null;
   }
 
   // Pinhole / fisheye cameras: frame the image plane projected at depth=cameraScale
