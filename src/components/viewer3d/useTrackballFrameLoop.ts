@@ -10,6 +10,7 @@ import {
   getKeyboardMoveSpeed,
 } from './trackballControlsViewModel';
 import {
+  computeGotoFrameQuaternion,
   getAutoRotateDelta,
   getCappedFrameDeltaMs,
   getFrameDamping,
@@ -170,7 +171,16 @@ export function useTrackballFrameLoop({
       const easedProgress = easeOutCubic(progress);
 
       camera.position.lerpVectors(anim.startPosition, anim.endPosition, easedProgress);
-      camera.quaternion.slerpQuaternions(anim.startQuaternion, anim.endQuaternion, easedProgress);
+      // Horizon lock ON/'flip': keep every interpolated frame level instead of letting the raw
+      // slerp roll the horizon mid-flight and re-level only at the end. Lock OFF => raw slerp.
+      computeGotoFrameQuaternion(
+        camera.quaternion,
+        anim.startQuaternion,
+        anim.endQuaternion,
+        easedProgress,
+        horizonLockRef.current,
+        worldUpRef.current
+      );
       targetVecRef.current.lerpVectors(anim.startTarget, anim.endTarget, easedProgress);
       distanceRef.current = anim.startDistance + (anim.endDistance - anim.startDistance) * easedProgress;
       targetDistanceRef.current = distanceRef.current;

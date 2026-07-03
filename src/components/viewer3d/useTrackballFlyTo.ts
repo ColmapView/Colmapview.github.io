@@ -155,14 +155,16 @@ export function getImageFlyToPose(
       currentViewerPos,
       worldRadius
     );
-    // Do NOT re-orient the scene: preserve the viewer's CURRENT up/roll. COLMAP world-up
-    // is unreliable (gravity is often +Y, i.e. three.js "down"), so locking the look-at to
-    // worldUpVec can flip the whole scene on fly-to (visual check 2026-07-02). Fall back to
-    // worldUpVec only when the current up is unavailable or degenerate (parallel to the new
-    // view direction).
+    // Horizon lock OFF (the default): do NOT re-orient the scene — preserve the viewer's
+    // CURRENT up/roll. COLMAP world-up is unreliable (gravity is often +Y, i.e. three.js
+    // "down"), so locking the look-at to worldUpVec can flip the whole scene on fly-to
+    // (visual check 2026-07-02). Fall back to worldUpVec only when the current up is
+    // unavailable or degenerate (parallel to the new view direction).
+    // Horizon lock ON/'flip': the user explicitly asked to be leveled, so level the end pose
+    // against worldUpVec (already the flipped effective up for 'flip').
     const viewDir = lookAt.clone().sub(position).normalize();
     let upForLook = worldUpVec;
-    if (currentViewerQuat) {
+    if (horizonLock === 'off' && currentViewerQuat) {
       const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(currentViewerQuat);
       if (Math.abs(currentUp.dot(viewDir)) < 0.999) {
         upForLook = currentUp;
