@@ -44,7 +44,7 @@ import {
   type SplatMetricCapability,
 } from '../../utils/splatBackendPolicy';
 import type { Reconstruction, SplatFileSource } from '../../types/colmap';
-import { getActiveSplatSourceId } from '../../utils/splatFileSourcePolicy';
+import { getActiveSplatSourceId, loadedFilesHaveSplatData } from '../../utils/splatFileSourcePolicy';
 
 interface ViewerControlsUiFacade {
   touchMode: boolean;
@@ -90,6 +90,8 @@ interface ViewerControlsSplatFacade {
   splatFiles: readonly File[];
   splatFileSources: readonly SplatFileSource[];
   activeSplatSourceId: string | null;
+  /** Whether the dataset has any splat (active, bundled, or pickable/lazy source). */
+  hasSplatData: boolean;
   setActiveSplatFile: (file: File) => void;
   selectSplatSource: (sourceId: string) => void;
 }
@@ -207,6 +209,7 @@ export function useViewerControlsStoreFacade(): ViewerControlsStoreFacade {
       splatFiles,
       splatFileSources,
       activeSplatSourceId,
+      hasSplatData: loadedFilesHaveSplatData(loadedFiles),
       setActiveSplatFile,
       selectSplatSource,
     },

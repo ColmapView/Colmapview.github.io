@@ -7,12 +7,31 @@ import {
   getActiveSplatSourceId,
   getNextSplatFile,
   getNextSplatSourceId,
+  loadedFilesHaveSplatData,
   mergeRemoteSplatCatalog,
 } from './splatFileSourcePolicy';
 
 function loaded(partial: Partial<LoadedFiles>): LoadedFiles {
   return { imageFiles: new Map(), hasMasks: false, ...partial };
 }
+
+describe('loadedFilesHaveSplatData', () => {
+  it('is true when an active splat file, bundled list, or pickable source is present', () => {
+    const splat = new File(['s'], 's.spz');
+    expect(loadedFilesHaveSplatData(loaded({ splatFile: splat }))).toBe(true);
+    expect(loadedFilesHaveSplatData(loaded({ splatFiles: [splat] }))).toBe(true);
+    // A lazy/not-yet-downloaded source (no file) still counts: the user can pick it.
+    expect(
+      loadedFilesHaveSplatData(loaded({ splatFileSources: [{ id: 'a', path: 'a.ply', url: 'u/a' }] }))
+    ).toBe(true);
+  });
+
+  it('is false for a dataset with no splat of any kind (and for null)', () => {
+    expect(loadedFilesHaveSplatData(loaded({}))).toBe(false);
+    expect(loadedFilesHaveSplatData(loaded({ splatFiles: [], splatFileSources: [] }))).toBe(false);
+    expect(loadedFilesHaveSplatData(null)).toBe(false);
+  });
+});
 
 describe('splat file source policy', () => {
   it('selects the next splat file with wraparound', () => {

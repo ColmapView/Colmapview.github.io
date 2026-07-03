@@ -11,8 +11,10 @@ import {
   clearActiveSplatFile,
   findSplatSourceById,
   getLoadedFilesWithActiveSplatSource,
+  loadedFilesHaveSplatData,
   mergeRemoteSplatCatalog as mergeRemoteSplatCatalogIntoLoadedFiles,
 } from '../utils/splatFileSourcePolicy';
+import { isSplatColorMode } from './types';
 import { fetchRemoteSplatFile } from '../utils/urlUtils';
 import { getSplatDownloadProgress } from '../utils/splatLoadingProgressPolicy';
 
@@ -31,6 +33,21 @@ function applySplatPointDisplayDefaults(): void {
   pointCloudStore.setColorMode('splatPoints');
   pointCloudStore.setPointSize(SPLAT_POINT_CLOUD_DEFAULT_SIZE);
   pointCloudStore.setPointOpacity(SPLAT_POINT_CLOUD_DEFAULT_OPACITY);
+}
+
+/**
+ * Inverse of applySplatPointDisplayDefaults: when a dataset without any splat loads,
+ * drop a splat color mode carried over from a previous splat dataset (colorMode is
+ * persisted across sessions) back to RGB. Otherwise the COLMAP points stay hidden
+ * behind a splat that will never render, leaving a near-blank view. No-op unless the
+ * current mode is actually a splat mode. setShowSplats(false) maps a splat mode to
+ * 'rgb' and keeps showSplats in sync.
+ */
+function downgradeSplatColorModeForSplatlessDataset(): void {
+  const pointCloudStore = usePointCloudStore.getState();
+  if (isSplatColorMode(pointCloudStore.colorMode)) {
+    pointCloudStore.setShowSplats(false);
+  }
 }
 
 /**
@@ -199,6 +216,12 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     }
     if (hasSplatFile && !isActiveSplatFileSwitch) {
       applySplatPointDisplayDefaults();
+    } else if (!loadedFilesHaveSplatData(resolvedLoadedFiles)) {
+      // Splat-less dataset (not even a lazy/pickable source): drop a leftover splat
+      // color mode so the points stay visible. Mirrors applySplatPointDisplayDefaults
+      // for the no-splat case; unreachable when a splat file is present (that hits the
+      // branch above), and pickable-but-inactive sources still count as having splats.
+      downgradeSplatColorModeForSplatlessDataset();
     }
     if (!isActiveSplatFileSwitch) {
       useTransformStore.getState().resetSplatTransform();

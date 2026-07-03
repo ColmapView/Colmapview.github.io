@@ -7,6 +7,7 @@ import {
   getMaxReprojectionErrorSliderValue,
   getPointCloudColorHint,
   getPointCloudMaxErrorLimit,
+  getPointColorModeOptions,
   getActiveSplatSourceSelectValue,
   getSplatFileFromSelectValue,
   getSplatFileSelectOptions,
@@ -27,6 +28,19 @@ describe('point cloud panel view-model helpers', () => {
       { value: 'splatPoints', label: 'Splats + Points' },
       { value: 'splatRainbowPoints', label: 'Splats + Rainbow' },
     ]);
+  });
+
+  it('drops the splat color modes when the dataset has no splat data', () => {
+    expect(getPointColorModeOptions(false)).toEqual([
+      { value: 'rgb', label: 'RGB' },
+      { value: 'error', label: 'Error' },
+      { value: 'trackLength', label: 'Track Length' },
+    ]);
+  });
+
+  it('offers all six color modes when the dataset has splat data', () => {
+    expect(getPointColorModeOptions(true)).toEqual(POINT_COLOR_MODE_OPTIONS);
+    expect(getPointColorModeOptions(true)).toHaveLength(6);
   });
 
   it('returns point color hints by mode', () => {

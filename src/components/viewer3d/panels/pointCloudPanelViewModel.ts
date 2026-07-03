@@ -1,4 +1,5 @@
 import type { ColorMode, SplatFileSource } from '../../../types/colmap';
+import { isSplatColorMode } from '../../../store/types';
 
 interface SelectOption<T extends string> {
   value: T;
@@ -18,6 +19,18 @@ export const POINT_COLOR_MODE_OPTIONS: SelectOption<ColorMode>[] = [
   { value: 'splatPoints', label: 'Splats + Points' },
   { value: 'splatRainbowPoints', label: 'Splats + Rainbow' },
 ];
+
+/**
+ * Point color-mode options filtered for the current dataset. When it has no splat
+ * data, the splat modes are dropped so the selector never offers dead options that
+ * would hide the COLMAP points against a splat that will never render. Keeps
+ * POINT_COLOR_MODE_OPTIONS as the source of truth.
+ */
+export function getPointColorModeOptions(hasSplatData: boolean): SelectOption<ColorMode>[] {
+  return hasSplatData
+    ? POINT_COLOR_MODE_OPTIONS
+    : POINT_COLOR_MODE_OPTIONS.filter((option) => !isSplatColorMode(option.value));
+}
 
 const POINT_COLOR_HINTS: Record<ColorMode, PointCloudColorHint> = {
   rgb: {

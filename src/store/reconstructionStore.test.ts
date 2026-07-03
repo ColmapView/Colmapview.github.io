@@ -4,6 +4,7 @@ import { useReconstructionStore } from './reconstructionStore';
 import { usePointCloudStore } from './stores/pointCloudStore';
 import { useTransformStore } from './stores/transformStore';
 import { useUIStore } from './stores/uiStore';
+import { isSplatColorMode } from './types';
 
 describe('reconstruction store URL load lifecycle', () => {
   beforeEach(() => {
@@ -92,6 +93,62 @@ describe('reconstruction store URL load lifecycle', () => {
     expect(usePointCloudStore.getState().showSplats).toBe(true);
     expect(usePointCloudStore.getState().pointSize).toBe(1);
     expect(usePointCloudStore.getState().pointOpacity).toBe(0.2);
+  });
+
+  it('downgrades a persisted splat color mode to RGB when a splat-less dataset loads', () => {
+    // A splat color mode survives from a previous (splat) dataset via persistence;
+    // loading a dataset with no splat must drop it so the COLMAP points stay visible.
+    usePointCloudStore.setState({ colorMode: 'splats', showSplats: true });
+
+    useReconstructionStore.getState().setLoadedFiles({
+      camerasFile: new File([''], 'cameras.bin'),
+      imagesFile: new File([''], 'images.bin'),
+      points3DFile: new File([''], 'points3D.bin'),
+      imageFiles: new Map(),
+      hasMasks: false,
+    });
+
+    expect(usePointCloudStore.getState().colorMode).toBe('rgb');
+    expect(usePointCloudStore.getState().showSplats).toBe(false);
+  });
+
+  it('keeps a splat color mode when the loaded dataset still has a selectable splat source', () => {
+    const fileB = new File(['b'], 'b.ply');
+    usePointCloudStore.setState({ colorMode: 'splats', showSplats: true });
+
+    // Lazy/pickable source with no active splatFile: the user can still activate a
+    // splat, so the color mode must NOT be downgraded.
+    useReconstructionStore.getState().setLoadedFiles({
+      camerasFile: new File([''], 'cameras.bin'),
+      imagesFile: new File([''], 'images.bin'),
+      points3DFile: new File([''], 'points3D.bin'),
+      splatFileSources: [{ id: 'splats/b.ply', path: 'splats/b.ply', file: fileB }],
+      imageFiles: new Map(),
+      hasMasks: false,
+    });
+
+    expect(usePointCloudStore.getState().colorMode).toBe('splats');
+    expect(usePointCloudStore.getState().showSplats).toBe(true);
+  });
+
+  it('does not downgrade the splat color mode when the loaded dataset includes a splat file', () => {
+    const splatFile = new File(['splat'], 'scene.spz');
+    usePointCloudStore.setState({ colorMode: 'splats', showSplats: true });
+
+    useReconstructionStore.getState().setLoadedFiles({
+      camerasFile: new File([''], 'cameras.bin'),
+      imagesFile: new File([''], 'images.bin'),
+      points3DFile: new File([''], 'points3D.bin'),
+      splatFile,
+      splatFiles: [splatFile],
+      imageFiles: new Map(),
+      hasMasks: false,
+    });
+
+    // A splat is present: display defaults switch to splatPoints (still a splat mode);
+    // the load-time downgrade must never fire.
+    expect(isSplatColorMode(usePointCloudStore.getState().colorMode)).toBe(true);
+    expect(usePointCloudStore.getState().showSplats).toBe(true);
   });
 
   it('preserves point rendering mode, size, and opacity when only the active splat file changes', () => {

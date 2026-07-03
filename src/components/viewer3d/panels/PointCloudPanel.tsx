@@ -13,13 +13,13 @@ import {
 import { renderPointCloudButtonIcon } from '../viewerControlButtonIcons';
 import { getPointCloudButtonState } from '../viewerControlsViewModel';
 import {
-  POINT_COLOR_MODE_OPTIONS,
   formatMaxReprojectionError,
   getActiveSplatSourceSelectValue,
   getMaxReprojectionErrorFromSliderValue,
   getMaxReprojectionErrorSliderValue,
   getPointCloudColorHint,
   getPointCloudMaxErrorLimit,
+  getPointColorModeOptions,
   getSplatSourceSelectOptionsWithNone,
   shouldShowSplatPointOverlayColorControl,
   shouldShowSplatPointOverlaySpeedControl,
@@ -45,6 +45,12 @@ export interface PointCloudPanelProps {
   maxReprojectionError: number | null;
   setMaxReprojectionError: (error: number | null) => void;
   reconstruction: Reconstruction | null;
+  /**
+   * Whether the dataset has any splat. When false the splat color modes are dropped
+   * from the Mode selector so it never offers dead options that would hide the COLMAP
+   * points behind a splat that will never render.
+   */
+  hasSplatData: boolean;
   splatFileSources: readonly SplatFileSource[];
   activeSplatSourceId: string | null;
   onSelectSplatSource: (sourceId: string) => void;
@@ -73,6 +79,7 @@ export function PointCloudPanel({
   maxReprojectionError,
   setMaxReprojectionError,
   reconstruction,
+  hasSplatData,
   splatFileSources,
   activeSplatSourceId,
   onSelectSplatSource,
@@ -87,6 +94,11 @@ export function PointCloudPanel({
   const colorHint = getPointCloudColorHint(colorMode);
   const showSplatPointOverlayColorControl = shouldShowSplatPointOverlayColorControl(colorMode);
   const showSplatPointOverlaySpeedControl = shouldShowSplatPointOverlaySpeedControl(colorMode);
+  // Splat modes are hidden for splat-less datasets. If colorMode were somehow a
+  // splat mode here (transient), the native <select> just shows no matching option
+  // and won't crash — but the load-time downgrade in reconstructionStore keeps
+  // colorMode non-splat whenever hasSplatData is false, so that stays unreachable.
+  const colorModeOptions = getPointColorModeOptions(hasSplatData);
   const splatSourceOptions = getSplatSourceSelectOptionsWithNone(splatFileSources);
   const activeSplatSourceValue = getActiveSplatSourceSelectValue(splatFileSources, activeSplatSourceId);
 
@@ -112,7 +124,7 @@ export function PointCloudPanel({
           label="Mode"
           value={colorMode}
           onChange={setColorMode}
-          options={POINT_COLOR_MODE_OPTIONS}
+          options={colorModeOptions}
         />
         {splatFileSources.length >= 1 && (
           <SelectRow

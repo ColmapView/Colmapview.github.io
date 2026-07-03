@@ -347,6 +347,7 @@ export function useViewerControlsController(): ViewerControlsController {
       maxReprojectionError: pointsNode.maxReprojectionError,
       setMaxReprojectionError: pointsActions.setMaxReprojectionError,
       reconstruction,
+      hasSplatData: splats.hasSplatData,
       splatFileSources: splats.splatFileSources,
       activeSplatSourceId: splats.activeSplatSourceId,
       onSelectSplatSource: splats.selectSplatSource,

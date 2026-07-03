@@ -153,6 +153,22 @@ export function getLoadedFilesWithActiveSplatSource(
   };
 }
 
+/**
+ * Whether a loaded dataset carries any splat at all — an active splat file, a
+ * bundled list, or a (possibly lazy/not-yet-downloaded) pickable source. A dataset
+ * with only lazy sources still counts, since the user can activate one. Single
+ * source of truth for both the load-time color-mode downgrade (reconstructionStore)
+ * and hiding the point-cloud panel's splat color options, so the two can't drift.
+ */
+export function loadedFilesHaveSplatData(loadedFiles: LoadedFiles | null): boolean {
+  if (!loadedFiles) {
+    return false;
+  }
+  return Boolean(loadedFiles.splatFile)
+    || (loadedFiles.splatFiles?.length ?? 0) > 0
+    || (loadedFiles.splatFileSources?.length ?? 0) > 0;
+}
+
 export function getActiveSplatSourceId(loadedFiles: LoadedFiles | null): string | null {
   if (!loadedFiles?.splatFile) {
     return null;
