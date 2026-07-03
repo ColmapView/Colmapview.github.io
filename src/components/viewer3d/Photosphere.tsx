@@ -124,7 +124,15 @@ export function Photosphere({
     const config = getPhotosphereRenderConfig(background, insideSphere);
     mesh.renderOrder = config.renderOrder;
     const material = mesh.material as THREE.MeshBasicMaterial;
-    material.transparent = config.transparent;
+    if (material.transparent !== config.transparent) {
+      material.transparent = config.transparent;
+      // three bakes an OPAQUE define into programs compiled while the material is
+      // opaque, hard-wiring output alpha to 1 — flipping `transparent` alone keeps
+      // that program, so the hover opacity below would do nothing (the fade only
+      // "came back" after something remounted the material). Recompile on the flip;
+      // both program variants are cache hits after the first toggle each way.
+      material.needsUpdate = true;
+    }
     material.depthTest = config.depthTest;
     material.depthWrite = config.depthWrite;
 
