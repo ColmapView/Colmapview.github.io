@@ -8,6 +8,7 @@ import type {
   SelectionColorMode,
 } from '../../store/types';
 import { hexToHsl, hslToHex } from '../../utils/colorUtils';
+import { cameraModelHasPinholeIntrinsics } from '../../utils/cameraModelRegistry';
 import { SensorType } from '../../types/rig';
 
 export interface HslColor {
@@ -217,6 +218,26 @@ function buildRigInfoFromImageNames(reconstruction: Reconstruction): RigInfo {
     cameraCount: maxCameras,
     frameCount: multiCameraFrames,
   };
+}
+
+/**
+ * Whether the reconstruction contains at least one non-spherical (pinhole-family) camera.
+ * A reconstruction with no cameras — or no reconstruction at all — is treated as having
+ * pinhole cameras so the default panel controls stay visible; only a genuinely
+ * spherical-only dataset returns false.
+ */
+export function reconstructionHasPinholeCameras(reconstruction: Reconstruction | null): boolean {
+  if (!reconstruction || reconstruction.cameras.size === 0) {
+    return true;
+  }
+
+  for (const camera of reconstruction.cameras.values()) {
+    if (cameraModelHasPinholeIntrinsics(camera.modelId)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export function syncHslWithHex(currentHsl: HslColor, nextHex: string): HslColor {

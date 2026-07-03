@@ -22,10 +22,12 @@ import {
   getRigButtonState,
   getSelectionButtonState,
   getToggledBackgroundHsl,
+  reconstructionHasPinholeCameras,
   syncHslWithHex,
   toSuperscript,
 } from './viewerControlsViewModel';
 import { buildCamera, buildFrame, buildImage, buildReconstruction, buildRigData } from '../../test/builders';
+import { CameraModelId } from '../../types/colmap';
 import { SensorType } from '../../types/rig';
 
 describe('viewer controls view-model helpers', () => {
@@ -338,5 +340,52 @@ describe('viewer controls view-model helpers', () => {
       frames: 'sparse/0/frames.bin',
     });
     expect(JSON.parse(buildExampleManifestJson())).toEqual(manifest);
+  });
+});
+
+describe('reconstructionHasPinholeCameras', () => {
+  it('treats a missing reconstruction as having pinhole cameras', () => {
+    expect(reconstructionHasPinholeCameras(null)).toBe(true);
+  });
+
+  it('treats a reconstruction with no cameras as having pinhole cameras', () => {
+    const reconstruction = buildReconstruction({ cameras: [], images: [] });
+
+    expect(reconstructionHasPinholeCameras(reconstruction)).toBe(true);
+  });
+
+  it('returns true for a pinhole-only reconstruction', () => {
+    const reconstruction = buildReconstruction({
+      cameras: [buildCamera({ cameraId: 1, modelId: CameraModelId.PINHOLE })],
+    });
+
+    expect(reconstructionHasPinholeCameras(reconstruction)).toBe(true);
+  });
+
+  it('returns true for a non-spherical fisheye-only reconstruction', () => {
+    const reconstruction = buildReconstruction({
+      cameras: [buildCamera({ cameraId: 1, modelId: CameraModelId.OPENCV_FISHEYE })],
+    });
+
+    expect(reconstructionHasPinholeCameras(reconstruction)).toBe(true);
+  });
+
+  it('returns true for a mixed reconstruction containing at least one non-spherical camera', () => {
+    const reconstruction = buildReconstruction({
+      cameras: [
+        buildCamera({ cameraId: 1, modelId: CameraModelId.EQUIRECTANGULAR, params: [640, 480] }),
+        buildCamera({ cameraId: 2, modelId: CameraModelId.PINHOLE }),
+      ],
+    });
+
+    expect(reconstructionHasPinholeCameras(reconstruction)).toBe(true);
+  });
+
+  it('returns false for a spherical-only reconstruction', () => {
+    const reconstruction = buildReconstruction({
+      cameras: [buildCamera({ cameraId: 1, modelId: CameraModelId.EQUIRECTANGULAR, params: [640, 480] })],
+    });
+
+    expect(reconstructionHasPinholeCameras(reconstruction)).toBe(false);
   });
 });

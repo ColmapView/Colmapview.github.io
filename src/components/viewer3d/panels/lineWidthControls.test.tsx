@@ -32,6 +32,7 @@ describe('viewer line width controls', () => {
         frustumColorMode="byCamera"
         setFrustumColorMode={vi.fn()}
         hasRigData={false}
+        hasPinholeCameras={true}
         frustumSingleColor="#ff0000"
         onFrustumColorPickerChange={vi.fn()}
         frustumHsl={{ h: 0, s: 100, l: 50 }}

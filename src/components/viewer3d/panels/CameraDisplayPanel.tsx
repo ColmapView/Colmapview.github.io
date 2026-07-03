@@ -40,6 +40,12 @@ export interface CameraDisplayPanelProps {
   frustumColorMode: FrustumColorMode;
   setFrustumColorMode: (mode: FrustumColorMode) => void;
   hasRigData: boolean;
+  /**
+   * Whether any non-spherical (pinhole-family) camera is present. When false the dataset
+   * is spherical-only, so the Mode selector and Selection α slider (both pinhole-only
+   * no-ops for equirectangular cameras) are hidden.
+   */
+  hasPinholeCameras: boolean;
   frustumSingleColor: string;
   onFrustumColorPickerChange: (hex: string) => void;
   frustumHsl: HslColor;
@@ -76,6 +82,7 @@ export function CameraDisplayPanel({
   frustumColorMode,
   setFrustumColorMode,
   hasRigData,
+  hasPinholeCameras,
   frustumSingleColor,
   onFrustumColorPickerChange,
   frustumHsl,
@@ -126,12 +133,14 @@ export function CameraDisplayPanel({
     >
       <div className={styles.panelContent}>
         <ToggleRow label="Show Cameras" checked={showCameras} onChange={setShowCameras} />
-        <SelectRow
-          label="Mode"
-          value={cameraDisplayMode}
-          onChange={setCameraDisplayMode}
-          options={CAMERA_DISPLAY_MODE_OPTIONS}
-        />
+        {hasPinholeCameras && (
+          <SelectRow
+            label="Mode"
+            value={cameraDisplayMode}
+            onChange={setCameraDisplayMode}
+            options={CAMERA_DISPLAY_MODE_OPTIONS}
+          />
+        )}
         {showCameras && (
           <>
             <SelectRow
@@ -205,15 +214,17 @@ export function CameraDisplayPanel({
               onChange={setFrustumLineWidth}
               formatValue={(v) => v.toFixed(1)}
             />
-            <SliderRow
-              label="Selection α"
-              value={selectionPlaneOpacity}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={setSelectionPlaneOpacity}
-              formatValue={(v) => v.toFixed(2)}
-            />
+            {hasPinholeCameras && (
+              <SliderRow
+                label="Selection α"
+                value={selectionPlaneOpacity}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={setSelectionPlaneOpacity}
+                formatValue={(v) => v.toFixed(2)}
+              />
+            )}
             <SliderRow
               label="Unselected α"
               value={unselectedCameraOpacity}
