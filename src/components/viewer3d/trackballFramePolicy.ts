@@ -73,7 +73,9 @@ const GOTO_LOOK_MATRIX = new THREE.Matrix4();
  * Degenerate guard: if the interpolated look direction is (anti)parallel to `worldUp`, the
  * lookAt basis is undefined, so that single frame falls back to the raw slerp.
  *
- * `out` is mutated in place and returned (no per-frame allocation).
+ * `out` is mutated in place and returned (no per-frame allocation). `out` must NOT alias
+ * `endQuaternion` — slerpQuaternions overwrites `out` before reading its second argument.
+ * (The sole caller passes the camera quaternion with cloned endpoints, which is safe.)
  */
 export function computeGotoFrameQuaternion(
   out: THREE.Quaternion,
