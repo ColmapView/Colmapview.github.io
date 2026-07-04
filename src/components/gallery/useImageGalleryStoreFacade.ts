@@ -12,7 +12,7 @@ import {
   type UIState,
 } from '../../store';
 import { shouldExposeSplatMetricVisualizations } from '../../utils/splatBackendPolicy';
-import { reconstructionHasPinholeCameras } from '../viewer3d/viewerControlsViewModel';
+import { reconstructionHasSplatMetricCapableCamera } from '../../splat/splatMetricCapability';
 import type { Reconstruction } from '../../types/colmap';
 
 interface ImageGalleryDataFacade {
@@ -68,8 +68,8 @@ export interface ImageGalleryStoreFacade {
 
 export function useImageGalleryStoreFacade(): ImageGalleryStoreFacade {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const hasPinholeCameras = useMemo(
-    () => reconstructionHasPinholeCameras(reconstruction),
+  const hasMetricCapableCamera = useMemo(
+    () => reconstructionHasSplatMetricCapableCamera(reconstruction),
     [reconstruction]
   );
   const dataset = useDataset();
@@ -106,7 +106,7 @@ export function useImageGalleryStoreFacade(): ImageGalleryStoreFacade {
   const splatPsnrByImage = useImageMetricsStore((s) => s.splatPsnrMetrics);
   const splatMetricVisualizationsAvailable = shouldExposeSplatMetricVisualizations({
     activeSplatFile,
-    hasPinholeCameras,
+    hasMetricCapableCamera,
     resolution: splatBackendResolution,
     metricAvailability: splatMetricAvailability,
     metricCapability: splatMetricCapability,

@@ -253,60 +253,73 @@ describe('splat backend policy', () => {
 
     expect(shouldExposeSplatMetricVisualizations({
       activeSplatFile,
-      hasPinholeCameras: true,
+      hasMetricCapableCamera: true,
       resolution: sparkResolution,
       metricCapability: resolveSplatMetricCapability({ webGpu: 'ready' }, sparkResolution),
     })).toBe(false);
 
     expect(shouldExposeSplatMetricVisualizations({
       activeSplatFile,
-      hasPinholeCameras: true,
+      hasMetricCapableCamera: true,
       resolution: webGpuResolution,
       metricCapability: resolveSplatMetricCapability({ webGpu: 'ready' }, webGpuResolution),
     })).toBe(true);
 
     expect(shouldExposeSplatMetricVisualizations({
       activeSplatFile,
-      hasPinholeCameras: true,
+      hasMetricCapableCamera: true,
       resolution: webGpuResolution,
       metricCapability: resolveSplatMetricCapability({ webGpu: 'unavailable' }, webGpuResolution),
     })).toBe(true);
 
     expect(shouldExposeSplatMetricVisualizations({
       activeSplatFile: null,
-      hasPinholeCameras: true,
+      hasMetricCapableCamera: true,
       resolution: webGpuResolution,
       metricCapability: resolveSplatMetricCapability({ webGpu: 'ready' }, webGpuResolution),
     })).toBe(false);
 
     expect(shouldExposeSplatMetricVisualizations({
       activeSplatFile,
-      hasPinholeCameras: true,
+      hasMetricCapableCamera: true,
       resolution: resolveSplatBackend('auto', sparkReady),
       metricCapability: resolveSplatMetricCapability({ webGpu: 'unsupported' }, resolveSplatBackend('auto', sparkReady)),
     })).toBe(false);
   });
 
-  it('hides PSNR/SSIM visualizations for a splat dataset with no pinhole camera', () => {
+  it('hides PSNR/SSIM visualizations for a splat dataset with no metric-capable camera', () => {
     const activeSplatFile = { name: 'scene.spz' };
     const webGpuResolution = resolveSplatBackend('webgpu', webGpuReady);
     const metricCapability = resolveSplatMetricCapability({ webGpu: 'ready' }, webGpuResolution);
 
-    // Sanity: the same WebGPU-ready config exposes the metrics when a pinhole camera exists.
+    // Sanity: the same WebGPU-ready config exposes the metrics when a metric-capable camera exists.
     expect(shouldExposeSplatMetricVisualizations({
       activeSplatFile,
-      hasPinholeCameras: true,
+      hasMetricCapableCamera: true,
       resolution: webGpuResolution,
       metricCapability,
     })).toBe(true);
 
-    // A spherical-only dataset can never produce a PSNR (SplatPsnrEvaluator excludes spherical
-    // cameras), so the PSNR/SSIM visualizations must stay hidden even when WebGPU PSNR is ready.
+    // A dataset with no metric-capable camera can never produce PSNR/SSIM, so the
+    // visualizations must stay hidden even when WebGPU PSNR is ready.
     expect(shouldExposeSplatMetricVisualizations({
       activeSplatFile,
-      hasPinholeCameras: false,
+      hasMetricCapableCamera: false,
       resolution: webGpuResolution,
       metricCapability,
     })).toBe(false);
+  });
+
+  it('hides PSNR/SSIM visualizations when no camera is metric-capable', () => {
+    const activeSplatFile = { name: 'scene.spz' };
+    const webGpuResolution = resolveSplatBackend('webgpu', webGpuReady);
+    const webgpuReadyInputs = {
+      activeSplatFile,
+      resolution: webGpuResolution,
+      metricCapability: resolveSplatMetricCapability({ webGpu: 'ready' }, webGpuResolution),
+    };
+
+    expect(shouldExposeSplatMetricVisualizations({ ...webgpuReadyInputs, hasMetricCapableCamera: true })).toBe(true);
+    expect(shouldExposeSplatMetricVisualizations({ ...webgpuReadyInputs, hasMetricCapableCamera: false })).toBe(false);
   });
 });

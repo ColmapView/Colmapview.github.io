@@ -263,21 +263,21 @@ export function resolveSplatMetricCapability(
 
 export function shouldExposeSplatMetricVisualizations({
   activeSplatFile,
-  hasPinholeCameras,
+  hasMetricCapableCamera,
   resolution,
   metricAvailability,
   metricCapability,
 }: {
   activeSplatFile?: unknown | null;
-  hasPinholeCameras: boolean;
+  hasMetricCapableCamera: boolean;
   resolution: SplatBackendResolution;
   metricAvailability?: SplatMetricAvailability;
   metricCapability: SplatMetricCapability;
 }): boolean {
-  // PSNR/SSIM are computed only for pinhole-family cameras (spherical/EQUIRECTANGULAR are
-  // excluded by SplatPsnrEvaluator), so a dataset with no pinhole camera can never produce a
-  // metric — don't expose the PSNR/SSIM visualizations (color modes, gallery borders) for it.
-  if (!hasPinholeCameras) {
+  // PSNR/SSIM can only be computed for cameras whose projection the renderer reproduces
+  // (see splatMetricCapability). A dataset with no metric-capable camera can never produce a
+  // metric, so don't expose the PSNR/SSIM color modes or gallery border modes for it.
+  if (!hasMetricCapableCamera) {
     return false;
   }
 

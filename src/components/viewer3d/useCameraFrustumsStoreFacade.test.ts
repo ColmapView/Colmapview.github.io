@@ -129,7 +129,10 @@ describe('useCameraFrustumsStoreFacade', () => {
 
   it('exposes splat metrics when camera frustum color mode needs them', () => {
     const splatFile = buildFile('scene.spz', 'splat');
-    useReconstructionStore.setState({ loadedFiles: buildLoadedFiles({ splatFile }) });
+    useReconstructionStore.setState({
+      reconstruction: buildReconstruction(),
+      loadedFiles: buildLoadedFiles({ splatFile }),
+    });
     useSplatBackendStore.getState().setRequestedBackend('webgpu');
     useSplatBackendStore.getState().setWebGpuBackendState('ready');
     useSplatBackendStore.getState().setWebGpuMetricState('ready');

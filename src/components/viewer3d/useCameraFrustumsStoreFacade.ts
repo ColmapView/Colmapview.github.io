@@ -26,7 +26,7 @@ import {
 } from '../../store';
 import { useIsAlignmentMode } from '../../hooks/useAlignmentMode';
 import { shouldExposeSplatMetricVisualizations } from '../../utils/splatBackendPolicy';
-import { reconstructionHasPinholeCameras } from './viewerControlsViewModel';
+import { reconstructionHasSplatMetricCapableCamera } from '../../splat/splatMetricCapability';
 import type { Reconstruction } from '../../types/colmap';
 import type { FrustumPsnrMetricSource } from './cameraFrustumViewModel';
 
@@ -60,8 +60,8 @@ export interface CameraFrustumsStoreFacade {
 
 export function useCameraFrustumsStoreFacade(): CameraFrustumsStoreFacade {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
-  const hasPinholeCameras = useMemo(
-    () => reconstructionHasPinholeCameras(reconstruction),
+  const hasMetricCapableCamera = useMemo(
+    () => reconstructionHasSplatMetricCapableCamera(reconstruction),
     [reconstruction]
   );
   const activeSplatFile = useReconstructionStore((s) => s.loadedFiles?.splatFile);
@@ -72,7 +72,7 @@ export function useCameraFrustumsStoreFacade(): CameraFrustumsStoreFacade {
   const splatMetricCapability = useSplatBackendStore((s) => s.metricCapability);
   const splatMetricVisualizationsAvailable = shouldExposeSplatMetricVisualizations({
     activeSplatFile,
-    hasPinholeCameras,
+    hasMetricCapableCamera,
     resolution: splatBackendResolution,
     metricAvailability: splatMetricAvailability,
     metricCapability: splatMetricCapability,

@@ -205,6 +205,22 @@ describe('useViewerControlsStoreFacade', () => {
     expect(result.current.metrics.splatMetricVisualizationsAvailable).toBe(false);
   });
 
+  it('hides splat metric visualizations for a fisheye-only reconstruction', () => {
+    const activeSplatFile = buildFile('model.spz');
+    useReconstructionStore.setState({
+      reconstruction: buildReconstruction({
+        cameras: [buildCamera({ cameraId: 1, modelId: CameraModelId.OPENCV_FISHEYE })],
+      }),
+      loadedFiles: buildLoadedFiles({ splatFile: activeSplatFile }),
+    });
+    useSplatBackendStore.getState().setWebGpuBackendState('ready');
+    useSplatBackendStore.getState().setWebGpuMetricState('ready');
+
+    const { result } = renderHook(() => useViewerControlsStoreFacade());
+
+    expect(result.current.metrics.splatMetricVisualizationsAvailable).toBe(false);
+  });
+
   it('keeps splat metric visualizations for a mixed reconstruction that has a pinhole camera', () => {
     const activeSplatFile = buildFile('model.spz');
     useReconstructionStore.setState({
