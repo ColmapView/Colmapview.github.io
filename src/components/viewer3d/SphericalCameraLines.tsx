@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import type { ImageId } from '../../types/colmap';
+import { cameraModelSupportsSplatMetric } from '../../splat/splatMetricCapability';
 import type { CameraFrustumItem, FrustumColorMode, FrustumPsnrMetricSource } from './cameraFrustumGeometry';
-import { getFrustumBaseColor, getFrustumMetricColorScale, getSphericalEffectiveColorMode } from './cameraFrustumGeometry';
+import { getFrustumBaseColor, getFrustumMetricColorScale } from './cameraFrustumGeometry';
 import { buildSphereLineGeometryData, writeSphereLineAlphas, VERTS_PER_SPHERE, FLOATS_PER_SPHERE } from './sphericalCameraGeometry';
 import {
   createFatLineSegmentsObject, disposeFatLineSegmentsObject,
@@ -31,11 +32,6 @@ export function SphericalCameraLines({
   frustumLineWidth, frustumStandbyOpacity, selectionColor, unselectedCameraOpacity,
   imageFrameIndexMap, splatPsnrByImage,
 }: SphericalCameraLinesProps) {
-  // Spherical cameras have no PSNR/SSIM, so a splat-metric mode falls back to byCamera
-  // (never the "metric unavailable" gray). The builder applies the same mapping internally;
-  // the recolor effect below must use this derived mode so both spherical paths agree.
-  const effectiveColorMode = useMemo(() => getSphericalEffectiveColorMode(frustumColorMode), [frustumColorMode]);
-
   const { positions, baseColors, baseAlphas } = useMemo(
     () => buildSphereLineGeometryData(frustums, cameraScale, { frustumColorMode, frustumSingleColor, imageFrameIndexMap, splatPsnrByImage }),
     [frustums, cameraScale, frustumColorMode, frustumSingleColor, imageFrameIndexMap, splatPsnrByImage]
@@ -60,11 +56,20 @@ export function SphericalCameraLines({
     const colors = getFatLineColorArray(fatLines.geometry);
     const alphas = getFatLineAlphaArray(fatLines.geometry);
     if (!colors || !alphas) return;
-    const metricColorScale = getFrustumMetricColorScale(effectiveColorMode, frustums.map((f) => f.image.imageId), splatPsnrByImage);
+    const metricColorScale = getFrustumMetricColorScale(frustumColorMode, frustums.map((f) => f.image.imageId), splatPsnrByImage);
     const c = new THREE.Color();
     frustums.forEach((frustum, index) => {
       const isSelected = frustum.image.imageId === selectedImageId;
-      c.set(isSelected ? selectionColor : getFrustumBaseColor(effectiveColorMode, frustum.cameraIndex, frustum.image.imageId, imageFrameIndexMap, frustumSingleColor, splatPsnrByImage, metricColorScale));
+      c.set(isSelected ? selectionColor : getFrustumBaseColor(
+        frustumColorMode,
+        cameraModelSupportsSplatMetric(frustum.camera.modelId),
+        frustum.cameraIndex,
+        frustum.image.imageId,
+        imageFrameIndexMap,
+        frustumSingleColor,
+        splatPsnrByImage,
+        metricColorScale
+      ));
       const base = index * FLOATS_PER_SPHERE;
       for (let v = 0; v < VERTS_PER_SPHERE; v++) {
         colors[base + v * 3] = c.r; colors[base + v * 3 + 1] = c.g; colors[base + v * 3 + 2] = c.b;
@@ -73,7 +78,7 @@ export function SphericalCameraLines({
     writeSphereLineAlphas(alphas, frustums, selectedImageId, hoveredImageId, frustumStandbyOpacity, unselectedCameraOpacity);
     markFatLineColorsNeedUpdate(fatLines.geometry);
     markFatLineAlphasNeedUpdate(fatLines.geometry);
-  }, [fatLines, frustums, selectedImageId, hoveredImageId, selectionColor, effectiveColorMode, frustumSingleColor, imageFrameIndexMap, splatPsnrByImage, frustumStandbyOpacity, unselectedCameraOpacity]);
+  }, [fatLines, frustums, selectedImageId, hoveredImageId, selectionColor, frustumColorMode, frustumSingleColor, imageFrameIndexMap, splatPsnrByImage, frustumStandbyOpacity, unselectedCameraOpacity]);
 
   if (frustums.length === 0) return null;
   return <primitive object={fatLines.object} />;

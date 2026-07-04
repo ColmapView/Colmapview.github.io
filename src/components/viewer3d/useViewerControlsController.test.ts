@@ -9,7 +9,7 @@ import {
   useSplatBackendStore,
   useUIStore,
 } from '../../store';
-import { buildFile, buildLoadedFiles } from '../../test/builders';
+import { buildFile, buildLoadedFiles, buildReconstruction } from '../../test/builders';
 import { useViewerControlsController } from './useViewerControlsController';
 
 function setWebGpuSplatMetricsReady() {
@@ -46,7 +46,10 @@ describe('useViewerControlsController', () => {
     useImageMetricsStore.setState({ splatPsnrFrameReady: true });
     usePointCloudStore.setState({ showPointCloud: true, colorMode: 'rgb', showSplats: false });
     useCameraStore.setState({ frustumColorMode: 'byCamera' });
-    useReconstructionStore.setState({ loadedFiles: buildLoadedFiles({ splatFile }) });
+    useReconstructionStore.setState({
+      reconstruction: buildReconstruction(),
+      loadedFiles: buildLoadedFiles({ splatFile }),
+    });
     const { result } = renderHook(() => useViewerControlsController());
 
     act(() => {
@@ -63,7 +66,10 @@ describe('useViewerControlsController', () => {
     useImageMetricsStore.setState({ splatPsnrFrameReady: true });
     usePointCloudStore.setState({ showPointCloud: true, colorMode: 'trackLength', showSplats: false });
     useCameraStore.setState({ frustumColorMode: 'single' });
-    useReconstructionStore.setState({ loadedFiles: buildLoadedFiles({ splatFile }) });
+    useReconstructionStore.setState({
+      reconstruction: buildReconstruction(),
+      loadedFiles: buildLoadedFiles({ splatFile }),
+    });
     const { result } = renderHook(() => useViewerControlsController());
 
     act(() => {
@@ -80,7 +86,10 @@ describe('useViewerControlsController', () => {
     useImageMetricsStore.setState({ splatPsnrFrameReady: false });
     usePointCloudStore.setState({ showPointCloud: true, colorMode: 'rgb', showSplats: false });
     useCameraStore.setState({ frustumColorMode: 'byCamera' });
-    useReconstructionStore.setState({ loadedFiles: buildLoadedFiles({ splatFile }) });
+    useReconstructionStore.setState({
+      reconstruction: buildReconstruction(),
+      loadedFiles: buildLoadedFiles({ splatFile }),
+    });
     const { result } = renderHook(() => useViewerControlsController());
 
     act(() => {
@@ -101,6 +110,7 @@ describe('useViewerControlsController', () => {
     setWebGpuSplatMetricsReady();
     useImageMetricsStore.setState({ splatPsnrFrameReady: true });
     useCameraStore.setState({ frustumColorMode: 'byCamera' });
+    useReconstructionStore.setState({ reconstruction: buildReconstruction() });
     act(() => {
       useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles({ splatFile }));
     });
@@ -116,6 +126,7 @@ describe('useViewerControlsController', () => {
     setWebGpuSplatMetricsPreparing();
     useImageMetricsStore.setState({ splatPsnrFrameReady: false });
     useCameraStore.setState({ frustumColorMode: 'byCamera' });
+    useReconstructionStore.setState({ reconstruction: buildReconstruction() });
     act(() => {
       useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles({ splatFile }));
     });
@@ -135,6 +146,7 @@ describe('useViewerControlsController', () => {
     setWebGpuSplatMetricsPreparing();
     useImageMetricsStore.setState({ splatPsnrFrameReady: false });
     useCameraStore.setState({ frustumColorMode: 'byCamera' });
+    useReconstructionStore.setState({ reconstruction: buildReconstruction() });
     act(() => {
       useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles({ splatFile }));
     });

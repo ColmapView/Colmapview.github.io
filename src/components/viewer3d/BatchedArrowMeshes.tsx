@@ -5,6 +5,7 @@ import { useFrame } from '@react-three/fiber';
 import type { SelectionColorMode } from '../../store/types';
 import type { Camera, Image } from '../../types/colmap';
 import { VIZ_COLORS, RAINBOW } from '../../theme';
+import { cameraModelSupportsSplatMetric } from '../../splat/splatMetricCapability';
 import {
   getFrustumBaseColor,
   getFrustumMetricColorScale,
@@ -230,6 +231,7 @@ export function BatchedArrowMeshes({
         case 'base':
           tempColor.set(getFrustumBaseColor(
             frustumColorMode,
+            cameraModelSupportsSplatMetric(f.camera.modelId),
             f.cameraIndex,
             f.image.imageId,
             imageFrameIndexMap,

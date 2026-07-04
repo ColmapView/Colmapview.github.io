@@ -8,8 +8,8 @@ import {
   getFrustumBaseColor,
   getFrustumMetricColorScale,
   getFrustumPlaneSize,
-  getSphericalEffectiveColorMode,
   isSplatMetricColorMode,
+  type FrustumGeometryItem,
 } from './cameraFrustumGeometry';
 import {
   buildCamera,
@@ -19,6 +19,27 @@ import {
   buildReconstruction,
 } from '../../test/builders';
 import { CameraModelId } from '../../types/colmap';
+import type { ImageId } from '../../types/colmap';
+import { getCameraColor } from '../../theme';
+import { SPLAT_PSNR_UNAVAILABLE_COLOR } from './splatPsnrMetric';
+
+function buildFrustumGeometryItem({
+  modelId = CameraModelId.PINHOLE,
+  cameraIndex = 0,
+  imageId = 1 as ImageId,
+}: {
+  modelId?: CameraModelId;
+  cameraIndex?: number;
+  imageId?: ImageId;
+} = {}): FrustumGeometryItem {
+  return {
+    camera: buildCamera({ modelId }),
+    image: buildImage({ imageId }),
+    position: new THREE.Vector3(),
+    quaternion: new THREE.Quaternion(),
+    cameraIndex,
+  };
+}
 
 describe('camera frustum geometry helpers', () => {
   it('builds camera and rig-frame color indexes used for frustum coloring', () => {
@@ -47,11 +68,12 @@ describe('camera frustum geometry helpers', () => {
       [frameB0.imageId, 1],
       [frameB1.imageId, 1],
     ]);
-    expect(getFrustumBaseColor('single', 0, frameA0.imageId, imageFrameIndexMap, '#123456')).toBe('#123456');
-    expect(getFrustumBaseColor('byRigFrame', 7, frameA1.imageId, imageFrameIndexMap, '#123456')).not.toBe('#123456');
-    expect(getFrustumBaseColor('byRigFrame', 7, unpaired.imageId, imageFrameIndexMap, '#123456')).toBe('#123456');
+    expect(getFrustumBaseColor('single', true, 0, frameA0.imageId, imageFrameIndexMap, '#123456')).toBe('#123456');
+    expect(getFrustumBaseColor('byRigFrame', true, 7, frameA1.imageId, imageFrameIndexMap, '#123456')).not.toBe('#123456');
+    expect(getFrustumBaseColor('byRigFrame', true, 7, unpaired.imageId, imageFrameIndexMap, '#123456')).toBe('#123456');
     expect(getFrustumBaseColor(
       'splatPsnr',
+      true,
       7,
       frameA0.imageId,
       imageFrameIndexMap,
@@ -60,6 +82,7 @@ describe('camera frustum geometry helpers', () => {
     )).toBe('#22c55e');
     expect(getFrustumBaseColor(
       'splatSsim',
+      true,
       7,
       frameA0.imageId,
       imageFrameIndexMap,
@@ -81,6 +104,7 @@ describe('camera frustum geometry helpers', () => {
     expect(psnrScale).toEqual({ min: 20, max: 35 });
     expect(getFrustumBaseColor(
       'splatPsnr',
+      true,
       7,
       frameA0.imageId,
       imageFrameIndexMap,
@@ -90,6 +114,7 @@ describe('camera frustum geometry helpers', () => {
     )).toBe('#ef4444');
     expect(getFrustumBaseColor(
       'splatPsnr',
+      true,
       7,
       frameB1.imageId,
       imageFrameIndexMap,
@@ -110,6 +135,7 @@ describe('camera frustum geometry helpers', () => {
     expect(ssimScale).toEqual({ min: 0.82, max: 0.92 });
     expect(getFrustumBaseColor(
       'splatSsim',
+      true,
       7,
       frameA0.imageId,
       imageFrameIndexMap,
@@ -119,6 +145,7 @@ describe('camera frustum geometry helpers', () => {
     )).toBe('#ef4444');
     expect(getFrustumBaseColor(
       'splatSsim',
+      true,
       7,
       frameA1.imageId,
       imageFrameIndexMap,
@@ -295,13 +322,35 @@ describe('splat-metric color mode helpers', () => {
     expect(isSplatMetricColorMode('byRigFrame')).toBe(false);
   });
 
-  it('getSphericalEffectiveColorMode maps the metric modes to byCamera and passes the rest through', () => {
-    // Spherical cameras have no PSNR/SSIM, so a metric mode falls back to per-camera color.
-    expect(getSphericalEffectiveColorMode('splatPsnr')).toBe('byCamera');
-    expect(getSphericalEffectiveColorMode('splatSsim')).toBe('byCamera');
-    // Non-metric modes are unchanged.
-    expect(getSphericalEffectiveColorMode('single')).toBe('single');
-    expect(getSphericalEffectiveColorMode('byCamera')).toBe('byCamera');
-    expect(getSphericalEffectiveColorMode('byRigFrame')).toBe('byRigFrame');
+  it('renders a non-capable camera in its byCamera color under a metric mode', () => {
+    expect(getFrustumBaseColor('splatPsnr', false, 0, 1 as ImageId, new Map(), '#000000'))
+      .toBe(getCameraColor(0));
   });
+
+  it('keeps the gray unavailable color for a capable camera with no metric (pending)', () => {
+    expect(getFrustumBaseColor('splatPsnr', true, 0, 1 as ImageId, new Map(), '#000000'))
+      .toBe(SPLAT_PSNR_UNAVAILABLE_COLOR);
+  });
+
+  it('uses the metric heatmap for a capable camera that has a value', () => {
+    const map = new Map([[1 as ImageId, { psnr: 30 }]]);
+    const color = getFrustumBaseColor('splatPsnr', true, 0, 1 as ImageId, new Map(), '#000000', map);
+    expect(color).not.toBe(getCameraColor(0));
+    expect(color).not.toBe(SPLAT_PSNR_UNAVAILABLE_COLOR);
+  });
+
+  it('buildFrustumLineGeometryData colors a fisheye camera byCamera under splatPsnr', () => {
+    const item = buildFrustumGeometryItem({ modelId: CameraModelId.FISHEYE, cameraIndex: 0, imageId: 1 as ImageId });
+    const { baseColors } = buildFrustumLineGeometryData([item], 0.1, {
+      frustumColorMode: 'splatPsnr',
+      frustumSingleColor: '#000000',
+      imageFrameIndexMap: new Map(),
+      splatPsnrByImage: new Map(),
+    });
+    const expected = new THREE.Color(getCameraColor(0));
+    expect(baseColors[0]).toBeCloseTo(expected.r, 5);
+    expect(baseColors[1]).toBeCloseTo(expected.g, 5);
+    expect(baseColors[2]).toBeCloseTo(expected.b, 5);
+  });
+
 });

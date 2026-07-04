@@ -4,6 +4,7 @@ import { getCameraColor } from '../../theme';
 import { getImageWorldPose } from '../../utils/colmapTransforms';
 import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
 import { cameraModelHasPinholeIntrinsics } from '../../utils/cameraModelRegistry';
+import { cameraModelSupportsSplatMetric } from '../../splat/splatMetricCapability';
 import {
   computeSplatMetricColorScale,
   getSplatMetricScaleColor,
@@ -17,16 +18,6 @@ export type FrustumPsnrMetricSource = ReadonlyMap<ImageId, { psnr: number; ssim?
 
 export function isSplatMetricColorMode(mode: FrustumColorMode): boolean {
   return mode === 'splatPsnr' || mode === 'splatSsim';
-}
-
-/**
- * Spherical cameras have no splat PSNR/SSIM computed, so the metric color modes don't
- * apply to them — fall back to the default per-camera coloring instead of the
- * "metric unavailable" gray (which reads as a bad/unknown score). Pinhole frustums are
- * unaffected. See SphericalCameraLines / buildSphereLineGeometryData.
- */
-export function getSphericalEffectiveColorMode(mode: FrustumColorMode): FrustumColorMode {
-  return isSplatMetricColorMode(mode) ? 'byCamera' : mode;
 }
 
 export interface FrustumImageSource {
@@ -64,6 +55,7 @@ export type FrustumGeometryItem = Pick<
 
 export function getFrustumBaseColor(
   frustumColorMode: FrustumColorMode,
+  supportsSplatMetric: boolean,
   cameraIndex: number,
   imageId: ImageId,
   imageFrameIndexMap: Map<ImageId, number>,
@@ -71,6 +63,13 @@ export function getFrustumBaseColor(
   splatPsnrByImage?: FrustumPsnrMetricSource,
   metricColorScale?: SplatMetricColorScale | null
 ): string {
+  // Not applicable: a camera whose projection the metric renderer can't reproduce has no
+  // metric. Show its normal identity color instead of the unavailable gray, which would
+  // read as a bad or pending score. Capable cameras fall through to metric/pending below.
+  if (isSplatMetricColorMode(frustumColorMode) && !supportsSplatMetric) {
+    return getCameraColor(cameraIndex);
+  }
+
   if (frustumColorMode === 'splatPsnr') {
     const psnr = splatPsnrByImage?.get(imageId)?.psnr;
     return metricColorScale
@@ -282,6 +281,7 @@ export function buildFrustumLineGeometryData(
 
     color.set(getFrustumBaseColor(
       frustumColorMode,
+      cameraModelSupportsSplatMetric(frustum.camera.modelId),
       frustum.cameraIndex,
       frustum.image.imageId,
       imageFrameIndexMap,

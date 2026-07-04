@@ -1,5 +1,6 @@
 import { VIZ_COLORS } from '../../theme';
 import type { ImageId } from '../../types/colmap';
+import { cameraModelSupportsSplatMetric } from '../../splat/splatMetricCapability';
 import {
   getFrustumBaseColor,
   getFrustumMetricColorScale,
@@ -65,6 +66,7 @@ export function buildImagePlaneRenderItems({
     const isMatched = matchedImageIds.has(imageId);
     const baseColor = getFrustumBaseColor(
       frustumColorMode,
+      cameraModelSupportsSplatMetric(frustum.camera.modelId),
       frustum.cameraIndex,
       imageId,
       imageFrameIndexMap,

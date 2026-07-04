@@ -1335,7 +1335,7 @@ describe('SplatPsnrEvaluator', () => {
     );
   });
 
-  it('notifies once when a compute-all excludes spherical cameras and proceeds over the pinhole images', async () => {
+  it('notifies once when a compute-all excludes unsupported cameras and proceeds over the pinhole images', async () => {
     const pinholeCameraA = buildCamera({ cameraId: 1, width: 4, height: 3 });
     const pinholeCameraB = buildCamera({ cameraId: 2, width: 4, height: 3 });
     const sphericalCamera = buildCamera({
@@ -1390,15 +1390,15 @@ describe('SplatPsnrEvaluator', () => {
       expect.arrayContaining([spherical1.imageId])
     );
 
-    // Exactly one info notification, naming the count and "spherical".
+    // Exactly one info notification, naming the count and unsupported-camera reason.
     const notifications = actions.addNotification.mock.calls;
     expect(notifications).toHaveLength(1);
     expect(notifications[0][0]).toBe('info');
-    expect(notifications[0][1]).toContain('spherical');
+    expect(notifications[0][1]).toContain('unsupported');
     expect(notifications[0][1]).toContain('3');
   });
 
-  it('warns and starts no compute when the selected camera is spherical', async () => {
+  it('warns and starts no compute when the selected camera is unsupported', async () => {
     const sphericalCamera = buildCamera({
       cameraId: 1,
       modelId: CameraModelId.EQUIRECTANGULAR,
@@ -1424,10 +1424,10 @@ describe('SplatPsnrEvaluator', () => {
     });
     expect(actions.addNotification).toHaveBeenCalledWith(
       'warning',
-      expect.stringContaining('spherical')
+      expect.stringContaining('camera model')
     );
 
-    // No pointless compute is started for a spherical selection.
+    // No pointless compute is started for an unsupported selection.
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
