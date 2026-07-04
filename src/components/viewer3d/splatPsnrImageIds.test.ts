@@ -35,6 +35,12 @@ function buildMixedReconstruction(pinholeCount: number, sphericalCount: number) 
   return buildReconstruction({ cameras, images });
 }
 
+function buildReconstructionWithCameraModels(modelIds: CameraModelId[]) {
+  const cameras = modelIds.map((modelId, i) => buildCamera({ cameraId: i, modelId }));
+  const images = modelIds.map((_, i) => buildImage({ imageId: i, cameraId: i }));
+  return buildReconstruction({ cameras, images });
+}
+
 describe('getRequestedSplatPsnrImageIds', () => {
   describe('scope=all', () => {
     it('excludes images whose camera is EQUIRECTANGULAR (spherical)', () => {
@@ -85,28 +91,18 @@ describe('getRequestedSplatPsnrImageIds', () => {
       expect(result).toHaveLength(1);
     });
 
-    it('includes images with fisheye cameras so the existing assertPinholeCamera backstop can handle them', () => {
-      // Fisheye is not pinhole, but it was already handled by assertPinholeCamera in the session.
-      // This test documents that only spherical (EQUIRECTANGULAR) cameras are excluded upstream;
-      // other non-pinhole models (fisheye, etc.) continue to reach the session guard.
-      const pinholeCamera = buildCamera({ cameraId: 1 });
-      const fisheyeCamera = buildCamera({
-        cameraId: 2,
-        modelId: CameraModelId.OPENCV_FISHEYE,
-        params: [500, 500, 320, 240, 0, 0, 0, 0],
-      });
-      const pinholeImage = buildImage({ imageId: 1, cameraId: 1 });
-      const fisheyeImage = buildImage({ imageId: 2, cameraId: 2 });
-      const reconstruction = buildReconstruction({
-        cameras: [pinholeCamera, fisheyeCamera],
-        images: [pinholeImage, fisheyeImage],
-      });
+    it('keeps only metric-capable (undistorted pinhole) images', () => {
+      const reconstruction = buildReconstructionWithCameraModels([
+        CameraModelId.PINHOLE,
+        CameraModelId.OPENCV,
+        CameraModelId.FISHEYE,
+        CameraModelId.EQUIRECTANGULAR,
+      ]);
 
-      const result = getRequestedSplatPsnrImageIds({ id: 1, scope: 'all' }, reconstruction);
+      const selection = getSplatPsnrImageSelection({ id: 1, scope: 'all' }, reconstruction);
 
-      expect(result).toContain(1);
-      // Fisheye reaches the session backstop (assertPinholeCamera throws), not filtered here
-      expect(result).toContain(2);
+      expect(selection.imageIds).toEqual([0]);
+      expect(selection.excludedUnsupportedCount).toBe(3);
     });
   });
 
@@ -156,15 +152,15 @@ describe('getRequestedSplatPsnrImageIds', () => {
 });
 
 describe('getSplatPsnrImageSelection', () => {
-  it('scope=all surfaces the excluded spherical count on a mixed dataset', () => {
+  it('scope=all surfaces the excluded unsupported count on a mixed dataset', () => {
     const reconstruction = buildMixedReconstruction(2, 3);
 
     const selection = getSplatPsnrImageSelection({ id: 1, scope: 'all' }, reconstruction);
 
     // Two pinhole images (ids 1, 2) proceed; three spherical (ids 3, 4, 5) are excluded.
     expect(selection.imageIds).toEqual([1, 2]);
-    expect(selection.excludedSphericalCount).toBe(3);
-    expect(selection.selectedIsSpherical).toBe(false);
+    expect(selection.excludedUnsupportedCount).toBe(3);
+    expect(selection.selectedIsUnsupported).toBe(false);
   });
 
   it('scope=all reports zero exclusions for an all-pinhole dataset', () => {
@@ -173,8 +169,8 @@ describe('getSplatPsnrImageSelection', () => {
     const selection = getSplatPsnrImageSelection({ id: 1, scope: 'all' }, reconstruction);
 
     expect(selection.imageIds).toEqual([1, 2, 3]);
-    expect(selection.excludedSphericalCount).toBe(0);
-    expect(selection.selectedIsSpherical).toBe(false);
+    expect(selection.excludedUnsupportedCount).toBe(0);
+    expect(selection.selectedIsUnsupported).toBe(false);
   });
 
   it('scope=all reports every image excluded for an all-spherical dataset', () => {
@@ -183,8 +179,8 @@ describe('getSplatPsnrImageSelection', () => {
     const selection = getSplatPsnrImageSelection({ id: 1, scope: 'all' }, reconstruction);
 
     expect(selection.imageIds).toEqual([]);
-    expect(selection.excludedSphericalCount).toBe(4);
-    expect(selection.selectedIsSpherical).toBe(false);
+    expect(selection.excludedUnsupportedCount).toBe(4);
+    expect(selection.selectedIsUnsupported).toBe(false);
   });
 
   it('scope=selected flags a spherical selection and yields no image ids', () => {
@@ -196,8 +192,20 @@ describe('getSplatPsnrImageSelection', () => {
     );
 
     expect(selection.imageIds).toEqual([]);
-    expect(selection.selectedIsSpherical).toBe(true);
-    expect(selection.excludedSphericalCount).toBe(0);
+    expect(selection.selectedIsUnsupported).toBe(true);
+    expect(selection.excludedUnsupportedCount).toBe(0);
+  });
+
+  it('scope=selected flags a fisheye selection as unsupported', () => {
+    const reconstruction = buildReconstructionWithCameraModels([CameraModelId.FISHEYE]);
+
+    const selection = getSplatPsnrImageSelection(
+      { id: 1, scope: 'selected', selectedImageId: 0 },
+      reconstruction
+    );
+
+    expect(selection.imageIds).toEqual([]);
+    expect(selection.selectedIsUnsupported).toBe(true);
   });
 
   it('scope=selected keeps a pinhole selection and does not flag spherical', () => {
@@ -209,8 +217,8 @@ describe('getSplatPsnrImageSelection', () => {
     );
 
     expect(selection.imageIds).toEqual([1]);
-    expect(selection.selectedIsSpherical).toBe(false);
-    expect(selection.excludedSphericalCount).toBe(0);
+    expect(selection.selectedIsUnsupported).toBe(false);
+    expect(selection.excludedUnsupportedCount).toBe(0);
   });
 
   it('mirrors getRequestedSplatPsnrImageIds exactly for every scope', () => {
@@ -228,38 +236,45 @@ describe('getSplatPsnrImageSelection', () => {
 });
 
 describe('getSplatPsnrExclusionNotice', () => {
-  it('returns an info notice naming the spherical count for partial exclusion', () => {
+  it('returns an info notice naming the unsupported count for partial exclusion', () => {
     const notice = getSplatPsnrExclusionNotice({
       imageIds: [1, 2],
-      excludedSphericalCount: 3,
-      selectedIsSpherical: false,
+      excludedUnsupportedCount: 3,
+      selectedIsUnsupported: false,
     });
 
     expect(notice).not.toBeNull();
     expect(notice?.type).toBe('info');
-    expect(notice?.message).toContain('spherical');
+    expect(notice?.message).toMatch(/unsupported/i);
     expect(notice?.message).toContain('3');
   });
 
-  it('returns a warning notice for a spherical selection', () => {
+  it('returns a warning notice for an unsupported selection', () => {
     const notice = getSplatPsnrExclusionNotice({
       imageIds: [],
-      excludedSphericalCount: 0,
-      selectedIsSpherical: true,
+      excludedUnsupportedCount: 0,
+      selectedIsUnsupported: true,
     });
 
     expect(notice).not.toBeNull();
     expect(notice?.type).toBe('warning');
-    expect(notice?.message).toContain('spherical');
+    expect(notice?.message).toMatch(/camera model/i);
   });
 
   it('returns null when nothing is excluded', () => {
     expect(
       getSplatPsnrExclusionNotice({
         imageIds: [1, 2, 3],
-        excludedSphericalCount: 0,
-        selectedIsSpherical: false,
+        excludedUnsupportedCount: 0,
+        selectedIsUnsupported: false,
       })
     ).toBeNull();
+  });
+
+  it('surfaces a generalized exclusion notice', () => {
+    const selection = { imageIds: [], excludedUnsupportedCount: 2, selectedIsUnsupported: false };
+
+    expect(getSplatPsnrExclusionNotice(selection)?.message).toContain('2');
+    expect(getSplatPsnrExclusionNotice(selection)?.message).toMatch(/unsupported/i);
   });
 });

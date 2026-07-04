@@ -1,29 +1,28 @@
 import type { ImageId, Reconstruction } from '../../types/colmap';
 import type { NotificationType, SplatPsnrComputeRequest } from '../../store';
-import { cameraModelHasPinholeIntrinsics } from '../../utils/cameraModelRegistry';
+import { cameraModelSupportsSplatMetric } from '../../splat/splatMetricCapability';
 
 /**
  * The image IDs to evaluate for a splat PSNR compute request, plus the
- * spherical-exclusion bookkeeping needed to notify the user.
+ * unsupported-camera bookkeeping needed to notify the user.
  *
- * Spherical (EQUIRECTANGULAR) cameras are filtered out here — they have no
- * focal-length intrinsics and cannot be rendered by the pinhole splat pipeline.
- * `cameraModelHasPinholeIntrinsics` is the exact complement of the spherical
- * family, so the excluded set is precisely the spherical cameras.
+ * Metric-capable cameras are currently undistorted pinhole cameras. Distorted
+ * pinhole, fisheye, and spherical cameras are filtered out here so they never
+ * enter the pending queue or reach the session backstop in normal flow.
  */
 export interface SplatPsnrImageSelection {
   /** Image IDs that should proceed into the PSNR pipeline. */
   imageIds: ImageId[];
   /**
    * `scope: 'all'` only — how many images were dropped because their camera is
-   * spherical. Zero for `scope: 'selected'` (see `selectedIsSpherical` instead).
+   * unsupported. Zero for `scope: 'selected'` (see `selectedIsUnsupported` instead).
    */
-  excludedSphericalCount: number;
+  excludedUnsupportedCount: number;
   /**
    * `scope: 'selected'` only — true when the selected image's camera is
-   * spherical, i.e. the compute would be a silent no-op.
+   * unsupported, i.e. the compute would be a silent no-op.
    */
-  selectedIsSpherical: boolean;
+  selectedIsUnsupported: boolean;
 }
 
 /**
@@ -37,16 +36,11 @@ export interface SplatPsnrExclusionNotice {
 
 /**
  * Resolves the image IDs to evaluate for a splat PSNR compute request and the
- * spherical-exclusion facts a caller needs to notify the user exactly once.
+ * unsupported-camera exclusion facts a caller needs to notify the user exactly once.
  *
- * Spherical (EQUIRECTANGULAR) cameras are filtered out — they have no
- * focal-length intrinsics and cannot be rendered by the pinhole splat pipeline.
- * Filtering here means they never enter the pending queue, so the store is not
- * left with orphaned pending entries.
- *
- * Other non-pinhole cameras (fisheye, etc.) are still passed through so that
- * the existing `assertPinholeCamera` backstop in the WebGPU PSNR session can
- * handle them consistently.
+ * Metric-capable cameras (undistorted pinhole) are kept; everything else
+ * (distorted pinhole, fisheye, spherical) is excluded here so it never enters
+ * the pending queue, rather than being passed through to the session backstop.
  */
 export function getSplatPsnrImageSelection(
   request: SplatPsnrComputeRequest,
@@ -55,23 +49,23 @@ export function getSplatPsnrImageSelection(
   if (request.scope === 'selected') {
     const { selectedImageId } = request;
     if (selectedImageId === undefined || selectedImageId === null) {
-      return { imageIds: [], excludedSphericalCount: 0, selectedIsSpherical: false };
+      return { imageIds: [], excludedUnsupportedCount: 0, selectedIsUnsupported: false };
     }
     const image = reconstruction.images.get(selectedImageId);
     const camera = image ? reconstruction.cameras.get(image.cameraId) : undefined;
-    if (camera && !cameraModelHasPinholeIntrinsics(camera.modelId)) {
-      // The selected image's camera is spherical — nothing to compute.
-      return { imageIds: [], excludedSphericalCount: 0, selectedIsSpherical: true };
+    if (camera && !cameraModelSupportsSplatMetric(camera.modelId)) {
+      // The selected image's camera is unsupported, so there is nothing to compute.
+      return { imageIds: [], excludedUnsupportedCount: 0, selectedIsUnsupported: true };
     }
-    return { imageIds: [selectedImageId], excludedSphericalCount: 0, selectedIsSpherical: false };
+    return { imageIds: [selectedImageId], excludedUnsupportedCount: 0, selectedIsUnsupported: false };
   }
 
-  // scope === 'all': exclude images with spherical cameras and count them.
+  // scope === 'all': exclude images with unsupported cameras and count them.
   // Images whose camera cannot be found are kept so that prepareSplatPsnrImage
   // can report the "Missing camera or image" error as usual (not counted as
-  // spherical exclusions).
+  // unsupported exclusions).
   const imageIds: ImageId[] = [];
-  let excludedSphericalCount = 0;
+  let excludedUnsupportedCount = 0;
   for (const imageId of reconstruction.images.keys()) {
     const image = reconstruction.images.get(imageId);
     if (!image) continue;
@@ -80,13 +74,13 @@ export function getSplatPsnrImageSelection(
       imageIds.push(imageId); // missing camera — pass through to existing error handling
       continue;
     }
-    if (cameraModelHasPinholeIntrinsics(camera.modelId)) {
+    if (cameraModelSupportsSplatMetric(camera.modelId)) {
       imageIds.push(imageId);
     } else {
-      excludedSphericalCount++;
+      excludedUnsupportedCount++;
     }
   }
-  return { imageIds, excludedSphericalCount, selectedIsSpherical: false };
+  return { imageIds, excludedUnsupportedCount, selectedIsUnsupported: false };
 }
 
 /**
@@ -101,17 +95,16 @@ export function getRequestedSplatPsnrImageIds(
   return getSplatPsnrImageSelection(request, reconstruction).imageIds;
 }
 
-/** Warning shown when a spherical camera is selected for a PSNR compute. */
-export const SPLAT_PSNR_SELECTED_SPHERICAL_MESSAGE =
-  'PSNR is not available for spherical cameras. Select a pinhole camera to compute PSNR.';
+/** Warning shown when an unsupported camera model is selected for a PSNR compute. */
+export const SPLAT_PSNR_SELECTED_UNSUPPORTED_MESSAGE =
+  'PSNR is not available for this camera model. Select an undistorted pinhole camera to compute PSNR.';
 
 /**
  * Info shown when some (but not all) images are dropped from a compute-all.
- * The count is per IMAGE (one spherical camera is often shared by many
- * panorama images), so the message must say "image(s)", not "camera(s)".
+ * The count is per IMAGE, so the message must say "image(s)", not "camera(s)".
  */
-export function formatSplatPsnrExcludedSphericalMessage(count: number): string {
-  return `Skipped ${count} spherical image(s) for PSNR; only pinhole cameras are supported.`;
+export function formatSplatPsnrExcludedUnsupportedMessage(count: number): string {
+  return `Skipped ${count} unsupported image(s) for PSNR; only undistorted pinhole cameras are supported.`;
 }
 
 /**
@@ -122,13 +115,13 @@ export function formatSplatPsnrExcludedSphericalMessage(count: number): string {
 export function getSplatPsnrExclusionNotice(
   selection: SplatPsnrImageSelection
 ): SplatPsnrExclusionNotice | null {
-  if (selection.selectedIsSpherical) {
-    return { type: 'warning', message: SPLAT_PSNR_SELECTED_SPHERICAL_MESSAGE };
+  if (selection.selectedIsUnsupported) {
+    return { type: 'warning', message: SPLAT_PSNR_SELECTED_UNSUPPORTED_MESSAGE };
   }
-  if (selection.excludedSphericalCount > 0) {
+  if (selection.excludedUnsupportedCount > 0) {
     return {
       type: 'info',
-      message: formatSplatPsnrExcludedSphericalMessage(selection.excludedSphericalCount),
+      message: formatSplatPsnrExcludedUnsupportedMessage(selection.excludedUnsupportedCount),
     };
   }
   return null;

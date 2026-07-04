@@ -1163,16 +1163,16 @@ export function SplatPsnrEvaluator() {
       cancelSplatPsnrTask(activeTaskRef.current, snapshot.actions, false, snapshot.releaseRenderSession);
     }
 
-    // Surface spherical exclusions once per user-triggered compute (this effect
+    // Surface unsupported-camera exclusions once per user-triggered compute (this effect
     // runs at most once per request id). A compute-all over a mixed dataset
-    // emits an info notice and still proceeds over the pinhole images; a
-    // spherical selection emits a warning and starts no pointless compute.
+    // emits an info notice and still proceeds over metric-capable images; an
+    // unsupported selection emits a warning and starts no pointless compute.
     const selection = getSplatPsnrImageSelection(request, snapshot.reconstruction);
     const exclusionNotice = getSplatPsnrExclusionNotice(selection);
     if (exclusionNotice) {
       snapshot.addNotification(exclusionNotice.type, exclusionNotice.message);
     }
-    if (selection.selectedIsSpherical) {
+    if (selection.selectedIsUnsupported) {
       activeTaskRef.current = null;
       lastHandledRequestRef.current = nextRequestId;
       snapshot.actions.finishSplatPsnrCompute();
