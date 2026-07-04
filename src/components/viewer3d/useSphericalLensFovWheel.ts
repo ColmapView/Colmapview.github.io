@@ -20,12 +20,23 @@ interface SphericalLensFovWheelOptions {
    */
   domElement: HTMLElement;
   /**
-   * Live pointer-in-lens gate, written each frame by the Photosphere's useFrame. True ONLY
-   * while the eye is inside the sphere AND the pointer is inside the lens circle — so a wheel
-   * INSIDE the circle changes fov in place, while a wheel OUTSIDE it falls through to the
-   * trackball's own dolly handler (which is how you zoom back out of the sphere).
+   * Live lens gate, written each frame by the Photosphere's useFrame:
+   *  - `pointerInsideLens` — eye inside the sphere AND pointer inside the lens circle.
+   *  - `lensActive` — the lens is showing at all (eye inside the sphere), regardless of where
+   *    the pointer sits.
+   * Together they route the wheel: INSIDE the circle changes fov in place; lens active but the
+   * pointer OUTSIDE the circle while scrolling out exits the immersive view; otherwise the wheel
+   * falls through to the trackball's own dolly handler.
    */
-  lensPointerStateRef: MutableRefObject<{ pointerInsideLens: boolean }>;
+  lensPointerStateRef: MutableRefObject<{ pointerInsideLens: boolean; lensActive: boolean }>;
+  /**
+   * Called to leave the immersive lens — deselect the camera + reset the view (U undistortion
+   * stays ON so the next selected camera comes up undistorted). Fired when the user scrolls OUT
+   * with the pointer outside the lens circle: the eye is parked at the tiny capture-center
+   * distance where a plain dolly barely moves, so we bail out of the whole immersive view in one
+   * gesture instead of crawling backwards.
+   */
+  onExit: () => void;
   controls?: SphericalLensFovWheelControls;
 }
 
@@ -41,8 +52,14 @@ interface SphericalLensFovWheelOptions {
  *
  * Like the frustum hook, this installs a capture-phase window wheel listener and sets
  * controls.wheelHandled so the trackball's canvas wheel handler bails (see
- * useTrackballWheelHandlers). The per-event pointer-in-lens gate is what keeps scroll
- * OUTSIDE the circle on the normal dolly/exit path (we return without preventing default).
+ * useTrackballWheelHandlers). The per-event lens gate routes each on-canvas wheel to one of
+ * three outcomes:
+ *   1. Pointer INSIDE the lens circle → change cameraFov in place (zoom without dollying).
+ *   2. Lens active but pointer OUTSIDE the circle and scrolling OUT (deltaY > 0) → onExit():
+ *      leave the immersive view (deselect + reset; U stays on). From the capture-center distance
+ *      a plain dolly barely moves, so this is the fast way out.
+ *   3. Anything else (scroll IN outside the circle, or the eye already outside the sphere) →
+ *      return without preventing default so the wheel falls through to the trackball dolly.
  */
 export function useSphericalLensFovWheel({
   enabled,
@@ -51,6 +68,7 @@ export function useSphericalLensFovWheel({
   setCameraFov,
   domElement,
   lensPointerStateRef,
+  onExit,
   controls,
 }: SphericalLensFovWheelOptions): void {
   useEffect(() => {
@@ -63,20 +81,38 @@ export function useSphericalLensFovWheel({
       // wheels whose target is the canvas (or a descendant).
       if (!(e.target instanceof Node) || !domElement.contains(e.target)) return;
 
-      // Outside the lens circle: let the event fall through to the trackball canvas
-      // handler so it dollies / exits the sphere exactly as before (no preventDefault,
-      // no stopPropagation, no wheelHandled flag).
-      if (!lensPointerStateRef.current.pointerInsideLens) return;
-
-      e.preventDefault();
-      e.stopPropagation();
-      if (controls?.wheelHandled) {
-        controls.wheelHandled.current = true;
+      // Inside the lens circle: change fov in place (zoom without dollying), marking the
+      // event handled so the trackball canvas handler bails.
+      if (lensPointerStateRef.current.pointerInsideLens) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (controls?.wheelHandled) {
+          controls.wheelHandled.current = true;
+        }
+        setCameraFov(getWheelAdjustedFov(cameraFov, e.deltaY));
+        return;
       }
-      setCameraFov(getWheelAdjustedFov(cameraFov, e.deltaY));
+
+      // Lens showing but the pointer is OUTSIDE the circle and the user scrolls OUT
+      // (deltaY > 0): the eye is parked at the tiny capture-center distance where a dolly
+      // barely moves it, so leave the immersive view in one gesture instead (onExit:
+      // deselect + reset; U stays on). Mark handled so the trackball dolly never also fires.
+      if (lensPointerStateRef.current.lensActive && e.deltaY > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (controls?.wheelHandled) {
+          controls.wheelHandled.current = true;
+        }
+        onExit();
+        return;
+      }
+
+      // Otherwise (scroll IN outside the circle, or the eye already outside the sphere): let
+      // the event fall through to the trackball canvas handler so it dollies exactly as before
+      // (no preventDefault, no stopPropagation, no wheelHandled flag).
     };
 
     window.addEventListener('wheel', handleWheel, { passive: false, capture: true });
     return () => window.removeEventListener('wheel', handleWheel, { capture: true });
-  }, [enabled, cameraProjection, cameraFov, setCameraFov, domElement, lensPointerStateRef, controls]);
+  }, [enabled, cameraProjection, cameraFov, setCameraFov, domElement, lensPointerStateRef, onExit, controls]);
 }

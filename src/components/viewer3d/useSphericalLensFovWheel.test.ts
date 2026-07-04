@@ -32,8 +32,9 @@ function createOptions(overrides: Partial<Options> = {}): Options {
     cameraFov: 60,
     setCameraFov: vi.fn(),
     domElement: canvas,
-    lensPointerStateRef: ref({ pointerInsideLens: true }),
+    lensPointerStateRef: ref({ pointerInsideLens: true, lensActive: true }),
     controls: { wheelHandled: ref(false) },
+    onExit: vi.fn(),
     ...overrides,
   };
 }
@@ -63,11 +64,61 @@ describe('useSphericalLensFovWheel', () => {
     expect(options.controls?.wheelHandled?.current).toBe(true);
     // The cancelable wheel was preventDefault'd, so the page/panel never scrolls.
     expect(event.defaultPrevented).toBe(true);
+    // Inside the circle is a pure FOV zoom — it must NOT trigger the immersive exit.
+    expect(options.onExit).not.toHaveBeenCalled();
+  });
+
+  it('exits the immersive lens when scrolling OUT with the pointer outside the circle', () => {
+    // The fix: the lens is showing (eye parked at the tiny capture-center distance) but the
+    // pointer is OUTSIDE the circle and the user scrolls OUT (deltaY > 0). A dolly from that
+    // distance crawls, so instead we exit immediately: deselect + reset view; U stays on (onExit).
+    const options = createOptions({
+      lensPointerStateRef: ref({ pointerInsideLens: false, lensActive: true }),
+    });
+    renderHook(() => useSphericalLensFovWheel(options));
+
+    const event = dispatchWheelOn(canvas, 10);
+
+    expect(options.onExit).toHaveBeenCalledTimes(1);
+    // It is an exit, not a zoom: the FOV is untouched.
+    expect(options.setCameraFov).not.toHaveBeenCalled();
+    // Handled + preventDefault so the trackball dolly never also fires and the page never scrolls.
+    expect(options.controls?.wheelHandled?.current).toBe(true);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('does NOT exit when scrolling IN with the pointer outside the circle (dolly closer)', () => {
+    // Scroll IN (deltaY < 0) outside the circle is not an exit gesture: it must fall through to
+    // the trackball so the user can still dolly toward the sphere as before.
+    const options = createOptions({
+      lensPointerStateRef: ref({ pointerInsideLens: false, lensActive: true }),
+    });
+    renderHook(() => useSphericalLensFovWheel(options));
+
+    const event = dispatchWheelOn(canvas, -10);
+
+    expect(options.onExit).not.toHaveBeenCalled();
+    expect(options.setCameraFov).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('does NOT exit when the eye is already outside the sphere (lens inactive)', () => {
+    // Lens inactive (eye already outside the sphere): even a scroll-OUT must pass through to
+    // the trackball's normal dolly — there is no immersive view to leave.
+    const options = createOptions({
+      lensPointerStateRef: ref({ pointerInsideLens: false, lensActive: false }),
+    });
+    renderHook(() => useSphericalLensFovWheel(options));
+
+    const event = dispatchWheelOn(canvas, 10);
+
+    expect(options.onExit).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
   });
 
   it('passes the wheel through untouched when the pointer is OUTSIDE the lens (dolly path)', () => {
     const options = createOptions({
-      lensPointerStateRef: ref({ pointerInsideLens: false }),
+      lensPointerStateRef: ref({ pointerInsideLens: false, lensActive: false }),
     });
     renderHook(() => useSphericalLensFovWheel(options));
 
@@ -87,7 +138,7 @@ describe('useSphericalLensFovWheel', () => {
     // but their target is NOT the canvas, so the FOV must not change and the panel/modal
     // must be free to scroll (no preventDefault).
     const options = createOptions({
-      lensPointerStateRef: ref({ pointerInsideLens: true }),
+      lensPointerStateRef: ref({ pointerInsideLens: true, lensActive: true }),
     });
     renderHook(() => useSphericalLensFovWheel(options));
 
@@ -106,7 +157,7 @@ describe('useSphericalLensFovWheel', () => {
     const panel = document.createElement('div');
     document.body.appendChild(panel);
     const options = createOptions({
-      lensPointerStateRef: ref({ pointerInsideLens: true }),
+      lensPointerStateRef: ref({ pointerInsideLens: true, lensActive: true }),
     });
     renderHook(() => useSphericalLensFovWheel(options));
 

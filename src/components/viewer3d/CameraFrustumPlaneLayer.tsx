@@ -1,9 +1,10 @@
-import { useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { VIZ_COLORS } from '../../theme';
 import type { ImageId } from '../../types/colmap';
 import type { SelectionColorMode } from '../../store/types';
+import { useCameraStore } from '../../store';
 import { COS_90_DEG } from './cameraFrustumConstants';
 import type { CameraFrustumItem, FrustumPsnrMetricSource } from './cameraFrustumViewModel';
 import { buildImagePlaneRenderItems, type BuildImagePlaneRenderItemsOptions } from './cameraFrustumPlaneLayerPolicy';
@@ -59,7 +60,16 @@ function SelectedSphericalPhotosphere({
   // component renders inside the Canvas (like FrustumPlane, which also calls useThree()).
   const domElement = useThree((s) => s.gl.domElement);
   // Written each frame by Photosphere; gates the wheel handler below.
-  const lensPointerStateRef = useRef({ pointerInsideLens: false });
+  const lensPointerStateRef = useRef({ pointerInsideLens: false, lensActive: false });
+  // Store action for the immersive-lens exit gesture (stable reference from zustand).
+  const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
+  // Scroll OUT with the pointer outside the lens circle leaves the immersive view by simply
+  // deselecting the camera, which unmounts the photosphere. The camera is left exactly where it
+  // is — no view reset (a jump to the whole-scene overview felt jarring). (U) undistortion stays
+  // ON so the next selected camera comes up undistorted immediately.
+  const handleLensExit = useCallback(() => {
+    setSelectedImageId(null);
+  }, [setSelectedImageId]);
   const imageFile = useSelectedFrustumImageFile({
     dataset,
     imageName: frustum.image.name,
@@ -87,6 +97,7 @@ function SelectedSphericalPhotosphere({
     setCameraFov,
     domElement,
     lensPointerStateRef,
+    onExit: handleLensExit,
     controls,
   });
 

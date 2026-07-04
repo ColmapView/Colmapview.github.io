@@ -39,11 +39,15 @@ interface PhotosphereProps {
    */
   selectionPlaneOpacity?: number;
   /**
-   * Written each frame with whether the pointer is inside the lens circle (only true when the
-   * lens is actually active — eye inside the sphere). It is the gate for useSphericalLensFovWheel:
-   * scroll INSIDE the circle changes fov in place, scroll OUTSIDE falls through to the dolly.
+   * Written each frame for useSphericalLensFovWheel's gate:
+   *  - `pointerInsideLens` — pointer inside the lens circle (only true when the lens is active,
+   *    i.e. the eye is inside the sphere).
+   *  - `lensActive` — the lens is showing at all (eye inside the sphere), regardless of pointer.
+   * The wheel handler uses both: scroll INSIDE the circle changes fov in place; a scroll OUT
+   * while the lens is active but the pointer is outside the circle exits the immersive view;
+   * otherwise the wheel falls through to the trackball dolly.
    */
-  lensPointerStateRef?: MutableRefObject<{ pointerInsideLens: boolean }>;
+  lensPointerStateRef?: MutableRefObject<{ pointerInsideLens: boolean; lensActive: boolean }>;
 }
 
 /**
@@ -160,12 +164,15 @@ export function Photosphere({
       && isPointerInsideLens(pointer.x, pointer.y, gl.domElement.width, gl.domElement.height);
     material.opacity = lensActive ? getPanoramaLensOpacity(hovered, selectionPlaneOpacity) : 1;
 
-    // Publish the lens-hover state for the wheel handler's gate (a ref write in useFrame is
+    // Publish the lens state for the wheel handler's gate (a ref write in useFrame is
     // allowed — not render scope). `hovered` is already false whenever the lens is inactive,
-    // so this is true ONLY inside the sphere AND inside the circle — exactly where scroll
-    // should change fov instead of dollying (see useSphericalLensFovWheel).
+    // so pointerInsideLens is true ONLY inside the sphere AND inside the circle — exactly where
+    // scroll should change fov. lensActive (eye inside the sphere) lets the handler tell "lens
+    // showing but pointer outside the circle" (→ scroll-out exits) from "eye already outside"
+    // (→ normal dolly). See useSphericalLensFovWheel.
     if (lensPointerStateRef) {
       lensPointerStateRef.current.pointerInsideLens = hovered;
+      lensPointerStateRef.current.lensActive = lensActive;
     }
   });
 
