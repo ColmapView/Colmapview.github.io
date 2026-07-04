@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-07-04
+
+### Added
+
+- Circular ground-truth lens for spherical (360°) panoramas: with (U) undistortion on, the viewer steps inside the photosphere and shows the panorama photo through a viewport-centered circle while the live reconstruction (points and splats) shows around it — a direct photo-vs-reconstruction comparison that stays aligned at every depth. Hover the circle to fade the photo and see the reconstruction underneath; scroll inside it to zoom the field of view with the photo staying locked to the points, like scrolling a pinhole camera's image plane.
+
+### Changed
+
+- (U) undistortion for spherical cameras now enters the panorama at its capture center instead of projecting a portal disk from outside the sphere. The earlier portal overlaid correctly only near one anchored depth and drifted elsewhere; from the center the photo overlays the point cloud exactly at all depths.
+- Flying to a spherical camera no longer changes the field of view — a field of view you set (for example by zooming the lens) now persists as you move between panoramas — and no longer briefly shows the full panorama texture mid-flight; only the circular lens appears, once the view arrives inside the sphere.
+- Origin axes are hidden by default on a fresh load (the grid still shows); toggle axes from the context menu or the View panel. Saved settings are unaffected.
+- PSNR/SSIM splat metrics now apply only to the camera models the metric renderer supports (undistorted pinhole: SIMPLE_PINHOLE and PINHOLE). The PSNR/SSIM color modes and gallery border modes appear only for datasets containing at least one such camera; a compute skips unsupported images up front with a notice; and spherical, fisheye, and distorted-pinhole cameras render in their normal per-camera color under a metric mode instead of a gray "no data" color.
+
+### Fixed
+
+- Point size no longer stays small after viewing a Gaussian-splat dataset: the splat display preset (small, faint points) persisted into later splat-less sessions; loading a dataset without a splat now restores the normal point size and opacity.
+- Scrolling a side panel or modal no longer gets captured into a camera field-of-view change while a spherical camera's lens is active.
+- Zooming out from inside a panorama is smooth — the zoom no longer snaps at a floor distance.
+- The (O) auto-orbit shortcut is now shown in the Camera Mode panel ("Auto Orbit (O)").
+- On datasets with only spherical cameras, the camera-display button, hotkey, and context-menu entry toggle camera visibility instead of cycling through arrow/image/frustum modes that have no effect on grid spheres.
+
 ## [0.9.1] - 2026-07-03
 
 ### Added
