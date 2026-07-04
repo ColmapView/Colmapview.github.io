@@ -5,6 +5,7 @@ import {
   loadGaussianCloudFromFile as defaultLoadGaussianCloudFromFile,
 } from '../gaussianCloudLoader';
 import type { LoadedGaussianCloud } from '../gaussianCloud';
+import { cameraModelSupportsSplatMetric } from '../splatMetricCapability';
 import {
   PSNR_METRIC_IMAGE_MISMATCH_MARKER,
   PsnrMetricImageDimensionMismatchError,
@@ -770,7 +771,10 @@ function createPsnrSceneId(file: File, loadedCloud: LoadedGaussianCloud): string
 }
 
 function assertPinholeCamera(camera: Camera): void {
-  if (camera.modelId === CameraModelId.SIMPLE_PINHOLE || camera.modelId === CameraModelId.PINHOLE) {
+  // Defensive backstop only: the UI gate and image selection already exclude non-capable
+  // cameras, so this should be unreachable in normal flow. It shares the same capability
+  // predicate so it cannot drift from what the UI offered.
+  if (cameraModelSupportsSplatMetric(camera.modelId)) {
     return;
   }
 

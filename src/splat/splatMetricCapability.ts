@@ -1,6 +1,10 @@
 import type { Reconstruction } from '../types/colmap';
 import type { CameraModelId } from '../types/cameraModelId';
-import { getCameraModelProjectionClass, type ProjectionClass } from '../utils/cameraModelRegistry';
+import {
+  CAMERA_MODEL_DESCRIPTORS,
+  getCameraModelProjectionClass,
+  type ProjectionClass,
+} from '../utils/cameraModelRegistry';
 
 /**
  * Projection classes the splat metric renderer can currently reproduce. PSNR/SSIM render
@@ -14,6 +18,9 @@ export const SPLAT_METRIC_SUPPORTED_PROJECTION_CLASSES: ReadonlySet<ProjectionCl
 
 /** Whether the splat metric renderer can reproduce this camera model's projection. */
 export function cameraModelSupportsSplatMetric(modelId: CameraModelId): boolean {
+  if (!Object.prototype.hasOwnProperty.call(CAMERA_MODEL_DESCRIPTORS, modelId)) {
+    return false;
+  }
   return SPLAT_METRIC_SUPPORTED_PROJECTION_CLASSES.has(getCameraModelProjectionClass(modelId));
 }
 
