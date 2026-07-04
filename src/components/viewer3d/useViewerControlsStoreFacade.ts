@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
   useAxesNode,
   useAxesNodeActions,
@@ -45,6 +46,7 @@ import {
 } from '../../utils/splatBackendPolicy';
 import type { Reconstruction, SplatFileSource } from '../../types/colmap';
 import { getActiveSplatSourceId, loadedFilesHaveSplatData } from '../../utils/splatFileSourcePolicy';
+import { reconstructionHasPinholeCameras } from './viewerControlsViewModel';
 
 interface ViewerControlsUiFacade {
   touchMode: boolean;
@@ -126,6 +128,10 @@ export function useViewerControlsStoreFacade(): ViewerControlsStoreFacade {
   const setView = useUIStore((s) => s.setView);
   const autoHideButtons = useUIStore((s) => s.autoHideElements.buttons);
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
+  const hasPinholeCameras = useMemo(
+    () => reconstructionHasPinholeCameras(reconstruction),
+    [reconstruction]
+  );
   const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
   const splatPsnrFrameReady = useImageMetricsStore((s) => s.splatPsnrFrameReady);
   const splatPsnrComputing = useImageMetricsStore((s) => s.splatPsnrComputing);
@@ -140,6 +146,7 @@ export function useViewerControlsStoreFacade(): ViewerControlsStoreFacade {
   const splatPsnrUnavailableReason = getSplatPsnrUnavailableReason(activeSplatFile, splatMetricCapability);
   const splatMetricVisualizationsAvailable = shouldExposeSplatMetricVisualizations({
     activeSplatFile,
+    hasPinholeCameras,
     resolution: splatBackendResolution,
     metricAvailability: splatMetricAvailability,
     metricCapability: splatMetricCapability,

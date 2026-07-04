@@ -9,7 +9,8 @@ import {
   useSplatBackendStore,
   useUIStore,
 } from '../../store';
-import { buildFile, buildLoadedFiles, buildReconstruction } from '../../test/builders';
+import { buildCamera, buildFile, buildLoadedFiles, buildReconstruction } from '../../test/builders';
+import { CameraModelId } from '../../types/colmap';
 import { useViewerControlsStoreFacade } from './useViewerControlsStoreFacade';
 
 describe('useViewerControlsStoreFacade', () => {
@@ -184,5 +185,42 @@ describe('useViewerControlsStoreFacade', () => {
     expect(usePointCloudStore.getState().showSplats).toBe(false);
     expect(useImageMetricsStore.getState().splatPsnrFrameReady).toBe(false);
     expect(useImageMetricsStore.getState().splatPsnrMetrics.size).toBe(0);
+  });
+
+  it('hides splat metric visualizations for a spherical-only reconstruction', () => {
+    const activeSplatFile = buildFile('model.spz');
+    useReconstructionStore.setState({
+      reconstruction: buildReconstruction({
+        cameras: [buildCamera({ cameraId: 1, modelId: CameraModelId.EQUIRECTANGULAR, params: [640, 480] })],
+      }),
+      loadedFiles: buildLoadedFiles({ splatFile: activeSplatFile }),
+    });
+    // WebGPU PSNR is fully ready — the only reason to hide is the spherical-only camera set,
+    // which SplatPsnrEvaluator can never produce a metric for.
+    useSplatBackendStore.getState().setWebGpuBackendState('ready');
+    useSplatBackendStore.getState().setWebGpuMetricState('ready');
+
+    const { result } = renderHook(() => useViewerControlsStoreFacade());
+
+    expect(result.current.metrics.splatMetricVisualizationsAvailable).toBe(false);
+  });
+
+  it('keeps splat metric visualizations for a mixed reconstruction that has a pinhole camera', () => {
+    const activeSplatFile = buildFile('model.spz');
+    useReconstructionStore.setState({
+      reconstruction: buildReconstruction({
+        cameras: [
+          buildCamera({ cameraId: 1, modelId: CameraModelId.EQUIRECTANGULAR, params: [640, 480] }),
+          buildCamera({ cameraId: 2, modelId: CameraModelId.PINHOLE }),
+        ],
+      }),
+      loadedFiles: buildLoadedFiles({ splatFile: activeSplatFile }),
+    });
+    useSplatBackendStore.getState().setWebGpuBackendState('ready');
+    useSplatBackendStore.getState().setWebGpuMetricState('ready');
+
+    const { result } = renderHook(() => useViewerControlsStoreFacade());
+
+    expect(result.current.metrics.splatMetricVisualizationsAvailable).toBe(true);
   });
 });
