@@ -30,8 +30,8 @@ interface SphericalLensFovWheelOptions {
    */
   lensPointerStateRef: MutableRefObject<{ pointerInsideLens: boolean; lensActive: boolean }>;
   /**
-   * Called to leave the immersive lens — deselect the camera + reset the view (U undistortion
-   * stays ON so the next selected camera comes up undistorted). Fired when the user scrolls OUT
+   * Called to leave the immersive lens — deselect the camera (U undistortion stays ON so the
+   * next selected camera comes up undistorted). Fired when the user scrolls OUT
    * with the pointer outside the lens circle: the eye is parked at the tiny capture-center
    * distance where a plain dolly barely moves, so we bail out of the whole immersive view in one
    * gesture instead of crawling backwards.
@@ -56,7 +56,7 @@ interface SphericalLensFovWheelOptions {
  * three outcomes:
  *   1. Pointer INSIDE the lens circle → change cameraFov in place (zoom without dollying).
  *   2. Lens active but pointer OUTSIDE the circle and scrolling OUT (deltaY > 0) → onExit():
- *      leave the immersive view (deselect + reset; U stays on). From the capture-center distance
+ *      leave the immersive view (deselect; U stays on). From the capture-center distance
  *      a plain dolly barely moves, so this is the fast way out.
  *   3. Anything else (scroll IN outside the circle, or the eye already outside the sphere) →
  *      return without preventing default so the wheel falls through to the trackball dolly.
@@ -96,7 +96,7 @@ export function useSphericalLensFovWheel({
       // Lens showing but the pointer is OUTSIDE the circle and the user scrolls OUT
       // (deltaY > 0): the eye is parked at the tiny capture-center distance where a dolly
       // barely moves it, so leave the immersive view in one gesture instead (onExit:
-      // deselect + reset; U stays on). Mark handled so the trackball dolly never also fires.
+      // deselect; U stays on). Mark handled so the trackball dolly never also fires.
       if (lensPointerStateRef.current.lensActive && e.deltaY > 0) {
         e.preventDefault();
         e.stopPropagation();

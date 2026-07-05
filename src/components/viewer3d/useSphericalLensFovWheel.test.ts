@@ -71,7 +71,7 @@ describe('useSphericalLensFovWheel', () => {
   it('exits the immersive lens when scrolling OUT with the pointer outside the circle', () => {
     // The fix: the lens is showing (eye parked at the tiny capture-center distance) but the
     // pointer is OUTSIDE the circle and the user scrolls OUT (deltaY > 0). A dolly from that
-    // distance crawls, so instead we exit immediately: deselect + reset view; U stays on (onExit).
+    // distance crawls, so instead we exit immediately: deselect; U stays on (onExit).
     const options = createOptions({
       lensPointerStateRef: ref({ pointerInsideLens: false, lensActive: true }),
     });

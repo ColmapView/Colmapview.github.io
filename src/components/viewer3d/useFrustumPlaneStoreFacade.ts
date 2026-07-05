@@ -18,6 +18,7 @@ interface FrustumPlaneDataFacade {
 
 interface FrustumPlaneActionsFacade {
   setCameraFov: CameraState['setCameraFov'];
+  setSelectedImageId: CameraState['setSelectedImageId'];
 }
 
 export interface FrustumPlaneStoreFacade {
@@ -32,6 +33,7 @@ export function useFrustumPlaneStoreFacade(): FrustumPlaneStoreFacade {
   const cameraFov = useCameraStore((s) => s.cameraFov);
   const flyTransitionDuration = useCameraStore((s) => s.flyTransitionDuration);
   const setCameraFov = useCameraStore((s) => s.setCameraFov);
+  const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
   const selectionColorMode = useCameraStore((s) => s.selectionColorMode);
   const selectionAnimationSpeed = useCameraStore((s) => s.selectionAnimationSpeed);
 
@@ -47,6 +49,7 @@ export function useFrustumPlaneStoreFacade(): FrustumPlaneStoreFacade {
     },
     actions: {
       setCameraFov,
+      setSelectedImageId,
     },
   };
 }

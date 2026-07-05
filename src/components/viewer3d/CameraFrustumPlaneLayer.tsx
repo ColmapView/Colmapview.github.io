@@ -4,7 +4,6 @@ import * as THREE from 'three';
 import { VIZ_COLORS } from '../../theme';
 import type { ImageId } from '../../types/colmap';
 import type { SelectionColorMode } from '../../store/types';
-import { useCameraStore } from '../../store';
 import { COS_90_DEG } from './cameraFrustumConstants';
 import type { CameraFrustumItem, FrustumPsnrMetricSource } from './cameraFrustumViewModel';
 import { buildImagePlaneRenderItems, type BuildImagePlaneRenderItemsOptions } from './cameraFrustumPlaneLayerPolicy';
@@ -52,7 +51,7 @@ function SelectedSphericalPhotosphere({
 }) {
   const {
     data: { dataset, cameraProjection, cameraFov },
-    actions: { setCameraFov },
+    actions: { setCameraFov, setSelectedImageId },
   } = useFrustumPlaneStoreFacade();
   const controls = useTrackballControlsApi();
   // The R3F canvas: the wheel hook rejects wheels whose target isn't the canvas (or a
@@ -61,8 +60,6 @@ function SelectedSphericalPhotosphere({
   const domElement = useThree((s) => s.gl.domElement);
   // Written each frame by Photosphere; gates the wheel handler below.
   const lensPointerStateRef = useRef({ pointerInsideLens: false, lensActive: false });
-  // Store action for the immersive-lens exit gesture (stable reference from zustand).
-  const setSelectedImageId = useCameraStore((s) => s.setSelectedImageId);
   // Scroll OUT with the pointer outside the lens circle leaves the immersive view by simply
   // deselecting the camera, which unmounts the photosphere. The camera is left exactly where it
   // is — no view reset (a jump to the whole-scene overview felt jarring). (U) undistortion stays
