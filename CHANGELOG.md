@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-07-04
+
+### Changed
+
+- Scrolling out of a spherical panorama's lens now detaches immediately: with a 360° camera selected and (U) undistortion on, flicking the wheel outward with the cursor outside the circular lens deselects the camera and closes the photosphere, leaving the view where it is. (U) stays on, so the next selected camera comes straight up undistorted. Previously the wheel slowly dollied the eye out from the panorama center.
+
+### Fixed
+
+- Zooming out with the mouse wheel no longer crawls when the camera is close to its orbit target: the near-range step is floored to a sensible fraction of the scene so the start isn't sluggish, while the mid- and far-range zoom speed is unchanged.
+
 ## [0.9.2] - 2026-07-04
 
 ### Added
