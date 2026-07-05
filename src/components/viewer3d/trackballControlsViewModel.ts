@@ -199,13 +199,31 @@ export function getOrthoWheelZoom(
   return clampValue(currentZoom / zoomFactor, minZoom, maxZoom);
 }
 
+// Near-range floor for zoom-OUT (see getPerspectiveWheelDistance). Pure multiplicative zoom moves
+// the camera by a fixed FRACTION of its current distance per notch, so when it is close each notch
+// barely budges — a sluggish start. The far/terminal speed is fine, so we DON'T cap it; we only
+// floor the effective distance that drives the proportional step at MIN * sceneRadius, so a very
+// close camera still steps a sensible fraction of the scene per notch. Raise for a faster start.
+export const ZOOM_OUT_REF_MIN_FRACTION = 0.35;
+
 export function getPerspectiveWheelDistance(
   currentDistance: number,
   deltaY: number,
   zoomSpeed: number,
-  minDistance: number
+  minDistance: number,
+  sceneRadius: number
 ): number {
   const zoomFactor = 1 + deltaY * zoomSpeed;
+  if (deltaY > 0 && sceneRadius > 0) {
+    // Zoom OUT: floor the near range only. The proportional step is driven by the current distance
+    // floored at MIN * sceneRadius — so it stops crawling when very close, while mid/far keep the
+    // natural multiplicative curve (terminal speed unchanged). Zoom-out always grows; no downward
+    // floor needed here.
+    const refDistance = Math.max(currentDistance, ZOOM_OUT_REF_MIN_FRACTION * sceneRadius);
+    return currentDistance + refDistance * (zoomFactor - 1);
+  }
+  // Zoom IN (and the degenerate sceneRadius <= 0 fallback): keep the multiplicative model —
+  // approaching a target should decelerate naturally.
   // The floor stops zoom-IN from collapsing the orbit — it must never clamp
   // UPWARD. A fly-to may legitimately land closer than minDistance (e.g. the
   // spherical U-mode orbits at 0.02x the sphere radius, well under the global

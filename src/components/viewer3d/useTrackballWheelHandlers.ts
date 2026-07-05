@@ -96,7 +96,8 @@ export function handleTrackballWheel({
       targetDistanceRef.current,
       event.deltaY,
       zoomSpeed,
-      CONTROLS.minDistance
+      CONTROLS.minDistance,
+      radius
     );
   }
 }
