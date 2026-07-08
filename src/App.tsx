@@ -9,6 +9,7 @@ import { ConfirmationHost } from './components/ui/ConfirmationHost';
 import { MouseTooltip } from './components/ui/MouseTooltip';
 import { NotificationContainer } from './components/ui/NotificationContainer';
 import {
+  abandonUrlAutoLoadRequest,
   initStoreMigration,
   useCameraStore,
   useExportStore,
@@ -21,13 +22,7 @@ import { decodeShareData, applyShareConfig } from './hooks/useUrlState';
 import { detectTouchDevice } from './hooks/useIsTouchDevice';
 import { TOUCH_BREAKPOINTS } from './theme/sizing';
 import { appLogger } from './utils/logger';
-import { requestConfirmation } from './utils/confirmation';
-import {
-  clearUrlLoadAttempt,
-  markUrlLoadAttemptStarted,
-  readUnfinishedUrlLoadAttempt,
-  shouldConfirmUrlAutoLoad,
-} from './utils/urlLoadAttemptGuard';
+import { runGuardedUrlLoad } from './appUrlLoadGuard';
 import {
   APP_EMBED_MODE_LOG_MESSAGE,
   APP_SHARED_CONFIG_LOG_MESSAGE,
@@ -100,30 +95,13 @@ function App() {
         return;
       }
 
-      const runGuardedUrlLoad = async (manifestUrl: string): Promise<boolean> => {
-        const previousAttempt = readUnfinishedUrlLoadAttempt();
-        if (shouldConfirmUrlAutoLoad(previousAttempt, manifestUrl)) {
-          const retry = await requestConfirmation({
-            title: 'Reload this dataset?',
-            message: 'The previous attempt to load this dataset did not finish - it may have run out of memory on this device. Load it again?',
-            confirmLabel: 'Load again',
-            cancelLabel: 'Not now',
-            size: 'compact',
-          });
-          if (!retry) {
-            clearUrlLoadAttempt();
-            return false;
-          }
-        }
-        markUrlLoadAttemptStarted(manifestUrl);
-        const loaded = await loadFromUrl(manifestUrl);
-        clearUrlLoadAttempt();
-        return loaded;
-      };
-
       if (loadPlan.kind === 'manifest-url') {
         appLogger.info(loadPlan.logMessage);
-        const loaded = await runGuardedUrlLoad(loadPlan.manifestUrl);
+        const loaded = await runGuardedUrlLoad({
+          manifestUrl: loadPlan.manifestUrl,
+          loadFromUrl,
+          onDeclined: abandonUrlAutoLoadRequest,
+        });
         if (loaded && loadPlan.config) {
           applyShareConfig(loadPlan.config);
         }
@@ -135,7 +113,11 @@ function App() {
 
       if (loadPlan.kind === 'legacy-url') {
         appLogger.info(loadPlan.logMessage);
-        await runGuardedUrlLoad(loadPlan.manifestUrl);
+        await runGuardedUrlLoad({
+          manifestUrl: loadPlan.manifestUrl,
+          loadFromUrl,
+          onDeclined: abandonUrlAutoLoadRequest,
+        });
       }
     };
 

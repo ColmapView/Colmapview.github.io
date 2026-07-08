@@ -101,6 +101,32 @@ export function hasUrlToLoad(): boolean {
   return false;
 }
 
+/**
+ * Inverse of hasUrlToLoad(): strip the auto-load request from the current URL so
+ * hasUrlToLoad() returns false. Removes the legacy `?url=` query param and the
+ * `#d=` share-data hash param (leaving any other hash params intact). Used when the
+ * user declines a crash-loop reload — without this the DropZone landing panels stay
+ * gated behind a load request that will never run, showing a permanent "Loading…".
+ */
+export function clearUrlLoadRequestFromLocation(
+  win: Pick<Window, 'location' | 'history'> = window
+): void {
+  try {
+    const url = new URL(win.location.href);
+    url.searchParams.delete('url');
+    const hashContent = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
+    const hashParams = new URLSearchParams(hashContent);
+    if (hashParams.has('d')) {
+      hashParams.delete('d');
+      const nextHash = hashParams.toString();
+      url.hash = nextHash ? `#${nextHash}` : '';
+    }
+    win.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  } catch {
+    // Best-effort: never let a URL rewrite block declining a load.
+  }
+}
+
 // Pre-compute at module load to show loading indicator immediately
 const initialUrlLoading = hasUrlToLoad();
 
@@ -435,6 +461,21 @@ export const selectPointCount = (state: ReconstructionState) => {
   }
   return state.reconstruction?.points3D?.size ?? 0;
 };
+
+/**
+ * Reset the URL-loading UI after the user declines a crash-loop reload so the
+ * landing page becomes reachable again. Clears the loading indicator/progress
+ * (fixes the permanent status-bar "Loading…") and strips the request from the URL
+ * so hasUrlToLoad() — which gates the DropZone landing panels — returns false.
+ */
+export function abandonUrlAutoLoadRequest(
+  win: Pick<Window, 'location' | 'history'> = window
+): void {
+  clearUrlLoadRequestFromLocation(win);
+  const store = useReconstructionStore.getState();
+  store.setUrlLoading(false);
+  store.setUrlProgress(null);
+}
 
 export const selectImageCount = (state: ReconstructionState) =>
   state.reconstruction?.images.size ?? 0;

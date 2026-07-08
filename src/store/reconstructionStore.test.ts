@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LoadedFiles } from '../types/colmap';
-import { useReconstructionStore } from './reconstructionStore';
+import { abandonUrlAutoLoadRequest, hasUrlToLoad, useReconstructionStore } from './reconstructionStore';
 import { usePointCloudStore } from './stores/pointCloudStore';
 import { useTransformStore } from './stores/transformStore';
 import { useUIStore } from './stores/uiStore';
@@ -653,5 +653,41 @@ describe('reconstruction store lazy splat source switching', () => {
     );
 
     expect(useReconstructionStore.getState().showSplatPicker).toBe(false);
+  });
+});
+
+describe('abandonUrlAutoLoadRequest', () => {
+  beforeEach(() => {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+  });
+
+  afterEach(() => {
+    window.history.replaceState(null, '', '/');
+  });
+
+  it('clears the loading UI and strips a legacy ?url= request so the landing page is reachable', () => {
+    window.history.replaceState(null, '', '/?url=https://example.com/manifest.json');
+    useReconstructionStore.setState({
+      urlLoading: true,
+      urlProgress: { percent: 0, message: 'Initializing...' },
+    });
+    expect(hasUrlToLoad()).toBe(true);
+
+    abandonUrlAutoLoadRequest();
+
+    expect(useReconstructionStore.getState().urlLoading).toBe(false);
+    expect(useReconstructionStore.getState().urlProgress).toBeNull();
+    // hasUrlToLoad() gates the DropZone landing panels; it must now be false.
+    expect(hasUrlToLoad()).toBe(false);
+  });
+
+  it('strips an inline-manifest hash request (#d=...) while preserving other hash params', () => {
+    window.history.replaceState(null, '', '/#d=eyJ4IjoxfQ&foo=bar');
+    expect(hasUrlToLoad()).toBe(true);
+
+    abandonUrlAutoLoadRequest();
+
+    expect(hasUrlToLoad()).toBe(false);
+    expect(window.location.hash).toContain('foo=bar');
   });
 });
