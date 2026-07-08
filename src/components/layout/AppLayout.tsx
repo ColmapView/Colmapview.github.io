@@ -18,6 +18,7 @@ import {
   getInitialGalleryPanelWidth,
   getWindowResizedGalleryPanelWidth,
   shouldHideInlineGallery,
+  TOUCH_LAYOUT_ROOT_CLASS,
 } from './appLayoutPolicy';
 import { useAppLayoutStoreFacade } from './useAppLayoutStoreFacade';
 
@@ -149,7 +150,7 @@ export function AppLayout() {
   // Touch mode layout - simplified like embed mode, no gallery
   if (touchMode && !embedMode) {
     return (
-      <div className="h-screen flex flex-col bg-ds-primary touch-none" data-touch-mode="true">
+      <div className={TOUCH_LAYOUT_ROOT_CLASS} data-touch-mode="true">
         {/* Full-screen 3D Viewer */}
         <div className="flex-1 overflow-hidden">
           <Scene3D />

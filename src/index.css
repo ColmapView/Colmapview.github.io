@@ -1172,6 +1172,7 @@ legend {
 /* Touch Action */
 .touch-none { touch-action: none; }
 .touch-auto { touch-action: auto; }
+.safe-area-inset { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 
 /* ============================================
    OBJECT FIT UTILITIES

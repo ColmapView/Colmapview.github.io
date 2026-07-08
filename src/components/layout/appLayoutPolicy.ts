@@ -4,6 +4,13 @@ export const APP_LAYOUT_MIN_PANEL_WIDTH = 300;
 export const APP_LAYOUT_MAX_PANEL_WIDTH_PERCENT = 0.6;
 export const APP_LAYOUT_CURSOR_OWNER = 'app-layout';
 
+/**
+ * Touch-layout shell classes. `safe-area-inset` pads the UI clear of notches
+ * and the home indicator (requires viewport-fit=cover in index.html);
+ * `touch-none` disables browser gestures inside the app shell.
+ */
+export const TOUCH_LAYOUT_ROOT_CLASS = 'h-screen flex flex-col bg-ds-primary touch-none safe-area-inset';
+
 export type AppLayoutGuideTip =
   | { id: 'contextMenu'; message: 'Right-click anywhere for quick actions' }
   | { id: 'touchMode'; message: 'Tap to select, long-press for options' };

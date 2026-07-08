@@ -7,6 +7,7 @@ import {
   getInitialGalleryPanelWidth,
   getWindowResizedGalleryPanelWidth,
   shouldHideInlineGallery,
+  TOUCH_LAYOUT_ROOT_CLASS,
 } from './appLayoutPolicy';
 
 describe('app layout policy', () => {
@@ -133,6 +134,14 @@ describe('app layout policy', () => {
     })).toEqual({
       id: 'touchMode',
       message: 'Tap to select, long-press for options',
+    });
+  });
+
+  describe('TOUCH_LAYOUT_ROOT_CLASS', () => {
+    it('pins page containment and notch safe-area handling on the touch shell', () => {
+      expect(TOUCH_LAYOUT_ROOT_CLASS).toContain('touch-none');
+      expect(TOUCH_LAYOUT_ROOT_CLASS).toContain('safe-area-inset');
+      expect(TOUCH_LAYOUT_ROOT_CLASS).toContain('h-screen');
     });
   });
 });
