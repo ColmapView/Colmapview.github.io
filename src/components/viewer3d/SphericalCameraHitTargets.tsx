@@ -3,15 +3,12 @@ import * as THREE from 'three';
 import type { ThreeEvent } from '@react-three/fiber';
 import type { ImageId } from '../../types/colmap';
 import type { CameraFrustumItem } from './cameraFrustumGeometry';
-import { TOUCH } from '../../theme/sizing';
-import { markFrustumTouchDown, markFrustumTap } from './frustumTouchGuards';
-import { markSceneContextMenuHandled } from './sceneContextMenuGuard';
-import { BATCHED_FRUSTUM_TOUCH_TAP_MAX_DISTANCE_SQUARED } from './batchedFrustumInteractionPolicy';
 import {
   composeSphericalHitTargetMatrix,
   getSphericalHitTargetMeshKey,
   resolveSphericalHitTargetImageId,
 } from './sphericalHitTargetPolicy';
+import { useSphericalCameraHitTargetTouchInteractions } from './useSphericalCameraHitTargetTouchInteractions';
 
 interface SphericalCameraHitTargetsProps {
   frustums: CameraFrustumItem[];
@@ -21,14 +18,6 @@ interface SphericalCameraHitTargetsProps {
   onContextMenu: (imageId: ImageId) => void;
   onLongPress: (imageId: ImageId) => void;
   touchMode: boolean;
-}
-
-interface TouchDownState {
-  imageId: ImageId;
-  x: number;
-  y: number;
-  fired: boolean;
-  timer: ReturnType<typeof setTimeout> | null;
 }
 
 // Reused scratch objects for per-instance matrix composition. Module-scoped like
@@ -69,8 +58,13 @@ export function SphericalCameraHitTargets({
   touchMode,
 }: SphericalCameraHitTargetsProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  // Shared long-press timer state across all spheres (only one touch-down at a time).
-  const touchDownRef = useRef<TouchDownState | null>(null);
+
+  const { onPointerDown, onPointerUp } = useSphericalCameraHitTargetTouchInteractions({
+    frustums,
+    touchMode,
+    onContextMenu,
+    onLongPress,
+  });
 
   // One shared unit-sphere geometry + one invisible material, created once. `dispose={null}`
   // on the mesh keeps R3F from disposing them on the count-driven remount; the cleanup
@@ -88,12 +82,6 @@ export function SphericalCameraHitTargets({
       hitMaterial.dispose();
     };
   }, [sphereGeometry, hitMaterial]);
-
-  useEffect(() => {
-    return () => {
-      if (touchDownRef.current?.timer) clearTimeout(touchDownRef.current.timer);
-    };
-  }, []);
 
   // Write per-instance matrices whenever the pose set or cameraScale changes. Uses the
   // UNIT geometry + uniform scale, so a slider tick only touches matrices (no geometry).
@@ -149,43 +137,6 @@ export function SphericalCameraHitTargets({
     onContextMenu(imageId);
   };
 
-  const handlePointerDownTouch = (e: ThreeEvent<PointerEvent>) => {
-    const imageId = resolveSphericalHitTargetImageId(frustums, e.instanceId);
-    if (imageId === null) return;
-    markFrustumTouchDown();
-    const x = e.nativeEvent.clientX;
-    const y = e.nativeEvent.clientY;
-    const timer = setTimeout(() => {
-      if (!touchDownRef.current || touchDownRef.current.imageId !== imageId) return;
-      touchDownRef.current.fired = true;
-      onLongPress(imageId);
-    }, TOUCH.longPressDelay);
-    touchDownRef.current = { imageId, x, y, timer, fired: false };
-  };
-
-  const handlePointerDownMouse = (e: ThreeEvent<PointerEvent>) => {
-    // Pre-mark context menu so sceneContextMenuGuard suppresses the scene-level handler.
-    if (e.nativeEvent.button !== 2) return;
-    markSceneContextMenuHandled();
-  };
-
-  const handlePointerUp = (e: ThreeEvent<PointerEvent>) => {
-    const down = touchDownRef.current;
-    touchDownRef.current = null;
-    if (!down) return;
-    if (down.timer) clearTimeout(down.timer);
-    if (down.fired) return; // long-press already fired
-
-    // Tap within distance threshold → treat as context menu (same as batched frustum tap).
-    const dx = e.nativeEvent.clientX - down.x;
-    const dy = e.nativeEvent.clientY - down.y;
-    if (dx * dx + dy * dy > BATCHED_FRUSTUM_TOUCH_TAP_MAX_DISTANCE_SQUARED) return;
-
-    e.stopPropagation();
-    markFrustumTap();
-    onContextMenu(down.imageId);
-  };
-
   return (
     <instancedMesh
       key={meshKey}
@@ -197,8 +148,8 @@ export function SphericalCameraHitTargets({
       onPointerOut={handlePointerOut}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
-      onPointerDown={touchMode ? handlePointerDownTouch : handlePointerDownMouse}
-      onPointerUp={touchMode ? handlePointerUp : undefined}
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
     />
   );
 }
