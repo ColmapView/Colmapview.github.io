@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { TOUCH } from '../../theme/sizing';
 import { clearBodyCursor, setBodyCursor } from '../../utils/bodyCursor';
 import {
   getBatchedFrustum,
@@ -9,7 +8,8 @@ import {
   type BatchedFrustumTouchStart,
 } from './batchedFrustumInteractionPolicy';
 import { CAMERA_FRUSTUM_CURSOR_OWNER } from './cameraFrustumConstants';
-import { markFrustumTap, markFrustumTouchDown } from './frustumTouchGuards';
+import { armFrustumLongPress, type FrustumLongPressHandle } from './frustumLongPress';
+import { markFrustumTap, markSceneObjectTouchDownForTouchPointer } from './frustumTouchGuards';
 import { markSceneContextMenuHandled } from './sceneContextMenuGuard';
 
 export type { BatchedFrustumInteractionItem } from './batchedFrustumInteractionPolicy';
@@ -22,6 +22,8 @@ export type BatchedFrustumTooltipData = {
 
 interface BatchedFrustumPointerNativeEvent {
   button?: number;
+  pointerId?: number;
+  pointerType?: string;
   clientX: number;
   clientY: number;
 }
@@ -59,12 +61,12 @@ export function useBatchedFrustumInteractions<T extends BatchedFrustumInteractio
   onLongPress,
 }: BatchedFrustumInteractionsOptions<T>) {
   const [tooltipData, setTooltipData] = useState<BatchedFrustumTooltipData | null>(null);
-  const touchDownRef = useRef<(BatchedFrustumTouchStart & { timer: ReturnType<typeof setTimeout> | null }) | null>(null);
+  const touchDownRef = useRef<{ instanceId: number; x: number; y: number; longPress: FrustumLongPressHandle | null } | null>(null);
 
   useEffect(() => {
     return () => {
       clearBodyCursor(CAMERA_FRUSTUM_CURSOR_OWNER);
-      if (touchDownRef.current?.timer) clearTimeout(touchDownRef.current.timer);
+      touchDownRef.current?.longPress?.cancel();
     };
   }, []);
 
@@ -126,18 +128,28 @@ export function useBatchedFrustumInteractions<T extends BatchedFrustumInteractio
   const onPointerDownForTouch = useCallback((e: BatchedFrustumEvent<BatchedFrustumPointerNativeEvent>) => {
     if (e.instanceId === undefined) return;
 
-    markFrustumTouchDown();
-    const instanceId = e.instanceId;
-    const x = e.nativeEvent.clientX;
-    const y = e.nativeEvent.clientY;
-    const timer = setTimeout(() => {
-      if (!touchDownRef.current || touchDownRef.current.instanceId !== instanceId) return;
-      touchDownRef.current.fired = true;
-      const frustum = getFrustum(instanceId);
-      if (frustum) onLongPress(frustum.image.imageId);
-    }, TOUCH.longPressDelay);
+    touchDownRef.current?.longPress?.cancel();
 
-    touchDownRef.current = { instanceId, x, y, timer, fired: false };
+    const instanceId = e.instanceId;
+    const { pointerId, pointerType, clientX, clientY } = e.nativeEvent;
+    const isTouch = markSceneObjectTouchDownForTouchPointer(pointerType);
+
+    touchDownRef.current = {
+      instanceId,
+      x: clientX,
+      y: clientY,
+      longPress: isTouch && pointerId !== undefined
+        ? armFrustumLongPress({
+            pointerId,
+            x: clientX,
+            y: clientY,
+            onFire: () => {
+              const frustum = getFrustum(instanceId);
+              if (frustum) onLongPress(frustum.image.imageId);
+            },
+          })
+        : null,
+    };
   }, [getFrustum, onLongPress]);
 
   const onPointerDownForMouse = useCallback((e: BatchedFrustumEvent<BatchedFrustumPointerNativeEvent>) => {
@@ -153,12 +165,14 @@ export function useBatchedFrustumInteractions<T extends BatchedFrustumInteractio
     touchDownRef.current = null;
     if (!down) return;
 
-    if (down.timer) clearTimeout(down.timer);
-    if (down.fired) return;
+    const fired = down.longPress?.fired ?? false;
+    down.longPress?.cancel();
+    if (fired) return;
 
+    const touchStart: BatchedFrustumTouchStart = { instanceId: down.instanceId, x: down.x, y: down.y, fired };
     const action = getBatchedFrustumTouchUpAction({
       frustums,
-      touchStart: down,
+      touchStart,
       touchEnd: {
         x: e.nativeEvent.clientX,
         y: e.nativeEvent.clientY,

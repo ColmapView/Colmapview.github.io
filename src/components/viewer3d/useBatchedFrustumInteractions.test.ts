@@ -9,6 +9,7 @@ import {
 import { TOUCH } from '../../theme/sizing';
 import { clearBodyCursor } from '../../utils/bodyCursor';
 import { CAMERA_FRUSTUM_CURSOR_OWNER } from './cameraFrustumConstants';
+import { resetFrustumTouchGuards, setActiveSceneTouchPointerCount } from './frustumTouchGuards';
 import {
   resetSceneContextMenuGuard,
   wasSceneContextMenuHandledRecently,
@@ -59,9 +60,27 @@ function mouseEvent(instanceId: number | undefined) {
   });
 }
 
+function batchedTouchEvent(
+  instanceId: number,
+  overrides: Partial<{ pointerId: number; pointerType: string; clientX: number; clientY: number }> = {}
+) {
+  return {
+    instanceId,
+    nativeEvent: { pointerId: 1, pointerType: 'touch', clientX: 10, clientY: 20, ...overrides },
+    stopPropagation: vi.fn(),
+  };
+}
+
+function dispatchWindowPointerMove(pointerId: number, clientX: number, clientY: number) {
+  const event = new Event('pointermove');
+  Object.assign(event, { pointerId, clientX, clientY });
+  window.dispatchEvent(event);
+}
+
 afterEach(() => {
   vi.useRealTimers();
   resetSceneContextMenuGuard();
+  resetFrustumTouchGuards();
   clearBodyCursor(CAMERA_FRUSTUM_CURSOR_OWNER);
   document.body.style.cursor = '';
 });
@@ -144,41 +163,109 @@ describe('useBatchedFrustumInteractions', () => {
     const options = createOptions({ touchMode: true });
     const { result } = renderHook(() => useBatchedFrustumInteractions(options));
 
-    act(() => result.current.interactionHandlers.onPointerDown?.(pointerEvent(0, 10, 10)));
+    act(() => result.current.interactionHandlers.onPointerDown?.(batchedTouchEvent(0, { clientX: 10, clientY: 10 })));
+    setActiveSceneTouchPointerCount(1);
     act(() => vi.advanceTimersByTime(TOUCH.longPressDelay));
-    act(() => result.current.interactionHandlers.onPointerUp?.(pointerEvent(0, 10, 10)));
+    act(() => result.current.interactionHandlers.onPointerUp?.(batchedTouchEvent(0, { clientX: 10, clientY: 10 })));
 
     expect(options.onLongPress).toHaveBeenCalledWith(1);
     expect(options.onContextMenu).not.toHaveBeenCalled();
 
-    act(() => result.current.interactionHandlers.onPointerDown?.(pointerEvent(1, 20, 20)));
+    act(() => result.current.interactionHandlers.onPointerDown?.(batchedTouchEvent(1, { clientX: 20, clientY: 20 })));
     act(() => vi.advanceTimersByTime(TOUCH.longPressDelay - 1));
-    const tapUp = pointerEvent(1, 22, 22);
+    const tapUp = batchedTouchEvent(1, { clientX: 22, clientY: 22 });
     act(() => result.current.interactionHandlers.onPointerUp?.(tapUp));
 
     expect(tapUp.stopPropagation).toHaveBeenCalledOnce();
     expect(options.onContextMenu).toHaveBeenCalledWith(2);
 
-    act(() => result.current.interactionHandlers.onPointerDown?.(pointerEvent(1, 0, 0)));
-    act(() => result.current.interactionHandlers.onPointerUp?.(pointerEvent(1, 16, 0)));
+    act(() => result.current.interactionHandlers.onPointerDown?.(batchedTouchEvent(1, { clientX: 0, clientY: 0 })));
+    act(() => result.current.interactionHandlers.onPointerUp?.(batchedTouchEvent(1, { clientX: 16, clientY: 0 })));
 
     expect(options.onContextMenu).toHaveBeenCalledTimes(1);
   });
 
-  it('suppresses selected touch taps and clears pending timers on unmount', () => {
+  it('suppresses selected touch taps and cancels the pending long-press on unmount', () => {
     vi.useFakeTimers();
     const options = createOptions({ selectedImageId: 2, touchMode: true });
     const { result, unmount } = renderHook(() => useBatchedFrustumInteractions(options));
 
-    act(() => result.current.interactionHandlers.onPointerDown?.(pointerEvent(1, 10, 10)));
-    act(() => result.current.interactionHandlers.onPointerUp?.(pointerEvent(1, 10, 10)));
+    act(() => result.current.interactionHandlers.onPointerDown?.(batchedTouchEvent(1, { clientX: 10, clientY: 10 })));
+    act(() => result.current.interactionHandlers.onPointerUp?.(batchedTouchEvent(1, { clientX: 10, clientY: 10 })));
 
     expect(options.onContextMenu).not.toHaveBeenCalled();
 
-    act(() => result.current.interactionHandlers.onPointerDown?.(pointerEvent(0, 10, 10)));
+    act(() => result.current.interactionHandlers.onPointerDown?.(batchedTouchEvent(0, { clientX: 10, clientY: 10 })));
+    setActiveSceneTouchPointerCount(1);
     unmount();
     act(() => vi.advanceTimersByTime(TOUCH.longPressDelay));
 
     expect(options.onLongPress).not.toHaveBeenCalled();
+  });
+});
+
+describe('batched long-press', () => {
+  it('fires the long-press for a stationary lone touch on the pressed instance', () => {
+    vi.useFakeTimers();
+    const options = createOptions({ touchMode: true });
+    const { result } = renderHook(() => useBatchedFrustumInteractions(options));
+
+    act(() => result.current.interactionHandlers.onPointerDown?.(batchedTouchEvent(0)));
+    setActiveSceneTouchPointerCount(1);
+    act(() => vi.advanceTimersByTime(TOUCH.longPressDelay));
+
+    expect(options.onLongPress).toHaveBeenCalledWith(1);
+  });
+
+  it('does not fire while the armed pointer drags past the tap radius', () => {
+    vi.useFakeTimers();
+    const options = createOptions({ touchMode: true });
+    const { result } = renderHook(() => useBatchedFrustumInteractions(options));
+
+    act(() => result.current.interactionHandlers.onPointerDown?.(batchedTouchEvent(0)));
+    setActiveSceneTouchPointerCount(1);
+    dispatchWindowPointerMove(1, 60, 20);
+    act(() => vi.advanceTimersByTime(TOUCH.longPressDelay));
+
+    expect(options.onLongPress).not.toHaveBeenCalled();
+  });
+
+  it('does not fire during a pinch (second scene touch pointer active)', () => {
+    vi.useFakeTimers();
+    const options = createOptions({ touchMode: true });
+    const { result } = renderHook(() => useBatchedFrustumInteractions(options));
+
+    act(() => result.current.interactionHandlers.onPointerDown?.(batchedTouchEvent(0)));
+    setActiveSceneTouchPointerCount(2);
+    act(() => vi.advanceTimersByTime(TOUCH.longPressDelay));
+
+    expect(options.onLongPress).not.toHaveBeenCalled();
+  });
+
+  it('never arms a long-press for mouse pointers but keeps the tap context-menu action', () => {
+    vi.useFakeTimers();
+    const options = createOptions({ touchMode: true });
+    const { result } = renderHook(() => useBatchedFrustumInteractions(options));
+
+    act(() => result.current.interactionHandlers.onPointerDown?.(batchedTouchEvent(0, { pointerType: 'mouse' })));
+    act(() => vi.advanceTimersByTime(TOUCH.longPressDelay));
+    expect(options.onLongPress).not.toHaveBeenCalled();
+
+    act(() => result.current.interactionHandlers.onPointerUp?.(batchedTouchEvent(0, { pointerType: 'mouse' })));
+    expect(options.onContextMenu).toHaveBeenCalledWith(1);
+  });
+
+  it('suppresses the tap context-menu action after a fired long-press', () => {
+    vi.useFakeTimers();
+    const options = createOptions({ touchMode: true });
+    const { result } = renderHook(() => useBatchedFrustumInteractions(options));
+
+    act(() => result.current.interactionHandlers.onPointerDown?.(batchedTouchEvent(0)));
+    setActiveSceneTouchPointerCount(1);
+    act(() => vi.advanceTimersByTime(TOUCH.longPressDelay));
+    expect(options.onLongPress).toHaveBeenCalledTimes(1);
+
+    act(() => result.current.interactionHandlers.onPointerUp?.(batchedTouchEvent(0)));
+    expect(options.onContextMenu).not.toHaveBeenCalled();
   });
 });
