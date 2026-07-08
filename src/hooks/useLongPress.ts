@@ -53,6 +53,18 @@ export function useLongPress({
   }, []);
 
   const onTouchStart = useCallback((e: LongPressTouchEvent) => {
+    // Never orphan a running timer: a second touchstart used to overwrite it,
+    // leaving an uncancellable timer that fired mid-gesture.
+    clearTimer();
+
+    // touches lists ALL active screen touches: more than one means a gesture
+    // (pinch / two-finger pan), not a long-press.
+    if (e.touches.length > 1) {
+      startPosRef.current = null;
+      touchEventRef.current = null;
+      return;
+    }
+
     // Store starting position for drag detection
     const touch = e.touches[0];
     startPosRef.current = { x: touch.clientX, y: touch.clientY };
@@ -64,9 +76,17 @@ export function useLongPress({
       longPressTriggeredRef.current = true;
       onLongPress(touchEventRef.current!);
     }, delay);
-  }, [onLongPress, delay]);
+  }, [clearTimer, onLongPress, delay]);
 
   const onTouchMove = useCallback((e: LongPressTouchEvent) => {
+    // A second finger can land on another element, so it may only become
+    // visible here (touches spans the whole screen): cancel the press.
+    if (e.touches.length > 1) {
+      clearTimer();
+      startPosRef.current = null;
+      return;
+    }
+
     if (!startPosRef.current) return;
 
     const touch = e.touches[0];

@@ -148,11 +148,10 @@ export const TOUCH = {
 } as const;
 
 /**
- * Phone vs tablet breakpoint.
- * Phones (<640px) show "Desktop Only" message.
- * Tablets (640-1080px) get touch mode UI.
+ * Phone vs tablet breakpoint. Phones are fully supported (touch mode);
+ * there is no "Desktop Only" gate anymore.
  */
 export const TOUCH_BREAKPOINTS = {
-  phone: 640,               // Below this = phone (blocked)
+  phone: 640,               // Below this = phone
   tablet: 1080,             // Below this = tablet (touch mode)
 } as const;

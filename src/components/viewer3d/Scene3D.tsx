@@ -397,6 +397,7 @@ export function Scene3D() {
       onPointerDown={sceneContextMenu.touchMode ? sceneContextMenu.handleTouchPointerDown : undefined}
       onPointerMove={sceneContextMenu.touchMode ? sceneContextMenu.handleTouchPointerMove : undefined}
       onPointerUp={sceneContextMenu.touchMode ? sceneContextMenu.handleTouchPointerUp : undefined}
+      onPointerCancel={sceneContextMenu.touchMode ? sceneContextMenu.handleTouchPointerCancel : undefined}
       onMouseDown={sceneContextMenu.touchMode ? undefined : sceneContextMenu.handleMouseDown}
       onMouseUp={sceneContextMenu.touchMode ? undefined : sceneContextMenu.handleMouseUp}
     >
