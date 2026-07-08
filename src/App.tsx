@@ -20,6 +20,13 @@ import { useUrlLoader } from './hooks/useUrlLoader';
 import { decodeShareData, applyShareConfig } from './hooks/useUrlState';
 import { detectTouchDevice } from './hooks/useIsTouchDevice';
 import { appLogger } from './utils/logger';
+import { requestConfirmation } from './utils/confirmation';
+import {
+  clearUrlLoadAttempt,
+  markUrlLoadAttemptStarted,
+  readUnfinishedUrlLoadAttempt,
+  shouldConfirmUrlAutoLoad,
+} from './utils/urlLoadAttemptGuard';
 import {
   APP_EMBED_MODE_LOG_MESSAGE,
   APP_SHARED_CONFIG_LOG_MESSAGE,
@@ -90,9 +97,30 @@ function App() {
         return;
       }
 
+      const runGuardedUrlLoad = async (manifestUrl: string): Promise<boolean> => {
+        const previousAttempt = readUnfinishedUrlLoadAttempt();
+        if (shouldConfirmUrlAutoLoad(previousAttempt, manifestUrl)) {
+          const retry = await requestConfirmation({
+            title: 'Reload this dataset?',
+            message: 'The previous attempt to load this dataset did not finish - it may have run out of memory on this device. Load it again?',
+            confirmLabel: 'Load again',
+            cancelLabel: 'Not now',
+            size: 'compact',
+          });
+          if (!retry) {
+            clearUrlLoadAttempt();
+            return false;
+          }
+        }
+        markUrlLoadAttemptStarted(manifestUrl);
+        const loaded = await loadFromUrl(manifestUrl);
+        clearUrlLoadAttempt();
+        return loaded;
+      };
+
       if (loadPlan.kind === 'manifest-url') {
         appLogger.info(loadPlan.logMessage);
-        const loaded = await loadFromUrl(loadPlan.manifestUrl);
+        const loaded = await runGuardedUrlLoad(loadPlan.manifestUrl);
         if (loaded && loadPlan.config) {
           applyShareConfig(loadPlan.config);
         }
@@ -104,7 +132,7 @@ function App() {
 
       if (loadPlan.kind === 'legacy-url') {
         appLogger.info(loadPlan.logMessage);
-        loadFromUrl(loadPlan.manifestUrl);
+        await runGuardedUrlLoad(loadPlan.manifestUrl);
       }
     };
 
