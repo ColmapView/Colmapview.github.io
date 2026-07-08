@@ -57,13 +57,6 @@ export const ASPECT_RATIO = {
 } as const;
 
 /**
- * Responsive breakpoints in pixels.
- */
-export const BREAKPOINTS = {
-  mobile: 1080,             // Below this width, use mobile layout
-} as const;
-
-/**
  * Fallback viewport/screen dimensions when window/screen APIs are unavailable (e.g., SSR).
  */
 export const VIEWPORT_FALLBACK = { width: 1920, height: 1080 } as const;
@@ -148,10 +141,10 @@ export const TOUCH = {
 } as const;
 
 /**
- * Phone vs tablet breakpoint. Phones are fully supported (touch mode);
- * there is no "Desktop Only" gate anymore.
+ * Phone-width breakpoint. Below this width the app auto-enables touch mode at
+ * startup (see App.tsx). Phones are fully supported; there is no "Desktop Only"
+ * gate anymore.
  */
 export const TOUCH_BREAKPOINTS = {
-  phone: 640,               // Below this = phone
-  tablet: 1080,             // Below this = tablet (touch mode)
+  phone: 640,               // Below this width = phone; auto-enables touch mode
 } as const;
