@@ -436,6 +436,42 @@ export function sortRemoteSplatCandidates(
   return sortSplatCandidatesByPreference(candidates);
 }
 
+/**
+ * Auto-load byte budget for a lone discovered splat. A single candidate used to
+ * auto-download unconditionally, which for large tiles meant an unprompted
+ * multi-GB fetch — on phones that OOM-crashes the tab into a reload loop.
+ * Over-budget candidates stay in the catalog for explicit selection instead.
+ */
+export const SPLAT_AUTO_LOAD_MAX_BYTES = 150_000_000;
+/** Stricter budget on touch devices: phone tabs get roughly a 1 GB memory cap. */
+export const SPLAT_AUTO_LOAD_MAX_BYTES_TOUCH = 50_000_000;
+
+export interface SplatAutoLoadDecision {
+  autoLoad: boolean;
+  budgetBytes: number;
+  /** The lone candidate that exceeded the budget (drives the skip log), or null. */
+  oversizedCandidate: RemoteSplatCandidate | null;
+}
+
+export function getSplatAutoLoadDecision(
+  candidates: readonly RemoteSplatCandidate[],
+  { isTouchDevice }: { isTouchDevice: boolean }
+): SplatAutoLoadDecision {
+  const budgetBytes = isTouchDevice ? SPLAT_AUTO_LOAD_MAX_BYTES_TOUCH : SPLAT_AUTO_LOAD_MAX_BYTES;
+  if (candidates.length !== 1) {
+    return { autoLoad: false, budgetBytes, oversizedCandidate: null };
+  }
+
+  const candidate = candidates[0];
+  // Size 0 means unknown (e.g. HEAD blocked on a static host); keep the legacy
+  // auto-load for those rather than silently hiding the only splat.
+  if (candidate.size > budgetBytes) {
+    return { autoLoad: false, budgetBytes, oversizedCandidate: candidate };
+  }
+
+  return { autoLoad: true, budgetBytes, oversizedCandidate: null };
+}
+
 export function getManifestColmapFileEntries(manifest: ColmapManifest): ManifestColmapFileEntries {
   const { files } = manifest;
   const requiredFiles = [

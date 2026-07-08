@@ -15,9 +15,12 @@ import {
   getManifestLoadSourceInfo,
   getManifestLazySourceBases,
   getRelativeHuggingFaceTreePath,
+  getSplatAutoLoadDecision,
   getUrlNormalizationLogMessage,
   joinManifestUrlPath,
   normalizeLoadUrl,
+  SPLAT_AUTO_LOAD_MAX_BYTES,
+  SPLAT_AUTO_LOAD_MAX_BYTES_TOUCH,
 } from './urlLoaderPolicy';
 
 const manifest: ColmapManifest = {
@@ -322,5 +325,60 @@ describe('url loader policy helpers', () => {
       .toBe('[URL Loader] Using direct URL with default paths: https://example.com/data');
     expect(getInlineManifestLoadLogMessage({ ...manifest, name: 'Shared' }))
       .toBe('[URL Loader] Loading from manifest: Shared');
+  });
+});
+
+describe('getSplatAutoLoadDecision', () => {
+  it('auto-loads a single candidate within the desktop budget', () => {
+    expect(
+      getSplatAutoLoadDecision([{ path: 'splats/scene.spz', size: 40_000_000 }], { isTouchDevice: false })
+    ).toEqual({
+      autoLoad: true,
+      budgetBytes: SPLAT_AUTO_LOAD_MAX_BYTES,
+      oversizedCandidate: null,
+    });
+  });
+
+  it('declines a single candidate above the desktop budget and reports it as oversized', () => {
+    const candidate = { path: 'splats/bigsur_v2.ply', size: 1_040_000_634 };
+
+    expect(getSplatAutoLoadDecision([candidate], { isTouchDevice: false })).toEqual({
+      autoLoad: false,
+      budgetBytes: SPLAT_AUTO_LOAD_MAX_BYTES,
+      oversizedCandidate: candidate,
+    });
+  });
+
+  it('applies the stricter touch budget on touch devices', () => {
+    const candidate = { path: 'splats/scene.spz', size: 60_000_000 };
+
+    expect(getSplatAutoLoadDecision([candidate], { isTouchDevice: false }).autoLoad).toBe(true);
+    expect(getSplatAutoLoadDecision([candidate], { isTouchDevice: true })).toEqual({
+      autoLoad: false,
+      budgetBytes: SPLAT_AUTO_LOAD_MAX_BYTES_TOUCH,
+      oversizedCandidate: candidate,
+    });
+  });
+
+  it('auto-loads a single candidate with unknown size (static hosts may block HEAD)', () => {
+    expect(
+      getSplatAutoLoadDecision([{ path: 'scene.spz', size: 0 }], { isTouchDevice: true }).autoLoad
+    ).toBe(true);
+  });
+
+  it('never auto-loads when there is not exactly one candidate', () => {
+    const small = { path: 'a.spz', size: 1_000 };
+    const alsoSmall = { path: 'b.spz', size: 2_000 };
+
+    expect(getSplatAutoLoadDecision([], { isTouchDevice: false })).toEqual({
+      autoLoad: false,
+      budgetBytes: SPLAT_AUTO_LOAD_MAX_BYTES,
+      oversizedCandidate: null,
+    });
+    expect(getSplatAutoLoadDecision([small, alsoSmall], { isTouchDevice: false })).toEqual({
+      autoLoad: false,
+      budgetBytes: SPLAT_AUTO_LOAD_MAX_BYTES,
+      oversizedCandidate: null,
+    });
   });
 });

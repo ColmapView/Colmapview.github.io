@@ -276,6 +276,70 @@ describe('URL loader manifest fetch helpers', () => {
     expect([...files.keys()]).toContain('splats/scene.spz');
   });
 
+  it('does not auto-download a single discovered splat above the auto-load budget', async () => {
+    const setUrlProgress = vi.fn();
+    const log = vi.fn();
+    const onRemoteSplatCatalog = vi.fn();
+    const baseUrl = 'https://huggingface.co/datasets/Jamesbass/bigsur-360-colmap/resolve/main';
+    const fetchImpl = vi.fn(async () => jsonResponse([
+      { type: 'file', path: 'splats/huge.spz', size: 1_040_000_634 },
+    ]));
+    const fetchFile = vi.fn(async (_baseUrl: string, path: string) =>
+      buildFile(path.split('/').pop() ?? path)
+    );
+
+    const files = await fetchManifestColmapFiles({
+      ...manifest,
+      baseUrl,
+      splats: undefined,
+    }, {
+      fetchImpl,
+      fetchFile,
+      isTouchDevice: false,
+      log,
+      setUrlProgress,
+      onRemoteSplatCatalog,
+    });
+
+    // The lone splat is over budget: never eager-downloaded, only cataloged.
+    expect(fetchFile).not.toHaveBeenCalledWith(baseUrl, 'splats/huge.spz', expect.anything());
+    expect([...files.keys()].some((key) => key.endsWith('.spz'))).toBe(false);
+    expect(onRemoteSplatCatalog).toHaveBeenCalledWith([{ path: 'splats/huge.spz', size: 1_040_000_634 }]);
+    expect(log).toHaveBeenCalledWith(
+      '[URL Loader] Splat splats/huge.spz (1040 MB) exceeds the 150 MB auto-load limit; select it from the splat picker to download'
+    );
+  });
+
+  it('applies the stricter touch budget to single-splat auto-load', async () => {
+    const setUrlProgress = vi.fn();
+    const log = vi.fn();
+    const baseUrl = 'https://huggingface.co/datasets/OpsiClear/NGS/resolve/main/objects/scan_touch';
+    const fetchImpl = vi.fn(async () => jsonResponse([
+      { type: 'file', path: 'objects/scan_touch/splats/scene.spz', size: 60_000_000 },
+    ]));
+    const fetchFile = vi.fn(async (_baseUrl: string, path: string) =>
+      buildFile(path.split('/').pop() ?? path)
+    );
+
+    const files = await fetchManifestColmapFiles({
+      ...manifest,
+      baseUrl,
+      splats: undefined,
+    }, {
+      fetchImpl,
+      fetchFile,
+      isTouchDevice: true,
+      log,
+      setUrlProgress,
+    });
+
+    expect(fetchFile).not.toHaveBeenCalledWith(baseUrl, 'splats/scene.spz', expect.anything());
+    expect([...files.keys()].some((key) => key.endsWith('.spz'))).toBe(false);
+    expect(log).toHaveBeenCalledWith(
+      '[URL Loader] Splat splats/scene.spz (60 MB) exceeds the 50 MB auto-load limit; select it from the splat picker to download'
+    );
+  });
+
   it('discovers all generic directory-listing splats recursively', async () => {
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === 'HEAD') {

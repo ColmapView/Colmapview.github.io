@@ -137,4 +137,66 @@ describe('useUrlLoader', () => {
       expect.objectContaining({ message: 'Failed to fetch splat (404)' })
     );
   });
+
+  it('surfaces a skipped oversized lone splat as a lazy source and opens the picker', async () => {
+    const baseUrl = 'https://huggingface.co/datasets/Acme/Scene/resolve/main';
+    const treeEntries = [
+      { type: 'file', path: 'sparse/0/cameras.bin', size: 48 },
+      { type: 'file', path: 'sparse/0/images.bin', size: 1_000 },
+      { type: 'file', path: 'sparse/0/points3D.bin', size: 1_000 },
+      { type: 'file', path: 'splats/huge.spz', size: 1_040_000_634 },
+    ];
+    const fetchMock = vi.fn(async (url: string | URL) => {
+      if (String(url).startsWith('https://huggingface.co/api/datasets/Acme/Scene/tree/main')) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: { get: () => null },
+          json: async () => treeEntries,
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: { get: () => null },
+        blob: async () => new Blob(['bin'], { type: 'application/octet-stream' }),
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    processFilesMock.mockImplementation(async () => {
+      // Real processFiles stores the parsed COLMAP files (no splat was downloaded).
+      useReconstructionStore.setState({
+        loadedFiles: {
+          camerasFile: new File([''], 'cameras.bin'),
+          imagesFile: new File([''], 'images.bin'),
+          points3DFile: new File([''], 'points3D.bin'),
+          imageFiles: new Map(),
+          hasMasks: false,
+        },
+      });
+    });
+    const logger = { error: vi.fn(), info: vi.fn() };
+    const { result } = renderHook(() => useUrlLoader({ logger }));
+
+    let loaded = false;
+    await act(async () => {
+      loaded = await result.current.loadFromUrl(baseUrl);
+    });
+
+    expect(loaded).toBe(true);
+    // The oversized splat body is never fetched...
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).not.toContainEqual(
+      expect.stringContaining('huge.spz')
+    );
+    // ...but the user can still opt in: it is listed as a lazy source and the picker opens.
+    const state = useReconstructionStore.getState();
+    const sources = state.loadedFiles?.splatFileSources ?? [];
+    expect(sources.map((source) => source.path)).toEqual(['splats/huge.spz']);
+    expect(sources[0]?.url).toBe(`${baseUrl}/splats/huge.spz`);
+    expect(sources[0]?.file).toBeUndefined();
+    expect(state.showSplatPicker).toBe(true);
+    expect(logger.error).not.toHaveBeenCalled();
+  });
 });

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   formatSplatSize,
+  getSplatPickerDescription,
   getSplatPickerItems,
   getSplatPickerOverlayStyle,
   getSplatPickerPanelStyle,
@@ -35,6 +36,18 @@ describe('getSplatPickerItems', () => {
       { id: 'splats/5x5#-5_-15_0_-10#-1_-3.ply', name: '5x5#-5_-15_0_-10#-1_-3.ply', sizeLabel: '943 MB' },
       { id: 'inside.ply', name: 'inside.ply', sizeLabel: '46 MB' },
     ]);
+  });
+});
+
+describe('getSplatPickerDescription', () => {
+  it('pluralizes for multiple splats', () => {
+    expect(getSplatPickerDescription(3))
+      .toBe('3 splats found. Pick one to load, or keep the COLMAP scene.');
+  });
+
+  it('uses singular phrasing for a lone non-auto-loaded splat', () => {
+    expect(getSplatPickerDescription(1))
+      .toBe('1 splat found. Pick it to load, or keep the COLMAP scene.');
   });
 });
 

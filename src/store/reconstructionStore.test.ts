@@ -625,4 +625,33 @@ describe('reconstruction store lazy splat source switching', () => {
     useReconstructionStore.getState().setShowSplatPicker(false);
     expect(useReconstructionStore.getState().showSplatPicker).toBe(false);
   });
+
+  it('opens the splat picker when a lone non-auto-loaded splat is merged with none active', () => {
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({ splatFileSources: [] }));
+
+    useReconstructionStore.getState().mergeRemoteSplatCatalog(
+      [{ path: 'splats/huge.ply', size: 1_040_000_634 }],
+      'https://x/ds'
+    );
+
+    const sources = useReconstructionStore.getState().loadedFiles?.splatFileSources ?? [];
+    expect(sources.map((s) => s.path)).toEqual(['splats/huge.ply']);
+    expect(useReconstructionStore.getState().showSplatPicker).toBe(true);
+  });
+
+  it('does not open the splat picker when the merged lone splat is already active', () => {
+    const fileA = new File(['a'], 'a.ply');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFile: fileA,
+      splatFiles: [fileA],
+      splatFileSources: [{ id: 'splats/a.ply', path: 'splats/a.ply', file: fileA }],
+    }));
+
+    useReconstructionStore.getState().mergeRemoteSplatCatalog(
+      [{ path: 'splats/a.ply', size: 10 }],
+      'https://x/ds'
+    );
+
+    expect(useReconstructionStore.getState().showSplatPicker).toBe(false);
+  });
 });

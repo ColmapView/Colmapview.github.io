@@ -27,6 +27,7 @@ import {
   getHuggingFaceSplatPaths,
   getManifestColmapFileEntries,
   getRelativeHuggingFaceTreePaths,
+  getSplatAutoLoadDecision,
   joinManifestUrlPath,
   sortRemoteSplatCandidates,
   type HuggingFaceColmapPaths,
@@ -34,6 +35,7 @@ import {
   type RemoteSplatCandidate,
 } from './urlLoaderPolicy';
 import { isUrlLoadError } from './urlLoaderErrorHandling';
+import { detectTouchDevice } from './useIsTouchDevice';
 
 type FetchUrl = (url: string, init?: RequestInit) => Promise<Response>;
 type FetchManifestFile = (
@@ -68,12 +70,18 @@ export interface FetchManifestColmapFilesDeps {
   setUrlProgress: SetUrlProgress;
   /**
    * Receives the full discovered remote splat catalog (all tiles, with sizes)
-   * so the caller can list every tile as a lazy, on-demand source. Only the
-   * first splat is eager-downloaded.
+   * so the caller can list every tile as a lazy, on-demand source. At most the
+   * lone discovered splat is eager-downloaded, and only within the auto-load
+   * size budget.
    */
   onRemoteSplatCatalog?: (catalog: RemoteSplatCandidate[]) => void;
   /** Override splat classification (defaults to reading the PLY header). */
   classifySplatUrl?: ClassifySplatUrl;
+  /**
+   * Override touch-device detection for the splat auto-load budget
+   * (defaults to detecting from the environment).
+   */
+  isTouchDevice?: boolean;
 }
 
 /**
@@ -527,33 +535,50 @@ function getDiscoveredSplatLogMessage(
     : `[URL Loader] Discovered ${candidates.length} ${label} files: ${candidateList}`;
 }
 
+function getOversizedSplatSkipLogMessage(
+  candidate: RemoteSplatCandidate,
+  budgetBytes: number
+): string {
+  const sizeMb = Math.round(candidate.size / 1_000_000);
+  const budgetMb = Math.round(budgetBytes / 1_000_000);
+  return `[URL Loader] Splat ${candidate.path} (${sizeMb} MB) exceeds the ${budgetMb} MB auto-load limit; select it from the splat picker to download`;
+}
+
 function applyDiscoveredSplats(
   manifest: ColmapManifest,
   candidates: readonly RemoteSplatCandidate[],
   source: 'Hugging Face' | 'directory',
-  deps: Pick<FetchManifestColmapFilesDeps, 'log' | 'onRemoteSplatCatalog'>
+  deps: Pick<FetchManifestColmapFilesDeps, 'log' | 'onRemoteSplatCatalog' | 'isTouchDevice'>
 ): ColmapManifest {
   deps.log?.(getDiscoveredSplatLogMessage(source, candidates));
   // Surface the full catalog so the loader can list every tile as a lazy,
-  // on-demand source. Only the first (preferred) splat is eager-downloaded; the
-  // rest are fetched when the user switches to them, which keeps large tiled
-  // datasets (tens of GB) from downloading everything up front.
+  // on-demand source. Anything not auto-loaded here is fetched when the user
+  // selects it, which keeps large tiled datasets (tens of GB) from downloading
+  // everything up front.
   deps.onRemoteSplatCatalog?.([...candidates]);
-  // A single splat auto-loads. With multiple, don't auto-download any (they can
-  // be huge, e.g. a multi-GB point_cloud.ply); the user picks one from the
-  // catalog dropdown, or stays on the COLMAP scene.
-  if (candidates.length === 1) {
+  // A single splat auto-loads only within the size budget (a lone multi-GB
+  // tile would otherwise download unprompted — on phones that OOM-crashes the
+  // tab into a reload loop). With multiple, don't auto-download any; the user
+  // picks one from the catalog, or stays on the COLMAP scene.
+  const decision = getSplatAutoLoadDecision(candidates, {
+    isTouchDevice: deps.isTouchDevice ?? detectTouchDevice(),
+  });
+  if (decision.autoLoad) {
     return { ...manifest, splats: [candidates[0].path] };
   }
-  deps.log?.(
-    `[URL Loader] ${candidates.length} splats found; none auto-loaded - select one to display`
-  );
+  if (decision.oversizedCandidate) {
+    deps.log?.(getOversizedSplatSkipLogMessage(decision.oversizedCandidate, decision.budgetBytes));
+  } else {
+    deps.log?.(
+      `[URL Loader] ${candidates.length} splats found; none auto-loaded - select one to display`
+    );
+  }
   return { ...manifest, splats: [] };
 }
 
 async function withDiscoveredRemoteSplats(
   manifest: ColmapManifest,
-  deps: Pick<FetchManifestColmapFilesDeps, 'fetchImpl' | 'log' | 'onRemoteSplatCatalog' | 'classifySplatUrl'>
+  deps: Pick<FetchManifestColmapFilesDeps, 'fetchImpl' | 'log' | 'onRemoteSplatCatalog' | 'classifySplatUrl' | 'isTouchDevice'>
 ): Promise<ColmapManifest> {
   if (manifest.splats?.length) {
     return manifest;
@@ -662,6 +687,7 @@ export async function fetchManifestColmapFiles(
     log,
     onRemoteSplatCatalog: deps.onRemoteSplatCatalog,
     classifySplatUrl: deps.classifySplatUrl,
+    isTouchDevice: deps.isTouchDevice,
   });
   const { baseUrl } = manifestWithDiscoveredSplats;
   const { requiredFiles, optionalFiles } = getManifestColmapFileEntries(manifestWithDiscoveredSplats);

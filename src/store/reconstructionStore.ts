@@ -278,9 +278,10 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       return;
     }
     set({ loadedFiles: mergeRemoteSplatCatalogIntoLoadedFiles(loadedFiles, catalog, baseUrl) });
-    // Multiple splats are not auto-loaded; pop up the picker so the user chooses
-    // one (or stays on COLMAP) as part of finishing the load.
-    if (catalog.length > 1 && !get().loadedFiles?.splatFile) {
+    // Splats that weren't auto-loaded (multiple candidates, or a lone one over
+    // the auto-load size budget) need an explicit choice; pop up the picker so
+    // the user picks one (or stays on COLMAP) as part of finishing the load.
+    if (catalog.length >= 1 && !get().loadedFiles?.splatFile) {
       set({ showSplatPicker: true });
     }
   },

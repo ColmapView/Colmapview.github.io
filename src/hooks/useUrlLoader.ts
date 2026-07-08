@@ -158,9 +158,11 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
           catalogHolder.value = catalog.map((candidate) => ({ path: candidate.path, size: candidate.size }));
         },
       });
-      // List all discovered tiles as lazy, on-demand sources (the loader only
-      // eager-downloaded the first); selecting another fetches it on demand.
-      if (loaded && catalogHolder.value.length > 1) {
+      // List discovered tiles as lazy, on-demand sources whenever none was
+      // eager-loaded (multiple candidates, or a lone one over the auto-load
+      // budget); selecting one fetches it on demand.
+      const splatEagerLoaded = Boolean(useReconstructionStore.getState().loadedFiles?.splatFile);
+      if (loaded && catalogHolder.value.length > 0 && !splatEagerLoaded) {
         mergeRemoteSplatCatalog(catalogHolder.value, manifest.baseUrl);
       }
       return loaded;

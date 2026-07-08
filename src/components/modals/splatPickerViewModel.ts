@@ -53,6 +53,16 @@ export function formatSplatSize(bytes: number | undefined): string {
   return `${Math.max(1, Math.round(bytes / 1000))} KB`;
 }
 
+/**
+ * Count-aware modal description. A lone entry means a splat that was found but
+ * not auto-loaded (over the size budget), so it reads as an opt-in prompt.
+ */
+export function getSplatPickerDescription(count: number): string {
+  return count === 1
+    ? '1 splat found. Pick it to load, or keep the COLMAP scene.'
+    : `${count} splats found. Pick one to load, or keep the COLMAP scene.`;
+}
+
 /** Build the picker rows from splat sources (filename + size). */
 export function getSplatPickerItems(sources: readonly SplatFileSource[]): SplatPickerItem[] {
   return sources.map((source) => ({

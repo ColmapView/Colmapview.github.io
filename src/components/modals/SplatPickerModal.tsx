@@ -3,6 +3,7 @@ import { modalStyles } from '../../theme';
 import { CloseIcon } from '../../icons';
 import { ModalDialogShell } from '../ui/ModalDialogShell';
 import {
+  getSplatPickerDescription,
   getSplatPickerItems,
   getSplatPickerOverlayStyle,
   getSplatPickerPanelStyle,
@@ -13,9 +14,11 @@ import {
 import { useSplatPickerStoreFacade } from './useSplatPickerStoreFacade';
 
 /**
- * Popup shown when a remote dataset resolves more than one splat. The user picks
- * which one to display (fetched on demand) or stays on the COLMAP scene. Appears
- * as the load finishes; switching later is still available in the Point Cloud panel.
+ * Popup shown when a remote dataset resolves splats that were not auto-loaded:
+ * several candidates, or a lone splat above the auto-load size budget. The user
+ * picks which one to display (fetched on demand) or stays on the COLMAP scene.
+ * Appears as the load finishes; switching later is still available in the Point
+ * Cloud panel.
  *
  * Uses the standard popup-window header (filled title bar + close button), matching
  * FloatingWindowShell / the other popup windows, inside a centered ModalDialogShell
@@ -28,7 +31,7 @@ export function SplatPickerModal() {
   const { showSplatPicker, splatFileSources, setShowSplatPicker, selectSplatSource } =
     useSplatPickerStoreFacade();
 
-  const isOpen = showSplatPicker && splatFileSources.length > 1;
+  const isOpen = showSplatPicker && splatFileSources.length >= 1;
   const items = getSplatPickerItems(splatFileSources);
 
   const handleClose = () => setShowSplatPicker(false);
@@ -64,7 +67,7 @@ export function SplatPickerModal() {
         </button>
       </div>
       <p id={descriptionId} className="px-4 pt-3 pb-1 text-ds-muted text-sm">
-        {splatFileSources.length} splats found. Pick one to load, or keep the COLMAP scene.
+        {getSplatPickerDescription(splatFileSources.length)}
       </p>
       <div className="flex flex-col gap-1 px-4 pb-3 overflow-y-auto min-h-0 flex-1">
         <button onClick={handleClose} className={SPLAT_PICKER_NONE_ROW_CLASS}>
