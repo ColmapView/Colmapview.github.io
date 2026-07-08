@@ -2,6 +2,7 @@ import { useId, useRef } from 'react';
 import { modalStyles } from '../../theme';
 import { CloseIcon } from '../../icons';
 import { ModalDialogShell } from '../ui/ModalDialogShell';
+import { SPLAT_AUTO_LOAD_MAX_BYTES_TOUCH } from '../../hooks/urlLoaderPolicy';
 import {
   getSplatPickerDescription,
   getSplatPickerItems,
@@ -10,6 +11,7 @@ import {
   SPLAT_PICKER_NONE_ROW_CLASS,
   SPLAT_PICKER_ROW_CLASS,
   SPLAT_PICKER_SIZE_CLASS,
+  SPLAT_PICKER_WARNING_CLASS,
 } from './splatPickerViewModel';
 import { useSplatPickerStoreFacade } from './useSplatPickerStoreFacade';
 
@@ -28,11 +30,13 @@ export function SplatPickerModal() {
   const titleId = useId();
   const descriptionId = useId();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const { showSplatPicker, splatFileSources, setShowSplatPicker, selectSplatSource } =
+  const { showSplatPicker, splatFileSources, touchMode, setShowSplatPicker, selectSplatSource } =
     useSplatPickerStoreFacade();
 
   const isOpen = showSplatPicker && splatFileSources.length >= 1;
-  const items = getSplatPickerItems(splatFileSources);
+  const items = getSplatPickerItems(splatFileSources, {
+    warnAboveBytes: touchMode ? SPLAT_AUTO_LOAD_MAX_BYTES_TOUCH : null,
+  });
 
   const handleClose = () => setShowSplatPicker(false);
   const handleSelect = (sourceId: string) => {
@@ -81,6 +85,7 @@ export function SplatPickerModal() {
           >
             <span className="truncate">{item.name}</span>
             {item.sizeLabel && <span className={SPLAT_PICKER_SIZE_CLASS}>{item.sizeLabel}</span>}
+            {item.warning && <span className={SPLAT_PICKER_WARNING_CLASS}>{item.warning}</span>}
           </button>
         ))}
       </div>

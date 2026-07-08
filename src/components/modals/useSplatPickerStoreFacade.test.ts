@@ -1,11 +1,12 @@
 import { renderHook, act } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useReconstructionStore } from '../../store';
+import { useReconstructionStore, useUIStore } from '../../store';
 import { useSplatPickerStoreFacade } from './useSplatPickerStoreFacade';
 
 describe('useSplatPickerStoreFacade', () => {
   beforeEach(() => {
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
   });
 
   it('exposes splat picker state and toggling', () => {
@@ -17,6 +18,15 @@ describe('useSplatPickerStoreFacade', () => {
 
     expect(useReconstructionStore.getState().showSplatPicker).toBe(true);
     expect(result.current.showSplatPicker).toBe(true);
+  });
+
+  it('reflects touchMode from the UI store', () => {
+    const { result } = renderHook(() => useSplatPickerStoreFacade());
+    expect(result.current.touchMode).toBe(false);
+
+    act(() => useUIStore.setState({ touchMode: true }));
+
+    expect(result.current.touchMode).toBe(true);
   });
 
   it('reflects splat sources from loadedFiles', () => {

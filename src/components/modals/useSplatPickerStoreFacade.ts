@@ -1,9 +1,10 @@
-import { useReconstructionStore } from '../../store';
+import { useReconstructionStore, useUIStore } from '../../store';
 import type { SplatFileSource } from '../../types/colmap';
 
 export interface SplatPickerStoreFacade {
   showSplatPicker: boolean;
   splatFileSources: readonly SplatFileSource[];
+  touchMode: boolean;
   setShowSplatPicker: (show: boolean) => void;
   selectSplatSource: (sourceId: string) => void;
 }
@@ -15,6 +16,7 @@ export function useSplatPickerStoreFacade(): SplatPickerStoreFacade {
   const splatFileSources = useReconstructionStore(
     (state) => state.loadedFiles?.splatFileSources ?? EMPTY_SPLAT_SOURCES
   );
+  const touchMode = useUIStore((state) => state.touchMode);
   const setShowSplatPicker = useReconstructionStore((state) => state.setShowSplatPicker);
   const selectSplatSourceAction = useReconstructionStore((state) => state.selectSplatSource);
 
@@ -22,5 +24,5 @@ export function useSplatPickerStoreFacade(): SplatPickerStoreFacade {
     void selectSplatSourceAction(sourceId);
   };
 
-  return { showSplatPicker, splatFileSources, setShowSplatPicker, selectSplatSource };
+  return { showSplatPicker, splatFileSources, touchMode, setShowSplatPicker, selectSplatSource };
 }

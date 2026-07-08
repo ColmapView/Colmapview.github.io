@@ -33,9 +33,28 @@ describe('getSplatPickerItems', () => {
         { id: 'inside.ply', path: 'inside.ply', url: 'u', size: 46_348_763 },
       ])
     ).toEqual([
-      { id: 'splats/5x5#-5_-15_0_-10#-1_-3.ply', name: '5x5#-5_-15_0_-10#-1_-3.ply', sizeLabel: '943 MB' },
-      { id: 'inside.ply', name: 'inside.ply', sizeLabel: '46 MB' },
+      { id: 'splats/5x5#-5_-15_0_-10#-1_-3.ply', name: '5x5#-5_-15_0_-10#-1_-3.ply', sizeLabel: '943 MB', warning: null },
+      { id: 'inside.ply', name: 'inside.ply', sizeLabel: '46 MB', warning: null },
     ]);
+  });
+});
+
+describe('splat picker device-memory warning', () => {
+  const sources = [
+    { id: 'a', path: 'splats/huge.ply', url: 'u', size: 1_040_000_634 },
+    { id: 'b', path: 'splats/small.spz', url: 'u', size: 40_000_000 },
+  ];
+
+  it('flags items above the budget when a budget is given', () => {
+    const items = getSplatPickerItems(sources, { warnAboveBytes: 50_000_000 });
+    expect(items[0].warning).toBe("may exceed this device's memory");
+    expect(items[1].warning).toBeNull();
+  });
+
+  it('never flags without a budget (desktop)', () => {
+    for (const item of getSplatPickerItems(sources)) {
+      expect(item.warning).toBeNull();
+    }
   });
 });
 
