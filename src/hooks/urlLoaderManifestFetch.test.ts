@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildFile } from '../test/builders';
 import type { ColmapManifest, UrlLoadError } from '../types/manifest';
+import { createDefaultManifest } from './urlLoaderPolicy';
 import {
   deriveMasksPathFromImages,
   discoverDirectoryListingSplatPaths,
@@ -8,6 +9,7 @@ import {
   fetchManifestColmapFiles,
   fetchManifestFile,
   fetchUrlManifest,
+  withDiscoveredColmapPaths,
 } from './urlLoaderManifestFetch';
 
 const manifest: ColmapManifest = {
@@ -773,5 +775,25 @@ describe('initial-load byte counting for COLMAP files', () => {
     expect(splatByteCalls.length).toBeGreaterThan(0);
     expect(splatByteCalls.every((p) => p.bytesTotal === expectedTotal)).toBe(true);
     expect(Math.max(...splatByteCalls.map((p) => p.bytesLoaded as number))).toBe(expectedTotal);
+  });
+});
+
+describe('large-dataset warning during layout discovery', () => {
+  it('reports a large-dataset warning for touch devices during layout discovery', async () => {
+    const onLargeDatasetWarning = vi.fn();
+    const fetchImpl = vi.fn(async () => jsonResponse([
+      { type: 'file', path: 'sparse/0/cameras.bin', size: 48 },
+      { type: 'file', path: 'sparse/0/images.bin', size: 192_776_427 },
+      { type: 'file', path: 'sparse/0/points3D.bin', size: 59_779_977 },
+    ]));
+
+    await withDiscoveredColmapPaths(
+      createDefaultManifest('https://huggingface.co/datasets/Acme/Scene/resolve/main'),
+      { fetchImpl, isTouchDevice: true, onLargeDatasetWarning }
+    );
+
+    expect(onLargeDatasetWarning).toHaveBeenCalledWith(
+      "Large dataset (253 MB of COLMAP data) - may exceed this device's memory"
+    );
   });
 });

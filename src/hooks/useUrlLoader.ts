@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import type { ColmapManifest } from '../types/manifest';
 import { useFileDropzone } from './useFileDropzone';
 import { useReconstructionStore } from '../store';
+import { useNotificationStore } from '../store/stores/notificationStore';
 import { isManifestUrl } from '../utils/urlUtils';
 import { isArchiveUrl } from '../utils/zipLoader';
 import { clearAllCaches } from '../cache';
@@ -144,7 +145,11 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
         // then let remote discovery rewrite the COLMAP paths to wherever the bins
         // actually live (e.g. a colmap/ folder on HuggingFace).
         manifest = createDefaultManifest(normalizedUrl);
-        manifest = await withDiscoveredColmapPaths(manifest, { log: logInfo });
+        manifest = await withDiscoveredColmapPaths(manifest, {
+          log: logInfo,
+          onLargeDatasetWarning: (message) =>
+            useNotificationStore.getState().addNotification('warning', message, 8000),
+        });
         logInfo(getDefaultUrlManifestLogMessage(normalizedUrl));
       }
 

@@ -22,9 +22,11 @@ import {
   getDirectoryListingLinks,
   getDirectoryListingRootUrl,
   getHuggingFaceColmapPaths,
+  getHuggingFaceColmapTotalBytes,
   getHuggingFaceDatasetTreeRequest,
   getHuggingFaceImagesPath,
   getHuggingFaceSplatPaths,
+  getLargeColmapDatasetWarning,
   getManifestColmapFileEntries,
   getRelativeHuggingFaceTreePaths,
   getSplatAutoLoadDecision,
@@ -283,6 +285,8 @@ export interface HuggingFaceLayout {
   imagesPath: string | null;
   /** Per-image override map (COLMAP name -> dataset-relative path), or null. */
   imageNameToPath: Record<string, string> | null;
+  /** Combined cameras+images+points3D size from the tree, or null if any is unknown. */
+  colmapTotalBytes: number | null;
 }
 
 function dirnameOf(path: string): string {
@@ -307,6 +311,7 @@ export async function discoverHuggingFaceLayout(
   const fetchImpl = deps.fetchImpl ?? defaultFetchUrl;
   const entries = await fetchHuggingFaceTreeEntries(request.apiUrl, fetchImpl);
   const colmap = getHuggingFaceColmapPaths(entries, request.treePath);
+  const colmapTotalBytes = colmap ? getHuggingFaceColmapTotalBytes(entries, request.treePath, colmap) : null;
   const modelDir = colmap ? dirnameOf(colmap.cameras) : undefined;
   const imagesPath = getHuggingFaceImagesPath(entries, request.treePath, modelDir);
 
@@ -328,7 +333,7 @@ export async function discoverHuggingFaceLayout(
     IMAGE_SOURCE_STRATEGIES
   );
 
-  return { colmap, imagesPath, imageNameToPath: imageSource?.imageNameToPath ?? null };
+  return { colmap, colmapTotalBytes, imagesPath, imageNameToPath: imageSource?.imageNameToPath ?? null };
 }
 
 /**
@@ -368,7 +373,9 @@ export function deriveMasksPathFromImages(imagesPath: string): string | null {
  */
 export async function withDiscoveredColmapPaths(
   manifest: ColmapManifest,
-  deps: Pick<FetchManifestColmapFilesDeps, 'fetchImpl' | 'log'> = {}
+  deps: Pick<FetchManifestColmapFilesDeps, 'fetchImpl' | 'log' | 'isTouchDevice'> & {
+    onLargeDatasetWarning?: (message: string) => void;
+  } = {}
 ): Promise<ColmapManifest> {
   try {
     const layout = await discoverHuggingFaceLayout(manifest.baseUrl, {
@@ -376,6 +383,15 @@ export async function withDiscoveredColmapPaths(
     });
     if (!layout) {
       return manifest;
+    }
+
+    const warning = getLargeColmapDatasetWarning(
+      layout.colmapTotalBytes,
+      deps.isTouchDevice ?? detectTouchDevice()
+    );
+    if (warning) {
+      deps.log?.(`[URL Loader] ${warning}`);
+      deps.onLargeDatasetWarning?.(warning);
     }
 
     let result = manifest;

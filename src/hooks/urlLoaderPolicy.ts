@@ -369,6 +369,40 @@ export function getHuggingFaceColmapPaths(
   };
 }
 
+export const LARGE_COLMAP_TOUCH_WARNING_BYTES = 150_000_000;
+
+export function getHuggingFaceColmapTotalBytes(
+  entries: readonly HuggingFaceDatasetTreeEntry[],
+  treePath: string,
+  colmap: Pick<HuggingFaceColmapPaths, 'cameras' | 'images' | 'points3D'>
+): number | null {
+  const sizeByRelativePath = new Map<string, number>();
+  for (const entry of entries) {
+    if (entry.type !== 'file' || typeof entry.path !== 'string' || typeof entry.size !== 'number') continue;
+    const relativePath = getRelativeHuggingFaceTreePath(entry.path, treePath);
+    if (relativePath) sizeByRelativePath.set(relativePath, entry.size);
+  }
+
+  let total = 0;
+  for (const path of [colmap.cameras, colmap.images, colmap.points3D]) {
+    const size = sizeByRelativePath.get(path);
+    if (size === undefined) return null;
+    total += size;
+  }
+  return total;
+}
+
+/** Non-blocking heads-up before a phone downloads a quarter-gigabyte of bins. */
+export function getLargeColmapDatasetWarning(
+  totalBytes: number | null,
+  isTouchDevice: boolean
+): string | null {
+  if (!isTouchDevice || totalBytes === null || totalBytes <= LARGE_COLMAP_TOUCH_WARNING_BYTES) {
+    return null;
+  }
+  return `Large dataset (${Math.round(totalBytes / 1_000_000)} MB of COLMAP data) - may exceed this device's memory`;
+}
+
 /**
  * Locate the images directory within a HuggingFace dataset tree, relative to the
  * tree root and with a trailing slash (e.g. 'corrected/images/'). `modelDir` is

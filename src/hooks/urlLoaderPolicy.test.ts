@@ -6,9 +6,11 @@ import {
   getDefaultUrlManifestLogMessage,
   getDirectoryListingLinks,
   getDirectoryListingRootUrl,
+  getHuggingFaceColmapTotalBytes,
   getHuggingFaceSplatPaths,
   getHuggingFaceDatasetTreeRequest,
   getInlineManifestLoadLogMessage,
+  getLargeColmapDatasetWarning,
   getPreferredHuggingFaceSplatPath,
   getManifestColmapFileEntries,
   getManifestLoadedLogMessage,
@@ -380,5 +382,36 @@ describe('getSplatAutoLoadDecision', () => {
       budgetBytes: SPLAT_AUTO_LOAD_MAX_BYTES,
       oversizedCandidate: null,
     });
+  });
+});
+
+describe('large COLMAP dataset warning', () => {
+  const treePath = 'objects/scan';
+  const entries = [
+    { type: 'file', path: 'objects/scan/sparse/0/cameras.bin', size: 48 },
+    { type: 'file', path: 'objects/scan/sparse/0/images.bin', size: 192_776_427 },
+    { type: 'file', path: 'objects/scan/sparse/0/points3D.bin', size: 59_779_977 },
+  ];
+  const colmap = {
+    cameras: 'sparse/0/cameras.bin',
+    images: 'sparse/0/images.bin',
+    points3D: 'sparse/0/points3D.bin',
+  };
+
+  it('sums the discovered COLMAP bin sizes', () => {
+    expect(getHuggingFaceColmapTotalBytes(entries, treePath, colmap)).toBe(252_556_452);
+  });
+
+  it('returns null when a size is unknown', () => {
+    expect(getHuggingFaceColmapTotalBytes(entries.slice(0, 2), treePath, colmap)).toBeNull();
+  });
+
+  it('warns on touch devices above the threshold, stays quiet otherwise', () => {
+    expect(getLargeColmapDatasetWarning(252_556_452, true)).toBe(
+      "Large dataset (253 MB of COLMAP data) - may exceed this device's memory"
+    );
+    expect(getLargeColmapDatasetWarning(252_556_452, false)).toBeNull();
+    expect(getLargeColmapDatasetWarning(100_000_000, true)).toBeNull();
+    expect(getLargeColmapDatasetWarning(null, true)).toBeNull();
   });
 });
