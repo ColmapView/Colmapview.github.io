@@ -3,6 +3,7 @@ import type { ColmapManifest } from './types/manifest';
 import type { DecodedShareData, ShareConfig } from './utils/shareDataCodec';
 import {
   APP_TOUCH_AUTO_LOG_MESSAGE,
+  APP_TOUCH_PHONE_WIDTH_LOG_MESSAGE,
   getAppStartupLoadPlan,
   getShareSelectedImageId,
   getTouchModeAutoAction,
@@ -67,12 +68,12 @@ describe('app startup policy', () => {
   });
 
   it('builds auto touch mode actions only when touch is detected', () => {
-    expect(getTouchModeAutoAction(true)).toEqual({
+    expect(getTouchModeAutoAction(true, false)).toEqual({
       enabled: true,
       source: 'auto',
       logMessage: APP_TOUCH_AUTO_LOG_MESSAGE,
     });
-    expect(getTouchModeAutoAction(false)).toBeNull();
+    expect(getTouchModeAutoAction(false, false)).toBeNull();
   });
 
   it('prioritizes inline manifests over other startup load sources', () => {
@@ -145,5 +146,27 @@ describe('app startup policy', () => {
     expect(getShareSelectedImageId({ camera: { selectedImageId: '12' } })).toBeNull();
     expect(getShareSelectedImageId({ camera: { selectedImageId: 0 } })).toBe(0);
     expect(getShareSelectedImageId(null)).toBeNull();
+  });
+});
+
+describe('getTouchModeAutoAction', () => {
+  it('enables touch mode for touch devices', () => {
+    expect(getTouchModeAutoAction(true, false)).toEqual({
+      enabled: true,
+      source: 'auto',
+      logMessage: APP_TOUCH_AUTO_LOG_MESSAGE,
+    });
+  });
+
+  it('enables touch mode for phone-width viewports on non-touch devices', () => {
+    expect(getTouchModeAutoAction(false, true)).toEqual({
+      enabled: true,
+      source: 'auto',
+      logMessage: APP_TOUCH_PHONE_WIDTH_LOG_MESSAGE,
+    });
+  });
+
+  it('returns null for wide non-touch environments', () => {
+    expect(getTouchModeAutoAction(false, false)).toBeNull();
   });
 });

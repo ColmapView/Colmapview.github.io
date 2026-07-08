@@ -19,6 +19,7 @@ import {
 import { useUrlLoader } from './hooks/useUrlLoader';
 import { decodeShareData, applyShareConfig } from './hooks/useUrlState';
 import { detectTouchDevice } from './hooks/useIsTouchDevice';
+import { TOUCH_BREAKPOINTS } from './theme/sizing';
 import { appLogger } from './utils/logger';
 import { requestConfirmation } from './utils/confirmation';
 import {
@@ -66,7 +67,9 @@ function App() {
       useUIStore.getState().setEmbedMode(true);
     }
 
-    const touchAction = getTouchModeUrlActionFromSearch(search) ?? getTouchModeAutoAction(detectTouchDevice());
+    const isPhoneViewport = window.innerWidth < TOUCH_BREAKPOINTS.phone;
+    const touchAction = getTouchModeUrlActionFromSearch(search)
+      ?? getTouchModeAutoAction(detectTouchDevice(), isPhoneViewport);
     if (touchAction) {
       appLogger.info(touchAction.logMessage);
       useUIStore.getState().setTouchMode(touchAction.enabled, touchAction.source);

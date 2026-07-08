@@ -4,6 +4,7 @@ import type { DecodedShareData, ShareConfig } from './utils/shareDataCodec';
 export const APP_EMBED_MODE_LOG_MESSAGE = '[App] Embed mode enabled';
 export const APP_SHARED_CONFIG_LOG_MESSAGE = '[App] Applying shared config';
 export const APP_TOUCH_AUTO_LOG_MESSAGE = '[App] Touch mode enabled (auto-detected)';
+export const APP_TOUCH_PHONE_WIDTH_LOG_MESSAGE = '[App] Touch mode enabled (phone-width viewport)';
 
 export interface TouchModeStartupAction {
   enabled: boolean;
@@ -64,13 +65,16 @@ export function getTouchModeUrlActionFromSearch(search: string): TouchModeStartu
   };
 }
 
-export function getTouchModeAutoAction(isTouchDevice: boolean): TouchModeStartupAction | null {
-  if (!isTouchDevice) return null;
+export function getTouchModeAutoAction(
+  isTouchDevice: boolean,
+  isPhoneViewport: boolean
+): TouchModeStartupAction | null {
+  if (!isTouchDevice && !isPhoneViewport) return null;
 
   return {
     enabled: true,
     source: 'auto',
-    logMessage: APP_TOUCH_AUTO_LOG_MESSAGE,
+    logMessage: isTouchDevice ? APP_TOUCH_AUTO_LOG_MESSAGE : APP_TOUCH_PHONE_WIDTH_LOG_MESSAGE,
   };
 }
 

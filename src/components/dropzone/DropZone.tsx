@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { useUrlLoader } from '../../hooks/useUrlLoader';
-import { useIsMobile } from '../../hooks/useIsMobile';
 import { clearPersistedSettings } from '../../store/migration';
 import { importConfigFile } from '../../config/configuration';
 import { getRandomDataset, getDatasetUrl } from '../../constants/exampleDatasets';
@@ -40,7 +39,6 @@ export function DropZone({ children }: DropZoneProps) {
   } = useDropZoneStoreFacade();
   const configInputRef = useRef<HTMLInputElement>(null);
   const manifestInputRef = useRef<HTMLInputElement>(null);
-  const isMobile = useIsMobile();
 
   // Handle URL loading from modal
   const handleUrlLoad = useCallback(async (url: string) => {
@@ -210,7 +208,7 @@ export function DropZone({ children }: DropZoneProps) {
         onChange={handleManifestFileChange}
       />
 
-      {!reconstruction && !urlLoading && !hasUrlLoadRequest && !isDragOver && !isPanelDismissed && !isMobile && !touchMode && (
+      {!reconstruction && !urlLoading && !hasUrlLoadRequest && !isDragOver && !isPanelDismissed && !touchMode && (
         <DesktopDropZonePanel
           urlLoading={urlLoading}
           onOpenUrlModal={() => setIsUrlModalOpen(true)}
@@ -225,7 +223,7 @@ export function DropZone({ children }: DropZoneProps) {
         />
       )}
 
-      {!reconstruction && !urlLoading && !hasUrlLoadRequest && !isPanelDismissed && (touchMode || isMobile) && (
+      {!reconstruction && !urlLoading && !hasUrlLoadRequest && !isPanelDismissed && touchMode && (
         <TouchDropZonePanel
           urlLoading={urlLoading}
           onOpenUrlModal={() => setIsUrlModalOpen(true)}
