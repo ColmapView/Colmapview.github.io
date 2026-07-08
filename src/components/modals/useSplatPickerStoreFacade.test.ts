@@ -20,15 +20,6 @@ describe('useSplatPickerStoreFacade', () => {
     expect(result.current.showSplatPicker).toBe(true);
   });
 
-  it('reflects touchMode from the UI store', () => {
-    const { result } = renderHook(() => useSplatPickerStoreFacade());
-    expect(result.current.touchMode).toBe(false);
-
-    act(() => useUIStore.setState({ touchMode: true }));
-
-    expect(result.current.touchMode).toBe(true);
-  });
-
   it('reflects splat sources from loadedFiles', () => {
     useReconstructionStore.setState({
       loadedFiles: {

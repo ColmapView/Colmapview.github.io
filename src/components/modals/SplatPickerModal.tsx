@@ -3,6 +3,7 @@ import { modalStyles } from '../../theme';
 import { CloseIcon } from '../../icons';
 import { ModalDialogShell } from '../ui/ModalDialogShell';
 import { SPLAT_AUTO_LOAD_MAX_BYTES_TOUCH } from '../../hooks/urlLoaderPolicy';
+import { useIsTouchDevice } from '../../hooks/useIsTouchDevice';
 import {
   getSplatPickerDescription,
   getSplatPickerItems,
@@ -30,12 +31,16 @@ export function SplatPickerModal() {
   const titleId = useId();
   const descriptionId = useId();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const { showSplatPicker, splatFileSources, touchMode, setShowSplatPicker, selectSplatSource } =
+  const { showSplatPicker, splatFileSources, setShowSplatPicker, selectSplatSource } =
     useSplatPickerStoreFacade();
+  // Key the hint on the hardware touch signal (what the auto-load budget uses), not the
+  // UI touchMode flag: a phone-width desktop window is touchMode=true but keeps the
+  // 150MB desktop budget, so a touchMode-keyed hint would warn against the wrong budget.
+  const isTouchDevice = useIsTouchDevice();
 
   const isOpen = showSplatPicker && splatFileSources.length >= 1;
   const items = getSplatPickerItems(splatFileSources, {
-    warnAboveBytes: touchMode ? SPLAT_AUTO_LOAD_MAX_BYTES_TOUCH : null,
+    warnAboveBytes: isTouchDevice ? SPLAT_AUTO_LOAD_MAX_BYTES_TOUCH : null,
   });
 
   const handleClose = () => setShowSplatPicker(false);
