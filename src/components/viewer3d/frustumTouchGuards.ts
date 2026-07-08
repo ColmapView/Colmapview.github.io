@@ -50,7 +50,28 @@ export function wasFrustumTouchDownRecent(now = Date.now()) {
   return wasSceneObjectTouchDownRecent(now);
 }
 
+/**
+ * Active touch pointers on the scene, maintained by useSceneContextMenuController
+ * (the container sees every scene touch via bubbling). Mesh-level long-press
+ * timers cannot see fingers on other meshes; they gate on this instead: a
+ * long-press may only fire while it is the lone active touch pointer.
+ */
+let _activeSceneTouchPointers = 0;
+
+export function setActiveSceneTouchPointerCount(count: number) {
+  _activeSceneTouchPointers = count;
+}
+
+export function getActiveSceneTouchPointerCount(): number {
+  return _activeSceneTouchPointers;
+}
+
+export function isSingleActiveSceneTouchPointer(): boolean {
+  return _activeSceneTouchPointers === 1;
+}
+
 export function resetFrustumTouchGuards() {
   _frustumTapTime = Number.NEGATIVE_INFINITY;
   _sceneObjectTouchDownTime = Number.NEGATIVE_INFINITY;
+  _activeSceneTouchPointers = 0;
 }

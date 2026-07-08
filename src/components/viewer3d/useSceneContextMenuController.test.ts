@@ -3,6 +3,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { usePointPickingStore, useUIStore } from '../../store';
 import { TOUCH } from '../../theme/sizing';
+import { getActiveSceneTouchPointerCount, resetFrustumTouchGuards } from './frustumTouchGuards';
 import { useSceneContextMenuController } from './useSceneContextMenuController';
 
 interface PointerEventOverrides {
@@ -38,6 +39,7 @@ afterEach(() => {
   // so a spied action would otherwise leak (with its call history) across tests.
   useUIStore.setState(useUIStore.getInitialState(), true);
   usePointPickingStore.getState().reset();
+  resetFrustumTouchGuards();
 });
 
 describe('useSceneContextMenuController', () => {
@@ -144,5 +146,20 @@ describe('useSceneContextMenuController', () => {
     act(() => result.current.handleContextMenu(contextMenuEvent()));
 
     expect(openContextMenu).toHaveBeenCalledWith(10, 20);
+  });
+
+  it('publishes the active scene touch-pointer count for mesh-level long-press gates', () => {
+    useUIStore.getState().setTouchMode(true, 'url');
+    const { result, unmount } = renderHook(() => useSceneContextMenuController());
+
+    expect(getActiveSceneTouchPointerCount()).toBe(0);
+    act(() => result.current.handleTouchPointerDown(pointerEvent({ pointerId: 1 })));
+    expect(getActiveSceneTouchPointerCount()).toBe(1);
+    act(() => result.current.handleTouchPointerDown(pointerEvent({ pointerId: 2, clientX: 120, clientY: 220 })));
+    expect(getActiveSceneTouchPointerCount()).toBe(2);
+    act(() => result.current.handleTouchPointerUp(pointerEvent({ pointerId: 2, clientX: 120, clientY: 220 })));
+    expect(getActiveSceneTouchPointerCount()).toBe(1);
+    unmount();
+    expect(getActiveSceneTouchPointerCount()).toBe(0);
   });
 });

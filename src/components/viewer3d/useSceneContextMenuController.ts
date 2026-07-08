@@ -6,7 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { TOUCH } from '../../theme/sizing';
-import { wasSceneObjectTouchDownRecent } from './frustumTouchGuards';
+import { setActiveSceneTouchPointerCount, wasSceneObjectTouchDownRecent } from './frustumTouchGuards';
 import { wasSceneContextMenuHandledRecently } from './sceneContextMenuGuard';
 import {
   getSceneContextMenuAction,
@@ -79,10 +79,12 @@ export function useSceneContextMenuController(): SceneContextMenuController {
     if (!touchMode) {
       clearLongPress();
       activeTouchPointers.clear();
+      setActiveSceneTouchPointerCount(0);
     }
     return () => {
       clearLongPress();
       activeTouchPointers.clear();
+      setActiveSceneTouchPointerCount(0);
     };
   }, [touchMode, clearLongPress]);
 
@@ -164,6 +166,7 @@ export function useSceneContextMenuController(): SceneContextMenuController {
     if (event.pointerType !== 'touch') return;
 
     activeTouchPointersRef.current.add(event.pointerId);
+    setActiveSceneTouchPointerCount(activeTouchPointersRef.current.size);
     // A second finger means a gesture (pinch / two-finger pan), never a
     // long-press: cancel any pending timer and don't arm a new one. The
     // cancelled press must not re-arm while the gesture is still in contact.
@@ -211,6 +214,7 @@ export function useSceneContextMenuController(): SceneContextMenuController {
     if (event.pointerType !== 'touch') return;
 
     activeTouchPointersRef.current.delete(event.pointerId);
+    setActiveSceneTouchPointerCount(activeTouchPointersRef.current.size);
     if (longPressRef.current && event.pointerId === longPressRef.current.pointerId) {
       clearLongPress();
     }
