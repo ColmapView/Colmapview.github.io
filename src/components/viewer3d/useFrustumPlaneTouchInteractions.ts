@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import type { ThreeEvent } from '@react-three/fiber';
-import { TOUCH } from '../../theme/sizing';
-import { markFrustumTap, markFrustumTouchDown } from './frustumTouchGuards';
-import {
-  getFrustumPlaneTouchUpAction,
-  type FrustumPlaneTouchStart,
-} from './frustumPlaneTouchPolicy';
+import { armFrustumLongPress, type FrustumLongPressHandle } from './frustumLongPress';
+import { markFrustumTap, markSceneObjectTouchDownForTouchPointer } from './frustumTouchGuards';
+import { getFrustumPlaneTouchUpAction } from './frustumPlaneTouchPolicy';
 
-interface TimedFrustumPlaneTouchStart extends FrustumPlaneTouchStart {
-  timer: ReturnType<typeof setTimeout> | null;
+interface FrustumPlaneTouchDown {
+  x: number;
+  y: number;
+  /** Armed only for touch pointers; mouse taps record position without a timer. */
+  longPress: FrustumLongPressHandle | null;
 }
 
 interface FrustumPlaneTouchInteractionsOptions {
@@ -28,37 +28,43 @@ export function useFrustumPlaneTouchInteractions({
   onLongPress,
   setTouchTransparent,
 }: FrustumPlaneTouchInteractionsOptions) {
-  const touchDownRef = useRef<TimedFrustumPlaneTouchStart | null>(null);
+  const touchDownRef = useRef<FrustumPlaneTouchDown | null>(null);
 
   useEffect(() => {
     return () => {
-      if (touchDownRef.current?.timer) clearTimeout(touchDownRef.current.timer);
+      touchDownRef.current?.longPress?.cancel();
     };
   }, []);
 
   const onPointerDown = useCallback((e: ThreeEvent<PointerEvent>) => {
-    markFrustumTouchDown();
-    const x = e.nativeEvent.clientX;
-    const y = e.nativeEvent.clientY;
-    const timer = setTimeout(() => {
-      if (!touchDownRef.current) return;
-      touchDownRef.current.fired = true;
-      onLongPress?.(imageId);
-    }, TOUCH.longPressDelay);
-    touchDownRef.current = { x, y, timer, fired: false };
+    touchDownRef.current?.longPress?.cancel();
+
+    const { pointerId, pointerType, clientX, clientY } = e.nativeEvent;
+    const isTouch = markSceneObjectTouchDownForTouchPointer(pointerType);
+
+    touchDownRef.current = {
+      x: clientX,
+      y: clientY,
+      longPress: isTouch
+        ? armFrustumLongPress({
+            pointerId,
+            x: clientX,
+            y: clientY,
+            onFire: () => onLongPress?.(imageId),
+          })
+        : null,
+    };
   }, [imageId, onLongPress]);
 
   const onPointerUp = useCallback((e: ThreeEvent<PointerEvent>) => {
-    const touchStart = touchDownRef.current;
+    const touchDown = touchDownRef.current;
     touchDownRef.current = null;
-    if (touchStart?.timer) clearTimeout(touchStart.timer);
+    const fired = touchDown?.longPress?.fired ?? false;
+    touchDown?.longPress?.cancel();
 
     const action = getFrustumPlaneTouchUpAction({
-      touchStart,
-      touchEnd: {
-        x: e.nativeEvent.clientX,
-        y: e.nativeEvent.clientY,
-      },
+      touchStart: touchDown ? { x: touchDown.x, y: touchDown.y, fired } : null,
+      touchEnd: { x: e.nativeEvent.clientX, y: e.nativeEvent.clientY },
       isSelected,
     });
 
