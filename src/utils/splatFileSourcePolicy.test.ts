@@ -193,8 +193,8 @@ describe('mergeRemoteSplatCatalog', () => {
     );
 
     expect(merged.splatFileSources).toEqual([
-      { id: 'splats/a.ply', path: 'splats/a.ply', url: 'https://x/ds/splats/a.ply', size: 100, file: firstFile },
-      { id: 'splats/b.ply', path: 'splats/b.ply', url: 'https://x/ds/splats/b.ply', size: 200, file: undefined },
+      { id: 'splats/a.ply', path: 'splats/a.ply', url: 'https://x/ds/splats/a.ply', size: 100, file: firstFile, splatCount: null },
+      { id: 'splats/b.ply', path: 'splats/b.ply', url: 'https://x/ds/splats/b.ply', size: 200, file: undefined, splatCount: null },
     ]);
     expect(merged.splatFiles).toEqual([firstFile]);
     expect(merged.splatFile).toBe(firstFile);
@@ -216,5 +216,27 @@ describe('mergeRemoteSplatCatalog', () => {
     expect(merged.splatFileSources?.[0].url).toBe(
       'https://x/ds/splats/5x5%23-5_-15_0_-10%23-1_-3.ply'
     );
+  });
+
+  it('carries splat counts from the remote catalog into sources', () => {
+    const loadedFiles = { imageFiles: new Map(), hasMasks: false } as unknown as LoadedFiles;
+    const merged = mergeRemoteSplatCatalog(loadedFiles, [
+      { path: 'splats/huge.ply', size: 1_040_000_634, splatCount: 10_000_000 },
+      { path: 'splats/tiles.spz', size: 40_000_000 },
+    ], 'https://x/ds');
+
+    expect(merged.splatFileSources?.map((s) => s.splatCount ?? null)).toEqual([10_000_000, null]);
+  });
+
+  it('preserves an existing source splat count when the incoming entry lacks one', () => {
+    const lf = loaded({
+      splatFileSources: [
+        { id: 'splats/a.ply', path: 'splats/a.ply', url: 'https://x/ds/splats/a.ply', size: 100, splatCount: 5_000_000 },
+      ],
+    });
+
+    const merged = mergeRemoteSplatCatalog(lf, [{ path: 'splats/a.ply', size: 100 }], 'https://x/ds');
+
+    expect(merged.splatFileSources?.[0].splatCount).toBe(5_000_000);
   });
 });

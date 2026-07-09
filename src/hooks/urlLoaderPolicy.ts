@@ -37,6 +37,8 @@ export interface DirectoryListingLink {
 export interface RemoteSplatCandidate {
   path: string;
   size: number;
+  /** PLY vertex count captured during classification; absent/null = unknown. */
+  splatCount?: number | null;
 }
 
 export type HuggingFaceSplatCandidate = RemoteSplatCandidate;

@@ -153,14 +153,18 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
         logInfo(getDefaultUrlManifestLogMessage(normalizedUrl));
       }
 
-      const catalogHolder: { value: { path: string; size: number }[] } = { value: [] };
+      const catalogHolder: { value: { path: string; size: number; splatCount: number | null }[] } = { value: [] };
       const loaded = await loadManifestSource(manifest, { type: 'url', sourceUrl: normalizedUrl }, {
         log: logInfo,
         processFiles,
         setSourceInfo,
         setUrlProgress,
         onRemoteSplatCatalog: (catalog) => {
-          catalogHolder.value = catalog.map((candidate) => ({ path: candidate.path, size: candidate.size }));
+          catalogHolder.value = catalog.map((candidate) => ({
+            path: candidate.path,
+            size: candidate.size,
+            splatCount: candidate.splatCount ?? null,
+          }));
         },
       });
       // List discovered tiles as lazy, on-demand sources whenever none was

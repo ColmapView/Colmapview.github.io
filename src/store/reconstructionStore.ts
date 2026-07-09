@@ -173,7 +173,10 @@ interface ReconstructionState {
   setSourceInfo: (type: ReconstructionSourceType, url?: string | null, imageUrlBase?: string | null, maskUrlBase?: string | null, manifest?: ColmapManifest | null, imageNameToUrl?: Record<string, string> | null) => void;
   setRequestedSplatSourceId: (sourceId: string | null) => void;
   /** Merge a discovered remote splat catalog so all tiles are listed (lazy). */
-  mergeRemoteSplatCatalog: (catalog: { path: string; size: number }[], baseUrl: string) => void;
+  mergeRemoteSplatCatalog: (
+    catalog: ReadonlyArray<{ path: string; size: number; splatCount?: number | null }>,
+    baseUrl: string
+  ) => void;
   /** Activate a splat source by id, fetching it on demand if not yet downloaded. */
   selectSplatSource: (sourceId: string) => Promise<void>;
   /** Show or hide the splat picker popup. */

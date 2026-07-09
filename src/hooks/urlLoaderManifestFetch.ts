@@ -17,7 +17,7 @@ import { appLogger } from '../utils/logger';
 import { isSplatFilePath } from '../utils/splatFilePolicy';
 import { resolveImageSource } from '../utils/imageSourceResolution';
 import { IMAGE_SOURCE_STRATEGIES } from '../utils/imageSourceStrategies';
-import { classifyPlyHeaderText } from '../parsers';
+import { classifyPlyHeaderText, getPlyHeaderVertexCount } from '../parsers';
 import {
   getDirectoryListingLinks,
   getDirectoryListingRootUrl,
@@ -87,13 +87,23 @@ export interface FetchManifestColmapFilesDeps {
 }
 
 /**
+ * Result of classifying a remote splat candidate URL. `splatCount` is the PLY
+ * vertex count read from the same 64 KiB header probe (null when unknown, e.g.
+ * non-PLY formats or a failed/unparseable probe).
+ */
+export interface SplatUrlClassification {
+  isSplat: boolean;
+  splatCount: number | null;
+}
+
+/**
  * Classify a remote splat candidate URL as a true Gaussian splat. Used to drop
  * raw point-cloud .ply files (e.g. a COLMAP `point_cloud.ply`) that share the
- * .ply extension with splats. Returns true for non-.ply splat formats and keeps
- * candidates on any classification error (so a transient failure never hides a
- * real splat).
+ * .ply extension with splats. Non-.ply splat formats classify as splats, and
+ * candidates are kept on any classification error (so a transient failure never
+ * hides a real splat).
  */
-export type ClassifySplatUrl = (url: string) => Promise<boolean>;
+export type ClassifySplatUrl = (url: string) => Promise<SplatUrlClassification>;
 
 export interface DiscoverHuggingFaceSplatDeps {
   fetchImpl?: FetchUrl;
@@ -159,21 +169,25 @@ async function readBoundedResponseText(response: Response, maxBytes: number): Pr
   return text + decoder.decode();
 }
 
-async function defaultClassifySplatUrl(url: string, fetchImpl: FetchUrl): Promise<boolean> {
+async function defaultClassifySplatUrl(url: string, fetchImpl: FetchUrl): Promise<SplatUrlClassification> {
   // Non-PLY splat formats (.spz / .splat) are always splats.
   const pathname = url.split('?')[0].toLowerCase();
   if (!pathname.endsWith('.ply')) {
-    return true;
+    return { isSplat: true, splatCount: null };
   }
   try {
     const response = await fetchImpl(url, { headers: { Range: `bytes=0-${SPLAT_HEADER_RANGE_BYTES - 1}` } });
     if (!response.ok) {
-      return true; // cannot classify -> keep (do not hide a real splat on error)
+      // Cannot classify -> keep (do not hide a real splat on error).
+      return { isSplat: true, splatCount: null };
     }
     const headerText = await readBoundedResponseText(response, SPLAT_HEADER_RANGE_BYTES);
-    return classifyPlyHeaderText(headerText) === 'gaussian-splat';
+    return {
+      isSplat: classifyPlyHeaderText(headerText) === 'gaussian-splat',
+      splatCount: getPlyHeaderVertexCount(headerText),
+    };
   } catch {
-    return true;
+    return { isSplat: true, splatCount: null };
   }
 }
 
@@ -268,9 +282,11 @@ export async function discoverHuggingFaceSplatPaths(
   const classify = deps.classifySplatUrl ?? ((url: string) => defaultClassifySplatUrl(url, fetchImpl));
   const classified = await mapWithConcurrency(candidates, SPLAT_CLASSIFY_CONCURRENCY, async (candidate) => ({
     candidate,
-    isSplat: await classify(joinManifestUrlPath(baseUrl, candidate.path)),
+    classification: await classify(joinManifestUrlPath(baseUrl, candidate.path)),
   }));
-  return classified.filter((entry) => entry.isSplat).map((entry) => entry.candidate);
+  return classified
+    .filter((entry) => entry.classification.isSplat)
+    .map((entry) => ({ ...entry.candidate, splatCount: entry.classification.splatCount }));
 }
 
 export async function discoverHuggingFaceSplatPath(

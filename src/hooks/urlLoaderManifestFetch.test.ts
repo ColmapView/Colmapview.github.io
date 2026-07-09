@@ -306,7 +306,9 @@ describe('URL loader manifest fetch helpers', () => {
     // The lone splat is over budget: never eager-downloaded, only cataloged.
     expect(fetchFile).not.toHaveBeenCalledWith(baseUrl, 'splats/huge.spz', expect.anything());
     expect([...files.keys()].some((key) => key.endsWith('.spz'))).toBe(false);
-    expect(onRemoteSplatCatalog).toHaveBeenCalledWith([{ path: 'splats/huge.spz', size: 1_040_000_634 }]);
+    expect(onRemoteSplatCatalog).toHaveBeenCalledWith([
+      { path: 'splats/huge.spz', size: 1_040_000_634, splatCount: null },
+    ]);
     expect(log).toHaveBeenCalledWith(
       '[URL Loader] Splat splats/huge.spz (1040 MB) exceeds the 150 MB auto-load limit; select it from the splat picker to download'
     );
@@ -567,7 +569,7 @@ describe('splat discovery robustness', () => {
       peak = Math.max(peak, inFlight);
       await new Promise((resolve) => setTimeout(resolve, 5));
       inFlight -= 1;
-      return true;
+      return { isSplat: true, splatCount: null };
     });
 
     const result = await discoverHuggingFaceSplatPaths(HF_BASE, { fetchImpl, classifySplatUrl });
@@ -581,7 +583,7 @@ describe('splat discovery robustness', () => {
       { type: 'file', path: 'ds/scene.ply', size: 100 },
       { type: 'file', path: 'ds/scene.ply', size: 100 },
     ]));
-    const classifySplatUrl = vi.fn(async () => true);
+    const classifySplatUrl = vi.fn(async () => ({ isSplat: true, splatCount: null }));
 
     const result = await discoverHuggingFaceSplatPaths(HF_BASE, { fetchImpl, classifySplatUrl });
 
@@ -593,7 +595,7 @@ describe('splat discovery robustness', () => {
       [{ type: 'file', path: 'ds/scene.ply', size: 1 }],
       { headers: { 'Content-Type': 'application/json', Link: `<${HF_API}>; rel="next"` } }
     ));
-    const classifySplatUrl = vi.fn(async () => true);
+    const classifySplatUrl = vi.fn(async () => ({ isSplat: true, splatCount: null }));
 
     await discoverHuggingFaceSplatPaths(HF_BASE, { fetchImpl, classifySplatUrl });
 
@@ -610,11 +612,41 @@ describe('splat discovery robustness', () => {
           )
         : jsonResponse([])
     );
-    const classifySplatUrl = vi.fn(async () => true);
+    const classifySplatUrl = vi.fn(async () => ({ isSplat: true, splatCount: null }));
 
     await discoverHuggingFaceSplatPaths(HF_BASE, { fetchImpl, classifySplatUrl });
 
     expect(fetchImpl).not.toHaveBeenCalledWith('https://evil.example/steal');
+  });
+
+  it('captures the PLY vertex count during splat classification', async () => {
+    const plyHeader = [
+      'ply', 'format binary_little_endian 1.0', 'element vertex 10000000',
+      'property float x', 'property float y', 'property float z',
+      'property float f_dc_0', 'property float f_dc_1', 'property float f_dc_2',
+      'property float opacity', 'property float scale_0', 'property float scale_1',
+      'property float scale_2', 'property float rot_0', 'property float rot_1',
+      'property float rot_2', 'property float rot_3', 'end_header', '',
+    ].join('\n');
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.headers && 'Range' in (init.headers as Record<string, string>)) {
+        return new Response(plyHeader, { status: 206 });
+      }
+      return jsonResponse([
+        { type: 'file', path: 'splats/huge.ply', size: 1_040_000_634 },
+        { type: 'file', path: 'splats/tiles.spz', size: 40_000_000 },
+      ]);
+    });
+
+    const candidates = await discoverHuggingFaceSplatPaths(
+      'https://huggingface.co/datasets/Acme/Scene/resolve/main',
+      { fetchImpl }
+    );
+
+    expect(candidates).toEqual([
+      { path: 'splats/tiles.spz', size: 40_000_000, splatCount: null },
+      { path: 'splats/huge.ply', size: 1_040_000_634, splatCount: 10_000_000 },
+    ]);
   });
 
   it('F8: keeps a directory-listing splat whose HEAD lacks Content-Length', async () => {

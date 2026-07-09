@@ -116,7 +116,10 @@ describe('discoverHuggingFaceSplatPaths pagination', () => {
     ];
     const fetchImpl = vi.fn(async () => jsonResponse(tree));
     // Classifier rejects the raw point cloud, keeps the real splat tile.
-    const classifySplatUrl = vi.fn(async (url: string) => !url.endsWith('/point_cloud.ply'));
+    const classifySplatUrl = vi.fn(async (url: string) => ({
+      isSplat: !url.endsWith('/point_cloud.ply'),
+      splatCount: null,
+    }));
 
     const splats = await discoverHuggingFaceSplatPaths(RESOLVE_BASE, { fetchImpl, classifySplatUrl });
 

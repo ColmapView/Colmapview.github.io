@@ -113,6 +113,8 @@ export interface SplatFileSource {
   url?: string;
   /** Byte size from discovery (used for ordering / UX), when known. */
   size?: number;
+  /** Splat count (PLY vertex count) from discovery; absent/null = unknown. */
+  splatCount?: number | null;
 }
 
 // File structure for loaded data

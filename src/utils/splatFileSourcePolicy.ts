@@ -75,21 +75,23 @@ function joinSplatUrl(baseUrl: string, path: string): string {
  */
 export function mergeRemoteSplatCatalog(
   loadedFiles: LoadedFiles,
-  catalog: ReadonlyArray<{ path: string; size: number }>,
+  catalog: ReadonlyArray<{ path: string; size: number; splatCount?: number | null }>,
   baseUrl: string
 ): LoadedFiles {
   const existingByPath = new Map(
     (loadedFiles.splatFileSources ?? []).map((source) => [normalizeSplatSourceId(source.path), source])
   );
 
-  const sources: SplatFileSource[] = catalog.map(({ path, size }) => {
-    const existing = existingByPath.get(normalizeSplatSourceId(path));
+  const sources: SplatFileSource[] = catalog.map((entry) => {
+    const existing = existingByPath.get(normalizeSplatSourceId(entry.path));
     return {
-      id: existing?.id ?? path,
-      path,
-      url: joinSplatUrl(baseUrl, path),
-      size,
+      id: existing?.id ?? entry.path,
+      path: entry.path,
+      url: joinSplatUrl(baseUrl, entry.path),
+      size: entry.size,
       file: existing?.file,
+      // Preserve a previously known count when the incoming entry lacks one.
+      splatCount: entry.splatCount ?? existing?.splatCount ?? null,
     };
   });
 
