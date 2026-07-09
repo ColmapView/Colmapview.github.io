@@ -587,54 +587,72 @@ git commit -m "feat(splat): decode-from-bytes entry and decode-cache seeding"
 
 ---
 
-### Task 7: Byte-less activation for oversized remote splats on touch (+ ceiling raise)
+### Task 7: Byte-less activation for oversized remote splats on touch (+ backend-aware ceiling raise)
 
-**RISK TASK — read this whole task before starting; if the consumer audit (Step 1) finds a consumer that cannot tolerate a byte-less `splatFile`, STOP and report BLOCKED with the list. Do not ship a partial version.**
+**RISK TASK — the Step-1 consumer audit ran (see `.superpowers/sdd/task-7-report.md`) and found the Spark renderer fallback reads `splatFile` bytes directly. USER DECISION (2026-07-09): backend-aware byte-less AND ceiling — both gate on one "byte-less loader available" predicate so Spark-bound devices keep today's safe retaining path and 3M ceiling.**
 
-On touch hardware, when a lazily-selected remote splat exceeds the retention threshold, do not retain its bytes: download into the single buffer (Task 5), decode from bytes (Task 6), seed the decode cache under a placeholder `File`, and store the source as re-fetchable (as `clearActiveSplatFile` already models). This removes the blob+buffer coexistence that caps phones at ~300 MB.
+On touch hardware **with the WebGPU splat backend available**, when a lazily-selected remote splat exceeds the retention threshold, do not retain its bytes: download into the single buffer (Task 5), decode from bytes (Task 6), seed the decode cache under a placeholder `File`, and store the source as re-fetchable. Spark-bound / non-WebGPU touch devices keep the existing byte-retaining path AND the 3M ceiling (no re-opened 312–416 MB crash window).
 
 **Files:**
+- Modify: `src/utils/splatBackendPolicy.ts` (pure predicate) and/or `src/hooks/urlLoaderPolicy.ts` — implementer picks the file the repo's layering implies; predicate + constants + tier change live where their consumers already import from
+- Modify: `src/hooks/urlLoaderPolicy.ts` (tier ceiling becomes availability-aware; retention constant)
+- Modify: `src/utils/splatFileSourcePolicy.ts` (+ test) — `applyActiveSplatPlaceholder(loadedFiles, sourceId, placeholder)`: sets `splatFile = placeholder`, keeps the matching source's `file` **undefined** (re-fetchable), offloads the previously active tile like `applyActiveSplatFile` does (audit note: `applyActiveSplatFile` sets `source.file` and cannot be reused as-is)
 - Modify: `src/store/reconstructionStore.ts` (`selectSplatSource` lazy branch)
-- Modify: `src/hooks/urlLoaderPolicy.ts` (constants bump + new retention constant)
-- Tests: `src/store/reconstructionStore.test.ts`, `src/hooks/urlLoaderPolicy.test.ts` (threshold updates)
+- Modify: `src/components/modals/SplatPickerModal.tsx` + its facade (thread the predicate to the tier call; componentStoreBoundary: backend state reaches the modal only via a facade/hook, following how existing components read `useSplatBackendStore`)
+- Modify: `src/components/viewer3d/panels/ExportPanel.tsx` — byte-reader guard from the audit: on a byte-less active splat (placeholder `size === 0` with a url-bearing active source), `handleDownloadSplat` surfaces the notification `'Splat bytes were not kept on this device - reload on desktop to export'` instead of writing a 0-byte file
+- Tests: `src/store/reconstructionStore.test.ts`, `src/hooks/urlLoaderPolicy.test.ts`, `src/utils/splatFileSourcePolicy.test.ts`, picker/export tests as touched
 
 **Interfaces:**
-- New constant in urlLoaderPolicy.ts: `TOUCH_SPLAT_BYTELESS_RETENTION_MIN_BYTES = 100_000_000` — above this, touch devices activate byte-less.
-- Ceiling raise (same commit): `TOUCH_SPLAT_DISABLE_MIN_SPLATS` 3_000_000 → `4_000_000`; update the Task 3 tests' expectations (the 64 MB spz case moves from 'disabled' to 'hint'/'ok' — recompute: 4M estimated == ceiling, not >, so 'hint' since 64 MB > 50 MB).
-- Store flow (lazy branch of `selectSplatSource`, replacing the current `fetchRemoteSplatFile` call **only when** `detectTouchDevice() && source.size > TOUCH_SPLAT_BYTELESS_RETENTION_MIN_BYTES`; desktop and small-touch keep the existing File path):
+- Predicate (pure, unit-tested): `canUseByteLessSplatLoader({ isTouchDevice, requestedBackend, webGpuAvailability })` — true iff touch AND `requestedBackend !== 'spark'` AND `webGpuAvailability` is not in a state that resolves to Spark (`'unsupported'` and any failed/fallback state — verify the exact state union in `splatBackendPolicy.ts` / the backend store and enumerate them in the test; note from the audit: `'ready'` must NOT be required, since WebGPU only reports ready after the canvas mounts).
+- Store reads the live inputs via `useSplatBackendStore.getState()` (verify store name/fields against the code) + `detectTouchDevice()`.
+- Constants in urlLoaderPolicy.ts: `TOUCH_SPLAT_BYTELESS_RETENTION_MIN_BYTES = 100_000_000` (byte-less above this); `TOUCH_SPLAT_DISABLE_MIN_SPLATS` **stays 3_000_000**; new `TOUCH_SPLAT_DISABLE_MIN_SPLATS_BYTELESS = 4_000_000`.
+- `getSplatDeviceTier(source, { isTouchDevice, byteLessLoaderAvailable })` — ceiling = `byteLessLoaderAvailable ? 4M : 3M`. Existing Task-3 tests pass `byteLessLoaderAvailable: false` with UNCHANGED expectations; add mirrored cases with `true` (recompute: 64 MB spz → estimate 4M == ceiling, not >, → 'hint' since 64 MB > 50 MB; a `splatCount: 3_500_000` / 364 MB PLY → 'hint' when true, 'disabled' when false).
+- Picker passes `byteLessLoaderAvailable` from the facade-exposed backend state; desktop unchanged (tier short-circuits to 'ok').
+- Ledger the accepted residual as a follow-up, not code: mid-session WebGPU device-loss → Spark fallback would meet a placeholder (empty render until reload); fix is Spark re-fetch from `source.url` in a later release.
+- Store flow (lazy branch of `selectSplatSource`, replacing the current `fetchRemoteSplatFile` call **only when** `detectTouchDevice() && source.size > TOUCH_SPLAT_BYTELESS_RETENTION_MIN_BYTES && canUseByteLessSplatLoader(...)`; desktop, small-touch, and Spark-bound touch keep the existing File path):
   ```ts
   const { bytes, name } = await fetchRemoteSplatBytes(source.url, progressCallback);
   const format = getGaussianCloudFormatForFile(new File([], name)); // format from extension only
-  const placeholder = new File([], name);                            // identity + name carrier, zero bytes
-  seedGaussianCloudLoad(placeholder, loadGaussianCloudFromBytes(toArrayBuffer(bytes), format, {}));
-  // then activate exactly like the existing path but with `placeholder` as the file and WITHOUT
-  // writing bytes into the source (source.file stays undefined -> still re-fetchable/offloadable)
+  const placeholder = new File([], name); // FRESH per attempt (a rejected seed never self-evicts; a reused placeholder would stay poisoned)
+  seedGaussianCloudLoad(
+    placeholder,
+    loadGaussianCloudFromBytes(toArrayBuffer(bytes), format, {})
+      .then((loaded) => ({ ...loaded, file: placeholder })) // T6 carry: bytes-entry returns a synthetic empty .file
+  );
+  // then activate via applyActiveSplatPlaceholder(loadedFiles, source.id, placeholder):
+  // splatFile = placeholder, source.file stays undefined (re-fetchable), previous tile offloaded
   ```
-  where `toArrayBuffer(bytes: Uint8Array): ArrayBuffer` returns `bytes.buffer` when the view spans it exactly, else `bytes.slice().buffer` (the view from Task 5 may be a subarray). The seeded promise must be created BEFORE `applyActiveSplatFile` runs so the renderer's first `loadGaussianCloudFromFile(placeholder)` is a guaranteed cache hit. Handle decode rejection like the current fetch-failure branch (same latest-wins `requestId` guard, same `urlError` shape).
-- **Step 1 is a consumer audit, not code:** enumerate every reader of `loadedFiles.splatFile` / `loadedFiles.splatFiles` bytes or size (`grep -rn "splatFile" src --include='*.ts' --include='*.tsx' | grep -v test | grep -v splatFileSources`). For each: classify **identity/name-only** (safe — renderer keying, progress-by-name policies), **size-reading** (evaluate: a 0-size placeholder must not break UI copy or progress math), or **byte-reading** (export/share paths — these must either already go through the re-fetchable source, or gain a guard: on a byte-less active splat, surface the existing notification store warning `'Splat bytes were not kept on this device - reload on desktop to export'` instead of writing an empty file). Write the classification table into your report BEFORE implementing. Known byte-reader to check first: the splat export flow (search `splatFile` under `src/store/actions/` and `src/parsers/writers.ts` / export store).
-- Everything else (auto-load budgets, eager path, picker tiers except the constant) unchanged.
+  where `toArrayBuffer(bytes: Uint8Array): ArrayBuffer` returns `bytes.buffer` ONLY when `bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength`, else `bytes.slice().buffer` (T5 carry: the underrun view is backed by the full Content-Length allocation — trailing garbage otherwise). The seeded promise must be created BEFORE the store activation runs so the renderer's first `loadGaussianCloudFromFile(placeholder)` is a guaranteed cache hit. AWAIT the seeded decode inside `selectSplatSource` and handle rejection like the current fetch-failure branch (same latest-wins `requestId` guard, same `urlError` shape) — a failed attempt leaves no reachable poisoned seed because the placeholder is fresh per attempt and never activated on failure.
+- **Step 1 (consumer audit) is DONE** — classification table + Spark-blocker analysis live in `.superpowers/sdd/task-7-report.md`. Apply its dispositions: ExportPanel guard (above), DatasetDiagnostics 0 B display accepted as-is, everything else identity/size-safe. The Spark blocker is resolved by the backend-aware predicate (this task's design), NOT by a Spark guard.
+- Everything else (auto-load budgets, eager path) unchanged.
 
-- [ ] **Step 1: Consumer audit** (table in report; BLOCKED if any consumer can't be guarded)
-- [ ] **Step 2: Write the failing store test**
+- [ ] **Step 1: Audit dispositions applied** (ExportPanel guard implemented; table referenced from the report)
+- [ ] **Step 2: Write the failing tests**
 
 ```ts
-  it('activates an oversized remote splat on touch without retaining its bytes', async () => {
-    // Arrange: touch device, lazy source > retention threshold, stubbed fetchRemoteSplatBytes + decode seam
+  // urlLoaderPolicy.test.ts — predicate + availability-aware ceiling (contracts; write real tests):
+  //   canUseByteLessSplatLoader: touch+webgpu-ok -> true; desktop -> false; requestedBackend 'spark' -> false;
+  //   every webGpuAvailability state that resolves to Spark -> false (enumerate the real state union).
+  //   getSplatDeviceTier with byteLessLoaderAvailable:false -> existing expectations unchanged;
+  //   with true -> 64MB spz 'hint'; splatCount 3_500_000 -> 'hint' (true) vs 'disabled' (false).
+  it('activates an oversized remote splat byte-lessly on touch with WebGPU available', async () => {
+    // Arrange: touch device, WebGPU-capable backend state, lazy source > retention threshold,
+    //          stubbed fetchRemoteSplatBytes + decode seam
     // Assert: selectSplatSource resolves; loadedFiles.splatFile is a zero-byte File named like the source;
-    // the source's `file` stays undefined; the decode cache holds a seeded entry for that File;
-    // requestedSplatSourceId set; urlLoading cleared.
+    // the source's `file` stays undefined; the decode cache holds a seeded entry resolving to
+    // { ...loaded, file: placeholder }; requestedSplatSourceId set; urlLoading cleared.
   });
-  it('keeps the byte-retaining path on desktop and for small touch splats', async () => { /* existing behavior pinned */ });
+  it('keeps the byte-retaining path on desktop, small touch splats, and Spark-bound touch', async () => { /* existing behavior pinned incl. requestedBackend "spark" and webgpu-unsupported cases */ });
 ```
 
-(Write these as real tests using the store test file's existing patterns — dependency seams for `fetchRemoteSplatBytes`, `detectTouchDevice`, and the loader functions will need injection points; prefer module mocks via `vi.mock` consistent with how the store tests already stub `fetchRemoteSplatFile` if they do — check first. The exact arrangement is the implementer's to adapt; the ASSERTIONS above are the contract.)
+(Write these as real tests using the store test file's existing patterns — dependency seams for `fetchRemoteSplatBytes`, `detectTouchDevice`, backend state, and the loader functions will need injection points; prefer module mocks via `vi.mock` consistent with how the store tests already stub `fetchRemoteSplatFile` if they do — check first. The ASSERTIONS above are the contract.)
 
-- [ ] **Step 3: RED**, **Step 4: implement**, **Step 5: GREEN** (store suite + urlLoaderPolicy suite with updated ceiling expectations + `npx tsc -b --force`)
+- [ ] **Step 3: RED**, **Step 4: implement**, **Step 5: GREEN** (store suite + urlLoaderPolicy suite + splatFileSourcePolicy suite + picker/export suites + `npx tsc -b --force` + eslint + full `npm run test:run`)
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/store/reconstructionStore.ts src/store/reconstructionStore.test.ts src/hooks/urlLoaderPolicy.ts src/hooks/urlLoaderPolicy.test.ts <any guarded consumer files>
-git commit -m "feat(viewer): byte-less oversized splat activation on touch; raise splat ceiling to 4M"
+git add <all touched source + test files>
+git commit -m "feat(viewer): backend-aware byte-less splat activation on touch; 4M ceiling where WebGPU is available"
 ```
 
 ---
