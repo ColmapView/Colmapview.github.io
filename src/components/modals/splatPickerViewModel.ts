@@ -77,13 +77,14 @@ export function getSplatPickerDescription(count: number): string {
 /**
  * Build the picker rows from splat sources (filename + size), classifying each by
  * device tier via `getSplatDeviceTier`. On touch hardware a source that would
- * crash the tab (over the ~3M-splat GPU ceiling) becomes `disabled` with an
+ * crash the tab (over the splat-count GPU ceiling: 4M when the byte-less WebGPU
+ * loader is available, a conservative 3M otherwise) becomes `disabled` with an
  * explicit reason; one merely over the memory budget gets a `hint` warning.
  * Desktop callers pass `isTouchDevice: false`, so every row stays `ok`.
  */
 export function getSplatPickerItems(
   sources: readonly SplatFileSource[],
-  options: { isTouchDevice: boolean }
+  options: { isTouchDevice: boolean; byteLessLoaderAvailable?: boolean }
 ): SplatPickerItem[] {
   return sources.map((source) => {
     const sizeLabel = formatSplatSize(source.size);

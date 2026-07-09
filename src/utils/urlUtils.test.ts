@@ -8,6 +8,7 @@ import {
   getCorsInstructions,
   fetchRemoteSplatFile,
   fetchRemoteSplatBytes,
+  toArrayBuffer,
   getFilenameFromUrl,
 } from './urlUtils';
 
@@ -481,5 +482,35 @@ describe('fetchRemoteSplatBytes', () => {
   it('throws the standard message on a non-OK response', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 404 })));
     await expect(fetchRemoteSplatBytes('https://x/a.ply')).rejects.toThrow('Failed to fetch splat (404)');
+  });
+});
+
+describe('toArrayBuffer', () => {
+  it('returns the backing buffer without copying when the view spans it exactly', () => {
+    const bytes = new Uint8Array([1, 2, 3, 4]);
+    expect(toArrayBuffer(bytes)).toBe(bytes.buffer);
+  });
+
+  it('copies a trimmed view so a Content-Length over-report cannot leak trailing garbage', () => {
+    // Simulates fetchRemoteSplatBytes' underrun result: a 3-byte subarray over a
+    // 6-byte pre-allocation whose tail was never filled.
+    const backing = new Uint8Array([7, 8, 9, 0, 0, 0]);
+    const view = backing.subarray(0, 3);
+
+    const buffer = toArrayBuffer(view);
+
+    expect(buffer).not.toBe(backing.buffer);
+    expect(buffer.byteLength).toBe(3);
+    expect(Array.from(new Uint8Array(buffer))).toEqual([7, 8, 9]);
+  });
+
+  it('copies an offset view', () => {
+    const backing = new Uint8Array([1, 2, 3, 4, 5]);
+    const view = backing.subarray(2);
+
+    const buffer = toArrayBuffer(view);
+
+    expect(buffer.byteLength).toBe(3);
+    expect(Array.from(new Uint8Array(buffer))).toEqual([3, 4, 5]);
   });
 });

@@ -2,9 +2,44 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LoadedFiles } from '../types/colmap';
 import { abandonUrlAutoLoadRequest, hasUrlToLoad, useReconstructionStore } from './reconstructionStore';
 import { usePointCloudStore } from './stores/pointCloudStore';
+import { useSplatBackendStore } from './stores/splatBackendStore';
 import { useTransformStore } from './stores/transformStore';
 import { useUIStore } from './stores/uiStore';
 import { isSplatColorMode } from './types';
+import {
+  clearGaussianCloudLoadCacheForTests,
+  loadGaussianCloudFromFile,
+} from '../splat/gaussianCloudLoader';
+import type { GaussianCloud } from '../splat/gaussianCloud';
+
+// Byte-less activation seams: the decode step is mocked (no real gs-toolbox
+// decode in store tests), while seedGaussianCloudLoad / loadGaussianCloudFromFile
+// stay REAL so the tests can verify the decode cache actually got seeded under
+// the placeholder File. detectTouchDevice defaults to desktop; touch tests
+// override per test.
+const loadGaussianCloudFromBytesMock = vi.hoisted(() => vi.fn());
+const detectTouchDeviceMock = vi.hoisted(() => vi.fn(() => false));
+
+vi.mock('../splat/gaussianCloudLoader', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../splat/gaussianCloudLoader')>();
+  return { ...actual, loadGaussianCloudFromBytes: loadGaussianCloudFromBytesMock };
+});
+
+vi.mock('../hooks/useIsTouchDevice', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../hooks/useIsTouchDevice')>();
+  return { ...actual, detectTouchDevice: detectTouchDeviceMock };
+});
+
+function baseLoadedFiles(overrides: Partial<LoadedFiles>): LoadedFiles {
+  return {
+    camerasFile: new File([''], 'cameras.bin'),
+    imagesFile: new File([''], 'images.bin'),
+    points3DFile: new File([''], 'points3D.bin'),
+    imageFiles: new Map(),
+    hasMasks: false,
+    ...overrides,
+  };
+}
 
 describe('reconstruction store URL load lifecycle', () => {
   beforeEach(() => {
@@ -382,17 +417,6 @@ describe('reconstruction store lazy splat source switching', () => {
     vi.unstubAllGlobals();
   });
 
-  function baseLoadedFiles(overrides: Partial<LoadedFiles>): LoadedFiles {
-    return {
-      camerasFile: new File([''], 'cameras.bin'),
-      imagesFile: new File([''], 'images.bin'),
-      points3DFile: new File([''], 'points3D.bin'),
-      imageFiles: new Map(),
-      hasMasks: false,
-      ...overrides,
-    };
-  }
-
   it('activates a downloaded splat source and offloads the previous one', async () => {
     const fileA = new File(['a'], 'a.ply');
     const fileB = new File(['b'], 'b.ply');
@@ -653,6 +677,203 @@ describe('reconstruction store lazy splat source switching', () => {
     );
 
     expect(useReconstructionStore.getState().showSplatPicker).toBe(false);
+  });
+});
+
+describe('reconstruction store byte-less oversized splat activation', () => {
+  beforeEach(() => {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
+    useTransformStore.setState(useTransformStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
+    useSplatBackendStore.setState(useSplatBackendStore.getInitialState(), true);
+    detectTouchDeviceMock.mockReturnValue(false);
+    loadGaussianCloudFromBytesMock.mockReset();
+    clearGaussianCloudLoadCacheForTests();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const decodedCloud = { count: 3, shDegree: 0 } as unknown as GaussianCloud;
+
+  function decodedResult() {
+    return { file: new File([], ''), format: 'ply' as const, byteLength: 11, cloud: decodedCloud };
+  }
+
+  /** Touch hardware with a WebGPU-capable backend: the byte-less gate is open. */
+  function armTouchWebGpu() {
+    detectTouchDeviceMock.mockReturnValue(true);
+    useSplatBackendStore.setState({
+      requestedBackend: 'auto',
+      availability: { webGpu: 'ready', webGpuFailureReason: null, spark: false },
+    });
+  }
+
+  // Hand-rolled streaming response (like urlUtils.test.ts): in this test
+  // environment `new Response(new Blob([...]))` is not byte-faithful, and the
+  // byte-less test asserts the exact bytes handed to the decoder.
+  function stubSplatBytesFetch() {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('splat-bytes'));
+          controller.close();
+        },
+      }),
+    }) as unknown as Response));
+  }
+
+  function loadOversizedLazySource() {
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFileSources: [
+        { id: 'splats/big.ply', path: 'splats/big.ply', url: 'https://x/splats/big.ply', size: 150_000_000 },
+      ],
+    }));
+  }
+
+  function getBigSource() {
+    return useReconstructionStore.getState().loadedFiles?.splatFileSources
+      ?.find((s) => s.id === 'splats/big.ply');
+  }
+
+  it('activates an oversized remote splat byte-lessly on touch with WebGPU available', async () => {
+    armTouchWebGpu();
+    stubSplatBytesFetch();
+    loadGaussianCloudFromBytesMock.mockResolvedValue(decodedResult());
+    loadOversizedLazySource();
+    usePointCloudStore.setState({ colorMode: 'rgb', showSplats: false });
+
+    await useReconstructionStore.getState().selectSplatSource('splats/big.ply');
+
+    const state = useReconstructionStore.getState();
+    const splatFile = state.loadedFiles?.splatFile;
+    // A zero-byte placeholder named like the source is active; the source keeps
+    // no bytes (stays re-fetchable/offloadable).
+    expect(splatFile?.name).toBe('big.ply');
+    expect(splatFile?.size).toBe(0);
+    expect(getBigSource()?.file).toBeUndefined();
+    expect(state.requestedSplatSourceId).toBe('splats/big.ply');
+    expect(state.urlLoading).toBe(false);
+    expect(state.urlProgress).toBeNull();
+    expect(state.urlError).toBeNull();
+    // Decode ran from the downloaded bytes (no File roundtrip), format from the extension.
+    expect(loadGaussianCloudFromBytesMock).toHaveBeenCalledTimes(1);
+    const [buffer, format] = loadGaussianCloudFromBytesMock.mock.calls[0] as [ArrayBuffer, string];
+    expect(new TextDecoder().decode(new Uint8Array(buffer))).toBe('splat-bytes');
+    expect(format).toBe('ply');
+    // The decode cache is seeded under the placeholder: the renderer's first
+    // loadGaussianCloudFromFile(placeholder) is a guaranteed cache hit whose
+    // file identity is the placeholder (not the bytes entry's synthetic file).
+    const seeded = await loadGaussianCloudFromFile(splatFile!);
+    expect(seeded.cloud).toBe(decodedCloud);
+    expect(seeded.file).toBe(splatFile);
+    // Fresh activation switches into a splat-visible display mode.
+    expect(usePointCloudStore.getState().colorMode).toBe('splatPoints');
+  });
+
+  it('keeps the byte-retaining path on desktop for oversized remote splats', async () => {
+    // Desktop (detectTouchDevice=false) with a fully capable WebGPU backend.
+    useSplatBackendStore.setState({
+      requestedBackend: 'auto',
+      availability: { webGpu: 'ready', webGpuFailureReason: null, spark: false },
+    });
+    stubSplatBytesFetch();
+    loadOversizedLazySource();
+
+    await useReconstructionStore.getState().selectSplatSource('splats/big.ply');
+
+    const source = getBigSource();
+    expect(source?.file).toBeDefined();
+    expect(source?.file?.size).toBeGreaterThan(0);
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(source?.file);
+    expect(loadGaussianCloudFromBytesMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the byte-retaining path for small touch splats', async () => {
+    armTouchWebGpu();
+    stubSplatBytesFetch();
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFileSources: [
+        // At the touch auto-load budget but under the 100MB retention threshold.
+        { id: 'splats/big.ply', path: 'splats/big.ply', url: 'https://x/splats/big.ply', size: 50_000_000 },
+      ],
+    }));
+
+    await useReconstructionStore.getState().selectSplatSource('splats/big.ply');
+
+    const source = getBigSource();
+    expect(source?.file).toBeDefined();
+    expect(source?.file?.size).toBeGreaterThan(0);
+    expect(loadGaussianCloudFromBytesMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the byte-retaining path on Spark-bound touch devices (requestedBackend spark)', async () => {
+    detectTouchDeviceMock.mockReturnValue(true);
+    useSplatBackendStore.setState({
+      requestedBackend: 'spark',
+      availability: { webGpu: 'ready', webGpuFailureReason: null, spark: true },
+    });
+    stubSplatBytesFetch();
+    loadOversizedLazySource();
+
+    await useReconstructionStore.getState().selectSplatSource('splats/big.ply');
+
+    const source = getBigSource();
+    // Spark streams splatFile bytes directly; a byte-less placeholder would
+    // render empty, so the bytes must be retained.
+    expect(source?.file).toBeDefined();
+    expect(source?.file?.size).toBeGreaterThan(0);
+    expect(loadGaussianCloudFromBytesMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the byte-retaining path on touch without WebGPU support', async () => {
+    detectTouchDeviceMock.mockReturnValue(true);
+    useSplatBackendStore.setState({
+      requestedBackend: 'auto',
+      // 'unsupported' auto-resolves to the Spark fallback.
+      availability: { webGpu: 'unsupported', webGpuFailureReason: null, spark: true },
+    });
+    stubSplatBytesFetch();
+    loadOversizedLazySource();
+
+    await useReconstructionStore.getState().selectSplatSource('splats/big.ply');
+
+    const source = getBigSource();
+    expect(source?.file).toBeDefined();
+    expect(source?.file?.size).toBeGreaterThan(0);
+    expect(loadGaussianCloudFromBytesMock).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a byte-less decode failure like a fetch failure and retries with a fresh placeholder', async () => {
+    armTouchWebGpu();
+    stubSplatBytesFetch();
+    loadGaussianCloudFromBytesMock.mockRejectedValueOnce(new Error('corrupt header'));
+    loadOversizedLazySource();
+
+    await useReconstructionStore.getState().selectSplatSource('splats/big.ply');
+
+    let state = useReconstructionStore.getState();
+    expect(state.urlLoading).toBe(false);
+    expect(state.urlProgress).toBeNull();
+    expect(state.urlError?.message).toBe('Failed to load splat');
+    expect(state.urlError?.details).toContain('corrupt header');
+    // The failed attempt never activated its placeholder.
+    expect(state.loadedFiles?.splatFile).toBeUndefined();
+
+    // Retry succeeds: each attempt seeds a FRESH placeholder, so the rejected
+    // seed from the failed attempt is unreachable and cannot poison the retry.
+    loadGaussianCloudFromBytesMock.mockResolvedValue(decodedResult());
+    await useReconstructionStore.getState().selectSplatSource('splats/big.ply');
+
+    state = useReconstructionStore.getState();
+    expect(state.loadedFiles?.splatFile?.name).toBe('big.ply');
+    const seeded = await loadGaussianCloudFromFile(state.loadedFiles!.splatFile!);
+    expect(seeded.cloud).toBe(decodedCloud);
   });
 });
 

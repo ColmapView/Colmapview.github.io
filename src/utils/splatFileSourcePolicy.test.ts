@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { LoadedFiles, SplatFileSource } from '../types/colmap';
 import {
   applyActiveSplatFile,
+  applyActiveSplatPlaceholder,
   clearActiveSplatFile,
   findSplatSourceById,
   getActiveSplatSourceId,
   getNextSplatFile,
   getNextSplatSourceId,
+  isByteLessActiveSplatFile,
   loadedFilesHaveSplatData,
   mergeRemoteSplatCatalog,
 } from './splatFileSourcePolicy';
@@ -73,6 +75,21 @@ describe('getActiveSplatSourceId (cycle anchor)', () => {
   it('falls back to the file name when the active file is not in the sources', () => {
     const orphan = new File(['x'], 'orphan.ply');
     expect(getActiveSplatSourceId(loaded({ splatFile: orphan, splatFileSources: [] }))).toBe('orphan.ply');
+  });
+
+  it('resolves a byte-less placeholder to its re-fetchable source by filename', () => {
+    // Byte-less activation: the active splat is a zero-byte placeholder held by
+    // no source; the panel's active-source value must still find the source id.
+    const placeholder = new File([], 'big.ply');
+    const lf = loaded({
+      splatFile: placeholder,
+      splatFiles: [],
+      splatFileSources: [
+        { id: 'splats/big.ply', path: 'splats/big.ply', url: 'u/big', size: 150_000_000 },
+        { id: 'splats/other.ply', path: 'splats/other.ply', url: 'u/other' },
+      ],
+    });
+    expect(getActiveSplatSourceId(lf)).toBe('splats/big.ply');
   });
 });
 
@@ -149,6 +166,77 @@ describe('applyActiveSplatFile (activate + offload previous)', () => {
     expect(next.splatFile).toBe(fileB);
     expect(next.splatFileSources?.find((s) => s.id === 'local')?.file).toBe(localFile);
     expect(next.splatFiles).toEqual([localFile, fileB]);
+  });
+});
+
+describe('applyActiveSplatPlaceholder (byte-less activation)', () => {
+  it('activates the placeholder while the source keeps no bytes (stays re-fetchable)', () => {
+    const placeholder = new File([], 'big.ply');
+    const lf = loaded({
+      splatFileSources: [
+        { id: 'splats/big.ply', path: 'splats/big.ply', url: 'u/big', size: 150_000_000 },
+      ],
+    });
+
+    const next = applyActiveSplatPlaceholder(lf, 'splats/big.ply', placeholder);
+
+    expect(next.splatFile).toBe(placeholder);
+    expect(next.splatFileSources?.find((s) => s.id === 'splats/big.ply')?.file).toBeUndefined();
+    // The placeholder holds no bytes, so it is not listed among loaded files.
+    expect(next.splatFiles).toEqual([]);
+  });
+
+  it('offloads the previous re-fetchable tile and keeps local ones', () => {
+    const fileA = new File(['a'], 'a.ply');
+    const localFile = new File(['local'], 'local.ply');
+    const placeholder = new File([], 'big.ply');
+    const lf = loaded({
+      splatFile: fileA,
+      splatFiles: [fileA, localFile],
+      splatFileSources: [
+        { id: 'a', path: 'a.ply', url: 'u/a', file: fileA },
+        { id: 'local', path: 'local.ply', file: localFile },
+        { id: 'big', path: 'splats/big.ply', url: 'u/big' },
+      ],
+    });
+
+    const next = applyActiveSplatPlaceholder(lf, 'big', placeholder);
+
+    expect(next.splatFile).toBe(placeholder);
+    // Previous active (a) is re-fetchable (has url) -> offloaded.
+    expect(next.splatFileSources?.find((s) => s.id === 'a')?.file).toBeUndefined();
+    // Local splats cannot be re-fetched -> kept.
+    expect(next.splatFileSources?.find((s) => s.id === 'local')?.file).toBe(localFile);
+    expect(next.splatFiles).toEqual([localFile]);
+  });
+});
+
+describe('isByteLessActiveSplatFile', () => {
+  it('detects a byte-less placeholder (zero bytes, held by no source, re-fetchable source present)', () => {
+    const placeholder = new File([], 'big.ply');
+    const lf = loaded({
+      splatFile: placeholder,
+      splatFileSources: [{ id: 'splats/big.ply', path: 'splats/big.ply', url: 'u/big' }],
+    });
+    expect(isByteLessActiveSplatFile(lf)).toBe(true);
+  });
+
+  it('is false for a real downloaded splat, no active splat, and null', () => {
+    const fileA = new File(['a'], 'a.ply');
+    expect(isByteLessActiveSplatFile(loaded({
+      splatFile: fileA,
+      splatFileSources: [{ id: 'a', path: 'a.ply', url: 'u/a', file: fileA }],
+    }))).toBe(false);
+    expect(isByteLessActiveSplatFile(loaded({}))).toBe(false);
+    expect(isByteLessActiveSplatFile(null)).toBe(false);
+  });
+
+  it('is false for a genuinely empty file attached to a source (not a placeholder)', () => {
+    const empty = new File([], 'empty.ply');
+    expect(isByteLessActiveSplatFile(loaded({
+      splatFile: empty,
+      splatFileSources: [{ id: 'e', path: 'empty.ply', url: 'u/e', file: empty }],
+    }))).toBe(false);
   });
 });
 

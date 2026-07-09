@@ -3,6 +3,7 @@ import { modalStyles } from '../../theme';
 import { CloseIcon } from '../../icons';
 import { ModalDialogShell } from '../ui/ModalDialogShell';
 import { useIsTouchDevice } from '../../hooks/useIsTouchDevice';
+import { canUseByteLessSplatLoader } from '../../hooks/urlLoaderPolicy';
 import {
   getSplatPickerDescription,
   getSplatPickerItems,
@@ -32,15 +33,28 @@ export function SplatPickerModal() {
   const titleId = useId();
   const descriptionId = useId();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const { showSplatPicker, splatFileSources, setShowSplatPicker, selectSplatSource } =
-    useSplatPickerStoreFacade();
+  const {
+    showSplatPicker,
+    splatFileSources,
+    requestedSplatBackend,
+    webGpuSplatAvailability,
+    setShowSplatPicker,
+    selectSplatSource,
+  } = useSplatPickerStoreFacade();
   // Key the hint on the hardware touch signal (what the auto-load budget uses), not the
   // UI touchMode flag: a phone-width desktop window is touchMode=true but keeps the
   // 150MB desktop budget, so a touchMode-keyed hint would warn against the wrong budget.
   const isTouchDevice = useIsTouchDevice();
+  // The raised 4M disable ceiling only applies where the byte-less WebGPU decode
+  // path will serve the render; Spark-bound devices keep the conservative 3M gate.
+  const byteLessLoaderAvailable = canUseByteLessSplatLoader({
+    isTouchDevice,
+    requestedBackend: requestedSplatBackend,
+    webGpuAvailability: webGpuSplatAvailability,
+  });
 
   const isOpen = showSplatPicker && splatFileSources.length >= 1;
-  const items = getSplatPickerItems(splatFileSources, { isTouchDevice });
+  const items = getSplatPickerItems(splatFileSources, { isTouchDevice, byteLessLoaderAvailable });
 
   const handleClose = () => setShowSplatPicker(false);
   const handleSelect = (sourceId: string) => {

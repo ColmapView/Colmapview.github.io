@@ -11,6 +11,7 @@ import { ControlButton, type PanelType } from '../ControlComponents';
 import { exportReconstructionText, exportReconstructionBinary, exportPointsPLY, downloadReconstructionZip, downloadImagesZip, downloadMasksZip } from '../../../parsers';
 import { useDataset } from '../../../dataset';
 import { createSim3dFromEuler, isIdentityEuler, transformReconstruction } from '../../../utils/sim3dTransforms';
+import { isByteLessActiveSplatFile } from '../../../utils/splatFileSourcePolicy';
 import { requestConfirmation } from '../../../utils/confirmation';
 import { appLogger } from '../../../utils/logger';
 import { downloadBlob } from '../../../utils/download';
@@ -168,6 +169,18 @@ export const ExportPanel = memo(function ExportPanel({
   const handleDownloadSplat = useCallback(() => {
     const splatFile = loadedFiles?.splatFile;
     if (!splatFile) return;
+
+    if (isByteLessActiveSplatFile(loadedFiles)) {
+      // Byte-less activation (oversized tile on touch) kept only the decoded
+      // cloud; there are no source bytes to write, so a download would produce
+      // a useless 0-byte file.
+      addNotification(
+        'warning',
+        'Splat bytes were not kept on this device - reload on desktop to export',
+        6000
+      );
+      return;
+    }
 
     downloadBlob(splatFile, splatFile.name);
     if (!isIdentityEuler(getTransform()) || !isIdentityEuler(getSplatTransform())) {

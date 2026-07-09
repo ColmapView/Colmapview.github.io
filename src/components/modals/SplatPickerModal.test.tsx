@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useReconstructionStore } from '../../store/reconstructionStore';
+import { useSplatBackendStore } from '../../store/stores/splatBackendStore';
 import { useUIStore } from '../../store/stores/uiStore';
 import { useIsTouchDevice } from '../../hooks/useIsTouchDevice';
 import { SplatPickerModal } from './SplatPickerModal';
@@ -104,5 +105,61 @@ describe('SplatPickerModal disabled tier', () => {
 
     fireEvent.click(row!);
     expect(selectSplatSource).not.toHaveBeenCalled();
+  });
+});
+
+// 364 MB PLY with an explicit 3.5M splat count: over the retaining 3M ceiling,
+// within the byte-less 4M ceiling. The row's tier therefore depends on whether
+// the byte-less WebGPU loader is available on this device.
+function openPickerWithByteLessEligibleSplat() {
+  useReconstructionStore.setState({
+    showSplatPicker: true,
+    loadedFiles: {
+      imageFiles: new Map(),
+      hasMasks: false,
+      splatFileSources: [
+        { id: 'big', path: 'splats/big.ply', url: 'u', size: 364_000_000, splatCount: 3_500_000 },
+      ],
+    },
+  });
+}
+
+describe('SplatPickerModal byte-less ceiling', () => {
+  beforeEach(() => {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
+    useSplatBackendStore.setState(useSplatBackendStore.getInitialState(), true);
+    mockUseIsTouchDevice.mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('offers a 3-4M splat with a memory hint on touch when the WebGPU byte-less loader is available', () => {
+    mockUseIsTouchDevice.mockReturnValue(true);
+    useSplatBackendStore.setState({
+      requestedBackend: 'auto',
+      availability: { webGpu: 'ready', webGpuFailureReason: null, spark: false },
+    });
+    openPickerWithByteLessEligibleSplat();
+
+    render(<SplatPickerModal />);
+
+    const row = screen.getByText('big.ply').closest('button');
+    expect(row).not.toBeNull();
+    expect(row).not.toBeDisabled();
+    expect(screen.getByText(MEMORY_WARNING)).toBeInTheDocument();
+  });
+
+  it('keeps the 3M ceiling (disabled row) on Spark-bound touch devices', () => {
+    mockUseIsTouchDevice.mockReturnValue(true);
+    // jsdom has no navigator.gpu, so the initial backend state is
+    // webGpu 'unsupported' -> resolves to the Spark fallback -> no byte-less.
+    openPickerWithByteLessEligibleSplat();
+
+    render(<SplatPickerModal />);
+
+    expect(screen.getByText('big.ply').closest('button')).toBeDisabled();
   });
 });

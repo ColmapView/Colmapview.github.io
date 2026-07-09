@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Reconstruction, LoadedFiles } from '../types/colmap';
+import type { Reconstruction, LoadedFiles, SplatFileSource } from '../types/colmap';
 import type { WasmReconstructionWrapper } from '../wasm/reconstruction';
 import type { UrlLoadProgress, UrlLoadError, ColmapManifest } from '../types/manifest';
 import { useUIStore } from './stores/uiStore';
@@ -8,10 +8,12 @@ import {
   POINT_CLOUD_DEFAULT_SIZE,
   POINT_CLOUD_DEFAULT_OPACITY,
 } from './stores/pointCloudStore';
+import { useSplatBackendStore } from './stores/splatBackendStore';
 import { useTransformStore } from './stores/transformStore';
 import { getDefaultBackgroundColorForSplatLoad } from './splatBackgroundPolicy';
 import {
   applyActiveSplatFile,
+  applyActiveSplatPlaceholder,
   clearActiveSplatFile,
   findSplatSourceById,
   getLoadedFilesWithActiveSplatSource,
@@ -19,8 +21,13 @@ import {
   mergeRemoteSplatCatalog as mergeRemoteSplatCatalogIntoLoadedFiles,
 } from '../utils/splatFileSourcePolicy';
 import { isSplatColorMode } from './types';
-import { fetchRemoteSplatFile } from '../utils/urlUtils';
+import { fetchRemoteSplatBytes, fetchRemoteSplatFile, toArrayBuffer } from '../utils/urlUtils';
 import { getSplatDownloadProgress } from '../utils/splatLoadingProgressPolicy';
+import {
+  canUseByteLessSplatLoader,
+  TOUCH_SPLAT_BYTELESS_RETENTION_MIN_BYTES,
+} from '../hooks/urlLoaderPolicy';
+import { detectTouchDevice } from '../hooks/useIsTouchDevice';
 
 const SPLAT_POINT_CLOUD_DEFAULT_SIZE = 1;
 const SPLAT_POINT_CLOUD_DEFAULT_OPACITY = 0.2;
@@ -73,6 +80,26 @@ function applySplatActivationVisuals(): void {
     uiStore.setBackgroundColor(nextBackgroundColor);
   }
   applySplatPointDisplayDefaults();
+}
+
+/**
+ * Byte-less gate for a lazily-selected remote splat: touch hardware, above the
+ * retention budget, AND a backend context where the seeded WebGPU decode cache
+ * will actually serve the render. The Spark fallback streams `splatFile` bytes
+ * directly and would render a byte-less placeholder as empty, so Spark-bound
+ * devices (and desktop, and small tiles) keep the byte-retaining path.
+ */
+function shouldActivateSplatSourceByteLess(source: SplatFileSource): boolean {
+  const isTouchDevice = detectTouchDevice();
+  if (!isTouchDevice || (source.size ?? 0) <= TOUCH_SPLAT_BYTELESS_RETENTION_MIN_BYTES) {
+    return false;
+  }
+  const { requestedBackend, availability } = useSplatBackendStore.getState();
+  return canUseByteLessSplatLoader({
+    isTouchDevice,
+    requestedBackend,
+    webGpuAvailability: availability.webGpu,
+  });
 }
 
 /** Source type for loaded reconstruction */
@@ -368,14 +395,61 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     }
     const splatName = source.path.split('/').pop() ?? source.path;
     set({ urlLoading: true, urlProgress: getSplatDownloadProgress(splatName, 0, 0) });
+    const onDownloadProgress = (loaded: number, total: number) => {
+      // Ignore progress from a fetch a newer selection has superseded.
+      if (requestId !== activeSplatRequestId) {
+        return;
+      }
+      set({ urlProgress: getSplatDownloadProgress(splatName, loaded, total) });
+    };
     try {
-      const file = await fetchRemoteSplatFile(source.url, (loaded, total) => {
-        // Ignore progress from a fetch a newer selection has superseded.
+      if (shouldActivateSplatSourceByteLess(source)) {
+        // Oversized tile on WebGPU-capable touch hardware: keep ONE copy of the
+        // bytes (download buffer -> decoder), seed the decode cache under a
+        // zero-byte placeholder File, and leave the source file-less so it
+        // stays re-fetchable. This avoids the blob+buffer coexistence that
+        // caps phones around ~300 MB tiles.
+        const { bytes, name } = await fetchRemoteSplatBytes(source.url, onDownloadProgress);
         if (requestId !== activeSplatRequestId) {
           return;
         }
-        set({ urlProgress: getSplatDownloadProgress(splatName, loaded, total) });
-      });
+        const {
+          getGaussianCloudFormatForFile,
+          loadGaussianCloudFromBytes,
+          seedGaussianCloudLoad,
+        } = await import('../splat/gaussianCloudLoader');
+        // FRESH placeholder per attempt: a rejected seeded promise never
+        // self-evicts from the decode cache, so a reused placeholder would stay
+        // poisoned across retries; a fresh one leaves a failed attempt's seed
+        // unreachable (WeakMap-collected).
+        const placeholder = new File([], name);
+        const format = getGaussianCloudFormatForFile(placeholder);
+        const seeded = loadGaussianCloudFromBytes(toArrayBuffer(bytes), format, {})
+          // The bytes entry carries a synthetic empty file; rewrite it to the
+          // placeholder so the cached result matches its cache key.
+          .then((loaded) => ({ ...loaded, file: placeholder }));
+        // Seed BEFORE activation so the renderer's first
+        // loadGaussianCloudFromFile(placeholder) is a guaranteed cache hit.
+        seedGaussianCloudLoad(placeholder, seeded);
+        await seeded;
+        if (requestId !== activeSplatRequestId) {
+          return;
+        }
+        const latest = get().loadedFiles ?? loadedFiles;
+        set({
+          requestedSplatSourceId: source.id,
+          loadedFiles: applyActiveSplatPlaceholder(latest, source.id, placeholder),
+          // Download AND decode are done; unlike the retaining path there is no
+          // renderer-side file read left to clear the indicator, so clear it here.
+          urlLoading: false,
+          urlProgress: null,
+        });
+        if (!hadSplatBefore) {
+          applySplatActivationVisuals();
+        }
+        return;
+      }
+      const file = await fetchRemoteSplatFile(source.url, onDownloadProgress);
       // A newer selection won the race: drop this stale result and leave the
       // winner's state untouched.
       if (requestId !== activeSplatRequestId) {
@@ -390,7 +464,8 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
         applySplatActivationVisuals();
       }
     } catch (err) {
-      // A superseded fetch's failure must not clobber the winner's state.
+      // Fetch and byte-less decode failures land here alike; a superseded
+      // attempt's failure must not clobber the winner's state.
       if (requestId !== activeSplatRequestId) {
         return;
       }

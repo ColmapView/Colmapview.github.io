@@ -62,6 +62,80 @@ export function applyActiveSplatFile(
   return { ...loadedFiles, splatFileSources: sources, splatFile: file, splatFiles };
 }
 
+/**
+ * Byte-less activation (oversized tile on WebGPU-capable touch): make
+ * `sourceId` the active splat via a zero-byte placeholder File. Unlike
+ * applyActiveSplatFile, the activated source keeps `file` undefined - its bytes
+ * were handed straight to the decoder and are NOT retained, so the source stays
+ * re-fetchable/offloadable. The previously active tile is offloaded exactly
+ * like applyActiveSplatFile does, and the placeholder is not listed in
+ * `splatFiles` (it carries no bytes).
+ */
+export function applyActiveSplatPlaceholder(
+  loadedFiles: LoadedFiles,
+  sourceId: string,
+  placeholder: File
+): LoadedFiles {
+  const previousActiveFile = loadedFiles.splatFile;
+  const sources = (loadedFiles.splatFileSources ?? []).map((source) => {
+    if (source.id === sourceId) {
+      // Byte-less activation targets a lazy (file-less) source; drop any stale
+      // bytes defensively so the invariant "active byte-less source holds no
+      // file" holds regardless of the caller.
+      return source.file ? { ...source, file: undefined } : source;
+    }
+    if (source.file && source.file === previousActiveFile && source.url) {
+      return { ...source, file: undefined };
+    }
+    return source;
+  });
+  const splatFiles = sources
+    .map((source) => source.file)
+    .filter((candidate): candidate is File => Boolean(candidate));
+
+  return { ...loadedFiles, splatFileSources: sources, splatFile: placeholder, splatFiles };
+}
+
+function getSplatSourceFileName(path: string): string {
+  const normalized = normalizeSplatSourceId(path);
+  return normalized.split('/').pop() ?? normalized;
+}
+
+/**
+ * Find the re-fetchable source a byte-less placeholder stands for. A byte-less
+ * active splat is a zero-byte File held by NO source (the retained-bytes path
+ * always attaches the file to its source); the placeholder is named after the
+ * source's downloaded filename, so match by filename among the file-less,
+ * url-bearing sources.
+ */
+function findByteLessActiveSplatSource(loadedFiles: LoadedFiles): SplatFileSource | undefined {
+  const activeFile = loadedFiles.splatFile;
+  if (!activeFile || activeFile.size !== 0) {
+    return undefined;
+  }
+  const sources = loadedFiles.splatFileSources ?? [];
+  if (sources.some((source) => source.file === activeFile)) {
+    return undefined;
+  }
+  return sources.find((source) =>
+    !source.file
+    && Boolean(source.url)
+    && getSplatSourceFileName(source.path) === activeFile.name
+  );
+}
+
+/**
+ * Whether the active splat is a byte-less placeholder: its bytes were not
+ * retained on this device (only the decoded cloud exists), so byte consumers
+ * (e.g. splat export) have nothing to read and must fall back to a notice.
+ */
+export function isByteLessActiveSplatFile(loadedFiles: LoadedFiles | null): boolean {
+  if (!loadedFiles) {
+    return false;
+  }
+  return Boolean(findByteLessActiveSplatSource(loadedFiles));
+}
+
 function joinSplatUrl(baseUrl: string, path: string): string {
   const encoded = encodeUrlPath(path);
   return baseUrl.endsWith('/') ? `${baseUrl}${encoded}` : `${baseUrl}/${encoded}`;
@@ -176,7 +250,10 @@ export function getActiveSplatSourceId(loadedFiles: LoadedFiles | null): string 
     return null;
   }
 
-  const source = loadedFiles.splatFileSources?.find((candidate) => candidate.file === loadedFiles.splatFile);
+  // A byte-less placeholder is held by no source; resolve it by filename so the
+  // active-source selection (panel select, share links) still finds its id.
+  const source = loadedFiles.splatFileSources?.find((candidate) => candidate.file === loadedFiles.splatFile)
+    ?? findByteLessActiveSplatSource(loadedFiles);
   return source?.id ?? loadedFiles.splatFile.name;
 }
 

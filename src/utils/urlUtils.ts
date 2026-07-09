@@ -215,6 +215,23 @@ export async function fetchRemoteSplatBytes(
 }
 
 /**
+ * View-exact ArrayBuffer for handing {@link fetchRemoteSplatBytes} output to a
+ * decoder. On a Content-Length over-report that function returns a `subarray`
+ * view backed by the FULL pre-allocation; returning that backing buffer would
+ * feed trailing garbage past the view's end, so copy unless the view spans its
+ * buffer exactly (the common case, which stays zero-copy).
+ */
+export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const { buffer, byteOffset, byteLength } = bytes;
+  if (buffer instanceof ArrayBuffer && byteOffset === 0 && byteLength === buffer.byteLength) {
+    return buffer;
+  }
+  const copy = new Uint8Array(byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
+/**
  * Read a successful response into a Blob. When an onProgress callback is given and
  * the body is streamable, reports bytes (vs Content-Length) as they arrive;
  * otherwise falls back to response.blob(). Shared by remote splat and COLMAP-file

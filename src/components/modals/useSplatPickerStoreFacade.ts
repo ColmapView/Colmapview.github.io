@@ -1,9 +1,16 @@
-import { useReconstructionStore } from '../../store';
+import { useReconstructionStore, useSplatBackendStore } from '../../store';
 import type { SplatFileSource } from '../../types/colmap';
+import type {
+  SplatBackendPreference,
+  WebGpuSplatBackendState,
+} from '../../utils/splatBackendPolicy';
 
 export interface SplatPickerStoreFacade {
   showSplatPicker: boolean;
   splatFileSources: readonly SplatFileSource[];
+  /** Backend inputs for the byte-less loader gate (see canUseByteLessSplatLoader). */
+  requestedSplatBackend: SplatBackendPreference;
+  webGpuSplatAvailability: WebGpuSplatBackendState;
   setShowSplatPicker: (show: boolean) => void;
   selectSplatSource: (sourceId: string) => void;
 }
@@ -17,10 +24,19 @@ export function useSplatPickerStoreFacade(): SplatPickerStoreFacade {
   );
   const setShowSplatPicker = useReconstructionStore((state) => state.setShowSplatPicker);
   const selectSplatSourceAction = useReconstructionStore((state) => state.selectSplatSource);
+  const requestedSplatBackend = useSplatBackendStore((state) => state.requestedBackend);
+  const webGpuSplatAvailability = useSplatBackendStore((state) => state.availability.webGpu);
 
   const selectSplatSource = (sourceId: string) => {
     void selectSplatSourceAction(sourceId);
   };
 
-  return { showSplatPicker, splatFileSources, setShowSplatPicker, selectSplatSource };
+  return {
+    showSplatPicker,
+    splatFileSources,
+    requestedSplatBackend,
+    webGpuSplatAvailability,
+    setShowSplatPicker,
+    selectSplatSource,
+  };
 }

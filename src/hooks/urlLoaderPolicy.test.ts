@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ColmapManifest } from '../types/manifest';
 import {
+  canUseByteLessSplatLoader,
   createDefaultManifest,
   getArchiveUrlDetectedLogMessage,
   getDefaultUrlManifestLogMessage,
@@ -25,6 +26,9 @@ import {
   normalizeLoadUrl,
   SPLAT_AUTO_LOAD_MAX_BYTES,
   SPLAT_AUTO_LOAD_MAX_BYTES_TOUCH,
+  TOUCH_SPLAT_BYTELESS_RETENTION_MIN_BYTES,
+  TOUCH_SPLAT_DISABLE_MIN_SPLATS,
+  TOUCH_SPLAT_DISABLE_MIN_SPLATS_BYTELESS,
 } from './urlLoaderPolicy';
 
 const manifest: ColmapManifest = {
@@ -389,27 +393,88 @@ describe('getSplatAutoLoadDecision', () => {
 
 describe('getSplatDeviceTier', () => {
   it('is always ok on desktop hardware', () => {
-    expect(getSplatDeviceTier({ path: 'huge.ply', size: 1_040_000_634, splatCount: 10_000_000 }, { isTouchDevice: false })).toBe('ok');
+    expect(getSplatDeviceTier({ path: 'huge.ply', size: 1_040_000_634, splatCount: 10_000_000 }, { isTouchDevice: false, byteLessLoaderAvailable: false })).toBe('ok');
+    // Loader availability is irrelevant off touch hardware.
+    expect(getSplatDeviceTier({ path: 'huge.ply', size: 1_040_000_634, splatCount: 10_000_000 }, { isTouchDevice: false, byteLessLoaderAvailable: true })).toBe('ok');
   });
 
   it('disables on touch when the known splat count exceeds the ceiling', () => {
-    expect(getSplatDeviceTier({ path: 'huge.ply', size: 1_040_000_634, splatCount: 10_000_000 }, { isTouchDevice: true })).toBe('disabled');
-    expect(getSplatDeviceTier({ path: 'ok.ply', size: 200_000_000, splatCount: 1_900_000 }, { isTouchDevice: true })).toBe('hint');
+    expect(getSplatDeviceTier({ path: 'huge.ply', size: 1_040_000_634, splatCount: 10_000_000 }, { isTouchDevice: true, byteLessLoaderAvailable: false })).toBe('disabled');
+    expect(getSplatDeviceTier({ path: 'ok.ply', size: 200_000_000, splatCount: 1_900_000 }, { isTouchDevice: true, byteLessLoaderAvailable: false })).toBe('hint');
   });
 
   it('estimates the count from bytes per format when unknown', () => {
-    // 1.04 GB PLY / 104 B -> ~10M -> disabled; 64 MB spz / 16 B = 4M -> disabled;
-    // 40 MB spz / 16 B = 2.5M (<= ceiling) and 40 MB <= 50 MB budget -> ok.
+    // 1.04 GB PLY / 104 B -> ~10M -> disabled; 64 MB spz / 16 B = 4M -> disabled
+    // under the retaining 3M ceiling; 40 MB spz / 16 B = 2.5M (<= ceiling) and
+    // 40 MB <= 50 MB budget -> ok.
     expect(getEstimatedSplatCount({ path: 'huge.ply', size: 1_040_000_634 })).toBe(10_000_006);
-    expect(getSplatDeviceTier({ path: 'huge.ply', size: 1_040_000_634 }, { isTouchDevice: true })).toBe('disabled');
-    expect(getSplatDeviceTier({ path: 'dense.spz', size: 64_000_000 }, { isTouchDevice: true })).toBe('disabled');
-    expect(getSplatDeviceTier({ path: 'tiles.spz', size: 40_000_000 }, { isTouchDevice: true })).toBe('ok');
-    expect(getSplatDeviceTier({ path: 'mid.spz', size: 55_000_000, splatCount: 2_000_000 }, { isTouchDevice: true })).toBe('hint');
+    expect(getSplatDeviceTier({ path: 'huge.ply', size: 1_040_000_634 }, { isTouchDevice: true, byteLessLoaderAvailable: false })).toBe('disabled');
+    expect(getSplatDeviceTier({ path: 'dense.spz', size: 64_000_000 }, { isTouchDevice: true, byteLessLoaderAvailable: false })).toBe('disabled');
+    expect(getSplatDeviceTier({ path: 'tiles.spz', size: 40_000_000 }, { isTouchDevice: true, byteLessLoaderAvailable: false })).toBe('ok');
+    expect(getSplatDeviceTier({ path: 'mid.spz', size: 55_000_000, splatCount: 2_000_000 }, { isTouchDevice: true, byteLessLoaderAvailable: false })).toBe('hint');
   });
 
   it('never disables on an unknown estimate', () => {
-    expect(getSplatDeviceTier({ path: 'mystery.ply', size: 0 }, { isTouchDevice: true })).toBe('ok');
-    expect(getSplatDeviceTier({ path: 'mystery.ply' }, { isTouchDevice: true })).toBe('ok');
+    expect(getSplatDeviceTier({ path: 'mystery.ply', size: 0 }, { isTouchDevice: true, byteLessLoaderAvailable: false })).toBe('ok');
+    expect(getSplatDeviceTier({ path: 'mystery.ply' }, { isTouchDevice: true, byteLessLoaderAvailable: false })).toBe('ok');
+    expect(getSplatDeviceTier({ path: 'mystery.ply' }, { isTouchDevice: true, byteLessLoaderAvailable: true })).toBe('ok');
+  });
+
+  it('raises the ceiling to 4M splats when the byte-less loader is available', () => {
+    // 64 MB spz / 16 B = 4M == the raised ceiling (not >) -> no longer disabled;
+    // 64 MB > 50 MB touch budget -> hint.
+    expect(getSplatDeviceTier({ path: 'dense.spz', size: 64_000_000 }, { isTouchDevice: true, byteLessLoaderAvailable: true })).toBe('hint');
+    // Explicit 3.5M count: over the retaining 3M ceiling, within the byte-less 4M one.
+    const midCount = { path: 'big.ply', size: 364_000_000, splatCount: 3_500_000 };
+    expect(getSplatDeviceTier(midCount, { isTouchDevice: true, byteLessLoaderAvailable: false })).toBe('disabled');
+    expect(getSplatDeviceTier(midCount, { isTouchDevice: true, byteLessLoaderAvailable: true })).toBe('hint');
+    // Still far over even the raised ceiling -> disabled either way.
+    expect(getSplatDeviceTier({ path: 'huge.ply', size: 1_040_000_634 }, { isTouchDevice: true, byteLessLoaderAvailable: true })).toBe('disabled');
+    // Under both ceilings and under the size budget -> ok.
+    expect(getSplatDeviceTier({ path: 'tiles.spz', size: 40_000_000 }, { isTouchDevice: true, byteLessLoaderAvailable: true })).toBe('ok');
+  });
+
+  it('defaults to the conservative retaining ceiling when availability is not given', () => {
+    expect(getSplatDeviceTier({ path: 'dense.spz', size: 64_000_000 }, { isTouchDevice: true })).toBe('disabled');
+  });
+});
+
+describe('canUseByteLessSplatLoader', () => {
+  it('is available on touch with the WebGPU backend ready', () => {
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'auto', webGpuAvailability: 'ready' })).toBe(true);
+  });
+
+  it('is available while WebGPU is still initializing (first load never reports ready)', () => {
+    // The WebGPU canvas only mounts after a splat activates, so at selection
+    // time a capable device reports 'unavailable' (preparing), never 'ready'.
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'auto', webGpuAvailability: 'unavailable' })).toBe(true);
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'webgpu', webGpuAvailability: 'unavailable' })).toBe(true);
+  });
+
+  it('is never available on desktop (the retaining path stays)', () => {
+    expect(canUseByteLessSplatLoader({ isTouchDevice: false, requestedBackend: 'auto', webGpuAvailability: 'ready' })).toBe(false);
+    expect(canUseByteLessSplatLoader({ isTouchDevice: false, requestedBackend: 'webgpu', webGpuAvailability: 'unavailable' })).toBe(false);
+  });
+
+  it('is unavailable when the Spark renderer is forced (it streams splatFile bytes)', () => {
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'spark', webGpuAvailability: 'ready' })).toBe(false);
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'spark', webGpuAvailability: 'unavailable' })).toBe(false);
+  });
+
+  it('is unavailable in every WebGPU state that resolves to the Spark fallback', () => {
+    // 'unsupported' (no navigator.gpu / blocked browser) and 'failed' (renderer
+    // init failed) both permanently fall back to Spark, which reads the active
+    // splatFile's bytes directly - a byte-less placeholder would render empty.
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'auto', webGpuAvailability: 'unsupported' })).toBe(false);
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'auto', webGpuAvailability: 'failed' })).toBe(false);
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'webgpu', webGpuAvailability: 'unsupported' })).toBe(false);
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'webgpu', webGpuAvailability: 'failed' })).toBe(false);
+  });
+
+  it('pins the splat tiering constants', () => {
+    expect(TOUCH_SPLAT_DISABLE_MIN_SPLATS).toBe(3_000_000);
+    expect(TOUCH_SPLAT_DISABLE_MIN_SPLATS_BYTELESS).toBe(4_000_000);
+    expect(TOUCH_SPLAT_BYTELESS_RETENTION_MIN_BYTES).toBe(100_000_000);
   });
 });
 

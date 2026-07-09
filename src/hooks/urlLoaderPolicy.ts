@@ -1,4 +1,8 @@
 import type { ColmapManifest } from '../types/manifest';
+import type {
+  SplatBackendPreference,
+  WebGpuSplatBackendState,
+} from '../utils/splatBackendPolicy';
 import {
   getPreferredSplatCandidate,
   getSplatFileExtension,
@@ -524,9 +528,59 @@ export const SPLAT_BYTES_PER_SPLAT_ESTIMATE: Record<SplatFileExtension, number> 
 /**
  * Phone GPUs in a browser tab render roughly 1-3M gaussians; above ~3M the
  * outcome is a context loss or OOM kill, so the picker disables the row
- * instead of offering a crash. Task 7's byte-less loader raises this to 4M.
+ * instead of offering a crash. This is the conservative ceiling for the
+ * byte-retaining load path (and for Spark-bound touch devices, which must
+ * retain bytes - see canUseByteLessSplatLoader).
  */
 export const TOUCH_SPLAT_DISABLE_MIN_SPLATS = 3_000_000;
+
+/**
+ * Raised ceiling when the byte-less loader is available: without the
+ * blob+buffer coexistence of the retaining path, the same phone can hold a
+ * somewhat larger decoded cloud before the tab OOMs.
+ */
+export const TOUCH_SPLAT_DISABLE_MIN_SPLATS_BYTELESS = 4_000_000;
+
+/**
+ * Byte-retention budget for lazily-selected remote splats on touch. Above this,
+ * a WebGPU-capable touch device downloads into a single buffer, decodes from
+ * bytes, and keeps only a zero-byte placeholder File (the source stays
+ * re-fetchable), instead of retaining the blob alongside the decode buffer.
+ */
+export const TOUCH_SPLAT_BYTELESS_RETENTION_MIN_BYTES = 100_000_000;
+
+export interface ByteLessSplatLoaderInputs {
+  isTouchDevice: boolean;
+  requestedBackend: SplatBackendPreference;
+  webGpuAvailability: WebGpuSplatBackendState;
+}
+
+/**
+ * Whether the byte-less splat loader may be used: touch hardware in a backend
+ * context where the seeded WebGPU decode cache will actually serve the render.
+ * The Spark renderer streams `splatFile`'s bytes directly (bypassing the decode
+ * cache), so a byte-less placeholder would render EMPTY on it: byte-less is off
+ * when Spark is forced (`requestedBackend === 'spark'`) and in every WebGPU
+ * state that permanently resolves to the Spark fallback ('unsupported',
+ * 'failed'). 'ready' is deliberately NOT required - the WebGPU renderer only
+ * reports ready after its canvas mounts, which happens after a splat activates,
+ * so at selection time a capable device reports 'unavailable' (initializing).
+ *
+ * Known accepted residual (ledgered follow-up, not handled here): a mid-session
+ * WebGPU device loss flips availability to 'failed' and falls back to Spark,
+ * which would meet an already-active byte-less placeholder and render empty
+ * until the tile is re-selected; the fix is a Spark re-fetch from `source.url`.
+ */
+export function canUseByteLessSplatLoader({
+  isTouchDevice,
+  requestedBackend,
+  webGpuAvailability,
+}: ByteLessSplatLoaderInputs): boolean {
+  if (!isTouchDevice || requestedBackend === 'spark') {
+    return false;
+  }
+  return webGpuAvailability === 'ready' || webGpuAvailability === 'unavailable';
+}
 
 export function getEstimatedSplatCount(
   source: { path: string; size?: number; splatCount?: number | null }
@@ -543,14 +597,27 @@ export function getEstimatedSplatCount(
 
 export type SplatDeviceTier = 'ok' | 'hint' | 'disabled';
 
+/**
+ * Device tier for a splat source. On touch hardware the disable ceiling depends
+ * on whether the byte-less loader can serve this device (see
+ * canUseByteLessSplatLoader): 4M splats with it, the conservative 3M without.
+ * `byteLessLoaderAvailable` defaults to false so any caller that does not know
+ * the backend context fails safe onto the conservative ceiling.
+ */
 export function getSplatDeviceTier(
   source: { path: string; size?: number; splatCount?: number | null },
-  { isTouchDevice }: { isTouchDevice: boolean }
+  {
+    isTouchDevice,
+    byteLessLoaderAvailable = false,
+  }: { isTouchDevice: boolean; byteLessLoaderAvailable?: boolean }
 ): SplatDeviceTier {
   if (!isTouchDevice) return 'ok';
 
+  const disableMinSplats = byteLessLoaderAvailable
+    ? TOUCH_SPLAT_DISABLE_MIN_SPLATS_BYTELESS
+    : TOUCH_SPLAT_DISABLE_MIN_SPLATS;
   const estimated = getEstimatedSplatCount(source);
-  if (estimated !== null && estimated > TOUCH_SPLAT_DISABLE_MIN_SPLATS) {
+  if (estimated !== null && estimated > disableMinSplats) {
     return 'disabled';
   }
   return (source.size ?? 0) > SPLAT_AUTO_LOAD_MAX_BYTES_TOUCH ? 'hint' : 'ok';
