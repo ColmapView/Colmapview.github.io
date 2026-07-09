@@ -7,7 +7,9 @@ export {
 export {
   getGaussianCloudFormatForFile,
   isGaussianCloudFile,
+  loadGaussianCloudFromBytes,
   loadGaussianCloudFromFile,
+  seedGaussianCloudLoad,
   type GaussianCloudLoaderDeps,
 } from './gaussianCloudLoader';
 export {

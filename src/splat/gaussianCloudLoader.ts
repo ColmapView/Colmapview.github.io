@@ -106,6 +106,41 @@ export function clearGaussianCloudLoadCacheForTests(): void {
   gaussianCloudLoadCache = new WeakMap<File, Promise<LoadedGaussianCloud>>();
 }
 
+/**
+ * Pre-populate the File-keyed decode cache with an already-decoded (or in-flight)
+ * cloud. Lets a caller decode bytes up front (see loadGaussianCloudFromBytes) and
+ * hand the renderer a guaranteed cache hit under a placeholder File, so the later
+ * loadGaussianCloudFromFile(file) never re-reads or re-decodes bytes.
+ */
+export function seedGaussianCloudLoad(
+  file: File,
+  loaded: Promise<LoadedGaussianCloud>
+): void {
+  gaussianCloudLoadCache.set(file, loaded);
+}
+
+/**
+ * Decode Gaussian cloud bytes that are already in memory, bypassing the File read
+ * (and its 'reading' progress). This is the post-read tail of
+ * loadGaussianCloudFromFileUncached: telemetry start, 'decoding' progress,
+ * worker-or-sync decode with buffer transfer, packing, and telemetry. It is not
+ * cached because no File key exists; a caller that wants renderer cache hits should
+ * seed the result with seedGaussianCloudLoad(placeholderFile, result).
+ */
+export async function loadGaussianCloudFromBytes(
+  buffer: ArrayBuffer,
+  format: GaussianCloudFormat,
+  deps: GaussianCloudLoaderDeps = {}
+): Promise<LoadedGaussianCloud> {
+  return decodeLoadedGaussianCloudFromBytes(buffer, format, deps, {
+    telemetryStart: nowWebGpuSplatTelemetryMs(),
+    // No source File exists on the bytes entry; use an empty placeholder so the
+    // returned LoadedGaussianCloud stays well-typed. Callers that need a named File
+    // (e.g. to seed the cache) supply their own placeholder via seedGaussianCloudLoad.
+    file: new File([], ''),
+  });
+}
+
 async function loadGaussianCloudFromFileUncached(
   file: File,
   deps: GaussianCloudLoaderDeps
@@ -130,6 +165,20 @@ async function loadGaussianCloudFromFileUncached(
     loadedBytes: byteLength,
     totalBytes: byteLength,
   });
+  return decodeLoadedGaussianCloudFromBytes(buffer, format, deps, {
+    telemetryStart,
+    file,
+  });
+}
+
+async function decodeLoadedGaussianCloudFromBytes(
+  buffer: ArrayBuffer,
+  format: GaussianCloudFormat,
+  deps: GaussianCloudLoaderDeps,
+  context: { telemetryStart: number; file: File }
+): Promise<LoadedGaussianCloud> {
+  const { telemetryStart, file } = context;
+  const byteLength = buffer.byteLength;
   deps.onProgress?.({ phase: 'decoding' });
   const loaded = await decodeGaussianCloud(format, buffer, deps);
   const cloud = loaded.cloud;

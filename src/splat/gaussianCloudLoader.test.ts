@@ -3,9 +3,16 @@ import {
   clearGaussianCloudLoadCacheForTests,
   getGaussianCloudFormatForFile,
   isGaussianCloudFile,
+  loadGaussianCloudFromBytes,
   loadGaussianCloudFromFile,
+  seedGaussianCloudLoad,
 } from './gaussianCloudLoader';
-import { createSh0OnlyGaussianCloud, validateGaussianCloud, type GaussianCloud } from './gaussianCloud';
+import {
+  createSh0OnlyGaussianCloud,
+  validateGaussianCloud,
+  type GaussianCloud,
+  type LoadedGaussianCloud,
+} from './gaussianCloud';
 import {
   getWebGpuSplatTelemetryEvents,
   resetWebGpuSplatTelemetryEventsForTests,
@@ -280,5 +287,73 @@ describe('gaussian cloud loader', () => {
     expect(Array.from(loaded.cloud.scales)).toEqual([1, 1, 1]);
     expect(Array.from(loaded.cloud.rotations)).toEqual([1, 0, 0, 0]);
     expect(loaded.cloud.opacities[0]).toBeCloseTo(0.5);
+  });
+
+  it('decodes bytes directly through an injected loader without a File', async () => {
+    const loadPLYFromBuffer = vi.fn(() => makeCloud(5));
+    const buffer = new TextEncoder().encode('ply-data').buffer;
+
+    const loaded = await loadGaussianCloudFromBytes(buffer, 'ply', { loadPLYFromBuffer });
+
+    expect(loaded.format).toBe('ply');
+    expect(loaded.byteLength).toBe(buffer.byteLength);
+    expect(loaded.cloud.count).toBe(5);
+    expect(loadPLYFromBuffer).toHaveBeenCalledTimes(1);
+    expect(loadPLYFromBuffer).toHaveBeenCalledWith(buffer);
+    expect(getWebGpuSplatTelemetryEvents().filter((event) => event.name === 'gaussian-decode'))
+      .toHaveLength(1);
+  });
+
+  it('transfers the buffer to the worker when decoding bytes', async () => {
+    const cloud = makeCloud(4);
+    const worker = createFakeWorker(cloud);
+    const buffer = new TextEncoder().encode('ply-data').buffer;
+
+    const loaded = await loadGaussianCloudFromBytes(buffer, 'ply', {
+      createWorker: () => worker,
+    });
+
+    expect(loaded.cloud).toBe(cloud);
+    expect(worker.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'decode', format: 'ply' }),
+      expect.arrayContaining([buffer])
+    );
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves a seeded File to the seeded result without decoding it', async () => {
+    const file = new File([new Uint8Array([1, 2, 3])], 'seeded.ply');
+    const seeded: LoadedGaussianCloud = {
+      file,
+      format: 'ply',
+      byteLength: 3,
+      cloud: makeCloud(7),
+    };
+    seedGaussianCloudLoad(file, Promise.resolve(seeded));
+
+    const loaded = await loadGaussianCloudFromFile(file);
+
+    expect(loaded).toBe(seeded);
+    expect(getWebGpuSplatTelemetryEvents().some((event) => event.name === 'gaussian-decode'))
+      .toBe(false);
+  });
+
+  it('clears seeded loads when the cache is reset for tests', async () => {
+    const file = makeBinaryPlyFile();
+    const seeded: LoadedGaussianCloud = {
+      file,
+      format: 'ply',
+      byteLength: 999,
+      cloud: makeCloud(42),
+    };
+    seedGaussianCloudLoad(file, Promise.resolve(seeded));
+
+    clearGaussianCloudLoadCacheForTests();
+    const loaded = await loadGaussianCloudFromFile(file);
+
+    expect(loaded).not.toBe(seeded);
+    expect(loaded.cloud.count).toBe(1);
+    expect(getWebGpuSplatTelemetryEvents().some((event) => event.name === 'gaussian-decode'))
+      .toBe(true);
   });
 });
