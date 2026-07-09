@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LoadedFiles } from '../types/colmap';
+import type { UrlLoadProgress } from '../types/manifest';
 import { abandonUrlAutoLoadRequest, hasUrlToLoad, useReconstructionStore } from './reconstructionStore';
 import { usePointCloudStore } from './stores/pointCloudStore';
 import { useSplatBackendStore } from './stores/splatBackendStore';
@@ -20,9 +21,23 @@ import type { GaussianCloud } from '../splat/gaussianCloud';
 const loadGaussianCloudFromBytesMock = vi.hoisted(() => vi.fn());
 const detectTouchDeviceMock = vi.hoisted(() => vi.fn(() => false));
 
+// One-shot hook fired the instant the store reads loadGaussianCloudFromBytes off
+// the dynamically-imported gaussianCloudLoader module — i.e. right AFTER the
+// dynamic import resolves but BEFORE the decode is invoked. This is the only seam
+// into that window (the fetch-level stubDeferredFetch seam can only supersede
+// during the download). Null (the per-test default) makes the getter a transparent
+// passthrough, so every other byte-less test is unaffected.
+const onByteLessDecodeSymbolRead = vi.hoisted(() => ({ current: null as (() => void) | null }));
+
 vi.mock('../splat/gaussianCloudLoader', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../splat/gaussianCloudLoader')>();
-  return { ...actual, loadGaussianCloudFromBytes: loadGaussianCloudFromBytesMock };
+  return {
+    ...actual,
+    get loadGaussianCloudFromBytes() {
+      onByteLessDecodeSymbolRead.current?.();
+      return loadGaussianCloudFromBytesMock;
+    },
+  };
 });
 
 vi.mock('../hooks/useIsTouchDevice', async (importOriginal) => {
@@ -689,6 +704,7 @@ describe('reconstruction store byte-less oversized splat activation', () => {
     useSplatBackendStore.setState(useSplatBackendStore.getInitialState(), true);
     detectTouchDeviceMock.mockReturnValue(false);
     loadGaussianCloudFromBytesMock.mockReset();
+    onByteLessDecodeSymbolRead.current = null;
     clearGaussianCloudLoadCacheForTests();
   });
 
@@ -774,6 +790,53 @@ describe('reconstruction store byte-less oversized splat activation', () => {
     expect(seeded.file).toBe(splatFile);
     // Fresh activation switches into a splat-visible display mode.
     expect(usePointCloudStore.getState().colorMode).toBe('splatPoints');
+  });
+
+  it('does not start the superseded decode when a newer selection wins after the import resolves', async () => {
+    armTouchWebGpu();
+    stubSplatBytesFetch();
+    loadGaussianCloudFromBytesMock.mockResolvedValue(decodedResult());
+    loadOversizedLazySource();
+    // Supersede in exactly the window the post-import re-check guards: the bytes
+    // are downloaded and the dynamic gaussianCloudLoader import has resolved, but
+    // the worker decode has NOT been invoked yet. A COLMAP-only switch is the
+    // cheapest superseding selection; it bumps the request id synchronously.
+    onByteLessDecodeSymbolRead.current = () => {
+      onByteLessDecodeSymbolRead.current = null; // fire once
+      void useReconstructionStore.getState().selectSplatSource('');
+    };
+
+    await useReconstructionStore.getState().selectSplatSource('splats/big.ply');
+
+    // The loser must never START a second, concurrent 100-416MB worker decode —
+    // the transient double memory this byte-less path exists to avoid.
+    expect(loadGaussianCloudFromBytesMock).not.toHaveBeenCalled();
+    const state = useReconstructionStore.getState();
+    // The superseded tile never activated its placeholder; the COLMAP-only winner stands.
+    expect(state.loadedFiles?.splatFile).toBeUndefined();
+    expect(state.requestedSplatSourceId).toBeNull();
+  });
+
+  it('advances the overlay to a decode-phase progress while the seeded worker decode runs', async () => {
+    armTouchWebGpu();
+    stubSplatBytesFetch();
+    let progressAtDecode: UrlLoadProgress | null | undefined;
+    loadGaussianCloudFromBytesMock.mockImplementation(async () => {
+      // The store invokes the decode, sets the decode-phase progress, then awaits
+      // it — all synchronously. Yield one microtask so that burst finishes, then
+      // snapshot the overlay a phone would show for the multi-second decode.
+      await Promise.resolve();
+      progressAtDecode = useReconstructionStore.getState().urlProgress;
+      return decodedResult();
+    });
+    loadOversizedLazySource();
+
+    await useReconstructionStore.getState().selectSplatSource('splats/big.ply');
+
+    // Not the stale "Downloading splat: …" frame left by the last download tick.
+    expect(progressAtDecode?.message).toBe('Decoding splat...');
+    expect(progressAtDecode?.currentFile).toBe('big.ply');
+    expect(progressAtDecode?.percent).toBeLessThan(100);
   });
 
   it('keeps the byte-retaining path on desktop for oversized remote splats', async () => {

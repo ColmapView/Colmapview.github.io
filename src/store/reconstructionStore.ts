@@ -22,7 +22,7 @@ import {
 } from '../utils/splatFileSourcePolicy';
 import { isSplatColorMode } from './types';
 import { fetchRemoteSplatBytes, fetchRemoteSplatFile, toArrayBuffer } from '../utils/urlUtils';
-import { getSplatDownloadProgress } from '../utils/splatLoadingProgressPolicy';
+import { getSplatDownloadProgress, getSplatPhaseProgress } from '../utils/splatLoadingProgressPolicy';
 import {
   canUseByteLessSplatLoader,
   TOUCH_SPLAT_BYTELESS_RETENTION_MIN_BYTES,
@@ -418,6 +418,15 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
           loadGaussianCloudFromBytes,
           seedGaussianCloudLoad,
         } = await import('../splat/gaussianCloudLoader');
+        // Re-check after the dynamic import's await (mirrors the post-fetch and
+        // post-decode latest-wins checks): a selection made while the import was
+        // resolving supersedes this one, and starting its worker decode anyway
+        // would run two 100-416MB decodes at once — the transient double memory
+        // this byte-less path exists to avoid on constrained phones. A decode
+        // already begun can't be cancelled; the goal is to not START the loser's.
+        if (requestId !== activeSplatRequestId) {
+          return;
+        }
         // FRESH placeholder per attempt: a rejected seeded promise never
         // self-evicts from the decode cache, so a reused placeholder would stay
         // poisoned across retries; a fresh one leaves a failed attempt's seed
@@ -431,6 +440,11 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
         // Seed BEFORE activation so the renderer's first
         // loadGaussianCloudFromFile(placeholder) is a guaranteed cache hit.
         seedGaussianCloudLoad(placeholder, seeded);
+        // Advance the overlay to the decode phase before the multi-second worker
+        // decode: unlike the byte-retaining path there is no renderer-side file
+        // read left to drive progress, so without this the overlay would sit on
+        // the last download frame for the whole phone decode.
+        set({ urlProgress: getSplatPhaseProgress(placeholder, 'decodingFile') });
         await seeded;
         if (requestId !== activeSplatRequestId) {
           return;
