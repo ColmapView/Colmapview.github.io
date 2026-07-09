@@ -1,12 +1,15 @@
 import type { CSSProperties } from 'react';
 import { Z_INDEX } from '../../theme/zIndex';
 import type { SplatFileSource } from '../../types/colmap';
+import { getSplatDeviceTier, type SplatDeviceTier } from '../../hooks/urlLoaderPolicy';
 
 export interface SplatPickerItem {
   id: string;
   name: string;
   sizeLabel: string;
+  tier: SplatDeviceTier;
   warning: string | null;
+  disabledReason: string | null;
 }
 
 // Row classes for the picker. This project has NO Tailwind — only the hand-written
@@ -19,6 +22,12 @@ export const SPLAT_PICKER_ROW_CLASS =
   'flex items-center justify-between gap-3 px-3 py-2 rounded text-ds-primary hover-ds-hover cursor-pointer text-sm';
 export const SPLAT_PICKER_SIZE_CLASS = 'flex-shrink-0 text-ds-muted text-xs';
 export const SPLAT_PICKER_WARNING_CLASS = 'flex-shrink-0 text-ds-warning text-xs';
+// Disabled row: stacked (name over reason) and dimmed. `opacity-50` and
+// `cursor-not-allowed` are real utilities in src/index.css (no Tailwind here); the
+// native `disabled` attribute — not a `disabled:` class prefix — carries behavior.
+export const SPLAT_PICKER_DISABLED_ROW_CLASS =
+  'flex flex-col items-start gap-1 px-3 py-2 rounded text-ds-muted text-sm opacity-50 cursor-not-allowed';
+export const SPLAT_PICKER_DISABLED_REASON_CLASS = 'text-ds-muted text-xs';
 
 /**
  * Overlay z-index for the splat picker. Matches UrlInputModal (both are
@@ -66,24 +75,31 @@ export function getSplatPickerDescription(count: number): string {
 }
 
 /**
- * Build the picker rows from splat sources (filename + size). `warnAboveBytes`
- * is the device's auto-load budget (e.g. SPLAT_AUTO_LOAD_MAX_BYTES_TOUCH on
- * touch devices); sources over that size get flagged so a phone user knows
- * tapping the row will likely exceed the device's memory. Desktop callers
- * omit it, so nothing is ever flagged there.
+ * Build the picker rows from splat sources (filename + size), classifying each by
+ * device tier via `getSplatDeviceTier`. On touch hardware a source that would
+ * crash the tab (over the ~3M-splat GPU ceiling) becomes `disabled` with an
+ * explicit reason; one merely over the memory budget gets a `hint` warning.
+ * Desktop callers pass `isTouchDevice: false`, so every row stays `ok`.
  */
 export function getSplatPickerItems(
   sources: readonly SplatFileSource[],
-  options: { warnAboveBytes?: number | null } = {}
+  options: { isTouchDevice: boolean }
 ): SplatPickerItem[] {
-  const { warnAboveBytes = null } = options;
-  return sources.map((source) => ({
-    id: source.id,
-    name: source.path.split('/').pop() || source.path,
-    sizeLabel: formatSplatSize(source.size),
-    warning:
-      warnAboveBytes !== null && (source.size ?? 0) > warnAboveBytes
-        ? "may exceed this device's memory"
-        : null,
-  }));
+  return sources.map((source) => {
+    const sizeLabel = formatSplatSize(source.size);
+    const tier = getSplatDeviceTier(source, options);
+    return {
+      id: source.id,
+      name: source.path.split('/').pop() || source.path,
+      sizeLabel,
+      tier,
+      warning: tier === 'hint' ? "may exceed this device's memory" : null,
+      disabledReason:
+        tier === 'disabled'
+          ? sizeLabel
+            ? `Too large for this device (${sizeLabel}) - open on a desktop to view`
+            : 'Too large for this device - open on a desktop to view'
+          : null,
+    };
+  });
 }

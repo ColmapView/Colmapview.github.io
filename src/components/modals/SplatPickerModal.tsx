@@ -2,13 +2,14 @@ import { useId, useRef } from 'react';
 import { modalStyles } from '../../theme';
 import { CloseIcon } from '../../icons';
 import { ModalDialogShell } from '../ui/ModalDialogShell';
-import { SPLAT_AUTO_LOAD_MAX_BYTES_TOUCH } from '../../hooks/urlLoaderPolicy';
 import { useIsTouchDevice } from '../../hooks/useIsTouchDevice';
 import {
   getSplatPickerDescription,
   getSplatPickerItems,
   getSplatPickerOverlayStyle,
   getSplatPickerPanelStyle,
+  SPLAT_PICKER_DISABLED_REASON_CLASS,
+  SPLAT_PICKER_DISABLED_ROW_CLASS,
   SPLAT_PICKER_NONE_ROW_CLASS,
   SPLAT_PICKER_ROW_CLASS,
   SPLAT_PICKER_SIZE_CLASS,
@@ -39,9 +40,7 @@ export function SplatPickerModal() {
   const isTouchDevice = useIsTouchDevice();
 
   const isOpen = showSplatPicker && splatFileSources.length >= 1;
-  const items = getSplatPickerItems(splatFileSources, {
-    warnAboveBytes: isTouchDevice ? SPLAT_AUTO_LOAD_MAX_BYTES_TOUCH : null,
-  });
+  const items = getSplatPickerItems(splatFileSources, { isTouchDevice });
 
   const handleClose = () => setShowSplatPicker(false);
   const handleSelect = (sourceId: string) => {
@@ -85,12 +84,16 @@ export function SplatPickerModal() {
         {items.map((item) => (
           <button
             key={item.id}
-            onClick={() => handleSelect(item.id)}
-            className={SPLAT_PICKER_ROW_CLASS}
+            onClick={item.tier === 'disabled' ? undefined : () => handleSelect(item.id)}
+            disabled={item.tier === 'disabled'}
+            className={item.tier === 'disabled' ? SPLAT_PICKER_DISABLED_ROW_CLASS : SPLAT_PICKER_ROW_CLASS}
           >
             <span className="truncate">{item.name}</span>
             {item.sizeLabel && <span className={SPLAT_PICKER_SIZE_CLASS}>{item.sizeLabel}</span>}
             {item.warning && <span className={SPLAT_PICKER_WARNING_CLASS}>{item.warning}</span>}
+            {item.disabledReason && (
+              <span className={SPLAT_PICKER_DISABLED_REASON_CLASS}>{item.disabledReason}</span>
+            )}
           </button>
         ))}
       </div>

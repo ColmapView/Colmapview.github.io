@@ -28,32 +28,39 @@ describe('formatSplatSize', () => {
 describe('getSplatPickerItems', () => {
   it('uses the file basename and a formatted size', () => {
     expect(
-      getSplatPickerItems([
-        { id: 'splats/5x5#-5_-15_0_-10#-1_-3.ply', path: 'splats/5x5#-5_-15_0_-10#-1_-3.ply', url: 'u', size: 942_559_508 },
-        { id: 'inside.ply', path: 'inside.ply', url: 'u', size: 46_348_763 },
-      ])
+      getSplatPickerItems(
+        [
+          { id: 'splats/5x5#-5_-15_0_-10#-1_-3.ply', path: 'splats/5x5#-5_-15_0_-10#-1_-3.ply', url: 'u', size: 942_559_508 },
+          { id: 'inside.ply', path: 'inside.ply', url: 'u', size: 46_348_763 },
+        ],
+        { isTouchDevice: false }
+      )
     ).toEqual([
-      { id: 'splats/5x5#-5_-15_0_-10#-1_-3.ply', name: '5x5#-5_-15_0_-10#-1_-3.ply', sizeLabel: '943 MB', warning: null },
-      { id: 'inside.ply', name: 'inside.ply', sizeLabel: '46 MB', warning: null },
+      { id: 'splats/5x5#-5_-15_0_-10#-1_-3.ply', name: '5x5#-5_-15_0_-10#-1_-3.ply', sizeLabel: '943 MB', tier: 'ok', warning: null, disabledReason: null },
+      { id: 'inside.ply', name: 'inside.ply', sizeLabel: '46 MB', tier: 'ok', warning: null, disabledReason: null },
     ]);
   });
 });
 
-describe('splat picker device-memory warning', () => {
+describe('splat picker device tiers', () => {
   const sources = [
-    { id: 'a', path: 'splats/huge.ply', url: 'u', size: 1_040_000_634 },
-    { id: 'b', path: 'splats/small.spz', url: 'u', size: 40_000_000 },
+    { id: 'a', path: 'splats/huge.ply', url: 'u', size: 1_040_000_634, splatCount: 10_000_000 },
+    { id: 'b', path: 'splats/mid.spz', url: 'u', size: 55_000_000, splatCount: 2_000_000 },
+    { id: 'c', path: 'splats/small.spz', url: 'u', size: 40_000_000, splatCount: 1_000_000 },
   ];
 
-  it('flags items above the budget when a budget is given', () => {
-    const items = getSplatPickerItems(sources, { warnAboveBytes: 50_000_000 });
-    expect(items[0].warning).toBe("may exceed this device's memory");
-    expect(items[1].warning).toBeNull();
+  it('maps sources to ok/hint/disabled tiers on touch hardware', () => {
+    const items = getSplatPickerItems(sources, { isTouchDevice: true });
+    expect(items.map((i) => i.tier)).toEqual(['disabled', 'hint', 'ok']);
+    expect(items[0].disabledReason).toBe('Too large for this device (1.0 GB) - open on a desktop to view');
+    expect(items[1].warning).toBe("may exceed this device's memory");
+    expect(items[2].warning).toBeNull();
   });
 
-  it('never flags without a budget (desktop)', () => {
-    for (const item of getSplatPickerItems(sources)) {
-      expect(item.warning).toBeNull();
+  it('leaves everything ok on desktop', () => {
+    for (const item of getSplatPickerItems(sources, { isTouchDevice: false })) {
+      expect(item.tier).toBe('ok');
+      expect(item.disabledReason).toBeNull();
     }
   });
 });
