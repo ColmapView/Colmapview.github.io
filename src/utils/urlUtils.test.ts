@@ -7,6 +7,7 @@ import {
   isManifestUrl,
   getCorsInstructions,
   fetchRemoteSplatFile,
+  fetchRemoteSplatBytes,
   getFilenameFromUrl,
 } from './urlUtils';
 
@@ -431,5 +432,54 @@ describe('fetchRemoteSplatFile', () => {
     ).rejects.toThrow('callback failed');
 
     expect(cancel).toHaveBeenCalled();
+  });
+});
+
+describe('fetchRemoteSplatBytes', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function streamOf(chunks: Uint8Array[], headers: Record<string, string> = {}) {
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: (k: string) => headers[k.toLowerCase()] ?? null },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(chunk);
+          controller.close();
+        },
+      }),
+    } as unknown as Response;
+  }
+
+  it('downloads into a single pre-allocated buffer when Content-Length is known', async () => {
+    const chunks = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5])];
+    vi.stubGlobal('fetch', vi.fn(async () => streamOf(chunks, { 'content-length': '5' })));
+    const progress: Array<[number, number]> = [];
+
+    const result = await fetchRemoteSplatBytes('https://x/splats/scene.spz', (l, t) => progress.push([l, t]));
+
+    expect(Array.from(result.bytes)).toEqual([1, 2, 3, 4, 5]);
+    expect(result.name).toBe('scene.spz');
+    expect(progress.at(-1)).toEqual([5, 5]);
+  });
+
+  it('consolidates once when Content-Length is missing', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => streamOf([new Uint8Array([9, 8])], {})));
+    const result = await fetchRemoteSplatBytes('https://x/a.ply');
+    expect(Array.from(result.bytes)).toEqual([9, 8]);
+  });
+
+  it('survives a lying Content-Length that undercounts', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => streamOf([new Uint8Array([1, 2]), new Uint8Array([3, 4, 5])], { 'content-length': '3' })));
+    const result = await fetchRemoteSplatBytes('https://x/a.ply');
+    expect(Array.from(result.bytes)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('throws the standard message on a non-OK response', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 404 })));
+    await expect(fetchRemoteSplatBytes('https://x/a.ply')).rejects.toThrow('Failed to fetch splat (404)');
   });
 });

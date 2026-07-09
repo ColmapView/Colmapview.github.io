@@ -132,6 +132,89 @@ export async function fetchRemoteSplatFile(
 }
 
 /**
+ * Fetch a splat file from a URL into a single Uint8Array, minimizing peak memory.
+ * Unlike {@link fetchRemoteSplatFile} (which returns a File and keeps the Blob
+ * around), this returns the raw bytes so the lazy-tier path can hand them straight
+ * to activation without a second copy.
+ *
+ * When Content-Length is known and the body is streamable, downloads into one
+ * pre-allocated buffer. A mis-reported length is handled transparently: if the
+ * stream yields more bytes than declared, the overflow is accumulated and merged
+ * once at the end; if it yields fewer, a subarray of the received bytes is
+ * returned. With no Content-Length the chunks are accumulated and consolidated
+ * once; with no readable body at all, the whole response is taken in one copy.
+ * Progress is reported as (loaded, total) bytes arrive, with total 0 when unknown.
+ */
+export async function fetchRemoteSplatBytes(
+  url: string,
+  onProgress?: DownloadProgressCallback
+): Promise<{ bytes: Uint8Array; name: string }> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch splat (${response.status})`);
+  }
+  const name = getFilenameFromUrl(url);
+  const total = parseSafeIntegerString(response.headers.get('content-length') ?? '') ?? 0;
+
+  // No readable body to stream: take the whole response in a single copy.
+  if (!response.body) {
+    return { bytes: new Uint8Array(await response.arrayBuffer()), name };
+  }
+
+  // Merge accumulated chunks into one buffer with a single final copy.
+  const consolidate = (chunks: Uint8Array<ArrayBuffer>[], size: number): Uint8Array<ArrayBuffer> => {
+    const merged = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return merged;
+  };
+
+  const reader = response.body.getReader();
+  // Pre-allocate when the length is known; otherwise accumulate every chunk.
+  const buffer: Uint8Array<ArrayBuffer> | null = total > 0 ? new Uint8Array(total) : null;
+  // Chunks past the declared length (mis-report), or all chunks when unknown.
+  const overflow: Uint8Array<ArrayBuffer>[] = [];
+  let received = 0;
+  onProgress?.(0, total);
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (buffer && received + value.length <= total) {
+        buffer.set(value, received);
+      } else if (buffer && received < total) {
+        // This chunk straddles the declared end: fill the rest, overflow the tail.
+        buffer.set(value.subarray(0, total - received), received);
+        overflow.push(new Uint8Array(value.subarray(total - received)));
+      } else {
+        // Unknown length, or already past the declared end.
+        overflow.push(new Uint8Array(value));
+      }
+      received += value.length;
+      onProgress?.(received, total);
+    }
+  } finally {
+    // Tear down the stream if the loop exits abnormally (read rejection or a
+    // throwing progress callback); a no-op once fully drained or already errored.
+    reader.cancel().catch(() => {});
+  }
+
+  if (!buffer) {
+    // Unknown length: one consolidation of all accumulated chunks.
+    return { bytes: consolidate(overflow, received), name };
+  }
+  if (overflow.length > 0) {
+    // Undercounted length: merge the filled buffer with the overflow tail.
+    return { bytes: consolidate([buffer, ...overflow], received), name };
+  }
+  // Exact fill, or fewer bytes than declared (return only what arrived).
+  return { bytes: received < total ? buffer.subarray(0, received) : buffer, name };
+}
+
+/**
  * Read a successful response into a Blob. When an onProgress callback is given and
  * the body is streamable, reports bytes (vs Content-Length) as they arrive;
  * otherwise falls back to response.blob(). Shared by remote splat and COLMAP-file
