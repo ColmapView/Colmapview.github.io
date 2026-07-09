@@ -1,8 +1,10 @@
 import type { ColmapManifest } from '../types/manifest';
 import {
   getPreferredSplatCandidate,
+  getSplatFileExtension,
   isSplatFilePath,
   sortSplatCandidatesByPreference,
+  type SplatFileExtension,
 } from '../utils/splatFilePolicy';
 import { resolveColmapPaths, resolveImagesDir } from '../utils/colmapPathResolver';
 import {
@@ -506,6 +508,52 @@ export function getSplatAutoLoadDecision(
   }
 
   return { autoLoad: true, budgetBytes, oversizedCandidate: null };
+}
+
+/**
+ * Bytes-per-splat by format, for estimating the GPU-relevant splat count when
+ * the exact header count is unknown. PLY: SH1 gaussian layout (26 float32 =
+ * 104 B; denser SH3 files over-estimate the count, which only makes the gate
+ * stricter). SPZ: compressed, ~16 B/splat.
+ */
+export const SPLAT_BYTES_PER_SPLAT_ESTIMATE: Record<SplatFileExtension, number> = {
+  '.ply': 104,
+  '.spz': 16,
+};
+
+/**
+ * Phone GPUs in a browser tab render roughly 1-3M gaussians; above ~3M the
+ * outcome is a context loss or OOM kill, so the picker disables the row
+ * instead of offering a crash. Task 7's byte-less loader raises this to 4M.
+ */
+export const TOUCH_SPLAT_DISABLE_MIN_SPLATS = 3_000_000;
+
+export function getEstimatedSplatCount(
+  source: { path: string; size?: number; splatCount?: number | null }
+): number | null {
+  if (typeof source.splatCount === 'number' && source.splatCount > 0) {
+    return source.splatCount;
+  }
+  const extension = getSplatFileExtension(source.path);
+  if (!extension || !source.size || source.size <= 0) {
+    return null;
+  }
+  return Math.floor(source.size / SPLAT_BYTES_PER_SPLAT_ESTIMATE[extension]);
+}
+
+export type SplatDeviceTier = 'ok' | 'hint' | 'disabled';
+
+export function getSplatDeviceTier(
+  source: { path: string; size?: number; splatCount?: number | null },
+  { isTouchDevice }: { isTouchDevice: boolean }
+): SplatDeviceTier {
+  if (!isTouchDevice) return 'ok';
+
+  const estimated = getEstimatedSplatCount(source);
+  if (estimated !== null && estimated > TOUCH_SPLAT_DISABLE_MIN_SPLATS) {
+    return 'disabled';
+  }
+  return (source.size ?? 0) > SPLAT_AUTO_LOAD_MAX_BYTES_TOUCH ? 'hint' : 'ok';
 }
 
 export function getManifestColmapFileEntries(manifest: ColmapManifest): ManifestColmapFileEntries {

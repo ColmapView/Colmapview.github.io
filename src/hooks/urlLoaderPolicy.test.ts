@@ -6,6 +6,7 @@ import {
   getDefaultUrlManifestLogMessage,
   getDirectoryListingLinks,
   getDirectoryListingRootUrl,
+  getEstimatedSplatCount,
   getHuggingFaceColmapTotalBytes,
   getHuggingFaceSplatPaths,
   getHuggingFaceDatasetTreeRequest,
@@ -18,6 +19,7 @@ import {
   getManifestLazySourceBases,
   getRelativeHuggingFaceTreePath,
   getSplatAutoLoadDecision,
+  getSplatDeviceTier,
   getUrlNormalizationLogMessage,
   joinManifestUrlPath,
   normalizeLoadUrl,
@@ -382,6 +384,32 @@ describe('getSplatAutoLoadDecision', () => {
       budgetBytes: SPLAT_AUTO_LOAD_MAX_BYTES,
       oversizedCandidate: null,
     });
+  });
+});
+
+describe('getSplatDeviceTier', () => {
+  it('is always ok on desktop hardware', () => {
+    expect(getSplatDeviceTier({ path: 'huge.ply', size: 1_040_000_634, splatCount: 10_000_000 }, { isTouchDevice: false })).toBe('ok');
+  });
+
+  it('disables on touch when the known splat count exceeds the ceiling', () => {
+    expect(getSplatDeviceTier({ path: 'huge.ply', size: 1_040_000_634, splatCount: 10_000_000 }, { isTouchDevice: true })).toBe('disabled');
+    expect(getSplatDeviceTier({ path: 'ok.ply', size: 200_000_000, splatCount: 1_900_000 }, { isTouchDevice: true })).toBe('hint');
+  });
+
+  it('estimates the count from bytes per format when unknown', () => {
+    // 1.04 GB PLY / 104 B -> ~10M -> disabled; 64 MB spz / 16 B = 4M -> disabled;
+    // 40 MB spz / 16 B = 2.5M (<= ceiling) and 40 MB <= 50 MB budget -> ok.
+    expect(getEstimatedSplatCount({ path: 'huge.ply', size: 1_040_000_634 })).toBe(10_000_006);
+    expect(getSplatDeviceTier({ path: 'huge.ply', size: 1_040_000_634 }, { isTouchDevice: true })).toBe('disabled');
+    expect(getSplatDeviceTier({ path: 'dense.spz', size: 64_000_000 }, { isTouchDevice: true })).toBe('disabled');
+    expect(getSplatDeviceTier({ path: 'tiles.spz', size: 40_000_000 }, { isTouchDevice: true })).toBe('ok');
+    expect(getSplatDeviceTier({ path: 'mid.spz', size: 55_000_000, splatCount: 2_000_000 }, { isTouchDevice: true })).toBe('hint');
+  });
+
+  it('never disables on an unknown estimate', () => {
+    expect(getSplatDeviceTier({ path: 'mystery.ply', size: 0 }, { isTouchDevice: true })).toBe('ok');
+    expect(getSplatDeviceTier({ path: 'mystery.ply' }, { isTouchDevice: true })).toBe('ok');
   });
 });
 
