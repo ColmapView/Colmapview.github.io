@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   classifyPlyFile,
   classifyPlyHeaderText,
+  getPlyHeaderVertexCount,
   parsePointCloudPlyFile,
 } from './plyPointCloud';
 
@@ -170,5 +171,27 @@ describe('PLY point cloud parser', () => {
     expect(points.get(1n)?.rgb).toEqual([10, 20, 30]);
     expect(points.get(2n)?.xyz).toEqual([-1, -2, -3]);
     expect(points.get(2n)?.rgb).toEqual([200, 210, 220]);
+  });
+});
+
+describe('getPlyHeaderVertexCount', () => {
+  const header = [
+    'ply',
+    'format binary_little_endian 1.0',
+    'element vertex 10000000',
+    'property float x',
+    'property float y',
+    'property float z',
+    'end_header',
+    '',
+  ].join('\n');
+
+  it('reads the vertex element count from a PLY header', () => {
+    expect(getPlyHeaderVertexCount(header)).toBe(10_000_000);
+  });
+
+  it('returns null for non-PLY text and headers without a vertex element', () => {
+    expect(getPlyHeaderVertexCount('not a ply')).toBeNull();
+    expect(getPlyHeaderVertexCount('ply\nformat ascii 1.0\nelement face 3\nend_header\n')).toBeNull();
   });
 });

@@ -7,6 +7,7 @@ export { parsePoints3DBinary, parsePoints3DText } from './points3d';
 export {
   classifyPlyFile,
   classifyPlyHeaderText,
+  getPlyHeaderVertexCount,
   parsePointCloudPlyBuffer,
   parsePointCloudPlyFile,
   type PlyCloudKind,

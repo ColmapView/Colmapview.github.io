@@ -62,6 +62,20 @@ export function classifyPlyHeaderText(text: string): PlyCloudKind {
   return classifyPlyHeader(parsePlyHeader(text));
 }
 
+/**
+ * Vertex count from a PLY header (the `element vertex N` line). Used to gate
+ * splat loading on the GPU-relevant number rather than file bytes. Null when
+ * the text is not a parseable PLY header or has no vertex element.
+ */
+export function getPlyHeaderVertexCount(text: string): number | null {
+  try {
+    const vertex = getVertexElement(parsePlyHeader(text));
+    return Number.isFinite(vertex.count) && vertex.count >= 0 ? vertex.count : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function parsePointCloudPlyFile(file: File): Promise<Map<bigint, Point3D>> {
   return parsePointCloudPlyBuffer(await readBlobAsArrayBuffer(file));
 }
