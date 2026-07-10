@@ -675,3 +675,19 @@ git commit -m "feat(viewer): backend-aware byte-less splat activation on touch; 
 - Honest-limits check: the 3M→4M ceiling raise is gated on T7 landing; if T7 blocks, Phase 1 ships alone at 3M/300 MB-equivalent and the plan's goal is still met minus the raise.
 - Type-consistency: `SplatUrlClassification` (T2) feeds `RemoteSplatCandidate.splatCount` → `SplatFileSource.splatCount` (T2) → `getSplatDeviceTier` (T3) → picker items (T4); `fetchRemoteSplatBytes` (T5) + `loadGaussianCloudFromBytes`/`seedGaussianCloudLoad` (T6) → T7's activation flow. Names match across tasks.
 - Known deviation from the no-placeholders rule: Task 7 Step 2 specifies assertion contracts rather than verbatim test code, because the store test file's stubbing seams must be discovered at implementation time; the contract is complete and the risk is explicitly gated by the Step-1 audit + BLOCKED escape hatch.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 2 | CLEAR (gate PASS) | 2 findings, 1/2 fixed ([P1] spark-aware predicate fixed @4515630; [P2] duplicate-basename deferred, twice-graded cosmetic) |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 0 | — | covered by per-task + whole-branch SDD reviews (7× Spec ✅/Approved; final: READY TO MERGE, zero C/I) |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+**CODEX:** initial gate FAIL on [P1] (byte-less could activate while auto-resolution picked already-loaded Spark); fixed by deferring the predicate to the real `resolveSplatBackend` with a 48-combination parity pin; re-review: P1 CLOSED, no new findings, GATE: PASS.
+**CROSS-MODEL:** both Claude reviews and Codex found the 'unavailable'→Spark window and the duplicate-basename edge; Codex correctly re-graded the former from accepted-transient to eliminable (fixed); agreement on all other surfaces (no Codex-only or Claude-only critical findings remained).
+**VERDICT:** CODEX CLEARED + SDD FINAL REVIEW CLEARED — ready to merge and release as v0.9.5.
+
+NO UNRESOLVED DECISIONS
