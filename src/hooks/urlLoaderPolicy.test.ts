@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { ColmapManifest } from '../types/manifest';
 import {
+  resolveSplatBackend,
+  type SplatBackendPreference,
+  type WebGpuSplatBackendState,
+} from '../utils/splatBackendPolicy';
+import {
   canUseByteLessSplatLoader,
   createDefaultManifest,
   getArchiveUrlDetectedLogMessage,
@@ -441,34 +446,109 @@ describe('getSplatDeviceTier', () => {
 
 describe('canUseByteLessSplatLoader', () => {
   it('is available on touch with the WebGPU backend ready', () => {
-    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'auto', webGpuAvailability: 'ready' })).toBe(true);
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'auto', webGpuAvailability: 'ready', sparkBackendAvailable: false })).toBe(true);
+    // A WebGPU-ready backend wins over a loaded Spark module, so byte-less stays on.
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'auto', webGpuAvailability: 'ready', sparkBackendAvailable: true })).toBe(true);
   });
 
-  it('is available while WebGPU is still initializing (first load never reports ready)', () => {
-    // The WebGPU canvas only mounts after a splat activates, so at selection
-    // time a capable device reports 'unavailable' (preparing), never 'ready'.
-    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'auto', webGpuAvailability: 'unavailable' })).toBe(true);
-    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'webgpu', webGpuAvailability: 'unavailable' })).toBe(true);
+  it('is available on fresh first load while WebGPU initializes and Spark is not yet loaded', () => {
+    // Adjudicated invariant: 'ready' must NOT be required. The WebGPU canvas only
+    // mounts after a splat activates, so at selection time a capable device reports
+    // 'unavailable' (preparing), never 'ready'. With Spark not loaded, auto mode
+    // resolves to no renderer yet (not Spark), so byte-less is safe.
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'auto', webGpuAvailability: 'unavailable', sparkBackendAvailable: false })).toBe(true);
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'webgpu', webGpuAvailability: 'unavailable', sparkBackendAvailable: false })).toBe(true);
+  });
+
+  it('is unavailable in auto mode when Spark is already loaded while WebGPU initializes', () => {
+    // The finding: a prior splat rendered via Spark this session leaves the Spark
+    // module loaded. In auto mode with WebGPU still 'unavailable', the resolver
+    // picks Spark NOW - and the visible Spark renderer streams the placeholder's
+    // (zero) bytes directly, so byte-less would render EMPTY. Must be off.
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'auto', webGpuAvailability: 'unavailable', sparkBackendAvailable: true })).toBe(false);
+    // Forced WebGPU never resolves to Spark, so a loaded Spark module is irrelevant.
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'webgpu', webGpuAvailability: 'unavailable', sparkBackendAvailable: true })).toBe(true);
   });
 
   it('is never available on desktop (the retaining path stays)', () => {
-    expect(canUseByteLessSplatLoader({ isTouchDevice: false, requestedBackend: 'auto', webGpuAvailability: 'ready' })).toBe(false);
-    expect(canUseByteLessSplatLoader({ isTouchDevice: false, requestedBackend: 'webgpu', webGpuAvailability: 'unavailable' })).toBe(false);
+    expect(canUseByteLessSplatLoader({ isTouchDevice: false, requestedBackend: 'auto', webGpuAvailability: 'ready', sparkBackendAvailable: false })).toBe(false);
+    expect(canUseByteLessSplatLoader({ isTouchDevice: false, requestedBackend: 'webgpu', webGpuAvailability: 'unavailable', sparkBackendAvailable: false })).toBe(false);
   });
 
   it('is unavailable when the Spark renderer is forced (it streams splatFile bytes)', () => {
-    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'spark', webGpuAvailability: 'ready' })).toBe(false);
-    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'spark', webGpuAvailability: 'unavailable' })).toBe(false);
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'spark', webGpuAvailability: 'ready', sparkBackendAvailable: true })).toBe(false);
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'spark', webGpuAvailability: 'unavailable', sparkBackendAvailable: false })).toBe(false);
   });
 
   it('is unavailable in every WebGPU state that resolves to the Spark fallback', () => {
     // 'unsupported' (no navigator.gpu / blocked browser) and 'failed' (renderer
     // init failed) both permanently fall back to Spark, which reads the active
     // splatFile's bytes directly - a byte-less placeholder would render empty.
-    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'auto', webGpuAvailability: 'unsupported' })).toBe(false);
-    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'auto', webGpuAvailability: 'failed' })).toBe(false);
-    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'webgpu', webGpuAvailability: 'unsupported' })).toBe(false);
-    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'webgpu', webGpuAvailability: 'failed' })).toBe(false);
+    // These stay off even before Spark finishes loading (spark not yet available),
+    // because they can NEVER seed the WebGPU decode cache byte-less relies on.
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'auto', webGpuAvailability: 'unsupported', sparkBackendAvailable: false })).toBe(false);
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'auto', webGpuAvailability: 'failed', sparkBackendAvailable: false })).toBe(false);
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'webgpu', webGpuAvailability: 'unsupported', sparkBackendAvailable: false })).toBe(false);
+    expect(canUseByteLessSplatLoader({ isTouchDevice: true, requestedBackend: 'webgpu', webGpuAvailability: 'failed', sparkBackendAvailable: false })).toBe(false);
+  });
+
+  it('never contradicts the real backend resolver: byte-less implies resolution is not Spark', () => {
+    // Parity pin against resolveSplatBackend over the FULL input matrix. Byte-less
+    // must never be enabled in a state whose current resolution is the Spark
+    // renderer (which reads splatFile bytes directly -> empty on a placeholder).
+    const touchValues = [true, false] as const;
+    const backends: SplatBackendPreference[] = ['auto', 'webgpu', 'spark'];
+    const webGpuStates: WebGpuSplatBackendState[] = ['unsupported', 'unavailable', 'ready', 'failed'];
+    const sparkValues = [true, false] as const;
+
+    let trueCount = 0;
+    let falseCount = 0;
+    for (const isTouchDevice of touchValues) {
+      for (const requestedBackend of backends) {
+        for (const webGpuAvailability of webGpuStates) {
+          for (const sparkBackendAvailable of sparkValues) {
+            const byteLess = canUseByteLessSplatLoader({
+              isTouchDevice,
+              requestedBackend,
+              webGpuAvailability,
+              sparkBackendAvailable,
+            });
+            if (byteLess) {
+              trueCount += 1;
+              const resolution = resolveSplatBackend(requestedBackend, {
+                webGpu: webGpuAvailability,
+                spark: sparkBackendAvailable,
+              });
+              expect(
+                resolution.backend,
+                `byte-less enabled but resolver picked Spark for ${JSON.stringify({ isTouchDevice, requestedBackend, webGpuAvailability, sparkBackendAvailable })}`
+              ).not.toBe('spark');
+            } else {
+              falseCount += 1;
+            }
+          }
+        }
+      }
+    }
+
+    // Guard against a vacuously-always-false predicate passing the implication.
+    expect(trueCount).toBeGreaterThan(0);
+    expect(falseCount).toBeGreaterThan(0);
+  });
+
+  it('falls back to the conservative 3M ceiling when a loaded Spark forces byte-less off', () => {
+    // Ceiling coherence: getSplatDeviceTier shares canUseByteLessSplatLoader, so
+    // the spark-availability guard must also demote the raised 4M ceiling to 3M.
+    const gate = { isTouchDevice: true, requestedBackend: 'auto' as const, webGpuAvailability: 'unavailable' as const };
+    const byteLessWithSpark = canUseByteLessSplatLoader({ ...gate, sparkBackendAvailable: true });
+    const byteLessWithoutSpark = canUseByteLessSplatLoader({ ...gate, sparkBackendAvailable: false });
+    expect(byteLessWithSpark).toBe(false);
+    expect(byteLessWithoutSpark).toBe(true);
+
+    // 364 MB / 3.5M splats: over the retaining 3M ceiling, within the byte-less 4M one.
+    const midCount = { path: 'big.ply', size: 364_000_000, splatCount: 3_500_000 };
+    expect(getSplatDeviceTier(midCount, { isTouchDevice: true, byteLessLoaderAvailable: byteLessWithSpark })).toBe('disabled');
+    expect(getSplatDeviceTier(midCount, { isTouchDevice: true, byteLessLoaderAvailable: byteLessWithoutSpark })).toBe('hint');
   });
 
   it('pins the splat tiering constants', () => {

@@ -11,6 +11,8 @@ export interface SplatPickerStoreFacade {
   /** Backend inputs for the byte-less loader gate (see canUseByteLessSplatLoader). */
   requestedSplatBackend: SplatBackendPreference;
   webGpuSplatAvailability: WebGpuSplatBackendState;
+  /** Whether the Spark renderer module is loaded; gates byte-less (auto mode picks Spark once loaded). */
+  sparkSplatAvailable: boolean;
   setShowSplatPicker: (show: boolean) => void;
   selectSplatSource: (sourceId: string) => void;
 }
@@ -26,6 +28,7 @@ export function useSplatPickerStoreFacade(): SplatPickerStoreFacade {
   const selectSplatSourceAction = useReconstructionStore((state) => state.selectSplatSource);
   const requestedSplatBackend = useSplatBackendStore((state) => state.requestedBackend);
   const webGpuSplatAvailability = useSplatBackendStore((state) => state.availability.webGpu);
+  const sparkSplatAvailable = useSplatBackendStore((state) => state.availability.spark);
 
   const selectSplatSource = (sourceId: string) => {
     void selectSplatSourceAction(sourceId);
@@ -36,6 +39,7 @@ export function useSplatPickerStoreFacade(): SplatPickerStoreFacade {
     splatFileSources,
     requestedSplatBackend,
     webGpuSplatAvailability,
+    sparkSplatAvailable,
     setShowSplatPicker,
     selectSplatSource,
   };

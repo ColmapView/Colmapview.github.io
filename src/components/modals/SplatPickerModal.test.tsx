@@ -162,4 +162,37 @@ describe('SplatPickerModal byte-less ceiling', () => {
 
     expect(screen.getByText('big.ply').closest('button')).toBeDisabled();
   });
+
+  it('keeps the 3M ceiling (disabled row) when Spark is loaded while WebGPU initializes', () => {
+    // Codex-gate P1 at the picker layer: auto mode, WebGPU still 'unavailable'
+    // (initializing) but the Spark module already loaded -> resolveSplatBackend
+    // picks Spark -> byte-less off -> the conservative 3M ceiling disables the row.
+    mockUseIsTouchDevice.mockReturnValue(true);
+    useSplatBackendStore.setState({
+      requestedBackend: 'auto',
+      availability: { webGpu: 'unavailable', webGpuFailureReason: null, spark: true },
+    });
+    openPickerWithByteLessEligibleSplat();
+
+    render(<SplatPickerModal />);
+
+    expect(screen.getByText('big.ply').closest('button')).toBeDisabled();
+  });
+
+  it('offers the 3-4M splat (raised 4M ceiling) on a fresh load while WebGPU initializes and Spark is not loaded', () => {
+    // Companion invariant: same 'unavailable' state, Spark NOT loaded -> byte-less
+    // stays on -> raised 4M ceiling -> the 3.5M row is offered with a memory hint.
+    mockUseIsTouchDevice.mockReturnValue(true);
+    useSplatBackendStore.setState({
+      requestedBackend: 'auto',
+      availability: { webGpu: 'unavailable', webGpuFailureReason: null, spark: false },
+    });
+    openPickerWithByteLessEligibleSplat();
+
+    render(<SplatPickerModal />);
+
+    const row = screen.getByText('big.ply').closest('button');
+    expect(row).not.toBeDisabled();
+    expect(screen.getByText(MEMORY_WARNING)).toBeInTheDocument();
+  });
 });

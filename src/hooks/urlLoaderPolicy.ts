@@ -1,4 +1,5 @@
 import type { ColmapManifest } from '../types/manifest';
+import { resolveSplatBackend } from '../utils/splatBackendPolicy';
 import type {
   SplatBackendPreference,
   WebGpuSplatBackendState,
@@ -553,18 +554,37 @@ export interface ByteLessSplatLoaderInputs {
   isTouchDevice: boolean;
   requestedBackend: SplatBackendPreference;
   webGpuAvailability: WebGpuSplatBackendState;
+  /**
+   * Whether the Spark renderer module is currently loaded/available (the backend
+   * store's `availability.spark`). In auto mode the resolver picks Spark the
+   * instant this is true while WebGPU is not yet ready - e.g. a prior splat
+   * rendered via Spark this session - so byte-less must consult it, not assume
+   * WebGPU will win.
+   */
+  sparkBackendAvailable: boolean;
 }
 
 /**
  * Whether the byte-less splat loader may be used: touch hardware in a backend
  * context where the seeded WebGPU decode cache will actually serve the render.
  * The Spark renderer streams `splatFile`'s bytes directly (bypassing the decode
- * cache), so a byte-less placeholder would render EMPTY on it: byte-less is off
- * when Spark is forced (`requestedBackend === 'spark'`) and in every WebGPU
- * state that permanently resolves to the Spark fallback ('unsupported',
- * 'failed'). 'ready' is deliberately NOT required - the WebGPU renderer only
- * reports ready after its canvas mounts, which happens after a splat activates,
- * so at selection time a capable device reports 'unavailable' (initializing).
+ * cache), so a byte-less placeholder would render EMPTY on it.
+ *
+ * Byte-less is therefore off when:
+ *  - Spark is forced (`requestedBackend === 'spark'`);
+ *  - the WebGPU state permanently resolves to the Spark fallback ('unsupported',
+ *    'failed') - these can never seed the decode cache, so they stay off even
+ *    before Spark finishes loading (spark availability alone can't catch them);
+ *  - the CURRENT backend resolution already picks Spark. In auto mode with the
+ *    Spark module loaded, `resolveSplatBackend` selects Spark the moment WebGPU
+ *    is still 'unavailable' (initializing) - so a placeholder would meet the
+ *    visible Spark renderer immediately. We defer to the real resolver here
+ *    rather than duplicate its Spark-selection condition (which would drift).
+ *
+ * 'ready' is deliberately NOT required - the WebGPU renderer only reports ready
+ * after its canvas mounts, which happens after a splat activates, so on a fresh
+ * first load a capable device reports 'unavailable' (initializing) with Spark
+ * not yet loaded, and byte-less must still work.
  *
  * Known accepted residual (ledgered follow-up, not handled here): a mid-session
  * WebGPU device loss flips availability to 'failed' and falls back to Spark,
@@ -575,11 +595,25 @@ export function canUseByteLessSplatLoader({
   isTouchDevice,
   requestedBackend,
   webGpuAvailability,
+  sparkBackendAvailable,
 }: ByteLessSplatLoaderInputs): boolean {
   if (!isTouchDevice || requestedBackend === 'spark') {
     return false;
   }
-  return webGpuAvailability === 'ready' || webGpuAvailability === 'unavailable';
+  // Permanent-fallback WebGPU states never populate the byte-less decode cache,
+  // so keep them off even before Spark finishes loading (the resolver would
+  // report backend=null while Spark is still loading, missing this case).
+  if (webGpuAvailability !== 'ready' && webGpuAvailability !== 'unavailable') {
+    return false;
+  }
+  // Off whenever the current resolution already picks Spark (auto mode + Spark
+  // loaded while WebGPU initializes). Shared with resolveSplatBackend to stay in
+  // lockstep with the renderer that will actually read the placeholder's bytes.
+  const resolution = resolveSplatBackend(requestedBackend, {
+    webGpu: webGpuAvailability,
+    spark: sparkBackendAvailable,
+  });
+  return resolution.backend !== 'spark';
 }
 
 export function getEstimatedSplatCount(

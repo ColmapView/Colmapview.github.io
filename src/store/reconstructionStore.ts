@@ -99,6 +99,7 @@ function shouldActivateSplatSourceByteLess(source: SplatFileSource): boolean {
     isTouchDevice,
     requestedBackend,
     webGpuAvailability: availability.webGpu,
+    sparkBackendAvailable: availability.spark,
   });
 }
 

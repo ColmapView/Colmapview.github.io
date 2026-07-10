@@ -38,6 +38,7 @@ export function SplatPickerModal() {
     splatFileSources,
     requestedSplatBackend,
     webGpuSplatAvailability,
+    sparkSplatAvailable,
     setShowSplatPicker,
     selectSplatSource,
   } = useSplatPickerStoreFacade();
@@ -51,6 +52,7 @@ export function SplatPickerModal() {
     isTouchDevice,
     requestedBackend: requestedSplatBackend,
     webGpuAvailability: webGpuSplatAvailability,
+    sparkBackendAvailable: sparkSplatAvailable,
   });
 
   const isOpen = showSplatPicker && splatFileSources.length >= 1;

@@ -912,6 +912,50 @@ describe('reconstruction store byte-less oversized splat activation', () => {
     expect(loadGaussianCloudFromBytesMock).not.toHaveBeenCalled();
   });
 
+  it('keeps the byte-retaining path when Spark is already loaded while WebGPU initializes', async () => {
+    // Codex-gate P1: auto mode, WebGPU still 'unavailable' (initializing), but the
+    // Spark module is already loaded (e.g. a prior splat rendered via Spark this
+    // session). resolveSplatBackend picks Spark NOW, and the visible Spark renderer
+    // streams splatFile bytes directly - a zero-byte placeholder would render empty.
+    // The bytes must be retained (no byte-less activation).
+    detectTouchDeviceMock.mockReturnValue(true);
+    useSplatBackendStore.setState({
+      requestedBackend: 'auto',
+      availability: { webGpu: 'unavailable', webGpuFailureReason: null, spark: true },
+    });
+    stubSplatBytesFetch();
+    loadOversizedLazySource();
+
+    await useReconstructionStore.getState().selectSplatSource('splats/big.ply');
+
+    const source = getBigSource();
+    expect(source?.file).toBeDefined();
+    expect(source?.file?.size).toBeGreaterThan(0);
+    expect(loadGaussianCloudFromBytesMock).not.toHaveBeenCalled();
+  });
+
+  it('still activates byte-lessly on a fresh first load while WebGPU initializes (Spark not yet loaded)', async () => {
+    // Adjudicated invariant, pinned at the store layer: same 'unavailable' WebGPU
+    // state as above, but Spark is NOT loaded yet, so auto mode resolves to no
+    // renderer (not Spark). Byte-less must still activate - the common capable-phone
+    // first-load path - so the fix must not over-correct into always retaining.
+    detectTouchDeviceMock.mockReturnValue(true);
+    useSplatBackendStore.setState({
+      requestedBackend: 'auto',
+      availability: { webGpu: 'unavailable', webGpuFailureReason: null, spark: false },
+    });
+    stubSplatBytesFetch();
+    loadGaussianCloudFromBytesMock.mockResolvedValue(decodedResult());
+    loadOversizedLazySource();
+
+    await useReconstructionStore.getState().selectSplatSource('splats/big.ply');
+
+    const state = useReconstructionStore.getState();
+    expect(state.loadedFiles?.splatFile?.size).toBe(0);
+    expect(getBigSource()?.file).toBeUndefined();
+    expect(loadGaussianCloudFromBytesMock).toHaveBeenCalledTimes(1);
+  });
+
   it('surfaces a byte-less decode failure like a fetch failure and retries with a fresh placeholder', async () => {
     armTouchWebGpu();
     stubSplatBytesFetch();
