@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   ESSENTIAL_HOTKEY_IDS,
+  ESSENTIAL_IMAGE_NAV_IDS,
+  ESSENTIAL_IMAGE_NAV_ROW_ID,
   ESSENTIAL_MOUSE_ROWS,
   ESSENTIAL_WASD_IDS,
   ESSENTIAL_WASD_ROW_ID,
@@ -36,21 +38,25 @@ describe('HOTKEYS registry', () => {
 });
 
 describe('ESSENTIAL_HOTKEY_IDS', () => {
-  it('references only registry ids plus the composite WASD and mouse rows', () => {
+  it('references only registry ids plus the composite WASD/image-nav and mouse rows', () => {
     const syntheticIds = new Set<string>([
       ESSENTIAL_WASD_ROW_ID,
+      ESSENTIAL_IMAGE_NAV_ROW_ID,
       ...ESSENTIAL_MOUSE_ROWS.map((row) => row.id),
     ]);
     const missing = ESSENTIAL_HOTKEY_IDS.filter((id) => !syntheticIds.has(id) && !(id in HOTKEYS));
     expect(missing).toEqual([]);
   });
 
-  it('maps, in order, to the curated combos (u, b, WASD, o, p, mouse clicks, scroll combos)', () => {
+  it('maps, in order, to the curated combos (keys, view controls, pointer rows, image-modal rows)', () => {
     // Recomputed from the registry rather than trusting any external claim:
-    // the user asked for u, b, navigate-WASD, o, p up front, then the pointer
-    // interactions (click select / right-click go-to and the scroll combos).
+    // the user asked for u, b, navigate-WASD, o, p up front, then flagged the
+    // missing view-control family (reset, orbit/fly, horizon lock, grid), then
+    // the pointer interactions, then the image-modal shortcuts merged in from
+    // the removed Image Modal tab.
     const comboFor = (id: string) => {
       if (id === ESSENTIAL_WASD_ROW_ID) return 'wasd';
+      if (id === ESSENTIAL_IMAGE_NAV_ROW_ID) return 'arrows';
       const mouseRow = ESSENTIAL_MOUSE_ROWS.find((row) => row.id === id);
       return mouseRow ? mouseRow.keyCombo : HOTKEYS[id].keys;
     };
@@ -60,15 +66,25 @@ describe('ESSENTIAL_HOTKEY_IDS', () => {
       'wasd',
       'o',
       'p',
+      'r',
+      'c',
+      'h',
+      'g',
       'click',
       'right click',
       'alt+scroll',
       'ctrl+scroll',
+      'arrows',
+      'escape',
     ]);
   });
 
   it('backs the composite Navigate row with the real WASD registry entries', () => {
     expect(ESSENTIAL_WASD_IDS.map((id) => HOTKEYS[id].keys)).toEqual(['w', 'a', 's', 'd']);
+  });
+
+  it('backs the composite image-nav row with the real prev/next registry entries', () => {
+    expect(ESSENTIAL_IMAGE_NAV_IDS.map((id) => HOTKEYS[id].keys)).toEqual(['left', 'right']);
   });
 
   it('describes the mouse rows as select / go-to camera interactions', () => {

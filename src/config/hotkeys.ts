@@ -274,9 +274,27 @@ export const ESSENTIAL_WASD_IDS = [
   'moveRight', //    d
 ] as const satisfies readonly (keyof typeof HOTKEYS)[];
 
-/** Synthetic row id + label for the combined WASD row in Essentials. */
+/**
+ * Synthetic row id + label for the combined WASD row. Used by the Essentials
+ * tab and reused by the Camera Controls tab, which collapses its four
+ * move/strafe rows into this same row (user request).
+ */
 export const ESSENTIAL_WASD_ROW_ID = 'navigateWasd';
 export const ESSENTIAL_WASD_DESCRIPTION = 'Navigate';
+
+/**
+ * The image-modal prev/next pair, rendered as one combined arrows row in
+ * Essentials. The Image Modal tab was merged into Essentials (user request),
+ * so these rows live here now; the bindings themselves are unchanged.
+ */
+export const ESSENTIAL_IMAGE_NAV_IDS = [
+  'prevImage', // left
+  'nextImage', // right
+] as const satisfies readonly (keyof typeof HOTKEYS)[];
+
+/** Synthetic row id + label for the combined prev/next image row in Essentials. */
+export const ESSENTIAL_IMAGE_NAV_ROW_ID = 'imageNavArrows';
+export const ESSENTIAL_IMAGE_NAV_DESCRIPTION = 'Previous / next image';
 
 /**
  * Mouse interactions surfaced in the Essentials tab (user request: click
@@ -293,18 +311,25 @@ export const ESSENTIAL_MOUSE_ROWS = [
 type EssentialMouseRowId = (typeof ESSENTIAL_MOUSE_ROWS)[number]['id'];
 
 export const ESSENTIAL_HOTKEY_IDS = [
-  'toggleUndistortion', //    u  - Toggle undistorted view
-  'toggleBackground', //      b  - Toggle background
-  ESSENTIAL_WASD_ROW_ID, //   w a s d - Navigate (composite of ESSENTIAL_WASD_IDS)
-  'cycleAutoRotate', //       o  - Cycle auto orbit
-  'cyclePointSize', //        p  - Cycle point cloud color mode
-  'mouseSelectCamera', //     click - Select camera
-  'mouseGoToCamera', //       right click - Go to camera view
-  'adjustFrustumSize', //     alt+scroll  - Adjust camera frustum size
-  'adjustPointSize', //       ctrl+scroll - Adjust point cloud size
+  'toggleUndistortion', //       u  - Toggle undistorted view
+  'toggleBackground', //         b  - Toggle background
+  ESSENTIAL_WASD_ROW_ID, //      w a s d - Navigate (composite of ESSENTIAL_WASD_IDS)
+  'cycleAutoRotate', //          o  - Cycle auto orbit
+  'cyclePointSize', //           p  - Cycle point cloud color mode
+  'resetView', //                r  - Reset view
+  'toggleCameraMode', //         c  - Toggle orbit/fly mode
+  'cycleHorizonLock', //         h  - Cycle horizon lock
+  'toggleGrid', //               g  - Toggle grid
+  'mouseSelectCamera', //        click - Select camera
+  'mouseGoToCamera', //          right click - Go to camera view
+  'adjustFrustumSize', //        alt+scroll  - Adjust camera frustum size
+  'adjustPointSize', //          ctrl+scroll - Adjust point cloud size
+  ESSENTIAL_IMAGE_NAV_ROW_ID, // left right - Previous / next image (composite)
+  'closeModal', //               escape - Close modal
 ] as const satisfies readonly (
   | keyof typeof HOTKEYS
   | typeof ESSENTIAL_WASD_ROW_ID
+  | typeof ESSENTIAL_IMAGE_NAV_ROW_ID
   | EssentialMouseRowId
 )[];
 

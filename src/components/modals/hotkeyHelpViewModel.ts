@@ -1,6 +1,9 @@
 import type { CSSProperties } from 'react';
 import {
   ESSENTIAL_HOTKEY_IDS,
+  ESSENTIAL_IMAGE_NAV_DESCRIPTION,
+  ESSENTIAL_IMAGE_NAV_IDS,
+  ESSENTIAL_IMAGE_NAV_ROW_ID,
   ESSENTIAL_MOUSE_ROWS,
   ESSENTIAL_WASD_DESCRIPTION,
   ESSENTIAL_WASD_IDS,
@@ -148,23 +151,42 @@ function stripTrailingParenthetical(description: string): string {
   return description.replace(/\s*\([^)]*\)\s*$/, '');
 }
 
+/**
+ * Key clusters rendered as one combined row (user feedback: "navigate wasd",
+ * merged Image Modal tab). Keyed by the synthetic row id; the member ids point
+ * at real registry entries so the combo is always recomputed from the source.
+ */
+const COMPOSITE_HELP_ROWS: Record<string, { ids: readonly string[]; description: string }> = {
+  [ESSENTIAL_WASD_ROW_ID]: { ids: ESSENTIAL_WASD_IDS, description: ESSENTIAL_WASD_DESCRIPTION },
+  [ESSENTIAL_IMAGE_NAV_ROW_ID]: {
+    ids: ESSENTIAL_IMAGE_NAV_IDS,
+    description: ESSENTIAL_IMAGE_NAV_DESCRIPTION,
+  },
+};
+
+function buildCompositeRow(id: string, hotkeys: HotkeyRegistry): HotkeyHelpRow | null {
+  const composite = COMPOSITE_HELP_ROWS[id];
+  if (!composite) {
+    return null;
+  }
+  // Combos join with a space ('w a s d', '← →'); the row's `uppercase`
+  // styling renders letters as W A S D.
+  const combo = composite.ids
+    .map((memberId) => hotkeys[memberId]?.keys)
+    .filter((keys): keys is string => Boolean(keys))
+    .map((keys) => formatKeyCombo(keys))
+    .join(' ');
+  return combo ? { id, description: composite.description, keyCombo: combo } : null;
+}
+
 export function getHotkeyHelpEssentialRows(
   hotkeys: HotkeyRegistry = HOTKEYS,
   ids: readonly string[] = ESSENTIAL_HOTKEY_IDS
 ): HotkeyHelpRow[] {
   return ids
     .map((id) => {
-      if (id === ESSENTIAL_WASD_ROW_ID) {
-        // The WASD fly cluster reads as one row (user: "navigate wasd"); the
-        // row's `uppercase` styling renders the combo as W A S D.
-        const combo = ESSENTIAL_WASD_IDS
-          .map((wasdId) => hotkeys[wasdId]?.keys)
-          .filter((keys): keys is string => Boolean(keys))
-          .map((keys) => formatKeyCombo(keys))
-          .join(' ');
-        return combo
-          ? { id, description: ESSENTIAL_WASD_DESCRIPTION, keyCombo: combo }
-          : null;
+      if (id in COMPOSITE_HELP_ROWS) {
+        return buildCompositeRow(id, hotkeys);
       }
       const mouseRow = ESSENTIAL_MOUSE_ROWS.find((row) => row.id === id);
       if (mouseRow) {
@@ -186,6 +208,27 @@ export function getHotkeyHelpEssentialRows(
 }
 
 /**
+ * Collapses the four WASD registry rows into the combined Navigate row, at the
+ * position of the first one. Applied to the category tabs so Camera Controls
+ * gets the same treatment as Essentials (user request); rows before the first
+ * WASD entry are untouched, so splicing at its index is position-preserving.
+ */
+function collapseWasdRows(rows: HotkeyHelpRow[], hotkeys: HotkeyRegistry): HotkeyHelpRow[] {
+  const wasdIds = new Set<string>(ESSENTIAL_WASD_IDS);
+  const firstIndex = rows.findIndex((row) => wasdIds.has(row.id));
+  if (firstIndex === -1) {
+    return rows;
+  }
+  const kept = rows.filter((row) => !wasdIds.has(row.id));
+  const composite = buildCompositeRow(ESSENTIAL_WASD_ROW_ID, hotkeys);
+  if (!composite) {
+    return kept;
+  }
+  kept.splice(firstIndex, 0, composite);
+  return kept;
+}
+
+/**
  * Tabbed view model for the help panel. Essentials comes first (curated rows
  * kept up front per user feedback), followed by one tab per non-empty category
  * in HOTKEY_CATEGORIES order. The category tabs reuse getHotkeyHelpSections, so
@@ -204,14 +247,15 @@ export function getHotkeyHelpTabs(
   };
 
   const categoryTabs: HotkeyHelpTab[] = getHotkeyHelpSections(hotkeys, categoryLabels)
-    // General is not worth a tab (user feedback 2026-07-10): it held the joke
-    // easter eggs, the guide reset, and the help toggle — and the footer
-    // already documents the toggle. The bindings themselves stay active.
-    .filter((section) => section.category !== 'general')
+    // Two categories carry no tab (user feedback 2026-07-10): General held the
+    // joke easter eggs, the guide reset, and the help toggle — the footer
+    // already documents the toggle — and Image Modal's rows were merged into
+    // Essentials. The bindings themselves stay active.
+    .filter((section) => section.category !== 'general' && section.category !== 'modal')
     .map((section) => ({
       id: section.category,
       title: section.title,
-      rows: section.rows,
+      rows: collapseWasdRows(section.rows, hotkeys),
     }));
 
   return [essentialsTab, ...categoryTabs];

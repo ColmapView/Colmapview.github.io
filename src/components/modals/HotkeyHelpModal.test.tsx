@@ -101,28 +101,30 @@ describe('HotkeyHelpModal', () => {
     expect(screen.getByText('Select camera')).toBeInTheDocument();
     expect(screen.getByText('Go to camera view')).toBeInTheDocument();
     // General-category shortcuts have no tab anymore (user removed it), so a
-    // general-only row never renders anywhere in the panel.
+    // general-only row never renders anywhere in the panel. Image Modal's rows
+    // were merged into Essentials, so that tab is gone too.
     expect(screen.queryByText('Reset guide tips')).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'General' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Image Modal' })).not.toBeInTheDocument();
   });
 
-  it('switches tabs: clicking Image Modal shows modal rows and hides essentials rows', () => {
+  it('switches tabs: clicking Camera Controls shows camera rows and hides essentials-only rows', () => {
     useUIStore.setState({ touchMode: false, embedMode: false });
     renderModal();
 
     fireEvent.click(screen.getByTestId('hotkey-info-button'));
-    expect(screen.getByText(/Toggle undistorted view/)).toBeInTheDocument();
+    expect(screen.getByText('Select camera')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Image Modal' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Camera Controls' }));
 
-    expect(screen.getByRole('tab', { name: 'Image Modal' })).toHaveAttribute(
+    expect(screen.getByRole('tab', { name: 'Camera Controls' })).toHaveAttribute(
       'aria-selected',
       'true'
     );
-    // Image Modal rows are now visible...
-    expect(screen.getByText('Previous image')).toBeInTheDocument();
-    // ...and the essentials u-row (a Camera shortcut) is hidden on this tab.
-    expect(screen.queryByText(/Toggle undistorted view/)).not.toBeInTheDocument();
+    // Camera-only rows are now visible...
+    expect(screen.getByText('Switch to next splat file')).toBeInTheDocument();
+    // ...and the essentials-only mouse row is hidden on this tab.
+    expect(screen.queryByText('Select camera')).not.toBeInTheDocument();
   });
 
   it('resets to the Essentials tab each time the panel reopens', () => {
@@ -131,8 +133,8 @@ describe('HotkeyHelpModal', () => {
 
     const button = screen.getByTestId('hotkey-info-button');
     fireEvent.click(button); // open
-    fireEvent.click(screen.getByRole('tab', { name: 'Image Modal' }));
-    expect(screen.getByRole('tab', { name: 'Image Modal' })).toHaveAttribute(
+    fireEvent.click(screen.getByRole('tab', { name: 'Camera Controls' }));
+    expect(screen.getByRole('tab', { name: 'Camera Controls' })).toHaveAttribute(
       'aria-selected',
       'true'
     );

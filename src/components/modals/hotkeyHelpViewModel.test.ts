@@ -30,7 +30,13 @@ import {
   getHotkeyInfoButtonStyle,
   shouldShowHotkeyInfoButton,
 } from './hotkeyHelpViewModel';
-import { ESSENTIAL_HOTKEY_IDS, ESSENTIAL_WASD_ROW_ID, HOTKEYS, type HotkeyRegistry } from '../../config/hotkeys';
+import {
+  ESSENTIAL_HOTKEY_IDS,
+  ESSENTIAL_IMAGE_NAV_ROW_ID,
+  ESSENTIAL_WASD_ROW_ID,
+  HOTKEYS,
+  type HotkeyRegistry,
+} from '../../config/hotkeys';
 import { Z_INDEX, contextMenuStyles } from '../../theme';
 
 describe('hotkey help view model', () => {
@@ -228,9 +234,11 @@ describe('hotkey help tabs view model', () => {
     expect(ESSENTIALS_TAB_TITLE).toBe('Essentials');
     // Essentials, then the categories that actually have rows, in HOTKEY_CATEGORIES order.
     // General is deliberately absent (user feedback 2026-07-10): it held easter
-    // eggs and the help toggle, which the footer already documents.
-    expect(tabs.map((tab) => tab.id)).toEqual(['essentials', 'modal', 'camera']);
+    // eggs and the help toggle, which the footer already documents. Image Modal
+    // is absent too — its rows were merged into Essentials.
+    expect(tabs.map((tab) => tab.id)).toEqual(['essentials', 'camera']);
     expect(tabs.some((tab) => tab.id === 'general')).toBe(false);
+    expect(tabs.some((tab) => tab.id === 'modal')).toBe(false);
     // navigation has no rows in the registry, so it is not surfaced as a tab.
     expect(tabs.some((tab) => tab.id === 'navigation')).toBe(false);
   });
@@ -254,6 +262,13 @@ describe('hotkey help tabs view model', () => {
       keyCombo: 'w a s d',
     });
     expect(essentials?.rows.map((row) => row.description)).not.toContain('Strafe left');
+    // The view-control family the user flagged as missing (2026-07-10:
+    // "you still miss hotkeys like horizonlock") rides along with its registry text.
+    expect(essentials?.rows).toContainEqual({
+      id: 'cycleHorizonLock',
+      description: 'Cycle horizon lock',
+      keyCombo: 'h',
+    });
     // Mouse interactions sit with the other pointer rows (user request): left
     // click selects a camera frustum, right click flies into its view.
     expect(essentials?.rows).toContainEqual({
@@ -277,26 +292,54 @@ describe('hotkey help tabs view model', () => {
       description: 'Adjust point cloud size',
       keyCombo: 'Ctrl + scroll',
     });
+    // The removed Image Modal tab's rows are merged in at the end: prev/next
+    // collapse into one arrows row, and Esc keeps its registry description.
+    expect(essentials?.rows).toContainEqual({
+      id: ESSENTIAL_IMAGE_NAV_ROW_ID,
+      description: 'Previous / next image',
+      keyCombo: '← →',
+    });
+    expect(essentials?.rows).toContainEqual({
+      id: 'closeModal',
+      description: 'Close modal',
+      keyCombo: 'Esc',
+    });
   });
 
-  it('keeps each category tab at its full row set (Essentials is a curated overlay, not a move)', () => {
+  it('keeps the Camera tab full except for the WASD collapse (Essentials is an overlay, not a move)', () => {
     const tabs = getHotkeyHelpTabs();
     const cameraIds = tabs.find((tab) => tab.id === 'camera')?.rows.map((row) => row.id) ?? [];
 
     // Essential camera rows still appear in the Camera tab (curated view may repeat rows).
     expect(cameraIds).toContain('toggleUndistortion');
     // Non-essential camera rows remain present too.
-    expect(cameraIds).toContain('moveForward');
+    expect(cameraIds).toContain('moveUp');
+    expect(cameraIds).toContain('speedBoost');
   });
 
-  it('reuses getHotkeyHelpSections rows for the category tabs', () => {
+  it('collapses the WASD rows in the Camera tab into one Navigate row, in place', () => {
     const tabs = getHotkeyHelpTabs();
-    const sections = getHotkeyHelpSections();
-    const modalTab = tabs.find((tab) => tab.id === 'modal');
-    const modalSection = sections.find((section) => section.category === 'modal');
+    const cameraTab = tabs.find((tab) => tab.id === 'camera');
+    const cameraSection = getHotkeyHelpSections().find((section) => section.category === 'camera');
+    const cameraIds = cameraTab?.rows.map((row) => row.id) ?? [];
 
-    expect(modalTab?.title).toBe(modalSection?.title);
-    expect(modalTab?.rows).toEqual(modalSection?.rows);
+    // Same treatment as Essentials (user request): one combined row instead of
+    // four "Move forward / Strafe left / ..." rows.
+    expect(cameraTab?.rows).toContainEqual({
+      id: ESSENTIAL_WASD_ROW_ID,
+      description: 'Navigate',
+      keyCombo: 'w a s d',
+    });
+    for (const id of ['moveForward', 'moveBackward', 'moveLeft', 'moveRight']) {
+      expect(cameraIds).not.toContain(id);
+    }
+    // The composite sits where the first WASD row was: after toggleUndistortion,
+    // before moveUp (registry order), and replaces four rows with one.
+    expect(cameraIds.indexOf(ESSENTIAL_WASD_ROW_ID)).toBe(
+      cameraIds.indexOf('toggleUndistortion') + 1
+    );
+    expect(cameraIds.indexOf('moveUp')).toBe(cameraIds.indexOf(ESSENTIAL_WASD_ROW_ID) + 1);
+    expect(cameraTab?.rows.length).toBe((cameraSection?.rows.length ?? 0) - 3);
   });
 
   it('pins the tab bar/button class strings to real (non-Tailwind) utilities', () => {
