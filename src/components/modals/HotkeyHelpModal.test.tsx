@@ -84,4 +84,56 @@ describe('HotkeyHelpModal', () => {
     expect(questionKey.tagName).toBe('KBD');
     expect(letterKey.tagName).toBe('KBD');
   });
+
+  it('defaults to the Essentials tab and shows the U (undistorted) row', () => {
+    useUIStore.setState({ touchMode: false, embedMode: false });
+    renderModal();
+
+    fireEvent.click(screen.getByTestId('hotkey-info-button'));
+
+    expect(screen.getByRole('tab', { name: 'Essentials' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    // The curated u binding is up front...
+    expect(screen.getByText(/Toggle undistorted view/)).toBeInTheDocument();
+    // ...while a general-only shortcut is not shown on the Essentials tab.
+    expect(screen.queryByText('Reset guide tips')).not.toBeInTheDocument();
+  });
+
+  it('switches tabs: clicking General shows general rows and hides essentials rows', () => {
+    useUIStore.setState({ touchMode: false, embedMode: false });
+    renderModal();
+
+    fireEvent.click(screen.getByTestId('hotkey-info-button'));
+    expect(screen.getByText(/Toggle undistorted view/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'General' }));
+
+    expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true');
+    // General rows are now visible...
+    expect(screen.getByText('Reset guide tips')).toBeInTheDocument();
+    // ...and the essentials u-row (a Camera shortcut) is hidden on the General tab.
+    expect(screen.queryByText(/Toggle undistorted view/)).not.toBeInTheDocument();
+  });
+
+  it('resets to the Essentials tab each time the panel reopens', () => {
+    useUIStore.setState({ touchMode: false, embedMode: false });
+    renderModal();
+
+    const button = screen.getByTestId('hotkey-info-button');
+    fireEvent.click(button); // open
+    fireEvent.click(screen.getByRole('tab', { name: 'General' }));
+    expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true');
+
+    fireEvent.click(button); // close
+    expect(screen.queryByText('Keyboard Shortcuts')).not.toBeInTheDocument();
+
+    fireEvent.click(button); // reopen
+    expect(screen.getByRole('tab', { name: 'Essentials' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(screen.getByText(/Toggle undistorted view/)).toBeInTheDocument();
+  });
 });

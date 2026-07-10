@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ESSENTIALS_TAB_ID,
+  ESSENTIALS_TAB_TITLE,
   HOTKEY_HELP_DESCRIPTION_CELL_CLASS,
   HOTKEY_HELP_FOOTER_CLASS,
   HOTKEY_HELP_FOOTER_KEY_CLASS,
@@ -11,20 +13,25 @@ import {
   HOTKEY_HELP_PANEL_LAYOUT_CLASS,
   HOTKEY_HELP_SECTION_CLASS,
   HOTKEY_HELP_SECTION_TITLE_CLASS,
+  HOTKEY_HELP_TAB_ACTIVE_CLASS,
+  HOTKEY_HELP_TAB_CLASS,
+  HOTKEY_HELP_TAB_LIST_CLASS,
+  HOTKEY_HELP_TAB_PANEL_CLASS,
   HOTKEY_HELP_TABLE_CLASS,
   HOTKEY_HELP_TITLE,
   HOTKEY_INFO_BUTTON_ARIA_LABEL,
   HOTKEY_INFO_BUTTON_CLASS,
-  HOTKEY_INFO_BUTTON_GLYPH,
+  HOTKEY_INFO_BUTTON_ICON_CLASS,
   HOTKEY_INFO_BUTTON_TITLE,
   getHotkeyHelpOverlayStyle,
   getHotkeyHelpPanelStyle,
   getHotkeyHelpSections,
+  getHotkeyHelpTabs,
   getHotkeyHelpToggleKeyLabels,
   getHotkeyInfoButtonStyle,
   shouldShowHotkeyInfoButton,
 } from './hotkeyHelpViewModel';
-import type { HotkeyRegistry } from '../../config/hotkeys';
+import { ESSENTIAL_HOTKEY_IDS, HOTKEYS, type HotkeyRegistry } from '../../config/hotkeys';
 import { Z_INDEX } from '../../theme';
 
 describe('hotkey help view model', () => {
@@ -123,12 +130,15 @@ describe('hotkey help view model', () => {
     // therefore carry no absolute-position, translate, fraction, or
     // arbitrary-bracket utilities that would defeat flex centering / go silently
     // dead.
-    expect(HOTKEY_HELP_PANEL_LAYOUT_CLASS).toBe('p-6 max-w-lg w-full overflow-auto');
+    // The panel no longer scrolls as one block: it caps at 80vh and clips
+    // (overflow-hidden) while the active tab's rows area owns the scroll.
+    expect(HOTKEY_HELP_PANEL_LAYOUT_CLASS).toBe('p-6 max-w-lg w-full overflow-hidden');
     expect(HOTKEY_HELP_PANEL_LAYOUT_CLASS).not.toMatch(/\/2/);
     expect(HOTKEY_HELP_PANEL_LAYOUT_CLASS).not.toContain('[');
     expect(HOTKEY_HELP_PANEL_LAYOUT_CLASS).not.toContain('translate');
     expect(getHotkeyHelpPanelStyle()).toEqual({ maxHeight: '80vh' });
-    expect(HOTKEY_HELP_HEADER_CLASS).toBe('flex items-center justify-between mb-4');
+    // Header, tab bar, and footer stay put (flex-shrink-0) so only the rows scroll.
+    expect(HOTKEY_HELP_HEADER_CLASS).toBe('flex items-center justify-between mb-4 flex-shrink-0');
     expect(HOTKEY_HELP_SECTION_CLASS).toBe('mb-4');
     expect(HOTKEY_HELP_SECTION_TITLE_CLASS).toBe('text-ds-secondary text-sm font-medium mb-2');
     expect(HOTKEY_HELP_TABLE_CLASS).toBe('w-full text-sm');
@@ -138,7 +148,7 @@ describe('hotkey help view model', () => {
       'px-2 py-0.5 bg-ds-secondary rounded text-ds-primary text-xs font-mono'
     );
     expect(HOTKEY_HELP_FOOTER_CLASS).toBe(
-      'mt-4 pt-4 border-t border-ds text-ds-muted text-xs text-center'
+      'mt-4 pt-4 border-t border-ds text-ds-muted text-xs text-center flex-shrink-0'
     );
     expect(HOTKEY_HELP_FOOTER_KEY_CLASS).toBe('px-1.5 py-0.5 bg-ds-secondary rounded');
     expect(HOTKEY_HELP_FOOTER_PREFIX).toBe('Press');
@@ -165,20 +175,26 @@ describe('hotkey info button view model', () => {
     expect(shouldShowHotkeyInfoButton({ touchMode: true, embedMode: true })).toBe(false);
   });
 
-  it('pins the info button class string to real (non-Tailwind) utilities', () => {
+  it('pins the info button class string to a transparent, icon-only button', () => {
+    // Revision (2026-07-10): the InfoIcon draws its own circle, so the button is
+    // transparent (no rounded pill, no background blob) and just brightens the
+    // muted icon on hover via an existing utility (hover-ds-text-primary).
     expect(HOTKEY_INFO_BUTTON_CLASS).toBe(
-      'fixed top-4 left-4 w-8 h-8 rounded-full flex items-center justify-center bg-ds-tertiary/50 text-ds-muted hover-ds-hover cursor-pointer text-sm'
+      'fixed top-4 left-4 flex items-center justify-center text-ds-muted hover-ds-text-primary cursor-pointer transition-colors'
     );
-    expect(HOTKEY_INFO_BUTTON_CLASS).toContain('rounded-full');
-    expect(HOTKEY_INFO_BUTTON_CLASS).toContain('bg-ds-tertiary/50');
     expect(HOTKEY_INFO_BUTTON_CLASS).toContain('top-4 left-4');
+    expect(HOTKEY_INFO_BUTTON_CLASS).toContain('text-ds-muted');
+    expect(HOTKEY_INFO_BUTTON_CLASS).toContain('hover-ds-text-primary');
+    // No background blob / pill anymore.
+    expect(HOTKEY_INFO_BUTTON_CLASS).not.toContain('rounded-full');
+    expect(HOTKEY_INFO_BUTTON_CLASS).not.toContain('bg-');
     // No Tailwind-only escapes: JIT hover variants or arbitrary bracket utilities.
     expect(HOTKEY_INFO_BUTTON_CLASS).not.toContain('hover:');
     expect(HOTKEY_INFO_BUTTON_CLASS).not.toContain('[');
   });
 
-  it('exposes stable glyph, title, and aria labels', () => {
-    expect(HOTKEY_INFO_BUTTON_GLYPH).toBe('i');
+  it('exposes stable icon size, title, and aria labels', () => {
+    expect(HOTKEY_INFO_BUTTON_ICON_CLASS).toBe('w-5 h-5');
     expect(HOTKEY_INFO_BUTTON_TITLE).toBe('Keyboard shortcuts (I)');
     expect(HOTKEY_INFO_BUTTON_ARIA_LABEL).toBe('Show keyboard shortcuts');
   });
@@ -187,5 +203,82 @@ describe('hotkey info button view model', () => {
     expect(getHotkeyInfoButtonStyle()).toEqual({ zIndex: Z_INDEX.overlay });
     expect(getHotkeyInfoButtonStyle(123)).toEqual({ zIndex: 123 });
     expect(Z_INDEX.overlay).toBeLessThan(Z_INDEX.modalOverlay);
+  });
+});
+
+describe('hotkey help tabs view model', () => {
+  it('puts Essentials first, then one tab per non-empty category in registry order', () => {
+    const tabs = getHotkeyHelpTabs();
+
+    expect(tabs[0].id).toBe(ESSENTIALS_TAB_ID);
+    expect(tabs[0].title).toBe(ESSENTIALS_TAB_TITLE);
+    expect(ESSENTIALS_TAB_ID).toBe('essentials');
+    expect(ESSENTIALS_TAB_TITLE).toBe('Essentials');
+    // Essentials, then the categories that actually have rows, in HOTKEY_CATEGORIES order.
+    expect(tabs.map((tab) => tab.id)).toEqual(['essentials', 'general', 'modal', 'camera']);
+    // navigation has no rows in the registry, so it is not surfaced as a tab.
+    expect(tabs.some((tab) => tab.id === 'navigation')).toBe(false);
+  });
+
+  it('fills the Essentials tab from ESSENTIAL_HOTKEY_IDS, in order', () => {
+    const essentials = getHotkeyHelpTabs().find((tab) => tab.id === ESSENTIALS_TAB_ID);
+
+    expect(essentials?.rows.map((row) => row.id)).toEqual([...ESSENTIAL_HOTKEY_IDS]);
+    expect(essentials?.rows).toContainEqual({
+      id: 'toggleUndistortion',
+      description: HOTKEYS.toggleUndistortion.description,
+      keyCombo: 'u',
+    });
+    // Modifier+scroll combos are formatted for display.
+    expect(essentials?.rows).toContainEqual({
+      id: 'adjustFrustumSize',
+      description: 'Adjust camera frustum size',
+      keyCombo: 'Alt + scroll',
+    });
+    expect(essentials?.rows).toContainEqual({
+      id: 'adjustPointSize',
+      description: 'Adjust point cloud size',
+      keyCombo: 'Ctrl + scroll',
+    });
+  });
+
+  it('keeps each category tab at its full row set (Essentials is a curated overlay, not a move)', () => {
+    const tabs = getHotkeyHelpTabs();
+    const cameraIds = tabs.find((tab) => tab.id === 'camera')?.rows.map((row) => row.id) ?? [];
+
+    // Essential camera rows still appear in the Camera tab (curated view may repeat rows).
+    expect(cameraIds).toContain('toggleUndistortion');
+    // Non-essential camera rows remain present too.
+    expect(cameraIds).toContain('moveForward');
+  });
+
+  it('reuses getHotkeyHelpSections rows for the category tabs', () => {
+    const tabs = getHotkeyHelpTabs();
+    const sections = getHotkeyHelpSections();
+    const generalTab = tabs.find((tab) => tab.id === 'general');
+    const generalSection = sections.find((section) => section.category === 'general');
+
+    expect(generalTab?.title).toBe(generalSection?.title);
+    expect(generalTab?.rows).toEqual(generalSection?.rows);
+  });
+
+  it('pins the tab bar/button class strings to real (non-Tailwind) utilities', () => {
+    expect(HOTKEY_HELP_TAB_LIST_CLASS).toBe('flex border-b border-ds mb-4 flex-shrink-0');
+    expect(HOTKEY_HELP_TAB_CLASS).toBe(
+      'px-3 py-1.5 text-sm font-medium transition-colors bg-transparent text-ds-secondary hover-ds-text-primary hover-ds-tertiary-50 cursor-pointer'
+    );
+    expect(HOTKEY_HELP_TAB_ACTIVE_CLASS).toBe(
+      'px-3 py-1.5 text-sm font-medium bg-ds-tertiary text-ds-accent border-b-2 border-ds-accent cursor-pointer'
+    );
+    expect(HOTKEY_HELP_TAB_PANEL_CLASS).toBe('flex-1 min-h-0 overflow-auto');
+    for (const cls of [
+      HOTKEY_HELP_TAB_LIST_CLASS,
+      HOTKEY_HELP_TAB_CLASS,
+      HOTKEY_HELP_TAB_ACTIVE_CLASS,
+      HOTKEY_HELP_TAB_PANEL_CLASS,
+    ]) {
+      expect(cls).not.toContain('[');
+      expect(cls).not.toContain('hover:');
+    }
   });
 });
