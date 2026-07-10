@@ -19,7 +19,6 @@ import {
   HOTKEY_INFO_BUTTON_TITLE,
   getHotkeyHelpOverlayStyle,
   getHotkeyHelpSections,
-  getHotkeyHelpToggleKeyLabel,
   getHotkeyHelpToggleKeyLabels,
   getHotkeyInfoButtonStyle,
   shouldShowHotkeyInfoButton,
@@ -112,11 +111,6 @@ describe('hotkey help view model', () => {
         ],
       },
     ]);
-  });
-
-  it('uses the literal help toggle label while formatting fallback keys', () => {
-    expect(getHotkeyHelpToggleKeyLabel()).toBe('?');
-    expect(getHotkeyHelpToggleKeyLabel('escape')).toBe('Esc');
   });
 
   it('defines stable render styles for the help panel', () => {

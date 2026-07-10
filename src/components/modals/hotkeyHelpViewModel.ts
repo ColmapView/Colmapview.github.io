@@ -78,10 +78,6 @@ export function getHotkeyHelpToggleKeyLabels(keys = HOTKEYS.showHelp.keys): stri
   });
 }
 
-export function getHotkeyHelpToggleKeyLabel(keys = HOTKEYS.showHelp.keys): string {
-  return getHotkeyHelpToggleKeyLabels(keys)[0];
-}
-
 export const HOTKEY_INFO_BUTTON_CLASS =
   'fixed top-4 left-4 w-8 h-8 rounded-full flex items-center justify-center bg-ds-tertiary/50 text-ds-muted hover-ds-hover cursor-pointer text-sm';
 export const HOTKEY_INFO_BUTTON_GLYPH = 'i';

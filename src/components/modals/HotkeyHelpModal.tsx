@@ -1,9 +1,10 @@
-import { useId, useRef, useState } from 'react';
+import { Fragment, useId, useRef, useState } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { HOTKEYS } from '../../config/hotkeys';
 import { tableStyles, modalStyles } from '../../theme';
 import { CloseIcon } from '../../icons';
 import { ModalDialogShell } from '../ui/ModalDialogShell';
+import { useHotkeyHelpStoreFacade } from './useHotkeyHelpStoreFacade';
 import {
   HOTKEY_HELP_DESCRIPTION_CELL_CLASS,
   HOTKEY_HELP_FOOTER_CLASS,
@@ -18,21 +19,29 @@ import {
   HOTKEY_HELP_SECTION_TITLE_CLASS,
   HOTKEY_HELP_TABLE_CLASS,
   HOTKEY_HELP_TITLE,
+  HOTKEY_INFO_BUTTON_ARIA_LABEL,
+  HOTKEY_INFO_BUTTON_CLASS,
+  HOTKEY_INFO_BUTTON_GLYPH,
+  HOTKEY_INFO_BUTTON_TITLE,
   getHotkeyHelpOverlayStyle,
   getHotkeyHelpSections,
-  getHotkeyHelpToggleKeyLabel,
+  getHotkeyHelpToggleKeyLabels,
+  getHotkeyInfoButtonStyle,
+  shouldShowHotkeyInfoButton,
 } from './hotkeyHelpViewModel';
 
 /**
  * Modal that displays all available keyboard shortcuts.
- * Toggle with Shift+? (question mark).
+ * Toggle with Shift+? (question mark) or I; also opened by the desktop
+ * top-left info button.
  */
 export function HotkeyHelpModal() {
   const titleId = useId();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const mode = useHotkeyHelpStoreFacade();
 
-  // Toggle help panel with ? key (global scope, always available)
+  // Toggle help panel with ? or I (global scope, always available)
   useHotkeys(
     HOTKEYS.showHelp.keys,
     () => setIsOpen((prev) => !prev),
@@ -46,7 +55,20 @@ export function HotkeyHelpModal() {
   const sections = getHotkeyHelpSections();
 
   return (
-    <ModalDialogShell
+    <>
+      {shouldShowHotkeyInfoButton(mode) && (
+        <button
+          onClick={() => setIsOpen((prev) => !prev)}
+          className={HOTKEY_INFO_BUTTON_CLASS}
+          style={getHotkeyInfoButtonStyle()}
+          title={HOTKEY_INFO_BUTTON_TITLE}
+          aria-label={HOTKEY_INFO_BUTTON_ARIA_LABEL}
+          data-testid="hotkey-info-button"
+        >
+          {HOTKEY_INFO_BUTTON_GLYPH}
+        </button>
+      )}
+      <ModalDialogShell
       isOpen={isOpen}
       onClose={() => setIsOpen(false)}
       ariaLabelledBy={titleId}
@@ -96,9 +118,15 @@ export function HotkeyHelpModal() {
         {/* Footer hint */}
         <div className={HOTKEY_HELP_FOOTER_CLASS}>
           {HOTKEY_HELP_FOOTER_PREFIX}{' '}
-          <kbd className={HOTKEY_HELP_FOOTER_KEY_CLASS}>{getHotkeyHelpToggleKeyLabel()}</kbd>{' '}
+          {getHotkeyHelpToggleKeyLabels().map((label, index) => (
+            <Fragment key={label}>
+              {index > 0 && <>{' '}or{' '}</>}
+              <kbd className={HOTKEY_HELP_FOOTER_KEY_CLASS}>{label}</kbd>
+            </Fragment>
+          ))}{' '}
           {HOTKEY_HELP_FOOTER_SUFFIX}
         </div>
-    </ModalDialogShell>
+      </ModalDialogShell>
+    </>
   );
 }
