@@ -42,16 +42,23 @@ export interface HotkeyHelpTab {
 }
 
 export const HOTKEY_HELP_TITLE = 'Keyboard Shortcuts';
-// Padding, width bound, and internal scroll for the help panel. Centering is
-// handled by the overlay's flexbox (see HotkeyHelpModal) and the viewport-height
-// cap is applied inline via getHotkeyHelpPanelStyle, so this class intentionally
+// Width bound and internal scroll for the help panel. Centering is handled by
+// the overlay's flexbox (see HotkeyHelpModal) and the viewport-height cap is
+// applied inline via getHotkeyHelpPanelStyle, so this class intentionally
 // carries no absolute-position or translate utilities.
 // The panel is a fixed-height flex column: the header, tab bar, and footer stay
 // put while the active tab's rows area (HOTKEY_HELP_TAB_PANEL_CLASS) owns the
 // scroll. overflow-hidden clips the shell at the inline 80vh cap so the rounded
-// corners are preserved and nothing overflows the viewport.
-export const HOTKEY_HELP_PANEL_LAYOUT_CLASS = 'p-6 max-w-lg w-full overflow-hidden';
-export const HOTKEY_HELP_HEADER_CLASS = 'flex items-center justify-between mb-4 flex-shrink-0';
+// corners are preserved and nothing overflows the viewport. No outer padding:
+// the header bar runs edge-to-edge (SplatPicker pattern) and each section
+// carries its own padding.
+export const HOTKEY_HELP_PANEL_LAYOUT_CLASS = 'max-w-lg w-full overflow-hidden';
+// The app's popup header idiom (user feedback 2026-07-10: the big floating
+// title read as inconsistent): the SplatPicker/modalStyles.toolHeader bar —
+// full-bleed px-4 py-2 rounded-t-lg bg-ds-secondary with a text-sm
+// font-medium title — minus cursor-move, since this dialog is not draggable.
+export const HOTKEY_HELP_HEADER_CLASS =
+  'flex items-center justify-between px-4 py-2 rounded-t-lg bg-ds-secondary select-none flex-shrink-0';
 export const HOTKEY_HELP_SECTION_CLASS = 'mb-4';
 export const HOTKEY_HELP_SECTION_TITLE_CLASS = 'text-ds-secondary text-sm font-medium mb-2';
 // Rows adopt the app's context-menu design language: a flat flex row (see
@@ -59,7 +66,9 @@ export const HOTKEY_HELP_SECTION_TITLE_CLASS = 'text-ds-secondary text-sm font-m
 // contextMenuStyles.button minus interactivity (no hover-ds-hover / cursor-pointer,
 // since rows are not clickable), the description grows (flex-1), and the key combo
 // is styled by HOTKEY_HELP_ROW_KEY_CLASS.
-export const HOTKEY_HELP_ROW_CLASS = 'flex items-center gap-2 px-3 py-1.5 text-sm text-ds-primary';
+// px-4 aligns row text with the header bar's inset; py-1 keeps the list dense
+// enough that Essentials fits without scrolling at common viewport heights.
+export const HOTKEY_HELP_ROW_CLASS = 'flex items-center gap-2 px-4 py-1 text-sm text-ds-primary';
 export const HOTKEY_HELP_ROW_DESCRIPTION_CLASS = 'flex-1 text-left';
 // Key-combo styling: the EXACT contextMenuStyles.hotkey token string
 // (src/theme/componentStyles.ts:544) so the combo reads identically to the context
@@ -74,7 +83,7 @@ export const HOTKEY_HELP_ROW_KEY_CLASS =
 // which painted a visible box around the footer (repo-wide utility footgun,
 // ledgered). The dedicated rule draws only the intended 1px top hairline.
 export const HOTKEY_HELP_FOOTER_CLASS =
-  'mt-4 pt-4 hotkey-help-divider-top text-ds-muted text-xs text-center flex-shrink-0';
+  'hotkey-help-divider-top px-4 py-2 text-ds-muted text-xs text-center flex-shrink-0';
 
 // Flat text tabs in the context-menu idiom. Pinned as literal strings here so the
 // class-string unit test guards that every utility exists in index.css (no Tailwind
@@ -88,14 +97,16 @@ export const HOTKEY_HELP_FOOTER_CLASS =
 // border-b-2 utilities: same all-sides `border-style: solid` footgun as the
 // footer note above (buttons are hit too — `button { border: none }` leaves
 // widths at `medium`). The dedicated rules paint only the bottom edge.
-export const HOTKEY_HELP_TAB_LIST_CLASS = 'flex hotkey-help-divider-bottom mb-4 flex-shrink-0';
+// px-1 indents the px-3 tab buttons to the header bar's px-4 text inset; no
+// mb — the rows area carries its own vertical padding.
+export const HOTKEY_HELP_TAB_LIST_CLASS = 'flex hotkey-help-divider-bottom flex-shrink-0 px-1';
 export const HOTKEY_HELP_TAB_CLASS =
   'px-3 py-1.5 text-sm font-medium transition-colors bg-transparent text-ds-secondary hover-ds-text-primary cursor-pointer hotkey-help-tab';
 export const HOTKEY_HELP_TAB_ACTIVE_CLASS =
   'px-3 py-1.5 text-sm font-medium transition-colors bg-transparent text-ds-primary hotkey-help-tab-active cursor-pointer hotkey-help-tab';
 // Scrollable rows area for the active tab (flex child; min-h-0 lets it shrink
 // below content height so overflow-auto actually scrolls inside the flex column).
-export const HOTKEY_HELP_TAB_PANEL_CLASS = 'flex-1 min-h-0 overflow-auto';
+export const HOTKEY_HELP_TAB_PANEL_CLASS = 'flex-1 min-h-0 overflow-auto py-2';
 // Footer key chips: same mono/uppercase idiom as the row combos (no boxed chip).
 export const HOTKEY_HELP_FOOTER_KEY_CLASS = 'font-mono uppercase tracking-wide text-gray-500';
 export const HOTKEY_HELP_FOOTER_PREFIX = 'Press';

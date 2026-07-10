@@ -95,16 +95,16 @@ export function HotkeyHelpModal() {
         // modalStyles.panel's `absolute`, which would defeat flex centering.
         overlayClassName="fixed inset-0 flex items-center justify-center bg-ds-void/50"
         overlayStyle={getHotkeyHelpOverlayStyle()}
-        // Context-menu surface: bg-ds-tertiary rounded-lg shadow-ds-lg + border
-        // border-ds (mirrors contextMenuStyles.container), kept as a flex column so
-        // the header/tabs/footer stay put while the active tab's rows scroll.
-        panelClassName={`bg-ds-tertiary rounded-lg shadow-ds-lg border border-ds flex flex-col ${HOTKEY_HELP_PANEL_LAYOUT_CLASS}`}
+        // Popup surface mirroring SplatPickerModal exactly (bg-ds-tertiary
+        // rounded-lg shadow-ds-lg, no border), kept as a flex column so the
+        // header/tabs/footer stay put while the active tab's rows scroll.
+        panelClassName={`bg-ds-tertiary rounded-lg shadow-ds-lg flex flex-col ${HOTKEY_HELP_PANEL_LAYOUT_CLASS}`}
         panelStyle={getHotkeyHelpPanelStyle()}
         initialFocusRef={closeButtonRef}
       >
-        {/* Header */}
+        {/* Header: the app's tool-header bar with its standard title token. */}
         <div className={HOTKEY_HELP_HEADER_CLASS}>
-          <h2 id={titleId} className="text-ds-primary text-lg font-semibold">{HOTKEY_HELP_TITLE}</h2>
+          <h2 id={titleId} className={modalStyles.toolHeaderTitle}>{HOTKEY_HELP_TITLE}</h2>
           <button
             ref={closeButtonRef}
             onClick={() => setIsOpen(false)}

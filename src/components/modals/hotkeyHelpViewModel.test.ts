@@ -136,19 +136,27 @@ describe('hotkey help view model', () => {
     // arbitrary-bracket utilities that would defeat flex centering / go silently
     // dead.
     // The panel no longer scrolls as one block: it caps at 80vh and clips
-    // (overflow-hidden) while the active tab's rows area owns the scroll.
-    expect(HOTKEY_HELP_PANEL_LAYOUT_CLASS).toBe('p-6 max-w-lg w-full overflow-hidden');
+    // (overflow-hidden) while the active tab's rows area owns the scroll. No
+    // outer p-6: the header is a full-bleed tool-header bar (SplatPicker
+    // pattern) and each section carries its own padding.
+    expect(HOTKEY_HELP_PANEL_LAYOUT_CLASS).toBe('max-w-lg w-full overflow-hidden');
     expect(HOTKEY_HELP_PANEL_LAYOUT_CLASS).not.toMatch(/\/2/);
     expect(HOTKEY_HELP_PANEL_LAYOUT_CLASS).not.toContain('[');
     expect(HOTKEY_HELP_PANEL_LAYOUT_CLASS).not.toContain('translate');
     expect(getHotkeyHelpPanelStyle()).toEqual({ maxHeight: '80vh' });
-    // Header, tab bar, and footer stay put (flex-shrink-0) so only the rows scroll.
-    expect(HOTKEY_HELP_HEADER_CLASS).toBe('flex items-center justify-between mb-4 flex-shrink-0');
+    // Header matches the app's popup idiom (user feedback 2026-07-10: the big
+    // floating title was inconsistent): the SplatPicker/toolHeader bar —
+    // px-4 py-2 rounded-t-lg bg-ds-secondary — minus cursor-move (not draggable).
+    expect(HOTKEY_HELP_HEADER_CLASS).toBe(
+      'flex items-center justify-between px-4 py-2 rounded-t-lg bg-ds-secondary select-none flex-shrink-0'
+    );
     expect(HOTKEY_HELP_SECTION_CLASS).toBe('mb-4');
     expect(HOTKEY_HELP_SECTION_TITLE_CLASS).toBe('text-ds-secondary text-sm font-medium mb-2');
     // Rows adopt the context-menu design language: a flat flex row (NOT a table
     // cell / boxed <kbd>) whose key combo mirrors contextMenuStyles.hotkey.
-    expect(HOTKEY_HELP_ROW_CLASS).toBe('flex items-center gap-2 px-3 py-1.5 text-sm text-ds-primary');
+    // px-4 aligns with the header bar; py-1 keeps the list dense enough that
+    // Essentials fits without scrolling at common viewport heights.
+    expect(HOTKEY_HELP_ROW_CLASS).toBe('flex items-center gap-2 px-4 py-1 text-sm text-ds-primary');
     expect(HOTKEY_HELP_ROW_DESCRIPTION_CLASS).toBe('flex-1 text-left');
     expect(HOTKEY_HELP_ROW_KEY_CLASS).toBe(
       'text-xs font-mono text-gray-500 ml-auto uppercase tracking-wide'
@@ -165,7 +173,7 @@ describe('hotkey help view model', () => {
     // border-style across all sides while unset sides keep the 3px `medium`
     // width, which painted a box around the footer.
     expect(HOTKEY_HELP_FOOTER_CLASS).toBe(
-      'mt-4 pt-4 hotkey-help-divider-top text-ds-muted text-xs text-center flex-shrink-0'
+      'hotkey-help-divider-top px-4 py-2 text-ds-muted text-xs text-center flex-shrink-0'
     );
     // Footer key chips restyle to the same mono/uppercase hotkey idiom (no boxed chip).
     expect(HOTKEY_HELP_FOOTER_KEY_CLASS).toBe('font-mono uppercase tracking-wide text-gray-500');
@@ -347,7 +355,9 @@ describe('hotkey help tabs view model', () => {
     // instead of border-b/border-b-2 utilities: those blanket border-style across all
     // sides while unset sides keep the 3px `medium` width — on the tab button and the
     // tablist that painted the boxes the user flagged.
-    expect(HOTKEY_HELP_TAB_LIST_CLASS).toBe('flex hotkey-help-divider-bottom mb-4 flex-shrink-0');
+    // px-1 indents the px-3 tab buttons to the header bar's px-4 text inset;
+    // no mb — the rows area carries its own vertical padding.
+    expect(HOTKEY_HELP_TAB_LIST_CLASS).toBe('flex hotkey-help-divider-bottom flex-shrink-0 px-1');
     // Flat text tabs (context-menu idiom): inactive is dimmed text that brightens
     // on hover — no background box.
     expect(HOTKEY_HELP_TAB_CLASS).toBe(
@@ -362,7 +372,7 @@ describe('hotkey help tabs view model', () => {
     // Both tab classes carry the marker class the focus-suppression rule targets.
     expect(HOTKEY_HELP_TAB_CLASS).toContain('hotkey-help-tab');
     expect(HOTKEY_HELP_TAB_ACTIVE_CLASS).toContain('hotkey-help-tab');
-    expect(HOTKEY_HELP_TAB_PANEL_CLASS).toBe('flex-1 min-h-0 overflow-auto');
+    expect(HOTKEY_HELP_TAB_PANEL_CLASS).toBe('flex-1 min-h-0 overflow-auto py-2');
     for (const cls of [
       HOTKEY_HELP_TAB_LIST_CLASS,
       HOTKEY_HELP_TAB_CLASS,
