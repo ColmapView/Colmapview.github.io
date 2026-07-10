@@ -97,23 +97,31 @@ describe('HotkeyHelpModal', () => {
     );
     // The curated u binding is up front...
     expect(screen.getByText(/Toggle undistorted view/)).toBeInTheDocument();
-    // ...while a general-only shortcut is not shown on the Essentials tab.
+    // ...and the mouse rows the user asked for sit alongside the key shortcuts.
+    expect(screen.getByText('Select camera')).toBeInTheDocument();
+    expect(screen.getByText('Go to camera view')).toBeInTheDocument();
+    // General-category shortcuts have no tab anymore (user removed it), so a
+    // general-only row never renders anywhere in the panel.
     expect(screen.queryByText('Reset guide tips')).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'General' })).not.toBeInTheDocument();
   });
 
-  it('switches tabs: clicking General shows general rows and hides essentials rows', () => {
+  it('switches tabs: clicking Image Modal shows modal rows and hides essentials rows', () => {
     useUIStore.setState({ touchMode: false, embedMode: false });
     renderModal();
 
     fireEvent.click(screen.getByTestId('hotkey-info-button'));
     expect(screen.getByText(/Toggle undistorted view/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'General' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Image Modal' }));
 
-    expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true');
-    // General rows are now visible...
-    expect(screen.getByText('Reset guide tips')).toBeInTheDocument();
-    // ...and the essentials u-row (a Camera shortcut) is hidden on the General tab.
+    expect(screen.getByRole('tab', { name: 'Image Modal' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    // Image Modal rows are now visible...
+    expect(screen.getByText('Previous image')).toBeInTheDocument();
+    // ...and the essentials u-row (a Camera shortcut) is hidden on this tab.
     expect(screen.queryByText(/Toggle undistorted view/)).not.toBeInTheDocument();
   });
 
@@ -123,8 +131,11 @@ describe('HotkeyHelpModal', () => {
 
     const button = screen.getByTestId('hotkey-info-button');
     fireEvent.click(button); // open
-    fireEvent.click(screen.getByRole('tab', { name: 'General' }));
-    expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('tab', { name: 'Image Modal' }));
+    expect(screen.getByRole('tab', { name: 'Image Modal' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
 
     fireEvent.click(button); // close
     expect(screen.queryByText('Keyboard Shortcuts')).not.toBeInTheDocument();

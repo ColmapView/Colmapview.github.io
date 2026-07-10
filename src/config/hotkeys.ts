@@ -278,15 +278,35 @@ export const ESSENTIAL_WASD_IDS = [
 export const ESSENTIAL_WASD_ROW_ID = 'navigateWasd';
 export const ESSENTIAL_WASD_DESCRIPTION = 'Navigate';
 
+/**
+ * Mouse interactions surfaced in the Essentials tab (user request: click
+ * semantics belong beside the key shortcuts). Display-only rows — the actual
+ * pointer bindings live in the viewer's event handlers
+ * (useCameraFrustumNavigationHandlers: click selects a frustum, right click
+ * flies into that camera's view), not in this registry.
+ */
+export const ESSENTIAL_MOUSE_ROWS = [
+  { id: 'mouseSelectCamera', description: 'Select camera', keyCombo: 'click' },
+  { id: 'mouseGoToCamera', description: 'Go to camera view', keyCombo: 'right click' },
+] as const;
+
+type EssentialMouseRowId = (typeof ESSENTIAL_MOUSE_ROWS)[number]['id'];
+
 export const ESSENTIAL_HOTKEY_IDS = [
   'toggleUndistortion', //    u  - Toggle undistorted view
   'toggleBackground', //      b  - Toggle background
   ESSENTIAL_WASD_ROW_ID, //   w a s d - Navigate (composite of ESSENTIAL_WASD_IDS)
   'cycleAutoRotate', //       o  - Cycle auto orbit
   'cyclePointSize', //        p  - Cycle point cloud color mode
+  'mouseSelectCamera', //     click - Select camera
+  'mouseGoToCamera', //       right click - Go to camera view
   'adjustFrustumSize', //     alt+scroll  - Adjust camera frustum size
   'adjustPointSize', //       ctrl+scroll - Adjust point cloud size
-] as const satisfies readonly (keyof typeof HOTKEYS | typeof ESSENTIAL_WASD_ROW_ID)[];
+] as const satisfies readonly (
+  | keyof typeof HOTKEYS
+  | typeof ESSENTIAL_WASD_ROW_ID
+  | EssentialMouseRowId
+)[];
 
 /**
  * Category labels for display in help panel.

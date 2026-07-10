@@ -227,7 +227,10 @@ describe('hotkey help tabs view model', () => {
     expect(ESSENTIALS_TAB_ID).toBe('essentials');
     expect(ESSENTIALS_TAB_TITLE).toBe('Essentials');
     // Essentials, then the categories that actually have rows, in HOTKEY_CATEGORIES order.
-    expect(tabs.map((tab) => tab.id)).toEqual(['essentials', 'general', 'modal', 'camera']);
+    // General is deliberately absent (user feedback 2026-07-10): it held easter
+    // eggs and the help toggle, which the footer already documents.
+    expect(tabs.map((tab) => tab.id)).toEqual(['essentials', 'modal', 'camera']);
+    expect(tabs.some((tab) => tab.id === 'general')).toBe(false);
     // navigation has no rows in the registry, so it is not surfaced as a tab.
     expect(tabs.some((tab) => tab.id === 'navigation')).toBe(false);
   });
@@ -251,6 +254,18 @@ describe('hotkey help tabs view model', () => {
       keyCombo: 'w a s d',
     });
     expect(essentials?.rows.map((row) => row.description)).not.toContain('Strafe left');
+    // Mouse interactions sit with the other pointer rows (user request): left
+    // click selects a camera frustum, right click flies into its view.
+    expect(essentials?.rows).toContainEqual({
+      id: 'mouseSelectCamera',
+      description: 'Select camera',
+      keyCombo: 'click',
+    });
+    expect(essentials?.rows).toContainEqual({
+      id: 'mouseGoToCamera',
+      description: 'Go to camera view',
+      keyCombo: 'right click',
+    });
     // Modifier+scroll combos are formatted for display.
     expect(essentials?.rows).toContainEqual({
       id: 'adjustFrustumSize',
@@ -277,11 +292,11 @@ describe('hotkey help tabs view model', () => {
   it('reuses getHotkeyHelpSections rows for the category tabs', () => {
     const tabs = getHotkeyHelpTabs();
     const sections = getHotkeyHelpSections();
-    const generalTab = tabs.find((tab) => tab.id === 'general');
-    const generalSection = sections.find((section) => section.category === 'general');
+    const modalTab = tabs.find((tab) => tab.id === 'modal');
+    const modalSection = sections.find((section) => section.category === 'modal');
 
-    expect(generalTab?.title).toBe(generalSection?.title);
-    expect(generalTab?.rows).toEqual(generalSection?.rows);
+    expect(modalTab?.title).toBe(modalSection?.title);
+    expect(modalTab?.rows).toEqual(modalSection?.rows);
   });
 
   it('pins the tab bar/button class strings to real (non-Tailwind) utilities', () => {

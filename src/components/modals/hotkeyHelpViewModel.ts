@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import {
   ESSENTIAL_HOTKEY_IDS,
+  ESSENTIAL_MOUSE_ROWS,
   ESSENTIAL_WASD_DESCRIPTION,
   ESSENTIAL_WASD_IDS,
   ESSENTIAL_WASD_ROW_ID,
@@ -165,6 +166,12 @@ export function getHotkeyHelpEssentialRows(
           ? { id, description: ESSENTIAL_WASD_DESCRIPTION, keyCombo: combo }
           : null;
       }
+      const mouseRow = ESSENTIAL_MOUSE_ROWS.find((row) => row.id === id);
+      if (mouseRow) {
+        // Display-only pointer rows (user request); combos like 'right click'
+        // are already display strings, so no formatKeyCombo pass.
+        return { id, description: mouseRow.description, keyCombo: mouseRow.keyCombo };
+      }
       const hotkey = hotkeys[id];
       if (!hotkey) {
         return null;
@@ -196,13 +203,16 @@ export function getHotkeyHelpTabs(
     rows: getHotkeyHelpEssentialRows(hotkeys, essentialIds),
   };
 
-  const categoryTabs: HotkeyHelpTab[] = getHotkeyHelpSections(hotkeys, categoryLabels).map(
-    (section) => ({
+  const categoryTabs: HotkeyHelpTab[] = getHotkeyHelpSections(hotkeys, categoryLabels)
+    // General is not worth a tab (user feedback 2026-07-10): it held the joke
+    // easter eggs, the guide reset, and the help toggle — and the footer
+    // already documents the toggle. The bindings themselves stay active.
+    .filter((section) => section.category !== 'general')
+    .map((section) => ({
       id: section.category,
       title: section.title,
       rows: section.rows,
-    })
-  );
+    }));
 
   return [essentialsTab, ...categoryTabs];
 }
