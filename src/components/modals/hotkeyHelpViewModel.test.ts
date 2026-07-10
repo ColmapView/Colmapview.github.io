@@ -155,8 +155,11 @@ describe('hotkey help view model', () => {
       expect(cls).not.toContain('hover:');
       expect(cls).not.toContain('bg-ds-secondary');
     }
+    // hotkey-help-divider-top, not border-t/border-ds: those utilities blanket
+    // border-style across all sides while unset sides keep the 3px `medium`
+    // width, which painted a box around the footer.
     expect(HOTKEY_HELP_FOOTER_CLASS).toBe(
-      'mt-4 pt-4 border-t border-ds text-ds-muted text-xs text-center flex-shrink-0'
+      'mt-4 pt-4 hotkey-help-divider-top text-ds-muted text-xs text-center flex-shrink-0'
     );
     // Footer key chips restyle to the same mono/uppercase hotkey idiom (no boxed chip).
     expect(HOTKEY_HELP_FOOTER_KEY_CLASS).toBe('font-mono uppercase tracking-wide text-gray-500');
@@ -272,7 +275,11 @@ describe('hotkey help tabs view model', () => {
   });
 
   it('pins the tab bar/button class strings to real (non-Tailwind) utilities', () => {
-    expect(HOTKEY_HELP_TAB_LIST_CLASS).toBe('flex border-b border-ds mb-4 flex-shrink-0');
+    // Single-side hairline rules (hotkey-help-divider-bottom / hotkey-help-tab-active)
+    // instead of border-b/border-b-2 utilities: those blanket border-style across all
+    // sides while unset sides keep the 3px `medium` width — on the tab button and the
+    // tablist that painted the boxes the user flagged.
+    expect(HOTKEY_HELP_TAB_LIST_CLASS).toBe('flex hotkey-help-divider-bottom mb-4 flex-shrink-0');
     // Flat text tabs (context-menu idiom): inactive is dimmed text that brightens
     // on hover — no background box.
     expect(HOTKEY_HELP_TAB_CLASS).toBe(
@@ -280,10 +287,10 @@ describe('hotkey help tabs view model', () => {
     );
     // Active tab: brighter text + a 2px accent underline, NO bg-ds-tertiary box.
     expect(HOTKEY_HELP_TAB_ACTIVE_CLASS).toBe(
-      'px-3 py-1.5 text-sm font-medium transition-colors bg-transparent text-ds-primary border-b-2 border-ds-accent cursor-pointer hotkey-help-tab'
+      'px-3 py-1.5 text-sm font-medium transition-colors bg-transparent text-ds-primary hotkey-help-tab-active cursor-pointer hotkey-help-tab'
     );
     expect(HOTKEY_HELP_TAB_ACTIVE_CLASS).not.toContain('bg-ds-tertiary');
-    expect(HOTKEY_HELP_TAB_ACTIVE_CLASS).toContain('border-b-2 border-ds-accent');
+    expect(HOTKEY_HELP_TAB_ACTIVE_CLASS).not.toContain('border-b-2');
     // Both tab classes carry the marker class the focus-suppression rule targets.
     expect(HOTKEY_HELP_TAB_CLASS).toContain('hotkey-help-tab');
     expect(HOTKEY_HELP_TAB_ACTIVE_CLASS).toContain('hotkey-help-tab');

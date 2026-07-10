@@ -1310,6 +1310,15 @@ legend {
    keeps the accent ring. Scoped to the tab marker class so app-wide focus is untouched. */
 .hotkey-help-tab:focus:not(:focus-visible) { outline: none; }
 
+/* Single-side hairlines for the hotkey help panel. The border-t/border-b/border-b-2
+   utilities set border-style on all four sides while the unset sides keep the
+   CSS-initial `medium` (3px) width, painting an unintended box (buttons too:
+   `button { border: none }` resets widths to medium). These rules draw only the
+   intended edge. */
+.hotkey-help-divider-top { border-top: 1px solid var(--border-color); }
+.hotkey-help-divider-bottom { border-bottom: 1px solid var(--border-color); }
+.hotkey-help-tab-active { border-bottom: 2px solid var(--accent); }
+
 /* ============================================
    GROUP HOVER UTILITIES
    ============================================ */
