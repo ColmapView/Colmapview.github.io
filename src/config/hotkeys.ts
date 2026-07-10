@@ -253,6 +253,26 @@ export const HOTKEYS: HotkeyRegistry = {
 } as const;
 
 /**
+ * Curated "Essentials" shortcuts surfaced first in the help panel.
+ *
+ * User feedback (2026-07-10): the flat shortcut list "spams the page"; keep the
+ * important shortcuts up front. Order matches the user's request — u, b, a, o, p
+ * followed by the modifier+scroll combos. These ids are the single source of
+ * truth for the Essentials tab; a registry test pins that every id exists and
+ * resolves to the expected key combo, so a rename/removal here fails at test
+ * time instead of silently dropping a row.
+ */
+export const ESSENTIAL_HOTKEY_IDS = [
+  'toggleUndistortion', // u  - Toggle undistorted view
+  'toggleBackground', //   b  - Toggle background
+  'moveLeft', //           a  - Strafe left
+  'cycleAutoRotate', //    o  - Cycle auto orbit
+  'cyclePointSize', //     p  - Cycle point cloud color mode
+  'adjustFrustumSize', //  alt+scroll  - Adjust camera frustum size
+  'adjustPointSize', //    ctrl+scroll - Adjust point cloud size
+] as const satisfies readonly (keyof typeof HOTKEYS)[];
+
+/**
  * Category labels for display in help panel.
  * Order determines display order.
  */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HOTKEYS } from './hotkeys';
+import { ESSENTIAL_HOTKEY_IDS, HOTKEYS } from './hotkeys';
 
 function comboScopePairs() {
   return Object.entries(HOTKEYS).flatMap(([id, def]) =>
@@ -26,5 +26,26 @@ describe('HOTKEYS registry', () => {
       }
     }
     expect(collisions).toEqual([]);
+  });
+});
+
+describe('ESSENTIAL_HOTKEY_IDS', () => {
+  it('references only ids that exist in the registry', () => {
+    const missing = ESSENTIAL_HOTKEY_IDS.filter((id) => !(id in HOTKEYS));
+    expect(missing).toEqual([]);
+  });
+
+  it('maps, in order, to the seven curated key combos (u, b, a, o, p, alt+scroll, ctrl+scroll)', () => {
+    // Recomputed from the registry rather than trusting any external claim:
+    // the user asked for u, b, a, o, p up front plus the alt/ctrl scroll combos.
+    expect(ESSENTIAL_HOTKEY_IDS.map((id) => HOTKEYS[id].keys)).toEqual([
+      'u',
+      'b',
+      'a',
+      'o',
+      'p',
+      'alt+scroll',
+      'ctrl+scroll',
+    ]);
   });
 });
