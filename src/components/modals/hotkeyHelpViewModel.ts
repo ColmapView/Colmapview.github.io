@@ -21,8 +21,11 @@ export interface HotkeyHelpSection {
 }
 
 export const HOTKEY_HELP_TITLE = 'Keyboard Shortcuts';
-export const HOTKEY_HELP_PANEL_LAYOUT_CLASS =
-  'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 p-6 max-w-lg w-full max-h-[80vh] overflow-auto';
+// Padding, width bound, and internal scroll for the help panel. Centering is
+// handled by the overlay's flexbox (see HotkeyHelpModal) and the viewport-height
+// cap is applied inline via getHotkeyHelpPanelStyle, so this class intentionally
+// carries no absolute-position or translate utilities.
+export const HOTKEY_HELP_PANEL_LAYOUT_CLASS = 'p-6 max-w-lg w-full overflow-auto';
 export const HOTKEY_HELP_HEADER_CLASS = 'flex items-center justify-between mb-4';
 export const HOTKEY_HELP_SECTION_CLASS = 'mb-4';
 export const HOTKEY_HELP_SECTION_TITLE_CLASS = 'text-ds-secondary text-sm font-medium mb-2';
@@ -39,6 +42,18 @@ export const HOTKEY_HELP_FOOTER_SUFFIX = 'to toggle this panel';
 
 export function getHotkeyHelpOverlayStyle(zIndex = Z_INDEX.modalOverlay): CSSProperties {
   return { zIndex };
+}
+
+/**
+ * Panel sizing for the help modal. maxHeight caps the panel so it scrolls
+ * internally (overflow-auto) instead of overflowing the top and bottom of the
+ * viewport; horizontal/vertical centering and the width bound come from the
+ * overlay's flexbox and the max-w-lg/w-full layout class. Applied inline because
+ * this project has no Tailwind, so arbitrary viewport-unit utilities (e.g.
+ * max-h-[80vh]) are not generated in src/index.css.
+ */
+export function getHotkeyHelpPanelStyle(): CSSProperties {
+  return { maxHeight: '80vh' };
 }
 
 export function getHotkeyHelpSections(

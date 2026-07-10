@@ -18,6 +18,7 @@ import {
   HOTKEY_INFO_BUTTON_GLYPH,
   HOTKEY_INFO_BUTTON_TITLE,
   getHotkeyHelpOverlayStyle,
+  getHotkeyHelpPanelStyle,
   getHotkeyHelpSections,
   getHotkeyHelpToggleKeyLabels,
   getHotkeyInfoButtonStyle,
@@ -116,9 +117,17 @@ describe('hotkey help view model', () => {
   it('defines stable render styles for the help panel', () => {
     expect(getHotkeyHelpOverlayStyle()).toEqual({ zIndex: Z_INDEX.modalOverlay });
     expect(getHotkeyHelpOverlayStyle(91)).toEqual({ zIndex: 91 });
-    expect(HOTKEY_HELP_PANEL_LAYOUT_CLASS).toBe(
-      'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 p-6 max-w-lg w-full max-h-[80vh] overflow-auto'
-    );
+    // Centering is done by the overlay's flexbox and the viewport-height cap is
+    // applied inline via getHotkeyHelpPanelStyle (arbitrary viewport-unit
+    // utilities like max-h-[80vh] are not generated here). The layout class must
+    // therefore carry no absolute-position, translate, fraction, or
+    // arbitrary-bracket utilities that would defeat flex centering / go silently
+    // dead.
+    expect(HOTKEY_HELP_PANEL_LAYOUT_CLASS).toBe('p-6 max-w-lg w-full overflow-auto');
+    expect(HOTKEY_HELP_PANEL_LAYOUT_CLASS).not.toMatch(/\/2/);
+    expect(HOTKEY_HELP_PANEL_LAYOUT_CLASS).not.toContain('[');
+    expect(HOTKEY_HELP_PANEL_LAYOUT_CLASS).not.toContain('translate');
+    expect(getHotkeyHelpPanelStyle()).toEqual({ maxHeight: '80vh' });
     expect(HOTKEY_HELP_HEADER_CLASS).toBe('flex items-center justify-between mb-4');
     expect(HOTKEY_HELP_SECTION_CLASS).toBe('mb-4');
     expect(HOTKEY_HELP_SECTION_TITLE_CLASS).toBe('text-ds-secondary text-sm font-medium mb-2');

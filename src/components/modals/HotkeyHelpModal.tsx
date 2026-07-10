@@ -24,6 +24,7 @@ import {
   HOTKEY_INFO_BUTTON_GLYPH,
   HOTKEY_INFO_BUTTON_TITLE,
   getHotkeyHelpOverlayStyle,
+  getHotkeyHelpPanelStyle,
   getHotkeyHelpSections,
   getHotkeyHelpToggleKeyLabels,
   getHotkeyInfoButtonStyle,
@@ -72,11 +73,14 @@ export function HotkeyHelpModal() {
       isOpen={isOpen}
       onClose={() => setIsOpen(false)}
       ariaLabelledBy={titleId}
-      overlayClassName="fixed inset-0 pointer-events-none"
+      // Flex-center the panel and bake the tint into the overlay (mirrors
+      // SplatPickerModal). The overlay captures pointer events, so clicking
+      // outside the panel closes it; the panel class deliberately omits
+      // modalStyles.panel's `absolute`, which would defeat flex centering.
+      overlayClassName="fixed inset-0 flex items-center justify-center bg-ds-void/50"
       overlayStyle={getHotkeyHelpOverlayStyle()}
-      panelClassName={`${modalStyles.panel} ${HOTKEY_HELP_PANEL_LAYOUT_CLASS}`}
-      renderBackdrop
-      backdropClassName={modalStyles.backdrop}
+      panelClassName={`bg-ds-tertiary rounded-lg shadow-ds-lg flex flex-col ${HOTKEY_HELP_PANEL_LAYOUT_CLASS}`}
+      panelStyle={getHotkeyHelpPanelStyle()}
       initialFocusRef={closeButtonRef}
     >
         {/* Header */}
