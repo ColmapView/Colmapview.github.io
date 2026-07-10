@@ -13,9 +13,16 @@ import {
   HOTKEY_HELP_SECTION_TITLE_CLASS,
   HOTKEY_HELP_TABLE_CLASS,
   HOTKEY_HELP_TITLE,
+  HOTKEY_INFO_BUTTON_ARIA_LABEL,
+  HOTKEY_INFO_BUTTON_CLASS,
+  HOTKEY_INFO_BUTTON_GLYPH,
+  HOTKEY_INFO_BUTTON_TITLE,
   getHotkeyHelpOverlayStyle,
   getHotkeyHelpSections,
   getHotkeyHelpToggleKeyLabel,
+  getHotkeyHelpToggleKeyLabels,
+  getHotkeyInfoButtonStyle,
+  shouldShowHotkeyInfoButton,
 } from './hotkeyHelpViewModel';
 import type { HotkeyRegistry } from '../../config/hotkeys';
 import { Z_INDEX } from '../../theme';
@@ -133,5 +140,49 @@ describe('hotkey help view model', () => {
     expect(HOTKEY_HELP_FOOTER_KEY_CLASS).toBe('px-1.5 py-0.5 bg-ds-secondary rounded');
     expect(HOTKEY_HELP_FOOTER_PREFIX).toBe('Press');
     expect(HOTKEY_HELP_FOOTER_SUFFIX).toBe('to toggle this panel');
+  });
+});
+
+describe('hotkey info button view model', () => {
+  it('lists both toggle labels for the multi-key help binding', () => {
+    expect(getHotkeyHelpToggleKeyLabels()).toEqual(['?', 'I']);
+    expect(getHotkeyHelpToggleKeyLabels('shift+/, i')).toEqual(['?', 'I']);
+  });
+
+  it('uppercases single-letter labels but keeps the literal help toggle and word keys', () => {
+    expect(getHotkeyHelpToggleKeyLabels('shift+/')).toEqual(['?']);
+    expect(getHotkeyHelpToggleKeyLabels('escape')).toEqual(['Esc']);
+    expect(getHotkeyHelpToggleKeyLabels('i')).toEqual(['I']);
+  });
+
+  it('shows the info button only on non-touch, non-embed (desktop) views', () => {
+    expect(shouldShowHotkeyInfoButton({ touchMode: false, embedMode: false })).toBe(true);
+    expect(shouldShowHotkeyInfoButton({ touchMode: true, embedMode: false })).toBe(false);
+    expect(shouldShowHotkeyInfoButton({ touchMode: false, embedMode: true })).toBe(false);
+    expect(shouldShowHotkeyInfoButton({ touchMode: true, embedMode: true })).toBe(false);
+  });
+
+  it('pins the info button class string to real (non-Tailwind) utilities', () => {
+    expect(HOTKEY_INFO_BUTTON_CLASS).toBe(
+      'fixed top-4 left-4 w-8 h-8 rounded-full flex items-center justify-center bg-ds-tertiary/50 text-ds-muted hover-ds-hover cursor-pointer text-sm'
+    );
+    expect(HOTKEY_INFO_BUTTON_CLASS).toContain('rounded-full');
+    expect(HOTKEY_INFO_BUTTON_CLASS).toContain('bg-ds-tertiary/50');
+    expect(HOTKEY_INFO_BUTTON_CLASS).toContain('top-4 left-4');
+    // No Tailwind-only escapes: JIT hover variants or arbitrary bracket utilities.
+    expect(HOTKEY_INFO_BUTTON_CLASS).not.toContain('hover:');
+    expect(HOTKEY_INFO_BUTTON_CLASS).not.toContain('[');
+  });
+
+  it('exposes stable glyph, title, and aria labels', () => {
+    expect(HOTKEY_INFO_BUTTON_GLYPH).toBe('i');
+    expect(HOTKEY_INFO_BUTTON_TITLE).toBe('Keyboard shortcuts (I)');
+    expect(HOTKEY_INFO_BUTTON_ARIA_LABEL).toBe('Show keyboard shortcuts');
+  });
+
+  it('sits above the canvas but below modal overlays via the overlay z-index', () => {
+    expect(getHotkeyInfoButtonStyle()).toEqual({ zIndex: Z_INDEX.overlay });
+    expect(getHotkeyInfoButtonStyle(123)).toEqual({ zIndex: 123 });
+    expect(Z_INDEX.overlay).toBeLessThan(Z_INDEX.modalOverlay);
   });
 });

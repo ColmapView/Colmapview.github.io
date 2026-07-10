@@ -31,7 +31,7 @@ export interface HotkeyRegistry {
 export const HOTKEYS: HotkeyRegistry = {
   // === GENERAL ===
   showHelp: {
-    keys: 'shift+/',
+    keys: 'shift+/, i',
     description: 'Show keyboard shortcuts',
     category: 'general',
     scopes: ['global'],
@@ -155,7 +155,7 @@ export const HOTKEYS: HotkeyRegistry = {
     scopes: ['viewer'],
   },
   cycleImageLoad: {
-    keys: 'i',
+    keys: 'l',
     description: 'Cycle image load mode',
     category: 'camera',
     scopes: ['viewer'],

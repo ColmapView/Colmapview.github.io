@@ -62,10 +62,42 @@ export function getHotkeyHelpSections(
     .filter((section) => section.rows.length > 0);
 }
 
-export function getHotkeyHelpToggleKeyLabel(keys = HOTKEYS.showHelp.keys): string {
-  if (keys === 'shift+/') {
-    return '?';
-  }
+/**
+ * Labels for every combo that toggles the help panel (comma-separated in the
+ * registry, e.g. 'shift+/, i'). '?' is shown for the shift+/ combo; single
+ * letters are uppercased ('i' -> 'I') so the footer hint reads cleanly.
+ */
+export function getHotkeyHelpToggleKeyLabels(keys = HOTKEYS.showHelp.keys): string[] {
+  return keys.split(',').map((rawCombo) => {
+    const combo = rawCombo.trim();
+    if (combo === 'shift+/') {
+      return '?';
+    }
+    const label = formatKeyCombo(combo);
+    return label.length === 1 ? label.toUpperCase() : label;
+  });
+}
 
-  return formatKeyCombo(keys);
+export function getHotkeyHelpToggleKeyLabel(keys = HOTKEYS.showHelp.keys): string {
+  return getHotkeyHelpToggleKeyLabels(keys)[0];
+}
+
+export const HOTKEY_INFO_BUTTON_CLASS =
+  'fixed top-4 left-4 w-8 h-8 rounded-full flex items-center justify-center bg-ds-tertiary/50 text-ds-muted hover-ds-hover cursor-pointer text-sm';
+export const HOTKEY_INFO_BUTTON_GLYPH = 'i';
+export const HOTKEY_INFO_BUTTON_TITLE = 'Keyboard shortcuts (I)';
+export const HOTKEY_INFO_BUTTON_ARIA_LABEL = 'Show keyboard shortcuts';
+
+export function getHotkeyInfoButtonStyle(zIndex = Z_INDEX.overlay): CSSProperties {
+  return { zIndex };
+}
+
+export function shouldShowHotkeyInfoButton({
+  touchMode,
+  embedMode,
+}: {
+  touchMode: boolean;
+  embedMode: boolean;
+}): boolean {
+  return !touchMode && !embedMode;
 }
