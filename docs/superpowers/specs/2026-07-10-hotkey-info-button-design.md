@@ -41,3 +41,9 @@
 
 ## Non-goals
 - No store-lifted modal state, no popup-layer inventory changes, no touch-mode button, no toolbar entry, no redesign of the panel's content.
+
+## Revision (2026-07-10, user feedback after first build)
+
+1. **Button design "not clean"** → replace the translucent-circle-with-text-glyph with the existing `InfoIcon` (a stroked circled-i SVG): transparent button, icon ~w-5 h-5 in `text-ds-muted`, hover brightens (`hover` state via existing utilities), same fixed top-left position, tooltip/aria/testid unchanged. The icon draws its own circle — no background blob.
+2. **Panel "spams the page"** → tabbed layout instead of one long scroll. First tab **Essentials** (default): the curated rows for `u` (Toggle undistorted view), `b` (Toggle background), `a` (Strafe left), `o` (Cycle auto orbit), `p` (Cycle point cloud color mode), plus the control/alt combos `alt+scroll` (frustum size) and `ctrl+scroll` (point size). Remaining tabs = the existing categories (General, Camera, Navigation, ... — whatever `HOTKEY_CATEGORIES` yields), one per tab, reusing the repo's tab pattern (see `DataPanel.tsx`). Curated list lives as an exported id list in `config/hotkeys.ts` so it's registry-checked (a test pins every essential id exists).
+3. Panel keeps the centered shell + `maxHeight: 80vh` + per-tab `overflow-auto` from the centering fix.
