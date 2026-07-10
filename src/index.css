@@ -885,6 +885,11 @@ legend {
 .capitalize { text-transform: capitalize; }
 .normal-case { text-transform: none; }
 
+/* Letter Spacing */
+/* Referenced by contextMenuStyles.hotkey (and the hotkey help panel's key combos)
+   but previously undefined, so it was a silent no-op; add the real rule. */
+.tracking-wide { letter-spacing: 0.025em; }
+
 /* Text Overflow */
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .overflow-ellipsis { text-overflow: ellipsis; }
@@ -1297,6 +1302,13 @@ legend {
 
 .focus-ds:focus { border-color: var(--accent); outline: none; }
 .focus-outline-none:focus { outline: none; }
+
+/* Hotkey help tabs: <button> has no outline reset in the base rule (unlike inputs/
+   selects above), so a focused tab falls through to the global :focus-visible accent
+   outline and shows a box on mouse click. Suppress the ring for pointer/mouse focus
+   only (:focus:not(:focus-visible)); keyboard Tab still matches :focus-visible and
+   keeps the accent ring. Scoped to the tab marker class so app-wide focus is untouched. */
+.hotkey-help-tab:focus:not(:focus-visible) { outline: none; }
 
 /* ============================================
    GROUP HOVER UTILITIES

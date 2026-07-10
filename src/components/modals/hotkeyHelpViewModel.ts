@@ -47,26 +47,42 @@ export const HOTKEY_HELP_PANEL_LAYOUT_CLASS = 'p-6 max-w-lg w-full overflow-hidd
 export const HOTKEY_HELP_HEADER_CLASS = 'flex items-center justify-between mb-4 flex-shrink-0';
 export const HOTKEY_HELP_SECTION_CLASS = 'mb-4';
 export const HOTKEY_HELP_SECTION_TITLE_CLASS = 'text-ds-secondary text-sm font-medium mb-2';
-export const HOTKEY_HELP_TABLE_CLASS = 'w-full text-sm';
-export const HOTKEY_HELP_DESCRIPTION_CELL_CLASS = 'py-1.5 text-ds-primary';
-export const HOTKEY_HELP_KEY_CELL_CLASS = 'py-1.5 text-right';
-export const HOTKEY_HELP_KEY_CLASS =
-  'px-2 py-0.5 bg-ds-secondary rounded text-ds-primary text-xs font-mono';
+// Rows adopt the app's context-menu design language: a flat flex row (see
+// ContextMenuList.tsx) instead of a table + boxed <kbd> badge. The row mirrors
+// contextMenuStyles.button minus interactivity (no hover-ds-hover / cursor-pointer,
+// since rows are not clickable), the description grows (flex-1), and the key combo
+// is styled by HOTKEY_HELP_ROW_KEY_CLASS.
+export const HOTKEY_HELP_ROW_CLASS = 'flex items-center gap-2 px-3 py-1.5 text-sm text-ds-primary';
+export const HOTKEY_HELP_ROW_DESCRIPTION_CLASS = 'flex-1 text-left';
+// Key-combo styling: the EXACT contextMenuStyles.hotkey token string
+// (src/theme/componentStyles.ts:544) so the combo reads identically to the context
+// menu's shortcut hints. Pinned as a literal here — following this file's
+// literal-pin convention (cf. splatPickerViewModel) so the class-string unit test
+// guards every utility exists in index.css (no Tailwind JIT here); a colocated test
+// also asserts this equals contextMenuStyles.hotkey to keep them in lockstep.
+export const HOTKEY_HELP_ROW_KEY_CLASS =
+  'text-xs font-mono text-gray-500 ml-auto uppercase tracking-wide';
 export const HOTKEY_HELP_FOOTER_CLASS =
   'mt-4 pt-4 border-t border-ds text-ds-muted text-xs text-center flex-shrink-0';
 
-// Tab bar (mirrors the repo's tabStyles / buttonStyles.variants.tab convention).
-// Pinned as literal strings here so the class-string unit test guards that every
-// utility exists in index.css (this project has no Tailwind JIT).
+// Flat text tabs in the context-menu idiom. Pinned as literal strings here so the
+// class-string unit test guards that every utility exists in index.css (no Tailwind
+// JIT). Inactive is dimmed text (text-ds-secondary) that brightens on hover — no
+// background box. Active gets brighter text (text-ds-primary) + a 2px accent
+// underline, deliberately WITHOUT bg-ds-tertiary (it read as an extra box against
+// the tertiary panel). Both carry the `hotkey-help-tab` marker class that the
+// focus-suppression rule in index.css targets so a mouse click shows no focus ring
+// while keyboard Tab still does (via the global :focus-visible rule).
 export const HOTKEY_HELP_TAB_LIST_CLASS = 'flex border-b border-ds mb-4 flex-shrink-0';
 export const HOTKEY_HELP_TAB_CLASS =
-  'px-3 py-1.5 text-sm font-medium transition-colors bg-transparent text-ds-secondary hover-ds-text-primary hover-ds-tertiary-50 cursor-pointer';
+  'px-3 py-1.5 text-sm font-medium transition-colors bg-transparent text-ds-secondary hover-ds-text-primary cursor-pointer hotkey-help-tab';
 export const HOTKEY_HELP_TAB_ACTIVE_CLASS =
-  'px-3 py-1.5 text-sm font-medium bg-ds-tertiary text-ds-accent border-b-2 border-ds-accent cursor-pointer';
+  'px-3 py-1.5 text-sm font-medium transition-colors bg-transparent text-ds-primary border-b-2 border-ds-accent cursor-pointer hotkey-help-tab';
 // Scrollable rows area for the active tab (flex child; min-h-0 lets it shrink
 // below content height so overflow-auto actually scrolls inside the flex column).
 export const HOTKEY_HELP_TAB_PANEL_CLASS = 'flex-1 min-h-0 overflow-auto';
-export const HOTKEY_HELP_FOOTER_KEY_CLASS = 'px-1.5 py-0.5 bg-ds-secondary rounded';
+// Footer key chips: same mono/uppercase idiom as the row combos (no boxed chip).
+export const HOTKEY_HELP_FOOTER_KEY_CLASS = 'font-mono uppercase tracking-wide text-gray-500';
 export const HOTKEY_HELP_FOOTER_PREFIX = 'Press';
 export const HOTKEY_HELP_FOOTER_SUFFIX = 'to toggle this panel';
 

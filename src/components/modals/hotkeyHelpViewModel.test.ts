@@ -2,22 +2,21 @@ import { describe, expect, it } from 'vitest';
 import {
   ESSENTIALS_TAB_ID,
   ESSENTIALS_TAB_TITLE,
-  HOTKEY_HELP_DESCRIPTION_CELL_CLASS,
   HOTKEY_HELP_FOOTER_CLASS,
   HOTKEY_HELP_FOOTER_KEY_CLASS,
   HOTKEY_HELP_FOOTER_PREFIX,
   HOTKEY_HELP_FOOTER_SUFFIX,
   HOTKEY_HELP_HEADER_CLASS,
-  HOTKEY_HELP_KEY_CELL_CLASS,
-  HOTKEY_HELP_KEY_CLASS,
   HOTKEY_HELP_PANEL_LAYOUT_CLASS,
+  HOTKEY_HELP_ROW_CLASS,
+  HOTKEY_HELP_ROW_DESCRIPTION_CLASS,
+  HOTKEY_HELP_ROW_KEY_CLASS,
   HOTKEY_HELP_SECTION_CLASS,
   HOTKEY_HELP_SECTION_TITLE_CLASS,
   HOTKEY_HELP_TAB_ACTIVE_CLASS,
   HOTKEY_HELP_TAB_CLASS,
   HOTKEY_HELP_TAB_LIST_CLASS,
   HOTKEY_HELP_TAB_PANEL_CLASS,
-  HOTKEY_HELP_TABLE_CLASS,
   HOTKEY_HELP_TITLE,
   HOTKEY_INFO_BUTTON_ARIA_LABEL,
   HOTKEY_INFO_BUTTON_CLASS,
@@ -32,7 +31,7 @@ import {
   shouldShowHotkeyInfoButton,
 } from './hotkeyHelpViewModel';
 import { ESSENTIAL_HOTKEY_IDS, HOTKEYS, type HotkeyRegistry } from '../../config/hotkeys';
-import { Z_INDEX } from '../../theme';
+import { Z_INDEX, contextMenuStyles } from '../../theme';
 
 describe('hotkey help view model', () => {
   it('builds ordered sections and omits empty categories', () => {
@@ -141,16 +140,26 @@ describe('hotkey help view model', () => {
     expect(HOTKEY_HELP_HEADER_CLASS).toBe('flex items-center justify-between mb-4 flex-shrink-0');
     expect(HOTKEY_HELP_SECTION_CLASS).toBe('mb-4');
     expect(HOTKEY_HELP_SECTION_TITLE_CLASS).toBe('text-ds-secondary text-sm font-medium mb-2');
-    expect(HOTKEY_HELP_TABLE_CLASS).toBe('w-full text-sm');
-    expect(HOTKEY_HELP_DESCRIPTION_CELL_CLASS).toBe('py-1.5 text-ds-primary');
-    expect(HOTKEY_HELP_KEY_CELL_CLASS).toBe('py-1.5 text-right');
-    expect(HOTKEY_HELP_KEY_CLASS).toBe(
-      'px-2 py-0.5 bg-ds-secondary rounded text-ds-primary text-xs font-mono'
+    // Rows adopt the context-menu design language: a flat flex row (NOT a table
+    // cell / boxed <kbd>) whose key combo mirrors contextMenuStyles.hotkey.
+    expect(HOTKEY_HELP_ROW_CLASS).toBe('flex items-center gap-2 px-3 py-1.5 text-sm text-ds-primary');
+    expect(HOTKEY_HELP_ROW_DESCRIPTION_CLASS).toBe('flex-1 text-left');
+    expect(HOTKEY_HELP_ROW_KEY_CLASS).toBe(
+      'text-xs font-mono text-gray-500 ml-auto uppercase tracking-wide'
     );
+    // The row's key styling is exactly the context menu's hotkey token string.
+    expect(HOTKEY_HELP_ROW_KEY_CLASS).toBe(contextMenuStyles.hotkey);
+    // No boxed / table utilities linger on the row classes (context-menu flat look).
+    for (const cls of [HOTKEY_HELP_ROW_CLASS, HOTKEY_HELP_ROW_DESCRIPTION_CLASS, HOTKEY_HELP_ROW_KEY_CLASS]) {
+      expect(cls).not.toContain('[');
+      expect(cls).not.toContain('hover:');
+      expect(cls).not.toContain('bg-ds-secondary');
+    }
     expect(HOTKEY_HELP_FOOTER_CLASS).toBe(
       'mt-4 pt-4 border-t border-ds text-ds-muted text-xs text-center flex-shrink-0'
     );
-    expect(HOTKEY_HELP_FOOTER_KEY_CLASS).toBe('px-1.5 py-0.5 bg-ds-secondary rounded');
+    // Footer key chips restyle to the same mono/uppercase hotkey idiom (no boxed chip).
+    expect(HOTKEY_HELP_FOOTER_KEY_CLASS).toBe('font-mono uppercase tracking-wide text-gray-500');
     expect(HOTKEY_HELP_FOOTER_PREFIX).toBe('Press');
     expect(HOTKEY_HELP_FOOTER_SUFFIX).toBe('to toggle this panel');
   });
@@ -264,12 +273,20 @@ describe('hotkey help tabs view model', () => {
 
   it('pins the tab bar/button class strings to real (non-Tailwind) utilities', () => {
     expect(HOTKEY_HELP_TAB_LIST_CLASS).toBe('flex border-b border-ds mb-4 flex-shrink-0');
+    // Flat text tabs (context-menu idiom): inactive is dimmed text that brightens
+    // on hover — no background box.
     expect(HOTKEY_HELP_TAB_CLASS).toBe(
-      'px-3 py-1.5 text-sm font-medium transition-colors bg-transparent text-ds-secondary hover-ds-text-primary hover-ds-tertiary-50 cursor-pointer'
+      'px-3 py-1.5 text-sm font-medium transition-colors bg-transparent text-ds-secondary hover-ds-text-primary cursor-pointer hotkey-help-tab'
     );
+    // Active tab: brighter text + a 2px accent underline, NO bg-ds-tertiary box.
     expect(HOTKEY_HELP_TAB_ACTIVE_CLASS).toBe(
-      'px-3 py-1.5 text-sm font-medium bg-ds-tertiary text-ds-accent border-b-2 border-ds-accent cursor-pointer'
+      'px-3 py-1.5 text-sm font-medium transition-colors bg-transparent text-ds-primary border-b-2 border-ds-accent cursor-pointer hotkey-help-tab'
     );
+    expect(HOTKEY_HELP_TAB_ACTIVE_CLASS).not.toContain('bg-ds-tertiary');
+    expect(HOTKEY_HELP_TAB_ACTIVE_CLASS).toContain('border-b-2 border-ds-accent');
+    // Both tab classes carry the marker class the focus-suppression rule targets.
+    expect(HOTKEY_HELP_TAB_CLASS).toContain('hotkey-help-tab');
+    expect(HOTKEY_HELP_TAB_ACTIVE_CLASS).toContain('hotkey-help-tab');
     expect(HOTKEY_HELP_TAB_PANEL_CLASS).toBe('flex-1 min-h-0 overflow-auto');
     for (const cls of [
       HOTKEY_HELP_TAB_LIST_CLASS,

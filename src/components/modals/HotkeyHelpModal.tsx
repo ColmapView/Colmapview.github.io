@@ -1,26 +1,25 @@
 import { Fragment, useCallback, useId, useRef, useState } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { HOTKEYS } from '../../config/hotkeys';
-import { tableStyles, modalStyles } from '../../theme';
+import { modalStyles } from '../../theme';
 import { CloseIcon, InfoIcon } from '../../icons';
 import { ModalDialogShell } from '../ui/ModalDialogShell';
 import { useHotkeyHelpStoreFacade } from './useHotkeyHelpStoreFacade';
 import {
   ESSENTIALS_TAB_ID,
-  HOTKEY_HELP_DESCRIPTION_CELL_CLASS,
   HOTKEY_HELP_FOOTER_CLASS,
   HOTKEY_HELP_FOOTER_KEY_CLASS,
   HOTKEY_HELP_FOOTER_PREFIX,
   HOTKEY_HELP_FOOTER_SUFFIX,
   HOTKEY_HELP_HEADER_CLASS,
-  HOTKEY_HELP_KEY_CELL_CLASS,
-  HOTKEY_HELP_KEY_CLASS,
   HOTKEY_HELP_PANEL_LAYOUT_CLASS,
+  HOTKEY_HELP_ROW_CLASS,
+  HOTKEY_HELP_ROW_DESCRIPTION_CLASS,
+  HOTKEY_HELP_ROW_KEY_CLASS,
   HOTKEY_HELP_TAB_ACTIVE_CLASS,
   HOTKEY_HELP_TAB_CLASS,
   HOTKEY_HELP_TAB_LIST_CLASS,
   HOTKEY_HELP_TAB_PANEL_CLASS,
-  HOTKEY_HELP_TABLE_CLASS,
   HOTKEY_HELP_TITLE,
   HOTKEY_INFO_BUTTON_ARIA_LABEL,
   HOTKEY_INFO_BUTTON_CLASS,
@@ -96,7 +95,10 @@ export function HotkeyHelpModal() {
         // modalStyles.panel's `absolute`, which would defeat flex centering.
         overlayClassName="fixed inset-0 flex items-center justify-center bg-ds-void/50"
         overlayStyle={getHotkeyHelpOverlayStyle()}
-        panelClassName={`bg-ds-tertiary rounded-lg shadow-ds-lg flex flex-col ${HOTKEY_HELP_PANEL_LAYOUT_CLASS}`}
+        // Context-menu surface: bg-ds-tertiary rounded-lg shadow-ds-lg + border
+        // border-ds (mirrors contextMenuStyles.container), kept as a flex column so
+        // the header/tabs/footer stay put while the active tab's rows scroll.
+        panelClassName={`bg-ds-tertiary rounded-lg shadow-ds-lg border border-ds flex flex-col ${HOTKEY_HELP_PANEL_LAYOUT_CLASS}`}
         panelStyle={getHotkeyHelpPanelStyle()}
         initialFocusRef={closeButtonRef}
       >
@@ -129,22 +131,16 @@ export function HotkeyHelpModal() {
           ))}
         </div>
 
-        {/* Active tab rows (scrolls independently so the shell stays fixed) */}
+        {/* Active tab rows (scrolls independently so the shell stays fixed).
+            Flat context-menu-style rows: a description that grows and a right-aligned
+            mono key combo — no table, no boxed <kbd>, and not clickable. */}
         <div className={HOTKEY_HELP_TAB_PANEL_CLASS} role="tabpanel">
-          <table className={HOTKEY_HELP_TABLE_CLASS}>
-            <tbody>
-              {activeTab.rows.map((row) => (
-                <tr key={row.id} className={tableStyles.row}>
-                  <td className={HOTKEY_HELP_DESCRIPTION_CELL_CLASS}>{row.description}</td>
-                  <td className={HOTKEY_HELP_KEY_CELL_CLASS}>
-                    <kbd className={HOTKEY_HELP_KEY_CLASS}>
-                      {row.keyCombo}
-                    </kbd>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {activeTab.rows.map((row) => (
+            <div key={row.id} className={HOTKEY_HELP_ROW_CLASS}>
+              <span className={HOTKEY_HELP_ROW_DESCRIPTION_CLASS}>{row.description}</span>
+              <span className={HOTKEY_HELP_ROW_KEY_CLASS}>{row.keyCombo}</span>
+            </div>
+          ))}
         </div>
 
         {/* Footer hint */}
