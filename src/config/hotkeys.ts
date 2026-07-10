@@ -262,15 +262,31 @@ export const HOTKEYS: HotkeyRegistry = {
  * resolves to the expected key combo, so a rename/removal here fails at test
  * time instead of silently dropping a row.
  */
-export const ESSENTIAL_HOTKEY_IDS = [
-  'toggleUndistortion', // u  - Toggle undistorted view
-  'toggleBackground', //   b  - Toggle background
-  'moveLeft', //           a  - Strafe left
-  'cycleAutoRotate', //    o  - Cycle auto orbit
-  'cyclePointSize', //     p  - Cycle point cloud color mode
-  'adjustFrustumSize', //  alt+scroll  - Adjust camera frustum size
-  'adjustPointSize', //    ctrl+scroll - Adjust point cloud size
+/**
+ * The WASD fly cluster, rendered as one combined "Navigate" row in the
+ * Essentials tab (user feedback: a lone "Strafe left - a" row reads wrong).
+ * A registry test pins these ids and their w/a/s/d keys.
+ */
+export const ESSENTIAL_WASD_IDS = [
+  'moveForward', //  w
+  'moveLeft', //     a
+  'moveBackward', // s
+  'moveRight', //    d
 ] as const satisfies readonly (keyof typeof HOTKEYS)[];
+
+/** Synthetic row id + label for the combined WASD row in Essentials. */
+export const ESSENTIAL_WASD_ROW_ID = 'navigateWasd';
+export const ESSENTIAL_WASD_DESCRIPTION = 'Navigate';
+
+export const ESSENTIAL_HOTKEY_IDS = [
+  'toggleUndistortion', //    u  - Toggle undistorted view
+  'toggleBackground', //      b  - Toggle background
+  ESSENTIAL_WASD_ROW_ID, //   w a s d - Navigate (composite of ESSENTIAL_WASD_IDS)
+  'cycleAutoRotate', //       o  - Cycle auto orbit
+  'cyclePointSize', //        p  - Cycle point cloud color mode
+  'adjustFrustumSize', //     alt+scroll  - Adjust camera frustum size
+  'adjustPointSize', //       ctrl+scroll - Adjust point cloud size
+] as const satisfies readonly (keyof typeof HOTKEYS | typeof ESSENTIAL_WASD_ROW_ID)[];
 
 /**
  * Category labels for display in help panel.

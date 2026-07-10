@@ -1,6 +1,9 @@
 import type { CSSProperties } from 'react';
 import {
   ESSENTIAL_HOTKEY_IDS,
+  ESSENTIAL_WASD_DESCRIPTION,
+  ESSENTIAL_WASD_IDS,
+  ESSENTIAL_WASD_ROW_ID,
   HOTKEYS,
   HOTKEY_CATEGORIES,
   formatKeyCombo,
@@ -136,19 +139,39 @@ export function getHotkeyHelpSections(
  * are somehow missing from the registry are skipped defensively (a registry
  * test pins that they all exist, so this is belt-and-suspenders).
  */
+/**
+ * Trailing parenthetical detail is trimmed in the compact Essentials view
+ * (user feedback); the full registry text stays in the category tabs.
+ */
+function stripTrailingParenthetical(description: string): string {
+  return description.replace(/\s*\([^)]*\)\s*$/, '');
+}
+
 export function getHotkeyHelpEssentialRows(
   hotkeys: HotkeyRegistry = HOTKEYS,
   ids: readonly string[] = ESSENTIAL_HOTKEY_IDS
 ): HotkeyHelpRow[] {
   return ids
     .map((id) => {
+      if (id === ESSENTIAL_WASD_ROW_ID) {
+        // The WASD fly cluster reads as one row (user: "navigate wasd"); the
+        // row's `uppercase` styling renders the combo as W A S D.
+        const combo = ESSENTIAL_WASD_IDS
+          .map((wasdId) => hotkeys[wasdId]?.keys)
+          .filter((keys): keys is string => Boolean(keys))
+          .map((keys) => formatKeyCombo(keys))
+          .join(' ');
+        return combo
+          ? { id, description: ESSENTIAL_WASD_DESCRIPTION, keyCombo: combo }
+          : null;
+      }
       const hotkey = hotkeys[id];
       if (!hotkey) {
         return null;
       }
       return {
         id,
-        description: hotkey.description,
+        description: stripTrailingParenthetical(hotkey.description),
         keyCombo: formatKeyCombo(hotkey.keys),
       };
     })

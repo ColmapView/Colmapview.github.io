@@ -30,7 +30,7 @@ import {
   getHotkeyInfoButtonStyle,
   shouldShowHotkeyInfoButton,
 } from './hotkeyHelpViewModel';
-import { ESSENTIAL_HOTKEY_IDS, HOTKEYS, type HotkeyRegistry } from '../../config/hotkeys';
+import { ESSENTIAL_HOTKEY_IDS, ESSENTIAL_WASD_ROW_ID, HOTKEYS, type HotkeyRegistry } from '../../config/hotkeys';
 import { Z_INDEX, contextMenuStyles } from '../../theme';
 
 describe('hotkey help view model', () => {
@@ -236,11 +236,21 @@ describe('hotkey help tabs view model', () => {
     const essentials = getHotkeyHelpTabs().find((tab) => tab.id === ESSENTIALS_TAB_ID);
 
     expect(essentials?.rows.map((row) => row.id)).toEqual([...ESSENTIAL_HOTKEY_IDS]);
+    // Trailing parenthetical detail is trimmed in the compact Essentials view
+    // (the full registry text stays in the Camera tab).
     expect(essentials?.rows).toContainEqual({
       id: 'toggleUndistortion',
-      description: HOTKEYS.toggleUndistortion.description,
+      description: 'Toggle undistorted view',
       keyCombo: 'u',
     });
+    // The WASD fly cluster reads as one combined row (user: "navigate wasd");
+    // the row's `uppercase` styling renders the combo as W A S D.
+    expect(essentials?.rows).toContainEqual({
+      id: ESSENTIAL_WASD_ROW_ID,
+      description: 'Navigate',
+      keyCombo: 'w a s d',
+    });
+    expect(essentials?.rows.map((row) => row.description)).not.toContain('Strafe left');
     // Modifier+scroll combos are formatted for display.
     expect(essentials?.rows).toContainEqual({
       id: 'adjustFrustumSize',
