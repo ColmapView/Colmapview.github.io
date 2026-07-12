@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Camera, Image, ImageId, Reconstruction } from '../../types/colmap';
 import type { Sim3dEuler } from '../../types/sim3d';
 import type { DatasetManager } from '../../dataset';
-import type { ImageMetricsState, SplatPsnrComputeRequest } from '../../store';
+import type { ImageMetricsState, NotificationState, SplatPsnrComputeRequest } from '../../store';
 import type { LoadedGaussianCloud } from '../../splat/gaussianCloud';
 import { prefetchFrustumTexturesInBackground } from '../../hooks/useFrustumTexture';
 import { useLatestRef } from '../../hooks/useLatestRef';
@@ -184,12 +184,26 @@ function hasSameSplatPsnrDataIdentity(
   return Boolean(a && !getSplatPsnrDataIdentityMismatchReason(a, b));
 }
 
+/**
+ * Interruption notice for cancels the user did not ask for. A silent stop
+ * reads as a bug (user report 2026-07-12: applying a scene change mid-run
+ * looked like PSNR just died) — every non-replacement cancel surfaces its
+ * reason as a persistent warning. Intentional replacements (a new compute
+ * request superseding the old one) pass no notice.
+ */
+interface SplatPsnrInterruptionNotice {
+  addNotification: NotificationState['addNotification'];
+  reason: string;
+}
+
 function cancelSplatPsnrTask(
   task: SplatPsnrTaskControl,
   actions: SplatPsnrTaskActions,
   finishCompute: boolean,
-  releaseRenderSession?: (renderSession: SplatPsnrRenderSession) => void
+  releaseRenderSession?: (renderSession: SplatPsnrRenderSession) => void,
+  interruption?: SplatPsnrInterruptionNotice
 ): void {
+  const alreadyCancelled = task.cancelled;
   task.cancelled = true;
   const renderSession = task.renderSession;
   task.renderSession = null;
@@ -202,6 +216,11 @@ function cancelSplatPsnrTask(
   }
   if (finishCompute) {
     actions.finishSplatPsnrCompute();
+  }
+  // One notice per task: overlapping cancel effects (identity mismatch +
+  // request clear both fire on a reconstruction swap) must not double-toast.
+  if (interruption && !alreadyCancelled) {
+    interruption.addNotification('warning', `PSNR computation stopped: ${interruption.reason}`);
   }
 }
 
@@ -856,7 +875,10 @@ export function SplatPsnrEvaluator() {
       const task = activeTaskRef.current;
       const snapshot = latestSnapshotRef.current;
       if (task && snapshot) {
-        cancelSplatPsnrTask(task, snapshot.actions, true, snapshot.releaseRenderSession);
+        cancelSplatPsnrTask(task, snapshot.actions, true, snapshot.releaseRenderSession, {
+          addNotification: snapshot.addNotification,
+          reason,
+        });
         activeTaskRef.current = null;
       }
       releaseCachedRenderSession();
@@ -969,11 +991,17 @@ export function SplatPsnrEvaluator() {
       || !snapshot.splatFile
       || !gpuPsnrAvailable
     ) {
+      const reason = !snapshot?.reconstruction
+        ? 'reconstruction unloaded'
+        : !snapshot.splatFile
+          ? 'splat file unloaded'
+          : 'GPU metrics became unavailable';
       cancelSplatPsnrTask(
         task,
         snapshot?.actions ?? currentActions,
         true,
-        snapshot?.releaseRenderSession ?? releaseCachedRenderSession
+        snapshot?.releaseRenderSession ?? releaseCachedRenderSession,
+        snapshot ? { addNotification: snapshot.addNotification, reason } : undefined
       );
       activeTaskRef.current = null;
       return;
@@ -986,7 +1014,10 @@ export function SplatPsnrEvaluator() {
     });
     const mismatchReason = getSplatPsnrDataIdentityMismatchReason(task.dataIdentity, nextIdentity);
     if (mismatchReason) {
-      cancelSplatPsnrTask(task, snapshot.actions, true, snapshot.releaseRenderSession);
+      cancelSplatPsnrTask(task, snapshot.actions, true, snapshot.releaseRenderSession, {
+        addNotification: snapshot.addNotification,
+        reason: mismatchReason,
+      });
       activeTaskRef.current = null;
     }
   }, [
@@ -1137,7 +1168,10 @@ export function SplatPsnrEvaluator() {
           activeTaskRef.current,
           snapshot?.actions ?? currentActions,
           true,
-          snapshot?.releaseRenderSession ?? releaseCachedRenderSession
+          snapshot?.releaseRenderSession ?? releaseCachedRenderSession,
+          snapshot
+            ? { addNotification: snapshot.addNotification, reason: 'compute request was cleared' }
+            : undefined
         );
         activeTaskRef.current = null;
       }

@@ -53,6 +53,7 @@ import {
   getInitialSceneCameraPosition,
   getSceneLayerVisibility,
   getSceneContainerStyle,
+  getSceneTransformGroupMatrix,
   shouldDeselectCanvasPointerMiss,
 } from './scene3dViewModel';
 import { useSceneContextMenuController } from './useSceneContextMenuController';
@@ -161,6 +162,11 @@ function SceneContent() {
     };
   }, [transform, splatTransform, bounds.center]);
 
+  const transformGroupMatrix = useMemo(
+    () => getSceneTransformGroupMatrix(transformMatrix),
+    [transformMatrix]
+  );
+
   const visibleLayers = useMemo(() => getSceneLayerVisibility({
     isAlignmentMode,
     hasReconstruction: reconstruction !== null,
@@ -218,7 +224,11 @@ function SceneContent() {
       <ambientLight intensity={OPACITY.light.ambient} />
       <directionalLight position={[10, 10, 5]} intensity={OPACITY.light.directional} />
 
-      {/* Transformable content - wrapped in group when preview is active */}
+      {/* Transformable content - ALWAYS wrapped in the group (identity matrix
+          when no transform). Conditionally adding the group on the first
+          non-identity transform re-parented — and therefore remounted — the
+          whole point/frustum/splat subtree mid-session: a GPU re-upload spike
+          concurrent with e.g. an in-flight PSNR run. */}
       {/* Hide frustums during alignment modes (point picking or floor detection) for cleaner visualization */}
       {/* Point content handles point/splat visibility internally; selection overlay
           stays visible when a camera is selected. */}
@@ -229,13 +239,9 @@ function SceneContent() {
         splatFile={splatFile}
       />
       <WebGpuSplatCanvasBridge enabled={webGpuSplatCanvasBridgeEnabled} modelMatrix={webGpuSplatModelMatrix} />
-      {transformMatrix ? (
-        <group matrixAutoUpdate={false} matrix={transformMatrix}>
-          {transformableContent}
-        </group>
-      ) : (
-        transformableContent
-      )}
+      <group matrixAutoUpdate={false} matrix={transformGroupMatrix}>
+        {transformableContent}
+      </group>
 
       {/* Axes/Grid stay in original coordinate system */}
       {/* Show axes automatically when in alignment mode for orientation reference */}

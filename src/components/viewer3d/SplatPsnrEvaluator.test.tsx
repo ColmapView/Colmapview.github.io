@@ -599,6 +599,129 @@ describe('SplatPsnrEvaluator', () => {
     expect(dispose).toHaveBeenCalledTimes(1);
   });
 
+  it('notifies when an in-flight run is cancelled by a reconstruction change', async () => {
+    const deferredMetric = createDeferredMetric();
+    const computeImageMetric = vi.fn(() => deferredMetric.promise);
+    createWebGpuSplatPsnrSessionMock.mockResolvedValue({
+      computeImageMetric,
+      dispose: vi.fn(),
+    });
+    const { facade, actions } = createFacade();
+    useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
+
+    const view = render(<SplatPsnrEvaluator />);
+    await waitFor(() => {
+      expect(computeImageMetric).toHaveBeenCalledTimes(1);
+    });
+
+    const camera = buildCamera({ width: 4, height: 3 });
+    const image = buildImage({ cameraId: camera.cameraId });
+    facade.data.reconstruction = buildReconstruction({ cameras: [camera], images: [image] });
+    view.rerender(<SplatPsnrEvaluator />);
+
+    await waitFor(() => {
+      expect(actions.finishSplatPsnrCompute).toHaveBeenCalled();
+    });
+    // A silent stop reads as a bug (user report 2026-07-12); the interruption
+    // must be surfaced with its reason.
+    expect(actions.addNotification).toHaveBeenCalledWith(
+      'warning',
+      expect.stringContaining('reconstruction changed')
+    );
+    view.unmount();
+  });
+
+  it('notifies when the WebGPU device is lost mid-run', async () => {
+    const deferredMetric = createDeferredMetric();
+    const computeImageMetric = vi.fn(() => deferredMetric.promise);
+    createWebGpuSplatPsnrSessionMock.mockResolvedValue({
+      computeImageMetric,
+      dispose: vi.fn(),
+    });
+    const { facade, actions } = createFacade();
+    useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
+
+    const view = render(<SplatPsnrEvaluator />);
+    await waitFor(() => {
+      expect(computeImageMetric).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      deviceLossListenerRef.current?.({
+        reason: 'destroyed',
+        message: 'GPU hung',
+      } as GPUDeviceLostInfo);
+    });
+
+    expect(actions.setWebGpuMetricState).toHaveBeenCalledWith(
+      'failed',
+      expect.stringContaining('GPU hung')
+    );
+    // 'warning' is the persistent notification tier in this app (no 'error').
+    expect(actions.addNotification).toHaveBeenCalledWith(
+      'warning',
+      expect.stringContaining('device was lost')
+    );
+    view.unmount();
+  });
+
+  it('notifies when the compute request is cleared out from under an active run', async () => {
+    const deferredMetric = createDeferredMetric();
+    const computeImageMetric = vi.fn(() => deferredMetric.promise);
+    createWebGpuSplatPsnrSessionMock.mockResolvedValue({
+      computeImageMetric,
+      dispose: vi.fn(),
+    });
+    const { facade, actions } = createFacade();
+    useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
+
+    const view = render(<SplatPsnrEvaluator />);
+    await waitFor(() => {
+      expect(computeImageMetric).toHaveBeenCalledTimes(1);
+    });
+
+    facade.data.splatPsnrComputeRequest = null;
+    view.rerender(<SplatPsnrEvaluator />);
+
+    await waitFor(() => {
+      expect(actions.addNotification).toHaveBeenCalledWith(
+        'warning',
+        expect.stringContaining('compute request was cleared')
+      );
+    });
+    view.unmount();
+  });
+
+  it('does not emit a stopped notification when a new request replaces the run', async () => {
+    const deferredMetric = createDeferredMetric();
+    const computeImageMetric = vi.fn(() => deferredMetric.promise);
+    createWebGpuSplatPsnrSessionMock.mockResolvedValue({
+      computeImageMetric,
+      dispose: vi.fn(),
+    });
+    const { facade, actions, image } = createFacade();
+    useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
+
+    const view = render(<SplatPsnrEvaluator />);
+    await waitFor(() => {
+      expect(computeImageMetric).toHaveBeenCalledTimes(1);
+    });
+
+    // The user re-triggering a compute is an intentional replacement, not an
+    // interruption worth a toast.
+    facade.data.splatPsnrComputeRequest = { id: 2, scope: 'selected', selectedImageId: image.imageId };
+    view.rerender(<SplatPsnrEvaluator />);
+
+    await waitFor(() => {
+      expect(computeImageMetric).toHaveBeenCalledTimes(2);
+    });
+    expect(actions.addNotification).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.stringContaining('stopped')
+    );
+    view.unmount();
+  });
+
   it('passes the published composed splat model transform into PSNR requests', async () => {
     const deferredMetric = createDeferredMetric();
     const computeImageMetric = vi.fn(() => deferredMetric.promise);

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import * as THREE from 'three';
 import { buildImage, buildPoint3D, buildReconstruction } from '../../test/builders';
 import type { BoundingBox } from '../../wasm/types';
 import {
@@ -9,6 +10,7 @@ import {
   getSceneErrorContainerStyle,
   getSceneLayerVisibility,
   getSceneContextMenuAction,
+  getSceneTransformGroupMatrix,
   getInitialSceneCameraPosition,
   hasSceneContextMenuDragMoved,
   shouldDeselectCanvasPointerMiss,
@@ -251,5 +253,21 @@ describe('scene 3d view-model helpers', () => {
       grid: false,
       gizmo: false,
     });
+  });
+});
+
+describe('scene transform group matrix', () => {
+  it('passes a real transform matrix through by reference', () => {
+    const matrix = new THREE.Matrix4().makeTranslation(1, 2, 3);
+    expect(getSceneTransformGroupMatrix(matrix)).toBe(matrix);
+  });
+
+  it('falls back to identity so the group renders unconditionally', () => {
+    // The group must ALWAYS wrap the transformable content: conditionally
+    // adding it on the first non-identity transform remounts the whole
+    // point/frustum/splat subtree mid-session (GPU re-upload spike while
+    // e.g. a PSNR run is in flight).
+    const fallback = getSceneTransformGroupMatrix(null);
+    expect(fallback.equals(new THREE.Matrix4())).toBe(true);
   });
 });

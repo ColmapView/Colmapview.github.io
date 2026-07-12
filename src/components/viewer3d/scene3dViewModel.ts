@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import type { CSSProperties } from 'react';
 import type { Reconstruction } from '../../types/colmap';
 import type { PointPickingMode } from '../../store';
@@ -277,4 +278,17 @@ function buildPointMapBounds(reconstruction: Reconstruction): SceneBounds | null
   const radius = Math.max(maxX - minX, maxY - minY, maxZ - minZ) / 2;
 
   return { center, radius };
+}
+
+/**
+ * Matrix for the scene's transform group. The group must render
+ * UNCONDITIONALLY: conditionally adding it on the first non-identity
+ * transform re-parents (and therefore remounts) the entire
+ * point/frustum/splat subtree mid-session — a GPU re-upload spike while,
+ * e.g., a PSNR run is in flight. Identity when no transform is active.
+ */
+export function getSceneTransformGroupMatrix(
+  transformMatrix: THREE.Matrix4 | null
+): THREE.Matrix4 {
+  return transformMatrix ?? new THREE.Matrix4();
 }
