@@ -8,7 +8,7 @@ import type {
 } from '../../store/stores/pointPickingStore';
 import type { Sim3d, Sim3dEuler } from '../../types/sim3d';
 import { Z_INDEX } from '../../theme';
-import { getCoordinateSystemAxisDirection } from '../../utils/coordinateSystems';
+import { getCoordinateSystemAxisDirection, isAxisSemanticallyDown } from '../../utils/coordinateSystems';
 import { parseFiniteNumberString } from '../../utils/numberParsing';
 import {
   composeSim3d,
@@ -58,8 +58,12 @@ export function getDistanceInputTargetUp(
   targetAxis: TargetAxis
 ): THREE.Vector3 {
   const direction = getCoordinateSystemAxisDirection(axesCoordinateSystem, targetAxis);
+  const vector = new THREE.Vector3(direction[0], direction[1], direction[2]);
 
-  return new THREE.Vector3(direction[0], direction[1], direction[2]);
+  // Mirror getFloorTargetUpVector: semantically-down axes (COLMAP/OpenCV +Y)
+  // negate so the picked plane's up side never maps onto the convention's
+  // down axis.
+  return isAxisSemanticallyDown(axesCoordinateSystem, targetAxis) ? vector.negate() : vector;
 }
 
 export function getInitialDistanceInputValue(

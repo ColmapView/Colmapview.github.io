@@ -40,6 +40,11 @@ describe('distance input modal view model', () => {
 
     expect(getDistanceInputTargetUp('blender', 'Z').toArray()).toEqual([0, 1, 0]);
     expect(getDistanceInputTargetUp('unreal', 'X').toArray()).toEqual([0, 0, -1]);
+    // Semantically-down axes negate, matching getFloorTargetUpVector: the
+    // picked plane's up side must not map onto COLMAP/OpenCV's down axis.
+    expect(getDistanceInputTargetUp('colmap', 'Y').toArray()).toEqual([0, -1, 0]);
+    expect(getDistanceInputTargetUp('opencv', 'Y').toArray()).toEqual([0, -1, 0]);
+    expect(getDistanceInputTargetUp('colmap', 'Z').toArray()).toEqual([0, 0, 1]);
   });
 
   it('derives modal dimensions, panel style, and apply key policy', () => {
