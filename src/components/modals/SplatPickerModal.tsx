@@ -77,7 +77,7 @@ export function SplatPickerModal() {
       panelTestId="splat-picker-modal"
       initialFocusRef={closeButtonRef}
     >
-      <div className="flex items-center justify-between px-4 py-2 rounded-t-lg bg-ds-secondary select-none">
+      <div className="flex items-center justify-between px-4 py-2 divider-b select-none">
         <span id={titleId} className={modalStyles.toolHeaderTitle}>
           Select a splat to display
         </span>

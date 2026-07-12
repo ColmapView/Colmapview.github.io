@@ -53,12 +53,13 @@ export const HOTKEY_HELP_TITLE = 'Keyboard Shortcuts';
 // the header bar runs edge-to-edge (SplatPicker pattern) and each section
 // carries its own padding.
 export const HOTKEY_HELP_PANEL_LAYOUT_CLASS = 'max-w-lg w-full overflow-hidden';
-// The app's popup header idiom (user feedback 2026-07-10: the big floating
-// title read as inconsistent): the SplatPicker/modalStyles.toolHeader bar —
-// full-bleed px-4 py-2 rounded-t-lg bg-ds-secondary with a text-sm
-// font-medium title — minus cursor-move, since this dialog is not draggable.
+// The app's popup header idiom (user feedback 2026-07-10/11: first the big
+// floating title read as inconsistent, then the dark bg-ds-secondary bar was
+// disliked project-wide): the flat modalStyles.toolHeader — px-4 py-2 with a
+// 1px divider-b hairline on the panel surface and a text-sm font-medium
+// title — minus cursor-move, since this dialog is not draggable.
 export const HOTKEY_HELP_HEADER_CLASS =
-  'flex items-center justify-between px-4 py-2 rounded-t-lg bg-ds-secondary select-none flex-shrink-0';
+  'flex items-center justify-between px-4 py-2 divider-b select-none flex-shrink-0';
 export const HOTKEY_HELP_SECTION_CLASS = 'mb-4';
 export const HOTKEY_HELP_SECTION_TITLE_CLASS = 'text-ds-secondary text-sm font-medium mb-2';
 // Rows adopt the app's context-menu design language: a flat flex row (see
