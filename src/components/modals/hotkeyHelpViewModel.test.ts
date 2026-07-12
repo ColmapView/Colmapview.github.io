@@ -144,14 +144,16 @@ describe('hotkey help view model', () => {
     expect(HOTKEY_HELP_PANEL_LAYOUT_CLASS).not.toContain('[');
     expect(HOTKEY_HELP_PANEL_LAYOUT_CLASS).not.toContain('translate');
     expect(getHotkeyHelpPanelStyle()).toEqual({ maxHeight: '80vh' });
-    // Header matches the app's popup idiom (user feedback 2026-07-10/11: first
-    // the big floating title was inconsistent, then the dark bg-ds-secondary
-    // bar was disliked project-wide): the flat toolHeader — px-4 py-2 with a
-    // 1px divider-b hairline, no background block — minus cursor-move (not
-    // draggable).
+    // Header matches the app's popup idiom (user feedback 2026-07-10/11: the
+    // big floating title, the dark bg-ds-secondary bar, and then the hairline
+    // under the header were each rejected): a purely flat px-4 py-2 title on
+    // the panel surface — no background block, no divider — minus cursor-move
+    // (not draggable).
     expect(HOTKEY_HELP_HEADER_CLASS).toBe(
-      'flex items-center justify-between px-4 py-2 divider-b select-none flex-shrink-0'
+      'flex items-center justify-between px-4 py-2 select-none flex-shrink-0'
     );
+    expect(HOTKEY_HELP_HEADER_CLASS).not.toContain('divider-b');
+    expect(HOTKEY_HELP_HEADER_CLASS).not.toContain('bg-ds-secondary');
     expect(HOTKEY_HELP_SECTION_CLASS).toBe('mb-4');
     expect(HOTKEY_HELP_SECTION_TITLE_CLASS).toBe('text-ds-secondary text-sm font-medium mb-2');
     // Rows adopt the context-menu design language: a flat flex row (NOT a table

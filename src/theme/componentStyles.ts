@@ -206,11 +206,10 @@ export const modalStyles = {
   headerTitle: 'text-ds-primary text-base font-medium truncate',
   // Tool modal panel (includes responsive class)
   toolPanel: 'absolute bg-ds-tertiary rounded-lg shadow-ds-lg flex flex-col pointer-events-auto tool-modal-responsive',
-  // Tool modal header: flat on the panel surface with a 1px hairline (user
-  // feedback 2026-07-11: the dark bg-ds-secondary bar was disliked
-  // project-wide). divider-b, not border-b — that utility sets border-style
-  // on all four sides while unset sides keep the 3px `medium` width.
-  toolHeader: 'flex items-center justify-between px-4 py-2 divider-b cursor-move select-none',
+  // Tool modal header: purely flat on the panel surface — no background block
+  // and no divider (user feedback 2026-07-11: the dark bg-ds-secondary bar and
+  // then the hairline under the header were both rejected).
+  toolHeader: 'flex items-center justify-between px-4 py-2 cursor-move select-none',
   toolHeaderTitle: 'text-ds-primary text-sm font-medium',
   toolHeaderClose: 'w-6 h-6 flex items-center justify-center rounded cursor-pointer text-ds-muted hover:text-ds-primary hover:bg-ds-tertiary transition-colors tool-header-close',
   /** Base for modal header icon buttons (delete/restore actions) */

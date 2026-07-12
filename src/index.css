@@ -1319,11 +1319,6 @@ legend {
 .hotkey-help-divider-bottom { border-bottom: 1px solid var(--border-color); }
 .hotkey-help-tab-active { border-bottom: 2px solid var(--accent); }
 
-/* Generic single-side hairline (same footgun rationale as above). Used by the
-   flat popup/tool-window header idiom: no dark background block, just a 1px
-   separator under the title bar. */
-.divider-b { border-bottom: 1px solid var(--border-color); }
-
 /* ============================================
    GROUP HOVER UTILITIES
    ============================================ */
