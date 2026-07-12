@@ -198,6 +198,12 @@ export const listStyles = {
 // MODAL STYLES
 // ============================================
 
+// Single source of truth for popup/tool-window headers: a purely flat px-4
+// py-2 title row on the panel surface — no background block, no divider (user
+// feedback 2026-07-11 rejected both the dark bg-ds-secondary bar and the
+// hairline). Draggable windows add cursor-move via modalStyles.toolHeader.
+const POPUP_HEADER_BASE = 'flex items-center justify-between px-4 py-2 select-none';
+
 export const modalStyles = {
   container: 'absolute inset-0 z-modal pointer-events-none',
   backdrop: 'absolute inset-0 bg-ds-void/50 pointer-events-auto',
@@ -206,10 +212,10 @@ export const modalStyles = {
   headerTitle: 'text-ds-primary text-base font-medium truncate',
   // Tool modal panel (includes responsive class)
   toolPanel: 'absolute bg-ds-tertiary rounded-lg shadow-ds-lg flex flex-col pointer-events-auto tool-modal-responsive',
-  // Tool modal header: purely flat on the panel surface — no background block
-  // and no divider (user feedback 2026-07-11: the dark bg-ds-secondary bar and
-  // then the hairline under the header were both rejected).
-  toolHeader: 'flex items-center justify-between px-4 py-2 cursor-move select-none',
+  // See POPUP_HEADER_BASE above. popupHeader = static dialogs; toolHeader =
+  // draggable tool windows (same header + cursor-move).
+  popupHeader: POPUP_HEADER_BASE,
+  toolHeader: `${POPUP_HEADER_BASE} cursor-move`,
   toolHeaderTitle: 'text-ds-primary text-sm font-medium',
   toolHeaderClose: 'w-6 h-6 flex items-center justify-center rounded cursor-pointer text-ds-muted hover:text-ds-primary hover:bg-ds-tertiary transition-colors tool-header-close',
   /** Base for modal header icon buttons (delete/restore actions) */

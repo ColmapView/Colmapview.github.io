@@ -14,7 +14,7 @@ import {
   type HotkeyCategory,
   type HotkeyRegistry,
 } from '../../config/hotkeys';
-import { Z_INDEX } from '../../theme';
+import { Z_INDEX, modalStyles } from '../../theme';
 
 export interface HotkeyHelpRow {
   id: string;
@@ -53,13 +53,11 @@ export const HOTKEY_HELP_TITLE = 'Keyboard Shortcuts';
 // the header bar runs edge-to-edge (SplatPicker pattern) and each section
 // carries its own padding.
 export const HOTKEY_HELP_PANEL_LAYOUT_CLASS = 'max-w-lg w-full overflow-hidden';
-// The app's popup header idiom (user feedback 2026-07-10/11: the big floating
-// title, the dark bg-ds-secondary bar, and then the hairline under the header
-// were each rejected): a purely flat px-4 py-2 text-sm font-medium title on
-// the panel surface, matching modalStyles.toolHeader minus cursor-move, since
-// this dialog is not draggable.
-export const HOTKEY_HELP_HEADER_CLASS =
-  'flex items-center justify-between px-4 py-2 select-none flex-shrink-0';
+// The shared popup-header token (single source of truth in
+// modalStyles.popupHeader — flat title row, no background block, no divider)
+// plus flex-shrink-0 so the header holds its height in this panel's flex
+// column. Not the draggable toolHeader variant: this dialog doesn't move.
+export const HOTKEY_HELP_HEADER_CLASS = `${modalStyles.popupHeader} flex-shrink-0`;
 export const HOTKEY_HELP_SECTION_CLASS = 'mb-4';
 export const HOTKEY_HELP_SECTION_TITLE_CLASS = 'text-ds-secondary text-sm font-medium mb-2';
 // Rows adopt the app's context-menu design language: a flat flex row (see

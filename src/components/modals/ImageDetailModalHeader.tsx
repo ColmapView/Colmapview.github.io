@@ -13,6 +13,7 @@ import {
   getTouchHeaderCloseButtonState,
   getTouchImageDetailTitle,
 } from './imageDetailModalHeaderViewModel';
+import { modalStyles } from '../../theme';
 
 interface DeleteScopeButtonProps {
   scopeLabel: 'I' | 'C' | 'F';
@@ -130,7 +131,9 @@ export function DesktopImageDetailHeader({
 
   return (
     <div
-      className="flex items-center justify-between px-4 py-2 text-xs cursor-move select-none"
+      // Shared draggable-header token; text-xs is this header's deliberate
+      // deviation — it is a dense info bar (name, stats, many small controls).
+      className={`${modalStyles.toolHeader} text-xs`}
       onPointerDown={handleDragStart}
       style={getDesktopHeaderDragStyle()}
     >
