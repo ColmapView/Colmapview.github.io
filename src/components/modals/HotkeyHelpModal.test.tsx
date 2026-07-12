@@ -40,6 +40,40 @@ describe('HotkeyHelpModal', () => {
     expect(screen.queryByText('Keyboard Shortcuts')).not.toBeInTheDocument();
   });
 
+  it('fades the info button with the auto-hide chrome when the viewer goes idle', () => {
+    useUIStore.setState({ touchMode: false, embedMode: false, isIdle: true });
+    // Default autoHideElements has buttons: true, so idle alone hides.
+    renderModal();
+
+    const button = screen.getByTestId('hotkey-info-button');
+    expect(button.className).toContain('opacity-0');
+    expect(button.className).toContain('pointer-events-none');
+    expect(button).toHaveAttribute('aria-hidden', 'true');
+    expect(button).toHaveAttribute('tabindex', '-1');
+
+    // Activity returns: the button comes back, focusable again.
+    act(() => {
+      useUIStore.setState({ isIdle: false });
+    });
+    expect(button.className).not.toContain('opacity-0');
+    expect(button).not.toHaveAttribute('aria-hidden', 'true');
+    expect(button).not.toHaveAttribute('tabindex', '-1');
+  });
+
+  it('keeps the info button visible while idle when buttons are excluded from auto-hide', () => {
+    useUIStore.setState({
+      touchMode: false,
+      embedMode: false,
+      isIdle: true,
+      autoHideElements: { ...useUIStore.getState().autoHideElements, buttons: false },
+    });
+    renderModal();
+
+    const button = screen.getByTestId('hotkey-info-button');
+    expect(button.className).not.toContain('opacity-0');
+    expect(button).not.toHaveAttribute('aria-hidden', 'true');
+  });
+
   it('toggles the panel with the i hotkey and closes on Escape', () => {
     useUIStore.setState({ touchMode: false, embedMode: false });
     renderModal();
