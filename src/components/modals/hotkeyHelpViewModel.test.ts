@@ -34,7 +34,6 @@ import {
   ESSENTIAL_HOTKEY_IDS,
   ESSENTIAL_IMAGE_NAV_ROW_ID,
   ESSENTIAL_WASD_ROW_ID,
-  HOTKEYS,
   type HotkeyRegistry,
 } from '../../config/hotkeys';
 import { Z_INDEX, contextMenuStyles, modalStyles } from '../../theme';
