@@ -32,6 +32,7 @@ import {
   shouldShowHotkeyInfoButton,
 } from './hotkeyHelpViewModel';
 import {
+  ESSENTIAL_FLY_NAV_ROW_ID,
   ESSENTIAL_HOTKEY_IDS,
   ESSENTIAL_IMAGE_NAV_ROW_ID,
   ESSENTIAL_WASD_ROW_ID,
@@ -328,6 +329,13 @@ describe('hotkey help tabs view model', () => {
       description: 'Previous / next image',
       keyCombo: '← →',
     });
+    // Fly-to companion (user request 2026-07-12): shift+arrows fly the camera
+    // to the previous/next image; the row uses a compact display combo.
+    expect(essentials?.rows).toContainEqual({
+      id: ESSENTIAL_FLY_NAV_ROW_ID,
+      description: 'Fly to previous / next image',
+      keyCombo: 'shift ← →',
+    });
     expect(essentials?.rows).toContainEqual({
       id: 'closeModal',
       description: 'Close modal',
@@ -337,13 +345,20 @@ describe('hotkey help tabs view model', () => {
 
   it('keeps the Camera tab full except for the WASD collapse (Essentials is an overlay, not a move)', () => {
     const tabs = getHotkeyHelpTabs();
-    const cameraIds = tabs.find((tab) => tab.id === 'camera')?.rows.map((row) => row.id) ?? [];
+    const cameraTab = tabs.find((tab) => tab.id === 'camera');
+    const cameraIds = cameraTab?.rows.map((row) => row.id) ?? [];
 
     // Essential camera rows still appear in the Camera tab (curated view may repeat rows).
     expect(cameraIds).toContain('toggleUndistortion');
     // Non-essential camera rows remain present too.
     expect(cameraIds).toContain('moveUp');
     expect(cameraIds).toContain('speedBoost');
+    // The fly-to registry entries render with arrow glyphs in the combo.
+    expect(cameraTab?.rows).toContainEqual({
+      id: 'flyToPrevImage',
+      description: 'Fly to previous image',
+      keyCombo: 'Shift + ←',
+    });
   });
 
   it('collapses the WASD rows in the Camera tab into one Navigate row, in place', () => {

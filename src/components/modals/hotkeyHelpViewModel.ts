@@ -1,5 +1,9 @@
 import type { CSSProperties } from 'react';
 import {
+  ESSENTIAL_FLY_NAV_COMBO,
+  ESSENTIAL_FLY_NAV_DESCRIPTION,
+  ESSENTIAL_FLY_NAV_IDS,
+  ESSENTIAL_FLY_NAV_ROW_ID,
   ESSENTIAL_HOTKEY_IDS,
   ESSENTIAL_IMAGE_NAV_DESCRIPTION,
   ESSENTIAL_IMAGE_NAV_IDS,
@@ -166,11 +170,21 @@ function stripTrailingParenthetical(description: string): string {
  * merged Image Modal tab). Keyed by the synthetic row id; the member ids point
  * at real registry entries so the combo is always recomputed from the source.
  */
-const COMPOSITE_HELP_ROWS: Record<string, { ids: readonly string[]; description: string }> = {
+const COMPOSITE_HELP_ROWS: Record<
+  string,
+  { ids: readonly string[]; description: string; combo?: string }
+> = {
   [ESSENTIAL_WASD_ROW_ID]: { ids: ESSENTIAL_WASD_IDS, description: ESSENTIAL_WASD_DESCRIPTION },
   [ESSENTIAL_IMAGE_NAV_ROW_ID]: {
     ids: ESSENTIAL_IMAGE_NAV_IDS,
     description: ESSENTIAL_IMAGE_NAV_DESCRIPTION,
+  },
+  [ESSENTIAL_FLY_NAV_ROW_ID]: {
+    ids: ESSENTIAL_FLY_NAV_IDS,
+    description: ESSENTIAL_FLY_NAV_DESCRIPTION,
+    // Joining the member combos would read 'Shift + ← Shift + →'; the
+    // curated display combo keeps the row compact.
+    combo: ESSENTIAL_FLY_NAV_COMBO,
   },
 };
 
@@ -178,6 +192,9 @@ function buildCompositeRow(id: string, hotkeys: HotkeyRegistry): HotkeyHelpRow |
   const composite = COMPOSITE_HELP_ROWS[id];
   if (!composite) {
     return null;
+  }
+  if (composite.combo) {
+    return { id, description: composite.description, keyCombo: composite.combo };
   }
   // Combos join with a space ('w a s d', '← →'); the row's `uppercase`
   // styling renders letters as W A S D.

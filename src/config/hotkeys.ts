@@ -247,6 +247,22 @@ export const HOTKEYS: HotkeyRegistry = {
     category: 'camera',
     scopes: ['viewer'],
   },
+  // Fly-to navigation (user request 2026-07-12). The actual binding lives in
+  // the gallery keyboard listener (window-level keydown, mounted even while
+  // the gallery panel is collapsed — see useImageGalleryKeyboardNavigation);
+  // these entries document it so the help panel can advertise the shortcut.
+  flyToPrevImage: {
+    keys: 'shift+left',
+    description: 'Fly to previous image',
+    category: 'camera',
+    scopes: ['viewer'],
+  },
+  flyToNextImage: {
+    keys: 'shift+right',
+    description: 'Fly to next image',
+    category: 'camera',
+    scopes: ['viewer'],
+  },
 } as const;
 
 /**
@@ -294,6 +310,20 @@ export const ESSENTIAL_IMAGE_NAV_ROW_ID = 'imageNavArrows';
 export const ESSENTIAL_IMAGE_NAV_DESCRIPTION = 'Previous / next image';
 
 /**
+ * The shift+arrow fly-to pair, rendered as one combined row in Essentials
+ * with a compact display combo ('shift ← →' — joining the two formatted
+ * combos would read as 'Shift + ← Shift + →').
+ */
+export const ESSENTIAL_FLY_NAV_IDS = [
+  'flyToPrevImage', // shift+left
+  'flyToNextImage', // shift+right
+] as const satisfies readonly (keyof typeof HOTKEYS)[];
+
+export const ESSENTIAL_FLY_NAV_ROW_ID = 'flyToImageArrows';
+export const ESSENTIAL_FLY_NAV_DESCRIPTION = 'Fly to previous / next image';
+export const ESSENTIAL_FLY_NAV_COMBO = 'shift ← →';
+
+/**
  * Mouse interactions surfaced in the Essentials tab (user request: click
  * semantics belong beside the key shortcuts). Display-only rows — the actual
  * pointer bindings live in the viewer's event handlers
@@ -322,11 +352,13 @@ export const ESSENTIAL_HOTKEY_IDS = [
   'adjustFrustumSize', //        alt+scroll  - Adjust camera frustum size
   'adjustPointSize', //          ctrl+scroll - Adjust point cloud size
   ESSENTIAL_IMAGE_NAV_ROW_ID, // left right - Previous / next image (composite)
+  ESSENTIAL_FLY_NAV_ROW_ID, //   shift+left shift+right - Fly to previous / next image (composite)
   'closeModal', //               escape - Close modal
 ] as const satisfies readonly (
   | keyof typeof HOTKEYS
   | typeof ESSENTIAL_WASD_ROW_ID
   | typeof ESSENTIAL_IMAGE_NAV_ROW_ID
+  | typeof ESSENTIAL_FLY_NAV_ROW_ID
   | EssentialMouseRowId
 )[];
 
@@ -366,10 +398,12 @@ export function formatKeyCombo(keys: string): string {
     .replace(/shift/gi, 'Shift')
     .replace(/alt/gi, 'Alt')
     .replace(/\+/g, ' + ')
-    .replace(/^left$/gi, '←')
-    .replace(/^right$/gi, '→')
-    .replace(/^up$/gi, '↑')
-    .replace(/^down$/gi, '↓')
+    // Word-boundary (not whole-string) so arrows render inside modifier
+    // combos too: 'shift+left' -> 'Shift + ←'.
+    .replace(/\bleft\b/gi, '←')
+    .replace(/\bright\b/gi, '→')
+    .replace(/\bup\b/gi, '↑')
+    .replace(/\bdown\b/gi, '↓')
     .replace(/^escape$/gi, 'Esc')
     .replace(/^enter$/gi, 'Enter')
     .replace(/^space$/gi, 'Space');

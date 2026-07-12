@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ESSENTIAL_FLY_NAV_IDS,
+  ESSENTIAL_FLY_NAV_ROW_ID,
   ESSENTIAL_HOTKEY_IDS,
   ESSENTIAL_IMAGE_NAV_IDS,
   ESSENTIAL_IMAGE_NAV_ROW_ID,
@@ -7,6 +9,7 @@ import {
   ESSENTIAL_WASD_IDS,
   ESSENTIAL_WASD_ROW_ID,
   HOTKEYS,
+  formatKeyCombo,
 } from './hotkeys';
 
 function comboScopePairs() {
@@ -42,10 +45,11 @@ describe('HOTKEYS registry', () => {
 });
 
 describe('ESSENTIAL_HOTKEY_IDS', () => {
-  it('references only registry ids plus the composite WASD/image-nav and mouse rows', () => {
+  it('references only registry ids plus the composite WASD/image-nav/fly-nav and mouse rows', () => {
     const syntheticIds = new Set<string>([
       ESSENTIAL_WASD_ROW_ID,
       ESSENTIAL_IMAGE_NAV_ROW_ID,
+      ESSENTIAL_FLY_NAV_ROW_ID,
       ...ESSENTIAL_MOUSE_ROWS.map((row) => row.id),
     ]);
     const missing = ESSENTIAL_HOTKEY_IDS.filter((id) => !syntheticIds.has(id) && !(id in HOTKEYS));
@@ -61,6 +65,7 @@ describe('ESSENTIAL_HOTKEY_IDS', () => {
     const comboFor = (id: string) => {
       if (id === ESSENTIAL_WASD_ROW_ID) return 'wasd';
       if (id === ESSENTIAL_IMAGE_NAV_ROW_ID) return 'arrows';
+      if (id === ESSENTIAL_FLY_NAV_ROW_ID) return 'shift-arrows';
       const mouseRow = ESSENTIAL_MOUSE_ROWS.find((row) => row.id === id);
       return mouseRow ? mouseRow.keyCombo : HOTKEYS[id].keys;
     };
@@ -79,8 +84,26 @@ describe('ESSENTIAL_HOTKEY_IDS', () => {
       'alt+scroll',
       'ctrl+scroll',
       'arrows',
+      'shift-arrows',
       'escape',
     ]);
+  });
+
+  it('backs the composite fly-nav row with the real shift+arrow registry entries', () => {
+    // The binding itself lives in the gallery keyboard listener (mounted even
+    // while the panel is collapsed); the registry entries document it.
+    expect(ESSENTIAL_FLY_NAV_IDS.map((id) => HOTKEYS[id].keys)).toEqual([
+      'shift+left',
+      'shift+right',
+    ]);
+  });
+
+  it('renders arrow glyphs inside modifier combos', () => {
+    expect(formatKeyCombo('left')).toBe('←');
+    expect(formatKeyCombo('shift+left')).toBe('Shift + ←');
+    expect(formatKeyCombo('shift+right')).toBe('Shift + →');
+    // Non-arrow combos are untouched.
+    expect(formatKeyCombo('ctrl+scroll')).toBe('Ctrl + scroll');
   });
 
   it('backs the composite Navigate row with the real WASD registry entries', () => {
