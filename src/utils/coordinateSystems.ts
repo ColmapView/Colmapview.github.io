@@ -70,15 +70,33 @@ export function getCoordinateSystemAxisDirection(
 }
 
 // Get the "world up" direction for a coordinate system (used for horizon lock)
-// For Y-vertical systems, this is the Y direction; for Z-up systems, this is the Z direction
+// For Y-vertical systems, this is the Y direction; for Z-up systems, this is
+// the Z direction. Y-DOWN conventions (COLMAP/OpenCV — AXIS_SEMANTIC pins
+// Y: 'Down') negate: their vertical axis points down, so world up is -Y.
 export function getWorldUp(coordinateSystem: AxesCoordinateSystem): [number, number, number] {
   const system = COORDINATE_SYSTEMS[coordinateSystem];
   // Z-up systems: Blender, Unreal
   if (coordinateSystem === 'blender' || coordinateSystem === 'unreal') {
     return system.z;
   }
-  // Y-vertical systems (most common): use Y direction [0, 1, 0]
+  // Y-vertical systems (most common): Y direction, negated when Y means down.
+  if (isAxisSemanticallyDown(coordinateSystem, 'Y')) {
+    // `|| 0` avoids emitting -0 components.
+    return [-system.y[0] || 0, -system.y[1] || 0, -system.y[2] || 0];
+  }
   return system.y;
+}
+
+/**
+ * Whether the given display axis points DOWN in its convention (per
+ * AXIS_SEMANTIC) — e.g. COLMAP/OpenCV +Y. Callers that align content "up"
+ * along an axis must negate the axis direction for these.
+ */
+export function isAxisSemanticallyDown(
+  coordinateSystem: AxesCoordinateSystem,
+  axis: CoordinateSystemAxis
+): boolean {
+  return AXIS_SEMANTIC[coordinateSystem][axis] === 'Down';
 }
 
 // Semantic meaning of each axis per coordinate system

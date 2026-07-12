@@ -4,6 +4,7 @@ import {
   COORDINATE_SYSTEMS,
   getCoordinateSystemAxisDirection,
   getWorldUp,
+  isAxisSemanticallyDown,
   type CoordinateSystemAxis,
 } from './coordinateSystems';
 
@@ -26,5 +27,22 @@ describe('coordinate systems', () => {
     expect(getWorldUp('threejs')).toEqual([0, 1, 0]);
     expect(getWorldUp('blender')).toEqual([0, 1, 0]);
     expect(getWorldUp('unreal')).toEqual([0, 1, 0]);
+  });
+
+  it('negates world up for Y-DOWN conventions (COLMAP/OpenCV)', () => {
+    // AXIS_SEMANTIC pins Y: 'Down' for these systems — treating +Y as world up
+    // inverted horizon lock and made floor alignment map cameras onto the
+    // convention's down axis.
+    expect(getWorldUp('colmap')).toEqual([0, -1, 0]);
+    expect(getWorldUp('opencv')).toEqual([0, -1, 0]);
+  });
+
+  it('reports which display axes are semantically down', () => {
+    expect(isAxisSemanticallyDown('colmap', 'Y')).toBe(true);
+    expect(isAxisSemanticallyDown('opencv', 'Y')).toBe(true);
+    expect(isAxisSemanticallyDown('colmap', 'Z')).toBe(false); // Fwd
+    expect(isAxisSemanticallyDown('colmap', 'X')).toBe(false); // Right
+    expect(isAxisSemanticallyDown('threejs', 'Y')).toBe(false); // Up
+    expect(isAxisSemanticallyDown('blender', 'Z')).toBe(false); // Up
   });
 });

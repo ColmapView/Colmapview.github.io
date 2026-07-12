@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { type ThreeEvent, useFrame } from '@react-three/fiber';
 import { hoverCardStyles, ICON_SIZES, INTERACTION_AXIS_COLORS, INTERACTION_HOVER_COLOR, OPACITY } from '../../theme';
-import { AXIS_SEMANTIC } from '../../utils/coordinateSystems';
+import { AXIS_SEMANTIC, isAxisSemanticallyDown } from '../../utils/coordinateSystems';
 import { HoverCard3D } from './HoverCard3D';
 import { BillboardLabel } from './BillboardLabel';
 import { markSceneContextMenuHandled } from './sceneContextMenuGuard';
@@ -62,15 +62,18 @@ export function FloorPlaneWidget({ boundsRadius }: FloorPlaneWidgetProps) {
     hovered ? OPACITY.interaction.circleHovered : OPACITY.interaction.circleDefault
   );
 
-  // Compute plane geometry data
+  // Compute plane geometry data. The arrow shows where +targetAxis will point
+  // after Apply, so it mirrors for semantically-down axes (COLMAP/OpenCV +Y)
+  // instead of pointing the convention's down axis at the frustums.
   const planeData = useMemo(() => {
     return getFloorPlaneWidgetData({
       boundsRadius,
       detectedPlane,
       normalFlipped,
       axesScale,
+      axisSign: isAxisSemanticallyDown(axesCoordinateSystem, targetAxis) ? -1 : 1,
     });
-  }, [detectedPlane, normalFlipped, boundsRadius, axesScale]);
+  }, [detectedPlane, normalFlipped, boundsRadius, axesScale, axesCoordinateSystem, targetAxis]);
 
   useFrame((state) => {
     if (ringMaterialRef.current) {

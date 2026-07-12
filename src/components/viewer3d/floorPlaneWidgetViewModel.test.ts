@@ -75,6 +75,27 @@ describe('floor plane widget view model', () => {
     expectVectorClose(data!.labelPosition.toArray(), [1, 2, -2.75]);
   });
 
+  it('mirrors the arrow for semantically-down target axes (axisSign -1)', () => {
+    // The arrow shows where +targetAxis will point after Apply. For Y-DOWN
+    // conventions (COLMAP/OpenCV) the camera-side normal maps to -Y, so the
+    // "+Y" arrow must point the other way — into the floor, away from the
+    // frustums (the reported bug). The disk stays put.
+    const data = getFloorPlaneWidgetData({
+      boundsRadius: 20,
+      detectedPlane: plane,
+      normalFlipped: false,
+      axesScale: 0.5,
+      axisSign: -1,
+    });
+
+    expect(data).not.toBeNull();
+    expectVectorClose(data!.position.toArray(), [1, 2, 3]);
+    expectVectorClose(data!.normalVec.toArray(), [0, 0, -1]);
+    expectVectorClose(data!.shaftCenter.toArray(), [1, 2, 0.7]);
+    expectVectorClose(data!.conePosition.toArray(), [1, 2, -1.8]);
+    expectVectorClose(data!.labelPosition.toArray(), [1, 2, -2.75]);
+  });
+
   it('claims only right-click pointer events for the widget context action', () => {
     expect(shouldClaimFloorPlaneContextPointer(2)).toBe(true);
     expect(shouldClaimFloorPlaneContextPointer(0)).toBe(false);

@@ -6,7 +6,7 @@ import type { Image } from '../../types/colmap';
 import type { Sim3dEuler } from '../../types/sim3d';
 import { Z_INDEX } from '../../theme';
 import { getImageWorldPosition } from '../../utils/colmapTransforms';
-import { getCoordinateSystemAxisDirection } from '../../utils/coordinateSystems';
+import { getCoordinateSystemAxisDirection, isAxisSemanticallyDown } from '../../utils/coordinateSystems';
 import {
   computeDistancesToPlane,
   detectPlaneRANSAC,
@@ -104,7 +104,12 @@ export function getFloorTargetUpVector(
   targetAxis: FloorTargetAxis
 ): THREE.Vector3 {
   const direction = getCoordinateSystemAxisDirection(coordinateSystem, targetAxis);
-  return new THREE.Vector3(direction[0], direction[1], direction[2]);
+  const vector = new THREE.Vector3(direction[0], direction[1], direction[2]);
+  // The oriented floor normal points toward the cameras (the floor's up
+  // side). For semantically-DOWN axes (COLMAP/OpenCV +Y) the alignment target
+  // must be the negated axis, otherwise the convention's down axis ends up
+  // pointing at the frustums (reported bug 2026-07-12).
+  return isAxisSemanticallyDown(coordinateSystem, targetAxis) ? vector.negate() : vector;
 }
 
 export function getFloorDetectionPositions(
@@ -137,7 +142,8 @@ export function getFloorNormalFlippedForCameraDownSide(
   plane: Plane | null,
   images: Iterable<Image>,
   transform: Sim3dEuler,
-  epsilon = 1e-6
+  epsilon = 1e-6,
+  fallbackPositions?: Float32Array
 ): boolean {
   if (!plane) return false;
 
@@ -168,7 +174,34 @@ export function getFloorNormalFlippedForCameraDownSide(
     }
   }
 
-  return positiveSideCameraCount < negativeSideCameraCount;
+  if (positiveSideCameraCount !== negativeSideCameraCount) {
+    return positiveSideCameraCount < negativeSideCameraCount;
+  }
+
+  // Cameras tied (or none countable): without a tie-breaker the raw RANSAC
+  // sign — random per run — would leak into the arrow. The scene bulk sits on
+  // the up side of a floor, so let the point majority vote the same way.
+  // fallbackPositions are in the already-transformed frame (the caller hands
+  // over detectFloorPlaneFromPositions's output), so no sim3d here.
+  if (fallbackPositions) {
+    let positiveSidePointCount = 0;
+    let negativeSidePointCount = 0;
+    for (let i = 0; i + 2 < fallbackPositions.length; i += 3) {
+      const signedDistance =
+        normal.x * fallbackPositions[i] +
+        normal.y * fallbackPositions[i + 1] +
+        normal.z * fallbackPositions[i + 2] +
+        plane.d;
+      if (signedDistance > sideEpsilon) {
+        positiveSidePointCount++;
+      } else if (signedDistance < -sideEpsilon) {
+        negativeSidePointCount++;
+      }
+    }
+    return positiveSidePointCount < negativeSidePointCount;
+  }
+
+  return false;
 }
 
 export function computeFloorAlignmentTransform(

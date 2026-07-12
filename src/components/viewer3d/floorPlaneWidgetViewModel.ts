@@ -24,6 +24,13 @@ export interface FloorPlaneWidgetDataOptions {
   detectedPlane: Plane | null;
   normalFlipped: boolean;
   axesScale: number;
+  /**
+   * Sign of the target axis in its convention: -1 when the axis is
+   * semantically DOWN (COLMAP/OpenCV +Y). The arrow shows where +targetAxis
+   * will point after Apply, so it mirrors against the camera-side normal for
+   * down axes; the disk itself is sign-independent.
+   */
+  axisSign?: 1 | -1;
 }
 
 export interface ScreenPoint {
@@ -50,6 +57,7 @@ export function getFloorPlaneWidgetData({
   detectedPlane,
   normalFlipped,
   axesScale,
+  axisSign = 1,
 }: FloorPlaneWidgetDataOptions): FloorPlaneWidgetData | null {
   if (!detectedPlane) return null;
 
@@ -57,7 +65,7 @@ export function getFloorPlaneWidgetData({
   const { normal, centroid, radius } = plane;
 
   const position = new THREE.Vector3(centroid[0], centroid[1], centroid[2]);
-  const normalVec = new THREE.Vector3(normal[0], normal[1], normal[2]);
+  const normalVec = new THREE.Vector3(normal[0], normal[1], normal[2]).multiplyScalar(axisSign);
 
   const quaternion = new THREE.Quaternion();
   quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normalVec);

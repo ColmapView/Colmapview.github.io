@@ -57,6 +57,18 @@ describe('floor plane alignment policy', () => {
     expectVectorClose(getFloorTargetUpVector('unreal', 'X'), [0, 0, -1]);
   });
 
+  it('negates the target vector for semantically-down axes (COLMAP/OpenCV Y)', () => {
+    // The oriented floor normal points toward the cameras (the up side of the
+    // floor). Aligning it to +Y in a Y-DOWN convention pointed the convention's
+    // down axis at the frustums (the reported bug); the target must be -Y so
+    // that +Y (down) goes into the floor.
+    expectVectorClose(getFloorTargetUpVector('colmap', 'Y'), [0, -1, 0]);
+    expectVectorClose(getFloorTargetUpVector('opencv', 'Y'), [0, -1, 0]);
+    // Non-down axes keep their raw direction.
+    expectVectorClose(getFloorTargetUpVector('colmap', 'Z'), [0, 0, 1]); // Fwd
+    expectVectorClose(getFloorTargetUpVector('colmap', 'X'), [1, 0, 0]); // Right
+  });
+
   it('keeps identity detection positions stable and transforms non-identity positions', () => {
     const positions = new Float32Array([1, 2, 3]);
 
@@ -160,6 +172,61 @@ describe('floor plane alignment policy', () => {
       ...identity,
       translationY: 10,
     })).toBe(false);
+  });
+
+  it('falls back to the point-cloud majority side when cameras tie or are absent', () => {
+    // Without a decisive camera vote the raw RANSAC sign (random 3-point
+    // winding) used to leak through, flipping the arrow between retries. The
+    // scene bulk sits on the up side of a floor, so points break the tie the
+    // same way cameras do. Positions are in the already-transformed frame
+    // (the caller hands over detectFloorPlaneFromPositions's output).
+    const plane: Plane = {
+      normal: [0, 1, 0],
+      d: 0,
+      centroid: [0, 0, 0],
+      inlierCount: 4,
+      radius: 1,
+    };
+    const identity = createIdentityEuler();
+    const cameraAt = (imageId: number, position: [number, number, number]) => buildImage({
+      imageId,
+      tvec: [-position[0], -position[1], -position[2]],
+    });
+    const pointsMostlyNegative = new Float32Array([
+      0, -2, 0,
+      1, -3, 0,
+      0, -1, 2,
+      0, 2, 0,
+    ]);
+    const pointsMostlyPositive = new Float32Array([
+      0, 2, 0,
+      1, 3, 0,
+      0, 1, 2,
+      0, -2, 0,
+    ]);
+
+    // No cameras at all: the point majority decides.
+    expect(getFloorNormalFlippedForCameraDownSide(plane, [], identity, 1e-6, pointsMostlyNegative)).toBe(true);
+    expect(getFloorNormalFlippedForCameraDownSide(plane, [], identity, 1e-6, pointsMostlyPositive)).toBe(false);
+
+    // Cameras tie 1-1: the point majority decides.
+    expect(getFloorNormalFlippedForCameraDownSide(plane, [
+      cameraAt(1, [0, 2, 0]),
+      cameraAt(2, [0, -2, 0]),
+    ], identity, 1e-6, pointsMostlyNegative)).toBe(true);
+
+    // A decisive camera vote is never overridden by points.
+    expect(getFloorNormalFlippedForCameraDownSide(plane, [
+      cameraAt(1, [0, 2, 0]),
+      cameraAt(2, [1, 3, 0]),
+      cameraAt(3, [0, -2, 0]),
+    ], identity, 1e-6, pointsMostlyNegative)).toBe(false);
+
+    // Points also tied (or absent): keep the raw sign, matching old behavior.
+    expect(getFloorNormalFlippedForCameraDownSide(plane, [], identity, 1e-6, new Float32Array([
+      0, 2, 0,
+      0, -2, 0,
+    ]))).toBe(false);
   });
 
   it('formats floor detection view state', () => {

@@ -116,7 +116,11 @@ export const FloorDetectionModal = memo(function FloorDetectionModal({
         getFloorNormalFlippedForCameraDownSide(
           result.plane,
           reconstruction?.images.values() ?? [],
-          transform
+          transform,
+          undefined,
+          // Tie-breaker when cameras split evenly or are absent; already in
+          // the transformed frame, matching the fitted plane.
+          result.positions
         )
       );
 
