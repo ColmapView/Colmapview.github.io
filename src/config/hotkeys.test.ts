@@ -16,9 +16,13 @@ function comboScopePairs() {
 }
 
 describe('HOTKEYS registry', () => {
-  it('binds i to the help panel and l to image-load cycling', () => {
+  it('binds i to the help panel and carries no fossil image-load entry', () => {
     expect(HOTKEYS.showHelp.keys).toBe('shift+/, i');
-    expect(HOTKEYS.cycleImageLoad.keys).toBe('l');
+    // cycleImageLoad was a dead registry entry: the imageLoadMode feature was
+    // removed long ago (persistedStoreMigrations still deletes its state) and
+    // no handler ever bound it, so the help panel was advertising a no-op
+    // shortcut (codex release-gate P1). The id must stay gone.
+    expect('cycleImageLoad' in HOTKEYS).toBe(false);
   });
 
   it('never binds the same combo twice within overlapping scopes', () => {

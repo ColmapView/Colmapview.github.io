@@ -154,12 +154,9 @@ export const HOTKEYS: HotkeyRegistry = {
     category: 'camera',
     scopes: ['viewer'],
   },
-  cycleImageLoad: {
-    keys: 'l',
-    description: 'Cycle image load mode',
-    category: 'camera',
-    scopes: ['viewer'],
-  },
+  // cycleImageLoad was removed (codex release-gate P1): the imageLoadMode
+  // feature is long gone (persistedStoreMigrations still deletes its state)
+  // and no handler ever bound it, so the entry only advertised a no-op key.
   cyclePointSize: {
     keys: 'p',
     description: 'Cycle point cloud color mode',

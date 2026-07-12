@@ -108,6 +108,30 @@ describe('HotkeyHelpModal', () => {
     expect(screen.queryByRole('tab', { name: 'Image Modal' })).not.toBeInTheDocument();
   });
 
+  it('wires the ARIA tab pattern: tabs control the panel, panel labelled by the active tab', () => {
+    useUIStore.setState({ touchMode: false, embedMode: false });
+    renderModal();
+
+    fireEvent.click(screen.getByTestId('hotkey-info-button'));
+
+    const panel = screen.getByRole('tabpanel');
+    expect(panel.id).toBeTruthy();
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(tab.id).toBeTruthy();
+      expect(tab).toHaveAttribute('aria-controls', panel.id);
+    }
+    // The panel is labelled by whichever tab is active — including after a switch.
+    expect(panel).toHaveAttribute(
+      'aria-labelledby',
+      screen.getByRole('tab', { name: 'Essentials' }).id
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Camera Controls' }));
+    expect(screen.getByRole('tabpanel')).toHaveAttribute(
+      'aria-labelledby',
+      screen.getByRole('tab', { name: 'Camera Controls' }).id
+    );
+  });
+
   it('switches tabs: clicking Camera Controls shows camera rows and hides essentials-only rows', () => {
     useUIStore.setState({ touchMode: false, embedMode: false });
     renderModal();

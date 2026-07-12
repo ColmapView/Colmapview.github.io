@@ -122,7 +122,9 @@ export function HotkeyHelpModal() {
               key={tab.id}
               type="button"
               role="tab"
+              id={`hotkey-help-tab-${tab.id}`}
               aria-selected={tab.id === activeTab.id}
+              aria-controls="hotkey-help-tabpanel"
               className={tab.id === activeTab.id ? HOTKEY_HELP_TAB_ACTIVE_CLASS : HOTKEY_HELP_TAB_CLASS}
               onClick={() => setActiveTabId(tab.id)}
             >
@@ -134,7 +136,12 @@ export function HotkeyHelpModal() {
         {/* Active tab rows (scrolls independently so the shell stays fixed).
             Flat context-menu-style rows: a description that grows and a right-aligned
             mono key combo — no table, no boxed <kbd>, and not clickable. */}
-        <div className={HOTKEY_HELP_TAB_PANEL_CLASS} role="tabpanel">
+        <div
+          className={HOTKEY_HELP_TAB_PANEL_CLASS}
+          role="tabpanel"
+          id="hotkey-help-tabpanel"
+          aria-labelledby={`hotkey-help-tab-${activeTab.id}`}
+        >
           {activeTab.rows.map((row) => (
             <div key={row.id} className={HOTKEY_HELP_ROW_CLASS}>
               <span className={HOTKEY_HELP_ROW_DESCRIPTION_CLASS}>{row.description}</span>
