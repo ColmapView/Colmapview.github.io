@@ -58,12 +58,14 @@ export function getDistanceInputTargetUp(
   targetAxis: TargetAxis
 ): THREE.Vector3 {
   const direction = getCoordinateSystemAxisDirection(axesCoordinateSystem, targetAxis);
-  const vector = new THREE.Vector3(direction[0], direction[1], direction[2]);
 
   // Mirror getFloorTargetUpVector: semantically-down axes (COLMAP/OpenCV +Y)
   // negate so the picked plane's up side never maps onto the convention's
-  // down axis.
-  return isAxisSemanticallyDown(axesCoordinateSystem, targetAxis) ? vector.negate() : vector;
+  // down axis. `|| 0` avoids -0 components.
+  if (isAxisSemanticallyDown(axesCoordinateSystem, targetAxis)) {
+    return new THREE.Vector3(-direction[0] || 0, -direction[1] || 0, -direction[2] || 0);
+  }
+  return new THREE.Vector3(direction[0], direction[1], direction[2]);
 }
 
 export function getInitialDistanceInputValue(

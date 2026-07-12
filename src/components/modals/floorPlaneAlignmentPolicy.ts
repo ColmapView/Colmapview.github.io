@@ -104,12 +104,14 @@ export function getFloorTargetUpVector(
   targetAxis: FloorTargetAxis
 ): THREE.Vector3 {
   const direction = getCoordinateSystemAxisDirection(coordinateSystem, targetAxis);
-  const vector = new THREE.Vector3(direction[0], direction[1], direction[2]);
   // The oriented floor normal points toward the cameras (the floor's up
   // side). For semantically-DOWN axes (COLMAP/OpenCV +Y) the alignment target
   // must be the negated axis, otherwise the convention's down axis ends up
-  // pointing at the frustums (reported bug 2026-07-12).
-  return isAxisSemanticallyDown(coordinateSystem, targetAxis) ? vector.negate() : vector;
+  // pointing at the frustums (reported bug 2026-07-12). `|| 0` avoids -0.
+  if (isAxisSemanticallyDown(coordinateSystem, targetAxis)) {
+    return new THREE.Vector3(-direction[0] || 0, -direction[1] || 0, -direction[2] || 0);
+  }
+  return new THREE.Vector3(direction[0], direction[1], direction[2]);
 }
 
 export function getFloorDetectionPositions(
