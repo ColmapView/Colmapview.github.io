@@ -291,8 +291,21 @@ export function getHotkeyHelpToggleKeyLabels(keys = HOTKEYS.showHelp.keys): stri
 // so the button needs no background blob or rounded pill; it just brightens the
 // muted icon on hover via an existing utility (hover-ds-text-primary changes
 // text color, which the SVG inherits through currentColor).
+// transition-all (not transition-colors): the auto-hide fade below transitions
+// opacity too, and the button never moves, so `all` is safe here.
 export const HOTKEY_INFO_BUTTON_CLASS =
-  'fixed top-4 left-4 flex items-center justify-center text-ds-muted hover-ds-text-primary cursor-pointer transition-colors';
+  'fixed top-4 left-4 flex items-center justify-center text-ds-muted hover-ds-text-primary cursor-pointer transition-all';
+// Auto-hide (user request 2026-07-12): the info button fades with the rest of
+// the button chrome. pointer-events-none rides along so the invisible button
+// can never swallow canvas clicks.
+export const HOTKEY_INFO_BUTTON_HIDDEN_CLASS = 'opacity-0 pointer-events-none';
+
+export function getHotkeyInfoButtonClassName(hidden: boolean): string {
+  return hidden
+    ? `${HOTKEY_INFO_BUTTON_CLASS} ${HOTKEY_INFO_BUTTON_HIDDEN_CLASS}`
+    : HOTKEY_INFO_BUTTON_CLASS;
+}
+
 export const HOTKEY_INFO_BUTTON_ICON_CLASS = 'w-5 h-5';
 export const HOTKEY_INFO_BUTTON_TITLE = 'Keyboard shortcuts (I)';
 export const HOTKEY_INFO_BUTTON_ARIA_LABEL = 'Show keyboard shortcuts';

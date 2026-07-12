@@ -27,6 +27,7 @@ import {
   getHotkeyHelpSections,
   getHotkeyHelpTabs,
   getHotkeyHelpToggleKeyLabels,
+  getHotkeyInfoButtonClassName,
   getHotkeyInfoButtonStyle,
   shouldShowHotkeyInfoButton,
 } from './hotkeyHelpViewModel';
@@ -213,8 +214,10 @@ describe('hotkey info button view model', () => {
     // Revision (2026-07-10): the InfoIcon draws its own circle, so the button is
     // transparent (no rounded pill, no background blob) and just brightens the
     // muted icon on hover via an existing utility (hover-ds-text-primary).
+    // transition-all (not transition-colors): the auto-hide fade transitions
+    // opacity too, and the button never moves, so `all` is safe here.
     expect(HOTKEY_INFO_BUTTON_CLASS).toBe(
-      'fixed top-4 left-4 flex items-center justify-center text-ds-muted hover-ds-text-primary cursor-pointer transition-colors'
+      'fixed top-4 left-4 flex items-center justify-center text-ds-muted hover-ds-text-primary cursor-pointer transition-all'
     );
     expect(HOTKEY_INFO_BUTTON_CLASS).toContain('top-4 left-4');
     expect(HOTKEY_INFO_BUTTON_CLASS).toContain('text-ds-muted');
@@ -225,6 +228,16 @@ describe('hotkey info button view model', () => {
     // No Tailwind-only escapes: JIT hover variants or arbitrary bracket utilities.
     expect(HOTKEY_INFO_BUTTON_CLASS).not.toContain('hover:');
     expect(HOTKEY_INFO_BUTTON_CLASS).not.toContain('[');
+  });
+
+  it('fades the info button with the auto-hide chrome (buttons element)', () => {
+    // User request 2026-07-12: the top-left info button participates in
+    // auto-hide like the rest of the button chrome. Hidden = faded AND
+    // click-through, so an invisible button can never swallow canvas clicks.
+    expect(getHotkeyInfoButtonClassName(false)).toBe(HOTKEY_INFO_BUTTON_CLASS);
+    expect(getHotkeyInfoButtonClassName(true)).toBe(
+      `${HOTKEY_INFO_BUTTON_CLASS} opacity-0 pointer-events-none`
+    );
   });
 
   it('exposes stable icon size, title, and aria labels', () => {

@@ -22,17 +22,18 @@ import {
   HOTKEY_HELP_TAB_PANEL_CLASS,
   HOTKEY_HELP_TITLE,
   HOTKEY_INFO_BUTTON_ARIA_LABEL,
-  HOTKEY_INFO_BUTTON_CLASS,
   HOTKEY_INFO_BUTTON_ICON_CLASS,
   HOTKEY_INFO_BUTTON_TITLE,
   getHotkeyHelpOverlayStyle,
   getHotkeyHelpPanelStyle,
   getHotkeyHelpTabs,
   getHotkeyHelpToggleKeyLabels,
+  getHotkeyInfoButtonClassName,
   getHotkeyInfoButtonStyle,
   shouldShowHotkeyInfoButton,
   type HotkeyHelpTabId,
 } from './hotkeyHelpViewModel';
+import { shouldHideChromeWithButtons } from '../layout/autoHideChromePolicy';
 
 /**
  * Modal that displays all available keyboard shortcuts, split into tabs so the
@@ -47,6 +48,11 @@ export function HotkeyHelpModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTabId, setActiveTabId] = useState<HotkeyHelpTabId>(ESSENTIALS_TAB_ID);
   const mode = useHotkeyHelpStoreFacade();
+  const hideWithButtons = shouldHideChromeWithButtons({
+    autoHideButtons: mode.autoHideButtons,
+    isIdle: mode.isIdle,
+    showAutoHideEditor: mode.showAutoHideEditor,
+  });
 
   // Toggle the panel and keep the important shortcuts up front by re-selecting
   // Essentials. Done here in the event handler (not a useEffect) to satisfy
@@ -76,10 +82,14 @@ export function HotkeyHelpModal() {
       {shouldShowHotkeyInfoButton(mode) && (
         <button
           onClick={togglePanel}
-          className={HOTKEY_INFO_BUTTON_CLASS}
+          // Fades with the auto-hide button chrome (user request 2026-07-12);
+          // hidden also means click-through and out of the tab order.
+          className={getHotkeyInfoButtonClassName(hideWithButtons)}
           style={getHotkeyInfoButtonStyle()}
           title={HOTKEY_INFO_BUTTON_TITLE}
           aria-label={HOTKEY_INFO_BUTTON_ARIA_LABEL}
+          aria-hidden={hideWithButtons || undefined}
+          tabIndex={hideWithButtons ? -1 : undefined}
           data-testid="hotkey-info-button"
         >
           <InfoIcon className={HOTKEY_INFO_BUTTON_ICON_CLASS} />
