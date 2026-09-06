@@ -481,7 +481,7 @@ describe('ImageDetailModal view-model helpers', () => {
       variant: 'touch',
       hasTarget: true,
     });
-    expect(touchPrevious.label).toBe('← Prev');
+    expect(touchPrevious.label).toBe('Prev');
     expect(touchPrevious.disabled).toBe(false);
     expect(touchPrevious.className).toContain('touch-hit-44');
     expect(touchPrevious.className).toContain('bg-ds-hover text-ds-primary');
@@ -491,7 +491,7 @@ describe('ImageDetailModal view-model helpers', () => {
       variant: 'touch',
       hasTarget: false,
     });
-    expect(touchNext.label).toBe('Next →');
+    expect(touchNext.label).toBe('Next');
     expect(touchNext.disabled).toBe(true);
     expect(touchNext.className).toContain('touch-hit-44');
     expect(touchNext.className).toContain('bg-ds-secondary text-ds-muted');
@@ -501,7 +501,7 @@ describe('ImageDetailModal view-model helpers', () => {
       variant: 'desktop',
       hasTarget: true,
     });
-    expect(desktopPrevious.label).toBe('← Prev');
+    expect(desktopPrevious.label).toBe('Prev');
     expect(desktopPrevious.disabled).toBe(false);
     expect(desktopPrevious.className).toContain('px-4 py-1 text-xs gap-1');
     expect(desktopPrevious.className).toContain('bg-ds-hover text-ds-secondary');
@@ -511,7 +511,7 @@ describe('ImageDetailModal view-model helpers', () => {
       variant: 'desktop',
       hasTarget: false,
     });
-    expect(desktopNext.label).toBe('Next →');
+    expect(desktopNext.label).toBe('Next');
     expect(desktopNext.disabled).toBe(true);
     expect(desktopNext.className).toContain('opacity-50 cursor-not-allowed');
     expect(desktopNext.className).toContain('bg-ds-secondary text-ds-muted');

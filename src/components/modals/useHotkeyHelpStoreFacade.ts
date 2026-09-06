@@ -3,6 +3,7 @@ import { useUIStore } from '../../store';
 export interface HotkeyHelpStoreFacade {
   /** Panel open state; store-owned so the status bar can open it too. */
   showHotkeyHelp: boolean;
+  hotkeyHelpInitialTab: 'essentials' | 'about';
   setShowHotkeyHelp: (show: boolean) => void;
   /** Flips the panel open/closed (? / I hotkey). */
   toggleHotkeyHelp: () => void;
@@ -18,11 +19,13 @@ export interface HotkeyHelpStoreFacade {
  */
 export function useHotkeyHelpStoreFacade(): HotkeyHelpStoreFacade {
   const showHotkeyHelp = useUIStore((s) => s.showHotkeyHelp);
+  const hotkeyHelpInitialTab = useUIStore((s) => s.hotkeyHelpInitialTab);
   const setShowHotkeyHelp = useUIStore((s) => s.setShowHotkeyHelp);
   const toggleHotkeyHelp = useUIStore((s) => s.toggleHotkeyHelp);
 
   return {
     showHotkeyHelp,
+    hotkeyHelpInitialTab,
     setShowHotkeyHelp,
     toggleHotkeyHelp,
   };

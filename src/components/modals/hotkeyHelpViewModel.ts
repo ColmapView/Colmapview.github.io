@@ -1,3 +1,4 @@
+import { tabStyles } from '../../theme/selectionStyles';
 import type { CSSProperties } from 'react';
 import {
   ESSENTIAL_FLY_NAV_COMBO,
@@ -96,10 +97,7 @@ export const HOTKEY_HELP_ROW_DESCRIPTION_CLASS = 'flex-1 text-left';
 // also asserts this equals contextMenuStyles.hotkey to keep them in lockstep.
 export const HOTKEY_HELP_ROW_KEY_CLASS =
   'text-xs font-mono text-ds-muted ml-auto uppercase tracking-wide';
-// hotkey-help-divider-top instead of `border-t border-ds`: those utilities set
-// border-style on ALL sides while widths stay at the CSS-initial `medium` (3px),
-// which painted a visible box around the footer (repo-wide utility footgun,
-// ledgered). The dedicated rule draws only the intended 1px top hairline.
+// Dedicated footer hairline retained for stable help-panel styling.
 export const HOTKEY_HELP_FOOTER_CLASS =
   'hotkey-help-divider-top px-4 py-2 text-ds-muted text-xs text-center flex-shrink-0';
 
@@ -111,17 +109,14 @@ export const HOTKEY_HELP_FOOTER_CLASS =
 // the tertiary panel). Both carry the `hotkey-help-tab` marker class that the
 // focus-suppression rule in index.css targets so a mouse click shows no focus ring
 // while keyboard Tab still does (via the global :focus-visible rule).
-// hotkey-help-divider-bottom / hotkey-help-tab-active instead of the border-b /
-// border-b-2 utilities: same all-sides `border-style: solid` footgun as the
-// footer note above (buttons are hit too — `button { border: none }` leaves
-// widths at `medium`). The dedicated rules paint only the bottom edge.
+// Dedicated divider and active-tab rules keep help styling explicit.
 // px-1 indents the px-3 tab buttons to the header bar's px-4 text inset; no
 // mb — the rows area carries its own vertical padding.
 export const HOTKEY_HELP_TAB_LIST_CLASS = 'flex hotkey-help-divider-bottom flex-shrink-0 px-1';
 export const HOTKEY_HELP_TAB_CLASS =
-  'px-3 py-1.5 text-sm font-medium transition-colors bg-transparent text-ds-secondary hover-ds-text-primary cursor-pointer hotkey-help-tab';
+  `${tabStyles.compact} hotkey-help-tab`;
 export const HOTKEY_HELP_TAB_ACTIVE_CLASS =
-  'px-3 py-1.5 text-sm font-medium transition-colors bg-transparent text-ds-primary hotkey-help-tab-active cursor-pointer hotkey-help-tab';
+  `${tabStyles.compactActive} hotkey-help-tab-active hotkey-help-tab`;
 // Scrollable rows area for the active tab (flex child; min-h-0 lets it shrink
 // below content height so overflow-auto actually scrolls inside the flex column).
 export const HOTKEY_HELP_TAB_PANEL_CLASS = 'flex-1 min-h-0 overflow-auto py-2';

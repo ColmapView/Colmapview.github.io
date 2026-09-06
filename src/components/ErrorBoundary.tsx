@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from 'react';
-import { emptyStateStyles, buttonStyles } from '../theme';
+import { emptyStateStyles, buttonStyles, errorStateStyles } from '../theme';
 import { classifyError, getRecoveryStrategy, type AppErrorType } from '../utils/errorUtils';
 import { getErrorMessage } from '../constants/errorMessages';
 import { appLogger } from '../utils/logger';
@@ -96,10 +96,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     // Inline variant - compact display
     if (variant === 'inline') {
       return (
-        <div className="flex flex-col items-center justify-center h-full p-4 text-center bg-ds-secondary">
-          <div className="text-ds-error text-2xl mb-2">!</div>
-          <h3 className="text-sm font-medium text-ds-primary mb-1">{displayTitle}</h3>
-          <p className="text-xs text-ds-secondary mb-3 max-w-xs">
+        <div className={errorStateStyles.container}>
+          <div className={errorStateStyles.icon}>!</div>
+          <h3 className={errorStateStyles.title}>{displayTitle}</h3>
+          <p className={errorStateStyles.message}>
             {error?.message ?? errorMessage.message}
           </p>
           <div className="flex gap-2">

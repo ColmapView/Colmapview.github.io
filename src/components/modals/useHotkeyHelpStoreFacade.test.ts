@@ -7,6 +7,7 @@ const DEFAULT_FACADE = {
   // Panel open state is store-owned so the status bar's Shortcuts entry can
   // open this exact panel.
   showHotkeyHelp: false,
+  hotkeyHelpInitialTab: 'essentials',
   setShowHotkeyHelp: expect.any(Function),
   toggleHotkeyHelp: expect.any(Function),
 };

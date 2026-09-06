@@ -157,6 +157,7 @@ export interface UIState {
   // Shortcuts entry and the touch status bar's Help entry. Transient — never
   // persisted.
   showHotkeyHelp: boolean;
+  hotkeyHelpInitialTab: 'essentials' | 'about';
 
   // Context menu (persisted config + transient state)
   contextMenuActions: ContextMenuAction[];
@@ -222,7 +223,7 @@ export interface UIState {
   setShowFloorModal: (show: boolean) => void;
   setShowConversionModal: (show: boolean) => void;
   setShowAutoHideEditor: (show: boolean) => void;
-  setShowHotkeyHelp: (show: boolean) => void;
+  setShowHotkeyHelp: (show: boolean, initialTab?: 'essentials' | 'about') => void;
   toggleHotkeyHelp: () => void;
 
   // Context menu actions
@@ -295,6 +296,7 @@ export const useUIStore = create<UIState>()(
       showConversionModal: false,
       showAutoHideEditor: false,
       showHotkeyHelp: false,
+      hotkeyHelpInitialTab: 'essentials',
       contextMenuActions: DEFAULT_CONTEXT_MENU_ACTIONS,
       contextMenuPosition: null,
       showContextMenuEditor: false,
@@ -364,8 +366,8 @@ export const useUIStore = create<UIState>()(
       setShowFloorModal: (show) => set({ showFloorModal: show }),
       setShowConversionModal: (show) => set({ showConversionModal: show }),
       setShowAutoHideEditor: (show) => set({ showAutoHideEditor: show }),
-      setShowHotkeyHelp: (show) => set({ showHotkeyHelp: show }),
-      toggleHotkeyHelp: () => set((state) => ({ showHotkeyHelp: !state.showHotkeyHelp })),
+      setShowHotkeyHelp: (show, initialTab = 'essentials') => set({ showHotkeyHelp: show, hotkeyHelpInitialTab: initialTab }),
+      toggleHotkeyHelp: () => set((state) => ({ showHotkeyHelp: !state.showHotkeyHelp, hotkeyHelpInitialTab: 'essentials' })),
 
       // Context menu actions
       openContextMenu: (x, y) => set({ contextMenuPosition: { x, y } }),

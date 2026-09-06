@@ -20,8 +20,17 @@ export function HoverIcon({ icon, label }: HoverIconProps) {
 // Close / X icon
 export function CloseIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true" focusable="false" strokeLinejoin="round">
       <path d="M18 6L6 18M6 6l12 12" />
+    </svg>
+  );
+}
+
+// Add icon, shared by standalone and compact add controls.
+export function PlusIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <path d="M12 5v14M5 12h14" />
     </svg>
   );
 }
@@ -29,7 +38,7 @@ export function CloseIcon({ className }: IconProps) {
 // Checkmark icon
 export function CheckIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 6L9 17l-5-5" />
     </svg>
   );
@@ -38,7 +47,7 @@ export function CheckIcon({ className }: IconProps) {
 // Reset / Refresh icon (circular arrow)
 export function ResetIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
       <path d="M3 3v5h5" />
     </svg>
@@ -48,11 +57,11 @@ export function ResetIcon({ className }: IconProps) {
 // Reload icon (two circular arrows)
 export function ReloadIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 12a8 8 0 0 0-8-8" />
-      <path d="M12 1l-3 3 3 3" />
+      <path d="M12 2l-2 2 2 2" />
       <path d="M4 12a8 8 0 0 0 8 8" />
-      <path d="M12 23l3-3-3-3" />
+      <path d="M12 22l2-2-2-2" />
     </svg>
   );
 }
@@ -60,7 +69,7 @@ export function ReloadIcon({ className }: IconProps) {
 // Upload icon (arrow up into tray)
 export function UploadIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 15V3M12 3l-4 4M12 3l4 4" />
       <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
     </svg>
@@ -70,8 +79,8 @@ export function UploadIcon({ className }: IconProps) {
 // Off / Disabled icon (circle with slash)
 export function OffIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="10" />
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
       <path d="M4 4l16 16" />
     </svg>
   );
@@ -80,7 +89,7 @@ export function OffIcon({ className }: IconProps) {
 // Hide / Eye-off icon
 export function HideIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 3l18 18M10.5 10.5a3 3 0 004.5 4.5M6.5 6.5C4 8.5 2 12 2 12s4 6 10 6c1.5 0 3-.5 4.5-1.5M17 17c2-1.5 3.5-3.5 5-5-1-1.5-4-6-10-6-.5 0-1 0-1.5.1" />
     </svg>
   );
@@ -89,9 +98,11 @@ export function HideIcon({ className }: IconProps) {
 // Settings / Gear icon
 export function SettingsIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
+      <g transform="translate(2 2) scale(0.833333)">
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      </g>
     </svg>
   );
 }
@@ -99,7 +110,7 @@ export function SettingsIcon({ className }: IconProps) {
 // Fullscreen icon
 export function FullscreenIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3M16 21h3a2 2 0 002-2v-3" />
     </svg>
   );
@@ -108,7 +119,7 @@ export function FullscreenIcon({ className }: IconProps) {
 // Filter icon
 export function FilterIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
     </svg>
   );
@@ -117,7 +128,7 @@ export function FilterIcon({ className }: IconProps) {
 // Lightning/Speed icon
 export function SpeedIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
     </svg>
   );
@@ -126,7 +137,7 @@ export function SpeedIcon({ className }: IconProps) {
 // Speed dimmed (for speed down)
 export function SpeedDimIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" opacity="0.4" />
     </svg>
   );
@@ -135,7 +146,7 @@ export function SpeedDimIcon({ className }: IconProps) {
 // Plus icon (for size up, etc.)
 export function PlusCircleIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="6" fill="currentColor" opacity="0.3" />
       <path d="M12 8v8M8 12h8" />
     </svg>
@@ -145,7 +156,7 @@ export function PlusCircleIcon({ className }: IconProps) {
 // Minus icon (for size down, etc.)
 export function MinusCircleIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="4" fill="currentColor" opacity="0.3" />
       <path d="M8 12h8" />
     </svg>
@@ -155,7 +166,7 @@ export function MinusCircleIcon({ className }: IconProps) {
 // Crosshair / Target icon
 export function CrosshairIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="3" />
       <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
     </svg>
@@ -165,7 +176,7 @@ export function CrosshairIcon({ className }: IconProps) {
 // Fly to / Send icon
 export function FlyToIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M22 2L11 13" />
       <path d="M22 2l-7 20-4-9-9-4 20-7z" />
     </svg>
@@ -175,8 +186,8 @@ export function FlyToIcon({ className }: IconProps) {
 // Info icon (circle with 'i')
 export function InfoIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="10" />
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
       <path d="M12 16v-4" />
       <circle cx="12" cy="8" r="1" fill="currentColor" stroke="none" />
     </svg>
@@ -186,7 +197,7 @@ export function InfoIcon({ className }: IconProps) {
 // Warning icon (triangle with exclamation)
 export function WarningIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
       <path d="M12 9v4" />
       <circle cx="12" cy="17" r="1" fill="currentColor" stroke="none" />
@@ -197,7 +208,7 @@ export function WarningIcon({ className }: IconProps) {
 // Link icon (chain link)
 export function LinkIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
     </svg>
@@ -207,7 +218,7 @@ export function LinkIcon({ className }: IconProps) {
 // Share icon (share arrow)
 export function ShareIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="18" cy="5" r="3" />
       <circle cx="6" cy="12" r="3" />
       <circle cx="18" cy="19" r="3" />
@@ -219,7 +230,7 @@ export function ShareIcon({ className }: IconProps) {
 // Dice icon (for "Lucky!" random feature)
 export function DiceIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <circle cx="8" cy="8" r="1.5" fill="currentColor" stroke="none" />
       <circle cx="16" cy="8" r="1.5" fill="currentColor" stroke="none" />
@@ -233,7 +244,7 @@ export function DiceIcon({ className }: IconProps) {
 // File JSON icon (document with braces)
 export function FileJsonIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
       <path d="M14 2v6h6" />
       <path d="M8 13h1.5a1 1 0 011 1v1.5a1 1 0 01-1 1h0a1 1 0 01-1-1V14" />
@@ -245,7 +256,7 @@ export function FileJsonIcon({ className }: IconProps) {
 // Embed icon (code brackets for iframe embedding)
 export function EmbedIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M16 18l6-6-6-6" />
       <path d="M8 6l-6 6 6 6" />
     </svg>
@@ -255,7 +266,7 @@ export function EmbedIcon({ className }: IconProps) {
 // Chevron down icon (for collapsible sections)
 export function ChevronDownIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M6 9l6 6 6-6" />
     </svg>
   );
@@ -264,7 +275,7 @@ export function ChevronDownIcon({ className }: IconProps) {
 // Chevron right icon (for collapsed sections)
 export function ChevronRightIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 18l6-6-6-6" />
     </svg>
   );
@@ -274,7 +285,7 @@ export function ChevronRightIcon({ className }: IconProps) {
 // utility in index.css, so the flipped glyph is its own component)
 export function ChevronLeftIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M15 18l-6-6 6-6" />
     </svg>
   );
@@ -283,7 +294,7 @@ export function ChevronLeftIcon({ className }: IconProps) {
 // Save / Floppy disk icon
 export function SaveIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
       <path d="M17 21v-8H7v8" />
       <path d="M7 3v5h8" />
@@ -294,7 +305,7 @@ export function SaveIcon({ className }: IconProps) {
 // Trash / Delete icon
 export function TrashIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 6h18" />
       <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" />
       <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
@@ -305,7 +316,7 @@ export function TrashIcon({ className }: IconProps) {
 // Gallery grid view icon (2x2 squares)
 export function GalleryGridIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="3" width="7" height="7" />
       <rect x="14" y="3" width="7" height="7" />
       <rect x="3" y="14" width="7" height="7" />
@@ -317,7 +328,7 @@ export function GalleryGridIcon({ className }: IconProps) {
 // Gallery list view icon (rows with thumbnails)
 export function GalleryListIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="4" width="4" height="4" />
       <line x1="10" y1="6" x2="21" y2="6" />
       <rect x="3" y="10" width="4" height="4" />
@@ -331,7 +342,7 @@ export function GalleryListIcon({ className }: IconProps) {
 // Sort ascending icon (arrow up)
 export function SortAscIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 5v14M5 12l7-7 7 7" />
     </svg>
   );
@@ -340,7 +351,7 @@ export function SortAscIcon({ className }: IconProps) {
 // Sort descending icon (arrow down)
 export function SortDescIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 5v14M5 12l7 7 7-7" />
     </svg>
   );

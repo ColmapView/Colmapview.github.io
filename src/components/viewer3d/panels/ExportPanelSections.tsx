@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { controlPanelStyles } from '../../../theme';
+import { controlPanelStyles, loadingStyles } from '../../../theme';
 import { SelectRow, SliderRow } from '../ControlComponents';
 import {
   EXPORT_FORMAT_DESCRIPTIONS,
@@ -41,7 +41,7 @@ export const ExportReconstructionSection = memo(function ExportReconstructionSec
 }: ExportReconstructionSectionProps) {
   return (
     <>
-      <div className="text-ds-primary text-sm mb-1">Reconstruction:</div>
+      <div className={`${styles.panelSectionLabel} mb-2`}>Reconstruction</div>
       <SelectRow
         label="Format"
         value={exportFormat}
@@ -113,7 +113,7 @@ export const ExportMediaSection = memo(function ExportMediaSection({
 
   return (
     <>
-      <div className="text-ds-primary text-sm mb-1 mt-3">Images:</div>
+      <div className={`${styles.panelSectionLabel} mb-2 mt-4`}>Images</div>
       {hasImages ? (
         <>
           <SliderRow
@@ -189,9 +189,9 @@ interface ExportProgressProps {
 function ExportProgress({ label, progress }: ExportProgressProps) {
   return (
     <div>
-      <div className="h-2 bg-ds-tertiary rounded overflow-hidden">
+      <div className={loadingStyles.progressTrack} role="progressbar" aria-label={`Export ${label}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}>
         <div
-          className="h-full bg-ds-accent transition-all"
+          className={loadingStyles.progressFill}
           style={getExportProgressStyle(progress)}
         />
       </div>

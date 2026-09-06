@@ -9,7 +9,7 @@ test.describe('Mask Export', () => {
     await page.goto('/');
 
     // Dismiss the empty state panel
-    const closeButton = page.locator('button:has-text("×")').first();
+    const closeButton = page.getByRole('button', { name: 'Dismiss this panel', exact: true });
     if (await closeButton.isVisible({ timeout: 2000 })) {
       await closeButton.click();
     }
@@ -24,7 +24,7 @@ test.describe('Mask Export', () => {
     await expect(exportButton).toBeVisible({ timeout: 10000 });
     await expect(exportButton).toBeEnabled({ timeout: 15000 });
     await exportButton.hover();
-    await expect(page.locator('text=Reconstruction:')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Reconstruction', { exact: true })).toBeVisible({ timeout: 5000 });
 
     // Verify mask export is available when loaded files include masks.
     await expect(page.locator('button:has-text("Download Masks")')).toBeVisible({ timeout: 5000 });
@@ -44,7 +44,7 @@ test.describe('Mask Export', () => {
   test('should download binary reconstruction files from the Export panel', async ({ page }) => {
     await page.goto('/');
 
-    const closeButton = page.locator('button:has-text("×")').first();
+    const closeButton = page.getByRole('button', { name: 'Dismiss this panel', exact: true });
     if (await closeButton.isVisible({ timeout: 2000 })) {
       await closeButton.click();
     }
@@ -56,7 +56,7 @@ test.describe('Mask Export', () => {
     await expect(exportButton).toBeVisible({ timeout: 10000 });
     await expect(exportButton).toBeEnabled({ timeout: 15000 });
     await exportButton.hover();
-    await expect(page.locator('text=Reconstruction:')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Reconstruction', { exact: true })).toBeVisible({ timeout: 5000 });
 
     const binaryDownloads: string[] = [];
     page.on('download', (download) => {
@@ -74,7 +74,7 @@ test.describe('Mask Export', () => {
   test('should download PLY point cloud from the Export panel', async ({ page }) => {
     await page.goto('/');
 
-    const closeButton = page.locator('button:has-text("×")').first();
+    const closeButton = page.getByRole('button', { name: 'Dismiss this panel', exact: true });
     if (await closeButton.isVisible({ timeout: 2000 })) {
       await closeButton.click();
     }
@@ -86,7 +86,7 @@ test.describe('Mask Export', () => {
     await expect(exportButton).toBeVisible({ timeout: 10000 });
     await expect(exportButton).toBeEnabled({ timeout: 15000 });
     await exportButton.hover();
-    await expect(page.locator('text=Reconstruction:')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Reconstruction', { exact: true })).toBeVisible({ timeout: 5000 });
 
     await page.locator('select').first().selectOption('ply');
     const downloadPromise = page.waitForEvent('download');
@@ -105,7 +105,7 @@ test.describe('Mask Export', () => {
   test('should open the camera conversion modal from the Export panel', async ({ page }) => {
     await page.goto('/');
 
-    const closeButton = page.locator('button:has-text("×")').first();
+    const closeButton = page.getByRole('button', { name: 'Dismiss this panel', exact: true });
     if (await closeButton.isVisible({ timeout: 2000 })) {
       await closeButton.click();
     }
@@ -117,7 +117,7 @@ test.describe('Mask Export', () => {
     await expect(exportButton).toBeVisible({ timeout: 10000 });
     await expect(exportButton).toBeEnabled({ timeout: 15000 });
     await exportButton.hover();
-    await expect(page.locator('text=Reconstruction:')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Reconstruction', { exact: true })).toBeVisible({ timeout: 5000 });
 
     await page.getByRole('button', { name: 'Convert Camera Model' }).click();
 

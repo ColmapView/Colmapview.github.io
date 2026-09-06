@@ -140,7 +140,7 @@ export function ConfirmationHost() {
         className={getConfirmationDialogClass(request.size)}
         style={getConfirmationDialogStyle(request.size)}
       >
-        <h3 id={titleId} className="text-ds-primary text-base font-medium mb-2">
+        <h3 id={titleId} className="m-0 text-ds-primary text-base font-semibold mb-2">
           {request.title}
         </h3>
         <p id={messageId} className="text-ds-secondary text-sm whitespace-pre-line mb-5">

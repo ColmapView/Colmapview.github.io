@@ -8,7 +8,7 @@ export const TOUCH_GALLERY_DRAWER_BODY_RESET_OVERFLOW = '';
 export const TOUCH_GALLERY_DRAWER_BACKDROP_CLASS =
   'fixed inset-0 z-touch-drawer-backdrop bg-ds-void/50 backdrop-blur-sm';
 export const TOUCH_GALLERY_DRAWER_PANEL_CLASS =
-  'fixed inset-y-0 right-0 z-touch-drawer bg-ds-secondary border-l border-ds shadow-ds-lg flex flex-col';
+  'fixed inset-y-0 right-0 z-touch-drawer bg-ds-secondary border-l border-ds flex flex-col';
 
 export type TouchGalleryDrawerMoveState =
   | { type: 'none' }

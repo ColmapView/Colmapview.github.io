@@ -108,7 +108,7 @@ export const ScreenshotPanel = memo(function ScreenshotPanel({
       panelTitle="Screenshot"
     >
       <div className={styles.panelContent}>
-        <div className="text-ds-primary text-sm mb-1">Static:</div>
+        <div className={`${styles.panelSectionLabel} mb-2`}>Static</div>
         <SelectRow
           label="Size"
           value={screenshotSize}
@@ -135,7 +135,7 @@ export const ScreenshotPanel = memo(function ScreenshotPanel({
             Copy
           </button>
         </div>
-        <div className="text-ds-primary text-sm mt-3 mb-1">Dynamic:</div>
+        <div className={`${styles.panelSectionLabel} mt-4 mb-2`}>Dynamic</div>
         <SelectRow
           label="Format"
           value={recordingFormat}

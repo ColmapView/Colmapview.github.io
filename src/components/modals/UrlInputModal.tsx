@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useId } from 'react';
-import { inputStyles, getButtonClass } from '../../theme';
-import { ChevronDownIcon, ChevronRightIcon } from '../../icons';
+import { inputStyles, getButtonClass, modalStyles, floatingPanelStyles, panelStyles } from '../../theme';
+import { ChevronDownIcon, ChevronRightIcon, CloseIcon } from '../../icons';
 import { ModalDialogShell } from '../ui/ModalDialogShell';
 import {
   getUrlInputHelpItemClassName,
@@ -74,15 +74,21 @@ export function UrlInputModal({ isOpen, onClose, onLoad, loading = false }: UrlI
       onClose={onClose}
       ariaLabelledBy={titleId}
       ariaDescribedBy={descriptionId}
-      overlayClassName="fixed inset-0 flex items-center justify-center bg-ds-void/50"
+      overlayClassName={panelStyles.overlay}
       overlayStyle={getUrlInputModalOverlayStyle()}
-      panelClassName="bg-ds-tertiary border border-ds rounded-lg shadow-ds-lg p-5 min-w-[400px] max-w-[520px]"
+      panelClassName={`${floatingPanelStyles.dialog} url-input-panel`}
       panelTestId="url-modal"
       initialFocusRef={inputRef}
       closeOnBackdrop={shouldCloseUrlInputFromBackdrop(true, loading)}
       closeOnEscape={!loading}
     >
-        <h3 id={titleId} className="text-ds-primary font-medium mb-3">Load from URL</h3>
+      <div className={`${modalStyles.popupHeader} flex-shrink-0`}>
+        <h3 id={titleId} className={modalStyles.toolHeaderTitle}>Load from URL</h3>
+        <button type="button" onClick={onClose} disabled={loading} className={modalStyles.toolHeaderClose} aria-label="Close URL dialog">
+          <CloseIcon className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <div className={panelStyles.scrollBody}>
         <p id={descriptionId} className="text-ds-muted text-sm mb-4">
           {URL_INPUT_DESCRIPTION}
         </p>
@@ -110,7 +116,7 @@ export function UrlInputModal({ isOpen, onClose, onLoad, loading = false }: UrlI
             Supported URL formats
           </button>
           {showHelp && (
-            <div className="mt-2 p-3 bg-ds-secondary rounded border border-ds text-xs text-ds-muted">
+            <div className="mt-2 p-3 bg-ds-tertiary rounded border border-ds text-xs text-ds-muted">
               {URL_INPUT_HELP_SECTIONS.map((section) => (
                 <UrlInputHelpSection key={section.title} section={section} />
               ))}
@@ -137,6 +143,7 @@ export function UrlInputModal({ isOpen, onClose, onLoad, loading = false }: UrlI
             {actionState.loadLabel}
           </button>
         </div>
+      </div>
     </ModalDialogShell>
   );
 }

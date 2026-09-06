@@ -1,3 +1,4 @@
+import { getClampedTooltipPosition } from './mouseTooltipPolicy';
 import { describe, expect, it } from 'vitest';
 import {
   getMouseTooltipStyle,
@@ -90,4 +91,16 @@ describe('mouse tooltip policy', () => {
       top: 12,
     });
   });
+});
+
+it('clamps hints at viewport corners and flips above when needed', () => {
+  const size = { width: 200, height: 80 };
+  const viewport = { width: 320, height: 240 };
+  for (const anchor of [{ x: 0, y: 0 }, { x: 319, y: 239 }]) {
+    const position = getClampedTooltipPosition(anchor, size, viewport, true);
+    expect(position.left).toBeGreaterThanOrEqual(8);
+    expect(position.top).toBeGreaterThanOrEqual(8);
+    expect(position.left + size.width).toBeLessThanOrEqual(312);
+    expect(position.top + size.height).toBeLessThanOrEqual(232);
+  }
 });

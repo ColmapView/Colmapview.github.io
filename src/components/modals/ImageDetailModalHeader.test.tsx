@@ -65,11 +65,11 @@ describe('image detail modal headers', () => {
     expect(getImageDetailHeaderTitleClassName({
       variant: 'touch',
       isMarkedForDeletion: false,
-    })).toBe('text-ds-primary text-sm truncate flex-1 mr-2');
+    })).toBe('text-ds-primary text-sm font-semibold truncate flex-1 mr-2');
     expect(getImageDetailHeaderTitleClassName({
       variant: 'desktop',
       isMarkedForDeletion: true,
-    })).toBe('text-ds-primary line-through text-ds-error');
+    })).toBe('text-ds-primary font-semibold line-through text-ds-error');
 
     expect(getDeleteScopeButtonClassName(false)).toBe(
       `${modalStyles.headerIconButton} text-ds-muted hover-ds-text-error hover-bg-ds-error-20`
@@ -79,7 +79,7 @@ describe('image detail modal headers', () => {
     );
 
     expect(getTouchHeaderCloseButtonState()).toEqual({
-      className: 'w-10 h-10 flex items-center justify-center text-ds-muted hover-ds-text-primary text-2xl',
+      className: modalStyles.toolHeaderClose,
       style: { minWidth: TOUCH.minTapTarget, minHeight: TOUCH.minTapTarget },
       title: 'Close',
     });

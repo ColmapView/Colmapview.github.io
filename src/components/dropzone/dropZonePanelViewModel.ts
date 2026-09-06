@@ -9,23 +9,15 @@ export interface DropZoneInfoLine {
   muted?: boolean;
 }
 
-export const DROP_ZONE_DESKTOP_OVERLAY_CLASS = 'absolute inset-0 flex items-center justify-center';
-export const DROP_ZONE_TOUCH_OVERLAY_CLASS = `${DROP_ZONE_DESKTOP_OVERLAY_CLASS} px-3`;
+export const DROP_ZONE_DESKTOP_OVERLAY_CLASS = 'absolute inset-0 flex items-center justify-center p-4 overflow-y-auto';
+export const DROP_ZONE_TOUCH_OVERLAY_CLASS = DROP_ZONE_DESKTOP_OVERLAY_CLASS;
 export const DROP_ZONE_ICON_BUTTON_CLASS = `${buttonStyles.base} w-8 h-8 ${buttonStyles.variants.ghost}`;
 export const DROP_ZONE_TOUCH_CLOSE_BUTTON_CLASS = `${buttonStyles.base} w-11 h-11 ${buttonStyles.variants.ghost} text-xl`;
-// No border-color utility here on purpose: the dashed box rides `currentColor`
-// (the panel's inherited text colour), which is what ships today. `border-ds-muted`
-// used to be listed but was never defined in index.css, so it painted nothing;
-// adding the rule would darken the landing modal's centrepiece.
+// The broad browse target is the primary action; supporting actions stay quiet.
 export const DROP_ZONE_BROWSE_BOX_CLASS =
-  'w-32 h-32 mt-6 mb-6 flex items-center justify-center border-2 border-dashed rounded-lg cursor-pointer hover-border-ds-primary transition-colors';
-export const DROP_ZONE_DESKTOP_ACTION_BUTTON_ICON_CLASS = 'w-3.5 h-3.5';
+  `${buttonStyles.base} w-full mt-4 mb-4 flex-col gap-2 border border-dashed border-ds-accent rounded-lg bg-ds-tertiary text-ds-primary hover-ds-hover`;
+export const DROP_ZONE_DESKTOP_ACTION_BUTTON_ICON_CLASS = 'w-4 h-4 flex-shrink-0';
 export const DROP_ZONE_TOUCH_ACTION_ICON_CLASS = 'w-5 h-5 mr-2';
-// Quiet text links under the desktop action row. They surface the same two
-// actions the right-click affordances hide, so they stay visually subordinate
-// to the buttons above them.
-export const DROP_ZONE_EXAMPLE_LINKS_ROW_CLASS = 'mt-3 flex gap-4 justify-center';
-export const DROP_ZONE_EXAMPLE_LINK_CLASS = 'text-ds-muted text-xs hover-ds-text-primary cursor-pointer transition-colors';
 
 export const DROP_ZONE_BROWSE_LABEL = 'Browse for a COLMAP dataset folder';
 export const DROP_ZONE_UPLOAD_CONFIG_TOOLTIP = 'Upload configuration file (.yaml)';
@@ -33,7 +25,7 @@ export const DROP_ZONE_RESET_CONFIG_TOOLTIP = 'Reset all settings to defaults';
 export const DROP_ZONE_DISMISS_TOOLTIP = 'Dismiss this panel';
 
 export const DROP_ZONE_DESKTOP_TITLE = 'Load Dataset';
-export const DROP_ZONE_DESKTOP_MESSAGE = 'Drag and drop a COLMAP dataset or image-only folder here.\nOr click the box above to browse.';
+export const DROP_ZONE_DESKTOP_MESSAGE = 'or drag and drop a COLMAP dataset or image-only folder';
 export const DROP_ZONE_TOUCH_TITLE = 'ColmapView';
 export const DROP_ZONE_TOUCH_SUBTITLE = 'View COLMAP reconstructions and image galleries';
 export const DROP_ZONE_TOUCH_FOOTER = 'Load a URL or try a sample dataset';
@@ -56,27 +48,13 @@ export const DROP_ZONE_ACTION_LABELS = {
   dismiss: 'Dismiss',
 } as const;
 
-export const DROP_ZONE_EXAMPLE_LINK_LABELS = {
-  openExampleDataset: 'Open example dataset',
-  downloadExampleManifest: 'Download example manifest',
-} as const;
-
 function withOptionalDisabledClass(baseClass: string, isDisabled: boolean): string {
   return isDisabled ? `${baseClass} ${buttonStyles.disabled}` : baseClass;
 }
 
 export function getDesktopDropZoneActionButtonClass(isDisabled: boolean): string {
   return withOptionalDisabledClass(
-    `${buttonStyles.base} ${buttonStyles.sizes.action} ${buttonStyles.variants.secondary}`,
-    isDisabled,
-  );
-}
-
-// Only the toy button is the primary path on desktop; URL/manifest stay
-// secondary. Mirrors the touch panel's url/toy split below.
-export function getDesktopDropZonePrimaryButtonClass(isDisabled: boolean): string {
-  return withOptionalDisabledClass(
-    `${buttonStyles.base} ${buttonStyles.sizes.action} ${buttonStyles.variants.primary}`,
+    `${buttonStyles.base} ${buttonStyles.sizes.action} h-10 w-full ${buttonStyles.variants.secondary}`,
     isDisabled,
   );
 }
@@ -102,11 +80,5 @@ export function getDropZoneInfoLineClass(isMuted: boolean): string {
 export function getDropZonePanelOverlayStyle(): CSSProperties {
   return {
     zIndex: Z_INDEX.controls,
-  };
-}
-
-export function getDropZoneBrowseIconStyle(): CSSProperties {
-  return {
-    fontSize: '72px',
   };
 }

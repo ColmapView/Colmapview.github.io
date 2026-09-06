@@ -28,6 +28,15 @@ function openFromStatusBar() {
 }
 
 describe('HotkeyHelpModal', () => {
+  it('opens About from the version entry and resets to Essentials for shortcuts', () => {
+    renderModal();
+    act(() => useUIStore.getState().setShowHotkeyHelp(true, 'about'));
+    expect(screen.getByRole('tab', { name: 'About' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    openFromStatusBar();
+    expect(screen.getByRole('tab', { name: 'Essentials' })).toHaveAttribute('aria-selected', 'true');
+  });
+
   afterEach(() => {
     // act(): the panel's open state is store-owned now, so resetting the store
     // while the component is still mounted is a React update like any other.

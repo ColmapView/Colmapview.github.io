@@ -7,7 +7,7 @@ import {
   type ReactNode,
   type WheelEvent,
 } from 'react';
-import { colorPickerStyles, controlPanelStyles } from '../../../theme';
+import { colorPickerStyles, controlPanelStyles, inputStyles } from '../../../theme';
 import { hexToHsl } from '../../../utils/colorUtils';
 import {
   HEX_COLOR_MAX_LENGTH,
@@ -35,13 +35,19 @@ export const ColorPickerRow = memo(function ColorPickerRow({ label, value, onCha
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreEditFocus = useRef(false);
 
-  const handleDoubleClick = () => {
+  const startEditing = () => {
     setInputValue(value);
     setIsEditing(true);
   };
 
   useEffect(() => {
+    if (!isEditing && restoreEditFocus.current) {
+      restoreEditFocus.current = false;
+      editButtonRef.current?.focus();
+    }
     if (isEditing && inputRef.current) {
       inputRef.current.focus();
       inputRef.current.select();
@@ -58,8 +64,14 @@ export const ColorPickerRow = memo(function ColorPickerRow({ label, value, onCha
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      restoreEditFocus.current = true;
       applyValue();
     } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      restoreEditFocus.current = true;
       setIsEditing(false);
     }
   };
@@ -70,11 +82,12 @@ export const ColorPickerRow = memo(function ColorPickerRow({ label, value, onCha
       <div className="flex items-center gap-2 flex-1">
         {/* Color picker swatch */}
         <label
-          className="relative w-8 h-6 rounded overflow-hidden border border-ds hover-border-ds-light transition-colors cursor-pointer block flex-shrink-0"
+          className={colorPickerStyles.swatch}
           style={getBackgroundColorStyle(value)}
         >
           <input
             type="color"
+            aria-label={typeof label === 'string' ? label : 'Color'}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             className="sr-only"
@@ -85,21 +98,25 @@ export const ColorPickerRow = memo(function ColorPickerRow({ label, value, onCha
           <input
             ref={inputRef}
             type="text"
+            aria-label={typeof label === 'string' ? label : 'Color value'}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onBlur={applyValue}
             onKeyDown={handleKeyDown}
-            className="bg-ds-secondary text-ds-primary text-sm font-mono px-1 py-0.5 rounded border border-ds w-16"
+            className={`${inputStyles.numeric} w-16`}
             maxLength={HEX_COLOR_MAX_LENGTH}
           />
         ) : (
-          <span
-            className="text-ds-secondary text-sm font-mono cursor-pointer hover-ds-text-primary transition-colors"
-            onDoubleClick={handleDoubleClick}
-            title="Double-click to edit"
+          <button
+          ref={editButtonRef}
+            type="button"
+            aria-label="Edit hex color"
+            className={`${colorPickerStyles.readout} value-edit-button`}
+            onClick={startEditing}
+            title="Click to edit"
           >
             {formatHexColorDisplay(value)}
-          </span>
+          </button>
         )}
       </div>
     </div>
@@ -116,6 +133,8 @@ export const HueRow = memo(function HueRow({ label, value, onChange }: HueRowPro
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreEditFocus = useRef(false);
 
   const hsl = hexToHsl(value);
   const hue = hsl.h;
@@ -130,12 +149,16 @@ export const HueRow = memo(function HueRow({ label, value, onChange }: HueRowPro
     handleHueChange(getHueWheelValue(hue, e.deltaY));
   };
 
-  const handleDoubleClick = () => {
+  const startEditing = () => {
     setInputValue(String(hue));
     setIsEditing(true);
   };
 
   useEffect(() => {
+    if (!isEditing && restoreEditFocus.current) {
+      restoreEditFocus.current = false;
+      editButtonRef.current?.focus();
+    }
     if (isEditing && inputRef.current) {
       inputRef.current.focus();
       inputRef.current.select();
@@ -152,8 +175,14 @@ export const HueRow = memo(function HueRow({ label, value, onChange }: HueRowPro
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      restoreEditFocus.current = true;
       applyValue();
     } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      restoreEditFocus.current = true;
       setIsEditing(false);
     }
   };
@@ -168,6 +197,7 @@ export const HueRow = memo(function HueRow({ label, value, onChange }: HueRowPro
         />
         <input
           type="range"
+          aria-label={label}
           min={0}
           max={360}
           step={1}
@@ -185,6 +215,7 @@ export const HueRow = memo(function HueRow({ label, value, onChange }: HueRowPro
         <input
           ref={inputRef}
           type="text"
+            aria-label={typeof label === 'string' ? label : 'Color value'}
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onBlur={applyValue}
@@ -193,14 +224,17 @@ export const HueRow = memo(function HueRow({ label, value, onChange }: HueRowPro
           style={getColorStyle(value)}
         />
       ) : (
-        <span
-          className={styles.value}
+        <button
+          ref={editButtonRef}
+          type="button"
+          aria-label={`Edit ${label}`}
+          className={`${styles.value} value-edit-button`}
           style={getColorStyle(value)}
-          onDoubleClick={handleDoubleClick}
-          title="Double-click to edit"
+          onClick={startEditing}
+          title="Click to edit"
         >
           {getHueDisplayLabel(hue)}
-        </span>
+        </button>
       )}
     </div>
   );
@@ -217,18 +251,24 @@ export const HueSliderRow = memo(function HueSliderRow({ label, value, onChange 
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreEditFocus = useRef(false);
 
   const handleWheel = (e: WheelEvent) => {
     e.preventDefault();
     onChange(getHueWheelValue(value, e.deltaY));
   };
 
-  const handleDoubleClick = () => {
+  const startEditing = () => {
     setInputValue(String(value));
     setIsEditing(true);
   };
 
   useEffect(() => {
+    if (!isEditing && restoreEditFocus.current) {
+      restoreEditFocus.current = false;
+      editButtonRef.current?.focus();
+    }
     if (isEditing && inputRef.current) {
       inputRef.current.focus();
       inputRef.current.select();
@@ -245,8 +285,14 @@ export const HueSliderRow = memo(function HueSliderRow({ label, value, onChange 
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      restoreEditFocus.current = true;
       applyValue();
     } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      restoreEditFocus.current = true;
       setIsEditing(false);
     }
   };
@@ -264,6 +310,7 @@ export const HueSliderRow = memo(function HueSliderRow({ label, value, onChange 
         />
         <input
           type="range"
+          aria-label={label}
           min={0}
           max={360}
           step={1}
@@ -281,6 +328,7 @@ export const HueSliderRow = memo(function HueSliderRow({ label, value, onChange 
         <input
           ref={inputRef}
           type="text"
+            aria-label={typeof label === 'string' ? label : 'Color value'}
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onBlur={applyValue}
@@ -289,14 +337,17 @@ export const HueSliderRow = memo(function HueSliderRow({ label, value, onChange 
           style={getColorStyle(displayColor)}
         />
       ) : (
-        <span
-          className={styles.value}
+        <button
+          ref={editButtonRef}
+          type="button"
+          aria-label={`Edit ${label}`}
+          className={`${styles.value} value-edit-button`}
           style={getColorStyle(displayColor)}
-          onDoubleClick={handleDoubleClick}
-          title="Double-click to edit"
+          onClick={startEditing}
+          title="Click to edit"
         >
           {getHueDisplayLabel(value)}
-        </span>
+        </button>
       )}
     </div>
   );

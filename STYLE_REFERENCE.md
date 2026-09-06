@@ -1,5 +1,8 @@
 # ColmapView Style Reference
 
+Implementation entry point: [Design system](docs/design-system.md). Panel recipes live in
+`src/theme/panelStyles.ts`; this reference provides the wider visual catalog.
+
 A complete guide for matching the visual style of ColmapView in other projects.
 
 ---
@@ -33,8 +36,8 @@ A complete guide for matching the visual style of ColmapView in other projects.
 | Token              | Hex       | Usage                                    |
 |--------------------|-----------|------------------------------------------|
 | `--text-primary`   | `#e8e8e8` | Headings, primary content, active labels |
-| `--text-secondary` | `#8a8a8a` | Descriptions, inactive labels, metadata  |
-| `--text-muted`     | `#5a5a5a` | Placeholders, disabled text, hints       |
+| `--text-secondary` | `#a8a8a8` | Descriptions, inactive labels, metadata  |
+| `--text-muted`     | `#858585` | Placeholders, disabled text, hints       |
 
 ### Borders
 
@@ -257,6 +260,58 @@ At the 1520px breakpoint, control buttons shrink from 40px to 36px, SVG icons fr
 - **Hover**: Background lightens one step (e.g., tertiary -> hover)
 - **Disabled**: `opacity: 0.5; cursor: not-allowed; pointer-events: none`
 - **Focus**: `outline: 2px solid var(--accent); outline-offset: 2px`
+
+### Viewer control states
+
+Selected viewer controls use an opaque `#303030` surface (a subtle silver tint over
+tertiary), primary text, and a `#777777` border. On hover the surface becomes
+`#383838` and the border uses the accent. Inactive controls retain tertiary surfaces;
+hover uses the normal hover surface. Keep geometry constant across states and use
+150ms color transitions. The global reduced-motion rule suppresses transitions.
+Primary confirmation actions and segmented toggles retain their stronger silver fill.
+
+### Icons
+
+Shared outline icons use a 24×24 viewBox, 1.75-unit strokes, rounded caps and joins,
+and visually centered artwork, normally inside coordinates 3–21. Optical exceptions
+remain for dense data symbols and brand artwork. Check at 16, 20, and 24px instead
+of judging enlarged artwork alone. Preserve the existing responsive display sizes.
+
+Image and match symbols use simple frames; selection symbols use corner brackets
+with a small indicator. Off, static, and blinking modes have distinct static geometry.
+Color previews occupy a small part of a neutral silhouette; XYZ and data colors
+retain their meaning. Do not add animation merely to indicate a blinking mode.
+
+Use `PlusIcon` and `CloseIcon` for add and dismiss actions. Decorative SVGs are hidden
+from assistive technology; the containing control supplies its accessible name.
+Standalone dismiss controls are 32px square on desktop and at least 44px with a coarse
+pointer. Dense inline action groups retain their existing spacing and hit areas.
+
+### Floating panels
+
+Load Dataset is the visual reference. Toolbar popovers, dialogs, and tool windows
+use `floatingPanelStyles`: muted secondary surface, large corner radius, subtle
+border, and no drop shadow. Headers stay flat with 16px horizontal padding,
+semibold 14px titles, and the shared dismiss control. Startup retains its larger title.
+Use compact spacing only for inline confirmation strips and dense menus.
+Dialog bodies must fit the viewport and scroll when content expands.
+See [the panel survey](docs/ui-panel-style-review.md) for the inventory and exceptions.
+
+### Startup panel
+
+The title and info button share the header with configuration and dismissal controls.
+Below 480px, configuration controls move to a second header row.
+The desktop panel fills available width up to 520px, with 24px padding (16px below
+640px). The labeled browse target is at least 112px high. URL, manifest, and toy
+actions fill three equal columns with 40px secondary buttons and 8px gaps, aligned
+to the browse target. Right-click Toy opens the example dataset; right-click manifest
+downloads an example manifest. Both shortcuts are emphasized in hover help.
+Below 480px, the actions stack into one column. Configuration actions remain
+quiet ghost buttons; format guidance lives in the title's info popover, available on
+hover, focus, or click and dismissible with Escape. Touch panels
+use 16px padding and 48px loading actions. Both panel variants use automatic vertical
+margins so their top remains reachable when the scrollable overlay is shorter than
+the content.
 
 ---
 

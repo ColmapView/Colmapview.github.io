@@ -18,6 +18,7 @@ export type { IconProps, HoverIconProps } from './types';
 export {
   HoverIcon,
   CloseIcon,
+  PlusIcon,
   CheckIcon,
   ResetIcon,
   ReloadIcon,

@@ -135,7 +135,16 @@ export function StatusBar() {
         >
           {STATUS_BAR_SHORTCUTS_LABEL}
         </button>
-        <span>v{__APP_VERSION__}</span>
+        <button
+          type="button"
+          onClick={() => setShowHotkeyHelp(true, 'about')}
+          className={STATUS_BAR_SHORTCUTS_BUTTON_CLASS}
+          aria-label={`About ColmapView, version ${__APP_VERSION__}`}
+          data-tooltip="About ColmapView"
+          {...getAutoHiddenChromeProps(hideWithButtons)}
+        >
+          v{__APP_VERSION__}
+        </button>
       </div>
     </footer>
   );

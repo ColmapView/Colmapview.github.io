@@ -1,6 +1,7 @@
 import { useMemo, useCallback } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { modalStyles } from '../../theme';
+import { CloseIcon } from '../../icons';
 import { useModalDrag } from '../../hooks/useModalDrag';
 import {
   FLOOR_ALIGN_MODAL_ESTIMATED_HEIGHT,
@@ -135,7 +136,7 @@ export function FloorAlignModal() {
   return (
     <div
       ref={panelRef}
-      className="fixed bg-ds-tertiary border border-ds rounded shadow-ds-lg p-1"
+      className={modalStyles.compactPanel}
       style={getFloorAlignModalPanelStyle(position)}
       onPointerDown={handleDragStart}
     >
@@ -167,9 +168,7 @@ export function FloorAlignModal() {
           className={modalStyles.iconButtonCancel}
           title="Cancel"
         >
-          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
+          <CloseIcon className="w-4 h-4" />
         </button>
       </div>
     </div>

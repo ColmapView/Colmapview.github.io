@@ -1,8 +1,13 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import {
   emptyStateStyles,
+  floatingPanelStyles,
+  panelStyles,
 } from '../../theme';
 import {
+  CloseIcon,
+  InfoIcon,
+  PlusIcon,
   FileJsonIcon,
   LinkIcon,
   ResetIcon,
@@ -20,9 +25,6 @@ import {
   DROP_ZONE_DESKTOP_OVERLAY_CLASS,
   DROP_ZONE_DESKTOP_TITLE,
   DROP_ZONE_DISMISS_TOOLTIP,
-  DROP_ZONE_EXAMPLE_LINK_CLASS,
-  DROP_ZONE_EXAMPLE_LINK_LABELS,
-  DROP_ZONE_EXAMPLE_LINKS_ROW_CLASS,
   DROP_ZONE_ICON_BUTTON_CLASS,
   DROP_ZONE_INFO_LINES,
   DROP_ZONE_RESET_CONFIG_TOOLTIP,
@@ -34,8 +36,6 @@ import {
   DROP_ZONE_TOUCH_TITLE,
   DROP_ZONE_UPLOAD_CONFIG_TOOLTIP,
   getDesktopDropZoneActionButtonClass,
-  getDesktopDropZonePrimaryButtonClass,
-  getDropZoneBrowseIconStyle,
   getDropZoneInfoLineClass,
   getDropZonePanelOverlayStyle,
   getTouchDropZoneToyButtonClass,
@@ -76,12 +76,52 @@ export function DesktopDropZonePanel({
   onDownloadExampleManifest,
 }: DesktopDropZonePanelProps) {
   const [hoveredButton, setHoveredButton] = useState<HoveredDropZoneButton>(null);
+  const [showFormatInfo, setShowFormatInfo] = useState(false);
+  const formatInfoId = useId();
 
   return (
     <div className={DROP_ZONE_DESKTOP_OVERLAY_CLASS} style={getDropZonePanelOverlayStyle()}>
-      <div className="flex flex-col bg-ds-secondary rounded-lg border border-ds p-6 min-w-[420px]">
-        <div className="flex justify-between -mt-4 -mx-4 mb-6">
-          <div className="flex items-center gap-1">
+      <div className={`${floatingPanelStyles.dialog} startup-panel w-full max-w-[520px]`}>
+        <div className="startup-header">
+          <div
+            className="startup-format-info"
+            onMouseLeave={() => setShowFormatInfo(false)}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) setShowFormatInfo(false);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                setShowFormatInfo(false);
+                event.stopPropagation();
+              }
+            }}
+          >
+            <h2 className={panelStyles.startupTitle}>{DROP_ZONE_DESKTOP_TITLE}</h2>
+            <button
+              type="button"
+              className={DROP_ZONE_ICON_BUTTON_CLASS}
+              aria-label="Supported files and folder structure"
+              aria-describedby={showFormatInfo ? formatInfoId : undefined}
+              onMouseEnter={() => setShowFormatInfo(true)}
+              onFocus={() => setShowFormatInfo(true)}
+              onClick={() => setShowFormatInfo(true)}
+            >
+              <InfoIcon className="w-4 h-4" />
+            </button>
+            {showFormatInfo && (
+              <div className="startup-format-popover">
+                <div id={formatInfoId} role="tooltip" className={`${floatingPanelStyles.surface} startup-format-content`}>
+                  {DROP_ZONE_INFO_LINES.map((line) => (
+                    <div key={`${line.label ?? ''}${line.text}`} className={getDropZoneInfoLineClass(false)}>
+                      {line.label && <strong>{line.label}</strong>}
+                      {line.label ? ` ${line.text}` : line.text}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="startup-config-actions">
             <ProfileDropdown />
             <div className="w-px h-5 bg-ds-muted/30 mx-1" />
             <button
@@ -110,7 +150,7 @@ export function DesktopDropZonePanel({
             data-tooltip={DROP_ZONE_DISMISS_TOOLTIP}
             aria-label={DROP_ZONE_DISMISS_TOOLTIP}
           >
-            ×
+            <CloseIcon className="w-4 h-4" />
           </button>
         </div>
 
@@ -118,39 +158,30 @@ export function DesktopDropZonePanel({
           <button
             type="button"
             className={DROP_ZONE_BROWSE_BOX_CLASS}
+            style={{ minHeight: 112 }}
             onClick={onBrowse}
             aria-label={DROP_ZONE_BROWSE_LABEL}
           >
-            <span className="text-ds-muted font-light leading-none" style={getDropZoneBrowseIconStyle()}>+</span>
+            <PlusIcon className="w-6 h-6" />
+            <span className="text-sm font-medium">Browse folder</span>
+            <span className="text-ds-secondary text-xs text-center px-4">
+              {DROP_ZONE_DESKTOP_MESSAGE}
+            </span>
           </button>
-          <h2 className={emptyStateStyles.title}>{DROP_ZONE_DESKTOP_TITLE}</h2>
-          <p className={emptyStateStyles.message}>
-            {DROP_ZONE_DESKTOP_MESSAGE.split('\n').map((line, index) => (
-              <span key={line}>
-                {index > 0 && <br />}
-                {line}
-              </span>
-            ))}
-          </p>
-          <div className="text-ds-muted text-sm text-left max-w-md mt-6 mb-4">
-            {DROP_ZONE_INFO_LINES.map((line) => (
-              <div key={`${line.label ?? ''}${line.text}`} className={getDropZoneInfoLineClass(line.muted === true)}>
-                {line.label && <strong>{line.label}</strong>}
-                {line.label ? ` ${line.text}` : line.text}
-              </div>
-            ))}
-          </div>
 
-          <div className="flex gap-2 mt-2">
+          <div className="startup-actions" onKeyDown={(event) => {
+            if (event.key === 'Escape' && hoveredButton !== null) {
+              setHoveredButton(null);
+              event.stopPropagation();
+            }
+          }}>
             <div className="relative">
               <button
                 type="button"
                 onClick={onOpenUrlModal}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  onOpenExampleDataset();
-                }}
                 onMouseEnter={() => setHoveredButton('url')}
+                onFocus={() => setHoveredButton('url')}
+                onBlur={() => setHoveredButton(null)}
                 onMouseLeave={() => setHoveredButton(null)}
                 disabled={urlLoading}
                 className={getDesktopDropZoneActionButtonClass(urlLoading)}
@@ -170,6 +201,8 @@ export function DesktopDropZonePanel({
                   onDownloadExampleManifest();
                 }}
                 onMouseEnter={() => setHoveredButton('json')}
+                onFocus={() => setHoveredButton('json')}
+                onBlur={() => setHoveredButton(null)}
                 onMouseLeave={() => setHoveredButton(null)}
                 disabled={urlLoading}
                 className={getDesktopDropZoneActionButtonClass(urlLoading)}
@@ -184,10 +217,16 @@ export function DesktopDropZonePanel({
               <button
                 type="button"
                 onClick={onLoadToy}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  onOpenExampleDataset();
+                }}
                 onMouseEnter={() => setHoveredButton('toy')}
+                onFocus={() => setHoveredButton('toy')}
+                onBlur={() => setHoveredButton(null)}
                 onMouseLeave={() => setHoveredButton(null)}
                 disabled={urlLoading}
-                className={getDesktopDropZonePrimaryButtonClass(urlLoading)}
+                className={getDesktopDropZoneActionButtonClass(urlLoading)}
               >
                 <img src={publicAsset('LOGO.png')} alt="" className={DROP_ZONE_DESKTOP_ACTION_BUTTON_ICON_CLASS} />
                 {DROP_ZONE_ACTION_LABELS.tryToy}
@@ -196,22 +235,7 @@ export function DesktopDropZonePanel({
             </div>
           </div>
 
-          <div className={DROP_ZONE_EXAMPLE_LINKS_ROW_CLASS}>
-            <button
-              type="button"
-              className={DROP_ZONE_EXAMPLE_LINK_CLASS}
-              onClick={onOpenExampleDataset}
-            >
-              {DROP_ZONE_EXAMPLE_LINK_LABELS.openExampleDataset}
-            </button>
-            <button
-              type="button"
-              className={DROP_ZONE_EXAMPLE_LINK_CLASS}
-              onClick={onDownloadExampleManifest}
-            >
-              {DROP_ZONE_EXAMPLE_LINK_LABELS.downloadExampleManifest}
-            </button>
-          </div>
+
         </div>
       </div>
     </div>
@@ -226,19 +250,19 @@ export function TouchDropZonePanel({
 }: TouchDropZonePanelProps) {
   return (
     <div className={DROP_ZONE_TOUCH_OVERLAY_CLASS} style={getDropZonePanelOverlayStyle()}>
-      <div className="flex flex-col bg-ds-secondary rounded-lg border border-ds p-4 w-full max-w-xs">
-        <div className="flex justify-end -mt-1 -mr-1">
+      <div className={`${floatingPanelStyles.dialog} startup-panel-touch p-4 w-full max-w-xs`}>
+        <div className="flex justify-end mb-4">
           <button
             type="button"
             className={DROP_ZONE_TOUCH_CLOSE_BUTTON_CLASS}
             onClick={onDismiss}
             aria-label={DROP_ZONE_ACTION_LABELS.dismiss}
           >
-            ×
+            <CloseIcon className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="flex flex-col items-center mb-3">
+        <div className="flex flex-col items-center mb-4">
           <img
             src={publicAsset('LOGO.png')}
             alt="ColmapView"
@@ -272,7 +296,7 @@ export function TouchDropZonePanel({
           </button>
         </div>
 
-        <p className="text-ds-muted text-xs text-center mt-3">
+        <p className="text-ds-muted text-xs text-center mt-4">
           {DROP_ZONE_TOUCH_FOOTER}
         </p>
       </div>

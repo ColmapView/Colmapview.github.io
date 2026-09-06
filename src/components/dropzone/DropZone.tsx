@@ -15,6 +15,7 @@ import { DesktopDropZonePanel, TouchDropZonePanel } from './DropZonePanels';
 import { getDropZoneProgressFillStyle } from './dropZoneLoadingViewModel';
 import { createExampleManifest, parseManifestContent } from './dropZoneManifestPolicy';
 import { useDropZoneStoreFacade } from './useDropZoneStoreFacade';
+import { CloseIcon, PlusIcon } from '../../icons';
 
 interface DropZoneProps {
   children: React.ReactNode;
@@ -181,7 +182,7 @@ export function DropZone({ children }: DropZoneProps) {
       {isDragOver && (
         <div className={dragOverlayStyles.container}>
           <div className={dragOverlayStyles.content}>
-            <div className={dragOverlayStyles.icon}>+</div>
+            <div className={dragOverlayStyles.icon}><PlusIcon className="w-12 h-12" /></div>
             <div className={dragOverlayStyles.title}>
               Drop dataset folder or ZIP here
             </div>
@@ -278,8 +279,9 @@ export function DropZone({ children }: DropZoneProps) {
           <button
             onClick={() => setError(null)}
             className={buttonStyles.close}
+            aria-label="Dismiss error"
           >
-            ×
+            <CloseIcon className="w-4 h-4" />
           </button>
         </div>
       )}

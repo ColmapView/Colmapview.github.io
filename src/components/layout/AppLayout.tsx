@@ -194,7 +194,7 @@ export function AppLayout() {
             className={`overflow-hidden flex-shrink-0 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
             style={getGalleryPanelStyle({ hideGallery, panelWidth })}
           >
-            <div className="h-full border-l border-ds" style={getGalleryPanelInnerStyle()}>
+            <div className="h-full" style={getGalleryPanelInnerStyle()}>
               <GalleryErrorBoundary>
                 <ImageGallery isResizing={isResizing} />
               </GalleryErrorBoundary>

@@ -1136,19 +1136,19 @@ legend {
 .border-8 { border-width: 8px; border-style: solid; }
 
 .border-t-0 { border-top-width: 0; }
-.border-t { border-top-width: 1px; border-style: solid; }
-.border-t-2 { border-top-width: 2px; border-style: solid; }
+.border-t { border-top-width: 1px; border-top-style: solid; }
+.border-t-2 { border-top-width: 2px; border-top-style: solid; }
 .border-r-0 { border-right-width: 0; }
-.border-r { border-right-width: 1px; border-style: solid; }
-.border-r-2 { border-right-width: 2px; border-style: solid; }
+.border-r { border-right-width: 1px; border-right-style: solid; }
+.border-r-2 { border-right-width: 2px; border-right-style: solid; }
 .border-b-0 { border-bottom-width: 0; }
-.border-b { border-bottom-width: 1px; border-style: solid; }
-.border-b-2 { border-bottom-width: 2px; border-style: solid; }
+.border-b { border-bottom-width: 1px; border-bottom-style: solid; }
+.border-b-2 { border-bottom-width: 2px; border-bottom-style: solid; }
 .border-l-0 { border-left-width: 0; }
-.border-l { border-left-width: 1px; border-style: solid; }
-.border-l-2 { border-left-width: 2px; border-style: solid; }
-.border-x { border-left-width: 1px; border-right-width: 1px; border-style: solid; }
-.border-y { border-top-width: 1px; border-bottom-width: 1px; border-style: solid; }
+.border-l { border-left-width: 1px; border-left-style: solid; }
+.border-l-2 { border-left-width: 2px; border-left-style: solid; }
+.border-x { border-left-width: 1px; border-right-width: 1px; border-left-style: solid; border-right-style: solid; }
+.border-y { border-top-width: 1px; border-bottom-width: 1px; border-top-style: solid; border-bottom-style: solid; }
 
 /* Border Style */
 .border-solid { border-style: solid; }
@@ -1509,6 +1509,165 @@ legend {
   background: var(--text-muted);
 }
 
+/* Opaque control surfaces remain legible over any reconstruction background. */
+.viewer-control {
+  transition-duration: 150ms;
+}
+
+.startup-panel {
+  padding: var(--sp-6);
+}
+
+.panel-heading {
+  line-height: 1.5;
+}
+
+.button-ui {
+  line-height: 1.5;
+}
+
+.button-ui > svg,
+.button-ui > img {
+  flex-shrink: 0;
+}
+
+.button-standard {
+  min-height: 40px;
+}
+
+@media (pointer: coarse) {
+  .button-standard {
+    min-height: 44px;
+  }
+}
+
+h2.panel-heading,
+h3.panel-heading {
+  margin-block: 0;
+}
+
+.url-input-panel {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+}
+
+.url-input-panel code {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.startup-header {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.startup-config-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.startup-actions {
+  display: grid;
+  width: 100%;
+  gap: var(--sp-2);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: var(--sp-2);
+}
+
+.startup-actions button {
+  min-width: 0;
+  padding-inline: var(--sp-3);
+}
+
+@media (max-width: 479px) {
+  .startup-header {
+    grid-template-columns: 1fr auto;
+  }
+
+  .startup-config-actions {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .startup-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+.startup-format-info {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--sp-1);
+  width: 100%;
+}
+
+.startup-format-popover {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: min(400px, 100%);
+  padding-top: var(--sp-2);
+  z-index: 1;
+}
+
+.startup-format-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.startup-panel,
+.startup-panel-touch {
+  margin-block: auto;
+  flex-shrink: 0;
+}
+
+@media (max-width: 639px) {
+  .startup-panel {
+    padding: var(--sp-4);
+  }
+}
+
+.viewer-control-selected {
+  background-color: #303030;
+  border-color: #777777;
+}
+
+.viewer-control-selected:hover:not(:disabled) {
+  background-color: #383838;
+  border-color: var(--accent);
+}
+
+.dismiss-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius);
+}
+
+.dismiss-control:hover {
+  background-color: var(--bg-hover);
+}
+
+@media (pointer: coarse) {
+  .dismiss-control {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
 /* ============================================
    ACCESSIBILITY
    ============================================ */
@@ -1730,127 +1889,38 @@ legend {
    RESIZE HANDLE
    ============================================ */
 
-/* The viewer↔gallery divider: a 1px hairline (the element itself) carrying a
-   transparent grab strip and a rectangular grip that lights up when you reach
-   for it. The two lengths below are the grip's contract with the collapse
-   chevron it frames — see the grip rule. */
+/* A single gallery edge, with a quiet collapse chevron at its midpoint. */
 .resize-handle {
-  --gallery-handle-height: 48px;
-  --grip-clearance: 6px;
   position: relative;
-  /* Expanded, the collapse tab straddles the divider, so 6px of it overhangs
-     the gallery — a later sibling whose thumbnail items are positioned and
-     would otherwise paint over it. The gallery's padding happens to clear the
-     tab today, but that is incidental spacing, not a guarantee. (Collapsed,
-     the tab re-anchors fully onto the viewer and this stacking question does
-     not arise.) Stays below every layer on the shared scale (controls: 10). */
   z-index: 1;
   width: 1px;
+  flex-shrink: 0;
   background-color: var(--border-color);
   cursor: col-resize;
-  flex-shrink: 0;
+  transition: background-color 150ms ease;
 }
 
-/* Grab strip: widens the 1px target to 5px without adding width to the flex
-   row. It overhangs the GALLERY side only (left: 0 starts at the divider).
-   The viewer side must stay clear: this box lives in the root stacking
-   context while everything inside Scene3D sits in an isolated context at
-   z auto, so any overlap here wins the hit test over the canvas — and a band
-   over live canvas turns orbit drags into gallery resizes (the collapsed
-   rule below drops these pseudos because a dead strip has nothing to drag).
-   The cost is that the grip only lights when the pointer is on or past the
-   divider, not on approach from the viewer.
-   ::before, not ::after: an absolutely positioned ::before paints — and so
-   hit-tests — BELOW the element's positioned children, so the collapse
-   chevron keeps winning every event inside its own box. */
+/* Keep the invisible resize target on the gallery side, clear of canvas drags. */
 .resize-handle::before {
   content: '';
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
+  inset: 0 auto 0 0;
   width: 5px;
-  background-color: transparent;
-  transition: background-color var(--transition-base);
 }
 
-/* The grip: a 2px bar split into two segments framing the collapse chevron,
-   which is centred on this same divider — one continuous bar would sit behind
-   the chevron's opaque tab and read as a rendering fault. The transparent gap
-   is the chevron's own height plus clearance on each side, so the two lengths
-   are read from the same custom properties the chevron sizes itself from.
-   One pseudo paints both segments via a gradient with a transparent middle,
-   keeping the chevron's DOM untouched. `pointer-events: none` so the grip can
-   never intercept a chevron click even though ::after paints above it.
-   height is deliberately NOT transitioned: --grip-segment is an unregistered
-   custom property and snaps, so animating height would shrink the gap below
-   the chevron mid-transition — the exact artifact the two segments prevent. */
-.resize-handle::after {
-  --grip-segment: 20px;
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 2px;
-  height: calc(
-    var(--gallery-handle-height) + 2 * var(--grip-clearance) + 2 * var(--grip-segment)
-  );
-  border-radius: 1px;
-  background-image: linear-gradient(
-    to bottom,
-    var(--accent) 0 var(--grip-segment),
-    transparent var(--grip-segment) calc(100% - var(--grip-segment)),
-    var(--accent) calc(100% - var(--grip-segment)) 100%
-  );
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--transition-base), filter var(--transition-base);
+.resize-handle:hover,
+.resize-handle[data-resizing='true'] {
+  background-color: var(--text-muted);
 }
 
-/* Lit while reaching for the divider, and for the whole drag. data-resizing,
-   not :active: Chrome drops :active as soon as the pointer leaves the element,
-   and a resize drag routinely leaves this 5px strip — past the width clamp the
-   divider stops tracking the cursor entirely — so :active went dark exactly
-   when the feedback matters. AppLayout force-sets the body cursor for the same
-   reason. */
-.resize-handle:hover::before,
-.resize-handle[data-resizing='true']::before {
-  background-color: var(--accent-dim);
-}
-
-.resize-handle:hover::after,
-.resize-handle[data-resizing='true']::after {
-  --grip-segment: 30px;
-  opacity: 1;
-  filter: drop-shadow(0 0 3px var(--accent-focus));
-}
-
-/* Collapsed gallery: the hairline stays (it carries the collapse handle, the
-   only edge control that can bring the panel back) but there is no longer a
-   width to drag, so it must not advertise resizing. AppLayout detaches the
-   mousedown in the same state. Dropping both pseudos removes the grip, the
-   tint AND the widened hit strip together — a dead strip has nothing to drag,
-   and the expanded-state rule above explains why a band over live canvas is
-   never acceptable. */
 .resize-handle[data-collapsed='true'] {
   cursor: default;
 }
 
-.resize-handle[data-collapsed='true']::before,
-.resize-handle[data-collapsed='true']::after {
+.resize-handle[data-collapsed='true']::before {
   content: none;
 }
 
-/* Gallery collapse handle — a chevron tab straddling the viewer↔gallery
-   divider (translate(50%, -50%) centres it on the 1px line). Straddling
-   rather than hanging into the viewer: all 12px on the viewer side read as
-   attached to the control column sitting 12px from the same edge, while
-   centred the tab belongs to the divider it controls, clears those buttons
-   by 7px, and costs 6px over the gallery's left padding (user decision
-   2026-08-24: "middle"). The collapsed variant below is the exception.
-   Not idle-hideable — the divider lives outside .scene-3d-container, which is
-   where those fade rules are scoped. */
 .gallery-collapse-handle {
   position: absolute;
   top: 50%;
@@ -1860,16 +1930,14 @@ legend {
   align-items: center;
   justify-content: center;
   width: 12px;
-  /* Same property the grip's transparent gap is sized from, so the two can
-     never disagree about how much room the chevron needs. */
-  height: var(--gallery-handle-height);
+  height: 36px;
   padding: 0;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  background-color: var(--bg-tertiary);
+  border: 0;
+  border-radius: 6px;
+  background-color: var(--bg-secondary);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color 150ms ease, color 150ms ease;
 }
 
 .gallery-collapse-handle:hover {
@@ -1877,19 +1945,10 @@ legend {
   color: var(--text-primary);
 }
 
-/* Collapsed, the divider sits flush against the layout row's overflow-hidden
-   edge, so a centred tab loses its right half to the clip — the reopen
-   affordance shrank to a ~6px sliver. Anchor the whole tab inward instead:
-   right: 0 with no X shift puts its right edge on the divider and the tab
-   itself over the viewer, where nothing clips. There is nowhere else to put
-   it: the viewer is full width now, so its control column still ends 12px
-   short of the divider, leaving 1px of slack around a 12px tab. That 1px is
-   the toolbar adjacency the expanded straddle exists to avoid, accepted here
-   because a clipped sliver is the worse affordance. */
+/* Bring the whole reopen control inside the viewport when the gallery is shut. */
 .resize-handle[data-collapsed='true'] .gallery-collapse-handle {
   transform: translate(0, -50%);
 }
-
 /* ============================================
    Auto-hide overlays after idle
    ============================================ */
@@ -2331,4 +2390,17 @@ legend {
   top: 50%;
   height: var(--tap-target-min);
   transform: translateY(-50%);
+}
+
+/* Hue uses the shared range geometry and focus state over its data gradient. */
+input.hue-slider::-webkit-slider-runnable-track { background: transparent; }
+input.hue-slider::-moz-range-track { background: transparent; }
+input.hue-slider::-moz-range-progress { background: transparent; }
+input.hue-slider::-webkit-slider-thumb { background: var(--text-primary); }
+input.hue-slider::-moz-range-thumb { background: var(--text-primary); }
+.value-edit-button { background: transparent; border: 0; padding: 0; }
+
+.color-swatch:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

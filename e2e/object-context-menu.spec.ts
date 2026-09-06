@@ -84,7 +84,7 @@ test.describe('Object-targeted canvas context menus', () => {
   test.beforeEach(async ({ page, scene3d }) => {
     await page.goto('/?e2eProbe=1');
 
-    const closeButton = page.locator('button:has-text("×")').first();
+    const closeButton = page.getByRole('button', { name: 'Dismiss this panel', exact: true });
     if (await closeButton.isVisible({ timeout: 2_000 })) {
       await closeButton.click();
     }

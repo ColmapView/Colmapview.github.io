@@ -112,6 +112,7 @@ const POSITIONAL = new Set(['top', 'right', 'bottom', 'left']);
 const POSITIONAL_VALUE_RE = /^\d|^\[|^(?:full|auto|px)$/;
 
 function isCandidate(token: string): boolean {
+  if (/^\[&.*\]:/.test(token)) return true;
   if (NON_CLASS_TOKENS.has(token)) return false;
   if (token.length < 2 || /[A-Z{}$()=<>'"*]/.test(token)) return false;
   // `border-style:` and friends are CSS property fragments inside style
@@ -158,6 +159,10 @@ function harvest(): Set<string> {
 const found = harvest();
 
 describe('utility class contract', () => {
+  it('recognizes unsupported arbitrary selector variants rather than silently skipping them', () => {
+    expect(isCandidate('[&::-webkit-slider-thumb]:bg-white')).toBe(true);
+    expect(isCandidate('[&:focus-visible]:outline-none')).toBe(true);
+  });
   it('every referenced utility class is defined in index.css', () => {
     const missing = [...found].filter((t) => !defined.has(t)).sort();
     expect(missing).toEqual([]);

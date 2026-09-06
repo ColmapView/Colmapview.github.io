@@ -46,7 +46,7 @@ function DropZoneHoverCardHintRows({ rows }: { rows: readonly DropZoneHoverCardH
   return (
     <div className={hoverCardStyles.hint}>
       {rows.map((row) => (
-        <div key={row.label} className={hoverCardStyles.hintRow}>
+        <div key={row.label} className={`${hoverCardStyles.hintRow}${row.icon === 'mouse-right' ? ' text-ds-primary font-semibold mt-2' : ''}`}>
           {renderHintIcon(row.icon)}
           {row.label}
         </div>
@@ -87,6 +87,7 @@ export function ToyHoverCard() {
       <div className={hoverCardStyles.subtitle}>{TOY_HOVER_CARD_SUBTITLE}</div>
       <div className={`${hoverCardStyles.subtitle} text-ds-muted/70`}>{TOY_HOVER_CARD_SOURCE}</div>
       <div className={`${hoverCardStyles.subtitle} mt-1`}>{TOY_HOVER_CARD_INCLUDES}</div>
+      <div className={`${hoverCardStyles.subtitle} mt-2`}>Use the example to organize your dataset for ColmapView.</div>
       <DropZoneHoverCardHintRows rows={TOY_HINT_ROWS} />
     </DropZoneHoverCardShell>
   );

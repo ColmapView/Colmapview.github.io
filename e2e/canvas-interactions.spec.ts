@@ -4,7 +4,7 @@ test.describe('Canvas Interactions', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     // Dismiss the empty state panel to access the canvas
-    const closeButton = page.locator('button:has-text("×")').first();
+    const closeButton = page.getByRole('button', { name: 'Dismiss this panel', exact: true });
     if (await closeButton.isVisible()) {
       await closeButton.click();
     }

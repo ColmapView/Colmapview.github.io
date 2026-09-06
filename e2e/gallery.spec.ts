@@ -5,7 +5,7 @@ test.describe('ImageGallery', () => {
   test('renders grid and list image items after loading a dataset', async ({ page }) => {
     await page.goto('/');
 
-    const closeButton = page.locator('button:has-text("×")').first();
+    const closeButton = page.getByRole('button', { name: 'Dismiss this panel', exact: true });
     if (await closeButton.isVisible({ timeout: 2000 })) {
       await closeButton.click();
     }
@@ -36,7 +36,7 @@ test.describe('ImageGallery', () => {
 
   test('divider grab strip never hit-tests over the 3D canvas', async ({ page }) => {
     await page.goto('/');
-    const closeButton = page.locator('button:has-text("×")').first();
+    const closeButton = page.getByRole('button', { name: 'Dismiss this panel', exact: true });
     if (await closeButton.isVisible({ timeout: 2000 })) {
       await closeButton.click();
     }
@@ -48,7 +48,7 @@ test.describe('ImageGallery', () => {
     expect(box).not.toBeNull();
 
     // Probe a quarter of the way down, NOT mid-height: the collapse chevron is
-    // 48px tall and centred on the divider, and it deliberately overhangs ~5px
+    // 36px tall and centred on the divider, and it deliberately overhangs ~5px
     // onto the viewer (see .gallery-collapse-handle). That narrow tab is the
     // documented exception; the full-height grab strip is what must stay off
     // the canvas.
@@ -74,7 +74,7 @@ test.describe('ImageGallery', () => {
 
   test('collapse tab stays fully on-screen when the gallery is collapsed', async ({ page }) => {
     await page.goto('/');
-    const closeButton = page.locator('button:has-text("×")').first();
+    const closeButton = page.getByRole('button', { name: 'Dismiss this panel', exact: true });
     if (await closeButton.isVisible({ timeout: 2000 })) {
       await closeButton.click();
     }

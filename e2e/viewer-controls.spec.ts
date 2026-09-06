@@ -4,7 +4,7 @@ test.describe('ViewerControls', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     // Dismiss the empty state panel to access controls
-    const closeButton = page.locator('button:has-text("×")').first();
+    const closeButton = page.getByRole('button', { name: 'Dismiss this panel', exact: true });
     if (await closeButton.isVisible({ timeout: 2000 })) {
       await closeButton.click();
     }

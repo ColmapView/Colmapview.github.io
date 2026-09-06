@@ -3,7 +3,7 @@
  * Only allows selecting/loading profiles, not saving.
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useId, useState, useCallback, useRef } from 'react';
 import { useProfiles } from '../../hooks/useProfiles';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { ChevronDownIcon } from '../../icons';
@@ -18,6 +18,7 @@ import {
 } from './profileDropdownViewModel';
 
 export function ProfileDropdown() {
+  const menuId = useId();
   const {
     profileNames,
     activeProfile,
@@ -42,6 +43,8 @@ export function ProfileDropdown() {
     <div className="relative" ref={dropdownRef}>
       <button
         type="button"
+        aria-expanded={isOpen}
+        aria-controls={menuId}
         onClick={() => setIsOpen((current) => !current)}
         className={`${buttonStyles.base} ${buttonStyles.variants.ghost} h-8 px-2 gap-1`}
         data-tooltip={PROFILE_DROPDOWN_TOOLTIP}
@@ -52,6 +55,9 @@ export function ProfileDropdown() {
 
       {isOpen && (
         <div
+          id={menuId}
+          role="group"
+          aria-label="Profiles"
           className={PROFILE_DROPDOWN_MENU_CLASS}
           style={getProfileDropdownMenuStyle()}
           data-idle-pause="true"

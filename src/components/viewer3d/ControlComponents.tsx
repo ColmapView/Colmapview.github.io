@@ -3,8 +3,8 @@
  * Extracted from ViewerControls.tsx for better organization.
  */
 
-import { useState, useEffect, memo, useRef, useCallback, type ReactNode } from 'react';
-import { controlPanelStyles, getControlButtonClass, getTooltipProps } from '../../theme';
+import { useId, useState, useEffect, memo, useRef, useCallback, type ReactNode } from 'react';
+import { buttonStyles, controlPanelStyles, getControlButtonClass, getTooltipProps } from '../../theme';
 import { isEventTargetOutside } from '../../utils/domTargetGuards';
 import {
   getControlPanelAdjustedTop,
@@ -31,11 +31,12 @@ const styles = controlPanelStyles;
 export type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'share' | 'export' | 'transform' | 'align' | 'gallery' | 'rig' | 'settings' | null;
 
 export interface PanelWrapperProps {
+  id?: string;
   title: string;
   children: ReactNode;
 }
 
-export const PanelWrapper = memo(function PanelWrapper({ title, children }: PanelWrapperProps) {
+export const PanelWrapper = memo(function PanelWrapper({ id, title, children }: PanelWrapperProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [adjustedTop, setAdjustedTop] = useState<number | null>(null);
   const lastHeightRef = useRef<number>(0);
@@ -86,6 +87,9 @@ export const PanelWrapper = memo(function PanelWrapper({ title, children }: Pane
 
   return (
     <div
+      id={id}
+      role="region"
+      aria-label={title}
       ref={panelRef}
       className={styles.panelWrapper}
       style={getControlPanelWrapperStyle(adjustedTop)}
@@ -125,6 +129,10 @@ export const ControlButton = memo(function ControlButton({
   children,
   disabled = false,
 }: ControlButtonProps) {
+  const contentId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const restoringFocus = useRef(false);
+  const keyboardFocus = useRef(false);
   const hasPanel = hasControlButtonPanel(panelTitle, children);
   const {
     touchMode,
@@ -175,14 +183,46 @@ export const ControlButton = memo(function ControlButton({
       ref={containerRef}
       className="relative w-10 control-button-responsive"
       onMouseEnter={touchMode ? undefined : () => !disabled && !contextMenuOpen && setActivePanel(panelId)}
-      onMouseLeave={touchMode ? undefined : () => setActivePanel(null)}
+      onMouseLeave={touchMode ? undefined : () => {
+        if (!keyboardFocus.current) setActivePanel(null);
+      }}
+      onFocus={(event) => {
+        if (restoringFocus.current || !hasPanel || disabled || contextMenuOpen) return;
+        if (event.target.matches(':focus-visible')) {
+          keyboardFocus.current = true;
+          setActivePanel(panelId);
+        }
+      }}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          keyboardFocus.current = false;
+          setActivePanel(null);
+        }
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && isHovered) {
+          event.stopPropagation();
+          restoringFocus.current = true;
+          triggerRef.current?.focus();
+          restoringFocus.current = false;
+          keyboardFocus.current = false;
+          setActivePanel(null);
+        } else if (event.key === 'ArrowDown' && event.target === triggerRef.current && hasPanel && !disabled && !contextMenuOpen) {
+          event.preventDefault();
+          keyboardFocus.current = true;
+          setActivePanel(panelId);
+        }
+      }}
     >
       <button
+        ref={triggerRef}
+        aria-expanded={hasPanel ? isHovered && !disabled : undefined}
+        aria-controls={hasPanel ? contentId : undefined}
         onClick={disabled ? undefined : (touchMode ? handleTouchClick : onClick)}
         onDoubleClick={disabled ? undefined : onDoubleClick}
         disabled={disabled}
         aria-label={accessibleLabel}
-        className={`group ${getControlButtonClass(isActive, isHovered)} ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+        className={`group ${getControlButtonClass(isActive, isHovered)} ${disabled ? buttonStyles.disabled : ''}`}
         {...(!hasPanel && getTooltipProps(accessibleLabel, 'left'))}
       >
         {icon}
@@ -193,7 +233,7 @@ export const ControlButton = memo(function ControlButton({
         isHovered,
         disabled,
       }) && (
-        <PanelWrapper title={panelTitle!}>
+        <PanelWrapper id={contentId} title={panelTitle!}>
           {children}
         </PanelWrapper>
       )}

@@ -20,12 +20,12 @@ describe('imageDetailNavigationViewModel', () => {
     })).toEqual({
       containerClassName: 'flex items-center gap-1.5 px-2 py-1.5 border-t border-ds',
       previousButton: {
-        label: '\u2190 Prev',
+        label: 'Prev',
         disabled: true,
         className: 'flex-1 px-2 flex items-center justify-center rounded-md text-xs relative touch-hit-44 bg-ds-secondary text-ds-muted',
       },
       nextButton: {
-        label: 'Next \u2192',
+        label: 'Next',
         disabled: false,
         className: 'flex-1 px-2 flex items-center justify-center rounded-md text-xs relative touch-hit-44 bg-ds-hover text-ds-primary',
       },
@@ -44,11 +44,11 @@ describe('imageDetailNavigationViewModel', () => {
     });
 
     expect(state.containerClassName).toBe('flex items-center gap-2');
-    expect(state.previousButton.label).toBe('\u2190 Prev');
+    expect(state.previousButton.label).toBe('Prev');
     expect(state.previousButton.disabled).toBe(false);
     expect(state.previousButton.className).toContain('px-4 py-1 text-xs gap-1');
     expect(state.previousButton.className).toContain('bg-ds-hover text-ds-secondary');
-    expect(state.nextButton.label).toBe('Next \u2192');
+    expect(state.nextButton.label).toBe('Next');
     expect(state.nextButton.disabled).toBe(true);
     expect(state.nextButton.className).toContain('opacity-50 cursor-not-allowed');
     expect(state.nextButton.className).toContain('bg-ds-secondary text-ds-muted');

@@ -14,6 +14,7 @@ import {
   getTouchImageDetailTitle,
 } from './imageDetailModalHeaderViewModel';
 import { modalStyles } from '../../theme';
+import { CloseIcon } from '../../icons';
 
 interface DeleteScopeButtonProps {
   scopeLabel: 'I' | 'C' | 'F';
@@ -80,7 +81,7 @@ export function TouchImageDetailHeader({
           style={closeButtonState.style}
           title={closeButtonState.title}
         >
-          ×
+          <CloseIcon className="w-5 h-5" />
         </button>
       </div>
       {!isMatchViewMode && (
@@ -180,9 +181,7 @@ export function DesktopImageDetailHeader({
           className={closeButtonState.className}
           title={closeButtonState.title}
         >
-          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
+          <CloseIcon className="w-4 h-4" />
         </button>
       </div>
     </div>

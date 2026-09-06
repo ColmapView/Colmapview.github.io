@@ -17,8 +17,7 @@ export class DropZonePageObject {
   constructor(page: Page) {
     this.page = page;
     this.container = page.locator('[data-testid="drop-zone"]');
-    // Matches DROP_ZONE_DESKTOP_TITLE in src/components/dropzone/dropZonePanelViewModel.ts
-    this.emptyStatePanel = page.locator('text="Load Dataset"').locator('..').locator('..');
+    this.emptyStatePanel = page.locator('.startup-panel');
     this.loadUrlButton = page.locator('button:has-text("Load URL")');
     this.loadJsonButton = page.locator('button:has-text("Load manifest")');
     this.tryToyButton = page.locator('button:has-text("Try a Toy!")');
@@ -102,7 +101,7 @@ export class DropZonePageObject {
    * Dismiss the empty state panel by clicking the X button
    */
   async dismissEmptyState(): Promise<void> {
-    const closeButton = this.emptyStatePanel.locator('button:has-text("×")');
+    const closeButton = this.emptyStatePanel.getByRole('button', { name: 'Dismiss this panel', exact: true });
     await closeButton.click();
     await expect(this.emptyStatePanel).not.toBeVisible();
   }

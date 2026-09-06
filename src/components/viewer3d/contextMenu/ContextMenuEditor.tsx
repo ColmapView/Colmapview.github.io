@@ -1,6 +1,7 @@
 import type { MouseEvent, PointerEvent, RefObject } from 'react';
 import type { ContextMenuAction } from '../../../store';
 import { modalStyles } from '../../../theme';
+import { CloseIcon } from '../../../icons';
 import { formatKeyCombo } from '../../../config/hotkeys';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
 import { FloatingWindowShell } from '../../ui/FloatingWindowShell';
@@ -117,9 +118,7 @@ export function ContextMenuEditor({
       onHeaderMouseDown={onDragStart}
       portal
       renderCloseIcon={(
-        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
+        <CloseIcon className="w-4 h-4" />
       )}
     >
         <div className="p-4 overflow-y-auto" style={getContextMenuEditorContentStyle()}>

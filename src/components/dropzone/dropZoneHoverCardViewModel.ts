@@ -24,7 +24,6 @@ export const LOAD_URL_SUPPORTED_SOURCES = 'Supports: S3, GCS, R2, Dropbox, Huggi
 export const LOAD_URL_LOCAL_SERVER_HINT = 'Local server: npx http-server --cors -p 8080';
 export const LOAD_URL_HINT_ROWS: DropZoneHoverCardHintRow[] = [
   { icon: 'mouse-left', label: 'Left: open URL dialog' },
-  { icon: 'mouse-right', label: 'Right: open NGS dataset' },
 ];
 
 export const LOAD_JSON_HOVER_CARD_TITLE = 'Load manifest.json';
@@ -42,7 +41,7 @@ export const LOAD_JSON_MANIFEST_EXAMPLE = `{
 }`;
 export const LOAD_JSON_HINT_ROWS: DropZoneHoverCardHintRow[] = [
   { icon: 'mouse-left', label: 'Left: browse manifest file' },
-  { icon: 'mouse-right', label: 'Right: download example' },
+  { icon: 'mouse-right', label: 'Right-click: download example manifest' },
 ];
 
 export const TOY_HOVER_CARD_TITLE = 'Load random 3D scan';
@@ -51,6 +50,7 @@ export const TOY_HOVER_CARD_SOURCE = 'huggingface.co/datasets/OpsiClear/NGS';
 export const TOY_HOVER_CARD_INCLUDES = 'Includes: images, masks, sparse reconstruction';
 export const TOY_HINT_ROWS: DropZoneHoverCardHintRow[] = [
   { icon: 'mouse-left', label: 'Left: load random scan' },
+  { icon: 'mouse-right', label: 'Right-click: open example dataset' },
 ];
 
 export function getArchiveFormatsHint(archiveExtensions: readonly string[] = ARCHIVE_EXTENSIONS): string {

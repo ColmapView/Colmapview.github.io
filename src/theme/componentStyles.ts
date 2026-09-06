@@ -3,188 +3,16 @@
  * Use these to maintain consistency across similar components.
  */
 
-import { STATUS_COLORS, STATUS_BG } from './colors';
+import { STATUS_BG } from './colors';
+import { inputStyles } from './formStyles';
+export { inputStyles, colorPickerStyles } from './formStyles';
+export { tabStyles, toggleSwitchStyles, getToggleSwitchClasses, checkboxGroupStyles } from './selectionStyles';
+export { loadingStyles, emptyStateStyles, mobileMessageStyles, errorStateStyles } from './feedbackStyles';
+import { buttonStyles, actionButtonStyles } from './buttonStyles';
+export { buttonStyles, actionButtonStyles, getButtonClass } from './buttonStyles';
+import { floatingPanelStyles, panelStyles } from './panelStyles';
+export { floatingPanelStyles, panelStyles } from './panelStyles';
 
-
-// ============================================
-// BUTTON STYLES
-// ============================================
-
-export const buttonStyles = {
-  // Base styles for all buttons
-  base: 'inline-flex items-center justify-center rounded transition-colors cursor-pointer select-none',
-
-  // Size variants
-  sizes: {
-    xs: 'px-2 py-1 text-xs gap-1',
-    sm: 'px-2.5 py-1.5 text-sm gap-1.5',
-    md: 'px-3 py-1.5 text-base gap-2',
-    lg: 'px-4 py-2 text-base gap-2',
-    xl: 'px-6 py-3 text-lg gap-3',
-    toggle: 'px-4 py-1 text-sm gap-1.5', // Wide toggle button (matches hover panel style)
-    toggleResponsive: 'px-4 py-1 text-xs gap-1', // Compact toggle button for modals
-    action: 'px-4 py-1.5 text-sm gap-2 min-w-[120px]', // Equal-width action buttons (startup panel)
-    icon: 'p-1',         // Square icon button small
-    iconMd: 'p-1.5',     // Square icon button medium
-    iconLg: 'p-2',       // Square icon button large
-    iconXl: 'w-10 h-10', // Large square icon button (viewer controls)
-  },
-
-  // Color variants
-  variants: {
-    // Primary - accent colored, high emphasis
-    primary: 'bg-ds-accent text-ds-void hover-bg-ds-accent-90',
-
-    // Secondary - subtle background, medium emphasis
-    secondary: 'bg-ds-hover text-ds-primary hover-ds-elevated',
-
-    // Tertiary - darker background
-    tertiary: 'bg-ds-tertiary text-ds-primary hover-ds-hover border border-ds',
-
-    // Ghost - no background until hover
-    ghost: 'bg-transparent text-ds-secondary hover-ds-text-primary hover-ds-hover',
-
-    // Outline - border only
-    outline: 'bg-transparent text-ds-primary border border-ds hover-ds-hover',
-
-    // Danger - for destructive actions
-    danger: 'bg-ds-error text-white hover-opacity-90',
-
-    // Tab style - for tab-like buttons
-    tab: 'bg-transparent text-ds-secondary hover-ds-text-primary hover-ds-tertiary-50',
-    tabActive: 'bg-ds-tertiary text-ds-accent border-b-2 border-ds-accent',
-
-    // Toggle style - for toggle buttons (gallery view mode)
-    toggle: 'bg-ds-hover text-ds-secondary hover-ds-text-primary hover-ds-elevated',
-    toggleActive: 'bg-ds-accent text-ds-void',
-    toggleError: 'bg-ds-error/20 text-ds-error border border-ds-error',
-    toggleSuccess: 'bg-ds-success/20 text-ds-success border border-ds-success',
-
-    // Control style - for viewer controls (solid background for visibility on any canvas color)
-    control: 'bg-ds-tertiary text-ds-secondary hover-ds-hover hover-ds-text-primary rounded-lg border border-ds',
-    controlActive: 'bg-ds-accent text-ds-void rounded-lg border border-ds-accent',
-    controlHover: 'bg-ds-hover text-ds-primary rounded-lg border border-ds',
-  },
-
-  // States
-  disabled: 'opacity-50 cursor-not-allowed pointer-events-none',
-  // The colors a disabled button wears — the `variants` entry the disabled
-  // state never had. Split from `disabled` above, which is behavior and opacity
-  // only, because a greyed-out button needs both and every family was pairing
-  // them by hand. The tokens below compose it; a few view-models outside this
-  // file still spell the pair out inline.
-  disabledSurface: 'bg-ds-secondary text-ds-muted',
-
-  // Close button (X)
-  close: 'text-ds-muted hover-ds-text-primary text-xl leading-none cursor-pointer',
-  closeLg: 'text-ds-muted hover-ds-text-primary text-2xl leading-none px-2 cursor-pointer',
-} as const;
-
-// Helper function to compose button classes
-export function getButtonClass(
-  variant: keyof typeof buttonStyles.variants = 'secondary',
-  size: keyof typeof buttonStyles.sizes = 'md',
-  disabled = false
-): string {
-  const classes: string[] = [
-    buttonStyles.base,
-    buttonStyles.sizes[size],
-    buttonStyles.variants[variant],
-  ];
-  if (disabled) {
-    classes.push(buttonStyles.disabled);
-  }
-  return classes.join(' ');
-}
-
-// ============================================
-// SHARED ACTION BUTTON STYLES
-// ============================================
-// Single source of truth for action buttons used across modals, panels, and context menus
-
-export const actionButtonStyles = {
-  // Container for action button groups
-  group: 'flex gap-2 mt-3',
-
-  // Standard action buttons (equal width distribution, compact padding)
-  button: `${buttonStyles.base} px-1 py-1 text-sm ${buttonStyles.variants.toggle} flex-1`,
-  buttonDisabled: `${buttonStyles.base} px-1 py-1 text-sm ${buttonStyles.disabled} ${buttonStyles.disabledSurface} flex-1`,
-  buttonPrimary: `${buttonStyles.base} px-1 py-1 text-sm ${buttonStyles.variants.toggleActive} flex-1`,
-  buttonPrimaryDisabled: `${buttonStyles.base} px-1 py-1 text-sm ${buttonStyles.disabled} ${buttonStyles.disabledSurface} flex-1`,
-
-  // Full-width primary action button (for "Done", "Confirm" dialogs)
-  buttonFullWidth: 'w-full px-3 py-1.5 bg-ds-accent text-ds-void rounded text-sm hover-opacity-90 transition-opacity',
-
-  // Icon action buttons (for confirm/retry/cancel style buttons).
-  //
-  // Hover affordance is the EXISTING `hover-brightness-110` utility, not three
-  // per-hue hover colors. The old form was `hover:text-green-300` /
-  // `-yellow-300` / `-red-300`: three escaped legacy rules carrying three more
-  // literal hexes whose only job was to be a lighter twin of three other
-  // literals. A brightness filter derives "lighter" from whatever ds token the
-  // button already wears, so the confirm/retry/cancel trio tracks
-  // --success/--warning/--error for free and the palette does not re-fork —
-  // and it adds ZERO new CSS (the rule already exists for menuStyles.itemHover).
-  // Retry moves off `text-yellow-400` onto the warning token: retry IS a
-  // warning, and yellow-400 had no other user.
-  //
-  // `hover-opacity-90` — the other candidate — was rejected: on these dark
-  // panels lowering opacity blends toward the background, so hover would DIM the
-  // icon, the wrong direction for an affordance.
-  //
-  // `transition` replaces `transition-colors` on the three: the colors no longer
-  // change, the filter does, and `.transition` is the repo utility whose
-  // property list already includes `filter` (index.css ~1199).
-  iconButton: 'p-0.5 transition-colors flex items-center',
-  iconButtonConfirm: `p-0.5 ${STATUS_COLORS.success} hover-brightness-110 transition flex items-center`,
-  iconButtonRetry: `p-0.5 ${STATUS_COLORS.warning} hover-brightness-110 transition flex items-center`,
-  iconButtonCancel: `p-0.5 ${STATUS_COLORS.error} hover-brightness-110 transition flex items-center`,
-} as const;
-
-// ============================================
-// FORM INPUT STYLES
-// ============================================
-
-export const inputStyles = {
-  // Base input styles
-  base: 'bg-ds-input text-ds-primary border border-ds rounded focus-ds transition-colors',
-
-  // Size variants
-  sizes: {
-    sm: 'px-2 py-1 text-sm',
-    md: 'px-2 py-1.5 text-base',
-    lg: 'px-3 py-2 text-base',
-  },
-
-  // Select specific
-  select: 'bg-ds-input text-ds-primary border border-ds-subtle rounded focus-ds cursor-pointer px-2 py-1',
-
-  // Select without border (for use in panels/hover menus)
-  selectPanel: 'bg-ds-input text-ds-primary rounded focus-ds cursor-pointer px-2 py-1',
-
-  // Select sizes (use with select or selectPanel)
-  selectSizes: {
-    xs: 'px-2 py-0.5 text-xs',
-    sm: 'px-2 py-1 text-sm',
-    md: 'px-3 py-1.5 text-sm',
-  },
-
-  // Checkbox/Radio
-  checkbox: 'w-5 h-5 accent-ds-accent cursor-pointer',
-
-  // Range slider
-  range: {
-    base: 'accent-ds-accent cursor-pointer',
-    sm: 'w-20',   // 5rem
-    md: 'w-28',   // 7rem
-    lg: 'w-36',   // 9rem
-    full: 'w-full',
-  },
-
-  // States
-  disabled: 'opacity-50 cursor-not-allowed',
-  error: 'border-ds-error',
-} as const;
 
 // ============================================
 // GALLERY STYLES
@@ -223,30 +51,26 @@ export const listStyles = {
 // MODAL STYLES
 // ============================================
 
-// Single source of truth for popup/tool-window headers: a purely flat px-4
-// py-2 title row on the panel surface — no background block, no divider (user
-// feedback 2026-07-11 rejected both the dark bg-ds-secondary bar and the
-// hairline). Draggable windows add cursor-move via modalStyles.toolHeader.
-const POPUP_HEADER_BASE = 'flex items-center justify-between px-4 py-2 select-none';
-
+// Compatibility recipes compose the canonical panel system.
 export const modalStyles = {
   container: 'absolute inset-0 z-modal pointer-events-none',
   backdrop: 'absolute inset-0 bg-ds-void/50 pointer-events-auto',
-  panel: 'absolute bg-ds-tertiary rounded-lg shadow-ds-lg flex flex-col pointer-events-auto',
-  header: 'flex items-center justify-between px-4 py-2 border-b border-ds cursor-move select-none',
-  headerTitle: 'text-ds-primary text-base font-medium truncate',
+  panel: `absolute ${floatingPanelStyles.dialog} pointer-events-auto`,
+  compactPanel: `fixed ${panelStyles.surface} ${panelStyles.compactInset}`,
+  header: panelStyles.draggableHeader,
+  headerTitle: `${panelStyles.title} truncate`,
   // Tool modal panel (includes responsive class)
-  toolPanel: 'absolute bg-ds-tertiary rounded-lg shadow-ds-lg flex flex-col pointer-events-auto tool-modal-responsive',
-  // See POPUP_HEADER_BASE above. popupHeader = static dialogs; toolHeader =
+  toolPanel: `absolute ${floatingPanelStyles.dialog} pointer-events-auto tool-modal-responsive`,
+  // popupHeader = static dialogs; toolHeader =
   // draggable tool windows (same header + cursor-move).
-  popupHeader: POPUP_HEADER_BASE,
-  toolHeader: `${POPUP_HEADER_BASE} cursor-move`,
-  toolHeaderTitle: 'text-ds-primary text-sm font-medium',
-  toolHeaderClose: 'w-6 h-6 flex items-center justify-center rounded cursor-pointer text-ds-muted hover-ds-text-primary hover-ds-hover transition-colors',
+  popupHeader: panelStyles.header,
+  toolHeader: panelStyles.draggableHeader,
+  toolHeaderTitle: panelStyles.title,
+  toolHeaderClose: panelStyles.close,
   /** Base for modal header icon buttons (delete/restore actions) */
   headerIconButton: 'w-6 h-6 flex items-center justify-center rounded cursor-pointer transition-colors',
   /** Standard tool modal content area */
-  toolContent: 'px-4 py-3 space-y-3',
+  toolContent: panelStyles.toolBody,
   closeButton: buttonStyles.closeLg,
   // Reference shared action button styles
   actionGroup: actionButtonStyles.group,
@@ -267,16 +91,6 @@ export const tableStyles = {
   row: 'hover-ds-tertiary-50',
   cell: 'px-3 py-0.5 text-ds-primary',
   cellTruncate: 'truncate max-w-[200px]',
-} as const;
-
-// ============================================
-// TAB STYLES
-// ============================================
-
-export const tabStyles = {
-  container: 'flex border-b border-ds',
-  tab: `px-4 py-2 text-base font-medium transition-colors ${buttonStyles.variants.tab}`,
-  tabActive: `px-4 py-2 text-base font-medium ${buttonStyles.variants.tabActive}`,
 } as const;
 
 // ============================================
@@ -327,8 +141,8 @@ export function getTooltipProps(
  * Use these for consistent hover popups across the app.
  */
 export const hoverCardStyles = {
-  container: 'bg-ds-tertiary rounded-lg px-3 py-2 shadow-ds-lg whitespace-nowrap text-sm',
-  title: 'text-ds-primary',
+  container: `${floatingPanelStyles.surface} px-3 py-2 whitespace-nowrap text-sm`,
+  title: 'text-ds-primary font-semibold',
   subtitle: 'text-ds-secondary',
   hint: 'text-ds-secondary text-sm mt-2',
   hintRow: 'flex items-center gap-1',
@@ -339,8 +153,8 @@ export const hoverCardStyles = {
 // ============================================
 
 export const toastStyles = {
-  container: 'absolute top-4 left-1/2 -translate-x-1/2 z-overlay bg-ds-tertiary rounded-lg shadow-ds-lg',
-  containerWithLayout: 'absolute top-4 left-1/2 -translate-x-1/2 z-overlay bg-ds-tertiary rounded-lg shadow-ds-lg max-w-md flex items-start gap-3',
+  container: `absolute top-4 left-1/2 -translate-x-1/2 z-overlay ${floatingPanelStyles.surface}`,
+  containerWithLayout: `absolute top-4 left-1/2 -translate-x-1/2 z-overlay ${floatingPanelStyles.surface} max-w-md flex items-start gap-3`,
   error: 'border border-ds-error',
   success: 'border border-ds-success',
   content: 'px-6 py-3 text-ds-primary',
@@ -358,7 +172,7 @@ export const notificationStyles = {
   container: 'fixed top-4 left-1/2 -translate-x-1/2 z-toast flex flex-col gap-3 pointer-events-none items-center',
 
   // Individual notification toast
-  toast: 'pointer-events-auto bg-ds-tertiary/90 rounded-lg shadow-ds-lg min-w-[300px] max-w-[400px] flex items-stretch',
+  toast: `pointer-events-auto ${floatingPanelStyles.surface} min-w-[300px] max-w-[400px] flex items-stretch`,
 
   // Icon container (left side) - same style as close button
   iconContainer: 'flex-shrink-0 px-3 flex items-center rounded-l-lg',
@@ -383,21 +197,6 @@ export const notificationStyles = {
 } as const;
 
 // ============================================
-// LOADING STYLES
-// ============================================
-
-export const loadingStyles = {
-  overlay: 'absolute inset-0 bg-black/50 backdrop-blur-sm z-overlay flex items-center justify-center',
-  container: 'flex flex-col items-center text-center',
-  dots: 'flex justify-center mb-4 space-x-2',
-  dot: 'w-3 h-3 rounded-full bg-white animate-bounce',
-  progressBar: 'w-64 h-2 bg-ds-tertiary rounded-full overflow-hidden',
-  progressFill: 'h-full bg-white transition-all duration-300',
-  text: 'text-xl mb-4 text-white max-w-md break-words',
-  percentage: 'text-base text-white mt-2',
-} as const;
-
-// ============================================
 // CONTROL PANEL STYLES (Viewer Controls)
 // ============================================
 
@@ -406,16 +205,16 @@ export const controlPanelStyles = {
   // Note: idle-hideable is added conditionally by ViewerControls based on autoHideElements.buttons
   container: 'absolute top-3 right-3 flex flex-col gap-2 z-tooltip control-panel-responsive',
   // Button styles
-  button: 'w-10 h-10 rounded-lg flex items-center justify-center transition-colors relative border border-ds control-button-responsive',
-  buttonActive: 'bg-ds-accent text-ds-void border-ds-accent',
+  button: 'w-10 h-10 rounded-lg flex items-center justify-center transition-colors relative border border-ds control-button-responsive viewer-control',
+  buttonActive: 'viewer-control-selected text-ds-primary',
   buttonHover: 'bg-ds-hover text-ds-primary',
   buttonInactive: 'bg-ds-tertiary text-ds-secondary hover-ds-hover hover-ds-text-primary',
   // Panel positioning - right-full positions at container's left edge, pr-2 creates gap inside hover area
   // z-index tooltip keeps hover panels above tool modals, while context menus render above panels.
   panelWrapper: 'absolute right-full top-0 pr-2 z-tooltip',
   // Panel content
-  panel: 'bg-ds-tertiary border border-ds rounded-lg p-4 w-[240px] shadow-ds-lg hover-panel-responsive',
-  panelTitle: 'text-ds-primary text-sm font-medium mb-3',
+  panel: `${panelStyles.surface} ${panelStyles.inset} w-[240px] hover-panel-responsive`,
+  panelTitle: `${panelStyles.title} mb-3`,
   panelContent: 'space-y-2',
   // Row layout
   row: 'flex items-center gap-2',
@@ -478,88 +277,6 @@ export const cardStyles = {
 } as const;
 
 // ============================================
-// TOGGLE SWITCH STYLES (Single source of truth)
-// ============================================
-
-/**
- * Toggle switch (oval with circle) - replaces checkboxes
- * Usage: <ToggleSwitch checked={value} onChange={setValue} />
- */
-export const toggleSwitchStyles = {
-  // Outer track (oval container)
-  track: 'relative inline-flex items-center cursor-pointer transition-colors duration-200 rounded-full',
-  trackSm: 'w-7 h-4',   // Small: 28x16px
-  trackMd: 'w-9 h-5',   // Medium: 36x20px (default)
-  trackLg: 'w-11 h-6',  // Large: 44x24px
-
-  // Track colors
-  trackOff: 'bg-ds-secondary border border-ds-light',
-  trackOn: 'bg-ds-accent border border-ds-accent',
-
-  // Inner circle (thumb) - base styles only, position via inline style.
-  // Deliberately flat: `shadow-sm` was listed here but never defined in index.css,
-  // so every toggle in the app has always rendered without a drop shadow. The ramp
-  // does offer `shadow-ds-sm`, but switching it on would change live pixels app-wide
-  // for no reason (same keep-current-pixels call as DROP_ZONE_BROWSE_BOX_CLASS's
-  // border). This is the canonical note; the profile menus point back here.
-  thumb: 'absolute bg-white rounded-full transition-all duration-200 ease-in-out',
-  thumbSm: 'w-2.5 h-2.5',   // 10x10px
-  thumbMd: 'w-3.5 h-3.5',   // 14x14px
-  thumbLg: 'w-4.5 h-4.5',   // 18x18px
-
-  // States
-  disabled: 'opacity-50 cursor-not-allowed',
-
-  // Container with label
-  container: 'flex items-center gap-2',
-  label: 'text-ds-secondary text-sm whitespace-nowrap cursor-pointer',
-} as const;
-
-// Thumb positions in pixels for each size
-const THUMB_POSITIONS = {
-  sm: { off: 3, on: 14 },   // 28px track, 10px thumb
-  md: { off: 3, on: 18 },   // 36px track, 14px thumb
-  lg: { off: 3, on: 22 },   // 44px track, 18px thumb
-} as const;
-
-// Helper to get toggle switch classes and thumb position
-export function getToggleSwitchClasses(
-  checked: boolean,
-  size: 'sm' | 'md' | 'lg' = 'md',
-  disabled = false
-): { track: string; thumb: string; thumbStyle: React.CSSProperties } {
-  const sizeClasses = {
-    sm: { track: toggleSwitchStyles.trackSm, thumb: toggleSwitchStyles.thumbSm },
-    md: { track: toggleSwitchStyles.trackMd, thumb: toggleSwitchStyles.thumbMd },
-    lg: { track: toggleSwitchStyles.trackLg, thumb: toggleSwitchStyles.thumbLg },
-  };
-
-  const s = sizeClasses[size];
-  const pos = THUMB_POSITIONS[size];
-  const trackColor = checked ? toggleSwitchStyles.trackOn : toggleSwitchStyles.trackOff;
-
-  return {
-    track: `${toggleSwitchStyles.track} ${s.track} ${trackColor}${disabled ? ` ${toggleSwitchStyles.disabled}` : ''}`,
-    thumb: `${toggleSwitchStyles.thumb} ${s.thumb}`,
-    thumbStyle: {
-      left: checked ? pos.on : pos.off,
-      top: '50%',
-      transform: 'translateY(-50%)',
-    },
-  };
-}
-
-// ============================================
-// CHECKBOX GROUP STYLES (Legacy - use ToggleSwitch instead)
-// ============================================
-
-export const checkboxGroupStyles = {
-  container: 'flex items-center gap-2',
-  checkbox: 'w-5 h-5 cursor-pointer',
-  label: 'text-ds-primary text-base',
-} as const;
-
-// ============================================
 // DRAG OVERLAY STYLES
 // ============================================
 
@@ -588,7 +305,7 @@ export const footerStyles = {
 // ============================================
 
 export const contextMenuStyles = {
-  container: 'bg-ds-tertiary rounded-lg shadow-ds-lg overflow-hidden border border-ds py-1',
+  container: `${floatingPanelStyles.surface} overflow-hidden py-1`,
   button: 'flex items-center gap-2 px-3 py-1.5 text-sm text-ds-primary hover-ds-hover cursor-pointer transition-colors w-full text-left',
   icon: 'w-4 h-4 flex-shrink-0',
   hotkey: 'text-xs font-mono text-ds-muted ml-auto uppercase tracking-wide',
@@ -610,30 +327,6 @@ export const toolbarStyles = {
 export const statusBarStyles = {
   container: 'absolute inset-x-0 bottom-0 z-sticky h-10 border-t border-ds bg-ds-tertiary text-ds-secondary text-base px-4 flex items-center justify-between status-bar-responsive overflow-visible',
   group: 'flex items-center gap-6 status-bar-group overflow-visible',
-} as const;
-
-// ============================================
-// EMPTY STATE STYLES
-// ============================================
-
-export const emptyStateStyles = {
-  container: 'h-full flex items-center justify-center text-ds-muted bg-ds-secondary',
-  containerFull: 'flex flex-col items-center justify-center h-full p-8 text-center bg-ds-secondary',
-  icon: 'text-ds-error text-6xl mb-4',
-  title: 'text-xl font-semibold text-ds-primary mb-2',
-  message: 'text-ds-secondary mb-4 max-w-md',
-  button: 'px-4 py-2 bg-ds-accent text-ds-void rounded hover-bg-ds-accent-90 transition-colors',
-} as const;
-
-// ============================================
-// MOBILE MESSAGE STYLES
-// ============================================
-
-export const mobileMessageStyles = {
-  container: 'h-screen flex flex-col items-center justify-center bg-ds-primary p-6 text-center',
-  title: 'text-2xl font-semibold text-ds-primary mb-3',
-  message: 'text-ds-secondary mb-4',
-  badge: 'mt-6 px-4 py-2 bg-ds-tertiary rounded-lg text-sm text-ds-muted',
 } as const;
 
 // ============================================
@@ -662,9 +355,9 @@ export const histogramStyles = {
   container: 'absolute left-1/2 z-tooltip',
   // Inline style needed for positioning above: style={{ bottom: '100%', marginBottom: '8px' }}
   // Card styling
-  card: 'bg-ds-tertiary rounded-lg px-4 py-3 shadow-ds-lg text-sm border border-ds',
+  card: `${floatingPanelStyles.surface} px-4 py-3 text-sm`,
   // Title text
-  title: 'text-ds-primary text-sm font-medium mb-1',
+  title: `${panelStyles.title} mb-1`,
   // Row for each histogram bin
   row: 'flex items-center gap-2 h-5',
   // Label (left side, right-aligned)
@@ -675,15 +368,6 @@ export const histogramStyles = {
   count: 'w-16 text-ds-muted text-xs',
   // Footer with mean and total
   footer: 'text-ds-secondary text-xs mt-3 pt-2 border-t border-ds',
-} as const;
-
-// ============================================
-// COLOR PICKER STYLES
-// ============================================
-
-export const colorPickerStyles = {
-  hueGradient: 'linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)',
-  hueSlider: 'w-full h-4 cursor-pointer appearance-none bg-transparent relative z-10 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-gray-400 [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-gray-400 [&::-moz-range-thumb]:cursor-pointer [&::-webkit-slider-runnable-track]:bg-transparent [&::-moz-range-track]:bg-transparent',
 } as const;
 
 // ============================================
@@ -700,10 +384,10 @@ export const cacheStatsStyles = {
   // Tooltip container (uses histogramStyles.container positioning)
   tooltipContainer: 'absolute z-tooltip',
   // Tooltip card - wider, no wrapping
-  card: 'bg-ds-tertiary rounded-lg px-4 py-3 shadow-ds-lg text-sm border border-ds whitespace-nowrap',
+  card: `${floatingPanelStyles.surface} px-4 py-3 text-sm whitespace-nowrap`,
   // Header row with title and legend
   header: 'flex items-center justify-between gap-8 mb-2',
-  headerTitle: 'flex items-center gap-1.5 text-ds-primary text-sm font-medium whitespace-nowrap',
+  headerTitle: `flex items-center gap-1.5 ${panelStyles.title} whitespace-nowrap`,
   headerLegend: 'flex items-center gap-4 text-[10px]',
   legendItem: 'flex items-center gap-1',
   legendText: 'text-ds-muted',

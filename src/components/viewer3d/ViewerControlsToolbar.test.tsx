@@ -60,7 +60,7 @@ describe('ViewerControlsToolbar cluster semantics', () => {
     expect(grouped.length).toBeGreaterThan(5);
 
     // Dividers stay direct children of the flex column, between the groups.
-    for (const divider of toolbar.querySelectorAll('[aria-hidden="true"]')) {
+    for (const divider of toolbar.querySelectorAll('div[aria-hidden="true"]')) {
       expect(divider.parentElement).toBe(toolbar);
     }
   });

@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from 'react';
-import { buttonStyles } from '../../theme';
+import { buttonStyles, errorStateStyles } from '../../theme';
 import { classifyError, type AppErrorType } from '../../utils/errorUtils';
 import { getErrorMessage } from '../../constants/errorMessages';
 import { appLogger } from '../../utils/logger';
@@ -58,12 +58,12 @@ export class GalleryErrorBoundary extends Component<GalleryErrorBoundaryProps, G
       const errorMessage = errorType ? getErrorMessage(errorType) : getErrorMessage('image_load_error');
 
       return (
-        <div className="h-full flex flex-col items-center justify-center p-4 text-center bg-ds-secondary">
-          <div className="text-ds-error text-3xl mb-3">!</div>
-          <h3 className="text-sm font-medium text-ds-primary mb-2">
+        <div className={errorStateStyles.container}>
+          <div className={errorStateStyles.icon}>!</div>
+          <h3 className={errorStateStyles.title}>
             Gallery Error
           </h3>
-          <p className="text-xs text-ds-secondary mb-4 max-w-xs">
+          <p className={errorStateStyles.message}>
             {error?.message ?? errorMessage.message}
           </p>
           <button

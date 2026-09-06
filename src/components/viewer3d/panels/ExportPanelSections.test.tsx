@@ -117,6 +117,8 @@ describe('ExportPanelSections', () => {
 
     expect(screen.getByText('Exporting images... 35%')).toBeVisible();
     expect(screen.getByText('Exporting masks... 70%')).toBeVisible();
+    expect(screen.getByRole('progressbar', { name: 'Export images' })).toHaveAttribute('aria-valuenow', '35');
+    expect(screen.getByRole('progressbar', { name: 'Export masks' })).toHaveAttribute('aria-valuenow', '70');
     expect(screen.queryByRole('button', { name: 'Download Images' })).toBeNull();
 
     cleanup();

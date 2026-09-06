@@ -1,5 +1,5 @@
 import { useId, useRef } from 'react';
-import { modalStyles } from '../../theme';
+import { modalStyles, floatingPanelStyles, panelStyles } from '../../theme';
 import { CloseIcon } from '../../icons';
 import { ModalDialogShell } from '../ui/ModalDialogShell';
 import { useIsTouchDevice } from '../../hooks/useIsTouchDevice';
@@ -70,9 +70,9 @@ export function SplatPickerModal() {
       onClose={handleClose}
       ariaLabelledBy={titleId}
       ariaDescribedBy={descriptionId}
-      overlayClassName="fixed inset-0 flex items-center justify-center bg-ds-void/50"
+      overlayClassName={panelStyles.overlay}
       overlayStyle={getSplatPickerOverlayStyle()}
-      panelClassName="bg-ds-tertiary rounded-lg shadow-ds-lg flex flex-col w-80 overflow-hidden"
+      panelClassName={`${floatingPanelStyles.dialog} w-80 overflow-hidden`}
       panelStyle={getSplatPickerPanelStyle()}
       panelTestId="splat-picker-modal"
       initialFocusRef={closeButtonRef}

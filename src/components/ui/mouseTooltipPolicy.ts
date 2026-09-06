@@ -97,3 +97,22 @@ export function getMouseTooltipStyle(
     top: position.y + cursorOffset,
   };
 }
+
+/** Keep both pointer and keyboard hints inside the viewport. */
+export function getClampedTooltipPosition(
+  anchor: MouseTooltipPosition,
+  size: { width: number; height: number },
+  viewport: { width: number; height: number },
+  preferAbove = false,
+): { left: number; top: number } {
+  const gap = MODAL_POSITION.cursorOffset;
+  const inset = 8;
+  const below = anchor.y + gap;
+  const above = anchor.y - size.height - gap;
+  const top = preferAbove && above >= inset ? above
+    : below + size.height <= viewport.height - inset ? below : above;
+  return {
+    left: Math.max(inset, Math.min(anchor.x, viewport.width - size.width - inset)),
+    top: Math.max(inset, Math.min(top, viewport.height - size.height - inset)),
+  };
+}

@@ -1,11 +1,11 @@
 import type { CSSProperties } from 'react';
-import { Z_INDEX } from '../../theme';
+import { Z_INDEX, floatingPanelStyles } from '../../theme';
 
 export const PROFILE_DROPDOWN_FALLBACK_LABEL = 'Profile';
 export const PROFILE_DROPDOWN_TOOLTIP = 'Select settings profile';
-// Deliberately flat, no shadow class: keep-current-pixels (see toggleSwitchStyles.thumb).
+// Match the shared Load Dataset surface.
 export const PROFILE_DROPDOWN_MENU_CLASS =
-  'absolute top-full right-0 mt-1 bg-ds-tertiary border border-ds rounded min-w-[120px] py-1';
+  `absolute top-full right-0 mt-1 ${floatingPanelStyles.surface} min-w-[120px] py-1`;
 
 const PROFILE_DROPDOWN_CHEVRON_CLASS = 'w-3 h-3 transition-transform';
 const PROFILE_DROPDOWN_OPTION_BASE_CLASS =

@@ -116,7 +116,7 @@ export function getImageDetailNavigationButtonState({
     : hasTarget ? DESKTOP_NAVIGATION_ENABLED_BUTTON_CLASS : DESKTOP_NAVIGATION_DISABLED_BUTTON_CLASS;
 
   return {
-    label: direction === 'previous' ? '\u2190 Prev' : 'Next \u2192',
+    label: direction === 'previous' ? 'Prev' : 'Next',
     disabled,
     className,
   };

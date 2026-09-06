@@ -78,7 +78,7 @@ describe('imageDetailControlsViewModel', () => {
     })).toEqual({
       value: '8',
       placeholderLabel: 'Select image...',
-      className: 'bg-ds-input text-ds-primary border border-ds-subtle rounded focus-ds cursor-pointer px-2 py-1 flex-1 min-w-0 py-1.5 text-xs',
+      className: 'bg-ds-input text-ds-primary border border-ds rounded focus-ds cursor-pointer px-2 py-1 flex-1 min-w-0 py-1.5 text-xs',
       minHeight: 36,
       options: [
         { value: '8', label: 'match-a.jpg (4)' },
@@ -95,7 +95,7 @@ describe('imageDetailControlsViewModel', () => {
     })).toEqual({
       value: '',
       placeholderLabel: 'Select connected image...',
-      className: 'bg-ds-input text-ds-primary border border-ds-subtle rounded focus-ds cursor-pointer px-2 py-1 py-1 pl-2 pr-1 text-xs',
+      className: 'bg-ds-input text-ds-primary border border-ds rounded focus-ds cursor-pointer px-2 py-1 py-1 pl-2 pr-1 text-xs',
       options: [
         { value: '8', label: 'match-a.jpg (4 matches)' },
       ],

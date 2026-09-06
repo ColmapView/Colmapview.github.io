@@ -43,14 +43,14 @@ describe('drop zone hover card view model', () => {
   it('defines hint rows with explicit icon identifiers', () => {
     expect(LOAD_URL_HINT_ROWS).toEqual([
       { icon: 'mouse-left', label: 'Left: open URL dialog' },
-      { icon: 'mouse-right', label: 'Right: open NGS dataset' },
-    ]);
+        ]);
     expect(LOAD_JSON_HINT_ROWS).toEqual([
       { icon: 'mouse-left', label: 'Left: browse manifest file' },
-      { icon: 'mouse-right', label: 'Right: download example' },
+      { icon: 'mouse-right', label: 'Right-click: download example manifest' },
     ]);
     expect(TOY_HINT_ROWS).toEqual([
       { icon: 'mouse-left', label: 'Left: load random scan' },
+  { icon: 'mouse-right', label: 'Right-click: open example dataset' },
     ]);
   });
 

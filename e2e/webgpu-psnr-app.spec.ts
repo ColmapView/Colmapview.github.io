@@ -687,7 +687,7 @@ async function prepareWebGpuPsnrApp(
 ): Promise<void> {
   test.skip(!await page.evaluate(() => Boolean((navigator as Navigator & { gpu?: unknown }).gpu)), 'WebGPU is unavailable');
 
-  const closeButton = page.locator('button:has-text("x"), button:has-text("×")').first();
+  const closeButton = page.getByRole('button', { name: 'Dismiss this panel', exact: true });
   if (await closeButton.isVisible({ timeout: 2_000 })) {
     await closeButton.click();
   }

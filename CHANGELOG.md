@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-06
+
+### Changed
+
+- Simplified the Load Dataset panel, moved setup guidance into contextual help, and consolidated sample dataset and manifest actions.
+- Centralized panel surfaces, buttons, form controls, selection states, and feedback styles around the Load Dataset design.
+- Refined viewer and menu icons, simplified the gallery divider, and removed redundant arrows from image navigation.
+- Standardized panel actions, including Reload, Reset, and Apply, with consistent sizing and recognizable disabled states.
+- Made the version number open About directly.
+
+### Fixed
+
+- Corrected inconsistent panel borders, heading margins, and spacing across floating tools and dialogs.
+- Added keyboard access and Escape dismissal to viewer panels, tooltips, and inline color editors, including focus restoration.
+- Kept tooltip placement within the viewport and improved narrow-screen panel layout.
+
+### Development
+
+- Added a design-system guide and regression coverage for panel borders, unsupported CSS utilities, keyboard interactions, and mobile layouts.
+
 ## [0.12.0] - 2026-08-31
 
 ### Changed

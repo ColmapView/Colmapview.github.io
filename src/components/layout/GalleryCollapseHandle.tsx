@@ -26,7 +26,7 @@ export interface GalleryCollapseHandleProps {
  * the col-resize cursor and could snap the panel width in the same gesture that
  * toggles it.
  *
- * `data-resizing` is what keeps the grip lit for the whole drag: the pointer
+ * `data-resizing` is what keeps the edge highlighted for the whole drag: the pointer
  * leaves this 5px strip routinely (past the width clamp the divider stops
  * following the cursor), and CSS `:active` does not survive that.
  */

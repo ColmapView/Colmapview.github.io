@@ -125,7 +125,7 @@ export function DistanceInputModal() {
   return (
     <div
       ref={panelRef}
-      className="fixed bg-ds-tertiary border border-ds rounded shadow-ds-lg p-1"
+      className={modalStyles.compactPanel}
       style={getDistanceInputModalPanelStyle(position)}
       onPointerDown={handleDragStart}
     >

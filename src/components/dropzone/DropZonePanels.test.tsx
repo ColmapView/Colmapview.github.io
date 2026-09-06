@@ -4,7 +4,6 @@ import { DesktopDropZonePanel, TouchDropZonePanel } from './DropZonePanels';
 import {
   DROP_ZONE_BROWSE_LABEL,
   DROP_ZONE_DISMISS_TOOLTIP,
-  DROP_ZONE_EXAMPLE_LINK_LABELS,
   DROP_ZONE_RESET_CONFIG_TOOLTIP,
   DROP_ZONE_UPLOAD_CONFIG_TOOLTIP,
 } from './dropZonePanelViewModel';
@@ -29,6 +28,39 @@ function createDesktopProps() {
 }
 
 describe('DropZone panels', () => {
+  it('shows action guidance on keyboard focus and dismisses it with Escape', () => {
+    render(<DesktopDropZonePanel {...createDesktopProps()} />);
+    const toy = screen.getByRole('button', { name: 'Try a Toy!' });
+    fireEvent.focus(toy);
+    expect(screen.getByText('Right-click: open example dataset')).toBeVisible();
+    fireEvent.keyDown(toy, { key: 'Escape' });
+    expect(screen.queryByText('Right-click: open example dataset')).not.toBeInTheDocument();
+    const manifest = screen.getByRole('button', { name: 'Load manifest' });
+    fireEvent.focus(manifest);
+    expect(screen.getByText('Right-click: download example manifest')).toBeVisible();
+    fireEvent.blur(manifest);
+    expect(screen.queryByText('Right-click: download example manifest')).not.toBeInTheDocument();
+  });
+
+  it('keeps format guidance in hover and keyboard help', () => {
+    render(<DesktopDropZonePanel {...createDesktopProps()} />);
+    const info = screen.getByRole('button', { name: 'Supported files and folder structure' });
+    expect(screen.queryByText('Drop folder or ZIP file')).not.toBeInTheDocument();
+    fireEvent.mouseEnter(info);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Drop folder or ZIP file');
+    expect(screen.getByRole('tooltip')).toHaveTextContent('ZIP: max 2GB');
+    fireEvent.mouseLeave(info.parentElement!);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    fireEvent.focus(info);
+    expect(info).toHaveAttribute('aria-describedby', screen.getByRole('tooltip').id);
+    fireEvent.keyDown(info, { key: 'Escape' });
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    fireEvent.click(info);
+    expect(screen.getByRole('tooltip')).toBeVisible();
+    fireEvent.blur(info, { relatedTarget: document.body });
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
   it('renders desktop actions and routes button events', () => {
     const props = createDesktopProps();
     render(<DesktopDropZonePanel {...props} />);
@@ -61,22 +93,21 @@ describe('DropZone panels', () => {
     const props = createDesktopProps();
     render(<DesktopDropZonePanel {...props} />);
 
-    fireEvent.contextMenu(screen.getByRole('button', { name: /Load URL/i }));
+    fireEvent.contextMenu(screen.getByRole('button', { name: /Try a Toy!/i }));
     fireEvent.contextMenu(screen.getByRole('button', { name: /Load manifest/i }));
 
     expect(props.onOpenExampleDataset).toHaveBeenCalledTimes(1);
     expect(props.onDownloadExampleManifest).toHaveBeenCalledTimes(1);
   });
 
-  it('routes the visible example links to the same handlers as the context menus', () => {
-    const props = createDesktopProps();
-    render(<DesktopDropZonePanel {...props} />);
-
-    fireEvent.click(screen.getByRole('button', { name: DROP_ZONE_EXAMPLE_LINK_LABELS.openExampleDataset }));
-    fireEvent.click(screen.getByRole('button', { name: DROP_ZONE_EXAMPLE_LINK_LABELS.downloadExampleManifest }));
-
-    expect(props.onOpenExampleDataset).toHaveBeenCalledTimes(1);
-    expect(props.onDownloadExampleManifest).toHaveBeenCalledTimes(1);
+  it('highlights example shortcuts in hover help without extra buttons', () => {
+    render(<DesktopDropZonePanel {...createDesktopProps()} />);
+    expect(screen.queryByRole('button', { name: 'Open example dataset' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Download example manifest' })).not.toBeInTheDocument();
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /Try a Toy!/i }));
+    expect(screen.getByText('Right-click: open example dataset')).toBeVisible();
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /Load manifest/i }));
+    expect(screen.getByText('Right-click: download example manifest')).toBeVisible();
   });
 
   it('shows desktop hover help for URL loading', () => {

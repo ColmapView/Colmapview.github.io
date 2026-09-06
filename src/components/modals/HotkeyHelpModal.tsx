@@ -1,7 +1,7 @@
 import { Fragment, useId, useRef, useState } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { HOTKEYS } from '../../config/hotkeys';
-import { modalStyles } from '../../theme';
+import { modalStyles, floatingPanelStyles, panelStyles } from '../../theme';
 import { CloseIcon } from '../../icons';
 import { ModalDialogShell } from '../ui/ModalDialogShell';
 import { useHotkeyHelpStoreFacade } from './useHotkeyHelpStoreFacade';
@@ -17,7 +17,6 @@ import {
   ABOUT_PROJECT_LINKS,
   ABOUT_ROW_CLASS,
   ABOUT_TAB_ID,
-  ESSENTIALS_TAB_ID,
   HOTKEY_HELP_FOOTER_CLASS,
   HOTKEY_HELP_FOOTER_KEY_CLASS,
   HOTKEY_HELP_FOOTER_PREFIX,
@@ -83,11 +82,12 @@ function HotkeyHelpAboutPanel() {
 /**
  * Tab bar plus the active tab's body. Mounted only while the panel is open
  * (ModalDialogShell renders nothing when closed), so the selected tab resets to
- * Essentials on every open — from the hotkey or the status bar's Shortcuts
- * entry alike — with no cross-component state.
+ * the requested entry tab on every open. Shortcuts defaults to Essentials;
+ * the status bar version opens About.
  */
 function HotkeyHelpTabs() {
-  const [activeTabId, setActiveTabId] = useState<HotkeyHelpTabId>(ESSENTIALS_TAB_ID);
+  const { hotkeyHelpInitialTab: initialTabId } = useHotkeyHelpStoreFacade();
+  const [activeTabId, setActiveTabId] = useState<HotkeyHelpTabId>(initialTabId);
   const tabs = getHotkeyHelpTabs();
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
 
@@ -175,12 +175,11 @@ export function HotkeyHelpModal() {
       // SplatPickerModal). The overlay captures pointer events, so clicking
       // outside the panel closes it; the panel class deliberately omits
       // modalStyles.panel's `absolute`, which would defeat flex centering.
-      overlayClassName="fixed inset-0 flex items-center justify-center bg-ds-void/50"
+      overlayClassName={panelStyles.overlay}
       overlayStyle={getHotkeyHelpOverlayStyle()}
-      // Popup surface mirroring SplatPickerModal exactly (bg-ds-tertiary
-      // rounded-lg shadow-ds-lg, no border), kept as a flex column so the
+      // Shared Load Dataset surface, kept as a flex column so the
       // header/tabs/footer stay put while the active tab's rows scroll.
-      panelClassName={`bg-ds-tertiary rounded-lg shadow-ds-lg flex flex-col ${HOTKEY_HELP_PANEL_LAYOUT_CLASS}`}
+      panelClassName={`${floatingPanelStyles.dialog} ${HOTKEY_HELP_PANEL_LAYOUT_CLASS}`}
       panelStyle={getHotkeyHelpPanelStyle()}
       initialFocusRef={closeButtonRef}
     >

@@ -26,11 +26,11 @@ interface HeaderButtonRenderState {
   title?: string;
 }
 
-const TOUCH_TITLE_CLASS = 'text-ds-primary text-sm truncate flex-1 mr-2';
-const DESKTOP_TITLE_CLASS = 'text-ds-primary';
+const TOUCH_TITLE_CLASS = 'text-ds-primary text-sm font-semibold truncate flex-1 mr-2';
+const DESKTOP_TITLE_CLASS = 'text-ds-primary font-semibold';
 const MARKED_TITLE_CLASS = 'line-through text-ds-error';
 const TOUCH_CLOSE_BUTTON_CLASS =
-  'w-10 h-10 flex items-center justify-center text-ds-muted hover-ds-text-primary text-2xl';
+  modalStyles.toolHeaderClose;
 
 export function getTouchImageDetailTitle({
   imageName,

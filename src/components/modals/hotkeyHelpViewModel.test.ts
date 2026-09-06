@@ -155,7 +155,7 @@ describe('hotkey help view model', () => {
     // the panel surface — no background block, no divider — minus cursor-move
     // (not draggable).
     expect(HOTKEY_HELP_HEADER_CLASS).toBe(
-      'flex items-center justify-between px-4 py-2 select-none flex-shrink-0'
+      'flex items-center justify-between gap-2 px-4 py-2 select-none flex-shrink-0'
     );
     // Single source of truth: derived from the shared popup-header token, so a
     // redesign of modalStyles.popupHeader restyles this panel with the rest.
@@ -380,7 +380,7 @@ describe('hotkey help tabs view model', () => {
     );
     // Active tab: brighter text + a 2px accent underline, NO bg-ds-tertiary box.
     expect(HOTKEY_HELP_TAB_ACTIVE_CLASS).toBe(
-      'px-3 py-1.5 text-sm font-medium transition-colors bg-transparent text-ds-primary hotkey-help-tab-active cursor-pointer hotkey-help-tab'
+      'px-3 py-1.5 text-sm font-medium transition-colors bg-transparent text-ds-primary cursor-pointer hotkey-help-tab-active hotkey-help-tab'
     );
     expect(HOTKEY_HELP_TAB_ACTIVE_CLASS).not.toContain('bg-ds-tertiary');
     expect(HOTKEY_HELP_TAB_ACTIVE_CLASS).not.toContain('border-b-2');
