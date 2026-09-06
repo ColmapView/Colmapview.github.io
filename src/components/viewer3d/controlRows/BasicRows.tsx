@@ -1,4 +1,4 @@
-import { memo, type WheelEvent } from 'react';
+import { memo, useId, type WheelEvent } from 'react';
 import { controlPanelStyles } from '../../../theme';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
 import {
@@ -18,11 +18,11 @@ export interface ToggleRowProps {
 
 export const ToggleRow = memo(function ToggleRow({ label, checked, onChange }: ToggleRowProps) {
   return (
-    <div className={styles.row}>
-      <label className={styles.label}>{label}</label>
-      <div className="flex-1" />
-      <ToggleSwitch checked={checked} onChange={() => onChange(getToggledRowValue(checked))} size="sm" />
-    </div>
+    <label className={styles.row}>
+      <span className={styles.label}>{label}</span>
+      <span className="flex-1" />
+      <ToggleSwitch ariaLabel={label} checked={checked} onChange={() => onChange(getToggledRowValue(checked))} size="sm" />
+    </label>
   );
 });
 
@@ -34,6 +34,7 @@ export interface SelectRowProps<T extends string = string> {
 }
 
 export function SelectRow<T extends string>({ label, value, onChange, options }: SelectRowProps<T>) {
+  const id = useId();
   const handleWheel = (e: WheelEvent) => {
     e.preventDefault();
     const nextValue = getNextSelectRowValue(options, value, e.deltaY);
@@ -44,8 +45,9 @@ export function SelectRow<T extends string>({ label, value, onChange, options }:
 
   return (
     <div className={styles.row} onWheel={handleWheel}>
-      <label className={styles.label}>{label}</label>
+      <label htmlFor={id} className={styles.label}>{label}</label>
       <select
+        id={id}
         value={value}
         onChange={(e) => {
           const nextValue = getSelectRowOptionValue(options, e.target.value);

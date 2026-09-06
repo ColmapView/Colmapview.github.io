@@ -1,4 +1,4 @@
-import type { KeyboardEvent, RefObject, WheelEvent } from 'react';
+import { useId, type KeyboardEvent, type RefObject, type WheelEvent } from 'react';
 import {
   getImageDetailMatchOpacityControlState,
   parseMatchLineOpacityValue,
@@ -41,6 +41,7 @@ function TouchMatchOpacityControl({
   matchLineOpacity,
   setMatchLineOpacity,
 }: TouchMatchOpacityControlProps) {
+  const controlId = useId();
   const controlState = getImageDetailMatchOpacityControlState({
     variant: 'touch',
     opacity: matchLineOpacity,
@@ -48,8 +49,10 @@ function TouchMatchOpacityControl({
 
   return (
     <div className={controlState.containerClassName}>
-      <span className={controlState.labelClassName}>{controlState.label}</span>
+      <label htmlFor={controlId} className={controlState.labelClassName}>{controlState.label}</label>
       <input
+        id={controlId}
+        aria-label="Match line opacity"
         type="range"
         min={controlState.sliderMin}
         max={controlState.sliderMax}
@@ -82,6 +85,7 @@ function DesktopMatchOpacityControl({
   onOpacityBlur,
   onOpacityKeyDown,
 }: DesktopMatchOpacityControlProps) {
+  const controlId = useId();
   const controlState = getImageDetailMatchOpacityControlState({
     variant: 'desktop',
     opacity: matchLineOpacity,
@@ -90,8 +94,10 @@ function DesktopMatchOpacityControl({
 
   return (
     <div className={controlState.containerClassName} onWheel={onOpacityWheel}>
-      <label className={controlState.labelClassName}>{controlState.label}</label>
+      <label htmlFor={controlId} className={controlState.labelClassName}>{controlState.label}</label>
       <input
+        id={controlId}
+        aria-label="Match line opacity"
         type="range"
         min={controlState.sliderMin}
         max={controlState.sliderMax}
@@ -108,6 +114,7 @@ function DesktopMatchOpacityControl({
       {controlState.showEditor ? (
         <input
           ref={opacityInputRef}
+          aria-label="Match line opacity value"
           type="text"
           value={opacityInputValue}
           onChange={(event) => setOpacityInputValue(event.target.value)}
@@ -116,13 +123,16 @@ function DesktopMatchOpacityControl({
           className={controlState.editorInputClassName}
         />
       ) : controlState.showDisplayValue ? (
-        <span
-          className={controlState.valueClassName}
+        <button
+          type="button"
+          aria-label="Edit match line opacity"
+          className={`${controlState.valueClassName} bg-transparent p-0 border-none rounded`}
+          onClick={onOpacityDoubleClick}
           onDoubleClick={onOpacityDoubleClick}
           title={controlState.displayValueTitle}
         >
           {controlState.valueLabel}
-        </span>
+        </button>
       ) : null}
     </div>
   );

@@ -1,9 +1,10 @@
-import { memo } from 'react';
+import { memo, useId } from 'react';
 import { getToggleSwitchClasses, toggleSwitchStyles } from '../../theme';
 
 interface ToggleSwitchProps {
   /** Whether the toggle is on */
   checked: boolean;
+  ariaLabel?: string;
   /** Called when the toggle state changes */
   onChange: (checked: boolean) => void;
   /** Size variant */
@@ -25,6 +26,7 @@ interface ToggleSwitchProps {
  */
 export const ToggleSwitch = memo(function ToggleSwitch({
   checked,
+  ariaLabel,
   onChange,
   size = 'sm',
   disabled = false,
@@ -32,6 +34,7 @@ export const ToggleSwitch = memo(function ToggleSwitch({
   labelPosition = 'left',
   className = '',
 }: ToggleSwitchProps) {
+  const id = useId();
   const classes = getToggleSwitchClasses(checked, size, disabled);
 
   const handleClick = () => {
@@ -40,32 +43,36 @@ export const ToggleSwitch = memo(function ToggleSwitch({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === ' ' || e.key === 'Enter') {
-      e.preventDefault();
-      if (!disabled) {
-        onChange(!checked);
-      }
-    }
-  };
-
   const toggle = (
-    <div
+    <button
+      type="button"
+      id={id}
       role="switch"
+      aria-label={ariaLabel ?? label}
+      disabled={disabled}
       aria-checked={checked}
       aria-disabled={disabled}
       tabIndex={disabled ? -1 : 0}
       className={classes.track}
       onClick={handleClick}
-      onKeyDown={handleKeyDown}
+      onKeyDown={(event) => {
+        if (event.key === ' ' || event.key === 'Enter') {
+          event.preventDefault();
+          event.stopPropagation();
+          if (!event.repeat) handleClick();
+        }
+      }}
+      onKeyUp={(event) => {
+        if (event.key === ' ' || event.key === 'Enter') event.stopPropagation();
+      }}
     >
       <span className={classes.thumb} style={classes.thumbStyle} />
-    </div>
+    </button>
   );
 
   if (label) {
     return (
-      <label className={`${toggleSwitchStyles.container} ${className}`}>
+      <label htmlFor={id} className={`${toggleSwitchStyles.container} ${className}`}>
         {labelPosition === 'left' && (
           <span className={toggleSwitchStyles.label}>{label}</span>
         )}

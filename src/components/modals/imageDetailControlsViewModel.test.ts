@@ -1,3 +1,4 @@
+import { buttonStyles } from '../../theme';
 import { describe, expect, it, vi } from 'vitest';
 import {
   formatImageDetailNavigationLabel,
@@ -47,8 +48,8 @@ describe('imageDetailControlsViewModel', () => {
       imageCount: 12,
     })).toEqual({
       containerClassName: 'flex items-center text-xs',
-      inputClassName: 'bg-ds-input text-ds-primary border border-ds rounded focus-ds transition-colors py-1 w-14 rounded-l rounded-r-none text-center text-xs',
-      countClassName: 'w-14 px-2 py-1 text-center bg-ds-secondary text-ds-muted border-y border-r border-ds rounded-r',
+      inputClassName: 'bg-ds-input text-ds-primary border border-ds rounded focus-ds transition-colors button-standard py-1 w-14 rounded-l rounded-r-none text-center text-sm',
+      countClassName: 'button-standard inline-flex items-center justify-center w-14 px-2 py-1 text-sm text-center bg-ds-secondary text-ds-muted border-y border-r border-ds rounded-r',
       inputKey: '7',
       resetValue: '7',
       countLabel: '12',
@@ -178,7 +179,7 @@ describe('imageDetailControlsViewModel', () => {
       inactiveCountClass: 'text-ds-success',
     })).toEqual({
       disabled: false,
-      className: 'flex-1 px-2 flex items-center justify-center rounded-md text-xs bg-ds-hover text-ds-primary',
+      className: `${buttonStyles.base} flex-1 px-2 text-xs ${buttonStyles.variants.secondary}`,
       countClass: 'text-ds-success',
       nextActive: true,
       minHeight: 36,
@@ -191,7 +192,7 @@ describe('imageDetailControlsViewModel', () => {
       inactiveCountClass: 'text-ds-success',
     })).toEqual({
       disabled: false,
-      className: 'flex-1 px-2 flex items-center justify-center rounded-md text-xs bg-ds-accent text-ds-void',
+      className: `${buttonStyles.base} flex-1 px-2 text-xs ${buttonStyles.variants.toggleActive}`,
       countClass: '',
       nextActive: false,
       minHeight: 36,
@@ -208,7 +209,7 @@ describe('imageDetailControlsViewModel', () => {
     expect(disabledDesktop.countClass).toBe('');
     expect(disabledDesktop.minHeight).toBeUndefined();
     expect(disabledDesktop.className).toContain('opacity-50 cursor-not-allowed');
-    expect(disabledDesktop.className).toContain('bg-ds-secondary text-ds-muted');
+    expect(disabledDesktop.className).toContain(buttonStyles.variants.secondary);
   });
 
   it('derives matches-toggle button state for touch and desktop controls', () => {
@@ -219,7 +220,7 @@ describe('imageDetailControlsViewModel', () => {
     })).toEqual({
       label: 'Matches',
       disabled: false,
-      className: 'flex-1 px-3 flex items-center justify-center rounded-md text-xs whitespace-nowrap bg-ds-hover text-ds-primary',
+      className: `flex-1 ${buttonStyles.base} px-3 text-xs whitespace-nowrap ${buttonStyles.variants.secondary}`,
       nextActive: true,
       minHeight: 36,
     });
@@ -231,7 +232,7 @@ describe('imageDetailControlsViewModel', () => {
     })).toEqual({
       label: 'Matches',
       disabled: false,
-      className: 'px-3 flex items-center justify-center rounded-md text-xs whitespace-nowrap bg-ds-accent text-ds-void',
+      className: `${buttonStyles.base} px-3 text-xs whitespace-nowrap ${buttonStyles.variants.toggleActive}`,
       nextActive: false,
       minHeight: 36,
     });
@@ -246,7 +247,7 @@ describe('imageDetailControlsViewModel', () => {
     expect(disabledDesktop.nextActive).toBe(true);
     expect(disabledDesktop.minHeight).toBeUndefined();
     expect(disabledDesktop.className).toContain('opacity-50 cursor-not-allowed');
-    expect(disabledDesktop.className).toContain('bg-ds-secondary text-ds-muted');
+    expect(disabledDesktop.className).toContain(buttonStyles.variants.secondary);
   });
 
   it('derives control visibility by mode and deletion state', () => {

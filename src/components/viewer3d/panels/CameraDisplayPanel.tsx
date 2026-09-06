@@ -235,16 +235,16 @@ export function CameraDisplayPanel({
               onChange={setUnselectedCameraOpacity}
               formatValue={(v) => v.toFixed(2)}
             />
-            <div className={styles.row}>
-              <label className={styles.label}>Undistort (U)</label>
+            <label className={styles.row}>
+              <span className={styles.label}>Undistort (U)</span>
               <span className="flex-1" />
-              <ToggleSwitch checked={undistortionEnabled} onChange={setUndistortionEnabled} />
-            </div>
-            <div className={styles.row}>
-              <label className={styles.label}>Auto FOV</label>
+              <ToggleSwitch ariaLabel="Undistort" checked={undistortionEnabled} onChange={setUndistortionEnabled} />
+            </label>
+            <label className={styles.row}>
+              <span className={styles.label}>Auto FOV</span>
               <span className="flex-1" />
-              <ToggleSwitch checked={autoFovEnabled} onChange={setAutoFovEnabled} />
-            </div>
+              <ToggleSwitch ariaLabel="Auto FOV" checked={autoFovEnabled} onChange={setAutoFovEnabled} />
+            </label>
           </>
         )}
         <div className={styles.hint}>

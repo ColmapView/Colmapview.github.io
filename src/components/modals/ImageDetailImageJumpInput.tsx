@@ -46,6 +46,7 @@ export function ImageDetailImageJumpInput({
     <div className={inputState.containerClassName}>
       <input
         type="text"
+        aria-label="Image ID"
         defaultValue={inputState.resetValue}
         key={inputState.inputKey}
         className={inputState.inputClassName}

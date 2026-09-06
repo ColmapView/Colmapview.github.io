@@ -115,7 +115,6 @@ export function SettingsPanel({ activePanel, setActivePanel }: SettingsPanelProp
       panelTitle="Settings"
     >
       <div className={styles.panelContent}>
-        <ThemeSelect />
         <div className="text-ds-muted text-xs uppercase tracking-wide mb-2">
           {SETTINGS_PANEL_SECTION_LABELS.profiles}
         </div>
@@ -147,6 +146,7 @@ export function SettingsPanel({ activePanel, setActivePanel }: SettingsPanelProp
           onChange={setIdleHideTimeout}
           formatValue={formatIdleHideTimeoutValue}
         />
+        <ThemeSelect />
         <div className={styles.actionGroup}>
           <button
             onClick={() => {

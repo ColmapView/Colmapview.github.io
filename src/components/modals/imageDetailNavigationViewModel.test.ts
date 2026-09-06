@@ -1,3 +1,4 @@
+import { buttonStyles } from '../../theme';
 import { describe, expect, it } from 'vitest';
 import {
   formatImageDetailNavigationLabel,
@@ -22,12 +23,12 @@ describe('imageDetailNavigationViewModel', () => {
       previousButton: {
         label: 'Prev',
         disabled: true,
-        className: 'flex-1 px-2 flex items-center justify-center rounded-md text-xs relative touch-hit-44 bg-ds-secondary text-ds-muted',
+        className: `${buttonStyles.base} flex-1 px-2 text-xs relative touch-hit-44 ${buttonStyles.variants.secondary} ${buttonStyles.disabled}`,
       },
       nextButton: {
         label: 'Next',
         disabled: false,
-        className: 'flex-1 px-2 flex items-center justify-center rounded-md text-xs relative touch-hit-44 bg-ds-hover text-ds-primary',
+        className: `${buttonStyles.base} flex-1 px-2 text-xs relative touch-hit-44 ${buttonStyles.variants.secondary}`,
       },
       label: '2 / 3',
       labelClassName: 'text-ds-primary text-xs px-1',
@@ -46,12 +47,12 @@ describe('imageDetailNavigationViewModel', () => {
     expect(state.containerClassName).toBe('flex items-center gap-2');
     expect(state.previousButton.label).toBe('Prev');
     expect(state.previousButton.disabled).toBe(false);
-    expect(state.previousButton.className).toContain('px-4 py-1 text-xs gap-1');
-    expect(state.previousButton.className).toContain('bg-ds-hover text-ds-secondary');
+    expect(state.previousButton.className).toContain(buttonStyles.sizes.toggleResponsive);
+    expect(state.previousButton.className).toContain(buttonStyles.variants.secondary);
     expect(state.nextButton.label).toBe('Next');
     expect(state.nextButton.disabled).toBe(true);
     expect(state.nextButton.className).toContain('opacity-50 cursor-not-allowed');
-    expect(state.nextButton.className).toContain('bg-ds-secondary text-ds-muted');
+    expect(state.nextButton.className).toContain(buttonStyles.variants.secondary);
     expect(state.label).toBeNull();
     expect(state.labelClassName).toBeNull();
     expect(state.buttonStyle).toBeUndefined();

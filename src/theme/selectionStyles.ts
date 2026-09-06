@@ -12,7 +12,8 @@ export const tabStyles = {
 
 export const toggleSwitchStyles = {
   // Outer track (oval container)
-  track: 'relative inline-flex items-center cursor-pointer transition-colors duration-200 rounded-full',
+  row: 'button-standard flex items-center gap-2 cursor-pointer hover-ds-hover rounded px-2 py-1',
+  track: 'switch-track p-0 flex-shrink-0 relative inline-flex items-center cursor-pointer transition-colors duration-200 rounded-full',
   trackSm: 'w-7 h-4',   // Small: 28x16px
   trackMd: 'w-9 h-5',   // Medium: 36x20px (default)
   trackLg: 'w-11 h-6',  // Large: 44x24px
@@ -27,7 +28,7 @@ export const toggleSwitchStyles = {
   // does offer `shadow-ds-sm`, but switching it on would change live pixels app-wide
   // for no reason (same keep-current-pixels call as DROP_ZONE_BROWSE_BOX_CLASS's
   // border). This is the canonical note; the profile menus point back here.
-  thumb: 'absolute bg-white rounded-full transition-all duration-200 ease-in-out',
+  thumb: 'switch-thumb pointer-events-none absolute rounded-full transition-all duration-200 ease-in-out',
   thumbSm: 'w-2.5 h-2.5',   // 10x10px
   thumbMd: 'w-3.5 h-3.5',   // 14x14px
   thumbLg: 'w-4.5 h-4.5',   // 18x18px
@@ -64,7 +65,7 @@ export function getToggleSwitchClasses(
   const trackColor = checked ? toggleSwitchStyles.trackOn : toggleSwitchStyles.trackOff;
 
   return {
-    track: `${toggleSwitchStyles.track} ${s.track} ${trackColor}${disabled ? ` ${toggleSwitchStyles.disabled}` : ''}`,
+    track: `${toggleSwitchStyles.track} ${s.track} ${trackColor}${checked ? " switch-on" : ""}${disabled ? ` ${toggleSwitchStyles.disabled}` : ''}`,
     thumb: `${toggleSwitchStyles.thumb} ${s.thumb}`,
     thumbStyle: {
       left: checked ? pos.on : pos.off,

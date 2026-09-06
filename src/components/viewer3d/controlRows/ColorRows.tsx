@@ -2,6 +2,7 @@ import {
   memo,
   useEffect,
   useRef,
+  useId,
   useState,
   type KeyboardEvent,
   type ReactNode,
@@ -32,6 +33,7 @@ export interface ColorPickerRowProps {
 }
 
 export const ColorPickerRow = memo(function ColorPickerRow({ label, value, onChange }: ColorPickerRowProps) {
+  const controlId = useId();
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -78,7 +80,7 @@ export const ColorPickerRow = memo(function ColorPickerRow({ label, value, onCha
 
   return (
     <div className={styles.row}>
-      <label className={styles.label}>{label}</label>
+      <label htmlFor={controlId} className={styles.label}>{label}</label>
       <div className="flex items-center gap-2 flex-1">
         {/* Color picker swatch */}
         <label
@@ -86,6 +88,7 @@ export const ColorPickerRow = memo(function ColorPickerRow({ label, value, onCha
           style={getBackgroundColorStyle(value)}
         >
           <input
+            id={controlId}
             type="color"
             aria-label={typeof label === 'string' ? label : 'Color'}
             value={value}
@@ -130,6 +133,7 @@ export interface HueRowProps {
 }
 
 export const HueRow = memo(function HueRow({ label, value, onChange }: HueRowProps) {
+  const controlId = useId();
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -189,13 +193,14 @@ export const HueRow = memo(function HueRow({ label, value, onChange }: HueRowPro
 
   return (
     <div className={styles.row} onWheel={handleWheel}>
-      <label className={styles.label}>{label}</label>
+      <label htmlFor={controlId} className={styles.label}>{label}</label>
       <div className="relative flex-1 min-w-0 h-4 flex items-center">
         <div
           className="absolute left-0 right-0 h-1.5 rounded-full z-0"
           style={getBackgroundStyle(colorPickerStyles.hueGradient)}
         />
         <input
+          id={controlId}
           type="range"
           aria-label={label}
           min={0}
@@ -248,6 +253,7 @@ export interface HueSliderRowProps {
 }
 
 export const HueSliderRow = memo(function HueSliderRow({ label, value, onChange }: HueSliderRowProps) {
+  const controlId = useId();
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -302,13 +308,14 @@ export const HueSliderRow = memo(function HueSliderRow({ label, value, onChange 
 
   return (
     <div className={styles.row} onWheel={handleWheel}>
-      <label className={styles.label}>{label}</label>
+      <label htmlFor={controlId} className={styles.label}>{label}</label>
       <div className="relative flex-1 min-w-0 h-4 flex items-center">
         <div
           className="absolute left-0 right-0 h-1.5 rounded-full z-0"
           style={getBackgroundStyle(colorPickerStyles.hueGradient)}
         />
         <input
+          id={controlId}
           type="range"
           aria-label={label}
           min={0}

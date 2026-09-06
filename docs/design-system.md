@@ -74,7 +74,7 @@ this document and the referenced source modules define the current system.
 
 ## Button audit
 
-Dialog actions use 14px text with a 40px minimum height (44px on coarse pointers),
+Dialog actions use 14px text with a 32px minimum height (44px on coarse pointers),
 matching the startup actions' scale. Dense toolbar and panel controls keep their
 compact geometry. Full-width and compact actions compose the same primary and
 secondary color/hover variants; toggles retain their separate selected state.
@@ -113,7 +113,7 @@ and inline edit focus restoration. The short touch-layout browser test selects
 `?touch=true` explicitly because Firefox touch emulation alone does not reliably
 set coarse-pointer/no-hover media; this tests layout, not device autodetection.
 
-Panel text actions (including Reset, Reload, and Apply) use the standard 40px
+Panel text actions (including Reset, Reload, and Apply) use the standard 32px
 minimum height, increasing to 44px on coarse pointers. Disabled actions preserve
 their secondary/primary fill and geometry with shared reduced opacity, rather
 than switching to the panel surface. Compact icon-only controls remain separate.
@@ -128,3 +128,17 @@ The root data-ui-theme attribute switches semantic CSS tokens and native control
 color-scheme. Scene background, visualization colors and image pixels are not
 modified by the UI preference. Theme is a device preference, not dataset/share
 configuration. Keep new UI colors semantic so both palettes remain supported.
+
+### Compact controls
+
+Standard text actions, panel toggles, and image navigation share a 32px minimum
+height, increasing to 44px on coarse pointers. Keep small utility icons, tabs,
+and canvas toolbar controls in their existing families; their layout roles differ.
+Use the shared button recipes for fill, rounding, hover, and disabled states.
+Image navigation fields use the same standard geometry as adjacent actions.
+
+Switches use the native button interaction model with role="switch" and an
+accessible label. An enclosing label makes the entire option row clickable.
+Use toggleSwitchStyles.row for editor options, center the switch wrapper with
+inline-flex, and use semantic thumb colors for light and dark themes. The small
+track remains compact while its touch hit area extends to 44px.

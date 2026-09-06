@@ -110,11 +110,11 @@ export function CameraModePanel({
           onChange={setFlyTransitionDuration}
           formatValue={formatFlyTransitionDuration}
         />
-        <div className={styles.row}>
-          <label className={styles.label}>Pointer Lock</label>
+        <label className={styles.row}>
+          <span className={styles.label}>Pointer Lock</span>
           <span className="flex-1" />
-          <ToggleSwitch checked={pointerLock} onChange={setPointerLock} />
-        </div>
+          <ToggleSwitch ariaLabel="Pointer Lock" checked={pointerLock} onChange={setPointerLock} />
+        </label>
         <SelectRow
           label="Horizon Lock (H)"
           value={horizonLock}

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-09-06
+
+### Changed
+
+- Made standard desktop buttons more compact at 32px while preserving touch targets.
+- Unified image viewer button styling and aligned the image number field with navigation buttons.
+- Moved Theme into Settings > Customization with consistent label and field alignment.
+
+### Fixed
+
+- Aligned context-menu and auto-hide switch rows and improved switch contrast in both themes.
+- Made switch labels clickable and ensured keyboard activation works consistently.
+- Connected shared slider, select, color, and profile labels to their controls.
+- Added accessible numeric editing, slider edit focus restoration, and labels for image navigation and opacity inputs.
+
 ## [0.14.1] - 2026-09-06
 
 ### Fixed

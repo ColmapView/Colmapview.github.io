@@ -3,7 +3,7 @@
  * Provides save, load, and delete operations for named configuration profiles.
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useId, useState, useCallback, useRef, useEffect } from 'react';
 import { useProfiles } from '../../hooks/useProfiles';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { TrashIcon } from '../../icons';
@@ -34,6 +34,7 @@ import { useProfileSelectorStoreFacade } from './useProfileSelectorStoreFacade';
 const styles = controlPanelStyles;
 
 export function ProfileSelector() {
+  const controlId = useId();
   const {
     profileNames,
     activeProfile,
@@ -127,10 +128,11 @@ export function ProfileSelector() {
     <>
       {/* Profile selector row with custom dropdown */}
       <div className={styles.row}>
-        <label className={styles.label}>{PROFILE_SELECTOR_LABEL}</label>
+        <label htmlFor={controlId} className={styles.label}>{PROFILE_SELECTOR_LABEL}</label>
         <div className="relative flex-1" ref={dropdownRef}>
           <button
             type="button"
+            id={controlId}
             onClick={() => setIsDropdownOpen((current) => !current)}
             className={`${styles.selectRight} text-left flex items-center justify-between`}
             aria-haspopup="listbox"

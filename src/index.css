@@ -1532,7 +1532,7 @@ legend {
 }
 
 .button-standard {
-  min-height: 40px;
+  min-height: 32px;
   box-sizing: border-box;
   flex-shrink: 0;
 }
@@ -2437,8 +2437,6 @@ input.hue-slider::-moz-range-thumb { background: var(--text-primary); }
   --shadow-md: 0 4px 12px rgba(0,0,0,.1);
   --shadow-lg: 0 8px 24px rgba(0,0,0,.12);
 }
-.theme-select { min-height: 32px; }
-@media (pointer: coarse) { .theme-select { min-height: 44px; } }
 :root[data-ui-theme="light"] .viewer-control-selected {
   background-color: #d6ded7;
   border-color: #6a786d;
@@ -2469,3 +2467,11 @@ input.hue-slider::-moz-range-thumb { background: var(--text-primary); }
 
 :root[data-ui-theme="light"] .bg-ds-success\/20 { background-color: color-mix(in srgb, var(--success) 20%, transparent); }
 :root[data-ui-theme="light"] .bg-ds-error\/20 { background-color: color-mix(in srgb, var(--error) 20%, transparent); }
+
+/* Shared switches: compact visuals with a generous touch hit area. */
+.switch-thumb { background-color: var(--text-secondary); }
+.switch-on .switch-thumb { background-color: var(--bg-void); }
+.switch-track::before { content: ''; position: absolute; inset: -8px -4px; }
+@media (pointer: coarse) {
+  .switch-track::before { min-width: 44px; min-height: 44px; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+}

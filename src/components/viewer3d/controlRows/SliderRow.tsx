@@ -2,6 +2,7 @@ import {
   memo,
   useEffect,
   useRef,
+  useId,
   useState,
   type KeyboardEvent,
   type ReactNode,
@@ -43,6 +44,9 @@ export const MouseScrollIcon = ({ className = "w-3 h-3" }: { className?: string 
 );
 
 export const SliderRow = memo(function SliderRow({ label, value, min, max, step, onChange, formatValue, inputMax }: SliderRowProps) {
+  const controlId = useId();
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -61,6 +65,9 @@ export const SliderRow = memo(function SliderRow({ label, value, min, max, step,
     if (isEditing && inputRef.current) {
       inputRef.current.focus();
       inputRef.current.select();
+    } else if (!isEditing && restoreFocus.current) {
+      restoreFocus.current = false;
+      editButtonRef.current?.focus();
     }
   }, [isEditing]);
 
@@ -74,8 +81,14 @@ export const SliderRow = memo(function SliderRow({ label, value, min, max, step,
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      restoreFocus.current = true;
       applyValue();
     } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      restoreFocus.current = true;
       setIsEditing(false);
     }
   };
@@ -93,8 +106,9 @@ export const SliderRow = memo(function SliderRow({ label, value, min, max, step,
 
   return (
     <div className={styles.row} onWheel={handleWheel}>
-      <label className={styles.label}>{label}</label>
+      <label id={`${controlId}-label`} htmlFor={controlId} className={styles.label}>{label}</label>
       <input
+        id={controlId}
         type="range"
         min={min}
         max={max}
@@ -112,6 +126,7 @@ export const SliderRow = memo(function SliderRow({ label, value, min, max, step,
       {isEditing ? (
         <input
           ref={inputRef}
+          aria-labelledby={`${controlId}-label`}
           type="text"
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
@@ -120,13 +135,17 @@ export const SliderRow = memo(function SliderRow({ label, value, min, max, step,
           className={styles.valueInput}
         />
       ) : (
-        <span
-          className={styles.value}
+        <button
+          ref={editButtonRef}
+          type="button"
+          aria-label={`Edit ${typeof label === "string" ? label : "value"}`}
+          className={`${styles.value} bg-transparent p-0 border-none rounded`}
+          onClick={handleDoubleClick}
           onDoubleClick={handleDoubleClick}
-          title="Double-click to edit"
+          title="Click to edit"
         >
           {displayValue}
-        </span>
+        </button>
       )}
     </div>
   );
