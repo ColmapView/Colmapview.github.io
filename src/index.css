@@ -2467,8 +2467,5 @@ input.hue-slider::-moz-range-thumb { background: var(--text-primary); }
 :root[data-ui-theme="light"] .hover-ds-void-70:hover { background-color: color-mix(in srgb, var(--bg-void) 70.0%, transparent); }
 :root[data-ui-theme="light"] .hover-bg-ds-accent-90:hover { background-color: color-mix(in srgb, var(--accent) 90.0%, transparent); }
 
-/* Keep the startup title intact with the additional appearance preference. */
-.startup-header { grid-template-columns: 1fr auto; }
-.startup-config-actions { grid-column: 1 / -1; grid-row: 2; flex-wrap: wrap; }
 :root[data-ui-theme="light"] .bg-ds-success\/20 { background-color: color-mix(in srgb, var(--success) 20%, transparent); }
 :root[data-ui-theme="light"] .bg-ds-error\/20 { background-color: color-mix(in srgb, var(--error) 20%, transparent); }

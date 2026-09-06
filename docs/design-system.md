@@ -120,7 +120,7 @@ than switching to the panel surface. Compact icon-only controls remain separate.
 
 ## Interface appearance
 
-Dark remains the default. Theme selectors in Load Dataset and Settings offer
+Dark remains the default. The theme selector in Settings offers
 Dark, Light, and System. `uiTheme.ts` owns preference validation, storage via
 STORAGE_KEYS.theme, cross-tab updates, and pre-mount application. System follows
 prefers-color-scheme changes. Clear Settings removes this preference too.

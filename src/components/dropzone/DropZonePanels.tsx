@@ -1,4 +1,3 @@
-import { ThemeSelect } from '../ui/ThemeSelect';
 import { useId, useState } from 'react';
 import {
   emptyStateStyles,
@@ -124,7 +123,6 @@ export function DesktopDropZonePanel({
           </div>
           <div className="startup-config-actions">
             <ProfileDropdown />
-            <ThemeSelect />
             <div className="w-px h-5 bg-ds-muted/30 mx-1" />
             <button
               type="button"
@@ -253,8 +251,7 @@ export function TouchDropZonePanel({
   return (
     <div className={DROP_ZONE_TOUCH_OVERLAY_CLASS} style={getDropZonePanelOverlayStyle()}>
       <div className={`${floatingPanelStyles.dialog} startup-panel-touch p-4 w-full max-w-xs`}>
-        <div className="flex items-center justify-between mb-4">
-          <ThemeSelect />
+        <div className="flex justify-end mb-4">
           <button
             type="button"
             className={DROP_ZONE_TOUCH_CLOSE_BUTTON_CLASS}
