@@ -54,21 +54,21 @@ function withOptionalDisabledClass(baseClass: string, isDisabled: boolean): stri
 
 export function getDesktopDropZoneActionButtonClass(isDisabled: boolean): string {
   return withOptionalDisabledClass(
-    `${buttonStyles.base} ${buttonStyles.sizes.action} h-10 w-full ${buttonStyles.variants.secondary}`,
+    `${buttonStyles.base} ${buttonStyles.sizes.action} w-full ${buttonStyles.variants.secondary}`,
     isDisabled,
   );
 }
 
 export function getTouchDropZoneUrlButtonClass(isDisabled: boolean): string {
   return withOptionalDisabledClass(
-    `${buttonStyles.base} h-12 text-sm ${buttonStyles.variants.secondary} active-scale-98`,
+    `${buttonStyles.base} button-standard px-4 py-2 text-sm ${buttonStyles.variants.secondary} active-scale-98`,
     isDisabled,
   );
 }
 
 export function getTouchDropZoneToyButtonClass(isDisabled: boolean): string {
   return withOptionalDisabledClass(
-    `${buttonStyles.base} h-12 text-sm ${buttonStyles.variants.primary} active-scale-98`,
+    `${buttonStyles.base} button-standard px-4 py-2 text-sm ${buttonStyles.variants.primary} active-scale-98`,
     isDisabled,
   );
 }

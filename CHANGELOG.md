@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-09-06
+
+### Added
+
+- Light interface mode, with Dark, Light, and System choices in Load Dataset and Settings.
+- Persistent appearance preferences, cross-tab synchronization, and automatic response to system theme changes. Scene backgrounds and image colors remain independent.
+
+### Changed
+
+- Unified panel presets and startup actions with standard button sizing: 40px on desktop and 44px on touch. Selected and disabled states retain consistent geometry.
+- Reorganized startup header controls to keep the title readable alongside the theme selector.
+- Excluded scratch prototypes and browser artifacts from linting.
+
+### Documentation
+
+- Documented native Three.js splat migration feasibility tests. The production rendering backend remains unchanged.
+
 ## [0.13.0] - 2026-09-06
 
 ### Changed

@@ -1533,6 +1533,8 @@ legend {
 
 .button-standard {
   min-height: 40px;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 @media (pointer: coarse) {
@@ -2404,3 +2406,69 @@ input.hue-slider::-moz-range-thumb { background: var(--text-primary); }
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* Interface theme only: scene colors and image pixels remain data-owned. */
+:root { color-scheme: dark; }
+:root[data-ui-theme="light"] {
+  color-scheme: light;
+  --bg-void: #ffffff;
+  --bg-primary: #f5f5f4;
+  --bg-secondary: #fafaf9;
+  --bg-tertiary: #eeeeec;
+  --bg-hover: #e3e3e0;
+  --bg-input: #ffffff;
+  --bg-elevated: #e8e8e5;
+  --text-primary: #202322;
+  --text-secondary: #4f5552;
+  --text-muted: #626861;
+  --border-color: #d4d6d1;
+  --border-light: #a1a69f;
+  --border-subtle: #e1e3dd;
+  --accent: #343e38;
+  --accent-hover: #202923;
+  --accent-dim: rgba(52, 62, 56, 0.1);
+  --accent-focus: rgba(52, 62, 56, 0.25);
+  --success: #326b3b;
+  --warning: #805b18;
+  --error: #a23c3c;
+  --info: #365d93;
+  --shadow-xs: 0 1px 2px rgba(0,0,0,.06);
+  --shadow-sm: 0 2px 4px rgba(0,0,0,.08);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.1);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,.12);
+}
+.theme-select { min-height: 32px; }
+@media (pointer: coarse) { .theme-select { min-height: 44px; } }
+:root[data-ui-theme="light"] .viewer-control-selected {
+  background-color: #d6ded7;
+  border-color: #6a786d;
+}
+:root[data-ui-theme="light"] .viewer-control-selected:hover { background-color: #c9d4cc; }
+:root[data-ui-theme="light"] .info-line:hover { color: var(--text-primary); }
+:root[data-ui-theme="light"] .group:hover .group-hover\:text-gray-300 { color: var(--text-primary); }
+:root[data-ui-theme="light"] .bg-ds-void\/60 { background-color: color-mix(in srgb, var(--bg-void) 60.0%, transparent); }
+:root[data-ui-theme="light"] .bg-ds-void\/70 { background-color: color-mix(in srgb, var(--bg-void) 70.0%, transparent); }
+:root[data-ui-theme="light"] .bg-ds-void\/80 { background-color: color-mix(in srgb, var(--bg-void) 80.0%, transparent); }
+:root[data-ui-theme="light"] .bg-ds-accent\/10 { background-color: color-mix(in srgb, var(--accent) 10.0%, transparent); }
+:root[data-ui-theme="light"] .bg-ds-accent\/90 { background-color: color-mix(in srgb, var(--accent) 90.0%, transparent); }
+:root[data-ui-theme="light"] .bg-ds-tertiary\/50 { background-color: color-mix(in srgb, var(--bg-tertiary) 50.0%, transparent); }
+:root[data-ui-theme="light"] .bg-ds-tertiary\/75 { background-color: color-mix(in srgb, var(--bg-tertiary) 75.0%, transparent); }
+:root[data-ui-theme="light"] .bg-ds-tertiary\/90 { background-color: color-mix(in srgb, var(--bg-tertiary) 90.0%, transparent); }
+:root[data-ui-theme="light"] .bg-ds-secondary\/20 { background-color: color-mix(in srgb, var(--bg-secondary) 20.0%, transparent); }  /* --bg-secondary @ 20% */
+:root[data-ui-theme="light"] .bg-ds-secondary\/50 { background-color: color-mix(in srgb, var(--bg-secondary) 50.0%, transparent); }  /* --bg-secondary @ 50% */
+:root[data-ui-theme="light"] .hover-bg-ds-success-20:hover { background-color: color-mix(in srgb, var(--success) 20.0%, transparent); }
+:root[data-ui-theme="light"] .hover-bg-ds-error-20:hover { background-color: color-mix(in srgb, var(--error) 20.0%, transparent); }
+:root[data-ui-theme="light"] .bg-ds-muted\/30 { background-color: color-mix(in srgb, var(--text-muted) 30.0%, transparent); }   /* --text-muted @ 30% */
+:root[data-ui-theme="light"] .bg-ds-muted\/50 { background-color: color-mix(in srgb, var(--text-muted) 50.0%, transparent); }   /* --text-muted @ 50% */
+:root[data-ui-theme="light"] .text-ds-muted\/70 { color: color-mix(in srgb, var(--text-muted) 70.0%, transparent); }
+:root[data-ui-theme="light"] .text-ds-muted\/80 { color: color-mix(in srgb, var(--text-muted) 80.0%, transparent); }
+:root[data-ui-theme="light"] .text-ds-void\/70 { color: color-mix(in srgb, var(--bg-void) 70.0%, transparent); }
+:root[data-ui-theme="light"] .hover-ds-tertiary-50:hover { background-color: color-mix(in srgb, var(--bg-tertiary) 50.0%, transparent); }
+:root[data-ui-theme="light"] .hover-ds-void-70:hover { background-color: color-mix(in srgb, var(--bg-void) 70.0%, transparent); }
+:root[data-ui-theme="light"] .hover-bg-ds-accent-90:hover { background-color: color-mix(in srgb, var(--accent) 90.0%, transparent); }
+
+/* Keep the startup title intact with the additional appearance preference. */
+.startup-header { grid-template-columns: 1fr auto; }
+.startup-config-actions { grid-column: 1 / -1; grid-row: 2; flex-wrap: wrap; }
+:root[data-ui-theme="light"] .bg-ds-success\/20 { background-color: color-mix(in srgb, var(--success) 20%, transparent); }
+:root[data-ui-theme="light"] .bg-ds-error\/20 { background-color: color-mix(in srgb, var(--error) 20%, transparent); }

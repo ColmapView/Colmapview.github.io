@@ -20,7 +20,7 @@ export const buttonStyles = {
     xl: 'px-6 py-3 text-lg gap-3',
     toggle: 'px-4 py-1 text-sm gap-1.5', // Wide toggle button (matches hover panel style)
     toggleResponsive: 'px-4 py-1 text-xs gap-1', // Compact toggle button for modals
-    action: 'px-4 py-1.5 text-sm gap-2 min-w-[120px]', // Equal-width action buttons (startup panel)
+    action: 'button-standard px-4 py-1.5 text-sm gap-2 min-w-[120px]', // Equal-width action buttons (startup panel)
     icon: 'p-1',         // Square icon button small
     iconMd: 'p-1.5',     // Square icon button medium
     iconLg: 'p-2',       // Square icon button large
@@ -99,7 +99,7 @@ export function getButtonClass(
 // ============================================
 // Single source of truth for action buttons used across modals, panels, and context menus
 
-const PANEL_ACTION = `${buttonStyles.base} button-standard px-2 py-2 text-sm gap-2 flex-1`;
+const PANEL_ACTION = `${buttonStyles.base} button-standard px-2 py-2 text-sm gap-2`;
 const PANEL_SECONDARY_ACTION = `${PANEL_ACTION} ${buttonStyles.variants.secondary}`;
 const PANEL_PRIMARY_ACTION = `${PANEL_ACTION} ${buttonStyles.variants.primary}`;
 
@@ -108,10 +108,13 @@ export const actionButtonStyles = {
   group: 'flex gap-2 mt-3',
 
   // Standard action geometry, including disabled panel actions.
-  button: PANEL_SECONDARY_ACTION,
-  buttonDisabled: `${PANEL_SECONDARY_ACTION} ${buttonStyles.disabled}`,
-  buttonPrimary: PANEL_PRIMARY_ACTION,
-  buttonPrimaryDisabled: `${PANEL_PRIMARY_ACTION} ${buttonStyles.disabled}`,
+  button: `${PANEL_SECONDARY_ACTION} flex-1`,
+  buttonDisabled: `${PANEL_SECONDARY_ACTION} ${buttonStyles.disabled} flex-1`,
+  buttonPrimary: `${PANEL_PRIMARY_ACTION} flex-1`,
+  buttonPrimaryDisabled: `${PANEL_PRIMARY_ACTION} ${buttonStyles.disabled} flex-1`,
+
+  preset: `${PANEL_SECONDARY_ACTION} w-full`,
+  presetDisabled: `${PANEL_SECONDARY_ACTION} ${buttonStyles.disabled} w-full`,
 
   // Full-width primary action button (for "Done", "Confirm" dialogs)
   buttonFullWidth: `${buttonStyles.base} button-standard w-full px-3 py-2 text-sm gap-2 ${buttonStyles.variants.primary}`,

@@ -247,10 +247,10 @@ export const controlPanelStyles = {
   // re-add it. Left-aligning would mean pulling justify-center out of base
   // (every button in the app) or reordering index.css — not worth it, and
   // centered reads fine in the panel.
-  presetButton: `${buttonStyles.base} ${buttonStyles.sizes.toggle} ${buttonStyles.variants.toggle} w-full`,
+  presetButton: actionButtonStyles.preset,
   // Disabled preset: preset geometry, shared disabled surface — so this family
   // and the action row can be retuned independently.
-  presetButtonDisabled: `${buttonStyles.base} ${buttonStyles.sizes.toggle} ${buttonStyles.disabled} ${buttonStyles.disabledSurface} w-full`,
+  presetButtonDisabled: actionButtonStyles.presetDisabled,
   // Action buttons (e.g., Reset, Apply) - references shared action button styles
   actionGroup: actionButtonStyles.group,
   actionButton: actionButtonStyles.button,

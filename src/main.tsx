@@ -11,6 +11,10 @@ import '@fontsource-variable/ibm-plex-sans'
 import '@fontsource-variable/jetbrains-mono'
 import './index.css'
 import App from './App.tsx'
+import { initializeUITheme } from './theme/uiTheme'
+
+const disposeUITheme = initializeUITheme();
+if (import.meta.hot) import.meta.hot.dispose(disposeUITheme);
 import { registerAllCaches } from './cache'
 
 // Register all caches for centralized management

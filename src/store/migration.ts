@@ -10,6 +10,7 @@ export const STORAGE_KEYS = {
   pointCloud: 'colmap-viewer-pointcloud',
   camera: 'colmap-viewer-camera',
   ui: 'colmap-viewer-ui',
+  theme: 'colmap-viewer-theme',
   export: 'colmap-viewer-export',
   rig: 'colmap-viewer-rig',
   guide: 'colmap-viewer-guide',

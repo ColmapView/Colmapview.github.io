@@ -1,3 +1,4 @@
+import { ThemeSelect } from '../../ui/ThemeSelect';
 import { useCallback } from 'react';
 import { extractConfigurationFromStores, serializeConfigToYaml } from '../../../config/configuration';
 import { clearPersistedSettings } from '../../../store/migration';
@@ -114,6 +115,7 @@ export function SettingsPanel({ activePanel, setActivePanel }: SettingsPanelProp
       panelTitle="Settings"
     >
       <div className={styles.panelContent}>
+        <ThemeSelect />
         <div className="text-ds-muted text-xs uppercase tracking-wide mb-2">
           {SETTINGS_PANEL_SECTION_LABELS.profiles}
         </div>

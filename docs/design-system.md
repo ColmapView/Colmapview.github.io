@@ -117,3 +117,14 @@ Panel text actions (including Reset, Reload, and Apply) use the standard 40px
 minimum height, increasing to 44px on coarse pointers. Disabled actions preserve
 their secondary/primary fill and geometry with shared reduced opacity, rather
 than switching to the panel surface. Compact icon-only controls remain separate.
+
+## Interface appearance
+
+Dark remains the default. Theme selectors in Load Dataset and Settings offer
+Dark, Light, and System. `uiTheme.ts` owns preference validation, storage via
+STORAGE_KEYS.theme, cross-tab updates, and pre-mount application. System follows
+prefers-color-scheme changes. Clear Settings removes this preference too.
+The root data-ui-theme attribute switches semantic CSS tokens and native control
+color-scheme. Scene background, visualization colors and image pixels are not
+modified by the UI preference. Theme is a device preference, not dataset/share
+configuration. Keep new UI colors semantic so both palettes remain supported.
