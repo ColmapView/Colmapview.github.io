@@ -20,7 +20,9 @@ import {
   useTrackballViewResets,
   useTrackballViewStateSync,
 } from './useTrackballCameraLifecycle';
-import { useTrackballFlyTo, type TrackballAnimationTarget } from './useTrackballFlyTo';
+import { getImageFlyToPose, useTrackballFlyTo, type TrackballAnimationTarget } from './useTrackballFlyTo';
+import { registerCameraController } from '../../features/cameraControl';
+import { createTrackballCommandController } from './trackballCommandController';
 import { useTrackballFrameLoop } from './useTrackballFrameLoop';
 import { useTrackballInputHandlers } from './useTrackballInputHandlers';
 import { useTrackballControlsStoreFacade } from './useTrackballControlsStoreFacade';
@@ -258,6 +260,18 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
     (): CameraViewState => buildCameraViewState(camera.position, cameraQuat.current, targetVec.current, distance.current),
     [camera]
   );
+
+  useEffect(() => registerCameraController(createTrackballCommandController({
+    camera, target, radius, pivot: targetVec, quaternion: cameraQuat, distance, targetDistance, orthoZoom,
+    angularVelocity, smoothedVelocity, flyVelocity, keys: keysPressed, animation: animationTarget,
+    worldUp: worldUpRef, rotate: applyRotation, update: updateCamera,
+    imagePose: id => {
+      if (!reconstruction) return null;
+      const pose = getImageFlyToPose(reconstruction, id, transform, horizonLockRef.current,
+        worldUpRef.current, distance.current, cameraScale, camera.position, camera.quaternion, undistortionEnabled);
+      return pose ? buildCameraViewState(pose.position, pose.quaternion, pose.target, pose.distance) : null;
+    },
+  })), [camera, target, radius, applyRotation, updateCamera, reconstruction, transform, cameraScale, undistortionEnabled]);
 
   useTrackballViewStateSync({
     camera,

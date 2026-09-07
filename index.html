@@ -13,9 +13,13 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>ColmapView</title>
+    <meta name="description" content="View COLMAP reconstructions. Agents: use MCP only. Read agent-guide.html, set up the MCP connector if missing, then pair with the user. Do not use computer-use tools, clicks, DOM automation or browser eval." />
+    <link rel="help" type="text/html" title="Agent guide" href="%BASE_URL%agent-guide.html" />
+    <link rel="alternate" type="text/plain" title="Agent instructions" href="%BASE_URL%llms.txt" />
   </head>
   <body>
     <div id="root"></div>
+    <noscript>ColmapView requires JavaScript to display reconstructions. Agents: use MCP only; set up the connector if missing. Do not use computer-use tools, clicks, DOM automation or browser eval. <a href="%BASE_URL%agent-guide.html">Read the agent setup and pairing instructions.</a></noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1575,14 +1575,20 @@ h3.panel-heading {
 .startup-actions {
   display: grid;
   width: 100%;
-  gap: var(--sp-2);
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-1);
+  grid-template-columns: repeat(4, auto);
   margin-top: var(--sp-2);
 }
 
 .startup-actions button {
   min-width: 0;
-  padding-inline: var(--sp-3);
+  padding-inline: 6px;
+  gap: var(--sp-1);
+  white-space: nowrap;
+}
+
+.startup-panel-touch button {
+  white-space: nowrap;
 }
 
 @media (max-width: 479px) {

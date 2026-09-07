@@ -14,6 +14,7 @@ import {
   UploadIcon,
 } from '../../icons';
 import { publicAsset } from '../../utils/paths';
+import { CopyAgentPrompt } from '../agent/CopyAgentPrompt';
 import { ProfileDropdown } from './ProfileDropdown';
 import { LoadJsonHoverCard, LoadUrlHoverCard, ToyHoverCard } from './DropZoneHoverCards';
 import {
@@ -213,6 +214,7 @@ export function DesktopDropZonePanel({
               {hoveredButton === 'json' && <LoadJsonHoverCard />}
             </div>
 
+            <CopyAgentPrompt />
             <div className="relative">
               <button
                 type="button"
@@ -234,8 +236,6 @@ export function DesktopDropZonePanel({
               {hoveredButton === 'toy' && <ToyHoverCard />}
             </div>
           </div>
-
-
         </div>
       </div>
     </div>
@@ -285,6 +285,7 @@ export function TouchDropZonePanel({
             {DROP_ZONE_ACTION_LABELS.loadFromUrl}
           </button>
 
+          <CopyAgentPrompt />
           <button
             type="button"
             onClick={onLoadToy}

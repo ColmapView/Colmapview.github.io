@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { useUrlLoader } from '../../hooks/useUrlLoader';
+import { registerDatasetLoader } from '../../features/datasetLoad';
 import { clearPersistedSettings } from '../../store/migration';
 import { importConfigFile } from '../../config/configuration';
 import { getRandomDataset, getDatasetUrl } from '../../constants/exampleDatasets';
@@ -27,6 +28,7 @@ export function DropZone({ children }: DropZoneProps) {
   const [isUrlModalOpen, setIsUrlModalOpen] = useState(false);
   const { handleDrop, handleDragOver, handleBrowse } = useFileDropzone();
   const { loadFromUrl, loadFromManifest, urlLoading, urlProgress, setUrlLoading, setUrlProgress } = useUrlLoader();
+  useEffect(() => registerDatasetLoader(loadFromUrl), [loadFromUrl]);
   const {
     data: {
       error,

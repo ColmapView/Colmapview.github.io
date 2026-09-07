@@ -5,6 +5,15 @@
 
 import type { IconProps, HoverIconProps } from './types';
 
+export function AgentIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <rect x="4" y="7" width="16" height="13" rx="4" />
+      <path d="M12 3v4M8 12v2m8-2v2M9 17h6M2 12v4m20-4v4" />
+    </svg>
+  );
+}
+
 // Icon wrapper that shows text abbreviation on hover (uses CSS group-hover from parent button)
 export function HoverIcon({ icon, label }: HoverIconProps) {
   return (

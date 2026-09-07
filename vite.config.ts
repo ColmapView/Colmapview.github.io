@@ -64,6 +64,8 @@ export default defineConfig(({ command, mode }) => {
       // Fast Refresh can preserve stale R3F hook state after deep renderer edits.
       // Use full reloads in dev so hook-order changes cannot survive in the browser.
       hmr: false,
+      // Native SDK fixtures and agent/test artifacts aren't application sources.
+      watch: { ignored: ['**/colmap-wasm/**', '**/.tmp/**', '**/.playwright-cli/**', '**/test-results/**', '**/playwright-report/**'] },
       // Required for SharedArrayBuffer (optional but better WASM performance)
       headers: {
         'Cross-Origin-Opener-Policy': 'same-origin',
@@ -92,6 +94,8 @@ export default defineConfig(({ command, mode }) => {
     },
 
     optimizeDeps: {
+      // Otherwise Vite scans HTML fixtures inside the local Emscripten SDK too.
+      entries: ['index.html'],
       include: ['react', 'react-dom', 'three'],
     },
 

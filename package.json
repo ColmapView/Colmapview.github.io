@@ -4,6 +4,8 @@
   "version": "0.14.2",
   "type": "module",
   "scripts": {
+    "mcp": "node scripts/mcp/server.mjs",
+    "test:mcp": "node --test scripts/mcp/*.test.mjs",
     "dev": "vite",
     "typecheck": "tsc -b",
     "build": "tsc -b && vite build",
@@ -47,6 +49,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@playwright/test": "^1.58.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
@@ -57,6 +60,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/react-window": "^1.8.8",
     "@types/three": "^0.182.0",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.1.1",
     "@vitest/coverage-v8": "^4.0.17",
     "autoprefixer": "^10.4.23",
@@ -69,7 +73,8 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4",
-    "vitest": "^4.0.17"
+    "vitest": "^4.0.17",
+    "ws": "^8.21.3"
   },
   "overrides": {
     "stats-gl@2.4.2": {

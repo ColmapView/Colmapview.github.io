@@ -17,6 +17,7 @@ export type { IconProps, HoverIconProps } from './types';
 // Common UI icons
 export {
   HoverIcon,
+  AgentIcon,
   CloseIcon,
   PlusIcon,
   CheckIcon,

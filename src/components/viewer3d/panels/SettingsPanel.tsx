@@ -1,4 +1,5 @@
 import { ThemeSelect } from '../../ui/ThemeSelect';
+import { AgentControls } from '../../agent/AgentControls';
 import { useCallback } from 'react';
 import { extractConfigurationFromStores, serializeConfigToYaml } from '../../../config/configuration';
 import { clearPersistedSettings } from '../../../store/migration';
@@ -147,6 +148,7 @@ export function SettingsPanel({ activePanel, setActivePanel }: SettingsPanelProp
           formatValue={formatIdleHideTimeoutValue}
         />
         <ThemeSelect />
+        <AgentControls />
         <div className={styles.actionGroup}>
           <button
             onClick={() => {

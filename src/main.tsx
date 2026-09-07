@@ -12,9 +12,12 @@ import '@fontsource-variable/jetbrains-mono'
 import './index.css'
 import App from './App.tsx'
 import { initializeUITheme } from './theme/uiTheme'
+import { AgentControlDialog, AgentSessionStatus } from './components/agent/AgentControls'
+import { disposeCommands } from './commands/runtime'
 
 const disposeUITheme = initializeUITheme();
 if (import.meta.hot) import.meta.hot.dispose(disposeUITheme);
+if (import.meta.hot) import.meta.hot.dispose(disposeCommands);
 import { registerAllCaches } from './cache'
 
 // Register all caches for centralized management
@@ -23,5 +26,7 @@ registerAllCaches();
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
+    <AgentSessionStatus />
+    <AgentControlDialog />
   </StrictMode>,
 )
