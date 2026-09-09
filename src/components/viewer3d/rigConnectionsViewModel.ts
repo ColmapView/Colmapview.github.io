@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { groupRigImagesByFrame } from '../../utils/rigFrameGroups';
+import type { RigData } from '../../types/rig';
 import type { Image, ImageId } from '../../types/colmap';
 import type { RigColorMode, RigDisplayMode } from '../../store/types';
 import { getImageWorldPosition } from '../../utils/colmapTransforms';
@@ -20,29 +22,13 @@ export interface RigConnectionRenderState {
   color: string;
 }
 
-export function getRigConnectionFrameId(imageName: string): string {
-  const parts = imageName.split(/[/\\]/);
-  return parts[parts.length - 1] ?? imageName;
-}
+export { getRigConnectionFrameId, groupRigImagesByFrame } from '../../utils/rigFrameGroups';
 
-export function groupRigImagesByFrame(images: Iterable<Image>): Map<string, Image[]> {
-  const frameGroups = new Map<string, Image[]>();
-
-  for (const image of images) {
-    const frameId = getRigConnectionFrameId(image.name);
-    const group = frameGroups.get(frameId);
-    if (group) {
-      group.push(image);
-    } else {
-      frameGroups.set(frameId, [image]);
-    }
-  }
-
-  return frameGroups;
-}
-
-export function buildRigConnectionGeometryData(images: Iterable<Image>): RigConnectionGeometryData | null {
-  const frameGroups = groupRigImagesByFrame(images);
+export function buildRigConnectionGeometryData(
+  images: Iterable<Image>,
+  rigData?: RigData
+): RigConnectionGeometryData | null {
+  const frameGroups = groupRigImagesByFrame(images, rigData);
   const positions: number[] = [];
   const colors: number[] = [];
   const alphas: number[] = [];

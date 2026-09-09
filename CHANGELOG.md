@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.3] - 2026-09-09
+
+### Fixed
+
+- Respect explicit COLMAP frame metadata when drawing rig connections, preventing persistent false lines for repeated filenames in different folders, including extensionless video frame names.
+- Share frame grouping between rig rendering and controls so visibility and availability agree, while preserving filename inference for legacy models without rig metadata.
+
 ## [0.14.2] - 2026-09-06
 
 ### Changed

@@ -10,7 +10,7 @@ import {
 } from '../../store/types';
 import { hexToHsl, hslToHex } from '../../utils/colorUtils';
 import { cameraModelHasPinholeIntrinsics } from '../../utils/cameraModelRegistry';
-import { SensorType } from '../../types/rig';
+import { groupRigImagesByFrame } from '../../utils/rigFrameGroups';
 
 export interface HslColor {
   h: number;
@@ -159,55 +159,12 @@ export function buildRigInfo(reconstruction: Reconstruction | null): RigInfo {
     return { hasRigData: false, cameraCount: 0, frameCount: 0 };
   }
 
-  const rigDataInfo = buildRigInfoFromParsedData(reconstruction);
-  if (rigDataInfo) {
-    return rigDataInfo;
-  }
-
-  return buildRigInfoFromImageNames(reconstruction);
-}
-
-function buildRigInfoFromParsedData(reconstruction: Reconstruction): RigInfo | null {
-  if (!reconstruction.rigData) {
-    return null;
-  }
+  const frameGroups = groupRigImagesByFrame(reconstruction.images.values(), reconstruction.rigData);
 
   let multiCameraFrames = 0;
   let maxCameras = 0;
-
-  for (const frame of reconstruction.rigData.frames.values()) {
-    let cameraCount = 0;
-
-    for (const data of frame.dataIds) {
-      if (data.sensorId.type === SensorType.CAMERA && reconstruction.images.has(data.dataId)) {
-        cameraCount++;
-      }
-    }
-
-    if (cameraCount < 2) continue;
-
-    multiCameraFrames++;
-    maxCameras = Math.max(maxCameras, cameraCount);
-  }
-
-  return {
-    hasRigData: multiCameraFrames > 0,
-    cameraCount: maxCameras,
-    frameCount: multiCameraFrames,
-  };
-}
-
-function buildRigInfoFromImageNames(reconstruction: Reconstruction): RigInfo {
-  const frameGroups = new Map<string, number>();
-  for (const image of reconstruction.images.values()) {
-    const parts = image.name.split(/[/\\]/);
-    const frameId = parts.length >= 2 ? parts[parts.length - 1] : image.name;
-    frameGroups.set(frameId, (frameGroups.get(frameId) ?? 0) + 1);
-  }
-
-  let multiCameraFrames = 0;
-  let maxCameras = 0;
-  for (const count of frameGroups.values()) {
+  for (const images of frameGroups.values()) {
+    const count = images.length;
     if (count < 2) continue;
 
     multiCameraFrames++;
