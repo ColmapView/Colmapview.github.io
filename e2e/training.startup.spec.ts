@@ -13,7 +13,7 @@ const previewMode = process.env.COLMAP_TRAIN_STARTUP_PREVIEW ?? 'on';
 test('real scene upload-to-result timing with disk-backed sources', async ({ page, request, browserName }, testInfo) => {
   test.skip(!apiUrl || !directory || browserName !== 'chromium', 'Requires an isolated local API and source scene.');
   test.setTimeout(600_000);
-  expect([0, 1, 2, 4]).toContain(imageWorkers);
+  if (imageWorkers !== null) expect([0, 1, 2, 4]).toContain(imageWorkers);
   expect(['spark', 'webgpu']).toContain(splatBackend);
   expect(['on', 'off']).toContain(previewMode);
   page.setDefaultTimeout(20_000);
