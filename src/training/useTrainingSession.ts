@@ -1,6 +1,7 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { getDatasetManager } from '../dataset';
-import { usePointCloudStore, useReconstructionStore, useTrainingStore } from '../store';
+import { useReconstructionStore, useTrainingStore } from '../store';
+import { selectTrainingSplatDisplay } from './useTrainingPreviewStoreFacade';
 import {
   createTrainingSnapshot,
   isSnapshotForCurrentReconstruction,
@@ -713,11 +714,10 @@ export function useTrainingSession() {
       actions.setCurrentJob(job);
       actions.setPhase(job.state);
       if (!['failed', 'cancelling', 'cancelled'].includes(job.state)) {
-        // The accepted run owns the main viewport. `setShowSplats` selects the
-        // regular "Splats" display mode and also restores point-layer visibility;
-        // the training preview supplies the temporary splat source until the
-        // completed PLY is attached through the normal reconstruction catalog.
-        usePointCloudStore.getState().setShowSplats(true);
+        // The accepted run owns the main viewport; the training preview supplies
+        // the temporary splat source until the completed PLY is attached through
+        // the normal reconstruction catalog.
+        selectTrainingSplatDisplay();
         useTrainingStore.setState({ previewEnabled: true });
       }
       useTrainingStore.setState({ admissionPending: false });

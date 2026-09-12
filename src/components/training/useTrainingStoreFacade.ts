@@ -1,6 +1,8 @@
+import { useCallback } from 'react';
 import { useReconstructionStore, useTrainingStore, useUIStore, selectPointCount } from '../../store';
 import { useShallow } from 'zustand/react/shallow';
 import type { useTrainingSessionActions } from '../../training';
+import { selectTrainingSplatDisplay } from '../../training/useTrainingPreviewStoreFacade';
 
 export type TrainingWindowState = ReturnType<typeof useTrainingDockStoreFacade>;
 export type TrainingWindowActions = ReturnType<typeof useTrainingSessionActions>;
@@ -31,7 +33,13 @@ export function useTrainingDockStoreFacade() {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const pointCount = useReconstructionStore(selectPointCount);
   const touchMode = useUIStore((s) => s.touchMode);
-  return { ...state, reconstruction, pointCount, touchMode };
+  const storeSetPreviewEnabled = state.setPreviewEnabled;
+  // Switching the live preview on hands the viewport to it, as admission does.
+  const setPreviewEnabled = useCallback((enabled: boolean) => {
+    if (enabled) selectTrainingSplatDisplay();
+    storeSetPreviewEnabled(enabled);
+  }, [storeSetPreviewEnabled]);
+  return { ...state, setPreviewEnabled, reconstruction, pointCount, touchMode };
 }
 
 export function useTrainingToggleStoreFacade() {

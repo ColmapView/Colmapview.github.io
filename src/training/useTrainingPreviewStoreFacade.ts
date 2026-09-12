@@ -1,5 +1,5 @@
 import { useShallow } from 'zustand/react/shallow';
-import { useTrainingStore, useReconstructionStore, useSplatBackendStore } from '../store';
+import { usePointCloudStore, useTrainingStore, useReconstructionStore, useSplatBackendStore } from '../store';
 
 /** Renderer-specific backend state stays behind the same boundary as preview visibility. */
 export function useTrainingSparkBackendFacade() {
@@ -14,6 +14,15 @@ export function useTrainingSparkBackendFacade() {
 /** Imperative renderer callbacks report errors without owning session state. */
 export function setTrainingPreviewError(previewError: string): void {
   useTrainingStore.setState({ previewError });
+}
+
+/**
+ * A live preview owns the main viewport. `setShowSplats` selects the regular
+ * "Splats" display mode and restores point-layer visibility, so the preview is
+ * never drawn under the point layer. Admission and the Live preview switch share it.
+ */
+export function selectTrainingSplatDisplay(): void {
+  usePointCloudStore.getState().setShowSplats(true);
 }
 
 /** Catalog selection takes precedence over the retained final preview renderer. */

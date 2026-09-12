@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useReconstructionStore, useTrainingStore } from '../../store';
+import { usePointCloudStore, useReconstructionStore, useTrainingStore } from '../../store';
 import { buildReconstruction } from '../../test/builders';
 import { trainingConfigSchema, trainingJobSchema } from '../../training/trainingClient';
 import wire from '../../training/fixtures/wire-v1.json';
@@ -174,6 +174,19 @@ describe('TrainingPanelHarness server-described setup', () => {
     expect(screen.queryByLabelText('Image budget')).toBeNull();
     expect(screen.queryByText('Advanced settings')).toBeNull();
     expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled();
+  });
+
+  it('selects the splat-only display mode when the live preview is switched on', () => {
+    const currentJob = trainingJobSchema.parse({ ...wire.job, state: 'running' });
+    useTrainingStore.setState({ currentJob, currentJobId: currentJob.job_id, phase: 'running', previewEnabled: false });
+    usePointCloudStore.setState({ showPointCloud: false, showSplats: false, colorMode: 'rgb' });
+    render(<TrainingPanelHarness />);
+    fireEvent.click(screen.getByRole('switch', { name: 'Live preview' }));
+    expect(useTrainingStore.getState().previewEnabled).toBe(true);
+    expect(usePointCloudStore.getState()).toMatchObject({ showPointCloud: true, showSplats: true, colorMode: 'splats' });
+    fireEvent.click(screen.getByRole('switch', { name: 'Live preview' }));
+    expect(useTrainingStore.getState().previewEnabled).toBe(false);
+    expect(usePointCloudStore.getState().colorMode).toBe('splats');
   });
 
   it.each(['running', 'succeeded', 'failed', 'cancelled'] as const)('always starts fresh from %s with backend settings', async phase => {
