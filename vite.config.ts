@@ -64,6 +64,8 @@ export default defineConfig(({ command, mode }) => {
       // Fast Refresh can preserve stale R3F hook state after deep renderer edits.
       // Use full reloads in dev so hook-order changes cannot survive in the browser.
       hmr: false,
+      // Native SDKs and scratch worktrees are not application sources.
+      watch: { ignored: ['**/colmap-wasm/**', '**/.tmp/**', '**/.playwright-cli/**', '**/test-results/**', '**/playwright-report/**'] },
       // Required for SharedArrayBuffer (optional but better WASM performance)
       headers: {
         'Cross-Origin-Opener-Policy': 'same-origin',
@@ -92,6 +94,8 @@ export default defineConfig(({ command, mode }) => {
     },
 
     optimizeDeps: {
+      // Avoid scanning HTML fixtures in SDKs and nested scratch checkouts.
+      entries: ['index.html'],
       include: ['react', 'react-dom', 'three'],
     },
 
