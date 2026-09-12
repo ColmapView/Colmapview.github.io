@@ -63,7 +63,7 @@ test(`training inputs become full-resolution JPEG Q90 before transfer (${workers
 
   expect(result).toEqual({
     quality: 0.9,
-    workerState: workers ? { workers, active: 0, queued: 0, unavailable: false } : null,
+    workerState: workers ? { capacity: workers, workers, active: 0, queued: 0, unavailable: false } : null,
     jpegName: 'nested/source.jpg',
     jpegType: 'image/jpeg',
     jpegHead: [0xff, 0xd8, 0xff],

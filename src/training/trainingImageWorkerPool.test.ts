@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TrainingImageWorkerPool } from './trainingImageWorkerPool';
+import { configureTrainingImageWorkers, DEFAULT_TRAINING_IMAGE_WORKERS, TrainingImageWorkerPool, trainingImageWorkers } from './trainingImageWorkerPool';
 import type { TrainingImageRequest, TrainingImageResponse } from './trainingImagePolicy';
 
 class FakeWorker {
@@ -82,5 +82,18 @@ describe('bounded image worker lifecycle', () => {
     workers[0].complete();
     expect(await next).toBeInstanceOf(Blob);
     expect(workers).toHaveLength(1);
+  });
+});
+
+describe('promoted image worker default', () => {
+  afterEach(() => configureTrainingImageWorkers(DEFAULT_TRAINING_IMAGE_WORKERS));
+
+  it('prepares images through a four-worker pool that spawns nothing until work arrives', () => {
+    expect(trainingImageWorkers()?.inspect()).toMatchObject({ capacity: 4, workers: 0, queued: 0, active: 0, unavailable: false });
+  });
+
+  it('returns preparation to the in-thread encoder when explicitly disabled', () => {
+    configureTrainingImageWorkers(0);
+    expect(trainingImageWorkers()).toBeNull();
   });
 });

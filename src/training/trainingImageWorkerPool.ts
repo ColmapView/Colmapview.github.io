@@ -21,7 +21,7 @@ export class TrainingImageWorkerPool {
     this.size = size; this.factory = factory;
   }
 
-  inspect() { return { workers: this.slots.size, queued: this.queue.length,
+  inspect() { return { capacity: this.size, workers: this.slots.size, queued: this.queue.length,
     active: [...this.slots].filter(slot => slot.task !== null).length, unavailable: this.unavailable }; }
 
   encode(source: Blob, operation: TrainingImageOperation, attemptId: string, signal?: AbortSignal): Promise<Blob | null> {
@@ -130,8 +130,13 @@ export class TrainingImageWorkerPool {
   }
 }
 
-// Keep the existing encoder as the default until the benchmark promotion gate.
-let pool: TrainingImageWorkerPool | null = null;
+// Promoted 2026-09-11 from three counterbalanced cold and warm 311-image pairs
+// (median submit-to-progress -30.9% cold, -35.2% warm versus no workers). Cap
+// four spawned two workers on the qualifying machine; workers spawn only when
+// image work arrives. Capability failure returns work to the in-thread encoder,
+// and configureTrainingImageWorkers(0) disables the pool entirely.
+export const DEFAULT_TRAINING_IMAGE_WORKERS = 4;
+let pool: TrainingImageWorkerPool | null = new TrainingImageWorkerPool(DEFAULT_TRAINING_IMAGE_WORKERS);
 export function configureTrainingImageWorkers(count: 0 | 1 | 2 | 4): void {
   if (pool && (pool.inspect().active || pool.inspect().queued)) throw new Error('Image preparation is active.');
   pool?.dispose();

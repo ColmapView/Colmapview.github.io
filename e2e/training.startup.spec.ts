@@ -4,7 +4,9 @@ import { loadDiskDataset } from './fixtures/load-disk-dataset';
 
 const apiUrl = process.env.COLMAP_TRAIN_STARTUP_API_URL;
 const directory = process.env.COLMAP_TRAIN_STARTUP_DATASET_DIR;
-const imageWorkers = Number(process.env.COLMAP_TRAIN_STARTUP_IMAGE_WORKERS ?? '0');
+// Unset keeps the promoted production default; 0 is the explicit no-worker control.
+const imageWorkers = process.env.COLMAP_TRAIN_STARTUP_IMAGE_WORKERS === undefined
+  ? null : Number(process.env.COLMAP_TRAIN_STARTUP_IMAGE_WORKERS);
 const splatBackend = process.env.COLMAP_TRAIN_STARTUP_SPLAT_BACKEND ?? 'spark';
 const previewMode = process.env.COLMAP_TRAIN_STARTUP_PREVIEW ?? 'on';
 
@@ -34,11 +36,13 @@ test('real scene upload-to-result timing with disk-backed sources', async ({ pag
       });
       expect(deviceError, 'WebGPU device creation must succeed before uploading/training.').toBeNull();
     }
-    await page.evaluate(async count => {
-      const path = '/src/training/trainingImageWorkerPool.ts';
-      const { configureTrainingImageWorkers } = await import(path) as typeof import('../src/training/trainingImageWorkerPool');
-      configureTrainingImageWorkers(count as 0 | 1 | 2 | 4);
-    }, imageWorkers);
+    if (imageWorkers !== null) {
+      await page.evaluate(async count => {
+        const path = '/src/training/trainingImageWorkerPool.ts';
+        const { configureTrainingImageWorkers } = await import(path) as typeof import('../src/training/trainingImageWorkerPool');
+        configureTrainingImageWorkers(count as 0 | 1 | 2 | 4);
+      }, imageWorkers);
+    }
     await loadDiskDataset(page, directory!);
     const sceneCount = () => page.evaluate(async () => {
       const path = '/src/store/reconstructionStore.ts';
