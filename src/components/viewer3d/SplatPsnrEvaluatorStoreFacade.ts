@@ -14,6 +14,8 @@ import type {
 } from '../../utils/splatBackendPolicy';
 import type { Reconstruction } from '../../types/colmap';
 import type { Sim3dEuler } from '../../types/sim3d';
+import { getSplatSourceTransform } from '../../utils/splatSourceTransform';
+import { useMemo } from 'react';
 
 type ReconstructionStoreSnapshot = ReturnType<typeof useReconstructionStore.getState>;
 
@@ -65,6 +67,7 @@ export function useSplatPsnrEvaluatorStoreFacade(): SplatPsnrEvaluatorStoreFacad
   const dataset = useDataset();
   const transform = useTransformStore((s) => s.transform);
   const splatTransform = useTransformStore((s) => s.splatTransform);
+  const sourceTransform = useMemo(() => getSplatSourceTransform(splatTransform, loadedFiles), [splatTransform, loadedFiles]);
   const splatBackendResolution = useSplatBackendStore((s) => s.resolution);
   const splatMetricCapability = useSplatBackendStore((s) => s.metricCapability);
   const setWebGpuMetricState = useSplatBackendStore((s) => s.setWebGpuMetricState);
@@ -96,7 +99,7 @@ export function useSplatPsnrEvaluatorStoreFacade(): SplatPsnrEvaluatorStoreFacad
       splatBackendResolution,
       splatMetricCapability,
       transform,
-      splatTransform,
+      splatTransform: sourceTransform,
     },
     actions: {
       setWebGpuMetricState,

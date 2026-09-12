@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useReconstructionStore } from '../../store/reconstructionStore';
 import { useUIStore } from '../../store/stores/uiStore';
+import { useTrainingStore } from '../../store/stores/trainingStore';
 import { TouchStatusBar } from './TouchStatusBar';
 import {
   TOUCH_STATUS_BAR_HELP_LABEL,
@@ -12,6 +13,7 @@ describe('TouchStatusBar', () => {
   beforeEach(() => {
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
+    useTrainingStore.setState(useTrainingStore.getInitialState(), true);
   });
 
   afterEach(() => {
@@ -61,5 +63,14 @@ describe('TouchStatusBar', () => {
     render(<TouchStatusBar />);
 
     expect(screen.queryByRole('button', { name: TOUCH_STATUS_BAR_HELP_TITLE })).toBeNull();
+  });
+
+  it('opens the training sheet from a compact active-job status', () => {
+    useTrainingStore.setState({ phase: 'running' });
+    render(<TouchStatusBar />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Training · Running' }));
+
+    expect(useTrainingStore.getState().dockOpen).toBe(true);
   });
 });

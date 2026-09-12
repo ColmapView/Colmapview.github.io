@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type JSX } fr
 import type * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { appLogger } from '../../utils/logger';
+import { createTrainingWebGpuDrawProbe } from '../../training/trainingDrawProbe';
 import type { NotificationState } from '../../store';
 import type { UrlLoadProgress } from '../../types/manifest';
 import type { GaussianCloud, LoadedGaussianCloud } from '../../splat/gaussianCloud';
@@ -671,6 +672,7 @@ async function createLoadedVisibleRenderer({
   );
   return createLoadedVisibleWebGpuSplatRendererAdapter(canvas, cloud, {
     sceneId: createVisibleWebGpuSplatSceneId(loadedFile),
+    onFirstFrame: createTrainingWebGpuDrawProbe(loadedFile, cloud.count),
     labelPrefix: `webgpu splat ${loadedFile.name}`,
     onUploadProgress,
   }, {
@@ -764,6 +766,7 @@ async function createProgressiveVisibleRenderer({
     onShFallback(error instanceof Error ? error.message : String(error));
     return createLoadedVisibleWebGpuSplatRendererAdapter(canvas, previewCloud, {
       sceneId,
+      onFirstFrame: createTrainingWebGpuDrawProbe(loadedFile, previewCloud.count),
       labelPrefix: `webgpu splat ${loadedFile.name}`,
       onUploadProgress,
     }, {
@@ -785,6 +788,7 @@ async function createProgressiveVisibleRenderer({
     onProgress('renderingPreview');
     await renderer.loadCloud(previewCloud, {
       sceneId: previewSceneId,
+      onFirstFrame: previewOnly ? createTrainingWebGpuDrawProbe(loadedFile, previewCloud.count) : undefined,
       labelPrefix: `webgpu splat ${loadedFile.name} preview`,
       onUploadProgress,
     });
@@ -810,6 +814,7 @@ async function createProgressiveVisibleRenderer({
     stage = 'full';
     await renderer.loadCloud(cloud, {
       sceneId,
+      onFirstFrame: createTrainingWebGpuDrawProbe(loadedFile, cloud.count),
       labelPrefix: `webgpu splat ${loadedFile.name}`,
     });
     return renderer;

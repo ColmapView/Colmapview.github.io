@@ -17,6 +17,7 @@ import {
   ViewPanel,
 } from './panels';
 import type { ViewerControlsController } from './useViewerControlsController';
+import { TrainingToggleButton } from '../training/TrainingToggleButton';
 import {
   TOOLBAR_GROUP_CLASS,
   TOOLBAR_GROUP_LABELS,
@@ -105,6 +106,7 @@ export function ViewerControlsToolbar({ controller }: ViewerControlsToolbarProps
 
       <div role="group" aria-label={TOOLBAR_GROUP_LABELS.app} className={TOOLBAR_GROUP_CLASS}>
         <SettingsPanel {...settingsPanel} />
+        <TrainingToggleButton activePanel={settingsPanel.activePanel} setActivePanel={settingsPanel.setActivePanel} />
         <GalleryToggleButton {...galleryToggleButton} />
       </div>
     </div>

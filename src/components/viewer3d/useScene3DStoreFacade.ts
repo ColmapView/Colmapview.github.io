@@ -21,6 +21,8 @@ import type { UrlLoadProgress } from '../../types/manifest';
 import type { Reconstruction } from '../../types/colmap';
 import type { WasmReconstructionWrapper } from '../../wasm/reconstruction';
 import { shouldHideSceneAutoHideElement } from './scene3dViewModel';
+import { getSplatSourceTransform } from '../../utils/splatSourceTransform';
+import { useMemo } from 'react';
 
 interface SceneContentDataFacade {
   reconstruction: Reconstruction | null;
@@ -96,6 +98,8 @@ export function useSceneContentStoreFacade(): SceneContentStoreFacade {
   const viewTrigger = useUIStore((s) => s.viewTrigger);
   const transform = useTransformStore((s) => s.transform);
   const splatTransform = useTransformStore((s) => s.splatTransform);
+  const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
+  const sourceTransform = useMemo(() => getSplatSourceTransform(splatTransform, loadedFiles), [splatTransform, loadedFiles]);
   const requestedSplatBackend = useSplatBackendStore((s) => s.requestedBackend);
   const splatBackendAvailability = useSplatBackendStore((s) => s.availability);
   const splatBackendResolution = useSplatBackendStore((s) => s.resolution);
@@ -116,7 +120,7 @@ export function useSceneContentStoreFacade(): SceneContentStoreFacade {
       viewDirection,
       viewTrigger,
       transform,
-      splatTransform,
+      splatTransform: sourceTransform,
       requestedSplatBackend,
       splatBackendAvailability,
       splatBackendResolution,

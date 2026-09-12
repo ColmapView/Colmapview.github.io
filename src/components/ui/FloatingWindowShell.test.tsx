@@ -9,6 +9,17 @@ afterEach(() => {
 });
 
 describe('FloatingWindowShell', () => {
+  it('forwards an optional panel id and focused keyboard events without adding global Escape behavior', () => {
+    const onKeyDown = vi.fn();
+    render(<FloatingWindowShell isOpen title="Named tool" onClose={vi.fn()}
+      panelId="named-tool" onPanelKeyDown={onKeyDown}><input aria-label="Tool input" /></FloatingWindowShell>);
+    expect(screen.getByRole('dialog')).toHaveAttribute('id', 'named-tool');
+    fireEvent.keyDown(screen.getByLabelText('Tool input'), { key: 'Escape' });
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+  });
+
   it('renders non-modal floating chrome with non-modal dialog semantics', () => {
     const onClose = vi.fn();
     const onPanelPointerDown = vi.fn();

@@ -200,6 +200,45 @@ async function flushPromises(): Promise<void> {
   }
 }
 
+describe('prepared live cloud replacement', () => {
+  it('keeps current scene/camera until commit and disposes an abandoned upload', async () => {
+    const harness = createHarness();
+    const first = makeSession().session;
+    const next = makeSession().session;
+    const abandoned = makeSession().session;
+    harness.createRenderSession.mockReturnValueOnce(first).mockReturnValueOnce(next).mockReturnValueOnce(abandoned);
+    const renderer = await createVisibleWebGpuSplatRendererAdapter(harness.canvas, {
+      initializeDevice: harness.initializeDevice,
+      createSceneResourceManager: () => harness.resourceManager as unknown as ReturnType<NonNullable<VisibleWebGpuSplatRendererAdapterDeps['createSceneResourceManager']>>,
+      createRenderSession: harness.createRenderSession,
+    });
+    const frame = makeFrame();
+    renderer.setFrameSnapshot(frame);
+    await renderer.loadCloud(makeCloud(), { sceneId: 'first' });
+    await flushPromises();
+    const drawn = vi.fn();
+    const replacement = await renderer.prepareCloud!(makeCloud(), { sceneId: 'next', onFirstFrame: drawn });
+    expect(first.dispose).not.toHaveBeenCalled();
+    expect(next.renderToCanvas).not.toHaveBeenCalled();
+    expect(drawn).not.toHaveBeenCalled();
+    replacement.commit();
+    await flushPromises();
+    expect(first.dispose).toHaveBeenCalledTimes(1);
+    expect(next.setCamera).toHaveBeenCalledWith(frame);
+    expect(drawn).toHaveBeenCalledTimes(1);
+    const late = await renderer.prepareCloud!(makeCloud(), { sceneId: 'late' });
+    late.dispose(); late.dispose();
+    expect(abandoned.dispose).toHaveBeenCalledTimes(1);
+    expect(next.dispose).not.toHaveBeenCalled();
+    replacement.dispose();
+    expect(next.dispose).toHaveBeenCalledTimes(1);
+    // A queued callback from a retired session must not become draw evidence.
+    next.onFirstFrame.mock.calls[0][0]();
+    expect(drawn).toHaveBeenCalledTimes(1);
+    renderer.dispose();
+  });
+});
+
 describe('visible WebGPU splat renderer adapter', () => {
   afterEach(() => {
     clearVisibleWebGpuSplatSharedRuntimesForTests();

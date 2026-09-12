@@ -79,6 +79,11 @@ describe('trackball keyboard handlers', () => {
     const inputEvent = createKeyEvent('w', input);
     handleTrackballKeyDown({ event: inputEvent, ...options });
     expect(inputEvent.preventDefault).not.toHaveBeenCalled();
+
+    const button = document.createElement('button');
+    const buttonEvent = createKeyEvent(' ', button);
+    handleTrackballKeyDown({ event: buttonEvent, ...options });
+    expect(buttonEvent.preventDefault).not.toHaveBeenCalled();
     expect(options.keysPressedRef.current.size).toBe(0);
   });
 

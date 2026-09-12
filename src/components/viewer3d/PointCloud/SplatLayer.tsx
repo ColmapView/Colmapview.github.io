@@ -23,6 +23,8 @@ import {
   type SplatLoadingPhase,
 } from '../../../utils/splatLoadingProgressPolicy';
 
+import { trainingDrawProbe } from '../../../training/trainingDrawProbe';
+
 type SplatMeshInstance = InstanceType<SparkModule['SplatMesh']>;
 type SparkRendererInstance = InstanceType<SparkModule['SparkRenderer']>;
 
@@ -142,7 +144,7 @@ function guardSparkRendererTeardownErrors(
   };
 }
 
-function SparkRendererBridge({
+export function SparkRendererBridge({
   SparkRenderer,
   onReadyChange,
 }: {
@@ -159,6 +161,15 @@ function SparkRendererBridge({
     });
     let tearingDown = false;
     guardSparkRendererTeardownErrors(spark, () => tearingDown);
+    if (trainingDrawProbe) {
+      const previous = spark.onAfterRender;
+      spark.onAfterRender = (...args) => {
+        previous.apply(spark, args);
+        if (!tearingDown && gl.getRenderTarget() === null) {
+          trainingDrawProbe?.observe(spark.display.mapping, spark.activeSplats);
+        }
+      };
+    }
 
     scene.add(spark);
     onReadyChange(true);
@@ -179,14 +190,17 @@ function SparkRendererBridge({
 export function SplatLayer({
   modelMatrix = null,
   visible = true,
+  splatFile: transientSplatFile,
 }: {
   modelMatrix?: Matrix4 | null;
   visible?: boolean;
+  /** Live training preview, held outside the persisted source catalog. */
+  splatFile?: File;
 }): JSX.Element | null {
   const {
     data: {
       showSplats,
-      splatFile,
+      splatFile: catalogSplatFile,
       requestedBackend,
       splatBackendAvailability,
       splatBackendResolution,
@@ -201,6 +215,7 @@ export function SplatLayer({
       setUrlProgress,
     },
   } = useSplatLayerStoreFacade();
+  const splatFile = transientSplatFile ?? catalogSplatFile;
   const { invalidate } = useThree();
   const [sparkModule, setSparkModule] = useState<SparkModule | null>(null);
   const [loadedSplat, setLoadedSplat] = useState<LoadedSplatMesh | null>(null);
@@ -457,6 +472,7 @@ export function SplatLayer({
         fileName: sourceFile.name,
         raycastable: false,
       });
+      mesh.name = 'catalog-splat';
 
       await mesh.initialized;
 
@@ -466,6 +482,7 @@ export function SplatLayer({
       }
 
       committed = true;
+      trainingDrawProbe?.register(mesh, sourceFile, mesh.numSplats);
       replaceLoadedSplat({ file: sourceFile, mesh });
       setSplatPhaseProgress(sourceFile, 'renderingFirstFrame');
       finishSplatLoading(sourceFile);

@@ -133,6 +133,36 @@ describe('WebGPU splat device initialization', () => {
     handle.dispose();
   });
 
+  it('does not let a late device request reconfigure or dispose a newer canvas owner', async () => {
+    const first = createDeviceHarness();
+    const next = createDeviceHarness({ context: first.context });
+    const delayed = createDeferred<GPUDevice>();
+    const started = createDeferred<void>();
+    vi.mocked(first.adapter!.requestDevice).mockImplementation(() => { started.resolve(); return delayed.promise; });
+    const late = initializeWebGpuSplatDevice(first.canvas, { gpu: first.gpu });
+    const rejected = expect(late).rejects.toThrow('superseded');
+    await started.promise;
+    const current = await initializeWebGpuSplatDevice(next.canvas, { gpu: next.gpu });
+    delayed.resolve(first.device);
+    await rejected;
+    expect(first.device.destroy).toHaveBeenCalledTimes(1);
+    expect(first.context!.configure).toHaveBeenCalledTimes(1);
+    expect(first.context!.unconfigure).not.toHaveBeenCalled();
+    current.dispose();
+    expect(first.context!.unconfigure).toHaveBeenCalledTimes(1);
+  });
+
+  it('an old handle cannot unconfigure a canvas already acquired by its replacement', async () => {
+    const first = createDeviceHarness();
+    const next = createDeviceHarness({ context: first.context });
+    const old = await initializeWebGpuSplatDevice(first.canvas, { gpu: first.gpu });
+    const current = await initializeWebGpuSplatDevice(next.canvas, { gpu: next.gpu });
+    old.dispose();
+    expect(first.context!.unconfigure).not.toHaveBeenCalled();
+    current.dispose();
+    expect(first.context!.unconfigure).toHaveBeenCalledTimes(1);
+  });
+
   it('falls back to the default adapter request when a high-performance adapter is unavailable', async () => {
     const { adapter: fallbackAdapter, canvas, context } = createDeviceHarness();
     const gpu: WebGpuSplatGpuProvider = {

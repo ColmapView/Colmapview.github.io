@@ -1,5 +1,6 @@
 import { downloadBlob } from '../utils/download';
 import { appLogger } from '../utils/logger';
+import { encodeRasterImage } from '../utils/imageRasterEncoding';
 import { createZipBlob } from './zipExportPolicy';
 
 export interface ImageZipExportOptions {
@@ -18,13 +19,7 @@ export function isJpegFile(file: File): boolean {
 }
 
 export async function convertToJpeg(file: File, quality: number): Promise<Blob> {
-  const effectiveQuality = isJpegFile(file) ? Math.min(quality, 0.85) : quality;
-  const bitmap = await createImageBitmap(file);
-  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-  const ctx = canvas.getContext('2d')!;
-  ctx.drawImage(bitmap, 0, 0);
-  bitmap.close();
-  return canvas.convertToBlob({ type: 'image/jpeg', quality: effectiveQuality });
+  return encodeRasterImage(file, 'image/jpeg', quality);
 }
 
 export function normalizeImageZipPath(path: string): string {
@@ -62,7 +57,8 @@ export async function exportImagesZip(
         continue;
       }
 
-      const jpegBlob = await convertToJpeg(file, options.jpegQuality);
+      const quality = isJpegFile(file) ? Math.min(options.jpegQuality, 0.85) : options.jpegQuality;
+      const jpegBlob = await convertToJpeg(file, quality);
       const arrayBuffer = await jpegBlob.arrayBuffer();
       zipData[toJpegZipPath(imageName)] = new Uint8Array(arrayBuffer);
     } catch (err) {

@@ -46,9 +46,10 @@ function collectFiles(dir: string, prefix: string = ''): TestDatasetFileEntry[] 
  */
 export async function loadTestDataset(
   page: Page,
-  extraFiles: TestDatasetFileEntry[] = []
+  extraFiles: TestDatasetFileEntry[] = [],
+  datasetDir: string = TEST_DATA_DIR,
 ): Promise<void> {
-  const files = [...collectFiles(TEST_DATA_DIR), ...extraFiles];
+  const files = [...collectFiles(datasetDir), ...extraFiles];
 
   await page.evaluate(async (fileData: TestDatasetFileEntry[]) => {
     // Helper: build a nested tree from flat paths

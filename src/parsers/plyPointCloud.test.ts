@@ -4,6 +4,7 @@ import {
   classifyPlyHeaderText,
   getPlyHeaderVertexCount,
   parsePointCloudPlyFile,
+  validateGaussianPlyFile,
 } from './plyPointCloud';
 
 function createGenericBinaryPlyFile(): File {
@@ -42,6 +43,14 @@ function createGenericBinaryPlyFile(): File {
 }
 
 describe('PLY point cloud parser', () => {
+  it('rejects truncated or oversized declared Gaussian topology before renderer allocation', async () => {
+    const properties = ['x', 'y', 'z', 'f_dc_0', 'f_dc_1', 'f_dc_2', 'opacity', 'scale_0', 'scale_1', 'scale_2', 'rot_0', 'rot_1', 'rot_2', 'rot_3'];
+    const header = (count: number) => `ply\nformat binary_little_endian 1.0\nelement vertex ${count}\n${properties.map((name) => `property float ${name}\n`).join('')}end_header\n`;
+    await expect(validateGaussianPlyFile(new File([header(1), new Float32Array(14)], 'valid.ply'))).resolves.toBeUndefined();
+    await expect(validateGaussianPlyFile(new File([header(2), new Float32Array(14)], 'short.ply'))).rejects.toThrow('truncated');
+    await expect(validateGaussianPlyFile(new File([header(Number.MAX_SAFE_INTEGER), new Float32Array(14)], 'overflow.ply'))).rejects.toThrow();
+    await expect(validateGaussianPlyFile(createGenericBinaryPlyFile())).rejects.toThrow('valid Gaussian');
+  });
   it('classifies ordinary XYZ/RGB PLY files as point clouds', async () => {
     const file = createGenericBinaryPlyFile();
 

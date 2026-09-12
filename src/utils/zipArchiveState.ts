@@ -38,6 +38,26 @@ export function getActiveZipImageIndex(): Map<string, ArchiveEntry> | null {
   return activeImageIndex;
 }
 
+/** Own the archive as well as its entries so later source replacement cannot
+ * redirect a lazy read. The handle is released when its snapshot is released. */
+export function retainActiveZipSource() {
+  const archive = activeArchive;
+  const index = activeImageIndex ? new Map(activeImageIndex) : null;
+  return {
+    hasMasks: () => [...(index?.keys() ?? [])].some(name => name.startsWith('masks/')),
+    hasEntry: (name: string) => index?.has(name) ?? false,
+    async read(name: string): Promise<File | null> {
+      if (!archive || !index) return null;
+      // Preserve the entire nested name; basename fallbacks can select another camera.
+      const entry = index.get(name) ?? index.get(`images/${name}`);
+      const result = entry ? await entry.extract() : null;
+      // Keep the owning reader alive across the asynchronous extraction.
+      void archive;
+      return result;
+    },
+  };
+}
+
 /**
  * Check if there's an active ZIP archive.
  */

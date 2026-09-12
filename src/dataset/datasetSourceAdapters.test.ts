@@ -21,6 +21,7 @@ vi.mock('../utils/zipImageFiles', () => ({
   getZipMaskCached: vi.fn(),
   fetchZipImage: vi.fn(),
   fetchZipMask: vi.fn(),
+  hasZipMasks: vi.fn(),
   isZipLoadingAvailable: vi.fn(),
 }));
 
@@ -42,6 +43,7 @@ import {
   getZipMaskCached,
   fetchZipImage,
   fetchZipMask,
+  hasZipMasks,
   isZipLoadingAvailable,
 } from '../utils/zipImageFiles';
 import { getDatasetSourceAdapter } from './datasetSourceAdapters';
@@ -168,6 +170,7 @@ describe('dataset source adapters', () => {
     const adapter = getDatasetSourceAdapter('zip')!;
 
     vi.mocked(isZipLoadingAvailable).mockReturnValue(true);
+    vi.mocked(hasZipMasks).mockReturnValue(true);
     vi.mocked(getZipImageCached).mockImplementation((name: string) => name === 'cached.jpg' ? cached : undefined);
     vi.mocked(getZipMaskCached).mockImplementation((name: string) => name === 'image.jpg' ? new File(['cached-mask'], 'mask.png') : undefined);
     vi.mocked(fetchZipImage).mockResolvedValue(fetched);
@@ -184,6 +187,8 @@ describe('dataset source adapters', () => {
     expect(adapter.getMaskSync(state, 'image.jpg')).toBeInstanceOf(File);
     expect(adapter.hasImages(state)).toBe(true);
     expect(adapter.hasMasks(state)).toBe(true);
+    vi.mocked(hasZipMasks).mockReturnValue(false);
+    expect(adapter.hasMasks(state)).toBe(false);
 
     await adapter.prefetchImages(state, ['cached.jpg', 'first.jpg', 'second.jpg'], 2);
     expect(fetchZipImage).toHaveBeenCalledWith('first.jpg');

@@ -1,0 +1,58 @@
+{
+  "health": {"api_version":"1.0","instance_id":"instance_01","ready":true,"busy":false,"backend_available":true,"authentication":{"mode":"bearer","token_required":true}},
+  "local_health": {"api_version":"1.0","instance_id":"instance_local","ready":true,"busy":false,"backend_available":true,"authentication":{"mode":"local","token_required":false}},
+  "config": {
+    "api_version":"1.0",
+    "backend":{"backend_id":"fixture","version":"1","display_name":"Fixture trainer","available":true,"unavailable_reason":null,"input_formats":["colmap"],"mask_modes":["none","directory"],"mask_sources":["none","directory"],"mask_loss_modes":["none","foreground"],"preview_formats":["ply"],"artifact_formats":["ply"],"progress_units":["image_exposures"]},
+    "recipe_id":"recipe_01",
+    "input_requirements":{"mask_source":"directory","missing_mask_policy":"error"},
+    "recipe_summary":{"mask_mode":"foreground","target_image_exposures":30000,"target_optimizer_steps":7500,"preview_every_s":0.3333333333333333,"preview_max_splats":100000},
+    "editable_settings":{"schema_version":1,"fields":[
+      {"key":"target_image_exposures","label":"Image exposures","description":"Total training-image exposure budget.","group":"training","value_type":"integer","default":30000,"nullable":true,"null_label":"Use the configured optimizer-step budget","minimum":1,"maximum":10000000,"step":1000,"advanced":false,"enabled_when":null},
+      {"key":"batch_size","label":"Batch size","description":"Images consumed by one optimizer step.","group":"performance","value_type":"integer","default":4,"nullable":false,"minimum":1,"maximum":64,"step":1,"advanced":false,"enabled_when":null},
+      {"key":"mask_source","label":"Mask source","description":"Source of foreground masks.","group":"masks","value_type":"enum","default":"directory","choices":[{"value":"auto","label":"Automatic"},{"value":"directory","label":"Directory masks"},{"value":"alpha","label":"Image alpha"}]}
+    ]},
+    "limits":{"max_queued_jobs":32,"max_files":100000,"max_dataset_bytes":53687091200,"max_file_bytes":5368709120,"max_preview_responses":8,"max_preview_bytes":134217728}
+  },
+  "resolve_recipe":{"base_recipe_id":"recipe_01","settings_schema_version":1,"settings":{"batch_size":3}},
+  "resolved_recipe":{"base_recipe_id":"recipe_01","recipe_id":"recipe_02","settings_schema_version":1,"settings":{"batch_size":3},"effective_settings":{"batch_size":3,"target_image_exposures":30000},"recipe_summary":{"mask_mode":"foreground","target_image_exposures":30000,"target_optimizer_steps":10000},"input_requirements":{"mask_source":"directory","missing_mask_policy":"error"}},
+  "recipe_selection":{"base_recipe_id":"recipe_01","expected_recipe_id":"recipe_02","settings_schema_version":1,"settings":{"batch_size":3}},
+  "create_dataset": {
+    "client_snapshot_id":"snapshot_01","coordinate_space":"colmap","source_label":"Two cameras",
+    "files":[
+      {"path":"sparse/0/cameras.bin","role":"model","expected_bytes":120},
+      {"path":"sparse/0/images.bin","role":"model","expected_bytes":320},
+      {"path":"sparse/0/points3D.bin","role":"model","expected_bytes":200},
+      {"path":"images/left/frame.png","role":"image","image_name":"left/frame.png","expected_bytes":null},
+      {"path":"masks/left/frame.png","role":"mask","image_name":"left/frame.png","expected_bytes":null}
+    ]
+  },
+  "dataset": {
+    "dataset_id":"ds_01","client_snapshot_id":"snapshot_01","coordinate_space":"colmap","source_label":"Two cameras","state":"uploading",
+    "recipe_id":"recipe_01","base_recipe_id":"recipe_01","settings_schema_version":1,"recipe_summary":{"mask_mode":"foreground"},"settings":{},"effective_settings":{"batch_size":4,"target_image_exposures":30000},"input_requirements":{"mask_source":"directory","missing_mask_policy":"error"},
+    "files":[
+      {"file_id":"file_01","path":"sparse/0/cameras.bin","role":"model","image_name":null,"expected_bytes":120,"receipt":{"file_id":"file_01","bytes":120,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+      {"file_id":"file_02","path":"sparse/0/images.bin","role":"model","image_name":null,"expected_bytes":320,"receipt":null},
+      {"file_id":"file_03","path":"sparse/0/points3D.bin","role":"model","image_name":null,"expected_bytes":200,"receipt":null},
+      {"file_id":"file_04","path":"images/left/frame.png","role":"image","image_name":"left/frame.png","expected_bytes":null,"receipt":null},
+      {"file_id":"file_05","path":"masks/left/frame.png","role":"mask","image_name":"left/frame.png","expected_bytes":null,"receipt":null}
+    ],
+    "file_ids":{"sparse/0/cameras.bin":"file_01","sparse/0/images.bin":"file_02","sparse/0/points3D.bin":"file_03","images/left/frame.png":"file_04","masks/left/frame.png":"file_05"},
+    "limits":{"max_file_bytes":5368709120},"errors":[],"errors_truncated":false,"total_errors":0
+  },
+  "create_job":{"dataset_id":"ds_01","client_label":"Browser A"},
+  "job": {
+    "job_id":"job_01","dataset_id":"ds_01","client_snapshot_id":"snapshot_01","source_label":"Two cameras","client_label":"Browser A",
+    "backend_id":"fixture","backend_version":"1","recipe_id":"recipe_01","recipe_summary":{"mask_mode":"foreground"},
+    "base_recipe_id":"recipe_01","settings_schema_version":1,"settings":{},"effective_settings":{"batch_size":4,"target_image_exposures":30000},"input_requirements":{"mask_source":"directory","missing_mask_policy":"error"},
+    "state":"queued","phase":null,"created_at":"2026-09-05T12:00:00Z","started_at":null,"finished_at":null,
+    "enqueue_sequence":1,"queue_position":1,"jobs_ahead":0,"progress":null,"error":null,"artifacts":[]
+  },
+  "progress":{"optimizer_step":500,"image_exposures":2000,"target_optimizer_steps":7500,"target_image_exposures":30000,"total_splats":200000,"shown_splats":100000,"metrics":{"loss":0.12},"metrics_step":500},
+  "artifact":{"artifact_id":"final","url":"/api/v1/jobs/job_01/artifacts/final","format":"ply","content_type":"application/octet-stream","bytes":25000000,"sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","coordinate_space":"colmap"},
+  "queue":{"revision":0,"active_job":null,"waiting":[],"capacity":32,"blocked_reason":null},
+  "jobs":{"items":[],"next_cursor":null},
+  "logs":{"text":"Preparing dataset\n","next_cursor":"0:18","truncated":false},
+  "problem":{"type":"urn:colmap-train-api:problem:dataset-not-ready","title":"Dataset is not ready","status":409,"detail":"Wait for validation to finish before starting training.","instance":"/api/v1/datasets/ds_01","code":"dataset_not_ready","request_id":"req_01","errors":[{"field":"dataset_id","code":"validation_pending","detail":null}],"errors_truncated":false,"total_errors":1},
+  "preview_headers":{"ETag":"\"job_01:1\"","X-Preview-Step":"500","X-Preview-Exposures":"2000","X-Preview-Captured-At":"2026-09-05T12:00:03Z","Cache-Control":"private, no-cache","Content-Type":"application/octet-stream"}
+}

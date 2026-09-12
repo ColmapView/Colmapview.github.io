@@ -15,6 +15,7 @@ export const STORAGE_KEYS = {
   rig: 'colmap-viewer-rig',
   guide: 'colmap-viewer-guide',
   profiles: 'colmap-viewer-profiles',
+  training: 'colmap-viewer-training',
   lastSeenVersion: 'colmap-viewer-last-seen-version',
 } as const;
 

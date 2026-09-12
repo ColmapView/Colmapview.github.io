@@ -28,7 +28,7 @@ export type { SliderRowProps } from './controlRows/SliderRow';
 const styles = controlPanelStyles;
 
 // Panel type for control buttons
-export type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'share' | 'export' | 'transform' | 'align' | 'gallery' | 'rig' | 'settings' | null;
+export type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'share' | 'export' | 'transform' | 'align' | 'gallery' | 'rig' | 'settings' | 'training' | null;
 
 export interface PanelWrapperProps {
   id?: string;
@@ -60,7 +60,11 @@ export const PanelWrapper = memo(function PanelWrapper({ id, title, children }: 
         }
 
         lastHeightRef.current = height;
-        setAdjustedTop(getControlPanelAdjustedTop(rect, window.innerHeight));
+        // Measure from the toolbar anchor, not the previous correction, so
+        // changing panel content cannot undo its viewport clearance.
+        setAdjustedTop(previous => getControlPanelAdjustedTop(
+          { bottom: rect.bottom - (previous ?? 0) }, window.innerHeight,
+        ));
       });
     };
 

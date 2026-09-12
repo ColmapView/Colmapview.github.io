@@ -35,6 +35,7 @@ import {
   getZipImageCached,
   getZipMaskCacheStats,
   getZipMaskCached,
+  hasZipMasks,
   isZipLoadingAvailable,
   removeZipMaskCacheEntries,
 } from './zipImageFiles';
@@ -63,6 +64,19 @@ describe('zip image files', () => {
 
     vi.mocked(hasActiveZipArchive).mockReturnValue(true);
     expect(isZipLoadingAvailable()).toBe(true);
+  });
+
+  it('reports masks only when the archive index contains a mask path', () => {
+    vi.mocked(getActiveZipImageIndex).mockReturnValue(new Map([
+      ['images/photo.jpg', buildArchiveEntry({ name: 'photo.jpg' })],
+    ]));
+    expect(hasZipMasks()).toBe(false);
+
+    vi.mocked(getActiveZipImageIndex).mockReturnValue(new Map([
+      ['images/photo.jpg', buildArchiveEntry({ name: 'photo.jpg' })],
+      ['masks/photo.jpg.png', buildArchiveEntry({ name: 'photo.jpg.png' })],
+    ]));
+    expect(hasZipMasks()).toBe(true);
   });
 
   it('dedupes concurrent image extraction and caches the compressed file', async () => {

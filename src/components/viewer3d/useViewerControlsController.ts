@@ -285,7 +285,7 @@ export function useViewerControlsController(): ViewerControlsController {
   return {
     className: getViewerControlsContainerClassName({
       baseClassName: styles.container,
-      autoHideButtons,
+      autoHideButtons: autoHideButtons && panelState.activePanel === null,
       touchMode,
     }),
     viewPanel: {

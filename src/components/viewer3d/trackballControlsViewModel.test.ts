@@ -24,6 +24,7 @@ import {
   getWheelAdjustedValue,
   hasPointerDelta,
   isDoubleTap,
+  isKeyboardInteractiveTarget,
   getViewDirectionVectors,
   getWheelIntent,
   isMovementKey,
@@ -52,8 +53,11 @@ describe('trackball controls view-model helpers', () => {
     expect(easeOutCubic(0.5)).toBeCloseTo(0.875);
   });
 
-  it('captures movement keys only outside text entry and shortcut chords', () => {
+  it('captures movement keys only outside interactive controls and shortcut chords', () => {
     const input = document.createElement('input');
+    const button = document.createElement('button');
+    const buttonLabel = document.createElement('span');
+    button.append(buttonLabel);
     const contentEditable = document.createElement('div');
     contentEditable.contentEditable = 'true';
 
@@ -61,9 +65,11 @@ describe('trackball controls view-model helpers', () => {
     expect(isMovementKey('Escape')).toBe(false);
     expect(isTextEntryTarget(input)).toBe(true);
     expect(isTextEntryTarget(contentEditable)).toBe(true);
+    expect(isKeyboardInteractiveTarget(buttonLabel)).toBe(true);
     expect(shouldCaptureMovementKey({ key: 'w', ctrlKey: false, metaKey: false, target: document.body })).toBe(true);
     expect(shouldCaptureMovementKey({ key: 'w', ctrlKey: true, metaKey: false, target: document.body })).toBe(false);
     expect(shouldCaptureMovementKey({ key: 'w', ctrlKey: false, metaKey: false, target: input })).toBe(false);
+    expect(shouldCaptureMovementKey({ key: ' ', ctrlKey: false, metaKey: false, target: button })).toBe(false);
   });
 
   it('builds keyboard acceleration from pressed movement keys', () => {

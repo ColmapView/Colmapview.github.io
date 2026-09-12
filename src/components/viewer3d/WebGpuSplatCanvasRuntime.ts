@@ -15,18 +15,25 @@ export interface WebGpuSplatCanvasHost {
 }
 
 let activeHost: WebGpuSplatCanvasHost | null = null;
+let activeFrame: WebGpuSplatFrameSnapshot | null = null;
 
 export function registerWebGpuSplatCanvasHost(host: WebGpuSplatCanvasHost): () => void {
   activeHost = host;
   return () => {
     if (activeHost === host) {
       activeHost = null;
+      activeFrame = null;
     }
   };
 }
 
 export function syncWebGpuSplatFrameSnapshot(snapshot: WebGpuSplatFrameSnapshot): void {
+  activeFrame = snapshot;
   activeHost?.setFrameSnapshot(snapshot);
+}
+
+export function getActiveWebGpuSplatFrameSnapshot(): WebGpuSplatFrameSnapshot | null {
+  return activeFrame;
 }
 
 export function getActiveWebGpuSplatCanvasHost(): WebGpuSplatCanvasHost | null {

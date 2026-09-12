@@ -129,6 +129,15 @@ describe('useModalDrag', () => {
       expect(result.current.position.y).toBe(984);
     });
 
+    it('keeps an explicit bottom inset clear while clamping', () => {
+      expect(getEstimatedModalPosition({
+        estimatedWidth: 200,
+        estimatedHeight: 80,
+        initialPosition: { x: 500, y: 1060 },
+        viewportBottomInset: 44,
+      })).toEqual({ x: 512, y: 940 });
+    });
+
     it('clamps to top-left when cursor is near origin', () => {
       const { result, rerender } = renderHook(
         ({ isOpen, initialPosition }) =>
@@ -146,6 +155,25 @@ describe('useModalDrag', () => {
   });
 
   describe('returned refs and handlers', () => {
+    it('keeps an opted-in tool window within the viewport while dragging and after resize', () => {
+      const { result } = renderHook(() => useModalDrag({
+        estimatedWidth: 400, estimatedHeight: 300, isOpen: true, constrainToViewport: true,
+      }));
+      const { element } = createCapturedPointerElement();
+      act(() => result.current.handleDragStart({ clientX: 100, clientY: 100, currentTarget: element,
+        pointerId: 1, preventDefault: vi.fn() }));
+      act(() => element.dispatchEvent(buildPointerEvent({ clientX: 5000, clientY: 5000 })));
+      expect(result.current.position).toEqual({ x: 1504, y: 764 });
+      act(() => {
+        window.innerWidth = 500;
+        window.innerHeight = 400;
+        window.dispatchEvent(new Event('resize'));
+      });
+      expect(result.current.position).toEqual({ x: 84, y: 84 });
+      act(() => element.dispatchEvent(buildPointerEvent({ clientX: -5000, clientY: -5000 })));
+      expect(result.current.position).toEqual({ x: 16, y: 16 });
+    });
+
     it('returns panelRef, handleDragStart, and centerModal', () => {
       const { result } = renderHook(() =>
         useModalDrag({ estimatedWidth: 200, estimatedHeight: 100, isOpen: true }),

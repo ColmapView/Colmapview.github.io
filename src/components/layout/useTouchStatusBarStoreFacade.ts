@@ -1,5 +1,7 @@
 import { useReconstructionStore } from '../../store/reconstructionStore';
 import { useUIStore } from '../../store/stores/uiStore';
+import { useTrainingStore } from '../../store/stores/trainingStore';
+import { formatTrainingStatus } from '../training/trainingUiPolicy';
 
 export interface TouchStatusBarStoreFacade {
   fps: ReturnType<typeof useUIStore.getState>['fps'];
@@ -15,6 +17,8 @@ export interface TouchStatusBarStoreFacade {
    * whitelist — so a reload never reopens the panel.
    */
   setShowHotkeyHelp: ReturnType<typeof useUIStore.getState>['setShowHotkeyHelp'];
+  trainingStatus: string | null;
+  setTrainingDockOpen: ReturnType<typeof useTrainingStore.getState>['setDockOpen'];
 }
 
 export function useTouchStatusBarStoreFacade(): TouchStatusBarStoreFacade {
@@ -26,6 +30,8 @@ export function useTouchStatusBarStoreFacade(): TouchStatusBarStoreFacade {
   const setShowHotkeyHelp = useUIStore((s) => s.setShowHotkeyHelp);
   const urlLoading = useReconstructionStore((s) => s.urlLoading);
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
+  const trainingStatus = useTrainingStore((s) => formatTrainingStatus(s.currentJob, s.phase));
+  const setTrainingDockOpen = useTrainingStore((s) => s.setDockOpen);
 
   return {
     fps,
@@ -36,5 +42,7 @@ export function useTouchStatusBarStoreFacade(): TouchStatusBarStoreFacade {
     urlLoading,
     reconstruction,
     setShowHotkeyHelp,
+    trainingStatus,
+    setTrainingDockOpen,
   };
 }

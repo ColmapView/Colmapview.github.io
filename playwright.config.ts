@@ -76,7 +76,7 @@ export default defineConfig({
     },
     {
       name: 'chromium-webgpu-hardware',
-      testMatch: webGpuHardwareSpec,
+      testMatch: [webGpuHardwareSpec, /training\.startup\.spec\.ts/],
       use: {
         ...devices['Desktop Chrome'],
         ...webGpuHardwareUse,

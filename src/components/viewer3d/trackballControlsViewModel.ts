@@ -277,9 +277,16 @@ export function isTextEntryTarget(target: EventTarget | null): boolean {
   );
 }
 
+export function isKeyboardInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return isTextEntryTarget(target) || Boolean(target.closest(
+    'button, a[href], select, option, summary, [role="button"], [role="link"], [role="checkbox"], [role="radio"], [role="switch"]'
+  ));
+}
+
 export function shouldCaptureMovementKey(event: KeyboardCaptureEvent): boolean {
   if (event.ctrlKey || event.metaKey) return false;
-  return isMovementKey(event.key) && !isTextEntryTarget(event.target);
+  return isMovementKey(event.key) && !isKeyboardInteractiveTarget(event.target);
 }
 
 export function getKeyboardMoveSpeed(

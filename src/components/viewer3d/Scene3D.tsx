@@ -68,6 +68,9 @@ import {
   useSceneContainerStoreFacade,
   useSceneContentStoreFacade,
 } from './useScene3DStoreFacade';
+import { TRAINING_PREVIEW_FILE } from '../../training/previewController';
+import { TrainingSparkPreview, TrainingWebGpuPreview } from './TrainingPreview';
+import { useTrainingPreviewVisible } from '../../training/useTrainingPreviewStoreFacade';
 
 const loadSplatLayer = () => import('./PointCloud/SplatLayer').then((module) => ({ default: module.SplatLayer }));
 
@@ -139,6 +142,11 @@ function SceneContent() {
       setSparkPreloadFailed,
     },
   } = useSceneContentStoreFacade();
+  const trainingPreview = useTrainingPreviewVisible();
+  // A preview is transport state, not a reconstruction/source-catalog load.
+  // It still runs through both existing splat renderers under the shared COLMAP
+  // coordinate root, preserving camera overlays and orbit state.
+  const displaySplatFile = trainingPreview ? TRAINING_PREVIEW_FILE : splatFile;
   // Use shared alignment mode (includes point picking AND floor detection)
   const isAlignmentMode = useIsAlignmentMode();
 
@@ -153,9 +161,9 @@ function SceneContent() {
   const webGpuSplatCanvasMounted = shouldMountWebGpuSplatCanvas(
     requestedSplatBackend,
     splatBackendAvailability,
-    splatFile
+    displaySplatFile
   );
-  const sparkSplatLayerNeeded = splatFile
+  const sparkSplatLayerNeeded = displaySplatFile
     && shouldPreloadSparkSplatRuntime(requestedSplatBackend, splatBackendAvailability);
 
   // Compute transforms for visual preview. The active transform wraps COLMAP
@@ -212,11 +220,11 @@ function SceneContent() {
 
   const webGpuSplatBackendVisible = shouldRenderWebGpuSplatCanvas(
     splatBackendResolution,
-    splatFile,
-    splatsVisible
+    displaySplatFile,
+    trainingPreview || splatsVisible
   );
   const webGpuSplatCanvasVisible = webGpuSplatBackendVisible && visibleLayers.points;
-  const webGpuSplatCanvasLoading = isSplatLoadingProgressForFile(urlProgress, splatFile);
+  const webGpuSplatCanvasLoading = isSplatLoadingProgressForFile(urlProgress, displaySplatFile);
   const webGpuSplatCanvasBridgeEnabled = shouldSyncWebGpuSplatCanvasFrame(
     webGpuSplatCanvasMounted,
     webGpuSplatCanvasVisible,
@@ -227,9 +235,11 @@ function SceneContent() {
   const transformableContent = (
     <>
       {visibleLayers.points && <PointCloud />}
-      {sparkSplatLayerNeeded && (
+      {trainingPreview && !webGpuSplatCanvasMounted && sparkSplatLayerNeeded &&
+        <TrainingSparkPreview visible={visibleLayers.points} />}
+      {!trainingPreview && sparkSplatLayerNeeded && (
         <Suspense fallback={null}>
-          <LazySplatLayer modelMatrix={splatTransformMatrix} visible={visibleLayers.points} />
+          <LazySplatLayer modelMatrix={splatTransformMatrix} visible={visibleLayers.points} splatFile={displaySplatFile} />
         </Suspense>
       )}
       {visibleLayers.cameras && <CameraFrustums />}
@@ -258,10 +268,10 @@ function SceneContent() {
         splatBackendAvailability={splatBackendAvailability}
         setSparkBackendAvailable={setSparkBackendAvailable}
         setSparkPreloadFailed={setSparkPreloadFailed}
-        splatFile={splatFile}
+        splatFile={displaySplatFile}
       />
-      <WebGpuSplatCanvasBridge enabled={webGpuSplatCanvasBridgeEnabled} modelMatrix={webGpuSplatModelMatrix} />
-      <group matrixAutoUpdate={false} matrix={transformGroupMatrix}>
+      <WebGpuSplatCanvasBridge enabled={webGpuSplatCanvasBridgeEnabled} modelMatrix={trainingPreview ? transformMatrix : webGpuSplatModelMatrix} />
+      <group name="colmap-coordinate-root" matrixAutoUpdate={false} matrix={transformGroupMatrix}>
         {transformableContent}
       </group>
 
@@ -346,6 +356,8 @@ export function Scene3D() {
       setUrlProgress,
     },
   } = useSceneContainerStoreFacade();
+  const trainingPreview = useTrainingPreviewVisible();
+  const displaySplatFile = trainingPreview ? TRAINING_PREVIEW_FILE : splatFile;
   const sceneContextMenu = useSceneContextMenuController();
 
   const idleRef = useIdleTimer();
@@ -356,14 +368,14 @@ export function Scene3D() {
   const webGpuSplatCanvasMounted = shouldMountWebGpuSplatCanvas(
     requestedSplatBackend,
     splatBackendAvailability,
-    splatFile
+    displaySplatFile
   );
   const webGpuSplatCanvasVisible = shouldRenderWebGpuSplatCanvas(
     splatBackendResolution,
-    splatFile,
-    splatsVisible
+    displaySplatFile,
+    trainingPreview || splatsVisible
   ) && pointsLayerVisible;
-  const sparkPreloadPending = Boolean(splatFile)
+  const sparkPreloadPending = Boolean(displaySplatFile)
     && isSparkSplatRuntimePreloadPending(requestedSplatBackend, splatBackendAvailability);
   // The DropZone load overlay renders urlProgress.message verbatim, so while
   // it shows this exact phase the toast would be the same sentence twice on
@@ -406,7 +418,7 @@ export function Scene3D() {
     if (shouldClearUnavailableForcedWebGpuSplatLoading(
       requestedSplatBackend,
       splatBackendResolution,
-      splatFile,
+      displaySplatFile,
       webGpuSplatCanvasMounted,
       getUrlProgress()
     )) {
@@ -419,7 +431,7 @@ export function Scene3D() {
     setUrlLoading,
     setUrlProgress,
     splatBackendResolution,
-    splatFile,
+    displaySplatFile,
     webGpuSplatCanvasMounted,
   ]);
 
@@ -438,10 +450,15 @@ export function Scene3D() {
       onMouseDown={sceneContextMenu.touchMode ? undefined : sceneContextMenu.handleMouseDown}
       onMouseUp={sceneContextMenu.touchMode ? undefined : sceneContextMenu.handleMouseUp}
     >
-      <WebGpuSplatCanvasLayer
+      {trainingPreview && webGpuSplatCanvasMounted && <TrainingWebGpuPreview
+        visible={webGpuSplatCanvasVisible}
+        onReady={handleWebGpuSplatRuntimeReady}
+        onFailed={handleWebGpuSplatRuntimeFailed}
+      />}
+      {!trainingPreview && <WebGpuSplatCanvasLayer
         mounted={webGpuSplatCanvasMounted}
         visible={webGpuSplatCanvasVisible}
-        splatFile={splatFile}
+        splatFile={displaySplatFile}
         addNotification={addNotification}
         removeNotification={removeNotification}
         getUrlProgress={getUrlProgress}
@@ -452,7 +469,7 @@ export function Scene3D() {
         onMetricRuntimeReady={handleWebGpuSplatMetricRuntimeReady}
         onRuntimeFailed={handleWebGpuSplatRuntimeFailed}
         onAdapterUnavailable={handleWebGpuSplatAdapterUnavailable}
-      />
+      />}
       <Scene3DErrorBoundary backgroundColor={backgroundColor}>
         {/* Inside the boundary on purpose. The two settle paths that run while
             a splat is being prepared — SplatRuntimePreloader and SplatLayer —
@@ -468,7 +485,7 @@ export function Scene3D() {
           removeNotification={removeNotification}
           requestedBackend={requestedSplatBackend}
           splatBackendResolution={splatBackendResolution}
-          splatFile={splatFile}
+          splatFile={displaySplatFile}
           webGpuSplatCanvasMounted={webGpuSplatCanvasMounted}
           sparkPreloadPending={sparkPreloadPending}
           preparingProgressVisible={preparingProgressVisible}

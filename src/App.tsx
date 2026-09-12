@@ -23,6 +23,7 @@ import { detectTouchDevice } from './hooks/useIsTouchDevice';
 import { TOUCH_BREAKPOINTS } from './theme/sizing';
 import { appLogger } from './utils/logger';
 import { runGuardedUrlLoad } from './appUrlLoadGuard';
+import { TrainingSessionHost } from './training';
 import {
   APP_EMBED_MODE_LOG_MESSAGE,
   APP_SHARED_CONFIG_LOG_MESSAGE,
@@ -128,7 +129,7 @@ function App() {
     <ErrorBoundary>
       <HotkeysProvider initiallyActiveScopes={['global', 'viewer']}>
         <DropZone>
-          <AppLayout />
+          <TrainingSessionHost><AppLayout /></TrainingSessionHost>
         </DropZone>
         <HotkeyHelpModal />
         <SplatPickerModal />

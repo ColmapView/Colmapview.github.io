@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { useReconstructionStore } from '../../store/reconstructionStore';
 import { useImageMetricsStore } from '../../store/stores/imageMetricsStore';
 import { useUIStore } from '../../store/stores/uiStore';
+import { useTrainingStore } from '../../store/stores/trainingStore';
 import { buildFile, buildLoadedFiles, buildReconstruction } from '../../test/builders/colmapBuilders';
 import { useStatusBarStoreFacade } from './useStatusBarStoreFacade';
 
@@ -11,6 +12,7 @@ describe('useStatusBarStoreFacade', () => {
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
     useImageMetricsStore.setState(useImageMetricsStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
+    useTrainingStore.setState(useTrainingStore.getInitialState(), true);
   });
 
   it('collects status bar dependencies from owning stores', () => {
@@ -44,6 +46,7 @@ describe('useStatusBarStoreFacade', () => {
       splatPsnrMetrics: splatPsnrByImage,
     });
     useUIStore.setState({ fps: 61 });
+    useTrainingStore.setState({ phase: 'preparing' });
 
     const { result } = renderHook(() => useStatusBarStoreFacade());
 
@@ -59,6 +62,8 @@ describe('useStatusBarStoreFacade', () => {
       isIdle: false,
       showAutoHideEditor: false,
       setShowHotkeyHelp: useUIStore.getState().setShowHotkeyHelp,
+      trainingStatus: 'Training · Preparing',
+      setTrainingDockOpen: useTrainingStore.getState().setDockOpen,
     });
   });
 });

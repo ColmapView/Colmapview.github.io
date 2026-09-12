@@ -76,6 +76,22 @@ export function getPlyHeaderVertexCount(text: string): number | null {
   }
 }
 
+/** Bound declared Gaussian topology against available bytes before GPU allocation. */
+export async function validateGaussianPlyFile(file: File): Promise<void> {
+  const header = parsePlyHeader(await readPlyHeaderText(file));
+  const vertex = getVertexElement(header);
+  if (classifyPlyHeader(header) !== 'gaussian-splat' || !Number.isSafeInteger(vertex.count)) {
+    throw new Error('The PLY does not declare a valid Gaussian cloud.');
+  }
+  const layout = getFixedScalarRowLayout(vertex);
+  const minimumBytes = header.format === 'ascii'
+    ? header.headerByteLength + vertex.count * vertex.properties.length
+    : getElementDataOffset(header, 'vertex') + vertex.count * layout.byteLength;
+  if (!Number.isSafeInteger(minimumBytes) || minimumBytes > file.size) {
+    throw new Error('The Gaussian PLY is truncated or its declared row count exceeds its bytes.');
+  }
+}
+
 export async function parsePointCloudPlyFile(file: File): Promise<Map<bigint, Point3D>> {
   return parsePointCloudPlyBuffer(await readBlobAsArrayBuffer(file));
 }

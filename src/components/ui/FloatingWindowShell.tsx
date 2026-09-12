@@ -3,6 +3,7 @@ import {
   useId,
   useRef,
   type CSSProperties,
+  type KeyboardEventHandler,
   type MouseEventHandler,
   type PointerEventHandler,
   type ReactNode,
@@ -69,10 +70,12 @@ interface FloatingWindowShellProps {
   panelClassName?: string;
   panelStyle?: CSSProperties;
   panelTestId?: string;
+  panelId?: string;
   headerClassName?: string;
   headerStyle?: CSSProperties;
   closeTitle?: string;
   onPanelPointerDown?: PointerEventHandler<HTMLDivElement>;
+  onPanelKeyDown?: KeyboardEventHandler<HTMLDivElement>;
   onHeaderPointerDown?: PointerEventHandler<HTMLDivElement>;
   onPanelMouseDown?: MouseEventHandler<HTMLDivElement>;
   onHeaderMouseDown?: MouseEventHandler<HTMLDivElement>;
@@ -96,10 +99,12 @@ export function FloatingWindowShell({
   panelClassName = modalStyles.toolPanel,
   panelStyle,
   panelTestId,
+  panelId,
   headerClassName = modalStyles.toolHeader,
   headerStyle,
   closeTitle = 'Close',
   onPanelPointerDown,
+  onPanelKeyDown,
   onHeaderPointerDown,
   onPanelMouseDown,
   onHeaderMouseDown,
@@ -136,6 +141,7 @@ export function FloatingWindowShell({
       )}
       <div
         ref={setPanelRef}
+        id={panelId}
         role="dialog"
         aria-labelledby={titleId}
         tabIndex={-1}
@@ -144,6 +150,7 @@ export function FloatingWindowShell({
         className={panelClassName}
         style={withCompactWidthVar(panelStyle, panelClassName)}
         onPointerDown={onPanelPointerDown}
+        onKeyDown={onPanelKeyDown}
         onMouseDown={onPanelMouseDown}
         onContextMenu={onPanelContextMenu}
       >

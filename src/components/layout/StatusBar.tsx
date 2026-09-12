@@ -33,6 +33,8 @@ export function StatusBar() {
     isIdle,
     showAutoHideEditor,
     setShowHotkeyHelp,
+    trainingStatus,
+    setTrainingDockOpen,
   } = useStatusBarStoreFacade();
   const hideWithButtons = shouldHideChromeWithButtons({
     autoHideButtons,
@@ -126,6 +128,16 @@ export function StatusBar() {
         {emptyStatusText !== null && <span>{emptyStatusText}</span>}
       </div>
       <div className="flex items-center gap-2 text-ds-secondary">
+        {trainingStatus && <button
+          type="button"
+          onClick={() => setTrainingDockOpen(true)}
+          className={STATUS_BAR_SHORTCUTS_BUTTON_CLASS}
+          title="Open training panel"
+          aria-controls="training-panel"
+          {...getAutoHiddenChromeProps(hideWithButtons)}
+        >
+          {trainingStatus}
+        </button>}
         <button
           type="button"
           onClick={() => setShowHotkeyHelp(true)}

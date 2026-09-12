@@ -11,6 +11,7 @@ import {
 } from '../../../store';
 import type { LoadedFiles, Reconstruction } from '../../../types/colmap';
 import type { WasmReconstructionWrapper } from '../../../wasm/reconstruction';
+import { getSplatSourceTransform } from '../../../utils/splatSourceTransform';
 
 interface ExportPanelLiveReconstruction {
   reconstruction: Reconstruction | null;
@@ -72,7 +73,7 @@ export function useExportPanelStoreFacade(): ExportPanelStoreFacade {
     transform: {
       resetTransform,
       getTransform: () => useTransformStore.getState().transform,
-      getSplatTransform: () => useTransformStore.getState().splatTransform,
+      getSplatTransform: () => getSplatSourceTransform(useTransformStore.getState().splatTransform, useReconstructionStore.getState().loadedFiles),
     },
     deletion: {
       pendingDeletions,

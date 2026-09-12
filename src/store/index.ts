@@ -22,6 +22,7 @@ export { useFloorPlaneStore, type FloorPlaneState, type FloorColorMode, type Flo
 export { useDeletionStore, type DeletionState } from './stores/deletionStore';
 export { useImageMetricsStore, type ImageMetricsState, type SplatPsnrComputeRequest, type SplatPsnrComputeScope, type SplatPsnrMetric } from './stores/imageMetricsStore';
 export { useSplatBackendStore, type SplatBackendState } from './stores/splatBackendStore';
+export { useTrainingStore, type TrainingState } from './stores/trainingStore';
 
 // Types and constants
 export type {

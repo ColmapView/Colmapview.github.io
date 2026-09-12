@@ -40,6 +40,11 @@ export function isZipLoadingAvailable(): boolean {
   return hasActiveZipArchive();
 }
 
+/** Whether the active archive index contains at least one directory mask. */
+export function hasZipMasks(): boolean {
+  return [...(getActiveZipImageIndex()?.keys() ?? [])].some((name) => name.toLowerCase().startsWith('masks/'));
+}
+
 /**
  * Extract an image from ZIP and cache it.
  * Returns the cached File if already extracted, otherwise extracts and caches.

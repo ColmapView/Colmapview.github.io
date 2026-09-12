@@ -22,6 +22,7 @@ vi.mock('../utils/zipImageFiles', () => ({
   getZipMaskCached: vi.fn(),
   fetchZipImage: vi.fn(),
   fetchZipMask: vi.fn(),
+  hasZipMasks: vi.fn(),
   isZipLoadingAvailable: vi.fn(),
 }));
 

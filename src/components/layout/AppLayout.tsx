@@ -168,6 +168,7 @@ export function AppLayout() {
           />
         )}
 
+
         <ImageDetailModal />
       </div>
     );

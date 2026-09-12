@@ -33,6 +33,8 @@ export function TouchStatusBar() {
     urlLoading,
     reconstruction,
     setShowHotkeyHelp,
+    trainingStatus,
+    setTrainingDockOpen,
   } = useTouchStatusBarStoreFacade();
   const emptyStatusText = getTouchEmptyStatusText({
     hasReconstruction: Boolean(reconstruction),
@@ -51,6 +53,15 @@ export function TouchStatusBar() {
           {emptyStatusText}
         </span>
       )}
+      {trainingStatus && <button
+        type="button"
+        onClick={() => setTrainingDockOpen(true)}
+        className="min-w-0 truncate px-2"
+        title="Open training panel"
+        aria-controls="training-panel"
+      >
+        {trainingStatus}
+      </button>}
       {/* self-stretch is what gives the button the bar's 43px content box as
           its OWN box: the row is `items-center`, which would otherwise shrink
           the button to one line of text-xs (~16px) and leave the bar's height

@@ -91,6 +91,7 @@ interface FrustumPlaneDebugSummary {
 }
 
 interface ColmapWebViewE2EApi {
+  getTrainingAlignmentState: () => { camera: number[]; root: number[] | null; splats: number[][] };
   clearSelectedImage: () => void;
   getFrustumPlaneDebug: () => FrustumPlaneDebugSummary;
   getImageIds: () => number[];
@@ -490,6 +491,14 @@ export function Scene3DE2EProbe() {
   }, [scene]);
 
   const api = useMemo<ColmapWebViewE2EApi>(() => ({
+    getTrainingAlignmentState: () => {
+      scene.updateMatrixWorld(true);
+      const splats: number[][] = [];
+      scene.traverse((object) => {
+        if (object.name === 'training-splat' || object.name === 'catalog-splat') splats.push(object.matrixWorld.toArray());
+      });
+      return { camera: camera.matrixWorld.toArray(), root: scene.getObjectByName('colmap-coordinate-root')?.matrixWorld.toArray() ?? null, splats };
+    },
     clearSelectedImage,
     getFrustumPlaneDebug,
     getImageIds,
@@ -517,6 +526,8 @@ export function Scene3DE2EProbe() {
       requestAnimationFrame(tick);
     }),
   }), [
+    camera,
+    scene,
     clearSelectedImage,
     getFrustumPlaneDebug,
     getImageIds,

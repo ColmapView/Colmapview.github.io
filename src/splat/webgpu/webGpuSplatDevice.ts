@@ -5,6 +5,11 @@ import {
 } from './webGpuSplatLimits';
 import { trackWebGpuSplatDebugCounter } from './webGpuSplatDebugCounters';
 
+// A canvas can be reused while an earlier asynchronous device request finishes
+// (notably React StrictMode). Only its newest owner may configure/unconfigure it.
+const canvasOwners = new WeakMap<GPUCanvasContext, object>();
+const configuredCanvasOwners = new WeakMap<GPUCanvasContext, object>();
+
 export interface WebGpuSplatGpuProvider {
   requestAdapter: (
     options?: GPURequestAdapterOptions
@@ -131,6 +136,8 @@ export async function initializeWebGpuSplatDevice(
   if (!context) {
     throw new Error('WebGPU canvas context is unavailable');
   }
+  const owner = {};
+  canvasOwners.set(context, owner);
 
   const adapter = options.adapter
     ?? await requestPreferredWebGpuSplatAdapter(
@@ -148,6 +155,10 @@ export async function initializeWebGpuSplatDevice(
     deviceDescriptor,
     options.deviceRequestTimeoutMs
   );
+  if (canvasOwners.get(context) !== owner) {
+    destroyGpuDevice(device);
+    throw new Error('WebGPU canvas initialization was superseded');
+  }
   try {
     assertWebGpuDeviceMeetsSplatRequiredLimits(device, options.requiredLimits);
   } catch (error) {
@@ -164,6 +175,7 @@ export async function initializeWebGpuSplatDevice(
       format,
       alphaMode,
     });
+    configuredCanvasOwners.set(context, owner);
   } catch (error) {
     destroyGpuDevice(device);
     throw error;
@@ -188,7 +200,10 @@ export async function initializeWebGpuSplatDevice(
       if (disposed) return;
       disposed = true;
       try {
-        context.unconfigure();
+        if (configuredCanvasOwners.get(context) === owner) {
+          configuredCanvasOwners.delete(context);
+          context.unconfigure();
+        }
       } finally {
         try {
           destroyGpuDevice(device);

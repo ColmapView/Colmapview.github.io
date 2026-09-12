@@ -25,12 +25,17 @@ interface UseModalDragOptions {
   isOpen: boolean;
   /** Optional cursor position to place the modal near (instead of centering) */
   initialPosition?: { x: number; y: number } | null;
+  /** Keep this window reachable after dragging, content resizing, or viewport changes. */
+  constrainToViewport?: boolean;
+  /** Additional occupied space below the draggable viewport, such as a touch status bar. */
+  viewportBottomInset?: number;
 }
 
 interface InitialModalPositionOptions {
   estimatedWidth: number;
   estimatedHeight: number;
   initialPosition?: { x: number; y: number } | null;
+  viewportBottomInset?: number;
 }
 
 interface ModalDragStartEvent extends CapturedPointerDragStartEvent {
@@ -44,13 +49,14 @@ function clampToViewport(
   y: number,
   width: number,
   height: number,
+  viewportBottomInset = 0,
 ): { x: number; y: number } {
   const vw = typeof window !== 'undefined' ? window.innerWidth : VIEWPORT_FALLBACK.width;
   const vh = typeof window !== 'undefined' ? window.innerHeight : VIEWPORT_FALLBACK.height;
   const padding = MODAL_POSITION.viewportPadding;
   return {
     x: Math.max(padding, Math.min(x, vw - width - padding)),
-    y: Math.max(padding, Math.min(y, vh - height - padding)),
+    y: Math.max(padding, Math.min(y, vh - height - padding - Math.max(0, viewportBottomInset))),
   };
 }
 
@@ -64,6 +70,7 @@ export function getEstimatedModalPosition({
   estimatedWidth,
   estimatedHeight,
   initialPosition,
+  viewportBottomInset = 0,
 }: InitialModalPositionOptions): { x: number; y: number } {
   if (initialPosition) {
     const offset = MODAL_POSITION.cursorOffset;
@@ -72,6 +79,7 @@ export function getEstimatedModalPosition({
       initialPosition.y - offset,
       estimatedWidth,
       estimatedHeight,
+      viewportBottomInset,
     );
   }
 
@@ -87,19 +95,25 @@ function getModalPositionResetKey({
   estimatedWidth,
   estimatedHeight,
   initialPosition,
+  viewportBottomInset = 0,
 }: UseModalDragOptions): string {
   if (!isOpen) return 'closed';
   if (initialPosition) {
-    return `cursor:${estimatedWidth}:${estimatedHeight}:${initialPosition.x}:${initialPosition.y}`;
+    return `cursor:${estimatedWidth}:${estimatedHeight}:${initialPosition.x}:${initialPosition.y}:${viewportBottomInset}`;
   }
-  return `center:${estimatedWidth}:${estimatedHeight}`;
+  return `center:${estimatedWidth}:${estimatedHeight}:${viewportBottomInset}`;
 }
 
-export function useModalDrag({ estimatedWidth, estimatedHeight, isOpen, initialPosition }: UseModalDragOptions) {
-  const initialEstimatedPosition = isOpen
-    ? getEstimatedModalPosition({ estimatedWidth, estimatedHeight, initialPosition })
+export function useModalDrag({ estimatedWidth, estimatedHeight, isOpen, initialPosition, constrainToViewport = false,
+  viewportBottomInset = 0 }: UseModalDragOptions) {
+  const estimate = isOpen
+    ? getEstimatedModalPosition({ estimatedWidth, estimatedHeight, initialPosition, viewportBottomInset })
     : { x: 0, y: 0 };
-  const positionResetKey = getModalPositionResetKey({ estimatedWidth, estimatedHeight, isOpen, initialPosition });
+  const initialEstimatedPosition = isOpen && constrainToViewport
+    ? clampToViewport(estimate.x, estimate.y, estimatedWidth, estimatedHeight, viewportBottomInset) : estimate;
+  const positionResetKey = getModalPositionResetKey({
+    estimatedWidth, estimatedHeight, isOpen, initialPosition, viewportBottomInset,
+  });
   const [position, setPosition] = useResetKeyedState(positionResetKey, initialEstimatedPosition);
   const panelRef = useRef<HTMLDivElement>(null);
   const positionRef = useRef(position);
@@ -110,12 +124,24 @@ export function useModalDrag({ estimatedWidth, estimatedHeight, isOpen, initialP
       const rect = panelRef.current.getBoundingClientRect();
       const viewportW = window.innerWidth;
       const viewportH = window.innerHeight;
-      setPosition({
-        x: (viewportW - rect.width) / 2,
-        y: Math.max(MODAL_POSITION.minTop, (viewportH - rect.height) / 2),
-      });
+      const centered = { x: (viewportW - rect.width) / 2, y: Math.max(MODAL_POSITION.minTop, (viewportH - rect.height) / 2) };
+      setPosition(constrainToViewport
+        ? clampToViewport(centered.x, centered.y, rect.width, rect.height, viewportBottomInset) : centered);
     }
-  }, [setPosition]);
+  }, [constrainToViewport, setPosition, viewportBottomInset]);
+
+  useEffect(() => {
+    if (!isOpen || !constrainToViewport) return;
+    const clampPosition = () => {
+      const rect = panelRef.current?.getBoundingClientRect();
+      setPosition(previous => clampToViewport(previous.x, previous.y,
+        rect?.width || estimatedWidth, rect?.height || estimatedHeight, viewportBottomInset));
+    };
+    window.addEventListener('resize', clampPosition);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(clampPosition);
+    if (panelRef.current) observer?.observe(panelRef.current);
+    return () => { window.removeEventListener('resize', clampPosition); observer?.disconnect(); };
+  }, [constrainToViewport, estimatedHeight, estimatedWidth, isOpen, setPosition, viewportBottomInset]);
 
   // Re-center on the measured DOM size after the estimated centered position renders.
   useEffect(() => {
@@ -132,13 +158,13 @@ export function useModalDrag({ estimatedWidth, estimatedHeight, isOpen, initialP
     const startPosY = positionRef.current.y;
 
     const onMove = (ev: PointerEvent) => {
-      setPosition({
-        x: startPosX + ev.clientX - startX,
-        y: startPosY + ev.clientY - startY,
-      });
+      const moved = { x: startPosX + ev.clientX - startX, y: startPosY + ev.clientY - startY };
+      const rect = panelRef.current?.getBoundingClientRect();
+      setPosition(constrainToViewport ? clampToViewport(moved.x, moved.y,
+        rect?.width || estimatedWidth, rect?.height || estimatedHeight, viewportBottomInset) : moved);
     };
     startCapturedPointerDrag({ event, onMove });
-  }, [setPosition]);
+  }, [constrainToViewport, estimatedHeight, estimatedWidth, setPosition, viewportBottomInset]);
 
   return { position, panelRef, handleDragStart, centerModal };
 }

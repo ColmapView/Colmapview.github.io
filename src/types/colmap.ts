@@ -1,4 +1,5 @@
 import type { RigData } from './rig';
+import type { Sim3dEuler } from './sim3d';
 
 // Type aliases for COLMAP IDs
 // These add semantic meaning and make code more self-documenting
@@ -115,6 +116,9 @@ export interface SplatFileSource {
   size?: number;
   /** Splat count (PLY vertex count) from discovery; absent/null = unknown. */
   splatCount?: number | null;
+  /** Historical COLMAP edits already baked into these source bytes. */
+  transformBaseline?: Sim3dEuler;
+  trainingResult?: { serverUrl: string; jobId: string; artifactId: string; snapshotId: string };
 }
 
 // File structure for loaded data

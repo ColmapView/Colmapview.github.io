@@ -17,6 +17,7 @@ import {
   getZipMaskCached,
   fetchZipImage,
   fetchZipMask,
+  hasZipMasks,
   isZipLoadingAvailable,
 } from '../utils/zipImageFiles';
 
@@ -123,8 +124,7 @@ const zipSourceAdapter: DatasetSourceAdapter = {
     return isZipLoadingAvailable();
   },
   hasMasks() {
-    // ZIP masks are discovered lazily, so we assume they might exist.
-    return isZipLoadingAvailable();
+    return hasZipMasks();
   },
 };
 

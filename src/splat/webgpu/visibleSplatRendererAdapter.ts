@@ -35,12 +35,19 @@ const VISIBLE_SPLAT_OUTPUT_ALGORITHM: NonNullable<SplatRenderSessionOptions['out
 
 export interface VisibleWebGpuSplatCloudOptions {
   sceneId: string;
+  /** This committed cloud's first successful canvas submission, not upload completion. */
+  onFirstFrame?: () => void;
   labelPrefix?: string;
   onUploadProgress?: WebGpuGaussianSceneUploadAsyncOptions['onProgress'];
 }
 
 export interface VisibleWebGpuSplatRendererAdapter {
   loadCloud: (cloud: GaussianCloud, options: VisibleWebGpuSplatCloudOptions) => Promise<void>;
+  /** Upload a replacement without displaying it until its owner commits. */
+  prepareCloud?: (cloud: GaussianCloud, options: VisibleWebGpuSplatCloudOptions) => Promise<{
+    commit: () => void;
+    dispose: () => void;
+  }>;
   setFrameSnapshot: (frame: SplatCameraFrame) => void;
   render: () => void;
   dispose: () => void;
@@ -184,12 +191,17 @@ class DefaultVisibleWebGpuSplatRendererAdapter implements VisibleWebGpuSplatRend
   }
 
   async loadCloud(cloud: GaussianCloud, options: VisibleWebGpuSplatCloudOptions): Promise<void> {
+    const prepared = await this.prepareCloud(cloud, options);
+    prepared.commit();
+  }
+
+  async prepareCloud(cloud: GaussianCloud, options: VisibleWebGpuSplatCloudOptions) {
     this.assertUsable();
 
     const scene = await this.acquireScene(cloud, options);
     if (this.disposed || this.failed) {
       scene.release();
-      return;
+      return { commit() {}, dispose() {} };
     }
 
     this.assertUsable();
@@ -206,10 +218,29 @@ class DefaultVisibleWebGpuSplatRendererAdapter implements VisibleWebGpuSplatRend
         sortAlgorithm: VISIBLE_SPLAT_SORT_ALGORITHM,
       });
 
-      this.replaceSession(session, options.sceneId);
-      if (this.frame) {
-        this.render();
-      }
+      let committed = false;
+      let disposed = false;
+      return {
+        commit: () => {
+          if (disposed || committed) return;
+          if (this.disposed || this.failed) {
+            disposed = true;
+            session.dispose();
+            return;
+          }
+          committed = true;
+          this.replaceSession(session, options.sceneId, options.onFirstFrame);
+          if (this.frame) this.render();
+        },
+        dispose: () => {
+          if (disposed) return;
+          disposed = true;
+          // replaceSession already disposes the previous session. Only release
+          // an uncommitted upload or the still-displayed resource here.
+          if (!committed) session.dispose();
+          else if (this.session === session) this.disposeRendererResources();
+        },
+      };
     } catch (error) {
       scene.release();
       throw error;
@@ -281,7 +312,7 @@ class DefaultVisibleWebGpuSplatRendererAdapter implements VisibleWebGpuSplatRend
     this.fail(getDeviceLostReason(info));
   }
 
-  private replaceSession(session: SplatRenderSession, sceneId: string): void {
+  private replaceSession(session: SplatRenderSession, sceneId: string, onFirstFrame?: () => void): void {
     this.unregisterSharedRuntime?.();
     this.unregisterSharedRuntime = null;
     this.unsubscribeFirstFrame?.();
@@ -294,6 +325,8 @@ class DefaultVisibleWebGpuSplatRendererAdapter implements VisibleWebGpuSplatRend
       sceneResourceManager: this.sceneResourceManager,
     });
     this.unsubscribeFirstFrame = session.onFirstFrame(() => {
+      if (this.disposed || this.failed || this.session !== session) return;
+      onFirstFrame?.();
       this.onFirstFrame?.();
     });
   }
