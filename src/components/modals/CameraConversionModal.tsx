@@ -102,7 +102,7 @@ export const CameraConversionModal = memo(function CameraConversionModal({
     }
   }, [isOpen, conversionPreview, centerModal]);
 
-  const applyConversion = useCallback(() => {
+  const applyConversion = useCallback(async () => {
     if (!reconstruction || effectiveTargetModelId === null) return;
 
     const result = applyCameraModelConversion({
@@ -116,7 +116,7 @@ export const CameraConversionModal = memo(function CameraConversionModal({
       return;
     }
 
-    setReconstruction(result.reconstruction);
+    if (await setReconstruction(result.reconstruction) === false) return;
     addNotification('info', getCameraConversionNotificationMessage({
       convertedCount: result.convertedCount,
       approximateCount: result.approximateCount,

@@ -16,6 +16,7 @@ vi.mock('../utils/urlImageFiles', () => ({
 }));
 
 vi.mock('../utils/zipImageFiles', () => ({
+  getZipImageGeneration: vi.fn(() => 0),
   fetchZipImageRaw: vi.fn(),
   getZipImageCached: vi.fn(),
   getZipMaskCached: vi.fn(),
@@ -107,15 +108,15 @@ describe('dataset source adapters', () => {
     vi.mocked(fetchUrlMask).mockResolvedValue(maskFile);
 
     await expect(manifestAdapter.getImage(state, 'image.jpg')).resolves.toBe(fetchedImage);
-    expect(fetchUrlImage).toHaveBeenCalledWith('https://example.test/images/', 'image.jpg', undefined);
+    expect(fetchUrlImage).toHaveBeenCalledWith('https://example.test/images/', 'image.jpg', undefined, undefined);
     await expect(manifestAdapter.getMetricImage(state, 'image.jpg')).resolves.toBe(rawImage);
-    expect(fetchUrlImageRaw).toHaveBeenCalledWith('https://example.test/images/', 'image.jpg', undefined);
+    expect(fetchUrlImageRaw).toHaveBeenCalledWith('https://example.test/images/', 'image.jpg', undefined, { priority: 'metric' });
     await expect(manifestAdapter.getMask(state, 'image.jpg')).resolves.toBe(maskFile);
-    expect(fetchUrlMask).toHaveBeenCalledWith('https://example.test/masks/', 'image.jpg');
+    expect(fetchUrlMask).toHaveBeenCalledWith('https://example.test/masks/', 'image.jpg', undefined);
     expect(manifestAdapter.getMaskSync(state, 'image.jpg')).toBe(maskFile);
 
     await manifestAdapter.prefetchImages(state, ['a.jpg', 'b.jpg'], 2);
-    expect(prefetchUrlImages).toHaveBeenCalledWith('https://example.test/images/', ['a.jpg', 'b.jpg'], 2, undefined);
+    expect(prefetchUrlImages).toHaveBeenCalledWith('https://example.test/images/', ['a.jpg', 'b.jpg'], 2, undefined, undefined);
     expect(manifestAdapter.hasImages(state)).toBe(true);
     expect(manifestAdapter.hasMasks(state)).toBe(true);
   });
@@ -139,17 +140,17 @@ describe('dataset source adapters', () => {
 
     // Mapped COLMAP name -> explicit URL threaded to the fetch helper verbatim.
     await expect(adapter.getImage(state, '0.jpg')).resolves.toBe(mappedImage);
-    expect(fetchUrlImage).toHaveBeenCalledWith(base, '0.jpg', mappedUrl);
+    expect(fetchUrlImage).toHaveBeenCalledWith(base, '0.jpg', mappedUrl, undefined);
     await adapter.getMetricImage(state, '0.jpg');
-    expect(fetchUrlImageRaw).toHaveBeenCalledWith(base, '0.jpg', mappedUrl);
+    expect(fetchUrlImageRaw).toHaveBeenCalledWith(base, '0.jpg', mappedUrl, { priority: 'metric' });
 
     // Unmapped name -> no explicit URL, falls back to the base directory.
     await adapter.getImage(state, '999.jpg');
-    expect(fetchUrlImage).toHaveBeenCalledWith(base, '999.jpg', undefined);
+    expect(fetchUrlImage).toHaveBeenCalledWith(base, '999.jpg', undefined, undefined);
 
     // Prefetch threads the whole map through for per-name resolution.
     await adapter.prefetchImages(state, ['0.jpg', '999.jpg'], 4);
-    expect(prefetchUrlImages).toHaveBeenCalledWith(base, ['0.jpg', '999.jpg'], 4, state.imageNameToUrl);
+    expect(prefetchUrlImages).toHaveBeenCalledWith(base, ['0.jpg', '999.jpg'], 4, state.imageNameToUrl, undefined);
   });
 
   it('reports images available from a mapping alone, with no base URL', () => {
@@ -176,9 +177,9 @@ describe('dataset source adapters', () => {
 
     await expect(adapter.getImage(state, 'cached.jpg')).resolves.toBe(cached);
     await expect(adapter.getImage(state, 'missing.jpg')).resolves.toBe(fetched);
-    expect(fetchZipImage).toHaveBeenCalledWith('missing.jpg');
+    expect(fetchZipImage).toHaveBeenCalledWith('missing.jpg', undefined);
     await expect(adapter.getMetricImage(state, 'missing.jpg')).resolves.toBe(raw);
-    expect(fetchZipImageRaw).toHaveBeenCalledWith('missing.jpg');
+    expect(fetchZipImageRaw).toHaveBeenCalledWith('missing.jpg', undefined);
     expect(adapter.getImageSync(state, 'cached.jpg')).toBe(cached);
     await expect(adapter.getMask(state, 'image.jpg')).resolves.toBeInstanceOf(File);
     expect(adapter.getMaskSync(state, 'image.jpg')).toBeInstanceOf(File);
@@ -186,8 +187,8 @@ describe('dataset source adapters', () => {
     expect(adapter.hasMasks(state)).toBe(true);
 
     await adapter.prefetchImages(state, ['cached.jpg', 'first.jpg', 'second.jpg'], 2);
-    expect(fetchZipImage).toHaveBeenCalledWith('first.jpg');
-    expect(fetchZipImage).toHaveBeenCalledWith('second.jpg');
+    expect(fetchZipImage).toHaveBeenCalledWith('first.jpg', undefined);
+    expect(fetchZipImage).toHaveBeenCalledWith('second.jpg', undefined);
     expect(fetchZipImage).not.toHaveBeenCalledWith('cached.jpg');
   });
 });

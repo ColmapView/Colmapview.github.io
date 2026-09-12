@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { computeImageStats, computeImageStatsFromWasm } from './imageStats';
 import type { Image, Point3D } from '../types/colmap';
 import { buildWasmReconstructionWrapper } from '../test/builders';
@@ -228,6 +228,29 @@ describe('computeImageStatsFromWasm', () => {
       point3DIds: BigUint64Array.from(allPoint3DIds),
     });
   }
+
+  it('preserves every statistic and connectivity count while omitting boxed membership for the worker', () => {
+    const images = makeImages(7, 42, 91);
+    const points = Array.from({ length: 80 }, (_, index) => ({
+      error: [-1, 0, 0.5, 2][index % 4],
+      point3DId: 9007199254740997n + BigInt(index * 73),
+      trackImageIds: Array.from({ length: index % 9 }, (_, track) => [7, 42, 999, 7][(index + track) % 4]),
+    }));
+    const wasm = makeMockWasm(points);
+    const normal = computeImageStatsFromWasm(images, wasm);
+    const mapResult = computeImageStats(images, new Map(points.map(point => [point.point3DId, makePoint3D(
+      point.point3DId, point.error, point.trackImageIds.map((imageId, point2DIdx) => ({ imageId, point2DIdx })),
+    )])));
+    expect(normal).toEqual(mapResult);
+    const pointIdRead = vi.spyOn(wasm, 'getPoint3DIds').mockImplementation(() => { throw new Error('Statistics should not read point IDs'); });
+    const compact = computeImageStatsFromWasm(images, wasm, { includePointMembership: false });
+    expect(compact.imageToPoint3DIds.size).toBe(0);
+    expect({ ...compact, imageToPoint3DIds: normal.imageToPoint3DIds }).toEqual(normal);
+    expect(pointIdRead).not.toHaveBeenCalled();
+    expect(compact.imageStats.get(91)).toEqual({ numPoints3D: 0, avgError: 0, covisibleCount: 0 });
+    expect(compact.connectedImagesIndex.get(7)!.has(999)).toBe(true);
+    expect(compact.connectedImagesIndex.get(7)!.has(7)).toBe(true);
+  });
 
   it('returns empty stats with zero points', () => {
     const images = makeImages(1);

@@ -24,6 +24,7 @@ import { useTrackballFlyTo, type TrackballAnimationTarget } from './useTrackball
 import { useTrackballFrameLoop } from './useTrackballFrameLoop';
 import { useTrackballInputHandlers } from './useTrackballInputHandlers';
 import { useTrackballControlsStoreFacade } from './useTrackballControlsStoreFacade';
+import { requestSceneRender } from '../../utils/sceneRenderInvalidation';
 
 export interface TrackballControlsProps {
   target: [number, number, number];
@@ -154,6 +155,7 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
     axesCoordinateSystem,
     enabledRef: enabled,
     isDraggingRef: isDragging,
+    interactingRef: dragging,
     horizonLockRef,
     worldUpRef,
     targetVecRef: targetVec,
@@ -320,6 +322,9 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
     camerasActions,
     pointsActions,
   });
+
+  // Lifecycle effects above mutate cameras in place, so there may be no Fiber prop change.
+  useEffect(() => { requestSceneRender(); });
 
   return null;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createMaskedThumbnailCache, type MaskedThumbnailLease } from './maskedThumbnailCache';
 import { getResizedImageDimensions } from './asyncImageCachePolicy';
 import {
   createBrowserImageCacheCanvas,
@@ -9,9 +10,7 @@ import { isOffscreenCanvas } from '../utils/canvasTypeGuards';
 
 const MASKED_THUMBNAIL_SIZE = 256;
 
-const maskedThumbnailCache = new Map<string, string>();
-const maskedThumbnailLoads = new Map<string, Promise<string | null>>();
-let maskedThumbnailCacheGeneration = 0;
+const maskedThumbnailCache = createMaskedThumbnailCache();
 
 type Canvas2DContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
@@ -19,8 +18,12 @@ function getCanvasContext(canvas: ImageCacheCanvas): Canvas2DContext | null {
   return isOffscreenCanvas(canvas) ? canvas.getContext('2d') : canvas.getContext('2d');
 }
 
-function getFileCacheKey(file: File): string {
-  return `${file.name}:${file.size}:${file.lastModified}`;
+const fileIdentities = new WeakMap<File, number>();
+let nextFileIdentity = 0;
+function getFileCacheKey(file: File): number {
+  let identity = fileIdentities.get(file);
+  if (identity === undefined) { identity = ++nextFileIdentity; fileIdentities.set(file, identity); }
+  return identity;
 }
 
 function getMaskedThumbnailCacheKey(imageName: string, imageFile: File, maskFile: File, inverseMask: boolean): string {
@@ -58,13 +61,12 @@ export function createMaskedThumbnailCanvas(
   maxSize = MASKED_THUMBNAIL_SIZE,
   createCanvas: ImageCacheCanvasFactory = createBrowserImageCacheCanvas
 ): ImageCacheCanvas | null {
-  const { width, height } = getResizedImageDimensions(imageBitmap, maxSize);
-  const imageCanvas = createCanvas(width, height);
-  const maskCanvas = createCanvas(width, height);
-  const imageCtx = getCanvasContext(imageCanvas);
-  const maskCtx = getCanvasContext(maskCanvas);
-
   try {
+    const { width, height } = getResizedImageDimensions(imageBitmap, maxSize);
+    const imageCanvas = createCanvas(width, height);
+    const maskCanvas = createCanvas(width, height);
+    const imageCtx = getCanvasContext(imageCanvas);
+    const maskCtx = getCanvasContext(maskCanvas);
     if (!imageCtx || !maskCtx) return null;
 
     imageCtx.imageSmoothingEnabled = true;
@@ -88,40 +90,31 @@ export function createMaskedThumbnailCanvas(
   }
 }
 
-async function canvasToPngUrl(canvas: ImageCacheCanvas): Promise<string | null> {
+async function canvasToPngBlob(canvas: ImageCacheCanvas): Promise<Blob | null> {
   const blob = isOffscreenCanvas(canvas)
     ? await canvas.convertToBlob({ type: 'image/png' })
     : await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
-  return blob ? URL.createObjectURL(blob) : null;
+  return blob;
 }
 
-async function loadMaskedThumbnail(imageFile: File, maskFile: File, inverseMask: boolean): Promise<string | null> {
-  try {
-    const [imageBitmap, maskBitmap] = await Promise.all([
-      createImageBitmap(imageFile),
-      createImageBitmap(maskFile),
-    ]);
-    const canvas = createMaskedThumbnailCanvas(imageBitmap, maskBitmap, inverseMask);
-    return canvas ? await canvasToPngUrl(canvas) : null;
-  } catch {
+export async function loadMaskedThumbnail(imageFile: File, maskFile: File, inverseMask: boolean): Promise<Blob | null> {
+  const results = await Promise.allSettled([imageFile, maskFile].map(file =>
+    Promise.resolve().then(() => createImageBitmap(file))));
+  if (results[0].status !== 'fulfilled' || results[1].status !== 'fulfilled') {
+    for (const result of results) if (result.status === 'fulfilled') result.value.close();
     return null;
   }
+  const canvas = createMaskedThumbnailCanvas(results[0].value, results[1].value, inverseMask);
+  if (!canvas) return null;
+  try { return await canvasToPngBlob(canvas); } catch { return null; }
 }
 
 export function clearMaskedThumbnailCache(): void {
-  maskedThumbnailCacheGeneration++;
-  for (const url of maskedThumbnailCache.values()) {
-    URL.revokeObjectURL(url);
-  }
   maskedThumbnailCache.clear();
-  maskedThumbnailLoads.clear();
 }
 
-export function getMaskedThumbnailCacheStats(): { count: number; loading: number } {
-  return {
-    count: maskedThumbnailCache.size,
-    loading: maskedThumbnailLoads.size,
-  };
+export function getMaskedThumbnailCacheStats() {
+  return maskedThumbnailCache.getStats();
 }
 
 export function useMaskedThumbnail(
@@ -137,55 +130,23 @@ export function useMaskedThumbnail(
       : '',
     [enabled, imageFile, imageName, maskFile, inverseMask]
   );
-  const [state, setState] = useState<{ cacheKey: string; url: string | null }>(() => ({
-    cacheKey,
-    url: cacheKey ? maskedThumbnailCache.get(cacheKey) ?? null : null,
-  }));
+  const [state, setState] = useState<{ cacheKey: string; lease: MaskedThumbnailLease } | null>(null);
 
   useEffect(() => {
+    if (!enabled || !imageFile || !maskFile || !cacheKey) return;
+    const lease = maskedThumbnailCache.acquire(cacheKey,
+      () => loadMaskedThumbnail(imageFile, maskFile, inverseMask));
     let cancelled = false;
-
-    if (!enabled || !imageFile || !maskFile || !cacheKey) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const cached = maskedThumbnailCache.get(cacheKey);
-    if (cached) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    let load = maskedThumbnailLoads.get(cacheKey);
-    if (!load) {
-      const loadGeneration = maskedThumbnailCacheGeneration;
-      load = loadMaskedThumbnail(imageFile, maskFile, inverseMask).then((result) => {
-        maskedThumbnailLoads.delete(cacheKey);
-        if (loadGeneration !== maskedThumbnailCacheGeneration) {
-          if (result) URL.revokeObjectURL(result);
-          return null;
-        }
-        if (result) {
-          maskedThumbnailCache.set(cacheKey, result);
-        }
-        return result;
-      });
-      maskedThumbnailLoads.set(cacheKey, load);
-    }
-
-    load.then((result) => {
-      if (!cancelled) {
-        setState({ cacheKey, url: result });
-      }
+    lease.ready.then(() => {
+      if (!cancelled) setState({ cacheKey, lease });
     });
-
     return () => {
       cancelled = true;
+      lease.release();
     };
   }, [cacheKey, enabled, imageFile, maskFile, inverseMask]);
 
-  if (!enabled || !cacheKey) return null;
-  return maskedThumbnailCache.get(cacheKey) ?? (state.cacheKey === cacheKey ? state.url : null);
+  // A changed/disabled resource renders no old URL before its effect releases the
+  // lease. Re-enabling cannot expose a URL from an already released lease either.
+  return enabled && state?.cacheKey === cacheKey ? state.lease.getUrl() : null;
 }

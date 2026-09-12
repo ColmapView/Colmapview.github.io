@@ -27,7 +27,7 @@ export async function executeTransformGizmoContextMenuAction(
       }
       break;
     case 'apply':
-      deps.applyTransformToData();
+      await deps.applyTransformToData();
       break;
     case 'off':
       deps.setShowGizmo(false);

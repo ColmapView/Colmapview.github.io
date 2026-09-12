@@ -4,6 +4,22 @@
 
 import type { LoadedFiles } from '../types/colmap';
 
+export type MediaPriority = 'selected' | 'visible' | 'metric' | 'prefetch';
+
+export interface DatasetAccessError {
+  kind: 'http' | 'network' | 'aborted';
+  message: string;
+  status?: number;
+  url?: string;
+}
+
+export interface DatasetAccessOptions {
+  /** Called before a failed request resolves null; definitive absence is not an error. */
+  onError?: (error: DatasetAccessError) => void;
+  signal?: AbortSignal;
+  priority?: MediaPriority;
+}
+
 /** Source type for loaded dataset */
 export type DatasetSource = 'local' | 'url' | 'manifest' | 'zip';
 
@@ -43,6 +59,8 @@ export interface CacheEntryStats {
 
 /** Statistics for all caches */
 export interface CacheStats {
+  /** Combined cache-owned File bytes; excludes external references and decoded/GPU memory. */
+  urlFileRetention?: import('./urlFileCache').UrlFileCacheStats;
   /** URL image cache (for 'url' and 'manifest' sources) */
   urlImages: CacheEntryStats;
   /** URL mask cache (for 'url' and 'manifest' sources) */

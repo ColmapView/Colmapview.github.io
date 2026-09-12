@@ -18,7 +18,8 @@ export const INITIAL_FPS_SAMPLE_STATE: FpsSampleState = {
 export function getNextFpsSample(
   state: FpsSampleState,
   now: number,
-  updateIntervalMs = FPS_UPDATE_INTERVAL_MS
+  updateIntervalMs = FPS_UPDATE_INTERVAL_MS,
+  renderedFrame = true
 ): FpsSampleResult {
   if (state.lastTime === 0) {
     return {
@@ -30,7 +31,7 @@ export function getNextFpsSample(
     };
   }
 
-  const frames = state.frames + 1;
+  const frames = state.frames + (renderedFrame ? 1 : 0);
   const elapsed = now - state.lastTime;
 
   if (elapsed >= updateIntervalMs) {

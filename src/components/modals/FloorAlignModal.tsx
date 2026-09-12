@@ -1,4 +1,6 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect, useRef } from 'react';
+import { isReconstructionSnapshot } from '../../wasm/reconstructionService';
+import { appLogger } from '../../utils/logger';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { modalStyles } from '../../theme';
 import { CloseIcon } from '../../icons';
@@ -40,6 +42,8 @@ export function FloorAlignModal() {
     transform: { transform, setTransform },
     ui: { axesCoordinateSystem },
   } = useFloorAlignStoreFacade();
+  const detectionRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => { detectionRequest.current?.abort(); }, [wasmReconstruction, showFloorModal]);
 
   // Get target direction based on selected axis and coordinate system
   const targetUp = useMemo(() => {
@@ -72,6 +76,22 @@ export function FloorAlignModal() {
     if (!wasmReconstruction?.hasPoints()) return;
 
     setIsDetecting(true);
+    if (isReconstructionSnapshot(wasmReconstruction)) {
+      detectionRequest.current?.abort();
+      const controller = new AbortController();
+      detectionRequest.current = controller;
+      void wasmReconstruction.floor({ transform, params: { distanceThreshold, maxIterations, sampleCount } }, controller.signal).then(result => {
+        if (controller.signal.aborted) return;
+        setDetectedPlane(result.plane);
+        setPointDistances(result.distances);
+        setNormalFlipped(result.normalFlipped);
+      }).catch(error => {
+        if (!controller.signal.aborted) appLogger.warn('Floor detection failed:', error);
+      }).finally(() => {
+        if (!controller.signal.aborted) setIsDetecting(false);
+      });
+      return;
+    }
 
     // Use setTimeout to allow UI to update before potentially blocking operation
     setTimeout(() => {

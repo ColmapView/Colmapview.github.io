@@ -10,11 +10,11 @@ import {
   type TransformState,
 } from '../../../store';
 import type { LoadedFiles, Reconstruction } from '../../../types/colmap';
-import type { WasmReconstructionWrapper } from '../../../wasm/reconstruction';
+import type { ReconstructionSource } from '../../../wasm/reconstructionService';
 
 interface ExportPanelLiveReconstruction {
   reconstruction: Reconstruction | null;
-  wasmReconstruction: WasmReconstructionWrapper | null;
+  wasmReconstruction: ReconstructionSource | null;
 }
 
 interface ExportPanelDataFacade {

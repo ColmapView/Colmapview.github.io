@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { requestSceneRender } from '../utils/sceneRenderInvalidation';
 
 export interface TextureSnapshot {
   cacheKey: string;
@@ -16,6 +17,7 @@ export interface FrustumTextureResource {
 }
 
 export interface SelectedImageTextureResource {
+  cancel: () => void;
   getSnapshot: () => TextureSnapshot;
   subscribe: (listener: () => void) => () => void;
   sync: (options: {
@@ -34,7 +36,7 @@ export interface FrustumTextureResourceDeps {
 export interface SelectedImageTextureResourceDeps {
   getCachedTexture: (imageName: string) => THREE.Texture | null;
   clearTextureCache: () => void;
-  createBitmap: (imageFile: File) => Promise<ImageBitmap>;
+  createBitmap: (imageFile: File, isCurrent: () => boolean) => Promise<ImageBitmap>;
   createTextureFromBitmap: (bitmap: ImageBitmap) => THREE.Texture;
   replaceTexture: (imageName: string, texture: THREE.Texture) => THREE.Texture;
 }
@@ -121,6 +123,7 @@ export function createSelectedImageTextureResource({
   let pendingCacheKey = '';
 
   return {
+    cancel: () => { requestId++; pendingCacheKey = ''; },
     getSnapshot: store.getSnapshot,
     subscribe: store.subscribe,
     sync: ({ imageFile, imageName, isSelected }) => {
@@ -146,7 +149,7 @@ export function createSelectedImageTextureResource({
 
       pendingCacheKey = cacheKey;
       const currentRequestId = ++requestId;
-      createBitmap(imageFile).then((bitmap) => {
+      createBitmap(imageFile, () => requestId === currentRequestId).then((bitmap) => {
         if (requestId !== currentRequestId) {
           bitmap.close();
           return;
@@ -186,6 +189,7 @@ function createTextureStore() {
 
     snapshot = nextSnapshot;
     emit();
+    requestSceneRender();
   };
 
   return {

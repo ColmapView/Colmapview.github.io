@@ -131,14 +131,48 @@ function getInterleavedFloatArray(
   return array instanceof Float32Array ? array : null;
 }
 
+/** Ranges use Float32Array element offsets, not bytes or endpoint indices. */
+export interface FatLineUpdateRange {
+  start: number;
+  count: number;
+}
+
+const uploadCleanupInstalled = new WeakSet<THREE.InterleavedBuffer>();
+
 function markInterleavedAttributeNeedsUpdate(
   geometry: LineSegmentsGeometry,
-  attributeName: string
+  attributeName: string,
+  ranges?: readonly FatLineUpdateRange[]
 ): void {
   const attribute = geometry.getAttribute(attributeName);
-  if (attribute instanceof THREE.InterleavedBufferAttribute) {
-    attribute.data.needsUpdate = true;
+  if (!(attribute instanceof THREE.InterleavedBufferAttribute)) return;
+  if (ranges?.length === 0) return;
+  const buffer = attribute.data;
+  if (!uploadCleanupInstalled.has(buffer)) {
+    const previousOnUpload = buffer.onUploadCallback;
+    buffer.onUpload(() => {
+      // Three clears ranges after bufferSubData, but not its initial bufferData.
+      buffer.clearUpdateRanges();
+      previousOnUpload.call(buffer);
+    });
+    uploadCleanupInstalled.add(buffer);
   }
+
+  // Explicit full ranges preserve a pending full write across later partial
+  // frames. Coalesce partial writes until upload, including culled/skipped frames.
+  const pending = ranges === undefined
+    ? [{ start: 0, count: buffer.array.length }]
+    : [...buffer.updateRanges, ...ranges].map(range => ({ ...range })).sort((a, b) => a.start - b.start);
+  const merged: FatLineUpdateRange[] = [];
+  for (const range of pending) {
+    const previous = merged[merged.length - 1];
+    if (previous && range.start <= previous.start + previous.count) {
+      previous.count = Math.max(previous.start + previous.count, range.start + range.count) - previous.start;
+    } else merged.push(range);
+  }
+  buffer.clearUpdateRanges();
+  for (const range of merged) buffer.addUpdateRange(range.start, range.count);
+  buffer.needsUpdate = true;
 }
 
 export function getFatLineColorArray(geometry: LineSegmentsGeometry): Float32Array | null {
@@ -149,12 +183,12 @@ export function getFatLineAlphaArray(geometry: LineSegmentsGeometry): Float32Arr
   return getInterleavedFloatArray(geometry, 'instanceAlphaStart');
 }
 
-export function markFatLineColorsNeedUpdate(geometry: LineSegmentsGeometry): void {
-  markInterleavedAttributeNeedsUpdate(geometry, 'instanceColorStart');
+export function markFatLineColorsNeedUpdate(geometry: LineSegmentsGeometry, ranges?: readonly FatLineUpdateRange[]): void {
+  markInterleavedAttributeNeedsUpdate(geometry, 'instanceColorStart', ranges);
 }
 
-export function markFatLineAlphasNeedUpdate(geometry: LineSegmentsGeometry): void {
-  markInterleavedAttributeNeedsUpdate(geometry, 'instanceAlphaStart');
+export function markFatLineAlphasNeedUpdate(geometry: LineSegmentsGeometry, ranges?: readonly FatLineUpdateRange[]): void {
+  markInterleavedAttributeNeedsUpdate(geometry, 'instanceAlphaStart', ranges);
 }
 
 export function disposeFatLineSegmentsObject(fatLines: FatLineSegmentsObject): void {

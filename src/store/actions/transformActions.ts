@@ -11,6 +11,7 @@ import {
   createSim3dFromEuler,
   sim3dToEuler,
   composeSim3d,
+  inverseSim3d,
   computeCenterAtOrigin,
   computeNormalizeScale,
   transformReconstruction,
@@ -20,6 +21,8 @@ import { useReconstructionStore } from '../reconstructionStore.js';
 import { useTransformStore } from '../stores/transformStore.js';
 import { usePointPickingStore } from '../stores/pointPickingStore.js';
 import { useFloorPlaneStore } from '../stores/floorPlaneStore.js';
+import { isReconstructionSnapshot } from '../../wasm/reconstructionService';
+import { useNotificationStore } from '../stores/notificationStore';
 
 /**
  * Apply a transform preset to the scene.
@@ -29,7 +32,7 @@ import { useFloorPlaneStore } from '../stores/floorPlaneStore.js';
  * @returns true if preset was applied, false if no reconstruction is loaded
  */
 export function applyTransformPreset(preset: TransformPreset): boolean {
-  const { reconstruction, wasmReconstruction } = useReconstructionStore.getState();
+  const { reconstruction } = useReconstructionStore.getState();
   if (!reconstruction) return false;
 
   const transformStore = useTransformStore.getState();
@@ -47,7 +50,8 @@ export function applyTransformPreset(preset: TransformPreset): boolean {
     // Transform the reconstruction with the current transform first
     // so the preset is computed based on the current scene state
     const currentSim3d = createSim3dFromEuler(currentTransform);
-    const transformedReconstruction = transformReconstruction(currentSim3d, reconstruction, wasmReconstruction);
+    // Presets use camera centers only; do not realize the full point cloud to transform camera metadata.
+    const transformedReconstruction = transformReconstruction(currentSim3d, { ...reconstruction, points3D: new Map() });
 
     // Compute the preset based on the transformed state
     const presetSim3d = preset === 'centerAtOrigin'
@@ -74,13 +78,40 @@ export function applyTransformPreset(preset: TransformPreset): boolean {
  *
  * @returns true if transform was applied, false if no reconstruction is loaded
  */
-export function applyTransformToData(): boolean {
+export function applyTransformToData(): boolean | Promise<boolean> {
   const reconstructionStore = useReconstructionStore.getState();
   const { reconstruction, wasmReconstruction } = reconstructionStore;
   if (!reconstruction) return false;
 
   const transformStore = useTransformStore.getState();
   const { transform, splatTransform } = transformStore;
+
+  if (isReconstructionSnapshot(wasmReconstruction)) {
+    return wasmReconstruction.transform(transform).then(snapshot => {
+      if (useReconstructionStore.getState().wasmReconstruction !== wasmReconstruction) return false;
+      reconstructionStore.setWasmReconstruction(snapshot);
+      reconstructionStore.setReconstruction(snapshot.reconstruction);
+      if (!isIdentityEuler(transform)) {
+        const nextSplatTransform = composeSim3d(createSim3dFromEuler(transform), createSim3dFromEuler(splatTransform));
+        transformStore.setSplatTransform(sim3dToEuler(nextSplatTransform));
+      }
+      const liveTransform = useTransformStore.getState().transform;
+      if (liveTransform === transform) transformStore.resetTransform();
+      else {
+        // Keep a newer visual adjustment in the same world frame after baking the captured transform.
+        const remainder = composeSim3d(createSim3dFromEuler(liveTransform), inverseSim3d(createSim3dFromEuler(transform)));
+        transformStore.setTransform(sim3dToEuler(remainder));
+      }
+      useFloorPlaneStore.getState().setDetectedPlane(null);
+      useFloorPlaneStore.getState().setPointDistances(null);
+      return true;
+    }).catch(error => {
+      if (useReconstructionStore.getState().wasmReconstruction === wasmReconstruction) {
+        useNotificationStore.getState().addNotification('warning', `Transform failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return false;
+    });
+  }
 
   const sim3d = createSim3dFromEuler(transform);
   const transformed = transformReconstruction(sim3d, reconstruction, wasmReconstruction);

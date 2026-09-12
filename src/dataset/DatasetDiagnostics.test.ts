@@ -8,6 +8,7 @@ vi.mock('../utils/imageFileUtils', () => ({
 }));
 
 vi.mock('../utils/urlImageFiles', () => ({
+  getUrlFileRetentionStats: vi.fn(() => ({ budgetBytes: 128 * 1024 * 1024, retainedBytes: 0, count: 0, evictions: 0, oversizedBypasses: 0 })),
   getUrlImageCacheStats: vi.fn(),
   getUrlMaskCacheStats: vi.fn(),
 }));

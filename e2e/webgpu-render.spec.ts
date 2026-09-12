@@ -80,27 +80,6 @@ interface BrowserPsnrMetric {
   validPixelCount: number;
 }
 
-interface BrowserPsnrColorDiagnostics {
-  validPixelCount: number;
-  validPixelRatio: number;
-  renderedMeanRgb: [number, number, number] | null;
-  groundTruthMeanRgb: [number, number, number] | null;
-  meanRgbDelta: [number, number, number] | null;
-}
-
-interface BrowserPsnrOffsetCandidate extends BrowserPsnrMetric {
-  dx: number;
-  dy: number;
-}
-
-interface BrowserPsnrOffsetDiagnostics {
-  maxOffsetPixels: number;
-  evaluatedOffsetCount: number;
-  baseline: BrowserPsnrOffsetCandidate;
-  best: BrowserPsnrOffsetCandidate;
-  improvementDb: number;
-}
-
 interface BrowserSim3dEuler {
   scale: number;
   rotationX: number;
@@ -146,10 +125,8 @@ interface WebGpuRenderBrowserResult {
   textureMetrics?: {
     flatColor: BrowserPsnrMetric;
     colorMismatch: BrowserPsnrMetric;
-    colorMismatchDiagnostics: BrowserPsnrColorDiagnostics;
     colorSpaceMismatch: BrowserPsnrMetric;
     onePixelOffset: BrowserPsnrMetric;
-    onePixelOffsetDiagnostics: BrowserPsnrOffsetDiagnostics;
   };
   sim3dInvariance?: {
     metric: BrowserPsnrMetric;
@@ -225,21 +202,6 @@ interface BrowserPsnrModule {
     width: number;
     height: number;
   }): Promise<BrowserPsnrMetric>;
-  computePsnrTextureColorDiagnosticsFromRgbaTexturesWebGpu(options: {
-    device: BrowserGpuDevice;
-    renderedTexture: BrowserGpuTexture;
-    groundTruthTexture: BrowserGpuTexture;
-    width: number;
-    height: number;
-  }): Promise<BrowserPsnrColorDiagnostics>;
-  computePsnrTextureOffsetDiagnosticsFromRgbaTexturesWebGpu(options: {
-    device: BrowserGpuDevice;
-    renderedTexture: BrowserGpuTexture;
-    groundTruthTexture: BrowserGpuTexture;
-    width: number;
-    height: number;
-    maxOffsetPixels?: number;
-  }): Promise<BrowserPsnrOffsetDiagnostics>;
 }
 
 test.describe('WebGPU splat render validation', () => {
@@ -270,14 +232,14 @@ test.describe('WebGPU splat render validation', () => {
       const rendererModulePath = '/src/splat/webgpu/gaussianRenderer.ts';
       const sceneModulePath = '/src/splat/webgpu/gaussianSceneResourceManager.ts';
       const cameraModulePath = '/src/splat/webgpu/cameraFrames.ts';
+      // Color/offset diagnostic exports were removed in 9db7ce3. Exercise the
+      // supported PSNR API below, including color-space and pixel-offset errors.
       const psnrModulePath = '/src/splat/webgpu/psnrTextureCompute.ts';
       const { createSplatRenderSession } = await import(rendererModulePath) as BrowserRendererModule;
       const { GaussianSceneResourceManager } = await import(sceneModulePath) as BrowserSceneModule;
       const { createColmapMetricWebGpuSplatFrame } = await import(cameraModulePath) as BrowserCameraModule;
       const {
         computePsnrFromRgbaTexturesWebGpu,
-        computePsnrTextureColorDiagnosticsFromRgbaTexturesWebGpu,
-        computePsnrTextureOffsetDiagnosticsFromRgbaTexturesWebGpu,
       } = await import(psnrModulePath) as BrowserPsnrModule;
 
       const textureUsageCopyDst = 0x02;
@@ -743,13 +705,6 @@ fn main(
           width,
           height,
         });
-        const colorMismatchDiagnostics = await computePsnrTextureColorDiagnosticsFromRgbaTexturesWebGpu({
-          device,
-          renderedTexture: flatRedTexture,
-          groundTruthTexture: flatGreenTexture,
-          width,
-          height,
-        });
         const colorSpaceMismatchMetric = await computePsnrFromRgbaTexturesWebGpu({
           device,
           renderedTexture: gammaLinearMidGrayTexture,
@@ -763,14 +718,6 @@ fn main(
           groundTruthTexture: onePixelGroundTruthTexture,
           width,
           height,
-        });
-        const onePixelOffsetDiagnostics = await computePsnrTextureOffsetDiagnosticsFromRgbaTexturesWebGpu({
-          device,
-          renderedTexture: onePixelRenderedTexture,
-          groundTruthTexture: onePixelGroundTruthTexture,
-          width,
-          height,
-          maxOffsetPixels: 1,
         });
 
         const poseBaseline = await renderCase({
@@ -842,10 +789,8 @@ fn main(
           textureMetrics: {
             flatColor: flatColorMetric,
             colorMismatch: colorMismatchMetric,
-            colorMismatchDiagnostics,
             colorSpaceMismatch: colorSpaceMismatchMetric,
             onePixelOffset: onePixelOffsetMetric,
-            onePixelOffsetDiagnostics,
           },
           sim3dInvariance: {
             metric: sim3dInvarianceMetric,
@@ -897,13 +842,6 @@ fn main(
     expect(result.textureMetrics?.colorMismatch.psnr).toBeCloseTo(
       10 * Math.log10((255 * 255) / expectedColorMismatchMse)
     );
-    expect(result.textureMetrics?.colorMismatchDiagnostics).toMatchObject({
-      validPixelCount: pixelCount,
-      validPixelRatio: 1,
-      renderedMeanRgb: [255, 0, 0],
-      groundTruthMeanRgb: [0, 255, 0],
-      meanRgbDelta: [255, -255, 0],
-    });
 
     const expectedColorSpaceMismatchMse = 60 * 60;
     expect(result.textureMetrics?.colorSpaceMismatch.validPixelCount).toBe(pixelCount);
@@ -920,15 +858,6 @@ fn main(
       10 * Math.log10((255 * 255) / expectedOnePixelOffsetMse)
     );
     expect(result.textureMetrics?.onePixelOffset.psnr).toBeLessThan(45);
-    expect(result.textureMetrics?.onePixelOffsetDiagnostics.best).toMatchObject({
-      dx: -1,
-      dy: 0,
-      psnr: Infinity,
-    });
-    expect(result.textureMetrics?.onePixelOffsetDiagnostics.baseline.psnr).toBeCloseTo(
-      result.textureMetrics?.onePixelOffset.psnr ?? Number.NaN
-    );
-    expect(result.textureMetrics?.onePixelOffsetDiagnostics.improvementDb).toBe(Infinity);
 
     const expectCentroidClose = (
       actual: BrowserTextureCentroid | undefined,

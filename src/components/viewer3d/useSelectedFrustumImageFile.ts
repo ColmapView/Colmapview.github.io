@@ -17,7 +17,7 @@ export function useSelectedFrustumImageFile({
   isSelected,
   showImagePlane,
 }: SelectedFrustumImageFileOptions): File | undefined {
-  const [fetchedImageFile, setFetchedImageFile] = useState<{ imageName: string; file: File } | null>(null);
+  const [fetchedImageFile, setFetchedImageFile] = useState<{ dataset: DatasetManager; imageName: string; file: File } | null>(null);
   const shouldFetch = shouldFetchSelectedFrustumImageFile({
     isSelected,
     showImagePlane,
@@ -27,24 +27,24 @@ export function useSelectedFrustumImageFile({
   useEffect(() => {
     if (!shouldFetch) return;
 
-    let cancelled = false;
+    const controller = new AbortController();
 
     const fetchImage = async () => {
-      const file = await dataset.getImage(imageName);
+      const file = await dataset.getImage(imageName, { signal: controller.signal, priority: 'selected' });
 
-      if (!cancelled && file) {
-        setFetchedImageFile({ imageName, file });
+      if (!controller.signal.aborted && file) {
+        setFetchedImageFile({ dataset, imageName, file });
       }
     };
 
     fetchImage();
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [dataset, imageName, shouldFetch]);
 
-  const fetchedFile = fetchedImageFile?.imageName === imageName
+  const fetchedFile = fetchedImageFile?.dataset === dataset && fetchedImageFile.imageName === imageName
     ? fetchedImageFile.file
     : undefined;
 

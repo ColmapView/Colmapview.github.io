@@ -14,11 +14,11 @@ import {
   type PointPickingState,
 } from '../../../store';
 import type { Reconstruction } from '../../../types/colmap';
-import type { WasmReconstructionWrapper } from '../../../wasm/reconstruction';
+import type { ReconstructionPointSource } from '../../../wasm/reconstructionProtocol';
 
 interface PointCloudDataFacade {
   reconstruction: Reconstruction | null;
-  wasmReconstruction: WasmReconstructionWrapper | null;
+  wasmReconstruction: ReconstructionPointSource | null;
   points: PointsNode;
   selection: SelectionNode;
   pointPicking: {

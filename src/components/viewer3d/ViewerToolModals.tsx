@@ -1,7 +1,9 @@
-import { AutoHideModal } from '../modals/AutoHideModal';
-import { CameraConversionModal } from '../modals/CameraConversionModal';
-import { DeletionModal } from '../modals/DeletionModal';
-import { FloorDetectionModal } from '../modals/FloorDetectionModal';
+import { LazyToolModal } from './LazyToolModal';
+
+const loadAutoHide = () => import('../modals/AutoHideModal').then(module => ({ default: module.AutoHideModal }));
+const loadConversion = () => import('../modals/CameraConversionModal').then(module => ({ default: module.CameraConversionModal }));
+const loadDeletion = () => import('../modals/DeletionModal').then(module => ({ default: module.DeletionModal }));
+const loadFloor = () => import('../modals/FloorDetectionModal').then(module => ({ default: module.FloorDetectionModal }));
 
 export interface ViewerToolModalsProps {
   showFloorModal: boolean;
@@ -26,19 +28,27 @@ export function ViewerToolModals({
 }: ViewerToolModalsProps) {
   return (
     <>
-      <FloorDetectionModal
+      <LazyToolModal
+        title="Floor detection"
+        load={loadFloor}
         isOpen={showFloorModal}
         onClose={() => setShowFloorModal(false)}
       />
-      <DeletionModal
+      <LazyToolModal
+        title="Deletion"
+        load={loadDeletion}
         isOpen={showDeletionModal}
         onClose={() => setShowDeletionModal(false)}
       />
-      <CameraConversionModal
+      <LazyToolModal
+        title="Camera conversion"
+        load={loadConversion}
         isOpen={showConversionModal}
         onClose={() => setShowConversionModal(false)}
       />
-      <AutoHideModal
+      <LazyToolModal
+        title="Auto hide"
+        load={loadAutoHide}
         isOpen={showAutoHideEditor}
         onClose={() => setShowAutoHideEditor(false)}
       />

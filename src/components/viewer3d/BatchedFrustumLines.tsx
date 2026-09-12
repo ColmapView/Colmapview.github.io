@@ -137,24 +137,11 @@ export function BatchedFrustumLines({
     });
   }, [frustums, cameraScale, frustumColorMode, frustumSingleColor, imageFrameIndexMap, splatPsnrByImage]);
 
-  const initialColors = useMemo(() => {
-    return new Float32Array(baseColors);
-  }, [baseColors]);
-
-  const initialAlphas = useMemo(() => {
-    const alphas = new Float32Array(baseAlphas.length);
-    const opacity = selectedImageId === null ? frustumStandbyOpacity : unselectedCameraOpacity;
-    for (let i = 0; i < baseAlphas.length; i++) {
-      alphas[i] = opacity;
-    }
-    return alphas;
-  }, [baseAlphas.length, frustumStandbyOpacity, unselectedCameraOpacity, selectedImageId]);
-
   const fatLines = useMemo(() => {
     return createFatLineSegmentsObject({
       positions,
-      colors: initialColors,
-      alphas: initialAlphas,
+      colors: new Float32Array(baseColors),
+      alphas: new Float32Array(baseAlphas),
       lineWidth: 1,
       depthWrite: false,
       depthTest: true,
@@ -163,7 +150,13 @@ export function BatchedFrustumLines({
       polygonOffsetUnits: 1,
       renderOrder: 2,
     });
-  }, [positions, initialColors, initialAlphas]);
+  }, [positions, baseColors, baseAlphas]);
+
+  useLayoutEffect(() => {
+    // The new buffers have only base values. Apply every current style before
+    // their first draw, even when selection/hover/opacity did not change.
+    prevStateRef.current = null;
+  }, [fatLines]);
 
   useLayoutEffect(() => {
     syncMaterialLineWidth(fatLines.material, frustumLineWidth);
@@ -269,14 +262,17 @@ export function BatchedFrustumLines({
         });
       }
       animatedIndices.forEach(writeFrustumLineStyle);
+      markFatLineColorsNeedUpdate(fatLines.geometry,
+        Array.from(animatedIndices, index => ({ start: index * 48, count: 48 })));
+      markFatLineAlphasNeedUpdate(fatLines.geometry,
+        Array.from(animatedIndices, index => ({ start: index * 16, count: 16 })));
     } else {
       for (let index = 0; index < frustums.length; index++) {
         writeFrustumLineStyle(index);
       }
+      markFatLineColorsNeedUpdate(fatLines.geometry);
+      markFatLineAlphasNeedUpdate(fatLines.geometry);
     }
-
-    markFatLineColorsNeedUpdate(fatLines.geometry);
-    markFatLineAlphasNeedUpdate(fatLines.geometry);
   });
 
   if (frustums.length === 0) return null;

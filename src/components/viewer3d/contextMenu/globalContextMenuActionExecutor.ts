@@ -280,7 +280,7 @@ export async function executeGlobalContextMenuAction(
       deps.resetTransform();
       break;
     case 'applyTransform':
-      deps.applyTransformToData();
+      await deps.applyTransformToData();
       break;
     case 'reloadData':
       if (deps.droppedFiles && await deps.confirmReload()) {

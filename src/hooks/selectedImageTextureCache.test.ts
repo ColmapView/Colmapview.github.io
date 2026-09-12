@@ -7,9 +7,23 @@ import {
   disposeSelectedImageTextureEntry,
   getSelectedImageTexture,
   replaceSelectedImageTexture,
+  retainSelectedImageTexture,
 } from './selectedImageTextureCache';
 
 describe('selected image texture cache helpers', () => {
+  it('keeps a replaced high-resolution image alive until all materials detach', () => {
+    const bitmap = createBitmap();
+    const texture = createSelectedImageTextureFromBitmap(bitmap);
+    replaceSelectedImageTexture('old', texture);
+    const releaseA = retainSelectedImageTexture(texture);
+    const releaseB = retainSelectedImageTexture(texture);
+    replaceSelectedImageTexture('new', createTexture());
+    releaseA();
+    expect(bitmap.close).not.toHaveBeenCalled();
+    releaseB();
+    releaseB();
+    expect(bitmap.close).toHaveBeenCalledOnce();
+  });
   afterEach(() => {
     clearSelectedImageTextureCache();
   });

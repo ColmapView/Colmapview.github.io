@@ -32,19 +32,15 @@ export async function parseWithWasm(
 } | null> {
   let wasm: WasmReconstructionWrapper | null = null;
 
+  // Text/PLY fallbacks do not need to initialize a WASM heap merely to decline parsing.
+  if (!camerasFile.name.endsWith('.bin') || !imagesFile.name.endsWith('.bin') || !points3DFile.name.endsWith('.bin')) {
+    return null;
+  }
+
   try {
     wasm = await createWasmReconstruction();
     if (!wasm) {
       appLogger.warn('[WASM] Module not available, falling back to JS parser');
-      return null;
-    }
-
-    // Only parse binary files with WASM (text files use JS parser)
-    if (!camerasFile.name.endsWith('.bin') ||
-        !imagesFile.name.endsWith('.bin') ||
-        !points3DFile.name.endsWith('.bin')) {
-      appLogger.info('[WASM] Text files detected, using JS parser');
-      wasm.dispose();
       return null;
     }
 

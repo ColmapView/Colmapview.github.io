@@ -152,3 +152,22 @@ describe('zip image files', () => {
     expect(clearActiveZipArchive).toHaveBeenCalledOnce();
   });
 });
+
+it('clear discards uncancellable ZIP extraction without settling a same-name replacement', async () => {
+  vi.mocked(hasActiveZipArchive).mockReturnValue(true);
+  const old = createDeferred<File | null>();
+  const replacement = createDeferred<File | null>();
+  vi.mocked(extractZipImage).mockReturnValueOnce(old.promise).mockReturnValueOnce(replacement.promise);
+  const first = fetchZipImage('same.png');
+  const duplicate = fetchZipImage('same.png');
+  clearZipCache();
+  await expect(Promise.all([first, duplicate])).resolves.toEqual([null, null]);
+  const next = fetchZipImage('same.png');
+  old.resolve(buildReadableFile({ name: 'old.png', contents: 'old' }));
+  await old.promise;
+  expect(getZipImageCached('same.png')).toBeUndefined();
+  replacement.resolve(buildReadableFile({ name: 'new.png', contents: 'new' }));
+  const file = await next;
+  expect(file).not.toBeNull();
+  expect(getZipImageCached('same.png')).toBe(file);
+});

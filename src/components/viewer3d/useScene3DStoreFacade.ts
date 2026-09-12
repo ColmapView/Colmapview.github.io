@@ -19,12 +19,12 @@ import type {
 } from '../../utils/splatBackendPolicy';
 import type { UrlLoadProgress } from '../../types/manifest';
 import type { Reconstruction } from '../../types/colmap';
-import type { WasmReconstructionWrapper } from '../../wasm/reconstruction';
+import type { ReconstructionSource } from '../../wasm/reconstructionService';
 import { shouldHideSceneAutoHideElement } from './scene3dViewModel';
 
 interface SceneContentDataFacade {
   reconstruction: Reconstruction | null;
-  wasmReconstruction: WasmReconstructionWrapper | null;
+  wasmReconstruction: ReconstructionSource | null;
   splatFile?: File;
   isIdle: UIState['isIdle'];
   autoHideElements: UIState['autoHideElements'];
@@ -48,7 +48,7 @@ interface SceneContentActionsFacade {
 
 interface SceneContainerDataFacade {
   reconstruction: Reconstruction | null;
-  wasmReconstruction: WasmReconstructionWrapper | null;
+  wasmReconstruction: ReconstructionSource | null;
   splatFile?: File;
   backgroundColor: UIState['backgroundColor'];
   showAutoHideEditor: UIState['showAutoHideEditor'];

@@ -24,8 +24,8 @@ describe('prefetchImagePlaneTexturesForReconstruction', () => {
       prefetch,
     });
 
-    expect(dataset.getImage).toHaveBeenCalledWith('a.jpg');
-    expect(dataset.getImage).toHaveBeenCalledWith('b.jpg');
+    expect(dataset.getImage).toHaveBeenCalledWith('a.jpg', { priority: 'prefetch', signal: undefined });
+    expect(dataset.getImage).toHaveBeenCalledWith('b.jpg', { priority: 'prefetch', signal: undefined });
     expect(prefetch).toHaveBeenCalledWith(
       [
         { file: fileA, name: 'a.jpg' },
@@ -107,8 +107,8 @@ describe('prefetchImagePlaneTexturesForReconstruction', () => {
       prefetch,
     });
 
-    expect(dataset.getImage).toHaveBeenCalledWith('metric.jpg');
-    expect(dataset.getMetricImage).toHaveBeenCalledWith('metric.jpg');
+    expect(dataset.getImage).toHaveBeenCalledWith('metric.jpg', { priority: 'prefetch', signal: undefined });
+    expect(dataset.getMetricImage).toHaveBeenCalledWith('metric.jpg', { priority: 'prefetch', signal: undefined });
     expect(prefetch).toHaveBeenCalledWith(
       [{ file: metricFile, name: 'metric.jpg' }],
       expect.objectContaining({ shouldCancel: expect.any(Function) })

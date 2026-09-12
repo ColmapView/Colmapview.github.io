@@ -6,7 +6,7 @@
  */
 
 import type { Reconstruction } from '../../types/colmap.js';
-import type { WasmReconstructionWrapper } from '../../wasm/reconstruction.js';
+import type { ReconstructionSource } from '../../wasm/reconstructionService';
 import { clearAllCaches } from '../../cache/index.js';
 import { useReconstructionStore } from '../reconstructionStore.js';
 import { useImageMetricsStore } from '../stores/imageMetricsStore.js';
@@ -64,7 +64,7 @@ export function clearReconstruction(options?: ClearReconstructionOptions): void 
  */
 export function setNewReconstruction(
   reconstruction: Reconstruction,
-  wasmWrapper?: WasmReconstructionWrapper | null,
+  wasmWrapper?: ReconstructionSource | null,
   options?: SetReconstructionOptions
 ): SetReconstructionResult {
   const { preserveZip = true, preserveView = false } = options ?? {};
@@ -107,7 +107,7 @@ export function setNewReconstruction(
  */
 export function getReconstructionForTransform(): {
   reconstruction: Reconstruction | null;
-  wasmReconstruction: WasmReconstructionWrapper | null;
+  wasmReconstruction: ReconstructionSource | null;
 } {
   const state = useReconstructionStore.getState();
   return {

@@ -119,3 +119,84 @@ describe('useImageGallerySelectedImageScroll', () => {
     expect(listVirtualizer.scrollToIndex).not.toHaveBeenCalled();
   });
 });
+
+
+describe('selected image scroll identity', () => {
+  it('ignores cache-only item replacements while following selection and row changes', () => {
+    const rowVirtualizer = createVirtualizer();
+    const listVirtualizer = createVirtualizer();
+    const initialProps = {
+      selectedImageId: 10 as number | null,
+      images,
+      viewMode: 'gallery' as 'gallery' | 'list',
+      galleryColumns: 2,
+      rowVirtualizer,
+      listVirtualizer,
+    };
+    const { rerender } = renderHook(useImageGallerySelectedImageScroll, { initialProps });
+    expect(rowVirtualizer.scrollToIndex).toHaveBeenCalledTimes(1);
+
+    // File cache updates replace the gallery items without changing their order.
+    const refreshedImages = images.map(image => ({ ...image, file: new File(['cached'], 'image.png') }));
+    rerender({ ...initialProps, images: refreshedImages });
+    expect(rowVirtualizer.scrollToIndex).toHaveBeenCalledTimes(1);
+
+    // Selecting a different image in the same row still recenters it.
+    rerender({ ...initialProps, images: refreshedImages, selectedImageId: 20 });
+    expect(rowVirtualizer.scrollToIndex).toHaveBeenCalledTimes(2);
+    expect(rowVirtualizer.scrollToIndex).toHaveBeenLastCalledWith(0, expect.anything());
+
+    // Sorting/filtering can move the current selection without changing its ID.
+    const reorderedImages = [...images.slice(2), ...images.slice(0, 2)];
+    rerender({ ...initialProps, images: reorderedImages, selectedImageId: 20 });
+    expect(rowVirtualizer.scrollToIndex).toHaveBeenLastCalledWith(2, expect.anything());
+    expect(rowVirtualizer.scrollToIndex).toHaveBeenCalledTimes(3);
+
+    rerender({ ...initialProps, selectedImageId: 50, galleryColumns: 3 });
+    expect(rowVirtualizer.scrollToIndex).toHaveBeenLastCalledWith(1, expect.anything());
+    rerender({ ...initialProps, selectedImageId: 50, viewMode: 'list' });
+    expect(listVirtualizer.scrollToIndex).toHaveBeenLastCalledWith(4, expect.anything());
+  });
+
+  it('recenters after a column resize even when the selected row stays the same', () => {
+    const rowVirtualizer = createVirtualizer();
+    const listVirtualizer = createVirtualizer();
+    const initialProps = {
+      selectedImageId: 40,
+      images,
+      viewMode: 'gallery' as const,
+      galleryColumns: 2,
+      rowVirtualizer,
+      listVirtualizer,
+    };
+    const { rerender } = renderHook(useImageGallerySelectedImageScroll, { initialProps });
+    expect(rowVirtualizer.scrollToIndex).toHaveBeenLastCalledWith(1, expect.anything());
+    rerender({ ...initialProps, galleryColumns: 3 });
+    expect(rowVirtualizer.scrollToIndex).toHaveBeenCalledTimes(2);
+    expect(rowVirtualizer.scrollToIndex).toHaveBeenLastCalledWith(1, expect.anything());
+  });
+
+  it('follows a selection that becomes available after a source or filter change', () => {
+    const rowVirtualizer = createVirtualizer();
+    const listVirtualizer = createVirtualizer();
+    const initialProps = {
+      selectedImageId: 50 as number | null,
+      images: [] as { imageId: number }[],
+      viewMode: 'gallery' as const,
+      galleryColumns: 2,
+      rowVirtualizer,
+      listVirtualizer,
+    };
+    const { rerender } = renderHook(useImageGallerySelectedImageScroll, { initialProps });
+    expect(rowVirtualizer.scrollToIndex).not.toHaveBeenCalled();
+    rerender({ ...initialProps, images });
+    expect(rowVirtualizer.scrollToIndex).toHaveBeenCalledTimes(1);
+    rerender({ ...initialProps, images, selectedImageId: null });
+    expect(rowVirtualizer.scrollToIndex).toHaveBeenCalledTimes(1);
+    rerender({ ...initialProps, images });
+    expect(rowVirtualizer.scrollToIndex).toHaveBeenCalledTimes(2);
+    rerender(initialProps);
+    rerender({ ...initialProps, images });
+    expect(rowVirtualizer.scrollToIndex).toHaveBeenCalledTimes(3);
+  });
+});

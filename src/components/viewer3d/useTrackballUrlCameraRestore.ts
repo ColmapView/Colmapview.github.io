@@ -2,6 +2,7 @@ import { useEffect, useRef, type MutableRefObject } from 'react';
 import * as THREE from 'three';
 import { decodeCameraState } from '../../hooks/useUrlState';
 import { appLogger } from '../../utils/logger';
+import { requestSceneRender } from '../../utils/sceneRenderInvalidation';
 import {
   applyTrackballUrlCameraState,
   shouldApplyTrackballUrlCameraState,
@@ -54,6 +55,8 @@ export function useTrackballUrlCameraRestore({
         distance: distanceRef,
         targetDistance: targetDistanceRef,
       });
+      camera.updateMatrixWorld();
+      requestSceneRender();
 
       appLogger.info('[URL State] Restored camera state from URL hash');
     });

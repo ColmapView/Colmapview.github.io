@@ -4,11 +4,11 @@ import {
   type UIState,
 } from '../../../store';
 import type { Reconstruction } from '../../../types/colmap';
-import type { WasmReconstructionWrapper } from '../../../wasm/reconstruction';
+import type { ReconstructionSource } from '../../../wasm/reconstructionService';
 
 interface SettingsPanelDataFacade {
   reconstruction: Reconstruction | null;
-  wasmReconstruction: WasmReconstructionWrapper | null;
+  wasmReconstruction: ReconstructionSource | null;
 }
 
 interface SettingsPanelUiFacade {

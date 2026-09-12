@@ -13,6 +13,7 @@ import { FloorPlaneWidget } from './FloorPlaneWidget';
 import { PickingCursor } from './PickingCursor';
 import { ScreenshotCapture } from './ScreenshotCapture';
 import { FpsTracker } from './FpsTracker';
+import { SceneRenderWakeups } from './SceneRenderWakeups';
 import { FooterBranding } from './FooterBranding';
 import { SplatPsnrEvaluator } from './SplatPsnrEvaluator';
 import { SplatBackendStatusNotifier } from './SplatBackendStatusNotifier';
@@ -474,6 +475,7 @@ export function Scene3D() {
           preparingProgressVisible={preparingProgressVisible}
         />
         <Canvas
+          frameloop="demand"
           className="relative z-10"
           camera={{
             position: cameraPosition,
@@ -494,6 +496,7 @@ export function Scene3D() {
           }}
         >
           <BackgroundColor color={backgroundColor} transparent={webGpuSplatCanvasVisible} />
+          <SceneRenderWakeups />
           <FpsTracker />
           <ScreenshotCapture />
           <Suspense fallback={<LoadingFallback />}>

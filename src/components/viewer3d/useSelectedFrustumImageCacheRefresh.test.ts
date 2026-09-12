@@ -29,7 +29,7 @@ describe('useSelectedFrustumImageCacheRefresh', () => {
     }));
 
     await waitFor(() => expect(onImageLoaded).toHaveBeenCalledTimes(1));
-    expect(imageSource.getImage).toHaveBeenCalledWith(selectedImage.name);
+    expect(imageSource.getImage).toHaveBeenCalledWith(selectedImage.name, { priority: 'selected', signal: expect.any(AbortSignal) });
   });
 
   it('does not fetch when images are unavailable, the selection is missing, or the image is cached', () => {

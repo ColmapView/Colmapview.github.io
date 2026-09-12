@@ -159,20 +159,21 @@ export function CameraFrustums() {
       return;
     }
 
-    let cancelled = false;
+    const controller = new AbortController();
     void prefetchImagePlaneTexturesForReconstruction({
       reconstruction,
       dataset,
-      shouldCancel: () => cancelled,
+      shouldCancel: () => controller.signal.aborted,
+      signal: controller.signal,
       onBatchPrefetched: handleSelectedImageLoaded,
     }).catch((error: unknown) => {
-      if (cancelled) return;
+      if (controller.signal.aborted) return;
       const message = error instanceof Error ? error.message : String(error);
       appLogger.warn(`[Image Plane] Background texture prefetch failed: ${message}`);
     });
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [
     dataset,

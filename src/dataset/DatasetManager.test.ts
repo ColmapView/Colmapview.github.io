@@ -17,6 +17,7 @@ vi.mock('../utils/urlImageFiles', () => ({
 }));
 
 vi.mock('../utils/zipImageFiles', () => ({
+  getZipImageGeneration: vi.fn(() => 0),
   fetchZipImageRaw: vi.fn(),
   getZipImageCached: vi.fn(),
   getZipMaskCached: vi.fn(),
@@ -122,13 +123,15 @@ describe('DatasetManager', () => {
       mockState.imageUrlBase = 'https://example.com/images/';
     });
 
-    it('returns cached image if available', async () => {
+    it('uses the consumer request path for cached images so recency is refreshed', async () => {
       const cachedFile = new File([], 'cached.jpg');
       vi.mocked(getUrlImageCached).mockReturnValue(cachedFile);
+      vi.mocked(fetchUrlImage).mockResolvedValue(cachedFile);
 
       const result = await manager.getImage('test.jpg');
       expect(result).toBe(cachedFile);
-      expect(fetchUrlImage).not.toHaveBeenCalled();
+      expect(fetchUrlImage).toHaveBeenCalledWith('https://example.com/images/', 'test.jpg', undefined, undefined);
+      expect(getUrlImageCached).not.toHaveBeenCalled();
     });
 
     it('fetches image if not cached', async () => {
@@ -138,7 +141,7 @@ describe('DatasetManager', () => {
 
       const result = await manager.getImage('test.jpg');
       expect(result).toBe(fetchedFile);
-      expect(fetchUrlImage).toHaveBeenCalledWith('https://example.com/images/', 'test.jpg', undefined);
+      expect(fetchUrlImage).toHaveBeenCalledWith('https://example.com/images/', 'test.jpg', undefined, undefined);
     });
 
     it('returns null when no imageUrlBase', async () => {
@@ -155,7 +158,7 @@ describe('DatasetManager', () => {
       const result = await manager.getMetricImage('test.jpg');
 
       expect(result).toBe(rawFile);
-      expect(fetchUrlImageRaw).toHaveBeenCalledWith('https://example.com/images/', 'test.jpg', undefined);
+      expect(fetchUrlImageRaw).toHaveBeenCalledWith('https://example.com/images/', 'test.jpg', undefined, { priority: 'metric' });
       expect(fetchUrlImage).not.toHaveBeenCalled();
     });
   });
@@ -182,7 +185,7 @@ describe('DatasetManager', () => {
 
       const result = await manager.getImage('test.jpg');
       expect(result).toBe(extractedFile);
-      expect(fetchZipImage).toHaveBeenCalledWith('test.jpg');
+      expect(fetchZipImage).toHaveBeenCalledWith('test.jpg', undefined);
     });
 
     it('returns null when ZIP not available', async () => {
@@ -199,7 +202,7 @@ describe('DatasetManager', () => {
       const result = await manager.getMetricImage('test.jpg');
 
       expect(result).toBe(rawFile);
-      expect(fetchZipImageRaw).toHaveBeenCalledWith('test.jpg');
+      expect(fetchZipImageRaw).toHaveBeenCalledWith('test.jpg', undefined);
       expect(fetchZipImage).not.toHaveBeenCalled();
     });
   });
@@ -257,7 +260,7 @@ describe('DatasetManager', () => {
 
       const result = await manager.getMask('test.jpg');
       expect(result).toBe(maskFile);
-      expect(fetchUrlMask).toHaveBeenCalledWith('https://example.com/masks/', 'test.jpg');
+      expect(fetchUrlMask).toHaveBeenCalledWith('https://example.com/masks/', 'test.jpg', undefined);
     });
 
     it('returns cached URL mask synchronously', () => {

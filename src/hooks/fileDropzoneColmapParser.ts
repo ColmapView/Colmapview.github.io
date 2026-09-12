@@ -1,4 +1,4 @@
-import {
+import type {
   parseCamerasBinary,
   parseCamerasText,
   parseImagesBinary,
@@ -12,7 +12,8 @@ import type { SkippedCameraRecord } from '../parsers';
 import type { Camera, Image as ColmapImage, Point3D } from '../types/colmap';
 import { appLogger } from '../utils/logger';
 import type { RigData } from '../types/rig';
-import type { WasmReconstructionWrapper } from '../wasm';
+import { ReconstructionService, type ReconstructionSnapshot, type ReconstructionSource } from '../wasm/reconstructionService';
+import type { ReconstructionPhase } from '../wasm/reconstructionProtocol';
 
 export interface ColmapParserFiles {
   camerasFile: File;
@@ -27,8 +28,9 @@ export interface ColmapParseResult {
   images: Map<number, ColmapImage>;
   points3D?: Map<bigint, Point3D>;
   wasmRigData?: RigData;
-  wasmWrapper: WasmReconstructionWrapper | null;
+  wasmWrapper: ReconstructionSource | null;
   usedWasmPath: boolean;
+  reconstructionSnapshot?: ReconstructionSnapshot;
 }
 
 export interface ColmapParserDeps {
@@ -44,20 +46,11 @@ export interface ColmapParserDeps {
 
 interface ParseColmapFilesOptions extends ColmapParserFiles {
   parsers?: ColmapParserDeps;
+  signal?: AbortSignal;
+  onProgress?: (phase: ReconstructionPhase) => void;
   addNotification: (type: 'info' | 'warning', message: string, duration?: number) => void;
   log?: (message: string) => void;
 }
-
-const defaultParsers: ColmapParserDeps = {
-  parseWithWasm,
-  parseCamerasBinary,
-  parseCamerasText,
-  parseImagesBinary,
-  parseImagesText,
-  parsePoints3DBinary,
-  parsePointCloudPlyBuffer,
-  parsePoints3DText,
-};
 
 export async function parseColmapFiles({
   camerasFile,
@@ -65,10 +58,24 @@ export async function parseColmapFiles({
   points3DFile,
   rigsFile,
   framesFile,
-  parsers = defaultParsers,
+  parsers,
+  signal,
+  onProgress,
   addNotification,
   log = appLogger.info,
 }: ParseColmapFilesOptions): Promise<ColmapParseResult> {
+  if (!parsers) {
+    const service = new ReconstructionService({ camerasFile, imagesFile, points3DFile, rigsFile, framesFile }, { signal, onProgress });
+    const snapshot = await service.load();
+    addNotification('info', `Loaded ${snapshot.pointCount.toLocaleString()} points`, 5000);
+    for (const warning of snapshot.data.warnings) addNotification('warning', warning);
+    log(`[Reconstruction] ${service.mode}, ${snapshot.data.diagnostics.parser}: ${JSON.stringify(snapshot.data.diagnostics)}`);
+    return {
+      cameras: snapshot.reconstruction.cameras, images: snapshot.reconstruction.images,
+      wasmRigData: snapshot.reconstruction.rigData, wasmWrapper: snapshot,
+      usedWasmPath: snapshot.data.diagnostics.parser === 'wasm', reconstructionSnapshot: snapshot,
+    };
+  }
   log('[Parser] Attempting WASM parser (memory-optimized)...');
   const wasmResult = await parsers.parseWithWasm(
     camerasFile,

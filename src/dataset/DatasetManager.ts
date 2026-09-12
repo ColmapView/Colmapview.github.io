@@ -10,6 +10,7 @@
  */
 
 import type {
+  DatasetAccessOptions,
   DatasetSource,
   DatasetState,
   DatasetStateReader,
@@ -52,9 +53,14 @@ export class DatasetManager {
    * @param imageName - Image name from COLMAP (e.g., "camera_123/00.png")
    * @returns The image File or null if not found/failed
    */
-  async getImage(imageName: string): Promise<File | null> {
+  async getImage(imageName: string, options?: DatasetAccessOptions): Promise<File | null> {
     const state = this.getState();
-    return await (this.getSourceAdapter(state)?.getImage(state, imageName) ?? Promise.resolve(null));
+    if (options?.signal?.aborted) return null;
+    const file = await (this.getSourceAdapter(state)?.getImage(state, imageName, options) ?? Promise.resolve(null));
+    const current = this.getState();
+    return !options?.signal?.aborted && state.sourceType === current.sourceType
+      && state.imageUrlBase === current.imageUrlBase && state.maskUrlBase === current.maskUrlBase
+      && state.imageNameToUrl === current.imageNameToUrl && state.loadedFiles === current.loadedFiles ? file : null;
   }
 
   /**
@@ -64,9 +70,14 @@ export class DatasetManager {
    * @param imageName - Image name from COLMAP
    * @returns The original image File or null if not found/failed
    */
-  async getMetricImage(imageName: string): Promise<File | null> {
+  async getMetricImage(imageName: string, options?: DatasetAccessOptions): Promise<File | null> {
     const state = this.getState();
-    return await (this.getSourceAdapter(state)?.getMetricImage(state, imageName) ?? Promise.resolve(null));
+    if (options?.signal?.aborted) return null;
+    const file = await (this.getSourceAdapter(state)?.getMetricImage(state, imageName, options) ?? Promise.resolve(null));
+    const current = this.getState();
+    return !options?.signal?.aborted && state.sourceType === current.sourceType
+      && state.imageUrlBase === current.imageUrlBase && state.maskUrlBase === current.maskUrlBase
+      && state.imageNameToUrl === current.imageNameToUrl && state.loadedFiles === current.loadedFiles ? file : null;
   }
 
   /**
@@ -93,9 +104,14 @@ export class DatasetManager {
    * @param imageName - Image name from COLMAP (e.g., "camera_123/00.png")
    * @returns The mask File or null if not found/failed
    */
-  async getMask(imageName: string): Promise<File | null> {
+  async getMask(imageName: string, options?: DatasetAccessOptions): Promise<File | null> {
     const state = this.getState();
-    return await (this.getSourceAdapter(state)?.getMask(state, imageName) ?? Promise.resolve(null));
+    if (options?.signal?.aborted) return null;
+    const file = await (this.getSourceAdapter(state)?.getMask(state, imageName, options) ?? Promise.resolve(null));
+    const current = this.getState();
+    return !options?.signal?.aborted && state.sourceType === current.sourceType
+      && state.imageUrlBase === current.imageUrlBase && state.maskUrlBase === current.maskUrlBase
+      && state.imageNameToUrl === current.imageNameToUrl && state.loadedFiles === current.loadedFiles ? file : null;
   }
 
   /**
@@ -122,9 +138,9 @@ export class DatasetManager {
    * @param imageNames - Array of image names to prefetch
    * @param concurrency - Number of concurrent fetches (default: 5)
    */
-  async prefetchImages(imageNames: string[], concurrency: number = 5): Promise<void> {
+  async prefetchImages(imageNames: string[], concurrency: number = 5, options?: DatasetAccessOptions): Promise<void> {
     const state = this.getState();
-    await this.getSourceAdapter(state)?.prefetchImages(state, imageNames, concurrency);
+    await this.getSourceAdapter(state)?.prefetchImages(state, imageNames, concurrency, options);
   }
 
   // ===========================================================================

@@ -9,139 +9,17 @@
  * - Store actions (applyDeletionsToData) for UI coordination
  */
 
-import type { Reconstruction, Image, Camera, ImageStats, ConnectedImagesIndex, ImageToPoint3DIdsMap, Point3D, Point3DId } from '../../types/colmap.js';
-import type { Frame, FrameId } from '../../types/rig.js';
+import { filterReconstructionByImageIds } from '../../utils/filterReconstruction';
+export { filterReconstructionByImageIds } from '../../utils/filterReconstruction';
 import { useReconstructionStore } from '../reconstructionStore.js';
 import { useUIStore } from '../stores/uiStore.js';
 import { useCameraStore } from '../stores/cameraStore.js';
 import { useDeletionStore } from '../stores/deletionStore.js';
 import { useFloorPlaneStore } from '../stores/floorPlaneStore.js';
 import { removeZipMaskCacheEntries } from '../../utils/zipImageFiles.js';
-
-/**
- * Pure function: Filter a reconstruction to remove specified images.
- * This is the core logic that can be reused by higher-level functions.
- *
- * @param reconstruction - The source reconstruction data
- * @param imageIdsToRemove - Set of image IDs to remove
- * @returns A new Reconstruction with the specified images removed, or null if no changes
- */
-export function filterReconstructionByImageIds(
-  reconstruction: Reconstruction,
-  imageIdsToRemove: Set<number>
-): Reconstruction | null {
-  if (imageIdsToRemove.size === 0) return null;
-
-  // Create new images Map excluding deleted IDs
-  const newImages = new Map<number, Image>();
-  for (const [id, image] of reconstruction.images) {
-    if (!imageIdsToRemove.has(id)) {
-      newImages.set(id, image);
-    }
-  }
-
-  // Filter cameras - only keep cameras that are still used by remaining images
-  const usedCameraIds = new Set<number>();
-  for (const image of newImages.values()) {
-    usedCameraIds.add(image.cameraId);
-  }
-  const newCameras = new Map<number, Camera>();
-  for (const [id, camera] of reconstruction.cameras) {
-    if (usedCameraIds.has(id)) {
-      newCameras.set(id, camera);
-    }
-  }
-
-  // Rebuild imageStats for remaining images
-  const newImageStats = new Map<number, ImageStats>();
-  for (const [id, stats] of reconstruction.imageStats) {
-    if (!imageIdsToRemove.has(id)) {
-      newImageStats.set(id, stats);
-    }
-  }
-
-  // Rebuild connectedImagesIndex (matches) excluding deleted images
-  const newConnectedImagesIndex: ConnectedImagesIndex = new Map();
-  for (const [imageId, connections] of reconstruction.connectedImagesIndex) {
-    if (!imageIdsToRemove.has(imageId)) {
-      const newConnections = new Map<number, number>();
-      for (const [connectedId, count] of connections) {
-        if (!imageIdsToRemove.has(connectedId)) {
-          newConnections.set(connectedId, count);
-        }
-      }
-      if (newConnections.size > 0) {
-        newConnectedImagesIndex.set(imageId, newConnections);
-      }
-    }
-  }
-
-  // Rebuild imageToPoint3DIds excluding deleted images
-  const newImageToPoint3DIds: ImageToPoint3DIdsMap = new Map();
-  for (const [imageId, pointIds] of reconstruction.imageToPoint3DIds) {
-    if (!imageIdsToRemove.has(imageId)) {
-      newImageToPoint3DIds.set(imageId, pointIds);
-    }
-  }
-
-  // Rebuild points3D (tracks): filter track elements but keep all points
-  // Points are kept even with 0 remaining observations - their 3D positions are still valid for visualization
-  let newPoints3D: Map<Point3DId, Point3D> | undefined;
-  if (reconstruction.points3D) {
-    newPoints3D = new Map();
-    for (const [pointId, point] of reconstruction.points3D) {
-      // Filter track elements to remove references to deleted images
-      const newTrack = point.track.filter(elem => !imageIdsToRemove.has(elem.imageId));
-
-      newPoints3D.set(pointId, {
-        ...point,
-        track: newTrack,
-      });
-    }
-
-    // Also update imageToPoint3DIds to remove orphaned point references
-    for (const [imageId, pointIds] of newImageToPoint3DIds) {
-      const filteredPointIds = new Set<Point3DId>();
-      for (const pointId of pointIds) {
-        if (newPoints3D.has(pointId)) {
-          filteredPointIds.add(pointId);
-        }
-      }
-      if (filteredPointIds.size > 0) {
-        newImageToPoint3DIds.set(imageId, filteredPointIds);
-      } else {
-        newImageToPoint3DIds.delete(imageId);
-      }
-    }
-  }
-
-  // Filter rig frames: each frame.dataIds maps sensors to image IDs. Drop
-  // mappings whose dataId was deleted. Frames that lose all mappings are
-  // removed entirely. Rigs (sensor definitions) stay untouched.
-  let newRigData = reconstruction.rigData;
-  if (reconstruction.rigData) {
-    const newFrames = new Map<FrameId, Frame>();
-    for (const [frameId, frame] of reconstruction.rigData.frames) {
-      const keptDataIds = frame.dataIds.filter(d => !imageIdsToRemove.has(d.dataId));
-      if (keptDataIds.length > 0) {
-        newFrames.set(frameId, { ...frame, dataIds: keptDataIds });
-      }
-    }
-    newRigData = { rigs: reconstruction.rigData.rigs, frames: newFrames };
-  }
-
-  // Create the new reconstruction object
-  return {
-    cameras: newCameras,
-    images: newImages,
-    points3D: newPoints3D,
-    imageStats: newImageStats,
-    connectedImagesIndex: newConnectedImagesIndex,
-    globalStats: reconstruction.globalStats, // Stats are approximations, keep as-is
-    imageToPoint3DIds: newImageToPoint3DIds,
-    rigData: newRigData,
-  };
-}
+import { isReconstructionSnapshot } from '../../wasm/reconstructionService';
+import { useNotificationStore } from '../stores/notificationStore';
+import type { Reconstruction } from '../../types/colmap';
 
 /**
  * Store action: Apply pending deletions to the reconstruction data permanently.
@@ -149,7 +27,7 @@ export function filterReconstructionByImageIds(
  *
  * @returns true if deletions were applied, false if no reconstruction or no pending deletions
  */
-export function applyDeletionsToData(): boolean {
+export function applyDeletionsToData(): boolean | Promise<boolean> {
   const reconstructionStore = useReconstructionStore.getState();
   const { reconstruction, wasmReconstruction } = reconstructionStore;
   if (!reconstruction) return false;
@@ -157,6 +35,20 @@ export function applyDeletionsToData(): boolean {
   const deletionStore = useDeletionStore.getState();
   const { pendingDeletions } = deletionStore;
   if (pendingDeletions.size === 0) return false;
+
+  if (isReconstructionSnapshot(wasmReconstruction)) {
+    return wasmReconstruction.deleteImages([...pendingDeletions]).then(snapshot => {
+      if (useReconstructionStore.getState().wasmReconstruction !== wasmReconstruction) return false;
+      reconstructionStore.setWasmReconstruction(snapshot);
+      finishDeletions(reconstruction, snapshot.reconstruction, pendingDeletions);
+      return true;
+    }).catch(error => {
+      if (useReconstructionStore.getState().wasmReconstruction === wasmReconstruction) {
+        useNotificationStore.getState().addNotification('warning', `Deletion failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return false;
+    });
+  }
 
   // In WASM mode reconstruction.points3D is empty — build it from WASM so
   // filterReconstructionByImageIds can strip track elements referencing
@@ -174,6 +66,14 @@ export function applyDeletionsToData(): boolean {
   const newReconstruction = filterReconstructionByImageIds(sourceReconstruction, pendingDeletions);
   if (!newReconstruction) return false;
 
+  finishDeletions(reconstruction, newReconstruction, pendingDeletions);
+  return true;
+}
+
+function finishDeletions(reconstruction: Reconstruction, newReconstruction: Reconstruction, pendingDeletions: Set<number>): void {
+  const reconstructionStore = useReconstructionStore.getState();
+  const deletionStore = useDeletionStore.getState();
+
   // Clear floor plane distances (stale after index changes)
   useFloorPlaneStore.getState().setPointDistances(null);
 
@@ -187,7 +87,8 @@ export function applyDeletionsToData(): boolean {
   reconstructionStore.setReconstruction(newReconstruction);
 
   // Clear pending deletions
-  deletionStore.clearPendingDeletions();
+  // Preserve any new marks added while an asynchronous worker edit was running.
+  deletionStore.unmarkBulkDeletion([...pendingDeletions]);
 
   // Clear selection if the selected image was deleted
   const cameraStore = useCameraStore.getState();
@@ -206,7 +107,6 @@ export function applyDeletionsToData(): boolean {
     uiStore.setMatchedImageId(null);
   }
 
-  return true;
 }
 
 /**
