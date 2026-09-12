@@ -1,6 +1,6 @@
 import type { MouseEvent, PointerEvent, RefObject } from 'react';
 import type { ContextMenuAction } from '../../../store';
-import { modalStyles } from '../../../theme';
+import { modalStyles, toggleSwitchStyles } from '../../../theme';
 import { CloseIcon } from '../../../icons';
 import { formatKeyCombo } from '../../../config/hotkeys';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
@@ -56,7 +56,7 @@ export function ContextMenuEditor({
   const renderAction = (action: ActionDef) => (
     <label
       key={action.id}
-      className="flex items-center gap-2 cursor-pointer hover-ds-hover rounded px-2 py-1"
+      className={toggleSwitchStyles.row}
       style={getContextMenuEditorActionStyle()}
     >
       <span className="w-4 h-4 flex-shrink-0 opacity-60">{action.icon}</span>
@@ -66,7 +66,7 @@ export function ContextMenuEditor({
           ({formatKeyCombo(action.hotkey)})
         </span>
       )}
-      <span className="ml-auto">
+      <span className="ml-auto inline-flex items-center">
         <ToggleSwitch
           checked={enabledActionIds.includes(action.id)}
           onChange={() => onToggleAction(action.id)}

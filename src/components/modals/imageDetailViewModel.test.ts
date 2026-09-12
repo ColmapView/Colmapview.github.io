@@ -494,7 +494,7 @@ describe('ImageDetailModal view-model helpers', () => {
     expect(touchNext.label).toBe('Next');
     expect(touchNext.disabled).toBe(true);
     expect(touchNext.className).toContain('touch-hit-44');
-    expect(touchNext.className).toContain('bg-ds-secondary text-ds-muted');
+    expect(touchNext.className).toContain('bg-ds-hover text-ds-primary');
 
     const desktopPrevious = getImageDetailNavigationButtonState({
       direction: 'previous',
@@ -503,8 +503,8 @@ describe('ImageDetailModal view-model helpers', () => {
     });
     expect(desktopPrevious.label).toBe('Prev');
     expect(desktopPrevious.disabled).toBe(false);
-    expect(desktopPrevious.className).toContain('px-4 py-1 text-xs gap-1');
-    expect(desktopPrevious.className).toContain('bg-ds-hover text-ds-secondary');
+    expect(desktopPrevious.className).toContain('button-standard px-2 py-1 text-sm gap-1.5');
+    expect(desktopPrevious.className).toContain('bg-ds-hover text-ds-primary');
 
     const desktopNext = getImageDetailNavigationButtonState({
       direction: 'next',
@@ -514,7 +514,7 @@ describe('ImageDetailModal view-model helpers', () => {
     expect(desktopNext.label).toBe('Next');
     expect(desktopNext.disabled).toBe(true);
     expect(desktopNext.className).toContain('opacity-50 cursor-not-allowed');
-    expect(desktopNext.className).toContain('bg-ds-secondary text-ds-muted');
+    expect(desktopNext.className).toContain('bg-ds-hover text-ds-primary');
   });
 
   it('derives image mask display state', () => {

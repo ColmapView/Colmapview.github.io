@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.3] - 2026-09-09
+
+### Fixed
+
+- Respect explicit COLMAP frame metadata when drawing rig connections, preventing persistent false lines for repeated filenames in different folders, including extensionless video frame names.
+- Share frame grouping between rig rendering and controls so visibility and availability agree, while preserving filename inference for legacy models without rig metadata.
+
+## [0.14.2] - 2026-09-06
+
+### Changed
+
+- Made standard desktop buttons more compact at 32px while preserving touch targets.
+- Unified image viewer button styling and aligned the image number field with navigation buttons.
+- Moved Theme into Settings > Customization with consistent label and field alignment.
+
+### Fixed
+
+- Aligned context-menu and auto-hide switch rows and improved switch contrast in both themes.
+- Made switch labels clickable and ensured keyboard activation works consistently.
+- Connected shared slider, select, color, and profile labels to their controls.
+- Added accessible numeric editing, slider edit focus restoration, and labels for image navigation and opacity inputs.
+
+## [0.14.1] - 2026-09-06
+
+### Fixed
+
+- Restored the original Load Dataset header layout and mobile dismiss row by removing the startup theme selector.
+- Kept Dark, Light, and System appearance controls in Settings, with existing saved preferences preserved.
+
 ## [0.14.0] - 2026-09-06
 
 ### Added

@@ -134,18 +134,18 @@ export interface ImageDetailMatchOpacityControlState {
 }
 
 const TOUCH_POINT_TOGGLE_DISABLED_CLASS =
-  'flex-1 px-2 flex items-center justify-center rounded-md text-xs bg-ds-secondary text-ds-muted opacity-50';
+  `${buttonStyles.base} flex-1 px-2 text-xs ${buttonStyles.variants.secondary} ${buttonStyles.disabled}`;
 const TOUCH_POINT_TOGGLE_ACTIVE_CLASS =
-  'flex-1 px-2 flex items-center justify-center rounded-md text-xs bg-ds-accent text-ds-void';
+  `${buttonStyles.base} flex-1 px-2 text-xs ${buttonStyles.variants.toggleActive}`;
 const TOUCH_POINT_TOGGLE_INACTIVE_CLASS =
-  'flex-1 px-2 flex items-center justify-center rounded-md text-xs bg-ds-hover text-ds-primary';
+  `${buttonStyles.base} flex-1 px-2 text-xs ${buttonStyles.variants.secondary}`;
 
 const DESKTOP_POINT_TOGGLE_DISABLED_CLASS =
-  `${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${buttonStyles.disabled} bg-ds-secondary text-ds-muted`;
+  `${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${buttonStyles.variants.secondary} ${buttonStyles.disabled}`;
 const DESKTOP_POINT_TOGGLE_ACTIVE_CLASS =
   `${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${buttonStyles.variants.toggleActive}`;
 const DESKTOP_POINT_TOGGLE_INACTIVE_CLASS =
-  `${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${buttonStyles.variants.toggle}`;
+  `${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${buttonStyles.variants.secondary}`;
 
 const POINT_TOGGLE_INACTIVE_COUNT_CLASSES: Record<ImageDetailPointToggleKey, string> = {
   points2D: 'text-ds-success',
@@ -153,25 +153,25 @@ const POINT_TOGGLE_INACTIVE_COUNT_CLASSES: Record<ImageDetailPointToggleKey, str
 };
 
 const TOUCH_MATCHES_TOGGLE_BASE_CLASS =
-  'px-3 flex items-center justify-center rounded-md text-xs whitespace-nowrap';
-const TOUCH_MATCHES_TOGGLE_DISABLED_CLASS = 'bg-ds-secondary text-ds-muted opacity-50';
-const TOUCH_MATCHES_TOGGLE_ACTIVE_CLASS = 'bg-ds-accent text-ds-void';
-const TOUCH_MATCHES_TOGGLE_INACTIVE_CLASS = 'bg-ds-hover text-ds-primary';
+  `${buttonStyles.base} px-3 text-xs whitespace-nowrap`;
+const TOUCH_MATCHES_TOGGLE_DISABLED_CLASS = `${buttonStyles.variants.secondary} ${buttonStyles.disabled}`;
+const TOUCH_MATCHES_TOGGLE_ACTIVE_CLASS = buttonStyles.variants.toggleActive;
+const TOUCH_MATCHES_TOGGLE_INACTIVE_CLASS = buttonStyles.variants.secondary;
 
 const DESKTOP_MATCHES_TOGGLE_DISABLED_CLASS =
-  `${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${buttonStyles.disabled} bg-ds-secondary text-ds-muted`;
+  `${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${buttonStyles.variants.secondary} ${buttonStyles.disabled}`;
 const DESKTOP_MATCHES_TOGGLE_ACTIVE_CLASS =
   `${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${buttonStyles.variants.toggleActive}`;
 const DESKTOP_MATCHES_TOGGLE_INACTIVE_CLASS =
-  `${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${buttonStyles.variants.toggle}`;
+  `${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${buttonStyles.variants.secondary}`;
 
 const TOUCH_MATCH_SELECT_CLASS = `${inputStyles.select} flex-1 min-w-0 py-1.5 text-xs`;
 const DESKTOP_MATCH_SELECT_CLASS = `${inputStyles.select} py-1 pl-2 pr-1 text-xs`;
 
 const IMAGE_JUMP_INPUT_CONTAINER_CLASS = 'flex items-center text-xs';
-const IMAGE_JUMP_INPUT_FIELD_CLASS = `${inputStyles.base} py-1 w-14 rounded-l rounded-r-none text-center text-xs`;
+const IMAGE_JUMP_INPUT_FIELD_CLASS = `${inputStyles.base} button-standard py-1 w-14 rounded-l rounded-r-none text-center text-sm`;
 const IMAGE_JUMP_INPUT_COUNT_CLASS =
-  'w-14 px-2 py-1 text-center bg-ds-secondary text-ds-muted border-y border-r border-ds rounded-r';
+  'button-standard inline-flex items-center justify-center w-14 px-2 py-1 text-sm text-center bg-ds-secondary text-ds-muted border-y border-r border-ds rounded-r';
 
 const TOUCH_MATCH_OPACITY_CONTAINER_CLASS = 'flex items-center gap-2 px-2 pb-1.5';
 const TOUCH_MATCH_OPACITY_LABEL_CLASS = 'text-ds-secondary text-xs';

@@ -14,13 +14,13 @@ export const buttonStyles = {
   // Size variants
   sizes: {
     xs: 'px-2 py-1 text-xs gap-1',
-    sm: 'px-2.5 py-1.5 text-sm gap-1.5',
-    md: 'px-3 py-1.5 text-base gap-2',
-    lg: 'button-standard px-4 py-2 text-sm gap-2',
+    sm: 'button-standard px-2.5 py-1 text-sm gap-1.5',
+    md: 'button-standard px-3 py-1 text-sm gap-2',
+    lg: 'button-standard px-4 py-1 text-sm gap-2',
     xl: 'px-6 py-3 text-lg gap-3',
-    toggle: 'px-4 py-1 text-sm gap-1.5', // Wide toggle button (matches hover panel style)
-    toggleResponsive: 'px-4 py-1 text-xs gap-1', // Compact toggle button for modals
-    action: 'button-standard px-4 py-1.5 text-sm gap-2 min-w-[120px]', // Equal-width action buttons (startup panel)
+    toggle: 'button-standard px-3 py-1 text-sm gap-1.5', // Wide toggle button (matches hover panel style)
+    toggleResponsive: 'button-standard px-2 py-1 text-sm gap-1.5', // Compact toggle button for modals
+    action: 'button-standard px-4 py-1 text-sm gap-2 min-w-[120px]', // Equal-width action buttons (startup panel)
     icon: 'p-1',         // Square icon button small
     iconMd: 'p-1.5',     // Square icon button medium
     iconLg: 'p-2',       // Square icon button large
@@ -99,7 +99,7 @@ export function getButtonClass(
 // ============================================
 // Single source of truth for action buttons used across modals, panels, and context menus
 
-const PANEL_ACTION = `${buttonStyles.base} button-standard px-2 py-2 text-sm gap-2`;
+const PANEL_ACTION = `${buttonStyles.base} button-standard px-2 py-1 text-sm gap-2`;
 const PANEL_SECONDARY_ACTION = `${PANEL_ACTION} ${buttonStyles.variants.secondary}`;
 const PANEL_PRIMARY_ACTION = `${PANEL_ACTION} ${buttonStyles.variants.primary}`;
 
@@ -117,7 +117,7 @@ export const actionButtonStyles = {
   presetDisabled: `${PANEL_SECONDARY_ACTION} ${buttonStyles.disabled} w-full`,
 
   // Full-width primary action button (for "Done", "Confirm" dialogs)
-  buttonFullWidth: `${buttonStyles.base} button-standard w-full px-3 py-2 text-sm gap-2 ${buttonStyles.variants.primary}`,
+  buttonFullWidth: `${buttonStyles.base} button-standard w-full px-3 py-1 text-sm gap-2 ${buttonStyles.variants.primary}`,
 
   // Centered compact icon actions preserve their semantic colors.
   iconButton: `${buttonStyles.base} w-6 h-6 hover-ds-hover`,

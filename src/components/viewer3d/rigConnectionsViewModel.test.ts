@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { buildImage } from '../../test/builders';
+import { buildFrame, buildImage, buildReconstruction, buildRigData } from '../../test/builders';
+import { SensorType } from '../../types/rig';
+import { buildRigInfo } from './viewerControlsViewModel';
 import { getCameraColor } from '../../theme';
 import {
   buildRigConnectionGeometryData,
@@ -13,6 +15,50 @@ import {
 } from './rigConnectionsViewModel';
 
 describe('rig connections view-model helpers', () => {
+  it('does not connect repeated extensionless filenames in separate COLMAP frames', () => {
+    const images = Array.from({ length: 64 }, (_, index) => buildImage({
+      imageId: index * 30 + 1,
+      name: `camera-${index}.mp4/00000450`,
+    }));
+    const rigData = buildRigData({
+      frames: images.map((image, index) => buildFrame({
+        frameId: index + 1,
+        dataIds: [{ sensorId: { type: SensorType.CAMERA, id: index + 1 }, dataId: image.imageId }],
+      })),
+    });
+
+    expect(buildRigConnectionGeometryData(images, rigData)).toBeNull();
+    expect(buildRigInfo(buildReconstruction({ images, rigData }))).toEqual({
+      hasRigData: false, cameraCount: 0, frameCount: 0,
+    });
+  });
+
+  it('connects explicit frame members regardless of names and ignores missing or non-camera data', () => {
+    const images = [
+      buildImage({ imageId: 10, name: 'left/00000450', tvec: [1, 0, 0] }),
+      buildImage({ imageId: 20, name: 'right/other', tvec: [0, 2, 0] }),
+      buildImage({ imageId: 30, name: 'unassigned/00000450' }),
+    ];
+    const rigData = buildRigData({ frames: [buildFrame({
+      frameId: 7,
+      dataIds: [
+        { sensorId: { type: SensorType.CAMERA, id: 1 }, dataId: 10 },
+        { sensorId: { type: SensorType.CAMERA, id: 2 }, dataId: 20 },
+        { sensorId: { type: SensorType.CAMERA, id: 2 }, dataId: 20 },
+        { sensorId: { type: SensorType.CAMERA, id: 3 }, dataId: 999 },
+        { sensorId: { type: SensorType.IMU, id: 4 }, dataId: 30 },
+      ],
+    })] });
+
+    const data = buildRigConnectionGeometryData(images, rigData);
+    expect(Array.from(data?.positions ?? [])).toEqual([-1, 0, 0, 0, -2, 0]);
+    expect(data?.lineFrameImageIds[0]).toEqual(new Set([10, 20]));
+    expect(buildRigInfo(buildReconstruction({ images, rigData }))).toEqual({
+      hasRigData: true, cameraCount: 2, frameCount: 1,
+    });
+    expect(buildRigConnectionGeometryData(images, buildRigData({ frames: [] }))).toBeNull();
+  });
+
   it('extracts frame ids from path-style and flat image names', () => {
     expect(getRigConnectionFrameId('cam_1/00.png')).toBe('00.png');
     expect(getRigConnectionFrameId('cam_2\\01.jpg')).toBe('01.jpg');

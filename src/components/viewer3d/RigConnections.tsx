@@ -27,9 +27,8 @@ const tempColor = new THREE.Color();
  * RigConnections component renders visual connections between cameras
  * that belong to the same frame in a multi-camera rig.
  *
- * It infers rig connections from image names - images with the same
- * frame identifier (e.g., "cam_1/00.png" and "cam_2/00.png" share frame "00.png")
- * are connected with lines.
+ * Uses explicit COLMAP frames when available, with filename inference for
+ * legacy reconstructions without rig metadata.
  */
 export function RigConnections() {
   const { reconstruction } = useRigConnectionsStoreFacade();
@@ -41,7 +40,7 @@ export function RigConnections() {
 
   const geometryData = useMemo(() => {
     if (!rig.visible || !reconstruction) return null;
-    return buildRigConnectionGeometryData(reconstruction.images.values());
+    return buildRigConnectionGeometryData(reconstruction.images.values(), reconstruction.rigData);
   }, [reconstruction, rig.visible]);
 
   useEffect(() => {

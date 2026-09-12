@@ -6,7 +6,7 @@
 import { memo, useCallback, type ReactNode } from 'react';
 import { useModalZIndex } from '../../hooks/useModalZIndex';
 import { useModalDrag } from '../../hooks/useModalDrag';
-import { modalStyles } from '../../theme';
+import { modalStyles, toggleSwitchStyles } from '../../theme';
 import { FloatingWindowShell } from '../ui/FloatingWindowShell';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import {
@@ -93,13 +93,13 @@ export const AutoHideModal = memo(function AutoHideModal({ isOpen, onClose }: Au
             {rows.map(({ key, label, iconId, checked }) => (
               <label
                 key={key}
-                className="flex items-center gap-2 cursor-pointer hover-ds-hover rounded px-2 py-1.5"
+                className={toggleSwitchStyles.row}
               >
                 <span className="w-4 h-4 flex-shrink-0 opacity-60">
                   {AUTO_HIDE_MODAL_ICONS[iconId]}
                 </span>
                 <span className="text-sm text-ds-primary">{label}</span>
-                <span className="ml-auto">
+                <span className="ml-auto inline-flex items-center">
                   <ToggleSwitch
                     checked={checked}
                     onChange={() => toggleElement(key)}

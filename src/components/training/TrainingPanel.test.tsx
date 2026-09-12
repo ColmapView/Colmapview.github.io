@@ -181,7 +181,8 @@ describe('TrainingPanelHarness server-described setup', () => {
     useTrainingStore.setState({ currentJob, currentJobId: currentJob.job_id, phase, legacyAttempt: true });
     render(<TrainingPanelHarness />);
     expect(screen.queryByLabelText('Image budget')).toBeNull();
-    expect(document.querySelectorAll('.training-window-body button, .training-window-action button')).toHaveLength(1);
+    // The live-preview switch renders as a button too; only the Start action may remain.
+    expect(document.querySelectorAll('.training-window-body button:not([role="switch"]), .training-window-action button:not([role="switch"])')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Start' }));
     await waitFor(() => expect(actions.startFresh).toHaveBeenCalledOnce());
     expect(actions.start).not.toHaveBeenCalled();

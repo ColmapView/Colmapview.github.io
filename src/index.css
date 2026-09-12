@@ -1532,7 +1532,7 @@ legend {
 }
 
 .button-standard {
-  min-height: 40px;
+  min-height: 32px;
   box-sizing: border-box;
   flex-shrink: 0;
 }
@@ -2437,8 +2437,6 @@ input.hue-slider::-moz-range-thumb { background: var(--text-primary); }
   --shadow-md: 0 4px 12px rgba(0,0,0,.1);
   --shadow-lg: 0 8px 24px rgba(0,0,0,.12);
 }
-.theme-select { min-height: 32px; }
-@media (pointer: coarse) { .theme-select { min-height: 44px; } }
 :root[data-ui-theme="light"] .viewer-control-selected {
   background-color: #d6ded7;
   border-color: #6a786d;
@@ -2467,9 +2465,6 @@ input.hue-slider::-moz-range-thumb { background: var(--text-primary); }
 :root[data-ui-theme="light"] .hover-ds-void-70:hover { background-color: color-mix(in srgb, var(--bg-void) 70.0%, transparent); }
 :root[data-ui-theme="light"] .hover-bg-ds-accent-90:hover { background-color: color-mix(in srgb, var(--accent) 90.0%, transparent); }
 
-/* Keep the startup title intact with the additional appearance preference. */
-.startup-header { grid-template-columns: 1fr auto; }
-.startup-config-actions { grid-column: 1 / -1; grid-row: 2; flex-wrap: wrap; }
 :root[data-ui-theme="light"] .bg-ds-success\/20 { background-color: color-mix(in srgb, var(--success) 20%, transparent); }
 :root[data-ui-theme="light"] .bg-ds-error\/20 { background-color: color-mix(in srgb, var(--error) 20%, transparent); }
 /* Training is a modeless tool window and never reserves viewer/gallery space. */
@@ -2490,3 +2485,11 @@ input.hue-slider::-moz-range-thumb { background: var(--text-primary); }
 .max-h-40 { max-height: 10rem; }
 .max-h-52 { max-height: 13rem; }
 .disabled\:opacity-50:disabled { opacity: 0.5; }
+
+/* Shared switches: compact visuals with a generous touch hit area. */
+.switch-thumb { background-color: var(--text-secondary); }
+.switch-on .switch-thumb { background-color: var(--bg-void); }
+.switch-track::before { content: ''; position: absolute; inset: -8px -4px; }
+@media (pointer: coarse) {
+  .switch-track::before { min-width: 44px; min-height: 44px; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+}

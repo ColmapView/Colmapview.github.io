@@ -94,16 +94,16 @@ const DESKTOP_NAVIGATION_CONTAINER_CLASS = 'flex items-center gap-2';
 // `relative touch-hit-44`: 36px-tall compact touch buttons get an invisible
 // 44px hit area (TOUCH.minTapTarget) via ::before — see src/index.css.
 const TOUCH_NAV_BUTTON_BASE =
-  'flex-1 px-2 flex items-center justify-center rounded-md text-xs relative touch-hit-44';
+  `${buttonStyles.base} flex-1 px-2 text-xs relative touch-hit-44`;
 const TOUCH_NAVIGATION_ENABLED_BUTTON_CLASS =
-  `${TOUCH_NAV_BUTTON_BASE} bg-ds-hover text-ds-primary`;
+  `${TOUCH_NAV_BUTTON_BASE} ${buttonStyles.variants.secondary}`;
 const TOUCH_NAVIGATION_DISABLED_BUTTON_CLASS =
-  `${TOUCH_NAV_BUTTON_BASE} bg-ds-secondary text-ds-muted`;
+  `${TOUCH_NAV_BUTTON_BASE} ${buttonStyles.variants.secondary} ${buttonStyles.disabled}`;
 
 const DESKTOP_NAVIGATION_ENABLED_BUTTON_CLASS =
-  `${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${buttonStyles.variants.toggle}`;
+  `${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${buttonStyles.variants.secondary}`;
 const DESKTOP_NAVIGATION_DISABLED_BUTTON_CLASS =
-  `${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${buttonStyles.disabled} bg-ds-secondary text-ds-muted`;
+  `${buttonStyles.base} ${buttonStyles.sizes.toggleResponsive} ${buttonStyles.variants.secondary} ${buttonStyles.disabled}`;
 
 export function getImageDetailNavigationButtonState({
   direction,
