@@ -7,6 +7,25 @@ export interface SelectedImageTextureCacheEntry {
 
 let selectedImageTexture: SelectedImageTextureCacheEntry | null = null;
 const selectedImageTextureBitmaps = new WeakMap<THREE.Texture, ImageBitmap>();
+const textureLeases = new Map<THREE.Texture, number>();
+const retiredTextures = new Map<THREE.Texture, SelectedImageTextureCacheEntry>();
+
+export function retainSelectedImageTexture(texture: THREE.Texture): () => void {
+  textureLeases.set(texture, (textureLeases.get(texture) ?? 0) + 1);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const remaining = (textureLeases.get(texture) ?? 1) - 1;
+    if (remaining > 0) { textureLeases.set(texture, remaining); return; }
+    textureLeases.delete(texture);
+    const retired = retiredTextures.get(texture);
+    if (retired) {
+      retiredTextures.delete(texture);
+      disposeSelectedImageTextureEntry(retired);
+    }
+  };
+}
 
 export function createSelectedImageTextureFromBitmap(bitmap: ImageBitmap): THREE.Texture {
   const texture = new THREE.Texture(bitmap);
@@ -38,6 +57,10 @@ export function disposeSelectedImageTextureEntry(entry: SelectedImageTextureCach
   if (!entry) return;
 
   const { texture } = entry;
+  if ((textureLeases.get(texture) ?? 0) > 0) {
+    retiredTextures.set(texture, entry);
+    return;
+  }
   texture.needsUpdate = false;
   texture.dispose();
 

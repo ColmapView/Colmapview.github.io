@@ -1,28 +1,8 @@
-export const FRUSTUM_PLANE_CULL_CHECK_INTERVAL = 5;
+export const FRUSTUM_PLANE_CULL_INTERVAL_MS = 80;
 
-export function getInitialFrustumPlaneCullFrame({
-  seed,
-  interval,
-}: {
-  seed: number;
-  interval: number;
-}): number {
-  if (!Number.isFinite(seed) || interval <= 1) return 0;
-  return Math.abs(Math.trunc(seed)) % interval;
-}
-
-export function getNextFrustumPlaneCullFrame({
-  frameCount,
-  interval,
-}: {
-  frameCount: number;
-  interval: number;
-}): number {
-  return (frameCount + 1) % interval;
-}
-
-export function shouldMeasureFrustumPlaneViewAngle(frameCount: number): boolean {
-  return frameCount === 0;
+/** Dirty planes either update now or explicitly request a frame at this deadline. */
+export function getFrustumPlaneCullDelay(now: number, lastCheck: number | null): number {
+  return lastCheck === null ? 0 : Math.max(0, FRUSTUM_PLANE_CULL_INTERVAL_MS - (now - lastCheck));
 }
 
 export function getFrustumPlaneViewAngleOk({

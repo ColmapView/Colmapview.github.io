@@ -5,11 +5,10 @@
 // @refresh reset
 
 import { useEffect, useMemo, useRef } from 'react';
-import * as THREE from 'three';
 import type { Reconstruction } from '../../types/colmap';
 import type { ColorMode } from '../../store/types';
 import type { FloorColorMode } from '../../store/stores/floorPlaneStore';
-import type { WasmReconstructionWrapper } from '../../wasm/reconstruction';
+import type { ReconstructionPointSource } from '../../wasm/reconstructionProtocol';
 import { appLogger } from '../../utils/logger';
 import type { Point3DIdLookup, PointCloudDataResult } from './types';
 import {
@@ -22,11 +21,12 @@ import {
 import { computeSelectedPointOverlay } from './pointCloudSelectionOverlay';
 import { computeSlowPathMap } from './pointCloudMapData';
 import { computeSlowPathWasm } from './pointCloudWasmData';
+import { createIndexedPointIdLookup } from './pointCloudIdIndex';
 
 export interface UsePointCloudDataParams {
   enabled: boolean;
   reconstruction: Reconstruction | null;
-  wasmReconstruction: WasmReconstructionWrapper | null;
+  wasmReconstruction: ReconstructionPointSource | null;
   colorMode: ColorMode;
   minTrackLength: number;
   maxReprojectionError: number;
@@ -54,11 +54,15 @@ interface FastPathPositionCacheStore {
 }
 
 const EMPTY_POINT_ID_LOOKUP = new Map<number, bigint>();
+const EMPTY_SELECTION = new Set<bigint>();
+const UNUSED_HIGHLIGHT: [number, number, number] = [0, 0, 0];
 
-function createSequentialPoint3DIdLookup(count: number): Point3DIdLookup {
+function createPoint3DIdLookup(count: number, sourceIds: BigUint64Array | null, immutable = false): Point3DIdLookup {
+  // WASM memory growth can detach views; the picking/selection lookup owns its IDs.
+  const ids = sourceIds ? (immutable ? sourceIds : new BigUint64Array(sourceIds)) : null;
   return {
     get(index: number) {
-      return index >= 0 && index < count ? BigInt(index + 1) : undefined;
+      return index >= 0 && index < count ? ids?.[index] ?? BigInt(index + 1) : undefined;
     },
   };
 }
@@ -84,7 +88,6 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
     thinning,
     selectedImageId,
     showSelectionHighlight,
-    selectionColor,
     floorColorMode,
     pointDistances,
     distanceThreshold,
@@ -92,13 +95,6 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
 
   const indexToPoint3DIdRef = useRef<Point3DIdLookup>(EMPTY_POINT_ID_LOOKUP);
   const fastPathPositionCache = useMemo<FastPathPositionCacheStore>(() => ({ value: null }), []);
-
-  // Compute highlight color directly in useMemo to avoid stale ref issue
-  // (useEffect runs after render, so ref would have old value during useMemo execution)
-  const highlightColor = useMemo((): [number, number, number] => {
-    const c = new THREE.Color(selectionColor);
-    return [c.r, c.g, c.b];
-  }, [selectionColor]);
 
   const pointCloudData = useMemo((): PointCloudDataResult => {
     if (!enabled || !reconstruction) {
@@ -121,11 +117,7 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
     if (wasmReconstruction?.hasPoints() && noFilters) {
       const result = computeFastPath(
         wasmReconstruction,
-        reconstruction,
         colorMode,
-        selectedImageId,
-        showSelectionHighlight,
-        highlightColor,
         floorColorMode,
         pointDistances,
         distanceThreshold,
@@ -142,9 +134,6 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
       minTrackLength,
       maxReprojectionError,
       thinning,
-      selectedImageId,
-      showSelectionHighlight,
-      highlightColor,
       floorColorMode,
       pointDistances,
       distanceThreshold
@@ -159,14 +148,32 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
     minTrackLength,
     maxReprojectionError,
     thinning,
-    selectedImageId,
-    showSelectionHighlight,
-    highlightColor,
     pointDistances,
     distanceThreshold,
     floorColorMode,
     fastPathPositionCache,
   ]);
+
+  const selectionPointIds = useMemo(() => createIndexedPointIdLookup(
+    pointCloudData.indexToPoint3DId, (pointCloudData.positions?.length ?? 0) / 3,
+  ), [pointCloudData.indexToPoint3DId, pointCloudData.positions]);
+
+  // Selection is independent of the base cloud: changing the selected image must
+  // not rebuild filtered positions or allocate/upload a full RGB attribute.
+  const selectionOverlay = useMemo(() => {
+    if (!showSelectionHighlight || selectedImageId === null || !pointCloudData.positions) {
+      return { selectedPositions: null, selectedColors: null };
+    }
+    return computeSelectedPointOverlay({
+      pointCount: pointCloudData.positions.length / 3,
+      positions: pointCloudData.positions,
+      point3DIds: null,
+      pointIdLookup: selectionPointIds,
+      selectedPointIds: reconstruction?.imageToPoint3DIds.get(selectedImageId) ?? EMPTY_SELECTION,
+      highlightColor: UNUSED_HIGHLIGHT,
+      includeColors: false,
+    });
+  }, [showSelectionHighlight, selectedImageId, pointCloudData.positions, selectionPointIds, reconstruction]);
 
   useEffect(() => {
     indexToPoint3DIdRef.current = pointCloudData.indexToPoint3DId;
@@ -174,6 +181,7 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
 
   return {
     ...pointCloudData,
+    ...selectionOverlay,
     indexToPoint3DIdRef,
   };
 }
@@ -182,12 +190,8 @@ export function usePointCloudData(params: UsePointCloudDataParams): UsePointClou
  * Compute point cloud data using WASM fast path (no filtering).
  */
 function computeFastPath(
-  wasmReconstruction: WasmReconstructionWrapper,
-  reconstruction: Reconstruction,
+  wasmReconstruction: ReconstructionPointSource,
   colorMode: ColorMode,
-  selectedImageId: number | null,
-  showSelectionHighlight: boolean,
-  highlightColor: [number, number, number],
   floorColorMode: FloorColorMode,
   pointDistances: Float32Array | null,
   distanceThreshold: number,
@@ -224,29 +228,11 @@ function computeFastPath(
     applyFloorColoring(finalColors, count, floorColorMode, pointDistances, distanceThreshold);
   }
 
-  // Compute selection overlay if needed
-  let selectedPositions: Float32Array | null = null;
-  let selectedColors: Float32Array | null = null;
-
-  if (showSelectionHighlight && selectedImageId !== null) {
-    const selectedPointIds =
-      reconstruction.imageToPoint3DIds.get(selectedImageId) ?? new Set<bigint>();
-    const result = computeSelectedPointOverlay({
-      pointCount: count,
-      point3DIds: wasmReconstruction.getPoint3DIds(),
-      positions: wasmPositions,
-      selectedPointIds,
-      highlightColor,
-    });
-    selectedPositions = result.selectedPositions;
-    selectedColors = result.selectedColors;
-  }
-
   let positionsCopy = fastPathPositionCache.value?.copy ?? null;
   const cache = fastPathPositionCache.value;
   if (!cache || cache.source !== wasmPositions || cache.count !== count || cache.copy.length !== wasmPositions.length) {
     // Copy WASM positions to prevent view invalidation when WASM memory is reallocated.
-    positionsCopy = new Float32Array(wasmPositions);
+    positionsCopy = wasmReconstruction.immutableBuffers ? wasmPositions : new Float32Array(wasmPositions);
     fastPathPositionCache.value = {
       source: wasmPositions,
       copy: positionsCopy,
@@ -257,9 +243,9 @@ function computeFastPath(
   return {
     positions: positionsCopy,
     colors: finalColors,
-    selectedPositions,
-    selectedColors,
-    indexToPoint3DId: createSequentialPoint3DIdLookup(count),
+    selectedPositions: null,
+    selectedColors: null,
+    indexToPoint3DId: createPoint3DIdLookup(count, wasmReconstruction.getPoint3DIds(), wasmReconstruction.immutableBuffers),
   };
 }
 
@@ -268,24 +254,15 @@ function computeFastPath(
  */
 function computeSlowPath(
   reconstruction: Reconstruction,
-  wasmReconstruction: WasmReconstructionWrapper | null,
+  wasmReconstruction: ReconstructionPointSource | null,
   colorMode: ColorMode,
   minTrackLength: number,
   maxReprojectionError: number,
   thinning: number,
-  selectedImageId: number | null,
-  showSelectionHighlight: boolean,
-  highlightColor: [number, number, number],
   floorColorMode: FloorColorMode,
   pointDistances: Float32Array | null,
   distanceThreshold: number
 ): PointCloudDataResult {
-  // Build set of selected image point IDs
-  const selectedImagePointIds =
-    selectedImageId !== null
-      ? reconstruction.imageToPoint3DIds.get(selectedImageId) ?? new Set<bigint>()
-      : new Set<bigint>();
-
   // Try WASM path first (even for filtered case)
   if (wasmReconstruction?.hasPoints()) {
     const result = computeSlowPathWasm({
@@ -294,9 +271,9 @@ function computeSlowPath(
       minTrackLength,
       maxReprojectionError,
       thinning,
-      selectedImagePointIds,
-      showSelectionHighlight,
-      highlightColor,
+      selectedImagePointIds: EMPTY_SELECTION,
+      showSelectionHighlight: false,
+      highlightColor: UNUSED_HIGHLIGHT,
       floorColorMode,
       pointDistances,
       distanceThreshold,
@@ -311,8 +288,8 @@ function computeSlowPath(
     minTrackLength,
     maxReprojectionError,
     thinning,
-    selectedImagePointIds,
-    showSelectionHighlight,
-    highlightColor,
+    selectedImagePointIds: EMPTY_SELECTION,
+    showSelectionHighlight: false,
+    highlightColor: UNUSED_HIGHLIGHT,
   });
 }

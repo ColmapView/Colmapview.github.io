@@ -11,7 +11,6 @@ import { appLogger } from '../../../utils/logger';
 
 export interface SelectionOverlayProps {
   selectedPositions: Float32Array;
-  selectedColors: Float32Array;
   pointSize: number;
   selectedImageId: number | null;
   selectionColorMode: SelectionColorMode;
@@ -26,7 +25,6 @@ export interface SelectionOverlayProps {
 export function SelectionOverlay(props: SelectionOverlayProps): React.JSX.Element {
   const {
     selectedPositions,
-    selectedColors,
     pointSize,
     selectedImageId,
     selectionColorMode,
@@ -42,7 +40,7 @@ export function SelectionOverlay(props: SelectionOverlayProps): React.JSX.Elemen
   });
 
   const geometry = useMemo(() => {
-    if (!selectedPositions || !selectedColors || selectedPositions.length === 0) return null;
+    if (!selectedPositions || selectedPositions.length === 0) return null;
 
     // Validate positions for NaN values before creating geometry
     // NaN positions cause computeBoundingSphere to fail and points to disappear
@@ -61,10 +59,9 @@ export function SelectionOverlay(props: SelectionOverlayProps): React.JSX.Elemen
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(selectedPositions, 3));
-    geo.setAttribute('color', new THREE.BufferAttribute(selectedColors, 3));
     geo.computeBoundingSphere();
     return geo;
-  }, [selectedPositions, selectedColors]);
+  }, [selectedPositions]);
 
   // Dispose geometry when it changes to prevent GPU memory leaks
   useEffect(() => {

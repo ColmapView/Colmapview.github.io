@@ -1,263 +1,149 @@
-import {
-  buildImageUrl,
-  buildMaskUrlCandidates,
-} from './imageFileLookupPolicy';
+import { buildImageUrl, buildMaskUrlCandidates } from './imageFileLookupPolicy';
 import { compressAndResizeToJpeg } from './imageFileCompression';
-import { createImageFileRequestState } from './imageFileRequestState';
-import type { CacheInfo } from './imageFileCachePolicy';
+import { createCoalescedRequestState, createImageFileRequestState } from './imageFileRequestState';
+import type { DatasetAccessError, DatasetAccessOptions } from '../dataset/types';
+import { createUrlFileCache } from '../dataset/urlFileCache';
+import { urlMediaScheduler, type MediaTransferOutcome } from '../dataset/urlMediaScheduler';
 import { getFilenameFromUrl } from './urlUtils';
-import { appLogger } from './logger';
 
-/** Cache for images fetched from URLs (stored as compressed JPEG, resized) */
-const urlImageState = createImageFileRequestState();
-
-/** Cache for masks fetched from URLs (stored as original mask files) */
-const urlMaskState = createImageFileRequestState();
-
-/**
- * Stop probing for masks once a source has clearly shipped none. Every miss is
- * two 404s (the name + a `.png` suffix), so on a maskless dataset that is ~2N
- * wasted requests (e.g. 1142 for 571 images). After this many consecutive misses
- * with no hit, short-circuit further probes. Reset by clearUrlMaskCache(), and
- * disabled the moment any mask is found (so partially-masked sets still work).
- */
+const urlFiles = createUrlFileCache();
+const urlImageState = createImageFileRequestState(urlFiles.scope('display'));
+const urlMaskState = createImageFileRequestState(urlFiles.scope('mask'));
+const maskTransfers = createCoalescedRequestState<MediaTransferOutcome>({ kind: 'aborted' });
+const urlRawState = createImageFileRequestState();
+const imageAliases = new Map<string, string>();
+const maskAliases = new Map<string, string[]>();
+const maskAbsence = new Map<string, { misses: number; found: boolean }>();
 const URL_MASK_ABSENCE_THRESHOLD = 8;
-let urlMaskConsecutiveMisses = 0;
-let urlMaskFoundAny = false;
 
-/**
- * Clear the URL image and mask caches.
- * Call this when loading a new reconstruction.
- */
+function transferError(result: MediaTransferOutcome, url: string): DatasetAccessError | undefined {
+  if (result.kind === 'aborted') return { kind: 'aborted', message: 'Media request cancelled.', url };
+  if (result.kind !== 'failure') return undefined;
+  return {
+    kind: result.status === undefined ? 'network' : 'http', status: result.status, url,
+    message: result.status === 429 ? 'HTTP 429: media rate limit exhausted after retries. Try again later.'
+      : result.status ? `HTTP ${result.status}: media request failed.` : 'Network error while loading media.',
+  };
+}
+
 export function clearUrlImageCache(): void {
   urlImageState.clear();
+  urlRawState.clear();
+  imageAliases.clear();
   clearUrlMaskCache();
 }
 
-/**
- * Clear the URL mask cache.
- */
 export function clearUrlMaskCache(): void {
   urlMaskState.clear();
-  urlMaskConsecutiveMisses = 0;
-  urlMaskFoundAny = false;
+  maskTransfers.clear();
+  maskAliases.clear();
+  maskAbsence.clear();
 }
 
-/**
- * Get a cached URL image (synchronous).
- * Returns undefined if not yet fetched.
- */
-export function getUrlImageCached(imageName: string): File | undefined {
-  return urlImageState.getCached(imageName);
+function resolveImageRequestUrl(base: string | null, name: string, explicitUrl?: string) {
+  if (explicitUrl) return { url: explicitUrl, filename: getFilenameFromUrl(explicitUrl) };
+  return base ? buildImageUrl(base, name) : null;
 }
 
-/**
- * Get a cached URL mask (synchronous).
- * Returns undefined if not yet fetched.
- */
-export function getUrlMaskCached(imageName: string): File | undefined {
-  return urlMaskState.getCached(imageName);
+const imageKey = (url: string) => `display:${url}`;
+const maskKeys = (base: string, name: string) => buildMaskUrlCandidates(base, name).map(item => `mask:${item.url}`);
+
+/** Source-aware callers resolve aliases without trusting a name from another source. */
+export function getUrlImageCached(name: string, base?: string | null, explicitUrl?: string): File | undefined {
+  const resolved = base !== undefined || explicitUrl ? resolveImageRequestUrl(base ?? null, name, explicitUrl) : null;
+  const key = resolved ? imageKey(resolved.url) : base === undefined ? imageAliases.get(name) : undefined;
+  return key ? urlImageState.peekCached(key) : undefined;
 }
 
-/**
- * Resolve the request URL and display filename for an image. When an explicit
- * URL is given (a per-image mapping), it is used verbatim — already absolute and
- * encoded — and must not pass through buildImageUrl again. Otherwise the URL is
- * built from the base + COLMAP name. Returns null when neither is available.
- */
-function resolveImageRequestUrl(
-  imageUrlBase: string | null,
-  imageName: string,
-  explicitUrl?: string
-): { url: string; filename: string } | null {
-  if (explicitUrl) {
-    return { url: explicitUrl, filename: getFilenameFromUrl(explicitUrl) };
-  }
-  if (!imageUrlBase) {
-    return null;
-  }
-  return buildImageUrl(imageUrlBase, imageName);
+export function getUrlMaskCached(name: string, base?: string | null): File | undefined {
+  const keys = base ? maskKeys(base, name) : base === undefined ? maskAliases.get(name) : undefined;
+  return keys?.map(key => urlMaskState.peekCached(key)).find(file => file !== undefined);
 }
 
-/**
- * Fetch an image from URL and cache it.
- * Returns the cached File if already fetched, otherwise fetches and caches.
- *
- * @param imageUrlBase - Base URL for images (e.g., "https://example.com/dataset/images/")
- * @param imageName - Image name from COLMAP (e.g., "camera_123/00.png")
- * @param explicitUrl - Optional absolute, pre-encoded URL for this exact image
- *   (per-image mapping); bypasses imageUrlBase + buildImageUrl when provided.
- * @returns The fetched File or null if fetch failed
- */
 export async function fetchUrlImage(
-  imageUrlBase: string | null,
-  imageName: string,
-  explicitUrl?: string
+  base: string | null, name: string, explicitUrl?: string, options?: DatasetAccessOptions,
 ): Promise<File | null> {
-  const cached = urlImageState.getCached(imageName);
-  if (cached) {
-    return cached;
-  }
-
-  const resolved = resolveImageRequestUrl(imageUrlBase, imageName, explicitUrl);
-  if (!resolved) {
-    return null;
-  }
-  const { url: imageUrl, filename } = resolved;
-
-  if (urlImageState.isRequestPending(imageUrl)) {
-    return urlImageState.waitForRequest(imageUrl);
-  }
-
-  urlImageState.startRequest(imageUrl);
-  let result: File | null = null;
-
-  try {
-    const response = await fetch(imageUrl);
-    if (!response.ok) {
-      appLogger.warn(`[URL Image] Failed to fetch ${imageName}: ${response.status}`);
-      return null;
-    }
-
-    const blob = await response.blob();
-    const file = await compressAndResizeToJpeg(blob, filename);
-
-    urlImageState.setCached(imageName, file);
-    result = file;
-
-    return file;
-  } catch (err) {
-    appLogger.warn(`[URL Image] Error fetching ${imageName}:`, err);
-    return null;
-  } finally {
-    urlImageState.completeRequest(imageUrl, result);
-  }
+  const resolved = resolveImageRequestUrl(base, name, explicitUrl);
+  if (!resolved || options?.signal?.aborted) return null;
+  const key = imageKey(resolved.url);
+  imageAliases.set(name, key);
+  return urlImageState.request(key, async context => {
+    const result = await urlMediaScheduler.transfer(resolved.url, context);
+    const error = transferError(result, resolved.url);
+    if (error) context.reportFailure(error);
+    if (result.kind !== 'success' || !context.isCurrent()) return null;
+    return compressAndResizeToJpeg(result.blob, resolved.filename);
+  }, options);
 }
 
-/**
- * Fetch an image from URL without display-cache resizing or JPEG recompression.
- * Metric computations use this path because lossy cached images bias PSNR.
- */
+/** Original metric bytes are transient; only simultaneous raw requests coalesce. */
 export async function fetchUrlImageRaw(
-  imageUrlBase: string | null,
-  imageName: string,
-  explicitUrl?: string
+  base: string | null, name: string, explicitUrl?: string, options?: DatasetAccessOptions,
 ): Promise<File | null> {
-  const resolved = resolveImageRequestUrl(imageUrlBase, imageName, explicitUrl);
-  if (!resolved) {
-    return null;
-  }
-  const { url: imageUrl, filename } = resolved;
-
-  try {
-    const response = await fetch(imageUrl);
-    if (!response.ok) {
-      appLogger.warn(`[URL Image] Failed to fetch raw ${imageName}: ${response.status}`);
-      return null;
-    }
-
-    const blob = await response.blob();
-    return new File([blob], filename, { type: blob.type || 'application/octet-stream' });
-  } catch (err) {
-    appLogger.warn(`[URL Image] Error fetching raw ${imageName}:`, err);
-    return null;
-  }
+  const resolved = resolveImageRequestUrl(base, name, explicitUrl);
+  if (!resolved) return null;
+  return urlRawState.request(`raw:${resolved.url}`, async context => {
+    const result = await urlMediaScheduler.transfer(resolved.url, context);
+    const error = transferError(result, resolved.url);
+    if (error) context.reportFailure(error);
+    return result.kind === 'success'
+      ? new File([result.blob], resolved.filename, { type: result.blob.type || 'application/octet-stream' })
+      : null;
+  }, options, false);
 }
 
-/**
- * Fetch a mask from URL.
- * Tries both same-name masks and COLMAP-style ".png" mask suffixes.
- *
- * @param maskUrlBase - Base URL for masks (e.g., "https://example.com/dataset/masks/")
- * @param imageName - Image name from COLMAP (e.g., "camera_123/00.png")
- * @returns The fetched File or null if fetch failed
- */
-export async function fetchUrlMask(
-  maskUrlBase: string,
-  imageName: string
-): Promise<File | null> {
-  const cached = urlMaskState.getCached(imageName);
-  if (cached) {
-    return cached;
-  }
-
-  // The source has shipped no masks (enough consecutive misses, never a hit):
-  // stop probing instead of firing two more doomed 404s for every image.
-  if (!urlMaskFoundAny && urlMaskConsecutiveMisses >= URL_MASK_ABSENCE_THRESHOLD) {
-    return null;
-  }
-
-  if (urlMaskState.isRequestPending(imageName)) {
-    return urlMaskState.waitForRequest(imageName);
-  }
-
-  urlMaskState.startRequest(imageName);
-  let result: File | null = null;
-
-  try {
-    for (const { url: maskUrl, filename } of buildMaskUrlCandidates(maskUrlBase, imageName)) {
-      try {
-        const response = await fetch(maskUrl);
-        if (response.ok) {
-          const blob = await response.blob();
-          const file = new File([blob], filename, { type: blob.type || 'image/png' });
-          urlMaskState.setCached(imageName, file);
-          result = file;
-          appLogger.debug(`[URL Mask] Found mask for ${imageName}`);
-          return file;
-        }
-      } catch (err) {
-        appLogger.debug(`[URL Mask] Error trying ${maskUrl}:`, err);
+export async function fetchUrlMask(base: string, name: string, options?: DatasetAccessOptions): Promise<File | null> {
+  if (options?.signal?.aborted) return null;
+  const keys = maskKeys(base, name);
+  const key = JSON.stringify(keys);
+  maskAliases.set(name, keys);
+  // An explicit consumer request refreshes recency; synchronous snapshots do not.
+  const cached = keys.map(candidateKey => urlMaskState.getCached(candidateKey)).find(file => file !== undefined);
+  if (cached) return cached;
+  const absence = maskAbsence.get(base) ?? { misses: 0, found: false };
+  maskAbsence.set(base, absence);
+  if (!absence.found && absence.misses >= URL_MASK_ABSENCE_THRESHOLD) return null;
+  return urlMaskState.request(key, async context => {
+    let allAbsent = true;
+    let failure: DatasetAccessError | undefined;
+    for (const { url, filename } of buildMaskUrlCandidates(base, name)) {
+      const candidateKey = `mask:${url}`;
+      const cachedCandidate = urlMaskState.getCached(candidateKey);
+      if (cachedCandidate) return cachedCandidate;
+      const result = await maskTransfers.request(candidateKey,
+        transferContext => urlMediaScheduler.transfer(url, transferContext),
+        { signal: context.signal, getPriority: context.getPriority });
+      if (!context.isCurrent()) return null;
+      if (result.kind === 'success') {
+        absence.found = true;
+        absence.misses = 0;
+        const file = new File([result.blob], filename, { type: result.blob.type || 'image/png' });
+        urlMaskState.setCached(candidateKey, file);
+        return file;
       }
+      if (result.kind !== 'absent') allAbsent = false;
+      failure ??= transferError(result, url);
     }
-
-    appLogger.debug(`[URL Mask] No mask found for ${imageName}`);
+    if (failure) context.reportFailure(failure);
+    if (allAbsent && context.isCurrent()) absence.misses += 1;
     return null;
-  } finally {
-    urlMaskState.completeRequest(imageName, result);
-    if (result) {
-      urlMaskFoundAny = true;
-      urlMaskConsecutiveMisses = 0;
-    } else {
-      urlMaskConsecutiveMisses += 1;
-      if (!urlMaskFoundAny && urlMaskConsecutiveMisses === URL_MASK_ABSENCE_THRESHOLD) {
-        appLogger.debug(
-          `[URL Mask] No masks found after ${URL_MASK_ABSENCE_THRESHOLD} images; skipping further mask probes for this source.`
-        );
-      }
-    }
-  }
+  }, options, false);
 }
 
-/**
- * Prefetch multiple images from URLs.
- * Useful for preloading visible frustum images.
- */
 export async function prefetchUrlImages(
-  imageUrlBase: string | null,
-  imageNames: string[],
-  concurrency: number = 5,
-  imageNameToUrl?: Record<string, string>
+  base: string | null, names: string[], concurrency = 5,
+  imageNameToUrl?: Record<string, string>, options: DatasetAccessOptions = {},
 ): Promise<void> {
-  const toFetch = imageNames.filter(name => !urlImageState.hasCached(name));
-  if (toFetch.length === 0) return;
-
-  for (let i = 0; i < toFetch.length; i += concurrency) {
-    const batch = toFetch.slice(i, i + concurrency);
-    await Promise.all(batch.map(name => fetchUrlImage(imageUrlBase, name, imageNameToUrl?.[name])));
+  const requestOptions = { ...options, priority: options.priority ?? 'prefetch' } as const;
+  const generation = urlImageState.getGeneration();
+  const batchSize = Math.max(1, Math.floor(concurrency) || 1);
+  for (let i = 0; i < names.length; i += batchSize) {
+    if (options.signal?.aborted || generation !== urlImageState.getGeneration()) return;
+    await Promise.all(names.slice(i, i + batchSize).map(name => fetchUrlImage(base, name, imageNameToUrl?.[name], requestOptions)));
   }
 }
 
-/**
- * Get URL image cache statistics.
- */
-export function getUrlImageCacheStats(): CacheInfo {
-  return urlImageState.getStats();
-}
+export function getUrlImageCacheStats() { return urlImageState.getStats(); }
+export function getUrlMaskCacheStats() { return urlMaskState.getStats(); }
 
-/**
- * Get URL mask cache statistics.
- */
-export function getUrlMaskCacheStats(): CacheInfo {
-  return urlMaskState.getStats();
-}
+export function getUrlFileRetentionStats() { return urlFiles.getStats(); }

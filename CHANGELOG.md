@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.4] - 2026-09-13
+
+### Changed
+
+- Move reconstruction parsing and ownership into a worker to improve loading responsiveness.
+- Reuse point-cloud and frustum resources during selection, and upload only changed frustum segments during animation.
+- Render settled static scenes on demand and defer optional viewer tools until opened.
+- Bound inactive image, mask, thumbnail and texture caches, with shared request scheduling and cancellation.
+- Limit development-server scanning to application entrypoints and exclude SDK and scratch trees.
+
+### Fixed
+
+- Preserve gallery scroll position and refresh cache recency correctly during image revisits.
+- Prevent stale reconstruction, image and floor-detection results from reappearing after cancellation or replacement.
+- Keep picking and texture arrival working when fully transparent image planes skip drawing.
+
 ## [0.14.3] - 2026-09-09
 
 ### Fixed
@@ -520,7 +536,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript for type safety
 - Deno native test runner for testing
 
-[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.14.4...HEAD
+[0.14.4]: https://github.com/ColmapView/colmapview.github.io/compare/v0.14.3...v0.14.4
 [0.12.0]: https://github.com/ColmapView/colmapview.github.io/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/ColmapView/colmapview.github.io/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/ColmapView/colmapview.github.io/compare/v0.9.3...v0.10.0

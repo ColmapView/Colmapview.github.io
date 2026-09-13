@@ -40,7 +40,7 @@ vi.mock('../modals/AutoHideModal', () => ({
 }));
 
 describe('ViewerToolModals', () => {
-  it('passes open state and close handlers to each tool modal', () => {
+  it('loads open tool modals and passes their close handlers', async () => {
     const setShowFloorModal = vi.fn();
     const setShowDeletionModal = vi.fn();
     const setShowConversionModal = vi.fn();
@@ -50,19 +50,19 @@ describe('ViewerToolModals', () => {
       <ViewerToolModals
         showFloorModal={true}
         setShowFloorModal={setShowFloorModal}
-        showDeletionModal={false}
+        showDeletionModal={true}
         setShowDeletionModal={setShowDeletionModal}
         showConversionModal={true}
         setShowConversionModal={setShowConversionModal}
-        showAutoHideEditor={false}
+        showAutoHideEditor={true}
         setShowAutoHideEditor={setShowAutoHideEditor}
       />
     );
 
-    expect(screen.getByTestId('floor-modal')).toHaveAttribute('data-open', 'true');
-    expect(screen.getByTestId('deletion-modal')).toHaveAttribute('data-open', 'false');
-    expect(screen.getByTestId('conversion-modal')).toHaveAttribute('data-open', 'true');
-    expect(screen.getByTestId('auto-hide-modal')).toHaveAttribute('data-open', 'false');
+    expect(await screen.findByTestId('floor-modal')).toHaveAttribute('data-open', 'true');
+    expect(await screen.findByTestId('deletion-modal')).toHaveAttribute('data-open', 'true');
+    expect(await screen.findByTestId('conversion-modal')).toHaveAttribute('data-open', 'true');
+    expect(await screen.findByTestId('auto-hide-modal')).toHaveAttribute('data-open', 'true');
 
     fireEvent.click(screen.getByTestId('floor-modal'));
     fireEvent.click(screen.getByTestId('deletion-modal'));
@@ -73,5 +73,17 @@ describe('ViewerToolModals', () => {
     expect(setShowDeletionModal).toHaveBeenCalledWith(false);
     expect(setShowConversionModal).toHaveBeenCalledWith(false);
     expect(setShowAutoHideEditor).toHaveBeenCalledWith(false);
+  });
+
+  it('does not mount tools that have never opened', () => {
+    render(<ViewerToolModals showFloorModal={false} setShowFloorModal={vi.fn()}
+      showDeletionModal={false} setShowDeletionModal={vi.fn()}
+      showConversionModal={false} setShowConversionModal={vi.fn()}
+      showAutoHideEditor={false} setShowAutoHideEditor={vi.fn()} />);
+    expect(screen.queryByTestId('floor-modal')).toBeNull();
+    expect(screen.queryByTestId('deletion-modal')).toBeNull();
+    expect(screen.queryByTestId('conversion-modal')).toBeNull();
+    expect(screen.queryByTestId('auto-hide-modal')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

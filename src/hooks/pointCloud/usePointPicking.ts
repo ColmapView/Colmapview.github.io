@@ -11,6 +11,7 @@ import {
   needsMoreSelectedPoints,
 } from '../../store/pointPickingPolicy';
 import { syncPointRaycasterThreshold } from '../../utils/threeObjectMutations';
+import { requestSceneRender } from '../../utils/sceneRenderInvalidation';
 import type { NearestPointResult, Point3DIdLookup, SelectedPointData, ScreenPosition } from './types';
 
 export interface UsePointPickingParams {
@@ -56,6 +57,8 @@ export function usePointPicking(params: UsePointPickingParams): UsePointPickingR
   const mouseRef = useRef(new THREE.Vector2());
   const lastHoverTimeRef = useRef(0);
   const hoverDirtyRef = useRef(false);
+  const pointerActiveRef = useRef(false);
+  const lastCameraMatrixRef = useRef(new THREE.Matrix4());
 
   // Reusable ref for result (avoid allocations in hot path)
   const resultWorldPosRef = useRef(new THREE.Vector3());
@@ -100,20 +103,24 @@ export function usePointPicking(params: UsePointPickingParams): UsePointPickingR
     if (pickingMode === 'off') return;
 
     const canvas = gl.domElement;
-    const rect = canvas.getBoundingClientRect();
 
     function onMouseMove(e: MouseEvent): void {
+      const rect = canvas.getBoundingClientRect();
       // Convert to NDC and mark dirty
       mouseRef.current.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       mouseRef.current.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       hoverDirtyRef.current = true;
+      pointerActiveRef.current = true;
+      requestSceneRender();
     }
 
     function onMouseLeave(): void {
       hoverDirtyRef.current = false;
+      pointerActiveRef.current = false;
       if (lastHoverPosRef.current !== null) {
         lastHoverPosRef.current = null;
         setHoveredPoint(null);
+        requestSceneRender();
       }
     }
 
@@ -128,6 +135,10 @@ export function usePointPicking(params: UsePointPickingParams): UsePointPickingR
 
   // Manual raycasting in useFrame - only when dirty and throttled
   useFrame(() => {
+    if (pointerActiveRef.current && !lastCameraMatrixRef.current.equals(camera.matrixWorld)) {
+      lastCameraMatrixRef.current.copy(camera.matrixWorld);
+      hoverDirtyRef.current = true;
+    }
     if (pickingMode === 'off' || !hoverDirtyRef.current || !pointsRef.current) return;
 
     // Check if we need more points
@@ -135,7 +146,10 @@ export function usePointPicking(params: UsePointPickingParams): UsePointPickingR
 
     // Throttle to ~12fps (80ms) - manual raycasting is expensive
     const now = performance.now();
-    if (now - lastHoverTimeRef.current < 80) return;
+    if (now - lastHoverTimeRef.current < 80) {
+      requestSceneRender(80 - (now - lastHoverTimeRef.current));
+      return;
+    }
     lastHoverTimeRef.current = now;
     hoverDirtyRef.current = false;
 

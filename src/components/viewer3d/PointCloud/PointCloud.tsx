@@ -6,6 +6,7 @@
 
 import React, { useMemo, useEffect, useLayoutEffect } from 'react';
 import * as THREE from 'three';
+import { requestSceneRender } from '../../../utils/sceneRenderInvalidation';
 import { usePointCloudData } from '../../../hooks/pointCloud/usePointCloudData';
 import { usePointPicking } from '../../../hooks/pointCloud/usePointPicking';
 import { useSelectionAnimation } from '../../../hooks/pointCloud/useSelectionAnimation';
@@ -96,7 +97,7 @@ export function PointCloud(): React.JSX.Element | null {
   });
 
   // Compute point cloud data (positions, colors, selection)
-  const { positions, colors, selectedPositions, selectedColors, indexToPoint3DIdRef } =
+  const { positions, colors, selectedPositions, indexToPoint3DIdRef } =
     usePointCloudData({
       enabled: computePointCloudData,
       reconstruction,
@@ -138,9 +139,11 @@ export function PointCloud(): React.JSX.Element | null {
     if (existing instanceof THREE.BufferAttribute && existing.array instanceof Float32Array && existing.array.length === colors.length) {
       existing.array.set(colors);
       existing.needsUpdate = true;
+      requestSceneRender();
       return;
     }
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    requestSceneRender();
   }, [geometry, colors]);
 
   // Dispose geometry when it changes to prevent GPU memory leaks
@@ -153,7 +156,7 @@ export function PointCloud(): React.JSX.Element | null {
   // Return null only if there's nothing to render at all
   const hasMainGeometry = geometry !== null && colors !== null;
   const hasSelectionOverlay =
-    selectedPositions !== null && selectedColors !== null && selectedPositions.length > 0;
+    selectedPositions !== null && selectedPositions.length > 0;
 
   if (!hasMainGeometry && !hasSelectionOverlay) return null;
 
@@ -183,10 +186,9 @@ export function PointCloud(): React.JSX.Element | null {
       )}
 
       {/* Selection overlay - always shown when there's a selection, independent of showPointCloud */}
-      {hasSelectionOverlay && selectedPositions && selectedColors && (
+      {hasSelectionOverlay && selectedPositions && (
         <SelectionOverlay
           selectedPositions={selectedPositions}
-          selectedColors={selectedColors}
           pointSize={pointSize}
           selectedImageId={selectedImageId}
           selectionColorMode={selectionColorMode}

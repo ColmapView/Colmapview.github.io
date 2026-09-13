@@ -105,6 +105,7 @@ export function FrustumPlaneSurface({
         depthTest={materialProps.depthTest}
         toneMapped={false}
         opacity={materialProps.opacity}
+        visible={materialProps.opacity > 0}
       />
     </>
   );

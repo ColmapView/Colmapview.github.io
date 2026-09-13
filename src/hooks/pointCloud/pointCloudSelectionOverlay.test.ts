@@ -9,6 +9,19 @@ describe('point cloud selection overlay', () => {
   ]);
   const highlightColor: [number, number, number] = [1, 0.5, 0.25];
 
+  it.each([false, true])('can omit colors without changing selection order (indexed=%s)', (indexed) => {
+    const result = computeSelectedPointOverlay({
+      pointCount: 3, point3DIds: [10n, 20n, 30n], positions,
+      pointIdLookup: indexed ? {
+        get: index => [10n, 20n, 30n][index],
+        findIndex: id => [10n, 20n, 30n].indexOf(id),
+      } : undefined,
+      selectedPointIds: new Set([30n, 10n]), highlightColor, includeColors: false,
+    });
+    expect(Array.from(result.selectedPositions!)).toEqual([1, 2, 3, 7, 8, 9]);
+    expect(result.selectedColors).toBeNull();
+  });
+
   it('returns null arrays when no points are selected', () => {
     expect(computeSelectedPointOverlay({
       pointCount: 3,

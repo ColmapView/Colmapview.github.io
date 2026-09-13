@@ -10,9 +10,9 @@ import type {
 } from './types';
 import { getDatasetSourceAdapter } from './datasetSourceAdapters';
 import type { Reconstruction } from '../types/colmap';
-import type { WasmReconstructionWrapper } from '../wasm/reconstruction';
+import type { ReconstructionSource } from '../wasm/reconstructionService';
 import { getLocalImageStats } from '../utils/imageFileUtils';
-import { getUrlImageCacheStats, getUrlMaskCacheStats } from '../utils/urlImageFiles';
+import { getUrlImageCacheStats, getUrlMaskCacheStats, getUrlFileRetentionStats } from '../utils/urlImageFiles';
 import { getZipImageCacheStats, getZipMaskCacheStats } from '../utils/zipImageFiles';
 import { getActiveZipStats } from '../utils/zipLoader';
 import { getThumbnailCacheStats } from '../hooks/useThumbnail';
@@ -20,7 +20,7 @@ import { getFrustumTextureCacheStats } from '../hooks/useFrustumTexture';
 
 export interface DatasetDiagnosticsState extends DatasetState {
   reconstruction: Reconstruction | null;
-  wasmReconstruction: WasmReconstructionWrapper | null;
+  wasmReconstruction: ReconstructionSource | null;
 }
 
 export type DatasetDiagnosticsStateReader = () => DatasetDiagnosticsState;
@@ -66,6 +66,7 @@ export class DatasetDiagnostics {
     const totalBytes = urlImages.sizeBytes + urlMasks.sizeBytes + zipImages.sizeBytes + zipMasks.sizeBytes + localImages.sizeBytes;
 
     return {
+      urlFileRetention: getUrlFileRetentionStats(),
       urlImages: this.formatCacheEntry(urlImages),
       urlMasks: this.formatCacheEntry(urlMasks),
       zipImages: this.formatCacheEntry(zipImages),

@@ -8,6 +8,7 @@ export interface ConfigFileLike {
 }
 
 export interface ImportConfigFileOptions {
+  signal?: AbortSignal;
   parse?: (content: string) => {
     valid: boolean;
     errors: ConfigValidationError[];
@@ -38,10 +39,13 @@ export async function importConfigFile(
   const logger = options.logger ?? console;
 
   try {
+    if (options.signal?.aborted) return { applied: false };
     const content = await file.text();
+    if (options.signal?.aborted) return { applied: false };
     const result = parse(content);
 
     if (result.valid && result.config) {
+      if (options.signal?.aborted) return { applied: false };
       apply(result.config);
       logger.log(`[Config] Applied settings from ${file.name}`);
       return { applied: true };
@@ -53,6 +57,7 @@ export async function importConfigFile(
     }
     return { applied: false, errorMessage: `Config error: ${errorMessages}` };
   } catch (err) {
+    if (options.signal?.aborted) return { applied: false };
     const message = err instanceof Error ? err.message : 'Unknown error';
     if (options.logErrors) {
       logger.error('[Config] Failed to load config file:', err);

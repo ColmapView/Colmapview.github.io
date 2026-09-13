@@ -12,7 +12,7 @@ export interface OrbitDistanceStep {
 }
 
 export function getCappedFrameDeltaMs(now: number, lastFrameTime: number, maxDeltaMs: number): number {
-  return Math.min(now - lastFrameTime, maxDeltaMs);
+  return Math.max(0, Math.min(now - lastFrameTime, maxDeltaMs));
 }
 
 export function getFrameDamping(baseDamping: number, frameDeltaMs: number, frameTimeMs: number): number {

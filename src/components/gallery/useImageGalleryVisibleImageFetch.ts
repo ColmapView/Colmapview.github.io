@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import type { DatasetAccessOptions } from '../../dataset/types';
 import type { Reconstruction } from '../../types/colmap';
 import type { GalleryThumbnailDisplayMode, ImageData, ViewMode } from './useImageGalleryViewModel';
 import {
@@ -11,8 +12,8 @@ type ImageGalleryFetchDataset = {
   hasMasks: () => boolean;
   getImageSync: (imageName: string) => File | undefined;
   getMaskSync: (imageName: string) => File | undefined;
-  getImage: (imageName: string) => Promise<File | null>;
-  getMask: (imageName: string) => Promise<File | null>;
+  getImage: (imageName: string, options?: DatasetAccessOptions) => Promise<File | null>;
+  getMask: (imageName: string, options?: DatasetAccessOptions) => Promise<File | null>;
 };
 
 type ImageGalleryFetchVirtualizer = {
@@ -46,70 +47,76 @@ export function useImageGalleryVisibleImageFetch({
   refreshImageCacheVersion,
   thumbnailDisplayMode,
 }: UseImageGalleryVisibleImageFetchOptions): void {
+  const shouldFetchImages = thumbnailDisplayMode !== 'mask' && dataset.hasImages();
+  const shouldFetchMasks = thumbnailDisplayMode !== 'image' && dataset.hasMasks();
+  const enabled = reconstruction !== null && !debouncedIsScrolling && !isSettling
+    && (shouldFetchImages || shouldFetchMasks);
+  const visibleItems = enabled
+    ? (viewMode === 'gallery' ? rowVirtualizer.getVirtualItems() : listVirtualizer.getVirtualItems())
+    : [];
+  // Cache refreshes rebuild row/image objects. Request lifetime follows visible resource
+  // membership instead, including cached names so completed batches cannot restart peers.
+  const visibleNamesKey = JSON.stringify(collectVisibleImageNames({
+    viewMode,
+    rows,
+    images,
+    visibleIndexes: visibleItems.map(item => item.index),
+    hasCachedImage: () => false,
+  }).sort());
+
   useEffect(() => {
-    if (!reconstruction || debouncedIsScrolling || isSettling) return;
-
-    const shouldFetchImages = thumbnailDisplayMode !== 'mask' && dataset.hasImages();
-    const shouldFetchMasks = thumbnailDisplayMode !== 'image' && dataset.hasMasks();
-    if (!shouldFetchImages && !shouldFetchMasks) return;
-
-    const visibleItems = viewMode === 'gallery'
-      ? rowVirtualizer.getVirtualItems()
-      : listVirtualizer.getVirtualItems();
-    const visibleIndexes = visibleItems.map((item) => item.index);
-    const imageNames = shouldFetchImages
-      ? collectVisibleImageNames({
-        viewMode,
-        rows,
-        images,
-        visibleIndexes,
-        hasCachedImage: (imageName) => dataset.getImageSync(imageName) !== undefined,
-      })
-      : [];
-    const maskNames = shouldFetchMasks
-      ? collectVisibleImageNames({
-        viewMode,
-        rows,
-        images,
-        visibleIndexes,
-        hasCachedImage: (imageName) => dataset.getMaskSync(imageName) !== undefined,
-      })
-      : [];
-
-    if (imageNames.length === 0 && maskNames.length === 0) return;
-
+    if (!enabled) return;
+    const visibleNames = JSON.parse(visibleNamesKey) as string[];
+    const controller = new AbortController();
+    const access = { signal: controller.signal, priority: 'visible' } as const;
     let cancelled = false;
-    if (imageNames.length > 0) {
-      fetchImageNamesInBatches({
-        imageNames,
-        getImage: (imageName) => dataset.getImage(imageName),
-        onBatchLoaded: refreshImageCacheVersion,
-        shouldCancel: () => cancelled,
-      });
+    const imageNames: string[] = [];
+    const maskNames: string[] = [];
+    const cachedConsumers: Promise<File | null>[] = [];
+    // Snapshot reads do not affect recency. Acquire every retained visible File
+    // before missing batches can evict an older, still-visible image/mask pair.
+    for (const name of visibleNames) {
+      if (shouldFetchImages) {
+        if (dataset.getImageSync(name) === undefined) imageNames.push(name);
+        else cachedConsumers.push(dataset.getImage(name, access));
+      }
+      if (shouldFetchMasks) {
+        if (dataset.getMaskSync(name) === undefined) maskNames.push(name);
+        else cachedConsumers.push(dataset.getMask(name, access));
+      }
     }
-    if (maskNames.length > 0) {
-      fetchImageNamesInBatches({
-        imageNames: maskNames,
-        getImage: (imageName) => dataset.getMask(imageName),
-        onBatchLoaded: refreshImageCacheVersion,
-        shouldCancel: () => cancelled,
-      });
-    }
+    const loadMissing = () => {
+      if (imageNames.length > 0) {
+        fetchImageNamesInBatches({
+          imageNames,
+          getImage: (imageName) => dataset.getImage(imageName, { signal: controller.signal, priority: 'visible' }),
+          onBatchLoaded: refreshImageCacheVersion,
+          shouldCancel: () => cancelled,
+        });
+      }
+      if (maskNames.length > 0) {
+        fetchImageNamesInBatches({
+          imageNames: maskNames,
+          getImage: (imageName) => dataset.getMask(imageName, { signal: controller.signal, priority: 'visible' }),
+          onBatchLoaded: refreshImageCacheVersion,
+          shouldCancel: () => cancelled,
+        });
+      }
+    };
+    if (cachedConsumers.length === 0) loadMissing();
+    else void Promise.all(cachedConsumers).then(() => { if (!cancelled) loadMissing(); });
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [
     dataset,
     reconstruction,
-    viewMode,
-    rows,
-    images,
-    debouncedIsScrolling,
-    isSettling,
-    rowVirtualizer,
-    listVirtualizer,
+    enabled,
+    visibleNamesKey,
+    shouldFetchImages,
+    shouldFetchMasks,
     refreshImageCacheVersion,
-    thumbnailDisplayMode,
   ]);
 }

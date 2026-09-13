@@ -1,0 +1,11 @@
+import { build } from 'esbuild';
+import { pathToFileURL } from 'node:url';
+import { resolve } from 'node:path';
+const outfile = resolve('.tmp/performance/generate.bundle.mjs');
+await build({ entryPoints: ['scripts/performance/generate.ts'], outfile, bundle: true, platform: 'node', format: 'esm' });
+const { generateFixture } = await import(pathToFileURL(outfile).href);
+const name = process.argv[2] || 'small';
+const sizes = { small: [10000, 20], million: [1000000, 1000], large: [5000000, 5000] };
+const baseName = name.replace(/-long$/, '');
+if (!sizes[baseName]) throw new Error('Use small, million, or large, optionally suffixed -long');
+console.log(generateFixture(name, ...sizes[baseName], Number(process.argv[3] || (name.endsWith('-long') ? 16 : 2))));

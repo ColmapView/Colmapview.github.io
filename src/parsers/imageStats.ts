@@ -29,6 +29,11 @@ interface ImageStatsResult {
   imageToPoint3DIds: ImageToPoint3DIdsMap;
 }
 
+export interface ImageStatsOptions {
+  /** The worker builds transferable membership directly from CSR instead. Defaults to true. */
+  includePointMembership?: boolean;
+}
+
 /**
  * Shared core that computes all stats from an iterable of track entries.
  * Both computeImageStats and computeImageStatsFromWasm delegate to this.
@@ -37,6 +42,7 @@ function computeStatsFromTracks(
   images: Map<number, Image>,
   tracks: Iterable<TrackEntry>,
   totalPoints: number,
+  includePointMembership = true,
 ): ImageStatsResult {
   // Initialize stats for all images
   const internalStats = new Map<number, InternalImageStats>();
@@ -57,8 +63,10 @@ function computeStatsFromTracks(
 
   // Initialize image to point3D IDs mapping (for highlighting without points2D)
   const imageToPoint3DIds: ImageToPoint3DIdsMap = new Map();
-  for (const imageId of images.keys()) {
-    imageToPoint3DIds.set(imageId, new Set());
+  if (includePointMembership) {
+    for (const imageId of images.keys()) {
+      imageToPoint3DIds.set(imageId, new Set());
+    }
   }
 
   // Initialize global stats accumulators
@@ -104,9 +112,8 @@ function computeStatsFromTracks(
       }
 
       // Build reverse mapping: imageId -> set of point3D IDs it observes
-      const point3DSet = imageToPoint3DIds.get(trackImageId);
-      if (point3DSet) {
-        point3DSet.add(point3DId);
+      if (includePointMembership) {
+        imageToPoint3DIds.get(trackImageId)?.add(point3DId);
       }
     }
 
@@ -186,14 +193,16 @@ export function computeImageStats(
  */
 export function computeImageStatsFromWasm(
   images: Map<number, Image>,
-  wasm: WasmReconstructionWrapper
+  wasm: WasmReconstructionWrapper,
+  options: ImageStatsOptions = {},
 ): ImageStatsResult {
   // Get WASM arrays
   const pointCount = wasm.pointCount;
   const errors = wasm.getErrors();
   const trackOffsets = wasm.getTrackOffsets();
   const trackImageIdsArr = wasm.getTrackImageIds();
-  const point3DIds = wasm.getPoint3DIds();
+  const includePointMembership = options.includePointMembership !== false;
+  const point3DIds = includePointMembership ? wasm.getPoint3DIds() : null;
 
   function* iterateTracks(): Generator<TrackEntry> {
     if (!trackOffsets || !trackImageIdsArr || !errors) return;
@@ -211,10 +220,10 @@ export function computeImageStatsFromWasm(
       yield {
         error: errors[pointIdx],
         trackImageIds,
-        point3DId: point3DIds ? point3DIds[pointIdx] : BigInt(pointIdx + 1),
+        point3DId: includePointMembership ? (point3DIds?.[pointIdx] ?? BigInt(pointIdx + 1)) : 0n,
       };
     }
   }
 
-  return computeStatsFromTracks(images, iterateTracks(), pointCount);
+  return computeStatsFromTracks(images, iterateTracks(), pointCount, includePointMembership);
 }

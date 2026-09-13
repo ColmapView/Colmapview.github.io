@@ -6,14 +6,14 @@ import type * as THREE from 'three';
 import type { Reconstruction } from '../../types/colmap';
 import type { ColorMode } from '../../store/types';
 import type { FloorColorMode } from '../../store/stores/floorPlaneStore';
-import type { WasmReconstructionWrapper } from '../../wasm/reconstruction';
+import type { ReconstructionPointSource } from '../../wasm/reconstructionProtocol';
 
 /**
  * Parameters for computing point cloud data (positions and colors).
  */
 export interface PointCloudDataParams {
   reconstruction: Reconstruction | null;
-  wasmReconstruction: WasmReconstructionWrapper | null;
+  wasmReconstruction: ReconstructionPointSource | null;
   colorMode: ColorMode;
   minTrackLength: number;
   maxReprojectionError: number;
@@ -30,6 +30,7 @@ export interface PointCloudDataParams {
  */
 export interface Point3DIdLookup {
   get(index: number): bigint | undefined;
+  findIndex?(pointId: bigint): number;
 }
 
 /**

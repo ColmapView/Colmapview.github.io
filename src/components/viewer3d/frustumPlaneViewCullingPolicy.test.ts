@@ -1,43 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
-  FRUSTUM_PLANE_CULL_CHECK_INTERVAL,
-  getInitialFrustumPlaneCullFrame,
+  FRUSTUM_PLANE_CULL_INTERVAL_MS,
+  getFrustumPlaneCullDelay,
   getFrustumPlaneViewAngleOk,
-  getNextFrustumPlaneCullFrame,
-  shouldMeasureFrustumPlaneViewAngle,
   shouldUpdateFrustumPlaneViewAngle,
 } from './frustumPlaneViewCullingPolicy';
 
 describe('frustum plane view culling policy', () => {
-  it('stagger-initializes culling frames from a stable seed', () => {
-    expect(getInitialFrustumPlaneCullFrame({
-      seed: 12,
-      interval: FRUSTUM_PLANE_CULL_CHECK_INTERVAL,
-    })).toBe(2);
-    expect(getInitialFrustumPlaneCullFrame({
-      seed: -12,
-      interval: FRUSTUM_PLANE_CULL_CHECK_INTERVAL,
-    })).toBe(2);
-    expect(getInitialFrustumPlaneCullFrame({
-      seed: Number.NaN,
-      interval: FRUSTUM_PLANE_CULL_CHECK_INTERVAL,
-    })).toBe(0);
-  });
-
-  it('advances culling frames and wraps at the configured interval', () => {
-    expect(getNextFrustumPlaneCullFrame({
-      frameCount: 0,
-      interval: FRUSTUM_PLANE_CULL_CHECK_INTERVAL,
-    })).toBe(1);
-    expect(getNextFrustumPlaneCullFrame({
-      frameCount: 4,
-      interval: FRUSTUM_PLANE_CULL_CHECK_INTERVAL,
-    })).toBe(0);
-  });
-
-  it('measures view angle only on wrapped culling frames', () => {
-    expect(shouldMeasureFrustumPlaneViewAngle(0)).toBe(true);
-    expect(shouldMeasureFrustumPlaneViewAngle(1)).toBe(false);
+  it('measures the initial pose immediately and gives dirty poses a wall-time deadline', () => {
+    expect(getFrustumPlaneCullDelay(1, null)).toBe(0);
+    expect(getFrustumPlaneCullDelay(20, 10)).toBe(FRUSTUM_PLANE_CULL_INTERVAL_MS - 10);
+    expect(getFrustumPlaneCullDelay(90, 10)).toBe(0);
+    expect(getFrustumPlaneCullDelay(9000, 10)).toBe(0);
   });
 
   it('keeps selected and close planes visible', () => {

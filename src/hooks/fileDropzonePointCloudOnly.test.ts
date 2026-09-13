@@ -3,6 +3,38 @@ import { buildPoint3D } from '../test/builders';
 import { runPointCloudOnlyLoad } from './fileDropzonePointCloudOnly';
 
 describe('file dropzone point-cloud-only load helper', () => {
+  it('does not install a point cloud after cancellation during parsing', async () => {
+    const controller = new AbortController();
+    const point = buildPoint3D({ point3DId: 1n });
+    const points = new Map([[point.point3DId, point]]);
+    let finishParse!: (value: typeof points) => void;
+    const setLoadedFiles = vi.fn();
+    const clearCaches = vi.fn();
+    const setReconstruction = vi.fn();
+    const loading = runPointCloudOnlyLoad({
+      pointCloudFile: new File(['ply'], 'stale.ply'),
+      mapProgress: value => value,
+      setUrlProgress: vi.fn(),
+      setLoadedFiles,
+      clearSplatPsnr: vi.fn(),
+      clearCaches,
+      setReconstruction,
+      resetView: vi.fn(),
+      addNotification: vi.fn(),
+      parsePointCloudFile: () => new Promise(resolve => { finishParse = resolve; }),
+      log: vi.fn(),
+      signal: controller.signal,
+    });
+
+    controller.abort();
+    finishParse(points);
+
+    await expect(loading).rejects.toMatchObject({ name: 'AbortError' });
+    expect(setLoadedFiles).not.toHaveBeenCalled();
+    expect(clearCaches).not.toHaveBeenCalled();
+    expect(setReconstruction).not.toHaveBeenCalled();
+  });
+
   it('builds a reconstruction with points3D and no active splat file', async () => {
     const pointCloudFile = new File(['ply'], 'points.ply');
     const point = buildPoint3D({ point3DId: 1n });

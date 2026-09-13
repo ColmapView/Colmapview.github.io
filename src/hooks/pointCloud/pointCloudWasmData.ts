@@ -1,6 +1,6 @@
 import type { ColorMode } from '../../store/types';
 import type { FloorColorMode } from '../../store/stores/floorPlaneStore';
-import type { WasmReconstructionWrapper } from '../../wasm/reconstruction';
+import type { ReconstructionPointSource } from '../../wasm/reconstructionProtocol';
 import { appLogger } from '../../utils/logger';
 import {
   computeColorFromWasm,
@@ -14,7 +14,7 @@ import {
 } from './pointCloudDataPolicy';
 
 export interface PointCloudWasmSlowPathParams {
-  wasmReconstruction: WasmReconstructionWrapper;
+  wasmReconstruction: ReconstructionPointSource;
   colorMode: ColorMode;
   minTrackLength: number;
   maxReprojectionError: number;

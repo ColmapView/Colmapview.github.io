@@ -1,6 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { Point3D, Point3DId } from '../../types/colmap';
-import type { WasmReconstructionWrapper } from '../../wasm/reconstruction';
+import type { ReconstructionSource } from '../../wasm/reconstructionService';
+import { isReconstructionSnapshot } from '../../wasm/reconstructionService';
+import { appLogger } from '../../utils/logger';
 import { StatHistogramTooltip } from './StatHistogramTooltip';
 import {
   computeHistogramFromMap,
@@ -10,6 +12,7 @@ import {
   getStatHistogramTitle,
   type PsnrHistogramMetric,
   type HistogramType,
+  type HistogramData,
 } from './statHistogramViewModel';
 
 export type { HistogramType } from './statHistogramViewModel';
@@ -21,7 +24,7 @@ interface StatWithHistogramProps {
   /** Optional points3D Map (for JS parser fallback) */
   points3D?: Map<Point3DId, Point3D>;
   /** Optional WASM reconstruction (preferred, avoids iterating Map) */
-  wasmReconstruction?: WasmReconstructionWrapper | null;
+  wasmReconstruction?: ReconstructionSource | null;
   /** Optional PSNR metrics for splat/image comparison histogram */
   psnrMetrics?: ReadonlyMap<number, PsnrHistogramMetric>;
   /** Total image count used for image metric histogram coverage labels */
@@ -38,6 +41,17 @@ export function StatWithHistogram({
   psnrTotalCount,
 }: StatWithHistogramProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [remote, setRemote] = useState<{ generation: number; revision: number; type: HistogramType; result: HistogramData } | null>(null);
+  const snapshot = isReconstructionSnapshot(wasmReconstruction) ? wasmReconstruction : null;
+  const remoteMatches = snapshot && remote?.generation === snapshot.service.generation && remote.revision === snapshot.revision && remote.type === type;
+  useEffect(() => {
+    if (!isHovered || !snapshot || remoteMatches || type === 'psnr' || type === 'ssim') return;
+    const controller = new AbortController();
+    void snapshot.histogram(type, controller.signal).then(result => {
+      if (!controller.signal.aborted) setRemote({ generation: snapshot.service.generation, revision: snapshot.revision, type, result });
+    }).catch(error => { if (!controller.signal.aborted) appLogger.warn('Histogram computation failed:', error); });
+    return () => controller.abort();
+  }, [isHovered, snapshot, type, remoteMatches]);
 
   // Lazily compute histogram only when hovered (and cache it)
   // Prefer WASM arrays over points3D Map for better performance
@@ -58,6 +72,7 @@ export function StatWithHistogram({
 
     // Prefer WASM arrays if available
     if (wasmReconstruction?.hasPoints()) {
+      if (snapshot) return remoteMatches ? remote!.result : null;
       return computeHistogramFromWasm(wasmReconstruction, type);
     }
 
@@ -67,7 +82,7 @@ export function StatWithHistogram({
     }
 
     return null;
-  }, [isHovered, points3D, psnrMetrics, wasmReconstruction, type]);
+  }, [isHovered, points3D, psnrMetrics, wasmReconstruction, type, snapshot, remoteMatches, remote]);
 
   return (
     <span

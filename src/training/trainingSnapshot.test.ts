@@ -7,12 +7,14 @@ import { useCameraStore, useDeletionStore, useReconstructionStore } from '../sto
 import { buildArchiveEntry, buildArchiveReader, buildCamera, buildFile, buildImage, buildPoint2D, buildPoint3D, buildReconstruction } from '../test/builders';
 import { resolveColmapWasmFactory } from '../test/builders/wasmFakes';
 import { WasmReconstructionWrapper } from '../wasm/reconstruction';
+import { ReconstructionService } from '../wasm/reconstructionService';
+import { File as NodeFile } from 'node:buffer';
 import * as wasmInit from '../wasm/init';
 import { parseCamerasBinary } from '../parsers/cameras';
 import { parseImagesBinary } from '../parsers/images';
 import { parsePoints3DBinary } from '../parsers/points3d';
 import { CameraModelId } from '../types/colmap';
-import { writeImagesBinary, writePoints3DBinary } from '../parsers/colmapBinaryWriters';
+import { writeCamerasBinary, writeImagesBinary, writePoints3DBinary } from '../parsers/colmapBinaryWriters';
 import { clearActiveZipArchive, setActiveZipArchive } from '../utils/zipArchiveState';
 import { createTrainingSnapshot, isSnapshotForCurrentReconstruction, isSourceIdForCurrentReconstruction } from './trainingSnapshot';
 
@@ -360,7 +362,7 @@ describe('createTrainingSnapshot', () => {
     expect(snapshot.files.filter(file => file.role === 'mask').map(file => file.image_name)).toEqual(['left/same.jpg']);
   });
 
-  it('exports actual WASM-only observations, 64-bit point IDs and tracks before WASM disposal', async () => {
+  it.each([false, true])('exports authoritative observations, 64-bit IDs and tracks (service=%s)', async serviceOwned => {
     const wasmDir = resolve(process.cwd(), 'public/wasm');
     const factory = resolveColmapWasmFactory(await import(pathToFileURL(resolve(wasmDir, 'colmap_wasm.js')).href));
     const module = await factory({ wasmBinary: readFileSync(resolve(wasmDir, 'colmap_wasm.wasm')), locateFile: file => resolve(wasmDir, file) });
@@ -372,12 +374,39 @@ describe('createTrainingSnapshot', () => {
     const point = buildPoint3D({ point3DId: id, xyz: [1, 2, 3], track: [{ imageId: 42, point2DIdx: 0 }] });
     expect(wasm.parsePoints3D(writePoints3DBinary(new Map([[id, point]])))).toBe(true);
     expect(wasm.parseImages(writeImagesBinary(new Map([[42, image]])))).toBe(true);
-    useReconstructionStore.setState({ reconstruction: buildReconstruction({ images: [{ ...image, points2D: [] }] }), wasmReconstruction: wasm, sourceType: 'local' });
+    const reconstruction = buildReconstruction({ images: [{ ...image, points2D: [] }] });
+    const file = (data: ArrayBuffer, name: string) => new NodeFile([data], name) as unknown as File;
+    const source = serviceOwned ? await new ReconstructionService({
+      camerasFile: file(writeCamerasBinary(reconstruction.cameras), 'cameras.bin'),
+      imagesFile: file(writeImagesBinary(new Map([[42, image]])), 'images.bin'),
+      points3DFile: file(writePoints3DBinary(new Map([[id, point]])), 'points3D.bin'),
+    }, { workerFactory: null }).load() : wasm;
+    useReconstructionStore.setState({ reconstruction: source instanceof WasmReconstructionWrapper ? reconstruction : source.reconstruction, wasmReconstruction: source, sourceType: 'local' });
     const snapshot = await createTrainingSnapshot({ maskSource: 'none' });
+    if (!(source instanceof WasmReconstructionWrapper)) {
+      const exportModel = source.export.bind(source);
+      const controller = new AbortController();
+      const exporter = vi.spyOn(source, 'export');
+      exporter.mockImplementationOnce(async payload => {
+        const files = await exportModel(payload);
+        controller.abort();
+        return files;
+      });
+      await expect(createTrainingSnapshot({ maskSource: 'none', signal: controller.signal }))
+        .rejects.toMatchObject({ name: 'AbortError' });
+      exporter.mockImplementationOnce(async payload => {
+        const files = await exportModel(payload);
+        useReconstructionStore.setState({ reconstruction: buildReconstruction() });
+        return files;
+      });
+      await expect(createTrainingSnapshot({ maskSource: 'none' })).rejects.toThrow('changed during model export');
+    }
+    source.dispose();
     wasm.dispose();
     const imageBytes = await bytes(await snapshot.files.find(file => file.id === 'images')!.read());
     const pointBytes = await bytes(await snapshot.files.find(file => file.id === 'points3d')!.read());
     expect(parseImagesBinary(imageBytes).get(42)?.points2D).toEqual(image.points2D);
+    expect(parseImagesBinary(imageBytes).get(42)?.name).toBe('nested/same.jpg');
     expect(parsePoints3DBinary(pointBytes).get(id)).toEqual(point);
   });
 });

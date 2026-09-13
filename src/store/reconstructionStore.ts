@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type { Reconstruction, LoadedFiles, SplatFileSource } from '../types/colmap';
-import type { WasmReconstructionWrapper } from '../wasm/reconstruction';
+import type { ReconstructionSource } from '../wasm/reconstructionService';
+import { isReconstructionSnapshot } from '../wasm/reconstructionService';
+import { cancelPendingReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
 import type { UrlLoadProgress, UrlLoadError, ColmapManifest } from '../types/manifest';
 import { useUIStore } from './stores/uiStore';
 import {
@@ -160,7 +162,7 @@ const initialUrlLoading = hasUrlToLoad();
 
 interface ReconstructionState {
   reconstruction: Reconstruction | null;
-  wasmReconstruction: WasmReconstructionWrapper | null;
+  wasmReconstruction: ReconstructionSource | null;
   loadedFiles: LoadedFiles | null;
   droppedFiles: Map<string, File> | null;
   loading: boolean;
@@ -192,7 +194,7 @@ interface ReconstructionState {
   urlError: UrlLoadError | null;
 
   setReconstruction: (rec: Reconstruction) => void;
-  setWasmReconstruction: (wasm: WasmReconstructionWrapper | null) => void;
+  setWasmReconstruction: (wasm: ReconstructionSource | null) => void;
   setLoadedFiles: (files: LoadedFiles) => void;
   setDroppedFiles: (files: Map<string, File>) => void;
   setLoading: (loading: boolean) => void;
@@ -254,7 +256,9 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   setWasmReconstruction: (wasmReconstruction) => {
     // Dispose old wrapper before setting new one
     const oldWasm = get().wasmReconstruction;
-    if (oldWasm && oldWasm !== wasmReconstruction) {
+    const sharesService = isReconstructionSnapshot(oldWasm) && isReconstructionSnapshot(wasmReconstruction)
+      && oldWasm.service === wasmReconstruction.service;
+    if (oldWasm && oldWasm !== wasmReconstruction && !sharesService) {
       oldWasm.dispose();
     }
     set({ wasmReconstruction });
@@ -262,6 +266,15 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
 
   setLoadedFiles: (loadedFiles) => {
     const previousLoadedFiles = get().loadedFiles;
+    const currentSource = get().wasmReconstruction;
+    if (isReconstructionSnapshot(currentSource) && previousLoadedFiles && (
+      previousLoadedFiles.camerasFile !== loadedFiles.camerasFile
+      || previousLoadedFiles.imagesFile !== loadedFiles.imagesFile
+      || previousLoadedFiles.points3DFile !== loadedFiles.points3DFile
+    )) {
+      currentSource.dispose();
+      set({ wasmReconstruction: null });
+    }
     const requestedSplatSourceId = get().requestedSplatSourceId;
     const resolvedLoadedFiles = requestedSplatSourceId
       ? getLoadedFilesWithActiveSplatSource(loadedFiles, requestedSplatSourceId)
@@ -517,6 +530,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   setUrlError: (urlError) => set(urlError ? { urlError, urlLoading: false } : { urlError }),
 
   clear: () => {
+    cancelPendingReconstructionLoad();
     // Dispose WASM wrapper on clear
     const oldWasm = get().wasmReconstruction;
     if (oldWasm) {

@@ -58,17 +58,17 @@ export function useImageGallerySelectedImageScroll({
   rowVirtualizer,
   listVirtualizer,
 }: UseImageGallerySelectedImageScrollOptions): void {
+  const targetIndex = getSelectedImageScrollTarget({
+    selectedImageId,
+    images,
+    viewMode,
+    galleryColumns,
+  })?.index ?? null;
+
   useEffect(() => {
-    const target = getSelectedImageScrollTarget({
-      selectedImageId,
-      images,
-      viewMode,
-      galleryColumns,
-    });
+    if (selectedImageId === null || targetIndex === null) return;
 
-    if (target === null) return;
-
-    const virtualizer = target.viewMode === 'gallery' ? rowVirtualizer : listVirtualizer;
-    virtualizer.scrollToIndex(target.index, SELECTED_IMAGE_SCROLL_OPTIONS);
-  }, [selectedImageId, images, viewMode, galleryColumns, rowVirtualizer, listVirtualizer]);
+    const virtualizer = viewMode === 'gallery' ? rowVirtualizer : listVirtualizer;
+    virtualizer.scrollToIndex(targetIndex, SELECTED_IMAGE_SCROLL_OPTIONS);
+  }, [selectedImageId, targetIndex, viewMode, galleryColumns, rowVirtualizer, listVirtualizer]);
 }
