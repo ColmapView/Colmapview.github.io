@@ -349,7 +349,10 @@ export function useTrainingSession() {
     let delay = POLL_MS;
     const poll = async () => {
       const ok = await refresh(AbortSignal.any([abort.signal, AbortSignal.timeout(10000)]));
-      delay = ok ? POLL_MS : Math.min(30000, delay * 2);
+      const job = useTrainingStore.getState().currentJob;
+      const awaitingFirstStep = job && ['starting', 'running'].includes(job.state)
+        && !(job.progress?.optimizer_step && job.progress.optimizer_step > 0);
+      delay = ok ? (awaitingFirstStep ? 200 : POLL_MS) : Math.min(30000, Math.max(POLL_MS, delay) * 2);
       if (!abort.signal.aborted) timer = window.setTimeout(poll, delay);
     };
     void poll();

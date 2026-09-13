@@ -83,6 +83,32 @@ describe('session connection and selection ownership', () => {
     expect(TrainingClient.prototype.logs).not.toHaveBeenCalled();
   });
 
+  it('polls quickly until the first step, then returns to the normal cadence', async () => {
+    vi.useFakeTimers();
+    try {
+      const starting: TrainingJob = { ...job, state: 'starting', progress: null };
+      useTrainingStore.getState().setCurrentJob(starting);
+      const request = vi.mocked(TrainingClient.prototype.job).mockResolvedValue(starting);
+      renderHook(() => useTrainingSession());
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(request).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(199); });
+      expect(request).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(request).toHaveBeenCalledTimes(2);
+      request.mockResolvedValue({ ...job, progress: { optimizer_step: 1, metrics: {} } });
+      await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+      expect(request).toHaveBeenCalledTimes(3);
+      await act(async () => { await vi.advanceTimersByTimeAsync(999); });
+      expect(request).toHaveBeenCalledTimes(3);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(request).toHaveBeenCalledTimes(4);
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+    }
+  });
+
   it('waits for cancellation before resetting identities and creating a fresh upload', async () => {
     loadReconstruction();
     useTrainingStore.setState({ config: { ...legacyConfig, input_requirements: { mask_source: 'none' } },
