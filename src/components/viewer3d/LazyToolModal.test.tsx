@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { LazyToolModal, type ToolModalProps } from './LazyToolModal';
 import { FloatingWindowShell } from '../ui/FloatingWindowShell';
@@ -21,7 +21,8 @@ describe('LazyToolModal', () => {
     expect(load).not.toHaveBeenCalled();
     view.rerender(<><button>Open tool</button><LazyToolModal title="Test" load={load} isOpen onClose={close} /></>);
     await screen.findByRole('textbox', { name: 'Draft' });
-    expect(screen.getByRole('dialog')).toContainElement(document.activeElement as HTMLElement);
+    // The loaded content can mount before its passive focus effect runs.
+    await waitFor(() => expect(screen.getByRole('dialog')).toContainElement(document.activeElement as HTMLElement));
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'retained edit' } });
     view.rerender(<><button>Open tool</button><LazyToolModal title="Test" load={load} isOpen={false} onClose={close} /></>);
     expect(opener).toHaveFocus();
