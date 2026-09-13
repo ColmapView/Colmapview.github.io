@@ -60,10 +60,10 @@ export function registerAllCaches(): void {
     clear: clearFrustumTextureCache,
     getStats: () => {
       const stats = getFrustumTextureCacheStats();
-      // Textures: ~65KB each (128px bitmaps)
+      // Estimate from actual texture dimensions and mipmap policy.
       return {
         count: stats.textures,
-        sizeBytes: stats.textures * 65000,
+        sizeBytes: stats.retention.textureBytes,
       };
     },
     strategy: 'lazy',
@@ -78,10 +78,9 @@ export function registerAllCaches(): void {
     clear: () => {}, // Cleared with frustumTextures
     getStats: () => {
       const stats = getFrustumTextureCacheStats();
-      // Bitmaps: ~65KB each (128px)
       return {
         count: stats.bitmaps,
-        sizeBytes: stats.bitmaps * 65000,
+        sizeBytes: stats.retention.bitmapBytes,
       };
     },
     strategy: 'lazy',
@@ -121,7 +120,7 @@ export function registerAllCaches(): void {
       const stats = getMaskedThumbnailCacheStats();
       return {
         count: stats.count,
-        sizeBytes: stats.count * 100000,
+        sizeBytes: stats.sizeBytes,
       };
     },
     strategy: 'lazy',

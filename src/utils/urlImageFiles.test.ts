@@ -52,7 +52,7 @@ describe('url image files', () => {
     const second = await fetchUrlImage('https://example.test/images/', 'images/cam1/photo.png');
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith('https://example.test/images/cam1/photo.png');
+    expect(fetchMock).toHaveBeenCalledWith('https://example.test/images/cam1/photo.png', { signal: expect.any(AbortSignal) });
     expect(compressAndResizeToJpeg).toHaveBeenCalledWith(expect.any(Blob), 'photo.png');
     expect(first?.name).toBe('photo.jpg');
     expect(second).toBe(first);
@@ -86,7 +86,7 @@ describe('url image files', () => {
 
     const file = await fetchUrlImageRaw('https://example.test/images/', 'images/cam1/photo.JPG');
 
-    expect(fetchMock).toHaveBeenCalledWith('https://example.test/images/cam1/photo.JPG');
+    expect(fetchMock).toHaveBeenCalledWith('https://example.test/images/cam1/photo.JPG', { signal: expect.any(AbortSignal) });
     expect(compressAndResizeToJpeg).not.toHaveBeenCalled();
     expect(file?.name).toBe('photo.JPG');
     expect(file?.type).toBe('image/jpeg');
@@ -106,8 +106,8 @@ describe('url image files', () => {
     const mask = await fetchUrlMask('https://example.test/masks', 'images/cam1/photo.jpg');
     const cachedMask = await fetchUrlMask('https://example.test/masks', 'images/cam1/photo.jpg');
 
-    expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://example.test/masks/cam1/photo.jpg');
-    expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://example.test/masks/cam1/photo.jpg.png');
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://example.test/masks/cam1/photo.jpg', { signal: expect.any(AbortSignal) });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://example.test/masks/cam1/photo.jpg.png', { signal: expect.any(AbortSignal) });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(mask?.name).toBe('photo.jpg.png');
     expect(mask?.type).toBe('image/png');
@@ -147,7 +147,7 @@ describe('url image files', () => {
     const file = await fetchUrlImage('https://example.test/images/', '0.jpg', explicitUrl);
 
     // Explicit URL used as-is: no re-encoding, no join with the images base.
-    expect(fetchMock).toHaveBeenCalledWith(explicitUrl);
+    expect(fetchMock).toHaveBeenCalledWith(explicitUrl, { signal: expect.any(AbortSignal) });
     // Display filename derived (decoded) from the explicit URL.
     expect(compressAndResizeToJpeg).toHaveBeenCalledWith(expect.any(Blob), 'G0019585.JPG');
     expect(file?.name).toBe('G0019585.jpg');
@@ -162,7 +162,7 @@ describe('url image files', () => {
     const explicitUrl = 'https://example.test/raw/10.07.25%20RHS/G0019586.JPG';
     const file = await fetchUrlImageRaw('https://example.test/images/', '1.jpg', explicitUrl);
 
-    expect(fetchMock).toHaveBeenCalledWith(explicitUrl);
+    expect(fetchMock).toHaveBeenCalledWith(explicitUrl, { signal: expect.any(AbortSignal) });
     expect(file?.name).toBe('G0019586.JPG');
     expect(file?.type).toBe('image/jpeg');
   });
@@ -217,4 +217,113 @@ describe('url image files', () => {
     // 2 (image 0) + 2 * 11 (images 1..11) — no short-circuit after a hit.
     expect(fetchMock).toHaveBeenCalledTimes(2 + 11 * 2);
   });
+});
+
+it('propagates independent cancellation through DatasetManager to an active URL body read', async () => {
+  const { DatasetManager } = await import('../dataset/DatasetManager');
+  let activeSignal!: AbortSignal;
+  const started = createDeferred<void>();
+  const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+    activeSignal = init.signal as AbortSignal;
+    return buildResponse({ blob: () => new Promise<Blob>((_resolve, reject) => {
+      activeSignal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+      started.resolve();
+    }) });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const manager = new DatasetManager(() => ({ sourceType: 'url', imageUrlBase: 'https://body.test/', maskUrlBase: null, imageNameToUrl: null, loadedFiles: null }));
+  const first = new AbortController();
+  const second = new AbortController();
+  const a = manager.getImage('same.png', { signal: first.signal });
+  const b = manager.getImage('same.png', { signal: second.signal });
+  await started.promise;
+  first.abort();
+  await expect(a).resolves.toBeNull();
+  expect(activeSignal.aborted).toBe(false);
+  second.abort();
+  await expect(b).resolves.toBeNull();
+  expect(activeSignal.aborted).toBe(true);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it('isolates same-name sources and shares explicit aliases without changing signed URLs', async () => {
+  const fetchMock = vi.fn(async () => okImageResponse('bytes'));
+  vi.stubGlobal('fetch', fetchMock);
+  const url = 'https://alias.test/a%20b.png?sig=a%2Fb&x=2';
+  const [a, b] = await Promise.all([fetchUrlImage(null, 'a', url), fetchUrlImage(null, 'b', url)]);
+  expect(a).toBe(b);
+  expect(getUrlImageCached('a', null, url)).toBe(a);
+  expect(getUrlImageCached('b', null, url)).toBe(a);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  await fetchUrlImage('https://other.test', 'a');
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(getUrlImageCached('a', null, url)).toBe(a);
+});
+
+it('clear during encoding settles old aliases and protects replacement publication', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => okImageResponse('bytes')));
+  const encoding = createDeferred<File>();
+  const encodingStarted = createDeferred<void>();
+  vi.mocked(compressAndResizeToJpeg).mockImplementationOnce(() => { encodingStarted.resolve(); return encoding.promise; });
+  const old = fetchUrlImage('https://encoding.test', 'same.png');
+  const duplicate = fetchUrlImage('https://encoding.test', 'same.png');
+  await encodingStarted.promise;
+  clearUrlImageCache();
+  await expect(Promise.all([old, duplicate])).resolves.toEqual([null, null]);
+  const current = await fetchUrlImage('https://encoding.test', 'same.png');
+  encoding.resolve(new File(['obsolete'], 'obsolete'));
+  await encoding.promise;
+  expect(getUrlImageCached('same.png')).toBe(current);
+});
+
+it('only definitive absence suppresses masks, and suppression stays scoped to its source', async () => {
+  const fetchMock = vi.fn(async () => buildResponse({ status: 503 }));
+  vi.stubGlobal('fetch', fetchMock);
+  for (let i = 0; i < 10; i++) await fetchUrlMask('https://errors.test/masks', `${i}.jpg`);
+  expect(fetchMock).toHaveBeenCalledTimes(20);
+  fetchMock.mockImplementation(async () => buildResponse({ status: 404 }));
+  for (let i = 0; i < 10; i++) await fetchUrlMask('https://absent.test/masks', `${i}.jpg`);
+  expect(fetchMock).toHaveBeenCalledTimes(36);
+  await fetchUrlMask('https://independent.test/masks', 'same.jpg');
+  expect(fetchMock).toHaveBeenCalledTimes(38);
+});
+
+it('coalesces overlapping mask candidate URLs across different names', async () => {
+  const body = createDeferred<Blob>();
+  const secondStarted = createDeferred<void>();
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url.endsWith('/a.jpg')) return buildResponse({ status: 404 });
+    secondStarted.resolve();
+    return buildResponse({ blob: () => body.promise });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const first = fetchUrlMask('https://overlap.test', 'a.jpg');
+  await secondStarted.promise;
+  const second = fetchUrlMask('https://overlap.test', 'a.jpg.png');
+  body.resolve(new Blob(['mask']));
+  const [a, b] = await Promise.all([first, second]);
+  expect(a?.size).toBe(4);
+  expect(b?.size).toBe(4);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(getUrlMaskCacheStats()).toEqual({ count: 1, sizeBytes: 4 });
+});
+
+it('preserves exhausted 429 errors for every mask consumer without reporting 404 as failure', async () => {
+  vi.useFakeTimers();
+  const fetchMock = vi.fn(async () => buildResponse({ status: 429, headers: new Headers({ 'Retry-After': '1' }) }));
+  vi.stubGlobal('fetch', fetchMock);
+  const firstError = vi.fn();
+  const secondError = vi.fn();
+  const a = fetchUrlMask('https://rate-mask.test', 'a.jpg', { onError: firstError });
+  const b = fetchUrlMask('https://rate-mask.test', 'a.jpg', { onError: secondError });
+  await vi.runAllTimersAsync();
+  await expect(Promise.all([a, b])).resolves.toEqual([null, null]);
+  expect(firstError).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ kind: 'http', status: 429, message: expect.stringContaining('429') }));
+  expect(secondError).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: 429 }));
+  expect(fetchMock).toHaveBeenCalledTimes(6);
+  fetchMock.mockImplementation(async () => buildResponse({ status: 404 }));
+  const absentError = vi.fn();
+  await fetchUrlMask('https://absent-mask.test', 'a.jpg', { onError: absentError });
+  expect(absentError).not.toHaveBeenCalled();
+  vi.useRealTimers();
 });

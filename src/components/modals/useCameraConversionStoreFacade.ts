@@ -4,8 +4,9 @@ import {
   type NotificationState,
 } from '../../store';
 import type { Reconstruction } from '../../types/colmap';
+import { isReconstructionSnapshot } from '../../wasm/reconstructionService';
 
-type SetReconstruction = ReturnType<typeof useReconstructionStore.getState>['setReconstruction'];
+type SetReconstruction = (reconstruction: Reconstruction) => void | Promise<boolean>;
 
 interface CameraConversionDataFacade {
   reconstruction: Reconstruction | null;
@@ -29,7 +30,21 @@ export function useCameraConversionStoreFacade(): CameraConversionStoreFacade {
   return {
     data: { reconstruction },
     actions: {
-      setReconstruction,
+      setReconstruction: (nextReconstruction) => {
+        const source = useReconstructionStore.getState().wasmReconstruction;
+        if (!isReconstructionSnapshot(source)) return setReconstruction(nextReconstruction);
+        return source.updateCameras(nextReconstruction.cameras).then(snapshot => {
+          if (useReconstructionStore.getState().wasmReconstruction !== source) return false;
+          useReconstructionStore.getState().setWasmReconstruction(snapshot);
+          setReconstruction(snapshot.reconstruction);
+          return true;
+        }).catch(error => {
+          if (useReconstructionStore.getState().wasmReconstruction === source) {
+            addNotification('warning', `Camera conversion failed: ${error instanceof Error ? error.message : String(error)}`);
+          }
+          return false;
+        });
+      },
       addNotification,
     },
   };

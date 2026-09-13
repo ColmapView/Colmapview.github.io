@@ -1,11 +1,14 @@
 import type { Reconstruction } from '../../../types/colmap';
 import type { Sim3dEuler } from '../../../types/sim3d';
+import type { ReconstructionSource } from '../../../wasm/reconstructionService';
+import { isReconstructionSnapshot } from '../../../wasm/reconstructionService';
 import type { WasmReconstructionWrapper } from '../../../wasm/reconstruction';
+import { exportReconstructionSnapshot } from '../../../parsers/reconstructionSnapshotExport';
 import type { ExportFormat } from './exportPanelViewModel';
 
 export interface LiveReconstructionExportState {
   reconstruction: Reconstruction | null;
-  wasmReconstruction: WasmReconstructionWrapper | null;
+  wasmReconstruction: ReconstructionSource | null;
 }
 
 export interface RunReconstructionExportOptions {
@@ -16,28 +19,28 @@ export interface RunReconstructionExportOptions {
 export interface ReconstructionExportWriters {
   exportBinary: (
     reconstruction: Reconstruction,
-    wasmReconstruction?: WasmReconstructionWrapper | null
-  ) => void;
+    wasmReconstruction?: ReconstructionSource | null
+  ) => void | Promise<void>;
   exportText: (
     reconstruction: Reconstruction,
-    wasmReconstruction?: WasmReconstructionWrapper | null
-  ) => void;
+    wasmReconstruction?: ReconstructionSource | null
+  ) => void | Promise<void>;
   exportPly: (
     reconstruction: Reconstruction,
-    wasmReconstruction?: WasmReconstructionWrapper | null
-  ) => void;
+    wasmReconstruction?: ReconstructionSource | null
+  ) => void | Promise<void>;
   downloadZip: (
     reconstruction: Reconstruction,
     options: { format: 'binary' },
     imageFiles?: Map<string, File> | null,
-    wasmReconstruction?: WasmReconstructionWrapper | null
+    wasmReconstruction?: ReconstructionSource | null
   ) => Promise<void>;
 }
 
 export interface RunReconstructionExportDeps {
   getPendingDeletionCount: () => number;
   confirmPendingDeletions: (count: number) => Promise<boolean>;
-  applyDeletionsToData: () => void;
+  applyDeletionsToData: () => void | boolean | Promise<boolean>;
   getTransform: () => Sim3dEuler;
   isIdentityTransform: (transform: Sim3dEuler) => boolean;
   confirmBakeTransform: () => Promise<boolean>;
@@ -63,7 +66,7 @@ export async function runReconstructionExport(
       deps.addNotification('info', 'Export cancelled.', 3000);
       return;
     }
-    deps.applyDeletionsToData();
+    if (await deps.applyDeletionsToData() === false) return;
   }
 
   const transform = deps.getTransform();
@@ -79,20 +82,23 @@ export async function runReconstructionExport(
   const { reconstruction, wasmReconstruction } = deps.getLiveReconstruction();
   if (!reconstruction) return;
 
-  const exportReconstruction = hasTransform
-    ? deps.transformReconstruction(transform, reconstruction, wasmReconstruction)
-    : reconstruction;
-
   try {
+    if (isReconstructionSnapshot(wasmReconstruction)) {
+      await exportReconstructionSnapshot(wasmReconstruction, exportFormat, loadedImageFiles, hasTransform ? transform : undefined);
+      return;
+    }
+    const exportReconstruction = hasTransform
+      ? deps.transformReconstruction(transform, reconstruction, wasmReconstruction)
+      : reconstruction;
     switch (exportFormat) {
       case 'binary':
-        deps.writers.exportBinary(exportReconstruction, wasmReconstruction);
+        await deps.writers.exportBinary(exportReconstruction, wasmReconstruction);
         break;
       case 'text':
-        deps.writers.exportText(exportReconstruction, wasmReconstruction);
+        await deps.writers.exportText(exportReconstruction, wasmReconstruction);
         break;
       case 'ply':
-        deps.writers.exportPly(exportReconstruction, wasmReconstruction);
+        await deps.writers.exportPly(exportReconstruction, wasmReconstruction);
         break;
       case 'zip':
         await deps.writers.downloadZip(

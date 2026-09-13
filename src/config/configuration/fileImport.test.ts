@@ -10,6 +10,28 @@ function configFile(name: string, content: string): ConfigFileLike {
 }
 
 describe('config file import helpers', () => {
+  it('does not parse or apply configuration when its load is cancelled during reading', async () => {
+    const controller = new AbortController();
+    let finishRead!: (text: string) => void;
+    const file: ConfigFileLike = {
+      name: 'stale.yaml',
+      text: () => new Promise(resolve => { finishRead = resolve; }),
+    };
+    const parse = vi.fn();
+    const apply = vi.fn();
+    const logger = { log: vi.fn(), error: vi.fn() };
+    const loading = importConfigFile(file, { parse, apply, logger, signal: controller.signal });
+
+    controller.abort();
+    finishRead('point_cloud: {}');
+
+    expect(await loading).toEqual({ applied: false });
+    expect(parse).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
+    expect(logger.log).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
   it('applies valid configuration files and logs the source filename', async () => {
     const parsedConfig: PartialAppConfiguration = {
       pointCloud: { pointSize: 4 },

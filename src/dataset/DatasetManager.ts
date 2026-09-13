@@ -10,6 +10,7 @@
  */
 
 import type {
+  DatasetAccessOptions,
   DatasetSource,
   DatasetState,
   DatasetStateReader,
@@ -87,9 +88,10 @@ export class DatasetManager {
       if (zip || state.sourceType === 'local') return findMaskPath(maskPaths(name)) !== undefined;
       return loadedMasks.get(name) !== undefined;
     };
-    if (zip) manager.getMetricImage = (name, signal) => readWithSignal(() => zip.read(name), signal);
+    if (zip) manager.getMetricImage = (name, options) => readWithSignal(() => zip.read(name), options?.signal);
     if (state.sourceType === 'url' || state.sourceType === 'manifest') {
-      manager.getMetricImage = (name, signal) => readWithSignal(async () => {
+      manager.getMetricImage = (name, options) => readWithSignal(async () => {
+        const signal = options?.signal;
         const explicitUrl = state.imageNameToUrl?.[name];
         const request = explicitUrl
           ? { url: explicitUrl, filename: getFilenameFromUrl(explicitUrl) }
@@ -99,10 +101,11 @@ export class DatasetManager {
         if (!response.ok) throw new Error(`Could not read original image (${response.status}): ${name}`);
         const blob = await response.blob();
         return new File([blob], request.filename, { type: blob.type });
-      }, signal);
+      }, options?.signal);
     }
     // Masks are original bytes: no canvas, orientation, threshold or alpha conversion.
-    manager.getMask = (name, signal) => readWithSignal(async () => {
+    manager.getMask = (name, options) => readWithSignal(async () => {
+      const signal = options?.signal;
       if (zip || state.sourceType === 'local') {
         const path = findMaskPath(maskPaths(name));
         if (path === undefined) return null;
@@ -121,7 +124,7 @@ export class DatasetManager {
         if (response.status !== 404) throw new Error(`Could not read mask (${response.status}): ${name}`);
       }
       return null;
-    }, signal);
+    }, options?.signal);
     if (zip) manager.hasMasks = zip.hasMasks;
     return manager;
   }
@@ -155,9 +158,14 @@ export class DatasetManager {
    * @param imageName - Image name from COLMAP (e.g., "camera_123/00.png")
    * @returns The image File or null if not found/failed
    */
-  async getImage(imageName: string): Promise<File | null> {
+  async getImage(imageName: string, options?: DatasetAccessOptions): Promise<File | null> {
     const state = this.getState();
-    return await (this.getSourceAdapter(state)?.getImage(state, imageName) ?? Promise.resolve(null));
+    if (options?.signal?.aborted) return null;
+    const file = await (this.getSourceAdapter(state)?.getImage(state, imageName, options) ?? Promise.resolve(null));
+    const current = this.getState();
+    return !options?.signal?.aborted && state.sourceType === current.sourceType
+      && state.imageUrlBase === current.imageUrlBase && state.maskUrlBase === current.maskUrlBase
+      && state.imageNameToUrl === current.imageNameToUrl && state.loadedFiles === current.loadedFiles ? file : null;
   }
 
   /**
@@ -167,9 +175,14 @@ export class DatasetManager {
    * @param imageName - Image name from COLMAP
    * @returns The original image File or null if not found/failed
    */
-  async getMetricImage(imageName: string, signal?: AbortSignal): Promise<File | null> {
+  async getMetricImage(imageName: string, options?: DatasetAccessOptions): Promise<File | null> {
     const state = this.getState();
-    return readWithSignal(() => this.getSourceAdapter(state)?.getMetricImage(state, imageName) ?? Promise.resolve(null), signal);
+    if (options?.signal?.aborted) return null;
+    const file = await (this.getSourceAdapter(state)?.getMetricImage(state, imageName, options) ?? Promise.resolve(null));
+    const current = this.getState();
+    return !options?.signal?.aborted && state.sourceType === current.sourceType
+      && state.imageUrlBase === current.imageUrlBase && state.maskUrlBase === current.maskUrlBase
+      && state.imageNameToUrl === current.imageNameToUrl && state.loadedFiles === current.loadedFiles ? file : null;
   }
 
   /**
@@ -196,9 +209,14 @@ export class DatasetManager {
    * @param imageName - Image name from COLMAP (e.g., "camera_123/00.png")
    * @returns The mask File or null if not found/failed
    */
-  async getMask(imageName: string, signal?: AbortSignal): Promise<File | null> {
+  async getMask(imageName: string, options?: DatasetAccessOptions): Promise<File | null> {
     const state = this.getState();
-    return readWithSignal(() => this.getSourceAdapter(state)?.getMask(state, imageName) ?? Promise.resolve(null), signal);
+    if (options?.signal?.aborted) return null;
+    const file = await (this.getSourceAdapter(state)?.getMask(state, imageName, options) ?? Promise.resolve(null));
+    const current = this.getState();
+    return !options?.signal?.aborted && state.sourceType === current.sourceType
+      && state.imageUrlBase === current.imageUrlBase && state.maskUrlBase === current.maskUrlBase
+      && state.imageNameToUrl === current.imageNameToUrl && state.loadedFiles === current.loadedFiles ? file : null;
   }
 
   /**
@@ -225,9 +243,9 @@ export class DatasetManager {
    * @param imageNames - Array of image names to prefetch
    * @param concurrency - Number of concurrent fetches (default: 5)
    */
-  async prefetchImages(imageNames: string[], concurrency: number = 5): Promise<void> {
+  async prefetchImages(imageNames: string[], concurrency: number = 5, options?: DatasetAccessOptions): Promise<void> {
     const state = this.getState();
-    await this.getSourceAdapter(state)?.prefetchImages(state, imageNames, concurrency);
+    await this.getSourceAdapter(state)?.prefetchImages(state, imageNames, concurrency, options);
   }
 
   // ===========================================================================

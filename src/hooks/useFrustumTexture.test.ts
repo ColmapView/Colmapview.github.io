@@ -8,6 +8,7 @@ import {
   prefetchFrustumTexturesInBackground,
   useFrustumTexture,
   useSelectedImageTexture,
+  getFrustumTextureCacheStats,
 } from './useFrustumTexture';
 
 let restoreCanvasToBlob: (() => void) | null = null;
@@ -39,6 +40,45 @@ afterEach(() => {
 });
 
 describe('useFrustumTexture', () => {
+  it('does not reuse a same-name file from the previous dataset after clear', async () => {
+    const a = new File(['a'], 'same.jpg');
+    const b = new File(['b'], 'same.jpg');
+    const bitmapA = createBitmapStub();
+    const reloadedA = createBitmapStub();
+    const bitmapB = createBitmapStub();
+    const decode = vi.fn().mockResolvedValueOnce(bitmapA).mockResolvedValueOnce(reloadedA).mockResolvedValueOnce(bitmapB);
+    vi.stubGlobal('createImageBitmap', decode);
+    const { result, rerender } = renderHook(({ file }) => useFrustumTexture(file, 'same.jpg', true), { initialProps: { file: a } });
+    await waitFor(() => expect(result.current?.image).toBe(bitmapA));
+    await act(async () => { clearFrustumTextureCache(); });
+    // Leave A mounted across the clear, as the dataset loading workflow does.
+    await waitFor(() => expect(result.current?.image).toBe(reloadedA));
+    rerender({ file: b });
+    expect(result.current).toBeNull();
+    await waitFor(() => expect(result.current?.image).toBe(bitmapB));
+    expect(decode).toHaveBeenCalledTimes(3);
+  });
+  it('keeps replacement decode tracking when an old same-name decode finishes after clear', async () => {
+    const oldDecode = createBitmapDeferred();
+    const newDecode = createBitmapDeferred();
+    const createBitmap = vi.fn().mockReturnValueOnce(oldDecode.promise).mockReturnValueOnce(newDecode.promise);
+    vi.stubGlobal('createImageBitmap', createBitmap);
+    const first = prefetchFrustumTexturesInBackground([{ file: createFile(), name: 'same.jpg' }]);
+    await waitFor(() => expect(createBitmap).toHaveBeenCalledTimes(1));
+    clearFrustumTextureCache();
+    const replacementFile = createFile();
+    const second = prefetchFrustumTexturesInBackground([{ file: replacementFile, name: 'same.jpg' }]);
+    await waitFor(() => expect(createBitmap).toHaveBeenCalledTimes(2));
+    const oldBitmap = createBitmapStub();
+    oldDecode.resolve(oldBitmap);
+    await first;
+    expect(oldBitmap.close).toHaveBeenCalledOnce();
+    const third = prefetchFrustumTexturesInBackground([{ file: replacementFile, name: 'same.jpg' }]);
+    newDecode.resolve(createBitmapStub());
+    await Promise.all([second, third]);
+    expect(createBitmap).toHaveBeenCalledTimes(2);
+  });
+
   it('returns null without decoding when disabled', () => {
     const createBitmap = vi.fn(async () => createBitmapStub());
     vi.stubGlobal('createImageBitmap', createBitmap);
@@ -57,7 +97,8 @@ describe('useFrustumTexture', () => {
       .mockResolvedValueOnce(textureBitmap);
     vi.stubGlobal('createImageBitmap', createBitmap);
 
-    const { result } = renderHook(() => useFrustumTexture(createFile(), 'image.jpg', true));
+    const file = createFile();
+    const { result } = renderHook(() => useFrustumTexture(file, 'image.jpg', true));
 
     await waitFor(() => {
       expect(result.current).toBeInstanceOf(THREE.Texture);
@@ -115,6 +156,36 @@ describe('useFrustumTexture', () => {
 });
 
 describe('useSelectedImageTexture', () => {
+  it('bounds rapid selected-image decoding and skips obsolete queued selections', async () => {
+    const pending: Array<{ file: File; resolve: (bitmap: ImageBitmap) => void }> = [];
+    vi.stubGlobal('createImageBitmap', vi.fn((file: File) => new Promise<ImageBitmap>(resolve => pending.push({ file, resolve }))));
+    const files = Array.from({ length: 12 }, (_, index) => new File([String(index)], `${index}.jpg`));
+    const { result, rerender } = renderHook(({ file }) => useSelectedImageTexture(file, file.name, true), { initialProps: { file: files[0] } });
+    await waitFor(() => expect(pending).toHaveLength(1));
+    for (const file of files.slice(1)) await act(async () => { rerender({ file }); });
+    expect(pending).toHaveLength(4);
+    expect(getFrustumTextureCacheStats().decodeQueue.active).toBe(4);
+    const stale = pending.map(() => createBitmapStub());
+    await act(async () => { pending.slice(0, 4).forEach((job, index) => job.resolve(stale[index])); });
+    await waitFor(() => expect(pending).toHaveLength(5));
+    expect(pending[4].file).toBe(files[11]);
+    const current = createBitmapStub();
+    await act(async () => { pending[4].resolve(current); });
+    await waitFor(() => expect(result.current?.image).toBe(current));
+    stale.forEach(bitmap => expect(bitmap.close).toHaveBeenCalledOnce());
+  });
+  it('replaces a selected same-name texture when its File changes', async () => {
+    const a = new File(['a'], 'same.jpg');
+    const b = new File(['b'], 'same.jpg');
+    const bitmapA = createBitmapStub();
+    const bitmapB = createBitmapStub();
+    vi.stubGlobal('createImageBitmap', vi.fn(async (file: File) => file === a ? bitmapA : bitmapB));
+    const { result, rerender } = renderHook(({ file }) => useSelectedImageTexture(file, 'same.jpg', true), { initialProps: { file: a } });
+    await waitFor(() => expect(result.current?.image).toBe(bitmapA));
+    rerender({ file: b });
+    expect(result.current).toBeNull();
+    await waitFor(() => expect(result.current?.image).toBe(bitmapB));
+  });
   it('publishes the selected high-resolution texture after bitmap load', async () => {
     const bitmap = createBitmapStub();
     const createBitmap = vi.fn(async () => bitmap);
@@ -190,11 +261,13 @@ describe('useSelectedImageTexture', () => {
     const deferred = createBitmapDeferred();
     const createBitmap = vi.fn(() => deferred.promise);
     vi.stubGlobal('createImageBitmap', createBitmap);
+    const file = createFile();
 
     const { result, rerender } = renderHook(
-      ({ isSelected }: { isSelected: boolean }) => useSelectedImageTexture(createFile(), 'selected.jpg', isSelected),
+      ({ isSelected }: { isSelected: boolean }) => useSelectedImageTexture(file, 'selected.jpg', isSelected),
       { initialProps: { isSelected: true } }
     );
+    await waitFor(() => expect(createBitmap).toHaveBeenCalledOnce());
     rerender({ isSelected: false });
 
     const bitmap = createBitmapStub();

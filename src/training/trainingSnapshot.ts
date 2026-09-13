@@ -1,4 +1,6 @@
 import { getDatasetManager } from '../dataset';
+import { parseImagesBinary } from '../parsers/images';
+import { isReconstructionSnapshot } from '../wasm/reconstructionService';
 import { writeCamerasBinary, writeFramesBinary, writeImagesBinary, writePoints3DBinary, writeRigsBinary } from '../parsers/colmapBinaryWriters';
 import { sortedKeys } from '../parsers/colmapWriterUtils';
 import { getPoints3DForExport } from '../parsers/reconstructionExportData';
@@ -121,7 +123,7 @@ export async function createTrainingSnapshot({
   const guardedImageRead = async (imageName: string, readSignal?: AbortSignal): Promise<File> => {
     readSignal?.throwIfAborted();
     if (!isSourceIdForCurrentReconstruction(sourceId)) throw new Error('The loaded reconstruction changed before upload.');
-    const file = await capturedDataset.getMetricImage(imageName, readSignal);
+    const file = await capturedDataset.getMetricImage(imageName, { signal: readSignal });
     readSignal?.throwIfAborted();
     if (!isSourceIdForCurrentReconstruction(sourceId)) throw new Error('The loaded reconstruction changed during upload.');
     if (!file) throw new Error(`Original image is unavailable: ${imageName}`);
@@ -130,7 +132,7 @@ export async function createTrainingSnapshot({
   const guardedMaskRead = async (imageName: string, readSignal?: AbortSignal): Promise<File | null> => {
     readSignal?.throwIfAborted();
     if (!isSourceIdForCurrentReconstruction(sourceId)) throw new Error('The loaded reconstruction changed before upload.');
-    const file = await capturedDataset.getMask(imageName, readSignal);
+    const file = await capturedDataset.getMask(imageName, { signal: readSignal });
     readSignal?.throwIfAborted();
     if (!isSourceIdForCurrentReconstruction(sourceId)) throw new Error('The loaded reconstruction changed during upload.');
     return file;
@@ -149,8 +151,30 @@ export async function createTrainingSnapshot({
     readSignal?.throwIfAborted();
     return new File([template], name, { type: 'image/png' });
   };
-  // There is no await between reading store/WASM state and completing every
-  // binary writer. JavaScript edits cannot interleave with this short guard.
+  // Worker-owned records must be exported at the captured revision. Render
+  // snapshots omit observations and tracks, so they cannot supply training data.
+  const source = state.wasmReconstruction;
+  const exported = isReconstructionSnapshot(source) ? await source.export({ format: 'binary' }) : null;
+  signal?.throwIfAborted();
+  const current = useReconstructionStore.getState();
+  if (current.reconstruction !== reconstruction || current.wasmReconstruction !== source || hasPendingDeletions()) {
+    throw new Error('The loaded reconstruction changed during model export.');
+  }
+  const exportedBytes = (name: string): ArrayBuffer => {
+    const data = exported?.[name];
+    if (!data) throw new Error(`Reconstruction export is missing ${name}.`);
+    return data.slice().buffer as ArrayBuffer;
+  };
+  const legacySource = isReconstructionSnapshot(source) ? null : source;
+  const modelImages = exported ? parseImagesBinary(exportedBytes('images.bin')) : snapshotImages;
+  if (exported) {
+    for (const [id, image] of modelImages) {
+      const name = uploadNames.get(id);
+      if (!name) throw new Error('Reconstruction image set changed during model export.');
+      modelImages.set(id, { ...image, name });
+    }
+    if (modelImages.size !== snapshotImages.size) throw new Error('Reconstruction image set changed during model export.');
+  }
   const modelFile = (id: string, path: string, read: () => File): TrainingSnapshotFile => {
     const file = read();
     return { id, role: 'model', path, file, expectedBytes: file.size, read: async (readSignal) => {
@@ -160,9 +184,9 @@ export async function createTrainingSnapshot({
   };
 
   const files: TrainingSnapshotFile[] = [
-    modelFile('cameras', 'sparse/0/cameras.bin', () => binaryFile(writeCamerasBinary(reconstruction.cameras), 'cameras.bin')),
-    modelFile('images', 'sparse/0/images.bin', () => binaryFile(writeImagesBinary(snapshotImages, state.wasmReconstruction), 'images.bin')),
-    modelFile('points3d', 'sparse/0/points3D.bin', () => binaryFile(writePoints3DBinary(getPoints3DForExport(reconstruction, state.wasmReconstruction)), 'points3D.bin')),
+    modelFile('cameras', 'sparse/0/cameras.bin', () => binaryFile(exported ? exportedBytes('cameras.bin') : writeCamerasBinary(reconstruction.cameras), 'cameras.bin')),
+    modelFile('images', 'sparse/0/images.bin', () => binaryFile(writeImagesBinary(modelImages, legacySource), 'images.bin')),
+    modelFile('points3d', 'sparse/0/points3D.bin', () => binaryFile(exported ? exportedBytes('points3D.bin') : writePoints3DBinary(getPoints3DForExport(reconstruction, legacySource)), 'points3D.bin')),
   ];
   if (reconstruction.rigData?.rigs.size) {
     files.push(modelFile('rigs', 'sparse/0/rigs.bin', () => binaryFile(writeRigsBinary(reconstruction.rigData!.rigs), 'rigs.bin')));

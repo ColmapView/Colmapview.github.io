@@ -1,14 +1,12 @@
-import { useRef, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
-  FRUSTUM_PLANE_CULL_CHECK_INTERVAL,
-  getInitialFrustumPlaneCullFrame,
+  getFrustumPlaneCullDelay,
   getFrustumPlaneViewAngleOk,
-  getNextFrustumPlaneCullFrame,
-  shouldMeasureFrustumPlaneViewAngle,
   shouldUpdateFrustumPlaneViewAngle,
 } from './frustumPlaneViewCullingPolicy';
+import { requestSceneRender } from '../../utils/sceneRenderInvalidation';
 
 const tempForward = new THREE.Vector3();
 const tempViewDir = new THREE.Vector3();
@@ -36,12 +34,15 @@ export function useFrustumPlaneViewAngleCulling({
   cullAngleThreshold,
   viewAngleOk,
   setViewAngleOk,
-  frameSeed = 0,
 }: FrustumPlaneViewAngleCullingOptions) {
-  const frameCountRef = useRef(getInitialFrustumPlaneCullFrame({
-    seed: frameSeed,
-    interval: FRUSTUM_PLANE_CULL_CHECK_INTERVAL,
-  }));
+  const lastCheckRef = useRef<number | null>(null);
+  const lastCameraPosition = useRef(new THREE.Vector3());
+  const lastWorldMatrix = useRef(new THREE.Matrix4());
+
+  useEffect(() => {
+    lastCheckRef.current = null;
+    requestSceneRender();
+  }, [enabled, isSelected, scale, cullAngleThreshold, camera]);
 
   useFrame(() => {
     if (!enabled || !groupRef.current) return;
@@ -53,11 +54,28 @@ export function useFrustumPlaneViewAngleCulling({
       return;
     }
 
-    frameCountRef.current = getNextFrustumPlaneCullFrame({
-      frameCount: frameCountRef.current,
-      interval: FRUSTUM_PLANE_CULL_CHECK_INTERVAL,
-    });
-    if (!shouldMeasureFrustumPlaneViewAngle(frameCountRef.current)) return;
+    const now = performance.now();
+    const delay = getFrustumPlaneCullDelay(now, lastCheckRef.current);
+    const cameraMoved = !lastCameraPosition.current.equals(camera.position);
+    if (cameraMoved && delay > 0) {
+      // Avoid walking every plane's ancestors while a camera update is still throttled.
+      requestSceneRender(delay);
+      return;
+    }
+    const group = groupRef.current;
+    group.updateWorldMatrix(true, false);
+    if (lastCheckRef.current !== null
+      && !cameraMoved
+      && lastWorldMatrix.current.equals(group.matrixWorld)) return;
+
+    if (delay > 0) {
+      // A shared timer completes the final dirty update even if camera motion stops here.
+      requestSceneRender(delay);
+      return;
+    }
+    lastCheckRef.current = now;
+    lastCameraPosition.current.copy(camera.position);
+    lastWorldMatrix.current.copy(group.matrixWorld);
 
     groupRef.current.getWorldPosition(tempWorldPos);
     groupRef.current.getWorldQuaternion(tempWorldQuat);
@@ -75,6 +93,7 @@ export function useFrustumPlaneViewAngleCulling({
 
     if (shouldUpdateFrustumPlaneViewAngle({ current: viewAngleOk, next })) {
       setViewAngleOk(next);
+      requestSceneRender();
     }
   });
 }

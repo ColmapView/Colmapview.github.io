@@ -75,6 +75,7 @@ interface SplatPsnrTaskControl {
   requestId: number;
   dataIdentity: SplatPsnrDataIdentity;
   cancelled: boolean;
+  mediaController: AbortController;
   renderSession: SplatPsnrRenderSession | null;
   /**
    * Set once a metric-image/camera size mismatch is seen. The mismatch is
@@ -205,6 +206,7 @@ function cancelSplatPsnrTask(
 ): void {
   const alreadyCancelled = task.cancelled;
   task.cancelled = true;
+  task.mediaController.abort();
   const renderSession = task.renderSession;
   task.renderSession = null;
   if (renderSession) {
@@ -397,14 +399,24 @@ async function prepareSplatPsnrImage(
   if (options.markComputing ?? true) {
     setSplatPsnrComputingImage(imageId);
   }
-  const imageFile = await dataset.getMetricImage(image.name);
+  let imageFailure: string | undefined;
+  const imageFile = await dataset.getMetricImage(image.name, {
+    signal: task.mediaController.signal, priority: 'metric', onError: error => { imageFailure = error.message; },
+  });
   if (task.cancelled) return null;
   if (!imageFile) {
-    setSplatPsnrImageError(imageId, 'Missing image file');
+    setSplatPsnrImageError(imageId, imageFailure ?? 'Missing image file');
     return null;
   }
-  const maskFile = dataset.hasMasks() ? await dataset.getMask(image.name) : null;
+  let maskFailure: string | undefined;
+  const maskFile = dataset.hasMasks() ? await dataset.getMask(image.name, {
+    signal: task.mediaController.signal, priority: 'metric', onError: error => { maskFailure = error.message; },
+  }) : null;
   if (task.cancelled) return null;
+  if (maskFailure) {
+    setSplatPsnrImageError(imageId, `Mask unavailable: ${maskFailure}`);
+    return null;
+  }
   warmSplatPsnrImagePlaneTexture({
     image,
     imageFile,
@@ -971,6 +983,7 @@ export function SplatPsnrEvaluator() {
       const task = activeTaskRef.current;
       if (task) {
         task.cancelled = true;
+        task.mediaController.abort();
         if (task.renderSession) {
           releaseCachedRenderSession(task.renderSession);
           task.renderSession = null;
@@ -1222,6 +1235,7 @@ export function SplatPsnrEvaluator() {
       requestId: nextRequestId,
       dataIdentity,
       cancelled: false,
+      mediaController: new AbortController(),
       renderSession: null,
       metricImagesIncompatible: false,
     };

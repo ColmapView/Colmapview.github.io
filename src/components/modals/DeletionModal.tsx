@@ -137,8 +137,7 @@ export const DeletionModal = memo(function DeletionModal({
     }
     // Second click — execute
     setConfirming(false);
-    applyDeletions();
-    onClose();
+    void Promise.resolve(applyDeletions()).then(applied => { if (applied) onClose(); });
   }, [hasPendingDeletions, confirming, setConfirming, applyDeletions, onClose]);
 
   const handleReset = useCallback(() => {

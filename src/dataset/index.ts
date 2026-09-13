@@ -24,6 +24,9 @@ export { DatasetManager } from './DatasetManager';
 export { DatasetDiagnostics } from './DatasetDiagnostics';
 export type { DatasetDiagnosticsState, DatasetDiagnosticsStateReader } from './DatasetDiagnostics';
 export type {
+  DatasetAccessOptions,
+  DatasetAccessError,
+  MediaPriority,
   DatasetSource,
   DatasetState,
   DatasetStateReader,

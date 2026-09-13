@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { AutoRotateMode, AxesCoordinateSystem, CameraMode, HorizonLockMode } from '../../store/types';
@@ -19,6 +19,7 @@ import {
   type XYVelocity,
 } from './trackballFramePolicy';
 import type { TrackballAnimationTarget } from './useTrackballFlyTo';
+import { hasTrackballRenderActivity } from './sceneRenderActivityPolicy';
 
 interface TrackballFrameLoopOptions {
   camera: THREE.Camera;
@@ -30,6 +31,7 @@ interface TrackballFrameLoopOptions {
   axesCoordinateSystem: AxesCoordinateSystem;
   enabledRef: MutableRefObject<boolean>;
   isDraggingRef: MutableRefObject<boolean>;
+  interactingRef?: MutableRefObject<boolean>;
   horizonLockRef: MutableRefObject<HorizonLockMode>;
   worldUpRef: MutableRefObject<THREE.Vector3>;
   targetVecRef: MutableRefObject<THREE.Vector3>;
@@ -57,6 +59,7 @@ export function useTrackballFrameLoop({
   axesCoordinateSystem,
   enabledRef,
   isDraggingRef,
+  interactingRef,
   horizonLockRef,
   worldUpRef,
   targetVecRef,
@@ -71,6 +74,23 @@ export function useTrackballFrameLoop({
   const lastFrameTime = useRef(0);
   const quatX = useRef(new THREE.Quaternion());
   const quatY = useRef(new THREE.Quaternion());
+
+  useEffect(() => {
+    let hiddenAt: number | null = null;
+    const onVisibilityChange = () => {
+      const now = performance.now();
+      lastFrameTime.current = 0;
+      if (document.hidden) {
+        hiddenAt = now;
+      } else if (hiddenAt !== null) {
+        const animation = animationTargetRef.current;
+        if (animation) animation.startTime += Math.max(0, now - Math.max(hiddenAt, animation.startTime));
+        hiddenAt = null;
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [animationTargetRef]);
 
   const absoluteWorldUp = useMemo(() => {
     const up = getWorldUp(axesCoordinateSystem);
@@ -119,10 +139,12 @@ export function useTrackballFrameLoop({
 
       camera.position.copy(targetVecRef.current).add(offset);
       camera.quaternion.copy(cameraQuatRef.current);
+      camera.updateMatrixWorld();
       return;
     }
 
     camera.quaternion.copy(cameraQuatRef.current);
+    camera.updateMatrixWorld();
   }, [camera, cameraMode, cameraQuatRef, distanceRef, targetVecRef]);
 
   const updateKeyboardMovement = useCallback((frameFlyDamping?: number) => {
@@ -154,7 +176,27 @@ export function useTrackballFrameLoop({
     return true;
   }, [absoluteWorldUp, camera, cameraMode, cameraQuatRef, flySpeed, flyVelocityRef, keysPressedRef, radius, targetVecRef]);
 
-  useFrame(() => {
+  useFrame((state) => {
+    const active = hasTrackballRenderActivity({
+      enabled: enabledRef.current,
+      interacting: interactingRef?.current ?? isDraggingRef.current,
+      animating: animationTargetRef.current !== null,
+      keys: keysPressedRef.current,
+      angularVelocity: angularVelocityRef.current,
+      minAngularVelocity: CONTROLS.minVelocity,
+      flyVelocityLength: flyVelocityRef.current.length(),
+      orbitDistanceDelta: cameraMode === 'orbit' ? targetDistanceRef.current - distanceRef.current : 0,
+      autoRotate: cameraMode === 'orbit' && autoRotateMode !== 'off',
+    });
+    const now = performance.now();
+    // An idle/hidden interval is not a simulation step. Keep normal frame damping on wake.
+    const frameDeltaMs = lastFrameTime.current === 0
+      ? CAMERA.frameTimeMs
+      : getCappedFrameDeltaMs(now, lastFrameTime.current, 100);
+    lastFrameTime.current = active ? now : 0;
+    // Checking before the tick includes one final settling frame for camera-dependent consumers.
+    if (active) state.invalidate();
+
     if (!enabledRef.current) {
       angularVelocityRef.current.x = 0;
       angularVelocityRef.current.y = 0;
@@ -165,7 +207,6 @@ export function useTrackballFrameLoop({
 
     if (animationTargetRef.current) {
       const anim = animationTargetRef.current;
-      const now = performance.now();
       const elapsed = now - anim.startTime;
       const progress = Math.min(elapsed / anim.duration, 1);
       const easedProgress = easeOutCubic(progress);
@@ -185,6 +226,7 @@ export function useTrackballFrameLoop({
       distanceRef.current = anim.startDistance + (anim.endDistance - anim.startDistance) * easedProgress;
       targetDistanceRef.current = distanceRef.current;
       cameraQuatRef.current.copy(camera.quaternion);
+      camera.updateMatrixWorld();
 
       if (progress >= 1) {
         animationTargetRef.current = null;
@@ -193,9 +235,6 @@ export function useTrackballFrameLoop({
     }
 
     let needsUpdate = false;
-    const now = performance.now();
-    const frameDeltaMs = getCappedFrameDeltaMs(now, lastFrameTime.current, 100);
-    lastFrameTime.current = now;
     const frameDamping = getFrameDamping(CONTROLS.damping, frameDeltaMs, CAMERA.frameTimeMs);
     const frameFlyDamping = getFrameDamping(CONTROLS.flyDamping, frameDeltaMs, CAMERA.frameTimeMs);
 
@@ -250,7 +289,8 @@ export function useTrackballFrameLoop({
     if (needsQuatUpdate) {
       camera.quaternion.copy(cameraQuatRef.current);
     }
-  });
+    camera.updateMatrixWorld();
+  }, -2);
 
   return { applyRotation, updateCamera };
 }

@@ -11,6 +11,9 @@ import type {
   Point3DId,
 } from '../types/colmap';
 import type { WasmReconstructionWrapper } from '../wasm/reconstruction';
+import { isReconstructionSnapshot, type ReconstructionSource } from '../wasm/reconstructionService';
+import { exportReconstructionSnapshot, exportSnapshotZip } from './reconstructionSnapshotExport';
+import { downloadBlob } from '../utils/download';
 import {
   downloadReconstructionZipFromWriters,
   exportReconstructionZipFromWriters,
@@ -100,8 +103,9 @@ export type {
  */
 export function exportReconstructionText(
   reconstruction: Reconstruction,
-  wasmReconstruction?: WasmReconstructionWrapper | null
-): void {
+  wasmReconstruction?: ReconstructionSource | null
+): void | Promise<void> {
+  if (isReconstructionSnapshot(wasmReconstruction)) return exportReconstructionSnapshot(wasmReconstruction, 'text');
   const points3D = getPoints3DForExport(reconstruction, wasmReconstruction);
   const { rigs, frames } = reconstruction.rigData ?? {};
 
@@ -123,8 +127,9 @@ export function exportReconstructionText(
  */
 export function exportReconstructionBinary(
   reconstruction: Reconstruction,
-  wasmReconstruction?: WasmReconstructionWrapper | null
-): void {
+  wasmReconstruction?: ReconstructionSource | null
+): void | Promise<void> {
+  if (isReconstructionSnapshot(wasmReconstruction)) return exportReconstructionSnapshot(wasmReconstruction, 'binary');
   const points3D = getPoints3DForExport(reconstruction, wasmReconstruction);
   const { rigs, frames } = reconstruction.rigData ?? {};
 
@@ -145,8 +150,9 @@ export function exportReconstructionBinary(
  */
 export function exportPointsPLY(
   reconstruction: Reconstruction,
-  wasmReconstruction?: WasmReconstructionWrapper | null
-): void {
+  wasmReconstruction?: ReconstructionSource | null
+): void | Promise<void> {
+  if (isReconstructionSnapshot(wasmReconstruction)) return exportReconstructionSnapshot(wasmReconstruction, 'ply');
   const points3D = getPoints3DForExport(reconstruction, wasmReconstruction);
   exportPointsPLYFile(() => writePointsPLY(points3D));
 }
@@ -205,9 +211,10 @@ export async function exportReconstructionZip(
   reconstruction: Reconstruction,
   options: ZipExportOptions,
   imageFiles?: Map<string, File> | null,
-  wasmReconstruction?: WasmReconstructionWrapper | null,
+  wasmReconstruction?: ReconstructionSource | null,
   onProgress?: ZipExportProgressCallback
 ): Promise<Blob> {
+  if (isReconstructionSnapshot(wasmReconstruction)) return exportSnapshotZip(wasmReconstruction, options, imageFiles, onProgress);
   return exportReconstructionZipFromWriters(
     createReconstructionZipFileWriters(reconstruction, options, wasmReconstruction),
     options,
@@ -230,10 +237,14 @@ export async function downloadReconstructionZip(
   reconstruction: Reconstruction,
   options: ZipExportOptions,
   imageFiles?: Map<string, File> | null,
-  wasmReconstruction?: WasmReconstructionWrapper | null,
+  wasmReconstruction?: ReconstructionSource | null,
   onProgress?: ZipExportProgressCallback,
   filename: string = 'reconstruction.zip'
 ): Promise<void> {
+  if (isReconstructionSnapshot(wasmReconstruction)) {
+    downloadBlob(await exportSnapshotZip(wasmReconstruction, options, imageFiles, onProgress), filename);
+    return;
+  }
   await downloadReconstructionZipFromWriters(
     createReconstructionZipFileWriters(reconstruction, options, wasmReconstruction),
     options,

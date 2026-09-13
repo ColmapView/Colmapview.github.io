@@ -172,7 +172,7 @@ for (const backend of ['spark', 'webgpu'] as const) {
       reconstruction.setState({ loadedFiles: { ...loaded, splatFile: original, splatFiles: [original], splatFileSources: [{ id: 'original', path: original.name, file: original }] } });
       const baked = { ...createIdentityEuler(), scale: 2, rotationX: 0.3, rotationY: -0.5, translationX: 1, translationY: -2, translationZ: 0.5 };
       transforms.getState().setTransform(baked);
-      applyTransformToData();
+      await applyTransformToData();
       const snapshot = await createTrainingSnapshot({ maskSource: 'none' });
       const display = { ...createIdentityEuler(), scale: 0.8, rotationZ: 0.7, translationX: -1, translationY: 0.5, translationZ: 2 };
       transforms.getState().setTransform(display);

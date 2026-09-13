@@ -11,13 +11,13 @@ import {
   type TransformState,
 } from '../../../store';
 import type { Reconstruction } from '../../../types/colmap';
-import type { WasmReconstructionWrapper } from '../../../wasm/reconstruction';
+import type { ReconstructionSource } from '../../../wasm/reconstructionService';
 import { selectHasPendingTransform } from './transformPanelViewModel';
 
 interface AlignPanelDataFacade {
   reconstruction: Reconstruction | null;
   /** Only for `hasPoints()`: RANSAC floor detection needs a cloud to fit to. */
-  wasmReconstruction: WasmReconstructionWrapper | null;
+  wasmReconstruction: ReconstructionSource | null;
 }
 
 interface AlignPanelPointPickingFacade {

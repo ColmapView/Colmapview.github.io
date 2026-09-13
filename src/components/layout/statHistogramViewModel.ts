@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { Point3D, Point3DId } from '../../types/colmap';
-import type { WasmReconstructionWrapper } from '../../wasm/reconstruction';
+import type { ReconstructionSource } from '../../wasm/reconstructionService';
 import type { HistogramBin } from './StatHistogramTooltip';
 
 export type ReconstructionHistogramType = 'trackLength' | 'error';
@@ -44,7 +44,7 @@ interface BinDefinition {
 }
 
 type HistogramWasmSource = Pick<
-  WasmReconstructionWrapper,
+  ReconstructionSource,
   'getTrackLengths' | 'getErrors'
 >;
 

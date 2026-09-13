@@ -5,6 +5,7 @@ import {
 import type { Point3D, Reconstruction } from '../types/colmap';
 import type { ColmapParseResult } from './fileDropzoneColmapParser';
 import { loadOptionalRigData } from './fileDropzoneRigData';
+import { isReconstructionSnapshot } from '../wasm/reconstructionService';
 
 export interface ColmapReconstructionStatsComputers {
   computeImageStats: typeof computeImageStats;
@@ -38,7 +39,11 @@ export async function buildColmapReconstruction({
   loadRigData = loadOptionalRigData,
   afterStatsComputed,
 }: BuildColmapReconstructionOptions): Promise<BuildColmapReconstructionResult> {
-  const stats = parseResult.usedWasmPath && parseResult.wasmWrapper
+  if (parseResult.reconstructionSnapshot) {
+    afterStatsComputed?.();
+    return { reconstruction: parseResult.reconstructionSnapshot.reconstruction, pointCount: parseResult.reconstructionSnapshot.pointCount };
+  }
+  const stats = parseResult.usedWasmPath && parseResult.wasmWrapper && !isReconstructionSnapshot(parseResult.wasmWrapper)
     ? statsComputers.computeImageStatsFromWasm(parseResult.images, parseResult.wasmWrapper)
     : statsComputers.computeImageStats(parseResult.images, requirePoints3D(parseResult.points3D));
 

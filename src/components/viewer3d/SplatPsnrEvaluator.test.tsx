@@ -472,7 +472,7 @@ describe('SplatPsnrEvaluator', () => {
     await waitFor(() => {
       expect(computeImageMetric).toHaveBeenCalledTimes(1);
     });
-    expect(facade.data.dataset.getMask).toHaveBeenCalledWith(image.name);
+    expect(facade.data.dataset.getMask).toHaveBeenCalledWith(image.name, { signal: expect.any(AbortSignal), priority: 'metric', onError: expect.any(Function) });
     expect(computeImageMetric).toHaveBeenCalledWith(expect.objectContaining({
       imageFile,
       maskFile,
@@ -480,6 +480,28 @@ describe('SplatPsnrEvaluator', () => {
       width: 4,
       height: 3,
     }));
+  });
+
+  it('skips metric computation and surfaces a mask transfer failure instead of computing unmasked', async () => {
+    const computeImageMetric = vi.fn();
+    createWebGpuSplatPsnrSessionMock.mockResolvedValue({ computeImageMetric, dispose: vi.fn() });
+    const { facade, image, imageFile } = createFacade({
+      dataset: {
+        getImageSync: vi.fn(() => imageFile),
+        getImage: vi.fn(async () => imageFile),
+        getMetricImage: vi.fn(async () => imageFile),
+        hasMasks: vi.fn(() => true),
+        getMask: vi.fn(async (_name: string, access?: import('../../dataset').DatasetAccessOptions) => {
+          access?.onError?.({ kind: 'http', status: 429, message: 'HTTP 429: media rate limit exhausted after retries.' });
+          return null;
+        }),
+        getMaskSync: vi.fn(() => undefined),
+      } as unknown as SplatPsnrEvaluatorStoreFacade['data']['dataset'],
+    });
+    useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
+    render(<SplatPsnrEvaluator />);
+    await waitFor(() => expect(facade.actions.setSplatPsnrImageError).toHaveBeenCalledWith(image.imageId, expect.stringContaining('Mask unavailable: HTTP 429')));
+    expect(computeImageMetric).not.toHaveBeenCalled();
   });
 
   it('retries PSNR setup with SH0-only data when full SH exceeds WebGPU limits', async () => {

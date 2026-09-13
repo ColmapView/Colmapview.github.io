@@ -3,7 +3,9 @@
  * Triggered from the AlignPanel button.
  */
 
-import { useCallback, memo, useMemo } from 'react';
+import { useCallback, memo, useMemo, useEffect, useRef } from 'react';
+import { isReconstructionSnapshot } from '../../wasm/reconstructionService';
+import { appLogger } from '../../utils/logger';
 import { SliderRow, SelectRow } from '../viewer3d/ControlComponents';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useModalZIndex } from '../../hooks/useModalZIndex';
@@ -66,6 +68,13 @@ export const FloorDetectionModal = memo(function FloorDetectionModal({
     transform: { transform, setTransform },
     ui: { axesCoordinateSystem },
   } = useFloorDetectionStoreFacade();
+  const detectionRequest = useRef<AbortController | null>(null);
+  const cancelDetection = useCallback(() => {
+    detectionRequest.current?.abort();
+    detectionRequest.current = null;
+    setIsDetecting(false);
+  }, [setIsDetecting]);
+  useEffect(() => cancelDetection, [wasmReconstruction, isOpen, cancelDetection]);
 
   const pointCount = wasmReconstruction?.pointCount ?? reconstruction?.points3D?.size ?? 0;
   const hasFloorDetectionPoints = wasmReconstruction?.hasPoints() ?? false;
@@ -87,19 +96,39 @@ export const FloorDetectionModal = memo(function FloorDetectionModal({
 
   // Close handler - also clears detection
   const handleClose = useCallback(() => {
+    cancelDetection();
     reset();
     onClose();
-  }, [reset, onClose]);
+  }, [cancelDetection, reset, onClose]);
 
   useHotkeys('escape', handleClose, { enabled: isOpen }, [isOpen, handleClose]);
 
   const handleDetectFloor = useCallback(() => {
     if (!wasmReconstruction?.hasPoints()) return;
 
+    detectionRequest.current?.abort();
+    const controller = new AbortController();
+    detectionRequest.current = controller;
     setIsDetecting(true);
+    if (isReconstructionSnapshot(wasmReconstruction)) {
+      void wasmReconstruction.floor({ transform, params: { distanceThreshold, sampleCount } }, controller.signal).then(result => {
+        if (controller.signal.aborted) return;
+        setDetectedPlane(result.plane);
+        setPointDistances(result.distances);
+        setNormalFlipped(result.normalFlipped);
+        const nextFloorColorMode = getFloorColorModeAfterDetection(floorColorMode, result.plane);
+        if (nextFloorColorMode !== floorColorMode) setFloorColorMode(nextFloorColorMode);
+      }).catch(error => {
+        if (!controller.signal.aborted) appLogger.warn('Floor detection failed:', error);
+      }).finally(() => {
+        if (!controller.signal.aborted) setIsDetecting(false);
+      });
+      return;
+    }
 
     // Use setTimeout to allow UI to update before potentially blocking operation
     setTimeout(() => {
+      if (controller.signal.aborted) return;
       const positions = wasmReconstruction.getPositions();
       if (!positions) {
         setIsDetecting(false);
@@ -146,12 +175,14 @@ export const FloorDetectionModal = memo(function FloorDetectionModal({
   ]);
 
   const handleClear = useCallback(() => {
+    cancelDetection();
     reset();
-  }, [reset]);
+  }, [cancelDetection, reset]);
 
   // Apply: compute and apply the alignment transform
   const handleApply = useCallback(() => {
     if (!detectedPlane) return;
+    cancelDetection();
 
     const composedEuler = computeFloorAlignmentTransform(
       detectedPlane,
@@ -163,7 +194,7 @@ export const FloorDetectionModal = memo(function FloorDetectionModal({
     setTransform(composedEuler);
     reset();
     onClose();
-  }, [detectedPlane, normalFlipped, targetUp, transform, setTransform, reset, onClose]);
+  }, [detectedPlane, normalFlipped, targetUp, transform, setTransform, cancelDetection, reset, onClose]);
 
   const planeControls = getFloorPlaneControlState(detectedPlane, targetAxis);
   const detectionAction = getFloorDetectionActionState({

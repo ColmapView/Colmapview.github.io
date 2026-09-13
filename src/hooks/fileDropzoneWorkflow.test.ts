@@ -3,6 +3,8 @@ import type { Reconstruction } from '../types/colmap';
 import { noopLogger, type AppLogger } from '../utils/logger';
 import type { FileDropzoneWorkflowDeps } from './fileDropzoneWorkflow';
 import { processFileDropzoneFiles } from './fileDropzoneWorkflow';
+import { ReconstructionService, ReconstructionSnapshot } from '../wasm/reconstructionService';
+import { cancelPendingReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
 
 function file(name: string): File {
   return new File([''], name);
@@ -102,7 +104,64 @@ function createDeps(overrides: Partial<FileDropzoneWorkflowDeps> = {}): FileDrop
   };
 }
 
+function workerLoadFixture() {
+  const files = {
+    camerasFile: file('cameras.bin'), imagesFile: file('images.bin'), points3DFile: file('points3D.bin'),
+  };
+  const service = new ReconstructionService(files);
+  const reconstruction = createReconstruction();
+  const snapshot = new ReconstructionSnapshot({
+    revision: 1, reconstruction, positions: new Float32Array(), colors: new Float32Array(), errors: new Float32Array(),
+    trackLengths: new Uint32Array(), point3DIds: new BigUint64Array(), boundingBox: null, warnings: [],
+    diagnostics: { parser: 'wasm', parseMs: 0, statisticsMs: 0, snapshotMs: 0, renderBytes: 0, wasmHeapBytes: null, retainedImageBufferBytes: 0 },
+  }, service);
+  return {
+    service, reconstruction, snapshot,
+    files: new Map(Object.values(files).map(value => [value.name, value])),
+    parseResult: {
+      cameras: reconstruction.cameras, images: reconstruction.images,
+      wasmWrapper: snapshot, reconstructionSnapshot: snapshot, usedWasmPath: true,
+    },
+  };
+}
+
 describe('file dropzone workflow', () => {
+  it.each(['worker', 'main-thread-fallback'] as const)('installs %s snapshots with only the required current-thread paint delay', async mode => {
+    const fixture = workerLoadFixture();
+    fixture.service.mode = mode;
+    const calls: string[] = [];
+    const deps = createDeps({
+      parseFiles: vi.fn(async () => fixture.parseResult),
+      clearCaches: vi.fn(() => calls.push('clear')),
+      setWasmReconstruction: vi.fn(() => calls.push('source')),
+      setReconstruction: vi.fn(() => calls.push('reconstruction')),
+    });
+    expect(await processFileDropzoneFiles(fixture.files, deps)).toBe(true);
+    if (mode === 'worker') expect(deps.delay).not.toHaveBeenCalled();
+    else expect(deps.delay).toHaveBeenCalledWith(200);
+    expect(calls).toEqual(['clear', 'source', 'reconstruction']);
+    fixture.service.dispose();
+  });
+
+  it('checks generation before clearing caches or installing a worker snapshot even without a paint delay', async () => {
+    const fixture = workerLoadFixture();
+    let finishBuild!: (value: { reconstruction: Reconstruction; pointCount: number }) => void;
+    const buildReconstruction = vi.fn(() => new Promise<{ reconstruction: Reconstruction; pointCount: number }>(resolve => {
+      finishBuild = resolve;
+    }));
+    const deps = createDeps({ parseFiles: vi.fn(async () => fixture.parseResult), buildReconstruction });
+    const loading = processFileDropzoneFiles(fixture.files, deps);
+    await vi.waitFor(() => expect(buildReconstruction).toHaveBeenCalledOnce());
+    cancelPendingReconstructionLoad();
+    finishBuild({ reconstruction: fixture.reconstruction, pointCount: 0 });
+    expect(await loading).toBe(false);
+    expect(deps.delay).not.toHaveBeenCalled();
+    expect(deps.clearCaches).not.toHaveBeenCalled();
+    expect(deps.setWasmReconstruction).not.toHaveBeenCalled();
+    expect(deps.setReconstruction).not.toHaveBeenCalled();
+    expect(fixture.service.isDisposed).toBe(true);
+  });
+
   it('applies config-only drops without entering reconstruction parsing', async () => {
     const importConfig = vi.fn(async () => ({ applied: false, errorMessage: 'Config error: invalid' }));
     const parseFiles = vi.fn();
@@ -111,11 +170,43 @@ describe('file dropzone workflow', () => {
     const result = await processFileDropzoneFiles(new Map([['viewer.yaml', file('viewer.yaml')]]), deps);
 
     expect(result).toBe(false);
-    expect(importConfig).toHaveBeenCalledWith(expect.any(File), { logErrors: true });
+    expect(importConfig).toHaveBeenCalledWith(expect.any(File), {
+      logErrors: true,
+      signal: expect.any(AbortSignal),
+    });
     expect(deps.setError).toHaveBeenCalledWith('Config error: invalid');
     expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
     expect(deps.setDroppedFiles).not.toHaveBeenCalled();
     expect(parseFiles).not.toHaveBeenCalled();
+  });
+
+  it('does not install files or clear a newer load after a stale config read completes', async () => {
+    let finishConfig!: (result: { applied: boolean }) => void;
+    const importConfig = vi.fn(() => new Promise<{ applied: boolean }>(resolve => {
+      finishConfig = resolve;
+    }));
+    const staleDeps = createDeps({ importConfig });
+    const staleFiles = new Map([
+      ['viewer.yaml', file('viewer.yaml')],
+      ['cameras.bin', file('cameras.bin')],
+      ['images.bin', file('images.bin')],
+      ['points3D.bin', file('points3D.bin')],
+    ]);
+    const staleLoad = processFileDropzoneFiles(staleFiles, staleDeps);
+    await vi.waitFor(() => expect(importConfig).toHaveBeenCalledOnce());
+
+    const currentDeps = createDeps();
+    const currentFile = file('current.jpg');
+    expect(await processFileDropzoneFiles(new Map([['images/current.jpg', currentFile]]), currentDeps)).toBe(true);
+    finishConfig({ applied: true });
+
+    expect(await staleLoad).toBe(false);
+    expect(staleDeps.setDroppedFiles).not.toHaveBeenCalled();
+    expect(staleDeps.setLoadedFiles).not.toHaveBeenCalled();
+    expect(staleDeps.setReconstruction).not.toHaveBeenCalled();
+    expect(staleDeps.clearCaches).not.toHaveBeenCalled();
+    expect(staleDeps.setUrlLoading).not.toHaveBeenCalledWith(false);
+    expect(currentDeps.setLoadedFiles).toHaveBeenCalledOnce();
   });
 
   it('runs COLMAP parsing through injected workflow dependencies', async () => {
@@ -533,7 +624,10 @@ describe('file dropzone workflow', () => {
     const result = await processFileDropzoneFiles(files, deps);
 
     expect(result).toBe(true);
-    expect(importConfig).toHaveBeenCalledWith(config, { logErrors: true });
+    expect(importConfig).toHaveBeenCalledWith(config, {
+      logErrors: true,
+      signal: expect.any(AbortSignal),
+    });
     expect(deps.preloadSplatRuntime).toHaveBeenCalledTimes(1);
     expect(deps.clearSplatPsnr).toHaveBeenCalledTimes(1);
     expect(deps.setLoadedFiles).toHaveBeenCalledWith({

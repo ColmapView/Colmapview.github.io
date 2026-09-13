@@ -2,16 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import type { DatasetManager } from '../../dataset';
 import { useFileUrl } from '../../hooks/useFileUrl';
 import type { Image, ImageId, Reconstruction } from '../../types/colmap';
-import {
-  getImageNamesToFetch,
-  getMaskNameToFetch,
-} from './imageDetailFileViewModel';
-
-interface AsyncMaskFile {
-  imageName: string;
-  file: File | null;
-  dataset: DatasetManager;
-}
 
 interface UseImageDetailFilesOptions {
   dataset: DatasetManager;
@@ -22,79 +12,46 @@ interface UseImageDetailFilesOptions {
   matchedImage: Image | null;
 }
 
-export function useImageDetailFiles({
-  dataset,
-  reconstruction,
-  imageDetailId,
-  matchedImageId,
-  image,
-  matchedImage,
-}: UseImageDetailFilesOptions) {
-  const [imageCacheVersion, setImageCacheVersion] = useState(0);
-  const [asyncMaskFile, setAsyncMaskFile] = useState<AsyncMaskFile | null>(null);
+/** Each visible consumer holds its File independently of cache eviction or the other pane. */
+function useActiveDetailFile(
+  dataset: DatasetManager,
+  reconstruction: Reconstruction | null,
+  image: Image | null,
+  mask = false,
+): File | null {
+  const name = image?.name;
+  const imageId = image?.imageId;
+  const available = mask ? dataset.hasMasks() : dataset.hasImages();
+  const identity = useMemo(() => ({ dataset, reconstruction, name, imageId, mask, available }),
+    [dataset, reconstruction, name, imageId, mask, available]);
+  const readCached = () => name && available
+    ? (mask ? dataset.getMaskSync(name) : dataset.getImageSync(name)) ?? null : null;
+  const [owned, setOwned] = useState(() => ({ identity, file: readCached() }));
+  // Updating derived state during render releases the old resource before it can be displayed
+  // under a new reconstruction/name, and snapshots synchronous hits before async work evicts them.
+  let current = owned;
+  if (owned.identity !== identity) {
+    current = { identity, file: readCached() };
+    setOwned(current);
+  }
 
   useEffect(() => {
-    const namesToFetch = getImageNamesToFetch({
-      reconstruction,
-      imageDetailId,
-      matchedImageId,
-      hasImages: dataset.hasImages(),
-      isImageCached: (imageName) => dataset.getImageSync(imageName) !== undefined,
+    if (!name || !available || current.file) return;
+    const controller = new AbortController();
+    const access = { signal: controller.signal, priority: 'selected' } as const;
+    const pending = mask ? dataset.getMask(name, access) : dataset.getImage(name, access);
+    void pending.then(file => {
+      if (!controller.signal.aborted) setOwned({ identity, file });
     });
-    if (namesToFetch.length === 0) return;
+    return () => controller.abort();
+  }, [dataset, name, available, mask, identity, current.file]);
+  return current.file;
+}
 
-    let cancelled = false;
-    Promise.all(namesToFetch.map(name => dataset.getImage(name))).then((results) => {
-      if (!cancelled && results.some(file => file !== null)) {
-        setImageCacheVersion(version => version + 1);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dataset, reconstruction, imageDetailId, matchedImageId]);
-
-  useEffect(() => {
-    const maskName = getMaskNameToFetch({
-      reconstruction,
-      imageDetailId,
-      hasMasks: dataset.hasMasks(),
-      isMaskCached: (imageName) => dataset.getMaskSync(imageName) !== undefined,
-    });
-    if (!maskName) return;
-
-    let cancelled = false;
-    dataset.getMask(maskName).then((file) => {
-      if (!cancelled) {
-        setAsyncMaskFile({ imageName: maskName, file, dataset });
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dataset, reconstruction, imageDetailId]);
-
-  const imageFile = useMemo(() => {
-    void imageCacheVersion;
-    if (!image) return null;
-    return dataset.getImageSync(image.name) ?? null;
-  }, [image, dataset, imageCacheVersion]);
-
-  const maskFile = useMemo(() => {
-    if (!image || !dataset.hasMasks()) return null;
-    return dataset.getMaskSync(image.name) ?? (
-      asyncMaskFile?.dataset === dataset && asyncMaskFile.imageName === image.name ? asyncMaskFile.file : null
-    );
-  }, [image, dataset, asyncMaskFile]);
-
-  const matchedImageFile = useMemo(() => {
-    void imageCacheVersion;
-    if (!matchedImage) return null;
-    return dataset.getImageSync(matchedImage.name) ?? null;
-  }, [matchedImage, dataset, imageCacheVersion]);
-
+export function useImageDetailFiles({ dataset, reconstruction, image, matchedImage }: UseImageDetailFilesOptions) {
+  const imageFile = useActiveDetailFile(dataset, reconstruction, image);
+  const matchedImageFile = useActiveDetailFile(dataset, reconstruction, matchedImage);
+  const maskFile = useActiveDetailFile(dataset, reconstruction, image, true);
   return {
     imageFile,
     imageSrc: useFileUrl(imageFile),

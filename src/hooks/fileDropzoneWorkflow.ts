@@ -18,7 +18,7 @@ import type { AppLogger } from '../utils/logger';
 import { appLogger } from '../utils/logger';
 import { preloadSparkModule } from '../utils/sparkSplatRuntime';
 import { getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
-import type { WasmReconstructionWrapper } from '../wasm/reconstruction';
+import { isReconstructionSnapshot, type ReconstructionSource } from '../wasm/reconstructionService';
 import { getFailedImageCount } from './useAsyncImageCache';
 import { getPointFilterWarning } from './fileDropzonePointFilterWarning';
 import {
@@ -30,6 +30,7 @@ import { runPointCloudOnlyLoad } from './fileDropzonePointCloudOnly';
 import { runSplatOnlyLoad } from './fileDropzoneSplatOnly';
 import { parseColmapFiles } from './fileDropzoneColmapParser';
 import { buildColmapReconstruction } from './fileDropzoneReconstruction';
+import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
 
 type SetUrlProgress = (progress: UrlLoadProgress | null) => void;
 type SetSourceInfo = {
@@ -90,7 +91,7 @@ export interface FileDropzoneWorkflowDeps {
   setReconstruction: (reconstruction: Reconstruction) => void;
   setUrlLoading: (loading: boolean) => void;
   setUrlProgress: SetUrlProgress;
-  setWasmReconstruction: (wasm: WasmReconstructionWrapper | null) => void;
+  setWasmReconstruction: (wasm: ReconstructionSource | null) => void;
 }
 
 export interface FileDropzoneWorkflowOptions {
@@ -197,10 +198,12 @@ async function runNewPointCloudOnlyLoad(
   >,
   clearCaches: ClearCaches,
   mapProgress: (localPercent: number) => number,
-  log: (message: string) => void
+  log: (message: string) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   deps.setDroppedFiles(files);
   await runPointCloudOnlyLoad({
+    signal,
     pointCloudFile,
     mapProgress,
     setUrlProgress: deps.setUrlProgress,
@@ -248,6 +251,10 @@ export async function processFileDropzoneFiles(
   deps: FileDropzoneWorkflowDeps,
   options?: { start: number; end: number } | FileDropzoneWorkflowOptions
 ): Promise<boolean> {
+  const load = beginReconstructionLoad();
+  let pendingSource: ReconstructionSource | null = null;
+  let sourceInstalled = false;
+  let keepLoadingForInitialSplat = false;
   const logger = deps.logger ?? appLogger;
   const clearCaches = deps.clearCaches ?? clearAllCaches;
   const importConfig = deps.importConfig ?? importConfigFile;
@@ -278,54 +285,55 @@ export async function processFileDropzoneFiles(
     sceneReplacementReported = true;
     onSceneReplaced?.();
   };
-  const {
-    splatFileSources,
-    pointCloudPlySources,
-  } = await splitSplatAndPointCloudPlySources(files, classifyPly);
-  const splatFiles = splatFileSources
-    .map((source) => source.file)
-    .filter((file): file is File => Boolean(file));
-  const splatFile = splatFiles[0];
-  const pointCloudFile = pointCloudPlySources[0]?.file;
-  const splatRendererStartPercent = mapProgress(60);
-  let keepLoadingForInitialSplat = false;
-  const handOffLoadingToSplatRenderer = () => {
-    if (!splatFile) {
-      return;
-    }
-    keepLoadingForInitialSplat = true;
-    deps.setUrlProgress(getSplatLoadingProgress(splatFile, {
-      startPercent: splatRendererStartPercent,
-    }));
-  };
-
-  // Head start on the Spark chunk, but only when Spark is the backend that will
-  // actually render this splat. Scene3D and SplatLayer gate their own preloads
-  // on the same policy; an ungated one here downloaded the whole bundle for
-  // WebGPU-backed splats that never touch it. This decides nothing about when
-  // the splat itself loads — that stays with the handoff below.
-  if (splatFile && shouldPreloadSplatRuntime()) {
-    void preloadSplatRuntime().catch((error: unknown) => {
-      // Report it, don't just log it: the renderer-side attempts read this
-      // outcome to stop waiting on a download that will not arrive, and to
-      // avoid re-requesting the 5 MB chunk the memo already gave up on.
-      onSplatRuntimePreloadFailed();
-      logger.warn(
-        `[Splats] Failed to preload Spark runtime: ${error instanceof Error ? error.message : String(error)}`
-      );
-    });
-  }
-
-  if (!deps.getUrlLoading()) {
-    deps.setUrlLoading(true);
-    deps.setUrlProgress({ percent: mapProgress(0), message: 'Starting...' });
-  }
-
   try {
+    const {
+      splatFileSources,
+      pointCloudPlySources,
+    } = await splitSplatAndPointCloudPlySources(files, classifyPly);
+    load.assertCurrent();
+    const splatFiles = splatFileSources
+      .map((source) => source.file)
+      .filter((file): file is File => Boolean(file));
+    const splatFile = splatFiles[0];
+    const pointCloudFile = pointCloudPlySources[0]?.file;
+    const splatRendererStartPercent = mapProgress(60);
+    const handOffLoadingToSplatRenderer = () => {
+      if (!splatFile) {
+        return;
+      }
+      keepLoadingForInitialSplat = true;
+      deps.setUrlProgress(getSplatLoadingProgress(splatFile, {
+        startPercent: splatRendererStartPercent,
+      }));
+    };
+
+    // Head start on the Spark chunk, but only when Spark is the backend that will
+    // actually render this splat. Scene3D and SplatLayer gate their own preloads
+    // on the same policy; an ungated one here downloaded the whole bundle for
+    // WebGPU-backed splats that never touch it. This decides nothing about when
+    // the splat itself loads — that stays with the handoff below.
+    if (splatFile && shouldPreloadSplatRuntime()) {
+      void preloadSplatRuntime().catch((error: unknown) => {
+        // Report it, don't just log it: the renderer-side attempts read this
+        // outcome to stop waiting on a download that will not arrive, and to
+        // avoid re-requesting the 5 MB chunk the memo already gave up on.
+        onSplatRuntimePreloadFailed();
+        logger.warn(
+          `[Splats] Failed to preload Spark runtime: ${error instanceof Error ? error.message : String(error)}`
+        );
+      });
+    }
+
+    if (!deps.getUrlLoading()) {
+      deps.setUrlLoading(true);
+      deps.setUrlProgress({ percent: mapProgress(0), message: 'Starting...' });
+    }
+
     const configFile = findConfigFile(files);
     let configErrorMessage: string | null = null;
     if (configFile) {
-      const result = await importConfig(configFile, { logErrors: true });
+      const result = await importConfig(configFile, { logErrors: true, signal: load.signal });
+      load.assertCurrent();
       if (!result.applied && result.errorMessage) {
         deps.setError(result.errorMessage);
         configErrorMessage = result.errorMessage;
@@ -343,7 +351,8 @@ export async function processFileDropzoneFiles(
           }
         } else if (pointCloudFile) {
           reportSceneReplacement();
-          await runNewPointCloudOnlyLoad(files, pointCloudFile, deps, clearCaches, mapProgress, logger.info);
+          await runNewPointCloudOnlyLoad(files, pointCloudFile, deps, clearCaches, mapProgress, logger.info, load.signal);
+          load.assertCurrent();
         }
         if (configErrorMessage && throwOnError) {
           throw new Error(configErrorMessage);
@@ -382,7 +391,8 @@ export async function processFileDropzoneFiles(
 
       if (pointCloudFile && !splatFile) {
         reportSceneReplacement();
-        await runNewPointCloudOnlyLoad(files, pointCloudFile, deps, clearCaches, mapProgress, logger.info);
+        await runNewPointCloudOnlyLoad(files, pointCloudFile, deps, clearCaches, mapProgress, logger.info, load.signal);
+        load.assertCurrent();
         return true;
       }
 
@@ -452,7 +462,16 @@ export async function processFileDropzoneFiles(
       framesFile,
       addNotification: deps.addNotification,
       log: logger.info,
+      signal: load.signal,
+      onProgress: phase => {
+        if (!load.signal.aborted) deps.setUrlProgress({
+          percent: mapProgress(phase === 'statistics' ? 30 : phase === 'snapshot' ? 40 : 15),
+          message: phase === 'statistics' ? 'Computing statistics...' : phase === 'snapshot' ? 'Preparing render snapshot...' : 'Parsing COLMAP files...',
+        });
+      },
     });
+    pendingSource = parseResult.wasmWrapper;
+    load.assertCurrent();
 
     deps.setUrlProgress({ percent: mapProgress(35), message: 'Computing statistics...' });
 
@@ -461,20 +480,27 @@ export async function processFileDropzoneFiles(
       rigsFile,
       framesFile,
       afterStatsComputed: () => {
-        deps.setUrlProgress({ percent: mapProgress(40), message: 'Processing rig data...' });
+        if (!load.signal.aborted) {
+          deps.setUrlProgress({ percent: mapProgress(40), message: 'Processing rig data...' });
+        }
       },
     });
+    load.assertCurrent();
 
-    clearCaches({ preserveZip: true });
-    await delay(200);
+    // Worker messages already yield between parse/progress/snapshot delivery.
+    // Keep the legacy paint opportunity only for work performed on this thread.
+    if (!isReconstructionSnapshot(parseResult.wasmWrapper) || parseResult.wasmWrapper.service.mode !== 'worker') {
+      await delay(200);
+    }
+    load.assertCurrent();
 
     deps.setUrlProgress(splatFile
       ? getSplatLoadingProgress(splatFile, { startPercent: splatRendererStartPercent })
       : { percent: mapProgress(95), message: 'Finalizing...' });
 
-    if (parseResult.wasmWrapper) {
-      deps.setWasmReconstruction(parseResult.wasmWrapper);
-    }
+    clearCaches({ preserveZip: true });
+    deps.setWasmReconstruction(parseResult.wasmWrapper);
+    sourceInstalled = true;
 
     deps.setReconstruction(reconstruction);
     deps.resetView();
@@ -505,6 +531,7 @@ export async function processFileDropzoneFiles(
     }
     return true;
   } catch (err) {
+    if (load.signal.aborted || (err instanceof Error && err.name === 'AbortError')) return false;
     logger.error('Error processing files:', err);
     const errorMessage = getProcessingErrorMessage(err);
     deps.setError(errorMessage);
@@ -513,8 +540,10 @@ export async function processFileDropzoneFiles(
     }
     return false;
   } finally {
-    if (!keepLoadingForInitialSplat) {
+    if (!sourceInstalled) pendingSource?.dispose();
+    if (!keepLoadingForInitialSplat && !load.signal.aborted) {
       deps.setUrlLoading(false);
     }
+    load.finish();
   }
 }

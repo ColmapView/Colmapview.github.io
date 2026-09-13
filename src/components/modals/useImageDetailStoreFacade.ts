@@ -1,12 +1,12 @@
 import { useDataset, type DatasetManager } from '../../dataset';
 import { useReconstructionStore, useUIStore, type UIState } from '../../store';
 import type { ImageId, Reconstruction } from '../../types/colmap';
-import type { WasmReconstructionWrapper } from '../../wasm/reconstruction';
+import type { ReconstructionSource } from '../../wasm/reconstructionService';
 
 interface ImageDetailDataFacade {
   dataset: DatasetManager;
   reconstruction: Reconstruction | null;
-  wasmReconstruction: WasmReconstructionWrapper | null;
+  wasmReconstruction: ReconstructionSource | null;
 }
 
 interface ImageDetailUiFacade {

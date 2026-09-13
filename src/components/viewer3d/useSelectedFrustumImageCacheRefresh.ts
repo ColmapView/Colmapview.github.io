@@ -1,10 +1,11 @@
 import { useEffect } from 'react';
 import type { ImageId, Reconstruction } from '../../types/colmap';
+import type { DatasetAccessOptions } from '../../dataset';
 
 export interface SelectedFrustumImageSource {
   hasImages(): boolean;
   getImageSync(name: string): File | null | undefined;
-  getImage(name: string): Promise<File | null | undefined>;
+  getImage(name: string, options?: DatasetAccessOptions): Promise<File | null | undefined>;
 }
 
 interface SelectedFrustumImageCacheRefreshOptions {
@@ -30,16 +31,16 @@ export function useSelectedFrustumImageCacheRefresh({
 
     if (imageSource.getImageSync(selectedImage.name)) return;
 
-    let cancelled = false;
+    const controller = new AbortController();
 
-    imageSource.getImage(selectedImage.name).then((file) => {
-      if (!cancelled && file) {
+    imageSource.getImage(selectedImage.name, { signal: controller.signal, priority: 'selected' }).then((file) => {
+      if (!controller.signal.aborted && file) {
         onImageLoaded();
       }
     });
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [imageSource, reconstruction, selectedImageId, onImageLoaded]);
 }

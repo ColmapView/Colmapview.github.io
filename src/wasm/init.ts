@@ -57,7 +57,7 @@ export async function loadColmapWasm(): Promise<ColmapWasmModule | null> {
     try {
       // Load WASM module from public directory
       // Vite doesn't allow importing JS from public/, so we fetch and create a blob URL
-      const baseUrl = import.meta.env.BASE_URL || '/';
+      const baseUrl = (import.meta as ImportMeta & { env?: { BASE_URL?: string } }).env?.BASE_URL || '/';
       const wasmJsUrl = `${baseUrl}wasm/colmap_wasm.js`;
 
       // Fetch the JS file and create a blob URL for dynamic import
@@ -112,7 +112,7 @@ export function getWasmMemoryStats(): {
   heapSize: number;
   heapUsed: number;
 } | null {
-  if (!cachedModule) {
+  if (!cachedModule?.HEAPU8) {
     return null;
   }
 
@@ -124,4 +124,10 @@ export function getWasmMemoryStats(): {
     heapSize,
     heapUsed: heapSize, // Approximation
   };
+}
+
+/** Release the factory cache after its authoritative wrapper is disposed. Other live wrappers keep their own module reference. */
+export function releaseColmapWasmModuleCache(): void {
+  cachedModule = null;
+  modulePromise = null;
 }

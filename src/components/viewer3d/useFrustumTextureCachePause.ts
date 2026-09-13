@@ -43,8 +43,8 @@ export function useFrustumTextureCachePause({
 }: FrustumTextureCachePauseOptions): () => void {
   const lastCameraPosRef = useRef(new THREE.Vector3());
   const lastCameraQuatRef = useRef(new THREE.Quaternion());
-  const lastMoveTimeRef = useRef(0);
   const isCameraMovingRef = useRef(false);
+  const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingHoverRefreshRef = useRef(false);
   const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -56,8 +56,13 @@ export function useFrustumTextureCachePause({
     return () => document.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
+  useEffect(() => () => {
+    if (resumeTimerRef.current !== null) clearTimeout(resumeTimerRef.current);
+    if (isCameraMovingRef.current) resumeFrustumTextureCache();
+    isCameraMovingRef.current = false;
+  }, []);
+
   useFrame(() => {
-    const now = performance.now();
     const moved = hasCameraPoseMoved(
       lastCameraPosRef.current,
       lastCameraQuatRef.current,
@@ -68,31 +73,28 @@ export function useFrustumTextureCachePause({
     if (moved) {
       lastCameraPosRef.current.copy(camera.position);
       lastCameraQuatRef.current.copy(camera.quaternion);
-      lastMoveTimeRef.current = now;
       if (!isCameraMovingRef.current) {
         isCameraMovingRef.current = true;
         pauseFrustumTextureCache();
       }
-      return;
-    }
+      if (resumeTimerRef.current !== null) clearTimeout(resumeTimerRef.current);
+      resumeTimerRef.current = setTimeout(() => {
+        resumeTimerRef.current = null;
+        isCameraMovingRef.current = false;
+        resumeFrustumTextureCache();
 
-    if (!shouldResumeFrustumTextureCache(isCameraMovingRef.current, now, lastMoveTimeRef.current, debounceMs)) {
-      return;
-    }
-
-    isCameraMovingRef.current = false;
-    resumeFrustumTextureCache();
-
-    if (pendingHoverRefreshRef.current && lastMousePosRef.current && canvas) {
-      pendingHoverRefreshRef.current = false;
-      canvas.dispatchEvent(new PointerEvent('pointermove', {
-        clientX: lastMousePosRef.current.x,
-        clientY: lastMousePosRef.current.y,
-        bubbles: true,
-        cancelable: true,
-        pointerType: 'mouse',
-        pointerId: 1,
-      }));
+        if (pendingHoverRefreshRef.current && lastMousePosRef.current && canvas) {
+          pendingHoverRefreshRef.current = false;
+          canvas.dispatchEvent(new PointerEvent('pointermove', {
+            clientX: lastMousePosRef.current.x,
+            clientY: lastMousePosRef.current.y,
+            bubbles: true,
+            cancelable: true,
+            pointerType: 'mouse',
+            pointerId: 1,
+          }));
+        }
+      }, debounceMs);
     }
   });
 

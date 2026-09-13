@@ -4,6 +4,7 @@ import type { Reconstruction } from '../../types/colmap';
 import type { Sim3dEuler } from '../../types/sim3d';
 import type { CameraViewState, HorizonLockMode } from '../../store/types';
 import { getImageWorldPose } from '../../utils/colmapTransforms';
+import { requestSceneRender } from '../../utils/sceneRenderInvalidation';
 import { createSim3dFromEuler } from '../../utils/sim3dTransforms';
 import { isSphericalCameraModel } from '../../utils/cameraModelRegistry';
 import {
@@ -120,10 +121,13 @@ function applyPoseTransition(
 ): void {
   if (flyTransitionDuration > 0) {
     animationTargetRef.current = buildAnimationTarget(camera, targetVecRef, distanceRef, pose, flyTransitionDuration);
+    requestSceneRender();
     return;
   }
 
   setInstantPose(camera, pose, targetVecRef, cameraQuatRef, distanceRef, targetDistanceRef);
+  camera.updateMatrixWorld();
+  requestSceneRender();
 }
 
 export function getImageFlyToPose(
