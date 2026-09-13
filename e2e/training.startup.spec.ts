@@ -20,7 +20,9 @@ test('real scene upload-to-result timing with disk-backed sources', async ({ pag
   const health = await request.get(`${apiUrl}/api/v1/health`);
   expect(health.ok()).toBe(true);
   expect((await health.json()).authentication.token_required).toBe(false);
-  await page.context().grantPermissions(['local-network-access'], { origin: 'http://localhost:5173' });
+  await page.context().grantPermissions(['local-network-access'], {
+    origin: new URL(testInfo.project.use.baseURL ?? 'http://localhost:5173').origin,
+  });
   let jobId: string | null = null;
   try {
     await page.goto(`/?splatBackend=${splatBackend}&e2eProbe=1`);
@@ -54,14 +56,7 @@ test('real scene upload-to-result timing with disk-backed sources', async ({ pag
     if (process.env.COLMAP_TRAIN_STARTUP_IMAGE_COUNT) expect(imageCount).toBe(Number(process.env.COLMAP_TRAIN_STARTUP_IMAGE_COUNT));
     await page.getByRole('button', { name: 'Training', exact: true }).click();
     const dock = page.getByRole('region', { name: 'Training', exact: true });
-    // Automatic connection can collapse this section between checking visibility
-    // and filling. Retry the normal UI interaction after that one-time transition.
-    await expect(async () => {
-      if (!await dock.getByLabel('Server URL').isVisible()) {
-        await dock.locator('.training-window-connection > summary').click();
-      }
-      await dock.getByLabel('Server URL').fill(apiUrl!, { timeout: 1000 });
-    }).toPass({ timeout: 20_000 });
+    await dock.getByLabel('Server URL').fill(apiUrl!);
     // The current UI connects on Start; the separate Connect/Train controls
     // belonged to the earlier panel design.
     await dock.getByRole('button', { name: 'Start', exact: true }).click();

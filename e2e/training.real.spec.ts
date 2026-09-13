@@ -53,7 +53,7 @@ function percentile(values: number[], fraction: number): number {
 test.describe('Real local splatxx training workflow', () => {
   test.skip(!apiUrl || !datasetDir, 'Start the real splatxx API and set its URL plus the generated fixture directory.');
 
-  test('E2E-01 uploads masks, displays live geometry, auto-loads final, and cancels the latest waiting run', async ({
+  test('E2E-01 uploads masks, displays live geometry, downloads final, and verifies HTTP queue cancellation', async ({
     page,
     browserName,
     request,
@@ -61,7 +61,9 @@ test.describe('Real local splatxx training workflow', () => {
     test.skip(browserName !== 'chromium', 'The real GPU qualification targets the supported Chromium/Spark path.');
     test.setTimeout(360_000);
     page.setDefaultTimeout(15_000);
-    await page.context().grantPermissions(['local-network-access'], { origin: 'http://localhost:5173' });
+    await page.context().grantPermissions(['local-network-access'], {
+      origin: new URL(testInfo.project.use.baseURL ?? 'http://localhost:5173').origin,
+    });
     const ownedJobs = new Set<string>();
     const health = await request.get(`${apiUrl}/api/v1/health`);
     expect(health.ok()).toBe(true);
@@ -82,21 +84,13 @@ test.describe('Real local splatxx training workflow', () => {
       const dock = page.getByRole('region', { name: 'Training', exact: true });
       await expect(dock).toBeVisible();
       await expect(dock).not.toHaveAttribute('aria-modal', 'true');
-      if (!await dock.getByLabel('Server URL').isVisible()) {
-        await dock.locator('.training-window-connection > summary').click();
-      }
       await dock.getByLabel('Server URL').fill(apiUrl!);
-      await dock.getByRole('button', { name: 'Connect / Retry', exact: true }).click();
       if (bearerRequired) {
+        // Start discovers bearer authentication before it can upload anything.
+        await dock.getByRole('button', { name: 'Start', exact: true }).click();
         await expect(dock.getByLabel('Session token')).toBeVisible();
         await dock.getByLabel('Session token').fill(token);
-        await dock.getByRole('button', { name: 'Connect / Retry', exact: true }).click();
-      } else {
-        await expect(dock.getByLabel('Session token')).toHaveCount(0);
-        await expect(dock.getByText('Connected', { exact: true })).toBeVisible();
       }
-      await expect(dock.getByText('Connected', { exact: true })).toBeVisible({ timeout: 20_000 });
-      await expect(dock.getByText('Masks: directory; missing masks use the full image as foreground', { exact: true })).toBeVisible();
 
       await page.evaluate(async () => {
         const storePath = '/src/store/stores/trainingStore.ts';
@@ -116,7 +110,7 @@ test.describe('Real local splatxx training workflow', () => {
         const { useReconstructionStore } = await import(storePath) as typeof import('../src/store/reconstructionStore');
         return useReconstructionStore.getState().loadedFiles?.splatFileSources?.length ?? 0;
       });
-      await dock.getByRole('button', { name: 'Train', exact: true }).click();
+      await dock.getByRole('button', { name: 'Start', exact: true }).click();
       await expect(dock.getByRole('tab')).toHaveCount(0);
       await expect.poll(async () => (await trainingState(page)).jobId, { timeout: 60_000 }).not.toBeNull();
       const firstJob = (await trainingState(page)).jobId!;
@@ -160,7 +154,7 @@ test.describe('Real local splatxx training workflow', () => {
       expect(previewBody.readUInt32LE(8)).toBe(previewTotalSplats);
 
       await expect.poll(async () => (await trainingState(page)).jobState, { timeout: 180_000 }).toBe('succeeded');
-      await expect(dock.getByRole('button', { name: 'Result loaded', exact: true })).toBeVisible({ timeout: 30_000 });
+      await expect.poll(async () => (await trainingState(page)).finalLoadedJobId, { timeout: 30_000 }).toBe(firstJob);
       const finalState = await page.evaluate(async () => {
         const storePath = '/src/store/index.ts';
         const { useReconstructionStore, useTrainingStore } = await import(storePath) as typeof import('../src/store');
@@ -194,10 +188,10 @@ test.describe('Real local splatxx training workflow', () => {
       });
       // Use the regular viewer export interface, not the training API's artifact
       // URL or the fallback download button in the Training window.
-      await dock.getByRole('button', { name: 'Close training', exact: true }).click();
-      await expect(dock).not.toBeVisible();
+      await page.keyboard.press('Escape');
       const exportButton = page.getByRole('button', { name: 'Export', exact: true });
       await exportButton.hover();
+      await expect(dock).not.toBeVisible();
       const downloadEvent = page.waitForEvent('download');
       await page.getByRole('button', { name: 'Download Splat File', exact: true }).click();
       const download = await downloadEvent;
@@ -205,25 +199,22 @@ test.describe('Real local splatxx training workflow', () => {
       const downloaded = await readFile((await download.path())!);
       expect(createHash('sha256').update(downloaded).digest('hex')).toBe(attachedDigest);
 
-      await page.getByRole('button', { name: 'Training', exact: true }).click();
-      await expect(dock).toBeVisible();
-      await dock.getByRole('button', { name: 'New setup', exact: true }).click();
-      await dock.getByRole('button', { name: 'Train', exact: true }).click();
-      await expect.poll(async () => {
-        const state = await trainingState(page);
-        return state.jobId !== firstJob && ['starting', 'running'].includes(state.jobState ?? '') ? state.jobId : null;
-      }, { timeout: 60_000 }).not.toBeNull();
-      const secondJob = (await trainingState(page)).jobId!;
-      ownedJobs.add(secondJob);
-
-      await dock.getByRole('button', { name: 'New setup', exact: true }).click();
-      await dock.getByRole('button', { name: 'Train', exact: true }).click();
-      await expect.poll(async () => {
-        const state = await trainingState(page);
-        return state.jobId && state.jobId !== secondJob ? state.jobId : null;
-      }, { timeout: 60_000 }).not.toBeNull();
-      const thirdJob = (await trainingState(page)).jobId!;
-      ownedJobs.add(thirdJob);
+      // The current browser Start action replaces its own run. Exercise other
+      // clients' FIFO jobs through HTTP; training.restart.spec.ts covers Start.
+      const firstResponse = await request.get(`${apiUrl}/api/v1/jobs/${firstJob}`, { headers: authHeaders });
+      const completed = await firstResponse.json() as { dataset_id: string };
+      const enqueue = async (key: string) => {
+        const response = await request.post(`${apiUrl}/api/v1/jobs`, {
+          headers: { ...authHeaders, 'Idempotency-Key': `${firstJob}-${key}` },
+          data: { dataset_id: completed.dataset_id },
+        });
+        expect(response.ok()).toBe(true);
+        const job = await response.json() as { job_id: string };
+        ownedJobs.add(job.job_id);
+        return job.job_id;
+      };
+      const secondJob = await enqueue('active');
+      const thirdJob = await enqueue('waiting');
       await expect.poll(async () => {
         const response = await request.get(`${apiUrl}/api/v1/queue`, { headers: authHeaders });
         const queue = await response.json() as {
@@ -233,7 +224,8 @@ test.describe('Real local splatxx training workflow', () => {
         return { active: queue.active_job?.job_id ?? null, waiting: queue.waiting.map(job => job.job_id) };
       }).toEqual({ active: secondJob, waiting: [thirdJob] });
 
-      await dock.getByRole('button', { name: 'Remove from queue', exact: true }).click();
+      const cancelResponse = await request.post(`${apiUrl}/api/v1/jobs/${thirdJob}/cancel`, { headers: authHeaders });
+      expect(cancelResponse.ok()).toBe(true);
       await expect.poll(async () => {
         const response = await request.get(`${apiUrl}/api/v1/jobs/${thirdJob}`, {
           headers: authHeaders,

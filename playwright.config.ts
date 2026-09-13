@@ -21,6 +21,8 @@ const webGpuHardwareBrowserChannel = process.env.COLMAP_WEBVIEW_WEBGPU_CHANNEL |
 const webGpuHardwareUse = webGpuHardwareBrowserChannel
   ? { channel: webGpuHardwareBrowserChannel }
   : {};
+const trainingBaseUrl = process.env.COLMAP_TRAINING_BASE_URL;
+const trainingPort = trainingBaseUrl ? new URL(trainingBaseUrl).port : '5173';
 
 /**
  * Playwright E2E test configuration for ColmapView
@@ -36,7 +38,7 @@ export default defineConfig({
   reporter: [['html'], ['list']],
 
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: trainingBaseUrl ?? 'http://localhost:5173',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'on-first-retry',
@@ -102,9 +104,9 @@ export default defineConfig({
 
   // Auto-start dev server before running tests
   webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
+    command: `npm run dev -- --port ${Number(trainingPort)} --strictPort`,
+    url: trainingBaseUrl ?? 'http://localhost:5173',
+    reuseExistingServer: !process.env.CI && !trainingBaseUrl,
     timeout: 120000,
   },
 });
