@@ -436,23 +436,55 @@ describe('fetchRemoteSplatFile', () => {
   });
 });
 
+describe.each([
+  ['file', fetchRemoteSplatFile],
+  ['bytes', fetchRemoteSplatBytes],
+] as const)('remote splat %s stream cleanup', (_name, download) => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('cancels the response stream when the caller aborts mid-download', async () => {
+    const abort = new AbortController();
+    const cancel = vi.fn();
+    let produced = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (produced++ < 2) controller.enqueue(new Uint8Array([1, 2, 3]));
+        else controller.close();
+      },
+      cancel,
+    }))));
+
+    await expect(download('https://x/tile.ply', (loaded) => {
+      if (loaded > 0) abort.abort();
+    }, abort.signal)).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('cancels the response stream if the initial progress callback throws', async () => {
+    const cancel = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new ReadableStream<Uint8Array>({ cancel }))));
+
+    await expect(download('https://x/tile.ply', () => {
+      throw new Error('progress failed');
+    })).rejects.toThrow('progress failed');
+
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+});
+
 describe('fetchRemoteSplatBytes', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
   function streamOf(chunks: Uint8Array[], headers: Record<string, string> = {}) {
-    return {
-      ok: true,
-      status: 200,
-      headers: { get: (k: string) => headers[k.toLowerCase()] ?? null },
-      body: new ReadableStream<Uint8Array>({
+    return new Response(new ReadableStream<Uint8Array>({
         start(controller) {
           for (const chunk of chunks) controller.enqueue(chunk);
           controller.close();
         },
-      }),
-    } as unknown as Response;
+      }), { status: 200, headers });
   }
 
   it('downloads into a single pre-allocated buffer when Content-Length is known', async () => {

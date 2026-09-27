@@ -23,11 +23,10 @@ export function drawImageBitmapToCacheCanvas(
   maxSize: number,
   createCanvas: ImageCacheCanvasFactory = createBrowserImageCacheCanvas
 ): ImageCacheCanvas | null {
-  const { width, height } = getResizedImageDimensions(bitmap, maxSize);
-  const canvas = createCanvas(width, height);
-  const ctx = getCanvas2dContext(canvas);
-
   try {
+    const { width, height } = getResizedImageDimensions(bitmap, maxSize);
+    const canvas = createCanvas(width, height);
+    const ctx = getCanvas2dContext(canvas);
     if (!ctx) return null;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';

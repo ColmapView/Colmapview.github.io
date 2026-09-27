@@ -91,6 +91,17 @@ describe('async image canvas helpers', () => {
     expect(canvas.height).toBe(240);
   });
 
+  it.each(['allocation', 'context'])('closes the bitmap when canvas %s throws', (stage) => {
+    const bitmap = buildImageBitmap({ close: vi.fn() });
+    const fail = () => { throw new Error('canvas unavailable'); };
+    const createCanvas = stage === 'allocation'
+      ? fail
+      : () => buildImageCacheCanvas({ getContext: fail });
+
+    expect(drawImageBitmapToCacheCanvas(bitmap, 256, createCanvas)).toBeNull();
+    expect(bitmap.close).toHaveBeenCalledOnce();
+  });
+
   it('uses an HTML canvas fallback when OffscreenCanvas is unavailable', () => {
     vi.stubGlobal('OffscreenCanvas', undefined);
 

@@ -23,7 +23,7 @@ import {
 
 export interface DatasetSourceAdapter {
   getImage: (state: DatasetState, imageName: string, options?: DatasetAccessOptions) => Promise<File | null>;
-  getMetricImage: (state: DatasetState, imageName: string, options?: DatasetAccessOptions) => Promise<File | null>;
+  getOriginalImage: (state: DatasetState, imageName: string, options?: DatasetAccessOptions) => Promise<File | null>;
   getImageSync: (state: DatasetState, imageName: string) => File | undefined;
   getMask: (state: DatasetState, imageName: string, options?: DatasetAccessOptions) => Promise<File | null>;
   getMaskSync: (state: DatasetState, imageName: string) => File | undefined;
@@ -36,7 +36,7 @@ const localSourceAdapter: DatasetSourceAdapter = {
   async getImage(state, imageName, options) {
     return options?.signal?.aborted ? null : getImageFile(state.loadedFiles?.imageFiles, imageName) ?? null;
   },
-  async getMetricImage(state, imageName, options) {
+  async getOriginalImage(state, imageName, options) {
     return options?.signal?.aborted ? null : getImageFile(state.loadedFiles?.imageFiles, imageName) ?? null;
   },
   getImageSync(state, imageName) {
@@ -66,10 +66,10 @@ const remoteSourceAdapter: DatasetSourceAdapter = {
     if (options?.signal?.aborted) return null;
     return await fetchUrlImage(state.imageUrlBase, imageName, explicitUrl, options);
   },
-  async getMetricImage(state, imageName, options) {
+  async getOriginalImage(state, imageName, options) {
     const explicitUrl = state.imageNameToUrl?.[imageName];
     if (!state.imageUrlBase && !explicitUrl) return null;
-    return await fetchUrlImageRaw(state.imageUrlBase, imageName, explicitUrl, { ...options, priority: options?.priority ?? 'metric' });
+    return await fetchUrlImageRaw(state.imageUrlBase, imageName, explicitUrl, options);
   },
   getImageSync(state, imageName) {
     return getUrlImageCached(imageName, state.imageUrlBase, state.imageNameToUrl?.[imageName]);
@@ -99,7 +99,7 @@ const zipSourceAdapter: DatasetSourceAdapter = {
     if (options?.signal?.aborted) return null;
     return getZipImageCached(imageName) ?? await fetchZipImage(imageName, options);
   },
-  async getMetricImage(_state, imageName, options) {
+  async getOriginalImage(_state, imageName, options) {
     if (!isZipLoadingAvailable()) return null;
     return await fetchZipImageRaw(imageName, options);
   },

@@ -27,6 +27,7 @@ import {
   ExportReloadSection,
 } from './ExportPanelSections';
 import { useExportPanelStoreFacade } from './useExportPanelStoreFacade';
+import { useCancellableExport } from './useCancellableExport';
 
 const styles = controlPanelStyles;
 
@@ -72,10 +73,11 @@ export const ExportPanel = memo(function ExportPanel({
 
   // Image export state
   const [jpegQuality, setJpegQuality] = useState(85);
-  const [imageExportProgress, setImageExportProgress] = useState<number | null>(null);
-
-  // Mask export state
-  const [maskExportProgress, setMaskExportProgress] = useState<number | null>(null);
+  const exportSource = useMemo(() => ({ dataset, reconstruction }), [dataset, reconstruction]);
+  const { progress: imageExportProgress, run: runImages, cancel: cancelImages } = useCancellableExport(exportSource);
+  const { progress: maskExportProgress, run: runMasks, cancel: cancelMasks } = useCancellableExport(exportSource);
+  // Applying confirmed deletions changes the reconstruction, but keeps this dataset.
+  const { progress: reconstructionExportProgress, run: runModel, cancel: cancelModel } = useCancellableExport(dataset);
 
   // Format export state
   const [exportFormat, setExportFormat] = useState<ExportFormat>('binary');
@@ -93,9 +95,11 @@ export const ExportPanel = memo(function ExportPanel({
   const handleExportFormat = useCallback(async () => {
     if (!reconstruction) return;
 
-    await runReconstructionExport({
+    await runModel((signal, setProgress) => runReconstructionExport({
       exportFormat,
       loadedImageFiles: loadedFiles?.imageFiles,
+      signal,
+      onProgress: percent => setProgress(percent),
     }, {
       getPendingDeletionCount,
       confirmPendingDeletions: (count) => requestConfirmation({
@@ -123,7 +127,7 @@ export const ExportPanel = memo(function ExportPanel({
       },
       addNotification,
       logError: appLogger.error,
-    });
+    }));
   }, [
     reconstruction,
     loadedFiles,
@@ -133,6 +137,7 @@ export const ExportPanel = memo(function ExportPanel({
     getTransform,
     getLiveReconstruction,
     addNotification,
+    runModel,
   ]);
 
   // Get list of all image names from reconstruction
@@ -143,28 +148,29 @@ export const ExportPanel = memo(function ExportPanel({
 
   // Export images as JPEG ZIP
   const handleExportImages = useCallback(async () => {
-    await runImageZipExport({
+    await runImages((signal, setProgress) => runImageZipExport({
       imageNames,
       jpegQualityPercent: jpegQuality,
+      signal,
     }, {
-      fetchImage: (name) => dataset.getImage(name),
+      fetchImage: (name, signal) => dataset.getOriginalImage(name, { signal }),
       downloadImagesZip,
-      setProgress: setImageExportProgress,
+      setProgress,
       addNotification,
       logError: appLogger.error,
-    });
-  }, [imageNames, dataset, jpegQuality, addNotification]);
+    }));
+  }, [imageNames, dataset, jpegQuality, addNotification, runImages]);
 
   // Export masks as PNG ZIP
   const handleExportMasks = useCallback(async () => {
-    await runMaskZipExport({ imageNames }, {
-      fetchMask: (name) => dataset.getMask(name),
+    await runMasks((signal, setProgress) => runMaskZipExport({ imageNames, signal }, {
+      fetchMask: (name, signal) => dataset.getMask(name, { signal }),
       downloadMasksZip,
-      setProgress: setMaskExportProgress,
+      setProgress,
       addNotification,
       logError: appLogger.error,
-    });
-  }, [imageNames, dataset, addNotification]);
+    }));
+  }, [imageNames, dataset, addNotification, runMasks]);
 
   const handleDownloadSplat = useCallback(() => {
     const splatFile = loadedFiles?.splatFile;
@@ -218,6 +224,8 @@ export const ExportPanel = memo(function ExportPanel({
       >
         <div className={styles.panelContent}>
           <ExportReconstructionSection
+            exportProgress={reconstructionExportProgress}
+            onCancelExport={cancelModel}
             exportFormat={exportFormat}
             hasCameras={hasCameras}
             hasPendingDeletions={hasPendingDeletions}
@@ -232,6 +240,8 @@ export const ExportPanel = memo(function ExportPanel({
             hasSplatFile={Boolean(loadedFiles?.splatFile)}
           />
           <ExportMediaSection
+            onCancelImages={cancelImages}
+            onCancelMasks={cancelMasks}
             hasImages={hasImages}
             hasMasks={hasMasks}
             imageExportProgress={imageExportProgress}

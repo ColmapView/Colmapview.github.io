@@ -10,6 +10,8 @@ export interface ProcessAsyncImagePendingItemDeps<T> {
   drawToCanvas?: DrawToCanvas;
   maxSize: number;
   processCanvas: ProcessCanvas<T>;
+  isCurrent?: () => boolean;
+  dispose?: (value: T) => void;
 }
 
 export function processAsyncImagePendingItem<T>(
@@ -23,27 +25,33 @@ export function processAsyncImagePendingItem<T>(
     return;
   }
 
-  const drawToCanvas = deps.drawToCanvas ?? drawImageBitmapToCacheCanvas;
-  const canvas = drawToCanvas(pending.bitmap, deps.maxSize);
-  if (!canvas) {
-    pending.resolve(null);
-    return;
-  }
-
-  const result = deps.processCanvas(canvas);
-
-  if (result instanceof Promise) {
-    result.then((value) => {
+  const complete = (value: T | null) => {
+    if (deps.isCurrent && !deps.isCurrent()) {
+      if (value !== null) deps.dispose?.(value);
+      pending.resolve(null);
+    } else {
       if (value !== null) {
         deps.cache.set(pending.cacheKey, value);
       }
       pending.resolve(value);
-    }).catch(() => {
-      pending.resolve(null);
-    });
-    return;
-  }
+    }
+  };
 
-  deps.cache.set(pending.cacheKey, result);
-  pending.resolve(result);
+  try {
+    const drawToCanvas = deps.drawToCanvas ?? drawImageBitmapToCacheCanvas;
+    const canvas = drawToCanvas(pending.bitmap, deps.maxSize);
+    if (!canvas) {
+      pending.resolve(null);
+      return;
+    }
+
+    const result = deps.processCanvas(canvas);
+    if (result instanceof Promise) {
+      void result.then(complete).catch(() => pending.resolve(null));
+    } else {
+      complete(result);
+    }
+  } catch {
+    pending.resolve(null);
+  }
 }

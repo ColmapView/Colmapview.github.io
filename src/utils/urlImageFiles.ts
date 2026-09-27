@@ -76,7 +76,7 @@ export async function fetchUrlImage(
   }, options);
 }
 
-/** Original metric bytes are transient; only simultaneous raw requests coalesce. */
+/** Original image bytes are transient; only simultaneous raw requests coalesce. */
 export async function fetchUrlImageRaw(
   base: string | null, name: string, explicitUrl?: string, options?: DatasetAccessOptions,
 ): Promise<File | null> {

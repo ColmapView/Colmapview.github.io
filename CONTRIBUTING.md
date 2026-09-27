@@ -76,7 +76,7 @@ src/
 ## Release Process
 
 1. Update `CHANGELOG.md` - move items from `[Unreleased]` to new version
-2. Update version in `package.json` and `deno.json`
+2. Update the version in `package.json` and `package-lock.json` with `npm version X.Y.Z --no-git-tag-version`
 3. Commit: `git commit -m "Release vX.Y.Z"`
 4. Tag: `git tag -a vX.Y.Z -m "ColmapView vX.Y.Z"`
 5. Push: `git push origin main && git push origin vX.Y.Z`
@@ -84,4 +84,4 @@ src/
 
 ## Deployment
 
-The application automatically deploys to GitHub Pages on push to `main` via GitHub Actions.
+GitHub Actions validates lint, unit tests, the production build and Chromium tests before deploying. Pushes to `main` publish `/dev/`; version tags publish `/vX.Y.Z/` and update `/latest/`.

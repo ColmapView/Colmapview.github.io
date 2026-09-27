@@ -1,4 +1,4 @@
-import type { RefObject, TouchEventHandler } from 'react';
+import type { ReactNode, RefObject, TouchEventHandler } from 'react';
 import type { Camera, Image, ImageId, Point2D } from '../../types/colmap';
 import { TouchImageControls } from './ImageDetailControls';
 import { TouchImageDetailHeader } from './ImageDetailModalHeader';
@@ -11,6 +11,7 @@ import type {
 } from './imageDetailViewModel';
 
 interface TouchImageDetailFrameProps {
+  loadErrors?: ReactNode;
   camera: Camera;
   closeImageDetail: () => void;
   connectedImages: ConnectedImageOption[];
@@ -52,6 +53,7 @@ interface TouchImageDetailFrameProps {
 }
 
 export function TouchImageDetailFrame({
+  loadErrors,
   camera,
   closeImageDetail,
   connectedImages,
@@ -102,6 +104,7 @@ export function TouchImageDetailFrame({
         matchedImage={matchedImage}
       />
 
+      {loadErrors}
       <div
         ref={imageContainerRef}
         className="flex-1 min-h-0 bg-ds-secondary relative overflow-hidden"

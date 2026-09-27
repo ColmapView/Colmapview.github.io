@@ -52,8 +52,8 @@ export function getCacheResizeDimensions(
   );
 
   return {
-    width: Math.round(dimensions.width * scale),
-    height: Math.round(dimensions.height * scale),
+    width: Math.max(1, Math.round(dimensions.width * scale)),
+    height: Math.max(1, Math.round(dimensions.height * scale)),
   };
 }
 

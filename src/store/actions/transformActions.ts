@@ -90,7 +90,7 @@ export function applyTransformToData(): boolean | Promise<boolean> {
     return wasmReconstruction.transform(transform).then(snapshot => {
       if (useReconstructionStore.getState().wasmReconstruction !== wasmReconstruction) return false;
       reconstructionStore.setWasmReconstruction(snapshot);
-      reconstructionStore.setReconstruction(snapshot.reconstruction);
+      reconstructionStore.setReconstruction(snapshot.reconstruction, { edited: true });
       if (!isIdentityEuler(transform)) {
         const nextSplatTransform = composeSim3d(createSim3dFromEuler(transform), createSim3dFromEuler(splatTransform));
         transformStore.setSplatTransform(sim3dToEuler(nextSplatTransform));
@@ -134,7 +134,7 @@ export function applyTransformToData(): boolean | Promise<boolean> {
     reconstructionStore.setWasmReconstruction(null);
   }
 
-  reconstructionStore.setReconstruction(transformed);
+  reconstructionStore.setReconstruction(transformed, { edited: true });
   if (!isIdentityEuler(transform)) {
     const nextSplatTransform = composeSim3d(sim3d, createSim3dFromEuler(splatTransform));
     transformStore.setSplatTransform(sim3dToEuler(nextSplatTransform));

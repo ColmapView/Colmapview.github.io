@@ -9,6 +9,7 @@ export interface AsyncImageCachePendingItem<T> {
 export interface AsyncImageCacheState<T> {
   cache: Map<string, T>;
   loadingPromises: Map<string, Promise<T | null>>;
+  cancelLoads: Set<() => void>;
   pendingQueue: Array<() => void>;
   pendingItems: AsyncImageCachePendingItem<T>[];
   activeLoads: number;
@@ -28,6 +29,7 @@ export function createAsyncImageCacheState<T>(): AsyncImageCacheState<T> {
   return {
     cache: new Map(),
     loadingPromises: new Map(),
+    cancelLoads: new Set(),
     pendingQueue: [],
     pendingItems: [],
     activeLoads: 0,
@@ -45,6 +47,9 @@ export function clearAsyncImageCacheState<T>(
 ): void {
   state.cacheGeneration++;
 
+  for (const cancel of state.cancelLoads) cancel();
+  state.cancelLoads.clear();
+
   for (const pending of state.pendingItems) {
     pending.bitmap.close();
     pending.resolve(null);
@@ -59,6 +64,7 @@ export function clearAsyncImageCacheState<T>(
   state.pendingQueue.length = 0;
   state.activeLoads = 0;
   state.idleCallbackScheduled = false;
+  state.bulkMode = false;
   clearFailures();
 }
 

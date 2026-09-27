@@ -68,9 +68,10 @@ describe('runReconstructionExport', () => {
 
     expect(deps.writers.downloadZip).toHaveBeenCalledWith(
       expect.any(Object),
-      { format: 'binary' },
+      { format: 'binary', signal: undefined },
       imageFiles,
-      null
+      null,
+      undefined,
     );
   });
 
@@ -126,7 +127,7 @@ describe('runReconstructionExport', () => {
       expect.any(Object),
       null
     );
-    expect(deps.writers.exportBinary).toHaveBeenCalledWith(transformed, null);
+    expect(deps.writers.exportBinary).toHaveBeenCalledWith(transformed, null, undefined);
   });
 
   it('cancels when transform baking is rejected', async () => {
@@ -159,5 +160,51 @@ describe('runReconstructionExport', () => {
 
     expect(deps.logError).toHaveBeenCalledWith('Export failed:', error);
     expect(deps.addNotification).toHaveBeenCalledWith('warning', 'Export failed');
+  });
+
+  it.each(['deletions', 'transform'] as const)('ignores a late %s confirmation after cancellation', async stage => {
+    let confirm!: (answer: boolean) => void;
+    const confirmation = vi.fn(() => new Promise<boolean>(resolve => { confirm = resolve; }));
+    const deps = createDeps(stage === 'deletions' ? {
+      getPendingDeletionCount: () => 1,
+      confirmPendingDeletions: confirmation,
+    } : {
+      isIdentityTransform: () => false,
+      confirmBakeTransform: confirmation,
+    });
+    const controller = new AbortController();
+    const pending = runReconstructionExport({ exportFormat: 'binary', signal: controller.signal }, deps);
+    expect(confirmation).toHaveBeenCalledOnce();
+    controller.abort();
+    await pending;
+    confirm(true);
+    await Promise.resolve();
+    expect(deps.applyDeletionsToData).not.toHaveBeenCalled();
+    expect(deps.transformReconstruction).not.toHaveBeenCalled();
+    expect(deps.writers.exportBinary).not.toHaveBeenCalled();
+    expect(deps.addNotification).not.toHaveBeenCalled();
+    expect(deps.logError).not.toHaveBeenCalled();
+  });
+
+  it('reports preparation failures through the normal export error notification', async () => {
+    const error = new Error('Could not apply deletions');
+    const deps = createDeps({
+      getPendingDeletionCount: () => 1,
+      applyDeletionsToData: vi.fn().mockRejectedValue(error),
+    });
+    await runReconstructionExport({ exportFormat: 'binary' }, deps);
+    expect(deps.writers.exportBinary).not.toHaveBeenCalled();
+    expect(deps.logError).toHaveBeenCalledWith('Export failed:', error);
+    expect(deps.addNotification).toHaveBeenCalledWith('warning', 'Export failed');
+  });
+
+  it('forwards cancellation and progress to the ZIP writer', async () => {
+    const deps = createDeps();
+    const signal = new AbortController().signal;
+    const onProgress = vi.fn();
+    await runReconstructionExport({ exportFormat: 'zip', signal, onProgress }, deps);
+    expect(deps.writers.downloadZip).toHaveBeenCalledWith(
+      expect.any(Object), { format: 'binary', signal }, undefined, null, onProgress,
+    );
   });
 });

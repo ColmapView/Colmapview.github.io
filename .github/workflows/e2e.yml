@@ -1,6 +1,6 @@
 name: E2E (chromium)
 
-# Gates the `chromium` Playwright project only — the 9 non-WebGPU spec files.
+# Runs the app checks and the `chromium` Playwright project.
 # The other projects in playwright.config.ts stay local-only:
 #   - firefox: runs the same specs as chromium, so gating it too would roughly
 #     double the job for no extra signal.
@@ -13,9 +13,9 @@ name: E2E (chromium)
 # scene probe that `import.meta.env.DEV` gates in Scene3D.tsx.
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  # Deployment calls the same checks for main, release tags, and manual runs.
+  workflow_call:
 
 permissions:
   contents: read
@@ -23,7 +23,7 @@ permissions:
 concurrency:
   # Per-ref queue so a new push supersedes the in-flight run for that branch/PR.
   # Deliberately not the `pages-deploy` group — e2e must not serialize behind deploys.
-  group: e2e-${{ github.ref }}
+  group: validation-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -33,6 +33,18 @@ env:
   BROWSER: none
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run check
+
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30

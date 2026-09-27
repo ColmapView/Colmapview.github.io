@@ -23,34 +23,47 @@ export interface ReconstructionBinaryFileWriters {
 
 export function exportReconstructionTextFiles(
   fileWriters: ReconstructionTextFileWriters,
-  download: ReconstructionFileDownloadFunction = downloadFile
+  download: ReconstructionFileDownloadFunction = downloadFile,
+  signal?: AbortSignal,
 ): void {
-  download(fileWriters.writeCameras(), 'cameras.txt');
-  download(fileWriters.writeImages(), 'images.txt');
-  download(fileWriters.writePoints3D(), 'points3D.txt');
+  signal?.throwIfAborted();
+  // Finish serialization before handing any files to the browser.
+  const files: Array<[string, string]> = [
+    [fileWriters.writeCameras(), 'cameras.txt'],
+    [fileWriters.writeImages(), 'images.txt'],
+    [fileWriters.writePoints3D(), 'points3D.txt'],
+  ];
 
   if (fileWriters.writeRigs) {
-    download(fileWriters.writeRigs(), 'rigs.txt');
+    files.push([fileWriters.writeRigs(), 'rigs.txt']);
   }
   if (fileWriters.writeFrames) {
-    download(fileWriters.writeFrames(), 'frames.txt');
+    files.push([fileWriters.writeFrames(), 'frames.txt']);
   }
+  signal?.throwIfAborted();
+  for (const [data, filename] of files) download(data, filename);
 }
 
 export function exportReconstructionBinaryFiles(
   fileWriters: ReconstructionBinaryFileWriters,
-  download: ReconstructionFileDownloadFunction = downloadFile
+  download: ReconstructionFileDownloadFunction = downloadFile,
+  signal?: AbortSignal,
 ): void {
-  download(fileWriters.writeCameras(), 'cameras.bin');
-  download(fileWriters.writeImages(), 'images.bin');
-  download(fileWriters.writePoints3D(), 'points3D.bin');
+  signal?.throwIfAborted();
+  const files: Array<[ArrayBuffer, string]> = [
+    [fileWriters.writeCameras(), 'cameras.bin'],
+    [fileWriters.writeImages(), 'images.bin'],
+    [fileWriters.writePoints3D(), 'points3D.bin'],
+  ];
 
   if (fileWriters.writeRigs) {
-    download(fileWriters.writeRigs(), 'rigs.bin');
+    files.push([fileWriters.writeRigs(), 'rigs.bin']);
   }
   if (fileWriters.writeFrames) {
-    download(fileWriters.writeFrames(), 'frames.bin');
+    files.push([fileWriters.writeFrames(), 'frames.bin']);
   }
+  signal?.throwIfAborted();
+  for (const [data, filename] of files) download(data, filename);
 }
 
 export function exportPointsPLYFile(

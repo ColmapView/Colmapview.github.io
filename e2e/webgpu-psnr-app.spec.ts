@@ -82,6 +82,7 @@ const SELECTED_IMAGE_ID = 1;
 const EXPECTED_RENDER_WIDTH = 640;
 const EXPECTED_RENDER_HEIGHT = 480;
 const TEST_IMAGE_PNG_BASE64 = createSolidPngBase64(EXPECTED_RENDER_WIDTH, EXPECTED_RENDER_HEIGHT, [12, 18, 24, 255]);
+const TEST_MASK_PNG_BASE64 = createSolidPngBase64(EXPECTED_RENDER_WIDTH, EXPECTED_RENDER_HEIGHT, [255, 255, 255, 255]);
 
 function createPsnrImageFixtureFiles(): TestDatasetFileEntry[] {
   return [
@@ -94,6 +95,17 @@ function createPsnrImageFixtureFiles(): TestDatasetFileEntry[] {
       relativePath: 'images/photo-2.jpg',
       name: 'photo-2.jpg',
       base64: TEST_IMAGE_PNG_BASE64,
+    },
+    // Metric inputs need decodable masks at the camera's full resolution.
+    {
+      relativePath: 'masks/photo.jpg.png',
+      name: 'photo.jpg.png',
+      base64: TEST_MASK_PNG_BASE64,
+    },
+    {
+      relativePath: 'masks/photo-2.jpg.png',
+      name: 'photo-2.jpg.png',
+      base64: TEST_MASK_PNG_BASE64,
     },
   ];
 }
@@ -327,7 +339,14 @@ async function routeLargeGaussianCloudLoader(page: Page): Promise<void> {
   });
 }
 
-async function routeDelayedTinyGaussianCloudLoader(page: Page, delayMs: number): Promise<void> {
+async function routePendingTinyGaussianCloudLoader(page: Page): Promise<() => Promise<void>> {
+  await page.addInitScript(() => {
+    let release!: () => void;
+    const ready = new Promise<void>((resolve) => { release = resolve; });
+    Object.defineProperty(window, '__COLMAP_WEBVIEW_CLOUD_GATE__', {
+      value: { ready, release },
+    });
+  });
   await page.route('**/src/splat/gaussianCloudLoader.ts*', async (route) => {
     await route.fulfill({
       contentType: 'application/javascript',
@@ -341,7 +360,7 @@ async function routeDelayedTinyGaussianCloudLoader(page: Page, delayMs: number):
           return true;
         }
         export async function loadGaussianCloudFromFile(file) {
-          await new Promise((resolve) => setTimeout(resolve, ${Math.max(0, Math.trunc(delayMs))}));
+          await window.__COLMAP_WEBVIEW_CLOUD_GATE__.ready;
           return {
             file,
             format: getGaussianCloudFormatForFile(file),
@@ -355,6 +374,32 @@ async function routeDelayedTinyGaussianCloudLoader(page: Page, delayMs: number):
               sh0: new Float32Array([1.772453850905516, -1.772453850905516, -1.772453850905516]),
               shDegree: 0,
             },
+          };
+        }
+      `,
+    });
+  });
+  return () => page.evaluate(() => {
+    const gate = (window as Window & { __COLMAP_WEBVIEW_CLOUD_GATE__?: { release: () => void } })
+      .__COLMAP_WEBVIEW_CLOUD_GATE__;
+    if (!gate) throw new Error('Cloud load gate is not installed');
+    gate.release();
+  });
+}
+
+async function rejectUnexpectedSparkPreload(page: Page): Promise<void> {
+  await page.route('**/src/utils/sparkSplatRuntime.ts*', async (route) => {
+    await route.fulfill({
+      contentType: 'application/javascript',
+      body: `
+        export function preloadSparkModule() {
+          window.__COLMAP_WEBVIEW_SPARK_PRELOADS__ = (window.__COLMAP_WEBVIEW_SPARK_PRELOADS__ ?? 0) + 1;
+          return Promise.reject(new Error('Unexpected Spark preload while WebGPU is initializing'));
+        }
+
+        export async function getSplatMeshSourceOptions(sourceFile) {
+          return {
+            fileBytes: new Uint8Array(await sourceFile.arrayBuffer()),
           };
         }
       `,
@@ -569,6 +614,8 @@ async function waitForWebGpuSplatCanvasVisible(page: Page): Promise<void> {
 }
 
 async function switchPointCloudToSplats(page: Page): Promise<void> {
+  // Wake controls that can auto-hide while a GPU fixture is initializing.
+  await page.keyboard.press('Tab');
   const pointCloudButton = page.locator('button[aria-label^="Point Cloud:"]').first();
   await expect(pointCloudButton).toBeVisible({ timeout: 10_000 });
 
@@ -595,10 +642,10 @@ async function waitForPsnrFrameReady(page: Page): Promise<void> {
 }
 
 async function waitForBackgroundPsnrSettled(page: Page): Promise<void> {
-  await page.waitForTimeout(350);
   await expect.poll(async () => {
-    return (await getPsnrState(page)).computing;
-  }, { timeout: 15_000 }).toBe(false);
+    const state = await getPsnrState(page);
+    return { readyCount: state.readyCount, computing: state.computing };
+  }, { timeout: 30_000 }).toEqual({ readyCount: 2, computing: false });
 }
 
 async function getPsnrState(page: Page, imageId = SELECTED_IMAGE_ID): Promise<SplatPsnrState> {
@@ -769,38 +816,6 @@ async function getScreenshotStats(page: Page, png: Buffer): Promise<ScreenshotSt
   }, png.toString('base64'));
 }
 
-async function captureNonBlankSceneCenterSamplesUntilWebGpu(
-  page: Page,
-  options: {
-    minSamples: number;
-    timeoutMs: number;
-    intervalMs: number;
-  }
-): Promise<ScreenshotStats[]> {
-  const startedAt = Date.now();
-  const samples: ScreenshotStats[] = [];
-
-  while (Date.now() - startedAt < options.timeoutMs) {
-    const stats = await getScreenshotStats(page, await captureSceneCenter(page));
-    samples.push(stats);
-    expect(stats.nonBlackPixelCount, `sample ${samples.length} nonblack pixels`).toBeGreaterThan(0);
-    expect(stats.meanLuma, `sample ${samples.length} mean luma`).toBeGreaterThan(0);
-
-    const state = await getSplatBackendState(page);
-    if (
-      state.resolution.status === 'resolved' &&
-      state.resolution.backend === 'webgpu' &&
-      samples.length >= options.minSamples
-    ) {
-      return samples;
-    }
-
-    await page.waitForTimeout(options.intervalMs);
-  }
-
-  throw new Error(`Timed out waiting for WebGPU backend after ${samples.length} nonblank handoff samples`);
-}
-
 async function requestSelectedPsnr(page: Page): Promise<void> {
   await page.evaluate((selectedImageId) => {
     const api = (window as Window & { __COLMAP_WEBVIEW_E2E__?: ColmapWebViewE2EApi }).__COLMAP_WEBVIEW_E2E__;
@@ -823,6 +838,13 @@ async function waitForSelectedPsnrComputing(page: Page): Promise<void> {
     const state = await getPsnrState(page);
     return state.computing;
   }, { timeout: 15_000 }).toBe(true);
+}
+
+async function waitForFakePsnrComputeStarted(page: Page): Promise<void> {
+  await expect.poll(() => page.evaluate(() => {
+    return (window as Window & { __COLMAP_WEBVIEW_FAKE_PSNR__?: { computeCount: number } })
+      .__COLMAP_WEBVIEW_FAKE_PSNR__?.computeCount ?? 0;
+  })).toBe(1);
 }
 
 test.describe('WebGPU PSNR app integration', () => {
@@ -912,6 +934,7 @@ test.describe('WebGPU PSNR app integration', () => {
     const previousComputedAt = (await getPsnrState(page)).metric?.computedAt ?? 0;
     await requestSelectedPsnr(page);
     await waitForSelectedPsnrComputing(page);
+    await waitForFakePsnrComputeStarted(page);
     await requestSelectedPsnr(page);
 
     await waitForSelectedPsnrReadyAfter(page, previousComputedAt);
@@ -940,6 +963,7 @@ test.describe('WebGPU PSNR app integration', () => {
 
     await requestSelectedPsnr(page);
     await waitForSelectedPsnrComputing(page);
+    await waitForFakePsnrComputeStarted(page);
 
     await loadTestDataset(page, createPsnrSpzFixtureFiles());
     await expect(page.locator('text=Source:')).toBeVisible({ timeout: 45_000 });
@@ -1048,9 +1072,9 @@ test.describe('Splat backend preference integration', () => {
     await waitForWebGpuSplatCanvasVisible(page);
   });
 
-  test('resolves auto from Spark fallback to WebGPU after the hidden WebGPU first frame', async ({ page }) => {
-    await routeFakeSparkRuntime(page);
-    await routeDelayedTinyGaussianCloudLoader(page, 1_200);
+  test('waits for WebGPU in auto mode without downloading Spark during initialization', async ({ page }) => {
+    await rejectUnexpectedSparkPreload(page);
+    const releaseCloud = await routePendingTinyGaussianCloudLoader(page);
 
     await page.goto('/?e2eProbe=1&splatBackend=auto', { waitUntil: 'domcontentloaded' });
     test.skip(!await page.evaluate(() => Boolean((navigator as Navigator & { gpu?: unknown }).gpu)), 'WebGPU is unavailable');
@@ -1062,18 +1086,12 @@ test.describe('Splat backend preference integration', () => {
     await expect.poll(async () => {
       const pendingState = await getSplatBackendState(page);
       return `${pendingState.availability.webGpu}:${pendingState.availability.spark}:${pendingState.resolution.backend}`;
-    }, { timeout: 10_000 }).toBe('unavailable:true:spark');
+    }, { timeout: 10_000 }).toBe('unavailable:false:null');
     await page.evaluate(async () => {
       const api = (window as Window & { __COLMAP_WEBVIEW_E2E__?: ColmapWebViewE2EApi }).__COLMAP_WEBVIEW_E2E__;
       await api?.waitForRenderFrames(3);
     });
-    const sparkFallbackStats = await getScreenshotStats(page, await captureSceneCenter(page));
-    const handoffStats = await captureNonBlankSceneCenterSamplesUntilWebGpu(page, {
-      minSamples: 3,
-      timeoutMs: 45_000,
-      intervalMs: 120,
-    });
-
+    await releaseCloud();
     const state = await waitForSplatBackend(page, { requested: 'auto', backend: 'webgpu' });
     await waitForWebGpuSplatCanvasVisible(page);
     await page.evaluate(async () => {
@@ -1082,15 +1100,14 @@ test.describe('Splat backend preference integration', () => {
     });
     const webGpuStats = await getScreenshotStats(page, await captureSceneCenter(page));
 
-    expect(state.availability.spark).toBe(true);
+    expect(state.availability.spark).toBe(false);
+    expect(await page.evaluate(() => (window as Window & { __COLMAP_WEBVIEW_SPARK_PRELOADS__?: number })
+      .__COLMAP_WEBVIEW_SPARK_PRELOADS__ ?? 0)).toBe(0);
     expect(state.resolution).toMatchObject({
       status: 'resolved',
       backend: 'webgpu',
       reason: 'WebGPU renderer selected automatically',
     });
-    expect(sparkFallbackStats.nonBlackPixelCount).toBeGreaterThan(0);
-    expect(sparkFallbackStats.meanLuma).toBeGreaterThan(0);
-    expect(handoffStats.length).toBeGreaterThanOrEqual(3);
     expect(webGpuStats.nonBlackPixelCount).toBeGreaterThan(0);
     expect(webGpuStats.meanLuma).toBeGreaterThan(0);
   });
@@ -1124,7 +1141,7 @@ test.describe('WebGPU adapter-limit failure integration', () => {
     await loadTestDataset(page, createPsnrFixtureFiles());
     await expect(page.locator('text=Source:')).toBeVisible({ timeout: 45_000 });
     await expect(page.getByText(
-      /WebGPU splat renderer unavailable: WebGPU splat renderer failed to initialize: WebGPU splat renderer requires max(BufferSize|StorageBufferBindingSize) 900000000 bytes, but this adapter supports (268435456|134217728) bytes/
+      /WebGPU splat renderer unavailable: WebGPU splat renderer failed to initialize: WebGPU splat renderer requires max(BufferSize|StorageBufferBindingSize) \d+ bytes, but this adapter supports (268435456|134217728) bytes/
     ))
       .toBeVisible({ timeout: 45_000 });
     await expect(page.getByTestId('webgpu-splat-canvas')).toHaveCount(0);
@@ -1152,18 +1169,18 @@ test.describe('WebGPU adapter-limit failure integration', () => {
     const backendState = await getSplatBackendState(page);
     expect(backendState.requestedBackend).toBe('auto');
     expect(backendState.availability.webGpuFailureReason).toMatch(
-      /WebGPU splat renderer requires max(BufferSize|StorageBufferBindingSize) 900000000 bytes/
+      /WebGPU splat renderer requires max(BufferSize|StorageBufferBindingSize) \d+ bytes/
     );
     expect(backendState.resolution).toMatchObject({
       status: 'resolved',
       backend: 'spark',
     });
     expect(backendState.resolution.reason).toMatch(
-      /Spark fallback selected because WebGPU splat renderer failed to initialize: WebGPU splat renderer requires max(BufferSize|StorageBufferBindingSize) 900000000 bytes/
+      /Spark fallback selected because WebGPU splat renderer failed to initialize: WebGPU splat renderer requires max(BufferSize|StorageBufferBindingSize) \d+ bytes/
     );
 
     await expect(page.getByText(
-      /Using Spark fallback: WebGPU splat renderer failed to initialize: WebGPU splat renderer requires max(BufferSize|StorageBufferBindingSize) 900000000 bytes/
+      /Using Spark fallback: WebGPU splat renderer failed to initialize: WebGPU splat renderer requires max(BufferSize|StorageBufferBindingSize) \d+ bytes/
     )).toBeVisible({ timeout: 45_000 });
     await expect(page.getByTestId('webgpu-splat-canvas')).toHaveCount(0);
     await expect(page.getByText(/WebGPU splat renderer unavailable:/)).toHaveCount(0);

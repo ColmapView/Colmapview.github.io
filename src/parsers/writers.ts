@@ -103,9 +103,11 @@ export type {
  */
 export function exportReconstructionText(
   reconstruction: Reconstruction,
-  wasmReconstruction?: ReconstructionSource | null
+  wasmReconstruction?: ReconstructionSource | null,
+  signal?: AbortSignal,
 ): void | Promise<void> {
-  if (isReconstructionSnapshot(wasmReconstruction)) return exportReconstructionSnapshot(wasmReconstruction, 'text');
+  signal?.throwIfAborted();
+  if (isReconstructionSnapshot(wasmReconstruction)) return exportReconstructionSnapshot(wasmReconstruction, 'text', undefined, undefined, signal);
   const points3D = getPoints3DForExport(reconstruction, wasmReconstruction);
   const { rigs, frames } = reconstruction.rigData ?? {};
 
@@ -115,7 +117,7 @@ export function exportReconstructionText(
     writePoints3D: () => writePoints3DText(points3D),
     writeRigs: rigs && rigs.size > 0 ? () => writeRigsText(rigs) : undefined,
     writeFrames: frames && frames.size > 0 ? () => writeFramesText(frames) : undefined,
-  });
+  }, undefined, signal);
 }
 
 /**
@@ -127,9 +129,11 @@ export function exportReconstructionText(
  */
 export function exportReconstructionBinary(
   reconstruction: Reconstruction,
-  wasmReconstruction?: ReconstructionSource | null
+  wasmReconstruction?: ReconstructionSource | null,
+  signal?: AbortSignal,
 ): void | Promise<void> {
-  if (isReconstructionSnapshot(wasmReconstruction)) return exportReconstructionSnapshot(wasmReconstruction, 'binary');
+  signal?.throwIfAborted();
+  if (isReconstructionSnapshot(wasmReconstruction)) return exportReconstructionSnapshot(wasmReconstruction, 'binary', undefined, undefined, signal);
   const points3D = getPoints3DForExport(reconstruction, wasmReconstruction);
   const { rigs, frames } = reconstruction.rigData ?? {};
 
@@ -139,7 +143,7 @@ export function exportReconstructionBinary(
     writePoints3D: () => writePoints3DBinary(points3D),
     writeRigs: rigs && rigs.size > 0 ? () => writeRigsBinary(rigs) : undefined,
     writeFrames: frames && frames.size > 0 ? () => writeFramesBinary(frames) : undefined,
-  });
+  }, undefined, signal);
 }
 
 /**
@@ -150,9 +154,11 @@ export function exportReconstructionBinary(
  */
 export function exportPointsPLY(
   reconstruction: Reconstruction,
-  wasmReconstruction?: ReconstructionSource | null
+  wasmReconstruction?: ReconstructionSource | null,
+  signal?: AbortSignal,
 ): void | Promise<void> {
-  if (isReconstructionSnapshot(wasmReconstruction)) return exportReconstructionSnapshot(wasmReconstruction, 'ply');
+  signal?.throwIfAborted();
+  if (isReconstructionSnapshot(wasmReconstruction)) return exportReconstructionSnapshot(wasmReconstruction, 'ply', undefined, undefined, signal);
   const points3D = getPoints3DForExport(reconstruction, wasmReconstruction);
   exportPointsPLYFile(() => writePointsPLY(points3D));
 }
@@ -242,7 +248,9 @@ export async function downloadReconstructionZip(
   filename: string = 'reconstruction.zip'
 ): Promise<void> {
   if (isReconstructionSnapshot(wasmReconstruction)) {
-    downloadBlob(await exportSnapshotZip(wasmReconstruction, options, imageFiles, onProgress), filename);
+    const blob = await exportSnapshotZip(wasmReconstruction, options, imageFiles, onProgress);
+    options.signal?.throwIfAborted();
+    downloadBlob(blob, filename);
     return;
   }
   await downloadReconstructionZipFromWriters(

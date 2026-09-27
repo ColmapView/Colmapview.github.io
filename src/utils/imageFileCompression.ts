@@ -34,20 +34,23 @@ export async function compressAndResizeToJpeg(
   try {
     const decode = options.decode ?? createImageBitmap;
     const bitmap = await decode(blob);
-    const { maxWidth, maxHeight } = options.getBounds?.() ?? getMaxCacheDimensions();
-    const { width, height } = getCacheResizeDimensions(
-      { width: bitmap.width, height: bitmap.height },
-      { maxWidth, maxHeight }
-    );
-    const canvas = (options.createCanvas ?? createBrowserCompressionCanvas)(width, height);
+    let canvas: ImageCompressionCanvas | null;
+    try {
+      const { maxWidth, maxHeight } = options.getBounds?.() ?? getMaxCacheDimensions();
+      const { width, height } = getCacheResizeDimensions(
+        { width: bitmap.width, height: bitmap.height },
+        { maxWidth, maxHeight }
+      );
+      canvas = (options.createCanvas ?? createBrowserCompressionCanvas)(width, height);
 
-    if (!canvas) {
+      if (!canvas) {
+        return new File([blob], filename, { type: blob.type || 'image/png' });
+      }
+
+      canvas.drawImage(bitmap, width, height);
+    } finally {
       bitmap.close();
-      return new File([blob], filename, { type: blob.type || 'image/png' });
     }
-
-    canvas.drawImage(bitmap, width, height);
-    bitmap.close();
 
     const jpegBlob = await canvas.toBlob('image/jpeg', URL_IMAGE_JPEG_QUALITY);
     return new File([jpegBlob], getJpegCacheFilename(filename), { type: 'image/jpeg' });

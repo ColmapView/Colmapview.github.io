@@ -5,6 +5,22 @@ import {
   exportReconstructionTextFiles,
 } from './reconstructionFileExport';
 
+describe.each(['text', 'binary'] as const)('%s export preparation', format => {
+  it.each(['writeImages', 'writePoints3D', 'writeRigs', 'writeFrames'] as const)(
+    'does not download a partial model when %s fails', stage => {
+      const fail = () => { throw new Error('Serialization failed'); };
+      const download = vi.fn();
+      const serialize = () => {
+        const content = { writeCameras: vi.fn(), writeImages: vi.fn(), writePoints3D: vi.fn(), writeRigs: vi.fn(), writeFrames: vi.fn(), [stage]: fail };
+        if (format === 'text') exportReconstructionTextFiles(content, download);
+        else exportReconstructionBinaryFiles(content, download);
+      };
+      expect(serialize).toThrow('Serialization failed');
+      expect(download).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe('exportReconstructionTextFiles', () => {
   it('downloads core COLMAP text files followed by optional rig files', () => {
     const download = vi.fn();

@@ -8,13 +8,20 @@ import {
   readBlobAsArrayBuffer,
 } from '../test/builders';
 import { __resetDownloadSchedulerForTests } from '../utils/download';
+import * as downloads from '../utils/download';
 import {
+  convertToJpeg,
   downloadImagesZip,
   exportImagesZip,
-  isJpegFile,
   normalizeImageZipPath,
   toJpegZipPath,
 } from './imageZipExport';
+
+vi.mock('./zipCompression', async () => {
+  const { zipSync } = await import('fflate');
+  const { createZipBlob, normalizeZipCompressionLevel } = await import('./zipExportPolicy');
+  return { compressZip: vi.fn(async (data, options) => createZipBlob(zipSync(data, { level: normalizeZipCompressionLevel(options?.level) }))) };
+});
 
 const jpegBytes = new Uint8Array([255, 216, 255, 224, 1, 2, 3, 255, 217]);
 
@@ -75,17 +82,58 @@ describe('image ZIP path helpers', () => {
     expect(toJpegZipPath('cam1\\photo.png')).toBe('images/cam1/photo.jpg');
     expect(toJpegZipPath('images/cam1/photo.jpeg')).toBe('images/cam1/photo.jpg');
   });
-});
 
-describe('isJpegFile', () => {
-  it('detects JPEG files by MIME type or extension', () => {
-    expect(isJpegFile(makeMockFile(jpegBytes, 'photo.bin', 'image/jpeg'))).toBe(true);
-    expect(isJpegFile(makeMockFile(jpegBytes, 'photo.JPG', ''))).toBe(true);
-    expect(isJpegFile(makeMockFile(jpegBytes, 'photo.png', 'image/png'))).toBe(false);
+  it.each([
+    ['photo', 'images/photo.jpg'],
+    ['camera.v1/photo', 'images/camera.v1/photo.jpg'],
+    ['camera.v1\\photo.v2.png', 'images/camera.v1/photo.v2.jpg'],
+  ])('preserves the directory and adds a JPEG extension for %s', (name, expected) => {
+    expect(toJpegZipPath(name)).toBe(expected);
   });
 });
 
+describe('convertToJpeg', () => {
+  it.each(['allocation', 'context', 'drawing', 'encoding'])(
+    'closes the bitmap when %s fails',
+    async (stage) => {
+      const { close } = installImageConversionMocks();
+      const error = new Error(`${stage} failed`);
+      vi.stubGlobal('OffscreenCanvas', class {
+        constructor() {
+          if (stage === 'allocation') throw error;
+        }
+
+        getContext() {
+          if (stage === 'context') return null;
+          return { drawImage: () => { if (stage === 'drawing') throw error; } };
+        }
+
+        async convertToBlob() {
+          throw error;
+        }
+      });
+
+      await expect(convertToJpeg(makeMockFile(jpegBytes, 'photo.jpg'), 0.8)).rejects.toThrow();
+
+      expect(close).toHaveBeenCalledOnce();
+    }
+  );
+});
+
 describe('exportImagesZip', () => {
+  it.each([
+    ['photo.png', 'photo.jpg'],
+    ['photo.png', 'images/photo.png'],
+  ])('rejects colliding output paths for %s and %s before fetching files', async (first, second) => {
+    installImageConversionMocks();
+    const fetchImage = vi.fn().mockResolvedValue(makeMockFile(jpegBytes, 'photo.jpg'));
+
+    await expect(exportImagesZip([first, second], fetchImage, { jpegQuality: 0.8 }))
+      .rejects.toThrow('Multiple files would be exported as "images/photo.jpg".');
+
+    expect(fetchImage).not.toHaveBeenCalled();
+  });
+
   it('converts fetched images to JPEG entries under images/', async () => {
     const mocks = installImageConversionMocks();
     const file = makeMockFile(new Uint8Array([1, 2, 3]), 'photo.png', 'image/png');
@@ -102,13 +150,13 @@ describe('exportImagesZip', () => {
     expect(mocks.convertOptions).toEqual([{ type: 'image/jpeg', quality: 0.72 }]);
   });
 
-  it('caps JPEG source quality at 0.85', async () => {
+  it('honors 100% quality for JPEG sources', async () => {
     const mocks = installImageConversionMocks();
     const fetchImage = vi.fn().mockResolvedValue(makeMockFile(jpegBytes, 'photo.jpg', 'image/jpeg'));
 
     await exportImagesZip(['images/photo.jpg'], fetchImage, { jpegQuality: 1 });
 
-    expect(mocks.convertOptions).toEqual([{ type: 'image/jpeg', quality: 0.85 }]);
+    expect(mocks.convertOptions).toEqual([{ type: 'image/jpeg', quality: 1 }]);
   });
 
   it('reports skipped images and still returns a valid ZIP', async () => {
@@ -130,6 +178,35 @@ describe('exportImagesZip', () => {
 });
 
 describe('downloadImagesZip', () => {
+  it('returns accurate counts and downloads the images that succeeded', async () => {
+    installImageConversionMocks();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const download = vi.spyOn(downloads, 'downloadBlob').mockImplementation(() => undefined);
+    const fetchImage = vi.fn()
+      .mockResolvedValueOnce(makeMockFile(jpegBytes, 'ok.jpg'))
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error('network failed'));
+
+    const summary = await downloadImagesZip(['ok.jpg', 'missing.jpg', 'bad.jpg'], fetchImage, { jpegQuality: 0.8 });
+
+    expect(summary).toEqual({ total: 3, exported: 1, failed: 2 });
+    expect(download).toHaveBeenCalledOnce();
+    const [blob, filename] = download.mock.calls[0];
+    expect(filename).toBe('images.zip');
+    expect(Object.keys(unzipSync(new Uint8Array(await readBlobAsArrayBuffer(blob)))))
+      .toEqual(['images/ok.jpg']);
+  });
+
+  it('does not download an empty ZIP when no images could be exported', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const download = vi.spyOn(downloads, 'downloadBlob').mockImplementation(() => undefined);
+
+    const summary = await downloadImagesZip(['missing.jpg'], async () => null, { jpegQuality: 0.8 });
+
+    expect(summary).toEqual({ total: 1, exported: 0, failed: 1 });
+    expect(download).not.toHaveBeenCalled();
+  });
+
   it('triggers a download with filename images.zip', async () => {
     __resetDownloadSchedulerForTests();
     installImageConversionMocks();

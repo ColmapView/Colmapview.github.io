@@ -12,6 +12,8 @@ const forbiddenStaticImports = [
 const evaluatorFacingRuntimeFiles = [
   'SplatPsnrEvaluator.tsx',
   'splatPsnrRuntime.ts',
+  '../../splat/metrics/splatPsnrTask.ts',
+  '../../splat/metrics/psnrTypes.ts',
 ];
 const forbiddenFullFrameReadbackTokens = [
   'getImageData',

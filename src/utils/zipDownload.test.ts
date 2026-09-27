@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildResponse } from '../test/builders';
+import { buildResponse, readBlobAsArrayBuffer } from '../test/builders';
 import {
   downloadZip,
   validateDownloadedArchiveSize,
@@ -36,6 +36,7 @@ describe('zip download', () => {
 
     expect(fetchImpl).toHaveBeenCalledWith('https://example.com/data.zip', 120000);
     expect(blob.size).toBe(4);
+    expect(Array.from(new Uint8Array(await readBlobAsArrayBuffer(blob)))).toEqual([1, 2, 3, 4]);
     expect(progress).toEqual([
       { percent: 2, message: 'Starting download...' },
       {
@@ -110,6 +111,65 @@ describe('zip download', () => {
     await expect(downloadZip('https://example.com/data.zip', vi.fn(), {
       fetchImpl,
     })).rejects.toThrow('Failed to download archive (503)');
+  });
+
+  it.each([undefined, 4])('stops an oversized stream even when its declared length is %s', async (contentLength) => {
+    const cancel = vi.fn();
+    let produced = 0;
+    const pull = vi.fn((controller: ReadableStreamDefaultController<Uint8Array>) => {
+      if (produced++ < 2) controller.enqueue(new Uint8Array([1, 2, 3, 4]));
+      else controller.close();
+    });
+    const response = new Response(new ReadableStream({ pull, cancel }, { highWaterMark: 0 }), {
+      headers: contentLength === undefined ? undefined : { 'content-length': String(contentLength) },
+    });
+
+    // The stream is still open at the limit; reject before requesting EOF.
+    await expect(downloadZip('https://example.com/data.zip', vi.fn(), {
+      fetchImpl: vi.fn().mockResolvedValue(response),
+      sizeLimit: 5,
+    })).rejects.toThrow('Downloaded archive exceeds size limit');
+
+    expect(pull).toHaveBeenCalledTimes(2);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an oversized declared length before consuming its body', async () => {
+    const cancel = vi.fn();
+    const pull = vi.fn((controller: ReadableStreamDefaultController<Uint8Array>) => controller.close());
+    const response = new Response(new ReadableStream({ pull, cancel }, { highWaterMark: 0 }), {
+      headers: { 'content-length': '6' },
+    });
+
+    await expect(downloadZip('https://example.com/data.zip', vi.fn(), {
+      fetchImpl: vi.fn().mockResolvedValue(response),
+      sizeLimit: 5,
+    })).rejects.toThrow('Downloaded archive exceeds size limit');
+
+    expect(pull).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('validates the size of the non-streaming fallback', async () => {
+    const response = buildResponse({ blob: vi.fn().mockResolvedValue(new Blob([new Uint8Array(6)])) });
+
+    await expect(downloadZip('https://example.com/data.zip', vi.fn(), {
+      fetchImpl: vi.fn().mockResolvedValue(response),
+      sizeLimit: 5,
+    })).rejects.toThrow('Downloaded archive exceeds size limit');
+  });
+
+  it('keeps download progress within its phase when the server undercounts the length', async () => {
+    const onProgress = vi.fn();
+    await downloadZip('https://example.com/data.zip', onProgress, {
+      fetchImpl: vi.fn().mockResolvedValue(createStreamedResponse([[1, 2], [3, 4]], 2)),
+    });
+
+    expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({
+      percent: 40,
+      bytesLoaded: 4,
+      bytesTotal: 2,
+    }));
   });
 
   it('rejects downloaded archives over the configured size limit', () => {

@@ -25,6 +25,7 @@ type SetSourceInfo = (
 type SetUrlProgress = (progress: UrlLoadProgress | null) => void;
 
 export interface LoadSplatUrlSourceDeps {
+  fetchImpl?: FetchUrl;
   fetchSplatFile?: (url: string) => Promise<File>;
   log?: (message: string) => void;
   onSplatFileFetched?: (file: File) => void;
@@ -72,7 +73,7 @@ export async function loadSplatUrlSource(
   deps: LoadSplatUrlSourceDeps
 ): Promise<boolean> {
   const log = deps.log ?? appLogger.info;
-  const fetchSplatFile = deps.fetchSplatFile ?? fetchSplatUrlFile;
+  const fetchSplatFile = deps.fetchSplatFile ?? ((targetUrl: string) => fetchSplatUrlFile(targetUrl, deps.fetchImpl));
 
   log(`[URL Loader] Loading splat or point cloud from URL: ${url}`);
   deps.setUrlProgress({ percent: 5, message: 'Downloading 3D file...' });

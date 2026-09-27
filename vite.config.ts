@@ -78,16 +78,15 @@ export default defineConfig(({ command, mode }) => {
       assetsDir: 'assets',
       sourcemap: false,
       target: 'esnext',
-      // Spark's splat renderer is an optional lazy chunk of roughly 5.1 MB minified.
-      // Keep warnings for chunks that exceed that known feature bundle.
-      chunkSizeWarningLimit: 5500,
+      // Spark 2.2 is an optional lazy chunk of roughly 2.6 MB minified.
+      chunkSizeWarningLimit: 3000,
       rollupOptions: {
         output: {
           manualChunks: {
             'react-vendor': ['react', 'react-dom'],
             'three-vendor': ['three', '@react-three/fiber', '@react-three/drei'],
             'spark-vendor': ['@sparkjsdev/spark'],
-            'ui-vendor': ['react-resizable-panels', '@tanstack/react-virtual'],
+            'ui-vendor': ['@tanstack/react-virtual'],
           },
         },
       },

@@ -1,7 +1,8 @@
 import { downloadBlob } from '../utils/download';
 import { appLogger } from '../utils/logger';
+import { awaitWithAbort } from '../utils/awaitWithAbort';
+import { compressZip, type ZipFiles } from './zipCompression';
 import {
-  createZipBlob,
   normalizeZipCompressionLevel,
 } from './zipExportPolicy';
 import type { ZipCompressionLevel } from './zipExportPolicy';
@@ -15,6 +16,8 @@ export interface ZipExportOptions {
   includeMasks?: boolean;
   /** Compression level (0-9, default 6) */
   compressionLevel?: number;
+  /** Stop preparation/compression and prevent a late download. */
+  signal?: AbortSignal;
 }
 
 export type ZipExportProgressCallback = (percent: number, message: string) => void;
@@ -43,14 +46,15 @@ function shouldIncludeImagePath(path: string, file: File): boolean {
   return normalized.includes('/') || normalized === file.name;
 }
 
-function toZipBytes(data: Uint8Array): Uint8Array {
+function toZipBytes(data: Uint8Array): Uint8Array<ArrayBuffer> {
   return new Uint8Array(data);
 }
 
 async function addImageFilesToZip(
-  files: Record<string, Uint8Array>,
+  files: ZipFiles,
   imageFiles: Map<string, File>,
-  onProgress?: ZipExportProgressCallback
+  onProgress?: ZipExportProgressCallback,
+  signal?: AbortSignal,
 ): Promise<void> {
   onProgress?.(25, 'Adding images...');
 
@@ -69,12 +73,14 @@ async function addImageFilesToZip(
   }
 
   for (const [file, path] of uniqueFiles) {
+    signal?.throwIfAborted();
     if (!shouldIncludeImagePath(path, file)) continue;
 
     const imagePath = normalizeReconstructionZipImagePath(path);
 
     try {
-      const buffer = await file.arrayBuffer();
+      const buffer = await awaitWithAbort(file.arrayBuffer(), signal);
+      signal?.throwIfAborted();
       files[imagePath] = new Uint8Array(buffer);
       imageCount++;
 
@@ -83,6 +89,7 @@ async function addImageFilesToZip(
         onProgress?.(percent, `Adding images (${imageCount}/${totalImages})...`);
       }
     } catch (err) {
+      signal?.throwIfAborted();
       appLogger.warn(`[ZIP Export] Failed to add image: ${path}`, err);
     }
   }
@@ -94,9 +101,9 @@ export async function exportReconstructionZipFromWriters(
   imageFiles?: Map<string, File> | null,
   onProgress?: ZipExportProgressCallback
 ): Promise<Blob> {
-  const { zipSync } = await import('fflate');
-
-  const files: Record<string, Uint8Array> = {};
+  const { signal } = options;
+  signal?.throwIfAborted();
+  const files: ZipFiles = {};
   const extension = options.format === 'binary' ? 'bin' : 'txt';
 
   onProgress?.(5, 'Exporting cameras...');
@@ -115,14 +122,15 @@ export async function exportReconstructionZipFromWriters(
   }
 
   if (options.includeImages && imageFiles && imageFiles.size > 0) {
-    await addImageFilesToZip(files, imageFiles, onProgress);
+    await addImageFilesToZip(files, imageFiles, onProgress, signal);
   }
 
   onProgress?.(85, 'Compressing...');
-  const zipped = zipSync(files, { level: normalizeZipCompressionLevel(options.compressionLevel) });
+  const blob = await compressZip(files, { signal, level: options.compressionLevel });
+  signal?.throwIfAborted();
 
   onProgress?.(100, 'Done');
-  return createZipBlob(zipped);
+  return blob;
 }
 
 export async function downloadReconstructionZipFromWriters(
@@ -139,5 +147,6 @@ export async function downloadReconstructionZipFromWriters(
     onProgress
   );
 
+  options.signal?.throwIfAborted();
   downloadBlob(blob, filename);
 }

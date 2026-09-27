@@ -11,6 +11,7 @@ import { useImageDetailMatchOpacity } from './useImageDetailMatchOpacity';
 import { useImageDetailNavigationHandlers } from './useImageDetailNavigationHandlers';
 import { useImageDetailStoreFacade } from './useImageDetailStoreFacade';
 import { useLazyImagePoints2D } from './useLazyImagePoints2D';
+import { MediaLoadError } from '../MediaLoadError';
 
 export function ImageDetailModal() {
   const {
@@ -114,6 +115,12 @@ export function ImageDetailModal() {
     maskFile,
     maskSrc,
     matchedImageSrc,
+    imageFailed,
+    maskFailed,
+    matchedImageFailed,
+    retryImage,
+    retryMask,
+    retryMatchedImage,
   } = useImageDetailFiles({
     dataset,
     reconstruction,
@@ -187,9 +194,16 @@ export function ImageDetailModal() {
 
   if (imageDetailId === null || !image || !camera) return null;
 
+  const loadErrors = <>
+    {imageFailed && <MediaLoadError message="Image could not be loaded." retryLabel="Retry image" onRetry={retryImage} />}
+    {!touchMode && maskFailed && <MediaLoadError message="Mask could not be loaded." retryLabel="Retry mask" onRetry={retryMask} />}
+    {isMatchViewMode && matchedImageFailed && <MediaLoadError message="Matched image could not be loaded." retryLabel="Retry matched image" onRetry={retryMatchedImage} />}
+  </>;
+
   if (touchMode) {
     return createPortal(
       <TouchImageDetailFrame
+        loadErrors={loadErrors}
         camera={camera}
         closeImageDetail={closeImageDetail}
         connectedImages={connectedImages}
@@ -235,6 +249,7 @@ export function ImageDetailModal() {
 
   return createPortal(
     <DesktopImageDetailFrame
+      loadErrors={loadErrors}
       camera={camera}
       cameraAllMarked={cameraAllMarked}
       closeImageDetail={closeImageDetail}

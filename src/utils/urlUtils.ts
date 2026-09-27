@@ -6,6 +6,8 @@
 import type { UrlLoadError } from '../types/manifest';
 import { detectCloudProvider, getCorsInstructions } from './urlCloudStorage';
 import { parseSafeIntegerString } from './numberParsing';
+import { fetchWithTimeout } from './fetchWithTimeout';
+export { fetchWithTimeout, FETCH_TIMEOUT } from './fetchWithTimeout';
 
 /** Reports download progress as bytes arrive. totalBytes is 0 when unknown. */
 export type DownloadProgressCallback = (loadedBytes: number, totalBytes: number) => void;
@@ -17,33 +19,13 @@ export {
   normalizeCloudStorageUrl,
 } from './urlCloudStorage';
 
-// Timeout for individual file fetches (30 seconds)
-export const FETCH_TIMEOUT = 30000;
-
-/**
- * Fetch with timeout support.
- */
-export async function fetchWithTimeout(url: string, timeout: number = FETCH_TIMEOUT): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeoutId);
-    return response;
-  } catch (err) {
-    clearTimeout(timeoutId);
-    throw err;
-  }
-}
-
 /**
  * Classify error type from fetch error.
  */
 export function classifyFetchError(err: unknown, url?: string): UrlLoadError {
   if (err instanceof Error) {
     // AbortError from timeout
-    if (err.name === 'AbortError') {
+    if (err.name === 'AbortError' || err.name === 'TimeoutError') {
       return {
         type: 'timeout',
         message: 'Request timed out',
@@ -113,8 +95,8 @@ export function encodeUrlPath(path: string): string {
 
 /**
  * Fetch a splat file from a URL on demand (e.g. when switching to a lazy tile).
- * Uses a plain fetch with no timeout because splat tiles can be very large
- * (hundreds of MB) and would otherwise be aborted by the default timeout.
+ * The inactivity timeout allows large downloads to continue while bytes arrive.
+ * A caller signal cancels both the request and its response stream.
  *
  * When an onProgress callback is given and the response is streamable, the body
  * is read incrementally so the caller can report real download progress. Without
@@ -122,10 +104,12 @@ export function encodeUrlPath(path: string): string {
  */
 export async function fetchRemoteSplatFile(
   url: string,
-  onProgress?: DownloadProgressCallback
+  onProgress?: DownloadProgressCallback,
+  signal?: AbortSignal
 ): Promise<File> {
-  const response = await fetch(url);
+  const response = await fetchWithTimeout(url, undefined, { signal });
   if (!response.ok) {
+    void response.body?.cancel().catch(() => {});
     throw new Error(`Failed to fetch splat (${response.status})`);
   }
   return blobToFile(await readResponseToBlob(response, onProgress), getFilenameFromUrl(url));
@@ -147,10 +131,12 @@ export async function fetchRemoteSplatFile(
  */
 export async function fetchRemoteSplatBytes(
   url: string,
-  onProgress?: DownloadProgressCallback
+  onProgress?: DownloadProgressCallback,
+  signal?: AbortSignal
 ): Promise<{ bytes: Uint8Array; name: string }> {
-  const response = await fetch(url);
+  const response = await fetchWithTimeout(url, undefined, { signal });
   if (!response.ok) {
+    void response.body?.cancel().catch(() => {});
     throw new Error(`Failed to fetch splat (${response.status})`);
   }
   const name = getFilenameFromUrl(url);
@@ -178,8 +164,8 @@ export async function fetchRemoteSplatBytes(
   // Chunks past the declared length (mis-report), or all chunks when unknown.
   const overflow: Uint8Array<ArrayBuffer>[] = [];
   let received = 0;
-  onProgress?.(0, total);
   try {
+    onProgress?.(0, total);
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -261,8 +247,8 @@ async function readResponseStreamToBlob(
   const reader = body.getReader();
   const chunks: Uint8Array<ArrayBuffer>[] = [];
   let loaded = 0;
-  onProgress(0, total);
   try {
+    onProgress(0, total);
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;

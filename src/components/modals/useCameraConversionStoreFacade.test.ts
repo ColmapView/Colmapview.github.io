@@ -6,6 +6,7 @@ import {
 } from '../../store';
 import { buildReconstruction } from '../../test/builders';
 import { useCameraConversionStoreFacade } from './useCameraConversionStoreFacade';
+import { hasUnsavedReloadState } from '../../store/actions/sessionActions';
 
 describe('useCameraConversionStoreFacade', () => {
   beforeEach(() => {
@@ -34,6 +35,8 @@ describe('useCameraConversionStoreFacade', () => {
     });
 
     expect(useReconstructionStore.getState().reconstruction).toBe(reconstruction);
+    expect(useReconstructionStore.getState().reconstructionEditRevision).toBe(1);
+    expect(hasUnsavedReloadState()).toBe(true);
     expect(useNotificationStore.getState().notifications).toMatchObject([
       {
         type: 'info',

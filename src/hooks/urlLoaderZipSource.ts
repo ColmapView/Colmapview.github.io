@@ -19,7 +19,8 @@ type SetSourceInfo = (type: ReconstructionSourceType, url?: string | null) => vo
 type SetUrlProgress = (progress: UrlLoadProgress | null) => void;
 type LoadZipFromUrl = (
   url: string,
-  onProgress: (progress: ZipProgress) => void
+  onProgress: (progress: ZipProgress) => void,
+  signal?: AbortSignal
 ) => Promise<ZipLoadResult>;
 type SetActiveZipArchive = (
   archive: ArchiveReader,
@@ -29,6 +30,7 @@ type SetActiveZipArchive = (
 ) => void;
 
 export interface LoadZipUrlSourceDeps {
+  signal?: AbortSignal;
   loadZip?: LoadZipFromUrl;
   log?: (message: string) => void;
   processFiles: ProcessFiles;
@@ -56,12 +58,18 @@ export async function loadZipUrlSource(
 
   log(`[URL Loader] Loading ZIP from URL: ${url}`);
 
-  const { colmapFiles, imageIndex, archive, fileSize, imageCount } = await loadZip(
-    url,
-    (progress) => {
-      deps.setUrlProgress(mapZipProgressToUrlProgress(progress));
-    }
-  );
+  const onProgress = (progress: ZipProgress) => {
+    deps.signal?.throwIfAborted();
+    deps.setUrlProgress(mapZipProgressToUrlProgress(progress));
+  };
+  const { colmapFiles, imageIndex, archive, fileSize, imageCount } = deps.signal
+    ? await loadZip(url, onProgress, deps.signal)
+    : await loadZip(url, onProgress);
+
+  if (deps.signal?.aborted) {
+    await archive.close();
+    deps.signal.throwIfAborted();
+  }
 
   setActiveArchive(archive, imageIndex, fileSize, imageCount);
 

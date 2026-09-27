@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildResponse } from '../test/builders';
 import { retryAfterDeadline, UrlMediaScheduler } from './urlMediaScheduler';
 import type { MediaPriority } from './types';
+import { FETCH_TIMEOUT } from '../utils/fetchWithTimeout';
 
 const options = (priority: MediaPriority = 'visible', signal = new AbortController().signal) => ({ signal, getPriority: () => priority });
 const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
@@ -9,6 +10,61 @@ const ok = () => buildResponse({ blob: async () => new Blob(['bytes']) });
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe('URL media scheduler', () => {
+  it.each(['headers', 'body'])('releases a stalled %s transfer so queued media can load', async (phase) => {
+    vi.useFakeTimers();
+    const scheduler = new UrlMediaScheduler({ perPage: 1 });
+    const cancel = vi.fn();
+    const fetchMock = vi.fn()
+      .mockImplementationOnce((_url: string, init: RequestInit) => phase === 'headers'
+        ? new Promise<Response>((_resolve, reject) => {
+          init.signal!.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
+        })
+        : Promise.resolve(new Response(new ReadableStream<Uint8Array>({ cancel }))))
+      .mockResolvedValueOnce(new Response('next'));
+    vi.stubGlobal('fetch', fetchMock);
+    const settled = vi.fn();
+    const stalled = scheduler.transfer('https://stall.test/first', options()).then(settled);
+    const queued = scheduler.transfer('https://stall.test/next', options());
+
+    await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT - 1);
+    expect(settled).not.toHaveBeenCalled();
+    expect(scheduler.getStats()).toMatchObject({ active: 1, queued: 1 });
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(settled).toHaveBeenCalledExactlyOnceWith({ kind: 'failure' });
+    await expect(queued).resolves.toMatchObject({ kind: 'success' });
+    await stalled;
+    expect(scheduler.getStats()).toMatchObject({ active: 0, queued: 0 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    if (phase === 'body') expect(cancel).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('allows a slow download to finish while its body keeps making progress', async () => {
+    vi.useFakeTimers();
+    const scheduler = new UrlMediaScheduler();
+    let source!: ReadableStreamDefaultController<Uint8Array>;
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) { source = controller; },
+    }))));
+    const settled = vi.fn();
+    const pending = scheduler.transfer('https://slow.test/image', options());
+    void pending.then(settled);
+
+    for (let i = 0; i < 4; i++) {
+      await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT / 2);
+      source.enqueue(new Uint8Array([i]));
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    expect(settled).not.toHaveBeenCalled();
+    expect(scheduler.getStats().active).toBe(1);
+    source.close();
+
+    await expect(pending).resolves.toMatchObject({ kind: 'success', blob: { size: 4 } });
+    expect(scheduler.getStats().active).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('holds both aggregate limits through body reads and releases slots after failures', async () => {
     const scheduler = new UrlMediaScheduler();
     const bodies: Array<() => void> = [];

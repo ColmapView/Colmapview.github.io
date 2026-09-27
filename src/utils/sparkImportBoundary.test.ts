@@ -49,7 +49,6 @@ const DOCUMENTED_NON_DOWNLOAD_PRELOAD_SITES = new Set([
   'src/utils/sparkSplatRuntime.ts',
   // Use-site, not a gate: reachable only once availability.spark is true, i.e.
   // the module already landed and the memo is warm.
-  'src/splat/spark/sparkPsnrSession.ts',
   // Injectable seam: the gate is threaded in as deps.shouldPreloadSplatRuntime
   // by useFileDropzone.ts, which is the file that consults START.
   'src/hooks/fileDropzoneWorkflow.ts',

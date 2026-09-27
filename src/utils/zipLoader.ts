@@ -8,13 +8,8 @@ import type { ArchiveEntry, ArchiveReader } from '../types/libarchive';
 import { publicAsset } from './paths';
 import { isSplatFilePath } from './splatFilePolicy';
 import { getFilenameFromUrl } from './urlUtils';
+import { downloadZip, type ZipProgress } from './zipDownload';
 import {
-  downloadZip,
-  validateDownloadedArchiveSize,
-  type ZipProgress,
-} from './zipDownload';
-import {
-  ARCHIVE_SIZE_LIMIT,
   validateZipFile,
   validateZipUrl,
 } from './zipValidation';
@@ -196,49 +191,64 @@ async function processZipArchive(
   return { colmapFiles, imageIndex, imageCount };
 }
 
+/** Transfer reader ownership to the caller only after extraction and validation succeed. */
+async function openZipArchive(
+  file: File,
+  onProgress: (progress: ZipProgress) => void,
+  signal?: AbortSignal
+): Promise<ZipLoadResult> {
+  signal?.throwIfAborted();
+  onProgress({ percent: 40, message: 'Opening archive...' });
+  signal?.throwIfAborted();
+  const archive = await Archive.open(file);
+  try {
+    signal?.throwIfAborted();
+    const result = await processZipArchive(archive, (progress) => {
+      signal?.throwIfAborted();
+      onProgress(progress);
+    });
+    signal?.throwIfAborted();
+    if (!hasRequiredColmapArchiveFiles(result.colmapFiles.keys())) {
+      throw new Error(
+        'Archive does not contain valid COLMAP files (cameras.bin, images.bin, points3D.bin)'
+      );
+    }
+    return { ...result, archive, fileSize: file.size };
+  } catch (error) {
+    await archive.close().catch(() => {});
+    throw error;
+  }
+}
+
 /**
  * Load a ZIP file from URL.
  * Downloads the ZIP, extracts COLMAP files immediately, and builds an index for lazy image extraction.
  */
 export async function loadZipFromUrl(
   url: string,
-  onProgress: (progress: ZipProgress) => void
+  onProgress: (progress: ZipProgress) => void,
+  signal?: AbortSignal
 ): Promise<ZipLoadResult> {
+  signal?.throwIfAborted();
   // Initialize libarchive.js
   await initializeArchive();
 
   onProgress({ percent: 0, message: 'Checking archive...' });
 
   // Validate size
-  const validation = await validateZipUrl(url);
+  const validation = await validateZipUrl(url, { signal });
+  signal?.throwIfAborted();
   if (!validation.valid) {
     throw new Error(validation.error ?? 'Invalid archive');
   }
 
   // Download archive
-  const blob = await downloadZip(url, onProgress);
-
-  // Validate downloaded size
-  validateDownloadedArchiveSize(blob, ARCHIVE_SIZE_LIMIT);
-
-  onProgress({ percent: 40, message: 'Opening archive...' });
+  const blob = await downloadZip(url, onProgress, { signal });
+  signal?.throwIfAborted();
 
   // Preserve original filename so libarchive.js can sniff format from extension.
   const archiveName = getFilenameFromUrl(url) || 'archive.zip';
-  const file = new File([blob], archiveName);
-  const archive = await Archive.open(file);
-
-  // Process archive
-  const { colmapFiles, imageIndex, imageCount } = await processZipArchive(archive, onProgress);
-
-  // Verify we have required COLMAP files
-  if (!hasRequiredColmapArchiveFiles(colmapFiles.keys())) {
-    throw new Error(
-      'Archive does not contain valid COLMAP files (cameras.bin, images.bin, points3D.bin)'
-    );
-  }
-
-  return { colmapFiles, imageIndex, archive, fileSize: blob.size, imageCount };
+  return openZipArchive(new File([blob], archiveName), onProgress, signal);
 }
 
 /**
@@ -260,20 +270,5 @@ export async function loadZipFromFile(
     throw new Error(validation.error ?? 'Invalid archive');
   }
 
-  onProgress({ percent: 40, message: 'Opening archive...' });
-
-  // Open archive
-  const archive = await Archive.open(zipFile);
-
-  // Process archive
-  const { colmapFiles, imageIndex, imageCount } = await processZipArchive(archive, onProgress);
-
-  // Verify we have required COLMAP files
-  if (!hasRequiredColmapArchiveFiles(colmapFiles.keys())) {
-    throw new Error(
-      'ZIP does not contain valid COLMAP files (cameras.bin, images.bin, points3D.bin)'
-    );
-  }
-
-  return { colmapFiles, imageIndex, archive, fileSize: zipFile.size, imageCount };
+  return openZipArchive(zipFile, onProgress);
 }

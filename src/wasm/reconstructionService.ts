@@ -232,9 +232,9 @@ export class ReconstructionService {
     });
   }
 
-  export(revision: number, payload: ReconstructionExportPayload): Promise<ReconstructionExportFiles> {
+  export(revision: number, payload: ReconstructionExportPayload, signal?: AbortSignal): Promise<ReconstructionExportFiles> {
     return this.serialized(revision, async () => {
-      const result = await this.requestWithRecovery('export', payload);
+      const result = await this.requestWithRecovery('export', payload, signal);
       if (!result || Object.values(result).some(value => !(value instanceof Uint8Array))) throw new Error('Invalid export response');
       return result;
     });
@@ -284,7 +284,7 @@ export class ReconstructionSnapshot implements ReconstructionPointSource {
   transform(transform: Sim3dEuler) { return this.service.edit(this.revision, 'transform', { transform }); }
   deleteImages(imageIds: number[]) { return this.service.edit(this.revision, 'deleteImages', { imageIds }); }
   updateCameras(cameras: Map<number, Camera>) { return this.service.edit(this.revision, 'updateCameras', { cameras }); }
-  export(payload: ReconstructionExportPayload) { return this.service.export(this.revision, payload); }
+  export(payload: ReconstructionExportPayload, signal?: AbortSignal) { return this.service.export(this.revision, payload, signal); }
   floor(payload: ReconstructionOperationPayloads['floor'], signal?: AbortSignal) { return this.service.floor(this.revision, payload, signal); }
   histogram(type: 'trackLength' | 'error', signal?: AbortSignal) { return this.service.histogram(this.revision, type, signal); }
   dispose(): void { this.service.dispose(); }

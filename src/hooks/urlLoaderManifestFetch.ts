@@ -52,7 +52,7 @@ const DIRECTORY_LISTING_DISCOVERY_MAX_DIRECTORIES = 200;
 const DIRECTORY_LISTING_DISCOVERY_MAX_CANDIDATES = 200;
 
 function defaultFetchUrl(url: string, init?: RequestInit): Promise<Response> {
-  return init ? fetch(url, init) : fetchWithTimeout(url);
+  return fetchWithTimeout(url, undefined, init);
 }
 
 export interface FetchUrlManifestDeps {

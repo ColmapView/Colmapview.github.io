@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildResponse } from '../test/builders';
+import { FETCH_TIMEOUT } from './fetchWithTimeout';
 
 vi.mock('./imageFileCompression', () => ({
   compressAndResizeToJpeg: vi.fn(async (_blob: Blob, filename: string) => {
@@ -41,6 +42,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('url image files', () => {
@@ -223,12 +225,13 @@ it('propagates independent cancellation through DatasetManager to an active URL 
   const { DatasetManager } = await import('../dataset/DatasetManager');
   let activeSignal!: AbortSignal;
   const started = createDeferred<void>();
+  const cancelBody = vi.fn();
   const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
     activeSignal = init.signal as AbortSignal;
-    return buildResponse({ blob: () => new Promise<Blob>((_resolve, reject) => {
-      activeSignal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
-      started.resolve();
-    }) });
+    return new Response(new ReadableStream<Uint8Array>({
+      pull() { started.resolve(); },
+      cancel: cancelBody,
+    }, { highWaterMark: 0 }));
   });
   vi.stubGlobal('fetch', fetchMock);
   const manager = new DatasetManager(() => ({ sourceType: 'url', imageUrlBase: 'https://body.test/', maskUrlBase: null, imageNameToUrl: null, loadedFiles: null }));
@@ -243,7 +246,38 @@ it('propagates independent cancellation through DatasetManager to an active URL 
   second.abort();
   await expect(b).resolves.toBeNull();
   expect(activeSignal.aborted).toBe(true);
+  expect(cancelBody).toHaveBeenCalledOnce();
   expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it('settles coalesced image consumers after an idle timeout and permits a fresh attempt', async () => {
+  vi.useFakeTimers();
+  const cancelBody = vi.fn();
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({ cancel: cancelBody })))
+    .mockResolvedValueOnce(new Response('retry', { headers: { 'Content-Type': 'image/png' } }));
+  vi.stubGlobal('fetch', fetchMock);
+  const firstError = vi.fn();
+  const secondError = vi.fn();
+  const settled = vi.fn();
+  const base = 'https://idle.test/images/';
+  const pending = Promise.all([
+    fetchUrlImageRaw(base, 'photo.png', undefined, { onError: firstError }),
+    fetchUrlImageRaw(base, 'photo.png', undefined, { onError: secondError }),
+  ]).then(settled);
+
+  await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT);
+
+  expect(settled).toHaveBeenCalledExactlyOnceWith([null, null]);
+  await pending;
+  expect(firstError).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+    kind: 'network', url: `${base}photo.png`,
+  }));
+  expect(secondError).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ kind: 'network' }));
+  expect(cancelBody).toHaveBeenCalledOnce();
+  await expect(fetchUrlImageRaw(base, 'photo.png')).resolves.toMatchObject({ name: 'photo.png', type: 'image/png' });
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(vi.getTimerCount()).toBe(0);
 });
 
 it('isolates same-name sources and shares explicit aliases without changing signed URLs', async () => {

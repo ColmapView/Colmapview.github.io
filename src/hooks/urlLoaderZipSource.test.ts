@@ -6,6 +6,40 @@ import {
 } from './urlLoaderZipSource';
 
 describe('URL loader ZIP source helpers', () => {
+  it('closes an archive returned after cancellation without restoring the cleared source', async () => {
+    const controller = new AbortController();
+    const archive = buildArchiveReader();
+    const close = vi.spyOn(archive, 'close');
+    const deps = {
+      signal: controller.signal,
+      loadZip: vi.fn(async () => {
+        controller.abort();
+        return {
+          archive, colmapFiles: new Map<string, File>(),
+          imageIndex: new Map<string, ReturnType<typeof buildArchiveEntry>>(),
+          fileSize: 1024, imageCount: 0,
+        };
+      }),
+      log: vi.fn(),
+      processFiles: vi.fn(),
+      setActiveArchive: vi.fn(),
+      setSourceInfo: vi.fn(),
+      setUrlProgress: vi.fn(),
+    };
+
+    await expect(loadZipUrlSource('https://example.com/scene.zip', deps))
+      .rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(deps.loadZip).toHaveBeenCalledWith(
+      'https://example.com/scene.zip', expect.any(Function), controller.signal
+    );
+    expect(close).toHaveBeenCalledOnce();
+    expect(deps.setActiveArchive).not.toHaveBeenCalled();
+    expect(deps.setSourceInfo).not.toHaveBeenCalled();
+    expect(deps.setUrlProgress).not.toHaveBeenCalled();
+    expect(deps.processFiles).not.toHaveBeenCalled();
+  });
+
   it('maps ZIP progress payloads onto URL load progress', () => {
     expect(mapZipProgressToUrlProgress({
       percent: 45,

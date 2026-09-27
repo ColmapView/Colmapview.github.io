@@ -2,6 +2,7 @@ import type { Sim3dEuler } from '../types/sim3d';
 import type { ReconstructionSnapshot } from '../wasm/reconstructionService';
 import type { ReconstructionExportFiles } from '../wasm/reconstructionProtocol';
 import { downloadFile } from '../utils/download';
+import { awaitWithAbort } from '../utils/awaitWithAbort';
 import {
   downloadReconstructionZipFromWriters, exportReconstructionZipFromWriters,
   type ReconstructionZipFileWriters, type ZipExportOptions, type ZipExportProgressCallback,
@@ -26,19 +27,27 @@ export async function exportReconstructionSnapshot(
   format: 'binary' | 'text' | 'ply' | 'zip',
   imageFiles?: Map<string, File> | null,
   transform?: Sim3dEuler,
+  signal?: AbortSignal,
+  onProgress?: ZipExportProgressCallback,
 ): Promise<void> {
-  const files = await snapshot.export({ format: format === 'zip' ? 'binary' : format, transform });
+  signal?.throwIfAborted();
+  onProgress?.(0, 'Preparing COLMAP files...');
+  const files = await awaitWithAbort(snapshot.export({ format: format === 'zip' ? 'binary' : format, transform }, signal), signal);
+  signal?.throwIfAborted();
   if (format === 'zip') {
-    await downloadReconstructionZipFromWriters(snapshotZipWriters(files, 'binary'), { format: 'binary' }, imageFiles);
+    await downloadReconstructionZipFromWriters(snapshotZipWriters(files, 'binary'), { format: 'binary', signal }, imageFiles, onProgress);
     return;
   }
   for (const [name, bytes] of Object.entries(files)) downloadFile(bytes.buffer as ArrayBuffer, name);
+  onProgress?.(100, 'Done');
 }
 
 export async function exportSnapshotZip(
   snapshot: ReconstructionSnapshot, options: ZipExportOptions,
   imageFiles?: Map<string, File> | null, onProgress?: ZipExportProgressCallback,
 ): Promise<Blob> {
-  const files = await snapshot.export({ format: options.format });
+  options.signal?.throwIfAborted();
+  const files = await awaitWithAbort(snapshot.export({ format: options.format }, options.signal), options.signal);
+  options.signal?.throwIfAborted();
   return exportReconstructionZipFromWriters(snapshotZipWriters(files, options.format), options, imageFiles, onProgress);
 }

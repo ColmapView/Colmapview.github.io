@@ -6,6 +6,58 @@ import {
 } from './imageFileCompression';
 
 describe('image file compression', () => {
+  it.each(['bounds', 'allocation', 'drawing', 'encoding'])(
+    'releases the bitmap and preserves the original file when %s fails',
+    async (stage) => {
+      const sourceBlob = new Blob(['original bytes'], { type: 'image/webp' });
+      const bitmap = buildImageBitmap({ width: 100, height: 100, close: vi.fn() });
+      const error = new Error(`${stage} failed`);
+      const warn = vi.fn();
+      const file = await compressAndResizeToJpeg(sourceBlob, 'photo.webp', {
+        decode: async () => bitmap,
+        getBounds: () => {
+          if (stage === 'bounds') throw error;
+          return { maxWidth: 50, maxHeight: 50 };
+        },
+        createCanvas: () => {
+          if (stage === 'allocation') throw error;
+          return {
+            drawImage: () => { if (stage === 'drawing') throw error; },
+            toBlob: async () => { throw error; },
+          };
+        },
+        warn,
+      });
+
+      expect(bitmap.close).toHaveBeenCalledOnce();
+      expect(file.name).toBe('photo.webp');
+      expect(file.type).toBe('image/webp');
+      expect(file.size).toBe(sourceBlob.size);
+      expect(warn).toHaveBeenCalledWith('[URL Image] Compression failed, using original:', error);
+    }
+  );
+
+  it('compresses a thin panorama using a nonempty canvas', async () => {
+    const bitmap = buildImageBitmap({ width: 10_000, height: 1, close: vi.fn() });
+    const createCanvas = vi.fn((width: number, height: number): ImageCompressionCanvas => {
+      if (width < 1 || height < 1) throw new Error('empty canvas');
+      return { drawImage: vi.fn(), toBlob: async () => new Blob(['jpeg'], { type: 'image/jpeg' }) };
+    });
+    const warn = vi.fn();
+
+    const file = await compressAndResizeToJpeg(new Blob(['original']), 'panorama.png', {
+      decode: async () => bitmap,
+      getBounds: () => ({ maxWidth: 1000, maxHeight: 1000 }),
+      createCanvas,
+      warn,
+    });
+
+    expect(createCanvas).toHaveBeenCalledWith(1000, 1);
+    expect(file.type).toBe('image/jpeg');
+    expect(bitmap.close).toHaveBeenCalledOnce();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it('resizes images to cache bounds and returns JPEG files', async () => {
     const sourceBlob = new Blob(['source'], { type: 'image/png' });
     const jpegBlob = new Blob(['jpeg'], { type: 'image/jpeg' });

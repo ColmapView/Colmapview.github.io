@@ -23,6 +23,8 @@ export interface ExportReconstructionSectionProps {
   onDownload: () => void;
   onDownloadSplat: () => void;
   hasSplatFile: boolean;
+  exportProgress: number | null;
+  onCancelExport: () => void;
 }
 
 export const ExportReconstructionSection = memo(function ExportReconstructionSection({
@@ -38,6 +40,8 @@ export const ExportReconstructionSection = memo(function ExportReconstructionSec
   onDownload,
   onDownloadSplat,
   hasSplatFile,
+  exportProgress,
+  onCancelExport,
 }: ExportReconstructionSectionProps) {
   return (
     <>
@@ -67,13 +71,17 @@ export const ExportReconstructionSection = memo(function ExportReconstructionSec
         >
           Delete Images from Model{hasPendingDeletions ? ` (${pendingDeletionCount})` : ''}
         </button>
-        <button
-          onClick={onDownload}
-          disabled={!hasReconstruction}
-          className={hasReconstruction ? styles.actionButton : styles.actionButtonDisabled}
-        >
-          Download COLMAP
-        </button>
+        {exportProgress !== null ? (
+          <ExportProgress label="COLMAP" progress={exportProgress} onCancel={onCancelExport} />
+        ) : (
+          <button
+            onClick={onDownload}
+            disabled={!hasReconstruction}
+            className={hasReconstruction ? styles.actionButton : styles.actionButtonDisabled}
+          >
+            Download COLMAP
+          </button>
+        )}
         {hasSplatFile && (
           <button
             onClick={onDownloadSplat}
@@ -95,6 +103,8 @@ export interface ExportMediaSectionProps {
   maskExportProgress: number | null;
   onExportImages: () => void;
   onExportMasks: () => void;
+  onCancelImages: () => void;
+  onCancelMasks: () => void;
   onJpegQualityChange: (quality: number) => void;
 }
 
@@ -106,6 +116,8 @@ export const ExportMediaSection = memo(function ExportMediaSection({
   maskExportProgress,
   onExportImages,
   onExportMasks,
+  onCancelImages,
+  onCancelMasks,
   onJpegQualityChange,
 }: ExportMediaSectionProps) {
   const isExportingImages = imageExportProgress !== null;
@@ -127,7 +139,7 @@ export const ExportMediaSection = memo(function ExportMediaSection({
           />
           <div className="flex flex-col gap-2">
             {isExportingImages ? (
-              <ExportProgress label="images" progress={imageExportProgress} />
+              <ExportProgress label="images" progress={imageExportProgress} onCancel={onCancelImages} />
             ) : (
               <button
                 onClick={onExportImages}
@@ -138,7 +150,7 @@ export const ExportMediaSection = memo(function ExportMediaSection({
             )}
             {hasMasks && (
               isExportingMasks ? (
-                <ExportProgress label="masks" progress={maskExportProgress} />
+                <ExportProgress label="masks" progress={maskExportProgress} onCancel={onCancelMasks} />
               ) : (
                 <button
                   onClick={onExportMasks}
@@ -182,11 +194,12 @@ export const ExportReloadSection = memo(function ExportReloadSection({
 });
 
 interface ExportProgressProps {
-  label: 'images' | 'masks';
+  label: 'images' | 'masks' | 'COLMAP';
   progress: number;
+  onCancel: () => void;
 }
 
-function ExportProgress({ label, progress }: ExportProgressProps) {
+function ExportProgress({ label, progress, onCancel }: ExportProgressProps) {
   return (
     <div>
       <div className={loadingStyles.progressTrack} role="progressbar" aria-label={`Export ${label}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}>
@@ -196,8 +209,11 @@ function ExportProgress({ label, progress }: ExportProgressProps) {
         />
       </div>
       <div className="text-ds-secondary text-xs mt-1 text-center">
-        Exporting {label}... {progress}%
+        {progress === 100 ? 'Creating ZIP...' : `Exporting ${label}... ${progress}%`}
       </div>
+      <button onClick={onCancel} className={`${styles.actionButton} mt-2 w-full`} aria-label={`Cancel ${label} export`}>
+        Cancel
+      </button>
     </div>
   );
 }

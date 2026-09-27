@@ -64,20 +64,24 @@ export class DatasetManager {
   }
 
   /**
-   * Get an original image file for metric computations.
+   * Get an original image file for exports and metric computations.
    * Unlike getImage(), URL and ZIP sources bypass the resized/lossy display cache.
    *
    * @param imageName - Image name from COLMAP
    * @returns The original image File or null if not found/failed
    */
-  async getMetricImage(imageName: string, options?: DatasetAccessOptions): Promise<File | null> {
+  async getOriginalImage(imageName: string, options?: DatasetAccessOptions): Promise<File | null> {
     const state = this.getState();
     if (options?.signal?.aborted) return null;
-    const file = await (this.getSourceAdapter(state)?.getMetricImage(state, imageName, options) ?? Promise.resolve(null));
+    const file = await (this.getSourceAdapter(state)?.getOriginalImage(state, imageName, options) ?? Promise.resolve(null));
     const current = this.getState();
     return !options?.signal?.aborted && state.sourceType === current.sourceType
       && state.imageUrlBase === current.imageUrlBase && state.maskUrlBase === current.maskUrlBase
       && state.imageNameToUrl === current.imageNameToUrl && state.loadedFiles === current.loadedFiles ? file : null;
+  }
+
+  getMetricImage(imageName: string, options?: DatasetAccessOptions): Promise<File | null> {
+    return this.getOriginalImage(imageName, { ...options, priority: options?.priority ?? 'metric' });
   }
 
   /**

@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { emptyStateStyles } from '../../theme';
+import { MediaLoadError } from '../MediaLoadError';
 import { ImageGalleryToolbar } from './ImageGalleryToolbar';
 import { ImageGalleryVirtualizedContent } from './ImageGalleryVirtualizedContent';
 import { useImageGalleryColumnResize } from './useImageGalleryColumnResize';
@@ -95,7 +96,7 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
   const currentIsScrolling = viewMode === 'gallery' ? rowVirtualizer.isScrolling : listVirtualizer.isScrolling;
   const debouncedIsScrolling = useImageGalleryScrollSettle(currentIsScrolling);
 
-  useImageGalleryVisibleImageFetch({
+  const { failedCount, retry } = useImageGalleryVisibleImageFetch({
     dataset,
     reconstruction,
     viewMode,
@@ -211,6 +212,15 @@ export function ImageGallery({ isResizing = false }: ImageGalleryProps) {
         onDoubleClick={handleDoubleClick}
         onRightClick={handleRightClick}
       />
+      {failedCount > 0 && (
+        <div className={`absolute left-2 right-2 z-30 ${touchMode ? 'bottom-2' : 'footer-status-clearance'}`}>
+          <MediaLoadError
+            message={`${failedCount} ${failedCount === 1 ? 'file' : 'files'} could not be loaded.`}
+            retryLabel="Retry loading gallery images and masks"
+            onRetry={retry}
+          />
+        </div>
+      )}
     </div>
   );
 }

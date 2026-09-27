@@ -40,6 +40,9 @@ describe('async image cache state helpers', () => {
     const pending = createPending<string>('pending', pendingResolve);
     const dispose = vi.fn();
     const clearFailures = vi.fn();
+    const cancelLoad = vi.fn();
+    state.cancelLoads.add(cancelLoad);
+    state.bulkMode = true;
     state.cache.set('cached', 'cached-value');
     state.loadingPromises.set('loading', Promise.resolve('value'));
     state.pendingQueue.push(vi.fn());
@@ -50,6 +53,9 @@ describe('async image cache state helpers', () => {
     clearAsyncImageCacheState(state, dispose, clearFailures);
 
     expect(state.cacheGeneration).toBe(1);
+    expect(cancelLoad).toHaveBeenCalledOnce();
+    expect(state.cancelLoads.size).toBe(0);
+    expect(state.bulkMode).toBe(false);
     expect(pending.bitmap.close).toHaveBeenCalledOnce();
     expect(pendingResolve).toHaveBeenCalledWith(null);
     expect(dispose).toHaveBeenCalledWith('cached-value');

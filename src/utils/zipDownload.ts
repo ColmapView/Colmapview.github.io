@@ -17,6 +17,7 @@ export interface ZipProgress {
 export type ZipProgressCallback = (progress: ZipProgress) => void;
 
 export interface ZipDownloadOptions {
+  signal?: AbortSignal;
   fetchImpl?: (url: string, timeout?: number) => Promise<Response>;
   timeoutMs?: number;
   sizeLimit?: number;
@@ -32,7 +33,8 @@ export async function downloadZip(
   onProgress: ZipProgressCallback,
   options: ZipDownloadOptions = {}
 ): Promise<Blob> {
-  const fetchImpl = options.fetchImpl ?? fetchWithTimeout;
+  const fetchImpl = options.fetchImpl
+    ?? ((targetUrl, timeout) => fetchWithTimeout(targetUrl, timeout, { signal: options.signal }));
   const timeoutMs = options.timeoutMs ?? DOWNLOAD_TIMEOUT;
 
   onProgress({ percent: 2, message: 'Starting download...' });
@@ -40,18 +42,25 @@ export async function downloadZip(
   const response = await fetchImpl(url, timeoutMs);
 
   if (!response.ok) {
+    void response.body?.cancel().catch(() => {});
     throw new Error(`Failed to download archive (${response.status})`);
   }
 
   const contentLength = response.headers.get('content-length');
   const total = contentLength ? parseSafeIntegerString(contentLength) ?? 0 : 0;
 
-  if (!response.body) {
-    return response.blob();
+  const sizeLimit = options.sizeLimit ?? ARCHIVE_SIZE_LIMIT;
+  try {
+    validateDownloadedSize(total, sizeLimit);
+  } catch (error) {
+    void response.body?.cancel().catch(() => {});
+    throw error;
   }
 
-  const blob = await readStreamingResponseBlob(response.body, total, onProgress);
-  validateDownloadedArchiveSize(blob, options.sizeLimit);
+  const blob = response.body
+    ? await readStreamingResponseBlob(response.body, total, onProgress, sizeLimit)
+    : await response.blob();
+  validateDownloadedArchiveSize(blob, sizeLimit);
   return blob;
 }
 
@@ -62,8 +71,12 @@ export function validateDownloadedArchiveSize(
   blob: Blob,
   sizeLimit: number = ARCHIVE_SIZE_LIMIT
 ): void {
-  if (blob.size > sizeLimit) {
-    const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
+  validateDownloadedSize(blob.size, sizeLimit);
+}
+
+function validateDownloadedSize(size: number, sizeLimit: number): void {
+  if (size > sizeLimit) {
+    const sizeMB = (size / (1024 * 1024)).toFixed(1);
     throw new Error(`Downloaded archive exceeds size limit (${sizeMB}MB)`);
   }
 }
@@ -71,35 +84,33 @@ export function validateDownloadedArchiveSize(
 async function readStreamingResponseBlob(
   body: ReadableStream<Uint8Array>,
   total: number,
-  onProgress: ZipProgressCallback
+  onProgress: ZipProgressCallback,
+  sizeLimit: number
 ): Promise<Blob> {
   const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
   let loaded = 0;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    chunks.push(new Uint8Array(value));
-    loaded += value.length;
-    onProgress(getDownloadProgress(loaded, total));
+      loaded += value.length;
+      validateDownloadedSize(loaded, sizeLimit);
+      chunks.push(new Uint8Array(value));
+      onProgress(getDownloadProgress(loaded, total));
+    }
+  } finally {
+    void reader.cancel().catch(() => {});
   }
 
-  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-  const result = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-
-  return new Blob([result]);
+  return new Blob(chunks);
 }
 
 function getDownloadProgress(loaded: number, total: number): ZipProgress {
   if (total > 0) {
-    const percent = 2 + Math.round((loaded / total) * 38);
+    const percent = Math.min(40, 2 + Math.round((loaded / total) * 38));
     const loadedMB = (loaded / (1024 * 1024)).toFixed(1);
     const totalMB = (total / (1024 * 1024)).toFixed(1);
     return {

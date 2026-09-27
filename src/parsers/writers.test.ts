@@ -15,6 +15,12 @@ import {
   readBlobAsArrayBuffer,
 } from '../test/builders';
 
+vi.mock('./zipCompression', async () => {
+  const { zipSync } = await import('fflate');
+  const { createZipBlob, normalizeZipCompressionLevel } = await import('./zipExportPolicy');
+  return { compressZip: vi.fn(async (data, options) => createZipBlob(zipSync(data, { level: normalizeZipCompressionLevel(options?.level) }))) };
+});
+
 /**
  * Create a File with a working arrayBuffer() method for jsdom.
  */

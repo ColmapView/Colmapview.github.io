@@ -202,12 +202,49 @@ describe('DatasetManager', () => {
       const result = await manager.getMetricImage('test.jpg');
 
       expect(result).toBe(rawFile);
-      expect(fetchZipImageRaw).toHaveBeenCalledWith('test.jpg', undefined);
+      expect(fetchZipImageRaw).toHaveBeenCalledWith('test.jpg', { priority: 'metric' });
       expect(fetchZipImage).not.toHaveBeenCalled();
     });
   });
 
   describe('getImageSync', () => {
+    it.each(['url', 'zip'] as const)('exports original %s images even when a display preview is cached', async sourceType => {
+      mockState.sourceType = sourceType;
+      mockState.imageUrlBase = 'https://example.com/images/';
+      vi.mocked(isZipLoadingAvailable).mockReturnValue(true);
+      const preview = new File(['preview'], 'photo.jpg');
+      const original = new File(['full-resolution'], 'photo.jpg');
+      vi.mocked(getUrlImageCached).mockReturnValue(preview);
+      vi.mocked(getZipImageCached).mockReturnValue(preview);
+      vi.mocked(fetchUrlImageRaw).mockResolvedValue(original);
+      vi.mocked(fetchZipImageRaw).mockResolvedValue(original);
+      const signal = new AbortController().signal;
+
+      await expect(manager.getOriginalImage('photo.jpg', { signal })).resolves.toBe(original);
+
+      if (sourceType === 'url') expect(fetchUrlImageRaw).toHaveBeenCalledWith(mockState.imageUrlBase, 'photo.jpg', undefined, { signal });
+      else expect(fetchZipImageRaw).toHaveBeenCalledWith('photo.jpg', { signal });
+      expect(fetchUrlImage).not.toHaveBeenCalled();
+      expect(fetchZipImage).not.toHaveBeenCalled();
+    });
+
+    it('discards original bytes if cancelled or the source changes during the request', async () => {
+      mockState.sourceType = 'url';
+      mockState.imageUrlBase = 'https://example.com/images/';
+      let finish!: (file: File) => void;
+      vi.mocked(fetchUrlImageRaw).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+      const controller = new AbortController();
+      const pending = manager.getOriginalImage('photo.jpg', { signal: controller.signal });
+      controller.abort();
+      finish(new File(['original'], 'photo.jpg'));
+      await expect(pending).resolves.toBeNull();
+
+      const obsolete = manager.getOriginalImage('photo.jpg');
+      mockState = { ...mockState, imageUrlBase: 'https://example.com/other/' };
+      finish(new File(['old-source'], 'photo.jpg'));
+      await expect(obsolete).resolves.toBeNull();
+    });
+
     it('returns local file directly', () => {
       mockState.sourceType = 'local';
       mockState.loadedFiles = {

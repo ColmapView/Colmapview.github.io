@@ -3,6 +3,7 @@ import type {
   MouseEvent,
   PointerEvent,
   RefObject,
+  ReactNode,
   WheelEvent,
 } from 'react';
 import { modalStyles } from '../../theme';
@@ -27,6 +28,7 @@ import type {
 import { ModalErrorBoundary } from './ModalErrorBoundary';
 
 interface DesktopImageDetailFrameProps {
+  loadErrors?: ReactNode;
   camera: Camera;
   cameraAllMarked: boolean;
   closeImageDetail: () => void;
@@ -94,6 +96,7 @@ interface DesktopImageDetailFrameProps {
 }
 
 export function DesktopImageDetailFrame({
+  loadErrors,
   camera,
   cameraAllMarked,
   closeImageDetail,
@@ -200,6 +203,7 @@ export function DesktopImageDetailFrame({
           />
 
           <div className="flex flex-col flex-1 overflow-hidden px-4 pt-1 pb-3 gap-2">
+            {loadErrors}
             <div className="flex-shrink-0 overflow-x-auto py-1">
               <CameraPoseInfoDisplay camera={camera} qvec={image.qvec} tvec={image.tvec} />
             </div>

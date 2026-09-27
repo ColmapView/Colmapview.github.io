@@ -34,11 +34,14 @@ import { detectTouchDevice } from '../hooks/useIsTouchDevice';
 const SPLAT_POINT_CLOUD_DEFAULT_SIZE = 1;
 const SPLAT_POINT_CLOUD_DEFAULT_OPACITY = 0.2;
 
-// Monotonic token for lazy splat selection. Each selectSplatSource call claims a
-// new id; an in-flight fetch only applies its result if it is still the latest
-// (latest-wins), so out-of-order resolutions can't show a stale tile or let a
-// superseded fetch's failure clobber the winner's state.
-let activeSplatRequestId = 0;
+// A lazy tile belongs to the current selection and dataset. Aborting its signal
+// stops the download and also guards any decode work that has already started.
+let activeSplatController: AbortController | null = null;
+
+function cancelPendingSplatLoad(): void {
+  activeSplatController?.abort();
+  activeSplatController = null;
+}
 
 /** Switch the point cloud into a splat-visible display mode with splat defaults. */
 function applySplatPointDisplayDefaults(): void {
@@ -190,10 +193,13 @@ interface ReconstructionState {
   /** URL loading state (shared across components) */
   urlLoading: boolean;
   urlLoadActive: boolean;
+  urlLoadController: AbortController | null;
   urlProgress: UrlLoadProgress | null;
   urlError: UrlLoadError | null;
 
-  setReconstruction: (rec: Reconstruction) => void;
+  /** Committed edits since the current dataset was loaded. Not persisted. */
+  reconstructionEditRevision: number;
+  setReconstruction: (rec: Reconstruction, options?: { edited?: boolean }) => void;
   setWasmReconstruction: (wasm: ReconstructionSource | null) => void;
   setLoadedFiles: (files: LoadedFiles) => void;
   setDroppedFiles: (files: Map<string, File>) => void;
@@ -211,8 +217,8 @@ interface ReconstructionState {
   selectSplatSource: (sourceId: string) => Promise<void>;
   /** Show or hide the splat picker popup. */
   setShowSplatPicker: (show: boolean) => void;
-  tryStartUrlLoad: () => boolean;
-  finishUrlLoad: () => void;
+  tryStartUrlLoad: () => AbortSignal | null;
+  finishUrlLoad: (signal: AbortSignal) => void;
   setUrlLoading: (loading: boolean) => void;
   setUrlProgress: (progress: UrlLoadProgress | null) => void;
   setUrlError: (error: UrlLoadError | null) => void;
@@ -221,6 +227,7 @@ interface ReconstructionState {
 
 export const useReconstructionStore = create<ReconstructionState>((set, get) => ({
   reconstruction: null,
+  reconstructionEditRevision: 0,
   wasmReconstruction: null,
   loadedFiles: null,
   droppedFiles: null,
@@ -238,15 +245,17 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   // Initialize loading state based on URL params so indicator shows immediately
   urlLoading: initialUrlLoading,
   urlLoadActive: false,
+  urlLoadController: null,
   urlProgress: initialUrlLoading ? { percent: 0, message: 'Initializing...' } : null,
   urlError: null,
 
-  setReconstruction: (reconstruction) => {
+  setReconstruction: (reconstruction, options) => {
     // Note: wasmReconstruction is managed separately via setWasmReconstruction
     // The caller should call setWasmReconstruction BEFORE setReconstruction
     // to ensure the WASM wrapper is kept alive for the fast rendering path
     set({
       reconstruction,
+      reconstructionEditRevision: options?.edited ? get().reconstructionEditRevision + 1 : 0,
       loading: false,
       progress: 100,
       error: null
@@ -265,6 +274,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   },
 
   setLoadedFiles: (loadedFiles) => {
+    cancelPendingSplatLoad();
     const previousLoadedFiles = get().loadedFiles;
     const currentSource = get().wasmReconstruction;
     if (isReconstructionSnapshot(currentSource) && previousLoadedFiles && (
@@ -361,8 +371,11 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     if (!loadedFiles) {
       return;
     }
-    // Every selection supersedes any in-flight lazy fetch (latest-wins).
-    const requestId = ++activeSplatRequestId;
+    const source = sourceId ? findSplatSourceById(loadedFiles, sourceId) : undefined;
+    if (sourceId && (!source || (!source.file && !source.url))) {
+      return;
+    }
+    cancelPendingSplatLoad();
     // Whether a splat was already showing: a fresh activation (COLMAP-only -> splat)
     // switches the viewer into a splat display mode; a tile-to-tile switch keeps the
     // user's current mode.
@@ -371,20 +384,16 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     // Empty selection -> "COLMAP only": unload the active splat. Also clear any
     // in-flight download indicator so a superseded lazy fetch can't leave the
     // loading overlay stuck (there is nothing left to render that would reset it).
-    if (!sourceId) {
+    if (!source) {
       set({
         requestedSplatSourceId: null,
         loadedFiles: clearActiveSplatFile(loadedFiles),
         urlLoading: false,
         urlProgress: null,
+        urlError: null,
       });
       return;
     }
-    const source = findSplatSourceById(loadedFiles, sourceId);
-    if (!source) {
-      return;
-    }
-
     // Already downloaded: activate immediately (and offload the previous tile).
     // Clear any download indicator left by a superseded in-flight fetch — this
     // switch is instant, so no "Downloading…" overlay should linger.
@@ -394,6 +403,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
         loadedFiles: applyActiveSplatFile(loadedFiles, source.id, source.file),
         urlLoading: false,
         urlProgress: null,
+        urlError: null,
       });
       if (!hadSplatBefore) {
         applySplatActivationVisuals();
@@ -407,11 +417,14 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     if (!source.url) {
       return;
     }
+    const controller = new AbortController();
+    activeSplatController = controller;
+    const { signal } = controller;
     const splatName = source.path.split('/').pop() ?? source.path;
-    set({ urlLoading: true, urlProgress: getSplatDownloadProgress(splatName, 0, 0) });
+    set({ urlLoading: true, urlProgress: getSplatDownloadProgress(splatName, 0, 0), urlError: null });
     const onDownloadProgress = (loaded: number, total: number) => {
       // Ignore progress from a fetch a newer selection has superseded.
-      if (requestId !== activeSplatRequestId) {
+      if (signal.aborted) {
         return;
       }
       set({ urlProgress: getSplatDownloadProgress(splatName, loaded, total) });
@@ -423,8 +436,8 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
         // zero-byte placeholder File, and leave the source file-less so it
         // stays re-fetchable. This avoids the blob+buffer coexistence that
         // caps phones around ~300 MB tiles.
-        const { bytes, name } = await fetchRemoteSplatBytes(source.url, onDownloadProgress);
-        if (requestId !== activeSplatRequestId) {
+        const { bytes, name } = await fetchRemoteSplatBytes(source.url, onDownloadProgress, signal);
+        if (signal.aborted) {
           return;
         }
         const {
@@ -438,7 +451,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
         // would run two 100-416MB decodes at once — the transient double memory
         // this byte-less path exists to avoid on constrained phones. A decode
         // already begun can't be cancelled; the goal is to not START the loser's.
-        if (requestId !== activeSplatRequestId) {
+        if (signal.aborted) {
           return;
         }
         // FRESH placeholder per attempt: a rejected seeded promise never
@@ -460,7 +473,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
         // the last download frame for the whole phone decode.
         set({ urlProgress: getSplatPhaseProgress(placeholder, 'decodingFile') });
         await seeded;
-        if (requestId !== activeSplatRequestId) {
+        if (signal.aborted) {
           return;
         }
         const latest = get().loadedFiles ?? loadedFiles;
@@ -477,10 +490,10 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
         }
         return;
       }
-      const file = await fetchRemoteSplatFile(source.url, onDownloadProgress);
+      const file = await fetchRemoteSplatFile(source.url, onDownloadProgress, signal);
       // A newer selection won the race: drop this stale result and leave the
       // winner's state untouched.
-      if (requestId !== activeSplatRequestId) {
+      if (signal.aborted) {
         return;
       }
       const latest = get().loadedFiles ?? loadedFiles;
@@ -494,7 +507,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     } catch (err) {
       // Fetch and byte-less decode failures land here alike; a superseded
       // attempt's failure must not clobber the winner's state.
-      if (requestId !== activeSplatRequestId) {
+      if (signal.aborted) {
         return;
       }
       set({
@@ -507,6 +520,10 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
           failedFile: source.url,
         },
       });
+    } finally {
+      if (activeSplatController === controller) {
+        activeSplatController = null;
+      }
     }
   },
 
@@ -514,13 +531,20 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
 
   tryStartUrlLoad: () => {
     if (get().urlLoadActive) {
-      return false;
+      return null;
     }
-    set({ urlLoadActive: true });
-    return true;
+    cancelPendingSplatLoad();
+    const controller = new AbortController();
+    set({ urlLoadActive: true, urlLoadController: controller });
+    return controller.signal;
   },
 
-  finishUrlLoad: () => set({ urlLoadActive: false }),
+  finishUrlLoad: (signal) => {
+    const controller = get().urlLoadController;
+    if (controller?.signal !== signal) return;
+    controller.abort();
+    set({ urlLoadActive: false, urlLoadController: null });
+  },
 
   setUrlLoading: (urlLoading) => set({ urlLoading }),
 
@@ -530,6 +554,8 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   setUrlError: (urlError) => set(urlError ? { urlError, urlLoading: false } : { urlError }),
 
   clear: () => {
+    cancelPendingSplatLoad();
+    get().urlLoadController?.abort();
     cancelPendingReconstructionLoad();
     // Dispose WASM wrapper on clear
     const oldWasm = get().wasmReconstruction;
@@ -538,6 +564,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     }
     set({
       reconstruction: null,
+      reconstructionEditRevision: 0,
       wasmReconstruction: null,
       loadedFiles: null,
       droppedFiles: null,
@@ -554,6 +581,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       showSplatPicker: false,
       urlLoading: false,
       urlLoadActive: false,
+      urlLoadController: null,
       urlProgress: null,
       urlError: null,
     });

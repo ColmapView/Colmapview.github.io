@@ -17,6 +17,7 @@ export interface PrefetchAsyncImagesOptions<T> {
   queueLoad: (file: File, cacheKey: string) => Promise<T | null>;
   setBulkMode: (bulkMode: boolean) => void;
   maxConcurrentLoads: number;
+  isCurrent?: () => boolean;
 }
 
 export async function prefetchAsyncImages<T>({
@@ -27,7 +28,9 @@ export async function prefetchAsyncImages<T>({
   queueLoad,
   setBulkMode,
   maxConcurrentLoads,
+  isCurrent = () => true,
 }: PrefetchAsyncImagesOptions<T>): Promise<void> {
+  if (!isCurrent()) return;
   if (images.length === 0) {
     onProgress?.(1);
     return;
@@ -40,6 +43,7 @@ export async function prefetchAsyncImages<T>({
   let lastReportedProgress = 0;
 
   const reportProgress = () => {
+    if (!isCurrent()) return;
     const progress = getPrefetchProgress(completed, total);
     if (shouldReportPrefetchProgress(completed, total, lastReportedProgress)) {
       lastReportedProgress = progress;
@@ -50,9 +54,11 @@ export async function prefetchAsyncImages<T>({
   try {
     const chunkSize = getPrefetchChunkSize(maxConcurrentLoads);
     for (let i = 0; i < images.length; i += chunkSize) {
+      if (!isCurrent()) return;
       const chunk = images.slice(i, i + chunkSize);
 
       const chunkPromises = chunk.map(async ({ file, name }) => {
+        if (!isCurrent()) return;
         if (cache.has(name)) {
           completed++;
           reportProgress();
@@ -73,6 +79,6 @@ export async function prefetchAsyncImages<T>({
       await Promise.all(chunkPromises);
     }
   } finally {
-    setBulkMode(false);
+    if (isCurrent()) setBulkMode(false);
   }
 }

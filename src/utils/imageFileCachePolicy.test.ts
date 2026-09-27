@@ -8,6 +8,13 @@ import {
 } from './imageFileCachePolicy';
 
 describe('image file cache policy', () => {
+  it.each([
+    [{ width: 10_000, height: 1 }, { width: 1000, height: 1 }],
+    [{ width: 1, height: 10_000 }, { width: 1, height: 1000 }],
+  ])('keeps both dimensions positive when resizing $width-by-$height images', (source, expected) => {
+    expect(getCacheResizeDimensions(source, { maxWidth: 1000, maxHeight: 1000 })).toEqual(expected);
+  });
+
   it('bounds cache dimensions by screen size, device pixel ratio, and maximum size', () => {
     expect(getBoundedCacheDimensions({
       screenWidth: 800,

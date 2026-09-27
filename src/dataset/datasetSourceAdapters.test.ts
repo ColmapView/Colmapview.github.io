@@ -109,8 +109,8 @@ describe('dataset source adapters', () => {
 
     await expect(manifestAdapter.getImage(state, 'image.jpg')).resolves.toBe(fetchedImage);
     expect(fetchUrlImage).toHaveBeenCalledWith('https://example.test/images/', 'image.jpg', undefined, undefined);
-    await expect(manifestAdapter.getMetricImage(state, 'image.jpg')).resolves.toBe(rawImage);
-    expect(fetchUrlImageRaw).toHaveBeenCalledWith('https://example.test/images/', 'image.jpg', undefined, { priority: 'metric' });
+    await expect(manifestAdapter.getOriginalImage(state, 'image.jpg')).resolves.toBe(rawImage);
+    expect(fetchUrlImageRaw).toHaveBeenCalledWith('https://example.test/images/', 'image.jpg', undefined, undefined);
     await expect(manifestAdapter.getMask(state, 'image.jpg')).resolves.toBe(maskFile);
     expect(fetchUrlMask).toHaveBeenCalledWith('https://example.test/masks/', 'image.jpg', undefined);
     expect(manifestAdapter.getMaskSync(state, 'image.jpg')).toBe(maskFile);
@@ -141,8 +141,8 @@ describe('dataset source adapters', () => {
     // Mapped COLMAP name -> explicit URL threaded to the fetch helper verbatim.
     await expect(adapter.getImage(state, '0.jpg')).resolves.toBe(mappedImage);
     expect(fetchUrlImage).toHaveBeenCalledWith(base, '0.jpg', mappedUrl, undefined);
-    await adapter.getMetricImage(state, '0.jpg');
-    expect(fetchUrlImageRaw).toHaveBeenCalledWith(base, '0.jpg', mappedUrl, { priority: 'metric' });
+    await adapter.getOriginalImage(state, '0.jpg');
+    expect(fetchUrlImageRaw).toHaveBeenCalledWith(base, '0.jpg', mappedUrl, undefined);
 
     // Unmapped name -> no explicit URL, falls back to the base directory.
     await adapter.getImage(state, '999.jpg');
@@ -178,7 +178,7 @@ describe('dataset source adapters', () => {
     await expect(adapter.getImage(state, 'cached.jpg')).resolves.toBe(cached);
     await expect(adapter.getImage(state, 'missing.jpg')).resolves.toBe(fetched);
     expect(fetchZipImage).toHaveBeenCalledWith('missing.jpg', undefined);
-    await expect(adapter.getMetricImage(state, 'missing.jpg')).resolves.toBe(raw);
+    await expect(adapter.getOriginalImage(state, 'missing.jpg')).resolves.toBe(raw);
     expect(fetchZipImageRaw).toHaveBeenCalledWith('missing.jpg', undefined);
     expect(adapter.getImageSync(state, 'cached.jpg')).toBe(cached);
     await expect(adapter.getMask(state, 'image.jpg')).resolves.toBeInstanceOf(File);

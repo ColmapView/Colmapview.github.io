@@ -4,6 +4,7 @@ import { buildFile, buildReconstruction } from '../../test/builders';
 import { useImageGalleryVisibleImageFetch } from './useImageGalleryVisibleImageFetch';
 import { createUrlFileCache } from '../../dataset/urlFileCache';
 import { createImageFileRequestState } from '../../utils/imageFileRequestState';
+import type { DatasetAccessOptions } from '../../dataset/types';
 
 type HookOptions = Parameters<typeof useImageGalleryVisibleImageFetch>[0];
 
@@ -27,8 +28,8 @@ function createDataset({
   hasMasks?: boolean;
   cachedNames?: string[];
   cachedMaskNames?: string[];
-  getImage?: (imageName: string) => Promise<File | null>;
-  getMask?: (imageName: string) => Promise<File | null>;
+  getImage?: (imageName: string, options?: DatasetAccessOptions) => Promise<File | null>;
+  getMask?: (imageName: string, options?: DatasetAccessOptions) => Promise<File | null>;
 } = {}) {
   return {
     hasImages: vi.fn(() => hasImages),
@@ -63,6 +64,50 @@ function createOptions(overrides: Partial<HookOptions> = {}): HookOptions {
 }
 
 describe('useImageGalleryVisibleImageFetch', () => {
+  it('reports network failures, leaves missing masks alone, and retries only on request', async () => {
+    let failed = true;
+    const getImage = vi.fn(async (name: string, options?: DatasetAccessOptions) => {
+      if (failed) {
+        options?.onError?.({ kind: 'network', message: 'Offline' });
+        return null;
+      }
+      return buildFile(name);
+    });
+    const getMask = vi.fn(async () => null);
+    const options = createOptions({
+      dataset: createDataset({ getImage, getMask, hasMasks: true }),
+      rows: [[{ name: 'photo.jpg' }]],
+      images: [{ name: 'photo.jpg' }],
+      rowVirtualizer: createVirtualizer([0]),
+      thumbnailDisplayMode: 'maskedImage',
+    });
+    const { result, rerender } = renderHook(useImageGalleryVisibleImageFetch, { initialProps: options });
+    await waitFor(() => expect(result.current.failedCount).toBe(1));
+    rerender({ ...options, rows: [[{ name: 'photo.jpg' }]] });
+    expect(getImage).toHaveBeenCalledOnce();
+    failed = false;
+    await act(async () => result.current.retry());
+    await waitFor(() => expect(options.refreshImageCacheVersion).toHaveBeenCalledOnce());
+    expect(getImage).toHaveBeenCalledTimes(2);
+    expect(result.current.failedCount).toBe(0);
+  });
+
+  it('ignores late failures from an obsolete request and clears errors when the dataset changes', async () => {
+    let oldAccess: DatasetAccessOptions | undefined;
+    const oldDataset = createDataset({ getImage: vi.fn(async (_name, access) => {
+      oldAccess = access;
+      access?.onError?.({ kind: 'network', message: 'Offline' });
+      return null;
+    }) });
+    const options = createOptions({ dataset: oldDataset, rows: [[{ name: 'a.jpg' }]], rowVirtualizer: createVirtualizer([0]) });
+    const { result, rerender } = renderHook(useImageGalleryVisibleImageFetch, { initialProps: options });
+    await waitFor(() => expect(result.current.failedCount).toBe(1));
+    rerender({ ...options, dataset: createDataset() });
+    act(() => oldAccess?.onError?.({ kind: 'network', message: 'Late failure' }));
+    expect(result.current.failedCount).toBe(0);
+    expect(oldAccess?.signal?.aborted).toBe(true);
+  });
+
   it('fetches uncached visible gallery row images and refreshes loaded batches', async () => {
     const options = createOptions();
 
@@ -106,7 +151,7 @@ describe('useImageGalleryVisibleImageFetch', () => {
 
     expect(options.rowVirtualizer.getVirtualItems).not.toHaveBeenCalled();
     expect(options.listVirtualizer.getVirtualItems).toHaveBeenCalledOnce();
-    expect(dataset.getImage).toHaveBeenCalledWith('b.jpg', { signal: expect.any(AbortSignal), priority: 'visible' });
+    expect(dataset.getImage).toHaveBeenCalledWith('b.jpg', expect.objectContaining({ signal: expect.any(AbortSignal), priority: 'visible' }));
   });
 
   it.each([
@@ -230,7 +275,7 @@ describe('useImageGalleryVisibleImageFetch', () => {
     );
 
     await waitFor(() => {
-      expect(getImage).toHaveBeenCalledWith('slow.jpg', { signal: expect.any(AbortSignal), priority: 'visible' });
+      expect(getImage).toHaveBeenCalledWith('slow.jpg', expect.objectContaining({ signal: expect.any(AbortSignal), priority: 'visible' }));
     });
 
     rerender({

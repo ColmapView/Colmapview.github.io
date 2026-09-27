@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.5] - 2026-09-27
+
+### Added
+
+- Progress and cancellation for COLMAP, image and mask exports, with protection against repeated download clicks.
+- Retry controls for failed image loads in the gallery and image detail viewer.
+
+### Changed
+
+- Upgrade SparkJS to 2.2.0.
+- Compress reconstruction and media ZIP exports in a shared worker to keep the interface responsive.
+- Export images from their original source resolution and honor the selected JPEG quality through 100%.
+- Simplify PSNR task orchestration and remove unused dependencies and the obsolete Spark PSNR session.
+- Require lint, unit tests, production builds and Chromium checks before deployment.
+
+### Fixed
+
+- Prevent cancelled or superseded dataset, splat and thumbnail loads from publishing stale results.
+- Recover stalled media requests, release failed archive readers and enforce ZIP download size limits while streaming.
+- Preserve image-cache pause behavior and release decoded image resources after errors or cancellation.
+- Report partial image and mask exports accurately, skip empty downloads and reject conflicting output filenames.
+- Prepare all COLMAP files before starting downloads so serialization failures cannot leave a partial file set.
+- Warn before reloading reconstructions with applied edits, including deletions, transforms and camera conversions.
+- Keep extremely narrow image previews at least one pixel in each dimension.
+
 ## [0.14.4] - 2026-09-13
 
 ### Changed
@@ -536,7 +561,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript for type safety
 - Deno native test runner for testing
 
-[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.14.4...HEAD
+[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.14.5...HEAD
+[0.14.5]: https://github.com/ColmapView/colmapview.github.io/compare/v0.14.4...v0.14.5
 [0.14.4]: https://github.com/ColmapView/colmapview.github.io/compare/v0.14.3...v0.14.4
 [0.12.0]: https://github.com/ColmapView/colmapview.github.io/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/ColmapView/colmapview.github.io/compare/v0.10.0...v0.11.0

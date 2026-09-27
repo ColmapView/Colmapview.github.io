@@ -18,6 +18,8 @@ function createReconstructionProps(
 ): ExportReconstructionSectionProps {
   return {
     exportFormat: 'text',
+    exportProgress: null,
+    onCancelExport: vi.fn(),
     hasCameras: true,
     hasPendingDeletions: true,
     hasReconstruction: true,
@@ -44,6 +46,8 @@ function createMediaProps(
     maskExportProgress: null,
     onExportImages: vi.fn(),
     onExportMasks: vi.fn(),
+    onCancelImages: vi.fn(),
+    onCancelMasks: vi.fn(),
     onJpegQualityChange: vi.fn(),
     ...overrides,
   };
@@ -60,6 +64,25 @@ function createReloadProps(
 }
 
 describe('ExportPanelSections', () => {
+  it('shows COLMAP progress and cancellation instead of another download action', () => {
+    const props = createReconstructionProps({ exportProgress: 85 });
+    render(<ExportReconstructionSection {...props} />);
+    expect(screen.getByRole('progressbar', { name: 'Export COLMAP' })).toHaveAttribute('aria-valuenow', '85');
+    expect(screen.queryByRole('button', { name: 'Download COLMAP' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel COLMAP export' }));
+    expect(props.onCancelExport).toHaveBeenCalledOnce();
+  });
+
+  it('keeps image and mask cancellation available while preparing the ZIP', () => {
+    const props = createMediaProps({ imageExportProgress: 100, maskExportProgress: 25 });
+    render(<ExportMediaSection {...props} />);
+    expect(screen.getByText('Creating ZIP...')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel images export' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel masks export' }));
+    expect(props.onCancelImages).toHaveBeenCalledOnce();
+    expect(props.onCancelMasks).toHaveBeenCalledOnce();
+  });
+
   it('routes reconstruction format and action callbacks', () => {
     const props = createReconstructionProps();
     render(<ExportReconstructionSection {...props} />);

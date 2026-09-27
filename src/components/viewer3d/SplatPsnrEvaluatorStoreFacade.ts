@@ -15,14 +15,8 @@ import type {
 import type { Reconstruction } from '../../types/colmap';
 import type { Sim3dEuler } from '../../types/sim3d';
 
-type ReconstructionStoreSnapshot = ReturnType<typeof useReconstructionStore.getState>;
-
-export interface SplatPsnrDatasetIdentity {
-  sourceType: ReconstructionStoreSnapshot['sourceType'];
-  imageUrlBase: ReconstructionStoreSnapshot['imageUrlBase'];
-  maskUrlBase: ReconstructionStoreSnapshot['maskUrlBase'];
-  loadedFiles: ReconstructionStoreSnapshot['loadedFiles'];
-}
+import type { SplatPsnrDatasetIdentity } from '../../splat/metrics/splatPsnrTask';
+export type { SplatPsnrDatasetIdentity } from '../../splat/metrics/splatPsnrTask';
 
 interface SplatPsnrEvaluatorDataFacade {
   reconstruction: Reconstruction | null;

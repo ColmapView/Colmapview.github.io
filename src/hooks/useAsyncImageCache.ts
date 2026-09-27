@@ -83,6 +83,7 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
     state,
     maxSize,
     processCanvas,
+    dispose,
     idleTimeout,
     idleFallback,
   });
@@ -108,40 +109,31 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
     cacheKey: string,
     generation: number
   ): Promise<T | null> {
-    // Helper to clean up load tracking.
-    // Only decrement activeLoads if we're still in the same generation.
-    // If clear() was called (generation changed), it already reset activeLoads to 0.
-    const cleanup = () => {
-      if (generation === state.cacheGeneration) {
-        state.activeLoads--;
-        state.loadingPromises.delete(cacheKey);
-        processQueue();
-      }
-    };
-
     try {
       // Skip images that have previously failed to decode
       if (hasImageFailed(cacheKey)) {
-        cleanup();
         return null;
       }
 
       if (generation !== state.cacheGeneration) {
-        // Don't call cleanup - clear() already reset state
         return null;
       }
 
       const cached = state.cache.get(cacheKey);
       if (cached) {
-        cleanup();
         return cached;
       }
 
       let bitmap: ImageBitmap;
       try {
         const decodedBitmap = await createImageBitmapWithTimeout(imageFile, DECODE_TIMEOUT);
+        if (generation !== state.cacheGeneration) {
+          decodedBitmap.close();
+          return null;
+        }
         bitmap = await resizeImageBitmapToMaxSizeWithTimeout(decodedBitmap, maxSize, DECODE_TIMEOUT);
       } catch (bitmapErr) {
+        if (generation !== state.cacheGeneration) return null;
         // Mark as failed so we don't retry (causes OOM with many failures)
         const failedCount = markImageFailed(cacheKey);
         // Only log first 20 failures to avoid console spam
@@ -150,17 +142,15 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
         } else if (shouldLogDecodeFailureSuppression(failedCount)) {
           appLogger.warn(`... suppressing further decode errors (${failedCount} images failed)`);
         }
-        cleanup();
         return null;
       }
 
       if (generation !== state.cacheGeneration) {
         bitmap.close();
-        // Don't call cleanup - clear() already reset state
         return null;
       }
 
-      // Return promise that cleans up AFTER idle processing completes
+      // Keep the load slot until idle processing and canvas conversion complete.
       return new Promise((resolve) => {
         // Backpressure: if too many pending items, process some synchronously
         // to prevent OOM from accumulating full-resolution bitmaps
@@ -172,16 +162,12 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
         state.pendingItems.push({
           bitmap,
           cacheKey,
-          resolve: (result: T | null) => {
-            cleanup();  // Clean up when idle processing actually finishes
-            resolve(result);
-          },
+          resolve,
         });
         scheduleIdleProcessing();
       });
     } catch (err) {
       appLogger.warn(`Failed to load image "${cacheKey}":`, err);
-      cleanup();
       return null;
     }
   }
@@ -193,21 +179,32 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
     const generation = state.cacheGeneration;
 
     return new Promise((resolve) => {
+      const settle = (result: T | null) => {
+        state.cancelLoads.delete(cancel);
+        resolve(result);
+      };
+      const cancel = () => settle(null);
+      state.cancelLoads.add(cancel);
+
+      const finish = (result: T | null) => {
+        // An obsolete load must not release the next dataset's slot or promise.
+        if (generation === state.cacheGeneration) {
+          state.activeLoads--;
+          state.loadingPromises.delete(cacheKey);
+          processQueue();
+        }
+        settle(result);
+      };
       const doLoad = () => {
         if (generation !== state.cacheGeneration) {
-          // clear() was called - it already reset activeLoads, don't decrement
-          resolve(null);
+          settle(null);
           return;
         }
-        loadFromFile(imageFile, cacheKey, generation).then(resolve);
+        void loadFromFile(imageFile, cacheKey, generation).then(finish, () => finish(null));
       };
 
-      if (state.activeLoads < MAX_CONCURRENT_LOADS) {
-        state.activeLoads++;
-        doLoad();
-      } else {
-        state.pendingQueue.push(() => doLoad());
-      }
+      state.pendingQueue.push(doLoad);
+      processQueue();
     });
   }
 
@@ -307,6 +304,7 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
       images: Array<{ file: File; name: string }>,
       onProgress?: (progress: number) => void
     ): Promise<void> {
+      const generation = state.cacheGeneration;
       await prefetchAsyncImages({
         images,
         onProgress,
@@ -317,6 +315,7 @@ export function createImageCache<T>(config: ImageCacheConfig<T>) {
           state.bulkMode = bulkMode;
         },
         maxConcurrentLoads: MAX_CONCURRENT_LOADS,
+        isCurrent: () => generation === state.cacheGeneration,
       });
     },
 

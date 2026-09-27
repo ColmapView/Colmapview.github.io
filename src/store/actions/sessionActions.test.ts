@@ -2,11 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { confirmReload, hasUnsavedReloadState } from './sessionActions';
 import { useTransformStore } from '../stores/transformStore';
 import { useDeletionStore } from '../stores/deletionStore';
+import { useReconstructionStore } from '../reconstructionStore';
+import { applyDeletionsToData } from './deletionActions';
+import { buildImage, buildReconstruction } from '../../test/builders';
 
 describe('reload confirmation gating', () => {
   let confirmSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
     useTransformStore.setState(useTransformStore.getInitialState(), true);
     useDeletionStore.getState().clearPendingDeletions();
     confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -67,5 +71,29 @@ describe('reload confirmation gating', () => {
     confirmSpy.mockReturnValueOnce(false);
     await expect(confirmReload()).resolves.toBe(false);
     expect(confirmSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('warns after a deletion is applied, until another dataset is loaded', async () => {
+    const reconstruction = buildReconstruction({
+      images: [buildImage({ imageId: 1 }), buildImage({ imageId: 2 })],
+    });
+    useReconstructionStore.getState().setReconstruction(reconstruction);
+    useDeletionStore.getState().markForDeletion(1);
+    expect(await applyDeletionsToData()).toBe(true);
+    expect(useDeletionStore.getState().pendingDeletions.size).toBe(0);
+    expect(useReconstructionStore.getState().reconstruction?.images.has(1)).toBe(false);
+    expect(hasUnsavedReloadState()).toBe(true);
+    confirmSpy.mockReturnValue(false);
+    await expect(confirmReload()).resolves.toBe(false);
+
+    useReconstructionStore.getState().setReconstruction(reconstruction);
+    expect(hasUnsavedReloadState()).toBe(false);
+  });
+
+  it('clears committed edit tracking on session clear', () => {
+    useReconstructionStore.getState().setReconstruction(buildReconstruction(), { edited: true });
+    expect(hasUnsavedReloadState()).toBe(true);
+    useReconstructionStore.getState().clear();
+    expect(hasUnsavedReloadState()).toBe(false);
   });
 });

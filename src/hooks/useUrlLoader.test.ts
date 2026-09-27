@@ -1,4 +1,4 @@
-import { act, cleanup, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useReconstructionStore } from '../store';
 import type { LoadedFiles } from '../types/colmap';
@@ -46,8 +46,85 @@ describe('useUrlLoader', () => {
 
   afterEach(() => {
     cleanup();
+    useReconstructionStore.getState().clear();
     vi.unstubAllGlobals();
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+  });
+
+  it.each(['complete', 'fail'] as const)('ignores a cleared download that later %ss while a new load is active', async (outcome) => {
+    const requests: Array<{
+      resolve: (response: Response) => void;
+      reject: (reason: unknown) => void;
+      signal: AbortSignal;
+    }> = [];
+    vi.stubGlobal('fetch', vi.fn((_url, init) => new Promise<Response>((resolve, reject) => {
+      requests.push({ resolve, reject, signal: init.signal });
+    })));
+    const logger = { error: vi.fn(), info: vi.fn() };
+    const { result } = renderHook(() => useUrlLoader({ logger }));
+    let first!: Promise<boolean>;
+    let second!: Promise<boolean>;
+    act(() => { first = result.current.loadFromUrl('https://example.com/old.spz'); });
+    act(() => { useReconstructionStore.getState().clear(); });
+    expect(requests[0].signal.aborted).toBe(true);
+    act(() => { second = result.current.loadFromUrl('https://example.com/new.spz'); });
+    const currentSignal = useReconstructionStore.getState().urlLoadController?.signal;
+    const cacheClears = clearAllCachesMock.mock.calls.length;
+
+    await act(async () => {
+      if (outcome === 'complete') requests[0].resolve(new Response('old splat'));
+      else requests[0].reject(new Error('late network failure'));
+      expect(await first).toBe(false);
+    });
+    expect(processFilesMock).not.toHaveBeenCalled();
+    expect(clearAllCachesMock).toHaveBeenCalledTimes(cacheClears);
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(useReconstructionStore.getState()).toMatchObject({
+      sourceUrl: null, urlLoading: true, urlLoadActive: true, urlError: null,
+    });
+    expect(useReconstructionStore.getState().urlLoadController?.signal).toBe(currentSignal);
+
+    processFilesMock.mockResolvedValueOnce();
+    await act(async () => {
+      requests[1].resolve(new Response('new splat'));
+      expect(await second).toBe(true);
+    });
+    expect(processFilesMock).toHaveBeenCalledOnce();
+    expect(useReconstructionStore.getState().sourceUrl).toBe('https://example.com/new.spz');
+  });
+
+  it.each(['url', 'inline'] as const)('aborts a %s manifest load before it can restore a cleared scene', async (source) => {
+    const pending: Array<{ signal: AbortSignal; resolve: (response: Response) => void }> = [];
+    vi.stubGlobal('fetch', vi.fn((_url, init) => new Promise<Response>((resolve) => {
+      pending.push({ signal: init.signal, resolve });
+    })));
+    const manifest = {
+      version: 1, baseUrl: 'https://example.com/scene',
+      files: { cameras: 'cameras.bin', images: 'images.bin', points3D: 'points3D.bin' },
+    };
+    const logger = { error: vi.fn(), info: vi.fn() };
+    const { result } = renderHook(() => useUrlLoader({ logger }));
+    let running!: Promise<boolean>;
+    act(() => {
+      running = source === 'url'
+        ? result.current.loadFromUrl('https://example.com/scene/manifest.json')
+        : result.current.loadFromManifest(manifest);
+    });
+    await waitFor(() => expect(pending.length).toBeGreaterThan(0));
+
+    act(() => { useReconstructionStore.getState().clear(); });
+    pending.forEach(({ signal }) => expect(signal.aborted).toBe(true));
+    await act(async () => {
+      pending.forEach(({ resolve }) => resolve(new Response(JSON.stringify(manifest))));
+      expect(await running).toBe(false);
+    });
+
+    expect(processFilesMock).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(useReconstructionStore.getState()).toMatchObject({
+      sourceUrl: null, sourceManifest: null, urlProgress: null,
+      urlLoading: false, urlLoadActive: false, urlError: null,
+    });
   });
 
   it('keeps URL loading active after a direct splat URL hands off to the renderer', async () => {

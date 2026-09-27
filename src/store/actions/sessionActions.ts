@@ -17,13 +17,10 @@ import { isIdentityEuler } from '../../utils/sim3dTransforms.js';
 import { requestConfirmation } from '../../utils/confirmation.js';
 
 /**
- * Returns true if a reload would discard in-memory edits the user made
- * (active transform or pending deletions). Camera conversions are already
- * persisted into the reconstruction Map and can't be cheaply detected, so
- * they're not factored in here — callers should treat this as a best-effort
- * early-skip for the confirm prompt.
+ * Reloading discards both pending changes and committed in-memory edits.
  */
 export function hasUnsavedReloadState(): boolean {
+  if (useReconstructionStore.getState().reconstructionEditRevision > 0) return true;
   const { transform, splatTransform } = useTransformStore.getState();
   if (!isIdentityEuler(transform)) return true;
   if (!isIdentityEuler(splatTransform)) return true;
@@ -40,7 +37,7 @@ export async function confirmReload(): Promise<boolean> {
   if (!hasUnsavedReloadState()) return true;
   return requestConfirmation({
     title: 'Reload data?',
-    message: 'Reloading will discard current/applied transforms and any pending deletions.',
+    message: 'Reloading will discard transforms, camera conversions, and pending or applied image deletions.',
     confirmLabel: 'Reload',
     tone: 'danger',
   });

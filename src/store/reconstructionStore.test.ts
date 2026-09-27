@@ -67,20 +67,25 @@ describe('reconstruction store URL load lifecycle', () => {
   it('serializes URL loads independently from the visible loading indicator', () => {
     useReconstructionStore.setState({ urlLoading: true });
 
-    expect(useReconstructionStore.getState().tryStartUrlLoad()).toBe(true);
-    expect(useReconstructionStore.getState().tryStartUrlLoad()).toBe(false);
+    const signal = useReconstructionStore.getState().tryStartUrlLoad();
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(useReconstructionStore.getState().tryStartUrlLoad()).toBeNull();
 
-    useReconstructionStore.getState().finishUrlLoad();
+    useReconstructionStore.getState().finishUrlLoad(signal!);
 
-    expect(useReconstructionStore.getState().tryStartUrlLoad()).toBe(true);
+    expect(useReconstructionStore.getState().tryStartUrlLoad()).toBeInstanceOf(AbortSignal);
   });
 
   it('clears active URL load state when the reconstruction is cleared', () => {
-    expect(useReconstructionStore.getState().tryStartUrlLoad()).toBe(true);
+    const signal = useReconstructionStore.getState().tryStartUrlLoad();
 
     useReconstructionStore.getState().clear();
 
-    expect(useReconstructionStore.getState().tryStartUrlLoad()).toBe(true);
+    expect(signal?.aborted).toBe(true);
+    const nextSignal = useReconstructionStore.getState().tryStartUrlLoad();
+    useReconstructionStore.getState().finishUrlLoad(signal!);
+    expect(useReconstructionStore.getState().urlLoadController?.signal).toBe(nextSignal);
+    expect(useReconstructionStore.getState().urlLoadActive).toBe(true);
   });
 
   it('uses a black default background when a splat file starts loading', () => {
@@ -473,14 +478,18 @@ describe('reconstruction store lazy splat source switching', () => {
 
   // Registers a controllable fetch per URL so tests can resolve/reject lazy
   // splat downloads out of order.
-  function stubDeferredFetch(): Map<string, { resolve: (r: Response) => void; reject: (e: unknown) => void }> {
-    const deferreds = new Map<string, { resolve: (r: Response) => void; reject: (e: unknown) => void }>();
+  function stubDeferredFetch() {
+    const deferreds = new Map<string, {
+      resolve: (r: Response) => void;
+      reject: (e: unknown) => void;
+      signal: AbortSignal | null | undefined;
+    }>();
     vi.stubGlobal(
       'fetch',
       vi.fn(
-        (url: string) =>
+        (url: string, init?: RequestInit) =>
           new Promise<Response>((resolve, reject) => {
-            deferreds.set(url, { resolve, reject });
+            deferreds.set(url, { resolve, reject, signal: init?.signal });
           })
       )
     );
@@ -508,6 +517,9 @@ describe('reconstruction store lazy splat source switching', () => {
     const pB = useReconstructionStore.getState().selectSplatSource('splats/b.ply');
     const pC = useReconstructionStore.getState().selectSplatSource('splats/c.ply');
 
+    expect(deferreds.get('https://x/splats/b.ply')?.signal?.aborted).toBe(true);
+    expect(deferreds.get('https://x/splats/c.ply')?.signal?.aborted).toBe(false);
+
     // C resolves first and wins; B resolves later and must be ignored.
     deferreds.get('https://x/splats/c.ply')!.resolve(new Response(new Blob(['c']), { status: 200 }));
     await pC;
@@ -516,6 +528,49 @@ describe('reconstruction store lazy splat source switching', () => {
 
     expect(useReconstructionStore.getState().loadedFiles?.splatFile?.name).toBe('c.ply');
     expect(useReconstructionStore.getState().requestedSplatSourceId).toBe('splats/c.ply');
+  });
+
+  it.each(['clear', 'replace', 'URL load', 'local', 'COLMAP only'])('cancels a pending tile on %s and ignores its late result', async (action) => {
+    const deferreds = stubDeferredFetch();
+    threeLazySources();
+    const pending = useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+    const request = deferreds.get('https://x/splats/b.ply')!;
+
+    if (action === 'clear') useReconstructionStore.getState().clear();
+    else if (action === 'replace') useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({}));
+    else if (action === 'URL load') {
+      useReconstructionStore.getState().tryStartUrlLoad();
+      useReconstructionStore.getState().setUrlProgress({ percent: 0, message: 'Loading another dataset...' });
+    }
+    else await useReconstructionStore.getState().selectSplatSource(action === 'local' ? 'splats/a.ply' : '');
+    const expectedState = useReconstructionStore.getState();
+
+    // The stub deliberately ignores cancellation to exercise the stale-result guard too.
+    request.resolve(new Response(new Uint8Array([1, 2, 3]), { status: 200 }));
+    await pending;
+
+    expect(request.signal?.aborted).toBe(true);
+    expect(useReconstructionStore.getState().loadedFiles).toBe(expectedState.loadedFiles);
+    expect(useReconstructionStore.getState().urlError).toBeNull();
+    expect(useReconstructionStore.getState().urlProgress).toBe(expectedState.urlProgress);
+    if (expectedState.urlLoadController) {
+      expect(useReconstructionStore.getState().urlLoadController).toBe(expectedState.urlLoadController);
+      useReconstructionStore.getState().finishUrlLoad(expectedState.urlLoadController.signal);
+    }
+  });
+
+  it('leaves a pending tile alone when an unavailable source is selected', async () => {
+    const deferreds = stubDeferredFetch();
+    threeLazySources();
+    const pending = useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+    await useReconstructionStore.getState().selectSplatSource('missing');
+
+    const request = deferreds.get('https://x/splats/b.ply')!;
+    request.resolve(new Response(new Uint8Array([1, 2, 3]), { status: 200 }));
+    await pending;
+
+    expect(request.signal?.aborted).toBe(false);
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile?.name).toBe('b.ply');
   });
 
   it('latest-wins: a superseded fetch failure does not clobber the winner', async () => {
@@ -800,7 +855,7 @@ describe('reconstruction store byte-less oversized splat activation', () => {
     // Supersede in exactly the window the post-import re-check guards: the bytes
     // are downloaded and the dynamic gaussianCloudLoader import has resolved, but
     // the worker decode has NOT been invoked yet. A COLMAP-only switch is the
-    // cheapest superseding selection; it bumps the request id synchronously.
+    // cheapest superseding selection; it aborts the request synchronously.
     onByteLessDecodeSymbolRead.current = () => {
       onByteLessDecodeSymbolRead.current = null; // fire once
       void useReconstructionStore.getState().selectSplatSource('');
@@ -837,6 +892,29 @@ describe('reconstruction store byte-less oversized splat activation', () => {
     expect(progressAtDecode?.message).toBe('Decoding splat...');
     expect(progressAtDecode?.currentFile).toBe('big.ply');
     expect(progressAtDecode?.percent).toBeLessThan(100);
+  });
+
+  it.each(['clear', 'replace'])('ignores an already-running decode after dataset %s', async (action) => {
+    armTouchWebGpu();
+    stubSplatBytesFetch();
+    let finishDecode!: (result: ReturnType<typeof decodedResult>) => void;
+    loadGaussianCloudFromBytesMock.mockImplementation(() => new Promise((resolve) => {
+      finishDecode = resolve;
+    }));
+    loadOversizedLazySource();
+    const pending = useReconstructionStore.getState().selectSplatSource('splats/big.ply');
+    await vi.waitFor(() => expect(loadGaussianCloudFromBytesMock).toHaveBeenCalledOnce());
+
+    if (action === 'clear') useReconstructionStore.getState().clear();
+    else useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({}));
+    const expectedState = useReconstructionStore.getState();
+    finishDecode(decodedResult());
+    await pending;
+
+    expect(useReconstructionStore.getState().loadedFiles).toBe(expectedState.loadedFiles);
+    expect(useReconstructionStore.getState().requestedSplatSourceId).toBeNull();
+    expect(useReconstructionStore.getState().urlProgress).toBe(expectedState.urlProgress);
+    expect(useReconstructionStore.getState().urlError).toBeNull();
   });
 
   it('keeps the byte-retaining path on desktop for oversized remote splats', async () => {
@@ -979,6 +1057,7 @@ describe('reconstruction store byte-less oversized splat activation', () => {
 
     state = useReconstructionStore.getState();
     expect(state.loadedFiles?.splatFile?.name).toBe('big.ply');
+    expect(state.urlError).toBeNull();
     const seeded = await loadGaussianCloudFromFile(state.loadedFiles!.splatFile!);
     expect(seeded.cloud).toBe(decodedCloud);
   });

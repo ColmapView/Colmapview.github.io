@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DatasetManager } from '../../dataset';
+import type { DatasetAccessOptions } from '../../dataset/types';
 import { buildFile, buildImage, buildReconstruction } from '../../test/builders';
 import { useImageDetailFiles } from './useImageDetailFiles';
 
@@ -8,6 +9,53 @@ vi.mock('../../hooks/useFileUrl', () => ({ useFileUrl: (file: File | null) => fi
 afterEach(() => vi.clearAllMocks());
 
 describe('image detail File ownership', () => {
+  it('retries failed panes independently without treating an absent mask as an error', async () => {
+    const image = buildImage({ imageId: 1, name: 'a.jpg' });
+    const matchedImage = buildImage({ imageId: 2, name: 'b.jpg' });
+    let failImage = true;
+    const getImage = vi.fn(async (name: string, options?: DatasetAccessOptions) => {
+      if (name === 'a.jpg' && failImage) {
+        options?.onError?.({ kind: 'http', status: 503, message: 'Unavailable' });
+        return null;
+      }
+      return buildFile(name);
+    });
+    const getMask = vi.fn(async () => null);
+    const dataset = { hasImages: () => true, hasMasks: () => true, getImageSync: () => undefined, getMaskSync: () => undefined, getImage, getMask } as unknown as DatasetManager;
+    const props = { dataset, reconstruction: buildReconstruction(), imageDetailId: 1, matchedImageId: 2, image, matchedImage };
+    const { result } = renderHook(useImageDetailFiles, { initialProps: props });
+    await waitFor(() => expect(result.current.imageFailed).toBe(true));
+    expect(result.current.maskFailed).toBe(false);
+    expect(result.current.matchedImageSrc).toBe('blob:b.jpg');
+    expect(getImage).toHaveBeenCalledTimes(2);
+    failImage = false;
+    await act(async () => result.current.retryImage());
+    await waitFor(() => expect(result.current.imageSrc).toBe('blob:a.jpg'));
+    expect(result.current.imageFailed).toBe(false);
+    expect(getImage.mock.calls.map(([name]) => name)).toEqual(['a.jpg', 'b.jpg', 'a.jpg']);
+    expect(getMask).toHaveBeenCalledOnce();
+  });
+
+  it('does not carry a failed request into a different image', async () => {
+    const first = buildImage({ imageId: 1, name: 'a.jpg' });
+    const second = buildImage({ imageId: 2, name: 'b.jpg' });
+    let oldAccess: DatasetAccessOptions | undefined;
+    const getImage = vi.fn(async (name: string, options?: DatasetAccessOptions) => {
+      if (name === 'a.jpg') { oldAccess = options; options?.onError?.({ kind: 'network', message: 'Offline' }); return null; }
+      return buildFile(name);
+    });
+    const dataset = { hasImages: () => true, hasMasks: () => false, getImageSync: () => undefined, getMaskSync: () => undefined, getImage, getMask: async () => null } as unknown as DatasetManager;
+    const props = { dataset, reconstruction: buildReconstruction(), imageDetailId: 1, matchedImageId: null, image: first, matchedImage: null };
+    const { result, rerender } = renderHook(useImageDetailFiles, { initialProps: props });
+    await waitFor(() => expect(result.current.imageFailed).toBe(true));
+    rerender({ ...props, imageDetailId: 2, image: second });
+    expect(result.current.imageFailed).toBe(false);
+    oldAccess?.onError?.({ kind: 'network', message: 'Late error' });
+    await waitFor(() => expect(result.current.imageSrc).toBe('blob:b.jpg'));
+    expect(result.current.imageFailed).toBe(false);
+    expect(oldAccess?.signal?.aborted).toBe(true);
+  });
+
   it('retains cached primary A while matched B evicts it, then releases only the changed pane', async () => {
     const a = buildImage({ imageId: 1, name: 'a.jpg' });
     const b = buildImage({ imageId: 2, name: 'b.jpg' });

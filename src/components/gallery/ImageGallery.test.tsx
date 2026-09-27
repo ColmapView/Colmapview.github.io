@@ -128,6 +128,7 @@ function createVirtualizer() {
 }
 
 beforeEach(() => {
+  useImageGalleryVisibleImageFetchMock.mockReturnValue({ failedCount: 0, retry: vi.fn() });
   useImageGalleryViewModelMock.mockReturnValue(createImageGalleryViewModel());
   useImageGalleryScrollSettleMock.mockReturnValue(false);
   useImageGalleryVirtualizersMock.mockReturnValue({
@@ -142,6 +143,15 @@ afterEach(() => {
 });
 
 describe('ImageGallery', () => {
+  it('offers Retry for failed visible files', () => {
+    const retry = vi.fn();
+    useImageGalleryVisibleImageFetchMock.mockReturnValue({ failedCount: 2, retry });
+    render(<ImageGallery />);
+    expect(screen.getByRole('alert')).toHaveTextContent('2 files could not be loaded.');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry loading gallery images and masks' }));
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
   it('shows the desktop toolbar only while the pointer is on the top gallery strip', () => {
     render(<ImageGallery />);
 

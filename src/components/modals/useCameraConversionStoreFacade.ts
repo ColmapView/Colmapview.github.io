@@ -32,11 +32,11 @@ export function useCameraConversionStoreFacade(): CameraConversionStoreFacade {
     actions: {
       setReconstruction: (nextReconstruction) => {
         const source = useReconstructionStore.getState().wasmReconstruction;
-        if (!isReconstructionSnapshot(source)) return setReconstruction(nextReconstruction);
+        if (!isReconstructionSnapshot(source)) return setReconstruction(nextReconstruction, { edited: true });
         return source.updateCameras(nextReconstruction.cameras).then(snapshot => {
           if (useReconstructionStore.getState().wasmReconstruction !== source) return false;
           useReconstructionStore.getState().setWasmReconstruction(snapshot);
-          setReconstruction(snapshot.reconstruction);
+          setReconstruction(snapshot.reconstruction, { edited: true });
           return true;
         }).catch(error => {
           if (useReconstructionStore.getState().wasmReconstruction === source) {

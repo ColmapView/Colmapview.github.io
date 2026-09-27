@@ -147,4 +147,32 @@ describe('async image cache prefetch', () => {
     }
     await prefetchPromise;
   });
+
+  it('stops obsolete batches without progress or changing a newer prefetch mode', async () => {
+    let current = true;
+    const resolvers: Array<() => void> = [];
+    const queueLoad = vi.fn(() => new Promise<string | null>((resolve) => {
+      resolvers.push(() => resolve(null));
+    }));
+    const onProgress = vi.fn();
+    const setBulkMode = vi.fn();
+    const pending = prefetchAsyncImages({
+      images: Array.from({ length: 5 }, (_, i) => createPrefetchItem(`image-${i}`)),
+      onProgress,
+      cache: new Map<string, string>(),
+      loadingPromises: new Map(),
+      queueLoad,
+      setBulkMode,
+      maxConcurrentLoads: 1,
+      isCurrent: () => current,
+    });
+
+    current = false;
+    for (const resolve of resolvers) resolve();
+    await pending;
+
+    expect(queueLoad).toHaveBeenCalledTimes(4);
+    expect(onProgress).not.toHaveBeenCalled();
+    expect(setBulkMode.mock.calls).toEqual([[true]]);
+  });
 });

@@ -1,9 +1,53 @@
 import { test, expect } from './fixtures/test-fixtures';
 import { loadTestDataset } from './fixtures/load-test-data';
 import { readFileSync } from 'node:fs';
+import { unzipSync } from 'fflate';
 
 test.describe('Mask Export', () => {
   test.setTimeout(60000);
+
+  for (const media of ['Images', 'Masks'] as const) {
+    test(`should download available ${media.toLowerCase()} and report a partial export`, async ({ page }) => {
+      await page.goto('/');
+      const closeButton = page.getByRole('button', { name: 'Dismiss this panel', exact: true });
+      if (await closeButton.isVisible()) await closeButton.click();
+
+      const pngBytes = readFileSync(new URL('./fixtures/test-data/masks/photo.jpg.png', import.meta.url));
+      await loadTestDataset(page, media === 'Images' ? [{
+        relativePath: 'images/photo.jpg',
+        name: 'photo.jpg',
+        base64: await page.evaluate(() => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 4;
+          canvas.height = 3;
+          return canvas.toDataURL('image/png').split(',')[1];
+        }),
+      }] : []);
+      await expect(page.locator('text=Source:')).toBeVisible({ timeout: 45000 });
+
+      const exportButton = page.locator('button[aria-label*="Export" i], button[data-tooltip*="Export" i]').first();
+      await expect(exportButton).toBeEnabled();
+      await exportButton.hover();
+      const downloadButton = page.getByRole('button', { name: `Download ${media}`, exact: true });
+      await expect(downloadButton).toBeVisible();
+
+      const downloadPromise = page.waitForEvent('download');
+      await downloadButton.click();
+      const download = await downloadPromise;
+      expect(download.suggestedFilename()).toBe(`${media.toLowerCase()}.zip`);
+      await expect(page.getByText(`Exported 1 of 2 ${media.toLowerCase()}; 1 could not be exported.`, { exact: true }))
+        .toBeVisible();
+
+      const entries = unzipSync(readFileSync((await download.path())!));
+      if (media === 'Images') {
+        expect(Object.keys(entries)).toEqual(['images/photo.jpg']);
+        expect(Array.from(entries['images/photo.jpg'].slice(0, 2))).toEqual([0xff, 0xd8]);
+      } else {
+        expect(Object.keys(entries)).toEqual(['masks/photo.jpg.png']);
+        expect(Buffer.from(entries['masks/photo.jpg.png'])).toEqual(pngBytes);
+      }
+    });
+  }
 
   test('should show Masks section in Export panel when dataset has masks', async ({ page }) => {
     await page.goto('/');

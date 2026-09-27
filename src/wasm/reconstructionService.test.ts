@@ -142,6 +142,26 @@ describe('reconstruction worker lifecycle', () => {
     expect(worker.terminate).toHaveBeenCalledOnce();
   });
 
+  it('cancels an export consumer without losing the model or a later export', async () => {
+    const worker = new FakeWorker();
+    const snapshot = await service(worker).load();
+    const controller = new AbortController();
+    const first = snapshot.export({ format: 'binary' }, controller.signal).catch(error => error);
+    const second = snapshot.export({ format: 'text' });
+    await vi.waitFor(() => expect(worker.requests.at(-1)?.operation).toBe('export'));
+    const oldRequest = worker.requests.at(-1)!;
+    controller.abort();
+    expect((await first).name).toBe('AbortError');
+    await vi.waitFor(() => expect(worker.requests.at(-1)?.payload).toEqual({ format: 'text' }));
+    const newRequest = worker.requests.at(-1)!;
+    const textFiles = { 'points3D.txt': new Uint8Array([42]) };
+    worker.result(oldRequest, { 'points3D.bin': new Uint8Array([7]) });
+    worker.result(newRequest, textFiles);
+    expect(await second).toEqual(textFiles);
+    expect(worker.terminate).not.toHaveBeenCalled();
+    expect(snapshot.getPositions()).toEqual(new Float32Array([1, 2, 3]));
+  });
+
   it('uses one compatible fallback after a crash and replays confirmed edits before exporting', async () => {
     const worker = new FakeWorker();
     const operations: string[] = [];

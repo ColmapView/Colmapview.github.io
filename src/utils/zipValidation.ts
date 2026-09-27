@@ -18,6 +18,7 @@ export interface ZipValidationOptions {
 }
 
 export interface ZipUrlValidationOptions extends ZipValidationOptions {
+  signal?: AbortSignal;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 }
@@ -29,6 +30,7 @@ export async function validateZipUrl(
   url: string,
   options: ZipUrlValidationOptions = {}
 ): Promise<ZipValidationResult> {
+  options.signal?.throwIfAborted();
   const fetchImpl = options.fetchImpl ?? fetch;
   const sizeLimit = options.sizeLimit ?? ARCHIVE_SIZE_LIMIT;
   const timeoutMs = options.timeoutMs ?? SIZE_CHECK_TIMEOUT;
@@ -38,7 +40,7 @@ export async function validateZipUrl(
   try {
     const response = await fetchImpl(url, {
       method: 'HEAD',
-      signal: controller.signal,
+      signal: options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal,
     });
 
     clearTimeout(timeoutId);
@@ -63,6 +65,7 @@ export async function validateZipUrl(
     return validateArchiveSize(size, sizeLimit);
   } catch (err) {
     clearTimeout(timeoutId);
+    options.signal?.throwIfAborted();
 
     if (err instanceof Error && err.name === 'AbortError') {
       return { valid: false, error: 'Size check timed out' };

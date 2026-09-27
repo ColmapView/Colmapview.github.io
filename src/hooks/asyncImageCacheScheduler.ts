@@ -29,6 +29,7 @@ export interface AsyncImageCacheSchedulerOptions<T> {
   state: AsyncImageCacheState<T>;
   maxSize: number;
   processCanvas: ProcessCanvas<T>;
+  dispose: (value: T) => void;
   idleTimeout: number;
   idleFallback: number;
   processPendingItem?: ProcessPendingItem<T>;
@@ -46,6 +47,7 @@ export function createAsyncImageCacheScheduler<T>({
   state,
   maxSize,
   processCanvas,
+  dispose,
   idleTimeout,
   idleFallback,
   processPendingItem = processAsyncImagePendingItem,
@@ -64,10 +66,11 @@ export function createAsyncImageCacheScheduler<T>({
       return;
     }
 
+    const generation = state.cacheGeneration;
     let processedCount = 0;
     const startedAt = now();
 
-    while (state.pendingItems.length > 0) {
+    while (state.pendingItems.length > 0 && generation === state.cacheGeneration) {
       if (!shouldProcessNextPendingItem({
         processedCount,
         maxItems,
@@ -86,9 +89,12 @@ export function createAsyncImageCacheScheduler<T>({
         cache: state.cache,
         maxSize,
         processCanvas,
+        dispose,
+        isCurrent: () => generation === state.cacheGeneration,
       });
     }
 
+    if (generation !== state.cacheGeneration) return;
     state.idleCallbackScheduled = false;
 
     if (state.pendingItems.length > 0) {
@@ -99,9 +105,11 @@ export function createAsyncImageCacheScheduler<T>({
   function scheduleIdleProcessing(): void {
     if (!shouldScheduleIdleProcessing(state.idleCallbackScheduled, state.paused)) return;
     state.idleCallbackScheduled = true;
+    const generation = state.cacheGeneration;
 
     if (state.bulkMode) {
       scheduleTimeout(() => {
+        if (generation !== state.cacheGeneration) return;
         processPendingItems(undefined, maxBulkItems);
       }, 0);
       return;
@@ -111,6 +119,7 @@ export function createAsyncImageCacheScheduler<T>({
 
     if (requestIdle) {
       requestIdle((deadline) => {
+        if (generation !== state.cacheGeneration) return;
         const logMessage = idleProcessingLogger.next(
           state.pendingItems.length,
           deadline?.timeRemaining(),
@@ -125,6 +134,7 @@ export function createAsyncImageCacheScheduler<T>({
     }
 
     scheduleTimeout(() => {
+      if (generation !== state.cacheGeneration) return;
       processPendingItems(undefined, maxIdleItems);
     }, idleFallback);
   }

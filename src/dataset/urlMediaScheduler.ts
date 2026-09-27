@@ -1,5 +1,6 @@
 import type { MediaPriority } from './types';
 import { MEDIA_PRIORITY_ORDER } from '../utils/imageFileRequestState';
+import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 
 export type MediaTransferOutcome =
   | { kind: 'success'; blob: Blob }
@@ -122,7 +123,7 @@ export class UrlMediaScheduler {
   private async run(job: Job) {
     let retry = false;
     try {
-      const response = await fetch(job.url, { signal: job.options.signal });
+      const response = await fetchWithTimeout(job.url, undefined, { signal: job.options.signal });
       if (response.status === 429) {
         const now = Date.now();
         const serverDeadline = retryAfterDeadline(response.headers?.get('Retry-After') ?? null, now);

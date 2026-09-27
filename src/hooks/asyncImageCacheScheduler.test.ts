@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildIdleDeadline, buildImageBitmap } from '../test/builders';
 import type { AsyncImageCachePendingItem } from './asyncImageCacheState';
-import { createAsyncImageCacheState } from './asyncImageCacheState';
+import { clearAsyncImageCacheState, createAsyncImageCacheState } from './asyncImageCacheState';
 import { createAsyncImageCacheScheduler } from './asyncImageCacheScheduler';
 
 function createPending<T>(
@@ -28,6 +28,7 @@ function createScheduler(overrides: Partial<Parameters<typeof createAsyncImageCa
       state,
       maxSize: 256,
       processCanvas: vi.fn(() => 'processed'),
+      dispose: vi.fn(),
       idleTimeout: 100,
       idleFallback: 16,
       processPendingItem,
@@ -37,6 +38,24 @@ function createScheduler(overrides: Partial<Parameters<typeof createAsyncImageCa
 }
 
 describe('async image cache scheduler', () => {
+  it('ignores an obsolete idle callback without disturbing the current scheduled work', () => {
+    const callbacks: IdleRequestCallback[] = [];
+    const { state, processPendingItem, scheduler } = createScheduler({
+      requestIdleCallback: (callback) => callbacks.push(callback),
+    });
+    state.pendingItems.push(createPending('old'));
+    scheduler.scheduleIdleProcessing();
+    clearAsyncImageCacheState(state, vi.fn());
+    state.pendingItems.push(createPending('current'));
+    scheduler.scheduleIdleProcessing();
+
+    callbacks[0](buildIdleDeadline());
+    expect(processPendingItem).not.toHaveBeenCalled();
+    expect(state.idleCallbackScheduled).toBe(true);
+    callbacks[1](buildIdleDeadline());
+    expect(processPendingItem).toHaveBeenCalledOnce();
+    expect(processPendingItem.mock.calls[0][0].cacheKey).toBe('current');
+  });
   it('does not process pending work while paused', () => {
     const { state, processPendingItem, scheduler } = createScheduler();
     state.paused = true;

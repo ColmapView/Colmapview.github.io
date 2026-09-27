@@ -332,6 +332,7 @@ test.describe('WebGPU PSNR isolation', () => {
     expect(result.viewerCameraState).toBe(3);
     expect(result.metric?.validPixelCount).toBe(64 * 64);
     expect(result.metric?.mse).toBeGreaterThan(0);
-    expect(result.mapReadBufferSizes).toEqual([16]);
+    // PSNR and SSIM share four 64-bit aggregate values, with no pixel readback.
+    expect(result.mapReadBufferSizes).toEqual([32]);
   });
 });

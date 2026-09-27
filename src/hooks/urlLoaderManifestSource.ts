@@ -26,6 +26,7 @@ type SetUrlProgress = (progress: UrlLoadProgress | null) => void;
 type Log = (...args: unknown[]) => void;
 
 export interface LoadManifestSourceDeps {
+  fetchImpl?: (url: string, init?: RequestInit) => Promise<Response>;
   fetchColmapFiles?: FetchColmapFiles;
   log?: Log;
   processFiles: ProcessFiles;
@@ -43,6 +44,7 @@ export async function loadManifestSource(
   const log = deps.log ?? appLogger.info;
   const fetchColmapFiles = deps.fetchColmapFiles
     ?? ((targetManifest: ColmapManifest) => fetchManifestColmapFiles(targetManifest, {
+      fetchImpl: deps.fetchImpl,
       log: (message) => log(message),
       setUrlProgress: deps.setUrlProgress,
       onRemoteSplatCatalog: deps.onRemoteSplatCatalog,

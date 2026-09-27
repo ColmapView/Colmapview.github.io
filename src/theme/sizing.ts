@@ -82,7 +82,7 @@ export const MODAL = {
 } as const;
 
 /**
- * Layout panel sizes for react-resizable-panels.
+ * Layout panel sizes for the gallery resize controls.
  * defaultSize is percentage, minSize is in pixels for reliable constraints.
  */
 export const LAYOUT_PANELS = {

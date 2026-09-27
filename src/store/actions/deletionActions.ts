@@ -84,7 +84,7 @@ function finishDeletions(reconstruction: Reconstruction, newReconstruction: Reco
   removeZipMaskCacheEntries(deletedImageNames);
 
   // Update reconstruction
-  reconstructionStore.setReconstruction(newReconstruction);
+  reconstructionStore.setReconstruction(newReconstruction, { edited: true });
 
   // Clear pending deletions
   // Preserve any new marks added while an asynchronous worker edit was running.

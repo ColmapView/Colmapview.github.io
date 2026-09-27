@@ -7,6 +7,8 @@ import {
   readBlobAsArrayBuffer,
 } from '../test/builders';
 import { __resetDownloadSchedulerForTests } from '../utils/download';
+import * as downloads from '../utils/download';
+import { compressZip } from './zipCompression';
 import {
   downloadReconstructionZipFromWriters,
   exportReconstructionZipFromWriters,
@@ -14,6 +16,12 @@ import {
   normalizeZipCompressionLevel,
   type ReconstructionZipFileWriters,
 } from './reconstructionZipExport';
+
+vi.mock('./zipCompression', async () => {
+  const { zipSync } = await import('fflate');
+  const { createZipBlob, normalizeZipCompressionLevel } = await import('./zipExportPolicy');
+  return { compressZip: vi.fn(async (files, options) => createZipBlob(zipSync(files, { level: normalizeZipCompressionLevel(options?.level) }))) };
+});
 
 const encoder = new TextEncoder();
 
@@ -32,6 +40,7 @@ function makeWriters(overrides: Partial<ReconstructionZipFileWriters> = {}): Rec
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
 describe('reconstruction ZIP helpers', () => {
@@ -47,6 +56,50 @@ describe('reconstruction ZIP helpers', () => {
 });
 
 describe('exportReconstructionZipFromWriters', () => {
+  it('hands owned copies to compression and preserves the requested compression level', async () => {
+    const source = new Uint8Array([9, 1, 2, 3, 9]);
+    const signal = new AbortController().signal;
+    const blob = await exportReconstructionZipFromWriters(
+      makeWriters({ writePoints3D: () => source.subarray(1, 4) }),
+      { format: 'binary', compressionLevel: 0, signal },
+    );
+    const [files, options] = vi.mocked(compressZip).mock.calls[0];
+    expect(options).toEqual({ level: 0, signal });
+    expect(files['sparse/0/points3D.bin'].buffer).not.toBe(source.buffer);
+    expect(source).toEqual(new Uint8Array([9, 1, 2, 3, 9]));
+    expect(unzipSync(new Uint8Array(await readBlobAsArrayBuffer(blob)))['sparse/0/points3D.bin']).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it('settles cancellation while reading an image and ignores its late bytes', async () => {
+    let finish!: (buffer: ArrayBuffer) => void;
+    const file = makeMockFile(new Uint8Array([1]), 'photo.jpg');
+    vi.spyOn(file, 'arrayBuffer').mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const controller = new AbortController();
+    const onProgress = vi.fn();
+    const download = vi.spyOn(downloads, 'downloadBlob');
+    const pending = downloadReconstructionZipFromWriters(
+      makeWriters(), { format: 'binary', includeImages: true, signal: controller.signal },
+      new Map([['photo.jpg', file]]), onProgress,
+    );
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    controller.abort();
+    await rejected;
+    finish(new ArrayBuffer(1));
+    await Promise.resolve();
+    expect(compressZip).not.toHaveBeenCalled();
+    expect(onProgress).not.toHaveBeenCalledWith(100, 'Done');
+    expect(download).not.toHaveBeenCalled();
+  });
+
+  it('prevents downloading when cancellation races with completed compression', async () => {
+    const controller = new AbortController();
+    const download = vi.spyOn(downloads, 'downloadBlob');
+    vi.mocked(compressZip).mockImplementationOnce(async () => { controller.abort(); return new Blob([]); });
+    await expect(downloadReconstructionZipFromWriters(makeWriters(), { format: 'binary', signal: controller.signal }))
+      .rejects.toMatchObject({ name: 'AbortError' });
+    expect(download).not.toHaveBeenCalled();
+  });
+
   it('writes text sparse entries and reports major progress steps', async () => {
     const onProgress = vi.fn();
 

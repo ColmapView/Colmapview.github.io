@@ -3,7 +3,7 @@ import type { ColmapManifest } from '../types/manifest';
 import { useFileDropzone } from './useFileDropzone';
 import { useReconstructionStore } from '../store';
 import { useNotificationStore } from '../store/stores/notificationStore';
-import { isManifestUrl } from '../utils/urlUtils';
+import { fetchWithTimeout, isManifestUrl } from '../utils/urlUtils';
 import { isArchiveUrl } from '../utils/zipLoader';
 import { clearAllCaches } from '../cache';
 import { appLogger, type AppLogger } from '../utils/logger';
@@ -28,9 +28,19 @@ export interface UseUrlLoaderDeps {
   logger?: Pick<AppLogger, 'error' | 'info'>;
 }
 
-/**
- * Hook for loading COLMAP reconstructions from URLs
- */
+type ReconstructionState = ReturnType<typeof useReconstructionStore.getState>;
+
+interface UrlLoadContext {
+  signal: AbortSignal;
+  assertCurrent: () => void;
+  fetchImpl: (url: string, init?: RequestInit) => Promise<Response>;
+  processFiles: ReturnType<typeof useFileDropzone>['processFiles'];
+  setSourceInfo: ReconstructionState['setSourceInfo'];
+  setUrlProgress: ReconstructionState['setUrlProgress'];
+  clearCachesOnFailure: boolean;
+}
+
+/** Owns URL discovery, downloading, and the handoff to reconstruction parsing. */
 export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
   const { processFiles } = useFileDropzone();
   const logError = logger.error;
@@ -38,8 +48,6 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
   const setError = useReconstructionStore((s) => s.setError);
   const setSourceInfo = useReconstructionStore((s) => s.setSourceInfo);
   const mergeRemoteSplatCatalog = useReconstructionStore((s) => s.mergeRemoteSplatCatalog);
-
-  // Use store state for URL loading (shared across components)
   const urlLoading = useReconstructionStore((s) => s.urlLoading);
   const urlProgress = useReconstructionStore((s) => s.urlProgress);
   const urlError = useReconstructionStore((s) => s.urlError);
@@ -48,238 +56,135 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
   const setUrlError = useReconstructionStore((s) => s.setUrlError);
   const tryStartUrlLoad = useReconstructionStore((s) => s.tryStartUrlLoad);
   const finishUrlLoad = useReconstructionStore((s) => s.finishUrlLoad);
-  const shouldKeepUrlLoadingForSplatRenderer = useCallback(() => {
-    const state = useReconstructionStore.getState();
-    return isSplatLoadingProgressForFile(state.urlProgress, state.loadedFiles?.splatFile);
-  }, []);
 
-  /**
-   * Fetch and validate the manifest file
-   */
-  const fetchManifest = useCallback(async (manifestUrl: string): Promise<ColmapManifest> => {
-    return fetchUrlManifest(manifestUrl, { setUrlProgress });
-  }, [setUrlProgress]);
-
-  /**
-   * Load reconstruction from a ZIP URL.
-   * Downloads the ZIP, extracts COLMAP files, and sets up lazy image extraction.
-   * Note: Caller (loadFromUrl) is responsible for clearing caches before calling this.
-   */
-  const loadFromZipUrl = useCallback(async (url: string): Promise<boolean> => {
-    return loadZipUrlSource(url, {
-      log: logInfo,
-      processFiles,
-      setSourceInfo,
-      setUrlProgress,
-    });
-  }, [logInfo, processFiles, setSourceInfo, setUrlProgress]);
-
-  const loadFromSplatUrl = useCallback(async (
-    url: string,
-    options: { onSplatFileFetched?: (file: File) => void } = {}
+  const runLoad = useCallback(async (
+    contextUrl: string,
+    work: (load: UrlLoadContext) => Promise<boolean>
   ): Promise<boolean> => {
-    return loadSplatUrlSource(url, {
-      log: logInfo,
-      onSplatFileFetched: options.onSplatFileFetched,
-      processFiles,
-      setSourceInfo,
-      setUrlProgress,
-    });
-  }, [logInfo, processFiles, setSourceInfo, setUrlProgress]);
-
-  /**
-   * Main entry point: load reconstruction from URL
-   * Accepts either:
-   * - A ZIP file URL (ends with .zip)
-   * - A splat file URL (ends with .spz or .ply)
-   * - A manifest JSON URL (ends with .json)
-   * - A direct base URL (assumes standard COLMAP directory structure)
-   */
-  const loadFromUrl = useCallback(async (url: string): Promise<boolean> => {
-    if (!tryStartUrlLoad()) {
+    const signal = tryStartUrlLoad();
+    if (!signal) {
       logInfo(URL_LOAD_GUARD_MESSAGE);
       return false;
     }
-
+    const isCurrent = () => !signal.aborted
+      && useReconstructionStore.getState().urlLoadController?.signal === signal;
+    const assertCurrent = () => {
+      if (!isCurrent()) throw new DOMException('Dataset load cancelled', 'AbortError');
+    };
+    // Guard every state publication, including callbacks from parallel downloads.
+    const guard = <Args extends unknown[], Result>(callback: (...args: Args) => Result) =>
+      (...args: Args): Result => {
+        assertCurrent();
+        return callback(...args);
+      };
+    const load: UrlLoadContext = {
+      signal,
+      assertCurrent,
+      fetchImpl: guard((url, init) => fetchWithTimeout(url, undefined, { ...init, signal })),
+      processFiles: guard(processFiles),
+      setSourceInfo: guard(setSourceInfo),
+      setUrlProgress: guard(setUrlProgress),
+      clearCachesOnFailure: true,
+    };
     setUrlLoading(true);
     setUrlError(null);
     setUrlProgress({ percent: 0, message: 'Starting...' });
 
+    try {
+      const loaded = await work(load);
+      assertCurrent();
+      return loaded;
+    } catch (error) {
+      if (isCurrent()) {
+        handleUrlLoadFailure(error, {
+          clearCaches: load.clearCachesOnFailure ? clearAllCaches : () => undefined,
+          contextUrl,
+          errorLog: logError,
+          setError,
+          setUrlError,
+        });
+      }
+      return false;
+    } finally {
+      // An old task must not finish a newer task's guard or loading indicator.
+      if (isCurrent()) {
+        finishUrlLoad(signal);
+        const state = useReconstructionStore.getState();
+        if (!isSplatLoadingProgressForFile(state.urlProgress, state.loadedFiles?.splatFile)) {
+          setUrlLoading(false);
+        }
+      }
+    }
+  }, [tryStartUrlLoad, logInfo, processFiles, setSourceInfo, setUrlProgress, setUrlLoading,
+    setUrlError, logError, setError, finishUrlLoad]);
+
+  const loadFromUrl = useCallback((url: string): Promise<boolean> => runLoad(url, async (load) => {
     const normalized = normalizeLoadUrl(url);
     const normalizedUrl = normalized.url;
-    for (const step of normalized.steps) {
-      logInfo(getUrlNormalizationLogMessage(step));
-    }
+    for (const step of normalized.steps) logInfo(getUrlNormalizationLogMessage(step));
 
-    let clearCachesOnFailure = true;
-    try {
-      if (isSplatUrl(normalizedUrl)) {
-        clearCachesOnFailure = false;
-        return await loadFromSplatUrl(normalizedUrl, {
-          onSplatFileFetched: () => {
-            clearAllCaches();
-            clearCachesOnFailure = true;
-          },
-        });
-      }
-
-      // Clear any previous ZIP/URL cache state before loading new data
-      // This ensures clean state regardless of previous load type
-      clearAllCaches();
-
-      // Check if URL points to a ZIP file
-      if (isArchiveUrl(normalizedUrl)) {
-        logInfo(getArchiveUrlDetectedLogMessage(normalizedUrl));
-        return await loadFromZipUrl(normalizedUrl);
-      }
-
-      // Determine if URL is a manifest or direct base URL
-      let manifest: ColmapManifest;
-
-      if (isManifestUrl(normalizedUrl)) {
-        // Fetch and validate manifest JSON
-        manifest = await fetchManifest(normalizedUrl);
-        logInfo(getManifestLoadedLogMessage(manifest));
-      } else {
-        // Treat as direct base URL. Start from the conventional sparse/0 layout,
-        // then let remote discovery rewrite the COLMAP paths to wherever the bins
-        // actually live (e.g. a colmap/ folder on HuggingFace).
-        manifest = createDefaultManifest(normalizedUrl);
-        manifest = await withDiscoveredColmapPaths(manifest, {
-          log: logInfo,
-          onLargeDatasetWarning: (message) =>
-            useNotificationStore.getState().addNotification('warning', message, 8000),
-        });
-        logInfo(getDefaultUrlManifestLogMessage(normalizedUrl));
-      }
-
-      const catalogHolder: { value: { path: string; size: number; splatCount: number | null }[] } = { value: [] };
-      const loaded = await loadManifestSource(manifest, { type: 'url', sourceUrl: normalizedUrl }, {
+    if (isSplatUrl(normalizedUrl)) {
+      load.clearCachesOnFailure = false;
+      return loadSplatUrlSource(normalizedUrl, {
+        ...load,
         log: logInfo,
-        processFiles,
-        setSourceInfo,
-        setUrlProgress,
-        onRemoteSplatCatalog: (catalog) => {
-          catalogHolder.value = catalog.map((candidate) => ({
-            path: candidate.path,
-            size: candidate.size,
-            splatCount: candidate.splatCount ?? null,
-          }));
+        onSplatFileFetched: () => {
+          load.assertCurrent();
+          clearAllCaches();
+          load.clearCachesOnFailure = true;
         },
       });
-      // List discovered tiles as lazy, on-demand sources whenever none was
-      // eager-loaded (multiple candidates, or a lone one over the auto-load
-      // budget); selecting one fetches it on demand.
-      const splatEagerLoaded = Boolean(useReconstructionStore.getState().loadedFiles?.splatFile);
-      if (loaded && catalogHolder.value.length > 0 && !splatEagerLoaded) {
-        mergeRemoteSplatCatalog(catalogHolder.value, manifest.baseUrl);
-      }
-      return loaded;
-    } catch (err) {
-      handleUrlLoadFailure(err, {
-        clearCaches: clearCachesOnFailure ? clearAllCaches : () => undefined,
-        contextUrl: normalizedUrl,
-        errorLog: logError,
-        setError,
-        setUrlError,
-      });
-      return false;
-    } finally {
-      finishUrlLoad();
-      if (!shouldKeepUrlLoadingForSplatRenderer()) {
-        setUrlLoading(false);
-      }
-    }
-  }, [
-    fetchManifest,
-    finishUrlLoad,
-    loadFromZipUrl,
-    loadFromSplatUrl,
-    logError,
-    logInfo,
-    mergeRemoteSplatCatalog,
-    processFiles,
-    setError,
-    shouldKeepUrlLoadingForSplatRenderer,
-    setSourceInfo,
-    setUrlError,
-    setUrlLoading,
-    setUrlProgress,
-    tryStartUrlLoad,
-  ]);
-
-  /**
-   * Load reconstruction from a pre-parsed manifest object.
-   * Used when loading from a local manifest.json file or from an inline manifest in the URL.
-   * Sets sourceType to 'manifest' to enable Share/Embed buttons with inline manifest embedding.
-   * @param manifest The manifest object to load
-   */
-  const loadFromManifest = useCallback(async (manifest: ColmapManifest): Promise<boolean> => {
-    if (!tryStartUrlLoad()) {
-      logInfo(URL_LOAD_GUARD_MESSAGE);
-      return false;
     }
 
-    setUrlLoading(true);
-    setUrlError(null);
-    setUrlProgress({ percent: 0, message: 'Starting...' });
+    clearAllCaches();
+    if (isArchiveUrl(normalizedUrl)) {
+      logInfo(getArchiveUrlDetectedLogMessage(normalizedUrl));
+      return loadZipUrlSource(normalizedUrl, { ...load, log: logInfo });
+    }
 
-    try {
-      // Clear any previous ZIP cache state before loading manifest data
-      clearAllCaches();
-
-      logInfo(getInlineManifestLoadLogMessage(manifest));
-
-      return await loadManifestSource(manifest, { type: 'manifest' }, {
+    let manifest: ColmapManifest;
+    if (isManifestUrl(normalizedUrl)) {
+      manifest = await fetchUrlManifest(normalizedUrl, load);
+      logInfo(getManifestLoadedLogMessage(manifest));
+    } else {
+      manifest = await withDiscoveredColmapPaths(createDefaultManifest(normalizedUrl), {
+        fetchImpl: load.fetchImpl,
         log: logInfo,
-        processFiles,
-        setSourceInfo,
-        setUrlProgress,
+        onLargeDatasetWarning: (message) => {
+          load.assertCurrent();
+          useNotificationStore.getState().addNotification('warning', message, 8000);
+        },
       });
-    } catch (err) {
-      handleUrlLoadFailure(err, {
-        clearCaches: clearAllCaches,
-        contextUrl: manifest.baseUrl,
-        errorLog: logError,
-        setError,
-        setUrlError,
-      });
-      return false;
-    } finally {
-      finishUrlLoad();
-      if (!shouldKeepUrlLoadingForSplatRenderer()) {
-        setUrlLoading(false);
-      }
+      logInfo(getDefaultUrlManifestLogMessage(normalizedUrl));
     }
-  }, [
-    finishUrlLoad,
-    logError,
-    logInfo,
-    processFiles,
-    setError,
-    shouldKeepUrlLoadingForSplatRenderer,
-    setSourceInfo,
-    setUrlError,
-    setUrlLoading,
-    setUrlProgress,
-    tryStartUrlLoad,
-  ]);
+    load.assertCurrent();
 
-  /**
-   * Clear URL loading error
-   */
-  const clearUrlError = useCallback(() => {
-    setUrlError(null);
-  }, [setUrlError]);
+    const catalog: { path: string; size: number; splatCount: number | null }[] = [];
+    const loaded = await loadManifestSource(manifest, { type: 'url', sourceUrl: normalizedUrl }, {
+      ...load,
+      log: logInfo,
+      onRemoteSplatCatalog: (candidates) => {
+        load.assertCurrent();
+        catalog.push(...candidates.map((candidate) => ({
+          path: candidate.path, size: candidate.size, splatCount: candidate.splatCount ?? null,
+        })));
+      },
+    });
+    load.assertCurrent();
+    if (loaded && catalog.length > 0 && !useReconstructionStore.getState().loadedFiles?.splatFile) {
+      mergeRemoteSplatCatalog(catalog, manifest.baseUrl);
+    }
+    return loaded;
+  }), [runLoad, logInfo, mergeRemoteSplatCatalog]);
 
-  return {
-    loadFromUrl,
-    loadFromManifest,
-    urlLoading,
-    urlProgress,
-    urlError,
-    clearUrlError,
-    setUrlLoading,
-    setUrlProgress,
-  };
+  const loadFromManifest = useCallback((manifest: ColmapManifest): Promise<boolean> =>
+    runLoad(manifest.baseUrl, async (load) => {
+      clearAllCaches();
+      logInfo(getInlineManifestLoadLogMessage(manifest));
+      return loadManifestSource(manifest, { type: 'manifest' }, { ...load, log: logInfo });
+    }), [runLoad, logInfo]);
+
+  const clearUrlError = useCallback(() => setUrlError(null), [setUrlError]);
+  return { loadFromUrl, loadFromManifest, urlLoading, urlProgress, urlError,
+    clearUrlError, setUrlLoading, setUrlProgress };
 }
