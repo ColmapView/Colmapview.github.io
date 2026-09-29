@@ -285,12 +285,12 @@ export function shouldCaptureMovementKey(event: KeyboardCaptureEvent): boolean {
 export function getKeyboardMoveSpeed(
   radius: number,
   moveSpeedMultiplier: number,
-  flySpeed: number,
+  wasdSpeed: number,
   shiftSpeedBoost: number,
   keysPressed: ReadonlySet<string>
 ): number {
   const shiftMultiplier = keysPressed.has('shift') ? shiftSpeedBoost : 1;
-  return radius * moveSpeedMultiplier * flySpeed * shiftMultiplier;
+  return radius * moveSpeedMultiplier * wasdSpeed * shiftMultiplier;
 }
 
 export function getKeyboardMovementAcceleration(

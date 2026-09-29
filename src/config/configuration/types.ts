@@ -58,6 +58,7 @@ export interface CameraConfig {
   autoRotateMode?: AutoRotateMode;
   autoRotateSpeed?: number;
   flySpeed?: number;
+  wasdSpeed?: number;
   flyTransitionDuration?: number;
   pointerLock?: boolean;
   showSelectionHighlight?: boolean;

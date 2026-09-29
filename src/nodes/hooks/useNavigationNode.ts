@@ -10,6 +10,7 @@ export function useNavigationNode(): NavigationNode {
   const autoRotateMode = useCameraStore((s) => s.autoRotateMode);
   const autoRotateSpeed = useCameraStore((s) => s.autoRotateSpeed);
   const flySpeed = useCameraStore((s) => s.flySpeed);
+  const wasdSpeed = useCameraStore((s) => s.wasdSpeed);
   const flyTransitionDuration = useCameraStore((s) => s.flyTransitionDuration);
   const pointerLock = useCameraStore((s) => s.pointerLock);
   const autoFovEnabled = useCameraStore((s) => s.autoFovEnabled);
@@ -28,6 +29,7 @@ export function useNavigationNode(): NavigationNode {
       autoRotateMode,
       autoRotateSpeed,
       flySpeed,
+      wasdSpeed,
       flyTransitionDuration,
       pointerLock,
       autoFovEnabled,
@@ -44,6 +46,7 @@ export function useNavigationNode(): NavigationNode {
       autoRotateMode,
       autoRotateSpeed,
       flySpeed,
+      wasdSpeed,
       flyTransitionDuration,
       pointerLock,
       autoFovEnabled,

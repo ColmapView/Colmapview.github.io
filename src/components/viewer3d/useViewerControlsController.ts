@@ -319,6 +319,8 @@ export function useViewerControlsController(): ViewerControlsController {
       setCameraMode: navActions.setMode,
       flySpeed: navNode.flySpeed,
       setFlySpeed: navActions.setFlySpeed,
+      wasdSpeed: navNode.wasdSpeed,
+      setWasdSpeed: navActions.setWasdSpeed,
       flyTransitionDuration: navNode.flyTransitionDuration,
       setFlyTransitionDuration: navActions.setFlyTransitionDuration,
       pointerLock: navNode.pointerLock,

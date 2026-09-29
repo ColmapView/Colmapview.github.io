@@ -167,6 +167,15 @@ export const cameraSection = defineSection({
       description: 'Flying speed (0.1 - 50)',
     },
     {
+      key: 'wasdSpeed',
+      type: 'number',
+      min: 0.1,
+      max: 50,
+      default: 1,
+      persist: true,
+      description: 'WASD keyboard movement speed (0.1 - 50)',
+    },
+    {
       key: 'flyTransitionDuration',
       type: 'number',
       min: 0,

@@ -34,6 +34,8 @@ export interface CameraModePanelProps {
   setCameraMode: (mode: CameraMode) => void;
   flySpeed: number;
   setFlySpeed: (speed: number) => void;
+  wasdSpeed: number;
+  setWasdSpeed: (speed: number) => void;
   flyTransitionDuration: number;
   setFlyTransitionDuration: (duration: number) => void;
   pointerLock: boolean;
@@ -54,6 +56,8 @@ export function CameraModePanel({
   setCameraMode,
   flySpeed,
   setFlySpeed,
+  wasdSpeed,
+  setWasdSpeed,
   flyTransitionDuration,
   setFlyTransitionDuration,
   pointerLock,
@@ -93,7 +97,16 @@ export function CameraModePanel({
           options={CAMERA_MODE_OPTIONS}
         />
         <SliderRow
-          label="Speed"
+          label="WASD Speed"
+          value={wasdSpeed}
+          min={0.1}
+          max={5}
+          step={0.1}
+          onChange={setWasdSpeed}
+          formatValue={(v) => v.toFixed(1)}
+        />
+        <SliderRow
+          label="Fly Speed"
           value={flySpeed}
           min={0.1}
           max={5}

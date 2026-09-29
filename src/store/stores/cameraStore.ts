@@ -36,6 +36,7 @@ export interface CameraState {
   autoRotateMode: AutoRotateMode;
   autoRotateSpeed: number;
   flySpeed: number;
+  wasdSpeed: number;
   flyTransitionDuration: number;
   flyToImageId: number | null;
   pointerLock: boolean;
@@ -82,6 +83,7 @@ export interface CameraState {
   setAutoRotateMode: (mode: AutoRotateMode) => void;
   setAutoRotateSpeed: (speed: number) => void;
   setFlySpeed: (speed: number) => void;
+  setWasdSpeed: (speed: number) => void;
   setFlyTransitionDuration: (duration: number) => void;
   setPointerLock: (enabled: boolean) => void;
   flyToImage: (id: number) => void;
@@ -127,6 +129,7 @@ export const useCameraStore = create<CameraState>()(
       autoRotateMode: 'off',
       autoRotateSpeed: 0.5,
       flySpeed: 2.5,
+      wasdSpeed: 1,
       flyTransitionDuration: 600,
       flyToImageId: null,
       pointerLock: true,
@@ -160,6 +163,7 @@ export const useCameraStore = create<CameraState>()(
       setAutoRotateMode: (autoRotateMode) => set({ autoRotateMode }),
       setAutoRotateSpeed: (autoRotateSpeed) => set({ autoRotateSpeed }),
       setFlySpeed: (flySpeed) => set({ flySpeed }),
+      setWasdSpeed: (wasdSpeed) => set({ wasdSpeed }),
       setFlyTransitionDuration: (flyTransitionDuration) => set({ flyTransitionDuration }),
       setPointerLock: (pointerLock) => set({ pointerLock }),
       flyToImage: (flyToImageId) => set({ flyToImageId }),
@@ -225,6 +229,7 @@ export const useCameraStore = create<CameraState>()(
         autoRotateMode: state.autoRotateMode,
         autoRotateSpeed: state.autoRotateSpeed,
         flySpeed: state.flySpeed,
+        wasdSpeed: state.wasdSpeed,
         flyTransitionDuration: state.flyTransitionDuration,
         pointerLock: state.pointerLock,
         showSelectionHighlight: state.showSelectionHighlight,

@@ -17,6 +17,7 @@ export interface NavigationNodeActions {
   setAutoRotateMode: (mode: AutoRotateMode) => void;
   setAutoRotateSpeed: (speed: number) => void;
   setFlySpeed: (speed: number) => void;
+  setWasdSpeed: (speed: number) => void;
   setFlyTransitionDuration: (duration: number) => void;
   setPointerLock: (enabled: boolean) => void;
   setAutoFovEnabled: (enabled: boolean) => void;
@@ -41,6 +42,7 @@ export function useNavigationNodeActions(): NavigationNodeActions {
       setAutoRotateMode: (m) => useCameraStore.getState().setAutoRotateMode(m),
       setAutoRotateSpeed: (s) => useCameraStore.getState().setAutoRotateSpeed(s),
       setFlySpeed: (s) => useCameraStore.getState().setFlySpeed(s),
+      setWasdSpeed: (s) => useCameraStore.getState().setWasdSpeed(s),
       setFlyTransitionDuration: (d) => useCameraStore.getState().setFlyTransitionDuration(d),
       setPointerLock: (e) => useCameraStore.getState().setPointerLock(e),
       setAutoFovEnabled: (e) => useCameraStore.getState().setAutoFovEnabled(e),

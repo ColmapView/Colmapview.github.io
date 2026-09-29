@@ -138,6 +138,7 @@ const cameraAdapter: StoreConfigAdapter = {
       case 'autoRotateMode': return state.autoRotateMode;
       case 'autoRotateSpeed': return state.autoRotateSpeed;
       case 'flySpeed': return state.flySpeed;
+      case 'wasdSpeed': return state.wasdSpeed;
       case 'flyTransitionDuration': return state.flyTransitionDuration;
       case 'pointerLock': return state.pointerLock;
       case 'showSelectionHighlight': return state.showSelectionHighlight;
@@ -201,6 +202,9 @@ const cameraAdapter: StoreConfigAdapter = {
         return;
       case 'flySpeed':
         state.setFlySpeed(requireNumber(storeKey, value));
+        return;
+      case 'wasdSpeed':
+        state.setWasdSpeed(requireNumber(storeKey, value));
         return;
       case 'flyTransitionDuration':
         state.setFlyTransitionDuration(requireNumber(storeKey, value));

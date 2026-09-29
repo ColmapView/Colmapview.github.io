@@ -25,7 +25,8 @@ interface TrackballFrameLoopOptions {
   camera: THREE.Camera;
   cameraMode: CameraMode;
   radius: number;
-  flySpeed: number;
+  /** WASD/QE keyboard movement speed; mouse and scroll use flySpeed elsewhere. */
+  wasdSpeed: number;
   autoRotateMode: AutoRotateMode;
   autoRotateSpeed: number;
   axesCoordinateSystem: AxesCoordinateSystem;
@@ -53,7 +54,7 @@ export function useTrackballFrameLoop({
   camera,
   cameraMode,
   radius,
-  flySpeed,
+  wasdSpeed,
   autoRotateMode,
   autoRotateSpeed,
   axesCoordinateSystem,
@@ -151,7 +152,7 @@ export function useTrackballFrameLoop({
     const moveSpeed = getKeyboardMoveSpeed(
       radius,
       CONTROLS.moveSpeedMultiplier,
-      flySpeed,
+      wasdSpeed,
       CONTROLS.shiftSpeedBoost,
       keysPressedRef.current
     );
@@ -174,7 +175,7 @@ export function useTrackballFrameLoop({
       targetVecRef.current.add(flyVelocityRef.current);
     }
     return true;
-  }, [absoluteWorldUp, camera, cameraMode, cameraQuatRef, flySpeed, flyVelocityRef, keysPressedRef, radius, targetVecRef]);
+  }, [absoluteWorldUp, camera, cameraMode, cameraQuatRef, flyVelocityRef, keysPressedRef, radius, targetVecRef, wasdSpeed]);
 
   useFrame((state) => {
     const active = hasTrackballRenderActivity({

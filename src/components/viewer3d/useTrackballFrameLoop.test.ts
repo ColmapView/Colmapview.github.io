@@ -15,7 +15,7 @@ function createOptions(cameraMode: 'orbit' | 'fly' = 'orbit') {
   const camera = new THREE.PerspectiveCamera();
   camera.position.set(0, 0, 5);
   return {
-    camera, cameraMode, radius: 2, flySpeed: 1, autoRotateMode: 'off' as const,
+    camera, cameraMode, radius: 2, wasdSpeed: 1, autoRotateMode: 'off' as const,
     autoRotateSpeed: 1, axesCoordinateSystem: 'colmap' as const,
     enabledRef: { current: true }, isDraggingRef: { current: false },
     horizonLockRef: { current: 'off' as const }, worldUpRef: { current: new THREE.Vector3(0, 1, 0) },
@@ -79,6 +79,22 @@ describe('trackball demand frame continuation', () => {
     expect(settle()).toBeGreaterThan(1);
     expect(options.flyVelocityRef.current.length()).toBeLessThanOrEqual(0.0001);
     unmount();
+  });
+
+  it('moves held WASD keys in proportion to the WASD speed', () => {
+    const moveAfterOneFrame = (wasdSpeed: number) => {
+      const options = { ...createOptions('fly'), wasdSpeed };
+      const start = options.camera.position.clone();
+      const { unmount } = renderHook(() => useTrackballFrameLoop(options));
+      options.keysPressedRef.current.add('w');
+      now += 16;
+      tick();
+      unmount();
+      return options.camera.position.distanceTo(start);
+    };
+    const slow = moveAfterOneFrame(0.5);
+    expect(slow).toBeGreaterThan(0);
+    expect(moveAfterOneFrame(2)).toBeCloseTo(slow * 4, 6);
   });
 
   it('finishes goto and pauses its elapsed time while the document is hidden', () => {

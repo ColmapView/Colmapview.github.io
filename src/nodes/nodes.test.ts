@@ -190,6 +190,7 @@ describe('Node Hooks', () => {
       expect(result.current).toHaveProperty('autoRotateMode');
       expect(result.current).toHaveProperty('autoRotateSpeed');
       expect(result.current).toHaveProperty('flySpeed');
+      expect(result.current).toHaveProperty('wasdSpeed');
       expect(result.current).toHaveProperty('flyTransitionDuration');
       expect(result.current).toHaveProperty('pointerLock');
       expect(result.current).toHaveProperty('autoFovEnabled');
@@ -575,6 +576,13 @@ describe('Node Actions', () => {
       const { result } = renderHook(() => useNavigationNodeActions());
       act(() => result.current.setFlySpeed(15));
       expect(useCameraStore.getState().flySpeed).toBe(15);
+    });
+
+    it('setWasdSpeed updates store, starting from a slower default than fly speed', () => {
+      expect(useCameraStore.getState().wasdSpeed).toBe(1);
+      const { result } = renderHook(() => useNavigationNodeActions());
+      act(() => result.current.setWasdSpeed(3));
+      expect(useCameraStore.getState().wasdSpeed).toBe(3);
     });
 
     it('setFlyTransitionDuration updates store', () => {

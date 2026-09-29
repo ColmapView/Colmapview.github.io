@@ -17,6 +17,7 @@ export interface NavigationNode extends BaseNode {
   autoRotateMode: AutoRotateMode;
   autoRotateSpeed: number;
   flySpeed: number;
+  wasdSpeed: number;
   flyTransitionDuration: number;
   pointerLock: boolean;
   autoFovEnabled: boolean;
