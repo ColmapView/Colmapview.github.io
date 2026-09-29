@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-09-29
+
+### Added
+
+- A WASD Speed slider in the Camera Mode panel, separate from Fly Speed, with a slower default (1.0, previously the shared 2.5). Fly Speed keeps controlling fly-mode mouse and scroll movement.
+
+### Changed
+
+- Enable Hugging Face publishing on colmapview.github.io.
+
+### Fixed
+
+- Open SOG bundles zipped with macOS Finder, whose `__MACOSX/._meta.json` sidecars were refused. Spark now always reads the validated `meta.json`, because the rebuilt zip directory lists it first.
+
 ## [0.15.0] - 2026-09-29
 
 ### Added
@@ -585,7 +599,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript for type safety
 - Deno native test runner for testing
 
-[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.1...HEAD
+[0.15.1]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/ColmapView/colmapview.github.io/compare/v0.14.5...v0.15.0
 [0.14.5]: https://github.com/ColmapView/colmapview.github.io/compare/v0.14.4...v0.14.5
 [0.14.4]: https://github.com/ColmapView/colmapview.github.io/compare/v0.14.3...v0.14.4
