@@ -83,6 +83,7 @@ describe('WebGPU splat canvas runtime', () => {
     let calls = 0;
     const unregister = registerWebGpuSplatCanvasHost({
       canvas,
+      captureFrame: async () => canvas,
       setFrameSnapshot(snapshot) {
         calls += 1;
         resizeWebGpuSplatCanvas(canvas, snapshot.viewport);

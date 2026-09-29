@@ -43,7 +43,13 @@ export interface VisibleWebGpuSplatRendererAdapter {
   loadCloud: (cloud: GaussianCloud, options: VisibleWebGpuSplatCloudOptions) => Promise<void>;
   setFrameSnapshot: (frame: SplatCameraFrame) => void;
   render: () => void;
+  captureFrame: () => Promise<HTMLCanvasElement>;
   dispose: () => void;
+}
+
+interface FrameCapture {
+  resolve: (canvas: HTMLCanvasElement) => void;
+  reject: (error: unknown) => void;
 }
 
 export interface VisibleWebGpuSplatRendererAdapterDeps {
@@ -163,6 +169,7 @@ class DefaultVisibleWebGpuSplatRendererAdapter implements VisibleWebGpuSplatRend
   private inFlightViewport: SplatViewportSize | null = null;
   private renderQueued = false;
   private rendering = false;
+  private pendingCaptures: FrameCapture[] = [];
   private unregisterSharedRuntime: (() => void) | null = null;
   private disposed = false;
   private failed = false;
@@ -262,6 +269,16 @@ class DefaultVisibleWebGpuSplatRendererAdapter implements VisibleWebGpuSplatRend
     }
   }
 
+  captureFrame(): Promise<HTMLCanvasElement> {
+    if (this.disposed || this.failed || !this.session || !this.frame) {
+      return Promise.reject(new Error('The splat view is not ready to capture.'));
+    }
+    return new Promise((resolve, reject) => {
+      this.pendingCaptures.push({ resolve, reject });
+      this.render();
+    });
+  }
+
   dispose(): void {
     if (this.disposed) {
       return;
@@ -269,6 +286,7 @@ class DefaultVisibleWebGpuSplatRendererAdapter implements VisibleWebGpuSplatRend
 
     this.disposed = true;
     this.renderQueued = false;
+    this.rejectPendingCaptures(new Error('The splat view changed before it could be captured.'));
     this.disposeRendererResources();
     this.deviceHandle.dispose();
   }
@@ -319,9 +337,12 @@ class DefaultVisibleWebGpuSplatRendererAdapter implements VisibleWebGpuSplatRend
         this.renderQueued = false;
         session.setCamera(frame);
         this.beginSubmittedFrame(frame);
+        const captures = this.pendingCaptures.splice(0);
         try {
           await session.renderToCanvas({ completion: 'submitted' });
+          this.completeFrameCaptures(captures);
         } catch (error) {
+          captures.forEach(capture => capture.reject(error));
           this.completeSubmittedFrame();
           throw error;
         }
@@ -345,6 +366,27 @@ class DefaultVisibleWebGpuSplatRendererAdapter implements VisibleWebGpuSplatRend
       && this.frame
       && this.canSubmitFrame(this.frame)
     );
+  }
+
+  private completeFrameCaptures(captures: FrameCapture[]): void {
+    if (!captures.length) return;
+    try {
+      this.assertUsable();
+      const copy = document.createElement('canvas');
+      copy.width = this.canvas.width;
+      copy.height = this.canvas.height;
+      const context = copy.getContext('2d');
+      if (!context) throw new Error('Image capture is unavailable in this browser.');
+      // Copy immediately after submission, before presentation discards the GPU canvas texture.
+      context.drawImage(this.canvas, 0, 0);
+      captures.forEach(capture => capture.resolve(copy));
+    } catch (error) {
+      captures.forEach(capture => capture.reject(error));
+    }
+  }
+
+  private rejectPendingCaptures(error: unknown): void {
+    this.pendingCaptures.splice(0).forEach(capture => capture.reject(error));
   }
 
   private canSubmitFrame(frame: SplatCameraFrame): boolean {
@@ -388,6 +430,7 @@ class DefaultVisibleWebGpuSplatRendererAdapter implements VisibleWebGpuSplatRend
     this.failed = true;
     this.disposed = true;
     this.renderQueued = false;
+    this.rejectPendingCaptures(error);
     this.inFlightRenders = 0;
     this.inFlightViewport = null;
     this.disposeRendererResources();

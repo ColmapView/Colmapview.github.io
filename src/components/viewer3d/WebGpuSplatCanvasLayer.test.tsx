@@ -382,6 +382,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     let onFirstFrame: (() => void) | undefined;
@@ -485,6 +486,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     let onFirstFrame: (() => void) | undefined;
@@ -550,12 +552,14 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     const secondRenderer = {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     vi.mocked(createLoadedVisibleWebGpuSplatRendererAdapter)
@@ -607,6 +611,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     let onFirstFrame: (() => void) | undefined;
@@ -770,6 +775,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     let onError: ((reason: string) => void) | undefined;
@@ -825,6 +831,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     vi.mocked(createLoadedVisibleWebGpuSplatRendererAdapter)
@@ -866,6 +873,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     vi.mocked(createLoadedVisibleWebGpuSplatRendererAdapter)
@@ -949,6 +957,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     const preflightAdapter = makePreflightAdapter();
@@ -994,6 +1003,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     vi.mocked(loadGaussianCloudFromFile).mockResolvedValue({
@@ -1079,6 +1089,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     let onFirstFrame: (() => void) | undefined;
@@ -1153,6 +1164,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     installWebGpuPreflightProvider(
@@ -1237,6 +1249,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     installWebGpuPreflightProvider(
@@ -1315,6 +1328,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       }),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     vi.mocked(createVisibleWebGpuSplatRendererAdapter).mockResolvedValue(renderer);
@@ -1353,6 +1367,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     let onError: ((reason: string) => void) | undefined;
@@ -1412,6 +1427,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     let onFirstFrame: (() => void) | undefined;
@@ -1488,6 +1504,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     let onFirstFrame: (() => void) | undefined;
@@ -1564,6 +1581,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     let onFirstFrame: (() => void) | undefined;
@@ -1658,6 +1676,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     let onFirstFrame: (() => void) | undefined;
@@ -1728,12 +1747,14 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     const secondRenderer = {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     vi.mocked(createLoadedVisibleWebGpuSplatRendererAdapter)
@@ -1786,6 +1807,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     vi.mocked(createLoadedVisibleWebGpuSplatRendererAdapter).mockImplementation(resolveLoadedRenderer(renderer));
@@ -1826,6 +1848,7 @@ describe('WebGpuSplatCanvasLayer', () => {
       loadCloud: vi.fn(),
       setFrameSnapshot: vi.fn(),
       render: vi.fn(),
+      captureFrame: vi.fn(async () => document.createElement('canvas')),
       dispose: vi.fn(),
     };
     vi.mocked(createLoadedVisibleWebGpuSplatRendererAdapter).mockImplementation(resolveLoadedRenderer(renderer));

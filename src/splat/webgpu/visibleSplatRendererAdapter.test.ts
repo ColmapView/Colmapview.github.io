@@ -203,6 +203,64 @@ async function flushPromises(): Promise<void> {
 describe('visible WebGPU splat renderer adapter', () => {
   afterEach(() => {
     clearVisibleWebGpuSplatSharedRuntimesForTests();
+    vi.restoreAllMocks();
+  });
+
+  it('captures a fresh submitted frame before the browser discards the canvas texture', async () => {
+    const harness = createHarness();
+    const adapter = await createVisibleWebGpuSplatRendererAdapter(harness.canvas, {
+      initializeDevice: harness.initializeDevice,
+      createSceneResourceManager: () => harness.resourceManager as unknown as ReturnType<NonNullable<VisibleWebGpuSplatRendererAdapterDeps['createSceneResourceManager']>>,
+      createRenderSession: harness.createRenderSession,
+    });
+    adapter.setFrameSnapshot(makeFrame());
+    await adapter.loadCloud(makeCloud(), { sceneId: 'capture' });
+    await flushPromises();
+    const drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage } as unknown as CanvasRenderingContext2D);
+    let submit!: () => void;
+    vi.mocked(harness.session!.renderToCanvas).mockImplementationOnce(() => new Promise<void>(resolve => { submit = resolve; }));
+    const capture = adapter.captureFrame();
+    expect(drawImage).not.toHaveBeenCalled();
+    submit();
+    const frame = await capture;
+    expect(harness.session!.renderToCanvas).toHaveBeenCalledTimes(2);
+    expect(drawImage).toHaveBeenCalledWith(harness.canvas, 0, 0);
+    expect(frame).not.toBe(harness.canvas);
+    expect([frame.width, frame.height]).toEqual([16, 8]);
+    adapter.dispose();
+  });
+
+  it('rejects a capture waiting behind another render when the view is disposed', async () => {
+    const session = makeSession({ renderToCanvas: () => new Promise(() => {}) }).session;
+    const harness = createHarness({ session });
+    const adapter = await createVisibleWebGpuSplatRendererAdapter(harness.canvas, {
+      initializeDevice: harness.initializeDevice,
+      createSceneResourceManager: () => harness.resourceManager as unknown as ReturnType<NonNullable<VisibleWebGpuSplatRendererAdapterDeps['createSceneResourceManager']>>,
+      createRenderSession: harness.createRenderSession,
+    });
+    adapter.setFrameSnapshot(makeFrame());
+    await adapter.loadCloud(makeCloud(), { sceneId: 'disposed-capture' });
+    const capture = adapter.captureFrame();
+    adapter.dispose();
+    await expect(capture).rejects.toThrow('changed before');
+    await expect(adapter.captureFrame()).rejects.toThrow('not ready');
+  });
+
+  it.each(['setCamera', 'renderToCanvas'] as const)('rejects the capture if %s fails instead of leaving it pending', async method => {
+    const harness = createHarness();
+    const adapter = await createVisibleWebGpuSplatRendererAdapter(harness.canvas, {
+      initializeDevice: harness.initializeDevice,
+      createSceneResourceManager: () => harness.resourceManager as unknown as ReturnType<NonNullable<VisibleWebGpuSplatRendererAdapterDeps['createSceneResourceManager']>>,
+      createRenderSession: harness.createRenderSession,
+      onError: harness.onError,
+    });
+    adapter.setFrameSnapshot(makeFrame());
+    await adapter.loadCloud(makeCloud(), { sceneId: 'failed-capture' });
+    await flushPromises();
+    vi.mocked(harness.session![method]).mockImplementationOnce(() => { throw new Error('Device lost'); });
+    await expect(adapter.captureFrame()).rejects.toThrow('Device lost');
+    expect(harness.onError).toHaveBeenCalled();
   });
 
   it('creates a loaded renderer with cloud-specific elevated limits before upload', async () => {

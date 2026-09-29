@@ -12,6 +12,7 @@ export type WebGpuSplatFrameSnapshot = WebGpuSplatCameraFrame;
 export interface WebGpuSplatCanvasHost {
   canvas: HTMLCanvasElement;
   setFrameSnapshot: (snapshot: WebGpuSplatFrameSnapshot) => void;
+  captureFrame: () => Promise<HTMLCanvasElement>;
 }
 
 let activeHost: WebGpuSplatCanvasHost | null = null;

@@ -332,6 +332,8 @@ export function WebGpuSplatCanvasLayer({
     const canvas = canvasRef.current;
     return registerWebGpuSplatCanvasHost({
       canvas,
+      captureFrame: () => rendererRef.current?.captureFrame()
+        ?? Promise.reject(new Error('The splat view is still loading. Try capturing it again when loading finishes.')),
       setFrameSnapshot(snapshot: WebGpuSplatFrameSnapshot) {
         resizeWebGpuSplatCanvas(canvas, snapshot.viewport);
         if (!latestFrameRef.current || !sameWebGpuSplatCameraPose(latestFrameRef.current, snapshot)) {
