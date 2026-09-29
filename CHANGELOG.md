@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.3] - 2026-09-29
+
+### Changed
+
+- Published dataset cards link one clean viewer URL, the same one the publish dialog copies: `https://colmapview.github.io/latest/?url=https://huggingface.co/datasets/<owner>/<name>`. It opens the current viewer on the dataset's latest revision, replacing the version-pinned, encoded links.
+- Published dataset cards set `viewer: false`, so Hugging Face no longer converts the images to Parquet and shows them as a table.
+
 ## [0.15.2] - 2026-09-29
 
 ### Changed
@@ -606,7 +613,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript for type safety
 - Deno native test runner for testing
 
-[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.2...HEAD
+[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.3...HEAD
+[0.15.3]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.2...v0.15.3
 [0.15.2]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.1...v0.15.2
 [0.15.1]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/ColmapView/colmapview.github.io/compare/v0.14.5...v0.15.0
