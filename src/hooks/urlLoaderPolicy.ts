@@ -7,6 +7,7 @@ import type {
 import {
   getPreferredSplatCandidate,
   getSplatFileExtension,
+  isSogSplatPath,
   isSplatFilePath,
   sortSplatCandidatesByPreference,
   type SplatFileExtension,
@@ -512,6 +513,15 @@ export function getSplatAutoLoadDecision(
     return { autoLoad: false, budgetBytes, oversizedCandidate: candidate };
   }
 
+  // SOG is 5-20x smaller per splat than PLY, so the byte budget alone would admit
+  // scenes a phone cannot hold; on touch also require the estimated count to fit.
+  if (isTouchDevice && isSogSplatPath(candidate.path)) {
+    const estimated = getEstimatedSplatCount(candidate);
+    if (estimated !== null && estimated > TOUCH_SPLAT_DISABLE_MIN_SPLATS) {
+      return { autoLoad: false, budgetBytes, oversizedCandidate: candidate };
+    }
+  }
+
   return { autoLoad: true, budgetBytes, oversizedCandidate: null };
 }
 
@@ -524,6 +534,9 @@ export function getSplatAutoLoadDecision(
 export const SPLAT_BYTES_PER_SPLAT_ESTIMATE: Record<SplatFileExtension, number> = {
   '.ply': 104,
   '.spz': 16,
+  // Measured colour-only SOG (the densest case): 14.42 / 12.39 / 11.60 B per splat at
+  // 10k / 100k / 500k splats; rounded down with margin because real captures compress better.
+  '.sog': 10,
 };
 
 /**

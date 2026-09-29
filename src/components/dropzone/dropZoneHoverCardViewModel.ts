@@ -19,7 +19,7 @@ export const LOAD_URL_DIRECT_EXAMPLE = `Direct URL expects:
   <baseUrl>/sparse/0/points3D.bin
   <baseUrl>/images/  (optional)
   <baseUrl>/masks/   (optional)
-  <baseUrl>/splats/  (optional .spz/.ply)`;
+  <baseUrl>/splats/  (optional .spz/.ply/.sog)`;
 export const LOAD_URL_SUPPORTED_SOURCES = 'Supports: S3, GCS, R2, Dropbox, HuggingFace, GitHub';
 export const LOAD_URL_LOCAL_SERVER_HINT = 'Local server: npx http-server --cors -p 8080';
 export const LOAD_URL_HINT_ROWS: DropZoneHoverCardHintRow[] = [

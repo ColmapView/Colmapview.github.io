@@ -396,6 +396,31 @@ describe('getSplatAutoLoadDecision', () => {
   });
 });
 
+describe('SOG budgets', () => {
+  it('estimates SOG splat counts at 10 bytes per splat', () => {
+    expect(getEstimatedSplatCount({ path: 'scene.sog', size: 25_000_000 })).toBe(2_500_000);
+  });
+
+  it('auto-loads a lone SOG on touch only when its estimated count fits the device', () => {
+    const decide = (size: number, isTouchDevice: boolean) =>
+      getSplatAutoLoadDecision([{ path: 'scene.sog', size, splatCount: null }], { isTouchDevice }).autoLoad;
+    expect(decide(25_000_000, true)).toBe(true);   // ~2.5M splats
+    expect(decide(40_000_000, true)).toBe(false);  // ~4M splats: over the 3M touch ceiling despite fitting 50 MB
+    expect(decide(100_000_000, false)).toBe(true); // desktop keeps the 150 MB byte budget
+  });
+
+  it('keeps PLY auto-load decisions unchanged on touch', () => {
+    expect(getSplatAutoLoadDecision([{ path: 'scene.ply', size: 40_000_000, splatCount: null }], { isTouchDevice: true }).autoLoad).toBe(true);
+  });
+
+  it('lists SOG files found in a Hugging Face tree', () => {
+    expect(getHuggingFaceSplatPaths([
+      { type: 'file', path: 'ds/scene.sog', size: 10 },
+      { type: 'file', path: 'ds/readme.md', size: 1 },
+    ] as never, 'ds').map((candidate) => candidate.path)).toEqual(['scene.sog']);
+  });
+});
+
 describe('getSplatDeviceTier', () => {
   it('is always ok on desktop hardware', () => {
     expect(getSplatDeviceTier({ path: 'huge.ply', size: 1_040_000_634, splatCount: 10_000_000 }, { isTouchDevice: false, byteLessLoaderAvailable: false })).toBe('ok');

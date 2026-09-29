@@ -76,18 +76,29 @@ export function getSplatPickerDescription(count: number): string {
 }
 
 /**
+ * Picker sort key. Unknown sizes sort last: absent, or 0 from a blocked HEAD on
+ * a static host (the same values `formatSplatSize` shows without a label).
+ */
+function getSortableSplatSize(bytes: number | undefined): number {
+  return bytes !== undefined && Number.isFinite(bytes) && bytes > 0 ? bytes : Number.POSITIVE_INFINITY;
+}
+
+/**
  * Build the picker rows from splat sources (filename + size), classifying each by
  * device tier via `getSplatDeviceTier`. On touch hardware a source that would
  * crash the tab (over the splat-count GPU ceiling: 4M when the byte-less WebGPU
  * loader is available, a conservative 3M otherwise) becomes `disabled` with an
  * explicit reason; one merely over the memory budget gets a `hint` warning.
  * Desktop callers pass `isTouchDevice: false`, so every row stays `ok`.
+ * Rows are sorted smallest first, then by path, so formats compare side by side.
  */
 export function getSplatPickerItems(
   sources: readonly SplatFileSource[],
   options: { isTouchDevice: boolean; byteLessLoaderAvailable?: boolean }
 ): SplatPickerItem[] {
-  return sources.map((source) => {
+  const bySize = [...sources].sort((a, b) =>
+    getSortableSplatSize(a.size) - getSortableSplatSize(b.size) || a.path.localeCompare(b.path));
+  return bySize.map((source) => {
     const sizeLabel = formatSplatSize(source.size);
     const tier = getSplatDeviceTier(source, {
       isTouchDevice: options.isTouchDevice,

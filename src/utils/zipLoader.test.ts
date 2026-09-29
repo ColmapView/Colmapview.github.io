@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Archive } from 'libarchive.js';
 import { buildArchiveEntry, buildArchiveReader, buildFile } from '../test/builders';
 import { downloadZip, type ZipProgressCallback } from './zipDownload';
-import { loadZipFromFile, loadZipFromUrl } from './zipLoader';
+import { isArchiveFile, loadZipFromFile, loadZipFromUrl } from './zipLoader';
 
 vi.mock('libarchive.js', () => ({ Archive: { init: vi.fn(), open: vi.fn() } }));
 vi.mock('./zipDownload', async (importOriginal) => ({
@@ -133,4 +133,13 @@ describe.each(['local', 'url'] as const)('%s archive reader ownership', (source)
       expect(getFilesArray).not.toHaveBeenCalled();
     });
   }
+});
+
+describe('isArchiveFile', () => {
+  it('treats a dropped SOG as a splat, never as a dataset archive, even with a ZIP MIME type', () => {
+    // A SOG bundle is itself a ZIP; routing it to the archive loader would look
+    // for COLMAP files inside it instead of rendering it.
+    expect(isArchiveFile(new File(['PK'], 'scene.sog', { type: 'application/zip' }))).toBe(false);
+    expect(isArchiveFile(new File(['PK'], 'dataset.zip', { type: 'application/zip' }))).toBe(true);
+  });
 });

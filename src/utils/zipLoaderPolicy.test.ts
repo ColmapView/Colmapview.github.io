@@ -37,6 +37,10 @@ describe('zip loader policy', () => {
     expect(isArchiveSplatPath('project/sparse/0/points3D.bin')).toBe(false);
   });
 
+  it('extracts a SOG inside a dataset archive as a splat', () => {
+    expect(isArchiveSplatPath('scene/splats/scene.sog')).toBe(true);
+  });
+
   it('chooses the largest PLY candidate across root and nested archive folders', () => {
     expect(findLargestArchivePlyCandidate([
       { path: 'root_gaussians.ply', size: 10 },

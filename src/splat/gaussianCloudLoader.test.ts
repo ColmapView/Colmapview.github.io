@@ -124,6 +124,12 @@ describe('gaussian cloud loader', () => {
     expect(isGaussianCloudFile(new File(['x'], 'scene.splat'))).toBe(false);
   });
 
+  it('refuses SOG even though it is a splat extension: only Spark decodes it', () => {
+    expect(() => getGaussianCloudFormatForFile(new File(['x'], 'scene.sog')))
+      .toThrow('Unsupported Gaussian splat format: scene.sog');
+    expect(isGaussianCloudFile(new File(['x'], 'scene.SOG'))).toBe(false);
+  });
+
   it('creates SH0-only views without mutating higher-order SH clouds', () => {
     const cloud = makeShCloud(2);
     const sh0Only = createSh0OnlyGaussianCloud(cloud);

@@ -57,7 +57,7 @@ describe('drop zone panel view model', () => {
       { label: 'COLMAP:', text: 'cameras, images, points3D (.bin or .txt preferred)' },
       { label: 'Image-only:', text: 'jpg, png, webp, tiff folders are supported' },
       { label: 'Auto-detected:', text: 'sparse/0/, sparse/, or any subfolder' },
-      { label: 'Optional:', text: 'source images, masks/, splats (.spz, .ply), config (.yaml)' },
+      { label: 'Optional:', text: 'source images, masks/, splats (.spz, .ply, .sog), config (.yaml)' },
       { text: 'ZIP: max 2GB, images loaded lazily on-demand', muted: true },
     ]);
   });

@@ -36,9 +36,28 @@ describe('getSplatPickerItems', () => {
         { isTouchDevice: false }
       )
     ).toEqual([
-      { id: 'splats/5x5#-5_-15_0_-10#-1_-3.ply', name: '5x5#-5_-15_0_-10#-1_-3.ply', sizeLabel: '943 MB', tier: 'ok', warning: null, disabledReason: null },
       { id: 'inside.ply', name: 'inside.ply', sizeLabel: '46 MB', tier: 'ok', warning: null, disabledReason: null },
+      { id: 'splats/5x5#-5_-15_0_-10#-1_-3.ply', name: '5x5#-5_-15_0_-10#-1_-3.ply', sizeLabel: '943 MB', tier: 'ok', warning: null, disabledReason: null },
     ]);
+  });
+
+  it('lists splats by size, smallest first, so the user chooses between formats', () => {
+    const items = getSplatPickerItems([
+      { id: 'big.ply', path: 'big.ply', size: 300 },
+      { id: 'small.sog', path: 'small.sog', size: 20 },
+      { id: 'mid.spz', path: 'mid.spz', size: 90 },
+      { id: 'unknown.ply', path: 'unknown.ply' },
+    ], { isTouchDevice: false });
+    expect(items.map((item) => item.id)).toEqual(['small.sog', 'mid.spz', 'big.ply', 'unknown.ply']);
+  });
+
+  it('lists a zero size (a blocked HEAD on a static host) last, with the other unknown sizes', () => {
+    const items = getSplatPickerItems([
+      { id: 'b-blocked.ply', path: 'b-blocked.ply', size: 0 },
+      { id: 'known.sog', path: 'known.sog', size: 20 },
+      { id: 'a-unknown.ply', path: 'a-unknown.ply' },
+    ], { isTouchDevice: false });
+    expect(items.map((item) => item.id)).toEqual(['known.sog', 'a-unknown.ply', 'b-blocked.ply']);
   });
 });
 
@@ -51,10 +70,12 @@ describe('splat picker device tiers', () => {
 
   it('maps sources to ok/hint/disabled tiers on touch hardware', () => {
     const items = getSplatPickerItems(sources, { isTouchDevice: true });
-    expect(items.map((i) => i.tier)).toEqual(['disabled', 'hint', 'ok']);
-    expect(items[0].disabledReason).toBe('Too large for this device (1.0 GB) - open on a desktop to view');
-    expect(items[1].warning).toBe("may exceed this device's memory");
-    expect(items[2].warning).toBeNull();
+    const byId = new Map(items.map((item) => [item.id, item]));
+    expect(items.map((i) => i.id)).toEqual(['c', 'b', 'a']);
+    expect(byId.get('a')?.tier).toBe('disabled');
+    expect(byId.get('a')?.disabledReason).toBe('Too large for this device (1.0 GB) - open on a desktop to view');
+    expect(byId.get('b')?.warning).toBe("may exceed this device's memory");
+    expect(byId.get('c')?.warning).toBeNull();
   });
 
   it('leaves everything ok on desktop', () => {

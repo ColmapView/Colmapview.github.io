@@ -36,6 +36,15 @@ describe('splat file policy', () => {
     ].reduce(getPreferredSplatCandidate)).toBe(largeSpz);
   });
 
+  it('accepts SOG but never prefers it over PLY or SPZ', () => {
+    expect(getSplatFileExtension('bicycle/splat_30000.SOG')).toBe('.sog');
+    expect(isSplatFilePath('scene.sog')).toBe(true);
+    const tinyPly = { path: 'scene.ply', size: 10 };
+    const hugeSog = { path: 'scene.sog', size: 1_000 };
+    expect(compareSplatCandidates(tinyPly, hugeSog)).toBeGreaterThan(0);
+    expect([hugeSog, { path: 'other.sog', size: 5 }].reduce(getPreferredSplatCandidate)).toBe(hugeSog);
+  });
+
   it('knows which formats the WebGPU decoders can read', () => {
     expect(supportsWebGpuRenderer('scene.PLY')).toBe(true);
     expect(supportsWebGpuRenderer('dir/scene.spz')).toBe(true);

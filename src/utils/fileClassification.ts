@@ -117,7 +117,7 @@ function getLocalSplatCandidates(files: Map<string, File>): LocalSplatCandidate[
 
 /**
  * Find all splat files in a scanned dataset, sorted by default preference:
- * largest SPZ first, then largest PLY.
+ * largest SPZ first, then largest PLY, then largest SOG.
  */
 export function findSplatFiles(files: Map<string, File>): File[] {
   return findSplatFileSources(files)

@@ -344,6 +344,44 @@ describe('URL loader manifest fetch helpers', () => {
     );
   });
 
+  it('holds back a lone SOG on touch by estimated splat count, without probing it as a PLY', async () => {
+    const setUrlProgress = vi.fn();
+    const log = vi.fn();
+    const onRemoteSplatCatalog = vi.fn();
+    const baseUrl = 'https://huggingface.co/datasets/OpsiClear/NGS/resolve/main/objects/scan_sog';
+    const fetchImpl = vi.fn(async () => jsonResponse([
+      { type: 'file', path: 'objects/scan_sog/splats/scene.sog', size: 40_000_000 },
+    ]));
+    const fetchFile = vi.fn(async (_baseUrl: string, path: string) =>
+      buildFile(path.split('/').pop() ?? path)
+    );
+
+    const files = await fetchManifestColmapFiles({
+      ...manifest,
+      baseUrl,
+      splats: undefined,
+    }, {
+      fetchImpl,
+      fetchFile,
+      isTouchDevice: true,
+      log,
+      setUrlProgress,
+      onRemoteSplatCatalog,
+    });
+
+    // Only the tree listing was fetched: no PLY header Range request against the SOG.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(onRemoteSplatCatalog).toHaveBeenCalledWith([
+      { path: 'splats/scene.sog', size: 40_000_000, splatCount: null },
+    ]);
+    // 40 MB fits the 50 MB touch byte budget, but ~4M estimated splats exceed the 3M ceiling.
+    expect(fetchFile).not.toHaveBeenCalledWith(baseUrl, 'splats/scene.sog', expect.anything());
+    expect([...files.keys()].some((key) => key.endsWith('.sog'))).toBe(false);
+    expect(log).toHaveBeenCalledWith(
+      '[URL Loader] Splat splats/scene.sog (40 MB, ~4.0M splats) exceeds the 3M-splat auto-load limit for this device; select it from the splat picker to download'
+    );
+  });
+
   it('discovers all generic directory-listing splats recursively', async () => {
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === 'HEAD') {

@@ -21,6 +21,7 @@ import { classifyPlyHeaderText, getPlyHeaderVertexCount } from '../parsers';
 import {
   getDirectoryListingLinks,
   getDirectoryListingRootUrl,
+  getEstimatedSplatCount,
   getHuggingFaceColmapPaths,
   getHuggingFaceColmapTotalBytes,
   getHuggingFaceDatasetTreeRequest,
@@ -32,6 +33,7 @@ import {
   getSplatAutoLoadDecision,
   joinManifestUrlPath,
   sortRemoteSplatCandidates,
+  TOUCH_SPLAT_DISABLE_MIN_SPLATS,
   type HuggingFaceColmapPaths,
   type HuggingFaceDatasetTreeEntry,
   type RemoteSplatCandidate,
@@ -170,7 +172,7 @@ async function readBoundedResponseText(response: Response, maxBytes: number): Pr
 }
 
 async function defaultClassifySplatUrl(url: string, fetchImpl: FetchUrl): Promise<SplatUrlClassification> {
-  // Non-PLY splat formats (.spz / .splat) are always splats.
+  // Only .ply is ambiguous (splat vs point cloud); .spz and .sog are always splats.
   const pathname = url.split('?')[0].toLowerCase();
   if (!pathname.endsWith('.ply')) {
     return { isSplat: true, splatCount: null };
@@ -572,6 +574,13 @@ function getOversizedSplatSkipLogMessage(
   budgetBytes: number
 ): string {
   const sizeMb = Math.round(candidate.size / 1_000_000);
+  if (candidate.size <= budgetBytes) {
+    // Within the byte budget, so the touch splat-count ceiling held it back (a
+    // compact SOG); naming the byte budget here would be false.
+    const estimatedMillions = ((getEstimatedSplatCount(candidate) ?? 0) / 1_000_000).toFixed(1);
+    const limitMillions = TOUCH_SPLAT_DISABLE_MIN_SPLATS / 1_000_000;
+    return `[URL Loader] Splat ${candidate.path} (${sizeMb} MB, ~${estimatedMillions}M splats) exceeds the ${limitMillions}M-splat auto-load limit for this device; select it from the splat picker to download`;
+  }
   const budgetMb = Math.round(budgetBytes / 1_000_000);
   return `[URL Loader] Splat ${candidate.path} (${sizeMb} MB) exceeds the ${budgetMb} MB auto-load limit; select it from the splat picker to download`;
 }

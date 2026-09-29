@@ -20,4 +20,18 @@ describe('Spark splat runtime helpers', () => {
       streamLength: file.size,
     });
   });
+
+  it('streams SOG bundles to Spark like any other splat', async () => {
+    const stream = new ReadableStream();
+    const file = {
+      name: 'bicycle/splat_30000.SOG',
+      size: 7,
+      stream: () => stream,
+    } as File;
+
+    await expect(getSplatMeshSourceOptions(file)).resolves.toEqual({
+      stream,
+      streamLength: file.size,
+    });
+  });
 });

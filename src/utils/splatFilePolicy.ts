@@ -1,10 +1,12 @@
-export const SPLAT_FILE_EXTENSIONS = ['.spz', '.ply'] as const;
+export const SPLAT_FILE_EXTENSIONS = ['.spz', '.ply', '.sog'] as const;
 
 export type SplatFileExtension = typeof SPLAT_FILE_EXTENSIONS[number];
 
 const SPLAT_EXTENSION_PRIORITY: Record<SplatFileExtension, number> = {
   '.spz': 2,
   '.ply': 1,
+  // Spark-only and without GPU PSNR: never the automatic choice when PLY/SPZ exist.
+  '.sog': 0,
 };
 
 export interface SplatCandidate {

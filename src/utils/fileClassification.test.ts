@@ -124,6 +124,18 @@ describe('file classification helpers', () => {
     ]);
   });
 
+  it('lists a SOG beside a PLY but keeps the PLY as the automatic choice, even when the SOG is larger', () => {
+    const ply = buildFile('scene.ply', 'x');
+    const sog = buildFile('scene.sog', 'xxxxxxxx');
+    const files = fileMap([
+      ['splats/scene.sog', sog],
+      ['splats/scene.ply', ply],
+    ]);
+
+    expect(findPreferredSplatFile(files)).toBe(ply);
+    expect(findSplatFiles(files)).toEqual([ply, sog]);
+  });
+
   it('returns undefined when no splat file is present', () => {
     const files = fileMap([
       ['images/frame.jpg', buildFile('frame.jpg')],
