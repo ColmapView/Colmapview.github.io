@@ -23,6 +23,7 @@ import {
   mergeRemoteSplatCatalog as mergeRemoteSplatCatalogIntoLoadedFiles,
 } from '../utils/splatFileSourcePolicy';
 import { isSplatColorMode } from './types';
+import { supportsWebGpuRenderer } from '../utils/splatFilePolicy';
 import { fetchRemoteSplatBytes, fetchRemoteSplatFile, toArrayBuffer } from '../utils/urlUtils';
 import { getSplatDownloadProgress, getSplatPhaseProgress } from '../utils/splatLoadingProgressPolicy';
 import {
@@ -95,6 +96,10 @@ function applySplatActivationVisuals(): void {
  * devices (and desktop, and small tiles) keep the byte-retaining path.
  */
 function shouldActivateSplatSourceByteLess(source: SplatFileSource): boolean {
+  // Byte-less activation seeds the WebGPU decode cache; formats only Spark reads keep their bytes.
+  if (!supportsWebGpuRenderer(source.path)) {
+    return false;
+  }
   const isTouchDevice = detectTouchDevice();
   if (!isTouchDevice || (source.size ?? 0) <= TOUCH_SPLAT_BYTELESS_RETENTION_MIN_BYTES) {
     return false;

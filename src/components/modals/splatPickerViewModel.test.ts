@@ -63,6 +63,15 @@ describe('splat picker device tiers', () => {
       expect(item.disabledReason).toBeNull();
     }
   });
+
+  it('applies the raised byte-less ceiling only to formats the WebGPU decoder reads', () => {
+    const items = getSplatPickerItems([
+      { id: 'a.ply', path: 'a.ply', size: 40_000_000, splatCount: 3_500_000 },
+      { id: 'b.sog', path: 'b.sog', size: 40_000_000, splatCount: 3_500_000 },
+    ], { isTouchDevice: true, byteLessLoaderAvailable: true });
+    expect(items.find((item) => item.id === 'a.ply')?.tier).not.toBe('disabled');
+    expect(items.find((item) => item.id === 'b.sog')?.tier).toBe('disabled');
+  });
 });
 
 describe('getSplatPickerDescription', () => {

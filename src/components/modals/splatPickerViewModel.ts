@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import { Z_INDEX } from '../../theme/zIndex';
 import type { SplatFileSource } from '../../types/colmap';
 import { getSplatDeviceTier, type SplatDeviceTier } from '../../hooks/urlLoaderPolicy';
+import { supportsWebGpuRenderer } from '../../utils/splatFilePolicy';
 
 export interface SplatPickerItem {
   id: string;
@@ -88,7 +89,11 @@ export function getSplatPickerItems(
 ): SplatPickerItem[] {
   return sources.map((source) => {
     const sizeLabel = formatSplatSize(source.size);
-    const tier = getSplatDeviceTier(source, options);
+    const tier = getSplatDeviceTier(source, {
+      isTouchDevice: options.isTouchDevice,
+      // The raised byte-less ceiling only applies where the WebGPU decoder serves the render.
+      byteLessLoaderAvailable: Boolean(options.byteLessLoaderAvailable) && supportsWebGpuRenderer(source.path),
+    });
     return {
       id: source.id,
       name: source.path.split('/').pop() || source.path,

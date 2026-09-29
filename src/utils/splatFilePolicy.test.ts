@@ -3,7 +3,10 @@ import {
   compareSplatCandidates,
   getPreferredSplatCandidate,
   getSplatFileExtension,
+  getSplatRendererRequirement,
+  isSogSplatPath,
   isSplatFilePath,
+  supportsWebGpuRenderer,
 } from './splatFilePolicy';
 
 describe('splat file policy', () => {
@@ -31,5 +34,20 @@ describe('splat file policy', () => {
       largeSpz,
       smallPly,
     ].reduce(getPreferredSplatCandidate)).toBe(largeSpz);
+  });
+
+  it('knows which formats the WebGPU decoders can read', () => {
+    expect(supportsWebGpuRenderer('scene.PLY')).toBe(true);
+    expect(supportsWebGpuRenderer('dir/scene.spz')).toBe(true);
+    expect(supportsWebGpuRenderer('scene.sog')).toBe(false);
+    expect(supportsWebGpuRenderer('scene.splat')).toBe(false);
+  });
+
+  it('marks SOG as renderable only by Spark', () => {
+    expect(getSplatRendererRequirement('bicycle/splat_30000.SOG')).toBe('spark-only');
+    expect(getSplatRendererRequirement('scene.ply')).toBe('any');
+    expect(getSplatRendererRequirement(undefined)).toBe('any');
+    expect(isSogSplatPath('a/b.sog')).toBe(true);
+    expect(isSogSplatPath('a/b.ply')).toBe(false);
   });
 });

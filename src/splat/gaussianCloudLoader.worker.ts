@@ -1,7 +1,4 @@
-import {
-  loadPLYFromBuffer,
-  loadSPZFromBuffer,
-} from 'gs-toolbox';
+import { decodeGaussianCloudBuffer } from './gaussianCloudDecode';
 import { validateGaussianCloud, type GaussianCloud } from './gaussianCloud';
 import {
   createPackedWebGpuGaussianCloud,
@@ -44,9 +41,7 @@ async function decodeGaussianCloudInWorker(request: GaussianCloudWorkerDecodeReq
     phase: 'decoding',
   } satisfies GaussianCloudWorkerResponse);
 
-  const cloud = request.format === 'spz'
-    ? loadSPZFromBuffer(request.buffer)
-    : loadPLYFromBuffer(request.buffer);
+  const cloud = decodeGaussianCloudBuffer(request.format, request.buffer);
 
   try {
     validateGaussianCloud(cloud);

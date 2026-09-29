@@ -1061,6 +1061,22 @@ describe('reconstruction store byte-less oversized splat activation', () => {
     const seeded = await loadGaussianCloudFromFile(state.loadedFiles!.splatFile!);
     expect(seeded.cloud).toBe(decodedCloud);
   });
+
+  it('keeps the byte-retaining path for an oversized SOG, which the WebGPU decoder cannot read', async () => {
+    armTouchWebGpu();
+    stubSplatBytesFetch();
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFileSources: [
+        { id: 'splats/big.sog', path: 'splats/big.sog', url: 'https://x/splats/big.sog', size: 150_000_000 },
+      ],
+    }));
+
+    await useReconstructionStore.getState().selectSplatSource('splats/big.sog');
+
+    const source = useReconstructionStore.getState().loadedFiles?.splatFileSources?.find((s) => s.id === 'splats/big.sog');
+    expect(source?.file?.size).toBeGreaterThan(0);
+    expect(loadGaussianCloudFromBytesMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('abandonUrlAutoLoadRequest', () => {

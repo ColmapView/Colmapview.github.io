@@ -207,6 +207,10 @@ describe('WebGpuSplatCanvasLayer', () => {
     webGpu: 'unavailable',
     spark: true,
   };
+  const readyWebGpuAvailability: SplatBackendAvailability = {
+    webGpu: 'ready',
+    spark: true,
+  };
   beforeEach(() => {
     vi.resetAllMocks();
     vi.spyOn(appLogger, 'info').mockImplementation(() => undefined);
@@ -237,10 +241,6 @@ describe('WebGpuSplatCanvasLayer', () => {
   });
 
   it('mounts only for supported Gaussian files when WebGPU can still initialize', () => {
-    const readyWebGpuAvailability: SplatBackendAvailability = {
-      webGpu: 'ready',
-      spark: true,
-    };
     expect(shouldMountWebGpuSplatCanvas('auto', unavailableWebGpuAvailability, new File(['x'], 'scene.spz')))
       .toBe(true);
     expect(shouldMountWebGpuSplatCanvas('webgpu', unavailableWebGpuAvailability, new File(['x'], 'scene.spz')))
@@ -263,6 +263,11 @@ describe('WebGpuSplatCanvasLayer', () => {
       .toBe(false);
     expect(shouldMountWebGpuSplatCanvas('auto', { webGpu: 'failed', spark: true }, new File(['x'], 'scene.spz')))
       .toBe(false);
+  });
+
+  it('never mounts the WebGPU layer for a SOG, which only Spark can read', () => {
+    expect(shouldMountWebGpuSplatCanvas('auto', readyWebGpuAvailability, new File(['x'], 'scene.sog'))).toBe(false);
+    expect(shouldMountWebGpuSplatCanvas('webgpu', readyWebGpuAvailability, new File(['x'], 'scene.sog'))).toBe(false);
   });
 
   it('syncs hidden WebGPU frames only until the backend has produced its first frame', () => {

@@ -1,4 +1,4 @@
-import { getSplatFileExtension } from '../../utils/splatFilePolicy';
+import { supportsWebGpuRenderer } from '../../utils/splatFilePolicy';
 import type {
   SplatBackendAvailability,
   SplatBackendPreference,
@@ -65,5 +65,5 @@ export function shouldClearUnavailableForcedWebGpuSplatLoading(
 }
 
 export function isWebGpuGaussianCloudFile(file: File): boolean {
-  return getSplatFileExtension(file.name) !== null;
+  return supportsWebGpuRenderer(file.name);
 }
