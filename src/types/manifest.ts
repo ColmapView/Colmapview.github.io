@@ -11,6 +11,8 @@ export interface ColmapManifest {
   name?: string;
   /** Base URL prefix for all relative file paths */
   baseUrl: string;
+  /** Optional saved ColmapView presentation, relative to baseUrl. */
+  viewerStatePath?: string;
   /** COLMAP binary/text file paths relative to baseUrl */
   files: {
     cameras: string;
@@ -59,6 +61,7 @@ export const ColmapManifestSchema = z.object({
   version: z.number().int().min(1).max(1),
   name: z.string().optional(),
   baseUrl: z.string().url(),
+  viewerStatePath: z.string().min(1).max(4096).optional(),
   files: z.object({
     cameras: z.string().min(1),
     images: z.string().min(1),

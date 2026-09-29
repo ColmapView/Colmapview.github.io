@@ -1,6 +1,7 @@
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useSplatBackendStore } from '../store';
+import { useReconstructionStore, useSplatBackendStore } from '../store';
+import type { DragEvent } from 'react';
 import type { FileDropzoneWorkflowDeps } from './fileDropzoneWorkflow';
 import { useFileDropzone } from './useFileDropzone';
 
@@ -25,6 +26,20 @@ describe('useFileDropzone', () => {
   beforeEach(() => {
     processFileDropzoneFilesMock.mockClear();
     useSplatBackendStore.setState(useSplatBackendStore.getInitialState(), true);
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+  });
+
+  it('cancels pending URL settings when local files are dropped', async () => {
+    const signal = useReconstructionStore.getState().tryStartUrlLoad()!;
+    useReconstructionStore.getState().setUrlLoading(false);
+    const { result } = renderHook(() => useFileDropzone());
+    const event = { preventDefault: vi.fn(), stopPropagation: vi.fn(), dataTransfer: {
+      types: ['Files'], items: [], files: [new File(['ui: {}'], 'colmapview.yaml')],
+    } } as unknown as DragEvent<HTMLElement>;
+    await act(async () => { await result.current.handleDrop(event); });
+    expect(signal.aborted).toBe(true);
+    expect(useReconstructionStore.getState().urlLoadController).toBeNull();
+    expect(processFileDropzoneFilesMock).toHaveBeenCalled();
   });
 
   it('does not preload the spark runtime when webgpu is the resolved splat backend', async () => {

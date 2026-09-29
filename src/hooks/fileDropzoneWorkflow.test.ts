@@ -5,6 +5,10 @@ import type { FileDropzoneWorkflowDeps } from './fileDropzoneWorkflow';
 import { processFileDropzoneFiles } from './fileDropzoneWorkflow';
 import { ReconstructionService, ReconstructionSnapshot } from '../wasm/reconstructionService';
 import { cancelPendingReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
+import { useReconstructionStore, useTransformStore, useUIStore, usePointCloudStore } from '../store';
+import { applyShareConfig } from './useUrlState';
+import { createIdentityEuler } from '../utils/sim3dTransforms';
+import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 
 function file(name: string): File {
   return new File([''], name);
@@ -126,6 +130,81 @@ function workerLoadFixture() {
 }
 
 describe('file dropzone workflow', () => {
+  it('restores the selected splat and alignment from a wrapped project folder', async () => {
+    const fixture = workerLoadFixture();
+    const preferred = new File(['a'.repeat(20)], 'default.spz');
+    const active = new File(['b'.repeat(10)], 'active.spz');
+    const alignment = { ...createIdentityEuler(), translationX: 7, rotationZ: 1 };
+    const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { activeSourceId: 'splats/active.spz', transform: alignment } } });
+    const files = new Map([...fixture.files].map(([path, value]) => ['project/' + path, value]));
+    files.set('project/splats/default.spz', preferred);
+    files.set('project/splats/active.spz', active);
+    files.set('project/colmapview.yaml', Object.assign(file('colmapview.yaml'), { text: async () => yaml }));
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    try {
+      const deps = createDeps({ parseFiles: async () => fixture.parseResult,
+        setLoadedFiles: useReconstructionStore.getState().setLoadedFiles,
+        onViewerState: state => applyShareConfig(state.config) });
+      expect(await processFileDropzoneFiles(files, deps)).toBe(true);
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(active);
+      expect(useTransformStore.getState().splatTransform).toEqual(alignment);
+    } finally {
+      fixture.service.dispose();
+      useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+      useTransformStore.setState(useTransformStore.getInitialState(), true);
+      useUIStore.setState(useUIStore.getInitialState(), true);
+      usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
+    }
+  });
+  it.each(['colmap', 'splats', 'images', 'settings-only'] as const)('restores project YAML after a successful %s load', async mode => {
+    const fixture = workerLoadFixture();
+    const files = mode === 'colmap' ? fixture.files : new Map<string, File>();
+    if (mode === 'splats') files.set('scene.spz', file('scene.spz'));
+    if (mode === 'images') files.set('photo.jpg', file('photo.jpg'));
+    const settings = Object.assign(file('colmapview.yaml'), { text: async () => 'ui:\n  background_color: "#123456"\nview_state:\n  position: [1, 2, 3]\n  target: [0, 0, 0]\n  quaternion: [0, 0, 0, 1]\n  distance: 4\n' });
+    files.set('project/colmapview.yaml', settings);
+    const sequence: string[] = [];
+    const onViewerState = vi.fn(() => { sequence.push('settings'); });
+    const importConfig = vi.fn();
+    const deps = createDeps({ parseFiles: async () => fixture.parseResult, importConfig,
+      resetView: () => { sequence.push('reset'); }, onViewerState });
+    expect(await processFileDropzoneFiles(files, deps)).toBe(true);
+    expect(onViewerState).toHaveBeenCalledWith(expect.objectContaining({ config: { ui: { backgroundColor: '#123456' } },
+      viewState: { position: [1, 2, 3], target: [0, 0, 0], quaternion: [0, 0, 0, 1], distance: 4 } }));
+    expect(sequence).toEqual(mode === 'settings-only' ? ['settings'] : ['reset', 'settings']);
+    expect(importConfig).not.toHaveBeenCalled();
+    fixture.service.dispose();
+  });
+
+  it.each(['invalid', 'oversized', 'unreadable'] as const)('skips %s project YAML without failing dataset loading', async mode => {
+    const fixture = workerLoadFixture();
+    const text = vi.fn(async () => { if (mode === 'unreadable') throw new Error('Read failed'); return 'version: 99'; });
+    const settings = Object.assign(new File([mode === 'oversized' ? 'x'.repeat(256 * 1024 + 1) : ''], 'colmapview.yaml'), { text });
+    fixture.files.set('colmapview.yaml', settings);
+    const onViewerState = vi.fn();
+    const deps = createDeps({ parseFiles: async () => fixture.parseResult, onViewerState });
+    expect(await processFileDropzoneFiles(fixture.files, deps)).toBe(true);
+    expect(deps.setReconstruction).toHaveBeenCalled();
+    expect(deps.setError).not.toHaveBeenCalled();
+    expect(onViewerState).not.toHaveBeenCalled();
+    if (mode === 'oversized') expect(text).not.toHaveBeenCalled();
+    fixture.service.dispose();
+  });
+
+  it('does not restore project settings when their load is cancelled', async () => {
+    let finish!: (text: string) => void;
+    const text = vi.fn(() => new Promise<string>(resolve => { finish = resolve; }));
+    const settings = Object.assign(file('colmapview.yaml'), { text });
+    const deps = createDeps({ onViewerState: vi.fn() });
+    const running = processFileDropzoneFiles(new Map([['colmapview.yaml', settings]]), deps);
+    await vi.waitFor(() => expect(text).toHaveBeenCalled());
+    cancelPendingReconstructionLoad();
+    finish('ui:\n  background_color: "#123456"');
+    expect(await running).toBe(false);
+    expect(deps.onViewerState).not.toHaveBeenCalled();
+  });
+
   it.each(['worker', 'main-thread-fallback'] as const)('installs %s snapshots with only the required current-thread paint delay', async mode => {
     const fixture = workerLoadFixture();
     fixture.service.mode = mode;

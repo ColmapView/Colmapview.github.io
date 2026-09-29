@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { Blob as NodeBlob } from 'node:buffer';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildFile } from '../test/builders';
 import type { ColmapManifest } from '../types/manifest';
 import { loadManifestSource } from './urlLoaderManifestSource';
@@ -26,6 +27,7 @@ function makeFiles(): Map<string, File> {
 
 function makeDeps(files = makeFiles()) {
   return {
+    fetchImpl: vi.fn(async () => new Response('', { status: 404 })),
     fetchColmapFiles: vi.fn(async () => files),
     log: vi.fn(),
     processFiles: vi.fn(async () => {}),
@@ -33,6 +35,8 @@ function makeDeps(files = makeFiles()) {
     setUrlProgress: vi.fn(),
   };
 }
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe('URL loader manifest source helpers', () => {
   it('loads a URL manifest source with lazy image/mask bases and processing progress', async () => {
@@ -98,6 +102,21 @@ describe('URL loader manifest source helpers', () => {
 
     expect(deps.processFiles).toHaveBeenCalledWith(files, { start: 80, end: 100 }, { throwOnError: true });
     expect(deps.setUrlProgress).not.toHaveBeenCalledWith({ percent: 100, message: 'Complete' });
+  });
+
+  it('downloads COLMAP files while optional viewer settings are still loading', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const deps = makeDeps();
+    let respond!: (response: Response) => void;
+    deps.fetchImpl.mockImplementationOnce(() => new Promise<Response>(resolve => { respond = resolve; }));
+    const onViewerState = vi.fn();
+    const loading = loadManifestSource(manifest, { type: 'manifest' }, { ...deps, onViewerState });
+
+    await vi.waitFor(() => expect(deps.fetchColmapFiles).toHaveBeenCalled());
+    respond(new Response('ui:\n  background_color: "#123456"\n'));
+
+    await expect(loading).resolves.toBe(true);
+    expect(onViewerState).toHaveBeenCalledWith(expect.objectContaining({ config: { ui: { backgroundColor: '#123456' } } }));
   });
 
   it('propagates COLMAP fetch failures before mutating source state', async () => {

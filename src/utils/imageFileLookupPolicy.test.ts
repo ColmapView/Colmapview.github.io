@@ -63,6 +63,18 @@ describe('image file lookup policy', () => {
     });
   });
 
+  it.each(['photo#1.jpg', 'photo?1.jpg', 'literal%20.jpg', 'folder name/照片.jpg'])(
+    'keeps reserved characters in the image and mask filename: %s', name => {
+      const image = new URL(buildImageUrl('https://example.com/images/', name).url);
+      expect(image.hash).toBe('');
+      expect(image.search).toBe('');
+      expect(decodeURIComponent(image.pathname)).toBe('/images/' + name);
+      const masks = buildMaskUrlCandidates('https://example.com/masks/', name).map(candidate => new URL(candidate.url));
+      expect(masks.map(url => decodeURIComponent(url.pathname))).toEqual(['/masks/' + name, '/masks/' + name + '.png']);
+      expect(masks.every(url => !url.hash && !url.search)).toBe(true);
+    },
+  );
+
   it('builds local mask lookup paths for mirrored folder layouts and fallbacks', () => {
     expect(getMaskLookupPaths('project/images/cam1/photo.jpg')).toEqual([
       'project/masks/cam1/photo.jpg',

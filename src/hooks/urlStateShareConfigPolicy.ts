@@ -1,11 +1,7 @@
 import type { Sim3dEuler } from '../types/sim3d';
 import type { ShareConfig } from '../utils/shareDataCodec';
-import {
-  composeSim3d,
-  createSim3dFromEuler,
-  isIdentityEuler,
-  sim3dToEuler,
-} from '../utils/sim3dTransforms';
+import { sections, getPersistedProperties, getStoreKey } from '../config/registry';
+import { isIdentityEuler } from '../utils/sim3dTransforms';
 
 export interface ShareableFieldSets {
   pointCloud?: ReadonlySet<string>;
@@ -27,6 +23,15 @@ export interface ShareConfigStoreStates {
   splatTransform?: Sim3dEuler;
 }
 
+// Shared formats (links, colmapview.yaml) store an unbounded nullable number (Infinity in the store) as null.
+const nullableNumberFields = new Set(sections.flatMap(section => getPersistedProperties(section)
+  .filter(property => property.type === 'number' && property.nullable).map(getStoreKey)));
+
+export function restoreNullableNumbers(values: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(values).map(([key, value]) =>
+    [key, value === null && nullableNumberFields.has(key) ? Infinity : value]));
+}
+
 export function extractShareableFields(
   state: object,
   allowedFields: ReadonlySet<string> | undefined
@@ -39,7 +44,10 @@ export function extractShareableFields(
 
     const value: unknown = Reflect.get(state, key);
     if (typeof value === 'function') continue;
-    if (value === Infinity) continue;
+    if (value === Infinity) {
+      if (nullableNumberFields.has(key)) result[key] = null;
+      continue;
+    }
 
     result[key] = value;
   }
@@ -87,26 +95,11 @@ export function buildShareConfigFromStoreStates(
     extractShareableFields(states.rig, shareableFields.rig)
   );
 
-  const transform = getShareTransform(states.transform, states.splatTransform);
+  const transform = states.transform;
   if (!isIdentityEuler(transform)) {
     config.transform = transform;
   }
+  if (states.splatTransform) config.splat = { transform: { ...states.splatTransform } };
 
   return config;
-}
-
-export function getShareTransform(
-  transform: Sim3dEuler,
-  splatTransform?: Sim3dEuler
-): Sim3dEuler {
-  if (!splatTransform || isIdentityEuler(splatTransform)) {
-    return transform;
-  }
-  if (isIdentityEuler(transform)) {
-    return splatTransform;
-  }
-  return sim3dToEuler(composeSim3d(
-    createSim3dFromEuler(transform),
-    createSim3dFromEuler(splatTransform)
-  ));
 }

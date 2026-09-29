@@ -349,7 +349,9 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     }
 
     set({ requestedSplatSourceId });
-    get().setLoadedFiles(loadedFiles);
+    // A lazy/missing source must stay pending without resetting the current scene.
+    const resolved = getLoadedFilesWithActiveSplatSource(loadedFiles, requestedSplatSourceId);
+    if (resolved !== loadedFiles) get().setLoadedFiles(resolved);
   },
 
   mergeRemoteSplatCatalog: (catalog, baseUrl) => {

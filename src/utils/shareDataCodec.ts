@@ -42,6 +42,7 @@ export interface ShareConfig {
   rig?: Record<string, unknown>;
   splat?: {
     activeSourceId?: string;
+    transform?: Sim3dEuler;
   };
   transform?: Sim3dEuler;
 }
@@ -82,7 +83,8 @@ function isSim3dEuler(value: unknown): value is Sim3dEuler {
 function isShareSplatConfig(value: unknown): boolean {
   if (value === undefined) return true;
   if (!isObjectRecord(value)) return false;
-  return value.activeSourceId === undefined || typeof value.activeSourceId === 'string';
+  return (value.activeSourceId === undefined || typeof value.activeSourceId === 'string')
+    && (value.transform === undefined || isSim3dEuler(value.transform));
 }
 
 function isShareConfig(value: unknown): value is ShareConfig {

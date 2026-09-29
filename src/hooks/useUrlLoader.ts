@@ -16,6 +16,7 @@ import {
   getManifestLoadedLogMessage,
   getUrlNormalizationLogMessage,
   normalizeLoadUrl,
+  type RemoteSplatCandidate,
 } from './urlLoaderPolicy';
 import { URL_LOAD_GUARD_MESSAGE } from './urlLoaderLoadGuard';
 import { fetchUrlManifest, withDiscoveredColmapPaths } from './urlLoaderManifestFetch';
@@ -23,14 +24,22 @@ import { handleUrlLoadFailure } from './urlLoaderErrorHandling';
 import { loadZipUrlSource } from './urlLoaderZipSource';
 import { loadManifestSource } from './urlLoaderManifestSource';
 import { isSplatUrl, loadSplatUrlSource } from './urlLoaderSplatSource';
+import { applySavedViewerState, decodeSharedViewerOverrides } from './useUrlState';
+import type { PublishedViewerState } from '../utils/publishedViewerState';
+import { fetchDatasetViewerSettings } from './urlLoaderViewerState';
+import { findDatasetViewerSettingsEntry } from '../utils/datasetViewerSettings';
 
 export interface UseUrlLoaderDeps {
   logger?: Pick<AppLogger, 'error' | 'info'>;
+  /** Only startup loads should inherit settings from the current viewer URL. */
+  applyUrlOverrides?: boolean;
 }
 
 type ReconstructionState = ReturnType<typeof useReconstructionStore.getState>;
 
 interface UrlLoadContext {
+  onViewerState: (state: PublishedViewerState) => Promise<void>;
+  onRemoteSplatCatalog: (catalog: RemoteSplatCandidate[]) => void;
   signal: AbortSignal;
   assertCurrent: () => void;
   fetchImpl: (url: string, init?: RequestInit) => Promise<Response>;
@@ -38,10 +47,11 @@ interface UrlLoadContext {
   setSourceInfo: ReconstructionState['setSourceInfo'];
   setUrlProgress: ReconstructionState['setUrlProgress'];
   clearCachesOnFailure: boolean;
+  hasEmbeddedViewerSettings: boolean;
 }
 
 /** Owns URL discovery, downloading, and the handoff to reconstruction parsing. */
-export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
+export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: UseUrlLoaderDeps = {}) {
   const { processFiles } = useFileDropzone();
   const logError = logger.error;
   const logInfo = logger.info;
@@ -77,14 +87,23 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
         assertCurrent();
         return callback(...args);
       };
+    const initialHash = applyUrlOverrides ? window.location.hash : '';
+    let savedViewerState: PublishedViewerState | null = null;
     const load: UrlLoadContext = {
+      // Recorded here and applied once the load succeeds, together with the URL's own settings.
+      onViewerState: async (state) => { savedViewerState = state; },
+      onRemoteSplatCatalog: guard(catalog => mergeRemoteSplatCatalog(catalog, contextUrl)),
       signal,
       assertCurrent,
       fetchImpl: guard((url, init) => fetchWithTimeout(url, undefined, { ...init, signal })),
-      processFiles: guard(processFiles),
+      processFiles: guard((files, range, options) => {
+        load.hasEmbeddedViewerSettings = Boolean(findDatasetViewerSettingsEntry(files));
+        return processFiles(files, range, { ...options, onViewerState: load.onViewerState });
+      }),
       setSourceInfo: guard(setSourceInfo),
       setUrlProgress: guard(setUrlProgress),
       clearCachesOnFailure: true,
+      hasEmbeddedViewerSettings: false,
     };
     setUrlLoading(true);
     setUrlError(null);
@@ -93,6 +112,12 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
     try {
       const loaded = await work(load);
       assertCurrent();
+      if (loaded) {
+        const shared = await decodeSharedViewerOverrides(initialHash);
+        assertCurrent();
+        await applySavedViewerState(savedViewerState, shared, assertCurrent);
+        assertCurrent();
+      }
       return loaded;
     } catch (error) {
       if (isCurrent()) {
@@ -116,7 +141,7 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
       }
     }
   }, [tryStartUrlLoad, logInfo, processFiles, setSourceInfo, setUrlProgress, setUrlLoading,
-    setUrlError, logError, setError, finishUrlLoad]);
+    setUrlError, logError, setError, finishUrlLoad, applyUrlOverrides, mergeRemoteSplatCatalog]);
 
   const loadFromUrl = useCallback((url: string): Promise<boolean> => runLoad(url, async (load) => {
     const normalized = normalizeLoadUrl(url);
@@ -125,7 +150,7 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
 
     if (isSplatUrl(normalizedUrl)) {
       load.clearCachesOnFailure = false;
-      return loadSplatUrlSource(normalizedUrl, {
+      const loaded = await loadSplatUrlSource(normalizedUrl, {
         ...load,
         log: logInfo,
         onSplatFileFetched: () => {
@@ -134,12 +159,22 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
           load.clearCachesOnFailure = true;
         },
       });
+      if (loaded) {
+        const settings = await fetchDatasetViewerSettings(normalizedUrl, load.fetchImpl, true);
+        if (settings) await load.onViewerState(settings);
+      }
+      return loaded;
     }
 
     clearAllCaches();
     if (isArchiveUrl(normalizedUrl)) {
       logInfo(getArchiveUrlDetectedLogMessage(normalizedUrl));
-      return loadZipUrlSource(normalizedUrl, { ...load, log: logInfo });
+      const loaded = await loadZipUrlSource(normalizedUrl, { ...load, log: logInfo });
+      if (loaded && !load.hasEmbeddedViewerSettings) {
+        const settings = await fetchDatasetViewerSettings(normalizedUrl, load.fetchImpl, true);
+        if (settings) await load.onViewerState(settings);
+      }
+      return loaded;
     }
 
     let manifest: ColmapManifest;
@@ -159,21 +194,15 @@ export function useUrlLoader({ logger = appLogger }: UseUrlLoaderDeps = {}) {
     }
     load.assertCurrent();
 
-    const catalog: { path: string; size: number; splatCount: number | null }[] = [];
     const loaded = await loadManifestSource(manifest, { type: 'url', sourceUrl: normalizedUrl }, {
       ...load,
       log: logInfo,
       onRemoteSplatCatalog: (candidates) => {
         load.assertCurrent();
-        catalog.push(...candidates.map((candidate) => ({
-          path: candidate.path, size: candidate.size, splatCount: candidate.splatCount ?? null,
-        })));
+        mergeRemoteSplatCatalog(candidates, manifest.baseUrl);
       },
     });
     load.assertCurrent();
-    if (loaded && catalog.length > 0 && !useReconstructionStore.getState().loadedFiles?.splatFile) {
-      mergeRemoteSplatCatalog(catalog, manifest.baseUrl);
-    }
     return loaded;
   }), [runLoad, logInfo, mergeRemoteSplatCatalog]);
 

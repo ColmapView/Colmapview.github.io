@@ -15,6 +15,12 @@ import { shouldStartSparkSplatRuntimePreload } from '../utils/splatBackendPolicy
 import { collectDroppedFiles, collectFileDropPayload, isFileDrop } from './fileDropzoneDropPayload';
 import { loadBrowsedDirectory, loadDropPayload, loadLocalZipFile } from './fileDropzoneLocalSources';
 import { processFileDropzoneFiles, type FileDropzoneWorkflowOptions } from './fileDropzoneWorkflow';
+import { applySavedViewerState } from './useUrlState';
+
+function cancelUrlLoad(): void {
+  const { urlLoadController, finishUrlLoad } = useReconstructionStore.getState();
+  if (urlLoadController) finishUrlLoad(urlLoadController.signal);
+}
 
 export function useFileDropzone() {
   const {
@@ -38,7 +44,7 @@ export function useFileDropzone() {
   const processFiles = useCallback(async (
     files: Map<string, File>,
     progressRange?: { start: number; end: number },
-    options: Pick<FileDropzoneWorkflowOptions, 'onSceneReplaced' | 'replaceSplatScene' | 'throwOnError'> = {}
+    options: Pick<FileDropzoneWorkflowOptions, 'onSceneReplaced' | 'replaceSplatScene' | 'throwOnError' | 'onViewerState'> = {}
   ) => {
     await processFileDropzoneFiles(files, {
       addNotification: useNotificationStore.getState().addNotification,
@@ -51,6 +57,8 @@ export function useFileDropzone() {
       },
       getUrlLoading: () => useReconstructionStore.getState().urlLoading,
       logger: appLogger,
+      // Local files carry no URL settings; URL loads pass their own handler.
+      onViewerState: (state) => applySavedViewerState(state, null),
       resetView,
       setDroppedFiles,
       setError,
@@ -70,6 +78,7 @@ export function useFileDropzone() {
     }, {
       progressRange,
       onSceneReplaced: options.onSceneReplaced,
+      onViewerState: options.onViewerState,
       replaceSplatScene: options.replaceSplatScene ?? false,
       throwOnError: options.throwOnError ?? false,
     });
@@ -90,6 +99,7 @@ export function useFileDropzone() {
   const processZipFile = useCallback(async (zipFile: File) => {
     await loadLocalZipFile(zipFile, {
       isLoading: () => useReconstructionStore.getState().urlLoading,
+      cancelUrlLoad,
       setUrlLoading,
       setUrlProgress,
       setError,
@@ -119,6 +129,7 @@ export function useFileDropzone() {
 
     await loadDropPayload(collectFileDropPayload(e.dataTransfer), {
       isLoading: () => useReconstructionStore.getState().urlLoading,
+      cancelUrlLoad,
       setUrlLoading,
       setUrlProgress,
       setError,
@@ -142,6 +153,7 @@ export function useFileDropzone() {
   const handleBrowse = useCallback(async () => {
     await loadBrowsedDirectory({
       isLoading: () => useReconstructionStore.getState().urlLoading,
+      cancelUrlLoad,
       setUrlLoading,
       setUrlProgress,
       setError,

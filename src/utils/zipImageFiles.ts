@@ -38,6 +38,7 @@ export async function fetchZipMask(name: string, options?: DatasetAccessOptions)
   const imageIndex = getActiveZipImageIndex();
   if (!imageIndex) return null;
   return zipMaskState.request(name, async context => {
+    let extractionFailed = false;
     for (const path of getMaskPathVariants(name)) {
       if (!context.isCurrent()) return null;
       const entry = findZipEntry(path, imageIndex);
@@ -47,9 +48,10 @@ export async function fetchZipMask(name: string, options?: DatasetAccessOptions)
           if (!context.isCurrent()) return null;
           appLogger.info(`[ZIP Mask] Found mask for ${name}`);
           return file;
-        } catch { /* Try the next candidate. */ }
+        } catch { extractionFailed = true; /* Try the next candidate. */ }
       }
     }
+    if (extractionFailed && context.isCurrent()) options?.onError?.({ kind: 'network', message: `Could not extract mask for ${name}` });
     return null;
   }, options);
 }

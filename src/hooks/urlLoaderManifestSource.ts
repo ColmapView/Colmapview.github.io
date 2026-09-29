@@ -7,6 +7,8 @@ import {
   type RemoteSplatCandidate,
 } from './urlLoaderPolicy';
 import { fetchManifestColmapFiles } from './urlLoaderManifestFetch';
+import { fetchPublishedViewerState } from './urlLoaderViewerState';
+import type { PublishedViewerState } from '../utils/publishedViewerState';
 
 type ProcessFiles = (
   files: Map<string, File>,
@@ -26,13 +28,14 @@ type SetUrlProgress = (progress: UrlLoadProgress | null) => void;
 type Log = (...args: unknown[]) => void;
 
 export interface LoadManifestSourceDeps {
+  onViewerState?: (state: PublishedViewerState) => void | Promise<void>;
   fetchImpl?: (url: string, init?: RequestInit) => Promise<Response>;
   fetchColmapFiles?: FetchColmapFiles;
   log?: Log;
   processFiles: ProcessFiles;
   setSourceInfo: SetSourceInfo;
   setUrlProgress: SetUrlProgress;
-  /** Receives the full discovered remote splat catalog for lazy on-demand loading. */
+  /** Installs discovered sources after parsing, before restoring viewer settings. */
   onRemoteSplatCatalog?: (catalog: RemoteSplatCandidate[]) => void;
 }
 
@@ -42,15 +45,20 @@ export async function loadManifestSource(
   deps: LoadManifestSourceDeps
 ): Promise<boolean> {
   const log = deps.log ?? appLogger.info;
+  const catalog: RemoteSplatCandidate[] = [];
   const fetchColmapFiles = deps.fetchColmapFiles
     ?? ((targetManifest: ColmapManifest) => fetchManifestColmapFiles(targetManifest, {
       fetchImpl: deps.fetchImpl,
       log: (message) => log(message),
       setUrlProgress: deps.setUrlProgress,
-      onRemoteSplatCatalog: deps.onRemoteSplatCatalog,
+      onRemoteSplatCatalog: candidates => catalog.push(...candidates),
     }));
 
-  const files = await fetchColmapFiles(manifest);
+  // Settings lookup may probe several locations; never make the reconstruction wait on it.
+  const [viewerState, files] = await Promise.all([
+    fetchPublishedViewerState(manifest, deps.fetchImpl ?? fetch),
+    fetchColmapFiles(manifest),
+  ]);
   log(`[URL Loader] Downloaded ${files.size} COLMAP files:`, Array.from(files.keys()));
 
   log('[URL Loader] Skipping image download (images will be loaded lazily)');
@@ -76,10 +84,12 @@ export async function loadManifestSource(
 
   log('[URL Loader] Calling processFiles...');
   await deps.processFiles(files, { start: 80, end: 100 }, { throwOnError: true });
+  if (catalog.length) deps.onRemoteSplatCatalog?.(catalog);
 
   if (findSplatFileSources(files).length === 0) {
     deps.setUrlProgress({ percent: 100, message: 'Complete' });
   }
+  if (viewerState) await deps.onViewerState?.(viewerState);
   log(`[URL Loader] Successfully loaded ${files.size} files from ${sourceInfo.successLabel}`);
 
   return true;

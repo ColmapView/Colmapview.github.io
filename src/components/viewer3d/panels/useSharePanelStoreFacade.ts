@@ -3,6 +3,7 @@ import {
   useExportStore,
   useNotificationStore,
   useReconstructionStore,
+  useDeletionStore,
   type ExportState,
   type NotificationState,
 } from '../../../store';
@@ -11,6 +12,7 @@ import type { Reconstruction } from '../../../types/colmap';
 import type { ColmapManifest } from '../../../types/manifest';
 
 interface SharePanelDataFacade {
+  hasEdits: boolean;
   reconstruction: Reconstruction | null;
   sourceUrl: string | null;
   sourceManifest: ColmapManifest | null;
@@ -24,6 +26,8 @@ export interface SharePanelStoreFacade {
 }
 
 export function useSharePanelStoreFacade(): SharePanelStoreFacade {
+  const revision = useReconstructionStore((s) => s.reconstructionEditRevision);
+  const pending = useDeletionStore((s) => s.pendingDeletions.size);
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const sourceUrl = useReconstructionStore((s) => s.sourceUrl);
   const sourceManifest = useReconstructionStore((s) => s.sourceManifest);
@@ -33,6 +37,7 @@ export function useSharePanelStoreFacade(): SharePanelStoreFacade {
 
   return {
     data: {
+      hasEdits: revision > 0 || pending > 0,
       reconstruction,
       sourceUrl,
       sourceManifest,

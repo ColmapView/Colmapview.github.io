@@ -31,6 +31,8 @@ import { runSplatOnlyLoad } from './fileDropzoneSplatOnly';
 import { parseColmapFiles } from './fileDropzoneColmapParser';
 import { buildColmapReconstruction } from './fileDropzoneReconstruction';
 import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
+import { findDatasetViewerSettingsEntry, parseDatasetViewerSettings, resolveDatasetSplatSourceId } from '../utils/datasetViewerSettings';
+import { MAX_VIEWER_STATE_BYTES, type PublishedViewerState } from '../utils/publishedViewerState';
 
 type SetUrlProgress = (progress: UrlLoadProgress | null) => void;
 type SetSourceInfo = {
@@ -78,6 +80,7 @@ export interface FileDropzoneWorkflowDeps {
   getSourceInfo: () => SetSourceInfo;
   getUrlLoading: () => boolean;
   importConfig?: ImportConfigFile;
+  onViewerState?: (state: PublishedViewerState) => void | Promise<void>;
   logger?: AppLogger;
   parseFiles?: ParseColmapFiles;
   classifyPlyFile?: ClassifyPlyFile;
@@ -99,6 +102,7 @@ export interface FileDropzoneWorkflowOptions {
   replaceSplatScene?: boolean;
   throwOnError?: boolean;
   onSceneReplaced?: () => void;
+  onViewerState?: (state: PublishedViewerState) => void | Promise<void>;
 }
 
 function updateLoadedSplatFile(
@@ -255,6 +259,7 @@ export async function processFileDropzoneFiles(
   let pendingSource: ReconstructionSource | null = null;
   let sourceInstalled = false;
   let keepLoadingForInitialSplat = false;
+  let viewerState: PublishedViewerState | null = null;
   const logger = deps.logger ?? appLogger;
   const clearCaches = deps.clearCaches ?? clearAllCaches;
   const importConfig = deps.importConfig ?? importConfigFile;
@@ -271,7 +276,15 @@ export async function processFileDropzoneFiles(
     replaceSplatScene = false,
     throwOnError = false,
     onSceneReplaced,
+    onViewerState = deps.onViewerState,
   } = normalizeWorkflowOptions(options);
+
+  const complete = async () => {
+    load.assertCurrent();
+    if (viewerState) await onViewerState?.(viewerState);
+    load.assertCurrent();
+    return true;
+  };
 
   const pStart = progressRange?.start ?? 0;
   const pEnd = progressRange?.end ?? 100;
@@ -329,14 +342,32 @@ export async function processFileDropzoneFiles(
       deps.setUrlProgress({ percent: mapProgress(0), message: 'Starting...' });
     }
 
-    const configFile = findConfigFile(files);
-    let configErrorMessage: string | null = null;
-    if (configFile) {
-      const result = await importConfig(configFile, { logErrors: true, signal: load.signal });
+    const settingsEntry = findDatasetViewerSettingsEntry(files);
+    const settingsFile = settingsEntry?.[1];
+    if (settingsFile) {
+      try {
+        if (settingsFile.size > MAX_VIEWER_STATE_BYTES) throw new Error('Settings exceed size limit');
+        viewerState = parseDatasetViewerSettings(await settingsFile.text());
+        if (viewerState.config.splat?.activeSourceId) {
+          viewerState.config.splat.activeSourceId = resolveDatasetSplatSourceId(
+            viewerState.config.splat.activeSourceId, settingsEntry![0], files.keys(),
+          );
+        }
+      } catch {
+        logger.warn('[Dataset Loader] Skipping unavailable or invalid colmapview.yaml settings.');
+      }
       load.assertCurrent();
-      if (!result.applied && result.errorMessage) {
-        deps.setError(result.errorMessage);
-        configErrorMessage = result.errorMessage;
+    }
+    const configFile = settingsFile ? null : findConfigFile(files);
+    let configErrorMessage: string | null = null;
+    if (configFile || settingsFile) {
+      if (configFile) {
+        const result = await importConfig(configFile, { logErrors: true, signal: load.signal });
+        load.assertCurrent();
+        if (!result.applied && result.errorMessage) {
+          deps.setError(result.errorMessage);
+          configErrorMessage = result.errorMessage;
+        }
       }
 
       if (!hasColmapFiles(files) && !hasImageFiles(files)) {
@@ -360,7 +391,7 @@ export async function processFileDropzoneFiles(
         if (startedNewSplatScene && configErrorMessage === null) {
           handOffLoadingToSplatRenderer();
         }
-        return configErrorMessage === null;
+        return configErrorMessage === null ? await complete() : false;
       }
     }
 
@@ -386,14 +417,14 @@ export async function processFileDropzoneFiles(
         && !replaceSplatScene
         && updateLoadedSplatFile(splatFile, splatFiles, splatFileSources, deps, mapProgress, logger.info)
       ) {
-        return true;
+        return await complete();
       }
 
       if (pointCloudFile && !splatFile) {
         reportSceneReplacement();
         await runNewPointCloudOnlyLoad(files, pointCloudFile, deps, clearCaches, mapProgress, logger.info, load.signal);
         load.assertCurrent();
-        return true;
+        return await complete();
       }
 
       if (hasImageFiles(files)) {
@@ -418,14 +449,14 @@ export async function processFileDropzoneFiles(
         if (splatFile) {
           handOffLoadingToSplatRenderer();
         }
-        return true;
+        return await complete();
       }
 
       if (splatFile) {
         reportSceneReplacement();
         runNewSplatOnlyLoad(files, splatFile, splatFiles, splatFileSources, deps, clearCaches, mapProgress, logger.info);
         handOffLoadingToSplatRenderer();
-        return true;
+        return await complete();
       }
 
       throw new Error(
@@ -529,7 +560,7 @@ export async function processFileDropzoneFiles(
     if (splatFile) {
       handOffLoadingToSplatRenderer();
     }
-    return true;
+    return await complete();
   } catch (err) {
     if (load.signal.aborted || (err instanceof Error && err.name === 'AbortError')) return false;
     logger.error('Error processing files:', err);

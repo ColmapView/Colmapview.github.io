@@ -1,11 +1,22 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useReconstructionStore } from '../store';
+import { useCameraStore, useReconstructionStore, useTransformStore, useUIStore, usePointCloudStore } from '../store';
 import type { LoadedFiles } from '../types/colmap';
 import { useUrlLoader } from './useUrlLoader';
+import { encodeCameraState } from '../utils/urlCameraStateCodec';
+import { encodeShareData } from '../utils/shareDataCodec';
+import { createIdentityEuler } from '../utils/sim3dTransforms';
+import type { CameraViewState } from '../store/types';
+import type { ColmapManifest } from '../types/manifest';
+import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
+import { buildLoadedFiles } from '../test/builders';
+import { createDefaultManifest } from './urlLoaderPolicy';
+import { getActiveSplatSourceId } from '../utils/splatFileSourcePolicy';
 
-const { clearAllCachesMock, processFilesMock } = vi.hoisted(() => ({
+const { clearAllCachesMock, processFilesMock, detectTouchDeviceMock } = vi.hoisted(() => ({
   clearAllCachesMock: vi.fn(),
+  detectTouchDeviceMock: vi.fn(() => false),
   processFilesMock: vi.fn<(
     files: Map<string, File>,
     progressRange?: { start: number; end: number },
@@ -21,6 +32,11 @@ vi.mock('./useFileDropzone', () => ({
   useFileDropzone: () => ({
     processFiles: processFilesMock,
   }),
+}));
+
+vi.mock('./useIsTouchDevice', async importOriginal => ({
+  ...await importOriginal<typeof import('./useIsTouchDevice')>(),
+  detectTouchDevice: detectTouchDeviceMock,
 }));
 
 function createSplatLoadedFiles(splatFile: File): LoadedFiles {
@@ -41,6 +57,7 @@ function createSplatLoadedFiles(splatFile: File): LoadedFiles {
 describe('useUrlLoader', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    detectTouchDeviceMock.mockReturnValue(false);
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
   });
 
@@ -49,6 +66,169 @@ describe('useUrlLoader', () => {
     useReconstructionStore.getState().clear();
     vi.unstubAllGlobals();
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
+    usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
+    useTransformStore.setState(useTransformStore.getInitialState(), true);
+    window.history.replaceState(null, '', '/');
+  });
+
+  it.each(['url', 'inline', 'override', 'large-desktop', 'large-touch'] as const)('restores the saved remote splat with %s loading', async mode => {
+    vi.stubGlobal('Blob', NodeBlob);
+    detectTouchDeviceMock.mockReturnValue(mode === 'large-touch');
+    const baseUrl = 'https://huggingface.co/datasets/owner/scene/resolve/main/';
+    const alignment = { ...createIdentityEuler(), translationX: 7, rotationZ: 1 };
+    const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
+      config: { transform: createIdentityEuler(), splat: { activeSourceId: 'splats/active.spz', transform: alignment },
+        ui: { backgroundColor: '#123456' }, pointCloud: { pointSize: 2 } } });
+    if (mode === 'override') window.history.replaceState(null, '', '/#' + encodeShareData(baseUrl, null,
+      { splat: { activeSourceId: 'splats/other.spz' } }));
+    const request = vi.fn(async (url: string | URL) => {
+      if (String(url).endsWith('colmapview.yaml')) return new Response(yaml);
+      if (String(url).includes('/api/datasets/')) return Response.json([
+        ...['cameras', 'images', 'points3D'].map(name => ({ type: 'file', path: `sparse/0/${name}.bin`, size: 10 })),
+        { type: 'file', path: 'splats/active.spz', size: mode.startsWith('large-') ? 2_000_000_000 : 100 },
+        { type: 'file', path: 'splats/other.spz', size: 200 },
+      ]);
+      return new Response(new Uint8Array([1, 2, 3]));
+    });
+    vi.stubGlobal('fetch', request);
+    processFilesMock.mockImplementationOnce(async () => { useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles()); });
+    const { result } = renderHook(() => useUrlLoader({ applyUrlOverrides: mode === 'override' }));
+    await act(async () => {
+      const loaded = mode === 'inline' ? await result.current.loadFromManifest(createDefaultManifest(baseUrl))
+        : await result.current.loadFromUrl(baseUrl);
+      expect(loaded).toBe(true);
+    });
+    const expected = mode === 'override' ? 'splats/other.spz' : 'splats/active.spz';
+    expect(useReconstructionStore.getState().loadedFiles?.splatFileSources).toHaveLength(2);
+    expect(useTransformStore.getState().splatTransform).toEqual(alignment);
+    expect(useUIStore.getState().backgroundColor).toBe('#123456');
+    expect(usePointCloudStore.getState().pointSize).toBe(2);
+    const splatRequests = request.mock.calls.map(([url]) => String(url)).filter(url => url.endsWith('.spz'));
+    expect(splatRequests).toEqual(mode === 'large-touch' ? [] : [baseUrl + expected]);
+    if (mode === 'large-touch') {
+      expect(useReconstructionStore.getState().requestedSplatSourceId).toBe(expected);
+      expect(useReconstructionStore.getState().showSplatPicker).toBe(true);
+      await act(async () => { await useReconstructionStore.getState().selectSplatSource(expected); });
+      expect(useTransformStore.getState().splatTransform).toEqual(alignment);
+    } else {
+      expect(useReconstructionStore.getState().showSplatPicker).toBe(false);
+    }
+    expect(getActiveSplatSourceId(useReconstructionStore.getState().loadedFiles)).toBe(expected);
+  });
+
+  it.each(['saved', 'override', 'previous-scene', 'missing', 'invalid'] as const)('loads a Hugging Face project with %s YAML settings', async mode => {
+    vi.stubGlobal('Blob', NodeBlob);
+    useCameraStore.setState(useCameraStore.getInitialState(), true);
+    const repo = 'https://huggingface.co/datasets/owner/scene';
+    const view: CameraViewState = { position: [1, 2, 3], target: [0, 0, 0], quaternion: [0, 0, 0, 1], distance: 4 };
+    const overrideView: CameraViewState = { ...view, position: [8, 0, 0], distance: 8 };
+    const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: view,
+      config: { ui: { backgroundColor: '#123456' }, camera: { cameraScale: 0.4 }, pointCloud: { maxReprojectionError: null } } });
+    const originalBackground = useUIStore.getState().backgroundColor;
+    const request = vi.fn(async (url: string | URL) => {
+      if (String(url).endsWith('/colmapview.yaml')) return mode === 'missing'
+        ? new Response('', { status: 404 }) : new Response(mode === 'invalid' ? 'version: 99' : yaml);
+      if (String(url).includes('/api/datasets/')) return Response.json([
+        { type: 'file', path: 'sparse/0/cameras.bin' }, { type: 'file', path: 'sparse/0/images.bin' }, { type: 'file', path: 'sparse/0/points3D.bin' },
+      ]);
+      return new Response(new Uint8Array([1, 2, 3]));
+    });
+    vi.stubGlobal('fetch', request);
+    if (mode === 'override' || mode === 'previous-scene') {
+      window.history.replaceState(null, '', '/#' + encodeShareData(repo, overrideView, { ui: { backgroundColor: '#abcdef' } }));
+    }
+    // A renderer-generated hash during parsing must not override the incoming dataset defaults.
+    processFilesMock.mockImplementationOnce(async () => { window.history.replaceState(null, '', '/#' + encodeCameraState(overrideView)); });
+    const { result } = renderHook(() => useUrlLoader({
+      logger: { info: vi.fn(), error: vi.fn() }, applyUrlOverrides: mode !== 'previous-scene',
+    }));
+    await act(async () => { expect(await result.current.loadFromUrl(repo)).toBe(true); });
+    expect(processFilesMock).toHaveBeenCalledOnce();
+    expect(request.mock.calls.map(call => String(call[0]))).toContain(repo + '/resolve/main/colmapview.yaml');
+    expect(useUIStore.getState().backgroundColor).toBe(mode === 'override' ? '#abcdef'
+      : mode === 'missing' || mode === 'invalid' ? originalBackground : '#123456');
+    if (mode === 'saved' || mode === 'override' || mode === 'previous-scene') {
+      expect(useCameraStore.getState().cameraScale).toBe(0.4);
+      expect(useCameraStore.getState().flyToViewState).toEqual(mode === 'override' ? overrideView : view);
+      expect(usePointCloudStore.getState().maxReprojectionError).toBe(Infinity);
+    }
+  });
+
+  it('does not apply YAML that arrives after its dataset load was cancelled', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const settingsUrl = 'https://huggingface.co/datasets/owner/scene/resolve/main/colmapview.yaml';
+    const responders = new Map<string, (response: Response) => void>();
+    // Like fetch, pending requests reject when their load is aborted.
+    const request = vi.fn((url: string, init?: RequestInit) => new Promise<Response>((resolve, reject) => {
+      responders.set(String(url), resolve);
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+    }));
+    vi.stubGlobal('fetch', request);
+    const manifest: ColmapManifest = { version: 1, baseUrl: 'https://huggingface.co/datasets/owner/scene/resolve/main/',
+      files: { cameras: 'cameras.bin', images: 'images.bin', points3D: 'points3D.bin' }, splats: [] };
+    const background = useUIStore.getState().backgroundColor;
+    const { result } = renderHook(() => useUrlLoader());
+    let pending!: Promise<boolean>;
+    act(() => { pending = result.current.loadFromManifest(manifest); });
+    await waitFor(() => expect(responders.has(settingsUrl)).toBe(true));
+    act(() => useReconstructionStore.getState().clear());
+    await act(async () => { responders.get(settingsUrl)!(new Response('ui:\n  background_color: "#123456"')); expect(await pending).toBe(false); });
+    expect(useUIStore.getState().backgroundColor).toBe(background);
+    expect(processFilesMock).not.toHaveBeenCalled();
+  });
+
+  it('restores settings beside a direct splat file hosted outside Hugging Face', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const request = vi.fn(async (url: string | URL) => new Response(String(url).endsWith('colmapview.yaml')
+      ? 'ui:\n  background_color: "#123456"' : 'splat bytes'));
+    vi.stubGlobal('fetch', request);
+    processFilesMock.mockResolvedValueOnce();
+    const { result } = renderHook(() => useUrlLoader());
+    await act(async () => { expect(await result.current.loadFromUrl('https://example.com/project/scene.spz')).toBe(true); });
+    expect(processFilesMock).toHaveBeenCalledOnce();
+    expect(useUIStore.getState().backgroundColor).toBe('#123456');
+    expect(request.mock.calls.map(call => String(call[0]))).toEqual([
+      'https://example.com/project/scene.spz', 'https://example.com/project/colmapview.yaml',
+    ]);
+  });
+
+  it.each(['document', 'combined', 'binary', 'legacy'] as const)('restores a published view with %s URL precedence', async format => {
+    vi.stubGlobal('Blob', NodeBlob);
+    useCameraStore.setState(useCameraStore.getInitialState(), true);
+    useTransformStore.setState(useTransformStore.getInitialState(), true);
+    const manifest: ColmapManifest = { version: 1, baseUrl: 'https://example.com/scene', viewerStatePath: 'colmapview-state.json',
+      files: { cameras: 'cameras.bin', images: 'images.bin', points3D: 'points3D.bin' }, splats: [], skipImages: true };
+    const savedView: CameraViewState = { position: [1, 2, 3], target: [0, 0, 0], quaternion: [0, 0, 0, 1], distance: Math.sqrt(14) };
+    const overrideView: CameraViewState = { ...savedView, position: [9, 0, 0], distance: 9 };
+    const savedTransform = { ...createIdentityEuler(), translationX: 2 };
+    const overrideTransform = { ...createIdentityEuler(), translationX: 7 };
+    const saved = { version: 1, viewerVersion: 'test', viewState: savedView, config: { transform: savedTransform } };
+    const hashes = { document: '', combined: encodeShareData('https://example.com/manifest.json', overrideView, { transform: overrideTransform }),
+      binary: encodeCameraState(overrideView), legacy: 'camera=9,0,0,0,0,0,0,0,0,1' };
+    window.history.replaceState(null, '', '/#' + hashes[format]);
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL) => String(url).endsWith('colmapview-state.json')
+      ? Response.json(saved) : new Response(new Uint8Array([1, 2, 3]))));
+    processFilesMock.mockResolvedValueOnce();
+    const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() }, applyUrlOverrides: true }));
+    await act(async () => { expect(await result.current.loadFromManifest(manifest)).toBe(true); });
+    expect(useCameraStore.getState().flyToViewState).toEqual(format === 'document' ? savedView : overrideView);
+    expect(useTransformStore.getState().transform).toEqual(format === 'combined' ? overrideTransform : savedTransform);
+  });
+
+  it('applies shared link settings after a load even when the dataset has no saved settings', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    useTransformStore.setState(useTransformStore.getInitialState(), true);
+    const overrideTransform = { ...createIdentityEuler(), translationX: 7 };
+    window.history.replaceState(null, '', '/#' + encodeShareData('https://example.com/manifest.json', null, { transform: overrideTransform }));
+    const manifest: ColmapManifest = { version: 1, baseUrl: 'https://example.com/scene',
+      files: { cameras: 'cameras.bin', images: 'images.bin', points3D: 'points3D.bin' }, splats: [], skipImages: true };
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL) => String(url).endsWith('colmapview.yaml')
+      ? new Response('', { status: 404 }) : new Response(new Uint8Array([1, 2, 3]))));
+    processFilesMock.mockResolvedValueOnce();
+    const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() }, applyUrlOverrides: true }));
+    await act(async () => { expect(await result.current.loadFromManifest(manifest)).toBe(true); });
+    expect(useTransformStore.getState().transform).toEqual(overrideTransform);
   });
 
   it.each(['complete', 'fail'] as const)('ignores a cleared download that later %ss while a new load is active', async (outcome) => {
@@ -57,7 +237,8 @@ describe('useUrlLoader', () => {
       reject: (reason: unknown) => void;
       signal: AbortSignal;
     }> = [];
-    vi.stubGlobal('fetch', vi.fn((_url, init) => new Promise<Response>((resolve, reject) => {
+    vi.stubGlobal('fetch', vi.fn((url, init) => String(url).endsWith('/colmapview.yaml')
+      ? Promise.resolve(new Response('', { status: 404 })) : new Promise<Response>((resolve, reject) => {
       requests.push({ resolve, reject, signal: init.signal });
     })));
     const logger = { error: vi.fn(), info: vi.fn() };
@@ -165,6 +346,7 @@ describe('useUrlLoader', () => {
       {
         replaceSplatScene: true,
         throwOnError: true,
+        onViewerState: expect.any(Function),
       }
     );
     expect(processFilesMock.mock.calls[0][0].get('scene.spz')).toBeInstanceOf(File);

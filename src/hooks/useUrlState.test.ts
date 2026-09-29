@@ -13,6 +13,7 @@ import type { CameraViewState } from '../store/types';
 import type { ColmapManifest } from '../types/manifest';
 import { decodeShareData } from '../utils/shareDataCodec';
 import { applyShareConfig, collectShareConfig, generateEmbedUrl } from './useUrlState';
+import { createIdentityEuler } from '../utils/sim3dTransforms';
 
 const manifest: ColmapManifest = {
   version: 1,
@@ -44,6 +45,27 @@ describe('URL state sharing', () => {
     useTransformStore.setState(useTransformStore.getInitialState(), true);
     useImageMetricsStore.setState(useImageMetricsStore.getInitialState(), true);
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+  });
+
+  it('restores separate scene and splat transforms absolutely across repeated startup applications', () => {
+    const transform = { ...createIdentityEuler(), translationX: 4, rotationY: 35 };
+    const splatTransform = { ...createIdentityEuler(), scale: 2, rotationX: 20, translationZ: -3 };
+    const config = { transform, splat: { transform: splatTransform } };
+    applyShareConfig(config);
+    applyShareConfig(config);
+    expect(useTransformStore.getState().transform).toEqual(transform);
+    expect(useTransformStore.getState().splatTransform).toEqual(splatTransform);
+    expect(collectShareConfig()).toMatchObject(config);
+  });
+
+  it('round trips an unlimited numeric filter through JSON/YAML null', () => {
+    usePointCloudStore.setState({ maxReprojectionError: Infinity });
+    const config = collectShareConfig();
+    expect(config.pointCloud?.maxReprojectionError).toBeNull();
+    usePointCloudStore.setState({ maxReprojectionError: 1 });
+    applyShareConfig(config);
+    expect(usePointCloudStore.getState().maxReprojectionError).toBe(Infinity);
+    expect(config.pointCloud?.maxReprojectionError).toBeNull();
   });
 
   it('collects splat display settings, active splat source, and gallery settings for shared URLs', () => {
@@ -139,6 +161,17 @@ describe('URL state sharing', () => {
 
     expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(activeSplatFile);
     expect(useReconstructionStore.getState().requestedSplatSourceId).toBeNull();
+  });
+
+  it('preserves saved alignment and a pending selection while installing a lazy catalog', async () => {
+    const alignment = { ...createIdentityEuler(), translationX: 7, rotationZ: 1 };
+    useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles());
+    applyShareConfig({ splat: { activeSourceId: 'splats/active.spz', transform: alignment }, transform: createIdentityEuler() });
+    useReconstructionStore.getState().mergeRemoteSplatCatalog([
+      { path: 'splats/default.spz', size: 200 }, { path: 'splats/active.spz', size: 100 },
+    ], 'https://example.com/');
+    expect(useReconstructionStore.getState().requestedSplatSourceId).toBe('splats/active.spz');
+    expect(useTransformStore.getState().splatTransform).toEqual(alignment);
   });
 
   it('keeps shared point-cloud settings after resolving an active splat source', () => {

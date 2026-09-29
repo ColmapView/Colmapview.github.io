@@ -41,6 +41,7 @@ type ScanDirectoryHandle = (
 
 interface LocalSourceBaseDeps {
   isLoading: () => boolean;
+  cancelUrlLoad?: () => void;
   setUrlLoading: (loading: boolean) => void;
   setUrlProgress: (progress: UrlLoadProgress | null) => void;
   setError: (error: string | null) => void;
@@ -98,6 +99,7 @@ export async function loadLocalZipFile(
     return false;
   }
 
+  deps.cancelUrlLoad?.();
   deps.setUrlLoading(true);
   deps.setUrlProgress({ percent: 0, message: 'Opening ZIP archive...' });
   await yieldToPaint(deps);
@@ -148,6 +150,7 @@ export async function loadDropPayload(
     return true;
   }
 
+  deps.cancelUrlLoad?.();
   deps.setUrlLoading(true);
   deps.setUrlProgress({ percent: 0, message: 'Scanning files...' });
   await yieldToPaint(deps);
@@ -185,6 +188,7 @@ export async function loadBrowsedDirectory(
   try {
     const dirHandle = await deps.pickDirectory();
 
+    deps.cancelUrlLoad?.();
     deps.setUrlLoading(true);
     deps.setUrlProgress({ percent: 0, message: 'Scanning folder...' });
     await yieldToPaint(deps);

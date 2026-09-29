@@ -7,6 +7,7 @@ import type { UrlLoadError } from '../types/manifest';
 import { detectCloudProvider, getCorsInstructions } from './urlCloudStorage';
 import { parseSafeIntegerString } from './numberParsing';
 import { fetchWithTimeout } from './fetchWithTimeout';
+import { normalizeHuggingFaceDatasetUrl } from './huggingFaceUrl';
 export { fetchWithTimeout, FETCH_TIMEOUT } from './fetchWithTimeout';
 
 /** Reports download progress as bytes arrive. totalBytes is 0 when unknown. */
@@ -289,6 +290,8 @@ export function getFilenameFromUrl(url: string): string {
  * Supports: HuggingFace, GitHub, GitLab, Bitbucket, Gitea, Codeberg
  */
 export function normalizeGitHostingUrl(url: string): string {
+  const datasetUrl = normalizeHuggingFaceDatasetUrl(url);
+  if (datasetUrl) return datasetUrl;
   // HuggingFace: Convert tree/main or blob/main to resolve/main
   if (url.includes('huggingface.co')) {
     return url

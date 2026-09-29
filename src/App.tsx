@@ -46,7 +46,7 @@ if (initStoreMigration()) {
 }
 
 function App() {
-  const { loadFromUrl, loadFromManifest } = useUrlLoader();
+  const { loadFromUrl, loadFromManifest } = useUrlLoader({ applyUrlOverrides: true });
   const hasCheckedUrl = useRef(false);
 
   // Check for URL parameter on mount
@@ -78,6 +78,7 @@ function App() {
         legacyManifestUrl: new URLSearchParams(search).get('url'),
       });
 
+      // Applied before loading so display settings and the requested splat take effect during the load.
       if (loadPlan.config) {
         appLogger.info(APP_SHARED_CONFIG_LOG_MESSAGE);
         applyShareConfig(loadPlan.config);
@@ -85,10 +86,8 @@ function App() {
 
       if (loadPlan.kind === 'inline-manifest') {
         appLogger.info(loadPlan.logMessage);
+        // The loader re-applies the URL's settings after the load (applyUrlOverrides).
         const loaded = await loadFromManifest(loadPlan.manifest);
-        if (loaded && loadPlan.config) {
-          applyShareConfig(loadPlan.config);
-        }
         if (loaded && loadPlan.selectedImageId !== null) {
           useCameraStore.getState().setSelectedImageId(loadPlan.selectedImageId);
         }
@@ -102,9 +101,6 @@ function App() {
           loadFromUrl,
           onDeclined: abandonUrlAutoLoadRequest,
         });
-        if (loaded && loadPlan.config) {
-          applyShareConfig(loadPlan.config);
-        }
         if (loaded && loadPlan.selectedImageId !== null) {
           useCameraStore.getState().setSelectedImageId(loadPlan.selectedImageId);
         }

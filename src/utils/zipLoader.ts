@@ -9,6 +9,9 @@ import { publicAsset } from './paths';
 import { isSplatFilePath } from './splatFilePolicy';
 import { getFilenameFromUrl } from './urlUtils';
 import { downloadZip, type ZipProgress } from './zipDownload';
+import { findDatasetViewerSettingsEntry, isDatasetViewerSettingsPath } from './datasetViewerSettings';
+import { MAX_VIEWER_STATE_BYTES } from './publishedViewerState';
+import { appLogger } from './logger';
 import {
   validateZipFile,
   validateZipUrl,
@@ -131,12 +134,15 @@ async function processZipArchive(
   const colmapEntries: Array<{ file: ArchiveEntry; path: string }> = [];
   const splatEntries: Array<{ file: ArchiveEntry; path: string; size: number }> = [];
   const imageIndex = new Map<string, ArchiveEntry>();
+  const settingsEntries = new Map<string, ArchiveEntry>();
   let imageCount = 0; // Track actual unique images (imageIndex has duplicates for lookup)
 
   for (const entry of filesArray) {
     const fullPath = buildArchiveEntryPath(entry.path, entry.file.name);
 
-    if (isArchiveColmapPath(fullPath)) {
+    if (isDatasetViewerSettingsPath(fullPath)) {
+      settingsEntries.set(fullPath, entry.file);
+    } else if (isArchiveColmapPath(fullPath)) {
       colmapEntries.push({ file: entry.file, path: fullPath });
     } else if (isArchiveSplatPath(fullPath)) {
       splatEntries.push({ file: entry.file, path: fullPath, size: entry.file.size });
@@ -155,6 +161,19 @@ async function processZipArchive(
 
   // Extract COLMAP files immediately
   const colmapFiles = new Map<string, File>();
+
+  const settingsEntry = findDatasetViewerSettingsEntry(settingsEntries);
+  if (settingsEntry) {
+    const [path, entry] = settingsEntry;
+    try {
+      if (entry.size > MAX_VIEWER_STATE_BYTES) throw new Error('Settings exceed size limit');
+      const extracted = await entry.extract();
+      if (extracted.size > MAX_VIEWER_STATE_BYTES) throw new Error('Settings exceed size limit');
+      colmapFiles.set(path, extracted);
+    } catch {
+      appLogger.warn('[Archive Loader] Skipping unavailable or oversized colmapview.yaml settings.');
+    }
+  }
 
   for (let i = 0; i < colmapEntries.length; i++) {
     const entry = colmapEntries[i];

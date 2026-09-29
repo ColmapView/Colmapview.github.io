@@ -5,7 +5,7 @@ import type { CameraViewState } from '../store/types';
 import type { ColmapManifest } from '../types/manifest';
 import { buildShareableFieldsFromRegistry } from '../config/registry';
 import type { ShareConfig } from '../utils/shareDataCodec';
-import { buildShareConfigFromStoreStates } from './urlStateShareConfigPolicy';
+import { buildShareConfigFromStoreStates, restoreNullableNumbers } from './urlStateShareConfigPolicy';
 import { encodeCameraState } from '../utils/urlCameraStateCodec';
 import {
   buildEmbedUrl,
@@ -13,7 +13,12 @@ import {
   getShareBaseUrl,
 } from '../utils/shareUrl';
 import { appLogger } from '../utils/logger';
-import { getShareActiveSplatSourceId } from '../utils/splatFileSourcePolicy';
+import { findSplatSourceById, getShareActiveSplatSourceId } from '../utils/splatFileSourcePolicy';
+import { SHARED_CONFIG_SECTIONS, sanitizeShareConfig, type PublishedViewerState } from '../utils/publishedViewerState';
+import { decodeShareData } from '../utils/shareDataCodec';
+import { getSplatAutoLoadDecision } from './urlLoaderPolicy';
+import { detectTouchDevice } from './useIsTouchDevice';
+import { createIdentityEuler } from '../utils/sim3dTransforms';
 import { getControlsViewState } from './urlStateControlsPolicy';
 import {
   decodeCameraStateFromHash,
@@ -55,19 +60,67 @@ export function collectShareConfig(): ShareConfig {
   );
   const activeSplatSourceId = getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles);
   if (activeSplatSourceId) {
-    config.splat = { activeSourceId: activeSplatSourceId };
+    config.splat = { ...config.splat, activeSourceId: activeSplatSourceId };
   }
   return config;
+}
+
+/** Settings carried by the viewer URL itself, which take precedence over a dataset's saved state. */
+export interface SharedViewerOverrides { config?: ShareConfig; viewState?: CameraViewState | null }
+
+export async function decodeSharedViewerOverrides(hash: string): Promise<SharedViewerOverrides | null> {
+  const shared = await decodeShareData(hash);
+  const viewState = shared?.viewState ?? await decodeCameraStateFromHash(hash);
+  return shared?.config || viewState ? { config: shared?.config ?? undefined, viewState } : null;
+}
+
+/**
+ * Saved settings explicitly select a lazy remote splat. Desktop restores it at any size;
+ * constrained touch devices keep the download prompt.
+ */
+async function activateSavedSplat(sourceId: string, assertCurrent: () => void): Promise<void> {
+  const source = findSplatSourceById(useReconstructionStore.getState().loadedFiles, sourceId);
+  const touch = detectTouchDevice();
+  if (!source?.url || source.file) return;
+  if (touch && !getSplatAutoLoadDecision([{ path: source.path, size: source.size ?? 0 }], { isTouchDevice: touch }).autoLoad) return;
+  await useReconstructionStore.getState().selectSplatSource(source.id);
+  assertCurrent();
+  if (useReconstructionStore.getState().loadedFiles?.splatFile) useReconstructionStore.getState().setShowSplatPicker(false);
+}
+
+/**
+ * The one place a finished load restores viewer settings: the dataset's saved state first, then the
+ * viewer URL's shared settings on top. Without saved state only the URL config applies; useUrlState
+ * restores a URL camera itself.
+ */
+export async function applySavedViewerState(saved: PublishedViewerState | null, shared: SharedViewerOverrides | null,
+  assertCurrent: () => void = () => undefined): Promise<void> {
+  const sourceId = shared?.config?.splat?.activeSourceId ?? saved?.config.splat?.activeSourceId;
+  if (saved && sourceId) await activateSavedSplat(sourceId, assertCurrent);
+  if (saved) applyShareConfig(saved.config);
+  if (shared?.config) applyShareConfig(shared.config);
+  const view = saved ? shared?.viewState ?? saved.viewState : null;
+  if (view) useCameraStore.getState().flyToState(view);
 }
 
 /**
  * Apply share config to all stores.
  * Automatically applies all fields using setState.
  */
-export function applyShareConfig(config: ShareConfig): void {
+export function applyShareConfig(input: ShareConfig): void {
+  const config = sanitizeShareConfig(input);
+  for (const key of SHARED_CONFIG_SECTIONS) {
+    const values = config[key];
+    if (values) config[key] = restoreNullableNumbers(values);
+  }
   if (config.splat?.activeSourceId) {
     useReconstructionStore.getState().setRequestedSplatSourceId(config.splat.activeSourceId);
     useImageMetricsStore.getState().clearSplatPsnr();
+  }
+  // Activating a file can reset its alignment; restore saved transforms afterwards.
+  if (config.splat?.transform) {
+    useTransformStore.getState().setSplatTransform(config.splat.transform);
+    useTransformStore.getState().setTransform(config.transform ?? createIdentityEuler());
   }
 
   // Point cloud store

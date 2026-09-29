@@ -1,3 +1,5 @@
+import { encodeUrlPath } from './urlUtils';
+
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'];
 
 const AUXILIARY_IMAGE_SEGMENTS = new Set([
@@ -134,9 +136,11 @@ export function buildImageUrl(imageUrlBase: string, imageName: string): UrlCandi
     normalizedName = normalizedName.slice(7);
   }
 
+  // COLMAP names are raw filenames, including literal %, # and ? characters.
+  const encodedName = encodeUrlPath(normalizedName);
   const url = imageUrlBase.endsWith('/')
-    ? `${imageUrlBase}${normalizedName}`
-    : `${imageUrlBase}/${normalizedName}`;
+    ? `${imageUrlBase}${encodedName}`
+    : `${imageUrlBase}/${encodedName}`;
   const filename = normalizedName.split('/').pop() || normalizedName;
 
   return { url, filename };
@@ -197,7 +201,7 @@ export function buildMaskUrlCandidates(maskUrlBase: string, imageName: string): 
   const maskNames = [normalizedName, `${normalizedName}.png`];
 
   return maskNames.map((maskName) => ({
-    url: `${baseUrl}${maskName}`,
+    url: `${baseUrl}${encodeUrlPath(maskName)}`,
     filename: maskName.split('/').pop() || maskName,
   }));
 }

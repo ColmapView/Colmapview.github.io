@@ -60,6 +60,28 @@ describe.each(['local', 'url'] as const)('%s archive reader ownership', (source)
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it('extracts project settings from a wrapped archive and leaves unrelated YAML alone', async () => {
+    const settings = buildFile('colmapview.yaml', 'ui:\n  background_color: "#123456"');
+    const unrelated = buildArchiveEntry({ name: 'training.yaml', extract: vi.fn() });
+    vi.mocked(Archive.open).mockResolvedValue(buildArchiveReader({ getFilesArray: async () => [
+      ...colmapEntries(), { path: 'project', file: buildArchiveEntry({ name: 'colmapview.yaml', extract: async () => settings }) },
+      { path: 'project', file: unrelated },
+    ] }));
+    const result = await load();
+    expect(result.colmapFiles.get('project/colmapview.yaml')).toBe(settings);
+    expect(unrelated.extract).not.toHaveBeenCalled();
+  });
+
+  it.each(['oversized', 'unreadable'] as const)('skips %s optional archive settings', async mode => {
+    const extract = vi.fn().mockRejectedValue(new Error('Read failed'));
+    vi.mocked(Archive.open).mockResolvedValue(buildArchiveReader({ getFilesArray: async () => [
+      ...colmapEntries(), { path: '', file: buildArchiveEntry({ name: 'colmapview.yaml', size: mode === 'oversized' ? 300000 : 4, extract }) },
+    ] }));
+    const result = await load();
+    expect(result.colmapFiles.size).toBe(3);
+    if (mode === 'oversized') expect(extract).not.toHaveBeenCalled();
+  });
+
   it('closes the reader when extraction fails', async () => {
     const error = new Error('corrupt entry');
     const entries = colmapEntries();

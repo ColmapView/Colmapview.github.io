@@ -18,7 +18,6 @@ import {
   getShareSource,
 } from './sharePanelViewModel';
 import { useSharePanelStoreFacade } from './useSharePanelStoreFacade';
-
 const styles = controlPanelStyles;
 
 export interface SharePanelProps {
@@ -37,6 +36,7 @@ export const SharePanel = memo(function SharePanel({
   const [includeScreenshot, setIncludeScreenshot] = useState(true);
   const {
     data: {
+      hasEdits,
       reconstruction,
       sourceUrl,
       sourceManifest,
@@ -51,28 +51,30 @@ export const SharePanel = memo(function SharePanel({
   // and sourceManifest null, which correctly hides the buttons.
   const shareSource = getShareSource(sourceUrl, sourceManifest);
   const canShare = canShareReconstruction(shareSource, reconstruction);
+  const sourceViewState = hasEdits ? null : currentViewState;
+  const sourceConfig = hasEdits ? null : undefined;
 
   // Handle share link copy
   const handleCopyShareLink = useCallback(async () => {
     if (!shareSource) return;
-    const url = generateShareableUrl(shareSource, currentViewState);
+    const url = generateShareableUrl(shareSource, sourceViewState, sourceConfig);
     await copyWithFeedback(url, setCopiedShareLink);
-  }, [shareSource, currentViewState]);
+  }, [shareSource, sourceViewState, sourceConfig]);
 
   // Handle embed URL copy
   const handleCopyEmbedUrl = useCallback(async () => {
     if (!shareSource) return;
-    const embedUrl = generateEmbedUrl(shareSource, currentViewState);
+    const embedUrl = generateEmbedUrl(shareSource, sourceViewState, sourceConfig);
     await copyWithFeedback(embedUrl, setCopiedEmbedUrl);
-  }, [shareSource, currentViewState]);
+  }, [shareSource, sourceViewState, sourceConfig]);
 
   // Handle embed HTML copy
   const handleCopyEmbedHtml = useCallback(async () => {
     if (!shareSource) return;
-    const embedUrl = generateEmbedUrl(shareSource, currentViewState);
+    const embedUrl = generateEmbedUrl(shareSource, sourceViewState, sourceConfig);
     const iframeHtml = generateIframeHtml(embedUrl);
     await copyWithFeedback(iframeHtml, setCopiedEmbedHtml);
-  }, [shareSource, currentViewState]);
+  }, [shareSource, sourceViewState, sourceConfig]);
 
   const handleCopyScreenshotToClipboard = useCallback(async () => {
     return copyScreenshotToClipboard(getScreenshotBlob, {
@@ -83,8 +85,8 @@ export const SharePanel = memo(function SharePanel({
   // Handle share to X (Twitter)
   const handleShareToX = useCallback(async () => {
     const sharePayload = buildSocialSharePayload({
-      currentViewState,
-      generateShareableUrl,
+      currentViewState: sourceViewState,
+      generateShareableUrl: (source, view) => generateShareableUrl(source, view, sourceConfig),
       includeShareLink,
       reconstruction,
       shareSource,
@@ -97,13 +99,13 @@ export const SharePanel = memo(function SharePanel({
 
     // Open X share dialog
     window.open(buildXShareUrl(sharePayload), '_blank', 'width=700,height=600,noopener,noreferrer');
-  }, [shareSource, currentViewState, reconstruction, handleCopyScreenshotToClipboard, includeShareLink, includeScreenshot]);
+  }, [shareSource, sourceViewState, sourceConfig, reconstruction, handleCopyScreenshotToClipboard, includeShareLink, includeScreenshot]);
 
   // Handle share to LinkedIn
   const handleShareToLinkedIn = useCallback(async () => {
     const sharePayload = buildSocialSharePayload({
-      currentViewState,
-      generateShareableUrl,
+      currentViewState: sourceViewState,
+      generateShareableUrl: (source, view) => generateShareableUrl(source, view, sourceConfig),
       includeShareLink,
       reconstruction,
       shareSource,
@@ -131,7 +133,7 @@ export const SharePanel = memo(function SharePanel({
 
     // Open LinkedIn - go to feed to create new post
     window.open('https://www.linkedin.com/feed/', '_blank', 'width=700,height=600,noopener,noreferrer');
-  }, [shareSource, currentViewState, reconstruction, getScreenshotBlob, includeShareLink, includeScreenshot, addNotification]);
+  }, [shareSource, sourceViewState, sourceConfig, reconstruction, getScreenshotBlob, includeShareLink, includeScreenshot, addNotification]);
 
   return (
     <ControlButton
@@ -145,7 +147,7 @@ export const SharePanel = memo(function SharePanel({
       <div className={styles.panelContent}>
         {canShare && (
           <>
-            <div className="text-ds-primary text-sm mb-1">Links:</div>
+            <div className="text-ds-primary text-sm mb-1">{hasEdits ? 'Original dataset links (edits excluded):' : 'Links:'}</div>
             <div className="flex flex-col gap-2">
               <button
                 onClick={handleCopyShareLink}
@@ -154,7 +156,7 @@ export const SharePanel = memo(function SharePanel({
                 {copiedShareLink ? (
                   <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
                 ) : (
-                  'Copy Link'
+                  hasEdits ? 'Copy original dataset link' : 'Copy Link'
                 )}
               </button>
               <button

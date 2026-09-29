@@ -14,6 +14,7 @@ import {
 function makeBaseDeps() {
   return {
     isLoading: vi.fn(() => false),
+    cancelUrlLoad: vi.fn(),
     setUrlLoading: vi.fn(),
     setUrlProgress: vi.fn(),
     setError: vi.fn(),
@@ -40,6 +41,7 @@ describe('file dropzone local source loading', () => {
     expect(deps.log).toHaveBeenCalledWith('[ZIP Loader] Already loading, ignoring duplicate request');
     expect(deps.setUrlLoading).not.toHaveBeenCalled();
     expect(deps.loadZipFromFile).not.toHaveBeenCalled();
+    expect(deps.cancelUrlLoad).not.toHaveBeenCalled();
   });
 
   it('loads a local ZIP, activates lazy image extraction, and processes extracted COLMAP files', async () => {
@@ -65,6 +67,7 @@ describe('file dropzone local source loading', () => {
     expect(deps.setActiveZipArchive).toHaveBeenCalledWith(archive, imageIndex, 4096, 1);
     expect(deps.setSourceInfo).toHaveBeenCalledWith('zip', null);
     expect(deps.processFiles).toHaveBeenCalledWith(colmapFiles);
+    expect(deps.cancelUrlLoad.mock.invocationCallOrder[0]).toBeLessThan(deps.loadZipFromFile.mock.invocationCallOrder[0]);
   });
 
   it('cleans up partial ZIP state and exposes ZIP errors', async () => {
@@ -128,6 +131,7 @@ describe('file dropzone local source loading', () => {
     expect(deps.processFiles).toHaveBeenCalledWith(files, undefined, {
       onSceneReplaced: expect.any(Function),
     });
+    expect(deps.cancelUrlLoad.mock.invocationCallOrder[0]).toBeLessThan(deps.collectDroppedFiles.mock.invocationCallOrder[0]);
   });
 
   it('commits dropped files as a local source only when the workflow replaces the scene', async () => {
@@ -206,6 +210,7 @@ describe('file dropzone local source loading', () => {
     expect(deps.setUrlLoading).toHaveBeenCalledWith(true);
     expect(deps.setUrlProgress).toHaveBeenCalledWith({ percent: 0, message: 'Scanning folder...' });
     expect(deps.scanDirectoryHandle).toHaveBeenCalledWith(dirHandle, '', expect.any(Map));
+    expect(deps.cancelUrlLoad.mock.invocationCallOrder[0]).toBeLessThan(deps.scanDirectoryHandle.mock.invocationCallOrder[0]);
     expect(deps.clearCaches).not.toHaveBeenCalled();
     expect(deps.setSourceInfo).not.toHaveBeenCalled();
     expect(deps.processFiles).toHaveBeenCalledWith(new Map([['cameras.bin', browsedFile]]), undefined, {
@@ -248,5 +253,6 @@ describe('file dropzone local source loading', () => {
 
     expect(deps.setError).not.toHaveBeenCalled();
     expect(deps.setUrlLoading).not.toHaveBeenCalled();
+    expect(deps.cancelUrlLoad).not.toHaveBeenCalled();
   });
 });
