@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Load and render PlayCanvas SOG (`.sog`) splats from local files, folders, archives, URLs, manifests and Hugging Face datasets. SOG renders with Spark; PLY and SPZ keep the WebGPU renderer and GPU PSNR.
+
+### Security
+
+- Validate SOG bundles (structure, metadata, texture sizes and device splat limits) before rendering, so malformed or oversized files are refused with a reason instead of reaching the GPU.
+
 ## [0.14.5] - 2026-09-27
 
 ### Added

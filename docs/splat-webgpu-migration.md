@@ -339,11 +339,33 @@ support is unavailable, PSNR should be unavailable with a clear status.
 
 The app WebGPU splat path supports `.spz` and `.ply` files. When a dataset has
 multiple splat candidates, automatic selection prefers the largest `.spz` file,
-then the largest `.ply` file. The point-cloud menu still allows explicitly
-choosing among available `.spz` and `.ply` candidates.
+then the largest `.ply` file, then the largest `.sog` bundle. The point-cloud
+menu still allows explicitly choosing among available `.spz`, `.ply` and `.sog`
+candidates, listed smallest first.
 
 The legacy `.splat` format remains Spark-only unless a separate WebGPU loader is
 implemented.
+
+PlayCanvas SOG bundles (`.sog`) render only with Spark. When a SOG becomes the
+active splat, backend resolution routes it to Spark, which downloads on demand,
+whatever the WebGPU state. A forced `?splatBackend=webgpu` also renders a SOG
+with Spark and shows an info note instead of the forced-WebGPU failure. WebGPU
+availability is never changed by a SOG, so the next PLY/SPZ returns to WebGPU.
+Before Spark decodes a SOG, `validateSogBundle` (`src/splat/sogBundle.ts`)
+checks:
+
+- the zip structure (no ZIP64, at most 64 entries, stored or deflate entries
+  only, a zip directory of at most 1 MiB, and no duplicate or ambiguous file
+  names);
+- `meta.json` (v1/v2, at most 1 MiB), with a splat count from 1 to 50,000,000,
+  finite position bounds (within [-30, 30] for v2), and scale values (the v2
+  codebook or the v1 range) in [-30, 20];
+- that every referenced texture exists, and that each means, scales, quats and
+  sh0 texture is a readable WebP holding at least the declared count;
+- the exact count against the touch-device ceiling (3,000,000 splats).
+
+A failed check shows `This SOG file can't be opened: <reason>` and no
+`SplatMesh` is created. GPU PSNR/SSIM is not available for SOG.
 
 ### Large-Cloud WebGPU Limits
 
