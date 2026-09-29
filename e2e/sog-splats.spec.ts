@@ -42,6 +42,8 @@ test.describe('SOG splats', () => {
     const ply = await loadAndCaptureSplat(page, splatEntry(PLY_FIXTURE, 'sog-scene.ply'), 'spark');
     await resetSession(page);
     const sog = await loadAndCaptureSplat(page, splatEntry(SOG_FIXTURE, 'sog-scene.sog'), 'spark');
+    expect((await compareScreenshots(page, ply.off, ply.splats)).changedFraction).toBeGreaterThan(0.02);
+    expect((await compareScreenshots(page, sog.off, sog.splats)).changedFraction).toBeGreaterThan(0.02);
     expect((await compareScreenshots(page, ply.splats, sog.splats)).psnr).toBeGreaterThan(35);
   });
 });
