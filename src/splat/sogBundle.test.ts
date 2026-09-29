@@ -140,6 +140,46 @@ describe('SOG bundle validation', () => {
     await expect(validateSogBundle(levelZeroDeflatedSog())).resolves.toEqual({ version: 2, count: 100, shBands: 0 });
   });
 
+  const shNMeta = (bands: number) => ({ ...V2_META, shN: { bands, codebook: codebook(-1, 0.008), files: ['shN_centroids.webp', 'shN_labels.webp'] } });
+  const shNEntries: Zippable = {
+    'shN_centroids.webp': [webpHeader('VP8L', 64, 64), { level: 0 }],
+    'shN_labels.webp': [webpHeader('VP8L', 10, 10), { level: 0 }],
+  };
+  it('reports the spherical-harmonic bands and keeps them within 1–3', async () => {
+    await expect(validateSogBundle(buildSog({ meta: shNMeta(3), entries: shNEntries }))).resolves.toEqual({ version: 2, count: 100, shBands: 3 });
+    expect(await reason(validateSogBundle(buildSog({ meta: shNMeta(0), entries: shNEntries })))).toContain('band count');
+    expect(await reason(validateSogBundle(buildSog({ meta: shNMeta(4), entries: shNEntries })))).toContain('band count');
+  });
+
+  const folder: [Uint8Array, { level: 0 }] = [new Uint8Array(0), { level: 0 }];
+  it('ignores folder entries when checking for repeated file names', async () => {
+    await expect(validateSogBundle(buildSog({ entries: { 'a/': folder, 'b/': folder } }))).resolves.toEqual({ version: 2, count: 100, shBands: 0 });
+  });
+
+  it('reports a zipped SOG folder (unbundled layout) as missing its root meta.json', async () => {
+    const entries: Zippable = { 'scene/': folder, '__MACOSX/': folder, '__MACOSX/scene/': folder, '__MACOSX/scene/._meta.json': folder };
+    entries['scene/meta.json'] = [new TextEncoder().encode(JSON.stringify(V2_META)), { level: 0 }];
+    for (const name of TEXTURES) entries[`scene/${name}`] = [webpHeader('VP8L', 10, 10), { level: 0 }];
+    expect(await reason(validateSogBundle(buildSog({ omit: [...TEXTURES, 'meta.json'], entries })))).toBe('meta.json is missing.');
+  });
+
+  it('refuses an oversized zip directory before reading it', async () => {
+    const bundle = patchedSog({ entries: { 'padding.bin': [new Uint8Array(1536 * 1024), { level: 0 }] } }, ({ view, eocd }) => {
+      view.setUint32(eocd + 12, eocd, true); // Directory size: everything before the end record...
+      view.setUint32(eocd + 16, 0, true); // ...starting at the first byte, which satisfies the end-record checks.
+    });
+    const reads: number[] = [];
+    const recorded = {
+      size: bundle.size,
+      slice: (start = 0, end = bundle.size) => {
+        reads.push(end - start);
+        return bundle.slice(start, end);
+      },
+    } as unknown as Blob;
+    expect(await reason(validateSogBundle(recorded))).toBe('its zip directory is too large.');
+    expect(Math.max(...reads)).toBeLessThan(1024 * 1024);
+  });
+
   const bombTexture = withTrailingBytes(webpHeader('VP8L', 10, 10), 1024 * 1024);
   it.each([
     ['a directory record whose name runs past the directory', () => patchedSog({}, (zip) => {

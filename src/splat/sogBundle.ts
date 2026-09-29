@@ -18,6 +18,8 @@ const CENTRAL_SIGNATURE = 0x02014b50;
 const LOCAL_SIGNATURE = 0x04034b50;
 const EOCD_SEARCH_BYTES = 65_535 + 22;
 const MAX_ENTRIES = 64;
+// 16 KiB per record for 64 entries; real SOG directories are a few KB, so the whole file is never read as one.
+const MAX_DIRECTORY_BYTES = 1024 * 1024;
 const MAX_META_BYTES = 1024 * 1024;
 const MAX_SPLATS = 50_000_000;
 const TEXTURE_PREFIX_BYTES = 64;
@@ -68,6 +70,7 @@ async function readDirectory(file: Blob): Promise<Map<string, ZipEntry>> {
   const directoryOffset = tailView.getUint32(eocd + 16, true);
   if (count === 0xffff || directorySize === 0xffffffff || directoryOffset === 0xffffffff) fail('ZIP64 bundles are not supported.');
   if (count === 0 || count > MAX_ENTRIES) fail(`it lists ${count} files; a SOG bundle has at most ${MAX_ENTRIES}.`);
+  if (directorySize > MAX_DIRECTORY_BYTES) fail('its zip directory is too large.');
   if (directoryOffset + directorySize > tailStart + eocd) fail('its zip directory lies outside the file.');
   // Spark's zip reader treats a gap before the end record as prepended data and shifts every offset by it.
   if (directoryOffset + directorySize < tailStart + eocd) fail('its zip directory is damaged.');
@@ -100,7 +103,8 @@ async function readDirectory(file: Blob): Promise<Map<string, ZipEntry>> {
     if (localHeaderOffset + 30 + compressedSize > directoryOffset) fail(`${name} lies outside the file.`);
     if (entries.has(name)) fail(`it contains ${name} twice.`);
     const basename = name.split(/[\\/]/).pop()!;
-    if (basenames.has(basename)) fail(`it contains more than one file named ${basename}.`);
+    // Folder entries (names ending in a separator) have no basename, and Spark ignores them.
+    if (basename && basenames.has(basename)) fail(`it contains more than one file named ${basename}.`);
     basenames.add(basename);
     entries.set(name, { name, method, compressedSize, size, localHeaderOffset });
     offset += 46 + nameLength + extraLength + commentLength;
