@@ -46,6 +46,18 @@ describe('publication controller', () => {
     expect(state.filesDone).toBe(3);
   });
 
+  it('returns a finished publication to a fresh form when the source dataset changes', async () => {
+    const { controller } = setup();
+    await controller.publish('owner', details, async () => fixture());
+    expect(controller.getSnapshot().phase).toBe('completed');
+
+    controller.invalidate();
+    const state = controller.getSnapshot();
+    expect(state.phase).toBe('idle');
+    expect(state.receipt).toBeUndefined();
+    expect(state.repoUrl).toBeUndefined();
+  });
+
   it('bounds file batches and ignores a duplicate publish click', async () => {
     const { controller, client } = setup();
     const work = vi.fn(async () => fixture(110));

@@ -31,8 +31,12 @@
 .publication-fields > label { font-size: 0.75rem; color: var(--text-secondary); }
 .publication-fields > .publication-label-top { align-self: start; padding-top: 6px; }
 .publication-fields textarea { resize: vertical; }
-.publication-repo { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.publication-repo input { flex: 1; min-width: 0; }
+/* The account prefix is joined to the name field, so every field starts at the same edge. */
+.publication-repo { display: flex; min-width: 0; }
+.publication-repo-prefix { display: flex; align-items: center; max-width: 45%; padding: 0 8px; font-size: 0.875rem; color: var(--text-muted);
+  background: var(--bg-elevated); border: 1px solid var(--border-color); border-right: 0; border-radius: 0.25rem 0 0 0.25rem; }
+.publication-repo-account { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.publication-repo input { flex: 1; min-width: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
 
 /* Published result. */
 .publication-result-title { font-weight: 600; }
@@ -40,9 +44,10 @@
 .publication-link-row { display: flex; gap: 8px; min-width: 0; }
 .publication-link-row input { flex: 1; min-width: 0; text-overflow: ellipsis; }
 .publication-body a.publication-button-link { color: inherit; text-decoration: none; }
-.publication-text-button { margin-left: auto; padding: 0; border: 0; background: none; font: inherit; font-size: 0.75rem;
-  color: var(--text-muted); cursor: pointer; }
-.publication-text-button:hover, .publication-text-button:focus-visible { color: var(--text-primary); text-decoration: underline; }
+/* Centred beside the preview, with the two links sharing the row equally. */
+.publication-layout-result { align-items: center; }
+.publication-result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.publication-result-actions a { display: flex; justify-content: center; }
 
 .publication-submit { display: grid; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color); }
 .publication-submit p { margin: 0; line-height: 1.5; }

@@ -28,7 +28,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
   const [license, setLicense] = useState('');
   const [licenseName, setLicenseName] = useState('');
   const [licenseUrl, setLicenseUrl] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const configuration = getHfConfiguration();
@@ -54,7 +54,8 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
   };
   const copy = async () => {
     if (!publish.receipt) return;
-    setCopied(await copyToClipboard(publish.receipt.viewerUrl));
+    const { viewerUrl } = publish.receipt;
+    setCopiedUrl(await copyToClipboard(viewerUrl) ? viewerUrl : null);
   };
   const signOut = () => { publication.cancel(); hfAuth.disconnect(); };
   const repositoryLine = (label: string) => publish.repoUrl && <p className="text-ds-muted text-xs">
@@ -67,7 +68,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
     overlayClassName={`${panelStyles.overlay} p-4`} overlayStyle={{ zIndex: Z_INDEX.modalOverlay }}
     panelClassName={`${panelStyles.dialog} w-full publication-dialog overflow-hidden`} panelStyle={{ maxHeight: '90dvh' }} closeOnBackdrop={false}>
     <header className={`${modalStyles.popupHeader} flex-shrink-0`}>
-      <h2 id={`${id}-title`} className={`${modalStyles.toolHeaderTitle} publication-title`}><span aria-hidden="true">🤗 </span>Publish dataset to Hugging Face</h2>
+      <h2 id={`${id}-title`} className={`${modalStyles.toolHeaderTitle} publication-title`}><span aria-hidden="true">🤗 </span>Publish to Hugging Face</h2>
       <div className="publication-header-actions">
         {config && (auth.status === 'connected' ? <>
           <span className="publication-account text-ds-muted text-xs" title={auth.identity?.username}>{auth.identity?.username}</span>
@@ -89,7 +90,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
         Open publishing viewer
       </a>}
     </section> : <>
-      <div className="publication-layout">
+      <div className={`publication-layout${publish.receipt ? ' publication-layout-result' : ''}`}>
         <section className="publication-preview-panel" aria-label="Dataset preview">
           <button type="button" className="publication-preview-button" disabled={!selecting} aria-label="Replace preview image"
             title={selecting ? 'Click to use your own image' : undefined} onClick={() => previewInput.current?.click()}>
@@ -108,7 +109,9 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
           {selecting && <section className="publication-fields" aria-label="Dataset details">
             <label htmlFor={`${id}-name`}>Repository name</label>
             <div className="publication-repo">
-              <span className="text-ds-muted">{auth.identity?.username ?? 'your-account'}/</span>
+              <span className="publication-repo-prefix" title={auth.identity?.username}>
+                <span className="publication-repo-account">{auth.identity?.username ?? 'your-account'}</span>/
+              </span>
               <input id={`${id}-name`} className={fieldClass} value={name} maxLength={96} onChange={event => setName(event.target.value)} autoComplete="off" />
             </div>
             <label htmlFor={`${id}-dataset-title`}>Dataset title</label>
@@ -150,16 +153,15 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
             <p className="text-ds-muted text-xs">Anyone can open this link without signing in.</p>
             <div className="publication-link-row">
               <input className={fieldClass} aria-label="Viewer link" readOnly value={publish.receipt.viewerUrl} onFocus={event => event.target.select()} />
-              <button type="button" className={primaryButtonClass} onClick={() => { void copy(); }}>{copied ? 'Copied' : 'Copy'}</button>
+              <button type="button" className={primaryButtonClass} onClick={() => { void copy(); }}>{copiedUrl === publish.receipt.viewerUrl ? 'Copied' : 'Copy'}</button>
             </div>
-            <div className="publication-actions">
+            <div className="publication-result-actions">
               <a className={`${buttonClass} publication-button-link`} href={publish.receipt.viewerUrl} target="_blank" rel="noopener noreferrer">
                 Open viewer<span aria-hidden="true"> ↗</span>
               </a>
               <a className={`${buttonClass} publication-button-link`} href={publish.receipt.repoUrl} target="_blank" rel="noopener noreferrer">
                 Hugging Face page<span aria-hidden="true"> ↗</span>
               </a>
-              <button type="button" className="publication-text-button" onClick={() => { setCopied(false); publication.reset(); }}>Publish another dataset</button>
             </div>
           </section>}
         </div>

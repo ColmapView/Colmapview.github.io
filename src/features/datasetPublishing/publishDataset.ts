@@ -159,6 +159,11 @@ export function createPublicationController(client: HubClient,
         error: signal.aborted ? undefined : publicationErrorMessage(error) });
     } finally { if (controller === owner) controller = null; }
   };
+  const reset = () => {
+    if (controller || state.uncertain) return;
+    job = null; invalidated = false;
+    state = { phase: 'idle', message: '', filesDone: 0, filesTotal: 0, bytesDone: 0, canRetry: false }; listeners.forEach(listener => listener());
+  };
   return {
     getSnapshot: () => state,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
@@ -191,14 +196,11 @@ export function createPublicationController(client: HubClient,
     retry: run,
     cancel() { if (controller) { set({ phase: 'cancelling', message: 'Stopping publication…' }); controller.abort(); } },
     invalidate() {
-      if (!job && !controller) return;
+      // A finished publication belongs to the previous dataset; the new one starts from a fresh form.
+      if (!job && !controller) { if (state.phase === 'completed') reset(); return; }
       invalidated = true; controller?.abort();
       if (!controller) set({ phase: 'cancelled', message: 'The source dataset changed. Start a new publication for the current dataset.' });
     },
-    reset() {
-      if (controller || state.uncertain) return;
-      job = null; invalidated = false;
-      state = { phase: 'idle', message: '', filesDone: 0, filesTotal: 0, bytesDone: 0, canRetry: false }; listeners.forEach(listener => listener());
-    },
+    reset,
   };
 }

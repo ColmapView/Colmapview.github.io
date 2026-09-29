@@ -148,8 +148,8 @@ describe('PublishDatasetModal', () => {
     expect(screen.getByRole('link', { name: 'Open viewer' })).toHaveAttribute('href', viewerUrl);
     expect(repositoryLinks()).toHaveLength(1);
     expect(repositoryLinks()[0]).toHaveAccessibleName('Hugging Face page');
-    fireEvent.click(screen.getByRole('button', { name: 'Publish another dataset' }));
-    expect(actions.reset).toHaveBeenCalledOnce();
+    // A new publication starts from the next dataset loaded; the result screen offers no restart.
+    expect(screen.queryByRole('button', { name: 'Publish another dataset' })).toBeNull();
   });
 });
 
