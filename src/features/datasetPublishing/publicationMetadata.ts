@@ -85,6 +85,8 @@ export function publicationMetadata(prepared: PreparedPublication, details: Publ
   const card = dump({ license: details.license,
     ...(details.license === 'other' ? { license_name: details.licenseName, license_link: details.licenseUrl } : {}),
     tags: ['colmap', 'photogrammetry', '3d', 'colmapview'],
+    // Not a tabular dataset: without this, Hugging Face converts images/ to Parquet for its table viewer.
+    viewer: false,
   }, { lineWidth: -1 });
   const readme = `---\n${card}---\n\n# ${markdown(details.title)}\n\n${markdown(details.description)}\n\n`
     + (prepared.previewPath ? `![Dataset preview](${datasetFileUrl(repoId, dataCommit, prepared.previewPath)})\n\n` : '')

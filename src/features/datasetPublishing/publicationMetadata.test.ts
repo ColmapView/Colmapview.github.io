@@ -50,6 +50,8 @@ describe('dataset card', () => {
     expect(readme).toContain(`[Open in ColmapView](${link})`);
     expect(readme).toContain(`Viewer link: <${link}>`);
     expect(readme).not.toContain('Direct viewer URL');
+    // Hugging Face would otherwise convert images/ to Parquet and show them as a table on the dataset page.
+    expect(readme).toMatch(/^---\n[\s\S]*^viewer: false$[\s\S]*^---$/m);
     expect(readme).not.toMatch(/\?url=https%3A|#manifest=|[?&]m=/);
   });
 });

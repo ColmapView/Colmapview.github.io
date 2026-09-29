@@ -43,7 +43,7 @@ ui:
 
 Published files also include `viewer_version`, `view_state`, `transform`, and `splat` metadata. Only validated presentation fields are applied. A saved splat selection loads automatically on desktop, including files above the ordinary discovery download budget. Touch devices retain the large-file selection prompt. Explicit camera/settings values in an incoming viewer link override dataset defaults. Manually opening a dataset uses its saved settings without inheriting the previous scene's URL state. A manifest with an explicit `viewerStatePath` uses that document instead of automatic discovery; an invalid explicitly required document still produces a load error.
 
-The dataset README links **Open in ColmapView** and shows the same **Viewer link** the dialog copies: `https://colmapview.github.io/latest/?url=https://huggingface.co/datasets/<owner>/<name>`. It opens the current viewer (not the version that published it) on the repository's latest revision and restores `colmapview.yaml`. The published `colmapview.json` manifest still pins every file to the data revision, for loading exactly what was published.
+The dataset card sets `viewer: false`, so Hugging Face does not convert `images/` to Parquet or show it as a table on the dataset page. The dataset README links **Open in ColmapView** and shows the same **Viewer link** the dialog copies: `https://colmapview.github.io/latest/?url=https://huggingface.co/datasets/<owner>/<name>`. It opens the current viewer (not the version that published it) on the repository's latest revision and restores `colmapview.yaml`. The published `colmapview.json` manifest still pins every file to the data revision, for loading exactly what was published.
 
 ### Supported inputs and limits
 
