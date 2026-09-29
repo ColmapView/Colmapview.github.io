@@ -355,8 +355,10 @@ Before Spark decodes a SOG, `validateSogBundle` (`src/splat/sogBundle.ts`)
 checks:
 
 - the zip structure (no ZIP64, at most 64 entries, stored or deflate entries
-  only, a zip directory of at most 1 MiB, and no duplicate or ambiguous file
-  names);
+  only, a zip directory of at most 1 MiB, entry data that lies before the
+  directory, and no duplicate or ambiguous file names: names are ASCII or
+  valid UTF-8, one entry per basename, and no name other than `meta.json`
+  ends in `meta.json`, because Spark reads the first entry that does);
 - `meta.json` (v1/v2, at most 1 MiB), with a splat count from 1 to 50,000,000,
   finite position bounds (within [-30, 30] for v2), and scale values (the v2
   codebook or the v1 range) in [-30, 20];
@@ -366,6 +368,16 @@ checks:
 
 A failed check shows `This SOG file can't be opened: <reason>` and no
 `SplatMesh` is created. GPU PSNR/SSIM is not available for SOG.
+
+Spark never receives the file's own zip directory. `validateSogBundle` returns
+a canonical bundle: the original bytes up to the zip directory (a `Blob` slice,
+not a copy), then a directory and end record rebuilt from the parsed entries,
+with no extra fields or comments, one disk and matching counts. Spark's zip
+reader skips an end record it cannot parse and falls back to an earlier one,
+so a file carrying a second archive could otherwise be checked as one archive
+and decoded as another. The validator reads every entry through the canonical
+bundle, and `SplatLayer` wraps it as a `File` with the original name and type
+before handing it to Spark.
 
 ### Large-Cloud WebGPU Limits
 

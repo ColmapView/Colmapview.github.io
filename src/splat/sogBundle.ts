@@ -3,14 +3,24 @@ import { readImageDimensions } from '../utils/imageDimensions';
 
 /**
  * Checks a PlayCanvas SOG bundle before Spark decodes it. Reads only the zip's
- * directory, meta.json and the first bytes of each per-splat texture, so a
- * malformed or oversized bundle is refused without touching the GPU.
+ * directory, meta.json and the first bytes of each texture, so a malformed or
+ * oversized bundle is refused without touching the GPU.
  */
 export class SogBundleError extends Error {
   constructor(message: string) { super(message); this.name = 'SogBundleError'; }
 }
 
 export interface SogBundleInfo { version: 1 | 2; count: number; shBands: number }
+
+export interface ValidatedSogBundle {
+  info: SogBundleInfo;
+  /**
+   * The bytes to hand Spark: the original file up to its zip directory, then a directory and
+   * end record rebuilt from the checked entries. Spark's zip reader skips an end record it cannot
+   * parse and falls back to an earlier one, so it must never see the file's own directory.
+   */
+  bundle: Blob;
+}
 
 const EOCD_SIGNATURE = 0x06054b50;
 const ZIP64_LOCATOR_SIGNATURE = 0x07064b50;
@@ -29,8 +39,24 @@ const INFLATE_STEP_BYTES = 4096;
 const TEXTURE_PREFIX_INPUT_BYTES = 128 * 1024;
 const UTF8_NAME_FLAG = 0x800;
 const UNICODE_PATH_FIELD = 0x7075;
+// Rebuilt records: made by and needing zip 2.0 (deflate), dated 1980-01-01 00:00 (the earliest valid DOS date).
+const ZIP_VERSION = 20;
+const DOS_DATE = (1 << 5) | 1;
+// Kept byte-for-byte as Spark's zip reader sees them: invalid UTF-8 is an error there, and a BOM is part of the name.
+const utf8Name = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
-interface ZipEntry { name: string; method: number; compressedSize: number; size: number; localHeaderOffset: number }
+interface ZipEntry {
+  name: string;
+  nameBytes: Uint8Array;
+  method: number;
+  crc: number;
+  compressedSize: number;
+  size: number;
+  localHeaderOffset: number;
+}
+interface ZipDirectory { entries: Map<string, ZipEntry>; directoryOffset: number }
+/** The rebuilt bundle, and where its entry data ends (the start of the rebuilt directory). */
+interface Archive { bundle: Blob; dataEnd: number; entries: Map<string, ZipEntry> }
 interface ParsedMeta { version: 1 | 2; count: number; shBands: number; files: string[]; textures: string[] }
 
 // A declaration (not a const arrow) so TypeScript's control flow treats calls as never returning.
@@ -57,7 +83,20 @@ function hasExtraField(view: DataView, start: number, length: number, id: number
   return false;
 }
 
-async function readDirectory(file: Blob): Promise<Map<string, ZipEntry>> {
+function decodeName(nameBytes: Uint8Array, flags: number): string {
+  if (!(flags & UTF8_NAME_FLAG)) {
+    // Spark's zip reader decodes names without the UTF-8 flag as CP437; only ASCII reads the same both ways.
+    if (nameBytes.some((byte) => byte > 0x7f)) fail(`${new TextDecoder().decode(nameBytes)} has a non-ASCII name not marked as UTF-8.`);
+    return String.fromCharCode(...nameBytes);
+  }
+  try {
+    return utf8Name.decode(nameBytes);
+  } catch {
+    return fail('its zip directory holds a file name that is not valid UTF-8.');
+  }
+}
+
+async function readDirectory(file: Blob): Promise<ZipDirectory> {
   const tailStart = Math.max(0, file.size - EOCD_SEARCH_BYTES);
   const tail = await read(file, tailStart, file.size);
   const tailView = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
@@ -82,13 +121,14 @@ async function readDirectory(file: Blob): Promise<Map<string, ZipEntry>> {
   const directory = await read(file, directoryOffset, directoryOffset + directorySize);
   const view = new DataView(directory.buffer, directory.byteOffset, directory.byteLength);
   const entries = new Map<string, ZipEntry>();
-  // Spark finds meta.json by basename (the last match wins), so each basename must name one entry.
+  // One entry per basename, so a folder copy (x/meta.json, x/quats.webp) can never stand in for the root file.
   const basenames = new Set<string>();
   let offset = 0;
   for (let index = 0; index < count; index++) {
     if (offset + 46 > directory.length || view.getUint32(offset, true) !== CENTRAL_SIGNATURE) fail('its zip directory is damaged.');
     const flags = view.getUint16(offset + 8, true);
     const method = view.getUint16(offset + 10, true);
+    const crc = view.getUint32(offset + 16, true);
     const compressedSize = view.getUint32(offset + 20, true);
     const size = view.getUint32(offset + 24, true);
     const nameLength = view.getUint16(offset + 28, true);
@@ -96,11 +136,10 @@ async function readDirectory(file: Blob): Promise<Map<string, ZipEntry>> {
     const commentLength = view.getUint16(offset + 32, true);
     const localHeaderOffset = view.getUint32(offset + 42, true);
     if (offset + 46 + nameLength + extraLength + commentLength > directory.length) fail('its zip directory is damaged.');
-    const nameBytes = directory.subarray(offset + 46, offset + 46 + nameLength);
-    const name = new TextDecoder().decode(nameBytes);
-    // Spark's zip reader decodes names without the UTF-8 flag as CP437; only ASCII reads the same both ways.
-    if (!(flags & UTF8_NAME_FLAG) && nameBytes.some((byte) => byte > 0x7f)) fail(`${name} has a non-ASCII name not marked as UTF-8.`);
-    // Spark's zip reader renames an entry that carries an Info-ZIP Unicode Path field.
+    const nameBytes = directory.slice(offset + 46, offset + 46 + nameLength);
+    const name = decodeName(nameBytes, flags);
+    // Zip readers, Spark's included, rename an entry that carries an Info-ZIP Unicode Path field. The
+    // rebuilt directory drops the field, but a bundle whose entries have two names is refused outright.
     if (hasExtraField(view, offset + 46 + nameLength, extraLength, UNICODE_PATH_FIELD)) fail(`${name} carries a second (Unicode) file name.`);
     if (flags & 1) fail(`${name} is encrypted.`);
     if (method !== 0 && method !== 8) fail(`${name} uses an unsupported compression method.`);
@@ -110,19 +149,57 @@ async function readDirectory(file: Blob): Promise<Map<string, ZipEntry>> {
     // Folder entries (names ending in a separator) have no basename, and Spark ignores them.
     if (basename && basenames.has(basename)) fail(`it contains more than one file named ${basename}.`);
     basenames.add(basename);
-    entries.set(name, { name, method, compressedSize, size, localHeaderOffset });
+    entries.set(name, { name, nameBytes, method, crc, compressedSize, size, localHeaderOffset });
     offset += 46 + nameLength + extraLength + commentLength;
   }
-  return entries;
+  return { entries, directoryOffset };
 }
 
-async function dataRange(file: Blob, entry: ZipEntry): Promise<[number, number]> {
-  const header = await read(file, entry.localHeaderOffset, entry.localHeaderOffset + 30);
+/**
+ * Rebuilds the zip directory from the parsed entries: no extra fields, no comments, one disk,
+ * and an end record that points at it. Everything before the original directory is kept as a
+ * Blob slice (no copy), so Spark reads the checked entries through a directory built here.
+ */
+function canonicalArchive(file: Blob, { entries, directoryOffset }: ZipDirectory): Archive {
+  const records = [...entries.values()];
+  const directorySize = records.reduce((total, entry) => total + 46 + entry.nameBytes.length, 0);
+  const tail = new Uint8Array(directorySize + 22);
+  const view = new DataView(tail.buffer);
+  let at = 0;
+  for (const entry of records) {
+    view.setUint32(at, CENTRAL_SIGNATURE, true);
+    view.setUint16(at + 4, ZIP_VERSION, true);
+    view.setUint16(at + 6, ZIP_VERSION, true);
+    view.setUint16(at + 8, entry.nameBytes.some((byte) => byte > 0x7f) ? UTF8_NAME_FLAG : 0, true);
+    view.setUint16(at + 10, entry.method, true);
+    view.setUint16(at + 14, DOS_DATE, true);
+    view.setUint32(at + 16, entry.crc, true);
+    view.setUint32(at + 20, entry.compressedSize, true);
+    view.setUint32(at + 24, entry.size, true);
+    view.setUint16(at + 28, entry.nameBytes.length, true);
+    view.setUint32(at + 42, entry.localHeaderOffset, true);
+    tail.set(entry.nameBytes, at + 46);
+    at += 46 + entry.nameBytes.length;
+  }
+  view.setUint32(at, EOCD_SIGNATURE, true);
+  view.setUint16(at + 8, records.length, true);
+  view.setUint16(at + 10, records.length, true);
+  view.setUint32(at + 12, directorySize, true);
+  view.setUint32(at + 16, directoryOffset, true);
+  // Readers look for a ZIP64 locator in the 20 bytes before the end record; if the rebuilt
+  // directory's last bytes happen to spell one, Spark would reject this end record and fall back.
+  if (directorySize >= 20 && view.getUint32(directorySize - 20, true) === ZIP64_LOCATOR_SIGNATURE) fail('ZIP64 bundles are not supported.');
+  return { bundle: new Blob([file.slice(0, directoryOffset), tail]), dataEnd: directoryOffset, entries };
+}
+
+async function dataRange(archive: Archive, entry: ZipEntry): Promise<[number, number]> {
+  const header = await read(archive.bundle, entry.localHeaderOffset, entry.localHeaderOffset + 30);
   const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
   if (header.length < 30 || view.getUint32(0, true) !== LOCAL_SIGNATURE) fail(`${entry.name} is damaged.`);
   const start = entry.localHeaderOffset + 30 + view.getUint16(26, true) + view.getUint16(28, true);
   const end = start + entry.compressedSize;
-  if (end > file.size) fail(`${entry.name} lies outside the file.`);
+  // Entry data sits before the directory; past it, the checked bytes would not be the ones Spark reads.
+  if (end > archive.dataEnd) fail(`${entry.name} lies outside the file.`);
   return [start, end];
 }
 
@@ -150,20 +227,20 @@ function inflateBounded(entry: ZipEntry, compressed: Uint8Array, complete: boole
   return kept.subarray(0, Math.min(produced, keep));
 }
 
-async function readWholeEntry(file: Blob, entry: ZipEntry, limit: number): Promise<Uint8Array<ArrayBuffer>> {
+async function readWholeEntry(archive: Archive, entry: ZipEntry, limit: number): Promise<Uint8Array<ArrayBuffer>> {
   // A stored entry's bytes are its compressed size, so both sizes are bounded.
   const bytes = Math.max(entry.size, entry.compressedSize);
   if (bytes > limit) fail(`${entry.name} is too large (${bytes} bytes).`);
-  const [start, end] = await dataRange(file, entry);
-  const data = await read(file, start, end);
+  const [start, end] = await dataRange(archive, entry);
+  const data = await read(archive.bundle, start, end);
   return entry.method === 0 ? data : inflateBounded(entry, data, true, entry.size);
 }
 
-async function readEntryPrefix(file: Blob, entry: ZipEntry, length: number): Promise<Uint8Array<ArrayBuffer>> {
-  const [start, end] = await dataRange(file, entry);
-  if (entry.method === 0) return read(file, start, Math.min(end, start + length));
+async function readEntryPrefix(archive: Archive, entry: ZipEntry, length: number): Promise<Uint8Array<ArrayBuffer>> {
+  const [start, end] = await dataRange(archive, entry);
+  if (entry.method === 0) return read(archive.bundle, start, Math.min(end, start + length));
   const inputEnd = Math.min(end, start + TEXTURE_PREFIX_INPUT_BYTES);
-  return inflateBounded(entry, await read(file, start, inputEnd), inputEnd === end, length);
+  return inflateBounded(entry, await read(archive.bundle, start, inputEnd), inputEnd === end, length);
 }
 
 function parseCount(value: unknown): number {
@@ -220,13 +297,21 @@ function parseV1(meta: Record<string, unknown>): ParsedMeta {
   return { version: 1, count, shBands: 0, textures, files: [...textures, ...shFiles] };
 }
 
-export async function validateSogBundle(file: Blob, { maxSplats }: { maxSplats?: number } = {}): Promise<SogBundleInfo> {
-  const entries = await readDirectory(file);
+/**
+ * Checks `file` and returns its info with the canonical bundle to decode. Every entry is read
+ * through that bundle, so the checked bytes are exactly the ones Spark will read.
+ */
+export async function validateSogBundle(file: Blob, { maxSplats }: { maxSplats?: number } = {}): Promise<ValidatedSogBundle> {
+  const archive = canonicalArchive(file, await readDirectory(file));
+  const { entries } = archive;
   const metaEntry = entries.get('meta.json') ?? fail('meta.json is missing.');
+  // Spark reads the first entry whose name ends in "meta.json" (x/meta.json, xmeta.json), so no other name may.
+  const lookalike = [...entries.keys()].find((name) => name !== 'meta.json' && name.endsWith('meta.json'));
+  if (lookalike) fail(`${lookalike} could be mistaken for meta.json.`);
   if (metaEntry.size > MAX_META_BYTES) fail(`meta.json is too large (${metaEntry.size} bytes).`);
   let meta: unknown;
   try {
-    meta = JSON.parse(new TextDecoder().decode(await readWholeEntry(file, metaEntry, MAX_META_BYTES)));
+    meta = JSON.parse(new TextDecoder().decode(await readWholeEntry(archive, metaEntry, MAX_META_BYTES)));
   } catch (error) {
     if (error instanceof SogBundleError) throw error;
     fail('meta.json is not valid JSON.');
@@ -240,12 +325,12 @@ export async function validateSogBundle(file: Blob, { maxSplats }: { maxSplats?:
   }
   for (const name of parsed.files) if (!entries.has(name)) fail(`${name} is missing.`);
   for (const name of new Set(parsed.textures)) {
-    const prefix = await readEntryPrefix(file, entries.get(name)!, TEXTURE_PREFIX_BYTES);
+    const prefix = await readEntryPrefix(archive, entries.get(name)!, TEXTURE_PREFIX_BYTES);
     const size = isWebp(prefix) ? await readImageDimensions(new Blob([prefix])) : null;
     if (!size) fail(`${name} is not a readable WebP image.`);
     else if (size.width * size.height < parsed.count) {
       fail(`${name} holds ${size.width * size.height} splats but the bundle declares ${parsed.count}.`);
     }
   }
-  return { version: parsed.version, count: parsed.count, shBands: parsed.shBands };
+  return { info: { version: parsed.version, count: parsed.count, shBands: parsed.shBands }, bundle: archive.bundle };
 }

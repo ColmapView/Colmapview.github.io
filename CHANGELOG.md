@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Validate SOG bundles (structure, metadata, texture sizes and device splat limits) before rendering, so malformed or oversized files are refused with a reason instead of reaching the GPU.
+- Validate SOG bundles (structure, metadata, texture sizes and device splat limits) before rendering, so malformed or oversized files are refused with a reason instead of reaching the GPU. Spark then receives the file with a zip directory rebuilt from the checked entries, never the file's own, so it decodes exactly the archive that was checked.
 
 ## [0.14.5] - 2026-09-27
 

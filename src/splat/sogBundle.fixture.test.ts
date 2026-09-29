@@ -18,6 +18,6 @@ describe('SOG bundle validation against the reference encoder output', () => {
 
   it('accepts the splat-transform fixture and reports its count and SH bands', async () => {
     const bundle = new NodeBlob([readFileSync(FIXTURE_PATH)]) as unknown as Blob;
-    await expect(validateSogBundle(bundle)).resolves.toEqual({ version: 2, count: 2000, shBands: 1 });
+    await expect(validateSogBundle(bundle).then(({ info }) => info)).resolves.toEqual({ version: 2, count: 2000, shBands: 1 });
   });
 });

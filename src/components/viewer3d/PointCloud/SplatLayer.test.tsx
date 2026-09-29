@@ -69,6 +69,21 @@ function createDeferred<T>() {
   return { promise, resolve };
 }
 
+/** What validateSogBundle resolves to: the checked info and the canonical bundle Spark must receive. */
+function validatedSog(bundle: Blob = new Blob(['canonical'])) {
+  return { info: { version: 2 as const, count: 100, shBands: 0 }, bundle };
+}
+
+function readText(blob: Blob): Promise<string> {
+  // jsdom's Blob has no text(); FileReader reads it.
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
+}
+
 interface TestSplatMesh {
   initialized: Promise<void>;
   dispose: () => void;
@@ -639,15 +654,23 @@ describe('SplatLayer', () => {
     }
   });
 
-  it('hands a validated SOG to Spark and never validates PLY files', async () => {
+  it('hands Spark the canonical SOG bundle, never the original file, and never validates PLY files', async () => {
     const SparkRenderer = vi.fn(function SparkRenderer(this: { dispose: () => void }) { this.dispose = vi.fn(); });
     const { SplatMesh } = createSplatMeshConstructor(Promise.resolve());
     preloadSparkModuleMock.mockResolvedValue({ SparkRenderer, SplatMesh });
-    validateSogBundleMock.mockResolvedValue({ version: 2, count: 100, shBands: 0 });
-    useSplatLayerStoreFacadeMock.mockReturnValue(createFacade({ splatFile: new File(['sog'], 'scene.sog') }));
+    validateSogBundleMock.mockResolvedValue(validatedSog(new Blob(['canonical-bundle'])));
+    const original = new File(['sog'], 'scene.sog', { type: 'application/octet-stream', lastModified: 1234 });
+    useSplatLayerStoreFacadeMock.mockReturnValue(createFacade({ splatFile: original }));
     const { unmount } = render(<SplatLayer />);
     await waitFor(() => expect(SplatMesh).toHaveBeenCalledWith(expect.objectContaining({ fileName: 'scene.sog' })));
     expect(validateSogBundleMock).toHaveBeenCalledTimes(1);
+    expect(validateSogBundleMock.mock.calls[0][0]).toBe(original);
+    expect(getSplatMeshSourceOptionsMock).toHaveBeenCalledTimes(1);
+    const handed = getSplatMeshSourceOptionsMock.mock.calls[0][0] as File;
+    expect(handed).not.toBe(original);
+    expect(handed).toBeInstanceOf(File);
+    expect(handed).toMatchObject({ name: 'scene.sog', type: 'application/octet-stream', lastModified: 1234 });
+    expect(await readText(handed)).toBe('canonical-bundle');
     unmount();
 
     validateSogBundleMock.mockClear();
@@ -661,7 +684,7 @@ describe('SplatLayer', () => {
     const SparkRenderer = vi.fn(function SparkRenderer(this: { dispose: () => void }) { this.dispose = vi.fn(); });
     const { SplatMesh } = createSplatMeshConstructor(Promise.resolve());
     preloadSparkModuleMock.mockResolvedValue({ SparkRenderer, SplatMesh });
-    validateSogBundleMock.mockResolvedValue({ version: 2, count: 100, shBands: 0 });
+    validateSogBundleMock.mockResolvedValue(validatedSog());
 
     detectTouchDeviceMock.mockReturnValueOnce(true);
     const touchFile = new File(['sog'], 'phone.sog');
@@ -686,7 +709,7 @@ describe('SplatLayer', () => {
     const SparkRenderer = vi.fn(function SparkRenderer(this: { dispose: () => void }) { this.dispose = vi.fn(); });
     const { SplatMesh } = createSplatMeshConstructor(Promise.resolve());
     preloadSparkModuleMock.mockResolvedValue({ SparkRenderer, SplatMesh });
-    const validation = createDeferred<{ version: 2; count: number; shBands: number }>();
+    const validation = createDeferred<ReturnType<typeof validatedSog>>();
     validateSogBundleMock.mockReturnValue(validation.promise);
     const facade = createFacade({ splatFile: new File(['sog'], 'scene.sog') });
     useSplatLayerStoreFacadeMock.mockReturnValue(facade);
@@ -696,7 +719,7 @@ describe('SplatLayer', () => {
     unmount();
 
     await act(async () => {
-      validation.resolve({ version: 2, count: 100, shBands: 0 });
+      validation.resolve(validatedSog());
       await validation.promise;
     });
 
