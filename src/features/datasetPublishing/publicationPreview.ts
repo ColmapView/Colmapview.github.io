@@ -1,4 +1,4 @@
-import { readImageDimensions } from './imageDimensions';
+import { readImageDimensions } from '../../utils/imageDimensions';
 
 export const PUBLICATION_PREVIEW_PATH = 'colmapview-preview.png';
 export const MAX_PREVIEW_INPUT_BYTES = 32 * 1024 * 1024;
