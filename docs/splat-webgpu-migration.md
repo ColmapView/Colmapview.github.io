@@ -341,7 +341,7 @@ The app WebGPU splat path supports `.spz` and `.ply` files. When a dataset has
 multiple splat candidates, automatic selection prefers the largest `.spz` file,
 then the largest `.ply` file, then the largest `.sog` bundle. The point-cloud
 menu still allows explicitly choosing among available `.spz`, `.ply` and `.sog`
-candidates, listed smallest first.
+candidates, and the splat picker lists them smallest first.
 
 The legacy `.splat` format remains Spark-only unless a separate WebGPU loader is
 implemented.
