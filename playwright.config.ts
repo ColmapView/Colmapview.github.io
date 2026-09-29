@@ -6,7 +6,7 @@ if (!/^\d{2,5}$/.test(testPort)) throw new Error('COLMAP_WEBVIEW_E2E_PORT must b
 const testOrigin = `http://localhost:${testPort}`;
 
 const webGpuSpec = /.*webgpu.*\.spec\.ts/;
-const webGpuSoftwareSpec = /.*webgpu-(psnr|psnr-app|psnr-isolation|render)\.spec\.ts/;
+const webGpuSoftwareSpec = /.*webgpu-(psnr|psnr-app|psnr-isolation|render|sog)\.spec\.ts/;
 const webGpuHardwareSpec = /.*webgpu-render\.spec\.ts/;
 const webGpuBicycleSpec = /.*webgpu-bicycle\.spec\.ts/;
 const defaultLaunchArgs = ['--enable-webgl', '--use-gl=angle', '--ignore-gpu-blocklist'];
