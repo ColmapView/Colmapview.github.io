@@ -10,7 +10,6 @@ import { parseImagesBinary } from '../../parsers/images';
 import { checkAssetSize, preparePublication, type PublicationInput } from './preparePublication';
 import { MAX_BUFFERED_PUBLICATION_FILE_BYTES } from './types';
 import { publicationManifest, publicationMetadata } from './publicationMetadata';
-import { decodeShareData } from '../../utils/shareDataCodec';
 import { publicationPath } from './publicationPaths';
 import { parseDatasetViewerSettings } from '../../utils/datasetViewerSettings';
 import { getManifestLoadSourceInfo } from '../../hooks/urlLoaderPolicy';
@@ -277,17 +276,16 @@ describe('publication snapshot preparation', () => {
     expect(await settled).toBe(40);
   });
 
-  it('keeps README links pinned to D without referencing their own metadata commit', async () => {
+  it('pins the manifest to D while the README links the viewer to the dataset page', async () => {
     const prepared = await preparePublication(input(), new AbortController().signal, deps());
     const files = publicationMetadata(prepared, { name: 'scene', title: 'Scene', description: 'Example', license: 'cc-by-4.0' }, 'owner/scene', 'd'.repeat(40), []);
+    const manifest = JSON.parse(await files.find(file => file.path === 'colmapview.json')!.content.text());
+    expect(manifest.baseUrl).toContain('/resolve/' + 'd'.repeat(40) + '/');
+    expect(manifest.viewerStatePath).toBe('colmapview.yaml');
     const readme = await files.find(file => file.path === 'README.md')!.content.text();
     const url = /\[Open in ColmapView\]\(([^)]+)\)/.exec(readme)![1];
-    const decoded = await decodeShareData(new URL(url).hash);
-    expect(decoded?.manifest?.baseUrl).toContain('/resolve/' + 'd'.repeat(40) + '/');
-    expect(decoded?.manifest?.viewerStatePath).toBe('colmapview.yaml');
-    const direct = /Direct viewer URL: <([^>]+)>/.exec(readme)![1];
-    expect(new URL(direct).searchParams.get('url')).toBe('https://huggingface.co/datasets/owner/scene/resolve/' + 'd'.repeat(40) + '/');
-    expect(new URL(direct).hash).toBe('');
+    expect(new URL(url).searchParams.get('url')).toBe('https://huggingface.co/datasets/owner/scene');
+    expect(new URL(url).hash).toBe('');
     expect(readme).toContain('colmapview.yaml');
   });
 

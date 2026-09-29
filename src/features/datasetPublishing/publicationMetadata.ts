@@ -1,6 +1,5 @@
 import { dump } from 'js-yaml';
 import type { ColmapManifest } from '../../types/manifest';
-import { buildShareableUrl } from '../../utils/shareUrl';
 import { HfError } from '../huggingface/http';
 import { datasetFileUrl, validateRepositoryName } from './publicationPaths';
 import type { PreparedPublication, PublicationDetails, PublicationReceipt } from './types';
@@ -52,15 +51,20 @@ export function publicationManifest(prepared: PreparedPublication, repoId: strin
   };
 }
 
-export function makeViewerLink(prepared: PreparedPublication, manifest: string | ColmapManifest): string {
-  return buildShareableUrl({ baseUrl: prepared.viewerBaseUrl, manifestUrlOrManifest: manifest,
-    viewState: prepared.viewerState.viewState, config: prepared.viewerState.config });
+/**
+ * The viewer a published dataset links to. On colmapview.github.io that is /latest/ (the root's
+ * redirect drops the query), so links keep opening the current viewer rather than the version
+ * that published them; /dev/ stays on /dev/, and other hosts link to the page they run on.
+ */
+export function getPublicationViewerBaseUrl(location: Pick<Location, 'origin' | 'hostname' | 'pathname'>): string {
+  if (location.hostname !== 'colmapview.github.io') return location.origin + location.pathname;
+  return `${location.origin}/${location.pathname.startsWith('/dev/') ? 'dev' : 'latest'}/`;
 }
 
 /**
- * The shareable link: the viewer followed by the dataset page, which follows the repository's latest revision.
+ * The shareable link, used by the dialog and the dataset card: the viewer followed by the dataset
+ * page, which follows the repository's latest revision and its saved colmapview.yaml settings.
  * The page URL stays unescaped for readability; repository ids contain no query-significant characters.
- * The README keeps revision-pinned links as the exact record.
  */
 export function makeRepositoryViewerLink(prepared: PreparedPublication, repoUrl: string): string {
   const url = new URL(prepared.viewerBaseUrl);
@@ -73,17 +77,10 @@ export function publicationReceipt(prepared: PreparedPublication, repoId: string
   return { repoId, repoUrl, dataCommit, metadataCommit, viewerUrl: makeRepositoryViewerLink(prepared, repoUrl) };
 }
 
-export function makeDirectViewerLink(prepared: PreparedPublication, repoId: string, dataCommit: string): string {
-  const url = new URL(prepared.viewerBaseUrl);
-  url.hash = '';
-  url.searchParams.set('url', new URL('.', datasetFileUrl(repoId, dataCommit, DATASET_VIEWER_SETTINGS_FILE)).href);
-  return url.href;
-}
-
 export function publicationMetadata(prepared: PreparedPublication, details: PublicationDetails, repoId: string, dataCommit: string,
   inventory: Array<{ path: string; size: number }>): UploadFile[] {
   const manifest = publicationManifest(prepared, repoId, dataCommit, details.title);
-  const directViewerUrl = makeDirectViewerLink(prepared, repoId, dataCommit);
+  const viewerLink = makeRepositoryViewerLink(prepared, `https://huggingface.co/datasets/${repoId}`);
   const markdown = (text: string) => text.replace(/[\\`*_[\]<>]/g, '\\$&');
   const card = dump({ license: details.license,
     ...(details.license === 'other' ? { license_name: details.licenseName, license_link: details.licenseUrl } : {}),
@@ -91,8 +88,8 @@ export function publicationMetadata(prepared: PreparedPublication, details: Publ
   }, { lineWidth: -1 });
   const readme = `---\n${card}---\n\n# ${markdown(details.title)}\n\n${markdown(details.description)}\n\n`
     + (prepared.previewPath ? `![Dataset preview](${datasetFileUrl(repoId, dataCommit, prepared.previewPath)})\n\n` : '')
-    + `[Open in ColmapView](${makeViewerLink(prepared, manifest)})\n\n`
-    + `Direct viewer URL: <${directViewerUrl}>\n\n`
+    + `[Open in ColmapView](${viewerLink})\n\n`
+    + `Viewer link: <${viewerLink}>\n\n`
     + `Published by ${markdown(repoId.split('/')[0])} with ColmapView ${prepared.viewerState.viewerVersion}.\n\n`
     + `## Contents\n\n${prepared.counts.cameras} cameras, ${prepared.counts.images} registered images, ${prepared.counts.points} points.\n\n`
     + `COLMAP binary files are in sparse/0/. Original images are in images/.\n`

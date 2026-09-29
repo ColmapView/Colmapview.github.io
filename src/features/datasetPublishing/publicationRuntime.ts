@@ -1,7 +1,7 @@
 import { useReconstructionStore, useTransformStore, useCameraStore, useDeletionStore, usePublicationStatusStore } from '../../store';
 import { isReconstructionSnapshot } from '../../wasm/reconstructionService';
 import { collectShareConfig } from '../../hooks/useUrlState';
-import { getShareBaseUrl } from '../../utils/shareUrl';
+import { getPublicationViewerBaseUrl } from './publicationMetadata';
 import { getActiveSplatSourceId } from '../../utils/splatFileSourcePolicy';
 import { getZipImageGeneration } from '../../utils/zipImageFiles';
 import { hfAuth } from '../huggingface/auth';
@@ -27,8 +27,7 @@ export function capturePublicationInput(): PublicationInput {
   const transform = useTransformStore.getState();
   if (!state.reconstruction || (!state.reconstruction.cameras.size && !state.loadedFiles?.camerasFile)) throw new HfError('Load a COLMAP reconstruction before publishing. Splat-only publication is not supported yet.');
   if (useDeletionStore.getState().pendingDeletions.size) throw new HfError('Apply or clear pending deletions before publishing.');
-  const viewerBaseUrl = window.location.hostname === 'colmapview.github.io' && window.location.pathname.startsWith('/dev/')
-    ? window.location.origin + '/dev/' : getShareBaseUrl(window.location, __APP_VERSION__);
+  const viewerBaseUrl = getPublicationViewerBaseUrl(window.location);
   return {
     sourceKey: getPublicationSourceKey(), modelRevision: state.reconstructionEditRevision,
     reconstruction: state.reconstruction, source: state.wasmReconstruction,

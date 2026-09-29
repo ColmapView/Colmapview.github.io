@@ -12,7 +12,7 @@ ColmapView can publish the currently loaded COLMAP reconstruction, original imag
 4. Enter a new repository name, dataset title, description, and a license you can grant: Creative Commons 4.0 (BY, BY-SA, BY-NC, BY-NC-SA, BY-ND, BY-NC-ND), CC0 1.0, MIT, Apache 2.0, or a custom license. Original images, available masks, and all loaded splats are included automatically; there are no content checkboxes.
 5. Apply or clear any pending image deletions. Applying them here changes the current reconstruction.
 6. Select **Publish public dataset**; the notice beside it explains that the dataset is public and that cancelling does not remove committed files. Publishing first captures a fixed snapshot of the current dataset (**Preparing dataset…**), then uploads it. Missing originals or files above the supported size limit stop publishing with an error before anything is uploaded; they are not silently omitted. If the repository name is taken, the dialog returns to the form so you can choose another name. Files become public during upload. Keep the tab open; closing only the dialog preserves progress.
-7. Once anonymous verification succeeds, **Copy** the viewer link, or use **Open viewer** or **Hugging Face page**. The link is the viewer followed by the dataset page (for example `https://colmapview.github.io/?url=https://huggingface.co/datasets/you/scene`), restores the saved settings from `colmapview.yaml`, and follows the repository's latest revision. If clipboard access fails, select and copy the displayed link manually.
+7. Once anonymous verification succeeds, **Copy** the viewer link, or use **Open viewer** or **Hugging Face page**. The link is the viewer followed by the dataset page (for example `https://colmapview.github.io/latest/?url=https://huggingface.co/datasets/you/scene`), restores the saved settings from `colmapview.yaml`, and follows the repository's latest revision. If clipboard access fails, select and copy the displayed link manually.
 
 The publication retains the snapshot captured when you selected Publish. Later edits do not change an already published link. Use **Publish another dataset** to capture a new snapshot under a new name.
 
@@ -43,7 +43,7 @@ ui:
 
 Published files also include `viewer_version`, `view_state`, `transform`, and `splat` metadata. Only validated presentation fields are applied. A saved splat selection loads automatically on desktop, including files above the ordinary discovery download budget. Touch devices retain the large-file selection prompt. Explicit camera/settings values in an incoming viewer link override dataset defaults. Manually opening a dataset uses its saved settings without inheriting the previous scene's URL state. A manifest with an explicit `viewerStatePath` uses that document instead of automatic discovery; an invalid explicitly required document still produces a load error.
 
-The dataset README contains both **Open in ColmapView** and a visible **Direct viewer URL** using `?url=` with the Hugging Face dataset directory. Both links pin the data revision, so they keep showing exactly what was published even if the repository changes later. The direct link discovers `colmapview.yaml` without needing an encoded inline manifest.
+The dataset README links **Open in ColmapView** and shows the same **Viewer link** the dialog copies: `https://colmapview.github.io/latest/?url=https://huggingface.co/datasets/<owner>/<name>`. It opens the current viewer (not the version that published it) on the repository's latest revision and restores `colmapview.yaml`. The published `colmapview.json` manifest still pins every file to the data revision, for loading exactly what was published.
 
 ### Supported inputs and limits
 
@@ -159,7 +159,7 @@ colmapview-upload.json
 README.md
 ```
 
-The final data revision **D** includes COLMAP files, original assets, the preview image, and bounded, validated viewer settings in `colmapview.yaml`. A later metadata revision **M** adds the dataset card, inventory, and manifest. That manifest points to D and uses the same YAML document; the copied viewer link points to the manifest at M. The README embeds the preview image, an equivalent manifest, and a direct dataset-directory viewer URL pinned to D, avoiding a reference to its own unknown commit ID.
+The final data revision **D** includes COLMAP files, original assets, the preview image, and bounded, validated viewer settings in `colmapview.yaml`. A later metadata revision **M** adds the dataset card, inventory, and manifest. That manifest points to D and uses the same YAML document; the copied viewer link points to the dataset page, which follows the latest revision. The README embeds the preview image pinned to D and links the viewer to the dataset page, avoiding a reference to its own unknown commit ID.
 
 The viewer-state document restores display settings, the camera view, and separate scene/splat transforms. Explicit URL settings override document defaults. Earlier publications referencing `colmapview-state.json` remain readable. Manifests without `viewerStatePath` discover optional YAML settings at their dataset base URL. Tokens and source credentials never enter the package.
 
@@ -171,7 +171,7 @@ The initial upload adapter explicitly selects the SDK's LFS/basic and multipart 
 
 ## Automated checks
 
-The publication tests cover anonymous reopening through manifest links, direct README links, and manual URL entry. Dataset-settings checks cover local folders, local archives, remote manifests, and remote archives on a host other than Hugging Face. Unit tests cover camera and splat transforms, URL precedence, legacy JSON compatibility, invalid settings, preview replacement and cancellation, source changes, and conflict recovery.
+The publication tests cover anonymous reopening through the shared link (which the README also uses) and manual entry of the pinned manifest directory. Dataset-settings checks cover local folders, local archives, remote manifests, and remote archives on a host other than Hugging Face. Unit tests cover camera and splat transforms, URL precedence, legacy JSON compatibility, invalid settings, preview replacement and cancellation, source changes, and conflict recovery.
 
 The browser fixture includes an 11 MiB original image to exercise worker hashing, LFS binary upload, and multipart completion. This is functional coverage, not a representative peak-memory benchmark; that measurement remains part of rollout testing.
 

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchManifestColmapFiles } from '../../hooks/urlLoaderManifestFetch';
 import { getManifestLoadSourceInfo } from '../../hooks/urlLoaderPolicy';
 import { buildImageUrl } from '../../utils/imageFileLookupPolicy';
-import { publicationManifest, publicationMetadata, publicationReceipt, validatePublicationDetails } from './publicationMetadata';
+import { getPublicationViewerBaseUrl, publicationManifest, publicationMetadata, publicationReceipt, validatePublicationDetails } from './publicationMetadata';
 import { datasetFileUrl } from './publicationPaths';
 import type { PreparedPublication } from './types';
 
@@ -23,6 +23,34 @@ describe('publication receipt', () => {
     const receipt = publicationReceipt(prepared([]), 'owner/scene', DATA_COMMIT, 'e'.repeat(40));
     expect(receipt.viewerUrl).toBe('https://viewer.example/?url=https://huggingface.co/datasets/owner/scene');
     expect(new URL(receipt.viewerUrl).searchParams.get('url')).toBe('https://huggingface.co/datasets/owner/scene');
+  });
+});
+
+describe('publication viewer base', () => {
+  it.each([
+    ['https://colmapview.github.io', '/v0.15.2/', 'https://colmapview.github.io/latest/'],
+    ['https://colmapview.github.io', '/latest/', 'https://colmapview.github.io/latest/'],
+    ['https://colmapview.github.io', '/dev/', 'https://colmapview.github.io/dev/'],
+    ['http://localhost:5173', '/', 'http://localhost:5173/'],
+  ])('links %s%s datasets to %s', (origin, pathname, expected) => {
+    const { hostname } = new URL(origin);
+    expect(getPublicationViewerBaseUrl({ origin, hostname, pathname })).toBe(expected);
+  });
+});
+
+describe('dataset card', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('links the viewer to the dataset page, the same clean link the dialog shares', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const checked = validatePublicationDetails({ name: 'scene', title: 'Scene', description: '', license: 'cc-by-4.0' });
+    const readme = await publicationMetadata(prepared([]), checked, 'owner/scene', DATA_COMMIT, [])
+      .find(file => file.path === 'README.md')!.content.text();
+    const link = 'https://viewer.example/?url=https://huggingface.co/datasets/owner/scene';
+    expect(readme).toContain(`[Open in ColmapView](${link})`);
+    expect(readme).toContain(`Viewer link: <${link}>`);
+    expect(readme).not.toContain('Direct viewer URL');
+    expect(readme).not.toMatch(/\?url=https%3A|#manifest=|[?&]m=/);
   });
 });
 

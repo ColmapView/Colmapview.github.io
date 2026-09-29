@@ -10,7 +10,7 @@ const mockHub = (options: { lfs?: boolean } = {}) => {
 test.afterEach(async () => { await Promise.all([...mocks].map(hub => hub.close())); mocks.clear(); });
 
 test.describe('Hugging Face dataset publication', () => {
-  test('publishes settings and originals and reopens manifest and direct README links anonymously', async ({ page, context, browser, baseURL }) => {
+  test('publishes settings and originals and reopens the shared link and pinned manifest anonymously', async ({ page, context, browser, baseURL }) => {
     test.setTimeout(120_000);
     const publisherErrors: string[] = [];
     page.on('pageerror', error => publisherErrors.push(error.message));
@@ -63,13 +63,13 @@ test.describe('Hugging Face dataset publication', () => {
     expect(preview.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     expect(readme).toContain(`![Dataset preview](${manifest.baseUrl}colmapview-preview.png)`);
     expect(hub.reads.some(read => read.path.endsWith('/colmapview-preview.png') && !read.authorization)).toBe(true);
-    const directViewerUrl = /Direct viewer URL: <([^>]+)>/.exec(readme)![1];
-    expect(new URL(directViewerUrl).searchParams.get('url')).toBe(manifest.baseUrl);
     const readmeViewerUrl = /\[Open in ColmapView\]\(([^)]+)\)/.exec(readme)![1];
-    // The shared link is the viewer followed by the dataset page; README links stay pinned to the published revision.
+    // The dialog and the dataset card share one clean link: the viewer followed by the dataset page.
     expect(viewerUrl).toBe(`${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene`);
+    expect(readmeViewerUrl).toBe(viewerUrl);
+    expect(readme).toContain(`Viewer link: <${viewerUrl}>`);
     expect(hub.reads.every(read => !read.authorization)).toBe(true);
-    for (const mode of ['shared', 'readme', 'direct', 'manual'] as const) {
+    for (const mode of ['shared', 'manual'] as const) {
       const recipient = await browser.newContext();
       try {
         await hub.attach(recipient, baseURL!);
@@ -84,7 +84,7 @@ test.describe('Hugging Face dataset publication', () => {
           await inputDialog.locator('input[type="url"]').fill(manifest.baseUrl);
           await inputDialog.getByRole('button', { name: 'Load', exact: true }).click();
         } else {
-          await recipientPage.goto({ shared: viewerUrl, readme: readmeViewerUrl, direct: directViewerUrl }[mode]);
+          await recipientPage.goto(viewerUrl);
         }
         await expect(recipientPage.getByText('Source:', { exact: false }).first()).toBeVisible({ timeout: 45000 });
         await expect(recipientPage.locator('canvas').first()).toBeVisible();
