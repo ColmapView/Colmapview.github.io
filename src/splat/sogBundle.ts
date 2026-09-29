@@ -45,6 +45,10 @@ const isFiniteArray = (value: unknown, length?: number): value is number[] =>
 const isFileList = (value: unknown): value is string[] =>
   Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === 'string' && item.length > 0);
 const inRange = (values: number[], min: number, max: number) => values.every((value) => value >= min && value <= max);
+const hasAscii = (bytes: Uint8Array, at: number, text: string) =>
+  [...text].every((char, index) => bytes[at + index] === char.charCodeAt(0));
+// readImageDimensions also sizes PNG and JPEG, but a SOG's textures are WebP by definition.
+const isWebp = (bytes: Uint8Array) => hasAscii(bytes, 0, 'RIFF') && hasAscii(bytes, 8, 'WEBP');
 
 function hasExtraField(view: DataView, start: number, length: number, id: number): boolean {
   for (let at = start; at + 4 <= start + length; at += 4 + view.getUint16(at + 2, true)) {
@@ -237,7 +241,7 @@ export async function validateSogBundle(file: Blob, { maxSplats }: { maxSplats?:
   for (const name of parsed.files) if (!entries.has(name)) fail(`${name} is missing.`);
   for (const name of new Set(parsed.textures)) {
     const prefix = await readEntryPrefix(file, entries.get(name)!, TEXTURE_PREFIX_BYTES);
-    const size = await readImageDimensions(new Blob([prefix]));
+    const size = isWebp(prefix) ? await readImageDimensions(new Blob([prefix])) : null;
     if (!size) fail(`${name} is not a readable WebP image.`);
     else if (size.width * size.height < parsed.count) {
       fail(`${name} holds ${size.width * size.height} splats but the bundle declares ${parsed.count}.`);

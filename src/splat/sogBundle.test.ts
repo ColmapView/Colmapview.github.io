@@ -2,7 +2,7 @@ import { Blob as NodeBlob } from 'node:buffer';
 import { crc32 } from 'node:zlib';
 import { Zip, ZipDeflate, zipSync, type Zippable } from 'fflate';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { webpHeader } from '../test/imageHeaders';
+import { jpegHeader, pngHeader, webpHeader } from '../test/imageHeaders';
 import { SogBundleError, validateSogBundle } from './sogBundle';
 
 const TEXTURES = ['means_l.webp', 'means_u.webp', 'scales.webp', 'quats.webp', 'sh0.webp'];
@@ -124,6 +124,22 @@ describe('SOG bundle validation', () => {
     ['textures smaller than the count', () => buildSog({ size: [5, 5] }), 'holds 25 splats'],
   ])('rejects %s', async (_case, build, expected) => {
     expect(await reason(validateSogBundle(build()))).toContain(expected);
+  });
+
+  const texturesAs = (header: Uint8Array): Zippable =>
+    Object.fromEntries(TEXTURES.map((name) => [name, [header, { level: 0 }]]));
+
+  it.each([['PNG', pngHeader(10, 10)], ['JPEG', jpegHeader(10, 10)]])(
+    'rejects %s textures, which Spark cannot decode as SOG',
+    async (_kind, header) => {
+      expect(await reason(validateSogBundle(buildSog({ entries: texturesAs(header) })))).toBe('means_l.webp is not a readable WebP image.');
+      expect(await reason(validateSogBundle(buildSog({ entries: { 'quats.webp': [header, { level: 0 }] } })))).toBe('quats.webp is not a readable WebP image.');
+    },
+  );
+
+  it.each(['VP8', 'VP8L', 'VP8X'] as const)('accepts %s WebP textures', async (kind) => {
+    await expect(validateSogBundle(buildSog({ entries: texturesAs(webpHeader(kind, 10, 10)) })))
+      .resolves.toEqual({ version: 2, count: 100, shBands: 0 });
   });
 
   it('rejects an oversized meta.json without parsing it', async () => {
