@@ -518,10 +518,26 @@ describe('SOG bundle validation', () => {
     it.each([
       ['before', (meta: Zippable, lookalike: Zippable) => ({ ...lookalike, ...meta })],
       ['after', (meta: Zippable, lookalike: Zippable) => ({ ...meta, ...lookalike })],
-    ])('refuses a second name ending in meta.json %s the real one (Spark reads the first such entry)', async (_order, arrange) => {
+    ])('lists meta.json first when another name ending in meta.json comes %s it (Spark reads the first such entry)', async (_order, arrange) => {
       const metaEntry = (count: number): Zippable => ({ [count === 100 ? 'meta.json' : 'xmeta.json']: [new TextEncoder().encode(JSON.stringify({ ...V2_META, count })), { level: 0 }] });
       const bundle = buildSog({ omit: ['meta.json'], entries: arrange(metaEntry(100), metaEntry(50)) });
-      expect(await reason(validateSogBundle(bundle))).toBe('xmeta.json could be mistaken for meta.json.');
+      const { info, bundle: rebuilt } = await validateSogBundleWithBundle(bundle);
+      expect(info.count).toBe(100);
+      const canonical = await canonicalBytes(rebuilt);
+      const end = endOf(canonical);
+      expect(directoryRecords(canonical.subarray(end.offset, end.at))[0].name).toBe('meta.json');
+    });
+
+    it('accepts a Finder-zipped bundle whose __MACOSX sidecars end in meta.json', async () => {
+      const sidecar: Zippable[string] = [new Uint8Array([0, 5, 22, 7, 0, 2, 0, 0]), { level: 0 }];
+      const bundle = buildSog({
+        entries: { '__MACOSX/': [new Uint8Array(0), { level: 0 }], '__MACOSX/._meta.json': sidecar, '__MACOSX/._means_l.webp': sidecar },
+      });
+      const { info, bundle: rebuilt } = await validateSogBundleWithBundle(bundle);
+      expect(info).toEqual({ version: 2, count: 100, shBands: 0 });
+      const canonical = await canonicalBytes(rebuilt);
+      const end = endOf(canonical);
+      expect(directoryRecords(canonical.subarray(end.offset, end.at))[0].name).toBe('meta.json');
     });
 
     it('reads a UTF-8 byte-order mark as part of the name, as Spark does', async () => {

@@ -357,8 +357,10 @@ checks:
 - the zip structure (no ZIP64, at most 64 entries, stored or deflate entries
   only, a zip directory of at most 1 MiB, entry data that lies before the
   directory, and no duplicate or ambiguous file names: names are ASCII or
-  valid UTF-8, one entry per basename, and no name other than `meta.json`
-  ends in `meta.json`, because Spark reads the first entry that does);
+  valid UTF-8, and one entry per basename. The rebuilt directory lists
+  `meta.json` first, because Spark reads the first entry whose name ends in
+  `meta.json`, so look-alikes such as Finder's `__MACOSX/._meta.json` are
+  never read in its place);
 - `meta.json` (v1/v2, at most 1 MiB), with a splat count from 1 to 50,000,000,
   finite position bounds (within [-30, 30] for v2), and scale values (the v2
   codebook or the v1 range) in [-30, 20];

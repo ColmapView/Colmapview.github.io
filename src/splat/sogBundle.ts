@@ -174,9 +174,12 @@ async function readDirectory(file: Blob): Promise<ZipDirectory> {
  * Rebuilds the zip directory from the parsed entries: no extra fields, no comments, one disk,
  * and an end record that points at it. Everything before the original directory is kept as a
  * Blob slice (no copy), so Spark reads the checked entries through a directory built here.
+ * meta.json is listed first: Spark reads the first entry whose name ends in "meta.json", so a
+ * look-alike (xmeta.json, a Finder sidecar __MACOSX/._meta.json) can never be read in its place.
  */
 function canonicalArchive(file: Blob, { entries, directoryOffset }: ZipDirectory): Archive {
-  const records = [...entries.values()];
+  const meta = entries.get('meta.json');
+  const records = meta ? [meta, ...[...entries.values()].filter((entry) => entry !== meta)] : [...entries.values()];
   const directorySize = records.reduce((total, entry) => total + 46 + entry.nameBytes.length, 0);
   const tail = new Uint8Array(directorySize + 22);
   const view = new DataView(tail.buffer);
@@ -343,9 +346,6 @@ export async function validateSogBundle(file: Blob, { maxSplats }: { maxSplats?:
   const archive = canonicalArchive(file, await readDirectory(file));
   const { entries } = archive;
   const metaEntry = entries.get('meta.json') ?? fail('meta.json is missing.');
-  // Spark reads the first entry whose name ends in "meta.json" (x/meta.json, xmeta.json), so no other name may.
-  const lookalike = [...entries.keys()].find((name) => name !== 'meta.json' && name.endsWith('meta.json'));
-  if (lookalike) fail(`${lookalike} could be mistaken for meta.json.`);
   if (metaEntry.size > MAX_META_BYTES) fail(`meta.json is too large (${metaEntry.size} bytes).`);
   let meta: unknown;
   try {
