@@ -25,6 +25,7 @@ import {
   getManifestLazySourceBases,
   getRelativeHuggingFaceTreePath,
   getSplatAutoLoadDecision,
+  getSplatDeviceAssessment,
   getSplatDeviceTier,
   getUrlNormalizationLogMessage,
   joinManifestUrlPath,
@@ -407,6 +408,31 @@ describe('SOG budgets', () => {
     expect(decide(25_000_000, true)).toBe(true);   // ~2.5M splats
     expect(decide(40_000_000, true)).toBe(false);  // ~4M splats: over the 3M touch ceiling despite fitting 50 MB
     expect(decide(100_000_000, false)).toBe(true); // desktop keeps the 150 MB byte budget
+  });
+
+  it('offers a mid-size SOG on touch with a warning, since only its estimated count is over the ceiling', () => {
+    // 40 MB / 10 B = ~4M estimated, over the 3M ceiling, but within the 50 MB touch budget: the exact
+    // meta.json count in validateSogBundle stops a truly over-limit file after download.
+    expect(getSplatDeviceTier({ path: 'scene.sog', size: 40_000_000 }, { isTouchDevice: true })).toBe('hint');
+    expect(getSplatDeviceAssessment({ path: 'scene.sog', size: 40_000_000 }, { isTouchDevice: true }))
+      .toEqual({ tier: 'hint', hint: 'splatLimit' });
+    expect(getSplatDeviceTier({ path: 'scene.sog', size: 50_000_000 }, { isTouchDevice: true })).toBe('hint');
+    // Over the byte budget, or an exact count over the ceiling: still refused.
+    expect(getSplatDeviceTier({ path: 'scene.sog', size: 60_000_000 }, { isTouchDevice: true })).toBe('disabled');
+    expect(getSplatDeviceTier({ path: 'scene.sog', size: 40_000_000, splatCount: 3_500_000 }, { isTouchDevice: true })).toBe('disabled');
+    // Under the ceiling: unchanged.
+    expect(getSplatDeviceAssessment({ path: 'scene.sog', size: 25_000_000 }, { isTouchDevice: true })).toEqual({ tier: 'ok', hint: null });
+    // Auto-load stays refused for the mid-size SOG.
+    expect(getSplatAutoLoadDecision([{ path: 'scene.sog', size: 40_000_000, splatCount: null }], { isTouchDevice: true }).autoLoad).toBe(false);
+  });
+
+  it('keeps PLY and SPZ tiers, and desktop, unchanged by the SOG rule', () => {
+    expect(getSplatDeviceTier({ path: 'scene.ply', size: 40_000_000 }, { isTouchDevice: true })).toBe('ok');
+    expect(getSplatDeviceAssessment({ path: 'mid.spz', size: 55_000_000, splatCount: 2_000_000 }, { isTouchDevice: true }))
+      .toEqual({ tier: 'hint', hint: 'memory' });
+    expect(getSplatDeviceTier({ path: 'dense.spz', size: 48_000_000 + 16 }, { isTouchDevice: true })).toBe('disabled');
+    expect(getSplatDeviceAssessment({ path: 'scene.sog', size: 60_000_000 }, { isTouchDevice: false })).toEqual({ tier: 'ok', hint: null });
+    expect(getSplatDeviceTier({ path: 'scene.sog', size: 40_000_000 }, { isTouchDevice: false })).toBe('ok');
   });
 
   it('keeps PLY auto-load decisions unchanged on touch', () => {

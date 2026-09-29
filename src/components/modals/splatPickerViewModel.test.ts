@@ -66,16 +66,33 @@ describe('splat picker device tiers', () => {
     { id: 'a', path: 'splats/huge.ply', url: 'u', size: 1_040_000_634, splatCount: 10_000_000 },
     { id: 'b', path: 'splats/mid.spz', url: 'u', size: 55_000_000, splatCount: 2_000_000 },
     { id: 'c', path: 'splats/small.spz', url: 'u', size: 40_000_000, splatCount: 1_000_000 },
+    { id: 'd', path: 'splats/mid.sog', url: 'u', size: 40_000_000 },
   ];
 
   it('maps sources to ok/hint/disabled tiers on touch hardware', () => {
     const items = getSplatPickerItems(sources, { isTouchDevice: true });
     const byId = new Map(items.map((item) => [item.id, item]));
-    expect(items.map((i) => i.id)).toEqual(['c', 'b', 'a']);
+    expect(items.map((i) => i.id)).toEqual(['d', 'c', 'b', 'a']); // Equal sizes sort by path.
+    expect(byId.get('d')?.tier).toBe('hint');
+    expect(byId.get('d')?.warning).toBe("may exceed this device's splat limit");
     expect(byId.get('a')?.tier).toBe('disabled');
     expect(byId.get('a')?.disabledReason).toBe('Too large for this device (1.0 GB) - open on a desktop to view');
     expect(byId.get('b')?.warning).toBe("may exceed this device's memory");
     expect(byId.get('c')?.warning).toBeNull();
+  });
+
+  it('offers a mid-size SOG on touch with a splat-limit warning, and refuses one over the byte budget', () => {
+    const items = getSplatPickerItems([
+      { id: 'mid.sog', path: 'splats/mid.sog', size: 40_000_000 },
+      { id: 'big.sog', path: 'splats/big.sog', size: 60_000_000 },
+      { id: 'mid.ply', path: 'splats/mid.ply', size: 40_000_000 },
+    ], { isTouchDevice: true });
+    const byId = new Map(items.map((item) => [item.id, item]));
+    expect(byId.get('mid.sog')).toMatchObject({ tier: 'hint', warning: "may exceed this device's splat limit", disabledReason: null });
+    expect(byId.get('big.sog')).toMatchObject({
+      tier: 'disabled', warning: null, disabledReason: 'Too large for this device (60 MB) - open on a desktop to view',
+    });
+    expect(byId.get('mid.ply')).toMatchObject({ tier: 'ok', warning: null, disabledReason: null });
   });
 
   it('leaves everything ok on desktop', () => {

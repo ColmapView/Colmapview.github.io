@@ -665,29 +665,58 @@ export function getEstimatedSplatCount(
 export type SplatDeviceTier = 'ok' | 'hint' | 'disabled';
 
 /**
- * Device tier for a splat source. On touch hardware the disable ceiling depends
- * on whether the byte-less loader can serve this device (see
- * canUseByteLessSplatLoader): 4M splats with it, the conservative 3M without.
- * `byteLessLoaderAvailable` defaults to false so any caller that does not know
- * the backend context fails safe onto the conservative ceiling.
+ * Why a touch source is only a `hint`: over the touch byte budget ('memory'), or a
+ * SOG whose size-based count estimate is over the splat ceiling ('splatLimit').
  */
-export function getSplatDeviceTier(
+export type SplatDeviceHint = 'memory' | 'splatLimit';
+
+export interface SplatDeviceAssessment {
+  tier: SplatDeviceTier;
+  hint: SplatDeviceHint | null;
+}
+
+/**
+ * Device tier for a splat source, and the reason behind a `hint`. On touch
+ * hardware the disable ceiling depends on whether the byte-less loader can
+ * serve this device (see canUseByteLessSplatLoader): 4M splats with it, the
+ * conservative 3M without. `byteLessLoaderAvailable` defaults to false so any
+ * caller that does not know the backend context fails safe onto the
+ * conservative ceiling.
+ *
+ * A SOG within the touch byte budget is never disabled by its estimate alone:
+ * SOG compresses far better than the conservative 10 B/splat estimate on real
+ * captures, and validateSogBundle stops a truly over-limit file by its exact
+ * meta.json count before Spark decodes it. It stays out of auto-load
+ * (getSplatAutoLoadDecision) and is offered with a warning instead.
+ */
+export function getSplatDeviceAssessment(
   source: { path: string; size?: number; splatCount?: number | null },
   {
     isTouchDevice,
     byteLessLoaderAvailable = false,
   }: { isTouchDevice: boolean; byteLessLoaderAvailable?: boolean }
-): SplatDeviceTier {
-  if (!isTouchDevice) return 'ok';
+): SplatDeviceAssessment {
+  if (!isTouchDevice) return { tier: 'ok', hint: null };
 
   const disableMinSplats = byteLessLoaderAvailable
     ? TOUCH_SPLAT_DISABLE_MIN_SPLATS_BYTELESS
     : TOUCH_SPLAT_DISABLE_MIN_SPLATS;
+  const size = source.size ?? 0;
   const estimated = getEstimatedSplatCount(source);
   if (estimated !== null && estimated > disableMinSplats) {
-    return 'disabled';
+    const countIsEstimate = !(typeof source.splatCount === 'number' && source.splatCount > 0);
+    return isSogSplatPath(source.path) && countIsEstimate && size <= SPLAT_AUTO_LOAD_MAX_BYTES_TOUCH
+      ? { tier: 'hint', hint: 'splatLimit' }
+      : { tier: 'disabled', hint: null };
   }
-  return (source.size ?? 0) > SPLAT_AUTO_LOAD_MAX_BYTES_TOUCH ? 'hint' : 'ok';
+  return size > SPLAT_AUTO_LOAD_MAX_BYTES_TOUCH ? { tier: 'hint', hint: 'memory' } : { tier: 'ok', hint: null };
+}
+
+export function getSplatDeviceTier(
+  source: { path: string; size?: number; splatCount?: number | null },
+  options: { isTouchDevice: boolean; byteLessLoaderAvailable?: boolean }
+): SplatDeviceTier {
+  return getSplatDeviceAssessment(source, options).tier;
 }
 
 export function getManifestColmapFileEntries(manifest: ColmapManifest): ManifestColmapFileEntries {

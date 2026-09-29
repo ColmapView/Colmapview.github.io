@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { Z_INDEX } from '../../theme/zIndex';
 import type { SplatFileSource } from '../../types/colmap';
-import { getSplatDeviceTier, type SplatDeviceTier } from '../../hooks/urlLoaderPolicy';
+import { getSplatDeviceAssessment, type SplatDeviceHint, type SplatDeviceTier } from '../../hooks/urlLoaderPolicy';
 import { supportsWebGpuRenderer } from '../../utils/splatFilePolicy';
 
 export interface SplatPickerItem {
@@ -83,12 +83,19 @@ function getSortableSplatSize(bytes: number | undefined): number {
   return bytes !== undefined && Number.isFinite(bytes) && bytes > 0 ? bytes : Number.POSITIVE_INFINITY;
 }
 
+const SPLAT_HINT_WARNINGS: Record<SplatDeviceHint, string> = {
+  memory: "may exceed this device's memory",
+  splatLimit: "may exceed this device's splat limit",
+};
+
 /**
  * Build the picker rows from splat sources (filename + size), classifying each by
- * device tier via `getSplatDeviceTier`. On touch hardware a source that would
+ * device tier via `getSplatDeviceAssessment`. On touch hardware a source that would
  * crash the tab (over the splat-count GPU ceiling: 4M when the byte-less WebGPU
  * loader is available, a conservative 3M otherwise) becomes `disabled` with an
- * explicit reason; one merely over the memory budget gets a `hint` warning.
+ * explicit reason; one merely over the memory budget gets a `hint` warning. A SOG
+ * within the touch byte budget whose estimated count is over the ceiling is a
+ * `hint` too (its exact count is checked after download).
  * Desktop callers pass `isTouchDevice: false`, so every row stays `ok`.
  * Rows are sorted smallest first, then by path, so formats compare side by side.
  */
@@ -100,7 +107,7 @@ export function getSplatPickerItems(
     getSortableSplatSize(a.size) - getSortableSplatSize(b.size) || a.path.localeCompare(b.path));
   return bySize.map((source) => {
     const sizeLabel = formatSplatSize(source.size);
-    const tier = getSplatDeviceTier(source, {
+    const { tier, hint } = getSplatDeviceAssessment(source, {
       isTouchDevice: options.isTouchDevice,
       // The raised byte-less ceiling only applies where the WebGPU decoder serves the render.
       byteLessLoaderAvailable: Boolean(options.byteLessLoaderAvailable) && supportsWebGpuRenderer(source.path),
@@ -110,7 +117,7 @@ export function getSplatPickerItems(
       name: source.path.split('/').pop() || source.path,
       sizeLabel,
       tier,
-      warning: tier === 'hint' ? "may exceed this device's memory" : null,
+      warning: hint ? SPLAT_HINT_WARNINGS[hint] : null,
       disabledReason:
         tier === 'disabled'
           ? sizeLabel

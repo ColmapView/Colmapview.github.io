@@ -106,6 +106,29 @@ describe('SplatPickerModal disabled tier', () => {
     fireEvent.click(row!);
     expect(selectSplatSource).not.toHaveBeenCalled();
   });
+
+  it('lets a phone pick a mid-size SOG, warning that it may exceed the splat limit', () => {
+    const selectSplatSource = vi.fn();
+    mockUseIsTouchDevice.mockReturnValue(true);
+    // 40 MB SOG: ~4M splats by the 10 B/splat estimate, but within the 50 MB touch budget.
+    useReconstructionStore.setState({
+      showSplatPicker: true,
+      loadedFiles: {
+        imageFiles: new Map(),
+        hasMasks: false,
+        splatFileSources: [{ id: 'mid-sog', path: 'splats/scene.sog', url: 'u', size: 40_000_000 }],
+      },
+      selectSplatSource,
+    });
+
+    render(<SplatPickerModal />);
+
+    const row = screen.getByText('scene.sog').closest('button');
+    expect(row).not.toBeDisabled();
+    expect(screen.getByText("may exceed this device's splat limit")).toBeInTheDocument();
+    fireEvent.click(row!);
+    expect(selectSplatSource).toHaveBeenCalledWith('mid-sog');
+  });
 });
 
 // 364 MB PLY with an explicit 3.5M splat count: over the retaining 3M ceiling,

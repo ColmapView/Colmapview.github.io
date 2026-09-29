@@ -371,6 +371,15 @@ checks:
   same rules for the same roles;
 - the exact count against the touch-device ceiling (3,000,000 splats).
 
+On phones and tablets a SOG's splat count is only estimated before download,
+at 10 bytes per splat. A lone SOG whose estimate exceeds the 3,000,000-splat
+ceiling never auto-loads. In the splat picker, a SOG within the 50 MB touch
+download budget stays selectable with the warning "may exceed this device's
+splat limit", because real captures often compress well below the estimate;
+the exact `meta.json` count above stops an over-limit file after download,
+before Spark decodes it. A SOG over 50 MB is disabled as too large for the
+device. PLY and SPZ rows keep their existing phone rules.
+
 A failed check shows `This SOG file can't be opened: <reason>` and no
 `SplatMesh` is created. GPU PSNR/SSIM is not available for SOG.
 
