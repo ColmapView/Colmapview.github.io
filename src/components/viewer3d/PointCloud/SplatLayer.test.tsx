@@ -661,8 +661,14 @@ describe('SplatLayer', () => {
     validateSogBundleMock.mockResolvedValue(validatedSog(new Blob(['canonical-bundle'])));
     const original = new File(['sog'], 'scene.sog', { type: 'application/octet-stream', lastModified: 1234 });
     useSplatLayerStoreFacadeMock.mockReturnValue(createFacade({ splatFile: original }));
+    const info = vi.spyOn(appLogger, 'info').mockImplementation(() => undefined);
     const { unmount } = render(<SplatLayer />);
     await waitFor(() => expect(SplatMesh).toHaveBeenCalledWith(expect.objectContaining({ fileName: 'scene.sog' })));
+    // The validated info is logged once: file name, SOG version, splat count and SH bands.
+    expect(info.mock.calls.filter(([line]) => String(line).includes('scene.sog'))).toEqual([
+      ['[Splats] Validated scene.sog: SOG v2, 100 splats, 0 SH bands'],
+    ]);
+    info.mockRestore();
     expect(validateSogBundleMock).toHaveBeenCalledTimes(1);
     expect(validateSogBundleMock.mock.calls[0][0]).toBe(original);
     expect(getSplatMeshSourceOptionsMock).toHaveBeenCalledTimes(1);

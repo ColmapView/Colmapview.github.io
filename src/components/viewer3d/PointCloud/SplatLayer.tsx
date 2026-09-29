@@ -452,12 +452,15 @@ export function SplatLayer({
       let decodeFile = sourceFile;
       if (isSogSplatPath(sourceFile.name)) {
         // A malformed or oversized SOG must be refused before Spark decodes it onto the GPU.
-        const { bundle } = await validateSogBundle(sourceFile, {
+        const { info, bundle } = await validateSogBundle(sourceFile, {
           maxSplats: detectTouchDevice() ? TOUCH_SPLAT_DISABLE_MIN_SPLATS : undefined,
         });
         if (cancelled) {
           return;
         }
+        appLogger.info(
+          `[Splats] Validated ${sourceFile.name}: SOG v${info.version}, ${info.count.toLocaleString()} splats, ${info.shBands} SH bands`
+        );
         // Spark gets the checked entries under a rebuilt zip directory, never the file's own.
         // Same name and type, so Spark's file-type detection is unchanged.
         decodeFile = new File([bundle], sourceFile.name, {
