@@ -21,6 +21,10 @@ import {
   createWebGpuSplatFrameSnapshot,
   syncWebGpuSplatFrameSnapshot,
 } from './WebGpuSplatCanvasRuntime';
+import {
+  PREPARING_SPARK_FOR_FORMAT_REASON,
+  SPARK_ONLY_FORMAT_UNAVAILABLE_REASON,
+} from '../../utils/splatBackendPolicy';
 import type {
   SplatBackendAvailability,
   SplatBackendResolution,
@@ -292,6 +296,28 @@ describe('WebGpuSplatCanvasLayer', () => {
     expect(shouldSyncWebGpuSplatCanvasFrame(true, false, webGpuResolution)).toBe(false);
     expect(shouldSyncWebGpuSplatCanvasFrame(true, false, webGpuResolution, true)).toBe(true);
     expect(shouldSyncWebGpuSplatCanvasFrame(false, true, webGpuResolution)).toBe(false);
+  });
+
+  it('keeps a forced-WebGPU SOG loading while Spark prepares (the WebGPU canvas never mounts for SOG)', () => {
+    const sog = new File(['x'], 'scene.sog');
+    const sogResolution = (reason: string): SplatBackendResolution =>
+      ({ status: 'unavailable', requested: 'webgpu', backend: null, gpuPsnr: false, reason });
+    // Spark's download reports untagged progress, which the forced-WebGPU cleanup would otherwise clear.
+    const sogProgress: UrlLoadProgress = { percent: 40, message: 'Downloading scene.sog...', currentFile: 'scene.sog' };
+    expect(shouldClearUnavailableForcedWebGpuSplatLoading(
+      'webgpu', sogResolution(PREPARING_SPARK_FOR_FORMAT_REASON), sog, false, sogProgress
+    )).toBe(false);
+    expect(shouldClearUnavailableForcedWebGpuSplatLoading(
+      'webgpu', sogResolution(SPARK_ONLY_FORMAT_UNAVAILABLE_REASON), sog, false, sogProgress
+    )).toBe(false);
+    // The forced-WebGPU PLY case is unchanged.
+    expect(shouldClearUnavailableForcedWebGpuSplatLoading(
+      'webgpu',
+      { status: 'unavailable', requested: 'webgpu', backend: null, gpuPsnr: false, reason: 'WebGPU splat renderer is not available' },
+      new File(['x'], 'scene.ply'),
+      false,
+      { percent: 60, message: 'Preparing splat renderer...', currentFile: 'scene.ply' }
+    )).toBe(true);
   });
 
   it('clears forced WebGPU loading only when the unavailable state belongs to the active splat file', () => {

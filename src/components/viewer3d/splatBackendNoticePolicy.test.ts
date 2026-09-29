@@ -445,6 +445,16 @@ describe('spark-only (SOG) notices', () => {
       .toMatchObject({ severity: 'info', message: expect.stringContaining('cannot read SOG') });
   });
 
+  it('warns when Spark cannot load for a SOG under a forced WebGPU request, without the forced-WebGPU failure', () => {
+    const result = notice('webgpu', unavailable('webgpu', SPARK_ONLY_FORMAT_UNAVAILABLE_REASON));
+    expect(result).toEqual({
+      key: `scene.sog:${SPARK_ONLY_FORMAT_UNAVAILABLE_REASON}`,
+      message: `${SPARK_ONLY_FORMAT_UNAVAILABLE_REASON}. Reload to try again.`,
+      severity: 'warning',
+    });
+    expect(result?.message).not.toContain('WebGPU splat renderer unavailable');
+  });
+
   it('warns when Spark cannot load for a SOG, without WebGPU advice', () => {
     const result = notice('auto', unavailable('auto', SPARK_ONLY_FORMAT_UNAVAILABLE_REASON));
     expect(result).toMatchObject({ severity: 'warning' });
