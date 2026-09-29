@@ -9,6 +9,7 @@ import {
   SPARK_ONLY_FORMAT_UNAVAILABLE_REASON,
   WEBGPU_INSECURE_CONTEXT_REASON,
   getBrowserWebGpuCompatibilityBlockReason,
+  isSparkOnlyFormatResolution,
   isSparkSplatRuntimePreloadPending,
   parseSplatBackendPreference,
   resolveSplatBackend,
@@ -513,5 +514,55 @@ describe('spark-only active splats (SOG)', () => {
     const resolution = resolveSplatBackend('auto', sparkOnly({ spark: true }));
     expect(resolveSplatMetricCapability({ webGpu: 'ready', webGpuFailureReason: null }, resolution))
       .toMatchObject({ gpuPsnr: false, reason: SPARK_ONLY_FORMAT_METRIC_REASON });
+  });
+
+  // Before Spark renders (still downloading, or the download failed) the resolution
+  // is 'unavailable', which used to fall through to the WebGPU metric path.
+  const unrenderedSogStates = [
+    { state: 'preparing', overrides: {} },
+    { state: 'failed', overrides: { sparkPreloadFailed: true } },
+  ] as const;
+
+  it.each(unrenderedSogStates)('never offers GPU PSNR for a $state SOG, even with WebGPU metrics ready', ({ overrides }) => {
+    const resolution = resolveSplatBackend('auto', sparkOnly(overrides));
+    expect(resolveSplatMetricCapability({ webGpu: 'ready' }, resolution)).toEqual({
+      status: 'unavailable', backend: null, gpuPsnr: false, reason: SPARK_ONLY_FORMAT_METRIC_REASON,
+    });
+  });
+
+  it.each(unrenderedSogStates)('hides PSNR/SSIM visualizations for a $state SOG but not for the same PLY', ({ overrides }) => {
+    const metricAvailability: SplatMetricAvailability = { webGpu: 'ready' };
+    // Computed without the resolution, so the visualization gate is tested on its own.
+    const metricCapability = resolveSplatMetricCapability(metricAvailability);
+    const inputs = { hasMetricCapableCamera: true, metricAvailability, metricCapability };
+
+    expect(shouldExposeSplatMetricVisualizations({
+      ...inputs,
+      activeSplatFile: { name: 'scene.sog' },
+      resolution: resolveSplatBackend('auto', sparkOnly(overrides)),
+    })).toBe(false);
+    expect(shouldExposeSplatMetricVisualizations({
+      ...inputs,
+      activeSplatFile: { name: 'scene.ply' },
+      resolution: resolveSplatBackend('auto', sparkOnly({ ...overrides, activeSplatRenderer: 'any' })),
+    })).toBe(true);
+  });
+
+  it.each([
+    { reason: SPARK_ONLY_FORMAT_REASON, requested: 'auto', overrides: { spark: true } },
+    { reason: SPARK_ONLY_FORMAT_FORCED_WEBGPU_REASON, requested: 'webgpu', overrides: { spark: true } },
+    { reason: PREPARING_SPARK_FOR_FORMAT_REASON, requested: 'auto', overrides: {} },
+    { reason: SPARK_ONLY_FORMAT_UNAVAILABLE_REASON, requested: 'auto', overrides: { sparkPreloadFailed: true } },
+  ] as const)('recognises $reason as a spark-only resolution',({ reason, requested, overrides }) => {
+    const resolution = resolveSplatBackend(requested, sparkOnly(overrides));
+    expect(resolution.reason).toBe(reason);
+    expect(isSparkOnlyFormatResolution(resolution)).toBe(true);
+  });
+
+  it('does not treat ordinary WebGPU or Spark resolutions as spark-only', () => {
+    expect(isSparkOnlyFormatResolution(resolveSplatBackend('auto', { webGpu: 'ready', spark: true }))).toBe(false);
+    expect(isSparkOnlyFormatResolution(resolveSplatBackend('auto', { webGpu: 'unsupported', spark: true }))).toBe(false);
+    expect(isSparkOnlyFormatResolution(resolveSplatBackend('spark', { webGpu: 'ready', spark: true }))).toBe(false);
+    expect(isSparkOnlyFormatResolution(resolveSplatBackend('auto', { webGpu: 'unavailable', spark: false }))).toBe(false);
   });
 });

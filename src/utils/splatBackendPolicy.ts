@@ -115,6 +115,20 @@ function resolveSparkOnlySplatBackend(
   };
 }
 
+// Every reason resolveSparkOnlySplatBackend produces; the one list both the
+// metric gates below and the notice policy key off.
+const SPARK_ONLY_FORMAT_REASONS: ReadonlySet<string> = new Set([
+  SPARK_ONLY_FORMAT_REASON,
+  SPARK_ONLY_FORMAT_FORCED_WEBGPU_REASON,
+  PREPARING_SPARK_FOR_FORMAT_REASON,
+  SPARK_ONLY_FORMAT_UNAVAILABLE_REASON,
+]);
+
+/** True for any resolution of a spark-only active splat (SOG): rendered, forced, preparing or failed. */
+export function isSparkOnlyFormatResolution(resolution: SplatBackendResolution): boolean {
+  return SPARK_ONLY_FORMAT_REASONS.has(resolution.reason);
+}
+
 // Both sides of the Spark fallback message share these: the reasons below
 // build them, and the notice policy strips/matches them. Unshared literals let
 // a producer reword silently break the strip and the notice keys at once.
@@ -393,14 +407,21 @@ export function resolveSplatMetricCapability(
   availability: SplatMetricAvailability,
   resolution?: SplatBackendResolution
 ): SplatMetricCapability {
+  // A SOG never reaches the WebGPU renderer, so GPU PSNR is never offered for it,
+  // including while Spark is still loading or after its download failed — states
+  // that would otherwise fall through to the WebGPU metric path below.
+  if (resolution && isSparkOnlyFormatResolution(resolution)) {
+    return resolution.status === 'resolved'
+      ? { status: 'available', backend: 'spark', gpuPsnr: false, reason: SPARK_ONLY_FORMAT_METRIC_REASON }
+      : { status: 'unavailable', backend: null, gpuPsnr: false, reason: SPARK_ONLY_FORMAT_METRIC_REASON };
+  }
+
   if (resolution?.status === 'resolved' && resolution.backend === 'spark') {
     return {
       status: 'available',
       backend: 'spark',
       gpuPsnr: false,
-      reason: resolution.reason === SPARK_ONLY_FORMAT_REASON || resolution.reason === SPARK_ONLY_FORMAT_FORCED_WEBGPU_REASON
-        ? SPARK_ONLY_FORMAT_METRIC_REASON
-        : 'Spark PSNR/SSIM metric capability is ready',
+      reason: 'Spark PSNR/SSIM metric capability is ready',
     };
   }
 
@@ -449,6 +470,11 @@ export function shouldExposeSplatMetricVisualizations({
     resolution.requested === 'spark'
     || (resolution.status === 'resolved' && resolution.backend === 'spark')
   ) {
+    return false;
+  }
+
+  // A SOG can never produce a metric, even before Spark resolves (preparing or failed).
+  if (isSparkOnlyFormatResolution(resolution)) {
     return false;
   }
 
