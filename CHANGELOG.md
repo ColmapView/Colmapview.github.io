@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.2] - 2026-09-29
+
+### Changed
+
+- Rebalance the Hugging Face publish dialog: the result sits centred beside the preview with equal link buttons, the account prefix joins the repository name field, and the shorter title fits on phones.
+- Start a fresh publication form when a different dataset is loaded after publishing, replacing the "Publish another dataset" button.
+
 ## [0.15.1] - 2026-09-29
 
 ### Added
@@ -599,7 +606,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript for type safety
 - Deno native test runner for testing
 
-[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.1...HEAD
+[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.2...HEAD
+[0.15.2]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.1...v0.15.2
 [0.15.1]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/ColmapView/colmapview.github.io/compare/v0.14.5...v0.15.0
 [0.14.5]: https://github.com/ColmapView/colmapview.github.io/compare/v0.14.4...v0.14.5
