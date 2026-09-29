@@ -389,6 +389,57 @@ describe('SOG bundle validation', () => {
     expect(await reason(validateSogBundle(build()))).toContain(expected);
   });
 
+  it.each([
+    // splat-transform 3.7.0 (-g cpu) encodes of a 2,000-splat cloud centred at each point: v2 stores
+    // position bounds as sign(v)·ln(|v| + 1), so ±30 covers about ±1e13 scene units.
+    ['x = 1000', [6.907756438649433, -0.6921270931964937, -0.693072075887243], [6.9097526725113285, 0.6927172492569283, 0.6924591361132574]],
+    ['(-5000, 20, -3)', [-8.5183913015206, 2.7732257525501747, -2.1971411273516805], [-8.516393457651922, 3.2579311718947053, 1.0963169438490794]],
+    ['(1e6, -1e6, 5e5)', [13.815461619266795, -13.815561431670185, 13.122265372602016], [13.815561556663818, -13.815461619266795, 13.122465247215423]],
+  ])('accepts a version 2 scene centred far from the origin at %s (log-encoded bounds)', async (_centre, mins, maxs) => {
+    await expect(validateSogBundle(buildSog({ meta: { ...V2_META, means: { ...V2_META.means, mins, maxs } } })))
+      .resolves.toEqual({ version: 2, count: 100, shBands: 0 });
+  });
+
+  it('rejects version 2 position bounds written as raw coordinates', async () => {
+    const meta = { ...V2_META, means: { ...V2_META.means, mins: [999, -1, -1], maxs: [1001, 1, 1] } };
+    expect(await reason(validateSogBundle(buildSog({ meta })))).toBe('its position bounds are invalid.');
+  });
+
+  describe('zip structure checks', () => {
+    const pad = (count: number): Zippable => Object.fromEntries(Array.from({ length: count }, (_, index) => [`pad-${index}.bin`, [new Uint8Array(1), { level: 0 }]]));
+    it.each([
+      ['a ZIP64 entry count', () => patchedSog({}, ({ view, eocd }) => view.setUint16(eocd + 10, 0xffff, true)), 'ZIP64 bundles are not supported.'],
+      ['a ZIP64 directory offset', () => patchedSog({}, ({ view, eocd }) => view.setUint32(eocd + 16, 0xffffffff, true)), 'ZIP64 bundles are not supported.'],
+      ['a ZIP64 locator before the end record', () => {
+        const bytes = buildSogBytes();
+        const locator = new Uint8Array(20);
+        viewOf(locator).setUint32(0, 0x07064b50, true);
+        return asBlob(bytes.subarray(0, bytes.length - 22), locator, bytes.subarray(bytes.length - 22));
+      }, 'ZIP64 bundles are not supported.'],
+      ['more than 64 entries', () => buildSog({ entries: pad(59) }), 'it lists 65 files; a SOG bundle has at most 64.'],
+      ['an encrypted entry', () => patchedSog({}, (zip) => {
+        const at = record(zip, 'quats.webp');
+        zip.view.setUint16(at + 8, zip.view.getUint16(at + 8, true) | 1, true);
+      }), 'quats.webp is encrypted.'],
+      ['an unsupported compression method (bzip2)', () => patchedSog({}, (zip) => zip.view.setUint16(record(zip, 'quats.webp') + 10, 12, true)),
+        'quats.webp uses an unsupported compression method.'],
+      ['an entry whose data runs past the zip directory', () => patchedSog({}, (zip) => zip.view.setUint32(record(zip, 'quats.webp') + 20, 1024 * 1024, true)),
+        'quats.webp lies outside the file.'],
+      ['an entry whose local header lies past the end of the file', () => patchedSog({}, (zip) => zip.view.setUint32(record(zip, 'quats.webp') + 42, 0x7fffffff, true)),
+        'quats.webp lies outside the file.'],
+      ['the same name twice', () => patchedSog({}, (zip) => {
+        // means_u.webp becomes a second means_l.webp (same length, so the directory stays well-formed).
+        zip.view.setUint8(record(zip, 'means_u.webp') + 46 + 'means_'.length, 'l'.charCodeAt(0));
+      }), 'it contains means_l.webp twice.'],
+    ])('rejects %s', async (_case, build, expected) => {
+      expect(await reason(validateSogBundle(build()))).toBe(expected);
+    });
+
+    it('accepts exactly 64 entries', async () => {
+      await expect(validateSogBundle(buildSog({ entries: pad(58) }))).resolves.toMatchObject({ count: 100 });
+    });
+  });
+
   describe('the canonical bundle handed to Spark', () => {
     const canonicalBytes = async (bundle: Blob) => new Uint8Array(await bundle.arrayBuffer());
     const endOf = (bytes: Uint8Array) => {
