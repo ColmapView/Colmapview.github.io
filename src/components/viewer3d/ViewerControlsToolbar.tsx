@@ -17,6 +17,7 @@ import {
   ViewPanel,
 } from './panels';
 import type { ViewerControlsController } from './useViewerControlsController';
+import { HuggingFacePublishButton } from './HuggingFacePublishButton';
 import {
   TOOLBAR_GROUP_CLASS,
   TOOLBAR_GROUP_LABELS,
@@ -98,6 +99,7 @@ export function ViewerControlsToolbar({ controller }: ViewerControlsToolbarProps
       <div role="group" aria-label={TOOLBAR_GROUP_LABELS.capture} className={TOOLBAR_GROUP_CLASS}>
         <ScreenshotPanel {...screenshotPanel} />
         <SharePanel {...sharePanel} />
+        <HuggingFacePublishButton {...sharePanel} />
         <ExportPanel {...exportPanel} />
       </div>
 

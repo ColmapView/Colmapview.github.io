@@ -2279,17 +2279,17 @@ h3.panel-heading {
    never beats it: the bottom 2.5rem of the column is painted over and eats no
    clicks at all. Budget = viewport height − status-bar height.
 
-   With today's 16 buttons (src/components/viewer3d/toolbarColumnHeight.test.ts
+   With all 17 buttons, including Hugging Face (toolbarColumnHeight.test.ts
    recomputes this from the CSS + the toolbar source and fails if a new button
    outgrows a tier):
-     40px / 8px gap  -> bottom edge 799px -> needs 839px of viewport
-     32px / 4px gap  -> bottom edge 599px -> needs 639px
-     28px / 2px gap  -> bottom edge 499px -> needs 539px
-   Each breakpoint sits one status-bar height (40px) above the tier's own
-   requirement so the crossover is never knife-edge. Touch mode keeps its own
-   28px sizing below (higher specificity, and later in the file for the gap).
+     40px / 8px gap  -> needs 887px of viewport
+     32px / 4px gap  -> needs 675px
+     28px / 2px gap  -> needs 569px
+     26px / 2px gap  -> needs 535px
+   Breakpoints leave about 40px of spare height before switching tiers.
+   The 26px tier also applies to touch controls in the shortest windows.
    --------------------------------------------------------------------------- */
-@media (max-height: 880px) {
+@media (max-height: 930px) {
   .control-button-responsive {
     width: 2rem !important;
     height: 2rem !important;
@@ -2306,7 +2306,7 @@ h3.panel-heading {
   }
 }
 
-@media (max-height: 680px) {
+@media (max-height: 720px) {
   .control-button-responsive {
     width: 1.75rem !important;   /* 28px — same tier touch mode uses */
     height: 1.75rem !important;
@@ -2341,12 +2341,24 @@ h3.panel-heading {
   height: 1rem;
 }
 
+@media (max-height: 610px) {
+  .control-button-responsive,
+  .touch-control-panel .control-button-responsive {
+    width: 1.625rem !important;
+    height: 1.625rem !important;
+  }
+
+  .control-panel-responsive {
+    gap: 0.125rem !important;
+  }
+}
+
 /* Invisible tap-target expansion (--tap-target-min, mirroring TOUCH.minTapTarget)
    for compact touch controls. Visual size unchanged (the pseudo paints nothing);
    tooltips own ::after, so ::before is free. Requires position:relative on the
    element. */
 
-/* Control panel: 28px buttons on a 30px pitch, so the boxes overlap their
+/* Control panel: compact buttons on a 28–30px pitch, so the boxes overlap their
    neighbours. z-index:-1 keeps each box beneath every sibling button, so it can
    only claim empty gap/margin, never a neighbour's painted surface. Verified
    safe: the nearest stacking context is controlPanelStyles.container (absolute

@@ -3,6 +3,12 @@
 declare const __APP_VERSION__: string;
 declare const __LOCAL_GSPLAT_WEBGPU_ENABLED__: boolean;
 
+interface ImportMetaEnv {
+  readonly VITE_HF_PUBLISH_ENABLED?: string;
+  readonly VITE_HF_OAUTH_CLIENT_ID?: string;
+  readonly VITE_HF_OAUTH_REDIRECT_URI?: string;
+}
+
 // File System Access API types
 interface FileSystemHandle {
   kind: 'file' | 'directory';

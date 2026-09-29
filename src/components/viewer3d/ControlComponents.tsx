@@ -28,7 +28,7 @@ export type { SliderRowProps } from './controlRows/SliderRow';
 const styles = controlPanelStyles;
 
 // Panel type for control buttons
-export type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'share' | 'export' | 'transform' | 'align' | 'gallery' | 'rig' | 'settings' | null;
+export type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'share' | 'publish' | 'export' | 'transform' | 'align' | 'gallery' | 'rig' | 'settings' | null;
 
 export interface PanelWrapperProps {
   id?: string;

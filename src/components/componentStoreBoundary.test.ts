@@ -15,6 +15,11 @@ const COMPONENTS_ROOT = path.join(SRC_ROOT, 'components');
 // that latency, not a performance assertion.
 const STORE_BOUNDARY_SCAN_TIMEOUT_MS = 15_000;
 const STORE_HOOK_CALL_PATTERN = /\buse[A-Z][A-Za-z0-9]*Store\s*\(/g;
+const ZUSTAND_CREATE_IMPORT_PATTERN = /import\s*\{[^}]*\bcreate\b[^}]*\}\s*from\s*['"]zustand['"]/;
+// Stores outside src/store also escape the use*Store facade check through their names.
+const DOCUMENTED_STORES_OUTSIDE_STORE_DIR = new Set([
+  'src/theme/uiTheme.ts', // Applied before React mounts; predates this rule.
+]);
 const DOCUMENTED_STORE_BOUNDARY_CALLERS = new Set([
   'src/dataset/index.ts',
   'src/hooks/useAlignmentMode.ts',
@@ -135,6 +140,19 @@ describe('component store boundaries', () => {
       for (const hookName of matches) {
         violations.push(`${relativePath}: ${hookName}`);
       }
+    }
+
+    expect(violations).toEqual([]);
+  }, STORE_BOUNDARY_SCAN_TIMEOUT_MS);
+
+  it('creates Zustand stores only under src/store', async () => {
+    const files = await sourceFilesPromise;
+    const violations: string[] = [];
+
+    for (const file of files) {
+      const relativePath = path.relative(process.cwd(), file).replace(/\\/g, '/');
+      if (isStoreModule(relativePath) || DOCUMENTED_STORES_OUTSIDE_STORE_DIR.has(relativePath)) continue;
+      if (ZUSTAND_CREATE_IMPORT_PATTERN.test(await readSourceFile(file))) violations.push(relativePath);
     }
 
     expect(violations).toEqual([]);

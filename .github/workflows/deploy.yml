@@ -28,6 +28,11 @@ jobs:
   deploy:
     needs: validate
     runs-on: ubuntu-latest
+    env:
+      # Public OAuth configuration. Publication stays off until the live smoke test passes.
+      VITE_HF_PUBLISH_ENABLED: ${{ github.ref_type == 'tag' && vars.HF_PUBLISH_ENABLED == 'true' || github.ref_type != 'tag' && vars.HF_DEV_PUBLISH_ENABLED == 'true' }}
+      VITE_HF_OAUTH_CLIENT_ID: ${{ github.ref_type == 'tag' && vars.HF_OAUTH_CLIENT_ID || github.ref_type != 'tag' && vars.HF_DEV_OAUTH_CLIENT_ID || '' }}
+      VITE_HF_OAUTH_REDIRECT_URI: ${{ github.ref_type == 'tag' && vars.HF_OAUTH_REDIRECT_URI || github.ref_type != 'tag' && vars.HF_DEV_OAUTH_REDIRECT_URI || '' }}
     steps:
       - uses: actions/checkout@v6
 

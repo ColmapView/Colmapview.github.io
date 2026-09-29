@@ -95,12 +95,12 @@ test('short desktop viewport keeps the panel top reachable', async ({ page }) =>
   await expect(dismiss).toBeInViewport();
 });
 
-test('short touch viewport keeps dismissal reachable', async ({ browser }) => {
-  const context = await browser.newContext({ viewport: { width: 640, height: 240 }, hasTouch: true });
+test('short touch viewport keeps dismissal reachable', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ viewport: { width: 640, height: 240 }, hasTouch: true, baseURL });
   const page = await context.newPage();
   try {
     // Firefox touch emulation does not consistently set coarse/no-hover media.
-    await page.goto('http://localhost:5173/?touch=true');
+    await page.goto('/?touch=true');
     const dismiss = page.getByRole('button', { name: 'Dismiss', exact: true });
     await expect(dismiss).toBeInViewport();
     const toy = page.getByRole('button', { name: 'Try a Toy!' });
@@ -132,12 +132,12 @@ test('phone startup has usable touch actions', async ({ page }, testInfo) => {
   await expect(dismiss).toBeHidden();
 });
 
-test('startup reflows at a 200-percent equivalent viewport', async ({ browser }, testInfo) => {
+test('startup reflows at a 200-percent equivalent viewport', async ({ browser, baseURL }, testInfo) => {
   // A 1280×900 physical viewport at 200% exposes 640×450 CSS pixels.
-  const context = await browser.newContext({ viewport: { width: 640, height: 450 }, deviceScaleFactor: 2 });
+  const context = await browser.newContext({ viewport: { width: 640, height: 450 }, deviceScaleFactor: 2, baseURL });
   const page = await context.newPage();
   try {
-    await page.goto('http://localhost:5173/?touch=false');
+    await page.goto('/?touch=false');
     const dismiss = page.getByRole('button', { name: 'Dismiss this panel' });
     await expect(dismiss).toBeInViewport();
     const panel = page.locator('.startup-panel');
