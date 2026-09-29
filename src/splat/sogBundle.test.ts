@@ -175,6 +175,20 @@ describe('SOG bundle validation', () => {
       const at = record(zip, 'quats-é.webp');
       zip.view.setUint16(at + 8, zip.view.getUint16(at + 8, true) & ~0x800, true);
     }), 'not marked as UTF-8'],
+    ['a second meta.json in a folder', () => buildSog({ entries: {
+      'x/meta.json': [new TextEncoder().encode(JSON.stringify(V2_META)), { level: 0 }],
+    } }), 'it contains more than one file named meta.json.'],
+    ['a second copy of a texture in a folder', () => buildSog({ entries: {
+      'extra/means_l.webp': [webpHeader('VP8L', 1, 1), { level: 0 }],
+    } }), 'it contains more than one file named means_l.webp.'],
+    ['a texture name repeated behind a backslash folder', () => buildSog({ entries: {
+      'a\\quats.webp': [webpHeader('VP8L', 1, 1), { level: 0 }],
+    } }), 'it contains more than one file named quats.webp.'],
+    // Spark only ever reads a root meta.json here; folder layouts stay unsupported.
+    ['a bundle whose only meta.json sits in a folder', () => buildSog({
+      omit: ['meta.json'],
+      entries: { 'x/meta.json': [new TextEncoder().encode(JSON.stringify(V2_META)), { level: 0 }] },
+    }), 'meta.json is missing.'],
   ])('rejects %s', async (_case, build, expected) => {
     expect(await reason(validateSogBundle(build()))).toContain(expected);
   });

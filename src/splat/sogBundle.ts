@@ -75,6 +75,8 @@ async function readDirectory(file: Blob): Promise<Map<string, ZipEntry>> {
   const directory = await read(file, directoryOffset, directoryOffset + directorySize);
   const view = new DataView(directory.buffer, directory.byteOffset, directory.byteLength);
   const entries = new Map<string, ZipEntry>();
+  // Spark finds meta.json by basename (the last match wins), so each basename must name one entry.
+  const basenames = new Set<string>();
   let offset = 0;
   for (let index = 0; index < count; index++) {
     if (offset + 46 > directory.length || view.getUint32(offset, true) !== CENTRAL_SIGNATURE) fail('its zip directory is damaged.');
@@ -97,6 +99,9 @@ async function readDirectory(file: Blob): Promise<Map<string, ZipEntry>> {
     if (method !== 0 && method !== 8) fail(`${name} uses an unsupported compression method.`);
     if (localHeaderOffset + 30 + compressedSize > directoryOffset) fail(`${name} lies outside the file.`);
     if (entries.has(name)) fail(`it contains ${name} twice.`);
+    const basename = name.split(/[\\/]/).pop()!;
+    if (basenames.has(basename)) fail(`it contains more than one file named ${basename}.`);
+    basenames.add(basename);
     entries.set(name, { name, method, compressedSize, size, localHeaderOffset });
     offset += 46 + nameLength + extraLength + commentLength;
   }
