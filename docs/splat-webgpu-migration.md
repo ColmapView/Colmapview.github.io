@@ -362,8 +362,13 @@ checks:
 - `meta.json` (v1/v2, at most 1 MiB), with a splat count from 1 to 50,000,000,
   finite position bounds (within [-30, 30] for v2), and scale values (the v2
   codebook or the v1 range) in [-30, 20];
-- that every referenced texture exists, and that each means, scales, quats and
-  sh0 texture is a readable WebP holding at least the declared count;
+- that every referenced texture exists and is a readable WebP at most 16,384
+  pixels on a side. Spark allocates each texture from its header's dimensions
+  before decoding it, so sizes are bounded both ways: each per-splat texture
+  (means, scales, quats, sh0 and the SH labels, `shN.files[1]`) holds at least
+  the declared count and at most 4 × count + 65,536 pixels, and the SH palette
+  (`shN.files[0]`) holds at most 2048 × 2048 pixels. Version 1 bundles get the
+  same rules for the same roles;
 - the exact count against the touch-device ceiling (3,000,000 splats).
 
 A failed check shows `This SOG file can't be opened: <reason>` and no

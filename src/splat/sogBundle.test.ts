@@ -256,6 +256,57 @@ describe('SOG bundle validation', () => {
     expect(await reason(validateSogBundle(buildSog({ meta: shNMeta(4), entries: shNEntries })))).toContain('band count');
   });
 
+  describe('texture sizes (Spark allocates from the declared dimensions before decoding)', () => {
+    const stored = (header: Uint8Array): Zippable[string] => [header, { level: 0 }];
+    const shN = (centroids: Uint8Array, labels: Uint8Array): SogBuildOptions => ({
+      meta: shNMeta(1),
+      entries: { 'shN_centroids.webp': stored(centroids), 'shN_labels.webp': stored(labels) },
+    });
+
+    it('accepts per-splat textures up to 4 × count + 65,536 pixels', async () => {
+      // 4 × 100 + 65,536 = 65,936: 256 × 257 = 65,792 fits, 257 × 257 = 66,049 does not.
+      await expect(validateSogBundle(buildSog({ size: [256, 257] }))).resolves.toMatchObject({ count: 100 });
+      expect(await reason(validateSogBundle(buildSog({ size: [257, 257] })))).toBe('means_l.webp is larger than its 100 splats need.');
+    });
+
+    it.each([
+      ['a per-splat texture far larger than its count', () => buildSog({ entries: { 'means_l.webp': stored(webpHeader('VP8L', 11000, 11000)) } }),
+        'means_l.webp is larger than its 100 splats need.'],
+      ['a per-splat texture wider than 16,384 pixels', () => buildSog({ entries: { 'scales.webp': stored(webpHeader('VP8X', 20000, 1)) } }),
+        'scales.webp is 20000×1 pixels; a SOG texture is at most 16,384 pixels on a side.'],
+      ['an oversized version 1 texture', () => buildSog({ meta: V1_META, entries: { 'quats.webp': stored(webpHeader('VP8L', 11000, 11000)) } }),
+        'quats.webp is larger than its 100 splats need.'],
+      ['a spherical-harmonic palette over 4,194,304 pixels', () => buildSog(shN(webpHeader('VP8L', 2049, 2048), webpHeader('VP8L', 10, 10))),
+        'shN_centroids.webp is larger than a spherical-harmonic palette needs.'],
+      ['a spherical-harmonic palette taller than 16,384 pixels', () => buildSog(shN(webpHeader('VP8X', 1, 16385), webpHeader('VP8L', 10, 10))),
+        'shN_centroids.webp is 1×16385 pixels; a SOG texture is at most 16,384 pixels on a side.'],
+      ['spherical-harmonic labels far larger than the count', () => buildSog(shN(webpHeader('VP8L', 64, 64), webpHeader('VP8L', 11000, 11000))),
+        'shN_labels.webp is larger than its 100 splats need.'],
+      ['spherical-harmonic labels smaller than the count', () => buildSog(shN(webpHeader('VP8L', 64, 64), webpHeader('VP8L', 5, 5))),
+        'shN_labels.webp holds 25 splats but the bundle declares 100.'],
+      ['a spherical-harmonic palette that is not WebP', () => buildSog(shN(pngHeader(64, 64), webpHeader('VP8L', 10, 10))),
+        'shN_centroids.webp is not a readable WebP image.'],
+      ['spherical-harmonic labels that are not WebP', () => buildSog(shN(webpHeader('VP8L', 64, 64), jpegHeader(10, 10))),
+        'shN_labels.webp is not a readable WebP image.'],
+      // Spark reads shN.files by position: [0] is the palette, [1] the per-splat labels.
+      ['a spherical-harmonic section without a labels texture', () => buildSog({
+        meta: { ...V2_META, shN: { bands: 1, codebook: codebook(-1, 0.008), files: ['shN_centroids.webp'] } },
+        entries: { 'shN_centroids.webp': stored(webpHeader('VP8L', 64, 64)) },
+      }), 'meta.json lists no spherical-harmonic labels texture.'],
+      ['version 1 spherical-harmonic labels smaller than the count', () => buildSog({
+        meta: { ...V1_META, shN: { shape: [100, 45], dtype: 'float32', mins: -1, maxs: 1, files: ['shN_centroids.webp', 'shN_labels.webp'] } },
+        entries: { 'shN_centroids.webp': stored(webpHeader('VP8L', 64, 64)), 'shN_labels.webp': stored(webpHeader('VP8L', 5, 5)) },
+      }), 'shN_labels.webp holds 25 splats but the bundle declares 100.'],
+    ])('rejects %s', async (_case, build, expected) => {
+      expect(await reason(validateSogBundle(build()))).toBe(expected);
+    });
+
+    it('accepts the largest spherical-harmonic palette (2048 × 2048) and labels at capacity', async () => {
+      await expect(validateSogBundle(buildSog(shN(webpHeader('VP8L', 2048, 2048), webpHeader('VP8L', 10, 10)))))
+        .resolves.toEqual({ version: 2, count: 100, shBands: 1 });
+    });
+  });
+
   const folder: [Uint8Array, { level: 0 }] = [new Uint8Array(0), { level: 0 }];
   it('ignores folder entries when checking for repeated file names', async () => {
     await expect(validateSogBundle(buildSog({ entries: { 'a/': folder, 'b/': folder } }))).resolves.toEqual({ version: 2, count: 100, shBands: 0 });

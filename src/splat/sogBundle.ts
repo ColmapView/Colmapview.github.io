@@ -33,6 +33,12 @@ const MAX_DIRECTORY_BYTES = 1024 * 1024;
 const MAX_META_BYTES = 1024 * 1024;
 const MAX_SPLATS = 50_000_000;
 const TEXTURE_PREFIX_BYTES = 64;
+// Spark allocates each texture from its declared dimensions before decoding it, and its WASM memory
+// never shrinks, so sizes are bounded from above too. Per-splat textures get 4× plus 65,536 pixels of
+// slack over their count (encoders pad to multiples of 4); the SH palette is flat-capped at 2048 × 2048.
+const MAX_TEXTURE_SIDE = 16_384;
+const SPLAT_TEXTURE_SLACK_PIXELS = 65_536;
+const MAX_PALETTE_PIXELS = 2048 * 2048;
 // Deflate input fed per step: a bomb can expand at most ~1000× one step (about 4 MB) before it is checked.
 const INFLATE_STEP_BYTES = 4096;
 // Deflate input read for a texture's first bytes; covers a full stored block (65,535 bytes plus a 5-byte header).
@@ -57,7 +63,16 @@ interface ZipEntry {
 interface ZipDirectory { entries: Map<string, ZipEntry>; directoryOffset: number }
 /** The rebuilt bundle, and where its entry data ends (the start of the rebuilt directory). */
 interface Archive { bundle: Blob; dataEnd: number; entries: Map<string, ZipEntry> }
-interface ParsedMeta { version: 1 | 2; count: number; shBands: number; files: string[]; textures: string[] }
+interface ParsedMeta {
+  version: 1 | 2;
+  count: number;
+  shBands: number;
+  files: string[];
+  /** One pixel per splat: means, scales, quats, sh0 and the SH labels. */
+  splatTextures: string[];
+  /** The SH palette (centroids), sized by the palette rather than the count. */
+  paletteTextures: string[];
+}
 
 // A declaration (not a const arrow) so TypeScript's control flow treats calls as never returning.
 function fail(message: string): never {
@@ -243,6 +258,17 @@ async function readEntryPrefix(archive: Archive, entry: ZipEntry, length: number
   return inflateBounded(entry, await read(archive.bundle, start, inputEnd), inputEnd === end, length);
 }
 
+/** A texture's pixel count, from the WebP header alone. */
+async function texturePixels(archive: Archive, entry: ZipEntry): Promise<number> {
+  const prefix = await readEntryPrefix(archive, entry, TEXTURE_PREFIX_BYTES);
+  const size = isWebp(prefix) ? await readImageDimensions(new Blob([prefix])) : null;
+  if (!size) return fail(`${entry.name} is not a readable WebP image.`);
+  if (size.width > MAX_TEXTURE_SIDE || size.height > MAX_TEXTURE_SIDE) {
+    fail(`${entry.name} is ${size.width}×${size.height} pixels; a SOG texture is at most 16,384 pixels on a side.`);
+  }
+  return size.width * size.height;
+}
+
 function parseCount(value: unknown): number {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > MAX_SPLATS) {
     return fail(`its splat count (${String(value)}) is not between 1 and ${MAX_SPLATS.toLocaleString()}.`);
@@ -259,6 +285,21 @@ function files(sectionValue: Record<string, unknown>, name: string): string[] {
   return isFileList(sectionValue.files) ? sectionValue.files : fail(`meta.json lists no ${name} textures.`);
 }
 
+/** Sorts the listed textures by what bounds their size. Spark reads shN.files by position: [0] is the palette, [1] the labels. */
+function textureRoles(
+  means: Record<string, unknown>,
+  scales: Record<string, unknown>,
+  quats: Record<string, unknown>,
+  sh0: Record<string, unknown>,
+  shN: Record<string, unknown> | undefined,
+): Pick<ParsedMeta, 'files' | 'splatTextures' | 'paletteTextures'> {
+  const splatTextures = [...files(means, 'means'), ...files(scales, 'scales'), ...files(quats, 'quats'), ...files(sh0, 'sh0')];
+  if (!shN) return { files: splatTextures, splatTextures, paletteTextures: [] };
+  const shFiles = files(shN, 'shN');
+  if (shFiles.length < 2) fail('meta.json lists no spherical-harmonic labels texture.');
+  return { files: [...splatTextures, ...shFiles], splatTextures: [...splatTextures, shFiles[1]], paletteTextures: [shFiles[0]] };
+}
+
 function parseV2(meta: Record<string, unknown>): ParsedMeta {
   const count = parseCount(meta.count);
   const means = section(meta, 'means');
@@ -269,17 +310,15 @@ function parseV2(meta: Record<string, unknown>): ParsedMeta {
     || !inRange(means.mins, -30, 30) || !inRange(means.maxs, -30, 30)) fail('its position bounds are invalid.');
   if (!isFiniteArray(scales.codebook) || !inRange(scales.codebook, -30, 20)) fail('its scale codebook holds invalid or extreme values.');
   if (!isFiniteArray(sh0.codebook)) fail('its colour codebook holds invalid values.');
-  const textures = [...files(means, 'means'), ...files(scales, 'scales'), ...files(quats, 'quats'), ...files(sh0, 'sh0')];
   let shBands = 0;
-  const shFiles: string[] = [];
+  let shN: Record<string, unknown> | undefined;
   if (meta.shN !== undefined) {
-    const shN = section(meta, 'shN');
+    shN = section(meta, 'shN');
     if (typeof shN.bands !== 'number' || !Number.isInteger(shN.bands) || shN.bands < 1 || shN.bands > 3) fail('its spherical-harmonic band count is invalid.');
     if (!isFiniteArray(shN.codebook)) fail('its spherical-harmonic codebook holds invalid values.');
     shBands = shN.bands as number;
-    shFiles.push(...files(shN, 'shN'));
   }
-  return { version: 2, count, shBands, textures, files: [...textures, ...shFiles] };
+  return { version: 2, count, shBands, ...textureRoles(means, scales, quats, sh0, shN) };
 }
 
 function parseV1(meta: Record<string, unknown>): ParsedMeta {
@@ -292,9 +331,8 @@ function parseV1(meta: Record<string, unknown>): ParsedMeta {
   if (!isFiniteArray(scales.mins) || !isFiniteArray(scales.maxs)
     || !inRange(scales.mins, -30, 20) || !inRange(scales.maxs, -30, 20)) fail('its scale range holds invalid or extreme values.');
   if (!isFiniteArray(sh0.mins) || !isFiniteArray(sh0.maxs)) fail('its colour range holds invalid values.');
-  const textures = [...files(means, 'means'), ...files(scales, 'scales'), ...files(quats, 'quats'), ...files(sh0, 'sh0')];
-  const shFiles = meta.shN === undefined ? [] : files(section(meta, 'shN'), 'shN');
-  return { version: 1, count, shBands: 0, textures, files: [...textures, ...shFiles] };
+  const shN = meta.shN === undefined ? undefined : section(meta, 'shN');
+  return { version: 1, count, shBands: 0, ...textureRoles(means, scales, quats, sh0, shN) };
 }
 
 /**
@@ -324,13 +362,14 @@ export async function validateSogBundle(file: Blob, { maxSplats }: { maxSplats?:
     fail(`it has ${parsed.count.toLocaleString()} splats; this device supports up to ${maxSplats.toLocaleString()}. Open it on a desktop to view.`);
   }
   for (const name of parsed.files) if (!entries.has(name)) fail(`${name} is missing.`);
-  for (const name of new Set(parsed.textures)) {
-    const prefix = await readEntryPrefix(archive, entries.get(name)!, TEXTURE_PREFIX_BYTES);
-    const size = isWebp(prefix) ? await readImageDimensions(new Blob([prefix])) : null;
-    if (!size) fail(`${name} is not a readable WebP image.`);
-    else if (size.width * size.height < parsed.count) {
-      fail(`${name} holds ${size.width * size.height} splats but the bundle declares ${parsed.count}.`);
-    }
+  const splatTextureLimit = 4 * parsed.count + SPLAT_TEXTURE_SLACK_PIXELS;
+  for (const name of new Set(parsed.splatTextures)) {
+    const pixels = await texturePixels(archive, entries.get(name)!);
+    if (pixels < parsed.count) fail(`${name} holds ${pixels} splats but the bundle declares ${parsed.count}.`);
+    if (pixels > splatTextureLimit) fail(`${name} is larger than its ${parsed.count.toLocaleString()} splats need.`);
+  }
+  for (const name of new Set(parsed.paletteTextures)) {
+    if (await texturePixels(archive, entries.get(name)!) > MAX_PALETTE_PIXELS) fail(`${name} is larger than a spherical-harmonic palette needs.`);
   }
   return { info: { version: parsed.version, count: parsed.count, shBands: parsed.shBands }, bundle: archive.bundle };
 }
