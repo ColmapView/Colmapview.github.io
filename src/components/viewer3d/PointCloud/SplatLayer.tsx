@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react';
 import { useThree } from '@react-three/fiber';
 import type { Matrix4 } from 'three';
+import { detectTouchDevice } from '../../../hooks/useIsTouchDevice';
+import { TOUCH_SPLAT_DISABLE_MIN_SPLATS } from '../../../hooks/urlLoaderPolicy';
+import { SogBundleError, validateSogBundle } from '../../../splat/sogBundle';
 import { appLogger } from '../../../utils/logger';
 import {
   getSplatMeshSourceOptions,
@@ -11,6 +14,7 @@ import {
   shouldPreloadSparkSplatRuntime,
   shouldStartSparkSplatRuntimePreload,
 } from '../../../utils/splatBackendPolicy';
+import { isSogSplatPath } from '../../../utils/splatFilePolicy';
 import { SPARK_SPLAT_RENDER_ORDER } from './pointCloudRenderPolicy';
 import { useSplatLayerStoreFacade } from './SplatLayerStoreFacade';
 import {
@@ -312,14 +316,14 @@ export function SplatLayer({
     addNotification('info', `Loaded splat: ${file.name}`, 3000);
   }, [addNotification, clearSplatLoadingNotification, ownsSparkSplatLoading, setUrlLoading, setUrlProgress]);
 
-  const failSplatLoading = useCallback((file: File) => {
+  const failSplatLoading = useCallback((file: File, message?: string) => {
     if (!ownsSparkSplatLoading(file)) {
       return;
     }
 
     clearSplatLoadingNotification(file);
     setUrlLoading(false);
-    addNotification('warning', `Failed to load splat: ${file.name}`);
+    addNotification('warning', message ?? `Failed to load splat: ${file.name}`);
   }, [addNotification, clearSplatLoadingNotification, ownsSparkSplatLoading, setUrlLoading]);
 
   const replaceLoadedSplat = useCallback((nextLoadedSplat: LoadedSplatMesh | null) => {
@@ -445,6 +449,16 @@ export function SplatLayer({
     }
 
     async function loadSplat(): Promise<void> {
+      if (isSogSplatPath(sourceFile.name)) {
+        // A malformed or oversized SOG must be refused before Spark decodes it onto the GPU.
+        await validateSogBundle(sourceFile, {
+          maxSplats: detectTouchDevice() ? TOUCH_SPLAT_DISABLE_MIN_SPLATS : undefined,
+        });
+        if (cancelled) {
+          return;
+        }
+      }
+
       const sourceOptions = await getSplatMeshSourceOptions(sourceFile);
 
       if (cancelled) {
@@ -476,7 +490,10 @@ export function SplatLayer({
       mesh?.dispose();
       mesh = null;
       if (!cancelled) {
-        failSplatLoading(sourceFile);
+        failSplatLoading(
+          sourceFile,
+          error instanceof SogBundleError ? `This SOG file can't be opened: ${error.message}` : undefined
+        );
         appLogger.warn(
           `[Splats] Failed to load ${sourceFile.name}: ${error instanceof Error ? error.message : String(error)}`
         );

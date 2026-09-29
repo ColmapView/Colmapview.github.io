@@ -4,13 +4,16 @@ import * as THREE from 'three';
 import { SplatLayer } from './SplatLayer';
 import type { SplatLayerStoreFacade } from './SplatLayerStoreFacade';
 import { appLogger } from '../../../utils/logger';
+import { SogBundleError } from '../../../splat/sogBundle';
 
 const {
+  detectTouchDeviceMock,
   getSplatMeshSourceOptionsMock,
   preloadSparkModuleMock,
   threeContextMock,
   useThreeMock,
   useSplatLayerStoreFacadeMock,
+  validateSogBundleMock,
 } = vi.hoisted(() => {
   const threeContext = {
     gl: { label: 'webgl-renderer' },
@@ -22,11 +25,13 @@ const {
   };
 
   return {
+    detectTouchDeviceMock: vi.fn<() => boolean>(),
     getSplatMeshSourceOptionsMock: vi.fn(),
     preloadSparkModuleMock: vi.fn(),
     threeContextMock: threeContext,
     useThreeMock: vi.fn(() => threeContext),
     useSplatLayerStoreFacadeMock: vi.fn<() => SplatLayerStoreFacade>(),
+    validateSogBundleMock: vi.fn(),
   };
 });
 
@@ -42,6 +47,19 @@ vi.mock('../../../utils/sparkSplatRuntime', () => ({
 vi.mock('./SplatLayerStoreFacade', () => ({
   useSplatLayerStoreFacade: () => useSplatLayerStoreFacadeMock(),
 }));
+
+vi.mock('../../../splat/sogBundle', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../splat/sogBundle')>()),
+  validateSogBundle: validateSogBundleMock,
+}));
+
+vi.mock('../../../hooks/useIsTouchDevice', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../hooks/useIsTouchDevice')>();
+  // Real detection by default (jsdom has no matchMedia, so it reports desktop);
+  // the touch-ceiling test overrides a single call.
+  detectTouchDeviceMock.mockImplementation(actual.detectTouchDevice);
+  return { ...actual, detectTouchDevice: detectTouchDeviceMock };
+});
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -597,5 +615,93 @@ describe('SplatLayer', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  it('refuses a damaged SOG with its reason and never creates a Spark mesh', async () => {
+    const SparkRenderer = vi.fn(function SparkRenderer(this: { dispose: () => void }) { this.dispose = vi.fn(); });
+    const { SplatMesh } = createSplatMeshConstructor(Promise.resolve());
+    preloadSparkModuleMock.mockResolvedValue({ SparkRenderer, SplatMesh });
+    validateSogBundleMock.mockRejectedValue(new SogBundleError('meta.json is missing.'));
+    const facade = createFacade({ splatFile: new File(['sog'], 'scene.sog') });
+    useSplatLayerStoreFacadeMock.mockReturnValue(facade);
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
+
+    try {
+      render(<SplatLayer />);
+
+      await waitFor(() => {
+        expect(facade.actions.addNotification).toHaveBeenCalledWith('warning', "This SOG file can't be opened: meta.json is missing.");
+      });
+      expect(SplatMesh).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('meta.json is missing.'));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('hands a validated SOG to Spark and never validates PLY files', async () => {
+    const SparkRenderer = vi.fn(function SparkRenderer(this: { dispose: () => void }) { this.dispose = vi.fn(); });
+    const { SplatMesh } = createSplatMeshConstructor(Promise.resolve());
+    preloadSparkModuleMock.mockResolvedValue({ SparkRenderer, SplatMesh });
+    validateSogBundleMock.mockResolvedValue({ version: 2, count: 100, shBands: 0 });
+    useSplatLayerStoreFacadeMock.mockReturnValue(createFacade({ splatFile: new File(['sog'], 'scene.sog') }));
+    const { unmount } = render(<SplatLayer />);
+    await waitFor(() => expect(SplatMesh).toHaveBeenCalledWith(expect.objectContaining({ fileName: 'scene.sog' })));
+    expect(validateSogBundleMock).toHaveBeenCalledTimes(1);
+    unmount();
+
+    validateSogBundleMock.mockClear();
+    useSplatLayerStoreFacadeMock.mockReturnValue(createFacade());
+    render(<SplatLayer />);
+    await waitFor(() => expect(SplatMesh).toHaveBeenCalledTimes(2));
+    expect(validateSogBundleMock).not.toHaveBeenCalled();
+  });
+
+  it('caps SOG validation at the touch splat ceiling on touch devices only', async () => {
+    const SparkRenderer = vi.fn(function SparkRenderer(this: { dispose: () => void }) { this.dispose = vi.fn(); });
+    const { SplatMesh } = createSplatMeshConstructor(Promise.resolve());
+    preloadSparkModuleMock.mockResolvedValue({ SparkRenderer, SplatMesh });
+    validateSogBundleMock.mockResolvedValue({ version: 2, count: 100, shBands: 0 });
+
+    detectTouchDeviceMock.mockReturnValueOnce(true);
+    const touchFile = new File(['sog'], 'phone.sog');
+    useSplatLayerStoreFacadeMock.mockReturnValue(createFacade({ splatFile: touchFile }));
+    const { unmount } = render(<SplatLayer />);
+    await waitFor(() => expect(SplatMesh).toHaveBeenCalledTimes(1));
+    expect(validateSogBundleMock).toHaveBeenCalledWith(touchFile, { maxSplats: 3_000_000 });
+    unmount();
+
+    validateSogBundleMock.mockClear();
+    const desktopFile = new File(['sog'], 'desktop.sog');
+    useSplatLayerStoreFacadeMock.mockReturnValue(createFacade({ splatFile: desktopFile }));
+    render(<SplatLayer />);
+    await waitFor(() => expect(SplatMesh).toHaveBeenCalledTimes(2));
+    expect(validateSogBundleMock).toHaveBeenCalledTimes(1);
+    const [validatedFile, options] = validateSogBundleMock.mock.calls[0] as [File, { maxSplats?: number }];
+    expect(validatedFile).toBe(desktopFile);
+    expect(options).toHaveProperty('maxSplats', undefined);
+  });
+
+  it('drops a SOG whose validation finishes after the layer unmounts', async () => {
+    const SparkRenderer = vi.fn(function SparkRenderer(this: { dispose: () => void }) { this.dispose = vi.fn(); });
+    const { SplatMesh } = createSplatMeshConstructor(Promise.resolve());
+    preloadSparkModuleMock.mockResolvedValue({ SparkRenderer, SplatMesh });
+    const validation = createDeferred<{ version: 2; count: number; shBands: number }>();
+    validateSogBundleMock.mockReturnValue(validation.promise);
+    const facade = createFacade({ splatFile: new File(['sog'], 'scene.sog') });
+    useSplatLayerStoreFacadeMock.mockReturnValue(facade);
+
+    const { unmount } = render(<SplatLayer />);
+    await waitFor(() => expect(validateSogBundleMock).toHaveBeenCalledTimes(1));
+    unmount();
+
+    await act(async () => {
+      validation.resolve({ version: 2, count: 100, shBands: 0 });
+      await validation.promise;
+    });
+
+    expect(getSplatMeshSourceOptionsMock).not.toHaveBeenCalled();
+    expect(SplatMesh).not.toHaveBeenCalled();
+    expect(facade.actions.addNotification).not.toHaveBeenCalledWith('warning', expect.any(String));
   });
 });
