@@ -7,9 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-29
+
 ### Added
 
+- Publish the loaded dataset to Hugging Face in one click. Sign in with Hugging Face, choose a repository name, a license (Creative Commons 4.0, CC0, MIT, Apache 2.0 or other) and a preview image. ColmapView uploads the COLMAP model, images, masks, splats and viewer settings, then gives a viewer link to the dataset. Available when the deployment configures a Hugging Face OAuth client.
+- Open a Hugging Face dataset by its page URL (`?url=https://huggingface.co/datasets/<owner>/<name>`), following its latest revision.
+- Apply viewer settings saved with a dataset: `colmapview.yaml` in folders, archives and Hugging Face datasets, or `viewerStatePath` in a manifest. Settings found in a parent folder apply display options only.
 - Load and render PlayCanvas SOG (`.sog`) splats from local files, folders, archives, URLs, manifests and Hugging Face datasets. SOG renders with Spark; PLY and SPZ keep the WebGPU renderer and GPU PSNR.
+
+### Changed
+
+- When a dataset offers several splats, the splat picker lists them smallest first. PLY and SPZ stay the automatic choice over SOG.
+- Share links from an edited scene point to the original dataset and say that edits are excluded.
+
+### Fixed
+
+- Include splats drawn by the WebGPU renderer in screenshots.
+- Load images and masks whose COLMAP names contain `%`, `#` or `?` from URLs.
+- Cancel an in-progress URL load when a local folder or ZIP is opened.
 
 ### Security
 
@@ -569,7 +585,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript for type safety
 - Deno native test runner for testing
 
-[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.14.5...HEAD
+[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/ColmapView/colmapview.github.io/compare/v0.14.5...v0.15.0
 [0.14.5]: https://github.com/ColmapView/colmapview.github.io/compare/v0.14.4...v0.14.5
 [0.14.4]: https://github.com/ColmapView/colmapview.github.io/compare/v0.14.3...v0.14.4
 [0.12.0]: https://github.com/ColmapView/colmapview.github.io/compare/v0.11.0...v0.12.0
