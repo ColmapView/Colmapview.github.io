@@ -16,6 +16,7 @@ import {
   type WebGpuSplatBackendState,
   type WebGpuSplatMetricState,
 } from '../../utils/splatBackendPolicy';
+import type { SplatRendererRequirement } from '../../utils/splatFilePolicy';
 
 export interface SplatBackendState {
   requestedBackend: SplatBackendPreference;
@@ -34,6 +35,7 @@ export interface SplatBackendState {
    * preload pending for the rest of the session.
    */
   setSparkPreloadFailed: () => void;
+  setActiveSplatRenderer: (activeSplatRenderer: SplatRendererRequirement) => void;
   resetSplatBackendState: () => void;
 }
 
@@ -134,6 +136,15 @@ export const useSplatBackendStore = create<SplatBackendState>()((set) => ({
       : resolveNextState(
         state.requestedBackend,
         { ...state.availability, sparkPreloadFailed: true },
+        state.metricAvailability
+      )
+  ),
+  setActiveSplatRenderer: (activeSplatRenderer) => set((state) =>
+    (state.availability.activeSplatRenderer ?? 'any') === activeSplatRenderer
+      ? state
+      : resolveNextState(
+        state.requestedBackend,
+        { ...state.availability, activeSplatRenderer },
         state.metricAvailability
       )
   ),

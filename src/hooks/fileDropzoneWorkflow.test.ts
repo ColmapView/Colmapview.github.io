@@ -540,7 +540,7 @@ describe('file dropzone workflow', () => {
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('spark unavailable'));
   });
 
-  it('skips the spark runtime preload when the caller says the backend will not use it', async () => {
+  it('asks the preload gate about the incoming splat and skips the download when it says no', async () => {
     const parseFiles = vi.fn();
     const spz = new File(['xx'], 'webgpu.spz');
     const deps = createDeps({
@@ -552,7 +552,7 @@ describe('file dropzone workflow', () => {
     const result = await processFileDropzoneFiles(new Map([['webgpu.spz', spz]]), deps);
 
     expect(result).toBe(true);
-    expect(deps.shouldPreloadSplatRuntime).toHaveBeenCalledTimes(1);
+    expect(deps.shouldPreloadSplatRuntime).toHaveBeenCalledExactlyOnceWith(spz);
     expect(deps.preloadSplatRuntime).not.toHaveBeenCalled();
     // Only the runtime download is skipped: the splat itself loads on exactly the
     // same schedule, with the same handoff to the renderer's own progress.

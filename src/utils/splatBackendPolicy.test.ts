@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   FIREFOX_LINUX_WEBGPU_UNSUPPORTED_REASON,
+  PREPARING_SPARK_FOR_FORMAT_REASON,
   SPARK_FALLBACK_REASON_PREFIX,
+  SPARK_ONLY_FORMAT_FORCED_WEBGPU_REASON,
+  SPARK_ONLY_FORMAT_METRIC_REASON,
+  SPARK_ONLY_FORMAT_REASON,
+  SPARK_ONLY_FORMAT_UNAVAILABLE_REASON,
   WEBGPU_INSECURE_CONTEXT_REASON,
   getBrowserWebGpuCompatibilityBlockReason,
   isSparkSplatRuntimePreloadPending,
@@ -461,5 +466,52 @@ describe('splat backend policy', () => {
 
     expect(shouldExposeSplatMetricVisualizations({ ...webgpuReadyInputs, hasMetricCapableCamera: true })).toBe(true);
     expect(shouldExposeSplatMetricVisualizations({ ...webgpuReadyInputs, hasMetricCapableCamera: false })).toBe(false);
+  });
+});
+
+describe('spark-only active splats (SOG)', () => {
+  const sparkOnly = (overrides: Partial<SplatBackendAvailability> = {}): SplatBackendAvailability => ({
+    webGpu: 'ready', webGpuFailureReason: null, spark: false, sparkPreloadFailed: false,
+    activeSplatRenderer: 'spark-only', ...overrides,
+  });
+
+  it.each(['auto', 'webgpu', 'spark'] as const)('waits for Spark, not WebGPU, when %s is requested', (requested) => {
+    expect(resolveSplatBackend(requested, sparkOnly())).toMatchObject({
+      status: 'unavailable', backend: null, reason: PREPARING_SPARK_FOR_FORMAT_REASON,
+    });
+  });
+
+  it('renders with Spark once it loads, explaining a forced WebGPU request', () => {
+    expect(resolveSplatBackend('auto', sparkOnly({ spark: true }))).toMatchObject({
+      status: 'resolved', backend: 'spark', gpuPsnr: false, reason: SPARK_ONLY_FORMAT_REASON,
+    });
+    expect(resolveSplatBackend('webgpu', sparkOnly({ spark: true }))).toMatchObject({
+      status: 'resolved', backend: 'spark', reason: SPARK_ONLY_FORMAT_FORCED_WEBGPU_REASON,
+    });
+  });
+
+  it('reports a failed Spark download as the reason SOG cannot display', () => {
+    expect(resolveSplatBackend('auto', sparkOnly({ sparkPreloadFailed: true }))).toMatchObject({
+      status: 'unavailable', reason: SPARK_ONLY_FORMAT_UNAVAILABLE_REASON,
+    });
+  });
+
+  it.each(['unsupported', 'unavailable', 'ready', 'failed'] as const)(
+    'needs, starts and awaits the Spark download whatever the WebGPU state (%s)', (webGpu) => {
+      expect(shouldPreloadSparkSplatRuntime('auto', sparkOnly({ webGpu }))).toBe(true);
+      expect(shouldStartSparkSplatRuntimePreload('auto', sparkOnly({ webGpu }))).toBe(true);
+      expect(isSparkSplatRuntimePreloadPending('auto', sparkOnly({ webGpu }))).toBe(true);
+      expect(shouldStartSparkSplatRuntimePreload('auto', sparkOnly({ webGpu, sparkPreloadFailed: true }))).toBe(false);
+    });
+
+  it('leaves PLY/SPZ routing unchanged', () => {
+    expect(resolveSplatBackend('auto', sparkOnly({ activeSplatRenderer: 'any' }))).toMatchObject({ backend: 'webgpu' });
+    expect(shouldPreloadSparkSplatRuntime('auto', { webGpu: 'unavailable', activeSplatRenderer: 'any' })).toBe(false);
+  });
+
+  it('explains that PSNR/SSIM is unavailable for SOG', () => {
+    const resolution = resolveSplatBackend('auto', sparkOnly({ spark: true }));
+    expect(resolveSplatMetricCapability({ webGpu: 'ready', webGpuFailureReason: null }, resolution))
+      .toMatchObject({ gpuPsnr: false, reason: SPARK_ONLY_FORMAT_METRIC_REASON });
   });
 });

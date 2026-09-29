@@ -4,7 +4,11 @@ import {
   getWebGpuSplatBackendNotice,
 } from './splatBackendNoticePolicy';
 import {
+  PREPARING_SPARK_FOR_FORMAT_REASON,
   SPARK_FALLBACK_REASON_PREFIX,
+  SPARK_ONLY_FORMAT_FORCED_WEBGPU_REASON,
+  SPARK_ONLY_FORMAT_REASON,
+  SPARK_ONLY_FORMAT_UNAVAILABLE_REASON,
   WEBGPU_INSECURE_CONTEXT_REASON,
 } from '../../utils/splatBackendPolicy';
 import type { SplatBackendResolution } from '../../utils/splatBackendPolicy';
@@ -413,5 +417,37 @@ describe('splat backend notice policy', () => {
       webGpuSplatCanvasMounted: false,
       sparkPreloadPending: true,
     })).not.toBeNull();
+  });
+});
+
+describe('spark-only (SOG) notices', () => {
+  const notice = (
+    requestedBackend: 'auto' | 'webgpu' | 'spark',
+    resolution: SplatBackendResolution,
+    sparkPreloadPending = false
+  ) => getWebGpuSplatBackendNotice({
+    requestedBackend, splatFile: { name: 'scene.sog' }, splatBackendResolution: resolution,
+    webGpuSplatCanvasMounted: false, sparkPreloadPending,
+  });
+  const resolved = (requested: 'auto' | 'webgpu' | 'spark', reason: string): SplatBackendResolution =>
+    ({ status: 'resolved', requested, backend: 'spark', gpuPsnr: false, reason });
+  const unavailable = (requested: 'auto' | 'webgpu' | 'spark', reason: string): SplatBackendResolution =>
+    ({ status: 'unavailable', requested, backend: null, gpuPsnr: false, reason });
+
+  it('stays silent while Spark prepares or renders a SOG', () => {
+    expect(notice('auto', unavailable('auto', PREPARING_SPARK_FOR_FORMAT_REASON), true)).toBeNull();
+    expect(notice('webgpu', unavailable('webgpu', PREPARING_SPARK_FOR_FORMAT_REASON), true)).toBeNull();
+    expect(notice('auto', resolved('auto', SPARK_ONLY_FORMAT_REASON))).toBeNull();
+  });
+
+  it('explains a forced WebGPU request that renders a SOG with Spark', () => {
+    expect(notice('webgpu', resolved('webgpu', SPARK_ONLY_FORMAT_FORCED_WEBGPU_REASON)))
+      .toMatchObject({ severity: 'info', message: expect.stringContaining('cannot read SOG') });
+  });
+
+  it('warns when Spark cannot load for a SOG, without WebGPU advice', () => {
+    const result = notice('auto', unavailable('auto', SPARK_ONLY_FORMAT_UNAVAILABLE_REASON));
+    expect(result).toMatchObject({ severity: 'warning' });
+    expect(result?.message).not.toContain('WebGPU splat renderer unavailable');
   });
 });

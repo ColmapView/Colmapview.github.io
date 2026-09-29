@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useSplatBackendStore } from './splatBackendStore';
-import { isSparkSplatRuntimePreloadPending } from '../../utils/splatBackendPolicy';
+import {
+  isSparkSplatRuntimePreloadPending,
+  PREPARING_SPARK_FOR_FORMAT_REASON,
+} from '../../utils/splatBackendPolicy';
 
 describe('splat backend store', () => {
   beforeEach(() => {
@@ -194,5 +197,21 @@ describe('splat backend store', () => {
     useSplatBackendStore.getState().setWebGpuMetricState('unavailable');
 
     expect(useSplatBackendStore.getState().metricAvailability.webGpuFailureReason).toBeNull();
+  });
+
+  it('resolves an active SOG with Spark while WebGPU stays ready, and returns to WebGPU for PLY', () => {
+    useSplatBackendStore.setState({
+      requestedBackend: 'auto',
+      availability: { webGpu: 'ready', webGpuFailureReason: null, spark: false },
+    });
+    useSplatBackendStore.getState().setActiveSplatRenderer('spark-only');
+    expect(useSplatBackendStore.getState().resolution).toMatchObject({ status: 'unavailable', reason: PREPARING_SPARK_FOR_FORMAT_REASON });
+
+    useSplatBackendStore.getState().setSparkBackendAvailable(true);
+    expect(useSplatBackendStore.getState().resolution).toMatchObject({ status: 'resolved', backend: 'spark' });
+    expect(useSplatBackendStore.getState().availability.webGpu).toBe('ready');
+
+    useSplatBackendStore.getState().setActiveSplatRenderer('any');
+    expect(useSplatBackendStore.getState().resolution).toMatchObject({ status: 'resolved', backend: 'webgpu' });
   });
 });

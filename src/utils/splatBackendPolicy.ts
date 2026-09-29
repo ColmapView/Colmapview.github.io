@@ -1,3 +1,5 @@
+import type { SplatRendererRequirement } from './splatFilePolicy';
+
 export const SPLAT_BACKEND_PREFERENCES = ['auto', 'webgpu', 'spark'] as const;
 export type SplatBackendPreference = typeof SPLAT_BACKEND_PREFERENCES[number];
 
@@ -19,6 +21,11 @@ export interface SplatBackendAvailability {
    * warning that never fires. Set only by the preload failure paths.
    */
   sparkPreloadFailed?: boolean;
+  /**
+   * What the ACTIVE splat can be drawn with. 'spark-only' formats (SOG) resolve to
+   * Spark and need its download whatever the WebGPU state; absent means 'any'.
+   */
+  activeSplatRenderer?: SplatRendererRequirement;
 }
 
 export interface SplatMetricAvailability {
@@ -67,6 +74,7 @@ export const DEFAULT_SPLAT_BACKEND_AVAILABILITY: SplatBackendAvailability = {
   webGpuFailureReason: null,
   spark: false,
   sparkPreloadFailed: false,
+  activeSplatRenderer: 'any',
 };
 
 export const DEFAULT_SPLAT_METRIC_AVAILABILITY: SplatMetricAvailability = {
@@ -83,6 +91,29 @@ export const WEBGPU_INSECURE_CONTEXT_REASON =
 // Exported because the notice policy keys behavior off this exact string: an
 // unshared literal let the two sides drift apart without any test noticing.
 export const PREPARING_WEBGPU_SPLAT_RENDERER_REASON = 'Preparing WebGPU splat renderer';
+
+// Shared with the notice policy, which keys off these exact strings.
+export const SPARK_ONLY_FORMAT_REASON = 'SOG renders with Spark';
+export const SPARK_ONLY_FORMAT_FORCED_WEBGPU_REASON = 'The WebGPU renderer cannot read SOG; using Spark';
+export const PREPARING_SPARK_FOR_FORMAT_REASON = 'Preparing Spark renderer for SOG';
+export const SPARK_ONLY_FORMAT_UNAVAILABLE_REASON = 'Spark renderer unavailable; SOG cannot be displayed';
+export const SPARK_ONLY_FORMAT_METRIC_REASON = 'PSNR/SSIM needs the WebGPU renderer, which cannot read SOG';
+
+function resolveSparkOnlySplatBackend(
+  requested: SplatBackendPreference,
+  availability: SplatBackendAvailability
+): SplatBackendResolution {
+  if (availability.spark) {
+    return {
+      status: 'resolved', requested, backend: 'spark', gpuPsnr: false,
+      reason: requested === 'webgpu' ? SPARK_ONLY_FORMAT_FORCED_WEBGPU_REASON : SPARK_ONLY_FORMAT_REASON,
+    };
+  }
+  return {
+    status: 'unavailable', requested, backend: null, gpuPsnr: false,
+    reason: availability.sparkPreloadFailed ? SPARK_ONLY_FORMAT_UNAVAILABLE_REASON : PREPARING_SPARK_FOR_FORMAT_REASON,
+  };
+}
 
 // Both sides of the Spark fallback message share these: the reasons below
 // build them, and the notice policy strips/matches them. Unshared literals let
@@ -187,6 +218,11 @@ export function resolveSplatBackend(
   requested: SplatBackendPreference,
   availability: SplatBackendAvailability
 ): SplatBackendResolution {
+  // A format only Spark decodes never waits on, or touches, WebGPU state.
+  if (availability.activeSplatRenderer === 'spark-only') {
+    return resolveSparkOnlySplatBackend(requested, availability);
+  }
+
   if (requested === 'spark') {
     return availability.spark
       ? {
@@ -277,10 +313,12 @@ export function resolveSplatBackend(
  * state. Two derived predicates below add that state:
  * shouldStartSparkSplatRuntimePreload (should a download begin now?) and
  * isSparkSplatRuntimePreloadPending (is one in flight?).
+ *
+ * A spark-only active splat (SOG) needs Spark regardless of WebGPU; resolveSplatBackend resolves it to Spark to match.
  */
 export function shouldPreloadSparkSplatRuntime(
   requested: SplatBackendPreference,
-  availability: Pick<SplatBackendAvailability, 'webGpu'>
+  availability: Pick<SplatBackendAvailability, 'webGpu' | 'activeSplatRenderer'>
 ): boolean {
   // Preload only when Spark is certain to be needed: requested outright, or
   // auto on a browser where WebGPU cannot work ('unsupported') or has already
@@ -298,7 +336,8 @@ export function shouldPreloadSparkSplatRuntime(
   // this by refusing to resolve 'spark' while WebGPU is 'unavailable', so the
   // two stay complements of each other; the honest state during init is
   // "preparing", not a Spark frame that the gate has no intention of feeding.
-  return requested === 'spark'
+  return availability.activeSplatRenderer === 'spark-only'
+    || requested === 'spark'
     || (
       requested === 'auto'
       && (availability.webGpu === 'unsupported' || availability.webGpu === 'failed')
@@ -324,7 +363,7 @@ export function shouldPreloadSparkSplatRuntime(
  */
 export function shouldStartSparkSplatRuntimePreload(
   requested: SplatBackendPreference,
-  availability: Pick<SplatBackendAvailability, 'webGpu' | 'sparkPreloadFailed'>
+  availability: Pick<SplatBackendAvailability, 'webGpu' | 'sparkPreloadFailed' | 'activeSplatRenderer'>
 ): boolean {
   return shouldPreloadSparkSplatRuntime(requested, availability)
     && !availability.sparkPreloadFailed;
@@ -343,7 +382,7 @@ export function shouldStartSparkSplatRuntimePreload(
  */
 export function isSparkSplatRuntimePreloadPending(
   requested: SplatBackendPreference,
-  availability: Pick<SplatBackendAvailability, 'webGpu' | 'spark' | 'sparkPreloadFailed'>
+  availability: Pick<SplatBackendAvailability, 'webGpu' | 'spark' | 'sparkPreloadFailed' | 'activeSplatRenderer'>
 ): boolean {
   return shouldPreloadSparkSplatRuntime(requested, availability)
     && !availability.spark
@@ -359,7 +398,9 @@ export function resolveSplatMetricCapability(
       status: 'available',
       backend: 'spark',
       gpuPsnr: false,
-      reason: 'Spark PSNR/SSIM metric capability is ready',
+      reason: resolution.reason === SPARK_ONLY_FORMAT_REASON || resolution.reason === SPARK_ONLY_FORMAT_FORCED_WEBGPU_REASON
+        ? SPARK_ONLY_FORMAT_METRIC_REASON
+        : 'Spark PSNR/SSIM metric capability is ready',
     };
   }
 

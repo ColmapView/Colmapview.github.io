@@ -54,7 +54,7 @@ type PreloadSplatRuntime = () => Promise<unknown>;
  * bandwidth, while skipping one that is needed stalls the first splat frame
  * behind the download.
  */
-type ShouldPreloadSplatRuntime = () => boolean;
+type ShouldPreloadSplatRuntime = (splatFile: File) => boolean;
 /**
  * Records that the chunk could not be fetched. This is chronologically the
  * FIRST of the three preload attempts in the app, so it has to report failure
@@ -325,7 +325,7 @@ export async function processFileDropzoneFiles(
     // on the same policy; an ungated one here downloaded the whole bundle for
     // WebGPU-backed splats that never touch it. This decides nothing about when
     // the splat itself loads — that stays with the handoff below.
-    if (splatFile && shouldPreloadSplatRuntime()) {
+    if (splatFile && shouldPreloadSplatRuntime(splatFile)) {
       void preloadSplatRuntime().catch((error: unknown) => {
         // Report it, don't just log it: the renderer-side attempts read this
         // outcome to stop waiting on a download that will not arrive, and to

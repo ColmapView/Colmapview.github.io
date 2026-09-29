@@ -1114,3 +1114,21 @@ describe('abandonUrlAutoLoadRequest', () => {
     expect(window.location.hash).toContain('foo=bar');
   });
 });
+
+describe('reconstruction store splat renderer sync', () => {
+  beforeEach(() => {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    useSplatBackendStore.setState(useSplatBackendStore.getInitialState(), true);
+  });
+
+  it('tells the splat backend when the active splat can only be drawn by Spark', () => {
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({ splatFile: new File(['x'], 'scene.sog') }));
+    expect(useSplatBackendStore.getState().availability.activeSplatRenderer).toBe('spark-only');
+
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({ splatFile: new File(['x'], 'scene.ply') }));
+    expect(useSplatBackendStore.getState().availability.activeSplatRenderer).toBe('any');
+
+    useReconstructionStore.getState().clear();
+    expect(useSplatBackendStore.getState().availability.activeSplatRenderer).toBe('any');
+  });
+});

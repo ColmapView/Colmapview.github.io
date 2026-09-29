@@ -12,6 +12,7 @@ import { isArchiveFile, loadZipFromFile, setActiveZipArchive } from '../utils/zi
 import { scanDirectoryHandle, scanEntry } from '../utils/fileScanning';
 import { appLogger } from '../utils/logger';
 import { shouldStartSparkSplatRuntimePreload } from '../utils/splatBackendPolicy';
+import { getSplatRendererRequirement } from '../utils/splatFilePolicy';
 import { collectDroppedFiles, collectFileDropPayload, isFileDrop } from './fileDropzoneDropPayload';
 import { loadBrowsedDirectory, loadDropPayload, loadLocalZipFile } from './fileDropzoneLocalSources';
 import { processFileDropzoneFiles, type FileDropzoneWorkflowOptions } from './fileDropzoneWorkflow';
@@ -70,9 +71,13 @@ export function useFileDropzone() {
       // Read at drop time, not at hook render: the WebGPU renderer flips
       // availability to 'ready' asynchronously, so the freshest answer is the
       // one taken the moment a splat actually arrives.
-      shouldPreloadSplatRuntime: () => {
+      shouldPreloadSplatRuntime: (splatFile) => {
         const { requestedBackend, availability } = useSplatBackendStore.getState();
-        return shouldStartSparkSplatRuntimePreload(requestedBackend, availability);
+        // The incoming file is not active yet, so state its renderer requirement explicitly.
+        return shouldStartSparkSplatRuntimePreload(requestedBackend, {
+          ...availability,
+          activeSplatRenderer: getSplatRendererRequirement(splatFile.name),
+        });
       },
       onSplatRuntimePreloadFailed: () => useSplatBackendStore.getState().setSparkPreloadFailed(),
     }, {

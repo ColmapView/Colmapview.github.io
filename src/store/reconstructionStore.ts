@@ -23,7 +23,7 @@ import {
   mergeRemoteSplatCatalog as mergeRemoteSplatCatalogIntoLoadedFiles,
 } from '../utils/splatFileSourcePolicy';
 import { isSplatColorMode } from './types';
-import { supportsWebGpuRenderer } from '../utils/splatFilePolicy';
+import { getSplatRendererRequirement, supportsWebGpuRenderer } from '../utils/splatFilePolicy';
 import { fetchRemoteSplatBytes, fetchRemoteSplatFile, toArrayBuffer } from '../utils/urlUtils';
 import { getSplatDownloadProgress, getSplatPhaseProgress } from '../utils/splatLoadingProgressPolicy';
 import {
@@ -595,6 +595,14 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     useTransformStore.getState().resetSplatTransform();
   },
 }));
+
+// Backend resolution is per active splat: a format only Spark decodes (SOG) must
+// resolve to Spark the moment it becomes active, without waiting on React effects.
+useReconstructionStore.subscribe((state, previous) => {
+  const splatFile = state.loadedFiles?.splatFile;
+  if (splatFile === previous.loadedFiles?.splatFile) return;
+  useSplatBackendStore.getState().setActiveSplatRenderer(getSplatRendererRequirement(splatFile?.name));
+});
 
 export const selectPointCount = (state: ReconstructionState) => {
   // Prefer WASM point count (always accurate), fall back to JS Map

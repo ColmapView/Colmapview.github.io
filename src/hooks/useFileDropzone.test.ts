@@ -22,6 +22,8 @@ async function captureWorkflowDeps(): Promise<FileDropzoneWorkflowDeps> {
   return deps;
 }
 
+const ply = new File(['x'], 'scene.ply');
+
 describe('useFileDropzone', () => {
   beforeEach(() => {
     processFileDropzoneFilesMock.mockClear();
@@ -50,7 +52,7 @@ describe('useFileDropzone', () => {
 
     const deps = await captureWorkflowDeps();
 
-    expect(deps.shouldPreloadSplatRuntime?.()).toBe(false);
+    expect(deps.shouldPreloadSplatRuntime?.(ply)).toBe(false);
   });
 
   it('preloads the spark runtime when webgpu cannot work in this browser', async () => {
@@ -61,7 +63,7 @@ describe('useFileDropzone', () => {
 
     const deps = await captureWorkflowDeps();
 
-    expect(deps.shouldPreloadSplatRuntime?.()).toBe(true);
+    expect(deps.shouldPreloadSplatRuntime?.(ply)).toBe(true);
   });
 
   it('does not preload the spark runtime while the webgpu renderer is still undecided', async () => {
@@ -75,7 +77,7 @@ describe('useFileDropzone', () => {
 
     const deps = await captureWorkflowDeps();
 
-    expect(deps.shouldPreloadSplatRuntime?.()).toBe(false);
+    expect(deps.shouldPreloadSplatRuntime?.(ply)).toBe(false);
   });
 
   it('records a failed drop-time preload so nothing re-requests the chunk', async () => {
@@ -85,7 +87,7 @@ describe('useFileDropzone', () => {
     });
 
     const deps = await captureWorkflowDeps();
-    expect(deps.shouldPreloadSplatRuntime?.()).toBe(true);
+    expect(deps.shouldPreloadSplatRuntime?.(ply)).toBe(true);
 
     // The drop-time attempt is the first of three in the app; if its failure
     // only reaches the log, the store keeps waiting on a download nobody is
@@ -93,7 +95,7 @@ describe('useFileDropzone', () => {
     deps.onSplatRuntimePreloadFailed?.();
 
     expect(useSplatBackendStore.getState().availability.sparkPreloadFailed).toBe(true);
-    expect(deps.shouldPreloadSplatRuntime?.()).toBe(false);
+    expect(deps.shouldPreloadSplatRuntime?.(ply)).toBe(false);
   });
 
   it('reads the backend at drop time, not at hook render time', async () => {
@@ -103,10 +105,24 @@ describe('useFileDropzone', () => {
     });
 
     const deps = await captureWorkflowDeps();
-    expect(deps.shouldPreloadSplatRuntime?.()).toBe(true);
+    expect(deps.shouldPreloadSplatRuntime?.(ply)).toBe(true);
 
     useSplatBackendStore.getState().setWebGpuBackendState('ready');
 
-    expect(deps.shouldPreloadSplatRuntime?.()).toBe(false);
+    expect(deps.shouldPreloadSplatRuntime?.(ply)).toBe(false);
+  });
+
+  it('preloads the spark runtime for an incoming SOG even while webgpu is ready', async () => {
+    // The dropped file is not active yet, so the gate must judge it by name
+    // rather than by the backend store's current active-splat requirement.
+    useSplatBackendStore.setState({
+      requestedBackend: 'auto',
+      availability: { webGpu: 'ready', webGpuFailureReason: null, spark: false },
+    });
+
+    const deps = await captureWorkflowDeps();
+
+    expect(deps.shouldPreloadSplatRuntime?.(new File(['x'], 'scene.sog'))).toBe(true);
+    expect(deps.shouldPreloadSplatRuntime?.(ply)).toBe(false);
   });
 });

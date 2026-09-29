@@ -1,7 +1,11 @@
 import {
   FIREFOX_LINUX_WEBGPU_UNSUPPORTED_REASON,
+  PREPARING_SPARK_FOR_FORMAT_REASON,
   PREPARING_WEBGPU_SPLAT_RENDERER_REASON,
   SPARK_FALLBACK_REASON_PREFIX,
+  SPARK_ONLY_FORMAT_FORCED_WEBGPU_REASON,
+  SPARK_ONLY_FORMAT_REASON,
+  SPARK_ONLY_FORMAT_UNAVAILABLE_REASON,
   WEBGPU_INSECURE_CONTEXT_REASON,
   WEBGPU_SPLAT_RENDERER_FAILED_REASON,
 } from '../../utils/splatBackendPolicy';
@@ -42,7 +46,36 @@ const WEBGPU_FULL_FEATURES_SUGGESTION =
 const WEBGPU_HTTPS_SUGGESTION =
   'Reload the page over HTTPS for full features.';
 
+const SPARK_ONLY_REASONS = new Set<string>([
+  SPARK_ONLY_FORMAT_REASON,
+  SPARK_ONLY_FORMAT_FORCED_WEBGPU_REASON,
+  PREPARING_SPARK_FOR_FORMAT_REASON,
+  SPARK_ONLY_FORMAT_UNAVAILABLE_REASON,
+]);
+
+/** SOG renders with Spark whatever was requested; the WebGPU chains below must never describe it. */
+function getSparkOnlyFormatNotice({
+  splatFile,
+  splatBackendResolution,
+  sparkPreloadPending,
+}: SplatBackendNoticeOptions): SplatBackendNotice | null {
+  const { reason } = splatBackendResolution;
+  if (!splatFile || reason === SPARK_ONLY_FORMAT_REASON || reason === PREPARING_SPARK_FOR_FORMAT_REASON) {
+    return null;
+  }
+  if (reason === SPARK_ONLY_FORMAT_FORCED_WEBGPU_REASON) {
+    return { key: `${splatFile.name}:${reason}`, message: `${reason}.`, severity: 'info' };
+  }
+  // SPARK_ONLY_FORMAT_UNAVAILABLE_REASON: an outcome only once no download is in flight.
+  return sparkPreloadPending
+    ? null
+    : { key: `${splatFile.name}:${reason}`, message: `${reason}. Reload to try again.`, severity: 'warning' };
+}
+
 export function getWebGpuSplatBackendNotice(options: SplatBackendNoticeOptions): SplatBackendNotice | null {
+  if (SPARK_ONLY_REASONS.has(options.splatBackendResolution.reason)) {
+    return getSparkOnlyFormatNotice(options);
+  }
   // Order is presentational only: every chain below rejects on requestedBackend
   // first, and the three preferences are disjoint — and where two chains share
   // a preference ('auto', the last two), they are split by resolution status,
