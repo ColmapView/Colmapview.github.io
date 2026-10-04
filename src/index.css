@@ -2267,10 +2267,9 @@ h3.panel-heading {
    above, which does nothing for a wide-but-short window).
 
    The toolbar is a fixed-height stack whose bottom edge is
-   `top offset + N buttons + 3 hairline dividers + (N + 2) gaps`, and it cannot
-   be made to scroll: `overflow-y` on the column would force `overflow-x` to
-   `auto` as well, clipping the hover panels, which sit OUTSIDE its left edge
-   (`right-full`). So the fit is bought with size tiers instead.
+   `top offset + N buttons + 3 hairline dividers + (N + 2) gaps`. Size tiers
+   shrink the buttons and gaps so the column fits above the status bar.
+   Hover panels are portaled to the body and constrained to the viewport.
 
    Falling off the bottom is not a cosmetic clip. The last item is the gallery
    toggle — the only mouse-reachable gallery control — and the status bar is

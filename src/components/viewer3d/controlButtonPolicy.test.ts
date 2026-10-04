@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CONTROL_PANEL_HEIGHT_CHANGE_THRESHOLD,
-  CONTROL_PANEL_STATUS_BAR_CLEARANCE,
-  getControlPanelAdjustedTop,
-  getControlPanelWrapperStyle,
+  getControlPanelPosition,
   getControlButtonAccessibleLabel,
   getControlButtonTouchAction,
-  hasControlPanelHeightChangedSignificantly,
   hasControlButtonPanel,
   shouldListenForOutsideTouch,
   shouldShowControlButtonPanel,
@@ -117,24 +113,27 @@ describe('control button policy helpers', () => {
     })).toBe(false);
   });
 
-  it('filters panel repositioning when height changes are below the jitter threshold', () => {
-    expect(CONTROL_PANEL_HEIGHT_CHANGE_THRESHOLD).toBe(5);
-    expect(hasControlPanelHeightChangedSignificantly(100, 0)).toBe(true);
-    expect(hasControlPanelHeightChangedSignificantly(104, 100)).toBe(false);
-    expect(hasControlPanelHeightChangedSignificantly(105, 100)).toBe(true);
-    expect(hasControlPanelHeightChangedSignificantly(94, 100)).toBe(true);
+  it('opens over the gallery when a narrow scene has no room to the left', () => {
+    const position = getControlPanelPosition({ left: 111, right: 143, top: 240 }, { width: 212, height: 420 }, { width: 390, height: 844 });
+    expect(position).toEqual({ left: 143, top: 240, opensRight: true, maxWidth: 374, maxHeight: 780 });
+    expect(position.left + 212).toBeLessThanOrEqual(390 - 8);
   });
 
-  it('computes panel top adjustment from viewport and status bar clearance', () => {
-    expect(CONTROL_PANEL_STATUS_BAR_CLEARANCE).toBe(48);
-    expect(getControlPanelAdjustedTop({ bottom: 700 }, 800)).toBeNull();
-    expect(getControlPanelAdjustedTop({ bottom: 760 }, 800)).toBe(-8);
-    expect(getControlPanelAdjustedTop({ bottom: 820 }, 800)).toBe(-68);
-    expect(getControlPanelAdjustedTop({ bottom: 760 }, 800, 20)).toBeNull();
+  it('keeps left-opening panels above the status bar', () => {
+    expect(getControlPanelPosition({ left: 850, right: 878, top: 400 }, { width: 248, height: 500 }, { width: 1280, height: 720 }))
+      .toEqual({ left: 602, top: 164, opensRight: false, maxWidth: 1264, maxHeight: 656 });
   });
 
-  it('returns wrapper style only when the panel has an adjusted top', () => {
-    expect(getControlPanelWrapperStyle(null)).toBeUndefined();
-    expect(getControlPanelWrapperStyle(-24)).toEqual({ top: -24 });
+  it('constrains oversized panels to a small viewport without a negative position', () => {
+    expect(getControlPanelPosition({ left: 100, right: 128, top: 20 }, { width: 248, height: 600 }, { width: 200, height: 300 }))
+      .toEqual({ left: 8, top: 8, opensRight: false, maxWidth: 184, maxHeight: 236 });
+  });
+
+  it('uses the visible viewport bounds when a keyboard or zoom pans and shrinks the screen', () => {
+    expect(getControlPanelPosition(
+      { left: 210, right: 242, top: 450 },
+      { width: 212, height: 429 },
+      { width: 390, height: 320, offsetLeft: 100, offsetTop: 200 }
+    )).toEqual({ left: 242, top: 208, opensRight: true, maxWidth: 374, maxHeight: 256 });
   });
 });

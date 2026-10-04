@@ -65,6 +65,43 @@ describe('useIdleTimer', () => {
     useUIStore.setState({ idleHideTimeout: 3, isIdle: false });
   });
 
+  it('disables hiding without re-entering the store on unrelated UI updates', () => {
+    render(<IdleTimerHarness />);
+    const scene = hideChrome();
+    const updates = vi.fn();
+    const unsubscribe = useUIStore.subscribe(updates);
+    try {
+      act(() => useUIStore.getState().setIdleHideTimeout(0));
+      expect(scene).toHaveAttribute('data-idle', 'false');
+      expect(useUIStore.getState().isIdle).toBe(false);
+      expect(updates.mock.calls.length).toBeLessThanOrEqual(2);
+
+      updates.mockClear();
+      act(() => {
+        useUIStore.getState().setIsIdle(false);
+        useUIStore.getState().openImageDetail(1);
+        vi.advanceTimersByTime(10_000);
+      });
+      expect(updates).toHaveBeenCalledOnce();
+      expect(scene).toHaveAttribute('data-idle', 'false');
+    } finally {
+      unsubscribe();
+      useUIStore.getState().closeImageDetail();
+    }
+  });
+
+  it('starts hiding again when a saved disabled timeout changes to a positive value', () => {
+    useUIStore.setState({ idleHideTimeout: 0 });
+    render(<IdleTimerHarness />);
+    const scene = screen.getByTestId('scene');
+    act(() => {
+      useUIStore.getState().setIdleHideTimeout(1);
+      vi.advanceTimersByTime(1_100);
+    });
+    expect(scene).toHaveAttribute('data-idle', 'true');
+    expect(useUIStore.getState().isIdle).toBe(true);
+  });
+
   it('pauses idle hiding while hovering a popup outside the scene container', () => {
     render(<IdleTimerHarness />);
 

@@ -32,8 +32,8 @@ import {
   getMatchesButtonState,
   getRigButtonState,
   getSelectionButtonState,
-  reconstructionHasPinholeCameras,
 } from './viewerControlsViewModel';
+import { getCameraUiContext } from './cameraUiContext';
 import { getViewerControlsContainerClassName } from './viewerControlsLayoutPolicy';
 
 export interface ViewerControlsController {
@@ -105,10 +105,11 @@ export function useViewerControlsController(): ViewerControlsController {
 
   const rigInfo = useMemo(() => buildRigInfo(reconstruction), [reconstruction]);
   const { hasRigData, cameraCount, frameCount } = rigInfo;
-  const hasPinholeCameras = useMemo(
-    () => reconstructionHasPinholeCameras(reconstruction),
-    [reconstruction]
+  const cameraContext = useMemo(
+    () => getCameraUiContext(reconstruction, selectionNode.selectedImageId),
+    [reconstruction, selectionNode.selectedImageId]
   );
+  const { hasPinholeCameras } = cameraContext;
   const initialSplatCameraColorDefaultFileRef = useRef<File | null>(null);
 
   const {
@@ -384,7 +385,7 @@ export function useViewerControlsController(): ViewerControlsController {
       frustumColorMode: camerasNode.colorMode,
       setFrustumColorMode: camerasActions.setColorMode,
       hasRigData,
-      hasPinholeCameras,
+      cameraContext,
       frustumSingleColor: camerasNode.singleColor,
       onFrustumColorPickerChange: handleFrustumColorPickerChange,
       frustumHsl,

@@ -334,7 +334,7 @@ export const useUIStore = create<UIState>()(
       setAutoHideElement: (element, enabled) => set((state) => ({
         autoHideElements: { ...state.autoHideElements, [element]: enabled },
       })),
-      setIsIdle: (isIdle) => set({ isIdle }),
+      setIsIdle: (isIdle) => set((state) => state.isIdle === isIdle ? state : { isIdle }),
       resetView: () => set((state) => ({ viewResetTrigger: state.viewResetTrigger + 1 })),
       setView: (direction) => set((state) => ({
         viewDirection: direction,

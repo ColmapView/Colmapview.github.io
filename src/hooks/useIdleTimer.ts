@@ -46,19 +46,6 @@ export function useIdleTimer() {
     useUIStore.getState().setIsIdle(false);
   }, []);
 
-  // Keep timeout in sync without re-running the effect
-  useEffect(() => {
-    return useUIStore.subscribe((s) => {
-      timeoutRef.current = s.idleHideTimeout;
-      // If disabled (0), immediately show
-      if (s.idleHideTimeout === 0 && containerRef.current) {
-        clearTimeout(timerRef.current);
-        containerRef.current.dataset.idle = 'false';
-        useUIStore.getState().setIsIdle(false);
-      }
-    });
-  }, []);
-
   const startTimer = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -79,6 +66,13 @@ export function useIdleTimer() {
     showFromIdle();
     startTimer();
   }, [showFromIdle, startTimer]);
+
+  // React only to timeout changes. Idle-state writes must not re-enter this listener.
+  useEffect(() => useUIStore.subscribe((state, previous) => {
+    if (state.idleHideTimeout === previous.idleHideTimeout) return;
+    timeoutRef.current = state.idleHideTimeout;
+    resetTimer();
+  }), [resetTimer]);
 
   useEffect(() => {
     const el = containerRef.current;

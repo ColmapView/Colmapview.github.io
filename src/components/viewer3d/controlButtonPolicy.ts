@@ -1,9 +1,9 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 export type ControlButtonTouchAction = 'none' | 'execute-click' | 'open-panel';
 
 export const CONTROL_PANEL_STATUS_BAR_CLEARANCE = 48;
-export const CONTROL_PANEL_HEIGHT_CHANGE_THRESHOLD = 5;
+export const CONTROL_PANEL_VIEWPORT_MARGIN = 8;
 
 export interface ControlButtonTouchActionInput {
   disabled: boolean;
@@ -25,9 +25,12 @@ export interface ControlButtonOutsideTouchInput {
   touchMode: boolean;
 }
 
-export interface ControlPanelRect {
-  bottom: number;
-  height: number;
+export interface ControlPanelPosition {
+  left: number;
+  top: number;
+  opensRight: boolean;
+  maxWidth: number;
+  maxHeight: number;
 }
 
 export function hasControlButtonPanel(
@@ -69,30 +72,31 @@ export function shouldShowControlButtonPanel({
   return hasPanel && isHovered && !disabled && !contextMenuOpen;
 }
 
-export function hasControlPanelHeightChangedSignificantly(
-  currentHeight: number,
-  lastHeight: number,
-  threshold = CONTROL_PANEL_HEIGHT_CHANGE_THRESHOLD
-): boolean {
-  return lastHeight <= 0 || Math.abs(currentHeight - lastHeight) >= threshold;
-}
+export function getControlPanelPosition(
+  anchor: Pick<DOMRect, 'left' | 'right' | 'top'>,
+  panel: { width: number; height: number },
+  viewport: { width: number; height: number; offsetLeft?: number; offsetTop?: number }
+): ControlPanelPosition {
+  const margin = CONTROL_PANEL_VIEWPORT_MARGIN;
+  const maxWidth = Math.max(0, viewport.width - margin * 2);
+  const maxHeight = Math.max(0, viewport.height - CONTROL_PANEL_STATUS_BAR_CLEARANCE - margin * 2);
+  const width = Math.min(panel.width, maxWidth);
+  const height = Math.min(panel.height, maxHeight);
+  const viewportLeft = viewport.offsetLeft ?? 0;
+  const viewportTop = viewport.offsetTop ?? 0;
+  const minLeft = viewportLeft + margin;
+  const right = viewportLeft + viewport.width - margin;
+  const preferredLeft = anchor.left - width;
+  const opensRight = preferredLeft < minLeft && anchor.right + width <= right;
+  const left = opensRight ? anchor.right : preferredLeft;
+  const minTop = viewportTop + margin;
+  const maxTop = viewportTop + viewport.height - CONTROL_PANEL_STATUS_BAR_CLEARANCE - margin - height;
 
-export function getControlPanelAdjustedTop(
-  rect: Pick<ControlPanelRect, 'bottom'>,
-  viewportHeight: number,
-  statusBarClearance = CONTROL_PANEL_STATUS_BAR_CLEARANCE
-): number | null {
-  const maxBottom = viewportHeight - statusBarClearance;
-
-  if (rect.bottom > maxBottom) {
-    return -(rect.bottom - maxBottom);
-  }
-
-  return null;
-}
-
-export function getControlPanelWrapperStyle(
-  adjustedTop: number | null
-): CSSProperties | undefined {
-  return adjustedTop !== null ? { top: adjustedTop } : undefined;
+  return {
+    left: Math.max(minLeft, Math.min(left, right - width)),
+    top: Math.max(minTop, Math.min(anchor.top, maxTop)),
+    opensRight,
+    maxWidth,
+    maxHeight,
+  };
 }

@@ -209,9 +209,9 @@ export const controlPanelStyles = {
   buttonActive: 'viewer-control-selected text-ds-primary',
   buttonHover: 'bg-ds-hover text-ds-primary',
   buttonInactive: 'bg-ds-tertiary text-ds-secondary hover-ds-hover hover-ds-text-primary',
-  // Panel positioning - right-full positions at container's left edge, pr-2 creates gap inside hover area
-  // z-index tooltip keeps hover panels above tool modals, while context menus render above panels.
-  panelWrapper: 'absolute right-full top-0 pr-2 z-tooltip',
+  // Portaled panels stay above the gallery; their shell positions them inside the viewport.
+  // Context menus retain their higher stacking level.
+  panelWrapper: 'fixed z-tooltip',
   // Panel content
   panel: `${panelStyles.surface} ${panelStyles.inset} w-[240px] hover-panel-responsive`,
   panelTitle: `${panelStyles.title} mb-3`,

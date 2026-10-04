@@ -31,9 +31,10 @@ export interface SelectRowProps<T extends string = string> {
   value: T;
   onChange: (value: T) => void;
   options: readonly SelectRowOption<T>[];
+  wrapLabel?: boolean;
 }
 
-export function SelectRow<T extends string>({ label, value, onChange, options }: SelectRowProps<T>) {
+export function SelectRow<T extends string>({ label, value, onChange, options, wrapLabel = false }: SelectRowProps<T>) {
   const id = useId();
   const handleWheel = (e: WheelEvent) => {
     e.preventDefault();
@@ -45,7 +46,7 @@ export function SelectRow<T extends string>({ label, value, onChange, options }:
 
   return (
     <div className={styles.row} onWheel={handleWheel}>
-      <label htmlFor={id} className={styles.label}>{label}</label>
+      <label htmlFor={id} className={styles.label} style={wrapLabel ? { whiteSpace: 'normal' } : undefined}>{label}</label>
       <select
         id={id}
         value={value}

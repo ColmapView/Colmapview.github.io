@@ -3,18 +3,29 @@
  * Extracted from ViewerControls.tsx for better organization.
  */
 
-import { useId, useState, useEffect, memo, useRef, useCallback, type ReactNode } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { buttonStyles, controlPanelStyles, getControlButtonClass, getTooltipProps } from '../../theme';
 import { isEventTargetOutside } from '../../utils/domTargetGuards';
 import {
-  getControlPanelAdjustedTop,
-  getControlPanelWrapperStyle,
+  CONTROL_PANEL_STATUS_BAR_CLEARANCE,
+  CONTROL_PANEL_VIEWPORT_MARGIN,
+  getControlPanelPosition,
   getControlButtonAccessibleLabel,
   getControlButtonTouchAction,
-  hasControlPanelHeightChangedSignificantly,
   hasControlButtonPanel,
   shouldListenForOutsideTouch,
   shouldShowControlButtonPanel,
+  type ControlPanelPosition,
 } from './controlButtonPolicy';
 import { useControlButtonStoreFacade } from './useControlButtonStoreFacade';
 export { SelectRow, ToggleRow } from './controlRows/BasicRows';
@@ -26,6 +37,24 @@ export type { SliderRowProps } from './controlRows/SliderRow';
 
 // Use centralized styles from theme
 const styles = controlPanelStyles;
+const FOCUSABLE_CONTROL_SELECTOR = [
+  'button:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'a[href]',
+  '[tabindex]:not([tabindex="-1"])',
+].join(', ');
+
+function getFocusableControls(parent: ParentNode): HTMLElement[] {
+  return [...parent.querySelectorAll<HTMLElement>(FOCUSABLE_CONTROL_SELECTOR)].filter(element => {
+    const style = getComputedStyle(element);
+    return element.tabIndex >= 0
+      && !element.closest('[hidden], [aria-hidden="true"]')
+      && style.display !== 'none'
+      && style.visibility !== 'hidden';
+  });
+}
 
 // Panel type for control buttons
 export type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'share' | 'publish' | 'export' | 'transform' | 'align' | 'gallery' | 'rig' | 'settings' | null;
@@ -34,71 +63,99 @@ export interface PanelWrapperProps {
   id?: string;
   title: string;
   children: ReactNode;
+  anchorRef: RefObject<HTMLElement | null>;
+  onReady?: (panel: HTMLDivElement) => void;
 }
 
-export const PanelWrapper = memo(function PanelWrapper({ id, title, children }: PanelWrapperProps) {
+export const PanelWrapper = memo(function PanelWrapper({ id, title, children, anchorRef, onReady }: PanelWrapperProps) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const [adjustedTop, setAdjustedTop] = useState<number | null>(null);
-  const lastHeightRef = useRef<number>(0);
+  const [position, setPosition] = useState<ControlPanelPosition | null>(null);
 
+  // Ancestor refs attach after child layout effects, so measure after the full commit.
   useEffect(() => {
     const panel = panelRef.current;
-    if (!panel) return;
+    const anchor = anchorRef.current;
+    if (!panel || !anchor) return;
 
     let animationFrame: number | null = null;
-    const measure = (heightHint?: number, force = false) => {
-      if (animationFrame !== null) {
-        cancelAnimationFrame(animationFrame);
-      }
-
+    const visualViewport = window.visualViewport;
+    const measure = () => {
+      const next = getControlPanelPosition(anchor.getBoundingClientRect(), panel.getBoundingClientRect(), {
+        width: visualViewport?.width ?? window.innerWidth,
+        height: visualViewport?.height ?? window.innerHeight,
+        offsetLeft: visualViewport?.offsetLeft,
+        offsetTop: visualViewport?.offsetTop,
+      });
+      setPosition(current => current?.left === next.left
+        && current.top === next.top
+        && current.opensRight === next.opensRight
+        && current.maxWidth === next.maxWidth
+        && current.maxHeight === next.maxHeight
+        ? current : next);
+    };
+    const scheduleMeasure = () => {
+      if (animationFrame !== null) cancelAnimationFrame(animationFrame);
       animationFrame = requestAnimationFrame(() => {
         animationFrame = null;
-        const rect = panel.getBoundingClientRect();
-        const height = heightHint ?? rect.height;
-        if (!force && !hasControlPanelHeightChangedSignificantly(height, lastHeightRef.current)) {
-          return;
-        }
-
-        lastHeightRef.current = height;
-        setAdjustedTop(getControlPanelAdjustedTop(rect, window.innerHeight));
+        measure();
       });
     };
-
-    measure(undefined, true);
+    measure();
 
     const resizeObserver = typeof ResizeObserver === 'undefined'
       ? null
-      : new ResizeObserver((entries) => {
-        measure(entries[0]?.contentRect.height);
-      });
+      : new ResizeObserver(scheduleMeasure);
     resizeObserver?.observe(panel);
-
-    const handleWindowResize = () => measure(undefined, true);
-    window.addEventListener('resize', handleWindowResize);
+    resizeObserver?.observe(anchor);
+    // Gallery resizing moves the toolbar without changing the panel's own size.
+    const scene = anchor.closest('[data-testid="scene-3d"]');
+    const toolbar = anchor.closest('[data-testid="viewer-controls"]');
+    if (scene) resizeObserver?.observe(scene);
+    if (toolbar) resizeObserver?.observe(toolbar);
+    window.addEventListener('resize', scheduleMeasure);
+    visualViewport?.addEventListener('resize', scheduleMeasure);
+    visualViewport?.addEventListener('scroll', scheduleMeasure);
 
     return () => {
       if (animationFrame !== null) {
         cancelAnimationFrame(animationFrame);
       }
       resizeObserver?.disconnect();
-      window.removeEventListener('resize', handleWindowResize);
+      window.removeEventListener('resize', scheduleMeasure);
+      visualViewport?.removeEventListener('resize', scheduleMeasure);
+      visualViewport?.removeEventListener('scroll', scheduleMeasure);
     };
-  }, []);
+  }, [anchorRef]);
 
-  return (
+  useEffect(() => {
+    if (position && panelRef.current) onReady?.(panelRef.current);
+  }, [position, onReady]);
+
+  return createPortal(
     <div
       id={id}
       role="region"
       aria-label={title}
+      data-idle-pause="true"
       ref={panelRef}
       className={styles.panelWrapper}
-      style={getControlPanelWrapperStyle(adjustedTop)}
+      style={{
+        left: position?.left,
+        top: position?.top,
+        visibility: position ? undefined : 'hidden',
+        maxWidth: position?.maxWidth ?? `calc(100vw - ${CONTROL_PANEL_VIEWPORT_MARGIN * 2}px)`,
+        maxHeight: position?.maxHeight ?? `calc(100dvh - ${CONTROL_PANEL_STATUS_BAR_CLEARANCE + CONTROL_PANEL_VIEWPORT_MARGIN * 2}px)`,
+        // Keep the gap inside the hover target so the pointer can cross to the popup.
+        paddingLeft: position?.opensRight ? CONTROL_PANEL_VIEWPORT_MARGIN : 0,
+        paddingRight: position?.opensRight ? 0 : CONTROL_PANEL_VIEWPORT_MARGIN,
+      }}
     >
-      <div className={styles.panel}>
+      <div className={styles.panel} style={{ maxWidth: '100%', maxHeight: 'inherit', overflowY: 'auto' }}>
         <div className={styles.panelTitle}>{title}</div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 });
 
@@ -133,6 +190,7 @@ export const ControlButton = memo(function ControlButton({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const restoringFocus = useRef(false);
   const keyboardFocus = useRef(false);
+  const pendingPanelFocus = useRef(false);
   const hasPanel = hasControlButtonPanel(panelTitle, children);
   const {
     touchMode,
@@ -141,11 +199,25 @@ export const ControlButton = memo(function ControlButton({
   const isHovered = activePanel === panelId && !contextMenuOpen;
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const handlePanelReady = useCallback((panel: HTMLElement) => {
+    if (!pendingPanelFocus.current) return;
+    pendingPanelFocus.current = false;
+    getFocusableControls(panel)[0]?.focus();
+  }, []);
+
+  const focusPanel = useCallback(() => {
+    pendingPanelFocus.current = true;
+    const panel = document.getElementById(contentId);
+    // New panels remain hidden until their measured position is committed.
+    if (panel && getComputedStyle(panel).visibility !== 'hidden') handlePanelReady(panel);
+  }, [contentId, handlePanelReady]);
+
   useEffect(() => {
+    if (!isHovered) pendingPanelFocus.current = false;
     if (contextMenuOpen && activePanel === panelId) {
       setActivePanel(null);
     }
-  }, [activePanel, contextMenuOpen, panelId, setActivePanel]);
+  }, [activePanel, contextMenuOpen, isHovered, panelId, setActivePanel]);
 
   // In touch mode: first tap shows panel, second tap executes action
   const handleTouchClick = useCallback(() => {
@@ -167,14 +239,14 @@ export const ControlButton = memo(function ControlButton({
     })) return;
 
     const handleOutsideTouch = (e: TouchEvent) => {
-      if (isEventTargetOutside(containerRef.current, e.target)) {
+      if (isEventTargetOutside(containerRef.current, e.target) && isEventTargetOutside(document.getElementById(contentId), e.target)) {
         setActivePanel(null);
       }
     };
 
     document.addEventListener('touchstart', handleOutsideTouch, { passive: true });
     return () => document.removeEventListener('touchstart', handleOutsideTouch);
-  }, [contextMenuOpen, touchMode, isHovered, hasPanel, setActivePanel]);
+  }, [contextMenuOpen, touchMode, isHovered, hasPanel, setActivePanel, contentId]);
 
   const accessibleLabel = getControlButtonAccessibleLabel(tooltip, disabled);
 
@@ -194,14 +266,18 @@ export const ControlButton = memo(function ControlButton({
         }
       }}
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) {
+        if (!event.currentTarget.contains(event.relatedTarget) && !document.getElementById(contentId)?.contains(event.relatedTarget)) {
           keyboardFocus.current = false;
+          pendingPanelFocus.current = false;
           setActivePanel(null);
         }
       }}
       onKeyDown={(event) => {
+        // Popup controls own their arrow keys; gallery navigation listens on window.
+        if (event.target !== triggerRef.current && event.key.startsWith('Arrow')) event.stopPropagation();
         if (event.key === 'Escape' && isHovered) {
           event.stopPropagation();
+          pendingPanelFocus.current = false;
           restoringFocus.current = true;
           triggerRef.current?.focus();
           restoringFocus.current = false;
@@ -209,8 +285,31 @@ export const ControlButton = memo(function ControlButton({
           setActivePanel(null);
         } else if (event.key === 'ArrowDown' && event.target === triggerRef.current && hasPanel && !disabled && !contextMenuOpen) {
           event.preventDefault();
+          event.stopPropagation();
           keyboardFocus.current = true;
           setActivePanel(panelId);
+          focusPanel();
+        } else if (event.key === 'Tab' && isHovered && hasPanel) {
+          const panel = document.getElementById(contentId);
+          if (!panel) return;
+          const controls = getFocusableControls(panel);
+          if (event.target === triggerRef.current && !event.shiftKey && controls.length > 0) {
+            event.preventDefault();
+            keyboardFocus.current = true;
+            focusPanel();
+          } else if (event.target === controls[0] && event.shiftKey) {
+            event.preventDefault();
+            triggerRef.current?.focus();
+          } else if (event.target === controls[controls.length - 1] && !event.shiftKey) {
+            // A portal sits at the end of the document; resume the trigger's tab order.
+            const outsideControls = getFocusableControls(document).filter(element => !panel.contains(element));
+            const next = outsideControls[outsideControls.indexOf(triggerRef.current!) + 1];
+            setActivePanel(null);
+            if (next) {
+              event.preventDefault();
+              next.focus();
+            }
+          }
         }
       }}
     >
@@ -233,7 +332,7 @@ export const ControlButton = memo(function ControlButton({
         isHovered,
         disabled,
       }) && (
-        <PanelWrapper id={contentId} title={panelTitle!}>
+        <PanelWrapper id={contentId} title={panelTitle!} anchorRef={containerRef} onReady={handlePanelReady}>
           {children}
         </PanelWrapper>
       )}

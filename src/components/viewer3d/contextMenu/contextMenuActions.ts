@@ -45,7 +45,7 @@ export const CONTEXT_MENU_ACTIONS: ActionDef[] = [
   { id: 'cycleSelectionColor', label: 'Selection Color', section: 'cameras', icon: SelectionColorIcon },
   { id: 'deselectAll', label: 'Deselect All', section: 'cameras', icon: DeselectAllIcon },
   { id: 'toggleImagePlanes', label: 'Image Planes', section: 'cameras', icon: ImagePlanesIcon },
-  { id: 'toggleUndistort', label: 'Undistort (U)', section: 'cameras', icon: UndistortIcon },
+  { id: 'toggleUndistort', label: 'Image preview (U)', section: 'cameras', icon: UndistortIcon },
   { id: 'toggleGizmo', label: 'Transform Gizmo', section: 'transform', hotkey: HOTKEYS.toggleGizmo.keys, icon: createElement(TransformIcon) },
   { id: 'centerAtOrigin', label: 'Center at Origin', section: 'transform', icon: CenterOriginIcon },
   { id: 'onePointOrigin', label: '1-Point Origin', section: 'transform', icon: OnePointOriginIcon },

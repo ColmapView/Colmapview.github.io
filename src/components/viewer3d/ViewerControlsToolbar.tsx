@@ -83,7 +83,7 @@ export function ViewerControlsToolbar({ controller }: ViewerControlsToolbarProps
 
         {shouldShowCameraDependentPanels(cameraDisplayPanel.showCameras) && (
           <>
-            {shouldShowMatchesPanel(cameraDisplayPanel.showCameras, cameraDisplayPanel.cameraDisplayMode, cameraDisplayPanel.hasPinholeCameras) && (
+            {shouldShowMatchesPanel(cameraDisplayPanel.showCameras, cameraDisplayPanel.cameraDisplayMode, cameraDisplayPanel.cameraContext) && (
               <MatchesPanel {...matchesPanel} />
             )}
 

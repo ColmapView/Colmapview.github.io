@@ -1,5 +1,5 @@
-import { render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   useCameraStore,
   useImageMetricsStore,
@@ -12,6 +12,10 @@ import {
 import { ViewerControlsToolbar } from './ViewerControlsToolbar';
 import { useViewerControlsController } from './useViewerControlsController';
 import { TOOLBAR_GROUP_LABELS } from './viewerControlsLayoutPolicy';
+import { CameraModelId } from '../../types/colmap';
+import { buildCamera, buildImage, buildReconstruction } from '../../test/builders';
+
+afterEach(cleanup);
 
 /**
  * Contract: the toolbar's four visual clusters are also announced clusters.
@@ -63,5 +67,22 @@ describe('ViewerControlsToolbar cluster semantics', () => {
     for (const divider of toolbar.querySelectorAll('div[aria-hidden="true"]')) {
       expect(divider.parentElement).toBe(toolbar);
     }
+  });
+
+  it('updates Matches availability as the selected camera family changes in a mixed Image Plane session', () => {
+    useReconstructionStore.setState({ reconstruction: buildReconstruction({
+      cameras: [buildCamera(), buildCamera({ cameraId: 2, modelId: CameraModelId.EQUIRECTANGULAR })],
+      images: [buildImage(), buildImage({ imageId: 2, cameraId: 2 })],
+    }) });
+    useCameraStore.setState({ cameraDisplayMode: 'imageplane', showCameras: true, selectedImageId: null });
+    render(<ToolbarHarness />);
+    const matchesButton = () => screen.queryByRole('button', { name: /Matches.*\(M\)/ });
+    expect(matchesButton()).toBeInTheDocument();
+    act(() => useCameraStore.getState().setSelectedImageId(1));
+    expect(matchesButton()).toBeNull();
+    act(() => useCameraStore.getState().setSelectedImageId(2));
+    expect(matchesButton()).toBeInTheDocument();
+    act(() => useCameraStore.getState().setShowCameras(false));
+    expect(matchesButton()).toBeNull();
   });
 });

@@ -1,4 +1,5 @@
 import type { CameraDisplayMode } from '../../store/types';
+import { cameraDisplaySupportsMatches, type CameraUiContext } from './cameraUiContext';
 
 export interface ViewerControlsContainerClassOptions {
   baseClassName: string;
@@ -42,10 +43,7 @@ export function shouldShowCameraDependentPanels(showCameras: boolean): boolean {
 export function shouldShowMatchesPanel(
   showCameras: boolean,
   cameraDisplayMode: CameraDisplayMode,
-  hasPinholeCameras: boolean
+  cameraContext: CameraUiContext
 ): boolean {
-  // The 'imageplane' mode hides Matches only when image planes actually exist. For a
-  // spherical-only dataset (no pinhole cameras) image planes are meaningless, so a
-  // persisted 'imageplane' mode must not trap the Matches panel hidden.
-  return showCameras && (cameraDisplayMode !== 'imageplane' || !hasPinholeCameras);
+  return showCameras && cameraDisplaySupportsMatches(cameraDisplayMode, cameraContext);
 }

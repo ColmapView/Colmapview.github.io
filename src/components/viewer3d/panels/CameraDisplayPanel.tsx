@@ -6,6 +6,7 @@ import type {
 import { HoverIcon } from '../../../icons';
 import { controlPanelStyles } from '../../../theme';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
+import type { CameraUiContext } from '../cameraUiContext';
 import {
   ColorPickerRow,
   ControlButton,
@@ -25,6 +26,7 @@ import {
   CAMERA_DISPLAY_MODE_OPTIONS,
   CAMERA_SCALE_FACTOR_OPTIONS,
   getCameraDisplayHint,
+  getCameraPreviewLabel,
   getFrustumColorModeOptions,
 } from './cameraDisplayPanelViewModel';
 
@@ -40,12 +42,7 @@ export interface CameraDisplayPanelProps {
   frustumColorMode: FrustumColorMode;
   setFrustumColorMode: (mode: FrustumColorMode) => void;
   hasRigData: boolean;
-  /**
-   * Whether any non-spherical (pinhole-family) camera is present. When false the dataset
-   * is spherical-only, so the Mode selector and Selection α slider (both pinhole-only
-   * no-ops for equirectangular cameras) are hidden.
-   */
-  hasPinholeCameras: boolean;
+  cameraContext: CameraUiContext;
   frustumSingleColor: string;
   onFrustumColorPickerChange: (hex: string) => void;
   frustumHsl: HslColor;
@@ -82,7 +79,7 @@ export function CameraDisplayPanel({
   frustumColorMode,
   setFrustumColorMode,
   hasRigData,
-  hasPinholeCameras,
+  cameraContext,
   frustumSingleColor,
   onFrustumColorPickerChange,
   frustumHsl,
@@ -108,12 +105,13 @@ export function CameraDisplayPanel({
   splatMetricVisualizationsAvailable,
   onCycleCameraDisplayMode,
 }: CameraDisplayPanelProps) {
-  const buttonState = getCameraDisplayButtonState(showCameras, cameraDisplayMode);
+  const buttonState = getCameraDisplayButtonState(showCameras, cameraDisplayMode, cameraContext);
   const frustumColorModeOptions = getFrustumColorModeOptions({
     hasRigData,
     hasSplatPsnr: splatMetricVisualizationsAvailable,
   });
-  const hint = getCameraDisplayHint(cameraDisplayMode);
+  const hint = getCameraDisplayHint(cameraDisplayMode, cameraContext);
+  const previewLabel = getCameraPreviewLabel(cameraContext);
 
   return (
     <ControlButton
@@ -133,9 +131,10 @@ export function CameraDisplayPanel({
     >
       <div className={styles.panelContent}>
         <ToggleRow label="Show Cameras" checked={showCameras} onChange={setShowCameras} />
-        {hasPinholeCameras && (
+        {cameraContext.hasPinholeCameras && (
           <SelectRow
-            label="Mode"
+            label={cameraContext.hasSphericalCameras ? 'Regular camera display' : 'Mode'}
+            wrapLabel={cameraContext.hasSphericalCameras}
             value={cameraDisplayMode}
             onChange={setCameraDisplayMode}
             options={CAMERA_DISPLAY_MODE_OPTIONS}
@@ -236,9 +235,8 @@ export function CameraDisplayPanel({
               formatValue={(v) => v.toFixed(2)}
             />
             <label className={styles.row}>
-              <span className={styles.label}>Undistort (U)</span>
-              <span className="flex-1" />
-              <ToggleSwitch ariaLabel="Undistort" checked={undistortionEnabled} onChange={setUndistortionEnabled} />
+              <span className="text-ds-secondary text-sm flex-1">{previewLabel}</span>
+              <ToggleSwitch ariaLabel={previewLabel} checked={undistortionEnabled} onChange={setUndistortionEnabled} />
             </label>
             <label className={styles.row}>
               <span className={styles.label}>Auto FOV</span>
@@ -252,6 +250,9 @@ export function CameraDisplayPanel({
           {hint.lines.map((line) => (
             <div key={`${hint.title}-${line}`}>{line}</div>
           ))}
+          {cameraContext.hasPinholeCameras && cameraContext.hasSphericalCameras && cameraContext.selectedCameraFamily === null && (
+            <div className="mt-2">U undistorts regular images or steps inside a panorama.</div>
+          )}
         </div>
       </div>
     </ControlButton>

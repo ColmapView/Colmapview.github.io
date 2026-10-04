@@ -3,6 +3,7 @@ import type {
   CameraScaleFactor,
   FrustumColorMode,
 } from '../../../store/types';
+import type { CameraUiContext } from '../cameraUiContext';
 
 interface SelectOption<T extends string> {
   value: T;
@@ -11,7 +12,7 @@ interface SelectOption<T extends string> {
 
 export interface CameraDisplayHint {
   title: string;
-  lines: [string, string];
+  lines: string[];
 }
 
 export const CAMERA_DISPLAY_MODE_OPTIONS: SelectOption<CameraDisplayMode>[] = [
@@ -80,6 +81,24 @@ export function getFrustumColorModeOptions({
   ];
 }
 
-export function getCameraDisplayHint(mode: CameraDisplayMode | string): CameraDisplayHint {
-  return CAMERA_DISPLAY_HINTS[getSupportedCameraDisplayMode(mode) ?? 'frustum'];
+export function getCameraDisplayHint(mode: CameraDisplayMode | string, context?: CameraUiContext): CameraDisplayHint {
+  const hint = CAMERA_DISPLAY_HINTS[getSupportedCameraDisplayMode(mode) ?? 'frustum'];
+  if (!context?.hasSphericalCameras) return hint;
+  if (!context.hasPinholeCameras) {
+    return {
+      title: 'Panoramas:',
+      lines: ['Spherical camera grids.', 'Select a camera to view its panorama.'],
+    };
+  }
+  return { ...hint, lines: [...hint.lines, 'Applies to regular cameras.', 'Panoramas stay spherical.'] };
+}
+
+export function getCameraPreviewLabel(context: CameraUiContext): string {
+  if (context.selectedCameraFamily === 'spherical' || !context.hasPinholeCameras) {
+    return 'Panorama view (U)';
+  }
+  if (context.selectedCameraFamily !== null || !context.hasSphericalCameras) {
+    return 'Lens undistortion (U)';
+  }
+  return 'Image preview (U)';
 }

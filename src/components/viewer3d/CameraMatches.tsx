@@ -81,7 +81,7 @@ export function CameraMatches() {
     ));
   });
 
-  if (!showMatches || cameraDisplayMode === 'imageplane' || !fatLines) return null;
+  if (!showMatches || !fatLines) return null;
 
   return <primitive object={fatLines.object} />;
 }

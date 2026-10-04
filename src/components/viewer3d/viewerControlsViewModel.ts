@@ -9,7 +9,7 @@ import {
   type SelectionColorMode,
 } from '../../store/types';
 import { hexToHsl, hslToHex } from '../../utils/colorUtils';
-import { cameraModelHasPinholeIntrinsics } from '../../utils/cameraModelRegistry';
+import { getCameraUiContext, type CameraUiContext } from './cameraUiContext';
 import { groupRigImagesByFrame } from '../../utils/rigFrameGroups';
 
 export interface HslColor {
@@ -179,23 +179,13 @@ export function buildRigInfo(reconstruction: Reconstruction | null): RigInfo {
 }
 
 /**
- * Whether the reconstruction contains at least one non-spherical (pinhole-family) camera.
+ * Whether the reconstruction contains at least one regular or fisheye camera.
  * A reconstruction with no cameras — or no reconstruction at all — is treated as having
  * pinhole cameras so the default panel controls stay visible; only a genuinely
  * spherical-only dataset returns false.
  */
 export function reconstructionHasPinholeCameras(reconstruction: Reconstruction | null): boolean {
-  if (!reconstruction || reconstruction.cameras.size === 0) {
-    return true;
-  }
-
-  for (const camera of reconstruction.cameras.values()) {
-    if (cameraModelHasPinholeIntrinsics(camera.modelId)) {
-      return true;
-    }
-  }
-
-  return false;
+  return getCameraUiContext(reconstruction).hasPinholeCameras;
 }
 
 export function syncHslWithHex(currentHsl: HslColor, nextHex: string): HslColor {
@@ -310,8 +300,12 @@ export function getPointCloudButtonState(
 
 export function getCameraDisplayButtonState(
   visible: boolean,
-  mode: CameraDisplayMode
+  mode: CameraDisplayMode,
+  context?: CameraUiContext
 ): ViewerControlButtonState<CameraDisplayButtonIcon> {
+  if (visible && context?.hasSphericalCameras && !context.hasPinholeCameras) {
+    return { icon: 'frustum', label: '360°', tooltip: 'Panorama cameras (F)', isActive: true };
+  }
   return getVisibleModeButtonState(CAMERA_DISPLAY_MODE_CONTROL, visible, mode);
 }
 

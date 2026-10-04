@@ -1,9 +1,10 @@
 import type { CameraDisplayMode } from '../../store/types';
 import type { ImageId, Reconstruction } from '../../types/colmap';
 import { getImageWorldPosition } from '../../utils/colmapTransforms';
+import { cameraDisplaySupportsMatches, getCameraUiContext } from './cameraUiContext';
 
 export interface CameraMatchLinePositionsOptions {
-  reconstruction: Pick<Reconstruction, 'images' | 'connectedImagesIndex'> | null;
+  reconstruction: Pick<Reconstruction, 'cameras' | 'images' | 'connectedImagesIndex'> | null;
   selectedImageId: ImageId | null;
   showMatches: boolean;
   cameraDisplayMode: CameraDisplayMode;
@@ -15,7 +16,10 @@ export function buildCameraMatchLinePositions({
   showMatches,
   cameraDisplayMode,
 }: CameraMatchLinePositionsOptions): Float32Array | null {
-  if (!reconstruction || selectedImageId === null || !showMatches || cameraDisplayMode === 'imageplane') {
+  if (!reconstruction || selectedImageId === null || !showMatches) {
+    return null;
+  }
+  if (!cameraDisplaySupportsMatches(cameraDisplayMode, getCameraUiContext(reconstruction, selectedImageId))) {
     return null;
   }
 
