@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.4] - 2026-10-04
+
+### Fixed
+
+- Keep image preview labels and match controls consistent with the selected camera in reconstructions containing both regular and spherical cameras.
+- Clarify regular-camera display settings and show the correct panorama controls for spherical-only reconstructions, including saved display preferences.
+- Keep viewer control popups visible and correctly anchored when the scene or visible viewport changes, including mobile keyboard resizing.
+- Restore keyboard focus and navigation, hover behavior, and touch dismissal for viewer control popups.
+- Prevent repeated idle-state updates.
+
 ## [0.15.3] - 2026-09-29
 
 ### Changed
@@ -613,7 +623,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript for type safety
 - Deno native test runner for testing
 
-[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.3...HEAD
+[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.4...HEAD
+[0.15.4]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.3...v0.15.4
 [0.15.3]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.2...v0.15.3
 [0.15.2]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.1...v0.15.2
 [0.15.1]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.0...v0.15.1
