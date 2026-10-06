@@ -78,11 +78,12 @@ export async function loadManifestSource(
   const optionalSettings = manifest.viewerStatePath === undefined
     ? startOptionalDatasetViewerSettings(manifest.baseUrl, fetchImpl, false, deps.signal)
     : null;
-  const explicitSettingsController = new AbortController();
-  const explicitSettingsSignal = deps.signal
-    ? anySignal([deps.signal, explicitSettingsController.signal]) : explicitSettingsController.signal;
-  const explicitSettingsTask = optionalSettings ? null
-    : fetchPublishedViewerState(manifest, (url, init) => fetchImpl(url, { ...init, signal: explicitSettingsSignal }))
+  // Only an explicitly referenced state document needs a request (and signal) of its own.
+  const explicitSettingsController = optionalSettings ? null : new AbortController();
+  const explicitSettingsSignal = explicitSettingsController && (deps.signal
+    ? anySignal([deps.signal, explicitSettingsController.signal]) : explicitSettingsController.signal);
+  const explicitSettingsTask = explicitSettingsSignal
+    && fetchPublishedViewerState(manifest, (url, init) => fetchImpl(url, { ...init, signal: explicitSettingsSignal }))
       .then(state => ({ state }), error => ({ error }));
   let optionalSettingsTimedOut = false;
   const getViewerState = async () => {
@@ -155,6 +156,6 @@ export async function loadManifestSource(
   return true;
   } finally {
     optionalSettings?.cancel();
-    explicitSettingsController.abort();
+    explicitSettingsController?.abort();
   }
 }
