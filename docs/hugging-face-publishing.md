@@ -2,7 +2,7 @@
 
 ColmapView can publish the currently loaded COLMAP reconstruction, original images, available masks, and splats to a new public dataset in the connected user's personal Hugging Face account. The resulting viewer link opens without a Hugging Face login and refers to fixed dataset revisions.
 
-**Status:** implemented behind a build flag. Real localhost sign-in, public repository creation, a 168 MB PLY upload, dataset-card rendering, and anonymous reopening passed against the live Hugging Face service on 2026-09-28. Development and production publishing remain disabled in GitHub Actions pending deployment. Local publishing currently generates localhost viewer links; public sharing still needs a compatible hosted viewer and a public publication base URL.
+**Status:** implemented behind a build flag. Real localhost sign-in, public repository creation, a 168 MB PLY upload, dataset-card rendering, and anonymous reopening passed against the live Hugging Face service on 2026-09-28. Publishing is enabled on colmapview.github.io since v0.15.1 (2026-09-29): release builds use the production settings and `/dev/` the development settings below. Local publishing currently generates localhost viewer links; public sharing still needs a compatible hosted viewer and a public publication base URL.
 
 ## User workflow
 
@@ -84,7 +84,7 @@ On 2026-09-27, the maintainer registered [ColmapView](https://huggingface.co/set
 
 On 2026-10-04, the app's allowed scopes were extended with `read-repos`. A read-only `openid profile read-repos` session was verified against a private dataset in the browser.
 
-The same public client ID is saved in `HF_OAUTH_CLIENT_ID` and `HF_DEV_OAUTH_CLIENT_ID`. Both deployment callback variables are configured; `HF_PUBLISH_ENABLED` and `HF_DEV_PUBLISH_ENABLED` remain `false`. The ignored `.env.local` enables the local integration with the registered `localhost:5173` callback.
+The same public client ID is saved in `HF_OAUTH_CLIENT_ID` and `HF_DEV_OAUTH_CLIENT_ID`. Both deployment callback variables are configured. `HF_PUBLISH_ENABLED` and `HF_DEV_PUBLISH_ENABLED` were set to `true` on 2026-09-29 (v0.15.1). `HF_AUTH_ENABLED` and `HF_DEV_AUTH_ENABLED` are unset because publishing already enables sign-in. The ignored `.env.local` enables the local integration with the registered `localhost:5173` callback.
 
 Real sign-in passed in Chrome on Windows using an isolated Vite server at `http://localhost:5186/`: the viewer opened the Hugging Face consent screen, requested no organization access, completed PKCE through the static callback, and displayed **Connected as opsiclear-admin** while retaining the loaded synthetic reconstruction. Hugging Face accepts a different port for an otherwise matching HTTP loopback callback. The test server overrides the local callback to port 5186; the saved development default remains 5173.
 
@@ -124,14 +124,16 @@ Configure these **repository variables** in GitHub Actions. They are public buil
 
 | Variable | Value |
 | --- | --- |
-| `HF_PUBLISH_ENABLED` | `false` until release rollout is approved; then `true` |
+| `HF_PUBLISH_ENABLED` | `true` offers publication in release builds (`/latest/` and versioned directories); `false` withdraws it |
+| `HF_AUTH_ENABLED` | Optional `true` for read-only private viewing in release builds while publishing is `false` |
 | `HF_OAUTH_CLIENT_ID` | Registered production public client ID |
 | `HF_OAUTH_REDIRECT_URI` | Production `/latest/hf-callback.html` URL |
-| `HF_DEV_PUBLISH_ENABLED` | `true` only when the development deployment is ready for testing |
+| `HF_DEV_PUBLISH_ENABLED` | `true` offers publication in `/dev/` builds from `main` or a manual branch run |
+| `HF_DEV_AUTH_ENABLED` | Optional `true` for read-only private viewing in `/dev/` while development publishing is `false` |
 | `HF_DEV_OAUTH_CLIENT_ID` | Public client ID registered for the development callback |
 | `HF_DEV_OAUTH_REDIRECT_URI` | Development `/dev/hf-callback.html` URL |
 
-The deployment workflow selects production settings for release tags and development settings for branch builds. Versioned releases and `/latest/` use the same production configuration. Settings take effect on the next build. Before enabling a release, bump the application version through the normal release process so generated links target a release containing the new manifest-state loader.
+The deployment workflow selects production settings for release tags and development settings for branch builds: a tag build never reads `HF_DEV_*`, and a branch build never reads the production variables. Versioned releases and `/latest/` use the same production configuration. Google Drive stays disabled in every GitHub build. The custom host uses separate `CUSTOM_HF_*` settings ([dual hosting](dual-hosting.md)), and isolated previews disable all providers. Settings take effect on the next build. Before enabling a release, bump the application version through the normal release process so generated links target a release containing the new manifest-state loader.
 
 ### Live acceptance before enabling publication
 
@@ -143,7 +145,7 @@ Use an authorized test account and a disposable, explicitly public dataset:
 4. Exercise cancellation, a temporary network failure, reconnection to the same account, and retry. Check that committed data are retained and no unrelated repository is overwritten.
 5. Record browser/platform results and export/upload memory on representative local and archive datasets. Test each browser to be advertised before enabling it publicly.
 
-Real OAuth consent, deployed callback headers, storage CORS, account permissions, quotas, and real large-file transport are not proven by the mock suite. Keep `HF_PUBLISH_ENABLED=false` until this live check passes. Disabling new publication does not disable the manifest loader or invalidate existing published links; those links still depend on the owner keeping the dataset accessible.
+Real OAuth consent, deployed callback headers, storage CORS, account permissions, quotas, and real large-file transport are not proven by the mock suite. Publication was enabled on 2026-09-29; if it is withdrawn, keep `HF_PUBLISH_ENABLED=false` until this live check passes again. Disabling new publication does not disable the manifest loader or invalidate existing published links; those links still depend on the owner keeping the dataset accessible.
 
 ## Published package
 

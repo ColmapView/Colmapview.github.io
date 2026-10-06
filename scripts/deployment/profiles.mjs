@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
 export const CUSTOM_ORIGIN = 'https://colmapview.opsiclear.com';
+export const GITHUB_ORIGIN = 'https://colmapview.github.io';
 export const WRANGLER_VERSION = '4.147.0';
 export const FIXTURE_GOOGLE_CONFIG = {
   CUSTOM_GOOGLE_DRIVE_API_KEY: 'colmapview_artifact_fixture_key',
@@ -57,6 +58,18 @@ export function validatePreviewConfiguration(env) {
   const preview = requireValue(env, 'CLOUDFLARE_PREVIEW_PROJECT', /^[a-z0-9][a-z0-9-]{0,57}[a-z0-9]$/);
   const production = requireValue(env, 'CLOUDFLARE_PAGES_PROJECT', /^[a-z0-9][a-z0-9-]{0,57}[a-z0-9]$/);
   if (preview === production) throw new Error('Preview must use a separate Pages project.');
+}
+
+/** GitHub Pages builds: release tags use the stable /latest/ callback, branch builds the /dev/ callback. */
+export function validateGithubHfConfiguration(env, isRelease) {
+  const publish = strictFlag(env.VITE_HF_PUBLISH_ENABLED, 'VITE_HF_PUBLISH_ENABLED');
+  const auth = strictFlag(env.VITE_HF_AUTH_ENABLED, 'VITE_HF_AUTH_ENABLED');
+  if (!publish && !auth) return { hf: 'disabled' };
+  const prefix = isRelease ? 'HF' : 'HF_DEV';
+  if (!/^[A-Za-z0-9_-]+$/.test(env.VITE_HF_OAUTH_CLIENT_ID?.trim() ?? '')) throw new Error(`${prefix}_OAUTH_CLIENT_ID is missing or invalid.`);
+  const callback = `${GITHUB_ORIGIN}/${isRelease ? 'latest' : 'dev'}/hf-callback.html`;
+  if (env.VITE_HF_OAUTH_REDIRECT_URI !== callback) throw new Error(`${prefix}_OAUTH_REDIRECT_URI must be ${callback}.`);
+  return { hf: publish ? 'publish' : 'read-only' };
 }
 
 /** Explicit empty values prevent ignored local .env files from leaking into a hosted build. */

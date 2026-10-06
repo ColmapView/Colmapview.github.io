@@ -38,11 +38,13 @@ jobs:
       CUSTOM_HF_PUBLISH_ENABLED: ${{ vars.CUSTOM_HF_PUBLISH_ENABLED }}
       CUSTOM_HF_OAUTH_CLIENT_ID: ${{ vars.CUSTOM_HF_OAUTH_CLIENT_ID }}
       CUSTOM_HF_OAUTH_REDIRECT_URI: ${{ vars.CUSTOM_HF_OAUTH_REDIRECT_URI }}
-      # GitHub production HF registration stays distinct; branch previews have no provider auth.
-      VITE_HF_PUBLISH_ENABLED: ${{ github.ref_type == 'tag' && vars.HF_PUBLISH_ENABLED == 'true' }}
-      VITE_HF_AUTH_ENABLED: ${{ github.ref_type == 'tag' && vars.HF_AUTH_ENABLED == 'true' }}
-      VITE_HF_OAUTH_CLIENT_ID: ${{ github.ref_type == 'tag' && vars.HF_OAUTH_CLIENT_ID || '' }}
-      VITE_HF_OAUTH_REDIRECT_URI: ${{ github.ref_type == 'tag' && vars.HF_OAUTH_REDIRECT_URI || '' }}
+      # GitHub Pages HF: release tags read HF_* (stable /latest/ callback); branch runs read HF_DEV_* (/dev/ callback).
+      # Each side is guarded by ref_type, so an unset value becomes '' instead of borrowing the other channel's.
+      # Custom builds replace all VITE_HF_* with CUSTOM_HF_*, and isolated previews clear them (profiles.mjs).
+      VITE_HF_PUBLISH_ENABLED: ${{ github.ref_type == 'tag' && vars.HF_PUBLISH_ENABLED == 'true' || github.ref_type != 'tag' && vars.HF_DEV_PUBLISH_ENABLED == 'true' }}
+      VITE_HF_AUTH_ENABLED: ${{ github.ref_type == 'tag' && vars.HF_AUTH_ENABLED == 'true' || github.ref_type != 'tag' && vars.HF_DEV_AUTH_ENABLED == 'true' }}
+      VITE_HF_OAUTH_CLIENT_ID: ${{ github.ref_type == 'tag' && vars.HF_OAUTH_CLIENT_ID || github.ref_type != 'tag' && vars.HF_DEV_OAUTH_CLIENT_ID || '' }}
+      VITE_HF_OAUTH_REDIRECT_URI: ${{ github.ref_type == 'tag' && vars.HF_OAUTH_REDIRECT_URI || github.ref_type != 'tag' && vars.HF_DEV_OAUTH_REDIRECT_URI || '' }}
       DEPLOYMENT_SHA: ${{ github.sha }}
       DEPLOYMENT_RELEASE: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
     steps:
