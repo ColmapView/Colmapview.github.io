@@ -31,7 +31,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
-          # This run is in the default branch's cache scope, which token-holding jobs restore.
+          # This run is in the default branch's cache scope, which the validation jobs (e2e.yml) restore.
           # Selected-ref code runs below, so never restore or save a dependency cache here.
           package-manager-cache: false
       # Selected-ref code is executed only in this credential-free, cache-free job.

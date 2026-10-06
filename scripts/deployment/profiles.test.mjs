@@ -133,6 +133,8 @@ test('deployment smoke report and traces land in the uploaded .tmp/deployment-sm
   for (const step of uploads) assert.match(step.with.path, /^\.tmp\/deployment-smoke\/results\/$/m, step.with.name);
 });
 
+const stepLabel = step => step.name ?? step.uses ?? step.run;
+
 test('Cloudflare deployment token is scoped only to trusted upload steps', () => {
   const releaseWorkflow = yaml.load(readFileSync('.github/workflows/deploy.yml', 'utf8'));
   assert.equal(releaseWorkflow.jobs.deploy.env.CLOUDFLARE_API_TOKEN, undefined);
@@ -163,9 +165,15 @@ test('Cloudflare deployment token is scoped only to trusted upload steps', () =>
   }
   // Untrusted preview code can write default-branch cache entries directly, and a restored archive can write
   // outside ~/.npm, so no job that references the token (even its presence check) restores a dependency cache.
+  // A job also receives what the workflow-level env provides, and `secrets: inherit` or any expression use of
+  // `secrets` other than secrets.NAME (toJSON(secrets), secrets[...], secrets.*) can expose every secret.
+  const holdsToken = text => /CLOUDFLARE_API_TOKEN|"secrets":"inherit"/i.test(text) || /\$\{\{(?:(?!\}\}).)*\bsecrets\b(?!\s*\.\s*\w)/i.test(text);
   const tokenJobs = readdirSync('.github/workflows').filter(file => /\.ya?ml$/.test(file)).sort()
-    .flatMap(file => Object.entries(yaml.load(readFileSync(`.github/workflows/${file}`, 'utf8')).jobs).map(([name, job]) => [`${file}:${name}`, job]))
-    .filter(([, job]) => /CLOUDFLARE_API_TOKEN/i.test(JSON.stringify(job)));
+    .flatMap(file => {
+      const workflow = yaml.load(readFileSync(`.github/workflows/${file}`, 'utf8'));
+      return Object.entries(workflow.jobs).map(([name, job]) => [`${file}:${name}`, job, JSON.stringify([workflow.env, job])]);
+    })
+    .filter(([, , text]) => holdsToken(text));
   assert.deepEqual(tokenJobs.map(([id]) => id), ['deploy-preview.yml:publish', 'deploy.yml:deploy']);
   for (const [id, job] of tokenJobs) {
     const setups = job.steps.filter(step => step.uses?.startsWith('actions/setup-node@'));
@@ -175,8 +183,33 @@ test('Cloudflare deployment token is scoped only to trusted upload steps', () =>
       assert.equal(setup.with?.['package-manager-cache'], false, id);
     }
     assert.ok(!job.steps.some(step => step.uses?.startsWith('actions/cache')), id);
+    // Other caching actions and the `cache:` input of other setup-* actions restore archives too.
+    for (const step of job.steps) {
+      assert.doesNotMatch(step.uses ?? '', /cache/i, `${id}: ${stepLabel(step)} is a caching action`);
+      assert.ok(!step.with?.cache || step.with.cache === 'false', `${id}: ${stepLabel(step)} must not enable a cache`);
+    }
   }
 });
+
+/**
+ * Lines of a step script that change VITE_HF_* for its own commands or later steps:
+ * - NAME= or NAME+= starting an unquoted word (assignment, inline env, export/declare/env NAME=…);
+ * - an unset or env -u/--unset operand;
+ * - a $GITHUB_ENV key (NAME= or NAME<<DELIM). A { … } group or here-document can redirect from another line,
+ *   so in a step that writes $GITHUB_ENV such a line passes only when it targets the step summary or outputs.
+ * The first two rules mask quoted text other than a bare "NAME", so reads such as
+ * echo "NAME=$NAME" >> "$GITHUB_STEP_SUMMARY" pass while unset "NAME" still counts.
+ */
+function viteHfWrites(script = '') {
+  const writesEnvFile = /\bGITHUB_ENV\b/.test(script);
+  return script.split('\n').filter(line => {
+    const code = line.replace(/'[^']*'|"(?:\\.|[^"\\])*"/g, quoted => /^(["'])VITE_HF_\w*\1$/.test(quoted) ? quoted.slice(1, -1) : '""');
+    const elsewhere = /\bGITHUB_(?:STEP_SUMMARY|OUTPUT)\b/.test(line) && !/\bGITHUB_ENV\b/.test(line);
+    return /(?:^|[\s;&|({!])VITE_HF_\w*\+?=/.test(code)
+      || /\bunset\b[^;&|]*\bVITE_HF_|\benv\b[^;&|]*?\s(?:-[a-z]*u\s*|--unset[=\s]\s*)VITE_HF_/.test(code)
+      || writesEnvFile && !elsewhere && /(?<![\w$]|\$\{)VITE_HF_[^\s"'=<>|;&]*(?:=|<<)/.test(line);
+  });
+}
 
 test('GitHub Pages builds read release HF settings on tags and development HF settings on branches', () => {
   const deploy = yaml.load(readFileSync('.github/workflows/deploy.yml', 'utf8')).jobs.deploy;
@@ -189,17 +222,34 @@ test('GitHub Pages builds read release HF settings on tags and development HF se
   assert.equal(env.VITE_HF_OAUTH_CLIENT_ID, value('HF_OAUTH_CLIENT_ID', 'HF_DEV_OAUTH_CLIENT_ID'));
   assert.equal(env.VITE_HF_OAUTH_REDIRECT_URI, value('HF_OAUTH_REDIRECT_URI', 'HF_DEV_OAUTH_REDIRECT_URI'));
   assert.ok(!Object.keys(env).some(name => name.startsWith('VITE_GOOGLE_DRIVE_')), 'GitHub builds receive no Drive configuration');
-  // The GitHub builds must see exactly this job env: no step may set VITE_HF_* (in its own env, by inline
-  // assignment or through $GITHUB_ENV), and --fixture would clear it.
+  // The GitHub builds must see exactly this job env: no step may set VITE_HF_* in its own env or write it from its
+  // run script (assignment, unset, env -u or a $GITHUB_ENV key; see viteHfWrites), and --fixture would clear it.
   for (const step of deploy.steps) {
-    const label = step.name ?? step.uses;
-    assert.ok(!Object.keys(step.env ?? {}).some(name => name.startsWith('VITE_HF_')), `${label} must not set VITE_HF_* in its env`);
-    assert.doesNotMatch(step.run ?? '', /\bVITE_HF_\w*=/, `${label} must not assign VITE_HF_*`);
+    assert.ok(!Object.keys(step.env ?? {}).some(name => name.startsWith('VITE_HF_')), `${stepLabel(step)} must not set VITE_HF_* in its env`);
+    assert.deepEqual(viteHfWrites(step.run), [], `${stepLabel(step)} must not write VITE_HF_*`);
   }
   const githubBuilds = deploy.steps.filter(step => /(?:build-profile\.mjs|build:deployment)\b.*\bgithub\b/.test(step.run ?? ''));
   assert.deepEqual(githubBuilds.map(step => step.name), ['Build version or dev', 'Build latest']);
   for (const step of githubBuilds) assert.doesNotMatch(step.run, /--fixture\b/, `${step.name} must not build with --fixture`);
   assert.doesNotMatch(readFileSync('.github/workflows/deploy-preview.yml', 'utf8'), /VITE_HF_|vars\.(?:CUSTOM_)?HF_/, 'previews receive no provider configuration');
+});
+
+test('VITE_HF_* write detection flags assignments, removals and $GITHUB_ENV keys but not reads', () => {
+  const writes = [
+    'VITE_HF_AUTH_ENABLED=true node scripts/deployment/build-profile.mjs github',
+    'export VITE_HF_PUBLISH_ENABLED=false',
+    'unset VITE_HF_OAUTH_CLIENT_ID',
+    'env -u VITE_HF_OAUTH_REDIRECT_URI npm run build:deployment -- github',
+    'echo "VITE_HF_PUBLISH_ENABLED=false" >> "$GITHUB_ENV"',
+    '{\n  echo "VITE_HF_OAUTH_REDIRECT_URI<<EOF"\n  echo "$URI"\n  echo EOF\n} >> "$GITHUB_ENV"',
+  ];
+  const reads = [
+    'echo "VITE_HF_PUBLISH_ENABLED=$VITE_HF_PUBLISH_ENABLED" >> "$GITHUB_STEP_SUMMARY"',
+    'echo "BRANCH=x" >> "$GITHUB_ENV"\necho "Built with VITE_HF_AUTH_ENABLED=$VITE_HF_AUTH_ENABLED" >> "$GITHUB_STEP_SUMMARY"',
+    '[[ "${VITE_HF_AUTH_ENABLED}" == true ]] && echo "to disable it, unset VITE_HF_AUTH_ENABLED"',
+  ];
+  for (const script of writes) assert.notDeepEqual(viteHfWrites(script), [], script);
+  for (const script of reads) assert.deepEqual(viteHfWrites(script), [], script);
 });
 
 test('GitHub Pages HF preflight accepts each channel and rejects incomplete or swapped settings', () => {
