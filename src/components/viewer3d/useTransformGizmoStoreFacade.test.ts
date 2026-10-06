@@ -38,7 +38,7 @@ describe('useTransformGizmoStoreFacade', () => {
       transform,
       droppedFiles,
     });
-    expect(result.current.actions.processFiles).toEqual(expect.any(Function));
+    expect(result.current.actions.reloadFiles).toEqual(expect.any(Function));
     expect(result.current.actions.applyTransformToData).toEqual(expect.any(Function));
     expect(result.current.actions.confirmReload).toEqual(expect.any(Function));
   });

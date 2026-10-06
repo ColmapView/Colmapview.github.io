@@ -52,7 +52,7 @@ export function TransformGizmo({ center, size }: TransformGizmoProps) {
       setShowGizmo,
       applyTransformToData,
       confirmReload,
-      processFiles,
+      reloadFiles,
     },
   } = useTransformGizmoStoreFacade();
 
@@ -214,7 +214,7 @@ export function TransformGizmo({ center, size }: TransformGizmoProps) {
       setShowGizmo,
       droppedFiles,
       confirmReload,
-      processFiles,
+      reloadFiles,
       closeContextMenu,
     });
   }, [
@@ -222,7 +222,7 @@ export function TransformGizmo({ center, size }: TransformGizmoProps) {
     closeContextMenu,
     confirmReload,
     droppedFiles,
-    processFiles,
+    reloadFiles,
     resetTransform,
     setShowGizmo,
   ]);

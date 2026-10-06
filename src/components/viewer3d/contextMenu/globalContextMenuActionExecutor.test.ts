@@ -68,7 +68,7 @@ function createDeps(
     applyTransformToData: vi.fn(),
     droppedFiles: null,
     confirmReload: vi.fn(() => true),
-    processFiles: vi.fn(),
+    reloadFiles: vi.fn(),
     takeScreenshot: vi.fn(),
     setExportFormat: vi.fn(),
     triggerExport: vi.fn(),
@@ -228,7 +228,7 @@ describe('global context menu action executor', () => {
 
     await executeGlobalContextMenuAction('reloadData', deniedDeps);
     expect(deniedDeps.resetTransform).not.toHaveBeenCalled();
-    expect(deniedDeps.processFiles).not.toHaveBeenCalled();
+    expect(deniedDeps.reloadFiles).not.toHaveBeenCalled();
 
     const confirmedDeps = createDeps({
       droppedFiles: files,
@@ -236,7 +236,7 @@ describe('global context menu action executor', () => {
     });
     await executeGlobalContextMenuAction('reloadData', confirmedDeps);
     expect(confirmedDeps.resetTransform).toHaveBeenCalled();
-    expect(confirmedDeps.processFiles).toHaveBeenCalledWith(files);
+    expect(confirmedDeps.reloadFiles).toHaveBeenCalledWith(files);
   });
 
   it('executes export and tool modal actions', async () => {

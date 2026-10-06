@@ -13,7 +13,7 @@ function createDeps(
     setShowGizmo: vi.fn(),
     droppedFiles: null,
     confirmReload: vi.fn(() => true),
-    processFiles: vi.fn(),
+    reloadFiles: vi.fn(),
     closeContextMenu: vi.fn(),
     ...overrides,
   };
@@ -40,7 +40,7 @@ describe('transform gizmo context menu executor', () => {
 
     expect(deps.confirmReload).toHaveBeenCalledTimes(1);
     expect(deps.resetTransform).toHaveBeenCalledTimes(1);
-    expect(deps.processFiles).toHaveBeenCalledWith(files);
+    expect(deps.reloadFiles).toHaveBeenCalledWith(files);
     expect(deps.closeContextMenu).toHaveBeenCalledTimes(1);
   });
 
@@ -57,12 +57,12 @@ describe('transform gizmo context menu executor', () => {
 
     expect(noFilesDeps.confirmReload).not.toHaveBeenCalled();
     expect(noFilesDeps.resetTransform).not.toHaveBeenCalled();
-    expect(noFilesDeps.processFiles).not.toHaveBeenCalled();
+    expect(noFilesDeps.reloadFiles).not.toHaveBeenCalled();
     expect(noFilesDeps.closeContextMenu).toHaveBeenCalledTimes(1);
 
     expect(deniedDeps.confirmReload).toHaveBeenCalledTimes(1);
     expect(deniedDeps.resetTransform).not.toHaveBeenCalled();
-    expect(deniedDeps.processFiles).not.toHaveBeenCalled();
+    expect(deniedDeps.reloadFiles).not.toHaveBeenCalled();
     expect(deniedDeps.closeContextMenu).toHaveBeenCalledTimes(1);
   });
 

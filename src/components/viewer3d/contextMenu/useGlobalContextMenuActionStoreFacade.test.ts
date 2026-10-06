@@ -35,7 +35,7 @@ describe('useGlobalContextMenuActionStoreFacade', () => {
       pickingMode: 'distance-2pt',
       droppedFiles,
     });
-    expect(result.current.processFiles).toEqual(expect.any(Function));
+    expect(result.current.reloadFiles).toEqual(expect.any(Function));
     expect(result.current.confirmReload).toEqual(expect.any(Function));
     expect(result.current.applyTransformPreset).toEqual(expect.any(Function));
     expect(result.current.applyTransformToData).toEqual(expect.any(Function));

@@ -8,7 +8,7 @@ export interface TransformGizmoContextMenuExecutorDeps {
   setShowGizmo: (visible: boolean) => void;
   droppedFiles: Map<string, File> | null;
   confirmReload: () => MaybePromise<boolean>;
-  processFiles: (files: Map<string, File>) => void;
+  reloadFiles: (files: Map<string, File>) => void;
   closeContextMenu: () => void;
 }
 
@@ -23,7 +23,7 @@ export async function executeTransformGizmoContextMenuAction(
     case 'reload':
       if (deps.droppedFiles && await deps.confirmReload()) {
         deps.resetTransform();
-        deps.processFiles(deps.droppedFiles);
+        deps.reloadFiles(deps.droppedFiles);
       }
       break;
     case 'apply':

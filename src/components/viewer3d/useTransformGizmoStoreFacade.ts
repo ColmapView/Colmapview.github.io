@@ -22,7 +22,7 @@ interface TransformGizmoActionsFacade {
   setShowGizmo: UIState['setShowGizmo'];
   applyTransformToData: typeof applyTransformToData;
   confirmReload: typeof confirmReload;
-  processFiles: ReturnType<typeof useFileDropzone>['reloadFiles'];
+  reloadFiles: ReturnType<typeof useFileDropzone>['reloadFiles'];
 }
 
 export interface TransformGizmoStoreFacade {
@@ -49,7 +49,7 @@ export function useTransformGizmoStoreFacade(): TransformGizmoStoreFacade {
       setShowGizmo,
       applyTransformToData,
       confirmReload,
-      processFiles: reloadFiles,
+      reloadFiles,
     },
   };
 }

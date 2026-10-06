@@ -28,7 +28,7 @@ type GlobalContextMenuActionStoreFacade = Pick<
   | 'applyTransformToData'
   | 'droppedFiles'
   | 'confirmReload'
-  | 'processFiles'
+  | 'reloadFiles'
   | 'takeScreenshot'
   | 'setExportFormat'
   | 'triggerExport'
@@ -93,7 +93,7 @@ export function useGlobalContextMenuActionStoreFacade(): GlobalContextMenuAction
       applyTransformToData,
       droppedFiles,
       confirmReload,
-      processFiles: reloadFiles,
+      reloadFiles,
       takeScreenshot,
       setExportFormat,
       triggerExport,
