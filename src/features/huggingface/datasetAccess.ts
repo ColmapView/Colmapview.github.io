@@ -1,6 +1,7 @@
 import { hfAuth, type HfAuthState } from './auth';
 import { HfError } from './http';
 import { huggingFaceDatasetReadRepoId } from '../../utils/huggingFaceUrl';
+import { appLogger } from '../../utils/logger';
 
 // A connection's known private repos avoid an anonymous failure for every lazy image.
 // Weak keys discard this routing hint on disconnect/reconnect; no token is retained here.
@@ -56,6 +57,11 @@ export async function fetchHuggingFaceDatasetRequest(url: string, init: RequestI
   return response;
 }
 
+/** A busy or unreachable metadata API says nothing about the files themselves. */
+function isTransientStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
 /** Fail before replacing the current scene, including Hub's deliberately ambiguous private 404s. */
 export async function checkHuggingFaceDatasetAccess(infoUrl: string,
   fetchImpl: (url: string, init?: RequestInit) => Promise<Response>): Promise<void> {
@@ -63,11 +69,24 @@ export async function checkHuggingFaceDatasetAccess(infoUrl: string,
   const accessUrl = new URL(infoUrl);
   accessUrl.searchParams.delete('expand[]');
   accessUrl.searchParams.set('expand', 'private');
-  const response = await fetchImpl(accessUrl.href);
+  let response: Response;
+  try {
+    response = await fetchImpl(accessUrl.href);
+  } catch (error) {
+    // Cancellation and the account answers raised while fetching stand.
+    if (error instanceof HfError
+      || (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError')) throw error;
+    appLogger.warn('[Hugging Face] Dataset access check failed; continuing with the dataset files.', error);
+    return;
+  }
   discard(response);
   if (response.ok) return;
   if (response.status === 404) throw new HfError(hfAuth.getReadAccessToken()
     ? 'Hugging Face dataset not found or unavailable to this account. Check the URL and repository permissions.'
     : 'Hugging Face dataset not found or private. Sign in with Hugging Face and check the URL.', 404);
+  if (isTransientStatus(response.status)) {
+    appLogger.warn(`[Hugging Face] Dataset access check returned ${response.status}; continuing with the dataset files.`);
+    return;
+  }
   throw new HfError(`Could not check Hugging Face dataset access (${response.status}). Please retry.`, response.status);
 }

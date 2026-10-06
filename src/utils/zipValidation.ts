@@ -20,7 +20,7 @@ export interface ZipValidationOptions {
 
 export interface ZipUrlValidationOptions extends ZipValidationOptions {
   signal?: AbortSignal;
-  fetchImpl?: typeof fetch;
+  fetchImpl?: (url: string, init?: RequestInit) => Promise<Response>;
   timeoutMs?: number;
 }
 

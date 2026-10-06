@@ -14,6 +14,7 @@ import { MAX_VIEWER_STATE_BYTES } from './publishedViewerState';
 import { appLogger } from './logger';
 import { awaitWithAbort } from './awaitWithAbort';
 import { closeZipArchive } from './zipArchiveState';
+import { fetchDatasetResource } from './fetchDatasetResource';
 import {
   validateZipFile,
   validateZipUrl,
@@ -274,7 +275,11 @@ export async function loadZipFromUrl(
   onProgress({ percent: 0, message: 'Checking archive...' });
 
   // Validate size
-  const validation = options ? validateArchiveSize(options.size) : await validateZipUrl(url, { signal });
+  // The size check needs the signed-in account for private Hub archives, like the download.
+  const validation = options ? validateArchiveSize(options.size) : await validateZipUrl(url, {
+    signal,
+    fetchImpl: (target, init) => fetchDatasetResource(target, undefined, init),
+  });
   signal?.throwIfAborted();
   if (!validation.valid) {
     throw new Error(validation.error ?? 'Invalid archive');

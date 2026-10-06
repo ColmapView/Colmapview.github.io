@@ -121,6 +121,20 @@ describe('useUrlLoader', () => {
     expect(JSON.stringify([source.sourceUrl, source.sourceManifest, source.imageUrlBase])).not.toContain('private-loader-token');
   });
 
+  it('loads a public Hugging Face dataset when the access check is rate limited', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const request = vi.fn(async (url: string) => {
+      if (url.endsWith('?expand=private')) return new Response(null, { status: 429 });
+      if (url.includes('/tree/')) return Response.json(['cameras', 'images', 'points3D'].map(name => ({ type: 'file', path: `sparse/0/${name}.bin` })));
+      if (/(cameras|images|points3D)\.bin$/.test(url)) return new Response(new Uint8Array([1, 2, 3]));
+      return new Response(null, { status: 404 });
+    });
+    vi.stubGlobal('fetch', request);
+    const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
+    await act(async () => { expect(await result.current.loadFromUrl('https://huggingface.co/datasets/owner/public')).toBe(true); });
+    expect(processFilesMock).toHaveBeenCalledOnce();
+  });
+
   it('cancels a private repository check without clearing or replacing the current scene', async () => {
     const loadedFiles = buildLoadedFiles();
     useReconstructionStore.setState({ loadedFiles });

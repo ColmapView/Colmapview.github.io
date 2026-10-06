@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Archive } from 'libarchive.js';
 import { buildArchiveEntry, buildArchiveReader, buildFile } from '../test/builders';
+import { hfAuth } from '../features/huggingface/auth';
 import { downloadZip, type ZipProgressCallback } from './zipDownload';
 import { isArchiveFile, loadZipFromFile, loadZipFromUrl } from './zipLoader';
 
@@ -197,5 +198,28 @@ describe('isArchiveFile', () => {
     // for COLMAP files inside it instead of rendering it.
     expect(isArchiveFile(new File(['PK'], 'scene.sog', { type: 'application/zip' }))).toBe(false);
     expect(isArchiveFile(new File(['PK'], 'dataset.zip', { type: 'application/zip' }))).toBe(true);
+  });
+});
+
+describe('private Hugging Face archive URLs', () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+  it('checks the archive size with the signed-in account before downloading', async () => {
+    const url = 'https://huggingface.co/datasets/owner/private/resolve/main/scene.zip';
+    vi.spyOn(hfAuth, 'getSnapshot').mockReturnValue({ status: 'connected', identity: { username: 'owner' }, error: null });
+    vi.spyOn(hfAuth, 'getReadAccessToken').mockReturnValue('reader-token');
+    const request = vi.fn(async (_url: string, init?: RequestInit) =>
+      new Headers(init?.headers).get('Authorization') === 'Bearer reader-token'
+        ? new Response(null, { status: 200, headers: { 'content-length': '7' } })
+        : new Response(null, { status: 401 }));
+    vi.stubGlobal('fetch', request);
+    vi.mocked(downloadZip).mockResolvedValue(new Blob(['archive']));
+    const archive = buildArchiveReader({ getFilesArray: async () => colmapEntries() });
+    vi.mocked(Archive.open).mockResolvedValue(archive);
+
+    await expect(loadZipFromUrl(url, vi.fn())).resolves.toMatchObject({ archive });
+    const heads = request.mock.calls.filter(([, init]) => init?.method === 'HEAD');
+    expect(heads).toHaveLength(2);
+    expect(new Headers(heads[1][1]?.headers).get('Authorization')).toBe('Bearer reader-token');
   });
 });

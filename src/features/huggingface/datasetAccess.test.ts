@@ -2,6 +2,7 @@ import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hfAuth, type HfAuthState } from './auth';
 import { checkHuggingFaceDatasetAccess, fetchHuggingFaceDatasetRequest } from './datasetAccess';
+import { HfError } from './http';
 import { fetchDatasetResource } from '../../utils/fetchDatasetResource';
 import { downloadZip } from '../../utils/zipDownload';
 import { UrlMediaScheduler } from '../../dataset/urlMediaScheduler';
@@ -237,5 +238,28 @@ describe('Hugging Face private dataset reads', () => {
     expect(await getOrLoadFrustumBitmap(root + 'images/other.png', 'other.png', new Map(),
       { createBitmap: vi.fn(async () => bitmap) })).toBe(bitmap);
     expect(request.mock.calls.slice(1).every(([, init]) => authorization(init) === 'Bearer test-private-access')).toBe(true);
+  });
+
+  it.each([408, 429, 500, 503])('lets the dataset files decide when the access check returns %s', async status => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status }));
+    await expect(checkHuggingFaceDatasetAccess(info, fetchImpl)).resolves.toBeUndefined();
+  });
+
+  it('lets the dataset files decide when the Hub API cannot be reached', async () => {
+    const fetchImpl = vi.fn(async (): Promise<Response> => { throw new TypeError('Failed to fetch'); });
+    await expect(checkHuggingFaceDatasetAccess(info, fetchImpl)).resolves.toBeUndefined();
+  });
+
+  it.each([
+    ['cancellation', new DOMException('Dataset load cancelled', 'AbortError')],
+    ['a sign-in answer', new HfError('Sign in with Hugging Face to open private datasets, then retry the URL.', 401)],
+  ])('still stops on %s', async (_label, error) => {
+    const fetchImpl = vi.fn(async (): Promise<Response> => { throw error; });
+    await expect(checkHuggingFaceDatasetAccess(info, fetchImpl)).rejects.toBe(error);
+  });
+
+  it.each([400, 401, 403, 410])('still stops on a definitive %s answer', async status => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status }));
+    await expect(checkHuggingFaceDatasetAccess(info, fetchImpl)).rejects.toMatchObject({ status });
   });
 });
