@@ -133,11 +133,13 @@ describe('URL loader manifest source helpers', () => {
     });
     const onViewerState = vi.fn();
     const onAutoSplatSource = vi.fn();
-    const loading = loadManifestSource(manifest, { type: 'manifest' }, { ...deps, onViewerState, onAutoSplatSource });
+    const onOptionalSettingsTimeout = vi.fn();
+    const loading = loadManifestSource(manifest, { type: 'manifest' }, { ...deps, onViewerState, onAutoSplatSource, onOptionalSettingsTimeout });
     await vi.waitFor(() => expect(deps.processFiles).toHaveBeenCalledOnce());
     expect(requestSignal?.aborted).toBe(false);
     await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS);
     await expect(loading).resolves.toBe(true);
+    expect(onOptionalSettingsTimeout).toHaveBeenCalledOnce();
     expect(requestSignal?.aborted).toBe(true);
     respond(new Response('ui:\n  background_color: "#123456"\n'));
     await Promise.resolve();
@@ -185,5 +187,25 @@ describe('URL loader manifest source helpers', () => {
       message: 'Parsing reconstruction...',
     });
     expect(deps.setUrlProgress).not.toHaveBeenCalledWith({ percent: 100, message: 'Complete' });
+  });
+
+  it('waits for optional settings that arrive while slow COLMAP files download', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Blob', NodeBlob);
+    const deps = makeDeps();
+    let respond!: (response: Response) => void;
+    deps.fetchImpl.mockImplementationOnce(() => new Promise<Response>(resolve => { respond = resolve; }));
+    let finishDownload!: (files: Map<string, File>) => void;
+    deps.fetchColmapFiles.mockImplementationOnce(() => new Promise<Map<string, File>>(resolve => { finishDownload = resolve; }));
+    const onViewerState = vi.fn();
+    const onOptionalSettingsTimeout = vi.fn();
+    const loading = loadManifestSource(manifest, { type: 'manifest' }, { ...deps, onViewerState, onOptionalSettingsTimeout });
+    await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS * 2);
+    vi.useRealTimers();
+    respond(new Response('ui:\n  background_color: "#123456"\n'));
+    finishDownload(makeFiles());
+    await expect(loading).resolves.toBe(true);
+    expect(onViewerState).toHaveBeenCalledWith(expect.objectContaining({ config: { ui: { backgroundColor: '#123456' } } }));
+    expect(onOptionalSettingsTimeout).not.toHaveBeenCalled();
   });
 });

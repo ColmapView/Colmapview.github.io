@@ -27,7 +27,7 @@ import { loadManifestSource } from './urlLoaderManifestSource';
 import { isSplatUrl, loadSplatUrlSource } from './urlLoaderSplatSource';
 import { applySavedViewerState, decodeSharedViewerOverrides, resolveRestoredSplatSourceId } from './useUrlState';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
-import { fetchOptionalDatasetViewerSettings } from './urlLoaderViewerState';
+import { fetchOptionalDatasetViewerSettingsResult, OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE } from './urlLoaderViewerState';
 import { findDatasetViewerSettingsEntry } from '../utils/datasetViewerSettings';
 import { parseGoogleDriveFileUrl } from '../utils/googleDriveUrl';
 import { resolveGoogleDriveArchive } from '../features/googleDrive/api';
@@ -51,6 +51,7 @@ type ReconstructionState = ReturnType<typeof useReconstructionStore.getState>;
 
 interface UrlLoadContext {
   onViewerState: (state: PublishedViewerState) => Promise<void>;
+  onOptionalSettingsTimeout: () => void;
   onRemoteSplatCatalog: (catalog: RemoteSplatCandidate[], baseUrl?: string) => void;
   onAutoSplatSource: (sourceId: string) => void;
   signal: AbortSignal;
@@ -62,6 +63,13 @@ interface UrlLoadContext {
   clearCachesOnFailure: boolean;
   hasEmbeddedViewerSettings: boolean;
   remoteCatalogMerged: boolean;
+}
+
+/** Settings beside a directly loaded file or archive; a timeout keeps defaults and says so. */
+async function applyOptionalSettingsBeside(url: string, load: UrlLoadContext): Promise<void> {
+  const settings = await fetchOptionalDatasetViewerSettingsResult(url, load.fetchImpl, true, load.signal);
+  if (settings.timedOut) load.onOptionalSettingsTimeout();
+  if (settings.state) await load.onViewerState(settings.state);
 }
 
 /** Owns URL discovery, downloading, and the handoff to reconstruction parsing. */
@@ -109,6 +117,9 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
     const load: UrlLoadContext = {
       // Recorded here and applied once the load succeeds, together with the URL's own settings.
       onViewerState: async (state) => { assertCurrent(); savedViewerState = state; },
+      onOptionalSettingsTimeout: guard(() => {
+        useNotificationStore.getState().addNotification('warning', OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE);
+      }),
       onRemoteSplatCatalog: guard((catalog: RemoteSplatCandidate[], baseUrl = contextUrl) => {
         mergeRemoteSplatCatalog(catalog, baseUrl);
         load.remoteCatalogMerged = true;
@@ -213,8 +224,7 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
         log: logInfo,
       });
       if (loaded) {
-        const settings = await fetchOptionalDatasetViewerSettings(normalizedUrl, load.fetchImpl, true, load.signal);
-        if (settings) await load.onViewerState(settings);
+        await applyOptionalSettingsBeside(normalizedUrl, load);
       }
       return loaded;
     }
@@ -224,8 +234,7 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
       logInfo(getArchiveUrlDetectedLogMessage(normalizedUrl));
       const loaded = await loadZipUrlSource(normalizedUrl, { ...load, log: logInfo });
       if (loaded && !load.hasEmbeddedViewerSettings) {
-        const settings = await fetchOptionalDatasetViewerSettings(normalizedUrl, load.fetchImpl, true, load.signal);
-        if (settings) await load.onViewerState(settings);
+        await applyOptionalSettingsBeside(normalizedUrl, load);
       }
       return loaded;
     }

@@ -17,7 +17,8 @@ import { hfAuth, type HfAuthState } from '../features/huggingface/auth';
 import * as archiveSource from './urlLoaderZipSource';
 import { processFileDropzoneFiles } from './fileDropzoneWorkflow';
 import { noopLogger } from '../utils/logger';
-import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS } from './urlLoaderViewerState';
+import { useNotificationStore } from '../store/stores/notificationStore';
+import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE, OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS } from './urlLoaderViewerState';
 
 const { clearAllCachesMock, processFilesMock, detectTouchDeviceMock } = vi.hoisted(() => ({
   clearAllCachesMock: vi.fn(),
@@ -82,6 +83,7 @@ describe('useUrlLoader', () => {
     useUIStore.setState(useUIStore.getInitialState(), true);
     usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
     useTransformStore.setState(useTransformStore.getInitialState(), true);
+    useNotificationStore.setState(useNotificationStore.getInitialState(), true);
     window.history.replaceState(null, '', '/');
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
@@ -517,6 +519,8 @@ describe('useUrlLoader', () => {
     expect(request.mock.calls.filter(([url]) => String(url).endsWith('.spz'))).toEqual([]);
     expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
     expect(useReconstructionStore.getState().showSplatPicker).toBe(true);
+    expect(useNotificationStore.getState().notifications).toContainEqual(expect.objectContaining({
+      type: 'warning', message: OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE }));
   });
 
   it('downloads an automatically chosen splat without opening the picker over it', async () => {
@@ -664,6 +668,25 @@ describe('useUrlLoader', () => {
     expect(request.mock.calls.map(call => String(call[0]))).toEqual([
       'https://example.com/project/scene.spz', 'https://example.com/project/colmapview.yaml',
     ]);
+  });
+
+  it('warns when settings beside a direct splat file do not arrive in time', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Blob', NodeBlob);
+    const request = vi.fn((url: string | URL) => String(url).endsWith('colmapview.yaml')
+      ? new Promise<Response>(() => {}) : Promise.resolve(new Response('splat bytes')));
+    vi.stubGlobal('fetch', request);
+    processFilesMock.mockResolvedValueOnce();
+    const { result } = renderHook(() => useUrlLoader());
+    let pending!: Promise<boolean>;
+    act(() => { pending = result.current.loadFromUrl('https://example.com/project/scene.spz'); });
+    await act(async () => {
+      await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+      await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS);
+      expect(await pending).toBe(true);
+    });
+    expect(useNotificationStore.getState().notifications).toContainEqual(expect.objectContaining({
+      type: 'warning', message: OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE }));
   });
 
   it.each(['document', 'combined', 'binary', 'legacy'] as const)('restores a published view with %s URL precedence', async format => {

@@ -9,42 +9,67 @@ import type { ShareConfig } from '../utils/shareDataCodec';
 import { anySignal } from '../utils/abortSignals';
 
 export const OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS = 3_000;
+export const OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE =
+  "This dataset's saved view settings (colmapview.yaml) did not load in time, so default settings are shown. Load the dataset again to retry.";
 
-interface OptionalViewerSettingsResult { state: PublishedViewerState | null; timedOut: boolean }
+export interface OptionalViewerSettingsResult { state: PublishedViewerState | null; timedOut: boolean }
 
-export async function fetchOptionalDatasetViewerSettings(url: string,
-  fetchImpl: (url: string, init?: RequestInit) => Promise<Response>, isFile = false,
-  signal?: AbortSignal): Promise<PublishedViewerState | null> {
-  return (await fetchOptionalDatasetViewerSettingsResult(url, fetchImpl, isFile, signal)).state;
+/** Automatic settings discovery: the request starts now, its deadline when the result is needed. */
+export interface OptionalViewerSettingsRequest {
+  /** Resolves within OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS of the first call; a stalled request is aborted. */
+  settle(): Promise<OptionalViewerSettingsResult>;
+  cancel(): void;
 }
 
-/** Automatic settings discovery has its own total deadline and cancellation. */
-export async function fetchOptionalDatasetViewerSettingsResult(url: string,
+export function startOptionalDatasetViewerSettings(url: string,
   fetchImpl: (url: string, init?: RequestInit) => Promise<Response>, isFile = false,
-  signal?: AbortSignal): Promise<OptionalViewerSettingsResult> {
+  signal?: AbortSignal): OptionalViewerSettingsRequest {
   signal?.throwIfAborted();
   const controller = new AbortController();
   const requestSignal = signal ? anySignal([signal, controller.signal]) : controller.signal;
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  let cancel: (() => void) | undefined;
-  const deadline = new Promise<OptionalViewerSettingsResult>((resolve, reject) => {
-    cancel = () => reject(signal?.reason ?? new DOMException('Dataset load cancelled', 'AbortError'));
-    signal?.addEventListener('abort', cancel, { once: true });
-    timeout = setTimeout(() => {
-      controller.abort(new DOMException('Optional viewer settings timed out', 'TimeoutError'));
-      resolve({ state: null, timedOut: true });
-    }, OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS);
-  });
-  const settings = fetchDatasetViewerSettings(url,
+  const settings = readDatasetViewerSettings(url,
     (candidate, init) => fetchImpl(candidate, { ...init, signal: requestSignal }), isFile)
-    .then(state => ({ state, timedOut: false }))
-    .catch(error => { if (controller.signal.aborted && !signal?.aborted) return { state: null, timedOut: true }; throw error; });
+    .catch((error): OptionalViewerSettingsResult => {
+      if (controller.signal.aborted && !signal?.aborted) return { state: null, timedOut: true };
+      throw error;
+    });
+  // A failure before settle() is reported by settle(), not as an unhandled rejection.
+  settings.catch(() => {});
+  let result: Promise<OptionalViewerSettingsResult> | null = null;
+  const settleWithDeadline = async (): Promise<OptionalViewerSettingsResult> => {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let cancel: (() => void) | undefined;
+    const deadline = new Promise<OptionalViewerSettingsResult>((resolve, reject) => {
+      cancel = () => reject(signal?.reason ?? new DOMException('Dataset load cancelled', 'AbortError'));
+      if (signal?.aborted) { cancel(); return; }
+      signal?.addEventListener('abort', cancel, { once: true });
+      timeout = setTimeout(() => {
+        controller.abort(new DOMException('Optional viewer settings timed out', 'TimeoutError'));
+        resolve({ state: null, timedOut: true });
+      }, OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS);
+    });
+    try {
+      return await Promise.race([settings, deadline]);
+    } finally {
+      clearTimeout(timeout);
+      if (cancel) signal?.removeEventListener('abort', cancel);
+      controller.abort();
+    }
+  };
+  return {
+    settle: () => (result ??= settleWithDeadline()),
+    cancel: () => controller.abort(),
+  };
+}
+
+export async function fetchOptionalDatasetViewerSettingsResult(url: string,
+  fetchImpl: (url: string, init?: RequestInit) => Promise<Response>, isFile = false,
+  signal?: AbortSignal): Promise<OptionalViewerSettingsResult> {
+  const request = startOptionalDatasetViewerSettings(url, fetchImpl, isFile, signal);
   try {
-    return await Promise.race([settings, deadline]);
+    return await request.settle();
   } finally {
-    clearTimeout(timeout);
-    if (cancel) signal?.removeEventListener('abort', cancel);
-    controller.abort();
+    request.cancel();
   }
 }
 
@@ -85,8 +110,9 @@ function savesFileAsActiveSplat(state: PublishedViewerState, settingsUrl: string
   } catch { return false; }
 }
 
-export async function fetchDatasetViewerSettings(url: string,
-  fetchImpl: (url: string, init?: RequestInit) => Promise<Response>, isFile = false): Promise<PublishedViewerState | null> {
+/** The candidate search; also says whether a stalled request (transport timeout) hid the settings. */
+async function readDatasetViewerSettings(url: string,
+  fetchImpl: (url: string, init?: RequestInit) => Promise<Response>, isFile: boolean): Promise<OptionalViewerSettingsResult> {
   // The first candidate sits beside the loaded project or file; later ones are parent folders.
   for (const [index, candidate] of settingsUrls(url, isFile).entries()) {
     try {
@@ -94,18 +120,27 @@ export async function fetchDatasetViewerSettings(url: string,
       if (!response.ok) {
         await response.body?.cancel();
         if (response.status === 404) continue;
-        return null;
+        return { state: null, timedOut: false };
       }
       const text = await (await readBoundedResponse(response, MAX_VIEWER_STATE_BYTES)).text();
       const state = parseDatasetViewerSettings(text);
-      return index === 0 || (isFile && savesFileAsActiveSplat(state, candidate, url)) ? state : displaySettingsOnly(state);
+      return {
+        state: index === 0 || (isFile && savesFileAsActiveSplat(state, candidate, url)) ? state : displaySettingsOnly(state),
+        timedOut: false,
+      };
     } catch (error) {
-      if (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError') throw error;
+      const name = error && typeof error === 'object' && 'name' in error ? error.name : undefined;
+      if (name === 'AbortError') throw error;
       appLogger.warn('[URL Loader] Skipping unavailable or invalid colmapview.yaml settings.');
-      return null;
+      return { state: null, timedOut: name === 'TimeoutError' };
     }
   }
-  return null;
+  return { state: null, timedOut: false };
+}
+
+export async function fetchDatasetViewerSettings(url: string,
+  fetchImpl: (url: string, init?: RequestInit) => Promise<Response>, isFile = false): Promise<PublishedViewerState | null> {
+  return (await readDatasetViewerSettings(url, fetchImpl, isFile)).state;
 }
 
 export async function fetchPublishedViewerState(manifest: ColmapManifest,

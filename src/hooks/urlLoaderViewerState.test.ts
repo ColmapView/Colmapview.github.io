@@ -1,7 +1,7 @@
 import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchDatasetViewerSettings, fetchOptionalDatasetViewerSettings, fetchPublishedViewerState,
-  OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS } from './urlLoaderViewerState';
+import { fetchDatasetViewerSettings, fetchOptionalDatasetViewerSettingsResult, fetchPublishedViewerState,
+  OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS, startOptionalDatasetViewerSettings } from './urlLoaderViewerState';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import type { ColmapManifest } from '../types/manifest';
@@ -21,20 +21,67 @@ describe('manifest viewer-state loading', () => {
       requestSignal = init?.signal;
       return new Promise<Response>(() => {});
     });
-    const pending = fetchOptionalDatasetViewerSettings(manifest.baseUrl + 'scene.spz', request, true);
+    const pending = fetchOptionalDatasetViewerSettingsResult(manifest.baseUrl + 'scene.spz', request, true);
     expect(requestSignal?.aborted).toBe(false);
     await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS);
-    await expect(pending).resolves.toBeNull();
+    await expect(pending).resolves.toEqual({ state: null, timedOut: true });
     expect(requestSignal?.aborted).toBe(true);
   });
 
   it('cancels optional metadata promptly even when an injected fetch does not settle on abort', async () => {
     const controller = new AbortController();
-    const pending = fetchOptionalDatasetViewerSettings(manifest.baseUrl,
+    const pending = fetchOptionalDatasetViewerSettingsResult(manifest.baseUrl,
       () => new Promise<Response>(() => {}), false, controller.signal);
     const aborted = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
     controller.abort();
     await aborted;
+  });
+
+  it('starts the deadline when the result is needed, not when the request starts', async () => {
+    vi.useFakeTimers();
+    let respond!: (response: Response) => void;
+    const request = vi.fn(() => new Promise<Response>(resolve => { respond = resolve; }));
+    const pending = startOptionalDatasetViewerSettings(manifest.baseUrl, request);
+    // COLMAP files take longer than the whole deadline to download and parse.
+    await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS * 3);
+    const result = pending.settle();
+    await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS - 1);
+    vi.useRealTimers();
+    respond(new Response('ui:\n  background_color: "#123456"\n'));
+    await expect(result).resolves.toEqual({
+      state: expect.objectContaining({ config: { ui: { backgroundColor: '#123456' } } }), timedOut: false });
+  });
+
+  it('reports a timeout and aborts the request when the result is still missing at the deadline', async () => {
+    vi.useFakeTimers();
+    let requestSignal: AbortSignal | null | undefined;
+    const request = vi.fn((_url: string, init?: RequestInit) => { requestSignal = init?.signal; return new Promise<Response>(() => {}); });
+    const pending = startOptionalDatasetViewerSettings(manifest.baseUrl, request);
+    const result = pending.settle();
+    await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS);
+    await expect(result).resolves.toEqual({ state: null, timedOut: true });
+    expect(requestSignal?.aborted).toBe(true);
+  });
+
+  it('returns settings that arrived before they were needed, once, without a second deadline', async () => {
+    const request = vi.fn(async () => new Response('ui:\n  background_color: "#123456"\n'));
+    const pending = startOptionalDatasetViewerSettings(manifest.baseUrl, request);
+    const first = pending.settle();
+    expect(pending.settle()).toBe(first);
+    await expect(first).resolves.toMatchObject({ timedOut: false, state: { config: { ui: { backgroundColor: '#123456' } } } });
+    expect(request).toHaveBeenCalledOnce();
+  });
+
+  it('counts a transport timeout that happened before the result was needed as a timeout', async () => {
+    // fetchWithTimeout gives up on a stalled request after 30 s, long before slow parsing ends.
+    const request = vi.fn(async (): Promise<Response> => { throw new DOMException('Request timed out', 'TimeoutError'); });
+    const pending = startOptionalDatasetViewerSettings(manifest.baseUrl, request);
+    await expect(pending.settle()).resolves.toEqual({ state: null, timedOut: true });
+  });
+
+  it('still reports a timed-out direct read as missing settings', async () => {
+    const request = vi.fn(async (): Promise<Response> => { throw new DOMException('Request timed out', 'TimeoutError'); });
+    await expect(fetchDatasetViewerSettings(manifest.baseUrl, request)).resolves.toBeNull();
   });
   it.each(['json', 'yaml'])('loads %s settings at the immutable dataset revision, including older JSON publications', async format => {
     const path = format === 'yaml' ? 'colmapview.yaml' : 'colmapview-state.json';

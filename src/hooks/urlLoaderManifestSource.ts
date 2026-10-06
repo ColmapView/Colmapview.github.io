@@ -8,7 +8,7 @@ import {
   type RemoteSplatCandidate,
 } from './urlLoaderPolicy';
 import { discoverManifestSplatCatalog, fetchManifestColmapFiles } from './urlLoaderManifestFetch';
-import { fetchOptionalDatasetViewerSettingsResult, fetchPublishedViewerState } from './urlLoaderViewerState';
+import { fetchPublishedViewerState, startOptionalDatasetViewerSettings } from './urlLoaderViewerState';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { fetchDatasetResource } from '../utils/fetchDatasetResource';
 import { detectTouchDevice } from './useIsTouchDevice';
@@ -38,6 +38,8 @@ export interface LoadManifestSourceDeps {
   assertCurrent?: () => void;
   isTouchDevice?: boolean;
   onViewerState?: (state: PublishedViewerState) => void | Promise<void>;
+  /** Optional dataset settings did not arrive in time; defaults stay in effect. */
+  onOptionalSettingsTimeout?: () => void;
   fetchImpl?: (url: string, init?: RequestInit) => Promise<Response>;
   fetchColmapFiles?: FetchColmapFiles;
   discoverSplatCatalog?: (manifest: ColmapManifest) => Promise<RemoteSplatCandidate[]>;
@@ -72,18 +74,26 @@ export async function loadManifestSource(
   }));
   // Discovery and optional settings do not gate required file transfer or parsing.
   const catalogTask = discover(manifest).catch(() => [] as RemoteSplatCandidate[]);
-  const settingsController = new AbortController();
-  const settingsSignal = deps.signal ? anySignal([deps.signal, settingsController.signal]) : settingsController.signal;
+  // The optional request starts with the downloads; its deadline starts once parsing is done.
+  const optionalSettings = manifest.viewerStatePath === undefined
+    ? startOptionalDatasetViewerSettings(manifest.baseUrl, fetchImpl, false, deps.signal)
+    : null;
+  const explicitSettingsController = new AbortController();
+  const explicitSettingsSignal = deps.signal
+    ? anySignal([deps.signal, explicitSettingsController.signal]) : explicitSettingsController.signal;
+  const explicitSettingsTask = optionalSettings ? null
+    : fetchPublishedViewerState(manifest, (url, init) => fetchImpl(url, { ...init, signal: explicitSettingsSignal }))
+      .then(state => ({ state }), error => ({ error }));
   let optionalSettingsTimedOut = false;
-  const settingsTask = (manifest.viewerStatePath === undefined
-    ? fetchOptionalDatasetViewerSettingsResult(manifest.baseUrl, fetchImpl, false, settingsSignal).then(result => {
-      optionalSettingsTimedOut = result.timedOut;
-      return result.state;
-    })
-    : fetchPublishedViewerState(manifest, (url, init) => fetchImpl(url, { ...init, signal: settingsSignal })))
-    .then(state => ({ state }), error => ({ error }));
   const getViewerState = async () => {
-    const result = await settingsTask;
+    if (optionalSettings) {
+      const result = await optionalSettings.settle();
+      assertCurrent();
+      optionalSettingsTimedOut = result.timedOut;
+      if (result.timedOut) deps.onOptionalSettingsTimeout?.();
+      return result.state;
+    }
+    const result = await explicitSettingsTask!;
     assertCurrent();
     if ('error' in result) throw result.error;
     return result.state;
@@ -144,6 +154,7 @@ export async function loadManifestSource(
 
   return true;
   } finally {
-    settingsController.abort();
+    optionalSettings?.cancel();
+    explicitSettingsController.abort();
   }
 }
