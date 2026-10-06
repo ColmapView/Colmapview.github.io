@@ -79,6 +79,13 @@ describe('manifest viewer-state loading', () => {
     await expect(pending.settle()).resolves.toEqual({ state: null, timedOut: true });
   });
 
+  it('counts a transport timeout reported as a plain AbortError as a timeout', async () => {
+    // Engines that predate abort-reason propagation reject fetch with AbortError even for timeouts.
+    const request = vi.fn(async (): Promise<Response> => { throw new DOMException('The operation was aborted.', 'AbortError'); });
+    const pending = startOptionalDatasetViewerSettings(manifest.baseUrl, request);
+    await expect(pending.settle()).resolves.toEqual({ state: null, timedOut: true });
+  });
+
   it('still reports a timed-out direct read as missing settings', async () => {
     const request = vi.fn(async (): Promise<Response> => { throw new DOMException('Request timed out', 'TimeoutError'); });
     await expect(fetchDatasetViewerSettings(manifest.baseUrl, request)).resolves.toBeNull();

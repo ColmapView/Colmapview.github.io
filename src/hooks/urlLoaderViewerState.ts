@@ -30,7 +30,9 @@ export function startOptionalDatasetViewerSettings(url: string,
   const settings = readDatasetViewerSettings(url,
     (candidate, init) => fetchImpl(candidate, { ...init, signal: requestSignal }), isFile)
     .catch((error): OptionalViewerSettingsResult => {
-      if (controller.signal.aborted && !signal?.aborted) return { state: null, timedOut: true };
+      // Only the load's own cancellation is fatal. Our deadline and the transport's timeout
+      // (which some engines report as a plain AbortError) leave the defaults in place.
+      if (!signal?.aborted) return { state: null, timedOut: true };
       throw error;
     });
   // A failure before settle() is reported by settle(), not as an unhandled rejection.
