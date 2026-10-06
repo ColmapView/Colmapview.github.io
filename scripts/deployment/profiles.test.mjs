@@ -234,6 +234,25 @@ test('public verification rejects fresh metadata paired with old HTML and accept
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
 
+test('public verification also requires the exact public viewer URL to serve the prepared HTML', async () => {
+  const preparedHtml = '<html><script type="module" src="/assets/new-entry-hash.js"></script></html>';
+  const expected = { schemaVersion: 1, sourceSha: 'f'.repeat(40), version: '0.15.4', release: 'v0.15.4', profile: 'github', base: '/latest/', googleDrive: { enabled: false, allowedOrigin: null }, indexHtmlSha256: htmlSha256(preparedHtml) };
+  let bareHtml = '<html><script type="module" src="/assets/old-entry-hash.js"></script></html>';
+  const server = createServer((request, response) => {
+    const url = new URL(request.url, 'http://127.0.0.1');
+    const metadata = url.pathname === '/latest/deployment.json';
+    response.writeHead(200, { 'Content-Type': metadata ? 'application/json' : 'text/html' });
+    response.end(metadata ? JSON.stringify(expected) : url.searchParams.has('verify') ? preparedHtml : bareHtml);
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const base = `http://127.0.0.1:${server.address().port}/latest/`;
+    await assert.rejects(fetchVerifiedArtifact(base, expected), /Delivered HTML does not match/);
+    bareHtml = preparedHtml;
+    assert.deepEqual(await fetchVerifiedArtifact(base, expected), expected);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
 test('public policy verification rejects a hosting SPA fallback even when it returns HTTP 200', () => {
   assert.throws(() => verifyPolicyHtml('privacy.html', '<html lang="en"><title>ColmapView</title></html>'), /SPA fallback/);
   verifyPolicyHtml('privacy.html', '<html lang="en"><title>Privacy policy · ColmapView</title></html>');

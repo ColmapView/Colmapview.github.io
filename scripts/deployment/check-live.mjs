@@ -43,39 +43,54 @@ for (let attempt = 1; attempt <= readinessAttempts; attempt++) {
 }
 if (!metadata) throw new Error(`Expected ${profile} artifact was not available.`, { cause: lastError });
 
-for (const filename of ['about.html', 'privacy.html', 'terms.html', 'policy.css']) {
-  // Pages may canonicalize about.html to /about. Only a same-host public final response is accepted.
-  const response = await fetch(new URL(filename, base), { signal: AbortSignal.timeout(10_000) });
-  assert.equal(new URL(response.url).origin, base.origin, 'Policy navigation must stay on this host.');
-  assert.equal(response.status, 200, `${filename} must be public HTTP 200.`);
-  if (filename.endsWith('.html')) verifyPolicyHtml(filename, await response.text());
+/** One attempt at the policy pages and a fresh browser load of the bare viewer URL. */
+async function verifyPublicPages(browser) {
+  for (const filename of ['about.html', 'privacy.html', 'terms.html', 'policy.css']) {
+    // Pages may canonicalize about.html to /about. Only a same-host public final response is accepted.
+    const response = await fetch(new URL(filename, base), { signal: AbortSignal.timeout(10_000) });
+    assert.equal(new URL(response.url).origin, base.origin, 'Policy navigation must stay on this host.');
+    assert.equal(response.status, 200, `${filename} must be public HTTP 200.`);
+    if (filename.endsWith('.html')) verifyPolicyHtml(filename, await response.text());
+  }
+  const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
+  try {
+    const unexpected = [];
+    const failedAssets = [];
+    const errors = [];
+    await context.route('**/*', route => {
+      if (new URL(route.request().url()).origin === base.origin) return route.continue();
+      unexpected.push(route.request().url());
+      return route.abort('blockedbyclient');
+    });
+    const page = await context.newPage();
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('response', response => { if (response.status() >= 400) failedAssets.push(`${response.status()} ${response.url()}`); });
+    const response = await page.goto(base.href, { waitUntil: 'networkidle', timeout: 45_000 });
+    assert.equal(response.status(), 200, 'Viewer navigation must be public HTTP 200.');
+    verifyIndexHtml(await response.body(), expected);
+    assert.equal(new URL(page.url()).origin, base.origin, 'Viewer must stay on its independent host.');
+    await page.getByRole('heading', { name: 'Load Dataset', exact: true }).waitFor();
+    const expectedControls = profile === 'custom' ? 1 : 0;
+    assert.equal(await page.getByRole('button', { name: 'Google Drive account', exact: true }).count(), expectedControls);
+    assert.equal(await page.getByRole('button', { name: 'Publish to Google Drive', exact: true }).count(), expectedControls);
+    assert.deepEqual(unexpected, [], 'An idle viewer must not contact provider SDKs/APIs or analytics.');
+    assert.deepEqual(failedAssets, [], 'All application assets must resolve on the public host.');
+    assert.deepEqual(errors, [], 'The deployed viewer must start without browser exceptions.');
+  } finally { await context.close(); }
 }
 
+// The upload is already public here, so a transient failure (network, 5xx, navigation timeout) gets
+// bounded retries instead of failing a published deployment at once.
+const PUBLIC_PAGE_ATTEMPTS = 3;
 const browser = await chromium.launch({ args: ['--enable-webgl', '--use-gl=angle', '--ignore-gpu-blocklist'] });
 try {
-  const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
-  const unexpected = [];
-  const failedAssets = [];
-  const errors = [];
-  await context.route('**/*', route => {
-    if (new URL(route.request().url()).origin === base.origin) return route.continue();
-    unexpected.push(route.request().url());
-    return route.abort('blockedbyclient');
-  });
-  const page = await context.newPage();
-  page.on('pageerror', error => errors.push(error.message));
-  page.on('response', response => { if (response.status() >= 400) failedAssets.push(`${response.status()} ${response.url()}`); });
-  const response = await page.goto(base.href, { waitUntil: 'networkidle', timeout: 45_000 });
-  assert.equal(response.status(), 200);
-  verifyIndexHtml(await response.body(), expected);
-  assert.equal(new URL(page.url()).origin, base.origin, 'Viewer must stay on its independent host.');
-  await page.getByRole('heading', { name: 'Load Dataset', exact: true }).waitFor();
-  const expectedControls = profile === 'custom' ? 1 : 0;
-  assert.equal(await page.getByRole('button', { name: 'Google Drive account', exact: true }).count(), expectedControls);
-  assert.equal(await page.getByRole('button', { name: 'Publish to Google Drive', exact: true }).count(), expectedControls);
-  assert.deepEqual(unexpected, [], 'An idle viewer must not contact provider SDKs/APIs or analytics.');
-  assert.deepEqual(failedAssets, [], 'All application assets must resolve on the public host.');
-  assert.deepEqual(errors, [], 'The deployed viewer must start without browser exceptions.');
-  await context.close();
+  for (let attempt = 1; ; attempt++) {
+    try { await verifyPublicPages(browser); break; }
+    catch (error) {
+      if (attempt === PUBLIC_PAGE_ATTEMPTS) throw error;
+      console.log(`Public page check failed (${attempt}/${PUBLIC_PAGE_ATTEMPTS}): ${String(error.message).split('\n')[0]}`);
+      await delay(15_000);
+    }
+  }
 } finally { await browser.close(); }
 console.log(`Verified ${base.href}: ${profile}, source ${expectedSha}, version ${metadata.version}.`);
