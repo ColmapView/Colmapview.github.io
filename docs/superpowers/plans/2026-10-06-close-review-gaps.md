@@ -137,7 +137,7 @@ Test-only changes: silence or assert the noise, add the coverage tests, fix the 
 
 **File:** `src/store/reconstructionStore.test.ts`.
 
-C6 pins today's behaviour; Task 7 may flip it, as R2's dependency matrix notes.
+C6 pins `urlError` preservation in the renderer-owned restore branch of `selectSplatSource`. It stays as written; Task 7 does not change that branch.
 
 - [ ] Step 1: Add the tests, run the file, then the full suite, tsc and lint.
 - [ ] Step 2: Commit with the subject "Pin cancellation and selection behaviour before the store refactor".
@@ -146,7 +146,7 @@ C6 pins today's behaviour; Task 7 may flip it, as R2's dependency matrix notes.
 
 **Spec:** R1 "Recommended task grouping and order", Task 1: A7, then A6, then A3's store part, then A2. Each item's Fix and Tests sections are binding:
 - A7 is the renderer-owns-progress helper.
-- A6 is `showColmapOnly`. Cancel clears `urlError`; update R2 C6's assertion accordingly.
+- A6 is `showColmapOnly`. Cancelling a decode clears `urlError`, matching None. Assert that in a separate test on `cancelLoading`'s decode branch, and leave R2 C6 unchanged: C6 covers `selectSplatSource`'s renderer-owned restore branch (Codex plan review #3).
 - A3 is the `restorePointDisplayWithoutSplat` export (renamed from `restorePointDisplayForSplatlessDataset`) and its call in `showColmapOnly`.
 - A2 dismisses the timeout warning when the scene is cleared.
 
@@ -154,6 +154,11 @@ C6 pins today's behaviour; Task 7 may flip it, as R2's dependency matrix notes.
 - In `selectSplatSource`'s failure branch, also set `error: \`Failed to load splat ${splatName}: ${details}\``. Use the same `details` string as `urlError.details`. A superseded or aborted attempt still sets nothing.
 - Test it in `reconstructionStore.test.ts`: a lazy tile whose fetch returns 404 leaves `error` containing `Failed to load splat`, and `urlError` is still set.
 - Update any existing test that asserted `error` stays null in that path.
+- **The toast must not outlive the failure (Codex plan review #4).**
+  - A later successful activation of any splat clears the splat-failure `error`: the downloaded-file branch, a lazy download or a byte-less activation.
+  - Choosing None clears it too.
+  - Clear only the error this path set. Keep the message in module state and clear `error` only when it still equals that message, so unrelated load errors are untouched.
+  - Test: a failure followed by a successful retry leaves `error` null. An unrelated `error` survives a successful activation.
 
 **Files:**
 - `src/store/reconstructionStore.ts`
@@ -175,6 +180,14 @@ C6 pins today's behaviour; Task 7 may flip it, as R2's dependency matrix notes.
 - `restorePointDisplayWithoutSplat()` runs when no splat ends up active.
 
 The spec notes this is the one patch the research could not execute. Run every A1 test RED then GREEN, and record that in the report.
+
+**Undistortion re-fly must not overwrite a restored view (Codex plan review #1).**
+- The problem:
+  - Navigation (including `undistortionEnabled`) and the saved view now land in the same tick when no splat download intervenes, as in a Reload or a restoration without a download.
+  - React batches those writes.
+  - `TrackballControls`' undistortion effect (`src/components/viewer3d/TrackballControls.tsx`, around :239) then queues a panorama fly-to after the saved-view effect, and it overwrites the restored position.
+- Fix: when a saved-view restoration is pending, the undistortion toggle must not re-fly to the selected panorama. For example, the camera store records that a restore fly is in progress, and the undistortion effect skips its fly while it is. Choose the smallest mechanism the effect code allows, and justify it.
+- Add a mounted regression test that renders `TrackballControls` with a selected panorama. Apply saved settings where `undistortionEnabled` differs from the visitor's, with no splat download in the restore and Reload shapes. The camera must end at the saved view.
 
 **Files:**
 - `src/hooks/useUrlState.ts`
@@ -250,24 +263,27 @@ Add tests:
 - TransformPanel confirms through its facade (`confirmReload` added to `useTransformPanelStoreFacade`; that facade's test pins its action keys);
 - the new confirm wording in `sessionActions.ts`.
 
-**Design ruling 4 (extension): baseline for the prompt.**
-- Record the alignment the dataset's *saved* settings apply, bound to the `droppedFiles` identity like `sourceViewerState`. The store keeps `savedAlignment: { files, transform, splatTransform } | null`.
-- Record it from the saved config (never the shared/URL config) in `applySavedViewerState`'s alignment phase. Both URL loads and a project YAML reach that function.
-- `setDroppedFiles` with a different map clears it, and `clear()` clears it.
-- `hasUnsavedReloadState` compares `transform` and `splatTransform` against that baseline, falling back to identity.
+**Design ruling 4 (extension, revised after Codex plan review #2): the baseline is what Reload would re-apply.**
+- Compute the baseline from the Reload inputs themselves, when the prompt is decided. Do not record it on every settings application: merges and settings-only imports apply settings without replacing `droppedFiles`, and Reload never re-applies those.
+- The baseline is the scene and splat transforms from the first of these that applies:
+  1. the retained `sourceViewerState`, when its `files` is the current `droppedFiles` (a URL dataset);
+  2. otherwise, the project's own `colmapview.yaml` among `droppedFiles` (`findDatasetViewerSettingsEntry` + `parseDatasetViewerSettings`; read the file asynchronously);
+  3. otherwise, identity.
+- `confirmReload` is already async, so it computes this baseline and compares the current `transform` and `splatTransform` against it.
+- If `hasUnsavedReloadState` has other synchronous callers, check them. Keep a synchronous identity fallback, or make the callers async, whichever the call sites allow. Justify the choice.
 
 Tests:
 - a published dataset with a saved alignment and no edits: `confirmReload()` resolves true without prompting;
 - after changing the splat transform it prompts;
 - a share-link override that differs from the saved alignment prompts, because Reload would change it;
 - a dataset without settings keeps today's identity behaviour;
-- a new dataset never inherits the previous baseline.
+- a new dataset never inherits the previous baseline;
+- a local project with its own `colmapview.yaml` alignment and no edits does not prompt;
+- after a settings-only import or a merged load changed the transforms, it prompts: Reload would restore the dataset's own settings, not the import.
 
 **Files:**
 - `src/components/viewer3d/panels/TransformPanel.tsx` and `useTransformPanelStoreFacade.ts` and their tests
-- `src/store/actions/sessionActions.ts` and its test
-- `src/store/reconstructionStore.ts` (or the transform store, if cleaner; justify)
-- `src/hooks/useUrlState.ts`
+- `src/store/actions/sessionActions.ts` and its test (compute the baseline here from the Reload inputs)
 
 - [ ] Step 1: Write the A9 tests and the ruling-4 tests (RED), then implement (GREEN).
 - [ ] Step 2: Run the full suite, tsc and lint. Commit with the subject "Confirm every Reload and only when edits would be lost".
@@ -329,6 +345,14 @@ In the probe's C3 diff, the dynamic import path is absolute. Use the repo's `'..
 - Part A (workflow): honor an in-load choice only if it is None (`''`) or names an incoming source.
 - Part B (hotkey guard): add `isReconstructionLoadPending()` and expose it through the viewer-controls facade. `n` does nothing while a dataset load runs.
 - Apply all three tests: workflow, controller hotkey, and lifecycle.
+
+**An ignored stale choice must not suppress the incoming dataset's saved selection (Codex plan review #5).**
+- A stale choice is one made during the load that names no incoming source. Part A ignores it at commit, but its `splatSelectionRevision` bump would still fail `applySavedViewerState`'s `canRestoreSplatSelection()` guard (`useUrlState.ts`, around :110).
+- That bump can come from the guarded hotkey, but also from a splat picker left open.
+- Without a fix, the incoming default would win over the dataset's YAML-selected splat.
+- Carry the choice's validity into the restoration guard. For example, when the workflow ignores a stale choice, it re-bases the revision that its `onViewerState` restoration compares against. Choose the smallest mechanism and justify it.
+- Add a workflow test: a non-default splat selected in the incoming dataset's own `colmapview.yaml`, plus a stale choice for an outgoing source made during the load. The YAML-selected splat must end up active.
+- A valid in-load choice (an incoming source or None) still beats the YAML, as today.
 
 **Files:**
 - `src/hooks/fileDropzoneWorkflow.ts`

@@ -21,12 +21,15 @@ Where a spec gives code, that code is the requirement. Where a spec offers optio
 
 ## Controller rulings (beyond the specs)
 
-1. **Lazy tile failures must be visible.** Today `selectSplatSource`'s failure sets only `urlError`, and its only reader is the landing-panel gate (R1, out-of-scope note). A failed tile download therefore shows nothing. The failure also sets the store `error`, which the DropZone error toast shows, with the text `Failed to load splat <name>: <details>`.
+1. **Lazy tile failures must be visible.** Today `selectSplatSource`'s failure sets only `urlError`, and its only reader is the landing-panel gate (R1, out-of-scope note). A failed tile download therefore shows nothing. The failure also sets the store `error`, which the DropZone error toast shows, with the text `Failed to load splat <name>: <details>`. A later successful activation, or None, clears that error, and only that error.
 2. **Reload keeps the splat state on every path** (extends R1 A8). The splat-only path (`updateLoadedSplatFile`) and the images-only path (`runImagesOnlyLoad`) keep the on-screen splat state on Reload too: the active splat, or None. That is the same rule as the COLMAP path.
 3. **The zip URL source commits only its own scene** (extends R1 A4). `loadZipUrlSource` must not install the active archive or source info when processing merged into the open scene without replacing it.
 4. **The Reload prompt compares against what Reload restores** (extends R1 A9). `hasUnsavedReloadState` currently treats any non-identity scene or splat transform as unsaved. With the TransformPanel now confirming as well, every published dataset with a saved alignment would prompt even when nothing was edited.
-   - The store records the alignment that the dataset's saved settings apply: the scene and splat transforms from the *saved* config only, never shared/URL overrides. It binds that record to the `droppedFiles` identity, the same way as `sourceViewerState`.
-   - `hasUnsavedReloadState` compares the current transforms against that baseline, falling back to identity.
+   - The baseline is what Reload would re-apply, computed from the Reload inputs at prompt time:
+     1. the retained `sourceViewerState` for the current `droppedFiles`;
+     2. otherwise the project's own `colmapview.yaml` among the files;
+     3. otherwise identity.
+   - It is never recorded per settings application, because merges and settings-only imports apply settings that Reload does not restore. This revision follows the Codex plan review.
 5. **The two remaining flaky test patterns are in scope** (from R2 Part 5): `ViewerToolModals.test.tsx` cold lazy imports with `findBy*`, and the `integrity.test.ts` budget. The same applies to the collection-time scan in `componentStoreBoundary.test.ts`.
 6. **Pristine test output and test-file type checking are in scope.**
    - R2's X2 noise sweep (16 other noisy files) brings suite-wide output to pristine.
