@@ -2,7 +2,7 @@
 
 ColmapView can publish the currently loaded COLMAP reconstruction, original images, available masks, and splats to a new public dataset in the connected user's personal Hugging Face account. The resulting viewer link opens without a Hugging Face login and refers to fixed dataset revisions.
 
-**Status:** implemented behind a build flag. Real localhost sign-in, public repository creation, a 168 MB PLY upload, dataset-card rendering, and anonymous reopening passed against the live Hugging Face service on 2026-09-28. Publishing is enabled on colmapview.github.io since v0.15.1 (2026-09-29): release builds use the production settings and `/dev/` the development settings below. Local publishing currently generates localhost viewer links; public sharing still needs a compatible hosted viewer and a public publication base URL.
+**Status:** implemented behind a build flag. Real localhost sign-in, public repository creation, a 168 MB PLY upload, dataset-card rendering, and anonymous reopening passed against the live Hugging Face service on 2026-09-28. Publishing is enabled on colmapview.github.io since v0.15.1 (2026-09-29): release builds use the production settings and `/dev/` the development settings below. Links published from colmapview.github.io open in `/latest/`, or in `/dev/` when published there. Other hosts link to their own viewer page, so links published from a local development server point to `localhost` and work only where that local viewer is running.
 
 ## User workflow
 
@@ -100,7 +100,7 @@ This exposed and fixed a desktop restoration issue: a saved splat above the 150 
 
 Data revision: `bb9ee9e1ef4b0496f695ec6ab21feea49dadfb20`. Metadata revision: `b630b92b6bbabd5697b9eb08c108340d33fad3cd`.
 
-The test used the localhost development viewer for publication and recipient rendering. Its README explicitly notes that its viewer links target localhost. This does **not** validate a deployed viewer or make those links usable on another person's computer; hosted rollout and public-link configuration remain outstanding.
+The test used the localhost development viewer for publication and recipient rendering. Its README explicitly notes that its viewer links target localhost. This does **not** validate a deployed viewer or make those links usable on another person's computer; hosted rollout and public-link configuration were still outstanding then (both completed 2026-09-29, v0.15.1).
 
 ### Private dataset viewing
 
@@ -192,4 +192,4 @@ npx playwright test e2e/dataset-viewer-settings.spec.ts e2e/hugging-face-publish
 
 Playwright always starts its own test server on port 5187 (override with `COLMAP_WEBVIEW_E2E_PORT`) and never reuses an existing one, so a developer's `npm run dev` server with different feature settings cannot be picked up by mistake. The mock browser fixture intercepts Hugging Face requests and receives binary uploads on a temporary loopback endpoint; it uses fake OAuth credentials and creates no real repositories. It also verifies that metadata retries preserve committed assets and that declining consent preserves the loaded dataset. Live service validation is recorded separately above.
 
-For the original design and outstanding rollout gates, see the [implementation plan](hugging-face-dataset-sharing-plan.md).
+For the original design and its rollout gates, see the [implementation plan](hugging-face-dataset-sharing-plan.md); the enablement gate on colmapview.github.io was completed on 2026-09-29 (v0.15.1).

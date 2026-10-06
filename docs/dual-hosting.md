@@ -1,6 +1,6 @@
 # Independent GitHub and custom hosting
 
-ColmapView has two deployment profiles from the same release commit:
+ColmapView is served from these hosts. A release tag builds the GitHub profile and, when the custom gate is enabled, the custom profile from the same commit; `/dev/` is built from `main` or a manual branch run, and a preview from an explicitly selected ref:
 
 | Host | App base | Google Drive | Account configuration |
 | --- | --- | --- | --- |

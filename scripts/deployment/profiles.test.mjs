@@ -133,31 +133,42 @@ test('Cloudflare deployment token is scoped only to trusted upload steps', () =>
 });
 
 test('GitHub Pages builds read release HF settings on tags and development HF settings on branches', () => {
-  const env = yaml.load(readFileSync('.github/workflows/deploy.yml', 'utf8')).jobs.deploy.env;
+  const deploy = yaml.load(readFileSync('.github/workflows/deploy.yml', 'utf8')).jobs.deploy;
+  const env = deploy.env;
   // Pinned verbatim: dropping the `ref_type != 'tag'` guard (`tag && A || B`) would give an unset release value the /dev/ one.
-  const flag = (release, dev) => `\${{ github.ref_type == 'tag' && vars.${release} == 'true' || github.ref_type != 'tag' && vars.${dev} == 'true' }}`;
-  const value = (release, dev) => `\${{ github.ref_type == 'tag' && vars.${release} || github.ref_type != 'tag' && vars.${dev} || '' }}`;
+  const flag = (releaseHf, devHf) => `\${{ github.ref_type == 'tag' && vars.${releaseHf} == 'true' || github.ref_type != 'tag' && vars.${devHf} == 'true' }}`;
+  const value = (releaseHf, devHf) => `\${{ github.ref_type == 'tag' && vars.${releaseHf} || github.ref_type != 'tag' && vars.${devHf} || '' }}`;
   assert.equal(env.VITE_HF_PUBLISH_ENABLED, flag('HF_PUBLISH_ENABLED', 'HF_DEV_PUBLISH_ENABLED'));
   assert.equal(env.VITE_HF_AUTH_ENABLED, flag('HF_AUTH_ENABLED', 'HF_DEV_AUTH_ENABLED'));
   assert.equal(env.VITE_HF_OAUTH_CLIENT_ID, value('HF_OAUTH_CLIENT_ID', 'HF_DEV_OAUTH_CLIENT_ID'));
   assert.equal(env.VITE_HF_OAUTH_REDIRECT_URI, value('HF_OAUTH_REDIRECT_URI', 'HF_DEV_OAUTH_REDIRECT_URI'));
   assert.ok(!Object.keys(env).some(name => name.startsWith('VITE_GOOGLE_DRIVE_')), 'GitHub builds receive no Drive configuration');
+  // The GitHub builds must see exactly this job env: no step may set VITE_HF_* (in its own env, by inline
+  // assignment or through $GITHUB_ENV), and --fixture would clear it.
+  for (const step of deploy.steps) {
+    const label = step.name ?? step.uses;
+    assert.ok(!Object.keys(step.env ?? {}).some(name => name.startsWith('VITE_HF_')), `${label} must not set VITE_HF_* in its env`);
+    assert.doesNotMatch(step.run ?? '', /\bVITE_HF_\w*=/, `${label} must not assign VITE_HF_*`);
+  }
+  const githubBuilds = deploy.steps.filter(step => /(?:build-profile\.mjs|build:deployment)\b.*\bgithub\b/.test(step.run ?? ''));
+  assert.deepEqual(githubBuilds.map(step => step.name), ['Build version or dev', 'Build latest']);
+  for (const step of githubBuilds) assert.doesNotMatch(step.run, /--fixture\b/, `${step.name} must not build with --fixture`);
   assert.doesNotMatch(readFileSync('.github/workflows/deploy-preview.yml', 'utf8'), /VITE_HF_|vars\.(?:CUSTOM_)?HF_/, 'previews receive no provider configuration');
 });
 
 test('GitHub Pages HF preflight accepts each channel and rejects incomplete or swapped settings', () => {
-  const dev = { VITE_HF_PUBLISH_ENABLED: 'true', VITE_HF_AUTH_ENABLED: 'false', VITE_HF_OAUTH_CLIENT_ID: '00000000-0000-4000-8000-000000000000', VITE_HF_OAUTH_REDIRECT_URI: 'https://colmapview.github.io/dev/hf-callback.html' };
-  const release = { ...dev, VITE_HF_OAUTH_REDIRECT_URI: 'https://colmapview.github.io/latest/hf-callback.html' };
-  assert.deepEqual(validateGithubHfConfiguration(dev, false), { hf: 'publish' });
-  assert.deepEqual(validateGithubHfConfiguration(release, true), { hf: 'publish' });
+  const devHf = { VITE_HF_PUBLISH_ENABLED: 'true', VITE_HF_AUTH_ENABLED: 'false', VITE_HF_OAUTH_CLIENT_ID: '00000000-0000-4000-8000-000000000000', VITE_HF_OAUTH_REDIRECT_URI: 'https://colmapview.github.io/dev/hf-callback.html' };
+  const releaseHf = { ...devHf, VITE_HF_OAUTH_REDIRECT_URI: 'https://colmapview.github.io/latest/hf-callback.html' };
+  assert.deepEqual(validateGithubHfConfiguration(devHf, false), { hf: 'publish' });
+  assert.deepEqual(validateGithubHfConfiguration(releaseHf, true), { hf: 'publish' });
   assert.deepEqual(validateGithubHfConfiguration({ VITE_HF_PUBLISH_ENABLED: 'false', VITE_HF_AUTH_ENABLED: 'false', VITE_HF_OAUTH_CLIENT_ID: '', VITE_HF_OAUTH_REDIRECT_URI: '' }, false), { hf: 'disabled' });
   assert.deepEqual(validateGithubHfConfiguration({}, true), { hf: 'disabled' });
-  assert.deepEqual(validateGithubHfConfiguration({ ...dev, VITE_HF_PUBLISH_ENABLED: 'false', VITE_HF_AUTH_ENABLED: 'true' }, false), { hf: 'read-only' });
+  assert.deepEqual(validateGithubHfConfiguration({ ...devHf, VITE_HF_PUBLISH_ENABLED: 'false', VITE_HF_AUTH_ENABLED: 'true' }, false), { hf: 'read-only' });
   // Callback and client errors name the repository variable to fix for the channel this run reads.
-  assert.throws(() => validateGithubHfConfiguration(release, false), { message: 'HF_DEV_OAUTH_REDIRECT_URI must be https://colmapview.github.io/dev/hf-callback.html.' });
-  assert.throws(() => validateGithubHfConfiguration(dev, true), { message: 'HF_OAUTH_REDIRECT_URI must be https://colmapview.github.io/latest/hf-callback.html.' });
-  assert.throws(() => validateGithubHfConfiguration({ ...dev, VITE_HF_OAUTH_CLIENT_ID: '' }, false), { message: 'HF_DEV_OAUTH_CLIENT_ID is missing or invalid.' });
-  assert.throws(() => validateGithubHfConfiguration({ ...dev, VITE_HF_PUBLISH_ENABLED: 'yes' }, false), { message: 'VITE_HF_PUBLISH_ENABLED must be true or false.' });
+  assert.throws(() => validateGithubHfConfiguration(releaseHf, false), { message: 'HF_DEV_OAUTH_REDIRECT_URI must be https://colmapview.github.io/dev/hf-callback.html.' });
+  assert.throws(() => validateGithubHfConfiguration(devHf, true), { message: 'HF_OAUTH_REDIRECT_URI must be https://colmapview.github.io/latest/hf-callback.html.' });
+  assert.throws(() => validateGithubHfConfiguration({ ...devHf, VITE_HF_OAUTH_CLIENT_ID: '' }, false), { message: 'HF_DEV_OAUTH_CLIENT_ID is missing or invalid.' });
+  assert.throws(() => validateGithubHfConfiguration({ ...devHf, VITE_HF_PUBLISH_ENABLED: 'yes' }, false), { message: 'VITE_HF_PUBLISH_ENABLED must be true or false.' });
 });
 
 test('public verification rejects fresh metadata paired with old HTML and accepts the exact prepared artifact', async () => {
