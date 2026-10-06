@@ -27,7 +27,8 @@ import { loadManifestSource } from './urlLoaderManifestSource';
 import { isSplatUrl, loadSplatUrlSource } from './urlLoaderSplatSource';
 import { applySavedViewerState, decodeSharedViewerOverrides, resolveRestoredSplatSourceId } from './useUrlState';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
-import { fetchOptionalDatasetViewerSettingsResult, OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE } from './urlLoaderViewerState';
+import { fetchOptionalDatasetViewerSettingsResult } from './urlLoaderViewerState';
+import { dismissOptionalSettingsTimeoutWarning, showOptionalSettingsTimeoutWarning } from './optionalSettingsWarning';
 import { findDatasetViewerSettingsEntry } from '../utils/datasetViewerSettings';
 import { parseGoogleDriveFileUrl } from '../utils/googleDriveUrl';
 import { resolveGoogleDriveArchive } from '../features/googleDrive/api';
@@ -99,6 +100,8 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
       logInfo(URL_LOAD_GUARD_MESSAGE);
       return false;
     }
+    // A settings timeout warning describes the previous load.
+    dismissOptionalSettingsTimeoutWarning();
     const initialSplatSelectionRevision = options.initialSplatSelectionRevision ?? useReconstructionStore.getState().splatSelectionRevision;
     const isCurrent = () => !signal.aborted
       && useReconstructionStore.getState().urlLoadController?.signal === signal;
@@ -117,9 +120,7 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
     const load: UrlLoadContext = {
       // Recorded here and applied once the load succeeds, together with the URL's own settings.
       onViewerState: async (state) => { assertCurrent(); savedViewerState = state; },
-      onOptionalSettingsTimeout: guard(() => {
-        useNotificationStore.getState().addNotification('warning', OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE);
-      }),
+      onOptionalSettingsTimeout: guard(showOptionalSettingsTimeoutWarning),
       onRemoteSplatCatalog: guard((catalog: RemoteSplatCandidate[], baseUrl = contextUrl) => {
         mergeRemoteSplatCatalog(catalog, baseUrl);
         load.remoteCatalogMerged = true;

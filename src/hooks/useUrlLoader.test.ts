@@ -767,6 +767,13 @@ describe('useUrlLoader', () => {
     });
     expect(useNotificationStore.getState().notifications).toContainEqual(expect.objectContaining({
       type: 'warning', message: OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE }));
+    // The warning describes that load; the next one removes it as soon as it starts.
+    let next!: Promise<boolean>;
+    act(() => { next = result.current.loadFromUrl('https://example.com/project/other.spz'); });
+    expect(useNotificationStore.getState().notifications).not.toContainEqual(expect.objectContaining({
+      message: OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE }));
+    act(() => useReconstructionStore.getState().cancelLoading());
+    await act(async () => { expect(await next).toBe(false); });
   });
 
   it.each(['document', 'combined', 'binary', 'legacy'] as const)('restores a published view with %s URL precedence', async format => {

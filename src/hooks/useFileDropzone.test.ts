@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useReconstructionStore, useSplatBackendStore, useUIStore } from '../store';
+import { useNotificationStore, useReconstructionStore, useSplatBackendStore, useUIStore } from '../store';
 import type { DragEvent } from 'react';
 import type { FileDropzoneWorkflowDeps } from './fileDropzoneWorkflow';
 import { useFileDropzone } from './useFileDropzone';
@@ -8,6 +8,8 @@ import { buildFile, buildFileSystemFileEntry, buildLoadedFiles, buildReconstruct
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
+import { showOptionalSettingsTimeoutWarning } from './optionalSettingsWarning';
+import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE } from './urlLoaderViewerState';
 
 const { processFileDropzoneFilesMock } = vi.hoisted(() => ({
   processFileDropzoneFilesMock: vi.fn(async () => true),
@@ -48,6 +50,17 @@ describe('useFileDropzone', () => {
     expect(signal.aborted).toBe(true);
     expect(useReconstructionStore.getState().urlLoadController).toBeNull();
     expect(processFileDropzoneFilesMock).toHaveBeenCalled();
+  });
+
+  it('removes the previous dataset\'s settings timeout warning when local files are dropped', async () => {
+    showOptionalSettingsTimeoutWarning();
+    const { result } = renderHook(() => useFileDropzone());
+    const event = { preventDefault: vi.fn(), stopPropagation: vi.fn(), dataTransfer: {
+      types: ['Files'], items: [], files: [new File(['x'], 'cameras.bin')],
+    } } as unknown as DragEvent<HTMLElement>;
+    await act(async () => { await result.current.handleDrop(event); });
+    expect(useNotificationStore.getState().notifications).not.toContainEqual(expect.objectContaining({
+      message: OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE }));
   });
 
   it('does not preload the spark runtime when webgpu is the resolved splat backend', async () => {
