@@ -26,7 +26,7 @@
         <p class="eyebrow">ColmapView · OpsiClear LLC</p>
         <h1>Privacy policy</h1>
         <p class="lede">What the viewer accesses, where data goes, and how to remove it.</p>
-        <p class="updated">Effective <time datetime="2026-10-05">October 5, 2026</time></p>
+        <p class="updated">Effective <time datetime="2026-10-07">October 7, 2026</time></p>
       </div>
       <div class="document-layout">
         <nav class="contents" aria-label="On this page">
@@ -51,6 +51,7 @@
               <li>Remote files download from the source you choose. Account access is optional and requested for private access or publishing.</li>
               <li>Publishing sends dataset files to your selected provider. The current Hugging Face publisher creates public repositories; Drive ZIPs start private.</li>
               <li>Disconnecting removes the app's in-memory credentials. It does not remove loaded files or published copies.</li>
+              <li>Current versions include no analytics. Older versions kept at their versioned GitHub Pages addresses (v0.15.4 and earlier) load Google Analytics; see <a href="#older-versions">section 7</a>.</li>
             </ul>
           </div>
           <section id="scope">
@@ -97,7 +98,8 @@
           <section id="services">
             <h2>7. Website hosting and external services</h2>
             <p>ColmapView is hosted on GitHub Pages and Cloudflare Pages. These hosting and infrastructure services process connection information such as IP address, request time, browser information, and requested website resources to deliver and protect the website. Their handling is described in the <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub privacy statement</a> and <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare privacy policy</a>.</p>
-            <p>ColmapView does not include analytics scripts or create analytics cookies. These policy pages load no third-party scripts or fonts. Opening an account control, signing in, loading a remote dataset, following an external link, or publishing contacts the relevant external services. Those services may use their own cookies and process account or connection information under their policies. See <a href="https://policies.google.com/privacy">Google's privacy policy</a> and <a href="https://huggingface.co/privacy">Hugging Face's privacy policy</a>.</p>
+            <p>Current ColmapView versions do not include analytics scripts or create analytics cookies; see <a href="#older-versions">older versions</a> below. These policy pages load no third-party scripts or fonts. Opening an account control, signing in, loading a remote dataset, following an external link, or publishing contacts the relevant external services. Those services may use their own cookies and process account or connection information under their policies. See <a href="https://policies.google.com/privacy">Google's privacy policy</a> and <a href="https://huggingface.co/privacy">Hugging Face's privacy policy</a>.</p>
+            <p id="older-versions"><strong>Older versions on GitHub Pages:</strong> each released version stays available at its own address on <code>colmapview.github.io</code>, such as <code>/v0.15.4/</code>, so existing links keep working. ColmapView v0.15.4 and earlier versions, including <code>/latest/</code> until a newer release replaces it, load Google Analytics (Google tag <code>G-7K5H83SEMY</code>) when the viewer opens. In those versions your browser sends page-view information to Google, including the full page address with any dataset URL in its query string, the referring page, browser and device details, and connection information such as your IP address. The tag also sets Google Analytics cookies (<code>_ga</code> and <code>_ga_7K5H83SEMY</code>) for <code>colmapview.github.io</code>. Google handles this information as described in <a href="https://policies.google.com/technologies/partner-sites">How Google uses information from sites or apps that use its services</a>. To avoid it, use a current version instead of a versioned address from v0.15.4 or earlier, or block analytics in your browser.</p>
             <p>The website restricts outgoing referrers to the site's origin so query strings and dataset paths are not sent as referrers. Requests to the dataset provider necessarily include the resource you ask it to retrieve. Tokens are limited to the relevant provider requests, and production Google and Hugging Face API connections use HTTPS. Your device, browser extensions, source hosts, and copies you share also affect the privacy of your data.</p>
           </section>
           <section id="controls">
@@ -105,7 +107,7 @@
             <ul>
               <li><strong>End app access:</strong> use Disconnect in the account control or Sign out in the publishing dialog. Viewing and publishing can have separate Google sessions; disconnect the relevant connections. Reload or close the viewer to end its in-memory sessions.</li>
               <li><strong>Revoke provider authorization:</strong> remove ColmapView in <a href="https://myaccount.google.com/connections">Google Account connections</a> or <a href="https://huggingface.co/settings/connected-applications">Hugging Face connected applications</a>. This is separate from the app's local Disconnect control.</li>
-              <li><strong>Clear this browser:</strong> use Reset settings on the dataset-loading page to remove saved viewer preferences, or clear this site's data in your browser to remove local and session storage and cached responses. Clear browser history, bookmarks, and downloaded exports separately if needed.</li>
+              <li><strong>Clear this browser:</strong> use Reset settings on the dataset-loading page to remove saved viewer preferences, or clear this site's data in your browser to remove local and session storage, cookies (including Google Analytics cookies set by older versions), and cached responses. Clear browser history, bookmarks, and downloaded exports separately if needed.</li>
               <li><strong>Remove published copies:</strong> change sharing or delete the uploaded file in <a href="https://drive.google.com/">Google Drive</a>; use your Hugging Face repository's settings to change access or delete the repository. Check for files or repositories left by interrupted publication.</li>
               <li><strong>Ask for help:</strong> email <a href="mailto:info@opsiclear.com">info@opsiclear.com</a> with a privacy or deletion request. We can help with information you sent to us; we do not have a central copy of your locally processed dataset and cannot erase other users' downloads or provider-managed backups.</li>
             </ul>
