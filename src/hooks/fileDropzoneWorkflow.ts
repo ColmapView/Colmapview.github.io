@@ -113,6 +113,8 @@ export interface FileDropzoneWorkflowOptions {
   throwOnError?: boolean;
   onSceneReplaced?: () => void;
   onViewerState?: (state: PublishedViewerState) => void | Promise<void>;
+  /** Settings that came with these files from their source; a settings file inside them wins. */
+  viewerState?: PublishedViewerState;
 }
 
 function updateLoadedSplatFile(
@@ -282,7 +284,7 @@ export async function processFileDropzoneFiles(
   let pendingSource: ReconstructionSource | null = null;
   let sourceInstalled = false;
   let keepLoadingForInitialSplat = false;
-  let viewerState: PublishedViewerState | null = null;
+  let viewerState: PublishedViewerState | null = normalizedOptions.viewerState ?? null;
   const logger = deps.logger ?? appLogger;
   const clearCaches = deps.clearCaches ?? clearAllCaches;
   const importConfig = deps.importConfig ?? importConfigFile;

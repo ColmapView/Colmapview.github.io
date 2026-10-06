@@ -5,6 +5,7 @@ import { isReconstructionSnapshot } from '../wasm/reconstructionService';
 import { cancelPendingReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
 import { clearActiveZipArchive } from '../utils/zipArchiveState';
 import type { UrlLoadProgress, UrlLoadError, ColmapManifest } from '../types/manifest';
+import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { useUIStore } from './stores/uiStore';
 import {
   usePointCloudStore,
@@ -174,6 +175,13 @@ interface ReconstructionState {
   wasmReconstruction: ReconstructionSource | null;
   loadedFiles: LoadedFiles | null;
   droppedFiles: Map<string, File> | null;
+  /**
+   * Saved settings a URL dataset brought from its source (its colmapview.yaml or published
+   * state), bound to the file map they came with. Reload re-applies them like a local
+   * project's own YAML.
+   */
+  sourceViewerState: { files: Map<string, File>; state: PublishedViewerState } | null;
+  setSourceViewerState: (state: PublishedViewerState | null) => void;
   loading: boolean;
   error: string | null;
   progress: number;
@@ -243,6 +251,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   wasmReconstruction: null,
   loadedFiles: null,
   droppedFiles: null,
+  sourceViewerState: null,
   loading: false,
   error: null,
   progress: 0,
@@ -336,7 +345,16 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     });
   },
 
-  setDroppedFiles: (droppedFiles) => set({ droppedFiles }),
+  setDroppedFiles: (droppedFiles) => set({
+    droppedFiles,
+    // Settings belong to the files they came with; another dataset must not inherit them.
+    ...(get().sourceViewerState?.files === droppedFiles ? {} : { sourceViewerState: null }),
+  }),
+
+  setSourceViewerState: (state) => {
+    const files = get().droppedFiles;
+    set({ sourceViewerState: state && files ? { files, state } : null });
+  },
 
   setLoading: (loading) => set({ loading }),
 
@@ -613,6 +631,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       wasmReconstruction: null,
       loadedFiles: null,
       droppedFiles: null,
+      sourceViewerState: null,
       error: null,
       progress: 0,
       loading: false,

@@ -58,7 +58,7 @@ export function useFileDropzone() {
   const processFiles = useCallback(async (
     files: Map<string, File>,
     progressRange?: { start: number; end: number },
-    options: Pick<FileDropzoneWorkflowOptions, 'onSceneReplaced' | 'replaceSplatScene' | 'preserveRemoteSplatSources' | 'throwOnError' | 'onViewerState' | 'load' | 'signal' | 'initialSplatSelectionRevision'> = {}
+    options: Pick<FileDropzoneWorkflowOptions, 'onSceneReplaced' | 'replaceSplatScene' | 'preserveRemoteSplatSources' | 'throwOnError' | 'onViewerState' | 'viewerState' | 'load' | 'signal' | 'initialSplatSelectionRevision'> = {}
   ) => {
     const initialSplatSelectionRevision = options.initialSplatSelectionRevision ?? useReconstructionStore.getState().splatSelectionRevision;
     const load = options.load ?? beginReconstructionLoad();
@@ -107,6 +107,7 @@ export function useFileDropzone() {
         progressRange,
         onSceneReplaced: options.onSceneReplaced,
         onViewerState,
+        viewerState: options.viewerState,
         load,
         signal: options.signal,
         initialSplatSelectionRevision,
@@ -129,10 +130,14 @@ export function useFileDropzone() {
   ]);
 
   /** Re-read the current dataset (discarding edits) without dropping its remote splat tiles. */
-  const reloadFiles = useCallback(
-    (files: Map<string, File>) => processFiles(files, undefined, { preserveRemoteSplatSources: true }),
-    [processFiles]
-  );
+  const reloadFiles = useCallback((files: Map<string, File>) => {
+    // A URL dataset's saved settings are not among its files; re-apply them like a project's own YAML.
+    const retained = useReconstructionStore.getState().sourceViewerState;
+    return processFiles(files, undefined, {
+      preserveRemoteSplatSources: true,
+      viewerState: retained?.files === files ? retained.state : undefined,
+    });
+  }, [processFiles]);
 
   /**
    * Process a ZIP file: extract COLMAP files and set up lazy image extraction.

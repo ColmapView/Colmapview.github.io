@@ -6,11 +6,12 @@ import { processFileDropzoneFiles } from './fileDropzoneWorkflow';
 import { ReconstructionService, ReconstructionSnapshot } from '../wasm/reconstructionService';
 import { cancelPendingReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
 import { useReconstructionStore, useTransformStore, useUIStore, usePointCloudStore } from '../store';
-import { applyShareConfig } from './useUrlState';
+import { applySavedViewerState, applyShareConfig } from './useUrlState';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import { getShareActiveSplatSourceId } from '../utils/splatFileSourcePolicy';
 import { buildWasmReconstructionWrapper } from '../test/builders';
+import type { PublishedViewerState } from '../utils/publishedViewerState';
 
 function file(name: string): File {
   return new File([''], name);
@@ -981,5 +982,46 @@ describe('file dropzone workflow', () => {
       expect(deps.setUrlProgress).not.toHaveBeenCalledWith(expect.objectContaining({ currentFile: 'a.spz' }));
       expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
     } finally { useReconstructionStore.getState().clear(); }
+  });
+
+  it('restores the saved alignment that came with a reloaded URL dataset', async () => {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    useTransformStore.setState(useTransformStore.getInitialState(), true);
+    const saved: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { transform: { ...createIdentityEuler(), translationX: 5 } } } };
+    // An applied transform moved the splat; Reload must return it to the saved alignment.
+    useTransformStore.getState().setSplatTransform({ ...createIdentityEuler(), translationX: 9 });
+    const deps = createDeps({
+      getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
+      setLoadedFiles: useReconstructionStore.getState().setLoadedFiles,
+      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
+      buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
+    });
+    const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, file(name)]));
+
+    await expect(processFileDropzoneFiles(files, deps, {
+      viewerState: saved,
+      onViewerState: viewerState => applySavedViewerState(viewerState, null),
+    })).resolves.toBe(true);
+
+    expect(useTransformStore.getState().splatTransform.translationX).toBe(5);
+  });
+
+  it('lets a settings file inside the files win over settings from their source', async () => {
+    const fromSource: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null,
+      config: { ui: { backgroundColor: '#111111' } } };
+    const inFiles = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
+      config: { ui: { backgroundColor: '#222222' } } });
+    const onViewerState = vi.fn();
+    const deps = createDeps({
+      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
+      buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
+    });
+    const files = new Map<string, File>(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, file(name)]));
+    files.set('colmapview.yaml', Object.assign(file('colmapview.yaml'), { text: async () => inFiles }));
+
+    await processFileDropzoneFiles(files, deps, { viewerState: fromSource, onViewerState });
+
+    expect(onViewerState).toHaveBeenCalledWith(expect.objectContaining({ config: { ui: { backgroundColor: '#222222' } } }));
   });
 });

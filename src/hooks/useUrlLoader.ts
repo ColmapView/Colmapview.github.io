@@ -167,6 +167,8 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
           && useReconstructionStore.getState().splatSelectionRevision === initialSplatSelectionRevision) {
           useReconstructionStore.getState().offerSplatPicker();
         }
+        // Reload re-reads the downloaded files; these settings are not among them.
+        useReconstructionStore.getState().setSourceViewerState(savedViewerState);
       }
       return loaded;
     } catch (error) {

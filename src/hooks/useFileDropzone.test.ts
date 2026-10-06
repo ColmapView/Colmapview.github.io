@@ -6,6 +6,7 @@ import type { FileDropzoneWorkflowDeps } from './fileDropzoneWorkflow';
 import { useFileDropzone } from './useFileDropzone';
 import { buildFile, buildFileSystemFileEntry, buildLoadedFiles, buildReconstruction } from '../test/builders';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
+import type { PublishedViewerState } from '../utils/publishedViewerState';
 
 const { processFileDropzoneFilesMock } = vi.hoisted(() => ({
   processFileDropzoneFilesMock: vi.fn(async () => true),
@@ -228,5 +229,22 @@ describe('useFileDropzone', () => {
     await act(async () => { await result.current.processFiles(files); });
     expect(processFileDropzoneFilesMock).toHaveBeenLastCalledWith(files, expect.anything(),
       expect.objectContaining({ preserveRemoteSplatSources: false }));
+  });
+
+  it('re-applies saved source settings only to the files they came with', async () => {
+    const files = new Map([['cameras.bin', buildFile('cameras.bin')]]);
+    const saved: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null, config: {} };
+    useReconstructionStore.getState().setDroppedFiles(files);
+    useReconstructionStore.getState().setSourceViewerState(saved);
+    const { result } = renderHook(() => useFileDropzone());
+
+    await act(async () => { await result.current.reloadFiles(files); });
+    expect(processFileDropzoneFilesMock).toHaveBeenLastCalledWith(files, expect.anything(),
+      expect.objectContaining({ viewerState: saved }));
+
+    const other = new Map(files);
+    await act(async () => { await result.current.reloadFiles(other); });
+    expect(processFileDropzoneFilesMock).toHaveBeenLastCalledWith(other, expect.anything(),
+      expect.objectContaining({ viewerState: undefined }));
   });
 });

@@ -591,6 +591,26 @@ describe('useUrlLoader', () => {
     expect(state.showSplatPicker).toBe(true);
   });
 
+  it('remembers the saved settings that came with a URL dataset for Reload', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const baseUrl = 'https://huggingface.co/datasets/owner/saved/resolve/main/';
+    const request = vi.fn(async (url: string | URL) => {
+      if (String(url).endsWith('colmapview.yaml')) return new Response('ui:\n  background_color: "#123456"\n');
+      if (String(url).includes('/api/datasets/')) return Response.json(hubEntries([]));
+      return new Response(new Uint8Array([1, 2, 3]));
+    });
+    vi.stubGlobal('fetch', request);
+    processFilesMock.mockImplementationOnce(async files => {
+      useReconstructionStore.getState().setDroppedFiles(files);
+      useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles());
+    });
+    const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
+    await act(async () => { expect(await result.current.loadFromUrl(baseUrl)).toBe(true); });
+    const { sourceViewerState, droppedFiles } = useReconstructionStore.getState();
+    expect(sourceViewerState?.files).toBe(droppedFiles);
+    expect(sourceViewerState?.state.config).toEqual({ ui: { backgroundColor: '#123456' } });
+  });
+
   it.each(['saved', 'override', 'previous-scene', 'missing', 'invalid'] as const)('loads a Hugging Face project with %s YAML settings', async mode => {
     vi.stubGlobal('Blob', NodeBlob);
     useCameraStore.setState(useCameraStore.getInitialState(), true);
