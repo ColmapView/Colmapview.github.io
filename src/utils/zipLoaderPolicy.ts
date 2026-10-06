@@ -18,7 +18,7 @@ export const ARCHIVE_EXTENSIONS = [
   '.7z',
 ] as const;
 
-const ARCHIVE_MIME_TYPES = new Set([
+export const ARCHIVE_MIME_TYPES: ReadonlySet<string> = new Set([
   'application/zip',
   'application/x-tar',
   'application/gzip',
@@ -160,6 +160,8 @@ export function hasRequiredColmapArchiveFiles(keys: Iterable<string>): boolean {
 
 export function getZipEntryLookupCandidates(imageName: string): string[] {
   const normalized = imageName.replace(/\\/g, '/');
+  // A missing mask must never fall back to the original image's basename.
+  if (normalized.toLowerCase().startsWith('masks/')) return [normalized, `sparse/0/${normalized}`];
   const filename = normalized.split('/').pop() ?? normalized;
   const candidates = [
     normalized,

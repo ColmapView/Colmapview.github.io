@@ -8,13 +8,16 @@ import type { ArchiveEntry, ArchiveReader } from '../types/libarchive';
 import { publicAsset } from './paths';
 import { isSplatFilePath } from './splatFilePolicy';
 import { getFilenameFromUrl } from './urlUtils';
-import { downloadZip, type ZipProgress } from './zipDownload';
+import { downloadZip, type ZipDownloadOptions, type ZipProgress } from './zipDownload';
 import { findDatasetViewerSettingsEntry, isDatasetViewerSettingsPath } from './datasetViewerSettings';
 import { MAX_VIEWER_STATE_BYTES } from './publishedViewerState';
 import { appLogger } from './logger';
+import { awaitWithAbort } from './awaitWithAbort';
+import { closeZipArchive } from './zipArchiveState';
 import {
   validateZipFile,
   validateZipUrl,
+  validateArchiveSize,
 } from './zipValidation';
 import {
   buildArchiveEntryPath,
@@ -72,6 +75,12 @@ export interface ZipLoadResult {
   imageCount: number;
 }
 
+export interface ZipUrlLoadOptions {
+  filename: string;
+  size: number;
+  fetchImpl: ZipDownloadOptions['fetchImpl'];
+}
+
 // ============================================================================
 // ZIP Detection
 // ============================================================================
@@ -121,12 +130,14 @@ async function initializeArchive(): Promise<void> {
  */
 async function processZipArchive(
   archive: ArchiveReader,
-  onProgress: (progress: ZipProgress) => void
+  onProgress: (progress: ZipProgress) => void,
+  signal?: AbortSignal
 ): Promise<{ colmapFiles: Map<string, File>; imageIndex: Map<string, ArchiveEntry>; imageCount: number }> {
   onProgress({ percent: 50, message: 'Reading archive contents...' });
 
   // Get list of files in archive
   const filesArray = await archive.getFilesArray();
+  signal?.throwIfAborted();
 
   onProgress({ percent: 55, message: 'Identifying COLMAP files...' });
 
@@ -176,6 +187,7 @@ async function processZipArchive(
   }
 
   for (let i = 0; i < colmapEntries.length; i++) {
+    signal?.throwIfAborted();
     const entry = colmapEntries[i];
     const extractedFile = await entry.file.extract();
 
@@ -194,6 +206,7 @@ async function processZipArchive(
       throw new Error('Internal error selecting archive splat file');
     }
     for (const splatEntry of sortedSplatEntries) {
+      signal?.throwIfAborted();
       const filename = splatEntry.path.split('/').pop() ?? splatEntry.path;
       const extractedFile = await splatEntry.file.extract();
       const namedFile = isArchiveSplatPath(extractedFile.name)
@@ -219,13 +232,16 @@ async function openZipArchive(
   signal?.throwIfAborted();
   onProgress({ percent: 40, message: 'Opening archive...' });
   signal?.throwIfAborted();
-  const archive = await Archive.open(file);
+  const archive = await awaitWithAbort(Archive.open(file), signal,
+    reader => { void closeZipArchive(reader).catch(() => {}); });
+  const closeOnAbort = () => { void closeZipArchive(archive).catch(() => {}); };
+  signal?.addEventListener('abort', closeOnAbort, { once: true });
   try {
     signal?.throwIfAborted();
-    const result = await processZipArchive(archive, (progress) => {
+    const result = await awaitWithAbort(processZipArchive(archive, (progress) => {
       signal?.throwIfAborted();
       onProgress(progress);
-    });
+    }, signal), signal);
     signal?.throwIfAborted();
     if (!hasRequiredColmapArchiveFiles(result.colmapFiles.keys())) {
       throw new Error(
@@ -234,8 +250,10 @@ async function openZipArchive(
     }
     return { ...result, archive, fileSize: file.size };
   } catch (error) {
-    await archive.close().catch(() => {});
+    await closeZipArchive(archive).catch(() => {});
     throw error;
+  } finally {
+    signal?.removeEventListener('abort', closeOnAbort);
   }
 }
 
@@ -246,7 +264,8 @@ async function openZipArchive(
 export async function loadZipFromUrl(
   url: string,
   onProgress: (progress: ZipProgress) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: ZipUrlLoadOptions
 ): Promise<ZipLoadResult> {
   signal?.throwIfAborted();
   // Initialize libarchive.js
@@ -255,18 +274,21 @@ export async function loadZipFromUrl(
   onProgress({ percent: 0, message: 'Checking archive...' });
 
   // Validate size
-  const validation = await validateZipUrl(url, { signal });
+  const validation = options ? validateArchiveSize(options.size) : await validateZipUrl(url, { signal });
   signal?.throwIfAborted();
   if (!validation.valid) {
     throw new Error(validation.error ?? 'Invalid archive');
   }
 
   // Download archive
-  const blob = await downloadZip(url, onProgress, { signal });
+  const blob = await downloadZip(url, onProgress, {
+    signal,
+    ...(options && { expectedSize: options.size, fetchImpl: options.fetchImpl }),
+  });
   signal?.throwIfAborted();
 
   // Preserve original filename so libarchive.js can sniff format from extension.
-  const archiveName = getFilenameFromUrl(url) || 'archive.zip';
+  const archiveName = options?.filename ?? (getFilenameFromUrl(url) || 'archive.zip');
   return openZipArchive(new File([blob], archiveName), onProgress, signal);
 }
 
@@ -276,10 +298,13 @@ export async function loadZipFromUrl(
  */
 export async function loadZipFromFile(
   zipFile: File,
-  onProgress: (progress: ZipProgress) => void
+  onProgress: (progress: ZipProgress) => void,
+  signal?: AbortSignal
 ): Promise<ZipLoadResult> {
+  signal?.throwIfAborted();
   // Initialize libarchive.js
   await initializeArchive();
+  signal?.throwIfAborted();
 
   onProgress({ percent: 0, message: 'Checking archive...' });
 
@@ -289,5 +314,5 @@ export async function loadZipFromFile(
     throw new Error(validation.error ?? 'Invalid archive');
   }
 
-  return openZipArchive(zipFile, onProgress);
+  return openZipArchive(zipFile, onProgress, signal);
 }

@@ -6,6 +6,7 @@ import {
   deriveMasksPathFromImages,
   discoverDirectoryListingSplatPaths,
   discoverHuggingFaceSplatPaths,
+  discoverManifestSplatCatalog,
   fetchManifestColmapFiles,
   fetchManifestFile,
   fetchUrlManifest,
@@ -46,6 +47,59 @@ function missingResponse(): Response {
 }
 
 describe('URL loader manifest fetch helpers', () => {
+  it('fetches required COLMAP independently of splat discovery and listed splat downloads when deferred', async () => {
+    const fetchImpl = vi.fn();
+    const fetchFile = vi.fn(async (_base: string, path: string) => buildFile(path));
+    const files = await fetchManifestColmapFiles({ ...manifest, splats: ['splats/a.spz', 'splats/b.spz'] }, {
+      deferSplatDownloads: true, fetchImpl, fetchFile, setUrlProgress: vi.fn(), log: vi.fn(),
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(fetchFile.mock.calls.map(([, path]) => path).filter(path => path.endsWith('.spz'))).toEqual([]);
+    expect(files.has('sparse/0/points3D.bin')).toBe(true);
+  });
+
+  it('catalogues explicit splats using bounded metadata requests without full file downloads', async () => {
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(init?.method).toBe('HEAD');
+      return new Response(null, { headers: { 'content-length': '2000000000' } });
+    });
+    const classifySplatUrl = vi.fn(async () => ({ isSplat: true, splatCount: null }));
+    const catalog = await discoverManifestSplatCatalog({ ...manifest, splats: ['splats/a.spz', 'splats/b.spz'] }, {
+      fetchImpl, classifySplatUrl, isTouchDevice: true,
+    });
+    expect(catalog.map(candidate => [candidate.path, candidate.size])).toEqual([
+      ['splats/a.spz', 2_000_000_000], ['splats/b.spz', 2_000_000_000],
+    ]);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+  it('keeps fetched-manifest progress steady before pending splat discovery resolves', async () => {
+    const setUrlProgress = vi.fn();
+    const fetchedManifest = await fetchUrlManifest('https://example.com/colmapview.json', {
+      fetchImpl: vi.fn(async () => jsonResponse({
+        ...manifest, baseUrl: 'https://huggingface.co/datasets/owner/scene/resolve/main/',
+      })),
+      setUrlProgress,
+    });
+    expect(setUrlProgress).toHaveBeenLastCalledWith({ percent: 5, message: 'Manifest loaded' });
+    let resolveTree!: (response: Response) => void;
+    const fetchImpl = vi.fn((url: string): Promise<Response> => url.includes('/tree/')
+      ? new Promise(resolve => { resolveTree = resolve; }) : Promise.resolve(missingResponse()));
+    const fetchFile = vi.fn(async (_baseUrl: string, path: string) => buildFile(path));
+    const pending = fetchManifestColmapFiles(fetchedManifest, { fetchImpl, fetchFile, setUrlProgress, log: vi.fn() });
+
+    expect(setUrlProgress).toHaveBeenLastCalledWith({ percent: 5, message: 'Discovering splat files...' });
+    expect(setUrlProgress.mock.calls.map(([progress]) => progress.percent)).toEqual([2, 5, 5]);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(fetchFile).not.toHaveBeenCalled();
+    expect(setUrlProgress.mock.invocationCallOrder.at(-1)).toBeLessThan(fetchImpl.mock.invocationCallOrder[0]);
+
+    resolveTree(jsonResponse([]));
+    const files = await pending;
+    expect(files.has('sparse/0/cameras.bin')).toBe(true);
+    expect(setUrlProgress.mock.calls.filter(([progress]) => progress.message === 'Discovering splat files...')).toHaveLength(1);
+    expect(setUrlProgress).toHaveBeenCalledWith(expect.objectContaining({ message: 'Downloading COLMAP files...' }));
+  });
+
   it('fetches and validates a manifest while reporting progress', async () => {
     const setUrlProgress = vi.fn();
     const fetchImpl = vi.fn(async () => jsonResponse(manifest));
@@ -563,6 +617,69 @@ describe('URL loader manifest fetch helpers', () => {
 describe('splat discovery robustness', () => {
   const HF_BASE = 'https://huggingface.co/datasets/x/y/resolve/main/ds';
   const HF_API = 'https://huggingface.co/api/datasets/x/y/tree/main/ds?recursive=true';
+  const pointCloudHeader = [
+    'ply', 'format binary_little_endian 1.0', 'element vertex 17',
+    'property float x', 'property float y', 'property float z',
+  ].join('\n');
+  const gaussianProperties = [
+    'f_dc_0', 'f_dc_1', 'f_dc_2', 'opacity', 'scale_0', 'scale_1', 'scale_2',
+    'rot_0', 'rot_1', 'rot_2', 'rot_3',
+  ].map(name => `property float ${name}`).join('\n');
+
+  it.each([200, 206])('clips an oversized single-chunk %s PLY response to the requested range', async status => {
+    // Splat-only properties outside the requested bytes must not affect classification.
+    const prefix = `${pointCloudHeader}\ncomment `.padEnd(65536, ' ');
+    const oversizedChunk = new TextEncoder().encode(`${prefix}\n${gaussianProperties}\nend_header\n`);
+    const cancel = vi.fn();
+    const pull = vi.fn((controller: ReadableStreamDefaultController<Uint8Array>) => controller.close());
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(oversizedChunk); }, pull, cancel,
+    }, { highWaterMark: 0 });
+    const fetchImpl = vi.fn(async (url: string, _init?: RequestInit) => url === HF_API
+      ? jsonResponse([{ type: 'file', path: 'ds/scene.ply', size: 9_000_000_000 }])
+      : new Response(body, { status }));
+
+    expect(await discoverHuggingFaceSplatPaths(HF_BASE, { fetchImpl })).toEqual([]);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(pull).not.toHaveBeenCalled();
+    expect(fetchImpl).toHaveBeenCalledWith(`${HF_BASE}/scene.ply`, { headers: { Range: 'bytes=0-65535' } });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([200, 206])('stops a %s PLY probe at a split CRLF header terminator and retains its vertex count', async status => {
+    const header = `${pointCloudHeader}\n${gaussianProperties}\n`.replaceAll('\n', '\r\n');
+    const chunks = [new TextEncoder().encode(`${header}end_hea`), new TextEncoder().encode('der\r\n')];
+    const cancel = vi.fn();
+    const pull = vi.fn((controller: ReadableStreamDefaultController<Uint8Array>) => {
+      controller.enqueue(chunks.shift() ?? new Uint8Array(65536));
+    });
+    const body = new ReadableStream<Uint8Array>({ pull, cancel }, { highWaterMark: 0 });
+    const fetchImpl = vi.fn(async (url: string) => url === HF_API
+      ? jsonResponse([{ type: 'file', path: 'ds/scene.ply', size: 9_000_000_000 }])
+      : new Response(body, { status }));
+
+    expect(await discoverHuggingFaceSplatPaths(HF_BASE, { fetchImpl })).toEqual([
+      { path: 'scene.ply', size: 9_000_000_000, splatCount: 17 },
+    ]);
+    expect(pull).toHaveBeenCalledTimes(2);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([200, 206])('stops a %s plain point-cloud PLY probe before downloading its vertex data', async status => {
+    const cancel = vi.fn();
+    const pull = vi.fn((controller: ReadableStreamDefaultController<Uint8Array>) => {
+      controller.enqueue(new TextEncoder().encode(`${pointCloudHeader}\nend_header\n`));
+    });
+    const body = new ReadableStream<Uint8Array>({ pull, cancel }, { highWaterMark: 0 });
+    const fetchImpl = vi.fn(async (url: string) => url === HF_API
+      ? jsonResponse([{ type: 'file', path: 'ds/point_cloud.ply', size: 9_000_000_000 }])
+      : new Response(body, { status }));
+
+    expect(await discoverHuggingFaceSplatPaths(HF_BASE, { fetchImpl })).toEqual([]);
+    expect(pull).toHaveBeenCalledOnce();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
 
   it('F2: does not download the full body when classifying a Range-ignored 200', async () => {
     let pulls = 0;

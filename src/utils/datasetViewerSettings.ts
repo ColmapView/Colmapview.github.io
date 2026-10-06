@@ -23,6 +23,7 @@ export function findDatasetViewerSettingsEntry<T>(files: ReadonlyMap<string, T>)
 
 /** Resolve project-relative splat paths without confusing equal basenames in other folders. */
 export function resolveDatasetSplatSourceId(sourceId: string, settingsPath: string, paths: Iterable<string>): string {
+  if (sourceId === '') return '';
   const normalize = (path: string) => path.replace(/\\/g, '/').replace(/^\.\//, '');
   const root = normalize(settingsPath).split('/').slice(0, -1).join('/');
   const target = root ? `${root}/${normalize(sourceId)}` : normalize(sourceId);

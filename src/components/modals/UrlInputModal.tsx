@@ -2,9 +2,12 @@ import { useState, useEffect, useRef, useCallback, useId } from 'react';
 import { inputStyles, getButtonClass, modalStyles, floatingPanelStyles, panelStyles } from '../../theme';
 import { ChevronDownIcon, ChevronRightIcon, CloseIcon } from '../../icons';
 import { ModalDialogShell } from '../ui/ModalDialogShell';
+import { isGoogleDriveEnabled } from '../../features/googleDrive/config';
 import {
   getUrlInputHelpItemClassName,
   getUrlInputHelpItemKey,
+  getUrlInputDriveHandoffUrl,
+  getUrlInputHelpSections,
   getUrlInputActionState,
   getUrlInputHelpIconKind,
   getUrlInputHelpSectionTitleClassName,
@@ -17,10 +20,10 @@ import {
   URL_INPUT_DESCRIPTION,
   URL_INPUT_HELP_CODE_CLASS,
   URL_INPUT_HELP_LIST_CLASS,
-  URL_INPUT_HELP_SECTIONS,
   URL_INPUT_PLACEHOLDER,
   URL_INPUT_WARNING_TEXT_CLASS,
   type UrlInputHelpIconKind,
+  type UrlInputHelpSection as UrlHelpSection,
 } from './urlInputModalViewModel';
 
 interface UrlInputModalProps {
@@ -43,6 +46,9 @@ export function UrlInputModal({ isOpen, onClose, onLoad, loading = false }: UrlI
   const [url, setUrl] = useState('');
   const [showHelp, setShowHelp] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const googleDriveEnabled = Boolean(isGoogleDriveEnabled());
+  const driveHandoffUrl = getUrlInputDriveHandoffUrl(url, googleDriveEnabled);
+  const helpSections = getUrlInputHelpSections(googleDriveEnabled);
   const actionState = getUrlInputActionState(url, loading);
   const helpIconKind = getUrlInputHelpIconKind(showHelp);
 
@@ -57,9 +63,9 @@ export function UrlInputModal({ isOpen, onClose, onLoad, loading = false }: UrlI
   // Handle load action
   const handleLoad = useCallback(() => {
     const submitUrl = getUrlInputSubmitUrl(url, loading);
-    if (!submitUrl) return;
+    if (!submitUrl || getUrlInputDriveHandoffUrl(submitUrl, googleDriveEnabled)) return;
     onLoad(submitUrl);
-  }, [url, loading, onLoad]);
+  }, [url, loading, onLoad, googleDriveEnabled]);
 
   // Handle key events
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -104,6 +110,9 @@ export function UrlInputModal({ isOpen, onClose, onLoad, loading = false }: UrlI
           className={`${inputStyles.base} ${inputStyles.sizes.lg} w-full mb-4 text-sm placeholder-ds-muted`}
           disabled={loading}
         />
+        {driveHandoffUrl && <p className="text-ds-muted text-sm mb-4">
+          Open this archive on colmapview.opsiclear.com to use Google Drive.
+        </p>}
 
         {/* Expandable help section */}
         <div className="mb-4">
@@ -117,7 +126,7 @@ export function UrlInputModal({ isOpen, onClose, onLoad, loading = false }: UrlI
           </button>
           {showHelp && (
             <div className="mt-2 p-3 bg-ds-tertiary rounded border border-ds text-xs text-ds-muted">
-              {URL_INPUT_HELP_SECTIONS.map((section) => (
+              {helpSections.map((section) => (
                 <UrlInputHelpSection key={section.title} section={section} />
               ))}
             </div>
@@ -134,14 +143,16 @@ export function UrlInputModal({ isOpen, onClose, onLoad, loading = false }: UrlI
           >
             Cancel
           </button>
-          <button
+          {driveHandoffUrl && !loading ? <a href={driveHandoffUrl} className={getButtonClass('primary', 'lg')}>
+            Use Google Drive
+          </a> : <button
             type="button"
             onClick={handleLoad}
             disabled={actionState.loadDisabled}
             className={getButtonClass('primary', 'lg', actionState.loadDisabled)}
           >
             {actionState.loadLabel}
-          </button>
+          </button>}
         </div>
       </div>
     </ModalDialogShell>
@@ -159,7 +170,7 @@ function UrlInputHelpIcon({ iconKind }: { iconKind: UrlInputHelpIconKind }) {
 function UrlInputHelpSection({
   section,
 }: {
-  section: (typeof URL_INPUT_HELP_SECTIONS)[number];
+  section: UrlHelpSection;
 }) {
   const titleClass = getUrlInputHelpSectionTitleClassName(section);
 

@@ -18,6 +18,7 @@ import {
 } from './panels';
 import type { ViewerControlsController } from './useViewerControlsController';
 import { HuggingFacePublishButton } from './HuggingFacePublishButton';
+import { GoogleDrivePublishButton } from './GoogleDrivePublishButton';
 import {
   TOOLBAR_GROUP_CLASS,
   TOOLBAR_GROUP_LABELS,
@@ -100,6 +101,7 @@ export function ViewerControlsToolbar({ controller }: ViewerControlsToolbarProps
         <ScreenshotPanel {...screenshotPanel} />
         <SharePanel {...sharePanel} />
         <HuggingFacePublishButton {...sharePanel} />
+        <GoogleDrivePublishButton {...sharePanel} />
         <ExportPanel {...exportPanel} />
       </div>
 

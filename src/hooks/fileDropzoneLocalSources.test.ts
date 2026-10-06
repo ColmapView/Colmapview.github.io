@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useReconstructionStore } from '../store';
+import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
+import type { FileDropzoneWorkflowOptions } from './fileDropzoneWorkflow';
+import type { ZipLoadResult, ZipProgress } from '../utils/zipLoader';
 import {
   buildArchiveEntry,
   buildArchiveReader,
@@ -20,7 +24,8 @@ function makeBaseDeps() {
     setError: vi.fn(),
     setSourceInfo: vi.fn(),
     clearCaches: vi.fn(),
-    processFiles: vi.fn(async () => {}),
+    processFiles: vi.fn(async (_files: Map<string, File>, _progress?: { start: number; end: number },
+      _options?: FileDropzoneWorkflowOptions): Promise<void | boolean> => {}),
     waitForPaint: vi.fn(async () => {}),
     log: vi.fn(),
     errorLog: vi.fn(),
@@ -28,6 +33,7 @@ function makeBaseDeps() {
 }
 
 describe('file dropzone local source loading', () => {
+  afterEach(() => useReconstructionStore.getState().clear());
   it('ignores duplicate local ZIP loads while another load is active', async () => {
     const deps = {
       ...makeBaseDeps(),
@@ -58,6 +64,8 @@ describe('file dropzone local source loading', () => {
       setActiveZipArchive: vi.fn(),
     };
 
+    deps.processFiles.mockImplementation(async (_files, _progress, options) => { options?.onSceneReplaced?.(); return true; });
+
     await expect(loadLocalZipFile(zipFile, deps)).resolves.toBe(true);
 
     expect(deps.setUrlLoading).toHaveBeenCalledWith(true);
@@ -66,7 +74,9 @@ describe('file dropzone local source loading', () => {
     expect(deps.clearCaches).toHaveBeenCalledTimes(1);
     expect(deps.setActiveZipArchive).toHaveBeenCalledWith(archive, imageIndex, 4096, 1);
     expect(deps.setSourceInfo).toHaveBeenCalledWith('zip', null);
-    expect(deps.processFiles).toHaveBeenCalledWith(colmapFiles);
+    expect(deps.processFiles).toHaveBeenCalledWith(colmapFiles, undefined, expect.objectContaining({
+      load: expect.objectContaining({ signal: expect.any(AbortSignal) }), onSceneReplaced: expect.any(Function),
+    }));
     expect(deps.cancelUrlLoad.mock.invocationCallOrder[0]).toBeLessThan(deps.loadZipFromFile.mock.invocationCallOrder[0]);
   });
 
@@ -82,7 +92,7 @@ describe('file dropzone local source loading', () => {
     await expect(loadLocalZipFile(buildFile('bad.zip'), deps)).resolves.toBe(false);
 
     expect(deps.errorLog).toHaveBeenCalledWith('[ZIP Loader] Error processing ZIP file:', expect.any(Error));
-    expect(deps.clearCaches).toHaveBeenCalledTimes(2);
+    expect(deps.clearCaches).not.toHaveBeenCalled();
     expect(deps.setError).toHaveBeenCalledWith('bad archive');
     expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
   });
@@ -128,9 +138,9 @@ describe('file dropzone local source loading', () => {
     expect(deps.setUrlProgress).toHaveBeenCalledWith({ percent: 0, message: 'Scanning files...' });
     expect(deps.clearCaches).not.toHaveBeenCalled();
     expect(deps.setSourceInfo).not.toHaveBeenCalled();
-    expect(deps.processFiles).toHaveBeenCalledWith(files, undefined, {
+    expect(deps.processFiles).toHaveBeenCalledWith(files, undefined, expect.objectContaining({
       onSceneReplaced: expect.any(Function),
-    });
+    }));
     expect(deps.cancelUrlLoad.mock.invocationCallOrder[0]).toBeLessThan(deps.collectDroppedFiles.mock.invocationCallOrder[0]);
   });
 
@@ -209,13 +219,13 @@ describe('file dropzone local source loading', () => {
     expect(deps.pickDirectory).toHaveBeenCalledOnce();
     expect(deps.setUrlLoading).toHaveBeenCalledWith(true);
     expect(deps.setUrlProgress).toHaveBeenCalledWith({ percent: 0, message: 'Scanning folder...' });
-    expect(deps.scanDirectoryHandle).toHaveBeenCalledWith(dirHandle, '', expect.any(Map));
+    expect(deps.scanDirectoryHandle).toHaveBeenCalledWith(dirHandle, '', expect.any(Map), expect.any(AbortSignal));
     expect(deps.cancelUrlLoad.mock.invocationCallOrder[0]).toBeLessThan(deps.scanDirectoryHandle.mock.invocationCallOrder[0]);
     expect(deps.clearCaches).not.toHaveBeenCalled();
     expect(deps.setSourceInfo).not.toHaveBeenCalled();
-    expect(deps.processFiles).toHaveBeenCalledWith(new Map([['cameras.bin', browsedFile]]), undefined, {
+    expect(deps.processFiles).toHaveBeenCalledWith(new Map([['cameras.bin', browsedFile]]), undefined, expect.objectContaining({
       onSceneReplaced: expect.any(Function),
-    });
+    }));
   });
 
   it('commits browsed directories as a local source only when the workflow replaces the scene', async () => {
@@ -254,5 +264,83 @@ describe('file dropzone local source loading', () => {
     expect(deps.setError).not.toHaveBeenCalled();
     expect(deps.setUrlLoading).not.toHaveBeenCalled();
     expect(deps.cancelUrlLoad).not.toHaveBeenCalled();
+  });
+
+  it.each(['scene.zip', 'scene.tar'])('cancels %s extraction without late progress, activation, or handoff', async name => {
+    let resolve!: (result: ZipLoadResult) => void;
+    let report!: (progress: { percent: number; message: string }) => void;
+    const close = vi.fn(async () => {});
+    const archive = buildArchiveReader({ close });
+    const deps = { ...makeBaseDeps(), setActiveZipArchive: vi.fn(),
+      loadZipFromFile: vi.fn((_file: File, onProgress: (progress: ZipProgress) => void, _signal?: AbortSignal) => {
+        report = onProgress;
+        return new Promise<ZipLoadResult>(done => { resolve = done; });
+      }),
+    };
+    const pending = loadLocalZipFile(buildFile(name), deps);
+    await vi.waitFor(() => expect(deps.loadZipFromFile).toHaveBeenCalledOnce());
+    const signal = deps.loadZipFromFile.mock.calls[0][2] as AbortSignal;
+    useReconstructionStore.getState().clear();
+    await expect(pending).resolves.toBe(false);
+    expect(signal.aborted).toBe(true);
+    const progressCount = deps.setUrlProgress.mock.calls.length;
+    report({ percent: 90, message: 'late extraction' });
+    resolve({ colmapFiles: new Map(), imageIndex: new Map(), archive, fileSize: 1, imageCount: 0 });
+    await vi.waitFor(() => expect(close).toHaveBeenCalledOnce());
+    expect(deps.setUrlProgress).toHaveBeenCalledTimes(progressCount);
+    expect(deps.processFiles).not.toHaveBeenCalled();
+    expect(deps.setActiveZipArchive).not.toHaveBeenCalled();
+    expect(deps.clearCaches).not.toHaveBeenCalled();
+    expect(deps.setError).not.toHaveBeenCalled();
+  });
+
+  it('retains the previous archive when replacement processing fails and closes the staged reader', async () => {
+    const close = vi.fn(async () => {});
+    const deps = { ...makeBaseDeps(), setActiveZipArchive: vi.fn(),
+      loadZipFromFile: vi.fn(async () => ({ colmapFiles: new Map(), imageIndex: new Map(),
+        archive: buildArchiveReader({ close }), fileSize: 1, imageCount: 0 })),
+    };
+    deps.processFiles.mockResolvedValue(false);
+    await expect(loadLocalZipFile(buildFile('replacement.zip'), deps)).resolves.toBe(false);
+    expect(close).toHaveBeenCalledOnce();
+    expect(deps.clearCaches).not.toHaveBeenCalled();
+    expect(deps.setActiveZipArchive).not.toHaveBeenCalled();
+    expect(deps.setSourceInfo).not.toHaveBeenCalled();
+  });
+
+  it.each(['clear', 'replacement'])('stops dropped-folder scanning after %s and ignores a late result', async action => {
+    let resolve!: (files: Map<string, File>) => void;
+    const deps = { ...makeBaseDeps(), isArchiveFile: vi.fn(() => false), processZipFile: vi.fn(), scanEntry: vi.fn(),
+      collectDroppedFiles: vi.fn(() => new Promise<Map<string, File>>(done => { resolve = done; })),
+    };
+    const pending = loadDropPayload({ singleFile: null, entries: [], fallbackFiles: [] }, deps);
+    await vi.waitFor(() => expect(deps.collectDroppedFiles).toHaveBeenCalledOnce());
+    const replacement = action === 'replacement' ? beginReconstructionLoad() : null;
+    if (!replacement) useReconstructionStore.getState().clear();
+    await expect(pending).resolves.toBe(false);
+    resolve(new Map([['cameras.bin', buildFile('cameras.bin')]]));
+    await Promise.resolve();
+    expect(deps.processFiles).not.toHaveBeenCalled();
+    expect(deps.setSourceInfo).not.toHaveBeenCalled();
+    expect(deps.setError).not.toHaveBeenCalled();
+    replacement?.finish();
+  });
+
+  it.each(['picker', 'scan'])('cancels folder browsing during the %s stage', async stage => {
+    let resolve!: () => void;
+    const handle = buildFileSystemDirectoryHandle();
+    const deps = { ...makeBaseDeps(),
+      pickDirectory: vi.fn(() => stage === 'picker' ? new Promise<FileSystemDirectoryHandle>(done => { resolve = () => done(handle); }) : Promise.resolve(handle)),
+      scanDirectoryHandle: vi.fn(() => new Promise<void>(done => { resolve = done; })),
+    };
+    const pending = loadBrowsedDirectory(deps);
+    await vi.waitFor(() => expect(stage === 'picker' ? deps.pickDirectory : deps.scanDirectoryHandle).toHaveBeenCalledOnce());
+    useReconstructionStore.getState().clear();
+    await expect(pending).resolves.toBe(false);
+    resolve();
+    await Promise.resolve();
+    expect(deps.processFiles).not.toHaveBeenCalled();
+    expect(deps.setError).not.toHaveBeenCalled();
+    if (stage === 'picker') expect(deps.scanDirectoryHandle).not.toHaveBeenCalled();
   });
 });

@@ -76,6 +76,7 @@ export interface FileDropzoneWorkflowDeps {
   delay?: (ms: number) => Promise<void>;
   getFailedImageCount?: () => number;
   getLoadedFiles: () => LoadedFiles | null;
+  getSplatSelectionState?: () => { revision: number; sourceId: string | undefined };
   getMinTrackLength: () => number;
   getSourceInfo: () => SetSourceInfo;
   getUrlLoading: () => boolean;
@@ -98,6 +99,11 @@ export interface FileDropzoneWorkflowDeps {
 }
 
 export interface FileDropzoneWorkflowOptions {
+  /** Reuse a job that already owns local scanning/extraction before this handoff. */
+  load?: ReturnType<typeof beginReconstructionLoad>;
+  /** Parent URL/preparation cancellation also applies to parsing and scene commit. */
+  signal?: AbortSignal;
+  initialSplatSelectionRevision?: number;
   progressRange?: { start: number; end: number };
   replaceSplatScene?: boolean;
   throwOnError?: boolean;
@@ -164,6 +170,7 @@ function runNewSplatOnlyLoad(
       | 'setDroppedFiles'
       | 'setLoadedFiles'
       | 'setReconstruction'
+      | 'setWasmReconstruction'
       | 'setUrlProgress'
       | 'resetView'
   >,
@@ -178,7 +185,7 @@ function runNewSplatOnlyLoad(
     splatFileSources,
     mapProgress,
     setUrlProgress: deps.setUrlProgress,
-    setLoadedFiles: deps.setLoadedFiles,
+    setLoadedFiles: loadedFiles => { deps.setLoadedFiles(loadedFiles); deps.setWasmReconstruction(null); },
     clearSplatPsnr: deps.clearSplatPsnr,
     clearCaches,
     setReconstruction: deps.setReconstruction,
@@ -197,6 +204,7 @@ async function runNewPointCloudOnlyLoad(
       | 'setDroppedFiles'
       | 'setLoadedFiles'
       | 'setReconstruction'
+      | 'setWasmReconstruction'
       | 'setUrlProgress'
       | 'resetView'
   >,
@@ -204,14 +212,19 @@ async function runNewPointCloudOnlyLoad(
   mapProgress: (localPercent: number) => number,
   log: (message: string) => void,
   signal?: AbortSignal,
+  onSceneReplaced?: () => void,
 ): Promise<void> {
-  deps.setDroppedFiles(files);
   await runPointCloudOnlyLoad({
     signal,
     pointCloudFile,
     mapProgress,
     setUrlProgress: deps.setUrlProgress,
-    setLoadedFiles: deps.setLoadedFiles,
+    setLoadedFiles: loadedFiles => {
+      onSceneReplaced?.();
+      deps.setDroppedFiles(files);
+      deps.setLoadedFiles(loadedFiles);
+      deps.setWasmReconstruction(null);
+    },
     clearSplatPsnr: deps.clearSplatPsnr,
     clearCaches,
     setReconstruction: deps.setReconstruction,
@@ -255,7 +268,13 @@ export async function processFileDropzoneFiles(
   deps: FileDropzoneWorkflowDeps,
   options?: { start: number; end: number } | FileDropzoneWorkflowOptions
 ): Promise<boolean> {
-  const load = beginReconstructionLoad();
+  const normalizedOptions = normalizeWorkflowOptions(options);
+  if (normalizedOptions.signal?.aborted || normalizedOptions.load?.signal.aborted) return false;
+  const job = normalizedOptions.load ?? beginReconstructionLoad();
+  const signal = normalizedOptions.signal
+    ? AbortSignal.any([job.signal, normalizedOptions.signal]) : job.signal;
+  const load = { signal, finish: job.finish, assertCurrent: () => { signal.throwIfAborted(); job.assertCurrent(); } };
+  const initialSplatSelectionRevision = normalizedOptions.initialSplatSelectionRevision ?? deps.getSplatSelectionState?.().revision;
   let pendingSource: ReconstructionSource | null = null;
   let sourceInstalled = false;
   let keepLoadingForInitialSplat = false;
@@ -277,7 +296,7 @@ export async function processFileDropzoneFiles(
     throwOnError = false,
     onSceneReplaced,
     onViewerState = deps.onViewerState,
-  } = normalizeWorkflowOptions(options);
+  } = normalizedOptions;
 
   const complete = async () => {
     load.assertCurrent();
@@ -307,7 +326,7 @@ export async function processFileDropzoneFiles(
     const splatFiles = splatFileSources
       .map((source) => source.file)
       .filter((file): file is File => Boolean(file));
-    const splatFile = splatFiles[0];
+    let splatFile: File | undefined = splatFiles[0];
     const pointCloudFile = pointCloudPlySources[0]?.file;
     const splatRendererStartPercent = mapProgress(60);
     const handOffLoadingToSplatRenderer = () => {
@@ -381,8 +400,7 @@ export async function processFileDropzoneFiles(
             startedNewSplatScene = true;
           }
         } else if (pointCloudFile) {
-          reportSceneReplacement();
-          await runNewPointCloudOnlyLoad(files, pointCloudFile, deps, clearCaches, mapProgress, logger.info, load.signal);
+          await runNewPointCloudOnlyLoad(files, pointCloudFile, deps, clearCaches, mapProgress, logger.info, load.signal, reportSceneReplacement);
           load.assertCurrent();
         }
         if (configErrorMessage && throwOnError) {
@@ -421,8 +439,7 @@ export async function processFileDropzoneFiles(
       }
 
       if (pointCloudFile && !splatFile) {
-        reportSceneReplacement();
-        await runNewPointCloudOnlyLoad(files, pointCloudFile, deps, clearCaches, mapProgress, logger.info, load.signal);
+        await runNewPointCloudOnlyLoad(files, pointCloudFile, deps, clearCaches, mapProgress, logger.info, load.signal, reportSceneReplacement);
         load.assertCurrent();
         return await complete();
       }
@@ -437,7 +454,7 @@ export async function processFileDropzoneFiles(
           splatFileSources,
           mapProgress,
           setUrlProgress: deps.setUrlProgress,
-          setLoadedFiles: deps.setLoadedFiles,
+          setLoadedFiles: loadedFiles => { deps.setLoadedFiles(loadedFiles); deps.setWasmReconstruction(null); },
           clearSplatPsnr: deps.clearSplatPsnr,
           clearCaches,
           setReconstruction: deps.setReconstruction,
@@ -464,24 +481,7 @@ export async function processFileDropzoneFiles(
       );
     }
 
-    reportSceneReplacement();
-    deps.setDroppedFiles(files);
-
     logger.info(`Scanned ${files.size} total files, ${imageFiles.size} image lookup keys`);
-
-    deps.clearSplatPsnr?.();
-    deps.setLoadedFiles({
-      camerasFile,
-      imagesFile,
-      points3DFile,
-      splatFile,
-      splatFiles,
-      splatFileSources,
-      rigsFile,
-      framesFile,
-      imageFiles,
-      hasMasks,
-    });
 
     deps.setUrlProgress({ percent: mapProgress(10), message: 'Parsing COLMAP files...' });
 
@@ -525,11 +525,33 @@ export async function processFileDropzoneFiles(
     }
     load.assertCurrent();
 
+    const currentSelection = deps.getSplatSelectionState?.();
+    if (currentSelection && initialSplatSelectionRevision !== undefined
+      && currentSelection.revision !== initialSplatSelectionRevision) {
+      splatFile = splatFileSources.find(source => source.id === currentSelection.sourceId)?.file;
+    }
     deps.setUrlProgress(splatFile
       ? getSplatLoadingProgress(splatFile, { startPercent: splatRendererStartPercent })
       : { percent: mapProgress(95), message: 'Finalizing...' });
 
     clearCaches({ preserveZip: true });
+    // Keep the previous files and WASM snapshot alive until every fallible parse/build
+    // step has succeeded. These synchronous publications form the scene commit.
+    reportSceneReplacement();
+    deps.setDroppedFiles(files);
+    deps.clearSplatPsnr?.();
+    deps.setLoadedFiles({
+      camerasFile,
+      imagesFile,
+      points3DFile,
+      splatFile,
+      splatFiles,
+      splatFileSources,
+      rigsFile,
+      framesFile,
+      imageFiles,
+      hasMasks,
+    });
     deps.setWasmReconstruction(parseResult.wasmWrapper);
     sourceInstalled = true;
 

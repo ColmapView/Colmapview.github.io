@@ -5,7 +5,8 @@ export const FETCH_TIMEOUT = 30_000;
 export async function fetchWithTimeout(
   url: string,
   timeout = FETCH_TIMEOUT,
-  init: RequestInit = {}
+  init: RequestInit = {},
+  fetchImpl: (url: string, init?: RequestInit) => Promise<Response> = fetch
 ): Promise<Response> {
   const controller = new AbortController();
   const signal = init.signal;
@@ -38,7 +39,7 @@ export async function fetchWithTimeout(
   resetTimer();
 
   try {
-    const response = await fetch(url, { ...init, signal: controller.signal });
+    const response = await fetchImpl(url, { ...init, signal: controller.signal });
     if (controller.signal.aborted) {
       void response.body?.cancel().catch(() => {});
       controller.signal.throwIfAborted();
@@ -73,7 +74,9 @@ export async function fetchWithTimeout(
       cancel(reason) {
         cleanup();
         controller.abort(reason);
-        return reader!.cancel(reason);
+        // Native fetch may reject reader cancellation after its signal is aborted.
+        // Discarding an unused body has already succeeded and must not fail the request.
+        return reader!.cancel(reason).catch(() => {});
       },
     }, { highWaterMark: 0 });
     const result = new Response(body, {

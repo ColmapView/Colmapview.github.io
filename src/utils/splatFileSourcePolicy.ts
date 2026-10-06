@@ -258,16 +258,8 @@ export function getActiveSplatSourceId(loadedFiles: LoadedFiles | null): string 
 }
 
 export function getShareActiveSplatSourceId(loadedFiles: LoadedFiles | null): string | null {
-  if (!loadedFiles?.splatFile) {
-    return null;
-  }
-
-  const splatFileCount = getLoadedSplatFiles(loadedFiles).length;
-  if (splatFileCount <= 1) {
-    return null;
-  }
-
-  return getActiveSplatSourceId(loadedFiles);
+  // Empty is an explicit COLMAP-only choice; absence keeps legacy load defaults.
+  return loadedFiles ? getActiveSplatSourceId(loadedFiles) ?? '' : null;
 }
 
 export function getNextSplatFile(

@@ -117,7 +117,63 @@ describe.each(['local', 'url'] as const)('%s archive reader ownership', (source)
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it('stops waiting on a cancelled archive open and closes the reader that arrives later', async () => {
+    const controller = new AbortController();
+    const close = vi.fn(async () => {});
+    const getFilesArray = vi.fn(async () => colmapEntries());
+    let resolve!: (reader: ReturnType<typeof buildArchiveReader>) => void;
+    vi.mocked(Archive.open).mockImplementation(() => new Promise(done => { resolve = done; }));
+    const pending = source === 'local'
+      ? loadZipFromFile(buildFile('scene.tar'), vi.fn(), controller.signal)
+      : loadZipFromUrl('https://example.com/scene.tar', vi.fn(), controller.signal);
+    await vi.waitFor(() => expect(Archive.open).toHaveBeenCalledOnce());
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    resolve(buildArchiveReader({ close, getFilesArray }));
+    await vi.waitFor(() => expect(close).toHaveBeenCalledOnce());
+    expect(getFilesArray).not.toHaveBeenCalled();
+  });
+
+  it('closes the native reader immediately during cancellation of pending extraction', async () => {
+    const controller = new AbortController();
+    let resolve!: (file: File) => void;
+    const entries = colmapEntries();
+    const extract = vi.fn(() => new Promise<File>(done => { resolve = done; }));
+    entries[0].file.extract = extract;
+    const secondExtract = vi.spyOn(entries[1].file, 'extract');
+    const close = vi.fn(async () => {});
+    vi.mocked(Archive.open).mockResolvedValue(buildArchiveReader({ close, getFilesArray: async () => entries }));
+    const progress = vi.fn();
+    const pending = source === 'local'
+      ? loadZipFromFile(buildFile('scene.zip'), progress, controller.signal)
+      : loadZipFromUrl('https://example.com/scene.zip', progress, controller.signal);
+    await vi.waitFor(() => expect(extract).toHaveBeenCalledOnce());
+    controller.abort();
+    expect(close).toHaveBeenCalledOnce();
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    const progressCount = progress.mock.calls.length;
+    resolve(buildFile('cameras.bin'));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(secondExtract).not.toHaveBeenCalled();
+    expect(progress).toHaveBeenCalledTimes(progressCount);
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   if (source === 'url') {
+    it('uses Drive metadata for archive naming and size instead of a HEAD request', async () => {
+      const archive = buildArchiveReader({ getFilesArray: async () => colmapEntries() });
+      vi.mocked(Archive.open).mockResolvedValue(archive);
+      const fetchImpl = vi.fn();
+      const signal = new AbortController().signal;
+      const result = await loadZipFromUrl('https://www.googleapis.com/drive/v3/files/file123?alt=media', vi.fn(), signal,
+        { filename: 'reconstruction.tar', size: 7, fetchImpl });
+      expect(result.archive).toBe(archive);
+      expect(fetch).not.toHaveBeenCalled();
+      expect(downloadZip).toHaveBeenCalledWith(expect.any(String), expect.any(Function), { signal, expectedSize: 7, fetchImpl });
+      expect(vi.mocked(Archive.open).mock.calls[0][0].name).toBe('reconstruction.tar');
+    });
+
     it('closes a reader opened after its URL load is cancelled', async () => {
       const controller = new AbortController();
       const close = vi.fn(async () => {});

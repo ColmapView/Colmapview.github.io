@@ -8,7 +8,6 @@ import { validateColmapManifest } from '../utils/manifestValidation';
 import {
   blobToFile,
   classifyFetchError,
-  fetchWithTimeout,
   getFilenameFromUrl,
   readResponseToBlob,
   type DownloadProgressCallback,
@@ -40,6 +39,7 @@ import {
 } from './urlLoaderPolicy';
 import { isUrlLoadError } from './urlLoaderErrorHandling';
 import { detectTouchDevice } from './useIsTouchDevice';
+import { fetchDatasetResource } from '../utils/fetchDatasetResource';
 
 type FetchUrl = (url: string, init?: RequestInit) => Promise<Response>;
 type FetchManifestFile = (
@@ -54,7 +54,7 @@ const DIRECTORY_LISTING_DISCOVERY_MAX_DIRECTORIES = 200;
 const DIRECTORY_LISTING_DISCOVERY_MAX_CANDIDATES = 200;
 
 function defaultFetchUrl(url: string, init?: RequestInit): Promise<Response> {
-  return fetchWithTimeout(url, undefined, init);
+  return fetchDatasetResource(url, undefined, init);
 }
 
 export interface FetchUrlManifestDeps {
@@ -68,6 +68,8 @@ export interface FetchManifestFileOptions {
 }
 
 export interface FetchManifestColmapFilesDeps {
+  /** Fetch COLMAP first; the caller discovers/activates splats after viewer settings settle. */
+  deferSplatDownloads?: boolean;
   fetchImpl?: FetchUrl;
   fetchFile?: FetchManifestFile;
   log?: (message: string) => void;
@@ -145,13 +147,11 @@ async function mapWithConcurrency<T, R>(
 }
 
 /**
- * Read at most maxBytes of text from a response. A 206 already returns only the
- * requested range, so reading it whole is bounded. A 200 means the server ignored
- * the Range header and is sending the entire file; stream at most maxBytes and
- * stop, instead of buffering a multi-GB body into a string just to sniff a header.
+ * Read only the PLY header, bounded even when a response ignores or exceeds Range.
+ * Stop at end_header so classification never waits for the following vertex data.
  */
-async function readBoundedResponseText(response: Response, maxBytes: number): Promise<string> {
-  if (response.status === 206 || !response.body) {
+async function readPlyHeaderText(response: Response, maxBytes: number): Promise<string> {
+  if (!response.body) {
     return response.text();
   }
   const reader = response.body.getReader();
@@ -162,8 +162,11 @@ async function readBoundedResponseText(response: Response, maxBytes: number): Pr
     while (received < maxBytes) {
       const { done, value } = await reader.read();
       if (done) break;
-      received += value.length;
-      text += decoder.decode(value, { stream: true });
+      const bytes = value.subarray(0, maxBytes - received);
+      received += bytes.length;
+      text += decoder.decode(bytes, { stream: true });
+      const headerEnd = /(?:^|\r\n|\n|\r)[ \t]*end_header[ \t]*(?:\r\n|\n|\r)/.exec(text);
+      if (headerEnd) return text.slice(0, headerEnd.index + headerEnd[0].length);
     }
   } finally {
     reader.cancel().catch(() => {});
@@ -183,7 +186,7 @@ async function defaultClassifySplatUrl(url: string, fetchImpl: FetchUrl): Promis
       // Cannot classify -> keep (do not hide a real splat on error).
       return { isSplat: true, splatCount: null };
     }
-    const headerText = await readBoundedResponseText(response, SPLAT_HEADER_RANGE_BYTES);
+    const headerText = await readPlyHeaderText(response, SPLAT_HEADER_RANGE_BYTES);
     return {
       isSplat: classifyPlyHeaderText(headerText) === 'gaussian-splat',
       splatCount: getPlyHeaderVertexCount(headerText),
@@ -653,6 +656,27 @@ async function withDiscoveredRemoteSplats(
   return manifest;
 }
 
+/** Discover selectable tiles without transferring full splat files. */
+export async function discoverManifestSplatCatalog(
+  manifest: ColmapManifest,
+  deps: Pick<FetchManifestColmapFilesDeps, 'fetchImpl' | 'log' | 'classifySplatUrl' | 'isTouchDevice'> = {}
+): Promise<RemoteSplatCandidate[]> {
+  if (manifest.splats?.length) {
+    const fetchImpl = deps.fetchImpl ?? defaultFetchUrl;
+    const classify = deps.classifySplatUrl ?? ((url: string) => defaultClassifySplatUrl(url, fetchImpl));
+    const paths = [...new Set(manifest.splats)];
+    const candidates = await mapWithConcurrency(paths, SPLAT_CLASSIFY_CONCURRENCY, async path => {
+      const url = joinManifestUrlPath(manifest.baseUrl, path);
+      const [classification, size] = await Promise.all([classify(url), getRemoteFileContentLength(url, fetchImpl)]);
+      return classification.isSplat ? { path, size: size ?? 0, splatCount: classification.splatCount } : null;
+    });
+    return sortRemoteSplatCandidates(candidates.filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null));
+  }
+  let catalog: RemoteSplatCandidate[] = [];
+  await withDiscoveredRemoteSplats(manifest, { ...deps, onRemoteSplatCatalog: candidates => { catalog = candidates; } });
+  return catalog;
+}
+
 export async function fetchUrlManifest(
   manifestUrl: string,
   deps: FetchUrlManifestDeps
@@ -723,7 +747,10 @@ export async function fetchManifestColmapFiles(
     ?? ((baseUrl, relativePath, onProgress) =>
       fetchManifestFile(baseUrl, relativePath, { fetchImpl: deps.fetchImpl, onProgress }));
   const log = deps.log ?? appLogger.info;
-  const manifestWithDiscoveredSplats = await withDiscoveredRemoteSplats(manifest, {
+  if (!deps.deferSplatDownloads && !manifest.splats?.length) {
+    deps.setUrlProgress({ percent: 5, message: 'Discovering splat files...' });
+  }
+  const manifestWithDiscoveredSplats = deps.deferSplatDownloads ? { ...manifest, splats: [] } : await withDiscoveredRemoteSplats(manifest, {
     fetchImpl: deps.fetchImpl,
     log,
     onRemoteSplatCatalog: deps.onRemoteSplatCatalog,

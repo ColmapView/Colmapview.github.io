@@ -14,6 +14,19 @@ let activeZipFileSize = 0;
 /** Actual count of unique images in the archive. */
 let activeZipImageCount = 0;
 
+const closedArchives = new WeakSet<ArchiveReader>();
+
+/** Closing may be requested by both cancellation and ownership cleanup. */
+export function closeZipArchive(archive: ArchiveReader): Promise<void> {
+  if (closedArchives.has(archive)) return Promise.resolve();
+  closedArchives.add(archive);
+  try {
+    return archive.close();
+  } catch (error) {
+    return Promise.reject(error);
+  }
+}
+
 /**
  * Set the active ZIP archive for lazy image extraction.
  */
@@ -23,7 +36,7 @@ export function setActiveZipArchive(
   fileSize = 0,
   imageCount = 0
 ): void {
-  clearActiveZipArchive();
+  if (activeArchive !== archive) clearActiveZipArchive();
 
   activeArchive = archive;
   activeImageIndex = imageIndex;
@@ -49,11 +62,14 @@ export function hasActiveZipArchive(): boolean {
  * Clear the active ZIP archive and release resources.
  */
 export function clearActiveZipArchive(): void {
-  // libarchive.js Archive does not expose a close method in every runtime path.
+  const previousArchive = activeArchive;
   activeArchive = null;
   activeImageIndex = null;
   activeZipFileSize = 0;
   activeZipImageCount = 0;
+  if (previousArchive) {
+    void closeZipArchive(previousArchive).catch(error => appLogger.warn('[ZIP] Failed to close archive:', error));
+  }
 }
 
 /**
@@ -100,13 +116,15 @@ export async function extractZipImage(imageName: string): Promise<File | null> {
     return null;
   }
 
+  const archive = activeArchive;
   const entry = findZipEntry(imageName, activeImageIndex);
   if (!entry) {
     return null;
   }
 
   try {
-    return await entry.extract();
+    const file = await entry.extract();
+    return activeArchive === archive ? file : null;
   } catch (err) {
     appLogger.warn(`[ZIP] Failed to extract ${imageName}:`, err);
     return null;

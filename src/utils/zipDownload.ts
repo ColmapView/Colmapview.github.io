@@ -1,4 +1,4 @@
-import { fetchWithTimeout } from './urlUtils';
+import { fetchDatasetResource } from './fetchDatasetResource';
 import { parseSafeIntegerString } from './numberParsing';
 import { ARCHIVE_SIZE_LIMIT } from './zipValidation';
 
@@ -21,6 +21,8 @@ export interface ZipDownloadOptions {
   fetchImpl?: (url: string, timeout?: number) => Promise<Response>;
   timeoutMs?: number;
   sizeLimit?: number;
+  /** Size from a trusted metadata response when Content-Length is unavailable. */
+  expectedSize?: number;
 }
 
 const DOWNLOAD_TIMEOUT = 120000;
@@ -34,7 +36,7 @@ export async function downloadZip(
   options: ZipDownloadOptions = {}
 ): Promise<Blob> {
   const fetchImpl = options.fetchImpl
-    ?? ((targetUrl, timeout) => fetchWithTimeout(targetUrl, timeout, { signal: options.signal }));
+    ?? ((targetUrl, timeout) => fetchDatasetResource(targetUrl, timeout, { signal: options.signal }));
   const timeoutMs = options.timeoutMs ?? DOWNLOAD_TIMEOUT;
 
   onProgress({ percent: 2, message: 'Starting download...' });
@@ -47,7 +49,7 @@ export async function downloadZip(
   }
 
   const contentLength = response.headers.get('content-length');
-  const total = contentLength ? parseSafeIntegerString(contentLength) ?? 0 : 0;
+  const total = options.expectedSize ?? (contentLength ? parseSafeIntegerString(contentLength) ?? 0 : 0);
 
   const sizeLimit = options.sizeLimit ?? ARCHIVE_SIZE_LIMIT;
   try {
@@ -61,6 +63,9 @@ export async function downloadZip(
     ? await readStreamingResponseBlob(response.body, total, onProgress, sizeLimit)
     : await response.blob();
   validateDownloadedArchiveSize(blob, sizeLimit);
+  if (options.expectedSize !== undefined && blob.size !== options.expectedSize) {
+    throw new Error('Archive download was incomplete or the file changed. Please retry.');
+  }
   return blob;
 }
 

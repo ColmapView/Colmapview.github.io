@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useReconstructionStore } from '../../store/reconstructionStore';
 import { useSplatBackendStore } from '../../store/stores/splatBackendStore';
@@ -44,6 +44,69 @@ function openPickerWithDisabledSplat() {
     },
   });
 }
+
+describe('SplatPickerModal COLMAP-only selection', () => {
+  beforeEach(() => {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
+    useSplatBackendStore.setState(useSplatBackendStore.getInitialState(), true);
+    mockUseIsTouchDevice.mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    cleanup();
+    useReconstructionStore.getState().clear();
+    vi.unstubAllGlobals();
+  });
+
+  it.each(['None', 'Skip', 'Escape', 'backdrop'])('%s cancels a pending HF PLY without replacing COLMAP data', async choice => {
+    let resolveDownload!: (response: Response) => void;
+    let downloadSignal: AbortSignal | null | undefined;
+    const request = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>(resolve => {
+      downloadSignal = init?.signal;
+      resolveDownload = resolve;
+    }));
+    vi.stubGlobal('fetch', request);
+    const camerasFile = new File(['cameras'], 'cameras.bin');
+    const imagesFile = new File(['images'], 'images.bin');
+    const points3DFile = new File(['points'], 'points3D.bin');
+    useReconstructionStore.setState({
+      showSplatPicker: true,
+      loadedFiles: {
+        camerasFile, imagesFile, points3DFile, imageFiles: new Map(), hasMasks: false,
+        splatFileSources: [{ id: 'mid', path: 'scene.ply',
+          url: 'https://huggingface.co/datasets/owner/scene/resolve/main/scene.ply', size: 91_000_000 }],
+      },
+    });
+    render(<SplatPickerModal />);
+    let pending!: Promise<void>;
+    act(() => { pending = useReconstructionStore.getState().selectSplatSource('mid'); });
+    await waitFor(() => expect(request).toHaveBeenCalledOnce());
+    expect(downloadSignal?.aborted).toBe(false);
+
+    if (choice === 'None') fireEvent.click(screen.getByRole('button', { name: 'None - COLMAP only' }));
+    else if (choice === 'Skip') fireEvent.click(screen.getByRole('button', { name: 'Skip (COLMAP only)' }));
+    else if (choice === 'Escape') fireEvent.keyDown(document, { key: 'Escape' });
+    else fireEvent.click(screen.getByRole('dialog'));
+
+    expect(downloadSignal?.aborted).toBe(true);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(useReconstructionStore.getState().urlLoading).toBe(false);
+    expect(useReconstructionStore.getState().urlProgress).toBeNull();
+    // A provider response arriving after cancellation must not reactivate the tile.
+    await act(async () => {
+      resolveDownload(new Response(new Uint8Array([1, 2, 3])));
+      await pending;
+    });
+    const state = useReconstructionStore.getState();
+    expect(state.loadedFiles).toMatchObject({ camerasFile, imagesFile, points3DFile });
+    expect(state.loadedFiles?.splatFile).toBeUndefined();
+    expect(state.requestedSplatSourceId).toBeNull();
+    expect(state.urlError).toBeNull();
+    expect(state.urlLoading).toBe(false);
+    expect(request).toHaveBeenCalledOnce();
+  });
+});
 
 describe('SplatPickerModal device-memory hint', () => {
   beforeEach(() => {

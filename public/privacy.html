@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="strict-origin" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; script-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'" />
+    <meta name="description" content="How ColmapView handles local files, Google Drive and Hugging Face access, publishing, browser storage, and privacy requests." />
+    <title>Privacy policy · ColmapView</title>
+    <link rel="icon" href="./favicon.ico" />
+    <link rel="stylesheet" href="./policy.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <a class="brand" href="./about.html">ColmapView</a>
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="./">Open viewer</a>
+        <a href="./about.html">About</a>
+        <a href="./privacy.html" aria-current="page">Privacy</a>
+        <a href="./terms.html">Terms</a>
+      </nav>
+    </header>
+    <main id="main" tabindex="-1">
+      <div class="page-intro">
+        <p class="eyebrow">ColmapView · OpsiClear LLC</p>
+        <h1>Privacy policy</h1>
+        <p class="lede">What the viewer accesses, where data goes, and how to remove it.</p>
+        <p class="updated">Effective <time datetime="2026-10-05">October 5, 2026</time></p>
+      </div>
+      <div class="document-layout">
+        <nav class="contents" aria-label="On this page">
+          <h2>On this page</h2>
+          <ul>
+            <li><a href="#scope">Who this covers</a></li>
+            <li><a href="#local">Local and remote files</a></li>
+            <li><a href="#google">Google Drive</a></li>
+            <li><a href="#hugging-face">Hugging Face</a></li>
+            <li><a href="#publishing">Publishing and sharing</a></li>
+            <li><a href="#storage">Storage and retention</a></li>
+            <li><a href="#services">Website and providers</a></li>
+            <li><a href="#controls">Your controls</a></li>
+            <li><a href="#contact">Contact and changes</a></li>
+          </ul>
+        </nav>
+        <article class="document" aria-label="Privacy policy">
+          <div class="summary">
+            <h2>At a glance</h2>
+            <ul>
+              <li>Local reconstruction processing and rendering run in your browser.</li>
+              <li>Remote files download from the source you choose. Account access is optional and requested for private access or publishing.</li>
+              <li>Publishing sends dataset files to your selected provider. The current Hugging Face publisher creates public repositories; Drive ZIPs start private.</li>
+              <li>Disconnecting removes the app's in-memory credentials. It does not remove loaded files or published copies.</li>
+            </ul>
+          </div>
+          <section id="scope">
+            <h2>1. Who this policy covers</h2>
+            <p>OpsiClear LLC maintains ColmapView, an open source web viewer for COLMAP reconstructions and related media. This policy describes the ColmapView website and its configured Google Drive and Hugging Face integrations. Account features may be disabled in some deployments. Other operators' deployments and the external services you use have their own policies.</p>
+            <p>Contact us about privacy at <a href="mailto:info@opsiclear.com">info@opsiclear.com</a>.</p>
+          </section>
+          <section id="local">
+            <h2>2. Local and remote files</h2>
+            <p>When you select local files, the viewer reads the reconstruction, image files, masks, Gaussian splats, configuration files, or archives needed for the features you use. It parses, transforms, and renders that data in your browser. Selecting local files does not upload their contents to a ColmapView application server.</p>
+            <p>Loading a URL or manifest makes requests to the file hosts and any image or mask hosts referenced by that dataset. Requests can expose your IP address and connection information to those hosts. The dataset's source URL, paths, filenames, and file contents are used in the browser to discover and load supported data.</p>
+            <p>If you open a viewer link that includes a dataset URL in its query string, your browser sends that full viewer URL to the website host when requesting the page. The host may therefore receive and log the dataset URL, including a Drive file ID or access-related link parameters. This is distinct from uploading dataset contents. To avoid putting a private source URL in that page request, open the viewer first and paste the source into Load URL instead of sharing or opening a URL-bearing viewer link.</p>
+            <p>Local export saves files through your browser. Sharing a viewer URL can include a dataset URL and encoded viewer settings. Treat links, filenames, and saved configurations as potentially sensitive; anyone receiving a link can read what the link itself contains.</p>
+          </section>
+          <section id="google">
+            <h2>3. Google Drive access</h2>
+            <p>Public Drive ZIP and TAR archive links, including compressed TAR, can be loaded without connecting your Google account where the Drive integration is configured. For a private archive, you choose to sign in, authorize <code>drive.file</code>, and select the file through Google Picker. This permission applies to files you select for ColmapView or files the app creates; it is not broad access to every file in your Drive. The account must already be allowed to download the file. Pasting an arbitrary private link does not itself grant access. ColmapView retrieves the selected archive's metadata and content; the loader does not modify source files.</p>
+            <p>Google Picker runs Google's file-selection interface in your browser. ColmapView supplies its app configuration and current Google token to Picker so you can choose an archive. After selection, the app uses the chosen file ID and, when required, its resource key to download through Google's Drive API. Cancelling the picker does not start a dataset load.</p>
+            <p>For publication, ColmapView requests the same <code>drive.file</code> permission in a separate local session. The current publisher uses it to upload and verify a new dataset ZIP and, only if you select link sharing, create a permission allowing anyone with the link to read that uploaded file. The app does not request <code>drive.readonly</code> or full-Drive read/write access.</p>
+            <p>Google supplies short-lived authorization tokens. ColmapView keeps them in the current tab's memory and uses them in requests to Google APIs. They are not saved to the app's persistent browser storage or included in shared viewer links. Google account passwords are entered with Google, not with ColmapView.</p>
+            <p><strong>Google Limited Use:</strong> Use of information received from Google APIs follows the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including its Limited Use requirements. We use this information for the visible viewing and publishing features you request. We do not sell it, use it for advertising or credit decisions, or use it to train generalized AI models. Transfers occur to provide features you explicitly request, including publication to another provider as described below, or where required for security or applicable law. Maintainers do not routinely receive or read your Drive file contents.</p>
+          </section>
+          <section id="hugging-face">
+            <h2>4. Hugging Face access</h2>
+            <p>Public dataset links can be opened without signing in. For private datasets, you choose to authorize repository read access. Hugging Face returns a short-lived access token and account profile information; ColmapView uses your username to identify the connected account and the token to retrieve permitted repository metadata, listings, reconstruction files, images, masks, and other referenced assets.</p>
+            <p>Publishing requests additional permission to create and write app-created repositories. The app uses the connected username to create a new dataset under your account. Passwords are entered with Hugging Face. Tokens and connected account state stay in the current tab's memory rather than persistent app storage.</p>
+            <p>The Hugging Face sign-in callback uses a short-lived authorization code in a URL before the browser exchanges it for a token. The callback page request can expose that URL to website hosting infrastructure. The code is distinct from the access token and is used with a verifier held in the signing-in tab.</p>
+          </section>
+          <section id="publishing">
+            <h2>5. Publishing and sharing data</h2>
+            <p>Publication is a separate action you start after choosing a destination and reviewing its options. It transfers a representation of the current reconstruction, original referenced images, available masks and splat files, viewer settings, and any chosen preview or dataset metadata to that provider. Original images can retain embedded metadata, including EXIF, capture details, or location information. Review your source files before publishing.</p>
+            <p>The current Hugging Face publisher creates a <strong>new public dataset repository</strong>. This includes a dataset card containing the title, description, and license you select. Public files and previews can be accessed or copied by others.</p>
+            <p>The current Google Drive publisher creates a <strong>private dataset ZIP</strong>. Selecting link sharing requests access for anyone with the link after upload verification. A viewer link to a private file does not grant access; recipients need provider permission and must authorize that ZIP for ColmapView through Google Picker unless it is already available to the app.</p>
+            <p>A dataset initially loaded from Google Drive may be uploaded to Hugging Face if you explicitly publish it there. Similarly, files read from Hugging Face or another source may be included in a Drive publication you request. These transfers go directly from your browser to the selected provider and are subject to that provider's terms and privacy policy. ColmapView does not automatically publish a loaded dataset.</p>
+            <p>Cancellation or failure may leave a created repository, committed files, a partial upload, or a completed private Drive file on the provider. Closing a publish dialog does not cancel the job. Provider-side copies must be reviewed and removed through that provider; deleting a viewer link or disconnecting an account does not delete them. Other people's downloads cannot be recalled.</p>
+          </section>
+          <section id="storage">
+            <h2>6. Browser storage and retention</h2>
+            <p>Loaded datasets, archives, decoded images, thumbnails, and publication progress are kept as working data and caches in the current browser session. The viewer does not create a persistent IndexedDB database for dataset contents. Browsers and remote hosts may still cache downloaded responses according to their own behavior.</p>
+            <p>The app saves viewer preferences, theme, named configuration profiles, and last-seen version information in local storage so they can survive reloads. A session-storage record of an unfinished automatic URL load may contain the dataset URL; it is normally removed when the attempt finishes and can remain after a tab crash to prevent repeated failing loads. Browser history and bookmarks may also retain viewer or dataset URLs.</p>
+            <p>Disconnecting or token expiry removes the app's access token for that session. Reloading or closing the tab ends in-memory account sessions and working data, although reopening a dataset link can load that dataset again. Disconnect does not erase downloaded data already displayed, saved preferences, exports, or provider-side publications.</p>
+            <p>Data uploaded to Google Drive or Hugging Face stays with that provider under its retention rules until you remove it there. If you contact OpsiClear LLC, we receive the contact details and information you voluntarily send and use them to respond and handle the request. Please send only the information needed; ask us by email to remove information you have supplied.</p>
+          </section>
+          <section id="services">
+            <h2>7. Website hosting and external services</h2>
+            <p>ColmapView is hosted on GitHub Pages and Cloudflare Pages. These hosting and infrastructure services process connection information such as IP address, request time, browser information, and requested website resources to deliver and protect the website. Their handling is described in the <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub privacy statement</a> and <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare privacy policy</a>.</p>
+            <p>ColmapView does not include analytics scripts or create analytics cookies. These policy pages load no third-party scripts or fonts. Opening an account control, signing in, loading a remote dataset, following an external link, or publishing contacts the relevant external services. Those services may use their own cookies and process account or connection information under their policies. See <a href="https://policies.google.com/privacy">Google's privacy policy</a> and <a href="https://huggingface.co/privacy">Hugging Face's privacy policy</a>.</p>
+            <p>The website restricts outgoing referrers to the site's origin so query strings and dataset paths are not sent as referrers. Requests to the dataset provider necessarily include the resource you ask it to retrieve. Tokens are limited to the relevant provider requests, and production Google and Hugging Face API connections use HTTPS. Your device, browser extensions, source hosts, and copies you share also affect the privacy of your data.</p>
+          </section>
+          <section id="controls">
+            <h2>8. Your controls and removal options</h2>
+            <ul>
+              <li><strong>End app access:</strong> use Disconnect in the account control or Sign out in the publishing dialog. Viewing and publishing can have separate Google sessions; disconnect the relevant connections. Reload or close the viewer to end its in-memory sessions.</li>
+              <li><strong>Revoke provider authorization:</strong> remove ColmapView in <a href="https://myaccount.google.com/connections">Google Account connections</a> or <a href="https://huggingface.co/settings/connected-applications">Hugging Face connected applications</a>. This is separate from the app's local Disconnect control.</li>
+              <li><strong>Clear this browser:</strong> use Reset settings on the dataset-loading page to remove saved viewer preferences, or clear this site's data in your browser to remove local and session storage and cached responses. Clear browser history, bookmarks, and downloaded exports separately if needed.</li>
+              <li><strong>Remove published copies:</strong> change sharing or delete the uploaded file in <a href="https://drive.google.com/">Google Drive</a>; use your Hugging Face repository's settings to change access or delete the repository. Check for files or repositories left by interrupted publication.</li>
+              <li><strong>Ask for help:</strong> email <a href="mailto:info@opsiclear.com">info@opsiclear.com</a> with a privacy or deletion request. We can help with information you sent to us; we do not have a central copy of your locally processed dataset and cannot erase other users' downloads or provider-managed backups.</li>
+            </ul>
+          </section>
+          <section id="contact">
+            <h2>9. Contact and policy changes</h2>
+            <p>OpsiClear LLC is responsible for this policy. Contact <a href="mailto:info@opsiclear.com">info@opsiclear.com</a> for questions about access, privacy, or data handling. Public <a href="https://github.com/ColmapView/colmapview.github.io/issues">GitHub issues</a> are suitable for general bugs, but do not post private files, account details, tokens, or private dataset URLs there.</p>
+            <p>We update this page when data practices change and show the effective date above. Changes to the use of Google user data will be disclosed and, where required, separately consented to before that new use begins.</p>
+          </section>
+        </article>
+      </div>
+    </main>
+    <footer class="site-footer">
+      <p>ColmapView · Maintained by OpsiClear LLC</p>
+      <nav class="footer-links" aria-label="Footer navigation">
+        <a href="./about.html">About</a>
+        <a href="./terms.html">Terms</a>
+        <a href="mailto:info@opsiclear.com">Contact</a>
+      </nav>
+    </footer>
+  </body>
+</html>

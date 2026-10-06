@@ -33,11 +33,14 @@ The toolbar's **Align** button holds everything that works out *where the scene 
 - **Screenshot & Recording** - PNG/JPEG/WebP screenshots, GIF/WebM/MP4 video export with quality controls.
 - **URL Sharing** - Share reconstructions with encoded camera view state. Embeddable iframes.
 - **Social Sharing** - One-click share to X/LinkedIn with auto-generated stats.
+- **Publish to Google Drive** - On the configured [custom viewer](https://colmapview.opsiclear.com/), save the current dataset as a private ZIP, or enable link sharing and copy a viewer URL. Includes original images, masks, the active splat, and viewer settings. GitHub and preview viewers offer an explicit link to the custom host. See [Drive publishing setup](docs/google-drive-publishing.md) and [dual-host deployment](docs/dual-hosting.md).
 - **Self-Contained Assets** - The interface typefaces (IBM Plex Sans, JetBrains Mono) ship with the app, so a page load makes no Google Fonts request — embeds and offline use stay self-contained.
 
 ### Data Loading
 - **Drag & Drop** - COLMAP folders, ZIP archives, or image-only galleries.
 - **URL Loading** - Load remote reconstructions with **Load URL**, or with a **Load manifest** file that points at one. The reconstruction is discovered wherever it lives in a Hugging Face repo or directory listing.
+- **Google Drive archives** - On the configured [custom viewer](https://colmapview.opsiclear.com/), paste a public ZIP or TAR sharing URL to load directly through Google's API without signing in; compressed TAR is supported too. For a private archive, connect with the Drive account icon next to Upload configuration and choose the file through Google Picker. Uses only per-file `drive.file` access; an arbitrary private URL alone does not authorize the file. GitHub and preview viewers offer **Use Google Drive** to open the archive on the custom host. Drive publishing creates ZIPs. See [Drive and Picker setup](docs/google-drive-loading.md) and [dual-host deployment](docs/dual-hosting.md).
+- **Private Hugging Face datasets** - Connect with the 🤗 account icon, approve repository read access, and paste a dataset, folder, manifest, or archive link. Images and masks load with the same session. See [Hugging Face setup](docs/hugging-face-loading.md).
 - **Images-Only Mode** - View image galleries without COLMAP reconstruction data.
 - **Profile System** - Save and switch between different configuration presets.
 
@@ -80,7 +83,7 @@ Subfolders are scanned automatically (`sparse/0/`, `sparse/`, or any subfolder).
 |---------|----------|
 | View | View options, axes/grid, camera mode, background, Transform, Align |
 | Data | Point cloud, camera display, matches, selection highlight, rigs |
-| Capture | Screenshot, Share, Export |
+| Capture | Screenshot, Share, Publish to Hugging Face / Google Drive when configured, Export |
 | App | Settings, gallery toggle |
 
 The matches and selection-highlight buttons appear only while cameras are shown.
@@ -166,6 +169,10 @@ Notes:
 
 ## Links
 
+- [About ColmapView](https://colmapview.github.io/latest/about.html)
+- [Privacy policy](https://colmapview.github.io/latest/privacy.html)
+- [Terms of use](https://colmapview.github.io/latest/terms.html)
+- [Google OAuth verification packet](docs/google-oauth-verification.md)
 - [COLMAP Documentation](https://colmap.github.io/)
 - [GitHub Repository](https://github.com/ColmapView/colmapview.github.io)
 - [Report Issues](https://github.com/ColmapView/colmapview.github.io/issues)

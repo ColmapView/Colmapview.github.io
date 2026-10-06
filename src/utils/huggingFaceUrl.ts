@@ -13,6 +13,37 @@ export function normalizeHuggingFaceDatasetUrl(value: string): string | null {
   return url.href;
 }
 
+function datasetRepoId(url: URL, api = false): string | null {
+  const prefix = api ? '/api/datasets/' : '/datasets/';
+  if (!url.pathname.startsWith(prefix)) return null;
+  const [owner, name] = url.pathname.slice(prefix.length).split('/');
+  if (!owner || !name) return null;
+  try {
+    const parts = [owner, name].map(part => decodeURIComponent(part));
+    return parts.every(part => /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(part)) ? parts.join('/') : null;
+  } catch { return null; }
+}
+
+/** Only the exact Hub origin and dataset metadata/tree/resolve endpoints can receive a token. */
+export function huggingFaceDatasetReadRepoId(value: string): string | null {
+  let url: URL;
+  try { url = new URL(value); } catch { return null; }
+  if (url.origin !== 'https://huggingface.co' || url.username || url.password) return null;
+  if (/^\/datasets\/[^/]+\/[^/]+\/resolve\/[^/]+(?:\/|$)/.test(url.pathname)) return datasetRepoId(url);
+  if (/^\/api\/datasets\/[^/]+\/[^/]+\/?$/.test(url.pathname)
+    || /^\/api\/datasets\/[^/]+\/[^/]+\/revision\/[^/]+\/?$/.test(url.pathname)
+    || /^\/api\/datasets\/[^/]+\/[^/]+\/tree\/[^/]+(?:\/|$)/.test(url.pathname)) return datasetRepoId(url, true);
+  return null;
+}
+
+/** Permission check for a pasted dataset, folder, manifest or file URL. */
+export function huggingFaceDatasetInfoUrl(value: string): string | null {
+  const normalized = normalizeHuggingFaceDatasetUrl(value);
+  if (!normalized) return null;
+  const repo = datasetRepoId(new URL(normalized));
+  return repo ? `https://huggingface.co/api/datasets/${repo}` : null;
+}
+
 /** Look beside the supplied project/file, then its ancestors through the repo root. */
 export function huggingFaceSettingsUrls(value: string, filename: string, isFile = false): string[] {
   const normalized = normalizeHuggingFaceDatasetUrl(value);

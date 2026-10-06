@@ -57,7 +57,7 @@ function getFocusableControls(parent: ParentNode): HTMLElement[] {
 }
 
 // Panel type for control buttons
-export type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'share' | 'publish' | 'export' | 'transform' | 'align' | 'gallery' | 'rig' | 'settings' | null;
+export type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'share' | 'publish' | 'publishDrive' | 'export' | 'transform' | 'align' | 'gallery' | 'rig' | 'settings' | null;
 
 export interface PanelWrapperProps {
   id?: string;

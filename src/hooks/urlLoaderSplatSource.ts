@@ -5,16 +5,16 @@ import { isSplatFilePath } from '../utils/splatFilePolicy';
 import {
   blobToFile,
   classifyFetchError,
-  fetchWithTimeout,
   getFilenameFromUrl,
 } from '../utils/urlUtils';
 import { isUrlLoadError } from './urlLoaderErrorHandling';
+import { fetchDatasetResource } from '../utils/fetchDatasetResource';
 
 type FetchUrl = (url: string) => Promise<Response>;
 type ProcessFiles = (
   files: Map<string, File>,
   progressRange?: { start: number; end: number },
-  options?: { replaceSplatScene?: boolean; throwOnError?: boolean }
+  options?: { replaceSplatScene?: boolean; throwOnError?: boolean; signal?: AbortSignal; onSceneReplaced?: () => void }
 ) => Promise<void | boolean>;
 type SetSourceInfo = (
   type: ReconstructionSourceType,
@@ -25,6 +25,8 @@ type SetSourceInfo = (
 type SetUrlProgress = (progress: UrlLoadProgress | null) => void;
 
 export interface LoadSplatUrlSourceDeps {
+  signal?: AbortSignal;
+  assertCurrent?: () => void;
   fetchImpl?: FetchUrl;
   fetchSplatFile?: (url: string) => Promise<File>;
   log?: (message: string) => void;
@@ -44,7 +46,7 @@ export function isSplatUrl(url: string): boolean {
 
 export async function fetchSplatUrlFile(
   url: string,
-  fetchImpl: FetchUrl = fetchWithTimeout
+  fetchImpl: FetchUrl = fetchDatasetResource
 ): Promise<File> {
   try {
     const response = await fetchImpl(url);
@@ -79,6 +81,8 @@ export async function loadSplatUrlSource(
   deps.setUrlProgress({ percent: 5, message: 'Downloading 3D file...' });
 
   const splatFile = await fetchSplatFile(url);
+  deps.signal?.throwIfAborted();
+  deps.assertCurrent?.();
   deps.onSplatFileFetched?.(splatFile);
   const files = new Map([[splatFile.name, splatFile]]);
 
@@ -87,12 +91,25 @@ export async function loadSplatUrlSource(
     message: 'Parsing 3D scene...',
     currentFile: splatFile.name,
   });
-  deps.setSourceInfo('url', url, null, null);
+  let committed = false;
+  const commitSource = () => {
+    deps.signal?.throwIfAborted();
+    deps.assertCurrent?.();
+    if (committed) return;
+    deps.setSourceInfo('url', url, null, null);
+    committed = true;
+  };
 
-  await deps.processFiles(files, { start: 80, end: 100 }, {
+  const processed = await deps.processFiles(files, { start: 80, end: 100 }, {
     replaceSplatScene: true,
     throwOnError: true,
+    signal: deps.signal,
+    onSceneReplaced: commitSource,
   });
+  deps.signal?.throwIfAborted();
+  deps.assertCurrent?.();
+  if (processed === false) return false;
+  commitSource();
 
   log(`[URL Loader] Successfully loaded 3D file from URL: ${splatFile.name}`);
 

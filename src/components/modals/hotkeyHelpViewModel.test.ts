@@ -6,7 +6,8 @@ import {
   ABOUT_LINK_CLASS_NAME,
   ABOUT_LINK_REST_COLOR,
   ABOUT_PANEL_CLASS,
-  ABOUT_PRODUCT_LINE,
+  ABOUT_PRODUCT_NAME,
+  ABOUT_MAINTAINER_LINE,
   ABOUT_PRODUCT_LINE_CLASS,
   ABOUT_PROJECT_LINKS,
   ABOUT_ROW_CLASS,
@@ -417,7 +418,8 @@ describe('about tab view model', () => {
   });
 
   it('keeps the brand, license, and credit strings verbatim', () => {
-    expect(ABOUT_PRODUCT_LINE).toBe('ColmapView by OpsiClear');
+    expect(ABOUT_PRODUCT_NAME).toBe('ColmapView');
+    expect(ABOUT_MAINTAINER_LINE).toBe('by OpsiClear');
     expect(ABOUT_LICENSE_LABEL).toBe('AGPL 3.0');
     expect(ABOUT_COLMAP_CREDIT_PREFIX).toBe('Based on');
   });

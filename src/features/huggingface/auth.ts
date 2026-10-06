@@ -4,9 +4,10 @@ import { awaitWithAbort } from '../../utils/awaitWithAbort';
 
 export interface HfIdentity { username: string }
 export interface HfAuthState { status: 'disconnected' | 'connecting' | 'connected'; identity: HfIdentity | null; error: string | null }
-interface Session { accessToken: string; expiresAt: number; identity: HfIdentity }
+interface Session { accessToken: string; expiresAt: number; identity: HfIdentity; canPublish: boolean }
 type OAuthMemory = { codeVerifier?: string; nonce?: string };
-export const HF_SCOPES = 'openid profile contribute-repos';
+export const HF_READ_SCOPES = 'openid profile read-repos';
+export const HF_SCOPES = `${HF_READ_SCOPES} contribute-repos`;
 export const HF_CALLBACK_TYPE = 'colmapview:hf-oauth:v1';
 
 export function validateOAuthCallback(value: unknown, redirectUri: string, expectedState: string): string | null {
@@ -39,8 +40,12 @@ export async function exchangeOAuthCode(config: HfConfig, callback: string, memo
   if (!response.ok) throw new HfError('Hugging Face sign-in failed. Please reconnect.', response.status);
   const token = await response.json() as { access_token?: unknown; expires_in?: unknown; scope?: unknown };
   if (typeof token.access_token !== 'string' || !token.access_token || typeof token.expires_in !== 'number'
-    || !Number.isFinite(token.expires_in) || token.expires_in <= 0 || typeof token.scope !== 'string'
-    || !token.scope.split(' ').includes('contribute-repos')) throw new HfError('Dataset publication permission was not granted.');
+    || !Number.isFinite(token.expires_in) || token.expires_in <= 5 || typeof token.scope !== 'string') {
+    throw new HfError('Hugging Face sign-in returned an invalid token. Please reconnect.');
+  }
+  const scopes = token.scope.split(' ');
+  if (!scopes.includes('read-repos')) throw new HfError('Private dataset read permission was not granted. Reconnect and allow repository read access.');
+  if (!config.readOnly && !scopes.includes('contribute-repos')) throw new HfError('Dataset publication permission was not granted.');
   const profile = await request('https://huggingface.co/oauth/userinfo', { headers: { Authorization: `Bearer ${token.access_token}` } });
   if (!profile.ok) throw new HfError('Could not identify the connected Hugging Face account.', profile.status);
   const user = await profile.json() as { preferred_username?: unknown };
@@ -48,7 +53,8 @@ export async function exchangeOAuthCode(config: HfConfig, callback: string, memo
     throw new HfError('The connected account did not provide a valid username.');
   }
   signal.throwIfAborted();
-  return { accessToken: token.access_token, expiresAt: Date.now() + token.expires_in * 1000, identity: { username: user.preferred_username } };
+  return { accessToken: token.access_token, expiresAt: Date.now() + token.expires_in * 1000,
+    identity: { username: user.preferred_username }, canPublish: scopes.includes('contribute-repos') };
 }
 
 function receiveCallback(popup: Window, config: HfConfig, expectedState: string, transactionId: string, signal: AbortSignal): Promise<string> {
@@ -80,15 +86,24 @@ export function createHfAuth() {
   let state: HfAuthState = { status: 'disconnected', identity: null, error: null };
   const listeners = new Set<() => void>();
   const set = (next: HfAuthState) => { state = next; listeners.forEach(listener => listener()); };
+  const expire = () => {
+    session = null;
+    set({ status: 'disconnected', identity: null, error: 'Your Hugging Face connection expired. Sign in again.' });
+  };
+  const getReadAccessToken = (): string | null => {
+    if (session && session.expiresAt <= Date.now() + 5000) expire();
+    return session?.accessToken ?? null;
+  };
   return {
     getSnapshot: () => state,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    getReadAccessToken,
+    expire,
     getAccessToken(username?: string) {
-      if (!session || session.expiresAt <= Date.now() + 5000) {
-        session = null;
-        set({ status: 'disconnected', identity: null, error: 'Reconnect to continue publication.' });
+      if (!getReadAccessToken() || !session) {
         throw new HfError('Reconnect the same Hugging Face account to continue.', 401);
       }
+      if (!session.canPublish) throw new HfError('Sign in from the publishing dialog to allow dataset publication.', 403);
       if (username && username !== session.identity.username) throw new HfError('Reconnect the account that started this publication.');
       return session.accessToken;
     },
@@ -106,6 +121,7 @@ export function createHfAuth() {
       const controller = new AbortController();
       const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(180_000)]);
       pending = controller;
+      session = null;
       set({ status: 'connecting', identity: null, error: null });
       return (async () => {
         try {
@@ -113,7 +129,7 @@ export function createHfAuth() {
           const memory: OAuthMemory = {};
           const id = crypto.randomUUID();
           const loginUrl = await awaitWithAbort(oauthLoginUrl({ clientId: config.clientId, redirectUrl: config.redirectUri,
-            scopes: HF_SCOPES, state: id, localStorage: memory }), signal);
+            scopes: config.readOnly ? HF_READ_SCOPES : HF_SCOPES, state: id, localStorage: memory }), signal);
           signal.throwIfAborted();
           const authorization = new URL(loginUrl);
           if (authorization.origin !== 'https://huggingface.co') throw new HfError('Unexpected sign-in provider.');

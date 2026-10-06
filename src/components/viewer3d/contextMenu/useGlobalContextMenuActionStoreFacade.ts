@@ -56,6 +56,9 @@ export function useGlobalContextMenuActionStoreFacade(): GlobalContextMenuAction
   const hasSplatData = loadedFilesHaveSplatData(loadedFiles);
   const hasPinholeCameras = reconstructionHasPinholeCameras(reconstruction);
   const { processFiles } = useFileDropzone();
+  const reloadFiles = useCallback(async (files: Map<string, File>) => {
+    await processFiles(files);
+  }, [processFiles]);
 
   const takeScreenshot = useExportStore((s) => s.takeScreenshot);
   const setExportFormat = useExportStore((s) => s.setExportFormat);
@@ -90,7 +93,7 @@ export function useGlobalContextMenuActionStoreFacade(): GlobalContextMenuAction
       applyTransformToData,
       droppedFiles,
       confirmReload,
-      processFiles,
+      processFiles: reloadFiles,
       takeScreenshot,
       setExportFormat,
       triggerExport,
@@ -110,7 +113,7 @@ export function useGlobalContextMenuActionStoreFacade(): GlobalContextMenuAction
       setPickingMode,
       resetTransform,
       droppedFiles,
-      processFiles,
+      reloadFiles,
       takeScreenshot,
       setExportFormat,
       triggerExport,

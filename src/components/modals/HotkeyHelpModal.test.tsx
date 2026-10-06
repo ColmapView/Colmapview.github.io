@@ -213,7 +213,8 @@ describe('HotkeyHelpModal', () => {
     openFromStatusBar();
     fireEvent.click(screen.getByRole('tab', { name: 'About' }));
 
-    expect(screen.getByText('ColmapView by OpsiClear')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'ColmapView' })).toBeInTheDocument();
+    expect(screen.getByText('by OpsiClear')).toBeInTheDocument();
     expect(screen.getByText('AGPL 3.0')).toBeInTheDocument();
     expect(screen.getByText(/Based on/)).toBeInTheDocument();
     expect(screen.getByText(`v${__APP_VERSION__}`)).toBeInTheDocument();

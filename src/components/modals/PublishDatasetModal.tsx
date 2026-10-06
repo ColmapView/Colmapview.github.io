@@ -90,6 +90,9 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
         Open publishing viewer
       </a>}
     </section> : <>
+      {auth.status !== 'connected' && <p className="text-ds-muted text-xs">
+        Sign-in lets ColmapView read private repositories and create datasets.
+      </p>}
       <div className={`publication-layout${publish.receipt ? ' publication-layout-result' : ''}`}>
         <section className="publication-preview-panel" aria-label="Dataset preview">
           <button type="button" className="publication-preview-button" disabled={!selecting} aria-label="Replace preview image"
@@ -172,7 +175,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
           <button type="button" className={buttonClass} disabled={applying} onClick={() => { void applyDeletions(); }}>Apply deletions and continue</button>
         </div>}
         <p className="text-ds-muted text-xs">Includes all loaded images, available masks, and splats. This creates a public, discoverable dataset that anyone can download.
-          Files may become public during upload; cancelling does not remove committed files.</p>
+          Original image metadata is retained. Files may become public during upload; cancelling does not remove committed files.</p>
         <div className="publication-submit-row">
           {auth.status !== 'connected' && <span className="text-ds-muted text-xs">Sign in to publish.</span>}
           <button type="button" className={primaryButtonClass}

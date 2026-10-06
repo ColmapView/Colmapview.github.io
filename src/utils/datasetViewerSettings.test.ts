@@ -11,6 +11,11 @@ const state: PublishedViewerState = { version: 1, viewerVersion: 'test',
     transform: createIdentityEuler(), splat: { activeSourceId: 'splats/scene.spz', transform: { ...createIdentityEuler(), translationY: 4 } } } };
 
 describe('colmapview.yaml settings', () => {
+  it('round trips COLMAP only without resolving it to a settings directory or a default splat', () => {
+    const none = { ...state, config: { ...state.config, splat: { activeSourceId: '' } } };
+    expect(parseDatasetViewerSettings(serializeDatasetViewerSettings(none))).toEqual(none);
+    expect(resolveDatasetSplatSourceId('', 'project/colmapview.yaml', ['project/splats/scene.spz'])).toBe('');
+  });
   it('resolves splats relative to the settings directory instead of matching a basename', () => {
     const paths = ['other/splats/scene.spz', 'project/nested/scene.spz', 'project/splats/scene.spz'];
     expect(resolveDatasetSplatSourceId('splats/scene.spz', 'project/colmapview.yaml', paths)).toBe('project/splats/scene.spz');

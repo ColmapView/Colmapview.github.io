@@ -10,9 +10,14 @@ import { createIdentityEuler } from '../utils/sim3dTransforms';
 import type { CameraViewState } from '../store/types';
 import type { ColmapManifest } from '../types/manifest';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
-import { buildLoadedFiles } from '../test/builders';
+import { buildLoadedFiles, buildReconstruction } from '../test/builders';
 import { createDefaultManifest } from './urlLoaderPolicy';
-import { getActiveSplatSourceId } from '../utils/splatFileSourcePolicy';
+import { getActiveSplatSourceId, getShareActiveSplatSourceId } from '../utils/splatFileSourcePolicy';
+import { hfAuth, type HfAuthState } from '../features/huggingface/auth';
+import * as archiveSource from './urlLoaderZipSource';
+import { processFileDropzoneFiles } from './fileDropzoneWorkflow';
+import { noopLogger } from '../utils/logger';
+import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS } from './urlLoaderViewerState';
 
 const { clearAllCachesMock, processFilesMock, detectTouchDeviceMock } = vi.hoisted(() => ({
   clearAllCachesMock: vi.fn(),
@@ -20,7 +25,8 @@ const { clearAllCachesMock, processFilesMock, detectTouchDeviceMock } = vi.hoist
   processFilesMock: vi.fn<(
     files: Map<string, File>,
     progressRange?: { start: number; end: number },
-    options?: { replaceSplatScene?: boolean; throwOnError?: boolean }
+    options?: { replaceSplatScene?: boolean; throwOnError?: boolean; onSceneReplaced?: () => void;
+      signal?: AbortSignal; initialSplatSelectionRevision?: number }
   ) => Promise<void>>(),
 }));
 
@@ -70,6 +76,211 @@ describe('useUrlLoader', () => {
     usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
     useTransformStore.setState(useTransformStore.getInitialState(), true);
     window.history.replaceState(null, '', '/');
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it.each([401, 403, 404])('preserves the existing dataset when private Hugging Face access returns %s', async status => {
+    const loadedFiles = buildLoadedFiles();
+    useReconstructionStore.setState({ loadedFiles });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status })));
+    const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
+    await act(async () => { expect(await result.current.loadFromUrl('https://huggingface.co/datasets/owner/private')).toBe(false); });
+    expect(useReconstructionStore.getState().loadedFiles).toBe(loadedFiles);
+    expect(clearAllCachesMock).not.toHaveBeenCalled();
+    expect(processFilesMock).not.toHaveBeenCalled();
+    expect(useReconstructionStore.getState().urlError?.message).toContain('Sign in with Hugging Face');
+  });
+
+  it.each(['directory', 'manifest'] as const)('loads a private Hugging Face %s with the current account and clean source URLs', async mode => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const repo = 'https://huggingface.co/datasets/owner/private';
+    const base = repo + '/resolve/main/';
+    const connection: HfAuthState = { status: 'connected', identity: { username: 'owner' }, error: null };
+    vi.spyOn(hfAuth, 'getSnapshot').mockReturnValue(connection);
+    vi.spyOn(hfAuth, 'getReadAccessToken').mockReturnValue('private-loader-token');
+    const request = vi.fn(async (url: string, init?: RequestInit) => {
+      if (new Headers(init?.headers).get('Authorization') !== 'Bearer private-loader-token') return new Response(null, { status: 401 });
+      if (url === 'https://huggingface.co/api/datasets/owner/private?expand=private') return Response.json({ id: 'owner/private', private: true });
+      if (url.includes('/tree/')) return Response.json(['cameras', 'images', 'points3D'].map(name => ({ type: 'file', path: `sparse/0/${name}.bin` })));
+      if (url.endsWith('colmapview.json')) return Response.json(createDefaultManifest(base));
+      if (/(cameras|images|points3D)\.bin$/.test(url)) return new Response(new Uint8Array([1, 2, 3]));
+      return new Response(null, { status: 404 });
+    });
+    vi.stubGlobal('fetch', request);
+    const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
+    await act(async () => { expect(await result.current.loadFromUrl(mode === 'manifest' ? base + 'colmapview.json' : repo)).toBe(true); });
+    expect(processFilesMock).toHaveBeenCalledOnce();
+    const files = processFilesMock.mock.calls[0][0];
+    expect([...files.keys()]).toEqual(['sparse/0/cameras.bin', 'sparse/0/images.bin', 'sparse/0/points3D.bin']);
+    expect(request.mock.calls.slice(1).every(([, init]) => new Headers(init?.headers).get('Authorization') === 'Bearer private-loader-token')).toBe(true);
+    const source = useReconstructionStore.getState();
+    expect(source.sourceUrl).toBe(mode === 'manifest' ? base + 'colmapview.json' : base);
+    expect(source.imageUrlBase).toBe(base + 'images/');
+    expect(JSON.stringify([source.sourceUrl, source.sourceManifest, source.imageUrlBase])).not.toContain('private-loader-token');
+  });
+
+  it('cancels a private repository check without clearing or replacing the current scene', async () => {
+    const loadedFiles = buildLoadedFiles();
+    useReconstructionStore.setState({ loadedFiles });
+    const request = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+    }));
+    vi.stubGlobal('fetch', request);
+    const { result } = renderHook(() => useUrlLoader());
+    let pending!: Promise<boolean>;
+    act(() => { pending = result.current.loadFromUrl('https://huggingface.co/datasets/owner/private'); });
+    await waitFor(() => expect(request).toHaveBeenCalledOnce());
+    act(() => {
+      const state = useReconstructionStore.getState();
+      state.finishUrlLoad(state.urlLoadController!.signal);
+    });
+    await act(async () => { expect(await pending).toBe(false); });
+    expect(clearAllCachesMock).not.toHaveBeenCalled();
+    expect(processFilesMock).not.toHaveBeenCalled();
+    expect(useReconstructionStore.getState().loadedFiles).toBe(loadedFiles);
+  });
+
+  it.each(['url', 'inline'] as const)('reports discovery after public HF access succeeds for %s loading', async mode => {
+    const repo = 'https://huggingface.co/datasets/owner/public';
+    const base = `${repo}/resolve/main/`;
+    let allowAccess!: (response: Response) => void;
+    const request = vi.fn((url: string, init?: RequestInit): Promise<Response> => {
+      if (url === 'https://huggingface.co/api/datasets/owner/public?expand=private') {
+        return new Promise(resolve => { allowAccess = resolve; });
+      }
+      if (url.includes('/tree/')) {
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+        });
+      }
+      return Promise.resolve(new Response(null, { status: 404 }));
+    });
+    vi.stubGlobal('fetch', request);
+    const messages: string[] = [];
+    const unsubscribe = useReconstructionStore.subscribe(state => {
+      if (state.urlProgress) messages.push(state.urlProgress.message);
+    });
+    const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
+    try {
+      let pending!: Promise<boolean>;
+      act(() => {
+        pending = mode === 'inline' ? result.current.loadFromManifest(createDefaultManifest(base))
+          : result.current.loadFromUrl(repo);
+      });
+      await waitFor(() => expect(request).toHaveBeenCalledOnce());
+      expect(useReconstructionStore.getState().urlProgress?.message).toBe('Checking Hugging Face dataset access...');
+      await act(async () => { allowAccess(Response.json({ id: 'owner/public', private: false })); });
+      await waitFor(() => expect(request.mock.calls.some(([url]) => url.includes('/tree/'))).toBe(true));
+      expect(messages).toContain(mode === 'inline' ? 'Loading dataset files...' : 'Discovering dataset files...');
+      expect(useReconstructionStore.getState().urlProgress?.message).toBe(mode === 'inline'
+        ? 'Downloading COLMAP files...' : 'Discovering dataset files...');
+      expect(processFilesMock).not.toHaveBeenCalled();
+      act(() => useReconstructionStore.getState().clear());
+      await act(async () => { expect(await pending).toBe(false); });
+      expect(useReconstructionStore.getState().urlProgress).toBeNull();
+    } finally { unsubscribe(); }
+  });
+
+  it.each([
+    { filename: 'scene.tar', message: 'Loading archive...' },
+    { filename: 'scene.spz', message: 'Loading 3D file...' },
+    { filename: 'colmapview.json', message: 'Fetching manifest...' },
+  ])('leaves the access-check status before downloading a public HF $filename', async ({ filename, message }) => {
+    const request = vi.fn((url: string, init?: RequestInit): Promise<Response> => {
+      if (url === 'https://huggingface.co/api/datasets/owner/public?expand=private') {
+        return Promise.resolve(Response.json({ id: 'owner/public', private: false }));
+      }
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+      });
+    });
+    vi.stubGlobal('fetch', request);
+    const messages: string[] = [];
+    const unsubscribe = useReconstructionStore.subscribe(state => {
+      if (state.urlProgress) messages.push(state.urlProgress.message);
+    });
+    const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
+    try {
+      let pending!: Promise<boolean>;
+      act(() => { pending = result.current.loadFromUrl(`https://huggingface.co/datasets/owner/public/resolve/main/${filename}`); });
+      await waitFor(() => expect(request.mock.calls.some(([url]) => url.includes('/resolve/main/'))).toBe(true));
+      expect(messages).toContain(message);
+      expect(useReconstructionStore.getState().urlProgress?.message).not.toBe('Checking Hugging Face dataset access...');
+      act(() => useReconstructionStore.getState().clear());
+      await act(async () => { expect(await pending).toBe(false); });
+    } finally { unsubscribe(); }
+  });
+
+  it.each([false, true])('rejects Drive links on a disabled host without network or scene changes (startup=%s)', async startup => {
+    vi.stubEnv('VITE_GOOGLE_DRIVE_ENABLED', 'false');
+    vi.stubEnv('VITE_GOOGLE_DRIVE_API_KEY', 'test-key');
+    const request = vi.fn();
+    vi.stubGlobal('fetch', request);
+    const loadedFiles = buildLoadedFiles();
+    const reconstruction = buildReconstruction();
+    useReconstructionStore.setState({ loadedFiles, reconstruction });
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger, applyUrlOverrides: startup }));
+
+    await act(async () => {
+      expect(await result.current.loadFromUrl('https://drive.google.com/file/d/archive123/view')).toBe(false);
+    });
+
+    expect(request).not.toHaveBeenCalled();
+    expect(processFilesMock).not.toHaveBeenCalled();
+    expect(clearAllCachesMock).not.toHaveBeenCalled();
+    expect(useReconstructionStore.getState().loadedFiles).toBe(loadedFiles);
+    expect(useReconstructionStore.getState().reconstruction).toBe(reconstruction);
+    expect(useReconstructionStore.getState().urlError?.message).toContain('https://colmapview.opsiclear.com');
+    expect(useReconstructionStore.getState().urlLoading).toBe(false);
+  });
+
+  it.each(['private', 'folder'] as const)('preserves the existing dataset when a %s Drive link cannot load', async kind => {
+    vi.stubEnv('VITE_GOOGLE_DRIVE_API_KEY', 'test-key');
+    const request = vi.fn(async () => Response.json({ error: { errors: [{ reason: 'notFound' }] } }, { status: 404 }));
+    vi.stubGlobal('fetch', request);
+    const loadedFiles = buildLoadedFiles();
+    useReconstructionStore.setState({ loadedFiles });
+    const logger = { info: vi.fn(), error: vi.fn() };
+    const { result } = renderHook(() => useUrlLoader({ logger }));
+
+    await act(async () => {
+      expect(await result.current.loadFromUrl(kind === 'private'
+        ? 'https://drive.google.com/file/d/private123/view' : 'https://drive.google.com/drive/folders/folder123')).toBe(false);
+    });
+
+    expect(request).toHaveBeenCalledTimes(kind === 'private' ? 1 : 0);
+    expect(processFilesMock).not.toHaveBeenCalled();
+    expect(clearAllCachesMock).not.toHaveBeenCalled();
+    expect(useReconstructionStore.getState().loadedFiles).toBe(loadedFiles);
+    expect(useReconstructionStore.getState().urlError?.message).toContain(kind === 'private' ? 'Google Drive icon' : 'folder link');
+    expect(useReconstructionStore.getState().urlLoading).toBe(false);
+  });
+
+  it('ignores Drive metadata that arrives after cancellation', async () => {
+    vi.stubEnv('VITE_GOOGLE_DRIVE_API_KEY', 'test-key');
+    let respond!: (response: Response) => void;
+    let requestSignal: AbortSignal | undefined;
+    vi.stubGlobal('fetch', vi.fn((_url, init) => {
+      requestSignal = init.signal;
+      return new Promise<Response>(resolve => { respond = resolve; });
+    }));
+    const logger = { info: vi.fn(), error: vi.fn() };
+    const { result } = renderHook(() => useUrlLoader({ logger }));
+    let loading!: Promise<boolean>;
+    act(() => { loading = result.current.loadFromUrl('https://drive.google.com/file/d/cancel123/view'); });
+    await waitFor(() => expect(requestSignal).toBeDefined());
+    act(() => useReconstructionStore.getState().clear());
+    expect(requestSignal?.aborted).toBe(true);
+    await act(async () => {
+      respond(Response.json({ id: 'cancel123', name: 'scene.tar', size: '1024' }));
+      expect(await loading).toBe(false);
+    });
+    expect(processFilesMock).not.toHaveBeenCalled();
+    expect(clearAllCachesMock).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: false, urlError: null, sourceUrl: null });
   });
 
   it.each(['url', 'inline', 'override', 'large-desktop', 'large-touch'] as const)('restores the saved remote splat with %s loading', async mode => {
@@ -117,6 +328,176 @@ describe('useUrlLoader', () => {
     expect(getActiveSplatSourceId(useReconstructionStore.getState().loadedFiles)).toBe(expected);
   });
 
+  it('keeps COLMAP only when the user chooses None before saved and shared source restoration', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const baseUrl = 'https://huggingface.co/datasets/owner/scene/resolve/main/';
+    const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { activeSourceId: 'splats/active.spz' }, ui: { backgroundColor: '#123456' } } });
+    window.history.replaceState(null, '', '/#' + encodeShareData(baseUrl, null,
+      { splat: { activeSourceId: 'splats/other.spz' }, pointCloud: { pointSize: 4 } }));
+    const request = vi.fn(async (url: string | URL) => {
+      if (String(url).endsWith('colmapview.yaml')) return new Response(yaml);
+      if (String(url).includes('/api/datasets/')) return Response.json([
+        ...['cameras', 'images', 'points3D'].map(name => ({ type: 'file', path: `sparse/0/${name}.bin`, size: 10 })),
+        { type: 'file', path: 'splats/active.spz', size: 100 },
+        { type: 'file', path: 'splats/other.spz', size: 200 },
+      ]);
+      return new Response(new Uint8Array([1, 2, 3]));
+    });
+    vi.stubGlobal('fetch', request);
+    processFilesMock.mockImplementationOnce(async () => { useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles()); });
+    const unsubscribe = useReconstructionStore.subscribe(state => {
+      if (state.showSplatPicker) {
+        unsubscribe();
+        void state.selectSplatSource('');
+      }
+    });
+    const { result } = renderHook(() => useUrlLoader({ applyUrlOverrides: true }));
+    try {
+      await act(async () => { expect(await result.current.loadFromUrl(baseUrl)).toBe(true); });
+      expect(request.mock.calls.map(([url]) => String(url)).filter(url => url.endsWith('.spz'))).toEqual([]);
+      expect(useReconstructionStore.getState().loadedFiles?.splatFileSources).toHaveLength(2);
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+      expect(useReconstructionStore.getState().requestedSplatSourceId).toBeNull();
+      expect(useUIStore.getState().backgroundColor).toBe('#123456');
+      expect(usePointCloudStore.getState().pointSize).toBe(4);
+    } finally { unsubscribe(); }
+  });
+
+  it.each([
+    { choice: 'shared', explicit: false }, { choice: 'saved', explicit: false },
+    { choice: 'shared', explicit: true }, { choice: 'saved', explicit: true },
+  ] as const)('makes no full splat request for $choice None with explicit manifest=$explicit', async ({ choice, explicit }) => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const baseUrl = 'https://huggingface.co/datasets/owner/none/resolve/main/';
+    const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { activeSourceId: choice === 'saved' ? '' : 'splats/scene.spz' } } });
+    if (choice === 'shared') window.history.replaceState(null, '', '/#' + encodeShareData(baseUrl, null,
+      { splat: { activeSourceId: '' } }));
+    const request = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      if (String(url).endsWith('colmapview.yaml')) return new Response(yaml);
+      if (init?.method === 'HEAD') return new Response(null, { headers: { 'content-length': '100' } });
+      if (String(url).includes('/api/datasets/')) return Response.json([
+        ...['cameras', 'images', 'points3D'].map(name => ({ type: 'file', path: `sparse/0/${name}.bin`, size: 10 })),
+        { type: 'file', path: 'splats/scene.spz', size: 100 },
+      ]);
+      return new Response(new Uint8Array([1, 2, 3]));
+    });
+    vi.stubGlobal('fetch', request);
+    processFilesMock.mockImplementationOnce(async () => { useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles()); });
+    const { result } = renderHook(() => useUrlLoader({ applyUrlOverrides: choice === 'shared' }));
+    await act(async () => {
+      expect(await (explicit ? result.current.loadFromManifest({ ...createDefaultManifest(baseUrl), splats: ['splats/scene.spz'] })
+        : result.current.loadFromUrl(baseUrl))).toBe(true);
+    });
+    expect(request.mock.calls.filter(([url, init]) => String(url).endsWith('.spz') && init?.method !== 'HEAD')).toEqual([]);
+    expect(useReconstructionStore.getState().loadedFiles?.splatFileSources).toHaveLength(1);
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(useReconstructionStore.getState().requestedSplatSourceId).toBeNull();
+    expect(useReconstructionStore.getState().showSplatPicker).toBe(false);
+  });
+
+  it.each(['archive download', 'outer preparation'] as const)('retains None chosen during %s before an archive default splat reaches parsing', async phase => {
+    const state = useReconstructionStore.getState();
+    const previousSplat = new File(['old'], 'old.spz');
+    state.setLoadedFiles(buildLoadedFiles({ splatFile: previousSplat, splatFiles: [previousSplat],
+      splatFileSources: [{ id: 'old.spz', path: 'old.spz', file: previousSplat }] }));
+    const initialRevision = useReconstructionStore.getState().splatSelectionRevision;
+    const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin', 'default.spz']
+      .map(name => [name, new File(['incoming'], name)]));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 404 })));
+    vi.spyOn(archiveSource, 'loadZipUrlSource').mockImplementation(async (_url, deps) => {
+      if (phase === 'archive download') await state.selectSplatSource('');
+      return (await deps.processFiles(files, undefined, { throwOnError: true })) !== false;
+    });
+    processFilesMock.mockImplementationOnce(async (incoming, _range, options) => {
+      expect(options?.initialSplatSelectionRevision).toBe(initialRevision);
+      await processFileDropzoneFiles(incoming, {
+        addNotification: vi.fn(), getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
+        getSplatSelectionState: () => ({ revision: useReconstructionStore.getState().splatSelectionRevision,
+          sourceId: getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles) ?? undefined }),
+        getMinTrackLength: () => 1, getSourceInfo: () => ({ sourceType: 'zip', imageUrlBase: null }),
+        getUrlLoading: () => useReconstructionStore.getState().urlLoading,
+        clearCaches: vi.fn(), logger: noopLogger, resetView: vi.fn(), delay: async () => {},
+        shouldPreloadSplatRuntime: () => false,
+        parseFiles: async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false }),
+        buildReconstruction: async () => ({ reconstruction: buildReconstruction(), pointCount: 0 }),
+        setDroppedFiles: state.setDroppedFiles, setLoadedFiles: state.setLoadedFiles,
+        setWasmReconstruction: state.setWasmReconstruction, setReconstruction: state.setReconstruction,
+        setUrlProgress: state.setUrlProgress, setUrlLoading: state.setUrlLoading, setError: state.setError,
+      }, options);
+    });
+    const { result } = renderHook(() => useUrlLoader());
+    await act(async () => {
+      if (phase === 'outer preparation') await state.selectSplatSource('');
+      expect(await result.current.loadFromUrl('https://example.com/scene.tar',
+        phase === 'outer preparation' ? { initialSplatSelectionRevision: initialRevision } : undefined)).toBe(true);
+    });
+    expect(useReconstructionStore.getState().loadedFiles?.points3DFile).toBe(files.get('points3D.bin'));
+    expect(useReconstructionStore.getState().loadedFiles?.splatFileSources).toHaveLength(1);
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(useReconstructionStore.getState().requestedSplatSourceId).toBeNull();
+  });
+
+  it('does not reopen the picker when a late catalog follows an explicit None choice', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const baseUrl = 'https://huggingface.co/datasets/owner/catalog/resolve/main/';
+    let respond!: (response: Response) => void;
+    const request = vi.fn(async (url: string | URL) => {
+      if (String(url).includes('/tree/')) return new Promise<Response>(resolve => { respond = resolve; });
+      if (String(url).endsWith('colmapview.yaml')) return new Response(null, { status: 404 });
+      if (String(url).includes('/api/datasets/')) return Response.json({ id: 'owner/catalog' });
+      return new Response(new Uint8Array([1, 2, 3]));
+    });
+    vi.stubGlobal('fetch', request);
+    processFilesMock.mockImplementationOnce(async () => { useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles()); });
+    const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
+    let pending!: Promise<boolean>;
+    act(() => { pending = result.current.loadFromManifest(createDefaultManifest(baseUrl)); });
+    await waitFor(() => expect(processFilesMock).toHaveBeenCalledOnce());
+    await act(async () => {
+      await useReconstructionStore.getState().selectSplatSource('');
+      useReconstructionStore.getState().setShowSplatPicker(false);
+      respond(Response.json([{ type: 'file', path: 'splats/scene.spz', size: 100 }]));
+      expect(await pending).toBe(true);
+    });
+    expect(useReconstructionStore.getState().loadedFiles?.splatFileSources).toHaveLength(1);
+    expect(useReconstructionStore.getState().showSplatPicker).toBe(false);
+    expect(request.mock.calls.filter(([url]) => String(url).endsWith('.spz'))).toEqual([]);
+  });
+
+  it('leaves a small splat lazy when optional YAML times out instead of guessing its saved choice', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Blob', NodeBlob);
+    const baseUrl = 'https://huggingface.co/datasets/owner/timeout/resolve/main/';
+    let respond!: (response: Response) => void;
+    const request = vi.fn(async (url: string | URL) => {
+      if (String(url).endsWith('colmapview.yaml')) return new Promise<Response>(resolve => { respond = resolve; });
+      if (String(url).includes('/api/datasets/')) return Response.json([
+        ...['cameras', 'images', 'points3D'].map(name => ({ type: 'file', path: `sparse/0/${name}.bin`, size: 10 })),
+        { type: 'file', path: 'splats/scene.spz', size: 100 },
+      ]);
+      return new Response(new Uint8Array([1, 2, 3]));
+    });
+    vi.stubGlobal('fetch', request);
+    processFilesMock.mockImplementationOnce(async () => { useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles()); });
+    const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
+    let pending!: Promise<boolean>;
+    act(() => { pending = result.current.loadFromUrl(baseUrl); });
+    await act(async () => { await vi.waitFor(() => expect(processFilesMock).toHaveBeenCalledOnce()); });
+    expect(useReconstructionStore.getState().loadedFiles).not.toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS);
+      expect(await pending).toBe(true);
+    });
+    const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { activeSourceId: '' } } });
+    await act(async () => { respond(new Response(yaml)); });
+    expect(request.mock.calls.filter(([url]) => String(url).endsWith('.spz'))).toEqual([]);
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(useReconstructionStore.getState().showSplatPicker).toBe(true);
+  });
+
   it.each(['saved', 'override', 'previous-scene', 'missing', 'invalid'] as const)('loads a Hugging Face project with %s YAML settings', async mode => {
     vi.stubGlobal('Blob', NodeBlob);
     useCameraStore.setState(useCameraStore.getInitialState(), true);
@@ -160,10 +541,13 @@ describe('useUrlLoader', () => {
     const settingsUrl = 'https://huggingface.co/datasets/owner/scene/resolve/main/colmapview.yaml';
     const responders = new Map<string, (response: Response) => void>();
     // Like fetch, pending requests reject when their load is aborted.
-    const request = vi.fn((url: string, init?: RequestInit) => new Promise<Response>((resolve, reject) => {
-      responders.set(String(url), resolve);
-      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-    }));
+    const request = vi.fn((url: string, init?: RequestInit) => {
+      if (String(url) === 'https://huggingface.co/api/datasets/owner/scene?expand=private') return Promise.resolve(Response.json({ id: 'owner/scene' }));
+      return new Promise<Response>((resolve, reject) => {
+        responders.set(String(url), resolve);
+        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+      });
+    });
     vi.stubGlobal('fetch', request);
     const manifest: ColmapManifest = { version: 1, baseUrl: 'https://huggingface.co/datasets/owner/scene/resolve/main/',
       files: { cameras: 'cameras.bin', images: 'images.bin', points3D: 'points3D.bin' }, splats: [] };
@@ -246,9 +630,11 @@ describe('useUrlLoader', () => {
     let first!: Promise<boolean>;
     let second!: Promise<boolean>;
     act(() => { first = result.current.loadFromUrl('https://example.com/old.spz'); });
+    await waitFor(() => expect(requests).toHaveLength(1));
     act(() => { useReconstructionStore.getState().clear(); });
     expect(requests[0].signal.aborted).toBe(true);
     act(() => { second = result.current.loadFromUrl('https://example.com/new.spz'); });
+    await waitFor(() => expect(requests).toHaveLength(2));
     const currentSignal = useReconstructionStore.getState().urlLoadController?.signal;
     const cacheClears = clearAllCachesMock.mock.calls.length;
 
@@ -315,7 +701,8 @@ describe('useUrlLoader', () => {
       statusText: 'OK',
       blob: vi.fn(async () => new Blob(['splat'], { type: 'application/octet-stream' })),
     })));
-    processFilesMock.mockImplementation(async (files) => {
+    processFilesMock.mockImplementation(async (files, _range, options) => {
+      options?.onSceneReplaced?.();
       const splatFile = files.get('scene.spz');
       expect(splatFile).toBeDefined();
       useReconstructionStore.setState({
@@ -343,11 +730,11 @@ describe('useUrlLoader', () => {
     expect(processFilesMock).toHaveBeenCalledWith(
       expect.any(Map),
       { start: 80, end: 100 },
-      {
+      expect.objectContaining({
         replaceSplatScene: true,
         throwOnError: true,
         onViewerState: expect.any(Function),
-      }
+      })
     );
     expect(processFilesMock.mock.calls[0][0].get('scene.spz')).toBeInstanceOf(File);
     expect(clearAllCachesMock).toHaveBeenCalledTimes(1);

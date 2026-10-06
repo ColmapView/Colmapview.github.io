@@ -13,14 +13,27 @@ import { scanDirectoryHandle, scanEntry } from '../utils/fileScanning';
 import { appLogger } from '../utils/logger';
 import { shouldStartSparkSplatRuntimePreload } from '../utils/splatBackendPolicy';
 import { getSplatRendererRequirement } from '../utils/splatFilePolicy';
+import { getShareActiveSplatSourceId } from '../utils/splatFileSourcePolicy';
 import { collectDroppedFiles, collectFileDropPayload, isFileDrop } from './fileDropzoneDropPayload';
 import { loadBrowsedDirectory, loadDropPayload, loadLocalZipFile } from './fileDropzoneLocalSources';
 import { processFileDropzoneFiles, type FileDropzoneWorkflowOptions } from './fileDropzoneWorkflow';
 import { applySavedViewerState } from './useUrlState';
+import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
 
 function cancelUrlLoad(): void {
   const { urlLoadController, finishUrlLoad } = useReconstructionStore.getState();
   if (urlLoadController) finishUrlLoad(urlLoadController.signal);
+}
+
+function beginLocalLoad() {
+  const initialSplatSelectionRevision = useReconstructionStore.getState().splatSelectionRevision;
+  const load = beginReconstructionLoad();
+  return {
+    ...load,
+    initialSplatSelectionRevision,
+    onViewerState: (state: Parameters<typeof applySavedViewerState>[0]) =>
+      applySavedViewerState(state, null, load.assertCurrent, initialSplatSelectionRevision),
+  };
 }
 
 export function useFileDropzone() {
@@ -45,48 +58,64 @@ export function useFileDropzone() {
   const processFiles = useCallback(async (
     files: Map<string, File>,
     progressRange?: { start: number; end: number },
-    options: Pick<FileDropzoneWorkflowOptions, 'onSceneReplaced' | 'replaceSplatScene' | 'throwOnError' | 'onViewerState'> = {}
+    options: Pick<FileDropzoneWorkflowOptions, 'onSceneReplaced' | 'replaceSplatScene' | 'throwOnError' | 'onViewerState' | 'load' | 'signal' | 'initialSplatSelectionRevision'> = {}
   ) => {
-    await processFileDropzoneFiles(files, {
-      addNotification: useNotificationStore.getState().addNotification,
-      clearSplatPsnr: useImageMetricsStore.getState().clearSplatPsnr,
-      getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
-      getMinTrackLength: () => usePointCloudStore.getState().minTrackLength,
-      getSourceInfo: () => {
-        const { imageUrlBase, sourceType } = useReconstructionStore.getState();
-        return { imageUrlBase, sourceType };
-      },
-      getUrlLoading: () => useReconstructionStore.getState().urlLoading,
-      logger: appLogger,
-      // Local files carry no URL settings; URL loads pass their own handler.
-      onViewerState: (state) => applySavedViewerState(state, null),
-      resetView,
-      setDroppedFiles,
-      setError,
-      setLoadedFiles,
-      setReconstruction,
-      setUrlLoading,
-      setUrlProgress,
-      setWasmReconstruction,
-      // Read at drop time, not at hook render: the WebGPU renderer flips
-      // availability to 'ready' asynchronously, so the freshest answer is the
-      // one taken the moment a splat actually arrives.
-      shouldPreloadSplatRuntime: (splatFile) => {
-        const { requestedBackend, availability } = useSplatBackendStore.getState();
-        // The incoming file is not active yet, so state its renderer requirement explicitly.
-        return shouldStartSparkSplatRuntimePreload(requestedBackend, {
-          ...availability,
-          activeSplatRenderer: getSplatRendererRequirement(splatFile.name),
-        });
-      },
-      onSplatRuntimePreloadFailed: () => useSplatBackendStore.getState().setSparkPreloadFailed(),
-    }, {
-      progressRange,
-      onSceneReplaced: options.onSceneReplaced,
-      onViewerState: options.onViewerState,
-      replaceSplatScene: options.replaceSplatScene ?? false,
-      throwOnError: options.throwOnError ?? false,
-    });
+    const initialSplatSelectionRevision = options.initialSplatSelectionRevision ?? useReconstructionStore.getState().splatSelectionRevision;
+    const load = options.load ?? beginReconstructionLoad();
+    const assertCurrent = () => { load.assertCurrent(); options.signal?.throwIfAborted(); };
+    const onViewerState = options.onViewerState ?? ((state: Parameters<typeof applySavedViewerState>[0]) =>
+      applySavedViewerState(state, null, assertCurrent, initialSplatSelectionRevision));
+    try {
+      return await processFileDropzoneFiles(files, {
+        addNotification: useNotificationStore.getState().addNotification,
+        clearSplatPsnr: useImageMetricsStore.getState().clearSplatPsnr,
+        getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
+        getMinTrackLength: () => usePointCloudStore.getState().minTrackLength,
+        getSourceInfo: () => {
+          const { imageUrlBase, sourceType } = useReconstructionStore.getState();
+          return { imageUrlBase, sourceType };
+        },
+        getUrlLoading: () => useReconstructionStore.getState().urlLoading,
+        logger: appLogger,
+        // Local files carry no URL settings; URL loads pass their own handler.
+        onViewerState,
+        resetView,
+        setDroppedFiles,
+        setError,
+        setLoadedFiles,
+        setReconstruction,
+        setUrlLoading,
+        setUrlProgress,
+        setWasmReconstruction,
+        // Read at drop time, not at hook render: the WebGPU renderer flips
+        // availability to 'ready' asynchronously, so the freshest answer is the
+        // one taken the moment a splat actually arrives.
+        shouldPreloadSplatRuntime: (splatFile) => {
+          const { requestedBackend, availability } = useSplatBackendStore.getState();
+          // The incoming file is not active yet, so state its renderer requirement explicitly.
+          return shouldStartSparkSplatRuntimePreload(requestedBackend, {
+            ...availability,
+            activeSplatRenderer: getSplatRendererRequirement(splatFile.name),
+          });
+        },
+        getSplatSelectionState: () => {
+          const { splatSelectionRevision, loadedFiles } = useReconstructionStore.getState();
+          return { revision: splatSelectionRevision, sourceId: getShareActiveSplatSourceId(loadedFiles) ?? undefined };
+        },
+        onSplatRuntimePreloadFailed: () => useSplatBackendStore.getState().setSparkPreloadFailed(),
+      }, {
+        progressRange,
+        onSceneReplaced: options.onSceneReplaced,
+        onViewerState,
+        load,
+        signal: options.signal,
+        initialSplatSelectionRevision,
+        replaceSplatScene: options.replaceSplatScene ?? false,
+        throwOnError: options.throwOnError ?? false,
+      });
+    } finally {
+      load.finish();
+    }
   }, [
     setReconstruction,
     setWasmReconstruction,
@@ -105,6 +134,7 @@ export function useFileDropzone() {
     await loadLocalZipFile(zipFile, {
       isLoading: () => useReconstructionStore.getState().urlLoading,
       cancelUrlLoad,
+      beginLoad: beginLocalLoad,
       setUrlLoading,
       setUrlProgress,
       setError,
@@ -135,6 +165,7 @@ export function useFileDropzone() {
     await loadDropPayload(collectFileDropPayload(e.dataTransfer), {
       isLoading: () => useReconstructionStore.getState().urlLoading,
       cancelUrlLoad,
+      beginLoad: beginLocalLoad,
       setUrlLoading,
       setUrlProgress,
       setError,
@@ -159,6 +190,7 @@ export function useFileDropzone() {
     await loadBrowsedDirectory({
       isLoading: () => useReconstructionStore.getState().urlLoading,
       cancelUrlLoad,
+      beginLoad: beginLocalLoad,
       setUrlLoading,
       setUrlProgress,
       setError,

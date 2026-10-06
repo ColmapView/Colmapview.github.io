@@ -9,6 +9,8 @@ import { useReconstructionStore, useTransformStore, useUIStore, usePointCloudSto
 import { applyShareConfig } from './useUrlState';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
+import { getShareActiveSplatSourceId } from '../utils/splatFileSourcePolicy';
+import { buildWasmReconstructionWrapper } from '../test/builders';
 
 function file(name: string): File {
   return new File([''], name);
@@ -239,6 +241,169 @@ describe('file dropzone workflow', () => {
     expect(deps.setWasmReconstruction).not.toHaveBeenCalled();
     expect(deps.setReconstruction).not.toHaveBeenCalled();
     expect(fixture.service.isDisposed).toBe(true);
+  });
+
+  it.each(['parse', 'build', 'abort'] as const)('preserves an edited worker scene when replacement ends during %s', async phase => {
+    useReconstructionStore.getState().clear();
+    const previous = workerLoadFixture();
+    const staged = workerLoadFixture();
+    const state = useReconstructionStore.getState();
+    const previousFiles = loadedFiles({
+      camerasFile: previous.files.get('cameras.bin'), imagesFile: previous.files.get('images.bin'),
+      points3DFile: previous.files.get('points3D.bin'),
+    });
+    state.setLoadedFiles(previousFiles);
+    state.setWasmReconstruction(previous.snapshot);
+    state.setReconstruction(previous.reconstruction, { edited: true });
+    state.setSourceInfo('url', 'https://example.com/old/', 'https://example.com/old/images/');
+    const editRevision = useReconstructionStore.getState().reconstructionEditRevision;
+    const controller = new AbortController();
+    let nativeSignal: AbortSignal | undefined;
+    const parseFiles = vi.fn(async ({ signal }) => {
+      nativeSignal = signal;
+      if (phase === 'parse') throw new Error('invalid replacement');
+      if (phase === 'abort') controller.abort();
+      return staged.parseResult;
+    });
+    const onSceneReplaced = vi.fn(() => state.setSourceInfo('url', 'https://example.com/new/'));
+    const deps = createDeps({
+      parseFiles, buildReconstruction: vi.fn(async () => { throw new Error('invalid statistics'); }),
+      getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
+      setDroppedFiles: state.setDroppedFiles, setLoadedFiles: state.setLoadedFiles,
+      setWasmReconstruction: state.setWasmReconstruction, setReconstruction: state.setReconstruction,
+    });
+    try {
+      expect(await processFileDropzoneFiles(staged.files, deps, { signal: controller.signal, onSceneReplaced })).toBe(false);
+      expect(useReconstructionStore.getState()).toMatchObject({
+        loadedFiles: previousFiles, wasmReconstruction: previous.snapshot, reconstruction: previous.reconstruction,
+        sourceUrl: 'https://example.com/old/', imageUrlBase: 'https://example.com/old/images/', reconstructionEditRevision: editRevision,
+      });
+      expect(previous.service.isDisposed).toBe(false);
+      expect(onSceneReplaced).not.toHaveBeenCalled();
+      expect(deps.clearCaches).not.toHaveBeenCalled();
+      expect(deps.clearSplatPsnr).not.toHaveBeenCalled();
+      if (phase === 'abort') expect(nativeSignal?.aborted).toBe(true);
+      if (phase !== 'parse') expect(staged.service.isDisposed).toBe(true);
+    } finally {
+      useReconstructionStore.getState().clear();
+      staged.service.dispose();
+    }
+  });
+
+  it('commits a completed replacement and disposes the previous snapshot only after building succeeds', async () => {
+    useReconstructionStore.getState().clear();
+    const previous = workerLoadFixture();
+    const staged = workerLoadFixture();
+    const state = useReconstructionStore.getState();
+    const previousFiles = loadedFiles({ camerasFile: previous.files.get('cameras.bin'),
+      imagesFile: previous.files.get('images.bin'), points3DFile: previous.files.get('points3D.bin') });
+    state.setLoadedFiles(previousFiles);
+    state.setWasmReconstruction(previous.snapshot);
+    state.setReconstruction(previous.reconstruction, { edited: true });
+    const disposePrevious = vi.spyOn(previous.snapshot, 'dispose');
+    let finishBuild!: (result: { reconstruction: Reconstruction; pointCount: number }) => void;
+    const buildReconstruction = vi.fn(() => new Promise<{ reconstruction: Reconstruction; pointCount: number }>(resolve => { finishBuild = resolve; }));
+    const onSceneReplaced = vi.fn(() => state.setSourceInfo('url', 'https://example.com/new/'));
+    const deps = createDeps({
+      parseFiles: vi.fn(async () => staged.parseResult), buildReconstruction,
+      getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
+      setDroppedFiles: state.setDroppedFiles, setLoadedFiles: state.setLoadedFiles,
+      setWasmReconstruction: state.setWasmReconstruction, setReconstruction: state.setReconstruction,
+    });
+    try {
+      const loading = processFileDropzoneFiles(staged.files, deps, { onSceneReplaced });
+      await vi.waitFor(() => expect(buildReconstruction).toHaveBeenCalledOnce());
+      expect(useReconstructionStore.getState().loadedFiles).toBe(previousFiles);
+      expect(disposePrevious).not.toHaveBeenCalled();
+      expect(onSceneReplaced).not.toHaveBeenCalled();
+      finishBuild({ reconstruction: staged.reconstruction, pointCount: 0 });
+      expect(await loading).toBe(true);
+      expect(disposePrevious).toHaveBeenCalledOnce();
+      expect(useReconstructionStore.getState().wasmReconstruction).toBe(staged.snapshot);
+      expect(useReconstructionStore.getState().loadedFiles?.camerasFile).toBe(staged.files.get('cameras.bin'));
+      expect(useReconstructionStore.getState().sourceUrl).toBe('https://example.com/new/');
+      expect(useReconstructionStore.getState().reconstructionEditRevision).toBe(0);
+    } finally { useReconstructionStore.getState().clear(); }
+  });
+
+  it.each(['None', 'alternate'] as const)('retains a user %s choice when COLMAP parsing finishes with a default splat', async choice => {
+    useReconstructionStore.getState().clear();
+    const fixture = workerLoadFixture();
+    const state = useReconstructionStore.getState();
+    const alternate = new File(['alt'], 'alternate.spz');
+    state.setLoadedFiles(loadedFiles({ splatFile: alternate, splatFiles: [alternate],
+      splatFileSources: [{ id: 'splats/alternate.spz', path: 'splats/alternate.spz', file: alternate }] }));
+    const incomingAlternate = new File(['new-alt'], 'alternate.spz');
+    fixture.files.set('splats/default.spz', new File(['much-larger-default'], 'default.spz'));
+    fixture.files.set('splats/alternate.spz', incomingAlternate);
+    let finishBuild!: (result: { reconstruction: Reconstruction; pointCount: number }) => void;
+    const buildReconstruction = vi.fn(() => new Promise<{ reconstruction: Reconstruction; pointCount: number }>(resolve => { finishBuild = resolve; }));
+    const deps = createDeps({
+      parseFiles: vi.fn(async () => fixture.parseResult), buildReconstruction,
+      getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
+      getSplatSelectionState: () => ({ revision: useReconstructionStore.getState().splatSelectionRevision,
+        sourceId: getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles) ?? undefined }),
+      setLoadedFiles: state.setLoadedFiles, setWasmReconstruction: state.setWasmReconstruction,
+      setReconstruction: state.setReconstruction,
+    });
+    try {
+      const pending = processFileDropzoneFiles(fixture.files, deps);
+      await vi.waitFor(() => expect(buildReconstruction).toHaveBeenCalledOnce());
+      await state.selectSplatSource(choice === 'None' ? '' : 'splats/alternate.spz');
+      finishBuild({ reconstruction: fixture.reconstruction, pointCount: 0 });
+      expect(await pending).toBe(true);
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(choice === 'None' ? undefined : incomingAlternate);
+      if (choice === 'None') expect(deps.setUrlProgress).not.toHaveBeenCalledWith(expect.objectContaining({ message: 'Preparing splat renderer...' }));
+    } finally { useReconstructionStore.getState().clear(); }
+  });
+
+  it('preserves the previous files, source and snapshot after a malformed point-cloud-only replacement', async () => {
+    useReconstructionStore.getState().clear();
+    const previous = workerLoadFixture();
+    const state = useReconstructionStore.getState();
+    const previousFiles = loadedFiles({ camerasFile: previous.files.get('cameras.bin'),
+      imagesFile: previous.files.get('images.bin'), points3DFile: previous.files.get('points3D.bin') });
+    state.setLoadedFiles(previousFiles);
+    state.setWasmReconstruction(previous.snapshot);
+    state.setDroppedFiles(previous.files);
+    state.setSourceInfo('url', 'https://example.com/old/');
+    const onSceneReplaced = vi.fn(() => state.setSourceInfo('url', 'https://example.com/new/'));
+    const deps = createDeps({
+      classifyPlyFile: vi.fn(async () => 'point-cloud'),
+      getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
+      setLoadedFiles: state.setLoadedFiles, setDroppedFiles: state.setDroppedFiles,
+      setWasmReconstruction: state.setWasmReconstruction, setReconstruction: state.setReconstruction,
+    });
+    const malformed = new File(['ply\nformat unsupported 1.0\nelement vertex 1\nproperty float x\nproperty float y\nproperty float z\nend_header\n'], 'invalid.ply');
+    try {
+      expect(await processFileDropzoneFiles(new Map([['invalid.ply', malformed]]), deps, { onSceneReplaced })).toBe(false);
+      expect(useReconstructionStore.getState()).toMatchObject({ loadedFiles: previousFiles,
+        droppedFiles: previous.files, wasmReconstruction: previous.snapshot, sourceUrl: 'https://example.com/old/' });
+      expect(previous.service.isDisposed).toBe(false);
+      expect(onSceneReplaced).not.toHaveBeenCalled();
+      expect(deps.clearCaches).not.toHaveBeenCalled();
+    } finally { useReconstructionStore.getState().clear(); }
+  });
+
+  it.each(['splat', 'point cloud', 'images'] as const)('disposes a previous legacy WASM wrapper only when a new %s scene commits', async kind => {
+    useReconstructionStore.getState().clear();
+    const state = useReconstructionStore.getState();
+    const previousWasm = buildWasmReconstructionWrapper();
+    const dispose = vi.spyOn(previousWasm, 'dispose');
+    state.setLoadedFiles(loadedFiles());
+    state.setWasmReconstruction(previousWasm);
+    const incoming = kind === 'splat' ? new File(['splat'], 'new.spz')
+      : kind === 'point cloud' ? genericPointCloudPly() : file('image.jpg');
+    const deps = createDeps({
+      getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
+      setLoadedFiles: state.setLoadedFiles, setWasmReconstruction: state.setWasmReconstruction,
+      setReconstruction: state.setReconstruction,
+    });
+    try {
+      expect(await processFileDropzoneFiles(new Map([[incoming.name, incoming]]), deps, { replaceSplatScene: true })).toBe(true);
+      expect(useReconstructionStore.getState().wasmReconstruction).toBeNull();
+      expect(dispose).toHaveBeenCalledOnce();
+    } finally { useReconstructionStore.getState().clear(); }
   });
 
   it('applies config-only drops without entering reconstruction parsing', async () => {

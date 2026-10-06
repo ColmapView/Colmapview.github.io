@@ -33,6 +33,28 @@ env:
   BROWSER: none
 
 jobs:
+  artifacts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # Synthetic public identifiers only; no account or provider access required.
+      - run: npm run test:deployment
+      - name: Upload production artifact smoke report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: production-artifact-smoke
+          path: .tmp/deployment-smoke/
+          if-no-files-found: ignore
+          retention-days: 7
+
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 20

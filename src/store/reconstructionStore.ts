@@ -3,6 +3,7 @@ import type { Reconstruction, LoadedFiles, SplatFileSource } from '../types/colm
 import type { ReconstructionSource } from '../wasm/reconstructionService';
 import { isReconstructionSnapshot } from '../wasm/reconstructionService';
 import { cancelPendingReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
+import { clearActiveZipArchive } from '../utils/zipArchiveState';
 import type { UrlLoadProgress, UrlLoadError, ColmapManifest } from '../types/manifest';
 import { useUIStore } from './stores/uiStore';
 import {
@@ -193,6 +194,8 @@ interface ReconstructionState {
   /** Manifest object (only set when sourceType is 'manifest', for inline embedding in URLs) */
   sourceManifest: ColmapManifest | null;
   requestedSplatSourceId: string | null;
+  /** Explicit source choices supersede pending startup restoration, including choosing None again. */
+  splatSelectionRevision: number;
   /** Whether to show the "select a splat" popup (set when >1 splat is discovered). */
   showSplatPicker: boolean;
   /** URL loading state (shared across components) */
@@ -219,7 +222,7 @@ interface ReconstructionState {
     baseUrl: string
   ) => void;
   /** Activate a splat source by id, fetching it on demand if not yet downloaded. */
-  selectSplatSource: (sourceId: string) => Promise<void>;
+  selectSplatSource: (sourceId: string, options?: { restore?: boolean }) => Promise<void>;
   /** Show or hide the splat picker popup. */
   setShowSplatPicker: (show: boolean) => void;
   tryStartUrlLoad: () => AbortSignal | null;
@@ -246,6 +249,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   imageNameToUrl: null,
   sourceManifest: null,
   requestedSplatSourceId: null,
+  splatSelectionRevision: 0,
   showSplatPicker: false,
   // Initialize loading state based on URL params so indicator shows immediately
   urlLoading: initialUrlLoading,
@@ -373,7 +377,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     }
   },
 
-  selectSplatSource: async (sourceId) => {
+  selectSplatSource: async (sourceId, options) => {
     const loadedFiles = get().loadedFiles;
     if (!loadedFiles) {
       return;
@@ -382,6 +386,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     if (sourceId && (!source || (!source.file && !source.url))) {
       return;
     }
+    if (!options?.restore) set({ splatSelectionRevision: get().splatSelectionRevision + 1 });
     cancelPendingSplatLoad();
     // Whether a splat was already showing: a fresh activation (COLMAP-only -> splat)
     // switches the viewer into a splat display mode; a tile-to-tile switch keeps the
@@ -564,6 +569,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     cancelPendingSplatLoad();
     get().urlLoadController?.abort();
     cancelPendingReconstructionLoad();
+    clearActiveZipArchive();
     // Dispose WASM wrapper on clear
     const oldWasm = get().wasmReconstruction;
     if (oldWasm) {

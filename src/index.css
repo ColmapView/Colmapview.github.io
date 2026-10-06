@@ -2278,17 +2278,18 @@ h3.panel-heading {
    never beats it: the bottom 2.5rem of the column is painted over and eats no
    clicks at all. Budget = viewport height − status-bar height.
 
-   With all 17 buttons, including Hugging Face (toolbarColumnHeight.test.ts
+   With all 18 buttons, including Hugging Face and Drive (toolbarColumnHeight.test.ts
    recomputes this from the CSS + the toolbar source and fails if a new button
    outgrows a tier):
-     40px / 8px gap  -> needs 887px of viewport
-     32px / 4px gap  -> needs 675px
-     28px / 2px gap  -> needs 569px
-     26px / 2px gap  -> needs 535px
+     40px / 8px gap  -> needs 935px of viewport
+     32px / 4px gap  -> needs 711px
+     28px / 2px gap  -> needs 599px
+     26px / 2px gap  -> needs 563px
+     24px / 2px gap  -> needs 527px
    Breakpoints leave about 40px of spare height before switching tiers.
-   The 26px tier also applies to touch controls in the shortest windows.
+   The smallest tiers also apply to touch controls in short windows.
    --------------------------------------------------------------------------- */
-@media (max-height: 930px) {
+@media (max-height: 980px) {
   .control-button-responsive {
     width: 2rem !important;
     height: 2rem !important;
@@ -2305,7 +2306,7 @@ h3.panel-heading {
   }
 }
 
-@media (max-height: 720px) {
+@media (max-height: 760px) {
   .control-button-responsive {
     width: 1.75rem !important;   /* 28px — same tier touch mode uses */
     height: 1.75rem !important;
@@ -2340,11 +2341,23 @@ h3.panel-heading {
   height: 1rem;
 }
 
-@media (max-height: 610px) {
+@media (max-height: 650px) {
   .control-button-responsive,
   .touch-control-panel .control-button-responsive {
     width: 1.625rem !important;
     height: 1.625rem !important;
+  }
+
+  .control-panel-responsive {
+    gap: 0.125rem !important;
+  }
+}
+
+@media (max-height: 600px) {
+  .control-button-responsive,
+  .touch-control-panel .control-button-responsive {
+    width: 1.5rem !important;
+    height: 1.5rem !important;
   }
 
   .control-panel-responsive {

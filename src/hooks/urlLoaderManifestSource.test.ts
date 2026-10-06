@@ -2,7 +2,7 @@ import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildFile } from '../test/builders';
 import type { ColmapManifest } from '../types/manifest';
-import { loadManifestSource } from './urlLoaderManifestSource';
+import { loadManifestSource, OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS } from './urlLoaderManifestSource';
 
 const manifest: ColmapManifest = {
   version: 1,
@@ -27,8 +27,9 @@ function makeFiles(): Map<string, File> {
 
 function makeDeps(files = makeFiles()) {
   return {
-    fetchImpl: vi.fn(async () => new Response('', { status: 404 })),
+    fetchImpl: vi.fn(async (_url: string, _init?: RequestInit) => new Response('', { status: 404 })),
     fetchColmapFiles: vi.fn(async () => files),
+    discoverSplatCatalog: vi.fn(async () => []),
     log: vi.fn(),
     processFiles: vi.fn(async () => {}),
     setSourceInfo: vi.fn(),
@@ -36,7 +37,7 @@ function makeDeps(files = makeFiles()) {
   };
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe('URL loader manifest source helpers', () => {
   it('loads a URL manifest source with lazy image/mask bases and processing progress', async () => {
@@ -70,7 +71,7 @@ describe('URL loader manifest source helpers', () => {
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Image URL base for lazy loading: https://example.com/dataset/rgb/');
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Mask URL base for lazy loading: https://example.com/dataset/segmentation/');
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Calling processFiles...');
-    expect(deps.processFiles).toHaveBeenCalledWith(files, { start: 80, end: 100 }, { throwOnError: true });
+    expect(deps.processFiles).toHaveBeenCalledWith(files, { start: 80, end: 100 }, expect.objectContaining({ throwOnError: true }));
     expect(deps.setUrlProgress).toHaveBeenLastCalledWith({ percent: 100, message: 'Complete' });
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Successfully loaded 3 files from URL');
   });
@@ -100,11 +101,11 @@ describe('URL loader manifest source helpers', () => {
 
     await expect(loadManifestSource(manifest, { type: 'manifest' }, deps)).resolves.toBe(true);
 
-    expect(deps.processFiles).toHaveBeenCalledWith(files, { start: 80, end: 100 }, { throwOnError: true });
+    expect(deps.processFiles).toHaveBeenCalledWith(files, { start: 80, end: 100 }, expect.objectContaining({ throwOnError: true }));
     expect(deps.setUrlProgress).not.toHaveBeenCalledWith({ percent: 100, message: 'Complete' });
   });
 
-  it('downloads COLMAP files while optional viewer settings are still loading', async () => {
+  it('parses and displays COLMAP files while optional viewer settings are still loading', async () => {
     vi.stubGlobal('Blob', NodeBlob);
     const deps = makeDeps();
     let respond!: (response: Response) => void;
@@ -112,11 +113,51 @@ describe('URL loader manifest source helpers', () => {
     const onViewerState = vi.fn();
     const loading = loadManifestSource(manifest, { type: 'manifest' }, { ...deps, onViewerState });
 
-    await vi.waitFor(() => expect(deps.fetchColmapFiles).toHaveBeenCalled());
+    await vi.waitFor(() => expect(deps.processFiles).toHaveBeenCalled());
+    expect(deps.setSourceInfo).toHaveBeenCalled();
     respond(new Response('ui:\n  background_color: "#123456"\n'));
 
     await expect(loading).resolves.toBe(true);
     expect(onViewerState).toHaveBeenCalledWith(expect.objectContaining({ config: { ui: { backgroundColor: '#123456' } } }));
+  });
+
+  it('bounds optional settings independently, aborts its request and ignores a late response', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Blob', NodeBlob);
+    const deps = { ...makeDeps(), discoverSplatCatalog: vi.fn(async () => [{ path: 'scene.spz', size: 100 }]) };
+    let respond!: (response: Response) => void;
+    let requestSignal: AbortSignal | null | undefined;
+    deps.fetchImpl.mockImplementationOnce((_url, init?: RequestInit) => {
+      requestSignal = init?.signal;
+      return new Promise<Response>(resolve => { respond = resolve; });
+    });
+    const onViewerState = vi.fn();
+    const onAutoSplatSource = vi.fn();
+    const loading = loadManifestSource(manifest, { type: 'manifest' }, { ...deps, onViewerState, onAutoSplatSource });
+    await vi.waitFor(() => expect(deps.processFiles).toHaveBeenCalledOnce());
+    expect(requestSignal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS);
+    await expect(loading).resolves.toBe(true);
+    expect(requestSignal?.aborted).toBe(true);
+    respond(new Response('ui:\n  background_color: "#123456"\n'));
+    await Promise.resolve();
+    expect(onViewerState).not.toHaveBeenCalled();
+    expect(onAutoSplatSource).not.toHaveBeenCalled();
+  });
+
+  it('keeps explicitly referenced settings required before committing a scene', async () => {
+    const deps = makeDeps();
+    deps.fetchImpl.mockResolvedValueOnce(new Response('invalid'));
+    await expect(loadManifestSource({ ...manifest, viewerStatePath: 'state.json' }, { type: 'manifest' }, deps))
+      .rejects.toThrow('invalid');
+    expect(deps.processFiles).not.toHaveBeenCalled();
+    expect(deps.setSourceInfo).not.toHaveBeenCalled();
+  });
+
+  it('does not commit metadata when processing reports cancellation', async () => {
+    const deps = { ...makeDeps(), processFiles: vi.fn(async () => false) };
+    await expect(loadManifestSource(manifest, { type: 'manifest' }, deps)).resolves.toBe(false);
+    expect(deps.setSourceInfo).not.toHaveBeenCalled();
   });
 
   it('propagates COLMAP fetch failures before mutating source state', async () => {
@@ -131,14 +172,14 @@ describe('URL loader manifest source helpers', () => {
     expect(deps.setUrlProgress).not.toHaveBeenCalled();
   });
 
-  it('propagates processing failures after source metadata is staged', async () => {
+  it('propagates processing failures without replacing source metadata', async () => {
     const error = new Error('parse failed');
     const deps = makeDeps();
     deps.processFiles.mockRejectedValueOnce(error);
 
     await expect(loadManifestSource(manifest, { type: 'manifest' }, deps)).rejects.toBe(error);
 
-    expect(deps.setSourceInfo).toHaveBeenCalled();
+    expect(deps.setSourceInfo).not.toHaveBeenCalled();
     expect(deps.setUrlProgress).toHaveBeenCalledWith({
       percent: 80,
       message: 'Parsing reconstruction...',

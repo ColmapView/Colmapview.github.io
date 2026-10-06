@@ -24,6 +24,8 @@ export interface PublicationInput {
   config: ShareConfig; viewState: CameraViewState | null; activeSplatId: string | null;
   appVersion: string; viewerBaseUrl: string;
   preview?: Blob;
+  /** Drive packages the active scene; Hub publications keep all splat sources by default. */
+  splats?: 'all' | 'active';
 }
 interface PrepareDeps {
   resolveRevision: (repoId: string, revision: string, signal: AbortSignal) => Promise<string>;
@@ -31,6 +33,10 @@ interface PrepareDeps {
   listFiles: (repoId: string, revision: string, path: string, signal: AbortSignal) => Promise<Array<{ path: string; size: number }>>;
   assertCurrent: () => void;
   progress: (message: string) => void;
+  pinAssetUrl?: (url: string) => Promise<string>;
+  readRemoteMask?: (base: string, name: string, signal: AbortSignal) => Promise<Blob | null>;
+  /** Bound a remote splat while downloading, before it becomes a complete Blob. */
+  maxAssetBytes?: number;
 }
 
 function publicationSplats(dataset: DatasetState): SplatFileSource[] {
@@ -83,6 +89,7 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
     return revisions.get(key)!;
   };
   const pin = async (value: string) => {
+    if (deps.pinAssetUrl) return deps.pinAssetUrl(value);
     const parsed = parseHfAssetUrl(value);
     const sha = await resolveSha(parsed.repoId, parsed.revision);
     parsed.url.pathname = parsed.url.pathname.replace(/(\/resolve\/)[^/]+\//, `$1${sha}/`);
@@ -99,7 +106,8 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
   const remote = async (url: string, path: string, kind: PublishAsset['kind']): Promise<PublishAsset> => {
     const pinned = await pin(url);
     return { path, kind, size: null,
-      open: targetSignal => downloadRemoteFile(pinned, path, targetSignal, kind === 'splat' ? Infinity : MAX_BUFFERED_PUBLICATION_FILE_BYTES) };
+      open: targetSignal => downloadRemoteFile(pinned, path, targetSignal,
+        Math.min(deps.maxAssetBytes ?? Infinity, kind === 'splat' ? Infinity : MAX_BUFFERED_PUBLICATION_FILE_BYTES)) };
   };
   const isRemote = captured.sourceType === 'url' || captured.sourceType === 'manifest';
   const media = async (name: string, mask: boolean): Promise<PublishAsset | null> => {
@@ -107,6 +115,11 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
     const path = mask ? `masks/${publicationPath(name).replace(/^images\//i, '')}.png` : `images/${publicationPath(name)}`;
     if (isRemote && mask) {
       if (!captured.maskUrlBase) return null;
+      if (deps.readRemoteMask) {
+        const value = await deps.readRemoteMask(captured.maskUrlBase, name, signal);
+        check();
+        return value ? fixed(path, value, 'mask') : null;
+      }
       const base = captured.maskUrlBase.replace(/\/?$/, '/');
       const available = await listRemoteMasks(base);
       // Accept each name the viewer tries, in its order.
@@ -169,9 +182,14 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
   const splatPaths: string[] = [];
   let activeSourceId: string | undefined;
   for (const source of publicationSplats(captured)) {
+    if (input.splats === 'active' && source.id !== input.activeSplatId) continue;
     const path = `splats/${publicationPath(source.path)}`;
     if (source.file?.size) add(fixed(path, source.file, 'splat'));
-    else if (source.url) add(await remote(source.url, path, 'splat'));
+    else if (source.url) {
+      const asset = await remote(source.url, path, 'splat');
+      asset.size = source.size ?? null;
+      add(asset);
+    }
     else throw new HfError(`Original splat ${source.path} is unavailable. Load its original file before publishing.`);
     splatPaths.push(path);
     if (source.id === input.activeSplatId) activeSourceId = path;
@@ -179,7 +197,7 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
   const config: ShareConfig = sanitizeShareConfig(structuredClone(input.config));
   config.transform = createIdentityEuler();
   config.splat = { transform: sim3dToEuler(composeSim3d(createSim3dFromEuler(input.transform), createSim3dFromEuler(input.splatTransform))),
-    ...(splatPaths.length ? { activeSourceId: activeSourceId ?? splatPaths[0] } : {}) };
+    activeSourceId: input.activeSplatId === null ? '' : activeSourceId ?? splatPaths[0] ?? '' };
   if (config.camera?.selectedImageId !== undefined && !input.reconstruction.images.has(config.camera.selectedImageId as number)) delete config.camera.selectedImageId;
   if (!splatPaths.length && config.pointCloud && ['splats', 'splatPoints', 'splatRainbowPoints'].includes(String(config.pointCloud.colorMode))) {
     config.pointCloud.colorMode = 'rgb';

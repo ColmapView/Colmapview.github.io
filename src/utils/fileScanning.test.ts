@@ -84,4 +84,38 @@ describe('file scanning helpers', () => {
       ['subdir/nested.png', nestedFile],
     ]));
   });
+
+  it('rejects a cancelled drag/drop scan without adding a late file', async () => {
+    const controller = new AbortController();
+    const entry = buildFileSystemFileEntry({ name: 'late.jpg' });
+    let resolve!: FileCallback;
+    vi.spyOn(entry, 'file').mockImplementation(done => { resolve = done; });
+    const files = new Map<string, File>();
+    const pending = scanEntry(entry, '', files, controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    resolve(buildFile('late.jpg'));
+    await Promise.resolve();
+    expect(files.size).toBe(0);
+  });
+
+  it('stops a cancelled directory-handle scan before reading additional files', async () => {
+    const controller = new AbortController();
+    let resolve!: (file: File) => void;
+    const getFirst = vi.fn(() => new Promise<File>(done => { resolve = done; }));
+    const getSecond = vi.fn(async () => buildFile('second.jpg'));
+    const root = buildFileSystemDirectoryHandle({ entries: [
+      buildFileSystemFileHandle({ name: 'first.jpg', getFile: getFirst }),
+      buildFileSystemFileHandle({ name: 'second.jpg', getFile: getSecond }),
+    ] });
+    const files = new Map<string, File>();
+    const pending = scanDirectoryHandle(root, '', files, controller.signal);
+    await vi.waitFor(() => expect(getFirst).toHaveBeenCalledOnce());
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    resolve(buildFile('first.jpg'));
+    await Promise.resolve();
+    expect(getSecond).not.toHaveBeenCalled();
+    expect(files.size).toBe(0);
+  });
 });

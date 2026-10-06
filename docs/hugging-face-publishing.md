@@ -62,7 +62,7 @@ Public publication is discoverable and downloadable. Cancel stops further work a
 
 ### Register a public OAuth application
 
-Create a maintainer-owned app from [Hugging Face application registration](https://huggingface.co/settings/applications/new). Choose a **public app without a client secret**. The integration uses authorization-code PKCE and requests `openid profile contribute-repos`; the last scope permits creating repositories and accessing repositories created by the app. Register the intended callback URLs. See the [official OAuth documentation](https://huggingface.co/docs/hub/oauth) for registration and scope details.
+Create a maintainer-owned app from [Hugging Face application registration](https://huggingface.co/settings/applications/new). Choose a **public app without a client secret**. The integration uses authorization-code PKCE and requests `openid profile read-repos contribute-repos`. Allow both repository scopes: `read-repos` opens private datasets, and `contribute-repos` permits creating repositories and accessing repositories created by the app. Register the intended callback URLs. See the [official OAuth documentation](https://huggingface.co/docs/hub/oauth) for registration and scope details.
 
 Register the app once for ColmapView. Users then sign in with their own Hugging Face accounts and authorize publication into their personal namespace. Dataset recipients can use the public viewer links without signing in.
 
@@ -82,6 +82,8 @@ Only a public client ID and callback URL enter the build. Never add a client sec
 
 On 2026-09-27, the maintainer registered [ColmapView](https://huggingface.co/settings/applications/6ab992584abcf4acddced01e) under `opsiclear-admin` as a public app without a client secret. All three callback URLs above are registered, with default scopes `openid profile contribute-repos` and an eight-hour token lifetime.
 
+On 2026-10-04, the app's allowed scopes were extended with `read-repos`. A read-only `openid profile read-repos` session was verified against a private dataset in the browser.
+
 The same public client ID is saved in `HF_OAUTH_CLIENT_ID` and `HF_DEV_OAUTH_CLIENT_ID`. Both deployment callback variables are configured; `HF_PUBLISH_ENABLED` and `HF_DEV_PUBLISH_ENABLED` remain `false`. The ignored `.env.local` enables the local integration with the registered `localhost:5173` callback.
 
 Real sign-in passed in Chrome on Windows using an isolated Vite server at `http://localhost:5186/`: the viewer opened the Hugging Face consent screen, requested no organization access, completed PKCE through the static callback, and displayed **Connected as opsiclear-admin** while retaining the loaded synthetic reconstruction. Hugging Face accepts a different port for an otherwise matching HTTP loopback callback. The test server overrides the local callback to port 5186; the saved development default remains 5173.
@@ -99,6 +101,10 @@ This exposed and fixed a desktop restoration issue: a saved splat above the 150 
 Data revision: `bb9ee9e1ef4b0496f695ec6ab21feea49dadfb20`. Metadata revision: `b630b92b6bbabd5697b9eb08c108340d33fad3cd`.
 
 The test used the localhost development viewer for publication and recipient rendering. Its README explicitly notes that its viewer links target localhost. This does **not** validate a deployed viewer or make those links usable on another person's computer; hosted rollout and public-link configuration remain outstanding.
+
+### Private dataset viewing
+
+The same OAuth app also supports [private dataset loading](hugging-face-loading.md). Add `read-repos` to its allowed scopes. Publishing-enabled sign-in now requests `openid profile read-repos contribute-repos`; private viewing alone requests `openid profile read-repos` and can be enabled with `VITE_HF_AUTH_ENABLED=true` while publishing remains disabled. Existing connections need to sign in again for the additional permission.
 
 ### Local configuration
 

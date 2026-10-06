@@ -58,11 +58,11 @@ export function SplatPickerModal() {
   const isOpen = showSplatPicker && splatFileSources.length >= 1;
   const items = getSplatPickerItems(splatFileSources, { isTouchDevice, byteLessLoaderAvailable });
 
-  const handleClose = () => setShowSplatPicker(false);
   const handleSelect = (sourceId: string) => {
     setShowSplatPicker(false);
     selectSplatSource(sourceId);
   };
+  const handleClose = () => handleSelect('');
 
   return (
     <ModalDialogShell

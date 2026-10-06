@@ -1,0 +1,21 @@
+.policy-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  min-width: 48px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.policy-link:hover,
+.policy-link:focus-visible {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+@media (pointer: coarse) {
+  .policy-link {
+    min-height: 44px;
+  }
+}

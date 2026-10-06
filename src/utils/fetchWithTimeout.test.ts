@@ -89,4 +89,18 @@ describe('fetchWithTimeout', () => {
     expect(response.body).toBeNull();
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it('discards unused bodies even when native fetch rejects cancellation after abort', async () => {
+    const cancel = vi.fn(() => Promise.reject(new DOMException('BodyStreamBuffer was aborted', 'AbortError')));
+    let requestSignal!: AbortSignal;
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      requestSignal = init.signal;
+      return new Response(new ReadableStream({ cancel }));
+    }));
+    const response = await fetchWithTimeout('/upload-session', 100);
+    await expect(response.body!.cancel()).resolves.toBeUndefined();
+    expect(requestSignal.aborted).toBe(true);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });

@@ -13,6 +13,7 @@
 
 // Types
 export type { IconProps, HoverIconProps } from './types';
+export { GoogleDriveIcon } from './brands';
 
 // Common UI icons
 export {

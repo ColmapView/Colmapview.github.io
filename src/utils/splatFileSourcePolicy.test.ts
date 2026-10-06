@@ -6,6 +6,7 @@ import {
   clearActiveSplatFile,
   findSplatSourceById,
   getActiveSplatSourceId,
+  getShareActiveSplatSourceId,
   getNextSplatFile,
   getNextSplatSourceId,
   isByteLessActiveSplatFile,
@@ -16,6 +17,19 @@ import {
 function loaded(partial: Partial<LoadedFiles>): LoadedFiles {
   return { imageFiles: new Map(), hasMasks: false, ...partial };
 }
+
+describe('share splat source selection', () => {
+  it('keeps explicit COLMAP-only distinct from an absent scene', () => {
+    expect(getShareActiveSplatSourceId(null)).toBeNull();
+    expect(getShareActiveSplatSourceId(loaded({ splatFileSources: [{ id: 'lazy', path: 'lazy.ply', url: 'u/lazy' }] }))).toBe('');
+  });
+
+  it('uses source identity for a byte-less active placeholder in a lazy catalog', () => {
+    const source: SplatFileSource = { id: 'model/b.ply', path: 'model/b.ply', url: 'u/b' };
+    const catalog = loaded({ splatFileSources: [source, { id: 'model/a.ply', path: 'model/a.ply', url: 'u/a' }] });
+    expect(getShareActiveSplatSourceId(applyActiveSplatPlaceholder(catalog, source.id, new File([], 'b.ply')))).toBe('model/b.ply');
+  });
+});
 
 describe('loadedFilesHaveSplatData', () => {
   it('is true when an active splat file, bundled list, or pickable source is present', () => {

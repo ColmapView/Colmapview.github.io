@@ -87,7 +87,7 @@ export function validateZipFile(
   return validateArchiveSize(file.size, sizeLimit);
 }
 
-function validateArchiveSize(size: number, sizeLimit: number): ZipValidationResult {
+export function validateArchiveSize(size: number, sizeLimit = ARCHIVE_SIZE_LIMIT): ZipValidationResult {
   if (size > sizeLimit) {
     return {
       valid: false,

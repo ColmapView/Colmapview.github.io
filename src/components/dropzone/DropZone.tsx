@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { useUrlLoader } from '../../hooks/useUrlLoader';
 import { clearPersistedSettings } from '../../store/migration';
+import { useReconstructionStore } from '../../store/reconstructionStore';
 import { importConfigFile } from '../../config/configuration';
 import { getRandomDataset, getDatasetUrl } from '../../constants/exampleDatasets';
 import { TIMING, buttonStyles, loadingStyles, toastStyles, dragOverlayStyles } from '../../theme';
@@ -36,67 +37,85 @@ export function DropZone({ children }: DropZoneProps) {
     },
     actions: {
       setError,
+      clear,
     },
   } = useDropZoneStoreFacade();
   const configInputRef = useRef<HTMLInputElement>(null);
   const manifestInputRef = useRef<HTMLInputElement>(null);
 
+  const prepareUrlLoad = useCallback(async (
+    message: string,
+    prepare: (assertCurrent: () => void, initialSplatSelectionRevision: number) => Promise<() => Promise<unknown>>,
+  ) => {
+    const signal = useReconstructionStore.getState().tryStartUrlLoad();
+    if (!signal) return;
+    const initialSplatSelectionRevision = useReconstructionStore.getState().splatSelectionRevision;
+    const isCurrent = () => !signal.aborted
+      && useReconstructionStore.getState().urlLoadController?.signal === signal;
+    const assertCurrent = () => {
+      if (!isCurrent()) throw new DOMException('Loading cancelled', 'AbortError');
+    };
+    setUrlLoading(true);
+    setUrlProgress({ percent: 0, message });
+    try {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      assertCurrent();
+      const load = await prepare(assertCurrent, initialSplatSelectionRevision);
+      assertCurrent();
+      // Transfer ownership synchronously to the loader after preparation succeeds.
+      useReconstructionStore.getState().finishUrlLoad(signal);
+      await load();
+    } catch (err) {
+      if (isCurrent()) {
+        setError(err instanceof Error ? err.message : 'Failed to load dataset');
+      }
+    } finally {
+      if (isCurrent()) {
+        useReconstructionStore.getState().finishUrlLoad(signal);
+        setUrlLoading(false);
+      }
+    }
+  }, [setError, setUrlLoading, setUrlProgress]);
+
   // Handle URL loading from modal
   const handleUrlLoad = useCallback(async (url: string) => {
-    // Set loading state IMMEDIATELY so UI responds instantly
-    setUrlLoading(true);
-    setUrlProgress({ percent: 0, message: 'Starting...' });
     setIsUrlModalOpen(false);
-    // Yield to React to paint loading UI before starting heavy work
-    await new Promise(resolve => setTimeout(resolve, 0));
-    await loadFromUrl(url);
-  }, [loadFromUrl, setUrlLoading, setUrlProgress]);
+    await prepareUrlLoad('Starting...', async (_assertCurrent, initialSplatSelectionRevision) =>
+      () => loadFromUrl(url, { initialSplatSelectionRevision }));
+  }, [loadFromUrl, prepareUrlLoad]);
 
   // Handle manifest JSON file selection
   const handleManifestFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Set loading state IMMEDIATELY so UI responds instantly
-    setUrlLoading(true);
-    setUrlProgress({ percent: 0, message: 'Loading manifest...' });
-    // Yield to React to paint loading UI before starting heavy work
-    await new Promise(resolve => setTimeout(resolve, 0));
-
     try {
-      const result = parseManifestContent(await file.text());
-      if (!result.success) {
-        setError(result.errorMessage);
-        setUrlLoading(false);
-        return;
-      }
-
-      await loadFromManifest(result.manifest);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      setError(`Failed to load manifest: ${message}`);
-      setUrlLoading(false);
+      await prepareUrlLoad('Loading manifest...', async (assertCurrent, initialSplatSelectionRevision) => {
+        let content: string;
+        try {
+          content = await file.text();
+        } catch (err) {
+          throw new Error(`Failed to load manifest: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+        assertCurrent();
+        const result = parseManifestContent(content);
+        if (!result.success) throw new Error(result.errorMessage);
+        return () => loadFromManifest(result.manifest, { initialSplatSelectionRevision });
+      });
+    } finally {
+      // Reset input so same file can be selected again.
+      e.target.value = '';
     }
-
-    // Reset input so same file can be selected again
-    e.target.value = '';
-  }, [loadFromManifest, setError, setUrlLoading, setUrlProgress]);
+  }, [loadFromManifest, prepareUrlLoad]);
 
   // Handle Try a Toy! button - load random example
   const handleLucky = useCallback(async () => {
-    // Early return if already loading (urlLoading state may be stale due to React batching)
-    if (urlLoading) return;
-
-    // Set loading state IMMEDIATELY so UI responds instantly
-    setUrlLoading(true);
-    setUrlProgress({ percent: 0, message: 'Starting...' });
-    // Yield to React to paint loading UI before starting heavy work
-    await new Promise(resolve => setTimeout(resolve, 0));
-
-    const dataset = getRandomDataset();
-    appLogger.info(`[Try a Toy] Loading random dataset: ${dataset.name}`);
-    await loadFromUrl(getDatasetUrl(dataset.scanId));
-  }, [loadFromUrl, urlLoading, setUrlLoading, setUrlProgress]);
+    await prepareUrlLoad('Starting...', async (_assertCurrent, initialSplatSelectionRevision) => {
+      const dataset = getRandomDataset();
+      appLogger.info(`[Try a Toy] Loading random dataset: ${dataset.name}`);
+      return () => loadFromUrl(getDatasetUrl(dataset.scanId), { initialSplatSelectionRevision });
+    });
+  }, [loadFromUrl, prepareUrlLoad]);
 
   // Download example manifest.json
   const handleDownloadExampleJson = useCallback(() => {
@@ -213,6 +232,7 @@ export function DropZone({ children }: DropZoneProps) {
         <DesktopDropZonePanel
           urlLoading={urlLoading}
           onOpenUrlModal={() => setIsUrlModalOpen(true)}
+          onLoadGoogleDriveArchive={handleUrlLoad}
           onOpenManifestFile={() => manifestInputRef.current?.click()}
           onLoadToy={handleLucky}
           onBrowse={handleBrowse}
@@ -228,6 +248,7 @@ export function DropZone({ children }: DropZoneProps) {
         <TouchDropZonePanel
           urlLoading={urlLoading}
           onOpenUrlModal={() => setIsUrlModalOpen(true)}
+          onLoadGoogleDriveArchive={handleUrlLoad}
           onLoadToy={handleLucky}
           onDismiss={() => setIsPanelDismissed(true)}
         />
@@ -266,6 +287,7 @@ export function DropZone({ children }: DropZoneProps) {
                 {formatByteProgress(urlProgress.bytesLoaded)} / {formatByteProgress(urlProgress.bytesTotal)}
               </div>
             )}
+            <button type="button" className="mt-4 text-sm text-white underline" onClick={clear}>Cancel loading</button>
           </div>
         </div>
       )}

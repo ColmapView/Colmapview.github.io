@@ -6,7 +6,7 @@
 import type { UrlLoadError } from '../types/manifest';
 import { detectCloudProvider, getCorsInstructions } from './urlCloudStorage';
 import { parseSafeIntegerString } from './numberParsing';
-import { fetchWithTimeout } from './fetchWithTimeout';
+import { fetchDatasetResource } from './fetchDatasetResource';
 import { normalizeHuggingFaceDatasetUrl } from './huggingFaceUrl';
 export { fetchWithTimeout, FETCH_TIMEOUT } from './fetchWithTimeout';
 
@@ -108,7 +108,7 @@ export async function fetchRemoteSplatFile(
   onProgress?: DownloadProgressCallback,
   signal?: AbortSignal
 ): Promise<File> {
-  const response = await fetchWithTimeout(url, undefined, { signal });
+  const response = await fetchDatasetResource(url, undefined, { signal });
   if (!response.ok) {
     void response.body?.cancel().catch(() => {});
     throw new Error(`Failed to fetch splat (${response.status})`);
@@ -135,7 +135,7 @@ export async function fetchRemoteSplatBytes(
   onProgress?: DownloadProgressCallback,
   signal?: AbortSignal
 ): Promise<{ bytes: Uint8Array; name: string }> {
-  const response = await fetchWithTimeout(url, undefined, { signal });
+  const response = await fetchDatasetResource(url, undefined, { signal });
   if (!response.ok) {
     void response.body?.cancel().catch(() => {});
     throw new Error(`Failed to fetch splat (${response.status})`);

@@ -32,6 +32,18 @@ beforeEach(() => { vi.stubGlobal('Blob', NodeBlob); vi.stubGlobal('File', NodeFi
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('publication snapshot preparation', () => {
+  it('publishes available splats while preserving COLMAP only in the saved viewer settings', async () => {
+    const source = input();
+    const splat = new File(['available splat'], 'scene.ply');
+    source.dataset.loadedFiles!.splatFileSources = [{ id: 'scene', path: splat.name, file: splat }];
+    source.activeSplatId = null;
+    const signal = new AbortController().signal;
+    const prepared = await preparePublication(source, signal, deps());
+    expect(prepared.splatPaths).toEqual(['splats/scene.ply']);
+    expect(prepared.viewerState.config.splat?.activeSourceId).toBe('');
+    const yaml = await (await prepared.assets.find(asset => asset.kind === 'viewer-state')!.open(signal)).text();
+    expect(parseDatasetViewerSettings(yaml).config.splat?.activeSourceId).toBe('');
+  });
   it.each([MAX_BUFFERED_PUBLICATION_FILE_BYTES + 1, 1_240_001_532, 5 * 1024 ** 3])('keeps a %i-byte PLY as its original File without reading or copying it', async size => {
     const source = input();
     const file = new File(['ply'], 'large.ply');

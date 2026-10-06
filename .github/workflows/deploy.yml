@@ -1,18 +1,15 @@
-name: Deploy to GitHub Pages
+name: Deploy viewer hosts
 
 on:
   push:
     branches: [main]
-    tags: ['v[0-9]+.[0-9]+.[0-9]+*']  # Semver tags only
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  # Single shared queue so main (dev) and tag (release) runs serialize on the
-  # gh-pages push instead of racing. cancel-in-progress: false means both still
-  # run — they just take turns.
   group: pages-deploy
   cancel-in-progress: false
 
@@ -28,93 +25,131 @@ jobs:
   deploy:
     needs: validate
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
-      # Public OAuth configuration. Publication stays off until the live smoke test passes.
-      VITE_HF_PUBLISH_ENABLED: ${{ github.ref_type == 'tag' && vars.HF_PUBLISH_ENABLED == 'true' || github.ref_type != 'tag' && vars.HF_DEV_PUBLISH_ENABLED == 'true' }}
-      VITE_HF_OAUTH_CLIENT_ID: ${{ github.ref_type == 'tag' && vars.HF_OAUTH_CLIENT_ID || github.ref_type != 'tag' && vars.HF_DEV_OAUTH_CLIENT_ID || '' }}
-      VITE_HF_OAUTH_REDIRECT_URI: ${{ github.ref_type == 'tag' && vars.HF_OAUTH_REDIRECT_URI || github.ref_type != 'tag' && vars.HF_DEV_OAUTH_REDIRECT_URI || '' }}
+      # Enabled but incomplete custom releases fail before either upload.
+      CLOUDFLARE_PAGES_ENABLED: ${{ vars.CLOUDFLARE_PAGES_ENABLED }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
+      CUSTOM_GOOGLE_DRIVE_API_KEY: ${{ secrets.CUSTOM_GOOGLE_DRIVE_API_KEY }}
+      CUSTOM_GOOGLE_DRIVE_CLIENT_ID: ${{ vars.CUSTOM_GOOGLE_DRIVE_CLIENT_ID }}
+      CUSTOM_GOOGLE_DRIVE_APP_ID: ${{ vars.CUSTOM_GOOGLE_DRIVE_APP_ID }}
+      CUSTOM_HF_AUTH_ENABLED: ${{ vars.CUSTOM_HF_AUTH_ENABLED }}
+      CUSTOM_HF_PUBLISH_ENABLED: ${{ vars.CUSTOM_HF_PUBLISH_ENABLED }}
+      CUSTOM_HF_OAUTH_CLIENT_ID: ${{ vars.CUSTOM_HF_OAUTH_CLIENT_ID }}
+      CUSTOM_HF_OAUTH_REDIRECT_URI: ${{ vars.CUSTOM_HF_OAUTH_REDIRECT_URI }}
+      # GitHub production HF registration stays distinct; branch previews have no provider auth.
+      VITE_HF_PUBLISH_ENABLED: ${{ github.ref_type == 'tag' && vars.HF_PUBLISH_ENABLED == 'true' }}
+      VITE_HF_AUTH_ENABLED: ${{ github.ref_type == 'tag' && vars.HF_AUTH_ENABLED == 'true' }}
+      VITE_HF_OAUTH_CLIENT_ID: ${{ github.ref_type == 'tag' && vars.HF_OAUTH_CLIENT_ID || '' }}
+      VITE_HF_OAUTH_REDIRECT_URI: ${{ github.ref_type == 'tag' && vars.HF_OAUTH_REDIRECT_URI || '' }}
+      DEPLOYMENT_SHA: ${{ github.sha }}
+      DEPLOYMENT_RELEASE: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
     steps:
       - uses: actions/checkout@v6
-
-      - name: Determine deployment target
-        id: target
-        run: |
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            TAG="${GITHUB_REF_NAME}"
-            echo "is_release=true" >> $GITHUB_OUTPUT
-            echo "version=$TAG" >> $GITHUB_OUTPUT
-            echo "base_path=/$TAG/" >> $GITHUB_OUTPUT
-          else
-            echo "is_release=false" >> $GITHUB_OUTPUT
-            echo "version=dev" >> $GITHUB_OUTPUT
-            echo "base_path=/dev/" >> $GITHUB_OUTPUT
-          fi
-
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
+          cache: npm
       - run: npm ci
-
-      # Build for version/dev directory
-      - name: Build
-        run: npm run build
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+      - name: Preflight deployment configuration
+        id: config
+        run: node scripts/deployment/preflight.mjs
         env:
-          VITE_BASE: ${{ steps.target.outputs.base_path }}
-
-      # Deploy to version directory (v0.3.2 or dev)
+          CLOUDFLARE_API_TOKEN_CONFIGURED: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+      - name: Determine deployment target
+        id: target
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.-]+)?$ ]] || { echo 'Invalid release tag'; exit 1; }
+            echo 'is_release=true' >> "$GITHUB_OUTPUT"
+            echo "version=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "base_path=/$GITHUB_REF_NAME/" >> "$GITHUB_OUTPUT"
+          else
+            echo 'is_release=false' >> "$GITHUB_OUTPUT"
+            echo 'version=dev' >> "$GITHUB_OUTPUT"
+            echo 'base_path=/dev/' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build version or dev
+        run: node scripts/deployment/build-profile.mjs github --skip-typecheck --base="$BUILD_BASE" --out=.tmp/deployment/version
+        env:
+          BUILD_BASE: ${{ steps.target.outputs.base_path }}
+      - name: Build latest
+        if: steps.target.outputs.is_release == 'true'
+        run: node scripts/deployment/build-profile.mjs github --skip-typecheck --base=/latest/ --out=.tmp/deployment/github
+      - name: Build custom production
+        if: steps.config.outputs.custom_enabled == 'true'
+        run: node scripts/deployment/build-profile.mjs custom --skip-typecheck --out=.tmp/deployment/custom
+      - name: Smoke prepared artifacts
+        run: npm run test:deployment:browser
+        env:
+          DEPLOYMENT_SMOKE_ROOT: .tmp/deployment
+          DEPLOYMENT_SMOKE_PROFILES: ${{ steps.config.outputs.custom_enabled == 'true' && 'version,github,custom' || steps.target.outputs.is_release == 'true' && 'version,github' || 'version' }}
+      # Both builds and offline checks pass before the first external mutation.
       - name: Deploy to version directory
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
+          publish_dir: ./.tmp/deployment/version
           destination_dir: ${{ steps.target.outputs.version }}
           keep_files: true
-          commit_message: "Deploy ${{ steps.target.outputs.version }}"
-
-      # For releases: also update /latest/
-      - name: Rebuild for latest
-        if: steps.target.outputs.is_release == 'true'
-        run: npm run build
-        env:
-          VITE_BASE: /latest/
-
+          commit_message: Deploy ${{ steps.target.outputs.version }}
       - name: Deploy to latest
         if: steps.target.outputs.is_release == 'true'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
+          publish_dir: ./.tmp/deployment/github
           destination_dir: latest
           keep_files: true
-          commit_message: "Update latest to ${{ steps.target.outputs.version }}"
-
-      # Update root redirect (only on release)
+          commit_message: Update latest to ${{ steps.target.outputs.version }}
       - name: Create root redirect
         if: steps.target.outputs.is_release == 'true'
         run: |
-          mkdir -p root
-          cat > root/index.html << 'EOF'
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta http-equiv="refresh" content="0; url=/latest/">
-            <link rel="canonical" href="/latest/">
-            <title>ColmapView</title>
-          </head>
-          <body>
-            <p>Redirecting to <a href="/latest/">latest version</a>...</p>
-          </body>
-          </html>
+          mkdir -p .tmp/deployment/root
+          cat > .tmp/deployment/root/index.html << 'EOF'
+          <!doctype html>
+          <html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=/latest/"><link rel="canonical" href="/latest/"><title>ColmapView</title></head><body><p>Open <a href="/latest/">ColmapView</a>.</p></body></html>
           EOF
-          touch root/.nojekyll
-
+          touch .tmp/deployment/root/.nojekyll
       - name: Deploy root
         if: steps.target.outputs.is_release == 'true'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./root
+          publish_dir: ./.tmp/deployment/root
           keep_files: true
-          commit_message: "Update root redirect"
+          commit_message: Update root redirect
+      - name: Deploy custom production
+        if: steps.config.outputs.custom_enabled == 'true'
+        # Project production branch is main; only tag runs can reach this step.
+        run: npx --yes wrangler@4.147.0 pages deploy .tmp/deployment/custom --project-name "$CLOUDFLARE_PAGES_PROJECT" --branch main --commit-hash "$DEPLOYMENT_SHA" --commit-message "$DEPLOYMENT_RELEASE" --commit-dirty=false
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - name: Check live GitHub artifact
+        run: node scripts/deployment/check-live.mjs "$LIVE_BASE" github --manifest="$EXPECTED_MANIFEST"
+        env:
+          LIVE_BASE: ${{ steps.target.outputs.is_release == 'true' && 'https://colmapview.github.io/latest/' || 'https://colmapview.github.io/dev/' }}
+          EXPECTED_MANIFEST: ${{ steps.target.outputs.is_release == 'true' && '.tmp/deployment/github/deployment.json' || '.tmp/deployment/version/deployment.json' }}
+      - name: Check live custom artifact
+        if: steps.config.outputs.custom_enabled == 'true'
+        run: node scripts/deployment/check-live.mjs https://colmapview.opsiclear.com/ custom --manifest=.tmp/deployment/custom/deployment.json
+      - name: Record successful deployment
+        run: |
+          if [[ "$CUSTOM_ENABLED" == "true" ]]; then
+            echo "Dual-host release $DEPLOYMENT_RELEASE verified at source SHA $DEPLOYMENT_SHA." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "GitHub Pages artifact verified at source SHA $DEPLOYMENT_SHA. Custom hosting was not deployed by this run." >> "$GITHUB_STEP_SUMMARY"
+          fi
+        env:
+          CUSTOM_ENABLED: ${{ steps.config.outputs.custom_enabled }}
+      - name: Upload artifact smoke report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: deployment-smoke-report
+          path: .tmp/deployment-smoke/
+          if-no-files-found: ignore
+          retention-days: 7

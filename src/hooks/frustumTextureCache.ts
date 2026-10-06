@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { appLogger } from '../utils/logger';
+import { fetchDatasetResource } from '../utils/fetchDatasetResource';
 
 export interface FrustumBitmapCacheEntry {
   bitmap: ImageBitmap;
@@ -61,7 +62,7 @@ export async function getOrLoadFrustumBitmap(
   if (cached) return cached;
 
   try {
-    const fetchBlob = deps.fetchBlob ?? ((input: string) => fetch(input));
+    const fetchBlob = deps.fetchBlob ?? fetchDatasetResource;
     const createBitmap = deps.createBitmap ?? createImageBitmap;
     const response = await fetchBlob(url);
     const blob = await response.blob();

@@ -126,9 +126,7 @@ export const HOTKEY_HELP_FOOTER_PREFIX = 'Press';
 export const HOTKEY_HELP_FOOTER_SUFFIX = 'to toggle this panel';
 
 // ---- About tab -------------------------------------------------------------
-// Verbatim relocation of the status bar's right cluster: the same product line,
-// project links (href/title/label unchanged), license, COLMAP credit, and
-// version string, now with room to breathe.
+// App identity, project links, and credits for the About panel.
 
 type AboutLinkColor = keyof typeof LINK_COLORS;
 
@@ -165,7 +163,8 @@ export const ABOUT_COLMAP_LINK: AboutLink = {
   color: 'colmap',
 };
 
-export const ABOUT_PRODUCT_LINE = 'ColmapView by OpsiClear';
+export const ABOUT_PRODUCT_NAME = 'ColmapView';
+export const ABOUT_MAINTAINER_LINE = 'by OpsiClear';
 export const ABOUT_LICENSE_LABEL = 'AGPL 3.0';
 export const ABOUT_COLMAP_CREDIT_PREFIX = 'Based on';
 

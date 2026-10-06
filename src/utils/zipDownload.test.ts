@@ -23,6 +23,20 @@ function createStreamedResponse(chunks: number[][], contentLength?: number): Res
 }
 
 describe('zip download', () => {
+  it('uses metadata for progress when Content-Length is hidden', async () => {
+    const onProgress = vi.fn();
+    const blob = await downloadZip('https://www.googleapis.com/drive/v3/files/file123?alt=media', onProgress, {
+      expectedSize: 4, fetchImpl: vi.fn().mockResolvedValue(createStreamedResponse([[1, 2], [3, 4]])),
+    });
+    expect(blob.size).toBe(4);
+    expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({ bytesLoaded: 4, bytesTotal: 4, percent: 40 }));
+  });
+
+  it('rejects truncated downloads instead of handing a partial archive to the parser', async () => {
+    await expect(downloadZip('https://www.googleapis.com/drive/v3/files/file123?alt=media', vi.fn(), {
+      expectedSize: 4, fetchImpl: vi.fn().mockResolvedValue(createStreamedResponse([[1, 2]])),
+    })).rejects.toThrow('incomplete or the file changed');
+  });
   it('streams archive downloads with bounded progress and concatenates chunks', async () => {
     const progress: ZipProgress[] = [];
     const fetchImpl = vi.fn().mockResolvedValue(createStreamedResponse([

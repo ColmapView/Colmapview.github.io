@@ -7,6 +7,46 @@ import { appLogger } from '../utils/logger';
 import { normalizeSplatSourceId } from '../utils/splatFileSourcePolicy';
 import type { ShareConfig } from '../utils/shareDataCodec';
 
+export const OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS = 3_000;
+
+interface OptionalViewerSettingsResult { state: PublishedViewerState | null; timedOut: boolean }
+
+export async function fetchOptionalDatasetViewerSettings(url: string,
+  fetchImpl: (url: string, init?: RequestInit) => Promise<Response>, isFile = false,
+  signal?: AbortSignal): Promise<PublishedViewerState | null> {
+  return (await fetchOptionalDatasetViewerSettingsResult(url, fetchImpl, isFile, signal)).state;
+}
+
+/** Automatic settings discovery has its own total deadline and cancellation. */
+export async function fetchOptionalDatasetViewerSettingsResult(url: string,
+  fetchImpl: (url: string, init?: RequestInit) => Promise<Response>, isFile = false,
+  signal?: AbortSignal): Promise<OptionalViewerSettingsResult> {
+  signal?.throwIfAborted();
+  const controller = new AbortController();
+  const requestSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let cancel: (() => void) | undefined;
+  const deadline = new Promise<OptionalViewerSettingsResult>((resolve, reject) => {
+    cancel = () => reject(signal?.reason ?? new DOMException('Dataset load cancelled', 'AbortError'));
+    signal?.addEventListener('abort', cancel, { once: true });
+    timeout = setTimeout(() => {
+      controller.abort(new DOMException('Optional viewer settings timed out', 'TimeoutError'));
+      resolve({ state: null, timedOut: true });
+    }, OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS);
+  });
+  const settings = fetchDatasetViewerSettings(url,
+    (candidate, init) => fetchImpl(candidate, { ...init, signal: requestSignal }), isFile)
+    .then(state => ({ state, timedOut: false }))
+    .catch(error => { if (controller.signal.aborted && !signal?.aborted) return { state: null, timedOut: true }; throw error; });
+  try {
+    return await Promise.race([settings, deadline]);
+  } finally {
+    clearTimeout(timeout);
+    if (cancel) signal?.removeEventListener('abort', cancel);
+    controller.abort();
+  }
+}
+
 function settingsUrls(value: string, isFile: boolean): string[] {
   const hfUrls = huggingFaceSettingsUrls(value, DATASET_VIEWER_SETTINGS_FILE, isFile);
   if (hfUrls.length) return hfUrls;

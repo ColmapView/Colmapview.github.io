@@ -1,5 +1,7 @@
 import type { CSSProperties } from 'react';
 import { Z_INDEX } from '../../theme';
+import { GOOGLE_DRIVE_ENABLED_ORIGIN } from '../../features/googleDrive/config';
+import { parseGoogleDriveFileUrl } from '../../utils/googleDriveUrl';
 
 export type UrlInputHelpIconKind = 'open' | 'closed';
 
@@ -25,7 +27,7 @@ export interface UrlInputHelpItem {
 }
 
 export const URL_INPUT_DESCRIPTION =
-  'Enter a manifest URL (.json), a ZIP file URL (.zip), or a direct path to a COLMAP folder';
+  'Enter a public Google Drive ZIP or TAR link, an archive URL (.zip, .tar), a manifest URL (.json), or a COLMAP folder URL';
 
 export const URL_INPUT_PLACEHOLDER =
   'https://huggingface.co/.../resolve/main/reconstruction';
@@ -45,6 +47,15 @@ export const URL_INPUT_HELP_SECTIONS: readonly UrlInputHelpSection[] = [
       { text: 'ZIP should contain cameras.bin, images.bin, points3D.bin', muted: true },
       { text: 'Images in ZIP are loaded lazily on-demand', muted: true },
       { text: 'Maximum ZIP size: 2GB', muted: true },
+    ],
+  },
+  {
+    title: 'Google Drive',
+    items: [
+      { code: 'https://drive.google.com/file/d/FILE_ID/view' },
+      { text: 'Public ZIP or TAR files shared with Anyone with the link load without sign-in.', muted: true },
+      { text: 'For private ZIP or TAR files, use the Google Drive account icon on the loading page and choose a file.', muted: true },
+      { text: 'The complete archive downloads before loading. Maximum archive size: 2GB.', muted: true },
     ],
   },
   {
@@ -102,6 +113,33 @@ export function getUrlInputActionState(url: string, loading: boolean): UrlInputA
     loadLabel: loading ? 'Loading...' : 'Load',
     normalizedUrl,
   };
+}
+
+/** Only carry a canonical file link, never credentials or unrelated viewer state. */
+export function getUrlInputDriveHandoffUrl(url: string, googleDriveEnabled: boolean): string | null {
+  if (googleDriveEnabled) return null;
+  try {
+    const driveFile = parseGoogleDriveFileUrl(url.trim());
+    if (!driveFile) return null;
+    const destination = new URL(GOOGLE_DRIVE_ENABLED_ORIGIN);
+    destination.searchParams.set('url', driveFile.sourceUrl);
+    return destination.href;
+  } catch {
+    return null;
+  }
+}
+
+export function getUrlInputHelpSections(googleDriveEnabled: boolean): readonly UrlInputHelpSection[] {
+  if (googleDriveEnabled) return URL_INPUT_HELP_SECTIONS;
+  return URL_INPUT_HELP_SECTIONS.map(section => section.title !== 'Google Drive' ? section : {
+    ...section,
+    items: [
+      section.items[0],
+      { text: 'Use Google Drive on colmapview.opsiclear.com to open ZIP or TAR archives.', muted: true },
+      { text: 'Public links work without sign-in. For private files, sign in and choose a file.', muted: true },
+      section.items[3],
+    ],
+  });
 }
 
 export function getUrlInputSubmitUrl(url: string, loading: boolean): string | null {

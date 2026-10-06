@@ -3,6 +3,9 @@ import type { ReconstructionSourceType } from '../store/reconstructionStore';
 import type { ArchiveEntry, ArchiveReader } from '../types/libarchive';
 import type { UrlLoadProgress } from '../types/manifest';
 import { appLogger } from '../utils/logger';
+import { awaitWithAbort } from '../utils/awaitWithAbort';
+import { closeZipArchive } from '../utils/zipArchiveState';
+import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
 import type { ZipLoadResult, ZipProgress } from '../utils/zipLoader';
 import type { FileDropPayload } from './fileDropzoneDropPayload';
 import type { FileDropzoneWorkflowOptions } from './fileDropzoneWorkflow';
@@ -10,7 +13,7 @@ import type { FileDropzoneWorkflowOptions } from './fileDropzoneWorkflow';
 type ProcessFiles = (
   files: Map<string, File>,
   progressRange?: { start: number; end: number },
-  options?: Pick<FileDropzoneWorkflowOptions, 'onSceneReplaced'>
+  options?: Pick<FileDropzoneWorkflowOptions, 'onSceneReplaced' | 'onViewerState' | 'load' | 'signal' | 'initialSplatSelectionRevision'>
 ) => Promise<void | boolean>;
 type ClearCaches = (options?: ClearAllOptions) => void;
 type SetSourceInfo = (type: ReconstructionSourceType, url?: string | null) => void;
@@ -20,14 +23,18 @@ type SetActiveZipArchive = (
   fileSize?: number,
   imageCount?: number
 ) => void;
+type LocalSourceLoad = ReturnType<typeof beginReconstructionLoad> &
+  Pick<FileDropzoneWorkflowOptions, 'onViewerState' | 'initialSplatSelectionRevision'>;
 type LoadZipFromFile = (
   zipFile: File,
-  onProgress: (progress: ZipProgress) => void
+  onProgress: (progress: ZipProgress) => void,
+  signal?: AbortSignal
 ) => Promise<ZipLoadResult>;
 type ScanEntry = (
   entry: FileSystemEntry,
   path: string,
-  files: Map<string, File>
+  files: Map<string, File>,
+  signal?: AbortSignal
 ) => Promise<void>;
 type CollectDroppedFiles = (
   payload: Pick<FileDropPayload, 'entries' | 'fallbackFiles'>,
@@ -36,12 +43,14 @@ type CollectDroppedFiles = (
 type ScanDirectoryHandle = (
   dirHandle: FileSystemDirectoryHandle,
   path: string,
-  files: Map<string, File>
+  files: Map<string, File>,
+  signal?: AbortSignal
 ) => Promise<void>;
 
 interface LocalSourceBaseDeps {
   isLoading: () => boolean;
   cancelUrlLoad?: () => void;
+  beginLoad?: () => LocalSourceLoad;
   setUrlLoading: (loading: boolean) => void;
   setUrlProgress: (progress: UrlLoadProgress | null) => void;
   setError: (error: string | null) => void;
@@ -100,40 +109,60 @@ export async function loadLocalZipFile(
   }
 
   deps.cancelUrlLoad?.();
-  deps.setUrlLoading(true);
-  deps.setUrlProgress({ percent: 0, message: 'Opening ZIP archive...' });
-  await yieldToPaint(deps);
-
+  const load: LocalSourceLoad = (deps.beginLoad ?? beginReconstructionLoad)();
+  let stagedArchive: ArchiveReader | null = null;
+  let transferred = false;
   try {
-    deps.clearCaches();
+    deps.setUrlLoading(true);
+    deps.setUrlProgress({ percent: 0, message: 'Opening ZIP archive...' });
+    await awaitWithAbort(yieldToPaint(deps), load.signal);
+    load.assertCurrent();
 
     log(`[ZIP Loader] Processing local ZIP file: ${zipFile.name}`);
 
-    const { colmapFiles, imageIndex, archive, fileSize, imageCount } = await deps.loadZipFromFile(
+    const { colmapFiles, imageIndex, archive, fileSize, imageCount } = await awaitWithAbort(deps.loadZipFromFile(
       zipFile,
       (progress) => {
+        if (load.signal.aborted) return;
         deps.setUrlProgress({
           percent: Math.round(progress.percent * 0.1),
           message: 'Extracting ZIP archive...',
         });
-      }
-    );
-
-    deps.setActiveZipArchive(archive, imageIndex, fileSize, imageCount);
-    deps.setSourceInfo('zip', null);
+      }, load.signal
+    ), load.signal, result => { void closeZipArchive(result.archive).catch(() => {}); });
+    stagedArchive = archive;
+    load.assertCurrent();
 
     log(`[ZIP Loader] ZIP contains ${colmapFiles.size} COLMAP files, ${imageCount} indexed images`);
 
-    await deps.processFiles(colmapFiles);
+    const processed = await deps.processFiles(colmapFiles, undefined, {
+      load,
+      signal: load.signal,
+      initialSplatSelectionRevision: load.initialSplatSelectionRevision,
+      onViewerState: load.onViewerState,
+      onSceneReplaced: () => {
+        load.assertCurrent();
+        deps.clearCaches();
+        deps.setActiveZipArchive(archive, imageIndex, fileSize, imageCount);
+        transferred = true;
+        deps.setSourceInfo('zip', null);
+      },
+    });
+    load.assertCurrent();
+    if (processed === false) return false;
 
     log('[ZIP Loader] Successfully loaded reconstruction from local ZIP');
     return true;
   } catch (error) {
+    if (load.signal.aborted || (error instanceof Error && error.name === 'AbortError')) return false;
     errorLog('[ZIP Loader] Error processing ZIP file:', error);
-    deps.clearCaches();
+    if (transferred) deps.clearCaches();
     deps.setError(getErrorMessage(error, 'Failed to process ZIP file'));
     deps.setUrlLoading(false);
     return false;
+  } finally {
+    if (stagedArchive && !transferred) await closeZipArchive(stagedArchive).catch(() => {});
+    load.finish();
   }
 }
 
@@ -151,22 +180,33 @@ export async function loadDropPayload(
   }
 
   deps.cancelUrlLoad?.();
-  deps.setUrlLoading(true);
-  deps.setUrlProgress({ percent: 0, message: 'Scanning files...' });
-  await yieldToPaint(deps);
-
+  const load: LocalSourceLoad = (deps.beginLoad ?? beginReconstructionLoad)();
   try {
-    const files = await deps.collectDroppedFiles(payload, deps.scanEntry);
+    deps.setUrlLoading(true);
+    deps.setUrlProgress({ percent: 0, message: 'Scanning files...' });
+    await awaitWithAbort(yieldToPaint(deps), load.signal);
+    load.assertCurrent();
+    const files = await awaitWithAbort(deps.collectDroppedFiles(payload,
+      (entry, path, files) => deps.scanEntry(entry, path, files, load.signal)), load.signal);
+    load.assertCurrent();
 
-    await deps.processFiles(files, undefined, {
-      onSceneReplaced: () => commitLocalSceneSource(deps),
+    const processed = await deps.processFiles(files, undefined, {
+      load,
+      signal: load.signal,
+      initialSplatSelectionRevision: load.initialSplatSelectionRevision,
+      onViewerState: load.onViewerState,
+      onSceneReplaced: () => { load.assertCurrent(); commitLocalSceneSource(deps); },
     });
-    return true;
+    load.assertCurrent();
+    return processed !== false;
   } catch (error) {
+    if (load.signal.aborted || (error instanceof Error && error.name === 'AbortError')) return false;
     errorLog('[File Dropzone] Error processing drop:', error);
     deps.setError(getErrorMessage(error, 'Failed to process dropped files'));
     deps.setUrlLoading(false);
     return false;
+  } finally {
+    load.finish();
   }
 }
 
@@ -185,23 +225,32 @@ export async function loadBrowsedDirectory(
     return false;
   }
 
+  const load: LocalSourceLoad = (deps.beginLoad ?? beginReconstructionLoad)();
   try {
-    const dirHandle = await deps.pickDirectory();
-
+    const dirHandle = await awaitWithAbort(deps.pickDirectory(), load.signal);
+    load.assertCurrent();
+    if (deps.isLoading()) return false;
     deps.cancelUrlLoad?.();
     deps.setUrlLoading(true);
     deps.setUrlProgress({ percent: 0, message: 'Scanning folder...' });
-    await yieldToPaint(deps);
+    await awaitWithAbort(yieldToPaint(deps), load.signal);
+    load.assertCurrent();
 
     const files = new Map<string, File>();
-    await deps.scanDirectoryHandle(dirHandle, '', files);
+    await awaitWithAbort(deps.scanDirectoryHandle(dirHandle, '', files, load.signal), load.signal);
+    load.assertCurrent();
 
-    await deps.processFiles(files, undefined, {
-      onSceneReplaced: () => commitLocalSceneSource(deps),
+    const processed = await deps.processFiles(files, undefined, {
+      load,
+      signal: load.signal,
+      initialSplatSelectionRevision: load.initialSplatSelectionRevision,
+      onViewerState: load.onViewerState,
+      onSceneReplaced: () => { load.assertCurrent(); commitLocalSceneSource(deps); },
     });
-    return true;
+    load.assertCurrent();
+    return processed !== false;
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (load.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
       return false;
     }
 
@@ -209,5 +258,7 @@ export async function loadBrowsedDirectory(
     deps.setError(getErrorMessage(error, 'Failed to open folder'));
     deps.setUrlLoading(false);
     return false;
+  } finally {
+    load.finish();
   }
 }

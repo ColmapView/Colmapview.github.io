@@ -59,7 +59,7 @@ export function collectShareConfig(): ShareConfig {
     SHAREABLE_FIELDS
   );
   const activeSplatSourceId = getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles);
-  if (activeSplatSourceId) {
+  if (activeSplatSourceId !== null) {
     config.splat = { ...config.splat, activeSourceId: activeSplatSourceId };
   }
   return config;
@@ -79,13 +79,17 @@ export async function decodeSharedViewerOverrides(hash: string): Promise<SharedV
  * constrained touch devices keep the download prompt.
  */
 async function activateSavedSplat(sourceId: string, assertCurrent: () => void): Promise<void> {
+  if (sourceId === '') {
+    await useReconstructionStore.getState().selectSplatSource('', { restore: true });
+    assertCurrent();
+    return;
+  }
   const source = findSplatSourceById(useReconstructionStore.getState().loadedFiles, sourceId);
   const touch = detectTouchDevice();
-  if (!source?.url || source.file) return;
-  if (touch && !getSplatAutoLoadDecision([{ path: source.path, size: source.size ?? 0 }], { isTouchDevice: touch }).autoLoad) return;
-  await useReconstructionStore.getState().selectSplatSource(source.id);
+  if (!source || (!source.url && !source.file)) return;
+  if (!source.file && touch && !getSplatAutoLoadDecision([{ path: source.path, size: source.size ?? 0 }], { isTouchDevice: touch }).autoLoad) return;
+  await useReconstructionStore.getState().selectSplatSource(source.id, { restore: true });
   assertCurrent();
-  if (useReconstructionStore.getState().loadedFiles?.splatFile) useReconstructionStore.getState().setShowSplatPicker(false);
 }
 
 /**
@@ -94,11 +98,29 @@ async function activateSavedSplat(sourceId: string, assertCurrent: () => void): 
  * restores a URL camera itself.
  */
 export async function applySavedViewerState(saved: PublishedViewerState | null, shared: SharedViewerOverrides | null,
-  assertCurrent: () => void = () => undefined): Promise<void> {
-  const sourceId = shared?.config?.splat?.activeSourceId ?? saved?.config.splat?.activeSourceId;
-  if (saved && sourceId) await activateSavedSplat(sourceId, assertCurrent);
-  if (saved) applyShareConfig(saved.config);
-  if (shared?.config) applyShareConfig(shared.config);
+  assertCurrent: () => void = () => undefined,
+  initialSplatSelectionRevision = useReconstructionStore.getState().splatSelectionRevision,
+  autoSplatSourceId?: string): Promise<void> {
+  const canRestoreSplatSelection = () => useReconstructionStore.getState().splatSelectionRevision === initialSplatSelectionRevision;
+  const restorationConfig = (config: ShareConfig): ShareConfig => {
+    if (!config.splat) return config;
+    // Apply the effective selection once, after merging saved and URL choices.
+    const splat = { ...config.splat };
+    delete splat.activeSourceId;
+    return { ...config, splat };
+  };
+  const sourceId = shared?.config?.splat?.activeSourceId ?? saved?.config.splat?.activeSourceId ?? autoSplatSourceId;
+  assertCurrent();
+  if (sourceId !== undefined && canRestoreSplatSelection()) await activateSavedSplat(sourceId, assertCurrent);
+  // A choice made before or during activation wins over both saved and URL source selections.
+  if (saved) applyShareConfig(restorationConfig(saved.config));
+  if (shared?.config) applyShareConfig(restorationConfig(shared.config));
+  if (sourceId !== undefined && canRestoreSplatSelection()) {
+    useReconstructionStore.getState().setRequestedSplatSourceId(sourceId || null);
+    if (sourceId === '' || useReconstructionStore.getState().loadedFiles?.splatFile) {
+      useReconstructionStore.getState().setShowSplatPicker(false);
+    }
+  }
   const view = saved ? shared?.viewState ?? saved.viewState : null;
   if (view) useCameraStore.getState().flyToState(view);
 }
@@ -113,8 +135,11 @@ export function applyShareConfig(input: ShareConfig): void {
     const values = config[key];
     if (values) config[key] = restoreNullableNumbers(values);
   }
-  if (config.splat?.activeSourceId) {
-    useReconstructionStore.getState().setRequestedSplatSourceId(config.splat.activeSourceId);
+  if (config.splat?.activeSourceId !== undefined) {
+    if (config.splat.activeSourceId === '') {
+      void useReconstructionStore.getState().selectSplatSource('', { restore: true });
+      useReconstructionStore.getState().setShowSplatPicker(false);
+    } else useReconstructionStore.getState().setRequestedSplatSourceId(config.splat.activeSourceId);
     useImageMetricsStore.getState().clearSplatPsnr();
   }
   // Activating a file can reset its alignment; restore saved transforms afterwards.

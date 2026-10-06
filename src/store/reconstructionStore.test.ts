@@ -12,6 +12,8 @@ import {
   loadGaussianCloudFromFile,
 } from '../splat/gaussianCloudLoader';
 import type { GaussianCloud } from '../splat/gaussianCloud';
+import { getActiveZipImageIndex, setActiveZipArchive } from '../utils/zipArchiveState';
+import { buildArchiveReader } from '../test/builders';
 
 // Byte-less activation seams: the decode step is mocked (no real gs-toolbox
 // decode in store tests), while seedGaussianCloudLoad / loadGaussianCloudFromFile
@@ -86,6 +88,17 @@ describe('reconstruction store URL load lifecycle', () => {
     useReconstructionStore.getState().finishUrlLoad(signal!);
     expect(useReconstructionStore.getState().urlLoadController?.signal).toBe(nextSignal);
     expect(useReconstructionStore.getState().urlLoadActive).toBe(true);
+  });
+
+  it('closes the active lazy archive exactly once when the scene is cleared', async () => {
+    const archive = buildArchiveReader();
+    const close = vi.spyOn(archive, 'close');
+    setActiveZipArchive(archive, new Map());
+    useReconstructionStore.getState().clear();
+    useReconstructionStore.getState().clear();
+    await Promise.resolve();
+    expect(close).toHaveBeenCalledOnce();
+    expect(getActiveZipImageIndex()).toBeNull();
   });
 
   it('uses a black default background when a splat file starts loading', () => {
@@ -435,6 +448,24 @@ describe('reconstruction store lazy splat source switching', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('tracks explicit choices, including repeated None, without marking automatic restoration as a user choice', async () => {
+    const file = new File(['splat'], 'a.spz');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFileSources: [{ id: 'a.spz', path: 'a.spz', file }],
+    }));
+    const initialRevision = useReconstructionStore.getState().splatSelectionRevision;
+
+    await useReconstructionStore.getState().selectSplatSource('a.spz', { restore: true });
+    expect(useReconstructionStore.getState().splatSelectionRevision).toBe(initialRevision);
+    await useReconstructionStore.getState().selectSplatSource('missing');
+    expect(useReconstructionStore.getState().splatSelectionRevision).toBe(initialRevision);
+
+    await useReconstructionStore.getState().selectSplatSource('');
+    await useReconstructionStore.getState().selectSplatSource('');
+    expect(useReconstructionStore.getState().splatSelectionRevision).toBe(initialRevision + 2);
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
   });
 
   it('activates a downloaded splat source and offloads the previous one', async () => {

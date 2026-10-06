@@ -80,6 +80,45 @@ describe('zip archive state', () => {
     expect(getActiveZipStats()).toEqual({ fileSize: 200, imageCount: 2 });
   });
 
+  it('closes readers exactly once on replacement and clear, retaining the current reader for lazy extraction', async () => {
+    const firstClose = vi.fn(async () => {});
+    const secondClose = vi.fn(async () => {});
+    const first = buildArchiveReader({ close: firstClose });
+    const second = buildArchiveReader({ close: secondClose });
+    const file = new File(['image'], 'photo.jpg');
+    const index = new Map([['photo.jpg', makeEntry('photo.jpg', file)]]);
+    setActiveZipArchive(first, index);
+    setActiveZipArchive(second, index);
+    expect(firstClose).toHaveBeenCalledOnce();
+    expect(secondClose).not.toHaveBeenCalled();
+    setActiveZipArchive(second, index, 10, 1);
+    await expect(extractZipImage('photo.jpg')).resolves.toBe(file);
+    expect(secondClose).not.toHaveBeenCalled();
+    clearActiveZipArchive();
+    clearActiveZipArchive();
+    expect(secondClose).toHaveBeenCalledOnce();
+  });
+
+  it('ignores an image extracted after its archive was replaced', async () => {
+    let resolve!: (file: File) => void;
+    const entry = makeEntry('photo.jpg');
+    vi.mocked(entry.extract).mockImplementation(() => new Promise<File>(done => { resolve = done; }));
+    setActiveZipArchive(buildArchiveReader(), new Map([['photo.jpg', entry]]));
+    const pending = extractZipImage('photo.jpg');
+    setActiveZipArchive(buildArchiveReader(), new Map());
+    resolve(new File(['old image'], 'photo.jpg'));
+    await expect(pending).resolves.toBeNull();
+  });
+
+  it('clears ownership even when reader close rejects', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    setActiveZipArchive(buildArchiveReader({ close: vi.fn().mockRejectedValue(new Error('close failed')) }), new Map());
+    clearActiveZipArchive();
+    expect(hasActiveZipArchive()).toBe(false);
+    await Promise.resolve();
+    expect(warn).toHaveBeenCalledWith('[ZIP] Failed to close archive:', expect.any(Error));
+  });
+
   it('finds ZIP entries by normalized, prefixed, filename, and case-insensitive candidates', () => {
     const direct = makeEntry('direct.jpg');
     const prefixed = makeEntry('nested.jpg');
@@ -127,6 +166,18 @@ describe('zip archive state', () => {
     expect(findZipEntry('cam1/photo.jpg', auxiliaryOnlyIndex)).toBeNull();
     expect(findZipEntry('photo.jpg', auxiliaryOnlyIndex)).toBeNull();
     expect(findZipEntry('cam1/photo.jpg', collisionIndex)).toBe(photo);
+  });
+
+  it('does not resolve missing masks to original images with matching filenames', () => {
+    const photo = makeEntry('photo.png');
+    const mask = makeEntry('photo.png.png');
+    const index = indexArchiveImages([
+      { path: 'project/images/nested/photo.png', entry: photo },
+      { path: 'project/masks/nested/photo.png.png', entry: mask },
+    ]);
+    expect(findZipEntry('masks/nested/photo.png', index)).toBeNull();
+    expect(findZipEntry('masks/nested/photo.png.png', index)).toBe(mask);
+    expect(findZipEntry('nested/photo.png', index)).toBe(photo);
   });
 
   it('extracts matching images from the active archive', async () => {

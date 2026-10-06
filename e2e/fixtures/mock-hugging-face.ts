@@ -80,9 +80,10 @@ export function createMockHuggingFace(options: { lfs?: boolean } = {}) {
         if (body.get('client_id') !== 'colmapview-browser-test' || !body.get('code_verifier') || body.has('client_secret')) {
           await json({ error: 'invalid public client exchange' }, 400); return;
         }
-        await json({ access_token: 'hf_browser_test_only', expires_in: 3600, scope: 'openid profile contribute-repos' }); return;
+        await json({ access_token: 'hf_browser_test_only', expires_in: 3600, scope: 'openid profile read-repos contribute-repos' }); return;
       }
       if (path === '/oauth/userinfo') { await json({ preferred_username: 'publisher' }); return; }
+      if (path === '/api/datasets/publisher/scene') { await json({ id: 'publisher/scene', private: false }); return; }
       if (request.method() === 'POST') writes.push(path);
       if (path === '/api/repos/create') {
         if (commits.length) { await json({ error: 'already exists' }, 409); return; }

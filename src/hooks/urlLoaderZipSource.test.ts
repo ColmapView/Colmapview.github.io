@@ -6,6 +6,22 @@ import {
 } from './urlLoaderZipSource';
 
 describe('URL loader ZIP source helpers', () => {
+  it('keeps provider download credentials out of source state and logs', async () => {
+    const archive = buildArchiveReader();
+    const sourceUrl = 'https://drive.google.com/file/d/file123/view';
+    const url = 'https://www.googleapis.com/drive/v3/files/file123?key=app-key&alt=media';
+    const options = { filename: 'archive.tar', size: 1024, fetchImpl: vi.fn() };
+    const signal = new AbortController().signal;
+    const deps = {
+      archiveOptions: options, sourceUrl, signal,
+      loadZip: vi.fn(async () => ({ archive, colmapFiles: new Map(), imageIndex: new Map(), fileSize: 1024, imageCount: 0 })),
+      log: vi.fn(), processFiles: vi.fn(), setActiveArchive: vi.fn(), setSourceInfo: vi.fn(), setUrlProgress: vi.fn(),
+    };
+    await loadZipUrlSource(url, deps);
+    expect(deps.loadZip).toHaveBeenCalledWith(url, expect.any(Function), signal, options);
+    expect(deps.setSourceInfo).toHaveBeenCalledWith('zip', sourceUrl);
+    expect(JSON.stringify(deps.log.mock.calls)).not.toContain('app-key');
+  });
   it('closes an archive returned after cancellation without restoring the cleared source', async () => {
     const controller = new AbortController();
     const archive = buildArchiveReader();
@@ -49,8 +65,8 @@ describe('URL loader ZIP source helpers', () => {
     })).toEqual({
       percent: 45,
       message: 'Downloading archive...',
-      filesDownloaded: 2048,
-      totalFiles: 4096,
+      bytesLoaded: 2048,
+      bytesTotal: 4096,
     });
   });
 
@@ -86,8 +102,8 @@ describe('URL loader ZIP source helpers', () => {
     expect(deps.setUrlProgress).toHaveBeenNthCalledWith(1, {
       percent: 35,
       message: 'Downloading archive...',
-      filesDownloaded: 512,
-      totalFiles: 1024,
+      bytesLoaded: 512,
+      bytesTotal: 1024,
     });
     expect(deps.setActiveArchive).toHaveBeenCalledWith(archive, imageIndex, 1024, 1);
     expect(deps.setUrlProgress).toHaveBeenNthCalledWith(2, {
@@ -95,7 +111,7 @@ describe('URL loader ZIP source helpers', () => {
       message: 'Parsing reconstruction...',
     });
     expect(deps.setSourceInfo).toHaveBeenCalledWith('zip', 'https://example.com/scene.zip');
-    expect(deps.processFiles).toHaveBeenCalledWith(colmapFiles, { start: 80, end: 100 }, { throwOnError: true });
+    expect(deps.processFiles).toHaveBeenCalledWith(colmapFiles, { start: 80, end: 100 }, expect.objectContaining({ throwOnError: true }));
     expect(deps.setUrlProgress).toHaveBeenLastCalledWith({ percent: 100, message: 'Complete' });
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] ZIP contains 3 COLMAP files, 1 indexed images');
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Calling processFiles...');
@@ -123,7 +139,7 @@ describe('URL loader ZIP source helpers', () => {
 
     await expect(loadZipUrlSource('https://example.com/scene.zip', deps)).resolves.toBe(true);
 
-    expect(deps.processFiles).toHaveBeenCalledWith(colmapFiles, { start: 80, end: 100 }, { throwOnError: true });
+    expect(deps.processFiles).toHaveBeenCalledWith(colmapFiles, { start: 80, end: 100 }, expect.objectContaining({ throwOnError: true }));
     expect(deps.setUrlProgress).not.toHaveBeenCalledWith({ percent: 100, message: 'Complete' });
   });
 
@@ -145,5 +161,21 @@ describe('URL loader ZIP source helpers', () => {
     expect(deps.setActiveArchive).not.toHaveBeenCalled();
     expect(deps.setSourceInfo).not.toHaveBeenCalled();
     expect(deps.processFiles).not.toHaveBeenCalled();
+  });
+
+  it.each(['failure', 'cancelled'] as const)('closes the staged archive and preserves source metadata when processing is %s', async outcome => {
+    const archive = buildArchiveReader();
+    const close = vi.spyOn(archive, 'close');
+    const deps = {
+      loadZip: vi.fn(async () => ({ archive, colmapFiles: new Map(), imageIndex: new Map(), fileSize: 1, imageCount: 0 })),
+      log: vi.fn(), setActiveArchive: vi.fn(), setSourceInfo: vi.fn(), setUrlProgress: vi.fn(),
+      processFiles: vi.fn(async () => { if (outcome === 'failure') throw new Error('invalid COLMAP'); return false; }),
+    };
+    const loading = loadZipUrlSource('https://example.com/scene.zip', deps);
+    if (outcome === 'failure') await expect(loading).rejects.toThrow('invalid COLMAP');
+    else await expect(loading).resolves.toBe(false);
+    expect(deps.setActiveArchive).not.toHaveBeenCalled();
+    expect(deps.setSourceInfo).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledOnce();
   });
 });

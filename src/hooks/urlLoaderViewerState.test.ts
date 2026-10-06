@@ -1,6 +1,7 @@
 import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchDatasetViewerSettings, fetchPublishedViewerState } from './urlLoaderViewerState';
+import { fetchDatasetViewerSettings, fetchOptionalDatasetViewerSettings, fetchPublishedViewerState,
+  OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS } from './urlLoaderViewerState';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import type { ColmapManifest } from '../types/manifest';
@@ -10,9 +11,31 @@ const manifest: ColmapManifest = { version: 1, baseUrl: 'https://huggingface.co/
   files: { cameras: 'cameras.bin', images: 'images.bin', points3D: 'points3D.bin' }, viewerStatePath: 'colmapview-state.json' };
 const state: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null, config: { transform: createIdentityEuler(), splat: { transform: { ...createIdentityEuler(), translationX: 5 } } } };
 beforeEach(() => vi.stubGlobal('Blob', NodeBlob));
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe('manifest viewer-state loading', () => {
+  it('bounds automatic direct-file metadata and aborts the stalled request', async () => {
+    vi.useFakeTimers();
+    let requestSignal: AbortSignal | null | undefined;
+    const request = vi.fn((_url: string, init?: RequestInit) => {
+      requestSignal = init?.signal;
+      return new Promise<Response>(() => {});
+    });
+    const pending = fetchOptionalDatasetViewerSettings(manifest.baseUrl + 'scene.spz', request, true);
+    expect(requestSignal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS);
+    await expect(pending).resolves.toBeNull();
+    expect(requestSignal?.aborted).toBe(true);
+  });
+
+  it('cancels optional metadata promptly even when an injected fetch does not settle on abort', async () => {
+    const controller = new AbortController();
+    const pending = fetchOptionalDatasetViewerSettings(manifest.baseUrl,
+      () => new Promise<Response>(() => {}), false, controller.signal);
+    const aborted = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    controller.abort();
+    await aborted;
+  });
   it.each(['json', 'yaml'])('loads %s settings at the immutable dataset revision, including older JSON publications', async format => {
     const path = format === 'yaml' ? 'colmapview.yaml' : 'colmapview-state.json';
     const body = format === 'yaml' ? serializeDatasetViewerSettings(state) : JSON.stringify(state);

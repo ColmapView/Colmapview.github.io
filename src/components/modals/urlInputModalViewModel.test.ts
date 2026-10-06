@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   getUrlInputHelpItemClassName,
   getUrlInputHelpItemKey,
+  getUrlInputDriveHandoffUrl,
+  getUrlInputHelpSections,
   getUrlInputActionState,
   getUrlInputHelpIconKind,
   getUrlInputHelpSectionTitleClassName,
@@ -12,6 +14,7 @@ import {
   shouldCloseUrlInputFromBackdrop,
   shouldSubmitUrlInputKey,
   URL_INPUT_DEFAULT_TITLE_CLASS,
+  URL_INPUT_DESCRIPTION,
   URL_INPUT_HELP_CODE_CLASS,
   URL_INPUT_HELP_ITEM_MUTED_CLASS,
   URL_INPUT_HELP_LIST_CLASS,
@@ -69,8 +72,10 @@ describe('URL input modal view model', () => {
   });
 
   it('keeps supported URL help sections stable', () => {
+    expect(URL_INPUT_DESCRIPTION).toContain('Google Drive ZIP or TAR link');
     expect(URL_INPUT_HELP_SECTIONS.map((section) => section.title)).toEqual([
       'ZIP Files',
+      'Google Drive',
       'Cloud Storage URLs',
       'Dropbox',
       'Git Hosting URLs',
@@ -83,6 +88,11 @@ describe('URL input modal view model', () => {
     expect(URL_INPUT_HELP_SECTIONS.at(-1)).toMatchObject({
       tone: 'warning',
     });
+    const driveHelp = URL_INPUT_HELP_SECTIONS.find(section => section.title === 'Google Drive');
+    expect(driveHelp?.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ text: 'Public ZIP or TAR files shared with Anyone with the link load without sign-in.' }),
+      expect.objectContaining({ text: 'For private ZIP or TAR files, use the Google Drive account icon on the loading page and choose a file.' }),
+    ]));
   });
 
   it('derives supported URL help render state', () => {
@@ -109,5 +119,30 @@ describe('URL input modal view model', () => {
     expect(URL_INPUT_WARNING_TEXT_CLASS).toBe('text-ds-muted/80');
     expect(URL_INPUT_HELP_LIST_CLASS).toBe('space-y-1 mb-3');
     expect(URL_INPUT_HELP_CODE_CLASS).toBe('text-ds-accent');
+  });
+
+  it('hands off only the canonical Drive file and resource key', () => {
+    const link = getUrlInputDriveHandoffUrl('  https://drive.google.com/file/d/FILE_123/view?resourcekey=KEY_456&access_token=secret&state=discard#token=secret  ', false);
+    const destination = new URL(link!);
+    expect(destination.origin).toBe('https://colmapview.opsiclear.com');
+    expect([...destination.searchParams.keys()]).toEqual(['url']);
+    expect(destination.searchParams.get('url')).toBe('https://drive.google.com/file/d/FILE_123/view?resourcekey=KEY_456');
+    expect(destination.hash).toBe('');
+    expect(link).not.toContain('secret');
+  });
+
+  it('keeps enabled Drive and other data URLs in the current viewer', () => {
+    expect(getUrlInputDriveHandoffUrl('https://drive.google.com/file/d/FILE_123/view', true)).toBeNull();
+    for (const url of ['https://huggingface.co/datasets/user/data', 'https://example.com/archive.tar',
+      'https://drive.google.com/folder/d/FILE_123', 'https://drive.google.com.evil.test/file/d/FILE_123/view', 'invalid']) {
+      expect(getUrlInputDriveHandoffUrl(url, false)).toBeNull();
+    }
+  });
+
+  it('explains Drive handoff without directing disabled-host visitors to a local account control', () => {
+    const drive = getUrlInputHelpSections(false).find(section => section.title === 'Google Drive');
+    expect(drive?.items.some(item => item.text?.includes('colmapview.opsiclear.com'))).toBe(true);
+    expect(drive?.items.some(item => item.text?.includes('account icon'))).toBe(false);
+    expect(getUrlInputHelpSections(true)).toBe(URL_INPUT_HELP_SECTIONS);
   });
 });

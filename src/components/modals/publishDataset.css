@@ -13,6 +13,7 @@
 .publication-body a { color: var(--accent-hover); text-decoration: underline; overflow-wrap: anywhere; }
 .publication-body progress { width: 100%; }
 .publication-body [role=alert] { overflow-wrap: anywhere; margin-top: 8px; }
+.publication-body [role=status] { overflow-wrap: anywhere; }
 
 /* Preview on the left; form, progress or result on the right. */
 .publication-layout { display: grid; grid-template-columns: minmax(0, 240px) minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -51,6 +52,7 @@
 
 .publication-submit { display: grid; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color); }
 .publication-submit p { margin: 0; line-height: 1.5; }
+.publication-body > .publication-section + .publication-submit { border-top: 0; margin-top: 0; }
 .publication-submit-row { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 
 @media (max-width: 640px) {

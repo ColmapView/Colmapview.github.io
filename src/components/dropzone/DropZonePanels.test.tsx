@@ -11,11 +11,16 @@ import {
 vi.mock('./ProfileDropdown', () => ({
   ProfileDropdown: () => <div data-testid="profile-dropdown" />,
 }));
+vi.mock('./DatasetAccountButtons', () => ({
+  DatasetAccountButtons: ({ onLoadGoogleDriveArchive }: { onLoadGoogleDriveArchive: (url: string) => void }) =>
+    <button type="button" onClick={() => onLoadGoogleDriveArchive('https://drive.google.com/file/d/chosen-archive/view')}>Choose test Drive archive</button>,
+}));
 
 function createDesktopProps() {
   return {
     urlLoading: false,
     onOpenUrlModal: vi.fn(),
+    onLoadGoogleDriveArchive: vi.fn(),
     onOpenManifestFile: vi.fn(),
     onLoadToy: vi.fn(),
     onBrowse: vi.fn(),
@@ -128,6 +133,7 @@ describe('DropZone panels', () => {
       <TouchDropZonePanel
         urlLoading={false}
         onOpenUrlModal={onOpenUrlModal}
+        onLoadGoogleDriveArchive={vi.fn()}
         onLoadToy={onLoadToy}
         onDismiss={onDismiss}
       />
@@ -140,5 +146,13 @@ describe('DropZone panels', () => {
     expect(onOpenUrlModal).toHaveBeenCalledTimes(1);
     expect(onLoadToy).toHaveBeenCalledTimes(1);
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['desktop', 'touch'] as const)('routes the selected Drive archive URL through the %s panel', mode => {
+    const props = createDesktopProps();
+    render(mode === 'desktop' ? <DesktopDropZonePanel {...props} /> : <TouchDropZonePanel {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Choose test Drive archive' }));
+    expect(props.onLoadGoogleDriveArchive).toHaveBeenCalledExactlyOnceWith('https://drive.google.com/file/d/chosen-archive/view');
+    expect(props.onOpenUrlModal).not.toHaveBeenCalled();
   });
 });

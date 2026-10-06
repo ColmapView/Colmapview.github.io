@@ -15,6 +15,7 @@ import {
 } from '../../icons';
 import { publicAsset } from '../../utils/paths';
 import { ProfileDropdown } from './ProfileDropdown';
+import { DatasetAccountButtons } from './DatasetAccountButtons';
 import { LoadJsonHoverCard, LoadUrlHoverCard, ToyHoverCard } from './DropZoneHoverCards';
 import {
   DROP_ZONE_ACTION_LABELS,
@@ -46,6 +47,7 @@ import {
 export interface DesktopDropZonePanelProps {
   urlLoading: boolean;
   onOpenUrlModal: () => void;
+  onLoadGoogleDriveArchive: (url: string) => void;
   onOpenManifestFile: () => void;
   onLoadToy: () => void;
   onBrowse: () => void;
@@ -59,6 +61,7 @@ export interface DesktopDropZonePanelProps {
 export interface TouchDropZonePanelProps {
   urlLoading: boolean;
   onOpenUrlModal: () => void;
+  onLoadGoogleDriveArchive: (url: string) => void;
   onLoadToy: () => void;
   onDismiss: () => void;
 }
@@ -66,6 +69,7 @@ export interface TouchDropZonePanelProps {
 export function DesktopDropZonePanel({
   urlLoading,
   onOpenUrlModal,
+  onLoadGoogleDriveArchive,
   onOpenManifestFile,
   onLoadToy,
   onBrowse,
@@ -133,6 +137,7 @@ export function DesktopDropZonePanel({
             >
               <UploadIcon className="w-4 h-4" />
             </button>
+            <DatasetAccountButtons onOpenUrlModal={onOpenUrlModal} onLoadGoogleDriveArchive={onLoadGoogleDriveArchive} />
             <button
               type="button"
               className={DROP_ZONE_ICON_BUTTON_CLASS}
@@ -245,13 +250,15 @@ export function DesktopDropZonePanel({
 export function TouchDropZonePanel({
   urlLoading,
   onOpenUrlModal,
+  onLoadGoogleDriveArchive,
   onLoadToy,
   onDismiss,
 }: TouchDropZonePanelProps) {
   return (
     <div className={DROP_ZONE_TOUCH_OVERLAY_CLASS} style={getDropZonePanelOverlayStyle()}>
       <div className={`${floatingPanelStyles.dialog} startup-panel-touch p-4 w-full max-w-xs`}>
-        <div className="flex justify-end mb-4">
+        <div className="flex justify-end gap-2 mb-4">
+          <DatasetAccountButtons onOpenUrlModal={onOpenUrlModal} onLoadGoogleDriveArchive={onLoadGoogleDriveArchive} />
           <button
             type="button"
             className={DROP_ZONE_TOUCH_CLOSE_BUTTON_CLASS}

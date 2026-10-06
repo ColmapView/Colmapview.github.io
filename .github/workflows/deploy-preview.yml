@@ -1,0 +1,115 @@
+name: Deploy isolated hosting preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Exact commit SHA, tag, or branch to preview
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-viewer-preview
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Resolve immutable source
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+      # Selected-ref code is executed only in this credential-free job.
+      - run: npm ci
+      - run: npm run check
+      - run: npx playwright install --with-deps chromium
+      - name: Build preview without provider configuration
+        run: node scripts/deployment/build-profile.mjs preview --skip-typecheck --out=.tmp/deployment/preview
+        env:
+          DEPLOYMENT_SHA: ${{ steps.source.outputs.sha }}
+      - name: Smoke preview artifact
+        run: npm run test:deployment:browser
+        env:
+          DEPLOYMENT_SHA: ${{ steps.source.outputs.sha }}
+          DEPLOYMENT_SMOKE_ROOT: .tmp/deployment
+          DEPLOYMENT_SMOKE_PROFILES: preview
+      - name: Upload prepared preview
+        uses: actions/upload-artifact@v6
+        with:
+          name: isolated-preview-viewer
+          path: .tmp/deployment/preview/
+          if-no-files-found: error
+          retention-days: 1
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: preview-build-smoke
+          path: .tmp/deployment-smoke/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
+      CLOUDFLARE_PREVIEW_PROJECT: ${{ vars.CLOUDFLARE_PREVIEW_PROJECT }}
+      DEPLOYMENT_SHA: ${{ needs.build.outputs.sha }}
+    steps:
+      # Use trusted deployment scripts/tests rather than executing selected-ref scripts with a token.
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Preflight isolated project
+        run: node scripts/deployment/preflight.mjs --preview
+        env:
+          CLOUDFLARE_API_TOKEN_CONFIGURED: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+      - name: Resolve preview branch
+        run: |
+          [[ "$DEPLOYMENT_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo 'Invalid preview source SHA'; exit 1; }
+          echo "PREVIEW_BRANCH=preview-${DEPLOYMENT_SHA:0:12}" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v5
+        with:
+          name: isolated-preview-viewer
+          path: .tmp/deployment/preview/
+      - run: npx playwright install --with-deps chromium
+      - name: Smoke downloaded preview with trusted tests
+        run: npm run test:deployment:browser
+        env:
+          DEPLOYMENT_SMOKE_ROOT: .tmp/deployment
+          DEPLOYMENT_SMOKE_PROFILES: preview
+      - name: Upload preview only
+        run: npx --yes wrangler@4.147.0 pages deploy .tmp/deployment/preview --project-name "$CLOUDFLARE_PREVIEW_PROJECT" --branch "$PREVIEW_BRANCH" --commit-hash "$DEPLOYMENT_SHA" --commit-dirty=false
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - name: Verify public preview
+        run: node scripts/deployment/check-live.mjs "https://$PREVIEW_BRANCH.$CLOUDFLARE_PREVIEW_PROJECT.pages.dev/" preview --manifest=.tmp/deployment/preview/deployment.json
+      - name: Record preview
+        run: echo "Preview verified at https://$PREVIEW_BRANCH.$CLOUDFLARE_PREVIEW_PROJECT.pages.dev/ (source SHA $DEPLOYMENT_SHA). Production was not deployed." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: preview-publish-smoke
+          path: .tmp/deployment-smoke/
+          if-no-files-found: ignore
+          retention-days: 7

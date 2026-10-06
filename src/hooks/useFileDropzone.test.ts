@@ -1,9 +1,11 @@
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useReconstructionStore, useSplatBackendStore } from '../store';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useReconstructionStore, useSplatBackendStore, useUIStore } from '../store';
 import type { DragEvent } from 'react';
 import type { FileDropzoneWorkflowDeps } from './fileDropzoneWorkflow';
 import { useFileDropzone } from './useFileDropzone';
+import { buildFile, buildFileSystemFileEntry, buildLoadedFiles, buildReconstruction } from '../test/builders';
+import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 
 const { processFileDropzoneFilesMock } = vi.hoisted(() => ({
   processFileDropzoneFilesMock: vi.fn(async () => true),
@@ -25,10 +27,12 @@ async function captureWorkflowDeps(): Promise<FileDropzoneWorkflowDeps> {
 const ply = new File(['x'], 'scene.ply');
 
 describe('useFileDropzone', () => {
+  afterEach(() => useReconstructionStore.getState().clear());
   beforeEach(() => {
     processFileDropzoneFilesMock.mockClear();
     useSplatBackendStore.setState(useSplatBackendStore.getInitialState(), true);
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
   });
 
   it('cancels pending URL settings when local files are dropped', async () => {
@@ -124,5 +128,94 @@ describe('useFileDropzone', () => {
 
     expect(deps.shouldPreloadSplatRuntime?.(new File(['x'], 'scene.sog'))).toBe(true);
     expect(deps.shouldPreloadSplatRuntime?.(ply)).toBe(false);
+  });
+
+  it('preserves an explicit None choice while restoring unrelated local YAML settings', async () => {
+    const deps = await captureWorkflowDeps();
+    const a = buildFile('a.spz');
+    const b = buildFile('b.spz');
+    useReconstructionStore.getState().setLoadedFiles({ ...buildLoadedFiles(), splatFile: a, splatFiles: [a, b],
+      splatFileSources: [{ id: 'a.spz', path: 'a.spz', file: a }, { id: 'b.spz', path: 'b.spz', file: b }],
+    });
+    await act(async () => { await useReconstructionStore.getState().selectSplatSource(''); });
+    await act(async () => { await deps.onViewerState?.({ version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { activeSourceId: 'b.spz' }, ui: { backgroundColor: '#234567' } },
+    }); });
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(useUIStore.getState().backgroundColor).toBe('#234567');
+  });
+
+  it('captures the selection revision before dropped-folder preparation', async () => {
+    const a = buildFile('a.spz');
+    const b = buildFile('b.spz');
+    useReconstructionStore.getState().setLoadedFiles({ ...buildLoadedFiles(), splatFile: a, splatFiles: [a, b],
+      splatFileSources: [{ id: 'a.spz', path: 'a.spz', file: a }, { id: 'b.spz', path: 'b.spz', file: b }],
+    });
+    const entry = buildFileSystemFileEntry({ name: 'colmapview.yaml' });
+    let resolve!: FileCallback;
+    vi.spyOn(entry, 'file').mockImplementation(done => { resolve = done; });
+    const { result } = renderHook(() => useFileDropzone());
+    const event = { preventDefault: vi.fn(), stopPropagation: vi.fn(), dataTransfer: {
+      types: ['Files'], items: [{ kind: 'file', webkitGetAsEntry: () => entry }], files: [],
+    } } as unknown as DragEvent<HTMLElement>;
+    const pending = result.current.handleDrop(event);
+    await vi.waitFor(() => expect(resolve).toBeTypeOf('function'));
+    await act(async () => { await useReconstructionStore.getState().selectSplatSource(''); });
+    resolve(buildFile('colmapview.yaml'));
+    await act(async () => { await pending; });
+    const options = processFileDropzoneFilesMock.mock.calls.at(-1)?.[2] as import('./fileDropzoneWorkflow').FileDropzoneWorkflowOptions;
+    await act(async () => { await options.onViewerState?.({ version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { activeSourceId: 'b.spz' }, ui: { backgroundColor: '#345678' } },
+    }); });
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(useUIStore.getState().backgroundColor).toBe('#345678');
+  });
+
+  it('rejects saved local settings from a cancelled job without changing the viewer', async () => {
+    const deps = await captureWorkflowDeps();
+    const initialColor = useUIStore.getState().backgroundColor;
+    useReconstructionStore.getState().clear();
+    await expect(deps.onViewerState?.({ version: 1, viewerVersion: 'test', viewState: null,
+      config: { ui: { backgroundColor: '#456789' } },
+    })).rejects.toMatchObject({ name: 'AbortError' });
+    expect(useUIStore.getState().backgroundColor).toBe(initialColor);
+  });
+
+  it('returns unsuccessful processing without committing a local scene', async () => {
+    processFileDropzoneFilesMock.mockResolvedValueOnce(false);
+    const { result } = renderHook(() => useFileDropzone());
+    await expect(result.current.processFiles(new Map())).resolves.toBe(false);
+  });
+
+  it('keeps None through actual local COLMAP commit and saved YAML restoration', async () => {
+    const actual = await vi.importActual<typeof import('./fileDropzoneWorkflow')>('./fileDropzoneWorkflow');
+    const a = buildFile('a.spz');
+    const b = buildFile('b.spz');
+    useReconstructionStore.getState().setLoadedFiles({ ...buildLoadedFiles(), splatFile: a, splatFiles: [a, b],
+      splatFileSources: [{ id: 'a.spz', path: 'a.spz', file: a }, { id: 'b.spz', path: 'b.spz', file: b }],
+    });
+    const deps = await captureWorkflowDeps();
+    const options = processFileDropzoneFilesMock.mock.calls.at(-1)?.[2] as import('./fileDropzoneWorkflow').FileDropzoneWorkflowOptions;
+    const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { activeSourceId: 'b.spz' }, ui: { backgroundColor: '#56789a' } },
+    });
+    const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, buildFile(name)]));
+    files.set('a.spz', a);
+    files.set('b.spz', b);
+    files.set('colmapview.yaml', Object.assign(buildFile('colmapview.yaml'), { text: async () => yaml }));
+    let resolve!: () => void;
+    const pending = actual.processFileDropzoneFiles(files, { ...deps,
+      parseFiles: async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), usedWasmPath: false }),
+      buildReconstruction: async () => ({ reconstruction: buildReconstruction(), pointCount: 0 }),
+      delay: () => new Promise<void>(done => { resolve = done; }),
+      clearCaches: vi.fn(), shouldPreloadSplatRuntime: () => false,
+    }, options);
+    await vi.waitFor(() => expect(resolve).toBeTypeOf('function'));
+    await act(async () => { await useReconstructionStore.getState().selectSplatSource(''); });
+    resolve();
+    await act(async () => { expect(await pending).toBe(true); });
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(useReconstructionStore.getState().loadedFiles?.splatFileSources).toHaveLength(2);
+    expect(useUIStore.getState().backgroundColor).toBe('#56789a');
   });
 });

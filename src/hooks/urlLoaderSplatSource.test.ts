@@ -57,10 +57,10 @@ describe('URL loader splat source helpers', () => {
     expect(deps.processFiles).toHaveBeenCalledWith(
       new Map([['scene.spz', splatFile]]),
       { start: 80, end: 100 },
-      {
+      expect.objectContaining({
         replaceSplatScene: true,
         throwOnError: true,
-      }
+      })
     );
     expect(deps.setUrlProgress).not.toHaveBeenCalledWith({ percent: 100, message: 'Complete' });
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Successfully loaded 3D file from URL: scene.spz');
@@ -82,5 +82,17 @@ describe('URL loader splat source helpers', () => {
 
     expect(deps.setSourceInfo).not.toHaveBeenCalled();
     expect(deps.processFiles).not.toHaveBeenCalled();
+  });
+
+  it.each(['failure', 'cancelled'] as const)('keeps the previous source metadata after processing is %s', async outcome => {
+    const deps = {
+      fetchSplatFile: vi.fn(async () => buildFile('scene.ply')),
+      log: vi.fn(), setSourceInfo: vi.fn(), setUrlProgress: vi.fn(),
+      processFiles: vi.fn(async () => { if (outcome === 'failure') throw new Error('invalid PLY'); return false; }),
+    };
+    const loading = loadSplatUrlSource('https://example.com/scene.ply', deps);
+    if (outcome === 'failure') await expect(loading).rejects.toThrow('invalid PLY');
+    else await expect(loading).resolves.toBe(false);
+    expect(deps.setSourceInfo).not.toHaveBeenCalled();
   });
 });

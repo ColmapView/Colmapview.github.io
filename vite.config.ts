@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import fs from 'node:fs';
 import * as path from 'node:path';
@@ -6,6 +7,9 @@ import pkg from './package.json';
 import { resolveViteLocalAliasPolicy } from './viteLocalAliasPolicy';
 
 export default defineConfig(({ command, mode }) => {
+  const googleDriveClientId = process.env.VITE_GOOGLE_DRIVE_CLIENT_ID
+    ?? loadEnv(mode, __dirname, 'VITE_GOOGLE_DRIVE_CLIENT_ID').VITE_GOOGLE_DRIVE_CLIENT_ID;
+  const googleDriveSignInEnabled = Boolean(googleDriveClientId?.trim());
   const localAliasPolicy = resolveViteLocalAliasPolicy({
     command,
     mode,
@@ -66,8 +70,11 @@ export default defineConfig(({ command, mode }) => {
       hmr: false,
       // Native SDKs and scratch worktrees are not application sources.
       watch: { ignored: ['**/colmap-wasm/**', '**/.tmp/**', '**/.playwright-cli/**', '**/test-results/**', '**/playwright-report/**'] },
-      // Required for SharedArrayBuffer (optional but better WASM performance)
-      headers: {
+      // OAuth popups need their opener. Keep optional SharedArrayBuffer isolation
+      // only when Google sign-in is not configured; production Pages is also unisolated.
+      headers: googleDriveSignInEnabled ? {
+        'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+      } : {
         'Cross-Origin-Opener-Policy': 'same-origin',
         'Cross-Origin-Embedder-Policy': 'require-corp',
       },

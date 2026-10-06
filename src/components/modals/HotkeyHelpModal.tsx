@@ -4,7 +4,9 @@ import { HOTKEYS } from '../../config/hotkeys';
 import { modalStyles, floatingPanelStyles, panelStyles } from '../../theme';
 import { CloseIcon } from '../../icons';
 import { ModalDialogShell } from '../ui/ModalDialogShell';
+import { PolicyLinks } from '../PolicyLinks';
 import { useHotkeyHelpStoreFacade } from './useHotkeyHelpStoreFacade';
+import './hotkeyHelp.css';
 import {
   ABOUT_COLMAP_CREDIT_PREFIX,
   ABOUT_COLMAP_LINK,
@@ -12,10 +14,10 @@ import {
   ABOUT_LINK_CLASS_NAME,
   ABOUT_LINK_REST_COLOR,
   ABOUT_PANEL_CLASS,
-  ABOUT_PRODUCT_LINE,
+  ABOUT_MAINTAINER_LINE,
+  ABOUT_PRODUCT_NAME,
   ABOUT_PRODUCT_LINE_CLASS,
   ABOUT_PROJECT_LINKS,
-  ABOUT_ROW_CLASS,
   ABOUT_TAB_ID,
   HOTKEY_HELP_FOOTER_CLASS,
   HOTKEY_HELP_FOOTER_KEY_CLASS,
@@ -58,23 +60,43 @@ function AboutLinkAnchor({ link }: { link: AboutLink }) {
   );
 }
 
-/** About tab body: brand, project links, license, credit, version. */
+/** About tab body: identity, project links, credits, and public policies. */
 function HotkeyHelpAboutPanel() {
   return (
-    <div className={ABOUT_PANEL_CLASS}>
-      <span className={ABOUT_PRODUCT_LINE_CLASS}>{ABOUT_PRODUCT_LINE}</span>
-      <div className={ABOUT_ROW_CLASS}>
-        {ABOUT_PROJECT_LINKS.map((link) => (
-          <AboutLinkAnchor key={link.href} link={link} />
-        ))}
+    <div className={`${ABOUT_PANEL_CLASS} hotkey-help-about`}>
+      <div className="hotkey-help-about-heading">
+        <div className="flex flex-col gap-1">
+          <h3 className={`${ABOUT_PRODUCT_LINE_CLASS} hotkey-help-about-title`}>{ABOUT_PRODUCT_NAME}</h3>
+          <span className="text-xs">{ABOUT_MAINTAINER_LINE}</span>
+        </div>
+        <span className="text-xs font-mono flex-shrink-0">v{__APP_VERSION__}</span>
       </div>
-      <div className={ABOUT_ROW_CLASS}>
-        <span>{ABOUT_LICENSE_LABEL}</span>
-        <span>{ABOUT_COLMAP_CREDIT_PREFIX}{' '}
-          <AboutLinkAnchor link={ABOUT_COLMAP_LINK} />
-        </span>
-        <span>v{__APP_VERSION__}</span>
-      </div>
+      <dl className="hotkey-help-about-details">
+        <dt>Project</dt>
+        <dd><AboutLinkAnchor link={ABOUT_PROJECT_LINKS[0]} /></dd>
+        <dt>Issues</dt>
+        <dd><AboutLinkAnchor link={ABOUT_PROJECT_LINKS[1]} /></dd>
+        <dt>License</dt>
+        <dd>{ABOUT_LICENSE_LABEL}</dd>
+        <dt>{ABOUT_COLMAP_CREDIT_PREFIX}</dt>
+        <dd><AboutLinkAnchor link={ABOUT_COLMAP_LINK} /></dd>
+      </dl>
+      <PolicyLinks includeAbout aboutLabel="Website" align="start" className="hotkey-help-about-policies" />
+    </div>
+  );
+}
+
+function HotkeyHelpFooter() {
+  return (
+    <div className={HOTKEY_HELP_FOOTER_CLASS}>
+      {HOTKEY_HELP_FOOTER_PREFIX}{' '}
+      {getHotkeyHelpToggleKeyLabels().map((label, index) => (
+        <Fragment key={label}>
+          {index > 0 && <>{' '}or{' '}</>}
+          <kbd className={HOTKEY_HELP_FOOTER_KEY_CLASS}>{label}</kbd>
+        </Fragment>
+      ))}{' '}
+      {HOTKEY_HELP_FOOTER_SUFFIX}
     </div>
   );
 }
@@ -132,6 +154,7 @@ function HotkeyHelpTabs() {
           ))
         )}
       </div>
+      <HotkeyHelpFooter />
     </>
   );
 }
@@ -198,17 +221,6 @@ export function HotkeyHelpModal() {
 
       <HotkeyHelpTabs />
 
-      {/* Footer hint */}
-      <div className={HOTKEY_HELP_FOOTER_CLASS}>
-        {HOTKEY_HELP_FOOTER_PREFIX}{' '}
-        {getHotkeyHelpToggleKeyLabels().map((label, index) => (
-          <Fragment key={label}>
-            {index > 0 && <>{' '}or{' '}</>}
-            <kbd className={HOTKEY_HELP_FOOTER_KEY_CLASS}>{label}</kbd>
-          </Fragment>
-        ))}{' '}
-        {HOTKEY_HELP_FOOTER_SUFFIX}
-      </div>
     </ModalDialogShell>
   );
 }
