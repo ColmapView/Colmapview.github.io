@@ -956,4 +956,30 @@ describe('file dropzone workflow', () => {
     expect(deps.setUrlProgress).not.toHaveBeenCalledWith(expect.objectContaining({ currentFile: 'scene.spz' }));
     expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
   });
+
+  it('does not wait on the renderer when the store re-picks the splat already on screen', async () => {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    // a.spz is larger, so it is the workflow's own default pick; the user has picked b.spz.
+    const a = new File(['aa'], 'a.spz');
+    const b = new File(['b'], 'b.spz');
+    useReconstructionStore.getState().setLoadedFiles(loadedFiles({ splatFile: a, splatFiles: [a, b],
+      splatFileSources: [{ id: 'a.spz', path: 'a.spz', file: a }, { id: 'b.spz', path: 'b.spz', file: b }] }));
+    await useReconstructionStore.getState().selectSplatSource('b.spz');
+    const deps = createDeps({
+      getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
+      setLoadedFiles: useReconstructionStore.getState().setLoadedFiles,
+      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
+      buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
+    });
+    const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, file(name)]));
+    files.set('a.spz', a);
+    files.set('b.spz', b);
+    try {
+      await expect(processFileDropzoneFiles(files, deps, { preserveRemoteSplatSources: true })).resolves.toBe(true);
+
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(b);
+      expect(deps.setUrlProgress).not.toHaveBeenCalledWith(expect.objectContaining({ currentFile: 'a.spz' }));
+      expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
+    } finally { useReconstructionStore.getState().clear(); }
+  });
 });

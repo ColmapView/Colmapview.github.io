@@ -539,12 +539,7 @@ export async function processFileDropzoneFiles(
       ? carryOverRemoteSplatSources(currentLoadedFiles, { splatFile, splatFiles, splatFileSources })
       : { splatFile, splatFiles, splatFileSources };
     splatFile = splatState.splatFile;
-    // The renderer reloads only when the splat file changes; handing it the loading state for
-    // the splat it already shows would leave the overlay up.
-    const splatAlreadyRendered = Boolean(splatFile) && splatFile === currentLoadedFiles?.splatFile;
-    deps.setUrlProgress(splatFile && !splatAlreadyRendered
-      ? getSplatLoadingProgress(splatFile, { startPercent: splatRendererStartPercent })
-      : { percent: mapProgress(95), message: 'Finalizing...' });
+    deps.setUrlProgress({ percent: mapProgress(95), message: 'Finalizing...' });
 
     clearCaches({ preserveZip: true });
     // Keep the previous files and WASM snapshot alive until every fallible parse/build
@@ -562,6 +557,12 @@ export async function processFileDropzoneFiles(
       imageFiles,
       hasMasks,
     });
+    // The store may re-pick the splat the user requested, so judge the file it committed.
+    const committedSplatFile = deps.getLoadedFiles()?.splatFile ?? splatFile;
+    splatFile = committedSplatFile;
+    // The renderer reloads only when the splat file changes; handing it the loading state for
+    // the splat it already shows would leave the overlay up.
+    const splatAlreadyRendered = Boolean(committedSplatFile) && committedSplatFile === currentLoadedFiles?.splatFile;
     deps.setWasmReconstruction(parseResult.wasmWrapper);
     sourceInstalled = true;
 
