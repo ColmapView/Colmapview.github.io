@@ -29,7 +29,8 @@ beforeEach(() => {
   vi.mocked(hfAuth.getSnapshot).mockReturnValue({ status: 'disconnected', identity: null, error: null });
   vi.mocked(hfAuth.getReadAccessToken).mockReturnValue(null);
 });
-afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+const CONTINUE_AFTER_FAILED_CHECK = '[Hugging Face] Dataset access check failed; continuing with the dataset files.';
 
 describe('Hugging Face private dataset reads', () => {
   it('checks access using only the privacy expansion and discards the body without reading metadata', async () => {
@@ -242,13 +243,27 @@ describe('Hugging Face private dataset reads', () => {
   });
 
   it.each([408, 429, 500, 503])('lets the dataset files decide when the access check returns %s', async status => {
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
     const fetchImpl = vi.fn(async () => new Response(null, { status }));
     await expect(checkHuggingFaceDatasetAccess(info, fetchImpl)).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledExactlyOnceWith(`[Hugging Face] Dataset access check returned ${status}; continuing with the dataset files.`);
   });
 
   it('lets the dataset files decide when the Hub API cannot be reached', async () => {
-    const fetchImpl = vi.fn(async (): Promise<Response> => { throw new TypeError('Failed to fetch'); });
+    const error = new TypeError('Failed to fetch');
+    const fetchImpl = vi.fn(async (): Promise<Response> => { throw error; });
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
     await expect(checkHuggingFaceDatasetAccess(info, fetchImpl)).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledExactlyOnceWith(CONTINUE_AFTER_FAILED_CHECK, error);
+  });
+
+  it('lets the dataset files decide when a stalled Hub API times out', async () => {
+    // fetchWithTimeout aborts a stalled request with a TimeoutError while the load itself is live.
+    const error = new DOMException('Request timed out', 'TimeoutError');
+    const fetchImpl = vi.fn(async (): Promise<Response> => { throw error; });
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
+    await expect(checkHuggingFaceDatasetAccess(info, fetchImpl, new AbortController().signal)).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledExactlyOnceWith(CONTINUE_AFTER_FAILED_CHECK, error);
   });
 
   it.each([
@@ -263,12 +278,8 @@ describe('Hugging Face private dataset reads', () => {
     // Engines without abort-reason propagation report the transport timeout this way.
     const fetchImpl = vi.fn(async (): Promise<Response> => { throw new DOMException('The operation was aborted.', 'AbortError'); });
     const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
-    try {
-      await expect(checkHuggingFaceDatasetAccess(info, fetchImpl, new AbortController().signal)).resolves.toBeUndefined();
-      expect(warn).toHaveBeenCalledOnce();
-    } finally {
-      warn.mockRestore();
-    }
+    await expect(checkHuggingFaceDatasetAccess(info, fetchImpl, new AbortController().signal)).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledOnce();
   });
 
   it('still stops when the load was cancelled', async () => {

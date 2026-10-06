@@ -61,6 +61,12 @@ function createSplatLoadedFiles(splatFile: File): LoadedFiles {
   };
 }
 
+/** Timeout warnings on screen; pinning the whole list catches a stacked duplicate. */
+function settingsTimeoutWarnings() {
+  return useNotificationStore.getState().notifications
+    .filter(notification => notification.message === OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE);
+}
+
 function hubEntries(splats: Array<{ path: string; size: number }>) {
   return [
     ...['cameras', 'images', 'points3D'].map(name => ({ type: 'file', path: `sparse/0/${name}.bin`, size: 10 })),
@@ -139,9 +145,11 @@ describe('useUrlLoader', () => {
       return new Response(null, { status: 404 });
     });
     vi.stubGlobal('fetch', request);
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
     const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
     await act(async () => { expect(await result.current.loadFromUrl('https://huggingface.co/datasets/owner/public')).toBe(true); });
     expect(processFilesMock).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledExactlyOnceWith('[Hugging Face] Dataset access check returned 429; continuing with the dataset files.');
   });
 
   it.each(['url', 'inline'] as const)('keeps loading a public HF dataset (%s) when the stalled access check reports a plain AbortError', async mode => {
@@ -172,7 +180,7 @@ describe('useUrlLoader', () => {
       init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
     }));
     vi.stubGlobal('fetch', request);
-    const { result } = renderHook(() => useUrlLoader());
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
     let pending!: Promise<boolean>;
     act(() => { pending = result.current.loadFromUrl('https://huggingface.co/datasets/owner/private'); });
     await waitFor(() => expect(request).toHaveBeenCalledOnce());
@@ -348,7 +356,7 @@ describe('useUrlLoader', () => {
     });
     vi.stubGlobal('fetch', request);
     processFilesMock.mockImplementationOnce(async () => { useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles()); });
-    const { result } = renderHook(() => useUrlLoader({ applyUrlOverrides: mode === 'override' }));
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger, applyUrlOverrides: mode === 'override' }));
     await act(async () => {
       const loaded = mode === 'inline' ? await result.current.loadFromManifest(createDefaultManifest(baseUrl))
         : await result.current.loadFromUrl(baseUrl);
@@ -396,7 +404,7 @@ describe('useUrlLoader', () => {
         void state.selectSplatSource('');
       }
     });
-    const { result } = renderHook(() => useUrlLoader({ applyUrlOverrides: true }));
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger, applyUrlOverrides: true }));
     try {
       await act(async () => { expect(await result.current.loadFromUrl(baseUrl)).toBe(true); });
       expect(request.mock.calls.map(([url]) => String(url)).filter(url => url.endsWith('.spz'))).toEqual([]);
@@ -429,7 +437,7 @@ describe('useUrlLoader', () => {
     });
     vi.stubGlobal('fetch', request);
     processFilesMock.mockImplementationOnce(async () => { useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles()); });
-    const { result } = renderHook(() => useUrlLoader({ applyUrlOverrides: choice === 'shared' }));
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger, applyUrlOverrides: choice === 'shared' }));
     await act(async () => {
       expect(await (explicit ? result.current.loadFromManifest({ ...createDefaultManifest(baseUrl), splats: ['splats/scene.spz'] })
         : result.current.loadFromUrl(baseUrl))).toBe(true);
@@ -471,7 +479,7 @@ describe('useUrlLoader', () => {
         setUrlProgress: state.setUrlProgress, setUrlLoading: state.setUrlLoading, setError: state.setError,
       }, options);
     });
-    const { result } = renderHook(() => useUrlLoader());
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
     await act(async () => {
       if (phase === 'outer preparation') await state.selectSplatSource('');
       expect(await result.current.loadFromUrl('https://example.com/scene.tar',
@@ -524,6 +532,7 @@ describe('useUrlLoader', () => {
       return new Response(new Uint8Array([1, 2, 3]));
     });
     vi.stubGlobal('fetch', request);
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
     processFilesMock.mockImplementationOnce(async () => { useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles()); });
     const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
     let pending!: Promise<boolean>;
@@ -540,8 +549,9 @@ describe('useUrlLoader', () => {
     expect(request.mock.calls.filter(([url]) => String(url).endsWith('.spz'))).toEqual([]);
     expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
     expect(useReconstructionStore.getState().showSplatPicker).toBe(true);
-    expect(useNotificationStore.getState().notifications).toContainEqual(expect.objectContaining({
-      type: 'warning', message: OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE }));
+    expect(settingsTimeoutWarnings()).toEqual([expect.objectContaining({ type: 'warning' })]);
+    // The late answer is logged and dropped; it never applies its None.
+    expect(warn).toHaveBeenCalledExactlyOnceWith('[URL Loader] Skipping unavailable or invalid colmapview.yaml settings.');
   });
 
   it('downloads an automatically chosen splat without opening the picker over it', async () => {
@@ -586,10 +596,45 @@ describe('useUrlLoader', () => {
     });
     vi.stubGlobal('fetch', request);
     processFilesMock.mockImplementationOnce(async () => { useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles()); });
+    // The picker state at the moment both splats are first listed, i.e. while the load still runs.
+    const pickerWhenListed: boolean[] = [];
+    const unsubscribe = useReconstructionStore.subscribe((state, previous) => {
+      if (state.loadedFiles?.splatFileSources?.length === 2 && previous.loadedFiles?.splatFileSources?.length !== 2) {
+        pickerWhenListed.push(state.showSplatPicker);
+      }
+    });
     const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
-    await act(async () => { expect(await result.current.loadFromUrl(baseUrl)).toBe(true); });
-    expect(useReconstructionStore.getState().showSplatPicker).toBe(true);
-    expect(request.mock.calls.filter(([url, init]) => String(url).endsWith('.spz') && init?.method !== 'HEAD')).toEqual([]);
+    try {
+      await act(async () => { expect(await result.current.loadFromUrl(baseUrl)).toBe(true); });
+      expect(pickerWhenListed).toEqual([false]);
+      expect(useReconstructionStore.getState().showSplatPicker).toBe(true);
+      expect(request.mock.calls.filter(([url, init]) => String(url).endsWith('.spz') && init?.method !== 'HEAD')).toEqual([]);
+    } finally { unsubscribe(); }
+  });
+
+  it.each([
+    ['an archive', 'https://example.com/scene.tar'],
+    ['a direct splat', 'https://example.com/scene.spz'],
+  ] as const)('does not offer the picker after %s load that listed no remote catalog', async (_kind, url) => {
+    vi.stubGlobal('Blob', NodeBlob);
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL) => String(input).endsWith('colmapview.yaml')
+      ? new Response(null, { status: 404 }) : new Response(new Uint8Array([1, 2, 3]))));
+    if (url.endsWith('.tar')) {
+      vi.spyOn(archiveSource, 'loadZipUrlSource').mockImplementation(async (_url, deps) =>
+        (await deps.processFiles(new Map([['cameras.bin', new File(['c'], 'cameras.bin')]]), undefined, { throwOnError: true })) !== false);
+    }
+    // The load ends with a splat listed but none showing, and nobody chose None.
+    processFilesMock.mockImplementationOnce(async () => {
+      useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles({ splatFileSources: [
+        { id: 'splats/a.spz', path: 'splats/a.spz', url: 'https://example.com/splats/a.spz', size: 100 }] }));
+    });
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
+    await act(async () => { expect(await result.current.loadFromUrl(url)).toBe(true); });
+    const state = useReconstructionStore.getState();
+    expect(state.loadedFiles?.splatFileSources).toHaveLength(1);
+    expect(state.loadedFiles?.splatFile).toBeUndefined();
+    // Only a merged remote catalog asks; this load never listed one.
+    expect(state.showSplatPicker).toBe(false);
   });
 
   it('asks again when the automatically chosen splat fails to download', async () => {
@@ -694,12 +739,16 @@ describe('useUrlLoader', () => {
     }
     // A renderer-generated hash during parsing must not override the incoming dataset defaults.
     processFilesMock.mockImplementationOnce(async () => { window.history.replaceState(null, '', '/#' + encodeCameraState(overrideView)); });
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
     const { result } = renderHook(() => useUrlLoader({
       logger: { info: vi.fn(), error: vi.fn() }, applyUrlOverrides: mode !== 'previous-scene',
     }));
     await act(async () => { expect(await result.current.loadFromUrl(repo)).toBe(true); });
     expect(processFilesMock).toHaveBeenCalledOnce();
     expect(request.mock.calls.map(call => String(call[0]))).toContain(repo + '/resolve/main/colmapview.yaml');
+    // Only unreadable settings are worth a warning; a missing file is normal.
+    expect(warn.mock.calls).toEqual(mode === 'invalid'
+      ? [['[URL Loader] Skipping unavailable or invalid colmapview.yaml settings.']] : []);
     expect(useUIStore.getState().backgroundColor).toBe(mode === 'override' ? '#abcdef'
       : mode === 'missing' || mode === 'invalid' ? originalBackground : '#123456');
     if (mode === 'saved' || mode === 'override' || mode === 'previous-scene') {
@@ -725,7 +774,7 @@ describe('useUrlLoader', () => {
     const manifest: ColmapManifest = { version: 1, baseUrl: 'https://huggingface.co/datasets/owner/scene/resolve/main/',
       files: { cameras: 'cameras.bin', images: 'images.bin', points3D: 'points3D.bin' }, splats: [] };
     const background = useUIStore.getState().backgroundColor;
-    const { result } = renderHook(() => useUrlLoader());
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
     let pending!: Promise<boolean>;
     act(() => { pending = result.current.loadFromManifest(manifest); });
     await waitFor(() => expect(responders.has(settingsUrl)).toBe(true));
@@ -741,7 +790,7 @@ describe('useUrlLoader', () => {
       ? 'ui:\n  background_color: "#123456"' : 'splat bytes'));
     vi.stubGlobal('fetch', request);
     processFilesMock.mockResolvedValueOnce();
-    const { result } = renderHook(() => useUrlLoader());
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
     await act(async () => { expect(await result.current.loadFromUrl('https://example.com/project/scene.spz')).toBe(true); });
     expect(processFilesMock).toHaveBeenCalledOnce();
     expect(useUIStore.getState().backgroundColor).toBe('#123456');
@@ -757,7 +806,7 @@ describe('useUrlLoader', () => {
       ? new Promise<Response>(() => {}) : Promise.resolve(new Response('splat bytes')));
     vi.stubGlobal('fetch', request);
     processFilesMock.mockResolvedValueOnce();
-    const { result } = renderHook(() => useUrlLoader());
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
     let pending!: Promise<boolean>;
     act(() => { pending = result.current.loadFromUrl('https://example.com/project/scene.spz'); });
     await act(async () => {
@@ -765,15 +814,38 @@ describe('useUrlLoader', () => {
       await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS);
       expect(await pending).toBe(true);
     });
-    expect(useNotificationStore.getState().notifications).toContainEqual(expect.objectContaining({
-      type: 'warning', message: OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE }));
+    expect(settingsTimeoutWarnings()).toEqual([expect.objectContaining({ type: 'warning' })]);
     // The warning describes that load; the next one removes it as soon as it starts.
     let next!: Promise<boolean>;
     act(() => { next = result.current.loadFromUrl('https://example.com/project/other.spz'); });
-    expect(useNotificationStore.getState().notifications).not.toContainEqual(expect.objectContaining({
-      message: OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE }));
+    expect(settingsTimeoutWarnings()).toEqual([]);
     act(() => useReconstructionStore.getState().cancelLoading());
     await act(async () => { expect(await next).toBe(false); });
+  });
+
+  it.each([
+    { inside: false, warnings: 1 },
+    { inside: true, warnings: 0 },
+  ])('warns about settings beside an archive that do not arrive in time (settings inside: $inside)', async ({ inside, warnings }) => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Blob', NodeBlob);
+    const request = vi.fn((_url: string | URL) => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', request);
+    const files = new Map([['cameras.bin', new File(['c'], 'cameras.bin')]]);
+    if (inside) files.set('colmapview.yaml', new File(['ui: {}'], 'colmapview.yaml'));
+    vi.spyOn(archiveSource, 'loadZipUrlSource').mockImplementation(async (_url, deps) =>
+      (await deps.processFiles(files, undefined, { throwOnError: true })) !== false);
+    processFilesMock.mockResolvedValueOnce();
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
+    let pending!: Promise<boolean>;
+    act(() => { pending = result.current.loadFromUrl('https://example.com/project/scene.tar'); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS);
+      expect(await pending).toBe(true);
+    });
+    // Settings inside the archive are the dataset's own; nothing is fetched beside it.
+    expect(request.mock.calls.map(([url]) => String(url))).toEqual(inside ? [] : ['https://example.com/project/colmapview.yaml']);
+    expect(settingsTimeoutWarnings()).toHaveLength(warnings);
   });
 
   it.each(['document', 'combined', 'binary', 'legacy'] as const)('restores a published view with %s URL precedence', async format => {
@@ -894,12 +966,13 @@ describe('useUrlLoader', () => {
   });
 
   it('keeps URL loading active after a direct splat URL hands off to the renderer', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      blob: vi.fn(async () => new Blob(['splat'], { type: 'application/octet-stream' })),
-    })));
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL) => String(url).endsWith('colmapview.yaml')
+      ? new Response(null, { status: 404 }) : ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        blob: vi.fn(async () => new Blob(['splat'], { type: 'application/octet-stream' })),
+      })));
     processFilesMock.mockImplementation(async (files, _range, options) => {
       options?.onSceneReplaced?.();
       const splatFile = files.get('scene.spz');
@@ -991,6 +1064,7 @@ describe('useUrlLoader', () => {
       { type: 'file', path: 'splats/huge.spz', size: 1_040_000_634 },
     ];
     const fetchMock = vi.fn(async (url: string | URL) => {
+      if (String(url).endsWith('colmapview.yaml')) return new Response(null, { status: 404 });
       if (String(url).startsWith('https://huggingface.co/api/datasets/Acme/Scene/tree/main')) {
         return {
           ok: true,

@@ -6,12 +6,17 @@ import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import type { ColmapManifest } from '../types/manifest';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
+import { appLogger } from '../utils/logger';
+import * as datasetViewerSettings from '../utils/datasetViewerSettings';
 
 const manifest: ColmapManifest = { version: 1, baseUrl: 'https://huggingface.co/datasets/owner/scene/resolve/abc/',
   files: { cameras: 'cameras.bin', images: 'images.bin', points3D: 'points3D.bin' }, viewerStatePath: 'colmapview-state.json' };
 const state: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null, config: { transform: createIdentityEuler(), splat: { transform: { ...createIdentityEuler(), translationX: 5 } } } };
+const SKIPPED_SETTINGS_WARNING = '[URL Loader] Skipping unavailable or invalid colmapview.yaml settings.';
+/** Lets a request that is already answered finish before anything asks for its result. */
+const flushRequest = () => new Promise(resolve => setTimeout(resolve, 0));
 beforeEach(() => vi.stubGlobal('Blob', NodeBlob));
-afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('manifest viewer-state loading', () => {
   it('bounds automatic direct-file metadata and aborts the stalled request', async () => {
@@ -64,19 +69,41 @@ describe('manifest viewer-state loading', () => {
   });
 
   it('returns settings that arrived before they were needed, once, without a second deadline', async () => {
+    const parse = vi.spyOn(datasetViewerSettings, 'parseDatasetViewerSettings');
     const request = vi.fn(async () => new Response('ui:\n  background_color: "#123456"\n'));
     const pending = startOptionalDatasetViewerSettings(manifest.baseUrl, request);
+    await flushRequest();
+    expect(parse).toHaveBeenCalledOnce();
+    vi.useFakeTimers();
     const first = pending.settle();
     expect(pending.settle()).toBe(first);
+    expect(vi.getTimerCount()).toBe(1);
     await expect(first).resolves.toMatchObject({ timedOut: false, state: { config: { ui: { backgroundColor: '#123456' } } } });
+    expect(vi.getTimerCount()).toBe(0);
     expect(request).toHaveBeenCalledOnce();
   });
 
   it('counts a transport timeout that happened before the result was needed as a timeout', async () => {
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
     // fetchWithTimeout gives up on a stalled request after 30 s, long before slow parsing ends.
     const request = vi.fn(async (): Promise<Response> => { throw new DOMException('Request timed out', 'TimeoutError'); });
     const pending = startOptionalDatasetViewerSettings(manifest.baseUrl, request);
+    await flushRequest();
+    // The request has already failed when the result is first needed.
+    expect(warn).toHaveBeenCalledExactlyOnceWith(SKIPPED_SETTINGS_WARNING);
     await expect(pending.settle()).resolves.toEqual({ state: null, timedOut: true });
+  });
+
+  it('rejects at once when the load was cancelled before the settings were needed, even if the request ignores it', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const pending = startOptionalDatasetViewerSettings(manifest.baseUrl, () => new Promise<Response>(() => {}), false, controller.signal);
+    controller.abort();
+    const settled = expect(pending.settle()).rejects.toMatchObject({ name: 'AbortError' });
+    // No deadline is armed for a load that is already gone; the cancellation, not a timeout, answers.
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS);
+    await settled;
   });
 
   it('counts a transport timeout reported as a plain AbortError as a timeout', async () => {
@@ -101,8 +128,10 @@ describe('manifest viewer-state loading', () => {
   });
 
   it('still reports a timed-out direct read as missing settings', async () => {
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
     const request = vi.fn(async (): Promise<Response> => { throw new DOMException('Request timed out', 'TimeoutError'); });
     await expect(fetchDatasetViewerSettings(manifest.baseUrl, request)).resolves.toBeNull();
+    expect(warn).toHaveBeenCalledExactlyOnceWith(SKIPPED_SETTINGS_WARNING);
   });
   it.each(['json', 'yaml'])('loads %s settings at the immutable dataset revision, including older JSON publications', async format => {
     const path = format === 'yaml' ? 'colmapview.yaml' : 'colmapview-state.json';
@@ -164,11 +193,14 @@ describe('manifest viewer-state loading', () => {
     await expect(fetchDatasetViewerSettings(manifest.baseUrl, vi.fn().mockResolvedValue(new Response('', { status })))).resolves.toBeNull();
   });
   it('skips invalid or oversized optional YAML but rejects invalid explicitly referenced YAML', async () => {
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
     const invalid = () => vi.fn().mockResolvedValue(new Response('version: 200'));
     await expect(fetchDatasetViewerSettings(manifest.baseUrl, invalid())).resolves.toBeNull();
     await expect(fetchDatasetViewerSettings(manifest.baseUrl,
       vi.fn().mockResolvedValue(new Response('x', { headers: { 'content-length': '300000' } })))).resolves.toBeNull();
     await expect(fetchPublishedViewerState({ ...manifest, viewerStatePath: 'colmapview.yaml' }, invalid())).rejects.toThrow('invalid');
+    // One warning per skipped optional file; the explicit reference fails loudly instead.
+    expect(warn.mock.calls).toEqual([[SKIPPED_SETTINGS_WARNING], [SKIPPED_SETTINGS_WARNING]]);
   });
   it('propagates cancellation instead of treating it as a missing file', async () => {
     await expect(fetchDatasetViewerSettings(manifest.baseUrl, vi.fn().mockRejectedValue(new DOMException('Cancelled', 'AbortError'))))
