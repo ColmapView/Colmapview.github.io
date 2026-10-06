@@ -62,9 +62,12 @@ function isTransientStatus(status: number): boolean {
   return status === 408 || status === 429 || status >= 500;
 }
 
-/** Fail before replacing the current scene, including Hub's deliberately ambiguous private 404s. */
+/**
+ * Fail before replacing the current scene, including Hub's deliberately ambiguous private 404s.
+ * `signal` is the load's own; while it is live, an AbortError means a stalled Hub API.
+ */
 export async function checkHuggingFaceDatasetAccess(infoUrl: string,
-  fetchImpl: (url: string, init?: RequestInit) => Promise<Response>): Promise<void> {
+  fetchImpl: (url: string, init?: RequestInit) => Promise<Response>, signal?: AbortSignal): Promise<void> {
   // Only the status is needed. Avoid generating the repo's complete sibling listing.
   const accessUrl = new URL(infoUrl);
   accessUrl.searchParams.delete('expand[]');
@@ -73,9 +76,10 @@ export async function checkHuggingFaceDatasetAccess(infoUrl: string,
   try {
     response = await fetchImpl(accessUrl.href);
   } catch (error) {
-    // Cancellation and the account answers raised while fetching stand.
-    if (error instanceof HfError
-      || (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError')) throw error;
+    // Cancellation and the account answers raised while fetching stand. Some engines report the
+    // transport timeout as a plain AbortError too.
+    const aborted = Boolean(error && typeof error === 'object' && 'name' in error && error.name === 'AbortError');
+    if (error instanceof HfError || (aborted && (!signal || signal.aborted))) throw error;
     appLogger.warn('[Hugging Face] Dataset access check failed; continuing with the dataset files.', error);
     return;
   }

@@ -215,7 +215,7 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
     const hfInfoUrl = huggingFaceDatasetInfoUrl(normalizedUrl);
     if (hfInfoUrl) {
       load.setUrlProgress({ percent: 0, message: 'Checking Hugging Face dataset access...' });
-      await checkHuggingFaceDatasetAccess(hfInfoUrl, load.fetchImpl);
+      await checkHuggingFaceDatasetAccess(hfInfoUrl, load.fetchImpl, load.signal);
       load.assertCurrent();
     }
 
@@ -277,7 +277,7 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
       if (hfInfoUrl) {
         load.clearCachesOnFailure = false;
         load.setUrlProgress({ percent: 0, message: 'Checking Hugging Face dataset access...' });
-        await checkHuggingFaceDatasetAccess(hfInfoUrl, load.fetchImpl);
+        await checkHuggingFaceDatasetAccess(hfInfoUrl, load.fetchImpl, load.signal);
         load.assertCurrent();
       }
       load.setUrlProgress({ percent: 1, message: 'Loading dataset files...' });

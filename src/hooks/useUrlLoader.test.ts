@@ -16,7 +16,7 @@ import { getActiveSplatSourceId, getShareActiveSplatSourceId } from '../utils/sp
 import { hfAuth, type HfAuthState } from '../features/huggingface/auth';
 import * as archiveSource from './urlLoaderZipSource';
 import { processFileDropzoneFiles } from './fileDropzoneWorkflow';
-import { noopLogger } from '../utils/logger';
+import { appLogger, noopLogger } from '../utils/logger';
 import { useNotificationStore } from '../store/stores/notificationStore';
 import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE, OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS } from './urlLoaderViewerState';
 
@@ -142,6 +142,27 @@ describe('useUrlLoader', () => {
     const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
     await act(async () => { expect(await result.current.loadFromUrl('https://huggingface.co/datasets/owner/public')).toBe(true); });
     expect(processFilesMock).toHaveBeenCalledOnce();
+  });
+
+  it.each(['url', 'inline'] as const)('keeps loading a public HF dataset (%s) when the stalled access check reports a plain AbortError', async mode => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const repo = 'https://huggingface.co/datasets/owner/public';
+    const request = vi.fn(async (url: string) => {
+      // Engines without abort-reason propagation report the transport timeout this way.
+      if (url.endsWith('?expand=private')) throw new DOMException('The operation was aborted.', 'AbortError');
+      if (url.includes('/tree/')) return Response.json(['cameras', 'images', 'points3D'].map(name => ({ type: 'file', path: `sparse/0/${name}.bin` })));
+      if (/(cameras|images|points3D)\.bin$/.test(url)) return new Response(new Uint8Array([1, 2, 3]));
+      return new Response(null, { status: 404 });
+    });
+    vi.stubGlobal('fetch', request);
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
+    const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
+    await act(async () => {
+      expect(await (mode === 'url' ? result.current.loadFromUrl(repo)
+        : result.current.loadFromManifest(createDefaultManifest(`${repo}/resolve/main/`)))).toBe(true);
+    });
+    expect(processFilesMock).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Dataset access check failed'), expect.any(DOMException));
   });
 
   it('cancels a private repository check without clearing or replacing the current scene', async () => {

@@ -7,6 +7,7 @@ import { fetchDatasetResource } from '../../utils/fetchDatasetResource';
 import { downloadZip } from '../../utils/zipDownload';
 import { UrlMediaScheduler } from '../../dataset/urlMediaScheduler';
 import { getOrLoadFrustumBitmap } from '../../hooks/frustumTextureCache';
+import { appLogger } from '../../utils/logger';
 
 vi.mock('./auth', () => ({ hfAuth: { getReadAccessToken: vi.fn(), getSnapshot: vi.fn(), expire: vi.fn() } }));
 const root = 'https://huggingface.co/datasets/owner/scene/resolve/main/';
@@ -256,6 +257,26 @@ describe('Hugging Face private dataset reads', () => {
   ])('still stops on %s', async (_label, error) => {
     const fetchImpl = vi.fn(async (): Promise<Response> => { throw error; });
     await expect(checkHuggingFaceDatasetAccess(info, fetchImpl)).rejects.toBe(error);
+  });
+
+  it('lets the dataset files decide when a stalled Hub API times out as a plain AbortError', async () => {
+    // Engines without abort-reason propagation report the transport timeout this way.
+    const fetchImpl = vi.fn(async (): Promise<Response> => { throw new DOMException('The operation was aborted.', 'AbortError'); });
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
+    try {
+      await expect(checkHuggingFaceDatasetAccess(info, fetchImpl, new AbortController().signal)).resolves.toBeUndefined();
+      expect(warn).toHaveBeenCalledOnce();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('still stops when the load was cancelled', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const error = new DOMException('The operation was aborted.', 'AbortError');
+    const fetchImpl = vi.fn(async (): Promise<Response> => { throw error; });
+    await expect(checkHuggingFaceDatasetAccess(info, fetchImpl, controller.signal)).rejects.toBe(error);
   });
 
   it.each([400, 401, 403, 410])('still stops on a definitive %s answer', async status => {
