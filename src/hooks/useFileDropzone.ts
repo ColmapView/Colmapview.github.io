@@ -19,6 +19,7 @@ import { loadBrowsedDirectory, loadDropPayload, loadLocalZipFile } from './fileD
 import { processFileDropzoneFiles, type FileDropzoneWorkflowOptions } from './fileDropzoneWorkflow';
 import { applySavedViewerState } from './useUrlState';
 import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
+import type { PublishedViewerState } from '../utils/publishedViewerState';
 
 function cancelUrlLoad(): void {
   const { urlLoadController, finishUrlLoad } = useReconstructionStore.getState();
@@ -34,6 +35,14 @@ function beginLocalLoad() {
     onViewerState: (state: Parameters<typeof applySavedViewerState>[0]) =>
       applySavedViewerState(state, null, load.assertCurrent, initialSplatSelectionRevision),
   };
+}
+
+/** Reload keeps the splat on screen; re-apply everything else the dataset saved. */
+function withoutSplatChoice(state: PublishedViewerState): PublishedViewerState {
+  if (state.config.splat?.activeSourceId === undefined) return state;
+  const splat = { ...state.config.splat };
+  delete splat.activeSourceId;
+  return { ...state, config: { ...state.config, splat } };
 }
 
 export function useFileDropzone() {
@@ -131,11 +140,12 @@ export function useFileDropzone() {
 
   /** Re-read the current dataset (discarding edits) without dropping its remote splat tiles. */
   const reloadFiles = useCallback((files: Map<string, File>) => {
-    // A URL dataset's saved settings are not among its files; re-apply them like a project's own YAML.
+    // A URL dataset's saved settings are not among its files; re-apply them like a project's own YAML,
+    // but keep the splat on screen.
     const retained = useReconstructionStore.getState().sourceViewerState;
     return processFiles(files, undefined, {
       preserveRemoteSplatSources: true,
-      viewerState: retained?.files === files ? retained.state : undefined,
+      viewerState: retained?.files === files ? withoutSplatChoice(retained.state) : undefined,
     });
   }, [processFiles]);
 

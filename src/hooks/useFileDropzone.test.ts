@@ -7,6 +7,7 @@ import { useFileDropzone } from './useFileDropzone';
 import { buildFile, buildFileSystemFileEntry, buildLoadedFiles, buildReconstruction } from '../test/builders';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
+import { createIdentityEuler } from '../utils/sim3dTransforms';
 
 const { processFileDropzoneFilesMock } = vi.hoisted(() => ({
   processFileDropzoneFilesMock: vi.fn(async () => true),
@@ -246,5 +247,23 @@ describe('useFileDropzone', () => {
     await act(async () => { await result.current.reloadFiles(other); });
     expect(processFileDropzoneFilesMock).toHaveBeenLastCalledWith(other, expect.anything(),
       expect.objectContaining({ viewerState: undefined }));
+  });
+
+  it('keeps the splat on screen when Reload re-applies saved source settings', async () => {
+    const files = new Map([['cameras.bin', buildFile('cameras.bin')]]);
+    const transform = { ...createIdentityEuler(), translationX: 5 };
+    const saved: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { activeSourceId: 'splats/a.spz', transform } } };
+    useReconstructionStore.getState().setDroppedFiles(files);
+    useReconstructionStore.getState().setSourceViewerState(saved);
+    const { result } = renderHook(() => useFileDropzone());
+
+    await act(async () => { await result.current.reloadFiles(files); });
+
+    // The alignment comes back; the saved splat choice does not replace the splat on screen.
+    expect(processFileDropzoneFilesMock).toHaveBeenLastCalledWith(files, expect.anything(),
+      expect.objectContaining({ viewerState: expect.objectContaining({ config: { splat: { transform } } }) }));
+    expect(useReconstructionStore.getState().sourceViewerState?.state.config.splat)
+      .toEqual({ activeSourceId: 'splats/a.spz', transform });
   });
 });

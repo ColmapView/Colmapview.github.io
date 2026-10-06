@@ -178,7 +178,7 @@ interface ReconstructionState {
   /**
    * Saved settings a URL dataset brought from its source (its colmapview.yaml or published
    * state), bound to the file map they came with. Reload re-applies them like a local
-   * project's own YAML.
+   * project's own YAML, but keeps the splat on screen.
    */
   sourceViewerState: { files: Map<string, File>; state: PublishedViewerState } | null;
   setSourceViewerState: (state: PublishedViewerState | null) => void;
