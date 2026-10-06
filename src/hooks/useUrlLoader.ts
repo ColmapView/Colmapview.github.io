@@ -25,7 +25,7 @@ import { handleUrlLoadFailure } from './urlLoaderErrorHandling';
 import { loadZipUrlSource } from './urlLoaderZipSource';
 import { loadManifestSource } from './urlLoaderManifestSource';
 import { isSplatUrl, loadSplatUrlSource } from './urlLoaderSplatSource';
-import { applySavedViewerState, decodeSharedViewerOverrides } from './useUrlState';
+import { applySavedViewerState, decodeSharedViewerOverrides, resolveRestoredSplatSourceId } from './useUrlState';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { fetchOptionalDatasetViewerSettings } from './urlLoaderViewerState';
 import { findDatasetViewerSettingsEntry } from '../utils/datasetViewerSettings';
@@ -61,6 +61,7 @@ interface UrlLoadContext {
   setUrlProgress: ReconstructionState['setUrlProgress'];
   clearCachesOnFailure: boolean;
   hasEmbeddedViewerSettings: boolean;
+  remoteCatalogMerged: boolean;
 }
 
 /** Owns URL discovery, downloading, and the handoff to reconstruction parsing. */
@@ -109,10 +110,8 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
       // Recorded here and applied once the load succeeds, together with the URL's own settings.
       onViewerState: async (state) => { assertCurrent(); savedViewerState = state; },
       onRemoteSplatCatalog: guard((catalog: RemoteSplatCandidate[], baseUrl = contextUrl) => {
-        const before = useReconstructionStore.getState();
-        const keepPickerClosed = !before.showSplatPicker && before.splatSelectionRevision !== initialSplatSelectionRevision;
         mergeRemoteSplatCatalog(catalog, baseUrl);
-        if (keepPickerClosed) useReconstructionStore.getState().setShowSplatPicker(false);
+        load.remoteCatalogMerged = true;
       }),
       onAutoSplatSource: guard(sourceId => { autoSplatSourceId = sourceId; }),
       signal,
@@ -134,6 +133,7 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
       setUrlProgress: guard(setUrlProgress),
       clearCachesOnFailure: false,
       hasEmbeddedViewerSettings: false,
+      remoteCatalogMerged: false,
     };
     setUrlLoading(true);
     setUrlError(null);
@@ -149,6 +149,13 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
       if (loaded) {
         await applySavedViewerState(savedViewerState, shared, assertCurrent, initialSplatSelectionRevision, autoSplatSourceId);
         assertCurrent();
+        // Ask only once restoration settled: an automatic or saved splat downloads without a
+        // picker over it, and an explicit None or a choice made during the load stands.
+        if (load.remoteCatalogMerged
+          && resolveRestoredSplatSourceId(savedViewerState, shared, autoSplatSourceId) !== ''
+          && useReconstructionStore.getState().splatSelectionRevision === initialSplatSelectionRevision) {
+          useReconstructionStore.getState().offerSplatPicker();
+        }
       }
       return loaded;
     } catch (error) {

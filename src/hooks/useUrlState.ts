@@ -92,6 +92,12 @@ async function activateSavedSplat(sourceId: string, assertCurrent: () => void): 
   assertCurrent();
 }
 
+/** The splat a finished load restores: the viewer URL's choice, then the saved one, then the automatic pick. */
+export function resolveRestoredSplatSourceId(saved: PublishedViewerState | null, shared: SharedViewerOverrides | null,
+  autoSplatSourceId?: string): string | undefined {
+  return shared?.config?.splat?.activeSourceId ?? saved?.config.splat?.activeSourceId ?? autoSplatSourceId;
+}
+
 /**
  * The one place a finished load restores viewer settings: the dataset's saved state first, then the
  * viewer URL's shared settings on top. Without saved state only the URL config applies; useUrlState
@@ -109,7 +115,7 @@ export async function applySavedViewerState(saved: PublishedViewerState | null, 
     delete splat.activeSourceId;
     return { ...config, splat };
   };
-  const sourceId = shared?.config?.splat?.activeSourceId ?? saved?.config.splat?.activeSourceId ?? autoSplatSourceId;
+  const sourceId = resolveRestoredSplatSourceId(saved, shared, autoSplatSourceId);
   assertCurrent();
   if (sourceId !== undefined && canRestoreSplatSelection()) await activateSavedSplat(sourceId, assertCurrent);
   // A choice made before or during activation wins over both saved and URL source selections.

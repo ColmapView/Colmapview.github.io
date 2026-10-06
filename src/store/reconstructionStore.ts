@@ -216,11 +216,13 @@ interface ReconstructionState {
   setProgress: (progress: number) => void;
   setSourceInfo: (type: ReconstructionSourceType, url?: string | null, imageUrlBase?: string | null, maskUrlBase?: string | null, manifest?: ColmapManifest | null, imageNameToUrl?: Record<string, string> | null) => void;
   setRequestedSplatSourceId: (sourceId: string | null) => void;
-  /** Merge a discovered remote splat catalog so all tiles are listed (lazy). */
+  /** Merge a discovered remote splat catalog so all tiles are listed (lazy). Never opens the picker. */
   mergeRemoteSplatCatalog: (
     catalog: ReadonlyArray<{ path: string; size: number; splatCount?: number | null }>,
     baseUrl: string
   ) => void;
+  /** Ask the user to pick a splat when the dataset lists splats but none is showing. */
+  offerSplatPicker: () => void;
   /** Activate a splat source by id, fetching it on demand if not yet downloaded. */
   selectSplatSource: (sourceId: string, options?: { restore?: boolean }) => Promise<void>;
   /** Show or hide the splat picker popup. */
@@ -371,10 +373,11 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       return;
     }
     set({ loadedFiles: mergeRemoteSplatCatalogIntoLoadedFiles(loadedFiles, catalog, baseUrl) });
-    // Splats that weren't auto-loaded (multiple candidates, or a lone one over
-    // the auto-load size budget) need an explicit choice; pop up the picker so
-    // the user picks one (or stays on COLMAP) as part of finishing the load.
-    if (catalog.length >= 1 && !get().loadedFiles?.splatFile) {
+  },
+
+  offerSplatPicker: () => {
+    const loadedFiles = get().loadedFiles;
+    if (loadedFiles?.splatFileSources?.length && !loadedFiles.splatFile) {
       set({ showSplatPicker: true });
     }
   },

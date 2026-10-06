@@ -60,6 +60,13 @@ function createSplatLoadedFiles(splatFile: File): LoadedFiles {
   };
 }
 
+function hubEntries(splats: Array<{ path: string; size: number }>) {
+  return [
+    ...['cameras', 'images', 'points3D'].map(name => ({ type: 'file', path: `sparse/0/${name}.bin`, size: 10 })),
+    ...splats.map(splat => ({ type: 'file', ...splat })),
+  ];
+}
+
 describe('useUrlLoader', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -361,7 +368,7 @@ describe('useUrlLoader', () => {
     vi.stubGlobal('fetch', request);
     processFilesMock.mockImplementationOnce(async () => { useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles()); });
     const unsubscribe = useReconstructionStore.subscribe(state => {
-      if (state.showSplatPicker) {
+      if ((state.loadedFiles?.splatFileSources?.length ?? 0) === 2) {
         unsubscribe();
         void state.selectSplatSource('');
       }
@@ -510,6 +517,74 @@ describe('useUrlLoader', () => {
     expect(request.mock.calls.filter(([url]) => String(url).endsWith('.spz'))).toEqual([]);
     expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
     expect(useReconstructionStore.getState().showSplatPicker).toBe(true);
+  });
+
+  it('downloads an automatically chosen splat without opening the picker over it', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const baseUrl = 'https://huggingface.co/datasets/owner/auto/resolve/main/';
+    let respondSplat!: (response: Response) => void;
+    const request = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      if (String(url).endsWith('colmapview.yaml')) return new Response(null, { status: 404 });
+      if (init?.method === 'HEAD') return new Response(null, { headers: { 'content-length': '100' } });
+      if (String(url).endsWith('.spz')) return new Promise<Response>(resolve => { respondSplat = resolve; });
+      if (String(url).includes('/api/datasets/')) return Response.json(hubEntries([{ path: 'splats/scene.spz', size: 100 }]));
+      return new Response(new Uint8Array([1, 2, 3]));
+    });
+    vi.stubGlobal('fetch', request);
+    processFilesMock.mockImplementationOnce(async () => { useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles()); });
+    const pickerStates: boolean[] = [];
+    const unsubscribe = useReconstructionStore.subscribe(state => { pickerStates.push(state.showSplatPicker); });
+    const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
+    try {
+      let pending!: Promise<boolean>;
+      act(() => { pending = result.current.loadFromUrl(baseUrl); });
+      await waitFor(() => expect(request.mock.calls.some(([url, init]) => String(url).endsWith('.spz') && init?.method !== 'HEAD')).toBe(true));
+      expect(useReconstructionStore.getState().showSplatPicker).toBe(false);
+      await act(async () => {
+        respondSplat(new Response(new Uint8Array([4, 5, 6])));
+        expect(await pending).toBe(true);
+      });
+      expect(getActiveSplatSourceId(useReconstructionStore.getState().loadedFiles)).toBe('splats/scene.spz');
+      expect(pickerStates).not.toContain(true);
+    } finally { unsubscribe(); }
+  });
+
+  it('opens the picker once the load settles when several splats need a choice', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const baseUrl = 'https://huggingface.co/datasets/owner/many/resolve/main/';
+    const request = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      if (String(url).endsWith('colmapview.yaml')) return new Response(null, { status: 404 });
+      if (init?.method === 'HEAD') return new Response(null, { headers: { 'content-length': '100' } });
+      if (String(url).includes('/api/datasets/')) return Response.json(hubEntries([
+        { path: 'splats/a.spz', size: 100 }, { path: 'splats/b.spz', size: 200 }]));
+      return new Response(new Uint8Array([1, 2, 3]));
+    });
+    vi.stubGlobal('fetch', request);
+    processFilesMock.mockImplementationOnce(async () => { useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles()); });
+    const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
+    await act(async () => { expect(await result.current.loadFromUrl(baseUrl)).toBe(true); });
+    expect(useReconstructionStore.getState().showSplatPicker).toBe(true);
+    expect(request.mock.calls.filter(([url, init]) => String(url).endsWith('.spz') && init?.method !== 'HEAD')).toEqual([]);
+  });
+
+  it('asks again when the automatically chosen splat fails to download', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const baseUrl = 'https://huggingface.co/datasets/owner/flaky/resolve/main/';
+    const request = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      if (String(url).endsWith('colmapview.yaml')) return new Response(null, { status: 404 });
+      if (init?.method === 'HEAD') return new Response(null, { headers: { 'content-length': '100' } });
+      if (String(url).endsWith('.spz')) return new Response(null, { status: 404 });
+      if (String(url).includes('/api/datasets/')) return Response.json(hubEntries([{ path: 'splats/scene.spz', size: 100 }]));
+      return new Response(new Uint8Array([1, 2, 3]));
+    });
+    vi.stubGlobal('fetch', request);
+    processFilesMock.mockImplementationOnce(async () => { useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles()); });
+    const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
+    await act(async () => { expect(await result.current.loadFromUrl(baseUrl)).toBe(true); });
+    const state = useReconstructionStore.getState();
+    expect(state.loadedFiles?.splatFile).toBeUndefined();
+    expect(state.urlError?.message).toBe('Failed to load splat');
+    expect(state.showSplatPicker).toBe(true);
   });
 
   it.each(['saved', 'override', 'previous-scene', 'missing', 'invalid'] as const)('loads a Hugging Face project with %s YAML settings', async mode => {
