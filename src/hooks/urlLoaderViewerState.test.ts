@@ -86,6 +86,19 @@ describe('manifest viewer-state loading', () => {
     await expect(pending.settle()).resolves.toEqual({ state: null, timedOut: true });
   });
 
+  it('keeps cancellation fatal when the load is cancelled before the settings are needed', async () => {
+    const controller = new AbortController();
+    // Like fetch, the request rejects with an AbortError once its signal aborts.
+    const request = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')));
+    }));
+    const pending = startOptionalDatasetViewerSettings(manifest.baseUrl, request, false, controller.signal);
+    controller.abort();
+    // The rejected request settles before the result is needed, so settle() sees it, not only the abort.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await expect(pending.settle()).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
   it('still reports a timed-out direct read as missing settings', async () => {
     const request = vi.fn(async (): Promise<Response> => { throw new DOMException('Request timed out', 'TimeoutError'); });
     await expect(fetchDatasetViewerSettings(manifest.baseUrl, request)).resolves.toBeNull();
