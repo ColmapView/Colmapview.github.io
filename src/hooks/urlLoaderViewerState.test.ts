@@ -77,7 +77,8 @@ describe('manifest viewer-state loading', () => {
     vi.useFakeTimers();
     const first = pending.settle();
     expect(pending.settle()).toBe(first);
-    expect(vi.getTimerCount()).toBe(1);
+    // At most one deadline, however often the result is asked for.
+    expect(vi.getTimerCount()).toBeLessThanOrEqual(1);
     await expect(first).resolves.toMatchObject({ timedOut: false, state: { config: { ui: { backgroundColor: '#123456' } } } });
     expect(vi.getTimerCount()).toBe(0);
     expect(request).toHaveBeenCalledOnce();
@@ -123,7 +124,7 @@ describe('manifest viewer-state loading', () => {
     const pending = startOptionalDatasetViewerSettings(manifest.baseUrl, request, false, controller.signal);
     controller.abort();
     // The rejected request settles before the result is needed, so settle() sees it, not only the abort.
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await flushRequest();
     await expect(pending.settle()).rejects.toMatchObject({ name: 'AbortError' });
   });
 

@@ -61,6 +61,8 @@ function createSplatLoadedFiles(splatFile: File): LoadedFiles {
   };
 }
 
+const SKIPPED_SETTINGS_WARNING = '[URL Loader] Skipping unavailable or invalid colmapview.yaml settings.';
+
 /** Timeout warnings on screen; pinning the whole list catches a stacked duplicate. */
 function settingsTimeoutWarnings() {
   return useNotificationStore.getState().notifications
@@ -551,7 +553,7 @@ describe('useUrlLoader', () => {
     expect(useReconstructionStore.getState().showSplatPicker).toBe(true);
     expect(settingsTimeoutWarnings()).toEqual([expect.objectContaining({ type: 'warning' })]);
     // The late answer is logged and dropped; it never applies its None.
-    expect(warn).toHaveBeenCalledExactlyOnceWith('[URL Loader] Skipping unavailable or invalid colmapview.yaml settings.');
+    expect(warn).toHaveBeenCalledExactlyOnceWith(SKIPPED_SETTINGS_WARNING);
   });
 
   it('downloads an automatically chosen splat without opening the picker over it', async () => {
@@ -588,7 +590,8 @@ describe('useUrlLoader', () => {
     vi.stubGlobal('Blob', NodeBlob);
     const baseUrl = 'https://huggingface.co/datasets/owner/many/resolve/main/';
     const request = vi.fn(async (url: string | URL, init?: RequestInit) => {
-      if (String(url).endsWith('colmapview.yaml')) return new Response(null, { status: 404 });
+      // Display-only saved settings: they choose no splat, so the settled load still asks.
+      if (String(url).endsWith('colmapview.yaml')) return new Response('ui:\n  background_color: "#123456"\n');
       if (init?.method === 'HEAD') return new Response(null, { headers: { 'content-length': '100' } });
       if (String(url).includes('/api/datasets/')) return Response.json(hubEntries([
         { path: 'splats/a.spz', size: 100 }, { path: 'splats/b.spz', size: 200 }]));
@@ -596,17 +599,19 @@ describe('useUrlLoader', () => {
     });
     vi.stubGlobal('fetch', request);
     processFilesMock.mockImplementationOnce(async () => { useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles()); });
-    // The picker state at the moment both splats are first listed, i.e. while the load still runs.
-    const pickerWhenListed: boolean[] = [];
-    const unsubscribe = useReconstructionStore.subscribe((state, previous) => {
-      if (state.loadedFiles?.splatFileSources?.length === 2 && previous.loadedFiles?.splatFileSources?.length !== 2) {
-        pickerWhenListed.push(state.showSplatPicker);
-      }
+    // The saved background is restored after the catalog merge and just before the load decides
+    // whether to ask, so an earlier open shows here, whichever store update made it.
+    const whenRestored: Array<{ listed: number; picker: boolean }> = [];
+    const unsubscribe = useUIStore.subscribe((state, previous) => {
+      if (state.backgroundColor === previous.backgroundColor) return;
+      const { loadedFiles, showSplatPicker } = useReconstructionStore.getState();
+      whenRestored.push({ listed: loadedFiles?.splatFileSources?.length ?? 0, picker: showSplatPicker });
     });
     const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
     try {
       await act(async () => { expect(await result.current.loadFromUrl(baseUrl)).toBe(true); });
-      expect(pickerWhenListed).toEqual([false]);
+      // Both splats were listed and the picker was still closed; only the settled load asked.
+      expect(whenRestored).toEqual([{ listed: 2, picker: false }]);
       expect(useReconstructionStore.getState().showSplatPicker).toBe(true);
       expect(request.mock.calls.filter(([url, init]) => String(url).endsWith('.spz') && init?.method !== 'HEAD')).toEqual([]);
     } finally { unsubscribe(); }
@@ -747,8 +752,7 @@ describe('useUrlLoader', () => {
     expect(processFilesMock).toHaveBeenCalledOnce();
     expect(request.mock.calls.map(call => String(call[0]))).toContain(repo + '/resolve/main/colmapview.yaml');
     // Only unreadable settings are worth a warning; a missing file is normal.
-    expect(warn.mock.calls).toEqual(mode === 'invalid'
-      ? [['[URL Loader] Skipping unavailable or invalid colmapview.yaml settings.']] : []);
+    expect(warn.mock.calls).toEqual(mode === 'invalid' ? [[SKIPPED_SETTINGS_WARNING]] : []);
     expect(useUIStore.getState().backgroundColor).toBe(mode === 'override' ? '#abcdef'
       : mode === 'missing' || mode === 'invalid' ? originalBackground : '#123456');
     if (mode === 'saved' || mode === 'override' || mode === 'previous-scene') {

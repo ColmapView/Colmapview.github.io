@@ -276,10 +276,11 @@ describe('Hugging Face private dataset reads', () => {
 
   it('lets the dataset files decide when a stalled Hub API times out as a plain AbortError', async () => {
     // Engines without abort-reason propagation report the transport timeout this way.
-    const fetchImpl = vi.fn(async (): Promise<Response> => { throw new DOMException('The operation was aborted.', 'AbortError'); });
+    const error = new DOMException('The operation was aborted.', 'AbortError');
+    const fetchImpl = vi.fn(async (): Promise<Response> => { throw error; });
     const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
     await expect(checkHuggingFaceDatasetAccess(info, fetchImpl, new AbortController().signal)).resolves.toBeUndefined();
-    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledExactlyOnceWith(CONTINUE_AFTER_FAILED_CHECK, error);
   });
 
   it('still stops when the load was cancelled', async () => {
