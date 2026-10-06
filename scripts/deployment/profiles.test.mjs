@@ -4,7 +4,7 @@ import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'nod
 import { createServer } from 'node:http';
 import path from 'node:path';
 import yaml from 'js-yaml';
-import { CUSTOM_ORIGIN, FIXTURE_GOOGLE_CONFIG, profileEnvironment, safeOutputDirectory, validateBase, validatePreviewConfiguration, validateReleaseConfiguration } from './profiles.mjs';
+import { CUSTOM_ORIGIN, FIXTURE_GOOGLE_CONFIG, WRANGLER_VERSION, profileEnvironment, safeOutputDirectory, validateBase, validatePreviewConfiguration, validateReleaseConfiguration } from './profiles.mjs';
 import { fetchVerifiedArtifact, htmlSha256, verifyPolicyHtml } from './artifact-verification.mjs';
 import { cloudflareStaticHeaders } from './headers.mjs';
 import { startArtifactServer } from './static-server.mjs';
@@ -95,6 +95,18 @@ test('Cloudflare deployment token is scoped only to trusted upload steps', () =>
     if (step.env?.CLOUDFLARE_API_TOKEN) assert.equal(step.name, 'Upload preview only');
   }
   assert.ok(preview.jobs.publish.steps.some(step => step.name === 'Smoke downloaded preview with trusted tests'));
+  // Selected-ref code runs in the default branch's cache scope: it must neither restore nor save the npm cache.
+  const buildSetup = preview.jobs.build.steps.find(step => step.uses?.startsWith('actions/setup-node@'));
+  assert.equal(buildSetup.with.cache, undefined);
+  assert.equal(buildSetup.with['package-manager-cache'], false);
+  assert.ok(!preview.jobs.build.steps.some(step => step.uses?.startsWith('actions/cache')));
+  // Steps holding the token resolve the pinned Wrangler from a fresh job-local npm cache, never a restored ~/.npm.
+  const tokenSteps = [...releaseWorkflow.jobs.deploy.steps, ...preview.jobs.publish.steps].filter(step => step.env?.CLOUDFLARE_API_TOKEN);
+  assert.deepEqual(tokenSteps.map(step => step.name), ['Deploy custom production', 'Upload preview only']);
+  for (const step of tokenSteps) {
+    assert.ok(step.run.startsWith(`npx --yes wrangler@${WRANGLER_VERSION} pages deploy `), step.name);
+    assert.equal(step.env.npm_config_cache, '${{ runner.temp }}/wrangler-npm-cache', step.name);
+  }
 });
 
 test('public verification rejects fresh metadata paired with old HTML and accepts the exact prepared artifact', async () => {

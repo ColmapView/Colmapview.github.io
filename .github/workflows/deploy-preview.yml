@@ -31,8 +31,10 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
-          cache: npm
-      # Selected-ref code is executed only in this credential-free job.
+          # This run is in the default branch's cache scope, which token-holding jobs restore.
+          # Selected-ref code runs below, so never restore or save a dependency cache here.
+          package-manager-cache: false
+      # Selected-ref code is executed only in this credential-free, cache-free job.
       - run: npm ci
       - run: npm run check
       - run: npx playwright install --with-deps chromium
@@ -102,6 +104,8 @@ jobs:
         run: npx --yes wrangler@4.147.0 pages deploy .tmp/deployment/preview --project-name "$CLOUDFLARE_PREVIEW_PROJECT" --branch "$PREVIEW_BRANCH" --commit-hash "$DEPLOYMENT_SHA" --commit-dirty=false
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Fresh job-local cache: never run a restored ~/.npm (_npx install or registry metadata) with the token.
+          npm_config_cache: ${{ runner.temp }}/wrangler-npm-cache
       - name: Verify public preview
         run: node scripts/deployment/check-live.mjs "https://$PREVIEW_BRANCH.$CLOUDFLARE_PREVIEW_PROJECT.pages.dev/" preview --manifest=.tmp/deployment/preview/deployment.json
       - name: Record preview
