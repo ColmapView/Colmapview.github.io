@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="strict-origin" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; script-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'" />
+    <meta name="description" content="ColmapView is an open source browser viewer for COLMAP reconstructions, images, cameras, point clouds, and Gaussian splats. Maintained by OpsiClear LLC." />
+    <title>About ColmapView</title>
+    <link rel="icon" href="./favicon.ico" />
+    <link rel="stylesheet" href="./policy.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <a class="brand" href="./about.html">ColmapView</a>
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="./" >Open viewer</a>
+        <a href="./about.html" aria-current="page">About</a>
+        <a href="./privacy.html">Privacy</a>
+        <a href="./terms.html">Terms</a>
+      </nav>
+    </header>
+    <main id="main" tabindex="-1">
+      <div class="page-intro">
+        <p class="eyebrow">Open source · In your browser</p>
+        <h1>Explore your 3D reconstructions.</h1>
+        <p class="lede">ColmapView displays COLMAP cameras, images, point clouds, and Gaussian splats in an interactive web viewer. Inspect a dataset, adjust the view, and share the results.</p>
+        <div class="actions">
+          <a class="button" href="./">Open ColmapView</a>
+          <a class="button" href="https://github.com/ColmapView/colmapview.github.io">View source code</a>
+        </div>
+      </div>
+      <div class="about-content">
+        <div class="cards">
+          <section class="card" aria-labelledby="local-heading">
+            <p class="feature-label">Local files</p>
+            <h2 id="local-heading">View without an account</h2>
+            <p>Drop supported files, folders, or archives into the viewer. Reconstruction processing and rendering run in your browser. Selecting local files does not upload them to a ColmapView server.</p>
+          </section>
+          <section class="card" aria-labelledby="remote-heading">
+            <p class="feature-label">Remote datasets</p>
+            <h2 id="remote-heading">Open a dataset URL</h2>
+            <p>Load supported public archives, Hugging Face datasets, and manifests. Your browser retrieves files from the source you choose; the source controls access and availability.</p>
+          </section>
+          <section class="card" aria-labelledby="private-heading">
+            <p class="feature-label">Optional account access</p>
+            <h2 id="private-heading">Read private datasets</h2>
+            <p>Where sign-in is enabled, connect Google Drive and select a private ZIP or TAR archive through Google's file picker, or connect Hugging Face to open a private dataset, folder, manifest, or archive. Your provider asks you to approve access.</p>
+          </section>
+          <section class="card" aria-labelledby="publish-heading">
+            <p class="feature-label">Explicit publication</p>
+            <h2 id="publish-heading">Publish the current dataset</h2>
+            <p>Where publishing is enabled, create a new public Hugging Face dataset or upload a private ZIP to Google Drive. Drive link sharing is optional. Publication can include original images, masks, splats, viewer settings, and a preview.</p>
+          </section>
+        </div>
+        <section class="about-section" aria-labelledby="accounts-heading">
+          <h2 id="accounts-heading">Why account permissions are requested</h2>
+          <p>Google Drive uses per-file access for archives you select through Google's file picker and dataset ZIPs created by the app. Pasting a private link alone does not grant access. Hugging Face read access lets the viewer download private repository files; publishing requests permission to create and write a new dataset repository.</p>
+          <p>Connecting an account does not start a publication. Tokens stay in the current tab's memory. Disconnecting ends future authenticated requests but does not erase files already loaded in the browser or uploaded to a provider. See the <a href="./privacy.html">privacy policy</a> for data handling and removal options.</p>
+        </section>
+        <section class="about-section" aria-labelledby="availability-heading">
+          <h2 id="availability-heading">Availability</h2>
+          <p>ColmapView is under active development. Account features depend on the configuration of the viewer you open and on provider approval and account permissions. Development previews may use providers' testing mode.</p>
+          <p>Google Drive loading and publishing are available only on the hosted viewer at <a href="https://colmapview.opsiclear.com">colmapview.opsiclear.com</a>. Drive loading supports public ZIP and TAR links, including compressed TAR, and private archive selection through Google's file picker. Drive folder loading is not available; the Drive publisher creates ZIP files. Other local and remote sources retain their supported archive formats. The current Hugging Face publisher creates public dataset repositories. The viewer shows which account and publishing features are available in the version you open.</p>
+        </section>
+        <section class="about-section" aria-labelledby="contact-heading">
+          <h2 id="contact-heading">Project and contact</h2>
+          <dl class="contact-details">
+            <dt>Maintainer</dt>
+            <dd>OpsiClear LLC</dd>
+            <dt>Support, privacy questions, and private reports</dt>
+            <dd><a href="mailto:info@opsiclear.com">info@opsiclear.com</a></dd>
+            <dt>Source code and public bug reports</dt>
+            <dd><a href="https://github.com/ColmapView/colmapview.github.io">GitHub repository</a> · <a href="https://github.com/ColmapView/colmapview.github.io/issues">Issue tracker</a></dd>
+          </dl>
+          <p>GitHub issues are public. Send private account, security, or data concerns by email, and do not include access tokens or private dataset links in a public report.</p>
+        </section>
+      </div>
+    </main>
+    <footer class="site-footer">
+      <p>ColmapView · Maintained by OpsiClear LLC</p>
+      <nav class="footer-links" aria-label="Footer navigation">
+        <a href="./privacy.html">Privacy</a>
+        <a href="./terms.html">Terms</a>
+        <a href="mailto:info@opsiclear.com">Contact</a>
+      </nav>
+    </footer>
+  </body>
+</html>
