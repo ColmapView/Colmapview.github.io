@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LoadedFiles } from '../types/colmap';
 import type { UrlLoadProgress } from '../types/manifest';
-import { abandonUrlAutoLoadRequest, hasUrlToLoad, useReconstructionStore } from './reconstructionStore';
+import { abandonUrlAutoLoadRequest, clearUrlLoadRequestFromLocation, hasUrlToLoad, useReconstructionStore } from './reconstructionStore';
 import { usePointCloudStore } from './stores/pointCloudStore';
 import { useSplatBackendStore } from './stores/splatBackendStore';
 import { useTransformStore } from './stores/transformStore';
@@ -122,6 +122,22 @@ describe('reconstruction store URL load lifecycle', () => {
     useReconstructionStore.getState().setDroppedFiles(files);
     useReconstructionStore.getState().setSourceViewerState(state);
     useReconstructionStore.getState().clear();
+    expect(useReconstructionStore.getState().sourceViewerState).toBeNull();
+  });
+
+  it('keeps saved source settings only while files are loaded, and forgets them on null', () => {
+    const state: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null, config: { ui: { backgroundColor: '#123456' } } };
+    // Without files there is nothing for Reload to re-read, so nothing to bind the settings to.
+    useReconstructionStore.getState().setSourceViewerState(state);
+    expect(useReconstructionStore.getState().sourceViewerState).toBeNull();
+
+    const files = new Map([['cameras.bin', new File([''], 'cameras.bin')]]);
+    useReconstructionStore.getState().setDroppedFiles(files);
+    useReconstructionStore.getState().setSourceViewerState(state);
+    expect(useReconstructionStore.getState().sourceViewerState).toEqual({ files, state });
+
+    // A load without saved settings replaces the previous dataset's.
+    useReconstructionStore.getState().setSourceViewerState(null);
     expect(useReconstructionStore.getState().sourceViewerState).toBeNull();
   });
 
@@ -468,12 +484,38 @@ describe('reconstruction store URL load lifecycle', () => {
       splatFileSources: [{ id: 'a.spz', path: 'a.spz', file: fileA }],
     }));
     const progress = getSplatLoadingProgress(fileA, { startPercent: 60 });
-    useReconstructionStore.setState({ urlLoading: true, urlProgress: progress });
+    // The loading state belongs to the renderer, including an error it is showing.
+    const urlError = { type: 'network' as const, message: 'Failed to load splat' };
+    useReconstructionStore.setState({ urlLoading: true, urlProgress: progress, urlError });
 
     await useReconstructionStore.getState().selectSplatSource('a.spz', { restore: true });
 
     expect(useReconstructionStore.getState().urlLoading).toBe(true);
     expect(useReconstructionStore.getState().urlProgress).toBe(progress);
+    expect(useReconstructionStore.getState().urlError).toBe(urlError);
+  });
+
+  it('clears the decoding splat\'s progress when switching to another downloaded splat of the same name', async () => {
+    const fileA = new File(['a'], 'scene.spz');
+    const fileB = new File(['b'], 'scene.spz');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFile: fileA, splatFiles: [fileA, fileB],
+      splatFileSources: [
+        { id: 'a/scene.spz', path: 'a/scene.spz', file: fileA },
+        { id: 'b/scene.spz', path: 'b/scene.spz', file: fileB },
+      ],
+    }));
+    // The renderer is decoding a/scene.spz; by name alone its progress would also match b/scene.spz.
+    useReconstructionStore.setState({ urlLoading: true, urlProgress: getSplatLoadingProgress(fileA, { startPercent: 60 }),
+      urlError: { type: 'network', message: 'Failed to load splat' } });
+
+    await useReconstructionStore.getState().selectSplatSource('b/scene.spz');
+
+    const state = useReconstructionStore.getState();
+    expect(state.loadedFiles?.splatFile).toBe(fileB);
+    expect(state.urlLoading).toBe(false);
+    expect(state.urlProgress).toBeNull();
+    expect(state.urlError).toBeNull();
   });
 
   it('still clears a superseded download indicator when switching to a downloaded splat', async () => {
@@ -1219,6 +1261,30 @@ describe('abandonUrlAutoLoadRequest', () => {
   });
 });
 
+describe('clearUrlLoadRequestFromLocation', () => {
+  function locationAt(href: string) {
+    const replaceState = vi.fn();
+    return { win: { location: { href } as Location, history: { replaceState } as unknown as History }, replaceState };
+  }
+
+  it.each([
+    ['https://viewer.example/app/#d=abc', '/app/'],
+    ['https://viewer.example/app/#d=abc&foo=bar', '/app/#foo=bar'],
+    ['https://viewer.example/app/?url=https%3A%2F%2Fx.example%2Fscene&keep=1#d=abc', '/app/?keep=1'],
+    ['https://viewer.example/app/?keep=1#foo=bar', '/app/?keep=1#foo=bar'],
+  ])('rewrites %s to %s', (href, expected) => {
+    const { win, replaceState } = locationAt(href);
+    clearUrlLoadRequestFromLocation(win);
+    expect(replaceState).toHaveBeenCalledExactlyOnceWith(null, '', expected);
+  });
+
+  it('never lets a failed URL rewrite block the cancel', () => {
+    const win = { location: { href: 'https://viewer.example/#d=abc' } as Location,
+      history: { replaceState: () => { throw new DOMException('Blocked', 'SecurityError'); } } as unknown as History };
+    expect(() => clearUrlLoadRequestFromLocation(win)).not.toThrow();
+  });
+});
+
 describe('reconstruction store splat renderer sync', () => {
   beforeEach(() => {
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
@@ -1411,6 +1477,31 @@ describe('reconstruction store loading cancellation', () => {
     useReconstructionStore.getState().cancelLoading();
     expect(hasUrlToLoad()).toBe(false);
     expect(useReconstructionStore.getState().urlLoading).toBe(false);
+  });
+
+  it('strips a shared #d= link cancelled before anything loaded, keeping other hash parameters', () => {
+    window.history.replaceState(null, '', '/#d=eyJ4IjoxfQ&foo=bar');
+    useReconstructionStore.setState({ urlLoading: true, urlProgress: { percent: 0, message: 'Initializing...' } });
+
+    useReconstructionStore.getState().cancelLoading();
+
+    expect(hasUrlToLoad()).toBe(false);
+    expect(window.location.hash).toBe('#foo=bar');
+  });
+
+  it('strips a shared #d= link when cancelling its splat-only decode returns to the landing page', () => {
+    window.history.replaceState(null, '', '/#d=eyJ4IjoxfQ');
+    const splat = new File(['a'], 'scene.spz');
+    useReconstructionStore.getState().setLoadedFiles({ imageFiles: new Map(), hasMasks: false,
+      splatFile: splat, splatFiles: [splat], splatFileSources: [{ id: 'scene.spz', path: 'scene.spz', file: splat }] });
+    useReconstructionStore.setState({ reconstruction: buildReconstruction(), urlLoading: true,
+      urlProgress: getSplatLoadingProgress(splat, { startPercent: 60 }) });
+
+    useReconstructionStore.getState().cancelLoading();
+
+    expect(useReconstructionStore.getState().loadedFiles).toBeNull();
+    expect(hasUrlToLoad()).toBe(false);
+    expect(window.location.hash).toBe('');
   });
 
   it('keeps the address bar when a scene is already loaded', () => {
