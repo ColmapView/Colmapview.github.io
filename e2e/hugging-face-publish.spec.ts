@@ -161,8 +161,11 @@ test.describe('Hugging Face dataset publication', () => {
     expect(previewBox.x + previewBox.width).toBeLessThanOrEqual(fieldsBox.x);
     await dialog.screenshot({ path: test.info().outputPath('publication-desktop.png') });
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect.poll(async () => (await preview.boundingBox())!.y + (await preview.boundingBox())!.height)
-      .toBeLessThanOrEqual((await fields.boundingBox())!.y + 1);
+    // Preview capture can resize both rows; sample both bounds on every retry.
+    await expect.poll(async () => {
+      const [previewBounds, fieldsBounds] = await Promise.all([preview.boundingBox(), fields.boundingBox()]);
+      return previewBounds!.y + previewBounds!.height - fieldsBounds!.y;
+    }).toBeLessThanOrEqual(1);
     previewBox = (await preview.boundingBox())!;
     fieldsBox = (await fields.boundingBox())!;
     expect(previewBox.y + previewBox.height).toBeLessThanOrEqual(fieldsBox.y + 1);
