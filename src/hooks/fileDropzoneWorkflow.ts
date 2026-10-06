@@ -33,6 +33,7 @@ import { buildColmapReconstruction } from './fileDropzoneReconstruction';
 import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
 import { findDatasetViewerSettingsEntry, parseDatasetViewerSettings, resolveDatasetSplatSourceId } from '../utils/datasetViewerSettings';
 import { MAX_VIEWER_STATE_BYTES, type PublishedViewerState } from '../utils/publishedViewerState';
+import { anySignal } from '../utils/abortSignals';
 
 type SetUrlProgress = (progress: UrlLoadProgress | null) => void;
 type SetSourceInfo = {
@@ -272,7 +273,7 @@ export async function processFileDropzoneFiles(
   if (normalizedOptions.signal?.aborted || normalizedOptions.load?.signal.aborted) return false;
   const job = normalizedOptions.load ?? beginReconstructionLoad();
   const signal = normalizedOptions.signal
-    ? AbortSignal.any([job.signal, normalizedOptions.signal]) : job.signal;
+    ? anySignal([job.signal, normalizedOptions.signal]) : job.signal;
   const load = { signal, finish: job.finish, assertCurrent: () => { signal.throwIfAborted(); job.assertCurrent(); } };
   const initialSplatSelectionRevision = normalizedOptions.initialSplatSelectionRevision ?? deps.getSplatSelectionState?.().revision;
   let pendingSource: ReconstructionSource | null = null;

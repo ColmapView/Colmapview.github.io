@@ -6,6 +6,7 @@ import { huggingFaceSettingsUrls, normalizeHuggingFaceDatasetUrl } from '../util
 import { appLogger } from '../utils/logger';
 import { normalizeSplatSourceId } from '../utils/splatFileSourcePolicy';
 import type { ShareConfig } from '../utils/shareDataCodec';
+import { anySignal } from '../utils/abortSignals';
 
 export const OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS = 3_000;
 
@@ -23,7 +24,7 @@ export async function fetchOptionalDatasetViewerSettingsResult(url: string,
   signal?: AbortSignal): Promise<OptionalViewerSettingsResult> {
   signal?.throwIfAborted();
   const controller = new AbortController();
-  const requestSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
+  const requestSignal = signal ? anySignal([signal, controller.signal]) : controller.signal;
   let timeout: ReturnType<typeof setTimeout> | undefined;
   let cancel: (() => void) | undefined;
   const deadline = new Promise<OptionalViewerSettingsResult>((resolve, reject) => {

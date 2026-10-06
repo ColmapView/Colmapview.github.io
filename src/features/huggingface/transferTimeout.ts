@@ -1,4 +1,5 @@
 import { HfError } from './http';
+import { anySignal } from '../../utils/abortSignals';
 
 export const TRANSFER_IDLE_TIMEOUT_MS = 15 * 60_000;
 
@@ -14,7 +15,7 @@ export function createTransferTimeout(signal: AbortSignal) {
   };
   activity();
   return {
-    signal: AbortSignal.any([signal, timeout.signal]),
+    signal: anySignal([signal, timeout.signal]),
     activity,
     dispose() { disposed = true; clearTimeout(timer); timeout.abort(); },
   };

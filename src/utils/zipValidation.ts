@@ -1,4 +1,5 @@
 import { parseSafeIntegerString } from './numberParsing';
+import { anySignal } from './abortSignals';
 
 /** Maximum archive file size (2GB) */
 export const ARCHIVE_SIZE_LIMIT = 2 * 1024 * 1024 * 1024;
@@ -40,7 +41,7 @@ export async function validateZipUrl(
   try {
     const response = await fetchImpl(url, {
       method: 'HEAD',
-      signal: options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal,
+      signal: options.signal ? anySignal([controller.signal, options.signal]) : controller.signal,
     });
 
     clearTimeout(timeoutId);

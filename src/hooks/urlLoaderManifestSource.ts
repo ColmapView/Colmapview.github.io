@@ -12,6 +12,7 @@ import { fetchOptionalDatasetViewerSettingsResult, fetchPublishedViewerState } f
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { fetchDatasetResource } from '../utils/fetchDatasetResource';
 import { detectTouchDevice } from './useIsTouchDevice';
+import { anySignal } from '../utils/abortSignals';
 
 export { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS } from './urlLoaderViewerState';
 
@@ -72,7 +73,7 @@ export async function loadManifestSource(
   // Discovery and optional settings do not gate required file transfer or parsing.
   const catalogTask = discover(manifest).catch(() => [] as RemoteSplatCandidate[]);
   const settingsController = new AbortController();
-  const settingsSignal = deps.signal ? AbortSignal.any([deps.signal, settingsController.signal]) : settingsController.signal;
+  const settingsSignal = deps.signal ? anySignal([deps.signal, settingsController.signal]) : settingsController.signal;
   let optionalSettingsTimedOut = false;
   const settingsTask = (manifest.viewerStatePath === undefined
     ? fetchOptionalDatasetViewerSettingsResult(manifest.baseUrl, fetchImpl, false, settingsSignal).then(result => {

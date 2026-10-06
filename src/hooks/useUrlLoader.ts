@@ -34,6 +34,7 @@ import { resolveGoogleDriveArchive } from '../features/googleDrive/api';
 import { assertGoogleDriveHostAllowed } from '../features/googleDrive/config';
 import { huggingFaceDatasetInfoUrl } from '../utils/huggingFaceUrl';
 import { checkHuggingFaceDatasetAccess } from '../features/huggingface/datasetAccess';
+import { anySignal } from '../utils/abortSignals';
 
 export interface UseUrlLoaderDeps {
   logger?: Pick<AppLogger, 'error' | 'info'>;
@@ -117,7 +118,7 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
       signal,
       assertCurrent,
       fetchImpl: guard((url, init) => fetchDatasetResource(url, undefined, { ...init,
-        signal: init?.signal ? AbortSignal.any([signal, init.signal]) : signal })),
+        signal: init?.signal ? anySignal([signal, init.signal]) : signal })),
       processFiles: guard((files, range, options) => {
         load.hasEmbeddedViewerSettings = Boolean(findDatasetViewerSettingsEntry(files));
         return processFiles(files, range, { ...options, signal, initialSplatSelectionRevision,

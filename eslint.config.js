@@ -23,6 +23,11 @@ export default defineConfig([
         varsIgnorePattern: '^_',
         caughtErrorsIgnorePattern: '^_',
       }],
+      'no-restricted-properties': ['error', {
+        object: 'AbortSignal',
+        property: 'any',
+        message: 'Use anySignal() from src/utils/abortSignals: AbortSignal.any is missing on Safari/iOS < 17.4.',
+      }],
     },
   },
   {
