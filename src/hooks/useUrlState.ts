@@ -115,8 +115,18 @@ export async function applySavedViewerState(saved: PublishedViewerState | null, 
     delete splat.activeSourceId;
     return { ...config, splat };
   };
+  // Alignment and view must survive a cancelled splat download. Display waits for the splat:
+  // splat-tuned point styling on a scene left without one can hide the points.
+  const alignmentConfig = (config: ShareConfig): ShareConfig => ({
+    ...(config.transform ? { transform: config.transform } : {}),
+    ...(config.splat?.transform ? { splat: { transform: config.splat.transform } } : {}),
+  });
   const sourceId = resolveRestoredSplatSourceId(saved, shared, autoSplatSourceId);
   assertCurrent();
+  if (saved) applyShareConfig(alignmentConfig(saved.config));
+  if (shared?.config) applyShareConfig(alignmentConfig(shared.config));
+  const view = saved ? shared?.viewState ?? saved.viewState : null;
+  if (view) useCameraStore.getState().flyToState(view);
   if (sourceId !== undefined && canRestoreSplatSelection()) await activateSavedSplat(sourceId, assertCurrent);
   // A choice made before or during activation wins over both saved and URL source selections.
   if (saved) applyShareConfig(restorationConfig(saved.config));
@@ -127,8 +137,6 @@ export async function applySavedViewerState(saved: PublishedViewerState | null, 
       useReconstructionStore.getState().setShowSplatPicker(false);
     }
   }
-  const view = saved ? shared?.viewState ?? saved.viewState : null;
-  if (view) useCameraStore.getState().flyToState(view);
 }
 
 /**

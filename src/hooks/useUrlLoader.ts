@@ -158,6 +158,9 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
       const loaded = await work(load);
       assertCurrent();
       if (loaded) {
+        // Reload re-reads the downloaded files; these settings are not among them. Recorded before
+        // restoration so a cancelled splat download still leaves them to Reload.
+        useReconstructionStore.getState().setSourceViewerState(savedViewerState);
         await applySavedViewerState(savedViewerState, shared, assertCurrent, initialSplatSelectionRevision, autoSplatSourceId);
         assertCurrent();
         // Ask only once restoration settled: an automatic or saved splat downloads without a
@@ -167,8 +170,6 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
           && useReconstructionStore.getState().splatSelectionRevision === initialSplatSelectionRevision) {
           useReconstructionStore.getState().offerSplatPicker();
         }
-        // Reload re-reads the downloaded files; these settings are not among them.
-        useReconstructionStore.getState().setSourceViewerState(savedViewerState);
       }
       return loaded;
     } catch (error) {

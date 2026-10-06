@@ -591,6 +591,45 @@ describe('useUrlLoader', () => {
     expect(state.showSplatPicker).toBe(true);
   });
 
+  it('keeps the saved alignment, view and Reload settings when the restored splat download is cancelled', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    useCameraStore.setState(useCameraStore.getInitialState(), true);
+    const baseUrl = 'https://huggingface.co/datasets/owner/cancel/resolve/main/';
+    const alignment = { ...createIdentityEuler(), translationX: 5 };
+    const view: CameraViewState = { position: [1, 2, 3], target: [0, 0, 0], quaternion: [0, 0, 0, 1], distance: 4 };
+    const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: view,
+      config: { splat: { transform: alignment }, ui: { backgroundColor: '#123456' } } });
+    const background = useUIStore.getState().backgroundColor;
+    const request = vi.fn((url: string | URL, init?: RequestInit): Promise<Response> => {
+      if (String(url).endsWith('colmapview.yaml')) return Promise.resolve(new Response(yaml));
+      if (init?.method === 'HEAD') return Promise.resolve(new Response(null, { headers: { 'content-length': '100' } }));
+      // Like fetch, the splat download rejects once its signal aborts.
+      if (String(url).endsWith('.spz')) return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+      });
+      if (String(url).includes('/api/datasets/')) return Promise.resolve(Response.json(hubEntries([{ path: 'splats/scene.spz', size: 100 }])));
+      return Promise.resolve(new Response(new Uint8Array([1, 2, 3])));
+    });
+    vi.stubGlobal('fetch', request);
+    processFilesMock.mockImplementationOnce(async files => {
+      useReconstructionStore.getState().setDroppedFiles(files);
+      useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles());
+    });
+    const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
+    let pending!: Promise<boolean>;
+    act(() => { pending = result.current.loadFromUrl(baseUrl); });
+    await waitFor(() => expect(request.mock.calls.some(([url, init]) => String(url).endsWith('.spz') && init?.method !== 'HEAD')).toBe(true));
+    act(() => useReconstructionStore.getState().cancelLoading());
+    await act(async () => { expect(await pending).toBe(false); });
+    expect(useTransformStore.getState().splatTransform.translationX).toBe(5);
+    expect(useCameraStore.getState().flyToViewState).toEqual(view);
+    const { sourceViewerState, droppedFiles } = useReconstructionStore.getState();
+    expect(sourceViewerState?.files).toBe(droppedFiles);
+    expect(sourceViewerState?.state.config).toMatchObject({ splat: { transform: alignment }, ui: { backgroundColor: '#123456' } });
+    // Splat-tuned display waits for the splat; on the COLMAP-only scene it could hide the points.
+    expect(useUIStore.getState().backgroundColor).toBe(background);
+  });
+
   it('remembers the saved settings that came with a URL dataset for Reload', async () => {
     vi.stubGlobal('Blob', NodeBlob);
     const baseUrl = 'https://huggingface.co/datasets/owner/saved/resolve/main/';
