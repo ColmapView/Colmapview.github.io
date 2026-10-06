@@ -15,6 +15,7 @@ import { decodeShareData } from '../utils/shareDataCodec';
 import { applySavedViewerState, applyShareConfig, collectShareConfig, generateEmbedUrl } from './useUrlState';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
+import { getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
 
 const manifest: ColmapManifest = {
   version: 1,
@@ -173,6 +174,18 @@ describe('URL state sharing', () => {
     expect(usePointCloudStore.getState().pointSize).toBe(4);
     expect(useTransformStore.getState().splatTransform).toEqual(saved.config.splat?.transform);
     expect(useCameraStore.getState().flyToViewState).toEqual(viewState);
+  });
+
+  it('keeps the loading overlay while the renderer decodes a restored splat that is already loaded', async () => {
+    const splat = buildFile('scene.spz', 'splat');
+    useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles({ splatFile: splat,
+      splatFileSources: [{ id: 'scene.spz', path: 'scene.spz', file: splat }] }));
+    const progress = getSplatLoadingProgress(splat, { startPercent: 60 });
+    useReconstructionStore.setState({ urlLoading: true, urlProgress: progress });
+
+    await applySavedViewerState(null, { config: { splat: { activeSourceId: 'scene.spz' } } });
+
+    expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true, urlProgress: progress });
   });
 
   it('restores separate scene and splat transforms absolutely across repeated startup applications', () => {

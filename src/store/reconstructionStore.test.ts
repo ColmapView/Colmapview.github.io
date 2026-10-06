@@ -16,7 +16,7 @@ import { getActiveZipImageIndex, setActiveZipArchive } from '../utils/zipArchive
 import { buildArchiveReader, buildReconstruction } from '../test/builders';
 import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
 import type { ReconstructionSource } from '../wasm/reconstructionService';
-import { getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
+import { getSplatDownloadProgress, getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
 
 // Byte-less activation seams: the decode step is mocked (no real gs-toolbox
 // decode in store tests), while seedGaussianCloudLoad / loadGaussianCloudFromFile
@@ -438,6 +438,65 @@ describe('reconstruction store URL load lifecycle', () => {
       scale: 2,
       translationX: 1,
     });
+  });
+
+  it('keeps the renderer progress when the restored splat is the one already decoding', async () => {
+    const fileA = new File(['a'], 'a.spz');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFile: fileA, splatFiles: [fileA],
+      splatFileSources: [{ id: 'a.spz', path: 'a.spz', file: fileA }],
+    }));
+    const progress = getSplatLoadingProgress(fileA, { startPercent: 60 });
+    useReconstructionStore.setState({ urlLoading: true, urlProgress: progress });
+
+    await useReconstructionStore.getState().selectSplatSource('a.spz', { restore: true });
+
+    expect(useReconstructionStore.getState().urlLoading).toBe(true);
+    expect(useReconstructionStore.getState().urlProgress).toBe(progress);
+  });
+
+  it('still clears a superseded download indicator when switching to a downloaded splat', async () => {
+    const fileA = new File(['a'], 'a.spz');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFile: fileA, splatFiles: [fileA],
+      splatFileSources: [
+        { id: 'a.spz', path: 'a.spz', file: fileA },
+        { id: 'b.spz', path: 'b.spz', url: 'https://x/b.spz', size: 5 },
+      ],
+    }));
+    useReconstructionStore.setState({ urlLoading: true, urlProgress: getSplatDownloadProgress('b.spz', 1, 5) });
+
+    await useReconstructionStore.getState().selectSplatSource('a.spz');
+
+    expect(useReconstructionStore.getState().urlLoading).toBe(false);
+    expect(useReconstructionStore.getState().urlProgress).toBeNull();
+  });
+
+  it('clears the indicator of a download it cancels, even when the file names match', async () => {
+    const fileA = new File(['a'], 'scene.spz');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFile: fileA, splatFiles: [fileA],
+      splatFileSources: [
+        { id: 'a/scene.spz', path: 'a/scene.spz', file: fileA },
+        { id: 'b/scene.spz', path: 'b/scene.spz', url: 'https://x/b/scene.spz', size: 5 },
+      ],
+    }));
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+    })));
+    try {
+      const pending = useReconstructionStore.getState().selectSplatSource('b/scene.spz');
+      expect(useReconstructionStore.getState().urlProgress?.currentFile).toBe('scene.spz');
+
+      await useReconstructionStore.getState().selectSplatSource('a/scene.spz');
+      await pending;
+
+      expect(useReconstructionStore.getState().urlLoading).toBe(false);
+      expect(useReconstructionStore.getState().urlProgress).toBeNull();
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(fileA);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

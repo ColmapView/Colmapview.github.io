@@ -392,6 +392,8 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       return;
     }
     if (!options?.restore) set({ splatSelectionRevision: get().splatSelectionRevision + 1 });
+    // A pending download's progress is never the renderer's, even for a same-named file.
+    const hadPendingDownload = activeSplatController !== null;
     cancelPendingSplatLoad();
     // Whether a splat was already showing: a fresh activation (COLMAP-only -> splat)
     // switches the viewer into a splat display mode; a tile-to-tile switch keeps the
@@ -411,16 +413,17 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       });
       return;
     }
-    // Already downloaded: activate immediately (and offload the previous tile).
-    // Clear any download indicator left by a superseded in-flight fetch — this
-    // switch is instant, so no "Downloading…" overlay should linger.
+    // Already downloaded: activate immediately (and offload the previous tile). A superseded
+    // download indicator is cleared, but re-selecting the splat that is already active (a
+    // restored choice right after a load) keeps the renderer's progress while it decodes.
     if (source.file) {
+      const rendererOwnsProgress = !hadPendingDownload
+        && source.file === loadedFiles.splatFile
+        && isSplatLoadingProgressForFile(get().urlProgress, source.file);
       set({
         requestedSplatSourceId: source.id,
         loadedFiles: applyActiveSplatFile(loadedFiles, source.id, source.file),
-        urlLoading: false,
-        urlProgress: null,
-        urlError: null,
+        ...(rendererOwnsProgress ? {} : { urlLoading: false, urlProgress: null, urlError: null }),
       });
       if (!hadSplatBefore) {
         applySplatActivationVisuals();
