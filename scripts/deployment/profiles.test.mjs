@@ -70,13 +70,28 @@ test('manual preview requires a separate project and bounded output/base paths',
   assert.throws(() => validateBase('github', '/../../'), /absolute directory/);
 });
 
+const PUBLICATION_GATES = ['Preflight deployment configuration', 'Build version or dev', 'Build latest', 'Build custom production', 'Smoke prepared artifacts'];
+const UNCONDITIONAL_GATES = new Set(['Preflight deployment configuration', 'Build version or dev', 'Smoke prepared artifacts']);
+
+/** Each gate must exist exactly once, by exact name, before the first gh-pages push or Wrangler upload. */
+function assertGatesPrecedePublication(workflow) {
+  const steps = workflow.jobs.deploy.steps;
+  const mutations = steps.flatMap((step, index) =>
+    step.uses?.startsWith('peaceiris/actions-gh-pages@') || /\bwrangler\b/.test(step.run ?? '') ? [index] : []);
+  assert.ok(mutations.length > 0, 'deploy.yml must publish through gh-pages or Wrangler');
+  const firstMutation = Math.min(...mutations);
+  for (const name of PUBLICATION_GATES) {
+    const matches = steps.flatMap((step, index) => step.name === name ? [index] : []);
+    assert.equal(matches.length, 1, `deploy.yml must contain exactly one "${name}" step`);
+    assert.ok(matches[0] < firstMutation, `${name} must precede publication`);
+    if (UNCONDITIONAL_GATES.has(name)) assert.equal(steps[matches[0]].if, undefined, `${name} must always run`);
+  }
+}
+
 test('release workflow gates both real artifacts before first publish and pins Wrangler', () => {
   const workflow = yaml.load(readFileSync('.github/workflows/deploy.yml', 'utf8'));
+  assertGatesPrecedePublication(workflow);
   const steps = workflow.jobs.deploy.steps;
-  const firstPublish = steps.findIndex(step => step.uses?.startsWith('peaceiris/'));
-  for (const name of ['Preflight deployment configuration', 'Build custom production', 'Smoke prepared artifacts']) {
-    assert.ok(steps.findIndex(step => step.name === name) < firstPublish, `${name} must precede publication`);
-  }
   const customDeploy = steps.find(step => step.name === 'Deploy custom production');
   assert.match(customDeploy.if, /custom_enabled/);
   assert.match(customDeploy.run, /wrangler@4\.147\.0/);
@@ -85,6 +100,22 @@ test('release workflow gates both real artifacts before first publish and pins W
   assert.equal(workflow.jobs.deploy.env.CUSTOM_GOOGLE_DRIVE_CLIENT_ID, '${{ vars.CUSTOM_GOOGLE_DRIVE_CLIENT_ID }}');
   const validation = yaml.load(readFileSync('.github/workflows/e2e.yml', 'utf8'));
   assert.ok(validation.jobs.artifacts.steps.some(step => step.run === 'npm run test:deployment'));
+});
+
+test('publication gate check rejects renamed, removed, moved or conditional gates', () => {
+  const workflow = yaml.load(readFileSync('.github/workflows/deploy.yml', 'utf8'));
+  const smoke = steps => steps.findIndex(step => step.name === 'Smoke prepared artifacts');
+  const variants = [
+    steps => { steps[smoke(steps)].name = 'Smoke artifacts'; },
+    steps => { steps.splice(steps.findIndex(step => step.name === 'Preflight deployment configuration'), 1); },
+    steps => { steps.push(...steps.splice(smoke(steps), 1)); },
+    steps => { steps[smoke(steps)].if = "github.ref_type == 'tag'"; },
+  ];
+  for (const mutate of variants) {
+    const copy = structuredClone(workflow);
+    mutate(copy.jobs.deploy.steps);
+    assert.throws(() => assertGatesPrecedePublication(copy), /exactly one|must precede publication|must always run/);
+  }
 });
 
 test('deployment smoke report and traces land in the uploaded .tmp/deployment-smoke directory', () => {
