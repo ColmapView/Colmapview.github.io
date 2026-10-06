@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import path from 'node:path';
 import yaml from 'js-yaml';
-import { CUSTOM_ORIGIN, FIXTURE_GOOGLE_CONFIG, WRANGLER_VERSION, profileEnvironment, safeOutputDirectory, validateBase, validateGithubHfConfiguration, validatePreviewConfiguration, validateReleaseConfiguration } from './profiles.mjs';
+import { CUSTOM_ORIGIN, FIXTURE_GOOGLE_CONFIG, WRANGLER_VERSION, previewAliasUrl, profileEnvironment, safeOutputDirectory, validateBase, validateGithubHfConfiguration, validatePreviewConfiguration, validateReleaseConfiguration } from './profiles.mjs';
 import { fetchVerifiedArtifact, htmlSha256, verifyPolicyHtml } from './artifact-verification.mjs';
 import { cloudflareStaticHeaders } from './headers.mjs';
 import { startArtifactServer } from './static-server.mjs';
@@ -256,6 +257,45 @@ test('public verification also requires the exact public viewer URL to serve the
 test('public policy verification rejects a hosting SPA fallback even when it returns HTTP 200', () => {
   assert.throws(() => verifyPolicyHtml('privacy.html', '<html lang="en"><title>ColmapView</title></html>'), /SPA fallback/);
   verifyPolicyHtml('privacy.html', '<html lang="en"><title>Privacy policy · ColmapView</title></html>');
+});
+
+test('preview verification uses the branch alias Wrangler reports instead of assuming the project subdomain', () => {
+  const entry = { type: 'pages-deploy-detailed', version: 1, pages_project: 'colmapview-preview', deployment_id: 'id', url: 'https://21fd00ac.colmapview-preview-4xk.pages.dev', alias: 'https://preview-9129c1d95fb8.colmapview-preview-4xk.pages.dev', environment: 'preview' };
+  const output = (overrides = {}) => [{ type: 'wrangler-session', version: 1 }, { type: 'pages-deploy', version: 1, pages_project: 'colmapview-preview' }, { ...entry, ...overrides }].map(line => JSON.stringify(line)).join('\n');
+  const options = { project: 'colmapview-preview', branch: 'preview-9129c1d95fb8' };
+  assert.equal(previewAliasUrl(output(), options), 'https://preview-9129c1d95fb8.colmapview-preview-4xk.pages.dev/');
+  assert.throws(() => previewAliasUrl(output({ environment: 'production' }), options), /not production/);
+  assert.throws(() => previewAliasUrl(output({ alias: undefined }), options), /branch alias/);
+  for (const alias of ['https://preview-000000000000.colmapview-preview.pages.dev', 'https://preview-9129c1d95fb8.attacker.example', 'https://preview-9129c1d95fb8.colmapview-preview.pages.dev/path?x=1',
+    'http://preview-9129c1d95fb8.colmapview-preview.pages.dev', 'https://preview-9129c1d95fb8.x.colmapview-preview.pages.dev', 'https://preview-9129c1d95fb8.colmapview-preview.pages.dev:8443', 'https://user:pass@preview-9129c1d95fb8.colmapview-preview.pages.dev']) {
+    assert.throws(() => previewAliasUrl(output({ alias }), options), /unexpected/);
+  }
+  assert.throws(() => previewAliasUrl(output({ pages_project: 'colmapview-opsiclear' }), options), /did not report/);
+  const publish = yaml.load(readFileSync('.github/workflows/deploy-preview.yml', 'utf8')).jobs.publish;
+  assert.ok(!JSON.stringify(publish).includes('$CLOUDFLARE_PREVIEW_PROJECT.pages.dev'));
+  assert.equal(publish.steps.find(step => step.name === 'Upload preview only').env.WRANGLER_OUTPUT_FILE_PATH, '${{ runner.temp }}/wrangler-preview-output.ndjson');
+});
+
+test('preview-url.mjs records only a verified alias in GITHUB_ENV, from the file Wrangler writes', () => {
+  mkdirSync('.tmp', { recursive: true });
+  const directory = mkdtempSync(path.resolve('.tmp/preview-url-'));
+  const output = path.join(directory, 'wrangler-preview-output.ndjson');
+  const githubEnv = path.join(directory, 'github-env');
+  const run = alias => {
+    writeFileSync(output, `${JSON.stringify({ type: 'pages-deploy-detailed', version: 1, pages_project: 'colmapview-preview', alias, environment: 'preview' })}\n`);
+    writeFileSync(githubEnv, '');
+    const env = { ...process.env, GITHUB_ENV: githubEnv, CLOUDFLARE_PREVIEW_PROJECT: 'colmapview-preview', PREVIEW_BRANCH: 'preview-9129c1d95fb8' };
+    return spawnSync(process.execPath, ['scripts/deployment/preview-url.mjs', output], { env, encoding: 'utf8' }).status;
+  };
+  try {
+    assert.equal(run('https://preview-9129c1d95fb8.colmapview-preview-4xk.pages.dev'), 0);
+    assert.equal(readFileSync(githubEnv, 'utf8'), 'PREVIEW_URL=https://preview-9129c1d95fb8.colmapview-preview-4xk.pages.dev/\n');
+    assert.notEqual(run('https://preview-9129c1d95fb8.attacker.example'), 0);
+    assert.equal(readFileSync(githubEnv, 'utf8'), '', 'a rejected alias must not reach GITHUB_ENV');
+  } finally { rmSync(directory, { recursive: true }); }
+  // RUNNER_TEMP is the shell form of runner.temp: the resolver must read the file the upload step writes.
+  const steps = yaml.load(readFileSync('.github/workflows/deploy-preview.yml', 'utf8')).jobs.publish.steps;
+  assert.equal(steps.find(step => step.name === 'Resolve preview alias')?.run, 'node scripts/deployment/preview-url.mjs "$RUNNER_TEMP/wrangler-preview-output.ndjson"');
 });
 
 test('Cloudflare artifact headers preserve HTML on canonical and alias routes without changing asset or metadata rules', async () => {

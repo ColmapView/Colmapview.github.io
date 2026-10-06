@@ -110,10 +110,14 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           # Fresh job-local cache: never run a restored ~/.npm (_npx install or registry metadata) with the token.
           npm_config_cache: ${{ runner.temp }}/wrangler-npm-cache
+          # Machine-readable result; the project's pages.dev subdomain can differ from its name.
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-preview-output.ndjson
+      - name: Resolve preview alias
+        run: node scripts/deployment/preview-url.mjs "$RUNNER_TEMP/wrangler-preview-output.ndjson"
       - name: Verify public preview
-        run: node scripts/deployment/check-live.mjs "https://$PREVIEW_BRANCH.$CLOUDFLARE_PREVIEW_PROJECT.pages.dev/" preview --manifest=.tmp/deployment/preview/deployment.json
+        run: node scripts/deployment/check-live.mjs "$PREVIEW_URL" preview --manifest=.tmp/deployment/preview/deployment.json
       - name: Record preview
-        run: echo "Preview verified at https://$PREVIEW_BRANCH.$CLOUDFLARE_PREVIEW_PROJECT.pages.dev/ (source SHA $DEPLOYMENT_SHA). Production was not deployed." >> "$GITHUB_STEP_SUMMARY"
+        run: echo "Preview verified at $PREVIEW_URL (source SHA $DEPLOYMENT_SHA). Production was not deployed." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v6
         if: always()
         with:

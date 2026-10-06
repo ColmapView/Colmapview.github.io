@@ -60,6 +60,22 @@ export function validatePreviewConfiguration(env) {
   if (preview === production) throw new Error('Preview must use a separate Pages project.');
 }
 
+/** Return the branch alias URL Wrangler reported for this preview deployment, or fail closed. */
+export function previewAliasUrl(ndjson, { project, branch }) {
+  const entries = ndjson.split(/\r?\n/).filter(Boolean).flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
+  const deployment = entries.findLast(entry => entry?.type === 'pages-deploy-detailed' && entry.pages_project === project);
+  if (!deployment) throw new Error(`Wrangler did not report a deployment of ${project}.`);
+  if (deployment.environment !== 'preview') throw new Error('The preview upload must create a preview deployment, not production.');
+  if (typeof deployment.alias !== 'string' || !deployment.alias) throw new Error('Wrangler did not report the preview branch alias.');
+  const alias = new URL(deployment.alias);
+  const [label, ...subdomain] = alias.hostname.split('.');
+  if (alias.protocol !== 'https:' || label !== branch || subdomain.length !== 3 || subdomain.slice(-2).join('.') !== 'pages.dev'
+    || alias.port || alias.username || alias.password || alias.search || alias.hash || alias.pathname !== '/') {
+    throw new Error('Wrangler reported an unexpected preview alias URL.');
+  }
+  return `https://${alias.hostname}/`;
+}
+
 /** GitHub Pages builds: release tags use the stable /latest/ callback, branch builds the /dev/ callback. */
 export function validateGithubHfConfiguration(env, isRelease) {
   const publish = strictFlag(env.VITE_HF_PUBLISH_ENABLED, 'VITE_HF_PUBLISH_ENABLED');
