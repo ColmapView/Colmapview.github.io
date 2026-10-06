@@ -933,4 +933,27 @@ describe('file dropzone workflow', () => {
     expect(deps.setError).toHaveBeenCalledWith('Config error: invalid');
     expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
   });
+
+  it.each([true, false])('carries remote splat tiles across a reload only when asked (%s)', async preserve => {
+    const remoteFile = new File(['remote'], 'scene.spz');
+    const current = loadedFiles({
+      splatFile: remoteFile, splatFiles: [remoteFile],
+      splatFileSources: [{ id: 'splats/scene.spz', path: 'splats/scene.spz', url: 'https://x/splats/scene.spz', size: 6, file: remoteFile }],
+    });
+    const deps = createDeps({
+      getLoadedFiles: vi.fn(() => current),
+      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
+      buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
+    });
+    const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, file(name)]));
+
+    await expect(processFileDropzoneFiles(files, deps, { preserveRemoteSplatSources: preserve })).resolves.toBe(true);
+
+    expect(deps.setLoadedFiles).toHaveBeenCalledWith(expect.objectContaining(preserve
+      ? { splatFile: remoteFile, splatFileSources: [expect.objectContaining({ id: 'splats/scene.spz', file: remoteFile })] }
+      : { splatFile: undefined, splatFileSources: [] }));
+    // The renderer already shows the kept splat, so the overlay must not wait for it.
+    expect(deps.setUrlProgress).not.toHaveBeenCalledWith(expect.objectContaining({ currentFile: 'scene.spz' }));
+    expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
+  });
 });

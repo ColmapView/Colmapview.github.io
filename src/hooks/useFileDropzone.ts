@@ -58,7 +58,7 @@ export function useFileDropzone() {
   const processFiles = useCallback(async (
     files: Map<string, File>,
     progressRange?: { start: number; end: number },
-    options: Pick<FileDropzoneWorkflowOptions, 'onSceneReplaced' | 'replaceSplatScene' | 'throwOnError' | 'onViewerState' | 'load' | 'signal' | 'initialSplatSelectionRevision'> = {}
+    options: Pick<FileDropzoneWorkflowOptions, 'onSceneReplaced' | 'replaceSplatScene' | 'preserveRemoteSplatSources' | 'throwOnError' | 'onViewerState' | 'load' | 'signal' | 'initialSplatSelectionRevision'> = {}
   ) => {
     const initialSplatSelectionRevision = options.initialSplatSelectionRevision ?? useReconstructionStore.getState().splatSelectionRevision;
     const load = options.load ?? beginReconstructionLoad();
@@ -111,6 +111,7 @@ export function useFileDropzone() {
         signal: options.signal,
         initialSplatSelectionRevision,
         replaceSplatScene: options.replaceSplatScene ?? false,
+        preserveRemoteSplatSources: options.preserveRemoteSplatSources ?? false,
         throwOnError: options.throwOnError ?? false,
       });
     } finally {
@@ -126,6 +127,12 @@ export function useFileDropzone() {
     setUrlProgress,
     resetView,
   ]);
+
+  /** Re-read the current dataset (discarding edits) without dropping its remote splat tiles. */
+  const reloadFiles = useCallback(
+    (files: Map<string, File>) => processFiles(files, undefined, { preserveRemoteSplatSources: true }),
+    [processFiles]
+  );
 
   /**
    * Process a ZIP file: extract COLMAP files and set up lazy image extraction.
@@ -210,6 +217,7 @@ export function useFileDropzone() {
     handleDrop,
     handleDragOver,
     processFiles,
+    reloadFiles,
     processZipFile,
     handleBrowse,
   };

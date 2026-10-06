@@ -218,4 +218,15 @@ describe('useFileDropzone', () => {
     expect(useReconstructionStore.getState().loadedFiles?.splatFileSources).toHaveLength(2);
     expect(useUIStore.getState().backgroundColor).toBe('#56789a');
   });
+
+  it('reloads the current dataset without dropping its remote splat tiles', async () => {
+    const { result } = renderHook(() => useFileDropzone());
+    const files = new Map([['cameras.bin', buildFile('cameras.bin')]]);
+    await act(async () => { await result.current.reloadFiles(files); });
+    expect(processFileDropzoneFilesMock).toHaveBeenLastCalledWith(files, expect.anything(),
+      expect.objectContaining({ preserveRemoteSplatSources: true }));
+    await act(async () => { await result.current.processFiles(files); });
+    expect(processFileDropzoneFilesMock).toHaveBeenLastCalledWith(files, expect.anything(),
+      expect.objectContaining({ preserveRemoteSplatSources: false }));
+  });
 });

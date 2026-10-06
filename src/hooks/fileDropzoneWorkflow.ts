@@ -17,6 +17,7 @@ import { classifyPlyFile, type PlyCloudKind } from '../parsers';
 import type { AppLogger } from '../utils/logger';
 import { appLogger } from '../utils/logger';
 import { preloadSparkModule } from '../utils/sparkSplatRuntime';
+import { carryOverRemoteSplatSources } from '../utils/splatFileSourcePolicy';
 import { getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
 import { isReconstructionSnapshot, type ReconstructionSource } from '../wasm/reconstructionService';
 import { getFailedImageCount } from './useAsyncImageCache';
@@ -107,6 +108,8 @@ export interface FileDropzoneWorkflowOptions {
   initialSplatSelectionRevision?: number;
   progressRange?: { start: number; end: number };
   replaceSplatScene?: boolean;
+  /** Reload of the current dataset: keep remote splat tiles its files never contained. */
+  preserveRemoteSplatSources?: boolean;
   throwOnError?: boolean;
   onSceneReplaced?: () => void;
   onViewerState?: (state: PublishedViewerState) => void | Promise<void>;
@@ -531,7 +534,15 @@ export async function processFileDropzoneFiles(
       && currentSelection.revision !== initialSplatSelectionRevision) {
       splatFile = splatFileSources.find(source => source.id === currentSelection.sourceId)?.file;
     }
-    deps.setUrlProgress(splatFile
+    const currentLoadedFiles = deps.getLoadedFiles();
+    const splatState = normalizedOptions.preserveRemoteSplatSources
+      ? carryOverRemoteSplatSources(currentLoadedFiles, { splatFile, splatFiles, splatFileSources })
+      : { splatFile, splatFiles, splatFileSources };
+    splatFile = splatState.splatFile;
+    // The renderer reloads only when the splat file changes; handing it the loading state for
+    // the splat it already shows would leave the overlay up.
+    const splatAlreadyRendered = Boolean(splatFile) && splatFile === currentLoadedFiles?.splatFile;
+    deps.setUrlProgress(splatFile && !splatAlreadyRendered
       ? getSplatLoadingProgress(splatFile, { startPercent: splatRendererStartPercent })
       : { percent: mapProgress(95), message: 'Finalizing...' });
 
@@ -545,9 +556,7 @@ export async function processFileDropzoneFiles(
       camerasFile,
       imagesFile,
       points3DFile,
-      splatFile,
-      splatFiles,
-      splatFileSources,
+      ...splatState,
       rigsFile,
       framesFile,
       imageFiles,
@@ -580,7 +589,7 @@ export async function processFileDropzoneFiles(
       logger.warn,
       { skipMissingImageDiagnostic: shouldSkipMissingImageDiagnosticForSource({ sourceType, imageUrlBase }) }
     );
-    if (splatFile) {
+    if (splatFile && !splatAlreadyRendered) {
       handOffLoadingToSplatRenderer();
     }
     return await complete();

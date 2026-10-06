@@ -67,7 +67,7 @@ export const ExportPanel = memo(function ExportPanel({
     },
   } = useExportPanelStoreFacade();
   const dataset = useDataset();
-  const { processFiles } = useFileDropzone();
+  const { reloadFiles } = useFileDropzone();
 
   const hasPendingDeletions = pendingDeletions.size > 0;
 
@@ -203,8 +203,8 @@ export const ExportPanel = memo(function ExportPanel({
     if (!droppedFiles) return;
     if (!await confirmReload()) return;
     resetTransform();
-    processFiles(droppedFiles);
-  }, [droppedFiles, confirmReload, resetTransform, processFiles]);
+    reloadFiles(droppedFiles);
+  }, [droppedFiles, confirmReload, resetTransform, reloadFiles]);
 
   const hasCameras = cameras.length > 0;
   const hasImages = imageNames.length > 0 && dataset.hasImages();

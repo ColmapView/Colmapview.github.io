@@ -3,6 +3,7 @@ import type { LoadedFiles, SplatFileSource } from '../types/colmap';
 import {
   applyActiveSplatFile,
   applyActiveSplatPlaceholder,
+  carryOverRemoteSplatSources,
   clearActiveSplatFile,
   findSplatSourceById,
   getActiveSplatSourceId,
@@ -340,5 +341,48 @@ describe('mergeRemoteSplatCatalog', () => {
     const merged = mergeRemoteSplatCatalog(lf, [{ path: 'splats/a.ply', size: 100 }], 'https://x/ds');
 
     expect(merged.splatFileSources?.[0].splatCount).toBe(5_000_000);
+  });
+});
+
+describe('carryOverRemoteSplatSources', () => {
+  const loaded = (overrides: Partial<LoadedFiles>): LoadedFiles => ({ imageFiles: new Map(), hasMasks: false, ...overrides });
+  const remoteFile = new File(['remote'], 'scene.spz');
+  const remoteActive = { id: 'splats/scene.spz', path: 'splats/scene.spz', url: 'https://x/splats/scene.spz', size: 6, file: remoteFile };
+  const remoteLazy = { id: 'splats/other.spz', path: 'splats/other.spz', url: 'https://x/splats/other.spz', size: 9 };
+  const nothingReloaded = { splatFile: undefined, splatFiles: [], splatFileSources: [] };
+
+  it('keeps remote tiles and the active remote splat that the reloaded files do not contain', () => {
+    const current = loaded({ splatFile: remoteFile, splatFiles: [remoteFile], splatFileSources: [remoteActive, remoteLazy] });
+    const result = carryOverRemoteSplatSources(current, nothingReloaded);
+    expect(result.splatFileSources?.map(source => source.id)).toEqual(['splats/scene.spz', 'splats/other.spz']);
+    expect(result.splatFile).toBe(remoteFile);
+    expect(result.splatFiles).toEqual([remoteFile]);
+  });
+
+  it('keeps a byte-less placeholder active', () => {
+    const placeholder = new File([], 'other.spz');
+    const current = loaded({ splatFile: placeholder, splatFiles: [], splatFileSources: [remoteLazy] });
+    const result = carryOverRemoteSplatSources(current, nothingReloaded);
+    expect(result.splatFile).toBe(placeholder);
+    expect(result.splatFileSources).toEqual([remoteLazy]);
+  });
+
+  it('keeps COLMAP only when no splat was showing', () => {
+    const current = loaded({ splatFileSources: [remoteLazy] });
+    expect(carryOverRemoteSplatSources(current, nothingReloaded).splatFile).toBeUndefined();
+  });
+
+  it('prefers a reloaded local file over a remote copy of the same path', () => {
+    const local = new File(['local'], 'scene.spz');
+    const current = loaded({ splatFile: remoteFile, splatFiles: [remoteFile], splatFileSources: [remoteActive] });
+    const reloaded = { splatFile: local, splatFiles: [local], splatFileSources: [{ id: 'splats/scene.spz', path: 'splats/scene.spz', file: local }] };
+    expect(carryOverRemoteSplatSources(current, reloaded)).toBe(reloaded);
+  });
+
+  it('changes nothing for datasets without remote tiles', () => {
+    const local = new File(['local'], 'local.spz');
+    const current = loaded({ splatFile: local, splatFiles: [local], splatFileSources: [{ id: 'local.spz', path: 'local.spz', file: local }] });
+    const reloaded = { splatFile: local, splatFiles: [local], splatFileSources: [{ id: 'local.spz', path: 'local.spz', file: local }] };
+    expect(carryOverRemoteSplatSources(current, reloaded)).toBe(reloaded);
   });
 });

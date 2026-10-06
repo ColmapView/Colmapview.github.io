@@ -262,6 +262,32 @@ export function getShareActiveSplatSourceId(loadedFiles: LoadedFiles | null): st
   return loadedFiles ? getActiveSplatSourceId(loadedFiles) ?? '' : null;
 }
 
+/**
+ * A reload re-reads the dataset's own files, which never contain remote (url-bearing) splat
+ * tiles. Carry those tiles over with any downloaded bytes, and keep the active splat when it
+ * is one of them (byte-less placeholders included). Local files of the same path win.
+ */
+export function carryOverRemoteSplatSources(
+  current: LoadedFiles | null,
+  reloaded: Pick<LoadedFiles, 'splatFile' | 'splatFiles' | 'splatFileSources'>
+): Pick<LoadedFiles, 'splatFile' | 'splatFiles' | 'splatFileSources'> {
+  const reloadedSources = reloaded.splatFileSources ?? [];
+  const reloadedPaths = new Set(reloadedSources.map((source) => normalizeSplatSourceId(source.path)));
+  const carried = (current?.splatFileSources ?? []).filter((source) =>
+    Boolean(source.url) && !reloadedPaths.has(normalizeSplatSourceId(source.path)));
+  if (!carried.length) {
+    return reloaded;
+  }
+  const sources = [...reloadedSources, ...carried];
+  const activeId = getActiveSplatSourceId(current);
+  const keepsActive = activeId !== null && carried.some((source) => source.id === activeId);
+  return {
+    splatFileSources: sources,
+    splatFiles: sources.map((source) => source.file).filter((file): file is File => Boolean(file)),
+    splatFile: keepsActive ? current?.splatFile : reloaded.splatFile,
+  };
+}
+
 export function getNextSplatFile(
   splatFiles: readonly File[],
   activeSplatFile: File | undefined
