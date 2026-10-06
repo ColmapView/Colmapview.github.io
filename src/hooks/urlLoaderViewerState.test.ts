@@ -82,7 +82,8 @@ describe('manifest viewer-state loading', () => {
   it('counts a transport timeout reported as a plain AbortError as a timeout', async () => {
     // Engines that predate abort-reason propagation reject fetch with AbortError even for timeouts.
     const request = vi.fn(async (): Promise<Response> => { throw new DOMException('The operation was aborted.', 'AbortError'); });
-    const pending = startOptionalDatasetViewerSettings(manifest.baseUrl, request);
+    // The load's own signal is present and live, as in production.
+    const pending = startOptionalDatasetViewerSettings(manifest.baseUrl, request, false, new AbortController().signal);
     await expect(pending.settle()).resolves.toEqual({ state: null, timedOut: true });
   });
 

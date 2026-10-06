@@ -1324,7 +1324,9 @@ describe('reconstruction store loading cancellation', () => {
       splatFile: fileA, splatFiles: [fileA],
       splatFileSources: [{ id: 'splats/a.ply', path: 'splats/a.ply', file: fileA }],
     }));
-    useReconstructionStore.setState({ urlLoading: true, urlProgress: getSplatLoadingProgress(fileA, { startPercent: 60 }) });
+    // A restored choice stays requested while the renderer decodes it.
+    useReconstructionStore.setState({ requestedSplatSourceId: 'splats/a.ply', urlLoading: true,
+      urlProgress: getSplatLoadingProgress(fileA, { startPercent: 60 }) });
     const revision = useReconstructionStore.getState().splatSelectionRevision;
 
     useReconstructionStore.getState().cancelLoading();
@@ -1332,7 +1334,36 @@ describe('reconstruction store loading cancellation', () => {
     const state = useReconstructionStore.getState();
     expect(state.loadedFiles?.splatFile).toBeUndefined();
     expect(state.loadedFiles?.splatFileSources?.map(source => source.id)).toEqual(['splats/a.ply']);
+    expect(state.requestedSplatSourceId).toBeNull();
     expect(state.splatSelectionRevision).toBe(revision + 1);
+    expect(state.urlLoading).toBe(false);
+  });
+
+  it('cancels a same-named tile download without dropping the splat on screen', async () => {
+    const fileA = new File(['a'], 'scene.spz');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFile: fileA, splatFiles: [fileA],
+      splatFileSources: [
+        { id: 'a/scene.spz', path: 'a/scene.spz', file: fileA },
+        { id: 'b/scene.spz', path: 'b/scene.spz', url: 'https://x/ds/b/scene.spz', size: 20 },
+      ],
+    }));
+    let requestSignal: AbortSignal | null | undefined;
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      requestSignal = init?.signal;
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+    })));
+    const pending = useReconstructionStore.getState().selectSplatSource('b/scene.spz');
+    await vi.waitFor(() => expect(requestSignal).toBeDefined());
+    // The download's progress names the same file as the splat on screen.
+    expect(useReconstructionStore.getState().urlProgress?.currentFile).toBe(fileA.name);
+
+    useReconstructionStore.getState().cancelLoading();
+    await pending;
+
+    const state = useReconstructionStore.getState();
+    expect(requestSignal?.aborted).toBe(true);
+    expect(state.loadedFiles?.splatFile).toBe(fileA);
     expect(state.urlLoading).toBe(false);
   });
 

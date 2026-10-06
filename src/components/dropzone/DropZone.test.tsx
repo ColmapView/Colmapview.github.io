@@ -101,7 +101,7 @@ describe('DropZone preparation cancellation', () => {
     expect(useReconstructionStore.getState().urlLoadActive).toBe(true);
     await waitFor(() => expect(read).toHaveBeenCalledOnce());
     const oldSignal = useReconstructionStore.getState().urlLoadController!.signal;
-    useReconstructionStore.getState().clear();
+    useReconstructionStore.getState().cancelLoading();
     const newSignal = useReconstructionStore.getState().tryStartUrlLoad();
     await act(async () => {
       if (outcome === 'resolve') resolve(JSON.stringify({ version: 1, baseUrl: 'https://example.com/',
@@ -124,7 +124,7 @@ describe('DropZone preparation cancellation', () => {
     });
     render(<DropZone><div>Viewer</div></DropZone>);
     fireEvent.click(screen.getByRole('button', { name: 'Select desktop Drive archive' }));
-    useReconstructionStore.getState().clear();
+    useReconstructionStore.getState().cancelLoading();
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
     expect(loadFromUrl).not.toHaveBeenCalled();
     expect(useReconstructionStore.getState().urlLoadActive).toBe(false);
