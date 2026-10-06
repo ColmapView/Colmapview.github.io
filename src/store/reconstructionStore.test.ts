@@ -1336,6 +1336,44 @@ describe('reconstruction store loading cancellation', () => {
     expect(state.urlLoading).toBe(false);
   });
 
+  it('returns to the landing page when cancelling the decode empties a splat-only scene', () => {
+    window.history.replaceState(null, '', '/?url=https%3A%2F%2Fexample.com%2Fscene.spz');
+    const splat = new File(['a'], 'scene.spz');
+    useReconstructionStore.getState().setLoadedFiles({ imageFiles: new Map(), hasMasks: false,
+      splatFile: splat, splatFiles: [splat], splatFileSources: [{ id: 'scene.spz', path: 'scene.spz', file: splat }] });
+    useReconstructionStore.setState({ reconstruction: buildReconstruction(), urlLoading: true,
+      urlProgress: getSplatLoadingProgress(splat, { startPercent: 60 }) });
+
+    useReconstructionStore.getState().cancelLoading();
+
+    const state = useReconstructionStore.getState();
+    expect(state.reconstruction).toBeNull();
+    expect(state.loadedFiles).toBeNull();
+    expect(state.urlLoading).toBe(false);
+    expect(hasUrlToLoad()).toBe(false);
+  });
+
+  it.each([
+    ['an image gallery', { imageFiles: new Map([['photo.jpg', new File(['p'], 'photo.jpg')]]) }],
+    ['a point cloud', { points3DFile: new File(['p'], 'cloud.ply') }],
+  ])('keeps %s on screen when cancelling the decode of its splat', (_label, scene) => {
+    window.history.replaceState(null, '', '/?url=https%3A%2F%2Fexample.com%2Fscene');
+    const splat = new File(['a'], 'scene.spz');
+    useReconstructionStore.getState().setLoadedFiles({ imageFiles: new Map(), hasMasks: false, ...scene,
+      splatFile: splat, splatFiles: [splat], splatFileSources: [{ id: 'scene.spz', path: 'scene.spz', file: splat }] });
+    const reconstruction = buildReconstruction();
+    useReconstructionStore.setState({ reconstruction, urlLoading: true,
+      urlProgress: getSplatLoadingProgress(splat, { startPercent: 60 }) });
+
+    useReconstructionStore.getState().cancelLoading();
+
+    const state = useReconstructionStore.getState();
+    expect(state.reconstruction).toBe(reconstruction);
+    expect(state.loadedFiles).toMatchObject(scene);
+    expect(state.loadedFiles?.splatFile).toBeUndefined();
+    expect(hasUrlToLoad()).toBe(true);
+  });
+
   it('returns to the landing page when a startup link is cancelled before anything loaded', () => {
     window.history.replaceState(null, '', '/?url=https%3A%2F%2Fexample.com%2Fscene');
     useReconstructionStore.setState({ urlLoading: true, urlProgress: { percent: 0, message: 'Initializing...' } });

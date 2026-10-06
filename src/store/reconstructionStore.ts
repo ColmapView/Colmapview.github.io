@@ -240,7 +240,10 @@ interface ReconstructionState {
   setUrlLoading: (loading: boolean) => void;
   setUrlProgress: (progress: UrlLoadProgress | null) => void;
   setUrlError: (error: UrlLoadError | null) => void;
-  /** Stop the load in progress (URL load, splat download, parse or splat decode) and keep the scene on screen. */
+  /**
+   * Stop the load in progress (URL load, splat download, parse or splat decode) and keep the scene on
+   * screen. A splat-only scene whose decode is cancelled has nothing left, so it returns to the landing page.
+   */
   cancelLoading: () => void;
   clear: () => void;
 }
@@ -597,6 +600,12 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     // still decoding it; cancelling that leaves the scene without the splat (COLMAP only).
     const cancelsRendererDecode = !activeSplatController
       && isSplatLoadingProgressForFile(urlProgress, loadedFiles?.splatFile);
+    // A splat-only scene would be left empty, with the landing page hidden: go back to it.
+    if (cancelsRendererDecode && loadedFiles && !hasSceneBesidesSplats(loadedFiles)) {
+      get().clear();
+      clearUrlLoadRequestFromLocation();
+      return;
+    }
     cancelPendingSplatLoad();
     urlLoadController?.abort();
     cancelPendingReconstructionLoad();
@@ -689,6 +698,11 @@ export const selectImageCount = (state: ReconstructionState) =>
 
 export const selectCameraCount = (state: ReconstructionState) =>
   state.reconstruction?.cameras.size ?? 0;
+
+/** COLMAP files, a point cloud or an image gallery stay on screen without a splat. */
+function hasSceneBesidesSplats(files: LoadedFiles): boolean {
+  return Boolean(files.camerasFile || files.imagesFile || files.points3DFile || files.imageFiles.size);
+}
 
 function isSplatFileSwitchWithinLoadedDataset(
   previousLoadedFiles: LoadedFiles | null,
