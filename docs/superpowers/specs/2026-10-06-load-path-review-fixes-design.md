@@ -27,8 +27,30 @@
 6. **HF access pre-check is fatal only for definitive answers:** 404 (existing messages), other 4xx except 408/429, thrown `HfError`s (sign-in required / expired / denied), and cancellation. 408, 429, 5xx, timeouts and network errors are logged and the load continues; the file requests decide.
 7. **The splat picker opens only after restoration settled with nothing active.** Merging a catalog never opens it. After `applySavedViewerState` finishes, the URL loader offers the picker when: a remote catalog was merged in this load, the effective restored source id is not `''` (explicit None), the user made no choice since the load began, and no splat is active. Closing the picker keeps meaning "COLMAP only".
 8. **Reload keeps remote splat tiles.** The three Reload actions re-process the dataset with `preserveRemoteSplatSources`: url-bearing sources from the current `loadedFiles` that the file map does not contain are carried over (downloaded bytes included), and the active splat stays active when it belongs to a carried-over source (byte-less placeholders included). The renderer is not handed the loading state when the committed splat file is the one already rendered.
-9. **Re-selecting the already-active splat keeps the renderer's progress.** In `selectSplatSource`'s already-downloaded branch, when the source's file is the active file and `urlProgress` is that file's splat-loading progress, `urlLoading`/`urlProgress`/`urlError` are left unchanged. A superseded lazy download indicator is still cleared, as today.
-10. **The optional-settings deadline starts when the result is needed** (after COLMAP parsing on the manifest path; unchanged for the sequential splat-URL and archive paths). The request itself still starts at load start. On timeout every optional-settings path shows one persistent warning notification instead of failing silently.
+9. **Re-selecting the already-active splat keeps the renderer's progress.** In `selectSplatSource`'s already-downloaded branch, `urlLoading`/`urlProgress`/`urlError` are left unchanged when all of these hold:
+   - no lazy download was pending,
+   - the source's file is the active file,
+   - `urlProgress` is that file's splat-loading progress.
+
+   A superseded lazy download indicator is still cleared, as today, even when the cancelled download has the same file name.
+10. **The optional-settings deadline starts when the result is needed:** after COLMAP parsing on the manifest path. The sequential splat-URL and archive paths are unchanged.
+    - The request itself still starts at load start.
+    - A transport timeout that hits before the deadline counts as a timeout, never as "no settings".
+    - On timeout, every optional-settings path shows one persistent warning notification instead of failing silently, and the splat is not auto-loaded on a guess.
+11. **Reload re-applies a URL dataset's saved settings** (alignment, view, display) the way a local project's own `colmapview.yaml` is re-applied.
+    - Splat alignment is the main concern: `setLoadedFiles` resets the splat transform on a re-parse, and applying a transform moves the splat.
+    - The settings are retained bound to the dataset's file map, so another dataset never inherits them.
+    - All four Reload entry points (Transform panel, Export panel, context menu, transform gizmo) behave the same.
+
+## Plan review (Codex, 2026-10-06)
+
+Codex reviewed the plan read-only before execution and raised five findings. All five were confirmed against the code and folded in:
+
+- the bound-action facade mock in `DropZone.test.tsx`;
+- same-basename stale download progress (requirement 9);
+- a fourth Reload entry point in `ExportPanel.tsx`;
+- the saved alignment lost on Reload (requirement 11, Task 8);
+- transport timeouts misclassified as "no settings" (requirement 10).
 
 ## Decisions
 

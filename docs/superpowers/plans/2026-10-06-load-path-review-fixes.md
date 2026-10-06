@@ -11,7 +11,8 @@
   - `offerSplatPicker` opens the picker; the URL loader calls it only after restoration has settled.
 - Hugging Face requests go through the existing token-aware `fetchDatasetResource`. The access pre-check becomes fatal only for definitive answers.
 - Reload passes an explicit `preserveRemoteSplatSources` option. A pure policy helper then carries remote splat tiles across the re-parse.
-- The optional settings request is split into a "start" step and a "settle with deadline" step, so its deadline begins when the result is needed.
+- Reload also re-applies a URL dataset's saved settings. The store retains them bound to the dataset's file map, as a local project's `colmapview.yaml` already would be.
+- The optional settings request is split into a "start" step and a "settle with deadline" step, so its deadline begins when the result is needed. Transport timeouts count as timeouts.
 
 **Tech Stack:** TypeScript 5, React 19, Zustand, Vitest 4 (jsdom) with Testing Library, ESLint 9 flat config.
 
@@ -447,6 +448,7 @@ In `src/components/dropzone/useDropZoneStoreFacade.test.ts`, replace the first t
 
 In `src/components/dropzone/DropZone.test.tsx`:
 - Replace every `actions: { setError: vi.fn(), clear: vi.fn() }` with `actions: { setError: vi.fn(), cancelLoading: vi.fn() }`.
+- Replace the mock that binds the real store action (`clear: useReconstructionStore.getState().clear`) with `cancelLoading: useReconstructionStore.getState().cancelLoading`.
 - Add `buildReconstruction` to the `../../test/builders` import.
 - Append:
 
@@ -973,6 +975,33 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
     expect(useReconstructionStore.getState().urlLoading).toBe(false);
     expect(useReconstructionStore.getState().urlProgress).toBeNull();
   });
+
+  it('clears the indicator of a download it cancels, even when the file names match', async () => {
+    const fileA = new File(['a'], 'scene.spz');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFile: fileA, splatFiles: [fileA],
+      splatFileSources: [
+        { id: 'a/scene.spz', path: 'a/scene.spz', file: fileA },
+        { id: 'b/scene.spz', path: 'b/scene.spz', url: 'https://x/b/scene.spz', size: 5 },
+      ],
+    }));
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+    })));
+    try {
+      const pending = useReconstructionStore.getState().selectSplatSource('b/scene.spz');
+      expect(useReconstructionStore.getState().urlProgress?.currentFile).toBe('scene.spz');
+
+      await useReconstructionStore.getState().selectSplatSource('a/scene.spz');
+      await pending;
+
+      expect(useReconstructionStore.getState().urlLoading).toBe(false);
+      expect(useReconstructionStore.getState().urlProgress).toBeNull();
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(fileA);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 ```
 
 In `src/hooks/useUrlState.test.ts`, add `import { getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';` and, inside `describe('URL state sharing')`:
@@ -996,14 +1025,25 @@ In `src/hooks/useUrlState.test.ts`, add `import { getSplatLoadingProgress } from
 Run: `npx vitest run src/store/reconstructionStore.test.ts src/hooks/useUrlState.test.ts -t "already"`
 Expected: FAIL. `urlLoading` is `false`.
 
-- [ ] **Step 3: Implement.** Replace the `if (source.file) { ... }` branch with:
+The two "clears ..." tests pass before this change. They guard the existing behavior, and the identical-basename one fails if the guard in Step 3 omits `hadPendingDownload`.
+
+- [ ] **Step 3: Implement.** In `selectSplatSource`, record whether a lazy download was pending immediately before the existing `cancelPendingSplatLoad();` call. Insert the new line directly above it:
+
+```ts
+    // A pending download's progress is never the renderer's, even for a same-named file.
+    const hadPendingDownload = activeSplatController !== null;
+    cancelPendingSplatLoad();
+```
+
+Then replace the `if (source.file) { ... }` branch with:
 
 ```ts
     // Already downloaded: activate immediately (and offload the previous tile). A superseded
     // download indicator is cleared, but re-selecting the splat that is already active (a
     // restored choice right after a load) keeps the renderer's progress while it decodes.
     if (source.file) {
-      const rendererOwnsProgress = source.file === loadedFiles.splatFile
+      const rendererOwnsProgress = !hadPendingDownload
+        && source.file === loadedFiles.splatFile
         && isSplatLoadingProgressForFile(get().urlProgress, source.file);
       set({
         requestedSplatSourceId: source.id,
@@ -1044,8 +1084,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - the `processFiles` options pass-through (lines 58-115);
   - the new `reloadFiles`;
   - the return object.
-- Modify the three Reload call sites:
+- Modify the four Reload call sites:
   - `src/components/viewer3d/panels/TransformPanel.tsx:61,171`;
+  - `src/components/viewer3d/panels/ExportPanel.tsx:70,202-207`;
   - `src/components/viewer3d/contextMenu/useGlobalContextMenuActionStoreFacade.ts:58-61`;
   - `src/components/viewer3d/useTransformGizmoStoreFacade.ts:25,39,52`.
 - Test: `src/utils/splatFileSourcePolicy.test.ts`.
@@ -1250,8 +1291,9 @@ In `src/hooks/useFileDropzone.ts`:
 
 - Return it: `return { handleDrop, handleDragOver, processFiles, reloadFiles, processZipFile, handleBrowse };`. Keep the existing order and add `reloadFiles` after `processFiles`.
 
-Rewire the three call sites:
+Rewire the four call sites:
 - `TransformPanel.tsx`: change `const { processFiles } = useFileDropzone();` to `const { reloadFiles } = useFileDropzone();`, and make the Reload button call `reloadFiles(droppedFiles)`.
+- `ExportPanel.tsx`: in `handleReload`, call `reloadFiles(droppedFiles)` instead of `processFiles(droppedFiles)`, and list `reloadFiles` in its `useCallback` dependencies. Destructure `reloadFiles` from `useFileDropzone()`, and keep `processFiles` only if the file still uses it elsewhere.
 - `useGlobalContextMenuActionStoreFacade.ts`: change `const { processFiles } = useFileDropzone();` to `const { reloadFiles: reloadDatasetFiles } = useFileDropzone();`, and make the callback `await reloadDatasetFiles(files);` with deps `[reloadDatasetFiles]`.
 - `useTransformGizmoStoreFacade.ts`:
   - Change the type to `processFiles: ReturnType<typeof useFileDropzone>['reloadFiles'];`.
@@ -1266,7 +1308,7 @@ Expected: PASS.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add src/utils/splatFileSourcePolicy.ts src/utils/splatFileSourcePolicy.test.ts src/hooks/fileDropzoneWorkflow.ts src/hooks/fileDropzoneWorkflow.test.ts src/hooks/useFileDropzone.ts src/hooks/useFileDropzone.test.ts src/components/viewer3d/panels/TransformPanel.tsx src/components/viewer3d/contextMenu/useGlobalContextMenuActionStoreFacade.ts src/components/viewer3d/useTransformGizmoStoreFacade.ts
+git add src/utils/splatFileSourcePolicy.ts src/utils/splatFileSourcePolicy.test.ts src/hooks/fileDropzoneWorkflow.ts src/hooks/fileDropzoneWorkflow.test.ts src/hooks/useFileDropzone.ts src/hooks/useFileDropzone.test.ts src/components/viewer3d/panels/TransformPanel.tsx src/components/viewer3d/panels/ExportPanel.tsx src/components/viewer3d/contextMenu/useGlobalContextMenuActionStoreFacade.ts src/components/viewer3d/useTransformGizmoStoreFacade.ts
 git commit -m "Keep remote splat tiles when reloading a dataset
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -1338,6 +1380,18 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
     expect(pending.settle()).toBe(first);
     await expect(first).resolves.toMatchObject({ timedOut: false, state: { config: { ui: { backgroundColor: '#123456' } } } });
     expect(request).toHaveBeenCalledOnce();
+  });
+
+  it('counts a transport timeout that happened before the result was needed as a timeout', async () => {
+    // fetchWithTimeout gives up on a stalled request after 30 s, long before slow parsing ends.
+    const request = vi.fn(async (): Promise<Response> => { throw new DOMException('Request timed out', 'TimeoutError'); });
+    const pending = startOptionalDatasetViewerSettings(manifest.baseUrl, request);
+    await expect(pending.settle()).resolves.toEqual({ state: null, timedOut: true });
+  });
+
+  it('still reports a timed-out direct read as missing settings', async () => {
+    const request = vi.fn(async (): Promise<Response> => { throw new DOMException('Request timed out', 'TimeoutError'); });
+    await expect(fetchDatasetViewerSettings(manifest.baseUrl, request)).resolves.toBeNull();
   });
 ```
 
@@ -1430,9 +1484,8 @@ export function startOptionalDatasetViewerSettings(url: string,
   signal?.throwIfAborted();
   const controller = new AbortController();
   const requestSignal = signal ? anySignal([signal, controller.signal]) : controller.signal;
-  const settings = fetchDatasetViewerSettings(url,
+  const settings = readDatasetViewerSettings(url,
     (candidate, init) => fetchImpl(candidate, { ...init, signal: requestSignal }), isFile)
-    .then((state): OptionalViewerSettingsResult => ({ state, timedOut: false }))
     .catch((error): OptionalViewerSettingsResult => {
       if (controller.signal.aborted && !signal?.aborted) return { state: null, timedOut: true };
       throw error;
@@ -1475,6 +1528,43 @@ export async function fetchOptionalDatasetViewerSettingsResult(url: string,
   } finally {
     request.cancel();
   }
+}
+```
+
+Then replace the existing `fetchDatasetViewerSettings` (the candidate loop further down the file) with an internal reader that also reports transport timeouts, plus the unchanged public wrapper. Publication verification calls `fetchPublishedViewerState`, which relies on the wrapper still returning `null` on a timeout.
+
+```ts
+/** The candidate search; also says whether a stalled request (transport timeout) hid the settings. */
+async function readDatasetViewerSettings(url: string,
+  fetchImpl: (url: string, init?: RequestInit) => Promise<Response>, isFile: boolean): Promise<OptionalViewerSettingsResult> {
+  // The first candidate sits beside the loaded project or file; later ones are parent folders.
+  for (const [index, candidate] of settingsUrls(url, isFile).entries()) {
+    try {
+      const response = await fetchImpl(candidate, { credentials: 'omit' });
+      if (!response.ok) {
+        await response.body?.cancel();
+        if (response.status === 404) continue;
+        return { state: null, timedOut: false };
+      }
+      const text = await (await readBoundedResponse(response, MAX_VIEWER_STATE_BYTES)).text();
+      const state = parseDatasetViewerSettings(text);
+      return {
+        state: index === 0 || (isFile && savesFileAsActiveSplat(state, candidate, url)) ? state : displaySettingsOnly(state),
+        timedOut: false,
+      };
+    } catch (error) {
+      const name = error && typeof error === 'object' && 'name' in error ? error.name : undefined;
+      if (name === 'AbortError') throw error;
+      appLogger.warn('[URL Loader] Skipping unavailable or invalid colmapview.yaml settings.');
+      return { state: null, timedOut: name === 'TimeoutError' };
+    }
+  }
+  return { state: null, timedOut: false };
+}
+
+export async function fetchDatasetViewerSettings(url: string,
+  fetchImpl: (url: string, init?: RequestInit) => Promise<Response>, isFile = false): Promise<PublishedViewerState | null> {
+  return (await readDatasetViewerSettings(url, fetchImpl, isFile)).state;
 }
 ```
 
@@ -1571,7 +1661,241 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-### Task 8: Whole-branch verification (controller)
+### Task 8: Reload re-applies a URL dataset's saved settings (F7, alignment)
+
+**Why:** Reload re-parses `droppedFiles`. `setLoadedFiles` then resets the splat transform, because a new `imageFiles` map makes the commit a new dataset rather than an active-splat switch. Applying a transform also moves the splat (`src/store/actions/transformActions.ts`). A kept splat therefore needs the dataset's saved alignment re-applied.
+
+A local project gets this already, because its `colmapview.yaml` is among the dropped files and the workflow applies it. A URL dataset's settings were fetched beside its files, so Reload must carry them in.
+
+**Files:**
+- Modify: `src/store/reconstructionStore.ts`:
+  - new state `sourceViewerState` and action `setSourceViewerState`;
+  - `setDroppedFiles` drops a binding for another file map;
+  - `clear()` resets it.
+- Modify: `src/hooks/useUrlLoader.ts`. Record the settings after a successful load, inside `if (loaded) { ... }` in `runLoad`.
+- Modify: `src/hooks/fileDropzoneWorkflow.ts`. Add the `viewerState` option.
+- Modify: `src/hooks/useFileDropzone.ts`. `processFiles` passes `viewerState` through, and `reloadFiles` supplies the retained settings.
+- Test: `src/store/reconstructionStore.test.ts`.
+- Test: `src/hooks/fileDropzoneWorkflow.test.ts`.
+- Test: `src/hooks/useFileDropzone.test.ts`.
+- Test: `src/hooks/useUrlLoader.test.ts`.
+
+**Interfaces:**
+- Consumes: `reloadFiles` from Task 6, the `hubEntries` test helper from Task 4, and `applySavedViewerState` from `src/hooks/useUrlState.ts`.
+- Produces: the store state `sourceViewerState: { files: Map<string, File>; state: PublishedViewerState } | null`.
+- Produces: the store action `setSourceViewerState(state: PublishedViewerState | null): void`. It binds the state to the current `droppedFiles`, and stores `null` when there are none.
+- Produces: `FileDropzoneWorkflowOptions.viewerState?: PublishedViewerState`. When the files contain no settings file, the workflow applies this state through `onViewerState`. A settings file inside the files wins.
+
+- [ ] **Step 1: Write the failing tests.**
+
+In `src/store/reconstructionStore.test.ts`, add `import type { PublishedViewerState } from '../utils/publishedViewerState';` and, inside `describe('reconstruction store URL load lifecycle')`:
+
+```ts
+  it('keeps saved source settings only with the files they came with', () => {
+    const state: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null, config: { ui: { backgroundColor: '#123456' } } };
+    const files = new Map([['cameras.bin', new File([''], 'cameras.bin')]]);
+    useReconstructionStore.getState().setDroppedFiles(files);
+    useReconstructionStore.getState().setSourceViewerState(state);
+    expect(useReconstructionStore.getState().sourceViewerState).toEqual({ files, state });
+
+    // A reload commits the same file map again.
+    useReconstructionStore.getState().setDroppedFiles(files);
+    expect(useReconstructionStore.getState().sourceViewerState?.state).toBe(state);
+
+    useReconstructionStore.getState().setDroppedFiles(new Map());
+    expect(useReconstructionStore.getState().sourceViewerState).toBeNull();
+
+    useReconstructionStore.getState().setDroppedFiles(files);
+    useReconstructionStore.getState().setSourceViewerState(state);
+    useReconstructionStore.getState().clear();
+    expect(useReconstructionStore.getState().sourceViewerState).toBeNull();
+  });
+```
+
+In `src/hooks/fileDropzoneWorkflow.test.ts`:
+- Add `import type { PublishedViewerState } from '../utils/publishedViewerState';`.
+- Extend the `./useUrlState` import with `applySavedViewerState`.
+- Add inside `describe('file dropzone workflow')`:
+
+```ts
+  it('restores the saved alignment that came with a reloaded URL dataset', async () => {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    useTransformStore.setState(useTransformStore.getInitialState(), true);
+    const saved: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { transform: { ...createIdentityEuler(), translationX: 5 } } } };
+    // An applied transform moved the splat; Reload must return it to the saved alignment.
+    useTransformStore.getState().setSplatTransform({ ...createIdentityEuler(), translationX: 9 });
+    const deps = createDeps({
+      getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
+      setLoadedFiles: useReconstructionStore.getState().setLoadedFiles,
+      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
+      buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
+    });
+    const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, file(name)]));
+
+    await expect(processFileDropzoneFiles(files, deps, {
+      viewerState: saved,
+      onViewerState: viewerState => applySavedViewerState(viewerState, null),
+    })).resolves.toBe(true);
+
+    expect(useTransformStore.getState().splatTransform.translationX).toBe(5);
+  });
+
+  it('lets a settings file inside the files win over settings from their source', async () => {
+    const fromSource: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null,
+      config: { ui: { backgroundColor: '#111111' } } };
+    const inFiles = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
+      config: { ui: { backgroundColor: '#222222' } } });
+    const onViewerState = vi.fn();
+    const deps = createDeps({
+      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
+      buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
+    });
+    const files = new Map<string, File>(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, file(name)]));
+    files.set('colmapview.yaml', new File([inFiles], 'colmapview.yaml'));
+
+    await processFileDropzoneFiles(files, deps, { viewerState: fromSource, onViewerState });
+
+    expect(onViewerState).toHaveBeenCalledWith(expect.objectContaining({ config: { ui: { backgroundColor: '#222222' } } }));
+  });
+```
+
+In `src/hooks/useFileDropzone.test.ts`, inside `describe('useFileDropzone')`:
+
+```ts
+  it('re-applies saved source settings only to the files they came with', async () => {
+    const files = new Map([['cameras.bin', buildFile('cameras.bin')]]);
+    const saved = { version: 1, viewerVersion: 'test', viewState: null, config: {} };
+    useReconstructionStore.getState().setDroppedFiles(files);
+    useReconstructionStore.getState().setSourceViewerState(saved);
+    const { result } = renderHook(() => useFileDropzone());
+
+    await act(async () => { await result.current.reloadFiles(files); });
+    expect(processFileDropzoneFilesMock).toHaveBeenLastCalledWith(files, expect.anything(),
+      expect.objectContaining({ viewerState: saved }));
+
+    const other = new Map(files);
+    await act(async () => { await result.current.reloadFiles(other); });
+    expect(processFileDropzoneFilesMock).toHaveBeenLastCalledWith(other, expect.anything(),
+      expect.objectContaining({ viewerState: undefined }));
+  });
+```
+
+In `src/hooks/useUrlLoader.test.ts`, next to the Task 4 tests:
+
+```ts
+  it('remembers the saved settings that came with a URL dataset for Reload', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const baseUrl = 'https://huggingface.co/datasets/owner/saved/resolve/main/';
+    const request = vi.fn(async (url: string | URL) => {
+      if (String(url).endsWith('colmapview.yaml')) return new Response('ui:\n  background_color: "#123456"\n');
+      if (String(url).includes('/api/datasets/')) return Response.json(hubEntries([]));
+      return new Response(new Uint8Array([1, 2, 3]));
+    });
+    vi.stubGlobal('fetch', request);
+    processFilesMock.mockImplementationOnce(async files => {
+      useReconstructionStore.getState().setDroppedFiles(files);
+      useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles());
+    });
+    const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
+    await act(async () => { expect(await result.current.loadFromUrl(baseUrl)).toBe(true); });
+    const { sourceViewerState, droppedFiles } = useReconstructionStore.getState();
+    expect(sourceViewerState?.files).toBe(droppedFiles);
+    expect(sourceViewerState?.state.config).toEqual({ ui: { backgroundColor: '#123456' } });
+  });
+```
+
+- [ ] **Step 2: Run them to verify they fail**
+
+Run: `npx vitest run src/store/reconstructionStore.test.ts src/hooks/fileDropzoneWorkflow.test.ts src/hooks/useFileDropzone.test.ts src/hooks/useUrlLoader.test.ts`
+Expected: FAIL. `setSourceViewerState` does not exist, the workflow ignores `viewerState` (the alignment stays reset at 0), and `sourceViewerState` is undefined after the URL load.
+
+- [ ] **Step 3: Implement the store state.** In `src/store/reconstructionStore.ts`:
+- Add `import type { PublishedViewerState } from '../utils/publishedViewerState';`.
+- Add to `ReconstructionState`, next to `droppedFiles`:
+
+```ts
+  /**
+   * Saved settings a URL dataset brought from its source (its colmapview.yaml or published
+   * state), bound to the file map they came with. Reload re-applies them like a local
+   * project's own YAML.
+   */
+  sourceViewerState: { files: Map<string, File>; state: PublishedViewerState } | null;
+  setSourceViewerState: (state: PublishedViewerState | null) => void;
+```
+
+- Initialize it with `sourceViewerState: null,` next to `droppedFiles: null,`.
+- Replace `setDroppedFiles` with:
+
+```ts
+  setDroppedFiles: (droppedFiles) => set({
+    droppedFiles,
+    // Settings belong to the files they came with; another dataset must not inherit them.
+    ...(get().sourceViewerState?.files === droppedFiles ? {} : { sourceViewerState: null }),
+  }),
+
+  setSourceViewerState: (state) => {
+    const files = get().droppedFiles;
+    set({ sourceViewerState: state && files ? { files, state } : null });
+  },
+```
+
+- Add `sourceViewerState: null,` to the object that `clear()` sets.
+
+- [ ] **Step 4: Record the settings after a URL load.** In `src/hooks/useUrlLoader.ts`, at the end of the `if (loaded) { ... }` block in `runLoad`, after the picker offer from Task 4:
+
+```ts
+        // Reload re-reads the downloaded files; these settings are not among them.
+        useReconstructionStore.getState().setSourceViewerState(savedViewerState);
+```
+
+- [ ] **Step 5: Accept the settings in the workflow.** In `src/hooks/fileDropzoneWorkflow.ts`:
+- Add to `FileDropzoneWorkflowOptions`:
+
+```ts
+  /** Settings that came with these files from their source; a settings file inside them wins. */
+  viewerState?: PublishedViewerState;
+```
+
+- In `processFileDropzoneFiles`, change `let viewerState: PublishedViewerState | null = null;` to:
+
+```ts
+  let viewerState: PublishedViewerState | null = normalizedOptions.viewerState ?? null;
+```
+
+- [ ] **Step 6: Supply the retained settings on Reload.** In `src/hooks/useFileDropzone.ts`:
+- Add `'viewerState'` to `processFiles`' `Pick<FileDropzoneWorkflowOptions, ...>` list, and pass `viewerState: options.viewerState,` in the options given to `processFileDropzoneFiles`.
+- Replace `reloadFiles` with:
+
+```ts
+  /** Re-read the current dataset (discarding edits) without dropping its remote splat tiles. */
+  const reloadFiles = useCallback((files: Map<string, File>) => {
+    // A URL dataset's saved settings are not among its files; re-apply them like a project's own YAML.
+    const retained = useReconstructionStore.getState().sourceViewerState;
+    return processFiles(files, undefined, {
+      preserveRemoteSplatSources: true,
+      viewerState: retained?.files === files ? retained.state : undefined,
+    });
+  }, [processFiles]);
+```
+
+- [ ] **Step 7: Run the tests to verify they pass**
+
+Run: `npx vitest run src/store src/hooks src/components/viewer3d`
+Expected: PASS.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add src/store/reconstructionStore.ts src/store/reconstructionStore.test.ts src/hooks/useUrlLoader.ts src/hooks/useUrlLoader.test.ts src/hooks/fileDropzoneWorkflow.ts src/hooks/fileDropzoneWorkflow.test.ts src/hooks/useFileDropzone.ts src/hooks/useFileDropzone.test.ts
+git commit -m "Restore a URL dataset's saved alignment on Reload
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 9: Whole-branch verification (controller)
 
 - [ ] **Step 1:** `npx vitest run`. Expected: all files pass, and the test count is at least 4,343 plus the tests added above.
 - [ ] **Step 2:** `npx tsc -b --force`. Expected: exit 0.
