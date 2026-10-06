@@ -50,7 +50,9 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          # This job holds the deploy token. Untrusted preview code can write default-branch cache entries,
+          # and a restored archive can replace files outside ~/.npm, so restore no cache here.
+          package-manager-cache: false
       - run: npm ci
       - name: Install Playwright chromium
         run: npx playwright install --with-deps chromium

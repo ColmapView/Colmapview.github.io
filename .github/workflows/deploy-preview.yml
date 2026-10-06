@@ -80,7 +80,9 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
-          cache: npm
+          # This job holds the deploy token. Untrusted preview code can write default-branch cache entries,
+          # and a restored archive can replace files outside ~/.npm, so restore no cache here.
+          package-manager-cache: false
       - run: npm ci
       - name: Preflight isolated project
         run: node scripts/deployment/preflight.mjs --preview

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import path from 'node:path';
 import yaml from 'js-yaml';
@@ -106,6 +106,21 @@ test('Cloudflare deployment token is scoped only to trusted upload steps', () =>
   for (const step of tokenSteps) {
     assert.ok(step.run.startsWith(`npx --yes wrangler@${WRANGLER_VERSION} pages deploy `), step.name);
     assert.equal(step.env.npm_config_cache, '${{ runner.temp }}/wrangler-npm-cache', step.name);
+  }
+  // Untrusted preview code can write default-branch cache entries directly, and a restored archive can write
+  // outside ~/.npm, so no job that references the token (even its presence check) restores a dependency cache.
+  const tokenJobs = readdirSync('.github/workflows').filter(file => /\.ya?ml$/.test(file)).sort()
+    .flatMap(file => Object.entries(yaml.load(readFileSync(`.github/workflows/${file}`, 'utf8')).jobs).map(([name, job]) => [`${file}:${name}`, job]))
+    .filter(([, job]) => /CLOUDFLARE_API_TOKEN/i.test(JSON.stringify(job)));
+  assert.deepEqual(tokenJobs.map(([id]) => id), ['deploy-preview.yml:publish', 'deploy.yml:deploy']);
+  for (const [id, job] of tokenJobs) {
+    const setups = job.steps.filter(step => step.uses?.startsWith('actions/setup-node@'));
+    assert.ok(setups.length > 0, id);
+    for (const setup of setups) {
+      assert.equal(setup.with?.cache, undefined, id);
+      assert.equal(setup.with?.['package-manager-cache'], false, id);
+    }
+    assert.ok(!job.steps.some(step => step.uses?.startsWith('actions/cache')), id);
   }
 });
 
