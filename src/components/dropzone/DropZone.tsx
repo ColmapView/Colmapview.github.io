@@ -37,7 +37,7 @@ export function DropZone({ children }: DropZoneProps) {
     },
     actions: {
       setError,
-      clear,
+      cancelLoading,
     },
   } = useDropZoneStoreFacade();
   const configInputRef = useRef<HTMLInputElement>(null);
@@ -287,7 +287,7 @@ export function DropZone({ children }: DropZoneProps) {
                 {formatByteProgress(urlProgress.bytesLoaded)} / {formatByteProgress(urlProgress.bytesTotal)}
               </div>
             )}
-            <button type="button" className="mt-4 text-sm text-white underline" onClick={clear}>Cancel loading</button>
+            <button type="button" className="mt-4 text-sm text-white underline" onClick={cancelLoading}>Cancel loading</button>
           </div>
         </div>
       )}

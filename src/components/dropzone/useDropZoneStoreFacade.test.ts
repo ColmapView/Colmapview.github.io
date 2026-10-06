@@ -2,18 +2,31 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useReconstructionStore } from '../../store/reconstructionStore';
 import { useUIStore } from '../../store/stores/uiStore';
-import { buildReconstruction } from '../../test/builders/colmapBuilders';
+import { buildLoadedFiles, buildReconstruction } from '../../test/builders/colmapBuilders';
 import { useDropZoneStoreFacade } from './useDropZoneStoreFacade';
 
 describe('useDropZoneStoreFacade', () => {
-  it('cancels an active URL request and clears its loading state', () => {
+  it('cancels an active URL request without clearing the loaded scene', () => {
+    const loadedFiles = buildLoadedFiles();
+    const reconstruction = buildReconstruction();
+    useReconstructionStore.setState({ loadedFiles, reconstruction });
     const signal = useReconstructionStore.getState().tryStartUrlLoad()!;
     useReconstructionStore.getState().setUrlLoading(true);
     const { result } = renderHook(() => useDropZoneStoreFacade());
-    act(() => { result.current.actions.clear(); });
+    act(() => { result.current.actions.cancelLoading(); });
     expect(signal.aborted).toBe(true);
-    expect(useReconstructionStore.getState().urlLoading).toBe(false);
-    expect(useReconstructionStore.getState().urlLoadActive).toBe(false);
+    expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: false, urlLoadActive: false, loadedFiles, reconstruction });
+  });
+
+  it('shows the landing controls again after a startup link is cancelled', () => {
+    window.history.replaceState(null, '', '/?url=https%3A%2F%2Fexample.com%2Fscene');
+    useReconstructionStore.setState({ urlLoading: true });
+    const { result, rerender } = renderHook(() => useDropZoneStoreFacade());
+    expect(result.current.data.hasUrlLoadRequest).toBe(true);
+    act(() => { result.current.actions.cancelLoading(); });
+    // DropZone re-renders on urlLoading; the gate is read during that render.
+    rerender();
+    expect(result.current.data.hasUrlLoadRequest).toBe(false);
   });
   beforeEach(() => {
     window.history.replaceState(null, '', '/');

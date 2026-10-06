@@ -4,7 +4,7 @@ import { DropZone } from './DropZone';
 import { useUrlLoader } from '../../hooks/useUrlLoader';
 import { useDropZoneStoreFacade } from './useDropZoneStoreFacade';
 import { useReconstructionStore } from '../../store/reconstructionStore';
-import { buildLoadedFiles } from '../../test/builders';
+import { buildLoadedFiles, buildReconstruction } from '../../test/builders';
 
 const selectedUrl = 'https://drive.google.com/file/d/1DpE-bfPPIVp7TwZeMyhmisfEwCrJ0QDd/view?resourcekey=shared-key';
 
@@ -24,7 +24,7 @@ beforeEach(() => {
   useReconstructionStore.getState().clear();
   vi.mocked(useDropZoneStoreFacade).mockReturnValue({
     data: { error: null, reconstruction: null, touchMode: false, hasUrlLoadRequest: false },
-    actions: { setError: vi.fn(), clear: vi.fn() },
+    actions: { setError: vi.fn(), cancelLoading: vi.fn() },
   });
 });
 afterEach(() => { cleanup(); useReconstructionStore.getState().clear(); vi.clearAllMocks(); });
@@ -40,7 +40,7 @@ describe('DropZone Drive selection loading', () => {
     });
     vi.mocked(useDropZoneStoreFacade).mockReturnValue({
       data: { error: null, reconstruction: null, touchMode, hasUrlLoadRequest: false },
-      actions: { setError: vi.fn(), clear: vi.fn() },
+      actions: { setError: vi.fn(), cancelLoading: vi.fn() },
     });
     render(<DropZone><div>Viewer</div></DropZone>);
     const initialSplatSelectionRevision = useReconstructionStore.getState().splatSelectionRevision;
@@ -92,7 +92,7 @@ describe('DropZone preparation cancellation', () => {
     });
     vi.mocked(useDropZoneStoreFacade).mockReturnValue({
       data: { error: null, reconstruction: null, touchMode: false, hasUrlLoadRequest: false },
-      actions: { setError, clear: useReconstructionStore.getState().clear },
+      actions: { setError, cancelLoading: useReconstructionStore.getState().cancelLoading },
     });
     const { container } = render(<DropZone><div>Viewer</div></DropZone>);
     const input = container.querySelector<HTMLInputElement>('input[accept=".json"]')!;
@@ -128,5 +128,23 @@ describe('DropZone preparation cancellation', () => {
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
     expect(loadFromUrl).not.toHaveBeenCalled();
     expect(useReconstructionStore.getState().urlLoadActive).toBe(false);
+  });
+});
+
+describe('DropZone loading overlay', () => {
+  it('cancels only the work in progress', () => {
+    const cancelLoading = vi.fn();
+    vi.mocked(useUrlLoader).mockReturnValue({
+      loadFromUrl: vi.fn(), loadFromManifest: vi.fn(), urlLoading: true,
+      urlProgress: { percent: 40, message: 'Downloading...' },
+      urlError: null, clearUrlError: vi.fn(), setUrlLoading: vi.fn(), setUrlProgress: vi.fn(),
+    });
+    vi.mocked(useDropZoneStoreFacade).mockReturnValue({
+      data: { error: null, reconstruction: buildReconstruction(), touchMode: false, hasUrlLoadRequest: false },
+      actions: { setError: vi.fn(), cancelLoading },
+    });
+    render(<DropZone><div>Viewer</div></DropZone>);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel loading' }));
+    expect(cancelLoading).toHaveBeenCalledOnce();
   });
 });

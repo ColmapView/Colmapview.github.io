@@ -26,7 +26,7 @@ import {
 import { isSplatColorMode } from './types';
 import { getSplatRendererRequirement, supportsWebGpuRenderer } from '../utils/splatFilePolicy';
 import { fetchRemoteSplatBytes, fetchRemoteSplatFile, toArrayBuffer } from '../utils/urlUtils';
-import { getSplatDownloadProgress, getSplatPhaseProgress } from '../utils/splatLoadingProgressPolicy';
+import { getSplatDownloadProgress, getSplatPhaseProgress, isSplatLoadingProgressForFile } from '../utils/splatLoadingProgressPolicy';
 import {
   canUseByteLessSplatLoader,
   TOUCH_SPLAT_BYTELESS_RETENTION_MIN_BYTES,
@@ -230,6 +230,8 @@ interface ReconstructionState {
   setUrlLoading: (loading: boolean) => void;
   setUrlProgress: (progress: UrlLoadProgress | null) => void;
   setUrlError: (error: UrlLoadError | null) => void;
+  /** Stop the load in progress (URL load, splat download, parse or splat decode) and keep the scene on screen. */
+  cancelLoading: () => void;
   clear: () => void;
 }
 
@@ -564,6 +566,30 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
 
   // Only set urlLoading to false when there's an actual error, not when clearing
   setUrlError: (urlError) => set(urlError ? { urlError, urlLoading: false } : { urlError }),
+
+  cancelLoading: () => {
+    const { urlLoadController, urlProgress, loadedFiles, reconstruction, splatSelectionRevision } = get();
+    // With no tile download pending, splat progress for the active file means the renderer is
+    // still decoding it; cancelling that leaves the scene without the splat (COLMAP only).
+    const cancelsRendererDecode = !activeSplatController
+      && isSplatLoadingProgressForFile(urlProgress, loadedFiles?.splatFile);
+    cancelPendingSplatLoad();
+    urlLoadController?.abort();
+    cancelPendingReconstructionLoad();
+    // A startup or shared link that never produced a scene would keep the landing page hidden.
+    if (!reconstruction) clearUrlLoadRequestFromLocation();
+    set({
+      urlLoading: false,
+      urlLoadActive: false,
+      urlLoadController: null,
+      urlProgress: null,
+      ...(cancelsRendererDecode && loadedFiles ? {
+        loadedFiles: clearActiveSplatFile(loadedFiles),
+        requestedSplatSourceId: null,
+        splatSelectionRevision: splatSelectionRevision + 1,
+      } : {}),
+    });
+  },
 
   clear: () => {
     cancelPendingSplatLoad();

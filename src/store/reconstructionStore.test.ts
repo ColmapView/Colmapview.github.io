@@ -13,7 +13,10 @@ import {
 } from '../splat/gaussianCloudLoader';
 import type { GaussianCloud } from '../splat/gaussianCloud';
 import { getActiveZipImageIndex, setActiveZipArchive } from '../utils/zipArchiveState';
-import { buildArchiveReader } from '../test/builders';
+import { buildArchiveReader, buildReconstruction } from '../test/builders';
+import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
+import type { ReconstructionSource } from '../wasm/reconstructionService';
+import { getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
 
 // Byte-less activation seams: the decode step is mocked (no real gs-toolbox
 // decode in store tests), while seedGaussianCloudLoad / loadGaussianCloudFromFile
@@ -1161,5 +1164,133 @@ describe('reconstruction store splat renderer sync', () => {
 
     useReconstructionStore.getState().clear();
     expect(useSplatBackendStore.getState().availability.activeSplatRenderer).toBe('any');
+  });
+});
+
+describe('reconstruction store loading cancellation', () => {
+  beforeEach(() => {
+    window.history.replaceState(null, '', '/');
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
+    useTransformStore.setState(useTransformStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
+  });
+
+  afterEach(() => {
+    useReconstructionStore.getState().clear();
+    window.history.replaceState(null, '', '/');
+    vi.unstubAllGlobals();
+  });
+
+  it('stops a URL load without touching the scene already on screen', async () => {
+    const loadedFiles = baseLoadedFiles({});
+    const droppedFiles = new Map([['cameras.bin', loadedFiles.camerasFile!]]);
+    const dispose = vi.fn();
+    const archive = buildArchiveReader();
+    const close = vi.spyOn(archive, 'close');
+    setActiveZipArchive(archive, new Map());
+    useReconstructionStore.setState({
+      reconstruction: buildReconstruction(), loadedFiles, droppedFiles,
+      wasmReconstruction: { dispose } as unknown as ReconstructionSource,
+      sourceType: 'url', sourceUrl: 'https://example.com/old',
+    });
+    const signal = useReconstructionStore.getState().tryStartUrlLoad()!;
+    useReconstructionStore.setState({ urlLoading: true, urlProgress: { percent: 40, message: 'Downloading...' } });
+
+    useReconstructionStore.getState().cancelLoading();
+    await Promise.resolve();
+
+    const state = useReconstructionStore.getState();
+    expect(signal.aborted).toBe(true);
+    expect(state).toMatchObject({
+      urlLoading: false, urlLoadActive: false, urlLoadController: null, urlProgress: null,
+      loadedFiles, droppedFiles, sourceType: 'url', sourceUrl: 'https://example.com/old',
+    });
+    expect(state.reconstruction).not.toBeNull();
+    expect(dispose).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+    expect(getActiveZipImageIndex()).not.toBeNull();
+  });
+
+  it('aborts a pending reconstruction parse', () => {
+    const job = beginReconstructionLoad();
+    useReconstructionStore.setState({ urlLoading: true, urlProgress: { percent: 20, message: 'Parsing COLMAP files...' } });
+    useReconstructionStore.getState().cancelLoading();
+    expect(job.signal.aborted).toBe(true);
+    expect(useReconstructionStore.getState().urlLoading).toBe(false);
+  });
+
+  it('stops a lazy splat download and keeps the splat that was showing', async () => {
+    const fileA = new File(['a'], 'a.ply');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFile: fileA, splatFiles: [fileA],
+      splatFileSources: [
+        { id: 'splats/a.ply', path: 'splats/a.ply', file: fileA },
+        { id: 'splats/b.ply', path: 'splats/b.ply', url: 'https://x/ds/splats/b.ply', size: 20 },
+      ],
+    }));
+    let requestSignal: AbortSignal | null | undefined;
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      requestSignal = init?.signal;
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+    })));
+    const pending = useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+    await vi.waitFor(() => expect(requestSignal).toBeDefined());
+    expect(useReconstructionStore.getState().urlLoading).toBe(true);
+
+    useReconstructionStore.getState().cancelLoading();
+    await pending;
+
+    const state = useReconstructionStore.getState();
+    expect(requestSignal?.aborted).toBe(true);
+    expect(state.loadedFiles?.splatFile).toBe(fileA);
+    expect(state.urlLoading).toBe(false);
+    expect(state.urlError).toBeNull();
+  });
+
+  it('treats cancelling a splat the renderer is still decoding as choosing COLMAP only', () => {
+    const fileA = new File(['a'], 'a.ply');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFile: fileA, splatFiles: [fileA],
+      splatFileSources: [{ id: 'splats/a.ply', path: 'splats/a.ply', file: fileA }],
+    }));
+    useReconstructionStore.setState({ urlLoading: true, urlProgress: getSplatLoadingProgress(fileA, { startPercent: 60 }) });
+    const revision = useReconstructionStore.getState().splatSelectionRevision;
+
+    useReconstructionStore.getState().cancelLoading();
+
+    const state = useReconstructionStore.getState();
+    expect(state.loadedFiles?.splatFile).toBeUndefined();
+    expect(state.loadedFiles?.splatFileSources?.map(source => source.id)).toEqual(['splats/a.ply']);
+    expect(state.splatSelectionRevision).toBe(revision + 1);
+    expect(state.urlLoading).toBe(false);
+  });
+
+  it('returns to the landing page when a startup link is cancelled before anything loaded', () => {
+    window.history.replaceState(null, '', '/?url=https%3A%2F%2Fexample.com%2Fscene');
+    useReconstructionStore.setState({ urlLoading: true, urlProgress: { percent: 0, message: 'Initializing...' } });
+    useReconstructionStore.getState().cancelLoading();
+    expect(hasUrlToLoad()).toBe(false);
+    expect(useReconstructionStore.getState().urlLoading).toBe(false);
+  });
+
+  it('keeps the address bar when a scene is already loaded', () => {
+    window.history.replaceState(null, '', '/?url=https%3A%2F%2Fexample.com%2Fscene');
+    useReconstructionStore.setState({ reconstruction: buildReconstruction(), urlLoading: true,
+      urlProgress: { percent: 10, message: 'Downloading...' } });
+    useReconstructionStore.getState().cancelLoading();
+    expect(hasUrlToLoad()).toBe(true);
+  });
+
+  it('lets a new load start right after a cancel, and a second cancel is harmless', () => {
+    const first = useReconstructionStore.getState().tryStartUrlLoad()!;
+    useReconstructionStore.getState().cancelLoading();
+    useReconstructionStore.getState().cancelLoading();
+    const second = useReconstructionStore.getState().tryStartUrlLoad();
+    expect(second).toBeInstanceOf(AbortSignal);
+    // The cancelled loader's cleanup must not end the new load.
+    useReconstructionStore.getState().finishUrlLoad(first);
+    expect(useReconstructionStore.getState().urlLoadController?.signal).toBe(second);
+    expect(second!.aborted).toBe(false);
   });
 });
