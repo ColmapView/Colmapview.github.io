@@ -28,15 +28,17 @@ let metadata;
 let lastError;
 
 // CDNs can expose the prior release briefly. Never accept it as a successful deployment.
-for (let attempt = 1; attempt <= 18; attempt++) {
+// GitHub branch uploads return before the Pages build completes; allow five minutes there.
+const readinessAttempts = profile === 'github' ? 60 : 18;
+for (let attempt = 1; attempt <= readinessAttempts; attempt++) {
   try {
     metadata = await fetchVerifiedArtifact(base, expected);
     break;
   } catch (error) {
     lastError = error;
     metadata = undefined;
-    console.log(`Waiting for ${profile} artifact (${attempt}/18).`);
-    if (attempt < 18) await delay(5_000);
+    console.log(`Waiting for ${profile} artifact (${attempt}/${readinessAttempts}).`);
+    if (attempt < readinessAttempts) await delay(5_000);
   }
 }
 if (!metadata) throw new Error(`Expected ${profile} artifact was not available.`, { cause: lastError });
