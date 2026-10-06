@@ -19,6 +19,7 @@ export interface HubClient {
 
 export const BATCH_RECEIPT_PATH = 'colmapview-upload.json';
 export const CREATION_MARKER_PATH = 'colmapview-publication.json';
+const PUBLIC_SOURCE_REQUIRED = 'Publication requires a public, ungated Hugging Face dataset.';
 export const commitTitle = (marker: string) => `ColmapView publication ${marker}`;
 
 export function createHubClient(getAccessToken: (username: string) => string): HubClient {
@@ -29,9 +30,14 @@ export function createHubClient(getAccessToken: (username: string) => string): H
     (await readBoundedResponse(await boundedFetch(signal)(url), 512 * 1024)).text();
   const client: HubClient = {
     async resolveRevision(repoId, revision, signal) {
-      const info = await (await sdk()).datasetInfo({ name: repoId, revision, additionalFields: ['sha'], fetch: boundedFetch(signal) });
+      const info = await (await sdk()).datasetInfo({ name: repoId, revision, additionalFields: ['sha'], fetch: boundedFetch(signal) })
+        .catch((error: unknown): never => {
+          // This read is anonymous: 401/403/404 mean a private, gated or missing source, never an expired connection.
+          if ([401, 403, 404].includes(errorStatus(error) ?? 0)) throw new HfError(`${PUBLIC_SOURCE_REQUIRED} This source dataset is private or no longer available.`);
+          throw error;
+        });
       if (info.private || info.gated || info.name !== repoId || !/^[a-f0-9]{40,64}$/i.test(info.sha)) {
-        throw new HfError('Publication requires a public, ungated Hugging Face dataset.');
+        throw new HfError(PUBLIC_SOURCE_REQUIRED);
       }
       return info.sha;
     },

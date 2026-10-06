@@ -187,7 +187,8 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
     if (source.file?.size) add(fixed(path, source.file, 'splat'));
     else if (source.url) {
       const asset = await remote(source.url, path, 'splat');
-      asset.size = source.size ?? null;
+      // Discovery records an unknown size as 0; only a positive size is a byte count to verify.
+      asset.size = source.size !== undefined && source.size > 0 ? source.size : null;
       add(asset);
     }
     else throw new HfError(`Original splat ${source.path} is unavailable. Load its original file before publishing.`);

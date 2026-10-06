@@ -1,7 +1,7 @@
 import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHubClient, commitTitle } from './hubClient';
-import { HfError } from './http';
+import { HfError, publicationErrorMessage } from './http';
 import { TRANSFER_IDLE_TIMEOUT_MS } from './transferTimeout';
 
 const sdk = vi.hoisted(() => ({ createRepo: vi.fn(), listCommits: vi.fn(), uploadFilesWithProgress: vi.fn(), datasetInfo: vi.fn(), listFiles: vi.fn() }));
@@ -117,5 +117,23 @@ describe('Hugging Face transport adapter', () => {
     await expect(client.reconcile('owner/scene', parent, 'op:0', 'exact receipt', signal())).resolves.toBe(next);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('different receipt')));
     await expect(client.reconcile('owner/scene', parent, 'op:0', 'exact receipt', signal())).rejects.toThrow('changed');
+  });
+
+  it.each([401, 403, 404])('explains an unreadable source (%i) instead of an expired connection', async status => {
+    sdk.datasetInfo.mockRejectedValue(Object.assign(new Error('Repository not found'), { statusCode: status }));
+    const error = await createHubClient(() => 'test-token').resolveRevision('owner/private', 'main', signal()).catch((value: unknown) => value);
+    expect(publicationErrorMessage(error)).toBe('Publication requires a public, ungated Hugging Face dataset. This source dataset is private or no longer available.');
+  });
+  it('keeps transient metadata failures retryable', async () => {
+    sdk.datasetInfo.mockRejectedValue(Object.assign(new Error('Busy'), { statusCode: 503 }));
+    await expect(createHubClient(() => 'test-token').resolveRevision('owner/scene', 'main', signal())).rejects.toMatchObject({ statusCode: 503 });
+  });
+  it.each([{ private: true }, { gated: 'auto' }])('refuses a readable non-public source: %o', async flags => {
+    sdk.datasetInfo.mockResolvedValue({ name: 'owner/scene', sha: 'c'.repeat(40), private: false, gated: false, ...flags });
+    await expect(createHubClient(() => 'test-token').resolveRevision('owner/scene', 'main', signal())).rejects.toThrow('Publication requires a public, ungated Hugging Face dataset.');
+  });
+  it('pins a public source', async () => {
+    sdk.datasetInfo.mockResolvedValue({ name: 'owner/scene', sha: 'c'.repeat(40), private: false, gated: false });
+    await expect(createHubClient(() => 'test-token').resolveRevision('owner/scene', 'main', signal())).resolves.toBe('c'.repeat(40));
   });
 });

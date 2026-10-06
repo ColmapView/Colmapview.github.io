@@ -11,6 +11,8 @@ import { checkAssetSize, preparePublication, type PublicationInput } from './pre
 import { MAX_BUFFERED_PUBLICATION_FILE_BYTES } from './types';
 import { publicationManifest, publicationMetadata } from './publicationMetadata';
 import { publicationPath } from './publicationPaths';
+import { createPublicationController } from './publishDataset';
+import type { HubClient } from '../huggingface/hubClient';
 import { parseDatasetViewerSettings } from '../../utils/datasetViewerSettings';
 import { getManifestLoadSourceInfo } from '../../hooks/urlLoaderPolicy';
 import { buildImageUrl, buildMaskUrlCandidates } from '../../utils/imageFileLookupPolicy';
@@ -64,6 +66,30 @@ describe('publication snapshot preparation', () => {
       expect(() => checkAssetSize(size, 'large.ply', 'splat')).toThrow('invalid size');
     }
     expect(() => checkAssetSize(MAX_BUFFERED_PUBLICATION_FILE_BYTES + 1, 'photo.png', 'image')).toThrow('128 MiB');
+  });
+
+  const tileUrl = 'https://huggingface.co/datasets/owner/source/resolve/main/tile.ply';
+  it.each([[0, null], [undefined, null], [42, 42]] as const)('treats a catalogued splat size of %s as %s bytes', async (size, expected) => {
+    const source = input();
+    source.dataset.loadedFiles!.splatFileSources = [{ id: 'tile', path: 'tile.ply', url: tileUrl, size }];
+    const prepared = await preparePublication(source, new AbortController().signal, deps());
+    expect(prepared.assets.find(asset => asset.kind === 'splat')!.size).toBe(expected);
+  });
+
+  it('publishes a lazy remote tile whose size discovery could not read', async () => {
+    const source = input();
+    source.dataset.loadedFiles!.splatFileSources = [{ id: 'tile', path: 'tile.ply', url: tileUrl, size: 0 }];
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('remote splat bytes')));
+    let commit = 1;
+    const client: HubClient = { create: vi.fn().mockResolvedValue('a'.repeat(40)), head: vi.fn(),
+      upload: vi.fn().mockImplementation(async () => (++commit).toString(16).padStart(40, '0')),
+      reconcile: vi.fn().mockResolvedValue(null), files: vi.fn(), resolveRevision: vi.fn() };
+    const controller = createPublicationController(client, vi.fn().mockResolvedValue(undefined));
+    await controller.publish('owner', { name: 'scene', title: 'Scene', description: '', license: 'cc0-1.0' },
+      signal => preparePublication(source, signal, deps()));
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'completed', error: undefined });
+    const batches = vi.mocked(client.upload).mock.calls.map(call => call[1].map(file => file.path));
+    expect(batches).toContainEqual(['splats/tile.ply', 'colmapview-upload.json']);
   });
 
   it('freezes the reviewed preview bytes and embeds their data revision in the README', async () => {
