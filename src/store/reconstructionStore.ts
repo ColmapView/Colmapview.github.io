@@ -204,7 +204,10 @@ interface ReconstructionState {
   requestedSplatSourceId: string | null;
   /** Explicit source choices supersede pending startup restoration, including choosing None again. */
   splatSelectionRevision: number;
-  /** Whether to show the "select a splat" popup (set when >1 splat is discovered). */
+  /**
+   * Whether to show the "select a splat" popup. Only offerSplatPicker opens it, after a URL load
+   * settles with splats listed and none showing.
+   */
   showSplatPicker: boolean;
   /** URL loading state (shared across components) */
   urlLoading: boolean;
