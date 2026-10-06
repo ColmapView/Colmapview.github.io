@@ -103,28 +103,41 @@ for (const format of ['text', 'binary'] as const) {
 
 test('clearing a pending real worker load prevents snapshot installation', async ({ page }) => {
   await page.goto('/');
-  // Hold worker module initialization so clear deterministically interrupts an active load.
+  // Let the native worker be created, but hold its parser module so initialization cannot finish.
   let release: () => void = () => undefined;
   const held = new Promise<void>(resolve => { release = resolve; });
-  await page.route('**/reconstruction.worker.ts*', async route => { await held; await route.continue().catch(() => undefined); });
-  await loadTestDataset(page);
-  await expect.poll(() => page.evaluate(async () => {
-    const storePath = '/src/store/reconstructionStore.ts';
-    const { useReconstructionStore } = await import(/* @vite-ignore */ storePath);
-    return useReconstructionStore.getState().loadedFiles?.camerasFile?.name;
-  })).toBe('cameras.txt');
-  await page.evaluate(async () => {
-    const storePath = '/src/store/reconstructionStore.ts';
-    const { useReconstructionStore } = await import(/* @vite-ignore */ storePath);
-    useReconstructionStore.getState().clear();
+  await page.route('**/reconstructionAuthority.ts*', async route => { await held; await route.continue().catch(() => undefined); });
+  const requested = page.waitForRequest(request => request.url().includes('reconstructionAuthority.ts'), { timeout: 10_000 });
+  const created = page.waitForEvent('worker', {
+    predicate: worker => worker.url().includes('reconstruction.worker'), timeout: 10_000,
   });
-  release();
-  await page.unroute('**/reconstruction.worker.ts*');
-  await expect.poll(() => page.evaluate(async () => {
-    const storePath = '/src/store/reconstructionStore.ts';
-    const { useReconstructionStore } = await import(/* @vite-ignore */ storePath);
-    return useReconstructionStore.getState().reconstruction;
-  })).toBe(null);
+  try {
+    await loadTestDataset(page);
+    const [, worker] = await Promise.all([requested, created]);
+    // Files and the scene remain staged until parsing succeeds; they are not a load-start signal.
+    expect(await page.evaluate(async () => {
+      const storePath = '/src/store/reconstructionStore.ts';
+      const { useReconstructionStore } = await import(/* @vite-ignore */ storePath);
+      const state = useReconstructionStore.getState();
+      return { files: state.loadedFiles, reconstruction: state.reconstruction, loading: state.urlLoading };
+    })).toEqual({ files: null, reconstruction: null, loading: true });
+    const closed = worker.waitForEvent('close', { timeout: 10_000 });
+    await page.evaluate(async () => {
+      const storePath = '/src/store/reconstructionStore.ts';
+      const { useReconstructionStore } = await import(/* @vite-ignore */ storePath);
+      useReconstructionStore.getState().clear();
+    });
+    await closed;
+    expect(await page.evaluate(async () => {
+      const storePath = '/src/store/reconstructionStore.ts';
+      const { useReconstructionStore } = await import(/* @vite-ignore */ storePath);
+      const state = useReconstructionStore.getState();
+      return { files: state.loadedFiles, reconstruction: state.reconstruction, snapshot: state.wasmReconstruction, loading: state.urlLoading };
+    })).toEqual({ files: null, reconstruction: null, snapshot: null, loading: false });
+  } finally {
+    release();
+    await page.unroute('**/reconstructionAuthority.ts*');
+  }
   await loadTestDataset(page);
   await expect(page.getByText('photo.jpg', { exact: true }).first()).toBeVisible({ timeout: 45000 });
 });

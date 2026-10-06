@@ -117,6 +117,7 @@ for (const directory of profiles) {
         for (const filename of ['about.html', 'privacy.html', 'terms.html']) {
           const response = await page.goto(`${viewer}${filename}`);
           expect(response?.status()).toBe(200);
+          if (metadata.profile !== 'github') expect(response?.headers()['cache-control']).toBe('public, no-cache, no-transform');
           await expect(page.locator('h1')).toBeVisible();
           const links = await page.getByRole('navigation', { name: 'Main navigation', exact: true }).locator('a').evaluateAll(anchors => anchors.map(anchor => (anchor as HTMLAnchorElement).href));
           for (const link of links) expect(new URL(link).origin).toBe(origin);
@@ -124,7 +125,10 @@ for (const directory of profiles) {
         }
         const response = await page.goto(viewer);
         expect(response?.status()).toBe(200);
-        if (metadata.profile !== 'github') expect(response?.headers()['cross-origin-opener-policy']).toBe('same-origin-allow-popups');
+        if (metadata.profile !== 'github') {
+          expect(response?.headers()['cross-origin-opener-policy']).toBe('same-origin-allow-popups');
+          expect(response?.headers()['cache-control']).toBe('public, no-cache, no-transform');
+        }
         await expect(page.getByRole('heading', { name: 'Load Dataset', exact: true })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Google Drive account', exact: true })).toHaveCount(enabled ? 1 : 0);
         await expect(page.getByRole('button', { name: 'Publish to Google Drive', exact: true })).toHaveCount(enabled ? 1 : 0);

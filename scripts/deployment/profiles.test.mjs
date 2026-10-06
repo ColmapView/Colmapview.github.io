@@ -1,10 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
+import path from 'node:path';
 import yaml from 'js-yaml';
 import { CUSTOM_ORIGIN, FIXTURE_GOOGLE_CONFIG, profileEnvironment, safeOutputDirectory, validateBase, validatePreviewConfiguration, validateReleaseConfiguration } from './profiles.mjs';
 import { fetchVerifiedArtifact, htmlSha256, verifyPolicyHtml } from './artifact-verification.mjs';
+import { cloudflareStaticHeaders } from './headers.mjs';
+import { startArtifactServer } from './static-server.mjs';
 
 const release = {
   CLOUDFLARE_PAGES_ENABLED: 'true', CLOUDFLARE_API_TOKEN_CONFIGURED: 'true',
@@ -115,4 +118,35 @@ test('public verification rejects fresh metadata paired with old HTML and accept
 test('public policy verification rejects a hosting SPA fallback even when it returns HTTP 200', () => {
   assert.throws(() => verifyPolicyHtml('privacy.html', '<html lang="en"><title>ColmapView</title></html>'), /SPA fallback/);
   verifyPolicyHtml('privacy.html', '<html lang="en"><title>Privacy policy · ColmapView</title></html>');
+});
+
+test('Cloudflare artifact headers preserve HTML on canonical and alias routes without changing asset or metadata rules', async () => {
+  mkdirSync('.tmp', { recursive: true });
+  const directory = mkdtempSync(path.resolve('.tmp/deployment-headers-'));
+  const htmlRoutes = ['/', '/index', '/index.html', '/about', '/about.html', '/privacy', '/privacy.html', '/terms', '/terms.html', '/hf-callback', '/hf-callback.html'];
+  writeFileSync(path.join(directory, '_headers'), cloudflareStaticHeaders());
+  for (const name of ['index.html', 'about.html', 'privacy.html', 'terms.html', 'hf-callback.html']) writeFileSync(path.join(directory, name), '<html><body>prepared bytes</body></html>');
+  for (const name of ['entry.js', 'style.css', 'worker.wasm', 'deployment.json']) writeFileSync(path.join(directory, name), 'fixture');
+  const server = await startArtifactServer(directory);
+  try {
+    for (const route of htmlRoutes) {
+      const response = await fetch(`${server.origin}${route}?url=private-file-identifier`);
+      assert.equal(response.status, 200, route);
+      assert.equal(response.headers.get('cache-control'), 'public, no-cache, no-transform', route);
+      assert.equal(response.headers.get('cross-origin-opener-policy'), 'same-origin-allow-popups');
+      assert.equal(response.headers.get('referrer-policy'), 'strict-origin');
+      assert.equal(await response.text(), '<html><body>prepared bytes</body></html>');
+    }
+    for (const name of ['entry.js', 'style.css', 'worker.wasm']) {
+      const response = await fetch(`${server.origin}/${name}`);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('cache-control'), 'no-store', `${name} must not inherit no-transform`);
+    }
+    const metadata = await fetch(`${server.origin}/deployment.json`);
+    assert.equal(metadata.headers.get('cache-control'), 'no-cache');
+    assert.equal((await fetch(`${server.origin}/missing-file`)).status, 404);
+  } finally {
+    await server.close();
+    rmSync(directory, { recursive: true });
+  }
 });

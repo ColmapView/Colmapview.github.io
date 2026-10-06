@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { profileEnvironment, safeOutputDirectory, sourceSha, validateBase } from './profiles.mjs';
 import { htmlSha256 } from './artifact-verification.mjs';
+import { cloudflareStaticHeaders } from './headers.mjs';
 
 const [profile, ...args] = process.argv.slice(2);
 const value = (name, fallback) => args.find(arg => arg.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
@@ -33,6 +34,6 @@ writeFileSync(path.join(output, 'deployment.json'), `${JSON.stringify({
   googleDrive: { enabled: profile === 'custom', allowedOrigin: profile === 'custom' ? env.VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN : null },
 }, null, 2)}\n`);
 if (profile !== 'github') {
-  writeFileSync(path.join(output, '_headers'), '/*\n  Cross-Origin-Opener-Policy: same-origin-allow-popups\n  Referrer-Policy: strict-origin\n/deployment.json\n  Cache-Control: no-cache\n');
+  writeFileSync(path.join(output, '_headers'), cloudflareStaticHeaders());
 }
 console.log(`Prepared ${profile} artifact (${sha.slice(0, 12)}, base ${base}).`);
