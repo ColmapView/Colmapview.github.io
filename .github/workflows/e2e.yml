@@ -51,7 +51,9 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: production-artifact-smoke
-          path: .tmp/deployment-smoke/
+          path: |
+            .tmp/deployment-smoke/report/
+            .tmp/deployment-smoke/results/
           if-no-files-found: ignore
           retention-days: 7
 

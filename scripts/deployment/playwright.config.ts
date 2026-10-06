@@ -8,7 +8,7 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   outputDir: '../../.tmp/deployment-smoke/results',
-  reporter: [['list'], ['html', { outputFolder: '.tmp/deployment-smoke/report', open: 'never' }]],
+  reporter: [['list'], ['html', { outputFolder: '../../.tmp/deployment-smoke/report', open: 'never' }]],
   use: {
     browserName: 'chromium',
     viewport: { width: 1280, height: 900 },

@@ -59,7 +59,9 @@ jobs:
         if: always()
         with:
           name: preview-build-smoke
-          path: .tmp/deployment-smoke/
+          path: |
+            .tmp/deployment-smoke/report/
+            .tmp/deployment-smoke/results/
           if-no-files-found: ignore
           retention-days: 7
 
@@ -116,6 +118,8 @@ jobs:
         if: always()
         with:
           name: preview-publish-smoke
-          path: .tmp/deployment-smoke/
+          path: |
+            .tmp/deployment-smoke/report/
+            .tmp/deployment-smoke/results/
           if-no-files-found: ignore
           retention-days: 7

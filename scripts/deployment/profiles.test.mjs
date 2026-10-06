@@ -87,6 +87,20 @@ test('release workflow gates both real artifacts before first publish and pins W
   assert.ok(validation.jobs.artifacts.steps.some(step => step.run === 'npm run test:deployment'));
 });
 
+test('deployment smoke report and traces land in the uploaded .tmp/deployment-smoke directory', () => {
+  const config = readFileSync('scripts/deployment/playwright.config.ts', 'utf8');
+  const fromConfig = pattern => path.relative(process.cwd(), path.resolve('scripts/deployment', config.match(pattern)[1])).split(path.sep).join('/');
+  assert.equal(fromConfig(/outputFolder: '([^']+)'/), '.tmp/deployment-smoke/report');
+  assert.equal(fromConfig(/outputDir: '([^']+)'/), '.tmp/deployment-smoke/results');
+  const uploads = ['e2e.yml', 'deploy.yml', 'deploy-preview.yml']
+    .flatMap(file => Object.values(yaml.load(readFileSync(`.github/workflows/${file}`, 'utf8')).jobs))
+    .flatMap(job => job.steps ?? [])
+    .filter(step => step.uses?.startsWith('actions/upload-artifact@') && /smoke/.test(step.with.name));
+  assert.equal(uploads.length, 4);
+  for (const step of uploads) assert.match(step.with.path, /^\.tmp\/deployment-smoke\/report\/$/m, step.with.name);
+  for (const step of uploads) assert.match(step.with.path, /^\.tmp\/deployment-smoke\/results\/$/m, step.with.name);
+});
+
 test('Cloudflare deployment token is scoped only to trusted upload steps', () => {
   const releaseWorkflow = yaml.load(readFileSync('.github/workflows/deploy.yml', 'utf8'));
   assert.equal(releaseWorkflow.jobs.deploy.env.CLOUDFLARE_API_TOKEN, undefined);
