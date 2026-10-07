@@ -51,6 +51,8 @@ export interface LoadManifestSourceDeps {
   onViewerState?: (state: PublishedViewerState) => void | Promise<void>;
   /** Optional dataset settings did not arrive in time; defaults stay in effect. */
   onOptionalSettingsTimeout?: () => void;
+  /** The splat listing outlasted SPLAT_DISCOVERY_TIMEOUT_MS; the scene appears without its splats. */
+  onSplatListTimeout?: () => void;
   fetchImpl?: (url: string, init?: RequestInit) => Promise<Response>;
   fetchColmapFiles?: FetchColmapFiles;
   discoverSplatCatalog?: (manifest: ColmapManifest) => Promise<RemoteSplatCandidate[]>;
@@ -112,6 +114,7 @@ export async function loadManifestSource(
       if (result) return result.value;
       discoveryController.abort(new DOMException('Splat discovery timed out', 'TimeoutError'));
       log(`[URL Loader] Splat discovery took longer than ${SPLAT_DISCOVERY_TIMEOUT_MS / 1000} s after parsing; no splats are listed`);
+      deps.onSplatListTimeout?.();
       return [];
     });
   // The optional request starts with the downloads; its deadline starts once parsing is done.

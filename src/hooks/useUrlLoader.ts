@@ -29,6 +29,7 @@ import { applySavedViewerState, decodeSharedViewerOverrides, resolveRestoredSpla
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { fetchOptionalDatasetViewerSettingsResult } from './urlLoaderViewerState';
 import { dismissOptionalSettingsTimeoutWarning, showOptionalSettingsTimeoutWarning } from './optionalSettingsWarning';
+import { dismissSplatListTimeoutWarning, showSplatListTimeoutWarning } from './splatListWarning';
 import { findDatasetViewerSettingsEntry } from '../utils/datasetViewerSettings';
 import { parseGoogleDriveFileUrl } from '../utils/googleDriveUrl';
 import { resolveGoogleDriveArchive } from '../features/googleDrive/api';
@@ -53,6 +54,7 @@ type ReconstructionState = ReturnType<typeof useReconstructionStore.getState>;
 interface UrlLoadContext {
   onViewerState: (state: PublishedViewerState) => Promise<void>;
   onOptionalSettingsTimeout: () => void;
+  onSplatListTimeout: () => void;
   onRemoteSplatCatalog: (catalog: RemoteSplatCandidate[], baseUrl?: string) => void;
   onAutoSplatSource: (sourceId: string) => void;
   signal: AbortSignal;
@@ -118,8 +120,9 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
       logInfo(URL_LOAD_GUARD_MESSAGE);
       return false;
     }
-    // A settings timeout warning describes the previous load.
+    // Timeout warnings describe the previous load.
     dismissOptionalSettingsTimeoutWarning();
+    dismissSplatListTimeoutWarning();
     const initialSplatSelectionRevision = options.initialSplatSelectionRevision ?? useReconstructionStore.getState().splatSelectionRevision;
     const isCurrent = () => !signal.aborted
       && useReconstructionStore.getState().urlLoadController?.signal === signal;
@@ -139,6 +142,7 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
       // Recorded here and applied once the load succeeds, together with the URL's own settings.
       onViewerState: async (state) => { assertCurrent(); savedViewerState = state; },
       onOptionalSettingsTimeout: guard(showOptionalSettingsTimeoutWarning),
+      onSplatListTimeout: guard(showSplatListTimeoutWarning),
       onRemoteSplatCatalog: guard((catalog: RemoteSplatCandidate[], baseUrl = contextUrl) => {
         mergeRemoteSplatCatalog(catalog, baseUrl);
         load.remoteCatalogMerged = true;

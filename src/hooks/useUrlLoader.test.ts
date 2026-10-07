@@ -21,6 +21,8 @@ import { appLogger, noopLogger } from '../utils/logger';
 import { useNotificationStore } from '../store/stores/notificationStore';
 import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS, SKIPPED_SETTINGS_WARNING } from './urlLoaderViewerState';
 import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE } from './optionalSettingsWarning';
+import { dismissSplatListTimeoutWarning, SPLAT_LIST_TIMEOUT_MESSAGE } from './splatListWarning';
+import { SPLAT_DISCOVERY_TIMEOUT_MS } from './urlLoaderManifestSource';
 import { isReconstructionLoadPending } from '../wasm/reconstructionLoadLifecycle';
 
 const { clearAllCachesMock, processFilesMock, detectTouchDeviceMock } = vi.hoisted(() => ({
@@ -70,6 +72,11 @@ function settingsTimeoutWarnings() {
     .filter(notification => notification.message === OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE);
 }
 
+function splatListTimeoutWarnings() {
+  return useNotificationStore.getState().notifications
+    .filter(notification => notification.message === SPLAT_LIST_TIMEOUT_MESSAGE);
+}
+
 function hubEntries(splats: Array<{ path: string; size: number }>) {
   return [
     ...['cameras', 'images', 'points3D'].map(name => ({ type: 'file', path: `sparse/0/${name}.bin`, size: 10 })),
@@ -114,6 +121,7 @@ describe('useUrlLoader', () => {
     usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
     useCameraStore.setState(useCameraStore.getInitialState(), true);
     useTransformStore.setState(useTransformStore.getInitialState(), true);
+    dismissSplatListTimeoutWarning();
     useNotificationStore.setState(useNotificationStore.getInitialState(), true);
     window.history.replaceState(null, '', '/');
     vi.unstubAllEnvs();
@@ -916,6 +924,36 @@ describe('useUrlLoader', () => {
     let next!: Promise<boolean>;
     act(() => { next = result.current.loadFromUrl('https://example.com/project/other.spz'); });
     expect(settingsTimeoutWarnings()).toEqual([]);
+    act(() => useReconstructionStore.getState().cancelLoading());
+    await act(async () => { expect(await next).toBe(false); });
+  });
+
+  it('warns once when the splat list does not load in time, until the next load starts', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Blob', NodeBlob);
+    const baseUrl = 'https://example.com/listing/';
+    const request = vi.fn(async (url: string | URL) => {
+      if (String(url).endsWith('colmapview.yaml')) return new Response(null, { status: 404 });
+      if (String(url).includes('/splats/')) return new Promise<Response>(() => {});
+      return new Response(new Uint8Array([1, 2, 3]));
+    });
+    vi.stubGlobal('fetch', request);
+    processFilesMock.mockImplementationOnce(async (files, _range, options) => { await processWithStore(files, options); });
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
+    let pending!: Promise<boolean>;
+    act(() => { pending = result.current.loadFromManifest({ ...createDefaultManifest(baseUrl), splats: ['splats/scene.ply'] }); });
+    await act(async () => { await vi.waitFor(() => expect(processFilesMock).toHaveBeenCalledOnce()); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SPLAT_DISCOVERY_TIMEOUT_MS);
+      expect(await pending).toBe(true);
+    });
+    expect(useReconstructionStore.getState().reconstruction).not.toBeNull();
+    expect(useReconstructionStore.getState().loadedFiles?.splatFileSources ?? []).toEqual([]);
+    expect(splatListTimeoutWarnings()).toEqual([expect.objectContaining({ type: 'warning' })]);
+    // The warning describes that load; the next one removes it as soon as it starts.
+    let next!: Promise<boolean>;
+    act(() => { next = result.current.loadFromUrl('https://example.com/project/other.spz'); });
+    expect(splatListTimeoutWarnings()).toEqual([]);
     act(() => useReconstructionStore.getState().cancelLoading());
     await act(async () => { expect(await next).toBe(false); });
   });

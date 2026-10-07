@@ -4,6 +4,8 @@ import { buildFile } from '../test/builders';
 import type { ColmapManifest } from '../types/manifest';
 import { loadManifestSource, OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS, SPLAT_DISCOVERY_TIMEOUT_MS } from './urlLoaderManifestSource';
 import type { RemoteSplatCandidate } from './urlLoaderPolicy';
+import { useNotificationStore } from '../store/stores/notificationStore';
+import { dismissSplatListTimeoutWarning, showSplatListTimeoutWarning, SPLAT_LIST_TIMEOUT_MESSAGE } from './splatListWarning';
 
 const manifest: ColmapManifest = {
   version: 1,
@@ -44,7 +46,15 @@ function makeDeps(files = makeFiles()) {
   };
 }
 
-afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+  dismissSplatListTimeoutWarning();
+  useNotificationStore.setState(useNotificationStore.getInitialState(), true);
+});
+
+const splatListWarnings = () => useNotificationStore.getState().notifications
+  .filter(notification => notification.message === SPLAT_LIST_TIMEOUT_MESSAGE);
 
 describe('URL loader manifest source helpers', () => {
   it('loads a URL manifest source with lazy image/mask bases and processing progress', async () => {
@@ -159,6 +169,34 @@ describe('URL loader manifest source helpers', () => {
     expect(onAutoSplatSource).not.toHaveBeenCalled();
     expect(listingSignals.length).toBeGreaterThan(0);
     expect(listingSignals.every(signal => signal.aborted)).toBe(true);
+  });
+
+  it('says once that a splat listing which never answers was dropped, and commits the scene without it', async () => {
+    vi.useFakeTimers();
+    const deps = { ...makeDeps(), discoverSplatCatalog: vi.fn(() => new Promise<RemoteSplatCandidate[]>(() => {})) };
+    const onRemoteSplatCatalog = vi.fn();
+    const loading = loadManifestSource(manifest, { type: 'manifest' },
+      { ...deps, onRemoteSplatCatalog, onSplatListTimeout: showSplatListTimeoutWarning });
+
+    await vi.waitFor(() => expect(deps.processFiles).toHaveBeenCalledOnce());
+    await vi.advanceTimersByTimeAsync(SPLAT_DISCOVERY_TIMEOUT_MS - 1_000);
+    expect(splatListWarnings()).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(loading).resolves.toBe(true);
+    expect(deps.setSourceInfo).toHaveBeenCalledOnce();
+    expect(onRemoteSplatCatalog).not.toHaveBeenCalled();
+    expect(splatListWarnings()).toEqual([expect.objectContaining({ type: 'warning' })]);
+  });
+
+  it('keeps a failed splat listing quiet: only a timeout warns', async () => {
+    const onSplatListTimeout = vi.fn();
+    const deps = { ...makeDeps(), discoverSplatCatalog: vi.fn(async (): Promise<RemoteSplatCandidate[]> => {
+      throw new Error('listing failed');
+    }) };
+    await expect(loadManifestSource(manifest, { type: 'manifest' }, { ...deps, onSplatListTimeout })).resolves.toBe(true);
+    expect(deps.setSourceInfo).toHaveBeenCalledOnce();
+    expect(onSplatListTimeout).not.toHaveBeenCalled();
   });
 
   it('starts the splat listing deadline after parsing, not with the downloads', async () => {

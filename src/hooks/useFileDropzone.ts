@@ -19,6 +19,7 @@ import { loadBrowsedDirectory, loadDropPayload, loadLocalZipFile } from './fileD
 import { processFileDropzoneFiles, type FileDropzoneWorkflowOptions } from './fileDropzoneWorkflow';
 import { applySavedViewerState } from './useUrlState';
 import { dismissOptionalSettingsTimeoutWarning } from './optionalSettingsWarning';
+import { dismissSplatListTimeoutWarning } from './splatListWarning';
 import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
 
 function cancelUrlLoad(): void {
@@ -27,8 +28,9 @@ function cancelUrlLoad(): void {
 }
 
 function beginLocalLoad() {
-  // A settings timeout warning describes the previous load.
+  // Timeout warnings describe the previous load.
   dismissOptionalSettingsTimeoutWarning();
+  dismissSplatListTimeoutWarning();
   const initialSplatSelectionRevision = useReconstructionStore.getState().splatSelectionRevision;
   const load = beginReconstructionLoad();
   return {

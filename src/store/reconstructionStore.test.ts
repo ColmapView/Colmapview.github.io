@@ -25,6 +25,7 @@ import {
   OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE,
   showOptionalSettingsTimeoutWarning,
 } from '../hooks/optionalSettingsWarning';
+import { dismissSplatListTimeoutWarning, showSplatListTimeoutWarning, SPLAT_LIST_TIMEOUT_MESSAGE } from '../hooks/splatListWarning';
 
 // Byte-less activation seams: the decode step is mocked (no real gs-toolbox
 // decode in store tests), while seedGaussianCloudLoad / loadGaussianCloudFromFile
@@ -1732,6 +1733,7 @@ describe('reconstruction store settings timeout warning', () => {
   afterEach(() => {
     useReconstructionStore.getState().clear();
     dismissOptionalSettingsTimeoutWarning();
+    dismissSplatListTimeoutWarning();
     useNotificationStore.setState(useNotificationStore.getInitialState(), true);
     window.history.replaceState(null, '', '/');
   });
@@ -1741,6 +1743,14 @@ describe('reconstruction store settings timeout warning', () => {
     showOptionalSettingsTimeoutWarning();
     useReconstructionStore.getState().clear();
     expect(timeoutWarnings()).toEqual([]);
+  });
+
+  it('takes the splat list warning down with the scene it describes', () => {
+    useReconstructionStore.setState({ reconstruction: buildReconstruction(), loadedFiles: baseLoadedFiles({}) });
+    showSplatListTimeoutWarning();
+    useReconstructionStore.getState().clear();
+    expect(useNotificationStore.getState().notifications
+      .filter(notification => notification.message === SPLAT_LIST_TIMEOUT_MESSAGE)).toEqual([]);
   });
 
   it('takes the warning down when cancelling returns to the landing page', () => {
