@@ -13,6 +13,7 @@ import {
   createSim3dFromEuler,
   transformReconstruction,
 } from '../utils/sim3dTransforms';
+import { buildGlobalStats } from '../test/builders/colmapBuilders';
 import { copyBytesToArrayBuffer } from '../test/builders/fileFakes';
 import type { Reconstruction } from '../types/colmap';
 import {
@@ -49,6 +50,10 @@ describe.skipIf(missingFixture)('transform flows through export', () => {
       cameras,
       images,
       points3D,
+      imageStats: new Map(),
+      connectedImagesIndex: new Map(),
+      globalStats: buildGlobalStats(),
+      imageToPoint3DIds: new Map(),
     };
 
     // 45° rotation around Y

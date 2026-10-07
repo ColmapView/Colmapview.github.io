@@ -232,7 +232,7 @@ describe('Hugging Face private dataset reads', () => {
     connected();
     request.mockImplementation(async (_url, init) => new Response(authorization(init) ? 'media' : null,
       { status: authorization(init) ? 200 : 401 }));
-    const options = { signal: new AbortController().signal, getPriority: () => 'foreground' as const };
+    const options = { signal: new AbortController().signal, getPriority: () => 'selected' as const };
     const scheduler = new UrlMediaScheduler();
     expect(await scheduler.transfer(root + 'images/photo.png', options)).toMatchObject({ kind: 'success' });
     expect(await scheduler.transfer(root + 'masks/photo.png', options)).toMatchObject({ kind: 'success' });

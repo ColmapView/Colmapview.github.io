@@ -57,6 +57,7 @@ describe('DatasetManager', () => {
       sourceType: null,
       imageUrlBase: null,
       maskUrlBase: null,
+      imageNameToUrl: null,
       loadedFiles: null,
     };
 

@@ -13,7 +13,7 @@ function pickerSdk() {
     setCallback: vi.fn((handler: (response: unknown) => void) => { callback = handler; return builder; }), build: vi.fn(() => dialog),
   };
   const sdk: GooglePickerSdk = {
-    DocsView: class { constructor() { return view; } } as GooglePickerSdk['DocsView'],
+    DocsView: class { constructor(_viewId: string) { return view; } } as GooglePickerSdk['DocsView'],
     PickerBuilder: class { constructor() { return builder; } } as GooglePickerSdk['PickerBuilder'],
     ViewId: { DOCS: 'docs' }, Action: { PICKED: 'picked', CANCEL: 'cancel', ERROR: 'error' },
   };

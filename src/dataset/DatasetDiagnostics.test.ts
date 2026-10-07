@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DatasetDiagnostics, type DatasetDiagnosticsState } from './DatasetDiagnostics';
 import type { LoadedFiles, Reconstruction } from '../types/colmap';
 import { buildCamera, buildImage, buildPoint2D, buildPoint3D, buildReconstruction } from '../test/builders';
+import type { getFrustumTextureCacheStats } from '../hooks/useFrustumTexture';
 
 vi.mock('../utils/imageFileUtils', () => ({
   getLocalImageStats: vi.fn(),
@@ -22,6 +23,21 @@ import { getLocalImageStats } from '../utils/imageFileUtils';
 import { getUrlImageCacheStats, getUrlMaskCacheStats } from '../utils/urlImageFiles';
 import { getZipImageCacheStats, getZipMaskCacheStats } from '../utils/zipImageFiles';
 
+/** Frustum texture cache stats with `cached` decoded bitmaps and textures, and an idle cache. */
+function frustumCacheStats(cached: number): ReturnType<typeof getFrustumTextureCacheStats> {
+  return {
+    urlCache: { count: cached, loading: 0, pending: 0 },
+    bitmaps: cached,
+    textures: cached,
+    retention: {
+      bitmapBytes: 0, textureBytes: 0, pinnedBitmapBytes: 0, pinnedTextureBytes: 0,
+      inactiveBitmapBytes: 0, inactiveTextureBytes: 0, retiredBytes: 0, evictions: 0,
+      bitmapBudgetBytes: 0, textureBudgetBytes: 0,
+    },
+    decodeQueue: { active: 0, queued: 0, paused: false, maxActive: 4 },
+  };
+}
+
 describe('DatasetDiagnostics', () => {
   let state: DatasetDiagnosticsState;
   let diagnostics: DatasetDiagnostics;
@@ -38,6 +54,7 @@ describe('DatasetDiagnostics', () => {
       sourceType: null,
       imageUrlBase: null,
       maskUrlBase: null,
+      imageNameToUrl: null,
       loadedFiles: null,
       reconstruction: null,
       wasmReconstruction: null,
@@ -45,7 +62,7 @@ describe('DatasetDiagnostics', () => {
 
     diagnostics = new DatasetDiagnostics(() => state, {
       getThumbnailCacheStats: vi.fn(() => ({ count: 0, loading: 0, pending: 0 })),
-      getFrustumTextureCacheStats: vi.fn(() => ({ urlCache: { count: 0, loading: 0, pending: 0 }, textures: 0, bitmaps: 0 })),
+      getFrustumTextureCacheStats: vi.fn(() => frustumCacheStats(0)),
       getActiveZipStats: vi.fn(() => ({ fileSize: 0, imageCount: 0 })),
     });
   });
@@ -76,7 +93,7 @@ describe('DatasetDiagnostics', () => {
 
     diagnostics = new DatasetDiagnostics(() => state, {
       getThumbnailCacheStats: vi.fn(() => ({ count: 2, loading: 0, pending: 0 })),
-      getFrustumTextureCacheStats: vi.fn(() => ({ urlCache: { count: 1, loading: 0, pending: 0 }, textures: 1, bitmaps: 1 })),
+      getFrustumTextureCacheStats: vi.fn(() => frustumCacheStats(1)),
       getActiveZipStats: vi.fn(() => ({ fileSize: 0, imageCount: 0 })),
     });
 

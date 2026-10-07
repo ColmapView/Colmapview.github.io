@@ -51,7 +51,7 @@ const config: AppConfiguration = {
     galleryCollapsed: false,
   },
   export: {
-    screenshotSize: 'viewport',
+    screenshotSize: 'current',
     screenshotFormat: 'jpeg',
     screenshotHideLogo: false,
     modelFormat: 'binary',

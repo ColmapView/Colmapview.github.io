@@ -134,7 +134,18 @@ describe.skipIf(missingFixture)('exported binary integrity (bicycle, WASM-mode)'
 
   it('survives applyTransformToData-style bake (realizes 2D points before dropping WASM)', () => {
     const { cameras, images } = buildWasmCameraImageMaps(wasm);
-    const reconstruction: Reconstruction = { cameras, images };
+    const reconstruction: Reconstruction = {
+      cameras,
+      images,
+      imageStats: new Map(),
+      connectedImagesIndex: new Map(),
+      imageToPoint3DIds: new Map(),
+      globalStats: {
+        minError: 0, maxError: 0, avgError: 0,
+        minTrackLength: 0, maxTrackLength: 0, avgTrackLength: 0,
+        totalObservations: 0, totalPoints: 0,
+      },
+    };
 
     // Simulate the fixed applyTransformToData:
     //  1. Transform with a non-identity Sim3D
