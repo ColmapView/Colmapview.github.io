@@ -50,7 +50,7 @@ The dataset card sets `viewer: false`, so Hugging Face does not convert `images/
 - Local COLMAP files, supported local archives, and public, ungated Hugging Face source assets whose revisions can be pinned. Download assets from other remote hosts locally before including them.
 - Current applied model edits, COLMAP observations and tracks, and optional rigs and frames. The pending scene transform is baked into the published COLMAP files once.
 - Original image, mask, and splat bytes. Image metadata, including any embedded location information, is retained. Original splat alignment is stored separately in the viewer state.
-- **No ColmapView size cap for PLY/splat files.** Local files are passed directly to the Hub SDK for incremental hashing and native Blob uploads. Remote splats are downloaded into browser-managed Blob storage before upload. Large splats get their own batch. Other files retain a **128 MiB per-file limit** and batches target **128 MiB**, with at most 49 data files plus a small batch receipt per commit. Remote files with unknown sizes are batched by their downloaded size; a remote splat of unknown size gets its own batch. Remote downloads time out only after 15 minutes without progress.
+- **No ColmapView size cap for PLY/splat files.** Local files are passed directly to the Hub SDK for incremental hashing and native Blob uploads. Remote splats are downloaded into browser-managed Blob storage before upload. Large splats get their own batch. Images, masks and other copied files retain a **128 MiB per-file limit**; the exported COLMAP files have none and get their own batch when large, and batches target **128 MiB**, with at most 49 data files plus a small batch receipt per commit. Remote files with unknown sizes are batched by their downloaded size; a remote splat of unknown size gets its own batch. Remote downloads time out only after 15 minutes without progress.
 - SOG bundles are published and reopened like other splats. ColmapView does not convert splats; to publish a smaller SOG, convert beforehand with `npx @playcanvas/splat-transform scene.ply scene.sog`.
 - Actual capacity still depends on browser memory/disk, the connection, and [Hugging Face storage limits](https://huggingface.co/docs/hub/storage-limits), including the account quota and Hub's 500 GB single-file ceiling. Removing the upload cap does not change the viewer's GPU/memory requirements.
 - Fewer than 100,000 files and fewer than 10,000 direct entries in any output folder. Browser export still requires enough memory for the model and current batch.
@@ -70,9 +70,10 @@ Register the app once for ColmapView. Users then sign in with their own Hugging 
 | --- | --- |
 | Production releases and `/latest/` | `https://colmapview.github.io/latest/hf-callback.html` |
 | Development deployment | `https://colmapview.github.io/dev/hf-callback.html` |
+| Custom production host | `https://colmapview.opsiclear.com/hf-callback` |
 | Local development example | `http://localhost:5173/hf-callback.html` |
 
-Use the actual origin if hosting elsewhere. The configured callback must have the same origin as the viewer, end in `/hf-callback.html`, and have no query or fragment. Production requires HTTPS; loopback HTTP is accepted for local development. A stable `/latest/` callback serves both the latest and versioned release viewers. Keep the version-1 callback message protocol compatible when updating that static page.
+Use the actual origin if hosting elsewhere. The configured callback must have the same origin as the viewer and no query or fragment. Its path must end in `/hf-callback.html`, except on the custom host: Cloudflare Pages redirects `.html` addresses to their extensionless form, so `https://colmapview.opsiclear.com` accepts only the exact path `/hf-callback`, in `CUSTOM_HF_OAUTH_REDIRECT_URI` and in the app registration. Production requires HTTPS; loopback HTTP is accepted for local development. A stable `/latest/` callback serves both the latest and versioned release viewers. Keep the version-1 callback message protocol compatible when updating that static page.
 
 For local development, open `http://localhost:5173/` when using the callback above. `127.0.0.1` is a different origin. When publishing is enabled but the address does not match, the **🤗 toolbar button** opens an explanation and a link to the configured viewer. Reload the dataset in that tab. Restart Vite after changing `.env.local` so it picks up the public OAuth settings.
 
@@ -80,7 +81,7 @@ Only a public client ID and callback URL enter the build. Never add a client sec
 
 ### Configured application and live sign-in check
 
-On 2026-09-27, the maintainer registered [ColmapView](https://huggingface.co/settings/applications/6ab992584abcf4acddced01e) under `opsiclear-admin` as a public app without a client secret. All three callback URLs above are registered, with default scopes `openid profile contribute-repos` and an eight-hour token lifetime.
+On 2026-09-27, the maintainer registered [ColmapView](https://huggingface.co/settings/applications/6ab992584abcf4acddced01e) under `opsiclear-admin` as a public app without a client secret. The two GitHub callbacks and the local callback above were registered then, with default scopes `openid profile contribute-repos` and an eight-hour token lifetime. Custom-host sign-in through the registered `/hf-callback` passed on 2026-10-06 ([dual hosting](dual-hosting.md)).
 
 On 2026-10-04, the app's allowed scopes were extended with `read-repos`. A read-only `openid profile read-repos` session was verified against a private dataset in the browser.
 

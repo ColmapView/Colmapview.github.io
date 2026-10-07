@@ -5,7 +5,7 @@ Load a COLMAP reconstruction with its original images, then click the **Google D
 1. **Sign in** with Google and allow ColmapView to create and manage the files it creates in Drive.
 2. Choose a ZIP file name. Files are saved privately in **My Drive** by default.
 3. Optionally select **Anyone with the link can view** to publish a shared dataset. ColmapView enables reader access after verifying the upload. An organization's sharing policy can prevent this step.
-4. Click **Save private dataset** or **Publish shared dataset**. After completion, copy the viewer link or open the file in Drive.
+4. Click **Save private dataset** or **Publish shared dataset**. After completion, copy the viewer link or open the file in Drive. The finished publication's link is cleared when another dataset loads or the model changes.
 
 Public viewer links to supported Drive archives need no sign-in when the viewer's Drive API key is configured. For a private archive, use the loading panel's Drive account control to sign in and **Choose archive from Drive** through Google Picker. The recipient must already have permission to download it; a viewer URL alone does not grant access. Loading supports ZIP and TAR, including compressed TAR; publication creates ZIP output only. Loading and publishing keep separate local sessions, both requesting only `drive.file`.
 
@@ -15,7 +15,7 @@ The ZIP contains the current COLMAP reconstruction in binary format, original im
 
 Publication copies the active splat, rather than every catalogued splat. Originals from local files, archives, and remote URLs are supported. Private Hugging Face source assets require the existing repository read connection; their revision is pinned before copying. The source repository and its visibility are unchanged.
 
-The complete ZIP must fit the viewer's **2 GiB** archive limit. Individual non-splat files retain the existing **128 MiB** publication limit. ZIP entries are stored without recompressing images or splats. Packing uses browser Blob parts and streams one entry at a time; the finished archive is retained in this tab while uploading or retrying.
+The complete ZIP must fit the viewer's **2 GiB** archive limit. Individual images and masks retain the existing **128 MiB** publication limit; the exported COLMAP files and the splat are bounded only by the ZIP. On hosts without a file listing, masks are treated as absent when none of the first 8 images has one, as in the viewer. ZIP entries are stored without recompressing images or splats. Packing uses browser Blob parts and streams one entry at a time; the finished archive is retained in this tab while uploading or retrying.
 
 ## Progress and recovery
 
