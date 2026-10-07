@@ -86,7 +86,8 @@ async function applyOptionalSettingsBeside(request: OptionalViewerSettingsReques
  * than replaced.
  */
 function settingsBesideOnce(url: string, load: UrlLoadContext) {
-  const request = startOptionalDatasetViewerSettings(url, load.fetchImpl, true, load.signal);  let settled: Promise<void> | undefined;
+  const request = startOptionalDatasetViewerSettings(url, load.fetchImpl, true, load.signal);
+  let settled: Promise<void> | undefined;
   const settle = () => settled ??= applyOptionalSettingsBeside(request, load);
   return {
     beforeSceneCommit: () => {
