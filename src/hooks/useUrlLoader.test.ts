@@ -705,6 +705,41 @@ describe('useUrlLoader', () => {
     expect(useUIStore.getState().backgroundColor).toBe(background);
   });
 
+  it('shows the points again when the restored splat download is cancelled', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const baseUrl = 'https://huggingface.co/datasets/owner/cancel/resolve/main/';
+    const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { activeSourceId: 'splats/scene.spz' } } });
+    const request = vi.fn((url: string | URL, init?: RequestInit): Promise<Response> => {
+      if (String(url).endsWith('colmapview.yaml')) return Promise.resolve(new Response(yaml));
+      if (init?.method === 'HEAD') return Promise.resolve(new Response(null, { headers: { 'content-length': '100' } }));
+      // Like fetch, the splat download rejects once its signal aborts.
+      if (String(url).endsWith('.spz')) return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+      });
+      if (String(url).includes('/api/datasets/')) return Promise.resolve(Response.json(hubEntries([{ path: 'splats/scene.spz', size: 100 }])));
+      return Promise.resolve(new Response(new Uint8Array([1, 2, 3])));
+    });
+    vi.stubGlobal('fetch', request);
+    // The visitor's stored splat style survives a commit that lists the splat without showing it.
+    const splatDisplay = { colorMode: 'splatPoints', pointSize: 1, pointOpacity: 0.2 } as const;
+    usePointCloudStore.setState(splatDisplay);
+    processFilesMock.mockImplementationOnce(async () => {
+      useReconstructionStore.getState().setReconstruction(buildReconstruction());
+      useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles({ splatFileSources: [
+        { id: 'splats/scene.spz', path: 'splats/scene.spz', url: baseUrl + 'splats/scene.spz', size: 100 }] }));
+    });
+    const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
+    let pending!: Promise<boolean>;
+    act(() => { pending = result.current.loadFromUrl(baseUrl); });
+    await waitFor(() => expect(request.mock.calls.some(([url, init]) => String(url).endsWith('.spz') && init?.method !== 'HEAD')).toBe(true));
+    expect(usePointCloudStore.getState()).toMatchObject(splatDisplay);
+    act(() => useReconstructionStore.getState().cancelLoading());
+    await act(async () => { expect(await pending).toBe(false); });
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'rgb', pointSize: 2, pointOpacity: 1 });
+  });
+
   it('remembers the saved settings that came with a URL dataset for Reload', async () => {
     vi.stubGlobal('Blob', NodeBlob);
     const baseUrl = 'https://huggingface.co/datasets/owner/saved/resolve/main/';

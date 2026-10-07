@@ -1547,6 +1547,8 @@ describe('reconstruction store loading cancellation', () => {
         { id: 'b/scene.spz', path: 'b/scene.spz', url: 'https://x/ds/b/scene.spz', size: 20 },
       ],
     }));
+    // Over a COLMAP scene, where a cancelled download that left no splat would restore the plain points.
+    useReconstructionStore.setState({ reconstruction: buildReconstruction() });
     let requestSignal: AbortSignal | null | undefined;
     vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
       requestSignal = init?.signal;
@@ -1567,6 +1569,47 @@ describe('reconstruction store loading cancellation', () => {
     expect(state.loadedFiles?.splatFile).toBe(fileA);
     expect(state.urlLoading).toBe(false);
     // Only "COLMAP only" restores the plain point display; the splat on screen keeps its own.
+    expect(usePointCloudStore.getState()).toMatchObject(splatDisplay);
+  });
+
+  it('shows the points again when a cancelled restore download leaves no splat on screen', async () => {
+    // The visitor's stored splat style: a commit that lists a splat without showing it keeps it.
+    const splatDisplay = { colorMode: 'splatPoints', pointSize: 1, pointOpacity: 0.2 } as const;
+    usePointCloudStore.setState(splatDisplay);
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFileSources: [{ id: 'splats/b.ply', path: 'splats/b.ply', url: 'https://x/ds/splats/b.ply', size: 20 }],
+    }));
+    useReconstructionStore.setState({ reconstruction: buildReconstruction() });
+    let requestSignal: AbortSignal | null | undefined;
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      requestSignal = init?.signal;
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+    })));
+    const pending = useReconstructionStore.getState().selectSplatSource('splats/b.ply', { restore: true });
+    await vi.waitFor(() => expect(requestSignal).toBeDefined());
+    expect(usePointCloudStore.getState()).toMatchObject(splatDisplay);
+
+    useReconstructionStore.getState().cancelLoading();
+    await pending;
+
+    expect(requestSignal?.aborted).toBe(true);
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'rgb', pointSize: 2, pointOpacity: 1 });
+  });
+
+  it('leaves the point display alone when the cancel stops no splat download', () => {
+    const splatDisplay = { colorMode: 'splatPoints', pointSize: 1, pointOpacity: 0.2 } as const;
+    usePointCloudStore.setState(splatDisplay);
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFileSources: [{ id: 'splats/b.ply', path: 'splats/b.ply', url: 'https://x/ds/splats/b.ply', size: 20 }],
+    }));
+    useReconstructionStore.setState({ reconstruction: buildReconstruction() });
+    useReconstructionStore.getState().tryStartUrlLoad();
+    useReconstructionStore.setState({ urlLoading: true, urlProgress: { percent: 40, message: 'Downloading...' } });
+
+    useReconstructionStore.getState().cancelLoading();
+
+    expect(useReconstructionStore.getState().urlLoading).toBe(false);
     expect(usePointCloudStore.getState()).toMatchObject(splatDisplay);
   });
 

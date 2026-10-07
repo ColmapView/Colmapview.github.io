@@ -637,6 +637,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       clearUrlLoadRequestFromLocation();
       return;
     }
+    const cancelsSplatDownload = activeSplatController !== null;
     cancelPendingSplatLoad();
     urlLoadController?.abort();
     cancelPendingReconstructionLoad();
@@ -648,6 +649,8 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       showColmapOnly(set, loadedFiles, { ...stopped, splatSelectionRevision: splatSelectionRevision + 1 });
     } else {
       set(stopped);
+      // A splat point style kept for the download would hide the points it leaves without a splat.
+      if (cancelsSplatDownload && get().reconstruction && !get().loadedFiles?.splatFile) restorePointDisplayWithoutSplat();
     }
   },
 
