@@ -245,31 +245,34 @@ describe('SplatPsnrEvaluator', () => {
     useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
     const warnSpy = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
 
-    render(<SplatPsnrEvaluator />);
+    try {
+      render(<SplatPsnrEvaluator />);
 
-    await waitFor(() => {
-      expect(actions.setSplatPsnrImageError).toHaveBeenCalledWith(secondImage.imageId, expect.any(String));
-    });
+      // Each lazy import() still makes one module-runner round trip, so the first wait gets headroom.
+      await waitFor(() => {
+        expect(actions.setSplatPsnrImageError).toHaveBeenCalledWith(secondImage.imageId, expect.any(String));
+      }, { timeout: 5000 });
 
-    // The second image is skipped (never computed) once the first mismatch is seen.
-    expect(session.computeImageMetric).toHaveBeenCalledTimes(1);
-    expect(actions.setSplatPsnrImageError).toHaveBeenCalledWith(
-      firstImage.imageId,
-      expect.stringContaining('undistorted metric image')
-    );
-    expect(actions.setSplatPsnrImageError).toHaveBeenCalledWith(
-      secondImage.imageId,
-      expect.stringContaining('do not match the sparse model')
-    );
+      // The second image is skipped (never computed) once the first mismatch is seen.
+      expect(session.computeImageMetric).toHaveBeenCalledTimes(1);
+      expect(actions.setSplatPsnrImageError).toHaveBeenCalledWith(
+        firstImage.imageId,
+        expect.stringContaining('undistorted metric image')
+      );
+      expect(actions.setSplatPsnrImageError).toHaveBeenCalledWith(
+        secondImage.imageId,
+        expect.stringContaining('do not match the sparse model')
+      );
 
-    // The per-image flood collapses to a single summary warning.
-    const psnrWarnings = warnSpy.mock.calls.filter(
-      ([message]) => typeof message === 'string' && message.includes('[PSNR]')
-    );
-    expect(psnrWarnings).toHaveLength(1);
-    expect(psnrWarnings[0][0]).toContain('Skipping the remaining images');
-
-    warnSpy.mockRestore();
+      // The per-image flood collapses to a single summary warning.
+      const psnrWarnings = warnSpy.mock.calls.filter(
+        ([message]) => typeof message === 'string' && message.includes('[PSNR]')
+      );
+      expect(psnrWarnings).toHaveLength(1);
+      expect(psnrWarnings[0][0]).toContain('Skipping the remaining images');
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('automatically requests all-image metrics for SPZ splats once the WebGPU scene is metric-ready', async () => {
