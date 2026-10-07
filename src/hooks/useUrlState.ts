@@ -97,10 +97,11 @@ async function activateSavedSplat(sourceId: string, assertCurrent: () => void): 
  * Settings the trackball reads while it places, levels or animates the restored view. Applied after
  * the fly-to, a horizon lock change resets the view to the default one, a U toggle with a selected
  * panorama flies to it, and the camera type, field of view, auto-orbit and world up change under it.
+ * The selection lands with U: a U toggle flies to the panorama selected in that same update.
  */
 const VIEW_NAVIGATION_FIELDS: { readonly camera: readonly (keyof CameraState)[]; readonly ui: readonly (keyof UIState)[] } = {
   camera: ['cameraMode', 'cameraProjection', 'cameraFov', 'horizonLock', 'flyTransitionDuration',
-    'autoRotateMode', 'autoRotateSpeed', 'undistortionEnabled'],
+    'autoRotateMode', 'autoRotateSpeed', 'undistortionEnabled', 'selectedImageId'],
   ui: ['axesCoordinateSystem'],
 };
 
@@ -130,7 +131,7 @@ export async function applySavedViewerState(saved: PublishedViewerState | null, 
   const restorationConfig = (config: ShareConfig): ShareConfig => {
     const restored: ShareConfig = {
       ...config,
-      // Navigation went with the view; applying it again would undo a change made during the download.
+      // Navigation and the selection went with the view; reapplied, they would undo a change made during the download.
       camera: pickSectionFields(config.camera, VIEW_NAVIGATION_FIELDS.camera, false),
       ui: pickSectionFields(config.ui, VIEW_NAVIGATION_FIELDS.ui, false),
     };

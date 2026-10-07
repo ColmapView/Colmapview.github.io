@@ -8,7 +8,7 @@ import {
 } from '../../store';
 import type { CameraViewState } from '../../store/types';
 import { buildCamera, buildImage, buildLoadedFiles, buildReconstruction } from '../../test/builders';
-import { CameraModelId } from '../../types/colmap';
+import { CameraModelId, type LoadedFiles } from '../../types/colmap';
 import type { PublishedViewerState } from '../../utils/publishedViewerState';
 import { TrackballControls } from './TrackballControls';
 
@@ -56,6 +56,15 @@ const panoramaScene = () => buildReconstruction({
   cameras: [buildCamera({ cameraId: 3, modelId: CameraModelId.EQUIRECTANGULAR, width: 3840, height: 1920, params: [3840, 1920] })],
   images: [buildImage({ imageId: PANORAMA_ID, cameraId: 3, tvec: [-4, 0, 0] })],
 });
+
+const OTHER_PANORAMA_ID = 8;
+const otherPanoramaCenter = new THREE.Vector3(-4, 0, 0);
+const twoPanoramaScene = () => buildReconstruction({
+  cameras: [buildCamera({ cameraId: 3, modelId: CameraModelId.EQUIRECTANGULAR, width: 3840, height: 1920, params: [3840, 1920] })],
+  images: [buildImage({ imageId: PANORAMA_ID, cameraId: 3, tvec: [-4, 0, 0] }),
+    buildImage({ imageId: OTHER_PANORAMA_ID, cameraId: 3, name: 'other.jpg', tvec: [4, 0, 0] })],
+});
+const remoteSplat = { id: 'splats/scene.spz', path: 'splats/scene.spz', url: 'https://example.com/splats/scene.spz' };
 
 function Viewer() {
   // As in Scene3D, resetView reaches the controls as a new reset trigger.
@@ -108,6 +117,25 @@ function expectSavedView() {
   const { camera } = scene.getState();
   expect(camera.position.distanceTo(savedPosition)).toBeCloseTo(0, 6);
   expect(camera.quaternion.angleTo(savedQuaternion)).toBeCloseTo(0, 6);
+}
+
+function mountOnFirstOfTwoPanoramas(loadedFiles: LoadedFiles) {
+  useReconstructionStore.setState({ reconstruction: twoPanoramaScene() });
+  useReconstructionStore.getState().setLoadedFiles(loadedFiles);
+  useCameraStore.setState({ selectedImageId: PANORAMA_ID, undistortionEnabled: false });
+  render(<Viewer />);
+  finishFlights();
+}
+
+/** Settings without a view that turn U on over the other panorama and restore this splat choice. */
+function savedOtherPanorama(activeSourceId: string): PublishedViewerState {
+  return { version: 1, viewerVersion: 'test', viewState: null,
+    config: { splat: { activeSourceId }, camera: { undistortionEnabled: true, selectedImageId: OTHER_PANORAMA_ID } } };
+}
+
+function expectInsideOtherPanorama() {
+  expect(useCameraStore.getState()).toMatchObject({ undistortionEnabled: true, selectedImageId: OTHER_PANORAMA_ID });
+  expect(scene.getState().camera.position.distanceTo(otherPanoramaCenter)).toBeLessThan(0.01);
 }
 
 describe('TrackballControls restoring a saved view', () => {
@@ -204,5 +232,43 @@ describe('TrackballControls restoring a saved view', () => {
     finishFlights();
 
     expect(scene.getState().camera.position.distanceTo(panoramaCenter)).toBeLessThan(0.01);
+  });
+
+  it.each([
+    ['None', '', () => buildLoadedFiles({ splatFileSources: [remoteSplat] })],
+    ['a loaded local splat', 'splats/scene.spz', () => {
+      const splat = new File(['splat'], 'scene.spz');
+      return buildLoadedFiles({ splatFile: splat,
+        splatFileSources: [{ id: 'splats/scene.spz', path: 'splats/scene.spz', file: splat }] });
+    }],
+  ])('flies into the newly selected panorama when a restore choosing %s turns undistortion on', async (_choice, sourceId, files) => {
+    mountOnFirstOfTwoPanoramas(files());
+
+    let restoration!: Promise<void>;
+    // As in the app, what the restore sets before it awaits the splat choice renders before the rest lands.
+    act(() => { restoration = applySavedViewerState(savedOtherPanorama(sourceId), null); });
+    await act(async () => { await restoration; });
+    finishFlights();
+
+    expectInsideOtherPanorama();
+  });
+
+  it('flies into the newly selected panorama when a restore that downloads its splat turns undistortion on', async () => {
+    mountOnFirstOfTwoPanoramas(buildLoadedFiles({ splatFileSources: [remoteSplat] }));
+    let respond!: (response: Response) => void;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { respond = resolve; })));
+
+    let restoration!: Promise<void>;
+    await act(async () => { restoration = applySavedViewerState(savedOtherPanorama('splats/scene.spz'), null); });
+    finishFlights();
+    expectInsideOtherPanorama();
+
+    await act(async () => {
+      respond(new Response(new Blob(['splat']), { status: 200 }));
+      await restoration;
+    });
+    finishFlights();
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeDefined();
+    expectInsideOtherPanorama();
   });
 });

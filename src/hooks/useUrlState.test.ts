@@ -251,6 +251,21 @@ describe('URL state sharing', () => {
     expect(useCameraStore.getState().showCameras).toBe(false);
   });
 
+  it("restores the selection with the navigation, the viewer URL's winning, and keeps a selection made during the download", async () => {
+    installSavedSplatSources();
+    const download = stubPendingDownload();
+    const saved = savedSplatState();
+    saved.config.camera = { undistortionEnabled: true, selectedImageId: 1 };
+    const restoration = applySavedViewerState(saved, { config: { camera: { selectedImageId: 2 } } });
+    // A U toggle flies to the panorama selected when it lands, so the selection lands with it.
+    expect(useCameraStore.getState()).toMatchObject({ undistortionEnabled: true, selectedImageId: 2 });
+    useCameraStore.getState().setSelectedImageId(3);
+    download.respond(new Response(new Blob(['splat']), { status: 200 }));
+    await restoration;
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeDefined();
+    expect(useCameraStore.getState().selectedImageId).toBe(3);
+  });
+
   it('falls back to the plain point display when saved splat display lands on a scene without a splat', async () => {
     installSavedSplatSources();
     const saved: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null,
