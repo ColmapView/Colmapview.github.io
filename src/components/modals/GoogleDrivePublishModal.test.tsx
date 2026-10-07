@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GoogleDrivePublishModal } from './GoogleDrivePublishModal';
 import type { DrivePublicationState } from '../../features/googleDrive/publishDataset';
@@ -25,6 +25,13 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllEnvs(); });
 
+// Opening the dialog loads the Google sign-in SDK; let that load settle inside act.
+async function renderOpenDialog(onClose: () => void = vi.fn()) {
+  const view = render(<GoogleDrivePublishModal isOpen onClose={onClose} />);
+  await act(async () => Promise.resolve());
+  return view;
+}
+
 describe('Google Drive publishing dialog', () => {
   it('defaults to private and requires an explicit choice for public link sharing', async () => {
     render(<GoogleDrivePublishModal isOpen onClose={vi.fn()} />);
@@ -47,36 +54,36 @@ describe('Google Drive publishing dialog', () => {
     expect(actions.connect).toHaveBeenCalledOnce();
     expect(actions.publishDataset).not.toHaveBeenCalled();
   });
-  it('allows closing the dialog during upload without cancelling the upload', () => {
+  it('allows closing the dialog during upload without cancelling the upload', async () => {
     actions.publish = { phase: 'uploading', message: 'Uploading scene.zip…', bytesDone: 10, bytesTotal: 20 };
     const close = vi.fn();
-    render(<GoogleDrivePublishModal isOpen onClose={close} />);
+    await renderOpenDialog(close);
     fireEvent.click(screen.getByRole('button', { name: 'Close Drive publication' }));
     expect(close).toHaveBeenCalledOnce();
     expect(actions.cancel).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
     expect(actions.cancel).toHaveBeenCalledOnce();
   });
-  it('cancels publication when signing out and disables upload with unapplied deletions', () => {
+  it('cancels publication when signing out and disables upload with unapplied deletions', async () => {
     actions.pending = 2;
-    render(<GoogleDrivePublishModal isOpen onClose={vi.fn()} />);
+    await renderOpenDialog();
     expect(screen.getByRole('button', { name: 'Save private dataset' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Apply deletions and continue' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(actions.cancel).toHaveBeenCalledOnce();
     expect(actions.disconnect).toHaveBeenCalledOnce();
   });
-  it('shows the verified private viewer link with the correct access requirement', () => {
+  it('shows the verified private viewer link with the correct access requirement', async () => {
     actions.publish = { phase: 'completed', receipt: { fileId: 'FILE_ID', driveUrl: 'https://drive.google.com/file/d/FILE_ID/view', viewerUrl: 'https://viewer.example/?url=drive-link', shared: false } };
-    render(<GoogleDrivePublishModal isOpen onClose={vi.fn()} />);
+    await renderOpenDialog();
     expect(screen.getByLabelText('Viewer link')).toHaveValue('https://viewer.example/?url=drive-link');
     expect(screen.getByText('Private. Viewers need permission to this file and must choose it in the Drive picker.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Open viewer/ })).toHaveAttribute('href', actions.publish.receipt!.viewerUrl);
     expect(screen.queryByRole('button', { name: 'Save private dataset' })).not.toBeInTheDocument();
   });
-  it('provides a retry and Drive file link for a partially completed publication', () => {
+  it('provides a retry and Drive file link for a partially completed publication', async () => {
     actions.publish = { phase: 'failed', fileUrl: 'https://drive.google.com/file/d/FILE_ID/view', message: 'Upload stopped.', error: 'Sharing was denied.', canRetry: true };
-    const { rerender } = render(<GoogleDrivePublishModal isOpen onClose={vi.fn()} />);
+    const { rerender } = await renderOpenDialog();
     fireEvent.click(screen.getByRole('button', { name: 'Check upload and retry' }));
     expect(actions.retry).toHaveBeenCalledOnce();
     expect(screen.getByRole('link', { name: /Review file in Drive/ })).toHaveAttribute('href', actions.publish.fileUrl);

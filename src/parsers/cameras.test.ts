@@ -1,9 +1,12 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { BinaryWriter } from './BinaryWriter';
 import { parseCamerasBinary, parseCamerasText } from './cameras';
 import { CameraModelId } from '../types/colmap';
+import { appLogger } from '../utils/logger';
 
 describe('parseCamerasText', () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
   it('returns empty map for empty input', () => {
     const result = parseCamerasText('');
     expect(result.size).toBe(0);
@@ -134,12 +137,14 @@ describe('parseCamerasText', () => {
     const input = `1 PINHOLE 1920 1080 1000 1000 960 540
 2 FUTURE_MODEL_X 640 480 1 2 3`;
     const skipped: { line: number; modelName: string }[] = [];
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
     const result = parseCamerasText(input, { onSkip: (record) => skipped.push(record) });
 
     expect(result.size).toBe(1);
     expect(result.has(1)).toBe(true);
     expect(result.has(2)).toBe(false);
     expect(skipped).toEqual([{ line: 2, modelName: 'FUTURE_MODEL_X' }]);
+    expect(warn).toHaveBeenCalledExactlyOnceWith('Unknown camera model: FUTURE_MODEL_X');
   });
 
   it('reports every skipped camera when a file has only unknown models', () => {
@@ -147,10 +152,16 @@ describe('parseCamerasText', () => {
 2 FUTURE_B 640 480 4 5 6
 3 FUTURE_A 640 480 7 8 9`;
     const skipped: { line: number; modelName: string }[] = [];
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
     const result = parseCamerasText(input, { onSkip: (record) => skipped.push(record) });
 
     expect(result.size).toBe(0);
     expect(skipped.map((s) => s.modelName)).toEqual(['FUTURE_A', 'FUTURE_B', 'FUTURE_A']);
+    expect(warn.mock.calls).toEqual([
+      ['Unknown camera model: FUTURE_A'],
+      ['Unknown camera model: FUTURE_B'],
+      ['Unknown camera model: FUTURE_A'],
+    ]);
   });
 
   it('does not invoke onSkip for a fully valid file', () => {

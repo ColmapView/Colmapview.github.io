@@ -6,6 +6,7 @@ import { buildReconstruction } from '../test/builders/colmapBuilders';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import { beginReconstructionLoad, cancelPendingReconstructionLoad } from './reconstructionLoadLifecycle';
 import { packPointMembership } from './compactPointMembership';
+import { appLogger } from '../utils/logger';
 
 const File = NodeFile as unknown as typeof globalThis.File;
 
@@ -72,6 +73,8 @@ describe('reconstruction worker lifecycle', () => {
   });
 
   it('installs compact reverse membership in worker and current-thread modes without boxed Set expansion', async () => {
+    // The current-thread pass reports its fallback as a warning.
+    vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
     for (const fallback of [false, true]) {
       const packedData = data();
       packedData.reconstruction.imageToPoint3DIds = new Map();

@@ -96,7 +96,7 @@ describe('published manifest', () => {
     const onRemoteSplatCatalog = vi.fn();
 
     const files = await fetchManifestColmapFiles(manifest, { fetchImpl, fetchFile, setUrlProgress: vi.fn(), onRemoteSplatCatalog,
-      classifySplatUrl: async () => ({ isSplat: true, splatCount: null }), isTouchDevice: false });
+      classifySplatUrl: async () => ({ isSplat: true, splatCount: null }), isTouchDevice: false, log: vi.fn() });
 
     expect(fetchFile.mock.calls.map(([, path]) => path).filter(path => path.startsWith('splats/'))).toEqual([]);
     expect([...files.keys()].some(key => key.startsWith('splats/'))).toBe(false);

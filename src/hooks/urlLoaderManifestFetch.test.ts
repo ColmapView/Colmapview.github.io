@@ -324,6 +324,7 @@ describe('URL loader manifest fetch helpers', () => {
     }, {
       fetchImpl,
       fetchFile,
+      log: vi.fn(),
       setUrlProgress,
       onRemoteSplatCatalog,
     });
@@ -900,7 +901,7 @@ describe('initial-load byte counting for COLMAP files', () => {
       return missingResponse(); // discovery / optional rigs+frames -> nothing
     });
 
-    await fetchManifestColmapFiles(manifest, { fetchImpl, setUrlProgress });
+    await fetchManifestColmapFiles(manifest, { fetchImpl, setUrlProgress, log: vi.fn() });
 
     const byteCalls = setUrlProgress.mock.calls
       .map(([p]) => p)
@@ -929,7 +930,7 @@ describe('initial-load byte counting for COLMAP files', () => {
       return missingResponse();
     });
 
-    await fetchManifestColmapFiles(manifest, { fetchImpl, setUrlProgress });
+    await fetchManifestColmapFiles(manifest, { fetchImpl, setUrlProgress, log: vi.fn() });
 
     const anyBytes = setUrlProgress.mock.calls.some(([p]) => p && p.bytesTotal !== undefined);
     expect(anyBytes).toBe(false);
@@ -951,7 +952,7 @@ describe('initial-load byte counting for COLMAP files', () => {
 
     await fetchManifestColmapFiles(
       { ...manifest, splats: ['splats/a.ply', 'splats/b.ply'] },
-      { fetchImpl, setUrlProgress }
+      { fetchImpl, setUrlProgress, log: vi.fn() }
     );
 
     const splatByteCalls = setUrlProgress.mock.calls

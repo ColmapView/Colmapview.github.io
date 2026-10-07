@@ -691,24 +691,30 @@ describe('SplatLayer', () => {
     const { SplatMesh } = createSplatMeshConstructor(Promise.resolve());
     preloadSparkModuleMock.mockResolvedValue({ SparkRenderer, SplatMesh });
     validateSogBundleMock.mockResolvedValue(validatedSog());
+    // Each validated SOG is reported at info level.
+    const info = vi.spyOn(appLogger, 'info').mockImplementation(() => undefined);
 
-    detectTouchDeviceMock.mockReturnValueOnce(true);
-    const touchFile = new File(['sog'], 'phone.sog');
-    useSplatLayerStoreFacadeMock.mockReturnValue(createFacade({ splatFile: touchFile }));
-    const { unmount } = render(<SplatLayer />);
-    await waitFor(() => expect(SplatMesh).toHaveBeenCalledTimes(1));
-    expect(validateSogBundleMock).toHaveBeenCalledWith(touchFile, { maxSplats: 3_000_000 });
-    unmount();
+    try {
+      detectTouchDeviceMock.mockReturnValueOnce(true);
+      const touchFile = new File(['sog'], 'phone.sog');
+      useSplatLayerStoreFacadeMock.mockReturnValue(createFacade({ splatFile: touchFile }));
+      const { unmount } = render(<SplatLayer />);
+      await waitFor(() => expect(SplatMesh).toHaveBeenCalledTimes(1));
+      expect(validateSogBundleMock).toHaveBeenCalledWith(touchFile, { maxSplats: 3_000_000 });
+      unmount();
 
-    validateSogBundleMock.mockClear();
-    const desktopFile = new File(['sog'], 'desktop.sog');
-    useSplatLayerStoreFacadeMock.mockReturnValue(createFacade({ splatFile: desktopFile }));
-    render(<SplatLayer />);
-    await waitFor(() => expect(SplatMesh).toHaveBeenCalledTimes(2));
-    expect(validateSogBundleMock).toHaveBeenCalledTimes(1);
-    const [validatedFile, options] = validateSogBundleMock.mock.calls[0] as [File, { maxSplats?: number }];
-    expect(validatedFile).toBe(desktopFile);
-    expect(options).toHaveProperty('maxSplats', undefined);
+      validateSogBundleMock.mockClear();
+      const desktopFile = new File(['sog'], 'desktop.sog');
+      useSplatLayerStoreFacadeMock.mockReturnValue(createFacade({ splatFile: desktopFile }));
+      render(<SplatLayer />);
+      await waitFor(() => expect(SplatMesh).toHaveBeenCalledTimes(2));
+      expect(validateSogBundleMock).toHaveBeenCalledTimes(1);
+      const [validatedFile, options] = validateSogBundleMock.mock.calls[0] as [File, { maxSplats?: number }];
+      expect(validatedFile).toBe(desktopFile);
+      expect(options).toHaveProperty('maxSplats', undefined);
+    } finally {
+      info.mockRestore();
+    }
   });
 
   it('drops a SOG whose validation finishes after the layer unmounts', async () => {

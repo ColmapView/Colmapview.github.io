@@ -16,6 +16,7 @@ import type { HubClient } from '../huggingface/hubClient';
 import { parseDatasetViewerSettings } from '../../utils/datasetViewerSettings';
 import { getManifestLoadSourceInfo } from '../../hooks/urlLoaderPolicy';
 import { buildImageUrl, buildMaskUrlCandidates } from '../../utils/imageFileLookupPolicy';
+import { appLogger } from '../../utils/logger';
 
 function input(): PublicationInput {
   const original = new File(['original png bytes'], 'nested/photo.png', { type: 'image/png' });
@@ -274,6 +275,8 @@ describe('publication snapshot preparation', () => {
       ['masks/nested/photo.png.png', buildArchiveEntry({ name: 'masks/nested/photo.png.png', size: mask.size, extract: extractMask })],
     ]);
     setActiveZipArchive(buildArchiveReader(), index);
+    // Extracting the mask is reported at info level.
+    vi.spyOn(appLogger, 'info').mockImplementation(() => undefined);
     try {
       const prepared = await preparePublication(source, new AbortController().signal, deps());
       expect(extractMask).not.toHaveBeenCalled();

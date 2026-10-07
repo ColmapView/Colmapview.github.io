@@ -1,5 +1,5 @@
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
-import { act, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { usePointPickingStore, useUIStore } from '../../store';
 import { TOUCH } from '../../theme/sizing';
@@ -33,6 +33,8 @@ function contextMenuEvent(nativePointerType?: string): ReactMouseEvent {
 }
 
 afterEach(() => {
+  // Unmount first: resetting the stores under a mounted hook is an update outside act().
+  cleanup();
   vi.restoreAllMocks();
   vi.useRealTimers();
   // Full reset: zustand set() copies action references into new state objects,

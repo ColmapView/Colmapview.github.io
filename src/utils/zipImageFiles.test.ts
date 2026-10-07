@@ -38,6 +38,7 @@ import {
   isZipLoadingAvailable,
   removeZipMaskCacheEntries,
 } from './zipImageFiles';
+import { appLogger } from './logger';
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -50,10 +51,13 @@ function createDeferred<T>() {
 beforeEach(() => {
   clearZipCache();
   vi.clearAllMocks();
+  // Every extracted mask is reported at info level.
+  vi.spyOn(appLogger, 'info').mockImplementation(() => undefined);
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe('zip image files', () => {

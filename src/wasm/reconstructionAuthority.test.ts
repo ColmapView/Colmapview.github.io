@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { File as NodeFile } from 'node:buffer';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -19,6 +19,7 @@ import { createIdentityEuler } from '../utils/sim3dTransforms';
 import { CameraModelId } from '../types/colmap';
 import { SensorType } from '../types/rig';
 import { createPointMembershipViews } from './compactPointMembership';
+import { appLogger } from '../utils/logger';
 
 let wasmModule: Promise<ColmapWasmModule> | undefined;
 const File = NodeFile as unknown as typeof globalThis.File;
@@ -62,6 +63,8 @@ function files(format: 'binary' | 'text'): ReconstructionLoadFiles {
 
 const owners: ReconstructionAuthority[] = [];
 function owner() { const value = new ReconstructionAuthority(); owners.push(value); return value; }
+// The WASM parser and the on-demand points rebuild report their timings at info level.
+beforeEach(() => { vi.spyOn(appLogger, 'info').mockImplementation(() => undefined); });
 afterEach(() => { owners.splice(0).forEach(value => value.dispose()); vi.restoreAllMocks(); });
 async function execute<K extends ReconstructionOperation>(authority: ReconstructionAuthority, operation: K, payload: ReconstructionOperationPayloads[K]): Promise<ReconstructionOperationResults[K]> {
   return await authority.execute({ generation: 1, requestId: 1, operation, payload } as ReconstructionRequest, () => undefined) as ReconstructionOperationResults[K];

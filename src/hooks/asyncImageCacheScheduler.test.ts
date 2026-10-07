@@ -32,6 +32,7 @@ function createScheduler(overrides: Partial<Parameters<typeof createAsyncImageCa
       idleTimeout: 100,
       idleFallback: 16,
       processPendingItem,
+      log: vi.fn(),
       ...overrides,
     }),
   };

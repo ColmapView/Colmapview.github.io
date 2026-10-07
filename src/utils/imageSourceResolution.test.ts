@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
   CORE_IMAGE_SOURCE_STRATEGIES,
   imagesDirStrategy,
@@ -6,6 +6,7 @@ import {
   type ImageSourceContribution,
   type ImageSourceStrategy,
 } from './imageSourceResolution';
+import { appLogger } from './logger';
 
 describe('imagesDirStrategy (core)', () => {
   it('resolves a canonical images/ folder as a base-dir contribution', () => {
@@ -40,6 +41,8 @@ describe('imagesDirStrategy (core)', () => {
 });
 
 describe('resolveImageSource (merge: override + fallback)', () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
   const stub = (id: string, contribution: ImageSourceContribution | null): ImageSourceStrategy => ({
     id,
     resolve: () => contribution,
@@ -71,17 +74,20 @@ describe('resolveImageSource (merge: override + fallback)', () => {
   });
 
   it('isolates a throwing strategy and still runs the rest', async () => {
+    const failure = new Error('strategy failure');
     const throwing: ImageSourceStrategy = {
       id: 'boom',
       resolve: () => {
-        throw new Error('strategy failure');
+        throw failure;
       },
     };
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
     const result = await resolveImageSource(
       { filePaths: ['images/0.jpg'], modelDir: '' },
       [throwing, ...CORE_IMAGE_SOURCE_STRATEGIES]
     );
     expect(result).toEqual({ imagesDir: 'images' });
+    expect(warn).toHaveBeenCalledExactlyOnceWith('[Image resolve] strategy "boom" failed:', failure);
   });
 
   it('returns null when nothing resolves', async () => {
