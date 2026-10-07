@@ -234,6 +234,10 @@ interface ReconstructionState {
   imageNameToUrl: Record<string, string> | null;
   /** Manifest object (only set when sourceType is 'manifest', for inline embedding in URLs) */
   sourceManifest: ColmapManifest | null;
+  /**
+   * The splat the next commit shows, by id, path or file name ('' for None). Every dataset load starts
+   * with only its own, so a choice never reaches another dataset's commit.
+   */
   requestedSplatSourceId: string | null;
   /** Explicit source choices supersede pending startup restoration, including choosing None again. */
   splatSelectionRevision: number;
@@ -260,6 +264,7 @@ interface ReconstructionState {
   setError: (error: string | null) => void;
   setProgress: (progress: number) => void;
   setSourceInfo: (type: ReconstructionSourceType, url?: string | null, imageUrlBase?: string | null, maskUrlBase?: string | null, manifest?: ColmapManifest | null, imageNameToUrl?: Record<string, string> | null) => void;
+  /** Applies to the scene on screen when it can; with no scene yet, it waits for the first commit ('' for None). */
   setRequestedSplatSourceId: (sourceId: string | null) => void;
   /** Merge a discovered remote splat catalog so all tiles are listed (lazy). Never opens the picker. */
   mergeRemoteSplatCatalog: (
@@ -350,9 +355,10 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       set({ wasmReconstruction: null });
     }
     const requestedSplatSourceId = get().requestedSplatSourceId;
-    const resolvedLoadedFiles = requestedSplatSourceId
-      ? getLoadedFilesWithActiveSplatSource(loadedFiles, requestedSplatSourceId)
-      : loadedFiles;
+    // '' is a None requested before this scene existed: its default splat is never handed over.
+    const resolvedLoadedFiles = requestedSplatSourceId === '' ? clearActiveSplatFile(loadedFiles)
+      : requestedSplatSourceId ? getLoadedFilesWithActiveSplatSource(loadedFiles, requestedSplatSourceId)
+        : loadedFiles;
     const hasSplatFile = Boolean(resolvedLoadedFiles.splatFile);
     const isActiveSplatFileSwitch = Boolean(
       previousLoadedFiles?.splatFile
@@ -383,7 +389,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
 
     set({
       loadedFiles: resolvedLoadedFiles,
-      requestedSplatSourceId: requestedSplatSourceId ? null : get().requestedSplatSourceId,
+      requestedSplatSourceId: requestedSplatSourceId === null ? get().requestedSplatSourceId : null,
     });
   },
 
@@ -415,14 +421,15 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   setSourceInfo: (sourceType, sourceUrl = null, imageUrlBase = null, maskUrlBase = null, sourceManifest = null, imageNameToUrl = null) => set({ sourceType, sourceUrl, imageUrlBase, maskUrlBase, sourceManifest, imageNameToUrl }),
 
   setRequestedSplatSourceId: (requestedSplatSourceId) => {
-    if (!requestedSplatSourceId) {
-      set({ requestedSplatSourceId: null });
+    const loadedFiles = get().loadedFiles;
+    // Before any scene exists, the choice waits for the first commit; '' asks it for None.
+    if (!loadedFiles) {
+      set({ requestedSplatSourceId });
       return;
     }
 
-    const loadedFiles = get().loadedFiles;
-    if (!loadedFiles) {
-      set({ requestedSplatSourceId });
+    if (!requestedSplatSourceId) {
+      set({ requestedSplatSourceId: null });
       return;
     }
 

@@ -74,6 +74,48 @@ describe('useFileDropzone', () => {
       message: OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE }));
   });
 
+  it('starts a dropped load with no splat request left by the previous dataset', async () => {
+    const shown = buildFile('scene.spz');
+    useReconstructionStore.getState().setLoadedFiles({ ...buildLoadedFiles(), splatFile: shown, splatFiles: [shown],
+      splatFileSources: [{ id: 'scene.spz', path: 'scene.spz', file: shown }] });
+    await act(async () => { await useReconstructionStore.getState().selectSplatSource('scene.spz'); });
+    let requestedWhenProcessing: string | null | undefined;
+    processFileDropzoneFilesMock.mockImplementationOnce(async () => {
+      requestedWhenProcessing = useReconstructionStore.getState().requestedSplatSourceId;
+      return true;
+    });
+    const { result } = renderHook(() => useFileDropzone());
+    const event = { preventDefault: vi.fn(), stopPropagation: vi.fn(), dataTransfer: {
+      types: ['Files'], items: [], files: [buildFile('cameras.bin')],
+    } } as unknown as DragEvent<HTMLElement>;
+    await act(async () => { await result.current.handleDrop(event); });
+    expect(processFileDropzoneFilesMock).toHaveBeenCalledOnce();
+    expect(requestedWhenProcessing).toBeNull();
+  });
+
+  it("shows the next dropped dataset's own default after a splat was picked on the previous one", async () => {
+    // The real workflow over the store this hook wires up, with parsing stubbed.
+    const realProcessing: typeof processFileDropzoneFiles = (files, deps, options) => actualWorkflow.processFileDropzoneFiles(files, {
+      ...deps, logger: noopLogger, clearCaches: vi.fn(), delay: async () => {}, shouldPreloadSplatRuntime: () => false,
+      parseFiles: async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false }),
+      buildReconstruction: async () => ({ reconstruction: buildReconstruction(), pointCount: 0 }),
+    }, options);
+    processFileDropzoneFilesMock.mockImplementationOnce(realProcessing).mockImplementationOnce(realProcessing);
+    const drop = (files: File[]) => ({ preventDefault: vi.fn(), stopPropagation: vi.fn(),
+      dataTransfer: { types: ['Files'], items: [], files } }) as unknown as DragEvent<HTMLElement>;
+    const colmap = () => ['cameras.bin', 'images.bin', 'points3D.bin'].map(name => buildFile(name));
+    const { result } = renderHook(() => useFileDropzone());
+
+    const firstScene = buildFile('scene.spz', 'first scene');
+    await act(async () => { await result.current.handleDrop(drop([...colmap(), buildFile('other.spz', 'first default, larger'), firstScene])); });
+    await act(async () => { await useReconstructionStore.getState().selectSplatSource('scene.spz'); });
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(firstScene);
+
+    const nextDefault = buildFile('big.spz', 'next default, larger again');
+    await act(async () => { await result.current.handleDrop(drop([...colmap(), nextDefault, buildFile('scene.spz', 'next scene')])); });
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(nextDefault);
+  });
+
   it('does not preload the spark runtime when webgpu is the resolved splat backend', async () => {
     useSplatBackendStore.setState({
       requestedBackend: 'webgpu',

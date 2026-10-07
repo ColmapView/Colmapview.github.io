@@ -405,7 +405,8 @@ describe('useUrlLoader', () => {
     const splatRequests = request.mock.calls.map(([url]) => String(url)).filter(url => url.endsWith('.spz'));
     expect(splatRequests).toEqual(mode === 'large-touch' ? [] : [baseUrl + expected]);
     if (mode === 'large-touch') {
-      expect(useReconstructionStore.getState().requestedSplatSourceId).toBe(expected);
+      // The picker offers the skipped splat; nothing stays requested for a later dataset to pick up.
+      expect(useReconstructionStore.getState().requestedSplatSourceId).toBeNull();
       expect(useReconstructionStore.getState().showSplatPicker).toBe(true);
       await act(async () => { await useReconstructionStore.getState().selectSplatSource(expected); });
       expect(useTransformStore.getState().splatTransform).toEqual(alignment);
@@ -1272,6 +1273,70 @@ describe('useUrlLoader', () => {
     expect(useTransformStore.getState().transform.translationX).toBe(5);
     const { droppedFiles, getBoundSourceViewerState } = useReconstructionStore.getState();
     expect(getBoundSourceViewerState(droppedFiles!)?.config.transform).toEqual(alignment);
+  });
+
+  it('starts a URL load with no splat request left by an earlier dataset', async () => {
+    // A startup link's choice whose load failed: nothing else is on screen.
+    useReconstructionStore.getState().setRequestedSplatSourceId('scene.spz');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 404 })));
+    let requested: string | null | undefined;
+    vi.spyOn(archiveSource, 'loadZipUrlSource').mockImplementation(async (_url, deps) => {
+      requested = useReconstructionStore.getState().requestedSplatSourceId;
+      return (await deps.processFiles(new Map(), undefined, { throwOnError: true })) !== false;
+    });
+    processFilesMock.mockResolvedValueOnce();
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
+    await act(async () => { await result.current.loadFromUrl('https://example.com/scene.tar'); });
+    expect(requested).toBeNull();
+  });
+
+  it("shows a 3DGS dataset's own default after the previous dataset's iteration_7000 was picked", async () => {
+    const early = 'point_cloud/iteration_7000/point_cloud.ply';
+    const late = 'point_cloud/iteration_30000/point_cloud.ply';
+    const picked = new File(['first early'], 'point_cloud.ply');
+    const firstDefault = new File(['first late, larger'], 'point_cloud.ply');
+    useReconstructionStore.getState().setLoadedFiles({ ...buildLoadedFiles(), splatFile: firstDefault, splatFiles: [firstDefault, picked],
+      splatFileSources: [{ id: late, path: late, file: firstDefault }, { id: early, path: early, file: picked }] });
+    await act(async () => { await useReconstructionStore.getState().selectSplatSource(early); });
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(picked);
+
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 404 })));
+    const nextDefault = new File(['next late, the largest of them all'], 'point_cloud.ply');
+    const files = new Map<string, File>([
+      ...['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, new File(['x'], name)] as const),
+      [late, nextDefault], [early, new File(['next early'], 'point_cloud.ply')]]);
+    vi.spyOn(archiveSource, 'loadZipUrlSource').mockImplementation(async (_url, deps) =>
+      (await deps.processFiles(files, undefined, { throwOnError: true, beforeSceneCommit: deps.beforeSceneCommit })) !== false);
+    processFilesMock.mockImplementationOnce(async (incoming, _range, options) => { await processWithStore(incoming, options); });
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
+    await act(async () => { expect(await result.current.loadFromUrl('https://example.com/next.zip')).toBe(true); });
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(nextDefault);
+  });
+
+  it("commits a startup link's None without handing the archive's default splat to the renderer", async () => {
+    window.history.replaceState(null, '', '/#' + encodeShareData('https://example.com/scene.tar', null,
+      { splat: { activeSourceId: '' } }));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 404 })));
+    const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin', 'default.spz']
+      .map(name => [name, new File(['incoming'], name)]));
+    vi.spyOn(archiveSource, 'loadZipUrlSource').mockImplementation(async (_url, deps) =>
+      (await deps.processFiles(files, undefined, { throwOnError: true })) !== false);
+    processFilesMock.mockImplementationOnce(async (incoming, _range, options) => { await processWithStore(incoming, options); });
+    const shown: Array<string | undefined> = [];
+    const progress: Array<string | undefined> = [];
+    const unsubscribe = useReconstructionStore.subscribe(state => {
+      shown.push(state.loadedFiles?.splatFile?.name);
+      progress.push(state.urlProgress?.message);
+    });
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger, applyUrlOverrides: true }));
+    try {
+      await act(async () => { expect(await result.current.loadFromUrl('https://example.com/scene.tar')).toBe(true); });
+    } finally { unsubscribe(); }
+    expect(useReconstructionStore.getState().loadedFiles?.splatFileSources).toHaveLength(1);
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(shown).not.toContain('default.spz');
+    expect(progress).not.toContain('Preparing splat renderer...');
+    expect(useReconstructionStore.getState().requestedSplatSourceId).toBeNull();
   });
 
   it('surfaces a skipped oversized lone splat as a lazy source and opens the picker', async () => {

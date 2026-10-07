@@ -397,6 +397,20 @@ describe('reconstruction store URL load lifecycle', () => {
     expect(useReconstructionStore.getState().requestedSplatSourceId).toBeNull();
   });
 
+  it('commits a None requested before its scene existed, without handing over the default splat', () => {
+    const defaultSplat = new File(['default'], 'default.spz');
+    useReconstructionStore.getState().setRequestedSplatSourceId('');
+    expect(useReconstructionStore.getState().requestedSplatSourceId).toBe('');
+
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({ splatFile: defaultSplat, splatFiles: [defaultSplat],
+      splatFileSources: [{ id: 'default.spz', path: 'default.spz', file: defaultSplat }] }));
+
+    const state = useReconstructionStore.getState();
+    expect(state.loadedFiles?.splatFile).toBeUndefined();
+    expect(state.loadedFiles?.splatFileSources?.[0].file).toBe(defaultSplat);
+    expect(state.requestedSplatSourceId).toBeNull();
+  });
+
   it('applies splat point defaults when a splat is added to an already loaded dataset', () => {
     const camerasFile = new File([''], 'cameras.bin');
     const imagesFile = new File([''], 'images.bin');

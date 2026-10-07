@@ -163,11 +163,9 @@ export async function applySavedViewerState(saved: PublishedViewerState | null, 
   if (shared?.config) applyShareConfig(restorationConfig(shared.config));
   // Display saved for a splat would hide the points of a scene that ended up without one.
   if (!useReconstructionStore.getState().loadedFiles?.splatFile) restorePointDisplayWithoutSplat();
-  if (sourceId !== undefined && canRestoreSplatSelection()) {
-    useReconstructionStore.getState().setRequestedSplatSourceId(sourceId || null);
-    if (sourceId === '' || useReconstructionStore.getState().loadedFiles?.splatFile) {
-      useReconstructionStore.getState().setShowSplatPicker(false);
-    }
+  if (sourceId !== undefined && canRestoreSplatSelection()
+    && (sourceId === '' || useReconstructionStore.getState().loadedFiles?.splatFile)) {
+    useReconstructionStore.getState().setShowSplatPicker(false);
   }
 }
 

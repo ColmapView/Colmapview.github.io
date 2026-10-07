@@ -25,7 +25,8 @@ import { handleUrlLoadFailure } from './urlLoaderErrorHandling';
 import { loadZipUrlSource } from './urlLoaderZipSource';
 import { loadManifestSource } from './urlLoaderManifestSource';
 import { isSplatUrl, loadSplatUrlSource } from './urlLoaderSplatSource';
-import { applySavedViewerState, decodeSharedViewerOverrides, resolveRestoredSplatSourceId } from './useUrlState';
+import { applySavedViewerState, decodeSharedViewerOverrides, resolveRestoredSplatSourceId,
+  type SharedViewerOverrides } from './useUrlState';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { fetchOptionalDatasetViewerSettingsResult } from './urlLoaderViewerState';
 import { dismissOptionalSettingsTimeoutWarning, showOptionalSettingsTimeoutWarning } from './optionalSettingsWarning';
@@ -91,6 +92,16 @@ function settingsBesideOnce(url: string, load: UrlLoadContext) {
     },
     settle,
   };
+}
+
+/**
+ * A load starts with only its own splat request: the viewer URL's choice, None included, which its
+ * commit applies. One left by the previous dataset would otherwise pick a same-named splat here. With
+ * a scene open the request would apply to that scene, so the restore applies the URL's choice instead.
+ */
+function requestSplatForLoad(shared: SharedViewerOverrides | null): void {
+  const store = useReconstructionStore.getState();
+  store.setRequestedSplatSourceId(store.loadedFiles ? null : shared?.config?.splat?.activeSourceId ?? null);
 }
 
 /** Owns URL discovery, downloading, and the handoff to reconstruction parsing. */
@@ -180,6 +191,7 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
       // never turn into an eager full splat request while URL settings decode.
       const shared = await decodeSharedViewerOverrides(initialHash);
       assertCurrent();
+      requestSplatForLoad(shared);
       const loaded = await work(load);
       assertCurrent();
       if (loaded) {

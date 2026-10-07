@@ -31,6 +31,8 @@ function beginLocalLoad() {
   // Timeout warnings describe the previous load.
   dismissOptionalSettingsTimeoutWarning();
   dismissSplatListTimeoutWarning();
+  // A splat chosen for the previous dataset must not pick one of these files' splats at their commit.
+  useReconstructionStore.getState().setRequestedSplatSourceId(null);
   const initialSplatSelectionRevision = useReconstructionStore.getState().splatSelectionRevision;
   const load = beginReconstructionLoad();
   return {
