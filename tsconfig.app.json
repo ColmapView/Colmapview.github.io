@@ -34,6 +34,6 @@
   /* Shipped sources only, under the browser types they ship with. Tests and the
      src/test helpers run under vitest in node: tsconfig.test.json (built by
      `tsc -b`, or alone by `npm run typecheck:tests`) checks them with node types.
-     src/store/viewerStore_test.ts is a Deno-era test that no runner executes. */
-  "exclude": ["src/**/*_test.ts", "src/**/*.test.ts", "src/**/*.test.tsx", "src/test/**"]
+     src/store/viewerStore_test.ts is a Deno-era test that neither vitest nor CI runs. */
+  "exclude": ["src/store/viewerStore_test.ts", "src/**/*.test.ts", "src/**/*.test.tsx", "src/test/**"]
 }

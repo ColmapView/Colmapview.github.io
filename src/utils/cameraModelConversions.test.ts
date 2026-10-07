@@ -515,17 +515,18 @@ describe('round-trip parameter conversions', () => {
     // Expand with index remapping
     const expanded = convertCameraModel(original, CameraModelId.THIN_PRISM_FISHEYE);
     expect(expanded.type).toBe('exact');
+    const expandedParams = paramsOf(expanded);
     // Verify k3,k4 moved to indices 8-9
-    expect(paramsOf(expanded)[8]).toBe(0.01);
-    expect(paramsOf(expanded)[9]).toBe(0.005);
+    expect(expandedParams[8]).toBe(0.01);
+    expect(expandedParams[9]).toBe(0.005);
     // Verify p1,p2,sx1,sy1 are zero
-    expect(paramsOf(expanded)[6]).toBe(0);
-    expect(paramsOf(expanded)[7]).toBe(0);
-    expect(paramsOf(expanded)[10]).toBe(0);
-    expect(paramsOf(expanded)[11]).toBe(0);
+    expect(expandedParams[6]).toBe(0);
+    expect(expandedParams[7]).toBe(0);
+    expect(expandedParams[10]).toBe(0);
+    expect(expandedParams[11]).toBe(0);
 
     // Reduce - should get original back
-    const expandedCam = makeCamera(CameraModelId.THIN_PRISM_FISHEYE, paramsOf(expanded));
+    const expandedCam = makeCamera(CameraModelId.THIN_PRISM_FISHEYE, expandedParams);
     const reduced = convertCameraModel(expandedCam, CameraModelId.OPENCV_FISHEYE);
     expect(reduced.type).toBe('exact');
     expect(paramsOf(reduced)).toEqual(originalParams);

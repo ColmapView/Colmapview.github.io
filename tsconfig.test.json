@@ -6,8 +6,8 @@
     "types": ["vite/client", "node"]
   },
   /* Every source: the tests, the src/test helpers, and the modules they import.
-     src/store/viewerStore_test.ts is a Deno-era test that no runner executes, so
-     it stays out here as it does in the app project. */
+     src/store/viewerStore_test.ts is a Deno-era test that neither vitest nor CI
+     runs, so it stays out here as it does in the app project. */
   "include": ["src"],
-  "exclude": ["src/**/*_test.ts"]
+  "exclude": ["src/store/viewerStore_test.ts"]
 }
