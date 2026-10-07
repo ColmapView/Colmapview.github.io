@@ -1,5 +1,6 @@
 import {
   applyTransformToData,
+  confirmReload,
   useReconstructionStore,
   useTransformStore,
   useUIStore,
@@ -31,6 +32,8 @@ interface TransformPanelActionFacade {
    * this panel only edits one by hand and commits it.
    */
   applyTransformToData: typeof applyTransformToData;
+  /** Asked before Reload, like every other Reload entry point. */
+  confirmReload: typeof confirmReload;
 }
 
 export interface TransformPanelStoreFacade {
@@ -67,6 +70,7 @@ export function useTransformPanelStoreFacade(): TransformPanelStoreFacade {
     },
     actions: {
       applyTransformToData,
+      confirmReload,
     },
   };
 }

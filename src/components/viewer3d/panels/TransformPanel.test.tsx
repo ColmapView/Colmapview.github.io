@@ -40,6 +40,7 @@ describe('TransformPanel', () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
   });
 
   it('keeps the by-hand controls: the gizmo toggle and the sliders', () => {
@@ -83,8 +84,28 @@ describe('TransformPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
 
-    // waitFor: still holds if this button gains the confirmReload() step the other three have.
+    // waitFor: the click goes through confirmReload() first, like the other three Reload actions.
     await waitFor(() => expect(reloadFilesMock).toHaveBeenCalledExactlyOnceWith(droppedFiles));
     expect(processFilesMock).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('asks before Reload discards the transform, like the other Reload actions (confirmed: %s)', async confirmed => {
+    const droppedFiles = new Map([['sparse/0/cameras.bin', new File([''], 'cameras.bin')]]);
+    const transform = { ...createIdentityEuler(), scale: 1.5 };
+    useReconstructionStore.setState({ droppedFiles });
+    useTransformStore.setState({ transform });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(confirmed);
+    renderPanel();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+
+    await waitFor(() => expect(confirm).toHaveBeenCalledOnce());
+    if (confirmed) {
+      await waitFor(() => expect(reloadFilesMock).toHaveBeenCalledWith(droppedFiles));
+      expect(useTransformStore.getState().transform).toEqual(createIdentityEuler());
+    } else {
+      expect(reloadFilesMock).not.toHaveBeenCalled();
+      expect(useTransformStore.getState().transform).toEqual(transform);
+    }
   });
 });

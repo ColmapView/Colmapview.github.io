@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  confirmReload,
   useReconstructionStore,
   useTransformStore,
   useUIStore,
@@ -44,8 +45,9 @@ describe('useTransformPanelStoreFacade', () => {
     });
     expect(result.current.transform.transform).toBe(transform);
     expect(result.current.ui.showGizmo).toBe(true);
-    // Only the commit is left here; `applyTransformPreset` moved with them.
-    expect(Object.keys(result.current.actions)).toEqual(['applyTransformToData']);
+    // The commit and the Reload confirmation; `applyTransformPreset` moved to Align.
+    expect(Object.keys(result.current.actions)).toEqual(['applyTransformToData', 'confirmReload']);
+    expect(result.current.actions.confirmReload).toBe(confirmReload);
     expect(typeof result.current.actions.applyTransformToData).toBe('function');
   });
 

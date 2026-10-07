@@ -56,9 +56,15 @@ export const TransformPanel = memo(function TransformPanel({
     },
     actions: {
       applyTransformToData,
+      confirmReload,
     },
   } = useTransformPanelStoreFacade();
   const { reloadFiles } = useFileDropzone();
+  const reload = async () => {
+    if (!droppedFiles || !await confirmReload()) return;
+    resetTransform();
+    void reloadFiles(droppedFiles);
+  };
 
   const panelState = getTransformPanelState({
     transform,
@@ -168,7 +174,7 @@ export const TransformPanel = memo(function TransformPanel({
             Reset
           </button>
           <button
-            onClick={() => { if (droppedFiles) { resetTransform(); reloadFiles(droppedFiles); } }}
+            onClick={() => { void reload(); }}
             disabled={!panelState.canReloadDroppedFiles}
             className={panelState.canReloadDroppedFiles ? styles.actionButton : styles.actionButtonDisabled}
           >
