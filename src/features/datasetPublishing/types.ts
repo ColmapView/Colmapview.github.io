@@ -1,6 +1,6 @@
 import type { PublishedViewerState } from '../../utils/publishedViewerState';
 
-// Splat files use native Blob transfers and are exempt from this buffer limit.
+// Splat files use native Blob transfers and the exported COLMAP model is generated in memory; both are exempt.
 export const MAX_BUFFERED_PUBLICATION_FILE_BYTES = 128 * 1024 * 1024;
 export const MAX_PUBLICATION_BATCH_BYTES = 128 * 1024 * 1024;
 export const MAX_PUBLICATION_BATCH_FILES = 49; // Plus one atomic batch receipt.

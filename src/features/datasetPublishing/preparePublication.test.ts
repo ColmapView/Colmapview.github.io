@@ -70,6 +70,11 @@ describe('publication snapshot preparation', () => {
     expect(() => checkAssetSize(MAX_BUFFERED_PUBLICATION_FILE_BYTES + 1, 'photo.png', 'image')).toThrow(expect.objectContaining({
       message: 'The file photo.png exceeds the 128 MiB publication limit for non-splat files.', permanent: true }));
   });
+  it('exempts the exported COLMAP model, which the export already holds in memory', () => {
+    // About 700 images with 8,000 keypoints each make a 128 MiB images.bin.
+    expect(() => checkAssetSize(MAX_BUFFERED_PUBLICATION_FILE_BYTES + 1, 'sparse/0/images.bin', 'colmap')).not.toThrow();
+    expect(() => checkAssetSize(-1, 'sparse/0/images.bin', 'colmap')).toThrow('has an invalid size');
+  });
 
   const splats = (source: PublicationInput, paths: string[]) => {
     const file = new File(['splat'], 'splat.ply');
