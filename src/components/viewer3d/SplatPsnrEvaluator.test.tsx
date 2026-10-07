@@ -248,10 +248,11 @@ describe('SplatPsnrEvaluator', () => {
     try {
       render(<SplatPsnrEvaluator />);
 
-      // Each lazy import() still makes one module-runner round trip, so the first wait gets headroom.
+      // Each lazy import() still makes one module-runner round trip, so the first wait gets headroom,
+      // ending before the 5 s test timeout so that a failure still says what it waited for.
       await waitFor(() => {
         expect(actions.setSplatPsnrImageError).toHaveBeenCalledWith(secondImage.imageId, expect.any(String));
-      }, { timeout: 5000 });
+      }, { timeout: 4000 });
 
       // The second image is skipped (never computed) once the first mismatch is seen.
       expect(session.computeImageMetric).toHaveBeenCalledTimes(1);

@@ -65,8 +65,9 @@ describe('ViewerToolModals', () => {
       />
     );
 
-    // Each lazy import() still makes one module-runner round trip, so the first lookup gets headroom.
-    expect(await screen.findByTestId('floor-modal', undefined, { timeout: 5000 })).toHaveAttribute('data-open', 'true');
+    // Each lazy import() still makes one module-runner round trip, so the first lookup gets headroom,
+    // ending before the 5 s test timeout so that a failure still says what it looked for.
+    expect(await screen.findByTestId('floor-modal', undefined, { timeout: 4000 })).toHaveAttribute('data-open', 'true');
     expect(await screen.findByTestId('deletion-modal')).toHaveAttribute('data-open', 'true');
     expect(await screen.findByTestId('conversion-modal')).toHaveAttribute('data-open', 'true');
     expect(await screen.findByTestId('auto-hide-modal')).toHaveAttribute('data-open', 'true');
