@@ -7,6 +7,7 @@ import { useSplatBackendStore } from './stores/splatBackendStore';
 import { useTransformStore } from './stores/transformStore';
 import { useUIStore } from './stores/uiStore';
 import { useNotificationStore } from './stores/notificationStore';
+import { useDeletionStore } from './stores/deletionStore';
 import { isSplatColorMode } from './types';
 import {
   clearGaussianCloudLoadCacheForTests,
@@ -438,6 +439,18 @@ describe('reconstruction store URL load lifecycle', () => {
       scale: 1,
       translationX: 0,
     });
+  });
+
+  it('drops pending deletion marks with the scene they were made on, keeping them across its edits', () => {
+    useDeletionStore.setState(useDeletionStore.getInitialState(), true);
+    useReconstructionStore.getState().setReconstruction(buildReconstruction());
+    useDeletionStore.getState().markForDeletion(1);
+
+    useReconstructionStore.getState().setReconstruction(buildReconstruction(), { edited: true });
+    expect(useDeletionStore.getState().pendingDeletions).toEqual(new Set([1]));
+
+    useReconstructionStore.getState().setReconstruction(buildReconstruction());
+    expect(useDeletionStore.getState().pendingDeletions.size).toBe(0);
   });
 
   it('preserves accumulated splat transform when only the active splat file changes', () => {

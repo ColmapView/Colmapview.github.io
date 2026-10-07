@@ -14,6 +14,7 @@ import {
 } from './stores/pointCloudStore';
 import { useSplatBackendStore } from './stores/splatBackendStore';
 import { useTransformStore } from './stores/transformStore';
+import { useDeletionStore } from './stores/deletionStore';
 import { getDefaultBackgroundColorForSplatLoad } from './splatBackgroundPolicy';
 import {
   applyActiveSplatFile,
@@ -317,6 +318,8 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       progress: 100,
       error: null
     });
+    // A loaded scene replaces the one whose images the pending deletion marks name.
+    if (!options?.edited) useDeletionStore.getState().clearPendingDeletions();
   },
 
   setWasmReconstruction: (wasmReconstruction) => {

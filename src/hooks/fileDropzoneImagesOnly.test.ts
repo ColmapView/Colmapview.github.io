@@ -42,10 +42,10 @@ describe('file dropzone images-only load helper', () => {
       percent: 60,
       message: 'Creating image gallery...',
     });
+    // The caller hands the splat to its renderer: only it knows whether the splat is already on screen.
     expect(setUrlProgress).toHaveBeenNthCalledWith(2, {
-      percent: 70,
-      message: 'Preparing splat renderer...',
-      currentFile: 'scene.ply',
+      percent: 105,
+      message: 'Finalizing...',
     });
     expect(setLoadedFiles).toHaveBeenCalledWith({
       camerasFile: undefined,
@@ -72,7 +72,7 @@ describe('file dropzone images-only load helper', () => {
       'clearSplatPsnr',
       'loadedFiles',
       'clearCaches',
-      'progress:Preparing splat renderer...',
+      'progress:Finalizing...',
       'reconstruction',
       'resetView',
       'notification',

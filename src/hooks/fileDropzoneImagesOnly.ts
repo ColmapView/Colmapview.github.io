@@ -1,7 +1,6 @@
 import type { LoadedFiles, Reconstruction, SplatFileSource } from '../types/colmap';
 import { appLogger } from '../utils/logger';
 import { createImagesOnlyReconstruction } from '../utils/fileClassification';
-import { getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
 
 interface ProgressUpdate {
   percent: number;
@@ -63,9 +62,8 @@ export function runImagesOnlyLoad({
 
   clearCaches({ preserveZip: true });
 
-  setUrlProgress(splatFile
-    ? getSplatLoadingProgress(splatFile, { startPercent: mapProgress(60) })
-    : { percent: mapProgress(95), message: 'Finalizing...' });
+  // The caller hands a splat to its renderer: only it knows whether that splat is already on screen.
+  setUrlProgress({ percent: mapProgress(95), message: 'Finalizing...' });
   setReconstruction(reconstruction);
   resetView();
 

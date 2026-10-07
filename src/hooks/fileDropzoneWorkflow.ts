@@ -109,8 +109,9 @@ export interface FileDropzoneWorkflowOptions {
   progressRange?: { start: number; end: number };
   replaceSplatScene?: boolean;
   /**
-   * Reload of the current dataset: the splat state on screen stays (remote tiles its files never
-   * contained, the active splat or None), and saved settings never switch it.
+   * Reload of the current dataset: the scene is rebuilt from its files as on a first load, discarding
+   * edits, but the splat state on screen stays (remote tiles its files never contained, the active
+   * splat or None), and saved settings never switch it.
    */
   reload?: boolean;
   throwOnError?: boolean;
@@ -120,9 +121,11 @@ export interface FileDropzoneWorkflowOptions {
   viewerState?: PublishedViewerState;
 }
 
+/** A splat dropped onto an open scene replaces only that scene's splat; a Reload rebuilds the scene instead. */
 function updateLoadedSplatFile(
-  incoming: Pick<LoadedFiles, 'splatFile' | 'splatFiles' | 'splatFileSources'>,
-  reload: boolean | undefined,
+  splatFile: File,
+  splatFiles: File[],
+  splatFileSources: SplatFileSource[],
   deps: Pick<FileDropzoneWorkflowDeps, 'addNotification' | 'clearSplatPsnr' | 'getLoadedFiles' | 'setLoadedFiles' | 'setUrlProgress'>,
   mapProgress: (localPercent: number) => number,
   log: (message: string) => void
@@ -132,8 +135,6 @@ function updateLoadedSplatFile(
     return false;
   }
 
-  // A reload keeps the splat state on screen, None included, instead of the files' default.
-  const { splatFile, splatFiles, splatFileSources } = reload ? carryOverSplatState(loadedFiles, incoming) : incoming;
   deps.clearSplatPsnr?.();
   deps.setLoadedFiles({
     ...loadedFiles,
@@ -141,10 +142,6 @@ function updateLoadedSplatFile(
     splatFiles,
     splatFileSources,
   });
-  if (!splatFile) {
-    // A reload that kept None has no splat to announce.
-    return true;
-  }
   deps.setUrlProgress({
     percent: mapProgress(100),
     message: 'Splat file updated',
@@ -182,9 +179,7 @@ function getProcessingErrorMessage(error: unknown): string {
 
 function runNewSplatOnlyLoad(
   files: Map<string, File>,
-  splatFile: File,
-  splatFiles: File[],
-  splatFileSources: SplatFileSource[],
+  splatState: Pick<LoadedFiles, 'splatFile' | 'splatFiles' | 'splatFileSources'>,
   deps: Pick<
     FileDropzoneWorkflowDeps,
     'clearSplatPsnr'
@@ -201,9 +196,7 @@ function runNewSplatOnlyLoad(
 ): void {
   deps.setDroppedFiles(files);
   runSplatOnlyLoad({
-    splatFile,
-    splatFiles,
-    splatFileSources,
+    ...splatState,
     mapProgress,
     setUrlProgress: deps.setUrlProgress,
     setLoadedFiles: loadedFiles => { deps.setLoadedFiles(loadedFiles); deps.setWasmReconstruction(null); },
@@ -350,15 +343,34 @@ export async function processFileDropzoneFiles(
       .filter((file): file is File => Boolean(file));
     let splatFile: File | undefined = splatFiles[0];
     const pointCloudFile = pointCloudPlySources[0]?.file;
+    /** A Reload keeps the splat state on screen; any other load shows the files' default. */
+    const getSplatState = (current: LoadedFiles | null) => normalizedOptions.reload
+      ? carryOverSplatState(current, { splatFile, splatFiles, splatFileSources })
+      : { splatFile, splatFiles, splatFileSources };
     const splatRendererStartPercent = mapProgress(60);
-    const handOffLoadingToSplatRenderer = () => {
-      if (!splatFile) {
+    /**
+     * After a scene commit, hand loading to the splat renderer for the splat the store committed (it may
+     * re-pick the one the user requested), unless that splat was already on screen: the renderer never
+     * reloads it, so a loading state for it would stay up.
+     */
+    const handOffCommittedSplat = (shownBefore: File | undefined) => {
+      splatFile = deps.getLoadedFiles()?.splatFile ?? splatFile;
+      if (!splatFile || splatFile === shownBefore) {
         return;
       }
       keepLoadingForInitialSplat = true;
       deps.setUrlProgress(getSplatLoadingProgress(splatFile, {
         startPercent: splatRendererStartPercent,
       }));
+    };
+    /** Replace the scene with a splat-only one; returns the splat shown until then. */
+    const replaceWithSplatOnlyScene = () => {
+      const current = deps.getLoadedFiles();
+      const splatState = getSplatState(current);
+      splatFile = splatState.splatFile;
+      reportSceneReplacement();
+      runNewSplatOnlyLoad(files, splatState, deps, clearCaches, mapProgress, logger.info);
+      return current?.splatFile;
     };
 
     // Head start on the Spark chunk, but only when Spark is the backend that will
@@ -413,12 +425,12 @@ export async function processFileDropzoneFiles(
 
       if (!hasColmapFiles(files) && !hasImageFiles(files)) {
         let startedNewSplatScene = false;
+        let splatShownBefore: File | undefined;
         if (splatFile) {
-          const updatedExistingSplat = !replaceSplatScene && updateLoadedSplatFile(
-            { splatFile, splatFiles, splatFileSources }, normalizedOptions.reload, deps, mapProgress, logger.info);
+          const updatedExistingSplat = !replaceSplatScene && !normalizedOptions.reload
+            && updateLoadedSplatFile(splatFile, splatFiles, splatFileSources, deps, mapProgress, logger.info);
           if (!updatedExistingSplat) {
-            reportSceneReplacement();
-            runNewSplatOnlyLoad(files, splatFile, splatFiles, splatFileSources, deps, clearCaches, mapProgress, logger.info);
+            splatShownBefore = replaceWithSplatOnlyScene();
             startedNewSplatScene = true;
           }
         } else if (pointCloudFile) {
@@ -429,7 +441,7 @@ export async function processFileDropzoneFiles(
           throw new Error(configErrorMessage);
         }
         if (startedNewSplatScene && configErrorMessage === null) {
-          handOffLoadingToSplatRenderer();
+          handOffCommittedSplat(splatShownBefore);
         }
         return configErrorMessage === null ? await complete() : false;
       }
@@ -455,8 +467,8 @@ export async function processFileDropzoneFiles(
       if (
         splatFile
         && !replaceSplatScene
-        && updateLoadedSplatFile(
-          { splatFile, splatFiles, splatFileSources }, normalizedOptions.reload, deps, mapProgress, logger.info)
+        && !normalizedOptions.reload
+        && updateLoadedSplatFile(splatFile, splatFiles, splatFileSources, deps, mapProgress, logger.info)
       ) {
         return await complete();
       }
@@ -469,9 +481,7 @@ export async function processFileDropzoneFiles(
 
       if (hasImageFiles(files)) {
         const currentLoadedFiles = deps.getLoadedFiles();
-        const splatState = normalizedOptions.reload
-          ? carryOverSplatState(currentLoadedFiles, { splatFile, splatFiles, splatFileSources })
-          : { splatFile, splatFiles, splatFileSources };
+        const splatState = getSplatState(currentLoadedFiles);
         splatFile = splatState.splatFile;
         deps.setDroppedFiles(files);
         runImagesOnlyLoad({
@@ -489,19 +499,12 @@ export async function processFileDropzoneFiles(
           log: logger.info,
         });
         reportSceneReplacement();
-        if (splatFile && splatFile === currentLoadedFiles?.splatFile) {
-          // The renderer never reloads the splat it already shows, so a loading state for it would stay up.
-          deps.setUrlProgress({ percent: mapProgress(95), message: 'Finalizing...' });
-        } else if (splatFile) {
-          handOffLoadingToSplatRenderer();
-        }
+        handOffCommittedSplat(currentLoadedFiles?.splatFile);
         return await complete();
       }
 
       if (splatFile) {
-        reportSceneReplacement();
-        runNewSplatOnlyLoad(files, splatFile, splatFiles, splatFileSources, deps, clearCaches, mapProgress, logger.info);
-        handOffLoadingToSplatRenderer();
+        handOffCommittedSplat(replaceWithSplatOnlyScene());
         return await complete();
       }
 
@@ -560,9 +563,7 @@ export async function processFileDropzoneFiles(
       splatFile = splatFileSources.find(source => source.id === currentSelection.sourceId)?.file;
     }
     const currentLoadedFiles = deps.getLoadedFiles();
-    const splatState = normalizedOptions.reload
-      ? carryOverSplatState(currentLoadedFiles, { splatFile, splatFiles, splatFileSources })
-      : { splatFile, splatFiles, splatFileSources };
+    const splatState = getSplatState(currentLoadedFiles);
     splatFile = splatState.splatFile;
     deps.setUrlProgress({ percent: mapProgress(95), message: 'Finalizing...' });
 
@@ -582,12 +583,6 @@ export async function processFileDropzoneFiles(
       imageFiles,
       hasMasks,
     });
-    // The store may re-pick the splat the user requested, so judge the file it committed.
-    const committedSplatFile = deps.getLoadedFiles()?.splatFile ?? splatFile;
-    splatFile = committedSplatFile;
-    // The renderer reloads only when the splat file changes; handing it the loading state for
-    // the splat it already shows would leave the overlay up.
-    const splatAlreadyRendered = Boolean(committedSplatFile) && committedSplatFile === currentLoadedFiles?.splatFile;
     deps.setWasmReconstruction(parseResult.wasmWrapper);
     sourceInstalled = true;
 
@@ -615,9 +610,7 @@ export async function processFileDropzoneFiles(
       logger.warn,
       { skipMissingImageDiagnostic: shouldSkipMissingImageDiagnosticForSource({ sourceType, imageUrlBase }) }
     );
-    if (splatFile && !splatAlreadyRendered) {
-      handOffLoadingToSplatRenderer();
-    }
+    handOffCommittedSplat(currentLoadedFiles?.splatFile);
     return await complete();
   } catch (err) {
     if (load.signal.aborted || (err instanceof Error && err.name === 'AbortError')) return false;

@@ -5,12 +5,15 @@ import type { FileDropzoneWorkflowDeps } from './fileDropzoneWorkflow';
 import { processFileDropzoneFiles } from './fileDropzoneWorkflow';
 import { ReconstructionService, ReconstructionSnapshot } from '../wasm/reconstructionService';
 import { cancelPendingReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
-import { useReconstructionStore, useTransformStore, useUIStore, usePointCloudStore } from '../store';
+import {
+  applyDeletionsToData, applyTransformToData, hasUnsavedReloadState,
+  useDeletionStore, useReconstructionStore, useTransformStore, useUIStore, usePointCloudStore,
+} from '../store';
 import { applySavedViewerState, applyShareConfig } from './useUrlState';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import { getShareActiveSplatSourceId } from '../utils/splatFileSourcePolicy';
-import { buildWasmReconstructionWrapper } from '../test/builders';
+import { buildImage, buildReconstruction as buildTestReconstruction, buildWasmReconstructionWrapper } from '../test/builders';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 
 function file(name: string): File {
@@ -595,7 +598,8 @@ describe('file dropzone workflow', () => {
     const parseFiles = vi.fn();
     const onSceneReplaced = vi.fn();
     const deps = createDeps({
-      getLoadedFiles: vi.fn(() => currentLoadedFiles),
+      // The renderer is handed the splat that the store reads back as committed.
+      ...loadedFilesStore(currentLoadedFiles),
       logger,
       parseFiles,
     });
@@ -1186,6 +1190,181 @@ describe('file dropzone workflow', () => {
       // The renderer already shows the kept splat: no splat load is left waiting on it.
       expect(deps.setUrlProgress).toHaveBeenLastCalledWith({ percent: 95, message: 'Finalizing...' });
       expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
+    } finally { useReconstructionStore.getState().clear(); }
+  });
+
+  type ReloadScene = 'COLMAP' | 'splat-only' | 'images+splats';
+
+  /** A freshly parsed scene with the images 1 and 2. */
+  const parsedScene = () => buildTestReconstruction({
+    images: [buildImage({ imageId: 1, name: 'one.jpg' }), buildImage({ imageId: 2, name: 'two.jpg' })],
+  });
+
+  /**
+   * Real stores and a scene's own files, holding the splats a (their default) and b. The COLMAP and
+   * gallery scenes show the images 1 and 2.
+   */
+  function reloadSceneFixture(scene: ReloadScene, settings?: string) {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    useTransformStore.setState(useTransformStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
+    usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
+    useDeletionStore.setState(useDeletionStore.getInitialState(), true);
+    const a = new File(['aa'], 'a.spz');   // larger: the files' default pick
+    const b = new File(['b'], 'b.spz');
+    const files = new Map([['a.spz', a], ['b.spz', b]]);
+    if (scene === 'COLMAP') for (const name of ['cameras.bin', 'images.bin', 'points3D.bin']) files.set(name, file(name));
+    if (scene === 'images+splats') for (const name of ['one.jpg', 'two.jpg']) files.set(`images/${name}`, file(name));
+    if (settings) files.set('colmapview.yaml', Object.assign(file('colmapview.yaml'), { text: async () => settings }));
+    const store = useReconstructionStore.getState();
+    const deps = createDeps({
+      getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
+      setDroppedFiles: store.setDroppedFiles, setLoadedFiles: store.setLoadedFiles,
+      setReconstruction: store.setReconstruction, setWasmReconstruction: store.setWasmReconstruction,
+      onViewerState: viewerState => applySavedViewerState(viewerState, null),
+      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
+      buildReconstruction: vi.fn(async () => ({ reconstruction: parsedScene(), pointCount: 0 })),
+    });
+    return { b, files, deps };
+  }
+
+  async function loadReloadScene(scene: ReloadScene, settings?: string) {
+    const fixture = reloadSceneFixture(scene, settings);
+    await expect(processFileDropzoneFiles(fixture.files, fixture.deps)).resolves.toBe(true);
+    return fixture;
+  }
+
+  /** What a Reload discards: an applied deletion (where the scene has images), an applied transform and a mark. */
+  async function editReloadScene(scene: ReloadScene) {
+    if (scene !== 'splat-only') {
+      useDeletionStore.getState().markForDeletion(1);
+      expect(await applyDeletionsToData()).toBe(true);
+    }
+    useDeletionStore.getState().markForDeletion(2);
+    useTransformStore.getState().setTransform({ translationX: 3 });
+    expect(await applyTransformToData()).toBe(true);
+    // The applied transform moved the splat with the scene, and the mark outlived that edit.
+    expect(useTransformStore.getState().splatTransform.translationX).toBe(3);
+    expect(useDeletionStore.getState().pendingDeletions).toEqual(new Set([2]));
+    expect(useReconstructionStore.getState().reconstructionEditRevision).toBeGreaterThan(0);
+  }
+
+  it.each(['COLMAP', 'splat-only', 'images+splats'] as const)('hands the renderer the splat the store committed (%s scene)', async scene => {
+    const { b, files, deps } = reloadSceneFixture(scene);
+    try {
+      // A choice waiting for the dataset, such as a shared link's, is the splat the store commits.
+      useReconstructionStore.getState().setRequestedSplatSourceId('b.spz');
+
+      await expect(processFileDropzoneFiles(files, deps)).resolves.toBe(true);
+
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(b);
+      expect(deps.setUrlProgress).toHaveBeenLastCalledWith(
+        expect.objectContaining({ message: 'Preparing splat renderer...', currentFile: 'b.spz' }));
+      expect(deps.setUrlLoading).not.toHaveBeenCalledWith(false);
+    } finally { useReconstructionStore.getState().clear(); }
+  });
+
+  it.each([
+    ['COLMAP', 'b.spz'], ['COLMAP', ''], ['splat-only', 'b.spz'], ['splat-only', ''],
+    ['images+splats', 'b.spz'], ['images+splats', ''],
+  ] as const)('discards edits on Reload but keeps the splat state on screen (%s scene, %j)', async (scene, choice) => {
+    const { b, files, deps } = await loadReloadScene(scene);
+    try {
+      await useReconstructionStore.getState().selectSplatSource(choice);
+      await editReloadScene(scene);
+      vi.mocked(deps.addNotification).mockClear();
+      vi.mocked(deps.setUrlProgress).mockClear();
+
+      await expect(processFileDropzoneFiles(files, deps, { reload: true })).resolves.toBe(true);
+
+      const { reconstruction, reconstructionEditRevision, loadedFiles } = useReconstructionStore.getState();
+      expect(reconstruction?.images.size).toBe(scene === 'splat-only' ? 0 : 2);
+      expect(reconstructionEditRevision).toBe(0);
+      expect(useTransformStore.getState()).toMatchObject({ transform: createIdentityEuler(), splatTransform: createIdentityEuler() });
+      expect(useDeletionStore.getState().pendingDeletions.size).toBe(0);
+      expect(hasUnsavedReloadState()).toBe(false);
+      expect(loadedFiles?.splatFile).toBe(choice ? b : undefined);
+      expect(loadedFiles?.splatFileSources).toHaveLength(2);
+      // Silent like the COLMAP path, and the renderer is never handed the splat it already shows.
+      expect(deps.addNotification).not.toHaveBeenCalledWith('info', expect.stringContaining('Updated splat file'), expect.anything());
+      expect(deps.setUrlProgress).not.toHaveBeenCalledWith(expect.objectContaining({ message: 'Splat file updated' }));
+      expect(deps.setUrlProgress).not.toHaveBeenCalledWith(expect.objectContaining({ message: 'Preparing splat renderer...' }));
+      expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
+    } finally { useReconstructionStore.getState().clear(); }
+  });
+
+  it.each(['COLMAP', 'splat-only', 'images+splats'] as const)('still updates the splat of an open %s scene for a plain splat drop', async scene => {
+    const { deps } = await loadReloadScene(scene);
+    try {
+      await editReloadScene(scene);
+      const edited = useReconstructionStore.getState();
+      const dropped = new File(['c'], 'c.spz');
+
+      await expect(processFileDropzoneFiles(new Map([['c.spz', dropped]]), deps)).resolves.toBe(true);
+
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(dropped);
+      expect(deps.addNotification).toHaveBeenCalledWith('info', 'Updated splat file: c.spz', 4000);
+      // Not a Reload: the scene and its edits stay.
+      expect(useReconstructionStore.getState().reconstruction).toBe(edited.reconstruction);
+      expect(useReconstructionStore.getState().reconstructionEditRevision).toBe(edited.reconstructionEditRevision);
+      expect(useTransformStore.getState().splatTransform.translationX).toBe(3);
+      expect(useDeletionStore.getState().pendingDeletions).toEqual(new Set([2]));
+    } finally { useReconstructionStore.getState().clear(); }
+  });
+
+  it.each(['COLMAP', 'splat-only', 'images+splats'] as const)("keeps None on Reload over the %s project's own colmapview.yaml", async scene => {
+    const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { activeSourceId: 'b.spz' }, ui: { backgroundColor: '#345678' } } });
+    const { b, files, deps } = await loadReloadScene(scene, yaml);
+    try {
+      // A first load shows the project's own choice.
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(b);
+      await useReconstructionStore.getState().selectSplatSource('');
+      useUIStore.getState().setBackgroundColor('#000000');
+      for (let reload = 0; reload < 2; reload += 1) {
+        await expect(processFileDropzoneFiles(files, deps, { reload: true })).resolves.toBe(true);
+      }
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+      expect(useReconstructionStore.getState().loadedFiles?.splatFileSources).toHaveLength(2);
+      expect(useUIStore.getState().backgroundColor).toBe('#345678');   // the rest of the file comes back
+    } finally { useReconstructionStore.getState().clear(); }
+  });
+
+  it.each(['cancelled', 'failed'] as const)('keeps the pending marks and the edited scene when a Reload is %s', async outcome => {
+    const { files, deps } = await loadReloadScene('COLMAP');
+    try {
+      await editReloadScene('COLMAP');
+      const edited = useReconstructionStore.getState();
+      let finishBuild!: (result: { reconstruction: Reconstruction; pointCount: number }) => void;
+      const building = vi.fn(() => new Promise<{ reconstruction: Reconstruction; pointCount: number }>(resolve => { finishBuild = resolve; }));
+      const parseFiles = outcome === 'failed' ? vi.fn(async () => { throw new Error('unreadable'); }) : deps.parseFiles;
+      const reloading = processFileDropzoneFiles(files, { ...deps, parseFiles, buildReconstruction: building }, { reload: true });
+      if (outcome === 'cancelled') {
+        await vi.waitFor(() => expect(building).toHaveBeenCalledOnce());
+        useReconstructionStore.getState().cancelLoading();
+        finishBuild({ reconstruction: parsedScene(), pointCount: 0 });
+      }
+
+      await expect(reloading).resolves.toBe(false);
+
+      expect(useReconstructionStore.getState().reconstruction).toBe(edited.reconstruction);
+      expect(useReconstructionStore.getState().reconstructionEditRevision).toBe(edited.reconstructionEditRevision);
+      expect(useDeletionStore.getState().pendingDeletions).toEqual(new Set([2]));
+    } finally { useReconstructionStore.getState().clear(); }
+  });
+
+  it.each(['COLMAP', 'splat', 'point cloud', 'images'] as const)('drops the pending marks of the scene a new %s dataset replaces', async kind => {
+    const { deps } = await loadReloadScene('COLMAP');
+    try {
+      useDeletionStore.getState().markForDeletion(2);
+      const single = kind === 'splat' ? new File(['c'], 'c.spz') : kind === 'point cloud' ? genericPointCloudPly() : file('three.jpg');
+      const incoming = kind === 'COLMAP'
+        ? new Map(['cameras.bin', 'images.bin', 'points3D.bin'].map((name): [string, File] => [`other/${name}`, file(name)]))
+        : new Map([[single.name, single]]);
+
+      await expect(processFileDropzoneFiles(incoming, deps, { replaceSplatScene: true })).resolves.toBe(true);
+
+      expect(useDeletionStore.getState().pendingDeletions.size).toBe(0);
     } finally { useReconstructionStore.getState().clear(); }
   });
 

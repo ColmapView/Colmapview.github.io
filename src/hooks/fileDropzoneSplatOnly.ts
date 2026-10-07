@@ -1,7 +1,6 @@
 import type { LoadedFiles, Reconstruction, SplatFileSource } from '../types/colmap';
 import { createEmptyReconstruction } from '../utils/fileClassification';
 import { appLogger } from '../utils/logger';
-import { getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
 
 interface ProgressUpdate {
   percent: number;
@@ -10,9 +9,10 @@ interface ProgressUpdate {
 }
 
 interface RunSplatOnlyLoadOptions {
-  splatFile: File;
-  splatFiles: File[];
-  splatFileSources: SplatFileSource[];
+  /** Absent when a Reload keeps None: the splats stay listed with none on screen. */
+  splatFile?: File;
+  splatFiles?: File[];
+  splatFileSources?: SplatFileSource[];
   mapProgress: (localPercent: number) => number;
   setUrlProgress: (progress: ProgressUpdate) => void;
   setLoadedFiles: (files: LoadedFiles) => void;
@@ -36,12 +36,14 @@ export function runSplatOnlyLoad({
   resetView,
   log = appLogger.info,
 }: RunSplatOnlyLoadOptions): Reconstruction {
-  log(`[Splats] Creating splat-only scene from ${splatFile.name}`);
+  log(splatFile
+    ? `[Splats] Creating splat-only scene from ${splatFile.name}`
+    : '[Splats] Creating splat-only scene with no splat active');
 
   setUrlProgress({
     percent: mapProgress(50),
     message: 'Loading splat scene...',
-    currentFile: splatFile.name,
+    ...(splatFile ? { currentFile: splatFile.name } : {}),
   });
 
   const reconstruction = createEmptyReconstruction();
@@ -62,11 +64,14 @@ export function runSplatOnlyLoad({
 
   clearCaches({ preserveZip: true });
 
-  setUrlProgress(getSplatLoadingProgress(splatFile, { startPercent: mapProgress(60) }));
+  // The caller hands the splat to its renderer: only it knows whether that splat is already on screen.
+  setUrlProgress({ percent: mapProgress(95), message: 'Finalizing...' });
   setReconstruction(reconstruction);
   resetView();
 
-  log(`[Splats] Loaded splat-only scene: ${splatFile.name}`);
+  log(splatFile
+    ? `[Splats] Loaded splat-only scene: ${splatFile.name}`
+    : '[Splats] Loaded splat-only scene with no splat active');
 
   return reconstruction;
 }
