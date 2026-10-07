@@ -498,6 +498,55 @@ describe('file dropzone workflow', () => {
     expect(shown).toBe(choice === 'None' ? undefined : incoming.alternate);
   });
 
+  it('replaces the scene only once beforeSceneCommit settles after parsing', async () => {
+    const fixture = workerLoadFixture();
+    const order: string[] = [];
+    let settle!: () => void;
+    const deps = createDeps({
+      parseFiles: vi.fn(async () => { order.push('parse'); return fixture.parseResult; }),
+      buildReconstruction: vi.fn(async () => ({ reconstruction: fixture.reconstruction, pointCount: 0 })),
+      setLoadedFiles: vi.fn(() => { order.push('commit'); }),
+    });
+    try {
+      const pending = processFileDropzoneFiles(fixture.files, deps, {
+        beforeSceneCommit: () => new Promise<void>(resolve => { order.push('settle'); settle = resolve; }),
+      });
+      await vi.waitFor(() => expect(order).toEqual(['parse', 'settle']));
+      // The overlay stays up meanwhile: nothing has ended the loading state.
+      expect(deps.setUrlLoading).not.toHaveBeenCalledWith(false);
+      settle();
+      expect(await pending).toBe(true);
+      expect(order).toEqual(['parse', 'settle', 'commit']);
+    } finally {
+      fixture.service.dispose();
+    }
+  });
+
+  it('keeps the previous scene when the load is cancelled while the new one settles', async () => {
+    const fixture = workerLoadFixture();
+    const controller = new AbortController();
+    const deps = createDeps({
+      parseFiles: vi.fn(async () => fixture.parseResult),
+      buildReconstruction: vi.fn(async () => ({ reconstruction: fixture.reconstruction, pointCount: 0 })),
+    });
+    const dispose = vi.spyOn(fixture.snapshot, 'dispose');
+    try {
+      const pending = processFileDropzoneFiles(fixture.files, deps, {
+        signal: controller.signal,
+        beforeSceneCommit: () => new Promise<void>((_resolve, reject) => {
+          controller.signal.addEventListener('abort', () => reject(controller.signal.reason));
+          controller.abort();
+        }),
+      });
+      expect(await pending).toBe(false);
+      expect(deps.setLoadedFiles).not.toHaveBeenCalled();
+      expect(deps.setReconstruction).not.toHaveBeenCalled();
+      expect(dispose).toHaveBeenCalled();
+    } finally {
+      fixture.service.dispose();
+    }
+  });
+
   it('preserves the previous files, source and snapshot after a malformed point-cloud-only replacement', async () => {
     useReconstructionStore.getState().clear();
     const previous = workerLoadFixture();

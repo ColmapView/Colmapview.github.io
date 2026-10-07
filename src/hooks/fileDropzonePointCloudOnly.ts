@@ -11,6 +11,8 @@ interface ProgressUpdate {
 
 interface RunPointCloudOnlyLoadOptions {
   signal?: AbortSignal;
+  /** Awaited after parsing, before the point cloud replaces the scene. */
+  beforeCommit?: () => Promise<void>;
   pointCloudFile: File;
   mapProgress: (localPercent: number) => number;
   setUrlProgress: (progress: ProgressUpdate) => void;
@@ -26,6 +28,7 @@ interface RunPointCloudOnlyLoadOptions {
 
 export async function runPointCloudOnlyLoad({
   signal,
+  beforeCommit,
   pointCloudFile,
   mapProgress,
   setUrlProgress,
@@ -48,6 +51,7 @@ export async function runPointCloudOnlyLoad({
 
   const points3D = await parsePointCloudFile(pointCloudFile);
   if (signal?.aborted) throw new DOMException('Reconstruction operation cancelled', 'AbortError');
+  await beforeCommit?.();
   const reconstruction = createPointCloudOnlyReconstruction(points3D);
 
   clearSplatPsnr?.();

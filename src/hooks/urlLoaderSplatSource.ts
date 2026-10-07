@@ -14,7 +14,8 @@ type FetchUrl = (url: string) => Promise<Response>;
 type ProcessFiles = (
   files: Map<string, File>,
   progressRange?: { start: number; end: number },
-  options?: { replaceSplatScene?: boolean; throwOnError?: boolean; signal?: AbortSignal; onSceneReplaced?: () => void }
+  options?: { replaceSplatScene?: boolean; throwOnError?: boolean; signal?: AbortSignal; onSceneReplaced?: () => void;
+    beforeSceneCommit?: () => Promise<void> }
 ) => Promise<void | boolean>;
 type SetSourceInfo = (
   type: ReconstructionSourceType,
@@ -34,6 +35,8 @@ export interface LoadSplatUrlSourceDeps {
   processFiles: ProcessFiles;
   setSourceInfo: SetSourceInfo;
   setUrlProgress: SetUrlProgress;
+  /** Settled before the file's scene replaces the open one. */
+  beforeSceneCommit?: () => Promise<void>;
 }
 
 export function isSplatUrl(url: string): boolean {
@@ -106,6 +109,7 @@ export async function loadSplatUrlSource(
     throwOnError: true,
     signal: deps.signal,
     onSceneReplaced: commitSource,
+    beforeSceneCommit: deps.beforeSceneCommit,
   });
   deps.signal?.throwIfAborted();
   deps.assertCurrent?.();

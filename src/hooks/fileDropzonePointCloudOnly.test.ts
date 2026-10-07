@@ -35,6 +35,31 @@ describe('file dropzone point-cloud-only load helper', () => {
     expect(setReconstruction).not.toHaveBeenCalled();
   });
 
+  it('installs the point cloud only once beforeCommit settles after parsing', async () => {
+    const point = buildPoint3D({ point3DId: 1n });
+    const order: string[] = [];
+    let settle!: () => void;
+    const loading = runPointCloudOnlyLoad({
+      pointCloudFile: new File(['ply'], 'points.ply'),
+      mapProgress: value => value,
+      setUrlProgress: vi.fn(),
+      setLoadedFiles: vi.fn(() => { order.push('commit'); }),
+      clearSplatPsnr: vi.fn(),
+      clearCaches: vi.fn(),
+      setReconstruction: vi.fn(),
+      resetView: vi.fn(),
+      addNotification: vi.fn(),
+      parsePointCloudFile: vi.fn(async () => { order.push('parse'); return new Map([[point.point3DId, point]]); }),
+      log: vi.fn(),
+      beforeCommit: () => new Promise<void>(resolve => { order.push('settle'); settle = resolve; }),
+    });
+
+    await vi.waitFor(() => expect(order).toEqual(['parse', 'settle']));
+    settle();
+    await loading;
+    expect(order).toEqual(['parse', 'settle', 'commit']);
+  });
+
   it('builds a reconstruction with points3D and no active splat file', async () => {
     const pointCloudFile = new File(['ply'], 'points.ply');
     const point = buildPoint3D({ point3DId: 1n });

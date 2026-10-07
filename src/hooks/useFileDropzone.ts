@@ -61,7 +61,7 @@ export function useFileDropzone() {
   const processFiles = useCallback(async (
     files: Map<string, File>,
     progressRange?: { start: number; end: number },
-    options: Pick<FileDropzoneWorkflowOptions, 'onSceneReplaced' | 'replaceSplatScene' | 'reload' | 'throwOnError' | 'onViewerState' | 'viewerState' | 'load' | 'signal' | 'initialSplatSelectionRevision'> = {}
+    options: Pick<FileDropzoneWorkflowOptions, 'beforeSceneCommit' | 'onSceneReplaced' | 'replaceSplatScene' | 'reload' | 'throwOnError' | 'onViewerState' | 'viewerState' | 'load' | 'signal' | 'initialSplatSelectionRevision'> = {}
   ) => {
     const initialSplatSelectionRevision = options.initialSplatSelectionRevision ?? useReconstructionStore.getState().splatSelectionRevision;
     const load = options.load ?? beginReconstructionLoad();
@@ -108,6 +108,7 @@ export function useFileDropzone() {
         onSplatRuntimePreloadFailed: () => useSplatBackendStore.getState().setSparkPreloadFailed(),
       }, {
         progressRange,
+        beforeSceneCommit: options.beforeSceneCommit,
         onSceneReplaced: options.onSceneReplaced,
         onViewerState,
         viewerState: options.viewerState,

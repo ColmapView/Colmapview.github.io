@@ -15,7 +15,8 @@ import { closeZipArchive } from '../utils/zipArchiveState';
 type ProcessFiles = (
   files: Map<string, File>,
   progressRange?: { start: number; end: number },
-  options?: { throwOnError?: boolean; signal?: AbortSignal; onSceneReplaced?: () => void }
+  options?: { throwOnError?: boolean; signal?: AbortSignal; onSceneReplaced?: () => void;
+    beforeSceneCommit?: () => Promise<void> }
 ) => Promise<void | boolean>;
 type SetSourceInfo = (type: ReconstructionSourceType, url?: string | null) => void;
 type SetUrlProgress = (progress: UrlLoadProgress | null) => void;
@@ -44,6 +45,8 @@ export interface LoadZipUrlSourceDeps {
   archiveOptions?: ZipUrlLoadOptions;
   /** Shareable source link, rather than the provider's authenticated download URL. */
   sourceUrl?: string;
+  /** Settled after parsing, before the archive's scene replaces the open one. */
+  beforeSceneCommit?: () => Promise<void>;
 }
 
 export function mapZipProgressToUrlProgress(progress: ZipProgress): UrlLoadProgress {
@@ -96,7 +99,7 @@ export async function loadZipUrlSource(
   // Only a scene this archive replaced installs it and its source. A splat merged into the open
   // scene leaves that scene's archive and source in place, and this one closes below.
   const processed = await deps.processFiles(colmapFiles, { start: 80, end: 100 }, {
-    throwOnError: true, signal: deps.signal, onSceneReplaced: commitSource,
+    throwOnError: true, signal: deps.signal, onSceneReplaced: commitSource, beforeSceneCommit: deps.beforeSceneCommit,
   });
   assertCurrent();
   if (processed === false) return false;

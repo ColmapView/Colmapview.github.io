@@ -21,6 +21,7 @@ import { appLogger, noopLogger } from '../utils/logger';
 import { useNotificationStore } from '../store/stores/notificationStore';
 import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS, SKIPPED_SETTINGS_WARNING } from './urlLoaderViewerState';
 import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE } from './optionalSettingsWarning';
+import { isReconstructionLoadPending } from '../wasm/reconstructionLoadLifecycle';
 
 const { clearAllCachesMock, processFilesMock, detectTouchDeviceMock } = vi.hoisted(() => ({
   clearAllCachesMock: vi.fn(),
@@ -74,6 +75,25 @@ function hubEntries(splats: Array<{ path: string; size: number }>) {
     ...['cameras', 'images', 'points3D'].map(name => ({ type: 'file', path: `sparse/0/${name}.bin`, size: 10 })),
     ...splats.map(splat => ({ type: 'file', ...splat })),
   ];
+}
+
+/** What processFiles does for a URL load: the real workflow over the real store, with parsing stubbed. */
+function processWithStore(files: Map<string, File>, options?: Parameters<typeof processFileDropzoneFiles>[2]) {
+  const state = useReconstructionStore.getState();
+  return processFileDropzoneFiles(files, {
+    addNotification: vi.fn(), getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
+    getSplatSelectionState: () => ({ revision: useReconstructionStore.getState().splatSelectionRevision,
+      sourceId: getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles) ?? undefined }),
+    getMinTrackLength: () => 1, getSourceInfo: () => ({ sourceType: 'url', imageUrlBase: null }),
+    getUrlLoading: () => useReconstructionStore.getState().urlLoading,
+    clearCaches: vi.fn(), logger: noopLogger, resetView: vi.fn(), delay: async () => {},
+    shouldPreloadSplatRuntime: () => false,
+    parseFiles: async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false }),
+    buildReconstruction: async () => ({ reconstruction: buildReconstruction(), pointCount: 0 }),
+    setDroppedFiles: state.setDroppedFiles, setLoadedFiles: state.setLoadedFiles,
+    setWasmReconstruction: state.setWasmReconstruction, setReconstruction: state.setReconstruction,
+    setUrlProgress: state.setUrlProgress, setUrlLoading: state.setUrlLoading, setError: state.setError,
+  }, options);
 }
 
 describe('useUrlLoader', () => {
@@ -1128,6 +1148,92 @@ describe('useUrlLoader', () => {
       '[URL Loader] Error:',
       expect.objectContaining({ message: 'Failed to fetch splat (404)' })
     );
+  });
+
+  describe('a dataset that settles its splat list and saved settings', () => {
+    const baseUrl = 'https://huggingface.co/datasets/owner/wait/resolve/main/';
+    const view: CameraViewState = { position: [1, 2, 3], target: [0, 0, 0], quaternion: [0, 0, 0, 1], distance: 4 };
+
+    /** Starts a load whose saved settings answer only when `respond` is called. */
+    function startLoadWithPendingSettings() {
+      vi.stubGlobal('Blob', NodeBlob);
+      let respond!: (response: Response) => void;
+      vi.stubGlobal('fetch', vi.fn(async (url: string | URL, init?: RequestInit) => {
+        if (String(url).endsWith('colmapview.yaml')) return new Promise<Response>(resolve => { respond = resolve; });
+        if (init?.method === 'HEAD') return new Response(null, { headers: { 'content-length': '100' } });
+        if (String(url).includes('/api/datasets/')) return Response.json(hubEntries([{ path: 'splats/scene.spz', size: 100 }]));
+        return new Response(new Uint8Array([1, 2, 3]));
+      }));
+      processFilesMock.mockImplementationOnce(async (files, _range, options) => { await processWithStore(files, options); });
+      const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
+      let pending!: Promise<boolean>;
+      act(() => { pending = result.current.loadFromUrl(baseUrl); });
+      return { pending, respond: (response: Response) => respond(response) };
+    }
+
+    it('keeps the overlay, its Cancel and the parsed scene back until they settle', async () => {
+      const load = startLoadWithPendingSettings();
+      // Parsed: what follows is the wait for the saved settings.
+      await waitFor(() => expect(useReconstructionStore.getState().urlProgress?.percent).toBeGreaterThanOrEqual(90));
+      // A drop or another load sees a load running, n waits for it, and nothing of the scene shows yet.
+      expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true, urlLoadActive: true, reconstruction: null });
+      expect(isReconstructionLoadPending()).toBe(true);
+
+      const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: view,
+        config: { splat: { activeSourceId: '' }, camera: { selectedImageId: 7 } } });
+      await act(async () => {
+        load.respond(new Response(yaml));
+        expect(await load.pending).toBe(true);
+      });
+      const state = useReconstructionStore.getState();
+      expect(state.reconstruction).not.toBeNull();
+      expect(state.loadedFiles?.splatFileSources).toHaveLength(1);
+      expect(state.urlLoading).toBe(false);
+      expect(useCameraStore.getState().flyToViewState).toEqual(view);
+      expect(useCameraStore.getState().selectedImageId).toBe(7);
+    });
+
+    it('leaves no half-loaded scene when cancelled while it settles', async () => {
+      // A startup link: the landing page it returns to must not load it again.
+      window.history.replaceState(null, '', '/?url=' + encodeURIComponent(baseUrl));
+      const load = startLoadWithPendingSettings();
+      await waitFor(() => expect(useReconstructionStore.getState().urlProgress?.percent).toBeGreaterThanOrEqual(90));
+      act(() => useReconstructionStore.getState().cancelLoading());
+      await act(async () => { expect(await load.pending).toBe(false); });
+      expect(useReconstructionStore.getState()).toMatchObject({ reconstruction: null, loadedFiles: null, urlLoading: false });
+      expect(window.location.search).toBe('');
+    });
+  });
+
+  it('settles the settings beside an archive before handing its bundled splat to the renderer', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const alignment = { ...createIdentityEuler(), translationX: 5 };
+    const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null, config: { transform: alignment } });
+    let respond: ((response: Response) => void) | undefined;
+    vi.stubGlobal('fetch', vi.fn((url: string | URL) => String(url).endsWith('colmapview.yaml')
+      ? new Promise<Response>(resolve => { respond = resolve; }) : Promise.resolve(new Response(null, { status: 404 }))));
+    const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin', 'scene.spz'].map(name => [name, new File(['x'], name)]));
+    // Like loadZipUrlSource, pass processing the hook the loader gave it.
+    vi.spyOn(archiveSource, 'loadZipUrlSource').mockImplementation(async (_url, deps) =>
+      (await deps.processFiles(files, undefined, { throwOnError: true, beforeSceneCommit: deps.beforeSceneCommit })) !== false);
+    processFilesMock.mockImplementationOnce(async (incoming, _range, options) => { await processWithStore(incoming, options); });
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
+    let pending!: Promise<boolean>;
+    act(() => { pending = result.current.loadFromUrl('https://example.com/project/scene.zip'); });
+    await waitFor(() => expect(respond).toBeDefined());
+    // Nothing decodes yet: a Cancel now stops the whole load instead of stranding its settings.
+    expect(useReconstructionStore.getState()).toMatchObject({ reconstruction: null, urlLoading: true,
+      urlProgress: expect.objectContaining({ message: 'Loading saved view settings...' }) });
+
+    await act(async () => { respond!(new Response(yaml)); expect(await pending).toBe(true); });
+    expect(useTransformStore.getState().transform.translationX).toBe(5);
+    expect(useReconstructionStore.getState().urlProgress?.message).toBe('Preparing splat renderer...');
+    // Cancelling the decode now only chooses None: the load and its restore are done.
+    act(() => useReconstructionStore.getState().cancelLoading());
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(useTransformStore.getState().transform.translationX).toBe(5);
+    const { droppedFiles, getBoundSourceViewerState } = useReconstructionStore.getState();
+    expect(getBoundSourceViewerState(droppedFiles!)?.config.transform).toEqual(alignment);
   });
 
   it('surfaces a skipped oversized lone splat as a lazy source and opens the picker', async () => {

@@ -122,6 +122,11 @@ export interface FileDropzoneWorkflowOptions {
    */
   reload?: boolean;
   throwOnError?: boolean;
+  /**
+   * Awaited once parsing is done, just before these files replace the scene: a URL load settles what
+   * the new scene restores (saved settings, its splat list), so the scene never appears and then jumps.
+   */
+  beforeSceneCommit?: () => Promise<void>;
   onSceneReplaced?: () => void;
   onViewerState?: OnViewerState;
   /** Settings that came with these files from their source; a settings file inside them wins. */
@@ -234,9 +239,11 @@ async function runNewPointCloudOnlyLoad(
   log: (message: string) => void,
   signal?: AbortSignal,
   onSceneReplaced?: () => void,
+  beforeCommit?: () => Promise<void>,
 ): Promise<void> {
   await runPointCloudOnlyLoad({
     signal,
+    beforeCommit,
     pointCloudFile,
     mapProgress,
     setUrlProgress: deps.setUrlProgress,
@@ -316,9 +323,15 @@ export async function processFileDropzoneFiles(
     progressRange,
     replaceSplatScene = false,
     throwOnError = false,
+    beforeSceneCommit,
     onSceneReplaced,
     onViewerState = deps.onViewerState,
   } = normalizedOptions;
+  const settleBeforeCommit = async () => {
+    if (!beforeSceneCommit) return;
+    await beforeSceneCommit();
+    load.assertCurrent();
+  };
 
   const complete = async () => {
     load.assertCurrent();
@@ -378,7 +391,8 @@ export async function processFileDropzoneFiles(
       }));
     };
     /** Replace the scene with a splat-only one; returns the splat shown until then. */
-    const replaceWithSplatOnlyScene = () => {
+    const replaceWithSplatOnlyScene = async () => {
+      await settleBeforeCommit();
       const current = deps.getLoadedFiles();
       const splatState = getSplatState(current);
       splatFile = splatState.splatFile;
@@ -434,11 +448,12 @@ export async function processFileDropzoneFiles(
           const updatedExistingSplat = !replaceSplatScene && !normalizedOptions.reload
             && updateLoadedSplatFile(splatFile, splatFiles, splatFileSources, deps, mapProgress, logger.info);
           if (!updatedExistingSplat) {
-            splatShownBefore = replaceWithSplatOnlyScene();
+            splatShownBefore = await replaceWithSplatOnlyScene();
             startedNewSplatScene = true;
           }
         } else if (pointCloudFile) {
-          await runNewPointCloudOnlyLoad(files, pointCloudFile, deps, clearCaches, mapProgress, logger.info, load.signal, reportSceneReplacement);
+          await runNewPointCloudOnlyLoad(files, pointCloudFile, deps, clearCaches, mapProgress, logger.info, load.signal,
+            reportSceneReplacement, settleBeforeCommit);
           load.assertCurrent();
         }
         if (configErrorMessage && throwOnError) {
@@ -478,12 +493,14 @@ export async function processFileDropzoneFiles(
       }
 
       if (pointCloudFile && !splatFile) {
-        await runNewPointCloudOnlyLoad(files, pointCloudFile, deps, clearCaches, mapProgress, logger.info, load.signal, reportSceneReplacement);
+        await runNewPointCloudOnlyLoad(files, pointCloudFile, deps, clearCaches, mapProgress, logger.info, load.signal,
+          reportSceneReplacement, settleBeforeCommit);
         load.assertCurrent();
         return await complete();
       }
 
       if (hasImageFiles(files)) {
+        await settleBeforeCommit();
         const currentLoadedFiles = deps.getLoadedFiles();
         const splatState = getSplatState(currentLoadedFiles);
         splatFile = splatState.splatFile;
@@ -508,7 +525,7 @@ export async function processFileDropzoneFiles(
       }
 
       if (splatFile) {
-        handOffCommittedSplat(replaceWithSplatOnlyScene());
+        handOffCommittedSplat(await replaceWithSplatOnlyScene());
         return await complete();
       }
 
@@ -560,6 +577,7 @@ export async function processFileDropzoneFiles(
       await delay(200);
     }
     load.assertCurrent();
+    await settleBeforeCommit();
 
     const currentSelection = deps.getSplatSelectionState?.();
     if (currentSelection && initialSplatSelectionRevision !== undefined

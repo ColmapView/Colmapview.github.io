@@ -2,7 +2,8 @@ import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildFile } from '../test/builders';
 import type { ColmapManifest } from '../types/manifest';
-import { loadManifestSource, OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS } from './urlLoaderManifestSource';
+import { loadManifestSource, OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS, SPLAT_DISCOVERY_TIMEOUT_MS } from './urlLoaderManifestSource';
+import type { RemoteSplatCandidate } from './urlLoaderPolicy';
 
 const manifest: ColmapManifest = {
   version: 1,
@@ -25,14 +26,17 @@ function makeFiles(): Map<string, File> {
   ]);
 }
 
+type ProcessOptions = { onSceneReplaced?: () => void; beforeSceneCommit?: () => Promise<void> };
+
 function makeDeps(files = makeFiles()) {
   return {
-    fetchImpl: vi.fn(async (_url: string, _init?: RequestInit) => new Response('', { status: 404 })),
+    fetchImpl: vi.fn(async (_url: string, _init?: RequestInit): Promise<Response> => new Response('', { status: 404 })),
     fetchColmapFiles: vi.fn(async () => files),
-    discoverSplatCatalog: vi.fn(async () => []),
+    discoverSplatCatalog: vi.fn(async (): Promise<RemoteSplatCandidate[]> => []),
     log: vi.fn(),
-    // Like processFiles: report the scene it replaced.
-    processFiles: vi.fn(async (_files: Map<string, File>, _range?: unknown, options?: { onSceneReplaced?: () => void }) => {
+    // Like processFiles: parse, settle what the scene restores, then report the scene it replaced.
+    processFiles: vi.fn(async (_files: Map<string, File>, _range?: unknown, options?: ProcessOptions): Promise<void | boolean> => {
+      await options?.beforeSceneCommit?.();
       options?.onSceneReplaced?.();
     }),
     setSourceInfo: vi.fn(),
@@ -108,7 +112,7 @@ describe('URL loader manifest source helpers', () => {
     expect(deps.setUrlProgress).not.toHaveBeenCalledWith({ percent: 100, message: 'Complete' });
   });
 
-  it('parses and displays COLMAP files while optional viewer settings are still loading', async () => {
+  it('parses COLMAP files while optional settings load, and shows the scene once they settle', async () => {
     vi.stubGlobal('Blob', NodeBlob);
     const deps = makeDeps();
     let respond!: (response: Response) => void;
@@ -117,11 +121,63 @@ describe('URL loader manifest source helpers', () => {
     const loading = loadManifestSource(manifest, { type: 'manifest' }, { ...deps, onViewerState });
 
     await vi.waitFor(() => expect(deps.processFiles).toHaveBeenCalled());
-    expect(deps.setSourceInfo).toHaveBeenCalled();
+    // Parsed, but the scene waits, behind the overlay, for what it restores.
+    expect(deps.setSourceInfo).not.toHaveBeenCalled();
+    expect(deps.setUrlProgress).toHaveBeenLastCalledWith({ percent: 90, message: 'Looking for splats and saved settings...' });
     respond(new Response('ui:\n  background_color: "#123456"\n'));
 
     await expect(loading).resolves.toBe(true);
+    expect(deps.setSourceInfo).toHaveBeenCalledOnce();
     expect(onViewerState).toHaveBeenCalledWith(expect.objectContaining({ config: { ui: { backgroundColor: '#123456' } } }));
+  });
+
+  it('shows the scene without a splat listing still running SPLAT_DISCOVERY_TIMEOUT_MS after parsing, and stops it', async () => {
+    vi.useFakeTimers();
+    const deps = makeDeps();
+    const listingSignals: AbortSignal[] = [];
+    deps.fetchImpl.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('colmapview.yaml')) return new Response('', { status: 404 });
+      if (init?.signal) listingSignals.push(init.signal);
+      return new Promise<Response>(() => {});
+    });
+    const onRemoteSplatCatalog = vi.fn();
+    const onAutoSplatSource = vi.fn();
+    let settled = false;
+    // The real discovery: it classifies and sizes the listed splat through fetchImpl.
+    const loading = loadManifestSource({ ...manifest, splats: ['splats/scene.ply'] }, { type: 'manifest' },
+      { ...deps, discoverSplatCatalog: undefined, onRemoteSplatCatalog, onAutoSplatSource }).finally(() => { settled = true; });
+
+    await vi.waitFor(() => expect(deps.processFiles).toHaveBeenCalledOnce());
+    await vi.advanceTimersByTimeAsync(SPLAT_DISCOVERY_TIMEOUT_MS - 1_000);
+    expect(settled).toBe(false);
+    expect(deps.setSourceInfo).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(loading).resolves.toBe(true);
+    expect(deps.setSourceInfo).toHaveBeenCalledOnce();
+    expect(onRemoteSplatCatalog).not.toHaveBeenCalled();
+    expect(onAutoSplatSource).not.toHaveBeenCalled();
+    expect(listingSignals.length).toBeGreaterThan(0);
+    expect(listingSignals.every(signal => signal.aborted)).toBe(true);
+  });
+
+  it('starts the splat listing deadline after parsing, not with the downloads', async () => {
+    vi.useFakeTimers();
+    let finishListing!: (catalog: RemoteSplatCandidate[]) => void;
+    const deps = { ...makeDeps(), discoverSplatCatalog: vi.fn(() => new Promise<RemoteSplatCandidate[]>(resolve => { finishListing = resolve; })) };
+    let finishDownload!: (files: Map<string, File>) => void;
+    deps.fetchColmapFiles.mockImplementationOnce(() => new Promise<Map<string, File>>(resolve => { finishDownload = resolve; }));
+    const onRemoteSplatCatalog = vi.fn();
+    const loading = loadManifestSource(manifest, { type: 'manifest' }, { ...deps, onRemoteSplatCatalog });
+
+    // The downloads alone outlast the deadline; the listing still gets its full time after parsing.
+    await vi.advanceTimersByTimeAsync(SPLAT_DISCOVERY_TIMEOUT_MS * 2);
+    finishDownload(makeFiles());
+    await vi.advanceTimersByTimeAsync(SPLAT_DISCOVERY_TIMEOUT_MS - 1_000);
+    finishListing([{ path: 'splats/scene.spz', size: 100 }]);
+
+    await expect(loading).resolves.toBe(true);
+    expect(onRemoteSplatCatalog).toHaveBeenCalledWith([{ path: 'splats/scene.spz', size: 100 }]);
   });
 
   it('bounds optional settings independently, aborts its request and ignores a late response', async () => {

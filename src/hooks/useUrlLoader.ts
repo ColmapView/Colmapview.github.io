@@ -75,6 +75,22 @@ async function applyOptionalSettingsBeside(url: string, load: UrlLoadContext): P
   if (settings.state) await load.onViewerState(settings.state);
 }
 
+/**
+ * The settings beside `url`, read once. The load asks for them just before its scene appears, so the
+ * restore lands with the scene, and again afterwards for a load that merged rather than replaced.
+ */
+function settingsBesideOnce(url: string, load: UrlLoadContext) {
+  let settled: Promise<void> | undefined;
+  const settle = () => settled ??= applyOptionalSettingsBeside(url, load);
+  return {
+    beforeSceneCommit: () => {
+      load.setUrlProgress({ percent: 90, message: 'Loading saved view settings...' });
+      return settle();
+    },
+    settle,
+  };
+}
+
 /** Owns URL discovery, downloading, and the handoff to reconstruction parsing. */
 export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: UseUrlLoaderDeps = {}) {
   const { processFiles } = useFileDropzone();
@@ -229,12 +245,14 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
     if (isSplatUrl(normalizedUrl)) {
       load.clearCachesOnFailure = false;
       load.setUrlProgress({ percent: 0, message: 'Loading 3D file...' });
+      const settings = settingsBesideOnce(normalizedUrl, load);
       const loaded = await loadSplatUrlSource(normalizedUrl, {
         ...load,
         log: logInfo,
+        beforeSceneCommit: settings.beforeSceneCommit,
       });
       if (loaded) {
-        await applyOptionalSettingsBeside(normalizedUrl, load);
+        await settings.settle();
       }
       return loaded;
     }
@@ -242,9 +260,12 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
     if (isArchiveUrl(normalizedUrl)) {
       load.setUrlProgress({ percent: 0, message: 'Loading archive...' });
       logInfo(getArchiveUrlDetectedLogMessage(normalizedUrl));
-      const loaded = await loadZipUrlSource(normalizedUrl, { ...load, log: logInfo });
+      const settings = settingsBesideOnce(normalizedUrl, load);
+      const loaded = await loadZipUrlSource(normalizedUrl, { ...load, log: logInfo,
+        // Known once processing starts: settings inside the archive are its own.
+        beforeSceneCommit: async () => { if (!load.hasEmbeddedViewerSettings) await settings.beforeSceneCommit(); } });
       if (loaded && !load.hasEmbeddedViewerSettings) {
-        await applyOptionalSettingsBeside(normalizedUrl, load);
+        await settings.settle();
       }
       return loaded;
     }
