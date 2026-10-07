@@ -79,6 +79,8 @@ function hubEntries(splats: Array<{ path: string; size: number }>) {
 describe('useUrlLoader', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks keeps implementations: one test's processFiles must not run in the next.
+    processFilesMock.mockReset();
     detectTouchDeviceMock.mockReturnValue(false);
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
   });
@@ -923,7 +925,6 @@ describe('useUrlLoader', () => {
 
   it.each(['document', 'combined', 'binary', 'legacy'] as const)('restores a published view with %s URL precedence', async format => {
     vi.stubGlobal('Blob', NodeBlob);
-    useTransformStore.setState(useTransformStore.getInitialState(), true);
     const manifest: ColmapManifest = { version: 1, baseUrl: 'https://example.com/scene', viewerStatePath: 'colmapview-state.json',
       files: { cameras: 'cameras.bin', images: 'images.bin', points3D: 'points3D.bin' }, splats: [], skipImages: true };
     const savedView: CameraViewState = { position: [1, 2, 3], target: [0, 0, 0], quaternion: [0, 0, 0, 1], distance: Math.sqrt(14) };
@@ -945,7 +946,6 @@ describe('useUrlLoader', () => {
 
   it('applies shared link settings after a load even when the dataset has no saved settings', async () => {
     vi.stubGlobal('Blob', NodeBlob);
-    useTransformStore.setState(useTransformStore.getInitialState(), true);
     const overrideTransform = { ...createIdentityEuler(), translationX: 7 };
     window.history.replaceState(null, '', '/#' + encodeShareData('https://example.com/manifest.json', null, { transform: overrideTransform }));
     const manifest: ColmapManifest = { version: 1, baseUrl: 'https://example.com/scene',
