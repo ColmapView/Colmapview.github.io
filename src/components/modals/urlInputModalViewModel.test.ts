@@ -131,6 +131,12 @@ describe('URL input modal view model', () => {
     expect(link).not.toContain('secret');
   });
 
+  it('hands off an account-scoped Drive link in canonical form', () => {
+    const destination = new URL(getUrlInputDriveHandoffUrl('https://drive.google.com/file/u/0/d/FILE_123/view?usp=sharing', false)!);
+    expect(destination.origin).toBe('https://colmapview.opsiclear.com');
+    expect(destination.searchParams.get('url')).toBe('https://drive.google.com/file/d/FILE_123/view');
+  });
+
   it('keeps enabled Drive and other data URLs in the current viewer', () => {
     expect(getUrlInputDriveHandoffUrl('https://drive.google.com/file/d/FILE_123/view', true)).toBeNull();
     for (const url of ['https://huggingface.co/datasets/user/data', 'https://example.com/archive.tar',
