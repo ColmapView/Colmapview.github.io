@@ -1194,7 +1194,7 @@ describe('file dropzone workflow', () => {
     } finally { useReconstructionStore.getState().clear(); }
   });
 
-  type ReloadScene = 'COLMAP' | 'splat-only' | 'images+splats';
+  type ReloadScene = 'COLMAP' | 'splat-only' | 'images+splats' | 'images' | 'point cloud';
 
   /** A freshly parsed scene with the images 1 and 2. */
   const parsedScene = () => buildTestReconstruction({
@@ -1213,8 +1213,8 @@ describe('file dropzone workflow', () => {
   }
 
   /**
-   * Real stores and a scene's own files, holding the splats a (their default) and b. The COLMAP and
-   * gallery scenes show the images 1 and 2.
+   * Real stores and a scene's own files. The COLMAP, splat-only and images+splats scenes hold the
+   * splats a (their default) and b; the COLMAP and gallery scenes show the images 1 and 2.
    */
   function reloadSceneFixture(scene: ReloadScene, settings?: string) {
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
@@ -1224,13 +1224,19 @@ describe('file dropzone workflow', () => {
     useDeletionStore.setState(useDeletionStore.getInitialState(), true);
     const a = new File(['aa'], 'a.spz');   // larger: the files' default pick
     const b = new File(['b'], 'b.spz');
-    const files = new Map([['a.spz', a], ['b.spz', b]]);
+    const files = new Map<string, File>(scene === 'images' || scene === 'point cloud' ? [] : [['a.spz', a], ['b.spz', b]]);
     if (scene === 'COLMAP') for (const name of ['cameras.bin', 'images.bin', 'points3D.bin']) files.set(name, file(name));
-    if (scene === 'images+splats') for (const name of ['one.jpg', 'two.jpg']) files.set(`images/${name}`, file(name));
+    if (scene === 'images+splats' || scene === 'images') for (const name of ['one.jpg', 'two.jpg']) files.set(`images/${name}`, file(name));
+    if (scene === 'point cloud') files.set('points.ply', genericPointCloudPly());
     if (settings) files.set('colmapview.yaml', Object.assign(file('colmapview.yaml'), { text: async () => settings }));
     const deps = realStoreDeps({
       onViewerState: viewerState => applySavedViewerState(viewerState, null),
-      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
+      // Announces like the real parser: the points it loaded, then its warnings.
+      parseFiles: vi.fn(async ({ addNotification }) => {
+        addNotification('info', 'Loaded 0 points', 5000);
+        addNotification('warning', 'Skipped 1 unreadable track');
+        return { cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false };
+      }),
       buildReconstruction: vi.fn(async () => ({ reconstruction: parsedScene(), pointCount: 0 })),
     });
     return { b, files, deps };
@@ -1307,8 +1313,8 @@ describe('file dropzone workflow', () => {
       expect(hasUnsavedReloadState()).toBe(false);
       expect(loadedFiles?.splatFile).toBe(choice ? b : undefined);
       expect(loadedFiles?.splatFileSources).toHaveLength(2);
-      // Silent like the COLMAP path, and the renderer is never handed the splat it already shows.
-      expect(deps.addNotification).not.toHaveBeenCalled();
+      // Nothing claims an updated splat, and the renderer is never handed the splat it already shows.
+      expect(deps.addNotification).not.toHaveBeenCalledWith('info', expect.stringContaining('Updated splat file'), expect.anything());
       expect(deps.setUrlProgress).not.toHaveBeenCalledWith(expect.objectContaining({ message: 'Splat file updated' }));
       expect(deps.setUrlProgress).not.toHaveBeenCalledWith(expect.objectContaining({ message: 'Preparing splat renderer...' }));
       expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
@@ -1316,26 +1322,23 @@ describe('file dropzone workflow', () => {
   });
 
   it.each([
-    ['images', 'Loaded 2 images (gallery only, no 3D data)'],
-    ['point cloud', 'Loaded 1 points'],
-    ['point cloud with its colmapview.yaml', 'Loaded 1 points'],
-  ] as const)('announces a first %s load but not its Reload', async (kind, announcement) => {
-    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
-    const files = kind === 'images'
-      ? new Map([['images/one.jpg', file('one.jpg')], ['images/two.jpg', file('two.jpg')]])
-      : new Map([['points.ply', genericPointCloudPly()]]);
-    if (kind === 'point cloud with its colmapview.yaml') {
-      files.set('colmapview.yaml', Object.assign(file('colmapview.yaml'), { text: async () => 'ui:\n  background_color: "#123456"\n' }));
-    }
-    const deps = realStoreDeps();
+    ['COLMAP', false, [['info', 'Loaded 0 points', 5000], ['warning', 'Skipped 1 unreadable track']]],
+    ['point cloud', false, [['info', 'Loaded 1 points', 5000]]],
+    ['point cloud', true, [['info', 'Loaded 1 points', 5000]]],
+    ['images', false, [['info', 'Loaded 2 images (gallery only, no 3D data)', 5000]]],
+    ['images+splats', false, [['info', 'Loaded 2 images (gallery only, no 3D data)', 5000]]],
+    ['splat-only', false, []],
+  ] as const)('announces a Reload exactly as its first load (%s scene, own colmapview.yaml: %s)', async (scene, ownSettings, announcements) => {
+    const { files, deps } = reloadSceneFixture(scene, ownSettings ? 'ui:\n  background_color: "#123456"\n' : undefined);
     try {
       await expect(processFileDropzoneFiles(files, deps)).resolves.toBe(true);
-      expect(deps.addNotification).toHaveBeenCalledExactlyOnceWith('info', announcement, 5000);
+      expect(vi.mocked(deps.addNotification).mock.calls).toEqual(announcements);
       vi.mocked(deps.addNotification).mockClear();
 
       await expect(processFileDropzoneFiles(files, deps, { reload: true })).resolves.toBe(true);
 
-      expect(deps.addNotification).not.toHaveBeenCalled();
+      expect(vi.mocked(deps.addNotification).mock.calls).toEqual(announcements);
+      expect(deps.addNotification).not.toHaveBeenCalledWith('info', expect.stringContaining('Updated splat file'), expect.anything());
     } finally { useReconstructionStore.getState().clear(); }
   });
 
