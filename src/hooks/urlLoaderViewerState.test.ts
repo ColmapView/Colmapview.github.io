@@ -143,12 +143,12 @@ describe('manifest viewer-state loading', () => {
   it('discovers YAML for manifests on any HTTP host', async () => {
     const request = vi.fn().mockResolvedValue(new Response(serializeDatasetViewerSettings(state)));
     await expect(fetchPublishedViewerState({ ...manifest, baseUrl: 'https://example.com/scene', viewerStatePath: undefined }, request)).resolves.toEqual(state);
-    expect(request).toHaveBeenCalledWith('https://example.com/scene/colmapview.yaml', { credentials: 'omit' });
+    expect(request).toHaveBeenCalledWith('https://example.com/scene/colmapview.yaml', { credentials: 'omit', signal: expect.any(AbortSignal) });
   });
   it('looks beside direct files without carrying credentials or URL parameters', async () => {
     const request = vi.fn().mockResolvedValue(new Response('', { status: 404 }));
     await expect(fetchDatasetViewerSettings('https://example.com/project/scene.zip?download=1#hash', request, true)).resolves.toBeNull();
-    expect(request).toHaveBeenCalledExactlyOnceWith('https://example.com/project/colmapview.yaml', { credentials: 'omit' });
+    expect(request).toHaveBeenCalledExactlyOnceWith('https://example.com/project/colmapview.yaml', { credentials: 'omit', signal: expect.any(AbortSignal) });
   });
   it.each(['file:///scene', 'data:text/plain,test', 'https://user:password@example.com/scene'])('does not probe unsupported or credentialed URLs: %s', async url => {
     const request = vi.fn();
@@ -158,7 +158,7 @@ describe('manifest viewer-state loading', () => {
   it('discovers YAML automatically for a plain Hugging Face dataset path', async () => {
     const request = vi.fn().mockResolvedValue(new Response(serializeDatasetViewerSettings(state)));
     await expect(fetchPublishedViewerState({ ...manifest, viewerStatePath: undefined }, request)).resolves.toEqual(state);
-    expect(request).toHaveBeenCalledWith(manifest.baseUrl + 'colmapview.yaml', { credentials: 'omit' });
+    expect(request).toHaveBeenCalledWith(manifest.baseUrl + 'colmapview.yaml', { credentials: 'omit', signal: expect.any(AbortSignal) });
   });
   it('falls back from a subfolder to the repository root at the same revision', async () => {
     const request = vi.fn().mockResolvedValueOnce(new Response('', { status: 404 }))
@@ -166,6 +166,38 @@ describe('manifest viewer-state loading', () => {
     await expect(fetchDatasetViewerSettings(manifest.baseUrl + 'splats/file.spz', request, true))
       .resolves.toMatchObject({ config: { ui: { backgroundColor: '#123456' } } });
     expect(request.mock.calls.map(call => call[0])).toEqual([manifest.baseUrl + 'splats/colmapview.yaml', manifest.baseUrl + 'colmapview.yaml']);
+  });
+  const deepFile = manifest.baseUrl + 'a/b/c/scene.spz';
+  const deepCandidates = ['a/b/c/', 'a/b/', 'a/', ''].map(folder => manifest.baseUrl + folder + 'colmapview.yaml');
+  it('reaches the repository root of a deep file within the deadline when every request is slow', async () => {
+    vi.useFakeTimers();
+    const request = vi.fn((url: string) => new Promise<Response>(resolve => setTimeout(() => resolve(url === deepCandidates[3]
+      ? new Response('ui:\n  background_color: "#123456"\n')
+      : new Response('Entry not found', { status: 404, headers: { 'X-Error-Code': 'EntryNotFound' } })), 1_000)));
+    const pending = fetchOptionalDatasetViewerSettingsResult(deepFile, request, true);
+    await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS);
+    await expect(pending).resolves.toEqual({
+      state: expect.objectContaining({ config: { ui: { backgroundColor: '#123456' } } }), timedOut: false });
+    expect(request.mock.calls.map(([url]) => url)).toEqual(deepCandidates);
+  });
+  it('lets the nearest settings decide even when a parent folder answers first', async () => {
+    vi.useFakeTimers();
+    const request = vi.fn((url: string) => new Promise<Response>(resolve => setTimeout(() => resolve(new Response(
+      `ui:\n  background_color: "${url === deepCandidates[0] ? '#111111' : '#222222'}"\n`)), url === deepCandidates[0] ? 900 : 100)));
+    const pending = fetchOptionalDatasetViewerSettingsResult(deepFile, request, true);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(pending).resolves.toMatchObject({ state: { config: { ui: { backgroundColor: '#111111' } } }, timedOut: false });
+  });
+  it('stops asking parent folders once the nearest settings decide', async () => {
+    const signals: AbortSignal[] = [];
+    const request = vi.fn(async (_url: string, init?: RequestInit) => {
+      signals.push(init!.signal!);
+      return signals.length === 1 ? new Response('ui:\n  background_color: "#123456"\n') : new Promise<Response>(() => {});
+    });
+    // The deadline has not started; nothing but the decision itself may stop the parent folders.
+    startOptionalDatasetViewerSettings(deepFile, request, true);
+    await vi.waitFor(() => expect(signals.slice(1).every(signal => signal.aborted)).toBe(true));
+    expect(signals).toHaveLength(4);
   });
   const everything: PublishedViewerState = { version: 1, viewerVersion: 'test',
     viewState: { position: [1, 2, 3], quaternion: [0, 0, 0, 1], target: [0, 0, 0], distance: 4 },

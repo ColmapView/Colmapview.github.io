@@ -943,8 +943,9 @@ describe('useUrlLoader', () => {
     await act(async () => { expect(await result.current.loadFromUrl('https://example.com/project/scene.spz')).toBe(true); });
     expect(processFilesMock).toHaveBeenCalledOnce();
     expect(useUIStore.getState().backgroundColor).toBe('#123456');
+    // The settings are asked for first, so they arrive during the download.
     expect(request.mock.calls.map(call => String(call[0]))).toEqual([
-      'https://example.com/project/scene.spz', 'https://example.com/project/colmapview.yaml',
+      'https://example.com/project/colmapview.yaml', 'https://example.com/project/scene.spz',
     ]);
   });
 
@@ -970,6 +971,39 @@ describe('useUrlLoader', () => {
     expect(settingsTimeoutWarnings()).toEqual([]);
     act(() => useReconstructionStore.getState().cancelLoading());
     await act(async () => { expect(await next).toBe(false); });
+  });
+
+  it('asks for the settings beside a direct splat file during its download, but starts their deadline after parsing', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Blob', NodeBlob);
+    let deliver: ((response: Response) => void) | undefined;
+    const request = vi.fn((url: string | URL) => String(url).endsWith('colmapview.yaml')
+      ? new Promise<Response>(() => {}) : new Promise<Response>(resolve => { deliver = resolve; }));
+    vi.stubGlobal('fetch', request);
+    processFilesMock.mockResolvedValueOnce();
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
+    let pending!: Promise<boolean>;
+    let finished = false;
+    act(() => {
+      pending = result.current.loadFromUrl('https://example.com/project/scene.spz');
+      void pending.then(() => { finished = true; });
+    });
+    await act(async () => { await vi.waitFor(() => expect(deliver).toBeDefined()); });
+    expect(request.mock.calls.map(([url]) => String(url))).toEqual([
+      'https://example.com/project/colmapview.yaml', 'https://example.com/project/scene.spz']);
+    // A slow download does not use up the settings' time.
+    await act(async () => { await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS * 2); });
+    expect(settingsTimeoutWarnings()).toEqual([]);
+    await act(async () => {
+      deliver!(new Response('splat bytes'));
+      await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS - 1);
+    });
+    expect(finished).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await pending).toBe(true);
+    });
+    expect(settingsTimeoutWarnings()).toEqual([expect.objectContaining({ type: 'warning' })]);
   });
 
   it('warns once when the splat list does not load in time, until the next load starts', async () => {
@@ -1008,7 +1042,7 @@ describe('useUrlLoader', () => {
   ])('warns about settings beside an archive that do not arrive in time (settings inside: $inside)', async ({ inside, warnings }) => {
     vi.useFakeTimers();
     vi.stubGlobal('Blob', NodeBlob);
-    const request = vi.fn((_url: string | URL) => new Promise<Response>(() => {}));
+    const request = vi.fn((_url: string | URL, _init?: RequestInit) => new Promise<Response>(() => {}));
     vi.stubGlobal('fetch', request);
     const files = new Map([['cameras.bin', new File(['c'], 'cameras.bin')]]);
     if (inside) files.set('colmapview.yaml', new File(['ui: {}'], 'colmapview.yaml'));
@@ -1022,8 +1056,10 @@ describe('useUrlLoader', () => {
       await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS);
       expect(await pending).toBe(true);
     });
-    // Settings inside the archive are the dataset's own; nothing is fetched beside it.
-    expect(request.mock.calls.map(([url]) => String(url))).toEqual(inside ? [] : ['https://example.com/project/colmapview.yaml']);
+    // The settings beside it are asked for during the download; settings inside the archive are the
+    // dataset's own, so the load's end aborts that request without a deadline or a warning.
+    expect(request.mock.calls.map(([url]) => String(url))).toEqual(['https://example.com/project/colmapview.yaml']);
+    expect(request.mock.calls[0][1]?.signal?.aborted).toBe(true);
     expect(settingsTimeoutWarnings()).toHaveLength(warnings);
   });
 

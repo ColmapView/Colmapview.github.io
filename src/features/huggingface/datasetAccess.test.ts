@@ -7,6 +7,7 @@ import { fetchDatasetResource } from '../../utils/fetchDatasetResource';
 import { downloadZip } from '../../utils/zipDownload';
 import { UrlMediaScheduler } from '../../dataset/urlMediaScheduler';
 import { getOrLoadFrustumBitmap } from '../../hooks/frustumTextureCache';
+import { fetchOptionalDatasetViewerSettingsResult } from '../../hooks/urlLoaderViewerState';
 import { appLogger } from '../../utils/logger';
 
 vi.mock('./auth', () => ({ hfAuth: { getReadAccessToken: vi.fn(), getSnapshot: vi.fn(), expire: vi.fn() } }));
@@ -153,6 +154,42 @@ describe('Hugging Face private dataset reads', () => {
     request.mockImplementation(async () => new Response(null, { status: 404 }));
     await expect(checkHuggingFaceDatasetAccess(info, url => fetchDatasetResource(url)))
       .rejects.toThrow(signedIn ? 'repository permissions' : 'Sign in with Hugging Face');
+  });
+
+  it.each(['EntryNotFound', 'RevisionNotFound'])('keeps a signed-in reader anonymous for a %s 404', async code => {
+    connected();
+    request.mockResolvedValue(new Response('Entry not found', { status: 404, headers: { 'X-Error-Code': code } }));
+    const response = await fetchDatasetResource(root + 'colmapview.yaml');
+    expect(response.status).toBe(404);
+    await response.body?.cancel();
+    expect(request).toHaveBeenCalledOnce();
+    expect(authorization(request.mock.calls[0][1])).toBeNull();
+    expect(hfAuth.getReadAccessToken).not.toHaveBeenCalled();
+  });
+
+  it('walks a public repo’s settings folders with one anonymous request each while signed in', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    connected();
+    request.mockImplementation(async url => url === root + 'colmapview.yaml'
+      ? new Response('ui:\n  background_color: "#123456"\n')
+      : new Response('Entry not found', { status: 404, headers: { 'X-Error-Code': 'EntryNotFound' } }));
+    await expect(fetchOptionalDatasetViewerSettingsResult(root + 'a/b/scene.spz',
+      (url, init) => fetchDatasetResource(url, undefined, init), true))
+      .resolves.toMatchObject({ timedOut: false, state: { config: { ui: { backgroundColor: '#123456' } } } });
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(request.mock.calls.every(([, init]) => authorization(init) === null)).toBe(true);
+  });
+
+  it('tells a signed-out reader that a 401 repo may be missing, not only private', async () => {
+    // The Hub answers anonymous reads of missing and private repos alike, without an error code.
+    request.mockImplementation(async () => new Response('Invalid username or password.', { status: 401 }));
+    await expect(checkHuggingFaceDatasetAccess(info, url => fetchDatasetResource(url)))
+      .rejects.toThrow('Hugging Face dataset not found, or it is private. Check the URL.');
+  });
+
+  it('names a gated dataset to a signed-out reader', async () => {
+    request.mockImplementation(async () => new Response(null, { status: 401, headers: { 'X-Error-Code': 'GatedRepo' } }));
+    await expect(fetchDatasetResource(root + 'sparse/0/cameras.bin')).rejects.toThrow('gated');
   });
 
   it('forgets a rejected current token without exposing the provider response', async () => {

@@ -8,6 +8,25 @@ import { appLogger } from '../../utils/logger';
 const privateRepos = new WeakMap<HfAuthState, Set<string>>();
 const discard = (response: Response) => { void response.body?.cancel().catch(() => {}); };
 
+/** The Hub's marks for a missing file or revision in a repo that anonymous readers can see. */
+const MISSING_FROM_VISIBLE_REPO = new Set(['EntryNotFound', 'RevisionNotFound']);
+
+/** Private, gated and missing repos all answer anonymous reads with 401; an unmarked 404 may hide one too. */
+function mayBeAccessDenial(response: Response): boolean {
+  if (response.status === 401 || response.status === 403) return true;
+  return response.status === 404 && !MISSING_FROM_VISIBLE_REPO.has(response.headers.get('X-Error-Code') ?? '');
+}
+
+/** Anonymously, the Hub cannot say whether a repo is missing or private. */
+const MISSING_OR_PRIVATE = 'Hugging Face dataset not found, or it is private. Check the URL. '
+  + 'Sign in with Hugging Face to open a private dataset, then retry.';
+
+function signedOutDenial(response: Response): HfError {
+  return new HfError(response.headers.get('X-Error-Code') === 'GatedRepo'
+    ? 'This Hugging Face dataset is gated: only accounts its owner has approved can open its files.'
+    : MISSING_OR_PRIVATE, response.status);
+}
+
 /** Public reads stay anonymous. Private reads use only the tab's current OAuth session. */
 export async function fetchHuggingFaceDatasetRequest(url: string, init: RequestInit = {}): Promise<Response> {
   init.signal?.throwIfAborted();
@@ -44,7 +63,8 @@ export async function fetchHuggingFaceDatasetRequest(url: string, init: RequestI
   if (token) return authenticated(token);
   const response = await fetch(url, request);
   init.signal?.throwIfAborted();
-  if (![401, 403, 404].includes(response.status)) return response;
+  // Only an answer an account could change is retried: a public repo's missing file stays one request.
+  if (!mayBeAccessDenial(response)) return response;
   const retryToken = hfAuth.getReadAccessToken();
   if (retryToken) {
     discard(response);
@@ -52,7 +72,7 @@ export async function fetchHuggingFaceDatasetRequest(url: string, init: RequestI
   }
   if (response.status !== 404) {
     discard(response);
-    throw new HfError('Sign in with Hugging Face to open private datasets, then retry the URL.', response.status);
+    throw signedOutDenial(response);
   }
   return response;
 }
@@ -87,7 +107,7 @@ export async function checkHuggingFaceDatasetAccess(infoUrl: string,
   if (response.ok) return;
   if (response.status === 404) throw new HfError(hfAuth.getReadAccessToken()
     ? 'Hugging Face dataset not found or unavailable to this account. Check the URL and repository permissions.'
-    : 'Hugging Face dataset not found or private. Sign in with Hugging Face and check the URL.', 404);
+    : MISSING_OR_PRIVATE, 404);
   if (isTransientStatus(response.status)) {
     appLogger.warn(`[Hugging Face] Dataset access check returned ${response.status}; continuing with the dataset files.`);
     return;

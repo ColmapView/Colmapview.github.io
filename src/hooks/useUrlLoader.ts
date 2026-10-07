@@ -29,7 +29,7 @@ import { isSplatUrl, loadSplatUrlSource } from './urlLoaderSplatSource';
 import { applySavedViewerState, decodeSharedViewerOverrides, resolveRestoredSplatSourceId,
   type SharedViewerOverrides } from './useUrlState';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
-import { fetchOptionalDatasetViewerSettingsResult } from './urlLoaderViewerState';
+import { startOptionalDatasetViewerSettings, type OptionalViewerSettingsRequest } from './urlLoaderViewerState';
 import { dismissOptionalSettingsTimeoutWarning, showOptionalSettingsTimeoutWarning } from './optionalSettingsWarning';
 import { dismissSplatListTimeoutWarning, showSplatListTimeoutWarning } from './splatListWarning';
 import { findDatasetViewerSettingsEntry } from '../utils/datasetViewerSettings';
@@ -73,19 +73,21 @@ interface UrlLoadContext {
 }
 
 /** Settings beside a directly loaded file or archive; a timeout keeps defaults and says so. */
-async function applyOptionalSettingsBeside(url: string, load: UrlLoadContext): Promise<void> {
-  const settings = await fetchOptionalDatasetViewerSettingsResult(url, load.fetchImpl, true, load.signal);
+async function applyOptionalSettingsBeside(request: OptionalViewerSettingsRequest, load: UrlLoadContext): Promise<void> {
+  const settings = await request.settle();
   if (settings.timedOut) load.onOptionalSettingsTimeout();
   if (settings.state) await load.onViewerState(settings.state);
 }
 
 /**
- * The settings beside `url`, read once. The load asks for them just before its scene appears, so the
- * restore lands with the scene, and again afterwards for a load that merged rather than replaced.
+ * The settings beside `url`, read once. They are asked for now, during the download (the load's end
+ * aborts a request it never used), and their deadline starts when the load needs them: just before its
+ * scene appears, so the restore lands with the scene, and again afterwards for a load that merged rather
+ * than replaced.
  */
 function settingsBesideOnce(url: string, load: UrlLoadContext) {
-  let settled: Promise<void> | undefined;
-  const settle = () => settled ??= applyOptionalSettingsBeside(url, load);
+  const request = startOptionalDatasetViewerSettings(url, load.fetchImpl, true, load.signal);  let settled: Promise<void> | undefined;
+  const settle = () => settled ??= applyOptionalSettingsBeside(request, load);
   return {
     beforeSceneCommit: () => {
       load.setUrlProgress({ percent: 90, message: 'Loading saved view settings...' });

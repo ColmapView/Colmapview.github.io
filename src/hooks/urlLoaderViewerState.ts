@@ -27,8 +27,8 @@ export function startOptionalDatasetViewerSettings(url: string,
   signal?.throwIfAborted();
   const controller = new AbortController();
   const requestSignal = signal ? anySignal([signal, controller.signal]) : controller.signal;
-  const settings = readDatasetViewerSettings(url,
-    (candidate, init) => fetchImpl(candidate, { ...init, signal: requestSignal }), isFile)
+  const settings = readDatasetViewerSettings(url, (candidate, init) => fetchImpl(candidate,
+    { ...init, signal: init?.signal ? anySignal([requestSignal, init.signal]) : requestSignal }), isFile)
     .catch((error): OptionalViewerSettingsResult => {
       // Only the load's own cancellation is fatal. Our deadline and the transport's timeout
       // (which some engines report as a plain AbortError) leave the defaults in place.
@@ -116,28 +116,40 @@ function savesFileAsActiveSplat(state: PublishedViewerState, settingsUrl: string
 async function readDatasetViewerSettings(url: string,
   fetchImpl: (url: string, init?: RequestInit) => Promise<Response>, isFile: boolean): Promise<OptionalViewerSettingsResult> {
   // The first candidate sits beside the loaded project or file; later ones are parent folders.
-  for (const [index, candidate] of settingsUrls(url, isFile).entries()) {
-    try {
-      const response = await fetchImpl(candidate, { credentials: 'omit' });
-      if (!response.ok) {
-        await response.body?.cancel();
-        if (response.status === 404) continue;
-        return { state: null, timedOut: false };
+  // All are requested at once, so a deep path costs one round trip; the nearest answer still decides.
+  const unneeded = new AbortController();
+  const requests = settingsUrls(url, isFile).map(candidate => {
+    const response = fetchImpl(candidate, { credentials: 'omit', signal: unneeded.signal });
+    response.catch(() => {});
+    return { candidate, response };
+  });
+  try {
+    for (const [index, { candidate, response: pending }] of requests.entries()) {
+      try {
+        const response = await pending;
+        if (!response.ok) {
+          await response.body?.cancel();
+          if (response.status === 404) continue;
+          return { state: null, timedOut: false };
+        }
+        const text = await (await readBoundedResponse(response, MAX_VIEWER_STATE_BYTES)).text();
+        const state = parseDatasetViewerSettings(text);
+        return {
+          state: index === 0 || (isFile && savesFileAsActiveSplat(state, candidate, url)) ? state : displaySettingsOnly(state),
+          timedOut: false,
+        };
+      } catch (error) {
+        const name = error && typeof error === 'object' && 'name' in error ? error.name : undefined;
+        if (name === 'AbortError') throw error;
+        appLogger.warn(SKIPPED_SETTINGS_WARNING);
+        return { state: null, timedOut: name === 'TimeoutError' };
       }
-      const text = await (await readBoundedResponse(response, MAX_VIEWER_STATE_BYTES)).text();
-      const state = parseDatasetViewerSettings(text);
-      return {
-        state: index === 0 || (isFile && savesFileAsActiveSplat(state, candidate, url)) ? state : displaySettingsOnly(state),
-        timedOut: false,
-      };
-    } catch (error) {
-      const name = error && typeof error === 'object' && 'name' in error ? error.name : undefined;
-      if (name === 'AbortError') throw error;
-      appLogger.warn(SKIPPED_SETTINGS_WARNING);
-      return { state: null, timedOut: name === 'TimeoutError' };
     }
+    return { state: null, timedOut: false };
+  } finally {
+    // Folders above the deciding answer are no longer needed.
+    unneeded.abort();
   }
-  return { state: null, timedOut: false };
 }
 
 export async function fetchDatasetViewerSettings(url: string,
