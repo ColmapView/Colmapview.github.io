@@ -32,7 +32,7 @@ export function parseHfAssetUrl(value: string): { repoId: string; revision: stri
   const url = new URL(value);
   const match = /^\/datasets\/([a-zA-Z0-9-]+\/[a-zA-Z0-9_.-]+)\/resolve\/([^/]+)\//.exec(url.pathname);
   if (url.origin !== 'https://huggingface.co' || url.username || url.password || url.hash || url.search || !match) {
-    throw new HfError('Copy these remote assets locally before publishing. Only public Hugging Face asset URLs can be pinned.');
+    throw new HfError('Copy these remote assets locally before publishing. Only public Hugging Face asset URLs can be pinned.', undefined, true);
   }
   const path = url.pathname.slice(match[0].length).split('/').filter(Boolean).map(decodeURIComponent).join('/');
   return { repoId: match[1], revision: decodeURIComponent(match[2]), path, url };

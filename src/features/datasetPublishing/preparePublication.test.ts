@@ -311,7 +311,8 @@ describe('publication snapshot preparation', () => {
     expect(request.mock.calls[0][0]).toContain('/resolve/' + 'd'.repeat(40) + '/images/nested/photo.png');
     expect(request.mock.calls[0][1].credentials).toBe('omit');
     source.dataset.imageUrlBase = 'https://arbitrary.example/images/';
-    await expect(preparePublication(source, new AbortController().signal, deps())).rejects.toThrow('locally');
+    await expect(preparePublication(source, new AbortController().signal, deps())).rejects.toMatchObject({
+      message: 'Copy these remote assets locally before publishing. Only public Hugging Face asset URLs can be pinned.', permanent: true });
   });
 
   it('keeps downloading a slow remote original while bytes keep arriving', async () => {

@@ -92,7 +92,7 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
   };
   const pinAssetUrl = async (value: string): Promise<string> => {
     const url = new URL(value);
-    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) throw new GoogleDrivePublishError('The dataset has an unsupported remote file URL.');
+    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) throw new GoogleDrivePublishError('The dataset has an unsupported remote file URL.', undefined, true);
     if (url.origin !== 'https://huggingface.co') return url.href;
     const parsed = parseHfAssetUrl(value);
     const sha = await resolveRevision(parsed.repoId, parsed.revision);

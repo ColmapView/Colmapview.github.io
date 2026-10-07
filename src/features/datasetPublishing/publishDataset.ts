@@ -152,7 +152,7 @@ export function createPublicationController(client: HubClient,
         current.pending = undefined;
         job = null; invalidated = true;
       }
-      // A size limit fails the same way on every retry. With no batch to reconcile, end the job.
+      // A failure bound to the captured input fails the same way on every retry. With no batch to reconcile, end the job.
       if (!signal.aborted && error instanceof HfError && error.permanent && !current.pending) job = null;
       // A cancelled batch the repository confirmed absent can be abandoned; a retry still reconciles it first.
       set({ phase: signal.aborted ? 'cancelled' : 'failed',

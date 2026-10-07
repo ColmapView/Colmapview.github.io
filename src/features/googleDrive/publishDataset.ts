@@ -154,7 +154,7 @@ export function createDrivePublicationController(client: DriveUploadClient) {
           ? current.invalid ? 'The dataset changed. Start a new Drive publication.' : 'Upload cancelled. Completed files may remain in Drive.'
           : 'Drive publication could not finish.', error: cancelled ? undefined : drivePublicationErrorMessage(error),
           canRetry: !current.invalid && !permanent });
-        // A size limit fails the same way on every retry: end the job, which also releases its dataset.
+        // A failure bound to the captured input fails the same way on every retry: end the job, which also releases its dataset.
         if (permanent) job = null;
       }
       if (current.invalid) release(current);
