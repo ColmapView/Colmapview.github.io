@@ -137,7 +137,7 @@ describe('URL loader ZIP source helpers', () => {
     const deps = {
       loadZip: vi.fn(async () => ({ colmapFiles, imageIndex, archive, fileSize: 1024, imageCount: 0 })),
       log: vi.fn(),
-      processFiles: vi.fn(async () => {}),
+      processFiles: replacingProcessFiles(),
       setActiveArchive: vi.fn(),
       setSourceInfo: vi.fn(),
       setUrlProgress: vi.fn(),
@@ -185,10 +185,28 @@ describe('URL loader ZIP source helpers', () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it.each(['merged into the open scene', 'cancelled', 'failed'] as const)(
+    'never lets a failed close of the archive no scene took change a load that %s', async outcome => {
+      const close = vi.fn(async () => { throw new Error('close failed'); });
+      const deps = {
+        loadZip: vi.fn(async () => ({ archive: buildArchiveReader({ close }),
+          colmapFiles: new Map([['splats/scene.spz', buildFile('scene.spz', 'splat')]]), imageIndex: new Map(), fileSize: 1, imageCount: 0 })),
+        log: vi.fn(), setActiveArchive: vi.fn(), setSourceInfo: vi.fn(), setUrlProgress: vi.fn(),
+        processFiles: vi.fn(async () => {
+          if (outcome === 'failed') throw new Error('invalid COLMAP');
+          return outcome === 'cancelled' ? false : undefined;
+        }),
+      };
+      const loading = loadZipUrlSource('https://example.com/splats.zip', deps);
+      if (outcome === 'failed') await expect(loading).rejects.toThrow('invalid COLMAP');
+      else await expect(loading).resolves.toBe(outcome !== 'cancelled');
+      expect(close).toHaveBeenCalledOnce();
+    });
+
   it.each([
     { outcome: 'replaces the scene', replaced: true },
     { outcome: 'merges into the open scene', replaced: false },
-  ])('installs the archive and source only when processing $outcome', async ({ replaced }) => {
+  ])('$outcome: installs the archive and source only for a scene it replaced', async ({ replaced }) => {
     const archive = buildArchiveReader();
     const close = vi.spyOn(archive, 'close');
     const imageIndex = new Map<string, ReturnType<typeof buildArchiveEntry>>();

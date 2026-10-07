@@ -666,7 +666,6 @@ describe('useUrlLoader', () => {
 
   it('keeps the saved alignment, navigation, view and Reload settings when the restored splat download is cancelled', async () => {
     vi.stubGlobal('Blob', NodeBlob);
-    useCameraStore.setState(useCameraStore.getInitialState(), true);
     const baseUrl = 'https://huggingface.co/datasets/owner/cancel/resolve/main/';
     const alignment = { ...createIdentityEuler(), translationX: 5 };
     const view: CameraViewState = { position: [1, 2, 3], target: [0, 0, 0], quaternion: [0, 0, 0, 1], distance: 4 };
@@ -759,7 +758,6 @@ describe('useUrlLoader', () => {
 
   it.each(['saved', 'override', 'previous-scene', 'missing', 'invalid'] as const)('loads a Hugging Face project with %s YAML settings', async mode => {
     vi.stubGlobal('Blob', NodeBlob);
-    useCameraStore.setState(useCameraStore.getInitialState(), true);
     const repo = 'https://huggingface.co/datasets/owner/scene';
     const view: CameraViewState = { position: [1, 2, 3], target: [0, 0, 0], quaternion: [0, 0, 0, 1], distance: 4 };
     const overrideView: CameraViewState = { ...view, position: [8, 0, 0], distance: 8 };
@@ -890,7 +888,6 @@ describe('useUrlLoader', () => {
 
   it.each(['document', 'combined', 'binary', 'legacy'] as const)('restores a published view with %s URL precedence', async format => {
     vi.stubGlobal('Blob', NodeBlob);
-    useCameraStore.setState(useCameraStore.getInitialState(), true);
     useTransformStore.setState(useTransformStore.getInitialState(), true);
     const manifest: ColmapManifest = { version: 1, baseUrl: 'https://example.com/scene', viewerStatePath: 'colmapview-state.json',
       files: { cameras: 'cameras.bin', images: 'images.bin', points3D: 'points3D.bin' }, splats: [], skipImages: true };

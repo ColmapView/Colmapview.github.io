@@ -108,6 +108,6 @@ export async function loadZipUrlSource(
 
   return true;
   } finally {
-    if (!committed) await closeZipArchive(archive);
+    if (!committed) await closeZipArchive(archive).catch(() => {});
   }
 }
