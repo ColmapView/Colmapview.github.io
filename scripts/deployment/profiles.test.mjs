@@ -197,18 +197,41 @@ test('Cloudflare deployment token is scoped only to trusted upload steps', () =>
  * - an unset or env -u/--unset operand;
  * - a $GITHUB_ENV key (NAME= or NAME<<DELIM). A { … } group or here-document can redirect from another line,
  *   so in a step that writes $GITHUB_ENV such a line passes only when it targets the step summary or outputs.
- * The first two rules mask quoted text other than a bare "NAME", so reads such as
- * echo "NAME=$NAME" >> "$GITHUB_STEP_SUMMARY" pass while unset "NAME" still counts.
+ * The first two rules read the line through maskQuotes, so reads such as
+ * echo "NAME=$NAME" >> "$GITHUB_STEP_SUMMARY" pass while unset "NAME" and env "NAME=…" still count.
  */
 function viteHfWrites(script = '') {
   const writesEnvFile = /\bGITHUB_ENV\b/.test(script);
   return script.split('\n').filter(line => {
-    const code = line.replace(/'[^']*'|"(?:\\.|[^"\\])*"/g, quoted => /^(["'])VITE_HF_\w*\1$/.test(quoted) ? quoted.slice(1, -1) : '""');
+    const code = maskQuotes(line);
     const elsewhere = /\bGITHUB_(?:STEP_SUMMARY|OUTPUT)\b/.test(line) && !/\bGITHUB_ENV\b/.test(line);
     return /(?:^|[\s;&|({!])VITE_HF_\w*\+?=/.test(code)
       || /\bunset\b[^;&|]*\bVITE_HF_|\benv\b[^;&|]*?\s(?:-[a-z]*u\s*|--unset[=\s]\s*)VITE_HF_/.test(code)
       || writesEnvFile && !elsewhere && /(?<![\w$]|\$\{)VITE_HF_[^\s"'=<>|;&]*(?:=|<<)/.test(line);
   });
+}
+
+// A quoted NAME=… word still assigns after these commands, and eval or -c runs its quoted argument as a script.
+const DECLARES = /(?:^|[\s;&|({!/])(?:env|export|declare|typeset|local|readonly)\s(?:[^;&|()]*\s)?$/;
+const RUNS_SCRIPT = /(?:(?:^|[\s;&|({!/])eval|\s-[A-Za-z]*c)\s+$/;
+
+/**
+ * Replaces quoted text with "" so data cannot pass for a write, except where the shell still reads it as code:
+ * a bare "NAME" (unset "NAME"), a quoted NAME=… word after env, export, declare, typeset, local or readonly,
+ * and a script after eval or -c, whose own quotes are masked in turn.
+ */
+function maskQuotes(text) {
+  let code = '';
+  let end = 0;
+  for (const { 0: quoted, index } of text.matchAll(/'[^']*'|"(?:\\.|[^"\\])*"/g)) {
+    code += text.slice(end, index);
+    end = index + quoted.length;
+    const inner = quoted[0] === '"' ? quoted.slice(1, -1).replace(/\\(["\\$`])/g, '$1') : quoted.slice(1, -1);
+    if (RUNS_SCRIPT.test(code)) code += maskQuotes(inner);
+    else if (/^VITE_HF_\w*$/.test(inner) || /^VITE_HF_\w*\+?=/.test(inner) && DECLARES.test(code)) code += inner;
+    else code += '""';
+  }
+  return code + text.slice(end);
 }
 
 test('GitHub Pages builds read release HF settings on tags and development HF settings on branches', () => {
@@ -242,11 +265,22 @@ test('VITE_HF_* write detection flags assignments, removals and $GITHUB_ENV keys
     'env -u VITE_HF_OAUTH_REDIRECT_URI npm run build:deployment -- github',
     'echo "VITE_HF_PUBLISH_ENABLED=false" >> "$GITHUB_ENV"',
     '{\n  echo "VITE_HF_OAUTH_REDIRECT_URI<<EOF"\n  echo "$URI"\n  echo EOF\n} >> "$GITHUB_ENV"',
+    // Quoting hides none of these.
+    'env "VITE_HF_AUTH_ENABLED=true" node scripts/deployment/build-profile.mjs github',
+    "export 'VITE_HF_PUBLISH_ENABLED=false'",
+    'declare -x "VITE_HF_OAUTH_CLIENT_ID=other-app"',
+    'typeset -x "VITE_HF_OAUTH_CLIENT_ID=other-app"',
+    'build() { local "VITE_HF_AUTH_ENABLED=false"; node scripts/deployment/build-profile.mjs github; }; build',
+    'readonly "VITE_HF_PUBLISH_ENABLED=false"',
+    'eval "export VITE_HF_OAUTH_REDIRECT_URI=https://example.com/hf-callback.html"',
+    'bash -c "VITE_HF_AUTH_ENABLED=true node scripts/deployment/build-profile.mjs github"',
   ];
   const reads = [
     'echo "VITE_HF_PUBLISH_ENABLED=$VITE_HF_PUBLISH_ENABLED" >> "$GITHUB_STEP_SUMMARY"',
     'echo "BRANCH=x" >> "$GITHUB_ENV"\necho "Built with VITE_HF_AUTH_ENABLED=$VITE_HF_AUTH_ENABLED" >> "$GITHUB_STEP_SUMMARY"',
     '[[ "${VITE_HF_AUTH_ENABLED}" == true ]] && echo "to disable it, unset VITE_HF_AUTH_ENABLED"',
+    'export SUMMARY="VITE_HF_PUBLISH_ENABLED=$VITE_HF_PUBLISH_ENABLED"',
+    `bash -c 'echo "VITE_HF_AUTH_ENABLED=$VITE_HF_AUTH_ENABLED" >> "$GITHUB_STEP_SUMMARY"'`,
   ];
   for (const script of writes) assert.notDeepEqual(viteHfWrites(script), [], script);
   for (const script of reads) assert.deepEqual(viteHfWrites(script), [], script);
