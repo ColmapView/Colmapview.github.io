@@ -469,10 +469,12 @@ export function buildSetTimeoutImplementation({
   handle = buildTimeoutHandle(),
   onSchedule = () => undefined,
 }: SetTimeoutImplementationBuilderOptions = {}): typeof setTimeout {
-  return (handler: TimerHandler, timeout?: number) => {
+  const implementation = (handler: TimerHandler, timeout?: number) => {
     onSchedule(handler, timeout);
     return handle;
   };
+  // With Node types in scope, setTimeout also carries a promisify helper the fake never needs.
+  return implementation as unknown as typeof setTimeout;
 }
 
 export function buildImageCacheCanvas({

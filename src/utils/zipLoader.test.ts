@@ -1,11 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { Archive } from 'libarchive.js';
 import { buildArchiveEntry, buildArchiveReader, buildFile } from '../test/builders';
 import { hfAuth } from '../features/huggingface/auth';
 import { downloadZip, type ZipProgressCallback } from './zipDownload';
 import { isArchiveFile, loadZipFromFile, loadZipFromUrl } from './zipLoader';
+import { appLogger } from './logger';
+import type { ArchiveReader } from '../types/libarchive';
 
 vi.mock('libarchive.js', () => ({ Archive: { init: vi.fn(), open: vi.fn() } }));
+// libarchive.js types Archive.open with its ArchiveReader class, whose private fields no fake can
+// satisfy. zipLoader only uses the reader through the local ArchiveReader interface.
+const openArchive = vi.mocked(Archive.open) as unknown as Mock<(file: File) => Promise<ArchiveReader>>;
 vi.mock('./zipDownload', async (importOriginal) => ({
   ...await importOriginal<typeof import('./zipDownload')>(),
   downloadZip: vi.fn(),
@@ -29,7 +34,7 @@ describe.each(['local', 'url'] as const)('%s archive reader ownership', (source)
     vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 200 })));
   });
 
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
   it('keeps a successfully loaded reader open for lazy image extraction', async () => {
     const image = buildArchiveEntry({ name: 'photo.jpg' });
@@ -38,7 +43,7 @@ describe.each(['local', 'url'] as const)('%s archive reader ownership', (source)
       getFilesArray: async () => [...colmapEntries(), { path: 'images', file: image }],
       close,
     });
-    vi.mocked(Archive.open).mockResolvedValue(archive);
+    openArchive.mockResolvedValue(archive);
 
     const result = await load();
 
@@ -52,7 +57,7 @@ describe.each(['local', 'url'] as const)('%s archive reader ownership', (source)
   it('closes the reader when listing entries fails and preserves the original error', async () => {
     const error = new Error('corrupt directory');
     const close = vi.fn().mockRejectedValue(new Error('close failed'));
-    vi.mocked(Archive.open).mockResolvedValue(buildArchiveReader({
+    openArchive.mockResolvedValue(buildArchiveReader({
       getFilesArray: vi.fn().mockRejectedValue(error),
       close,
     }));
@@ -64,7 +69,7 @@ describe.each(['local', 'url'] as const)('%s archive reader ownership', (source)
   it('extracts project settings from a wrapped archive and leaves unrelated YAML alone', async () => {
     const settings = buildFile('colmapview.yaml', 'ui:\n  background_color: "#123456"');
     const unrelated = buildArchiveEntry({ name: 'training.yaml', extract: vi.fn() });
-    vi.mocked(Archive.open).mockResolvedValue(buildArchiveReader({ getFilesArray: async () => [
+    openArchive.mockResolvedValue(buildArchiveReader({ getFilesArray: async () => [
       ...colmapEntries(), { path: 'project', file: buildArchiveEntry({ name: 'colmapview.yaml', extract: async () => settings }) },
       { path: 'project', file: unrelated },
     ] }));
@@ -74,13 +79,15 @@ describe.each(['local', 'url'] as const)('%s archive reader ownership', (source)
   });
 
   it.each(['oversized', 'unreadable'] as const)('skips %s optional archive settings', async mode => {
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
     const extract = vi.fn().mockRejectedValue(new Error('Read failed'));
-    vi.mocked(Archive.open).mockResolvedValue(buildArchiveReader({ getFilesArray: async () => [
+    openArchive.mockResolvedValue(buildArchiveReader({ getFilesArray: async () => [
       ...colmapEntries(), { path: '', file: buildArchiveEntry({ name: 'colmapview.yaml', size: mode === 'oversized' ? 300000 : 4, extract }) },
     ] }));
     const result = await load();
     expect(result.colmapFiles.size).toBe(3);
     if (mode === 'oversized') expect(extract).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledExactlyOnceWith('[Archive Loader] Skipping unavailable or oversized colmapview.yaml settings.');
   });
 
   it('closes the reader when extraction fails', async () => {
@@ -88,7 +95,7 @@ describe.each(['local', 'url'] as const)('%s archive reader ownership', (source)
     const entries = colmapEntries();
     entries[0].file.extract = vi.fn().mockRejectedValue(error);
     const close = vi.fn(async () => {});
-    vi.mocked(Archive.open).mockResolvedValue(buildArchiveReader({
+    openArchive.mockResolvedValue(buildArchiveReader({
       getFilesArray: async () => entries,
       close,
     }));
@@ -99,7 +106,7 @@ describe.each(['local', 'url'] as const)('%s archive reader ownership', (source)
 
   it('closes the reader when required COLMAP files are missing', async () => {
     const close = vi.fn(async () => {});
-    vi.mocked(Archive.open).mockResolvedValue(buildArchiveReader({ close }));
+    openArchive.mockResolvedValue(buildArchiveReader({ close }));
 
     await expect(load()).rejects.toThrow('does not contain valid COLMAP files');
     expect(close).toHaveBeenCalledOnce();
@@ -107,7 +114,7 @@ describe.each(['local', 'url'] as const)('%s archive reader ownership', (source)
 
   it('closes the reader if extraction progress throws', async () => {
     const close = vi.fn(async () => {});
-    vi.mocked(Archive.open).mockResolvedValue(buildArchiveReader({
+    openArchive.mockResolvedValue(buildArchiveReader({
       getFilesArray: async () => colmapEntries(),
       close,
     }));
@@ -123,7 +130,7 @@ describe.each(['local', 'url'] as const)('%s archive reader ownership', (source)
     const close = vi.fn(async () => {});
     const getFilesArray = vi.fn(async () => colmapEntries());
     let resolve!: (reader: ReturnType<typeof buildArchiveReader>) => void;
-    vi.mocked(Archive.open).mockImplementation(() => new Promise(done => { resolve = done; }));
+    openArchive.mockImplementation(() => new Promise(done => { resolve = done; }));
     const pending = source === 'local'
       ? loadZipFromFile(buildFile('scene.tar'), vi.fn(), controller.signal)
       : loadZipFromUrl('https://example.com/scene.tar', vi.fn(), controller.signal);
@@ -143,7 +150,7 @@ describe.each(['local', 'url'] as const)('%s archive reader ownership', (source)
     entries[0].file.extract = extract;
     const secondExtract = vi.spyOn(entries[1].file, 'extract');
     const close = vi.fn(async () => {});
-    vi.mocked(Archive.open).mockResolvedValue(buildArchiveReader({ close, getFilesArray: async () => entries }));
+    openArchive.mockResolvedValue(buildArchiveReader({ close, getFilesArray: async () => entries }));
     const progress = vi.fn();
     const pending = source === 'local'
       ? loadZipFromFile(buildFile('scene.zip'), progress, controller.signal)
@@ -164,7 +171,7 @@ describe.each(['local', 'url'] as const)('%s archive reader ownership', (source)
   if (source === 'url') {
     it('uses Drive metadata for archive naming and size instead of a HEAD request', async () => {
       const archive = buildArchiveReader({ getFilesArray: async () => colmapEntries() });
-      vi.mocked(Archive.open).mockResolvedValue(archive);
+      openArchive.mockResolvedValue(archive);
       const fetchImpl = vi.fn();
       const signal = new AbortController().signal;
       const result = await loadZipFromUrl('https://www.googleapis.com/drive/v3/files/file123?alt=media', vi.fn(), signal,
@@ -172,14 +179,14 @@ describe.each(['local', 'url'] as const)('%s archive reader ownership', (source)
       expect(result.archive).toBe(archive);
       expect(fetch).not.toHaveBeenCalled();
       expect(downloadZip).toHaveBeenCalledWith(expect.any(String), expect.any(Function), { signal, expectedSize: 7, fetchImpl });
-      expect(vi.mocked(Archive.open).mock.calls[0][0].name).toBe('reconstruction.tar');
+      expect(openArchive.mock.calls[0][0].name).toBe('reconstruction.tar');
     });
 
     it('closes a reader opened after its URL load is cancelled', async () => {
       const controller = new AbortController();
       const close = vi.fn(async () => {});
       const getFilesArray = vi.fn(async () => colmapEntries());
-      vi.mocked(Archive.open).mockImplementation(async () => {
+      openArchive.mockImplementation(async () => {
         controller.abort();
         return buildArchiveReader({ close, getFilesArray });
       });
@@ -215,7 +222,7 @@ describe('private Hugging Face archive URLs', () => {
     vi.stubGlobal('fetch', request);
     vi.mocked(downloadZip).mockResolvedValue(new Blob(['archive']));
     const archive = buildArchiveReader({ getFilesArray: async () => colmapEntries() });
-    vi.mocked(Archive.open).mockResolvedValue(archive);
+    openArchive.mockResolvedValue(archive);
 
     await expect(loadZipFromUrl(url, vi.fn())).resolves.toMatchObject({ archive });
     const heads = request.mock.calls.filter(([, init]) => init?.method === 'HEAD');

@@ -278,8 +278,8 @@ class TestFileList implements FileList {
     return this.files[index] ?? null;
   }
 
-  *[Symbol.iterator](): IterableIterator<File> {
-    yield* this.files;
+  [Symbol.iterator](): ArrayIterator<File> {
+    return this.files[Symbol.iterator]();
   }
 
   private syncIndexes(): void {
@@ -380,8 +380,8 @@ class TestDataTransferItemList implements DataTransferItemList {
     this.syncIndexes(previousLength);
   }
 
-  *[Symbol.iterator](): IterableIterator<DataTransferItem> {
-    yield* this.items;
+  [Symbol.iterator](): ArrayIterator<DataTransferItem> {
+    return this.items[Symbol.iterator]();
   }
 
   private syncIndexes(previousLength = this.items.length): void {
