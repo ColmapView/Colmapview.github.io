@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { anySignal } from './abortSignals';
+import { anySignal, timeoutSignal } from './abortSignals';
 
 const nativeAny = Object.getOwnPropertyDescriptor(AbortSignal, 'any');
+const nativeTimeout = Object.getOwnPropertyDescriptor(AbortSignal, 'timeout');
 
 afterEach(() => {
   if (nativeAny) Object.defineProperty(AbortSignal, 'any', nativeAny);
+  if (nativeTimeout) Object.defineProperty(AbortSignal, 'timeout', nativeTimeout);
 });
 
 describe.each(['native', 'fallback'] as const)('anySignal (%s)', mode => {
@@ -48,4 +50,18 @@ it('releases its listeners from the other inputs once it aborts (fallback)', () 
   first.abort();
   // The very listener it registered, so the surviving input no longer holds the combined signal.
   expect(remove).toHaveBeenCalledExactlyOnceWith(type, listener);
+});
+
+describe.each(['native', 'fallback'] as const)('timeoutSignal (%s)', mode => {
+  beforeEach(() => {
+    // Safari/iOS < 16 has no AbortSignal.timeout.
+    if (mode === 'fallback') Object.defineProperty(AbortSignal, 'timeout', { value: undefined, configurable: true, writable: true });
+  });
+
+  it('aborts with a TimeoutError once the time has passed', async () => {
+    const signal = timeoutSignal(10);
+    expect(signal.aborted).toBe(false);
+    await vi.waitFor(() => expect(signal.aborted).toBe(true));
+    expect(signal.reason).toMatchObject({ name: 'TimeoutError' });
+  });
 });

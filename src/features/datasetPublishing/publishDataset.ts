@@ -1,6 +1,7 @@
 import type { HubClient, UploadFile } from '../huggingface/hubClient';
 import { BATCH_RECEIPT_PATH } from '../huggingface/hubClient';
 import { HfError, publicationErrorMessage, errorStatus, delay } from '../huggingface/http';
+import { timeoutSignal } from '../../utils/abortSignals';
 import { checkAssetSize } from './preparePublication';
 import { publicationMetadata, publicationReceipt, validatePublicationDetails } from './publicationMetadata';
 import { MAX_PUBLICATION_BATCH_BYTES, MAX_PUBLICATION_BATCH_FILES,
@@ -59,7 +60,7 @@ export function createPublicationController(client: HubClient,
         return;
       } catch (error) {
         set({ phase: 'reconciling', message: 'Checking whether the upload completed…' });
-        const existing = await client.reconcile(current.repoId, batch.parent, batch.marker, batch.receipt, AbortSignal.timeout(20_000));
+        const existing = await client.reconcile(current.repoId, batch.parent, batch.marker, batch.receipt, timeoutSignal(20_000));
         if (existing) { record(current, existing); return; }
         batch.outcomeUnknown = false;
         const status = errorStatus(error);

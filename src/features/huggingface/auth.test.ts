@@ -165,6 +165,28 @@ describe('public Hugging Face OAuth', () => {
     expect(auth.getReadAccessToken()).toBeNull();
   });
 
+  it('signs in on engines without AbortSignal.timeout (Safari/iOS 15.4–15.x)', async () => {
+    const nativeTimeout = Object.getOwnPropertyDescriptor(AbortSignal, 'timeout');
+    Object.defineProperty(AbortSignal, 'timeout', { value: undefined, configurable: true, writable: true });
+    try {
+      vi.stubGlobal('BroadcastChannel', undefined);
+      const popup = { location: { href: '' }, closed: false, close: vi.fn() };
+      vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({ access_token: 'test-read', expires_in: 60, scope: HF_READ_SCOPES }))
+        .mockResolvedValueOnce(Response.json({ preferred_username: 'reader' })));
+      const auth = createHfAuth();
+      const pending = auth.connect({ ...config, readOnly: true });
+      await vi.waitFor(() => expect(popup.location.href).toContain('oauth/authorize'));
+      const returnedState = new URL(popup.location.href).searchParams.get('state')!;
+      window.dispatchEvent(new MessageEvent('message', { origin: window.location.origin, source: popup as unknown as Window,
+        data: { type: HF_CALLBACK_TYPE, url: `${config.redirectUri}?${new URLSearchParams({ code: 'code', state: returnedState })}` } }));
+      await pending;
+      expect(auth.getSnapshot()).toMatchObject({ status: 'connected', identity: { username: 'reader' }, error: null });
+    } finally {
+      if (nativeTimeout) Object.defineProperty(AbortSignal, 'timeout', nativeTimeout);
+    }
+  });
+
   it('does not surface provider request URLs or credentials in UI errors', () => {
     expect(publicationErrorMessage(new Error('Authorization: Bearer secret'))).not.toContain('secret');
   });

@@ -27,6 +27,10 @@ export default defineConfig([
         object: 'AbortSignal',
         property: 'any',
         message: 'Use anySignal() from src/utils/abortSignals: AbortSignal.any is missing on Safari/iOS < 17.4.',
+      }, {
+        object: 'AbortSignal',
+        property: 'timeout',
+        message: 'Use timeoutSignal() from src/utils/abortSignals: AbortSignal.timeout is missing on Safari/iOS < 16.',
       }],
     },
   },

@@ -1,7 +1,7 @@
 import type { HfConfig } from './config';
 import { boundedFetch, HfError } from './http';
 import { awaitWithAbort } from '../../utils/awaitWithAbort';
-import { anySignal } from '../../utils/abortSignals';
+import { anySignal, timeoutSignal } from '../../utils/abortSignals';
 
 export interface HfIdentity { username: string }
 export interface HfAuthState { status: 'disconnected' | 'connecting' | 'connected'; identity: HfIdentity | null; error: string | null }
@@ -120,7 +120,7 @@ export function createHfAuth() {
         return Promise.resolve();
       }
       const controller = new AbortController();
-      const signal = anySignal([controller.signal, AbortSignal.timeout(180_000)]);
+      const signal = anySignal([controller.signal, timeoutSignal(180_000)]);
       pending = controller;
       session = null;
       set({ status: 'connecting', identity: null, error: null });

@@ -2,6 +2,7 @@ import { boundedFetch, errorStatus, HfError } from './http';
 import { datasetFileUrl } from '../datasetPublishing/publicationPaths';
 import { readBoundedResponse } from '../../utils/publishedViewerState';
 import { awaitWithAbort } from '../../utils/awaitWithAbort';
+import { timeoutSignal } from '../../utils/abortSignals';
 import { createTransferTimeout } from './transferTimeout';
 
 export interface UploadFile { path: string; content: Blob }
@@ -60,14 +61,14 @@ export function createHubClient(getAccessToken: (username: string) => string): H
         });
       } catch (error) {
         // A lost response can still leave a created repository. Never adopt a name alone.
-        const check = AbortSignal.timeout(20_000);
+        const check = timeoutSignal(20_000);
         try {
           const head = await client.head(repoId, check);
           if (await readText(datasetFileUrl(repoId, head.oid, CREATION_MARKER_PATH), check) === marker) return head.oid;
         } catch { /* Preserve original error and retain operation ID for same-tab retry. */ }
         throw error;
       }
-      return (await client.head(repoId, AbortSignal.timeout(20_000))).oid;
+      return (await client.head(repoId, timeoutSignal(20_000))).oid;
     },
     async upload(repoId, files, parent, marker, signal, progress) {
       signal.throwIfAborted();

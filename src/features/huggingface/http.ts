@@ -1,4 +1,4 @@
-import { anySignal } from '../../utils/abortSignals';
+import { anySignal, timeoutSignal } from '../../utils/abortSignals';
 
 export class HfError extends Error {
   readonly status?: number;
@@ -27,7 +27,7 @@ export function delay(ms: number, signal: AbortSignal): Promise<void> {
 /** `timeout: null` leaves the deadline to the caller's signal, e.g. an idle transfer timeout. */
 export function boundedFetch(signal: AbortSignal, timeout: number | null = 60_000, fetchImpl: typeof fetch = fetch): typeof fetch {
   return async (input, init) => {
-    const bounded = timeout === null ? signal : anySignal([signal, AbortSignal.timeout(timeout)]);
+    const bounded = timeout === null ? signal : anySignal([signal, timeoutSignal(timeout)]);
     const canRetry = ['GET', 'HEAD'].includes((init?.method ?? 'GET').toUpperCase());
     for (let attempt = 0; ; attempt++) {
       const response = await fetchImpl(input, { ...init, credentials: 'omit', signal: bounded });
