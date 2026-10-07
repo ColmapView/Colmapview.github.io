@@ -108,6 +108,53 @@ describe('SplatPickerModal COLMAP-only selection', () => {
   });
 });
 
+describe('SplatPickerModal closing over an activated splat', () => {
+  beforeEach(() => {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
+    mockUseIsTouchDevice.mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    cleanup();
+    useReconstructionStore.getState().clear();
+  });
+
+  function openPickerOverTwoTiles() {
+    const a = new File(['a'], 'a.spz');
+    useReconstructionStore.setState({
+      showSplatPicker: true,
+      loadedFiles: { imageFiles: new Map(), hasMasks: false, splatFiles: [a], splatFileSources: [
+        { id: 'a.spz', path: 'a.spz', url: 'https://example.com/a.spz', file: a },
+        { id: 'b.spz', path: 'b.spz', url: 'https://example.com/b.spz', size: 100 }] },
+    });
+    render(<SplatPickerModal />);
+    return a;
+  }
+
+  it.each(['Close', 'Escape', 'backdrop'] as const)('keeps a splat activated while it was open on %s', async close => {
+    const a = openPickerOverTwoTiles();
+    // What n does with the picker open: show the next tile.
+    await act(async () => { await useReconstructionStore.getState().selectSplatSource('a.spz'); });
+
+    if (close === 'Close') fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    else if (close === 'Escape') fireEvent.keyDown(document, { key: 'Escape' });
+    else fireEvent.click(screen.getByRole('dialog'));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    const state = useReconstructionStore.getState();
+    expect(state.loadedFiles?.splatFile).toBe(a);
+    expect(state.loadedFiles?.splatFileSources?.[0].file).toBe(a);
+  });
+
+  it('still chooses None from its None row while a splat shows', async () => {
+    openPickerOverTwoTiles();
+    await act(async () => { await useReconstructionStore.getState().selectSplatSource('a.spz'); });
+    fireEvent.click(screen.getByRole('button', { name: 'None - COLMAP only' }));
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+  });
+});
+
 describe('SplatPickerModal device-memory hint', () => {
   beforeEach(() => {
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);

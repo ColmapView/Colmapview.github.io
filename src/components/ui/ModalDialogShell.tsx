@@ -7,7 +7,7 @@ import {
   type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { getModalDialogFocusableElements } from './modalDialogShellPolicy';
+import { getModalDialogFocusableElements, openModalDialog } from './modalDialogShellPolicy';
 import { useFloatingDialogFocus } from './useFloatingDialogFocus';
 
 interface ModalDialogShellProps {
@@ -46,13 +46,12 @@ export function ModalDialogShell({
   backdropClassName,
 }: ModalDialogShellProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const keyHandlerRef = useRef<(event: KeyboardEvent) => void>(() => undefined);
 
   useFloatingDialogFocus(isOpen, dialogRef, initialFocusRef);
 
   useEffect(() => {
-    if (!isOpen) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
+    keyHandlerRef.current = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         if (closeOnEscape) {
           event.preventDefault();
@@ -82,10 +81,10 @@ export function ModalDialogShell({
         first.focus();
       }
     };
+  }, [closeOnEscape, onClose]);
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, closeOnEscape, onClose]);
+  // Opened on top of any open dialog, it keeps that place while its handlers change.
+  useEffect(() => (isOpen ? openModalDialog(event => keyHandlerRef.current(event)) : undefined), [isOpen]);
 
   if (!isOpen) return null;
 

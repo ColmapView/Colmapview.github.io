@@ -76,6 +76,39 @@ describe('ModalDialogShell', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('lets only the most recently opened of stacked dialogs answer Escape', () => {
+    const closeLower = vi.fn();
+    const closeUpper = vi.fn();
+    function Stack({ upperOpen, lowerTitle }: { upperOpen: boolean; lowerTitle: string }) {
+      return (
+        <>
+          <ModalDialogShell isOpen onClose={() => closeLower()} ariaLabelledBy="lower-title"
+            overlayClassName="fixed inset-0" panelClassName="panel">
+            <h2 id="lower-title">{lowerTitle}</h2>
+          </ModalDialogShell>
+          <ModalDialogShell isOpen={upperOpen} onClose={closeUpper} ariaLabelledBy="upper-title"
+            overlayClassName="fixed inset-0" panelClassName="panel">
+            <h2 id="upper-title">Upper</h2>
+          </ModalDialogShell>
+        </>
+      );
+    }
+
+    const { rerender } = render(<Stack upperOpen={false} lowerTitle="Lower" />);
+    rerender(<Stack upperOpen lowerTitle="Lower" />);
+    // The dialog underneath re-renders, with a new close handler, after the upper one opened.
+    rerender(<Stack upperOpen lowerTitle="Lower again" />);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(closeUpper).toHaveBeenCalledOnce();
+    expect(closeLower).not.toHaveBeenCalled();
+
+    rerender(<Stack upperOpen={false} lowerTitle="Lower again" />);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(closeLower).toHaveBeenCalledOnce();
+    expect(closeUpper).toHaveBeenCalledOnce();
+  });
+
   it('uses the full focusable selector for dialog descendants', () => {
     const root = document.createElement('div');
     root.innerHTML = `

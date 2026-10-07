@@ -27,7 +27,8 @@ import { useSplatPickerStoreFacade } from './useSplatPickerStoreFacade';
  *
  * Uses the standard popup-window header (filled title bar + close button), matching
  * FloatingWindowShell / the other popup windows, inside a centered ModalDialogShell
- * (focus trap, Escape, backdrop). Closing the window keeps the COLMAP scene.
+ * (focus trap, Escape, backdrop). Closing the window chooses COLMAP only while no splat
+ * shows; a splat activated meanwhile (with `n`) stays and the window just closes.
  */
 export function SplatPickerModal() {
   const titleId = useId();
@@ -36,6 +37,7 @@ export function SplatPickerModal() {
   const {
     showSplatPicker,
     splatFileSources,
+    splatShowing,
     requestedSplatBackend,
     webGpuSplatAvailability,
     sparkSplatAvailable,
@@ -62,7 +64,7 @@ export function SplatPickerModal() {
     setShowSplatPicker(false);
     selectSplatSource(sourceId);
   };
-  const handleClose = () => handleSelect('');
+  const handleClose = () => (splatShowing ? setShowSplatPicker(false) : handleSelect(''));
 
   return (
     <ModalDialogShell
@@ -85,7 +87,7 @@ export function SplatPickerModal() {
           ref={closeButtonRef}
           onClick={handleClose}
           className={modalStyles.toolHeaderClose}
-          title="Skip (COLMAP only)"
+          title={splatShowing ? 'Close' : 'Skip (COLMAP only)'}
         >
           <CloseIcon className="w-3.5 h-3.5" />
         </button>
@@ -94,7 +96,7 @@ export function SplatPickerModal() {
         {getSplatPickerDescription(splatFileSources.length)}
       </p>
       <div className="flex flex-col gap-1 px-4 pb-3 overflow-y-auto min-h-0 flex-1">
-        <button onClick={handleClose} className={SPLAT_PICKER_NONE_ROW_CLASS}>
+        <button onClick={() => handleSelect('')} className={SPLAT_PICKER_NONE_ROW_CLASS}>
           None - COLMAP only
         </button>
         {items.map((item) => (

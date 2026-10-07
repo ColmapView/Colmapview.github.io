@@ -8,6 +8,8 @@ import type {
 export interface SplatPickerStoreFacade {
   showSplatPicker: boolean;
   splatFileSources: readonly SplatFileSource[];
+  /** A splat is on screen, for example one activated with `n` while the picker was open. */
+  splatShowing: boolean;
   /** Backend inputs for the byte-less loader gate (see canUseByteLessSplatLoader). */
   requestedSplatBackend: SplatBackendPreference;
   webGpuSplatAvailability: WebGpuSplatBackendState;
@@ -24,6 +26,7 @@ export function useSplatPickerStoreFacade(): SplatPickerStoreFacade {
   const splatFileSources = useReconstructionStore(
     (state) => state.loadedFiles?.splatFileSources ?? EMPTY_SPLAT_SOURCES
   );
+  const splatShowing = useReconstructionStore((state) => Boolean(state.loadedFiles?.splatFile));
   const setShowSplatPicker = useReconstructionStore((state) => state.setShowSplatPicker);
   const selectSplatSourceAction = useReconstructionStore((state) => state.selectSplatSource);
   const requestedSplatBackend = useSplatBackendStore((state) => state.requestedBackend);
@@ -37,6 +40,7 @@ export function useSplatPickerStoreFacade(): SplatPickerStoreFacade {
   return {
     showSplatPicker,
     splatFileSources,
+    splatShowing,
     requestedSplatBackend,
     webGpuSplatAvailability,
     sparkSplatAvailable,
