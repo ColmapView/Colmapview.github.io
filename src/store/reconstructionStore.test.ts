@@ -1363,20 +1363,25 @@ describe('abandonUrlAutoLoadRequest', () => {
 });
 
 describe('clearUrlLoadRequestFromLocation', () => {
-  function locationAt(href: string) {
-    const replaceState = vi.fn();
-    return { win: { location: { href } as Location, history: { replaceState } as unknown as History }, replaceState };
+  /** A window whose history rewrites its location, as a browser's does. */
+  function windowAt(href: string) {
+    const location = { href } as Location;
+    const replaceState = (_data: unknown, _unused: string, url?: string | URL | null) => {
+      if (url != null) location.href = new URL(url, location.href).href;
+    };
+    return { location, history: { replaceState } as unknown as History };
   }
 
   it.each([
     ['https://viewer.example/app/#d=abc', '/app/'],
     ['https://viewer.example/app/#d=abc&foo=bar', '/app/#foo=bar'],
     ['https://viewer.example/app/?url=https%3A%2F%2Fx.example%2Fscene&keep=1#d=abc', '/app/?keep=1'],
+    // Nothing to strip: only the URL it leaves matters, not whether it rewrote it.
     ['https://viewer.example/app/?keep=1#foo=bar', '/app/?keep=1#foo=bar'],
-  ])('rewrites %s to %s', (href, expected) => {
-    const { win, replaceState } = locationAt(href);
+  ])('leaves %s at %s', (href, expected) => {
+    const win = windowAt(href);
     clearUrlLoadRequestFromLocation(win);
-    expect(replaceState).toHaveBeenCalledExactlyOnceWith(null, '', expected);
+    expect(win.location.href).toBe(new URL(expected, href).href);
   });
 
   it('never lets a failed URL rewrite block the cancel', () => {
@@ -1512,7 +1517,7 @@ describe('reconstruction store loading cancellation', () => {
       splatFile: fileA, splatFiles: [fileA],
       splatFileSources: [{ id: 'splats/a.ply', path: 'splats/a.ply', file: fileA }],
     }));
-    // Local loads never clear urlError, so an earlier tile's failure can outlive into this decode.
+    // Local loads never clear urlError, so an earlier tile's failure can survive into this decode.
     useReconstructionStore.setState({ urlLoading: true, urlProgress: getSplatLoadingProgress(fileA, { startPercent: 60 }),
       urlError: { type: 'network', message: 'Failed to load splat' } });
 
@@ -1551,6 +1556,8 @@ describe('reconstruction store loading cancellation', () => {
     await vi.waitFor(() => expect(requestSignal).toBeDefined());
     // The download's progress names the same file as the splat on screen.
     expect(useReconstructionStore.getState().urlProgress?.currentFile).toBe(fileA.name);
+    const splatDisplay = { colorMode: 'splatPoints', pointSize: 1, pointOpacity: 0.2 };
+    expect(usePointCloudStore.getState()).toMatchObject(splatDisplay);
 
     useReconstructionStore.getState().cancelLoading();
     await pending;
@@ -1559,6 +1566,8 @@ describe('reconstruction store loading cancellation', () => {
     expect(requestSignal?.aborted).toBe(true);
     expect(state.loadedFiles?.splatFile).toBe(fileA);
     expect(state.urlLoading).toBe(false);
+    // Only "COLMAP only" restores the plain point display; the splat on screen keeps its own.
+    expect(usePointCloudStore.getState()).toMatchObject(splatDisplay);
   });
 
   it('returns to the landing page when cancelling the decode empties a splat-only scene', () => {
