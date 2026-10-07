@@ -20,6 +20,7 @@ function createNavigationActions(): NavigationNodeActions {
     setAutoRotateMode: vi.fn(),
     setAutoRotateSpeed: vi.fn(),
     setFlySpeed: vi.fn(),
+    setWasdSpeed: vi.fn(),
     setFlyTransitionDuration: vi.fn(),
     setPointerLock: vi.fn(),
     setAutoFovEnabled: vi.fn(),

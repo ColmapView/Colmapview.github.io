@@ -10,7 +10,7 @@ import {
 import { COLMAP_JOKES, getColmapJoke, useViewerControlHotkeys } from './useViewerControlHotkeys';
 
 function hotkeyWrapper({ children }: { children: ReactNode }) {
-  return createElement(HotkeysProvider, { initiallyActiveScopes: ['viewer'] }, children);
+  return createElement(HotkeysProvider, { initiallyActiveScopes: ['viewer'], children });
 }
 
 describe('viewer control hotkey helpers', () => {

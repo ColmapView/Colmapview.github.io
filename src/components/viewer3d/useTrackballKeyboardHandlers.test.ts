@@ -1,6 +1,8 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as THREE from 'three';
 import { buildKeyboardEvent } from '../../test/builders';
+import type { TrackballAnimationTarget } from './useTrackballFlyTo';
 import {
   handleTrackballBlur,
   handleTrackballKeyDown,
@@ -12,11 +14,26 @@ function ref<T>(current: T) {
   return { current };
 }
 
+function buildAnimationTarget(): TrackballAnimationTarget {
+  return {
+    startPosition: new THREE.Vector3(),
+    startQuaternion: new THREE.Quaternion(),
+    startTarget: new THREE.Vector3(),
+    startDistance: 1,
+    endPosition: new THREE.Vector3(0, 0, 1),
+    endQuaternion: new THREE.Quaternion(),
+    endTarget: new THREE.Vector3(),
+    endDistance: 1,
+    startTime: 0,
+    duration: 1,
+  };
+}
+
 function createOptions() {
   return {
     enabledRef: ref(true),
     keysPressedRef: ref(new Set<string>()),
-    animationTargetRef: ref<object | null>({ target: true }),
+    animationTargetRef: ref<TrackballAnimationTarget | null>(buildAnimationTarget()),
     navActions: {
       clearNavigationHistory: vi.fn(),
     },

@@ -33,7 +33,7 @@ function setSparkSplatBackendActive() {
 }
 
 function hotkeyWrapper({ children }: { children: ReactNode }) {
-  return createElement(HotkeysProvider, { initiallyActiveScopes: ['viewer'] }, children);
+  return createElement(HotkeysProvider, { initiallyActiveScopes: ['viewer'], children });
 }
 
 function pressKey(key: string) {

@@ -59,6 +59,7 @@ describe('useImageGalleryColumnResize', () => {
     vi.useFakeTimers();
     const container = document.createElement('div');
     const setGalleryColumns = vi.fn();
+    const initialProps: { container: HTMLDivElement | null } = { container: null };
 
     const { rerender } = renderHook(
       ({ container: nextContainer }: { container: HTMLDivElement | null }) => useImageGalleryColumnResize({
@@ -67,7 +68,7 @@ describe('useImageGalleryColumnResize', () => {
         setGalleryColumns,
         viewMode: 'gallery',
       }),
-      { initialProps: { container: null } }
+      { initialProps }
     );
 
     rerender({ container });

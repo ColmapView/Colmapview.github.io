@@ -139,7 +139,7 @@ describe('trackball pointer handlers', () => {
   });
 
   it('starts panning and disables auto-rotate for middle or right button drags', async () => {
-    const options = createOptions({ autoRotateMode: 'clockwise' });
+    const options = createOptions({ autoRotateMode: 'cw' });
 
     handleTrackballPointerDown({ event: pointerEvent({ button: 2 }), ...options });
     await Promise.resolve();

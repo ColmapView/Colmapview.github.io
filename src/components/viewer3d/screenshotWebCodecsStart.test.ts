@@ -108,7 +108,7 @@ describe('screenshot WebCodecs start helper', () => {
   });
 
   it('clears active recording state and rejects on encoder errors', async () => {
-    const error = new Error('encoder failed');
+    const error = new DOMException('encoder failed', 'EncodingError');
     const fixture = createOptions({
       isRecordingWebCodecsRef: ref(true),
     });

@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import type * as THREE from 'three';
+import type { CameraViewState } from '../../store/types';
 import {
   createTrackballControlsApi,
   getTrackballControlsApi,
@@ -12,7 +14,7 @@ function createControls(dragging = false) {
     enabled: { current: true },
     dragging: { current: dragging },
     wheelHandled: { current: false },
-    getCurrentViewState: vi.fn(() => ({
+    getCurrentViewState: vi.fn((): CameraViewState => ({
       position: [1, 2, 3],
       quaternion: [0, 0, 0, 1],
       target: [0, 0, 0],
@@ -31,7 +33,9 @@ describe('trackballControlsApi', () => {
   });
 
   it('creates controls that satisfy the R3F EventDispatcher controls contract', () => {
-    const controls = createControls();
+    // drei's CameraShake subscribes to 'change' on the default controls, an event that
+    // THREE.EventDispatcher's default event map cannot name.
+    const controls: THREE.EventDispatcher<{ change: object }> = createControls();
     const onChange = vi.fn();
 
     controls.addEventListener('change', onChange);

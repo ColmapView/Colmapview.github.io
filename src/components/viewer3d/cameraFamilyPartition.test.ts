@@ -5,7 +5,7 @@ import { CameraModelId } from '../../types/colmap';
 import type { CameraFrustumItem } from './cameraFrustumGeometry';
 import { partitionFrustumsByFamily } from './cameraFamilyPartition';
 
-function item(modelId: number, imageId: number): CameraFrustumItem {
+function item(modelId: CameraModelId, imageId: number): CameraFrustumItem {
   const image = buildImage({ imageId });
   const { position, quaternion } = getImageWorldPose(image);
   return { image, camera: buildCamera({ modelId }), position, quaternion, cameraIndex: 0, numPoints3D: 0 };
@@ -27,8 +27,9 @@ describe('partitionFrustumsByFamily', () => {
   it('routes out-of-registry model ids to the non-spherical bucket without throwing', () => {
     // A future/unknown model id (99) is not in CAMERA_MODEL_DESCRIPTORS; the registry
     // family lookup would throw. Partition must tolerate it and treat it as pinhole.
+    // CameraModelId cannot name it, but a parsed file can carry it.
     const items = [
-      item(99, 5),
+      item(99 as CameraModelId, 5),
       item(CameraModelId.EQUIRECTANGULAR, 6),
     ];
 

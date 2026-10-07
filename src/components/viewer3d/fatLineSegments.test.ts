@@ -52,7 +52,7 @@ describe('fat line segments', () => {
       vertexShader: 'attribute vec3 instanceColorEnd;\nvoid main() {',
       fragmentShader: '#include <clipping_planes_pars_fragment>\nfloat alpha = opacity;',
       uniforms: {},
-    } as THREE.Shader;
+    } as THREE.WebGLProgramParametersWithUniforms;
 
     fatLines.material.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
 

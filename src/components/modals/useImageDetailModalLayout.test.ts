@@ -90,8 +90,9 @@ describe('useImageDetailModalLayout', () => {
   it('resets bounds after the modal closes and opens again', () => {
     setViewport(1200, 800);
     const firstCamera = buildCamera({ width: 1000, height: 500 });
+    const initialProps: HookProps = { camera: firstCamera, imageDetailId: 1 };
     const { result, rerender } = renderHook((props: HookProps) => useImageDetailModalLayout(props), {
-      initialProps: { camera: firstCamera, imageDetailId: 1 },
+      initialProps,
     });
 
     rerender({ camera: null, imageDetailId: null });

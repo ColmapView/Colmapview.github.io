@@ -51,8 +51,9 @@ describe('usePublicationPreview', () => {
 
   it('waits for the viewer capture callback and freezes the image while publishing', async () => {
     const capture = vi.fn().mockImplementation(async () => png());
+    const initialProps: { enabled: boolean; getter: ScreenshotCallback | null } = { enabled: true, getter: null };
     const { result, rerender } = renderHook(({ enabled, getter }: { enabled: boolean; getter: ScreenshotCallback | null }) =>
-      usePublicationPreview('source', enabled, getter), { initialProps: { enabled: true, getter: null } });
+      usePublicationPreview('source', enabled, getter), { initialProps });
     expect(result.current.file).toBeNull();
     rerender({ enabled: true, getter: capture });
     await waitFor(() => expect(result.current.file).toBeTruthy());

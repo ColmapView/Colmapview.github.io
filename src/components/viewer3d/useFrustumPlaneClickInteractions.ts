@@ -7,6 +7,9 @@ import {
 } from './frustumPlaneClickPolicy';
 import { markSceneContextMenuHandled } from './sceneContextMenuGuard';
 
+/** The part of an R3F event these handlers read. */
+type FrustumPlaneEvent<TNativeEvent extends Event> = Pick<ThreeEvent<TNativeEvent>, 'nativeEvent' | 'stopPropagation'>;
+
 interface FrustumPlaneClickInteractionsOptions {
   disabled: boolean;
   imageId: ImageId;
@@ -22,7 +25,7 @@ export function useFrustumPlaneClickInteractions({
   onClick,
   onContextMenu,
 }: FrustumPlaneClickInteractionsOptions) {
-  const onPlaneClick = useCallback((e: ThreeEvent<MouseEvent>) => {
+  const onPlaneClick = useCallback((e: FrustumPlaneEvent<MouseEvent>) => {
     const action = getFrustumPlaneClickAction({ disabled, touchMode });
     if (action === 'disabled') return;
 
@@ -30,14 +33,14 @@ export function useFrustumPlaneClickInteractions({
     if (action === 'select') onClick(imageId);
   }, [disabled, imageId, onClick, touchMode]);
 
-  const onPlaneContextMenu = useCallback((e: ThreeEvent<MouseEvent>) => {
+  const onPlaneContextMenu = useCallback((e: FrustumPlaneEvent<MouseEvent>) => {
     e.stopPropagation();
     e.nativeEvent.preventDefault();
     e.nativeEvent.stopPropagation();
     onContextMenu(imageId);
   }, [imageId, onContextMenu]);
 
-  const onPlanePointerDown = useCallback((e: ThreeEvent<PointerEvent>) => {
+  const onPlanePointerDown = useCallback((e: FrustumPlaneEvent<PointerEvent>) => {
     if (disabled || touchMode || e.nativeEvent.button !== 2) return;
 
     markSceneContextMenuHandled();

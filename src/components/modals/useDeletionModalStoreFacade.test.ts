@@ -76,7 +76,8 @@ describe('useDeletionModalStoreFacade', () => {
       result.current.actions.markBulkForDeletion([1]);
     });
 
-    let applied = false;
+    // applyDeletions is async only for a WASM snapshot; this scene takes the synchronous path.
+    let applied: boolean | Promise<boolean> = false;
     act(() => {
       applied = result.current.actions.applyDeletions();
     });
