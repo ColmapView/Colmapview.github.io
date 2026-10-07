@@ -22,16 +22,28 @@ import {
 } from '../../tests/colmapFixturePaths';
 
 const BIN = getBicycleFixtureDir();
+const missingFixture = !hasSparseBinaryFixture(BIN);
 
-describe.skipIf(!hasSparseBinaryFixture(BIN))('transform flows through export', () => {
+function toAB(path: string): ArrayBuffer {
+  return copyBytesToArrayBuffer(readFileSync(path));
+}
+
+function parseBicycle() {
+  return {
+    cameras: parseCamerasBinary(toAB(resolve(BIN, 'cameras.bin'))),
+    images: parseImagesBinary(toAB(resolve(BIN, 'images.bin'))),
+    points3D: parsePoints3DBinary(toAB(resolve(BIN, 'points3D.bin'))),
+  };
+}
+
+// Parsed once, while this file is collected: no per-test timeout applies there. The test below
+// transforms and exports from this parse and only reads it. With the parse inside it, the test took
+// 2.5-3 s of its 15 s budget under parallel load.
+const bicycle = missingFixture ? null : parseBicycle();
+
+describe.skipIf(missingFixture)('transform flows through export', () => {
   it('45° Y rotation changes exported qvecs and point xyz', () => {
-    const toAB = (path: string): ArrayBuffer => {
-      return copyBytesToArrayBuffer(readFileSync(path));
-    };
-
-    const cameras = parseCamerasBinary(toAB(resolve(BIN, 'cameras.bin')));
-    const images = parseImagesBinary(toAB(resolve(BIN, 'images.bin')));
-    const points3D = parsePoints3DBinary(toAB(resolve(BIN, 'points3D.bin')));
+    const { cameras, images, points3D } = bicycle!;
 
     const reconstruction: Reconstruction = {
       cameras,

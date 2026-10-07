@@ -18,6 +18,9 @@ import {
   createVisibleWebGpuSplatSceneId,
   registerVisibleWebGpuSplatSharedRuntime,
 } from '../../splat/webgpu/visibleSplatRuntimeRegistry';
+// The evaluator imports these lazily; loading them here keeps a cold module load out of the first test's waitFor.
+import '../../splat/gaussianCloudLoader';
+import '../../splat/webgpu/psnrSplatSession';
 
 const {
   deviceLossListenerRef,
