@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ColmapManifest } from './types/manifest';
 import type { DecodedShareData, ShareConfig } from './utils/shareDataCodec';
+import { createIdentityEuler } from './utils/sim3dTransforms';
+import { applyShareConfig } from './hooks/useUrlState';
+import { useReconstructionStore, useTransformStore } from './store';
 import {
   APP_TOUCH_AUTO_LOG_MESSAGE,
   APP_TOUCH_PHONE_WIDTH_LOG_MESSAGE,
@@ -142,10 +145,50 @@ describe('app startup policy', () => {
     });
   });
 
+  it("leaves a link's alignment to the scene its load commits", () => {
+    const alignment = { ...createIdentityEuler(), rotationY: 0.5, translationX: 2 };
+    const plan = getAppStartupLoadPlan({
+      shareData: buildShareData({ manifestUrl: 'https://example.com/scene.zip',
+        config: { ...shareConfig, transform: alignment, splat: { activeSourceId: 'a.spz', transform: alignment } } }),
+      legacyManifestUrl: null,
+    });
+
+    // Display settings and the requested splat apply before the load; the alignment waits for the scene.
+    expect(plan.config).toEqual({ ...shareConfig, splat: { activeSourceId: 'a.spz' } });
+  });
+
   it('ignores malformed selected image ids from shared config', () => {
     expect(getShareSelectedImageId({ camera: { selectedImageId: '12' } })).toBeNull();
     expect(getShareSelectedImageId({ camera: { selectedImageId: 0 } })).toBe(0);
     expect(getShareSelectedImageId(null)).toBeNull();
+  });
+});
+
+describe('a startup link cancelled before its scene loads', () => {
+  const resetStores = () => {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    useTransformStore.setState(useTransformStore.getInitialState(), true);
+  };
+  beforeEach(resetStores);
+  afterEach(() => {
+    resetStores();
+    window.history.replaceState(null, '', '/');
+  });
+
+  it('leaves no alignment behind for the next dataset', () => {
+    const alignment = { ...createIdentityEuler(), scale: 2 };
+    const plan = getAppStartupLoadPlan({
+      shareData: buildShareData({ manifestUrl: 'https://example.com/scene.zip',
+        config: { transform: alignment, splat: { transform: alignment } } }),
+      legacyManifestUrl: null,
+    });
+    useReconstructionStore.setState({ urlLoading: true, urlProgress: { percent: 0, message: 'Initializing...' } });
+
+    // What App does before it starts the load, which the visitor then cancels.
+    if (plan.config) applyShareConfig(plan.config);
+    useReconstructionStore.getState().cancelLoading();
+
+    expect(useTransformStore.getState()).toMatchObject({ transform: createIdentityEuler(), splatTransform: createIdentityEuler() });
   });
 });
 

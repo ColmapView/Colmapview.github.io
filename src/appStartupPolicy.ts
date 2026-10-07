@@ -83,11 +83,27 @@ export function getShareSelectedImageId(config: ShareConfig | null | undefined):
   return typeof selectedImageId === 'number' ? selectedImageId : null;
 }
 
+/**
+ * What App applies before the load starts: display settings and the requested splat. A link's alignment
+ * belongs to the scene it loads, and the loader applies it with the link's other settings once that scene
+ * is there, so a load that is cancelled, fails or is declined leaves none for the next dataset.
+ */
+function getConfigBeforeLoad(config: ShareConfig | null): ShareConfig | null {
+  if (!config?.transform && !config?.splat?.transform) return config;
+  const beforeLoad: ShareConfig = { ...config };
+  delete beforeLoad.transform;
+  if (beforeLoad.splat?.transform) {
+    beforeLoad.splat = { ...beforeLoad.splat };
+    delete beforeLoad.splat.transform;
+  }
+  return beforeLoad;
+}
+
 export function getAppStartupLoadPlan({
   shareData,
   legacyManifestUrl,
 }: AppStartupLoadPlanOptions): AppStartupLoadPlan {
-  const config = shareData?.config ?? null;
+  const config = getConfigBeforeLoad(shareData?.config ?? null);
 
   if (shareData?.manifest) {
     return {
