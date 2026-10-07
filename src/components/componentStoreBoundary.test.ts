@@ -3,7 +3,8 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const SRC_ROOT = path.join(process.cwd(), 'src');
-const STORE_HOOK_CALL_PATTERN = /\buse[A-Z][A-Za-z0-9]*Store\s*\(/g;
+const HOOK_CALL_PATTERN = /\b(use[A-Z][A-Za-z0-9]*)\s*\(/g;
+const STORE_EXPORT_PATTERN = /export\s+const\s+(use[A-Za-z0-9]+)\s*=\s*create\b/g;
 const ZUSTAND_CREATE_IMPORT_PATTERN = /import\s*\{[^}]*\bcreate\b[^}]*\}\s*from\s*['"]zustand['"]/;
 // Stores outside src/store also escape the use*Store facade check through their names.
 const DOCUMENTED_STORES_OUTSIDE_STORE_DIR = new Set([
@@ -73,17 +74,26 @@ const PRODUCTION_SOURCES = TREE_FILES.filter(isProductionSourceFile).map((file) 
   source: readFileSync(file, 'utf8'),
 }));
 const COMPONENT_SOURCES = PRODUCTION_SOURCES.filter(({ relativePath }) => relativePath.startsWith('src/components/'));
+// Every store under src/store counts by its exported name too, so one named without the Store suffix
+// (useDrivePublicationStatus) cannot escape the checks below.
+const STORE_HOOK_NAMES = new Set(PRODUCTION_SOURCES.filter(({ relativePath }) => isStoreModule(relativePath))
+  .flatMap(({ source }) => Array.from(source.matchAll(STORE_EXPORT_PATTERN), (match) => match[1])));
+
+function storeHookCalls(source: string): string[] {
+  return Array.from(source.matchAll(HOOK_CALL_PATTERN), (match) => match[1])
+    .filter((hookName) => hookName !== 'useSyncExternalStore' && (hookName.endsWith('Store') || STORE_HOOK_NAMES.has(hookName)));
+}
 
 describe('component store boundaries', () => {
   it('keeps production component store hooks behind facade modules', () => {
+    // An empty name set would quietly fall back to the suffix rule alone.
+    expect(STORE_HOOK_NAMES.has('useReconstructionStore')).toBe(true);
     const violations: string[] = [];
 
     for (const { relativePath, source } of COMPONENT_SOURCES) {
       if (isStoreFacadeFile(relativePath)) continue;
 
-      const matches = Array.from(source.matchAll(STORE_HOOK_CALL_PATTERN))
-        .map((match) => match[0].replace(/\s*\($/, ''))
-        .filter((hookName) => hookName !== 'useSyncExternalStore');
+      const matches = storeHookCalls(source);
 
       for (const hookName of matches) {
         violations.push(`${relativePath}: ${hookName}`);
@@ -105,9 +115,7 @@ describe('component store boundaries', () => {
         continue;
       }
 
-      const matches = Array.from(source.matchAll(STORE_HOOK_CALL_PATTERN))
-        .map((match) => match[0].replace(/\s*\($/, ''))
-        .filter((hookName) => hookName !== 'useSyncExternalStore');
+      const matches = storeHookCalls(source);
 
       for (const hookName of matches) {
         violations.push(`${relativePath}: ${hookName}`);

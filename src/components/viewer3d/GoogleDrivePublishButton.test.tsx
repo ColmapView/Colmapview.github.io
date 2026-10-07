@@ -14,7 +14,7 @@ vi.mock('../../utils/shareDataCodec', async importOriginal => {
   return { ...codec, encodeShareData: vi.fn(codec.encodeShareData) };
 });
 
-const facade = vi.hoisted(() => ({ handoffSource: null as string | object | null }));
+const facade = vi.hoisted(() => ({ handoffSource: null as string | object | null, publicationActive: false }));
 vi.mock('./useGoogleDrivePublishButtonStoreFacade', () => ({ useGoogleDrivePublishButtonStoreFacade: () => facade }));
 vi.mock('./useControlButtonStoreFacade', () => ({ useControlButtonStoreFacade: () => ({ touchMode: false, contextMenuOpen: false }) }));
 vi.mock('./LazyToolModal', () => ({ LazyToolModal: ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => isOpen
@@ -25,6 +25,7 @@ beforeEach(() => {
   vi.stubEnv('VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN', '');
   vi.mocked(isGoogleDriveEnabled).mockReturnValue(true);
   facade.handoffSource = null;
+  facade.publicationActive = false;
 });
 afterEach(() => { cleanup(); vi.unstubAllEnvs(); });
 
@@ -39,6 +40,11 @@ describe('Google Drive publishing toolbar control', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Publish to Google Drive' }));
     expect(screen.getByRole('dialog', { name: 'Drive publisher' })).toBeInTheDocument();
+  });
+  it.each([false, true])('highlights the control while a Drive publication is open (%s)', open => {
+    facade.publicationActive = open;
+    render(<GoogleDrivePublishButton activePanel={null} setActivePanel={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Publish to Google Drive' }).classList.contains('viewer-control-selected')).toBe(open);
   });
   it('stays hidden when the Google client is unconfigured', () => {
     vi.stubEnv('VITE_GOOGLE_DRIVE_CLIENT_ID', '');
