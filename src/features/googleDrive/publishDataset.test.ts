@@ -71,6 +71,42 @@ describe('Drive publication lifecycle', () => {
     expect(client.share).toHaveBeenCalledOnce();
     expect(controller.getSnapshot().phase).toBe('completed');
   });
+  it.each([
+    { left: 'an empty file', size: '0', starts: 2, chunks: 1 },
+    { left: 'the complete ZIP', size: '20', starts: 1, chunks: 0 },
+  ])('adopts $left that a lost create response left behind instead of failing on the 409', async ({ size, starts, chunks }) => {
+    const { controller, client, prepare, setFile, uploaded } = fixture();
+    client.start.mockImplementationOnce(async (_id, filename, marker) => {
+      setFile({ ...uploaded(), name: filename, appProperties: { colmapviewOperation: marker }, size, md5Checksum: size === '0' ? undefined : 'fixture-md5' });
+      throw new GoogleDrivePublishError('The file already exists.', 409);
+    });
+    await controller.publish('scene', false, prepare);
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'completed', receipt: { driveUrl: 'https://drive.google.com/file/d/DRIVE_FILE_123456789/view' } });
+    expect(client.start).toHaveBeenCalledTimes(starts);
+    expect(client.start.mock.calls.map(call => call[5])).toEqual(starts === 2 ? [false, true] : [false]);
+    expect(client.chunk).toHaveBeenCalledTimes(chunks);
+    expect(client.generateId).toHaveBeenCalledOnce();
+  });
+  it('keeps the 409 and offers a retry when no file came of the lost create', async () => {
+    const { controller, client, prepare } = fixture();
+    client.start.mockRejectedValueOnce(new GoogleDrivePublishError('The file already exists.', 409));
+    await controller.publish('scene', false, prepare);
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: true, error: 'The file already exists.' });
+    expect(client.file).toHaveBeenCalledTimes(2);
+    expect(client.chunk).not.toHaveBeenCalled();
+  });
+  it.each(['anyone', 'domain'])('does not report a private save while the file grants %s access', async type => {
+    const { controller, client, prepare, setFile, uploaded } = fixture();
+    client.chunk.mockImplementationOnce(async () => {
+      setFile({ ...uploaded(), permissions: [{ type: 'user', role: 'owner' }, { type, role: 'reader' }] });
+      return { complete: true, offset: 20 };
+    });
+    await controller.publish('scene', false, prepare);
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: true,
+      error: 'This file was shared outside the publication. Review its sharing settings in Drive.' });
+    expect(controller.getSnapshot().receipt).toBeUndefined();
+    expect(client.share).not.toHaveBeenCalled();
+  });
   it('rechecks an applied sharing change when the permission response is lost', async () => {
     const { controller, client, prepare, setFile, uploaded } = fixture();
     client.share.mockImplementationOnce(async () => { setFile({ ...uploaded(), permissions: [{ type: 'anyone', role: 'reader', allowFileDiscovery: false }] }); throw new GoogleDrivePublishError('Lost sharing response'); });
@@ -125,6 +161,19 @@ describe('Drive publication lifecycle', () => {
     expect(controller.getSnapshot()).toMatchObject({ phase: 'cancelled', canRetry: true });
     await controller.retry();
     expect(controller.getSnapshot().phase).toBe('completed');
+  });
+  it('returns a finished publication to a fresh form when the dataset changes', async () => {
+    const { controller, client, prepare } = fixture();
+    await controller.publish('scene', true, prepare);
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'completed', receipt: { shared: true } });
+    const listener = vi.fn();
+    controller.subscribe(listener);
+    controller.invalidate();
+    expect(controller.getSnapshot()).toEqual({ phase: 'idle', message: '', bytesDone: 0, bytesTotal: 0, filesDone: 0, filesTotal: 0, canRetry: false });
+    expect(listener).toHaveBeenCalledOnce();
+    await controller.retry();
+    expect(controller.getSnapshot().phase).toBe('idle');
+    expect(client.file).toHaveBeenCalledTimes(3);
   });
   it('invalidates a changed dataset during preparation and prevents a late upload or retry', async () => {
     const { controller, client } = fixture();

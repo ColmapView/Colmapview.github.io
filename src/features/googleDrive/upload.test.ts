@@ -113,6 +113,59 @@ describe('Drive resumable upload transport', () => {
     await client.share(fileId, new AbortController().signal);
     expect(JSON.parse(request.mock.calls[0][1].body as string)).toEqual({ type: 'anyone', role: 'reader', allowFileDiscovery: false });
   });
+  /** Replays Drive's answers through XMLHttpRequest's onload, as a browser delivers them. */
+  function stubDriveXhr(replies: Array<{ status: number; headers: string; body?: string }>) {
+    const sent: Array<{ method: string; url: string; headers: Record<string, string>; size: number }> = [];
+    class DriveXhrFixture {
+      upload: { onprogress?: (event: { loaded: number }) => void } = {};
+      onprogress?: () => void; onload?: () => void; onerror?: () => void;
+      responseType = ''; status = 0; response: ArrayBuffer | null = null;
+      private method = ''; private url = ''; private headers: Record<string, string> = {}; private replyHeaders = '';
+      abort = vi.fn();
+      open(method: string, url: string) { this.method = method; this.url = url; }
+      setRequestHeader(name: string, value: string) { this.headers[name.toLowerCase()] = value; }
+      getAllResponseHeaders() { return this.replyHeaders; }
+      send(body: Blob) {
+        sent.push({ method: this.method, url: this.url, headers: this.headers, size: body.size });
+        const reply = replies.shift()!;
+        queueMicrotask(() => {
+          this.upload.onprogress?.({ loaded: body.size });
+          this.status = reply.status;
+          this.replyHeaders = reply.headers;
+          this.response = new TextEncoder().encode(reply.body ?? '').buffer;
+          this.onload?.();
+        });
+      }
+    }
+    vi.stubGlobal('XMLHttpRequest', DriveXhrFixture);
+    return sent;
+  }
+  it('reads a resumable 308’s Range and a final 200 through the browser upload transport', async () => {
+    const sent = stubDriveXhr([
+      { status: 308, headers: `range: bytes=0-${DRIVE_UPLOAD_CHUNK_BYTES - 1}\r\nx-guploader-uploadid: fixture:1\r\ncontent-length: 0\r\n` },
+      { status: 200, headers: 'content-type: application/json; charset=UTF-8\r\n', body: `{"id":"${fileId}"}` },
+    ]);
+    // No uploadImpl: chunks take the real XMLHttpRequest path.
+    const client = createDriveUploadClient({ getAccessToken: () => 'upload-test-token', fetchImpl: vi.fn() });
+    const blob = new Blob([new Uint8Array(DRIVE_UPLOAD_CHUNK_BYTES + 13)]);
+    const progress = vi.fn();
+    const signal = new AbortController().signal;
+    expect(await client.chunk(session, blob, 0, signal, progress)).toEqual({ complete: false, offset: DRIVE_UPLOAD_CHUNK_BYTES });
+    expect(await client.chunk(session, blob, DRIVE_UPLOAD_CHUNK_BYTES, signal, progress)).toEqual({ complete: true, offset: blob.size });
+    expect(sent).toEqual([
+      { method: 'PUT', url: session, size: DRIVE_UPLOAD_CHUNK_BYTES, headers: { authorization: 'Bearer upload-test-token',
+        'content-range': `bytes 0-${DRIVE_UPLOAD_CHUNK_BYTES - 1}/${blob.size}`, 'content-type': 'application/zip' } },
+      { method: 'PUT', url: session, size: 13, headers: { authorization: 'Bearer upload-test-token',
+        'content-range': `bytes ${DRIVE_UPLOAD_CHUNK_BYTES}-${blob.size - 1}/${blob.size}`, 'content-type': 'application/zip' } },
+    ]);
+    expect(progress.mock.calls.map(([bytes]) => bytes)).toEqual([DRIVE_UPLOAD_CHUNK_BYTES, 13]);
+  });
+  it('rejects an upload response that cannot become a Response instead of leaving the chunk pending', async () => {
+    // A 204 cannot carry the (empty) array buffer XHR always hands back.
+    stubDriveXhr([{ status: 204, headers: '' }]);
+    await expect(uploadDriveChunk(session, { method: 'PUT', body: new Blob(['zip']) })).rejects.toMatchObject({
+      name: 'GoogleDrivePublishError', message: 'Google Drive returned an unreadable upload response. Retry to check the upload.' });
+  });
   it('keeps active XHR uploads alive beyond the inactivity deadline and cleans up on cancellation', async () => {
     vi.useFakeTimers();
     const instances: UploadFixture[] = [];

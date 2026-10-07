@@ -161,6 +161,7 @@ export function createDrivePublicationController(client: DriveUploadClient) {
     } finally { if (active === controller) active = null; }
   };
   const cancel = () => { if (active) { set({ phase: 'cancelling', message: 'Cancelling upload…' }); active.abort(); } };
+  const reset = () => { if (!active) { job = null; state = initial(); listeners.forEach(listener => listener()); } };
   return {
     getSnapshot: () => state,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
@@ -172,7 +173,11 @@ export function createDrivePublicationController(client: DriveUploadClient) {
     },
     retry: run,
     cancel,
-    invalidate() { if (job) { job.invalid = true; cancel(); release(job); set({ canRetry: false }); } },
-    reset() { if (!active) { job = null; state = initial(); listeners.forEach(listener => listener()); } },
+    invalidate() {
+      // A finished publication belongs to the previous dataset; the new one starts from a fresh form.
+      if (state.phase === 'completed') { reset(); return; }
+      if (job) { job.invalid = true; cancel(); release(job); set({ canRetry: false }); }
+    },
+    reset,
   };
 }
