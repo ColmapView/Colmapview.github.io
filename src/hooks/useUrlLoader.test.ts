@@ -9,6 +9,7 @@ import { encodeShareData } from '../utils/shareDataCodec';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import type { CameraViewState } from '../store/types';
 import type { ColmapManifest } from '../types/manifest';
+import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import { buildLoadedFiles, buildReconstruction } from '../test/builders';
 import { createDefaultManifest } from './urlLoaderPolicy';
@@ -715,7 +716,8 @@ describe('useUrlLoader', () => {
       return new Response(new Uint8Array([1, 2, 3]));
     });
     vi.stubGlobal('fetch', request);
-    processFilesMock.mockImplementationOnce(async files => {
+    processFilesMock.mockImplementationOnce(async (files, _range, options) => {
+      options?.onSceneReplaced?.();
       useReconstructionStore.getState().setDroppedFiles(files);
       useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles());
     });
@@ -724,6 +726,36 @@ describe('useUrlLoader', () => {
     const { sourceViewerState, droppedFiles } = useReconstructionStore.getState();
     expect(sourceViewerState?.files).toBe(droppedFiles);
     expect(sourceViewerState?.state.config).toEqual({ ui: { backgroundColor: '#123456' } });
+  });
+
+  it.each([
+    ['its own settings', 'ui:\n  background_color: "#abcdef"\n'],
+    ['no settings', null],
+  ] as const)("leaves the open dataset's Reload settings alone when a load only merges into its scene (%s)", async (_label, yaml) => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const openFiles = new Map([['sparse/0/cameras.bin', new File(['c'], 'cameras.bin')]]);
+    const openSettings: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null,
+      config: { ui: { backgroundColor: '#123456' } } };
+    const store = useReconstructionStore.getState();
+    store.setDroppedFiles(openFiles);
+    store.setLoadedFiles(buildLoadedFiles());
+    store.setSourceViewerState(openSettings);
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL) => yaml && String(url).endsWith('colmapview.yaml')
+      ? new Response(yaml) : new Response(null, { status: 404 })));
+    vi.spyOn(archiveSource, 'loadZipUrlSource').mockImplementation(async (_url, deps) =>
+      (await deps.processFiles(new Map([['scene.spz', new File(['s'], 'scene.spz')]]), undefined, { throwOnError: true })) !== false);
+    // Like updateLoadedSplatFile: the splat joins the open scene; no new file map, no onSceneReplaced.
+    processFilesMock.mockImplementationOnce(async files => {
+      const splat = files.get('scene.spz')!;
+      const loaded = useReconstructionStore.getState().loadedFiles!;
+      useReconstructionStore.getState().setLoadedFiles({ ...loaded, splatFile: splat, splatFiles: [splat] });
+    });
+    const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
+
+    await act(async () => { expect(await result.current.loadFromUrl('https://example.com/splats.zip')).toBe(true); });
+
+    expect(useReconstructionStore.getState().droppedFiles).toBe(openFiles);
+    expect(useReconstructionStore.getState().sourceViewerState).toEqual({ files: openFiles, state: openSettings });
   });
 
   it.each(['saved', 'override', 'previous-scene', 'missing', 'invalid'] as const)('loads a Hugging Face project with %s YAML settings', async mode => {

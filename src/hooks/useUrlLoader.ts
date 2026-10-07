@@ -64,6 +64,8 @@ interface UrlLoadContext {
   clearCachesOnFailure: boolean;
   hasEmbeddedViewerSettings: boolean;
   remoteCatalogMerged: boolean;
+  /** This load committed its own file map (not a splat merged into the open scene). */
+  sceneReplaced: boolean;
 }
 
 /** Settings beside a directly loaded file or archive; a timeout keeps defaults and says so. */
@@ -137,6 +139,7 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
           onSceneReplaced: guard(() => {
             clearAllCaches();
             load.clearCachesOnFailure = true;
+            load.sceneReplaced = true;
             options?.onSceneReplaced?.();
           }),
         });
@@ -146,6 +149,7 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
       clearCachesOnFailure: false,
       hasEmbeddedViewerSettings: false,
       remoteCatalogMerged: false,
+      sceneReplaced: false,
     };
     setUrlLoading(true);
     setUrlError(null);
@@ -160,8 +164,10 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
       assertCurrent();
       if (loaded) {
         // Reload re-reads the downloaded files; these settings are not among them. Recorded before
-        // restoration so a cancelled splat download still leaves them to Reload.
-        useReconstructionStore.getState().setSourceViewerState(savedViewerState);
+        // restoration so a cancelled splat download still leaves them to Reload. They bind to the
+        // current file map, so only a load that committed its own may record them: a splat merged
+        // into the open scene must neither take over nor drop that scene's settings.
+        if (load.sceneReplaced) useReconstructionStore.getState().setSourceViewerState(savedViewerState);
         await applySavedViewerState(savedViewerState, shared, assertCurrent, initialSplatSelectionRevision, autoSplatSourceId);
         assertCurrent();
         // Ask only once restoration settled: an automatic or saved splat downloads without a
