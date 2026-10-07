@@ -93,12 +93,13 @@ export async function loadZipUrlSource(
   log(`[URL Loader] ZIP contains ${colmapFiles.size} COLMAP files, ${imageCount} indexed images`);
   log('[URL Loader] Calling processFiles...');
 
+  // Only a scene this archive replaced installs it and its source. A splat merged into the open
+  // scene leaves that scene's archive and source in place, and this one closes below.
   const processed = await deps.processFiles(colmapFiles, { start: 80, end: 100 }, {
     throwOnError: true, signal: deps.signal, onSceneReplaced: commitSource,
   });
   assertCurrent();
   if (processed === false) return false;
-  commitSource();
 
   if (findSplatFileSources(colmapFiles).length === 0) {
     deps.setUrlProgress({ percent: 100, message: 'Complete' });

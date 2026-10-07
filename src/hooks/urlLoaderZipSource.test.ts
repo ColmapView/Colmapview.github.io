@@ -5,6 +5,12 @@ import {
   mapZipProgressToUrlProgress,
 } from './urlLoaderZipSource';
 
+/** Like processFiles committing the archive's own scene: it reports the replacement. */
+const replacingProcessFiles = () => vi.fn(async (_files: Map<string, File>,
+  _range?: { start: number; end: number }, options?: { onSceneReplaced?: () => void }) => {
+  options?.onSceneReplaced?.();
+});
+
 describe('URL loader ZIP source helpers', () => {
   it('keeps provider download credentials out of source state and logs', async () => {
     const archive = buildArchiveReader();
@@ -15,7 +21,7 @@ describe('URL loader ZIP source helpers', () => {
     const deps = {
       archiveOptions: options, sourceUrl, signal,
       loadZip: vi.fn(async () => ({ archive, colmapFiles: new Map(), imageIndex: new Map(), fileSize: 1024, imageCount: 0 })),
-      log: vi.fn(), processFiles: vi.fn(), setActiveArchive: vi.fn(), setSourceInfo: vi.fn(), setUrlProgress: vi.fn(),
+      log: vi.fn(), processFiles: replacingProcessFiles(), setActiveArchive: vi.fn(), setSourceInfo: vi.fn(), setUrlProgress: vi.fn(),
     };
     await loadZipUrlSource(url, deps);
     expect(deps.loadZip).toHaveBeenCalledWith(url, expect.any(Function), signal, options);
@@ -89,7 +95,7 @@ describe('URL loader ZIP source helpers', () => {
         return { colmapFiles, imageIndex, archive, fileSize: 1024, imageCount: 1 };
       }),
       log: vi.fn(),
-      processFiles: vi.fn(async () => {}),
+      processFiles: replacingProcessFiles(),
       setActiveArchive: vi.fn(),
       setSourceInfo: vi.fn(),
       setUrlProgress: vi.fn(),
@@ -177,5 +183,28 @@ describe('URL loader ZIP source helpers', () => {
     expect(deps.setActiveArchive).not.toHaveBeenCalled();
     expect(deps.setSourceInfo).not.toHaveBeenCalled();
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { outcome: 'replaces the scene', replaced: true },
+    { outcome: 'merges into the open scene', replaced: false },
+  ])('installs the archive and source only when processing $outcome', async ({ replaced }) => {
+    const archive = buildArchiveReader();
+    const close = vi.spyOn(archive, 'close');
+    const imageIndex = new Map<string, ReturnType<typeof buildArchiveEntry>>();
+    const deps = {
+      loadZip: vi.fn(async () => ({ archive, colmapFiles: new Map([['splats/scene.spz', buildFile('scene.spz', 'splat')]]),
+        imageIndex, fileSize: 1, imageCount: 0 })),
+      log: vi.fn(), setActiveArchive: vi.fn(), setSourceInfo: vi.fn(), setUrlProgress: vi.fn(),
+      // A merge, like updateLoadedSplatFile, joins the open scene and reports no replacement.
+      processFiles: replaced ? replacingProcessFiles() : vi.fn(async () => {}),
+    };
+
+    await expect(loadZipUrlSource('https://example.com/splats.zip', deps)).resolves.toBe(true);
+
+    expect(deps.setActiveArchive.mock.calls).toEqual(replaced ? [[archive, imageIndex, 1, 0]] : []);
+    expect(deps.setSourceInfo.mock.calls).toEqual(replaced ? [['zip', 'https://example.com/splats.zip']] : []);
+    // An installed archive serves lazy images; one no scene took would otherwise stay open.
+    expect(close).toHaveBeenCalledTimes(replaced ? 0 : 1);
   });
 });
