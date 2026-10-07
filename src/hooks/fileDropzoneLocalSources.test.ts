@@ -253,6 +253,7 @@ describe('file dropzone local source loading', () => {
     abortError.name = 'AbortError';
     const deps = {
       ...makeBaseDeps(),
+      beginLoad: vi.fn(beginReconstructionLoad),
       pickDirectory: vi.fn(async () => {
         throw abortError;
       }),
@@ -264,6 +265,8 @@ describe('file dropzone local source loading', () => {
     expect(deps.setError).not.toHaveBeenCalled();
     expect(deps.setUrlLoading).not.toHaveBeenCalled();
     expect(deps.cancelUrlLoad).not.toHaveBeenCalled();
+    // A cancelled picker is not a load start.
+    expect(deps.beginLoad).not.toHaveBeenCalled();
   });
 
   it.each(['scene.zip', 'scene.tar'])('cancels %s extraction without late progress, activation, or handoff', async name => {
@@ -329,18 +332,42 @@ describe('file dropzone local source loading', () => {
   it.each(['picker', 'scan'])('cancels folder browsing during the %s stage', async stage => {
     let resolve!: () => void;
     const handle = buildFileSystemDirectoryHandle();
-    const deps = { ...makeBaseDeps(),
+    const deps = { ...makeBaseDeps(), beginLoad: vi.fn(beginReconstructionLoad),
       pickDirectory: vi.fn(() => stage === 'picker' ? new Promise<FileSystemDirectoryHandle>(done => { resolve = () => done(handle); }) : Promise.resolve(handle)),
       scanDirectoryHandle: vi.fn(() => new Promise<void>(done => { resolve = done; })),
     };
     const pending = loadBrowsedDirectory(deps);
     await vi.waitFor(() => expect(stage === 'picker' ? deps.pickDirectory : deps.scanDirectoryHandle).toHaveBeenCalledOnce());
     useReconstructionStore.getState().clear();
+    // The native picker cannot be aborted: it answers after the clear.
+    if (stage === 'picker') resolve();
     await expect(pending).resolves.toBe(false);
-    resolve();
+    if (stage === 'scan') resolve();
     await Promise.resolve();
     expect(deps.processFiles).not.toHaveBeenCalled();
     expect(deps.setError).not.toHaveBeenCalled();
-    if (stage === 'picker') expect(deps.scanDirectoryHandle).not.toHaveBeenCalled();
+    if (stage === 'picker') {
+      expect(deps.scanDirectoryHandle).not.toHaveBeenCalled();
+      expect(deps.beginLoad).not.toHaveBeenCalled();
+      expect(deps.setUrlLoading).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each([
+    ['another load started', () => { beginReconstructionLoad().finish(); return false; }],
+    ['a URL load is running', () => true],
+  ])('ignores a folder picked after %s while the picker was open', async (_name, during) => {
+    let pick!: () => void;
+    let loading = false;
+    const deps = { ...makeBaseDeps(), isLoading: vi.fn(() => loading), beginLoad: vi.fn(beginReconstructionLoad), scanDirectoryHandle: vi.fn(),
+      pickDirectory: vi.fn(() => new Promise<FileSystemDirectoryHandle>(done => { pick = () => done(buildFileSystemDirectoryHandle()); })) };
+    const pending = loadBrowsedDirectory(deps);
+    await vi.waitFor(() => expect(deps.pickDirectory).toHaveBeenCalledOnce());
+    loading = during();
+    pick();
+    await expect(pending).resolves.toBe(false);
+    expect(deps.beginLoad).not.toHaveBeenCalled();
+    expect(deps.cancelUrlLoad).not.toHaveBeenCalled();
+    expect(deps.scanDirectoryHandle).not.toHaveBeenCalled();
   });
 });

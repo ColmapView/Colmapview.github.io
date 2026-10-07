@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   beginReconstructionLoad,
   cancelPendingReconstructionLoad,
+  getReconstructionLoadGeneration,
   onReconstructionLoadStart,
 } from './reconstructionLoadLifecycle';
 
@@ -21,6 +22,17 @@ describe('reconstruction load lifecycle', () => {
     stop();
     beginReconstructionLoad();
     expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it('moves the generation on when a load starts or is cancelled, not when one finishes', () => {
+    const start = getReconstructionLoadGeneration();
+    const load = beginReconstructionLoad();
+    const begun = getReconstructionLoadGeneration();
+    expect(begun).not.toBe(start);
+    load.finish();
+    expect(getReconstructionLoadGeneration()).toBe(begun);
+    cancelPendingReconstructionLoad();
+    expect(getReconstructionLoadGeneration()).not.toBe(begun);
   });
 
   it('still tells the other listeners when one unsubscribes while being told', () => {

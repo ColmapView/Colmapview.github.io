@@ -5,7 +5,7 @@ import type { UrlLoadProgress } from '../types/manifest';
 import { appLogger } from '../utils/logger';
 import { awaitWithAbort } from '../utils/awaitWithAbort';
 import { closeZipArchive } from '../utils/zipArchiveState';
-import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
+import { beginReconstructionLoad, getReconstructionLoadGeneration } from '../wasm/reconstructionLoadLifecycle';
 import type { ZipLoadResult, ZipProgress } from '../utils/zipLoader';
 import type { FileDropPayload } from './fileDropzoneDropPayload';
 import type { FileDropzoneWorkflowOptions } from './fileDropzoneWorkflow';
@@ -85,6 +85,11 @@ export function waitForBrowserPaint(): Promise<void> {
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
+}
+
+/** By name: a picker's DOMException need not pass `instanceof Error` in every realm. */
+function isAbortError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'AbortError';
 }
 
 async function yieldToPaint(deps: Pick<LocalSourceBaseDeps, 'waitForPaint'>): Promise<void> {
@@ -225,11 +230,23 @@ export async function loadBrowsedDirectory(
     return false;
   }
 
+  // The load starts only once a folder is picked: an open or cancelled picker is not a load start.
+  const generation = getReconstructionLoadGeneration();
+  let dirHandle: FileSystemDirectoryHandle;
+  try {
+    dirHandle = await deps.pickDirectory();
+  } catch (error) {
+    if (isAbortError(error)) return false;
+    errorLog('Error browsing for folder:', error);
+    deps.setError(getErrorMessage(error, 'Failed to open folder'));
+    deps.setUrlLoading(false);
+    return false;
+  }
+  // The native picker cannot be aborted: a load or clear while it was open wins.
+  if (getReconstructionLoadGeneration() !== generation || deps.isLoading()) return false;
+
   const load: LocalSourceLoad = (deps.beginLoad ?? beginReconstructionLoad)();
   try {
-    const dirHandle = await awaitWithAbort(deps.pickDirectory(), load.signal);
-    load.assertCurrent();
-    if (deps.isLoading()) return false;
     deps.cancelUrlLoad?.();
     deps.setUrlLoading(true);
     deps.setUrlProgress({ percent: 0, message: 'Scanning folder...' });

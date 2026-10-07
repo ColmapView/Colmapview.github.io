@@ -6,7 +6,7 @@ import { useCameraStore, useReconstructionStore } from './store';
 import { clearUrlLoadAttempt } from './utils/urlLoadAttemptGuard';
 import { createDefaultManifest } from './hooks/urlLoaderPolicy';
 import { loadBrowsedDirectory, loadDropPayload } from './hooks/fileDropzoneLocalSources';
-import { buildFile } from './test/builders';
+import { buildFile, buildFileSystemDirectoryHandle } from './test/builders';
 import { appLogger } from './utils/logger';
 import type { UrlLoadError } from './types/manifest';
 
@@ -102,17 +102,27 @@ describe('startup link loading', () => {
       { entries: [], fallbackFiles: [buildFile('cameras.bin')], singleFile: null },
       { ...deps, collectDroppedFiles: async () => { throw new Error('Unreadable folder'); },
         isArchiveFile: () => false, processZipFile: vi.fn(), scanEntry: vi.fn() })],
-    ['a browsed folder whose picker is cancelled', (deps: ReturnType<typeof localSourceDeps>) => loadBrowsedDirectory(
-      { ...deps, pickDirectory: async () => { throw new DOMException('The user aborted a request.', 'AbortError'); },
-        scanDirectoryHandle: vi.fn() })],
+    ['a browsed folder that fails to scan', (deps: ReturnType<typeof localSourceDeps>) => loadBrowsedDirectory(
+      { ...deps, pickDirectory: async () => buildFileSystemDirectoryHandle(),
+        scanDirectoryHandle: async () => { throw new Error('Unreadable folder'); } })],
   ])('withdraws the retry once a local load starts: %s', async (_name, startLocalLoad) => {
     await runStartupLoadPlan(sharedLink(datasetUrl), { loadFromUrl: loader(false), loadFromManifest: vi.fn() });
     expect(startupLinkRetry.getSnapshot()).not.toBeNull();
-    const local = startLocalLoad(localSourceDeps());
-    expect(startupLinkRetry.getSnapshot()).toBeNull();
-    await expect(local).resolves.toBe(false);
+    const deps = localSourceDeps();
+    await expect(startLocalLoad(deps)).resolves.toBe(false);
+    expect(deps.setError).toHaveBeenCalledWith('Unreadable folder');
     // The shared link's failure is still the one the landing page shows.
     expect(useReconstructionStore.getState().urlError).toEqual(accessDenied);
     expect(startupLinkRetry.getSnapshot()).toBeNull();
+  });
+
+  it('keeps the retry when the folder picker is cancelled, since nothing loads', async () => {
+    await runStartupLoadPlan(sharedLink(datasetUrl), { loadFromUrl: loader(false), loadFromManifest: vi.fn() });
+    const deps = localSourceDeps();
+    await expect(loadBrowsedDirectory({ ...deps, scanDirectoryHandle: vi.fn(),
+      pickDirectory: async () => { throw new DOMException('The user aborted a request.', 'AbortError'); } })).resolves.toBe(false);
+    expect(startupLinkRetry.getSnapshot()).not.toBeNull();
+    expect(useReconstructionStore.getState().urlError).toEqual(accessDenied);
+    expect(deps.setError).not.toHaveBeenCalled();
   });
 });

@@ -26,6 +26,11 @@ export function beginReconstructionLoad(): { signal: AbortSignal; assertCurrent(
   };
 }
 
+/** Changes whenever a dataset load starts or the pending one is cancelled, for example by a clear. */
+export function getReconstructionLoadGeneration(): number {
+  return generation;
+}
+
 export function cancelPendingReconstructionLoad(): void {
   generation++;
   active?.abort();
