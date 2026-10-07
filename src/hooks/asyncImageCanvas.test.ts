@@ -26,8 +26,8 @@ describe('async image canvas helpers', () => {
     const canvas = drawImageBitmapToCacheCanvas(bitmap, 1000, createCanvas);
 
     expect(createCanvas).toHaveBeenCalledWith(1000, 500);
-    expect(canvas.width).toBe(1000);
-    expect(canvas.height).toBe(500);
+    expect(canvas?.width).toBe(1000);
+    expect(canvas?.height).toBe(500);
     expect(context.imageSmoothingEnabled).toBe(true);
     expect(context.imageSmoothingQuality).toBe('high');
     expect(drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 1000, 500);

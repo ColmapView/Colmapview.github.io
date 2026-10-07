@@ -82,9 +82,9 @@ describe('useFileUrl', () => {
   });
 
   it('returns null immediately when the file is cleared and defers URL revocation', () => {
-    const file = createFile('image-b.jpg');
+    const initialProps: HookProps = { file: createFile('image-b.jpg') };
     const { result, rerender } = renderHook(({ file }: HookProps) => useFileUrl(file), {
-      initialProps: { file },
+      initialProps,
     });
 
     expect(result.current).toBe('blob:image-b.jpg');

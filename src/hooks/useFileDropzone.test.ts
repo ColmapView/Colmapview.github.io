@@ -2,7 +2,7 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useNotificationStore, useReconstructionStore, useSplatBackendStore, useUIStore } from '../store';
 import type { DragEvent } from 'react';
-import type { FileDropzoneWorkflowDeps } from './fileDropzoneWorkflow';
+import type { FileDropzoneWorkflowDeps, processFileDropzoneFiles } from './fileDropzoneWorkflow';
 import { useFileDropzone } from './useFileDropzone';
 import { buildFile, buildFileSystemFileEntry, buildLoadedFiles, buildReconstruction } from '../test/builders';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
@@ -12,7 +12,7 @@ import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE, showOptionalSettingsTimeoutWa
 import { appLogger, noopLogger } from '../utils/logger';
 
 const { processFileDropzoneFilesMock } = vi.hoisted(() => ({
-  processFileDropzoneFilesMock: vi.fn(async () => true),
+  processFileDropzoneFilesMock: vi.fn<typeof processFileDropzoneFiles>(async () => true),
 }));
 
 vi.mock('./fileDropzoneWorkflow', () => ({
@@ -253,7 +253,7 @@ describe('useFileDropzone', () => {
     // The real workflow publishes progress to the mounted hook's store until it reaches the paint delay.
     await act(async () => {
       pending = actualWorkflow.processFileDropzoneFiles(files, { ...deps, logger: noopLogger,
-        parseFiles: async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), usedWasmPath: false }),
+        parseFiles: async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false }),
         buildReconstruction: async () => ({ reconstruction: buildReconstruction(), pointCount: 0 }),
         delay: () => new Promise<void>(done => { resolve = done; }),
         clearCaches: vi.fn(), shouldPreloadSplatRuntime: () => false,

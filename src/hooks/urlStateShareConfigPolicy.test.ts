@@ -23,6 +23,12 @@ describe('urlStateShareConfigPolicy', () => {
   });
 
   it('builds share config from allowed store fields and transient selection', () => {
+    // A whole store state, as the hook passes it: fields beyond CameraShareState included.
+    const camera = {
+      cameraMode: 'orbit',
+      selectedImageId: 42,
+      navigationHistory: ['runtime-only'],
+    };
     const states: ShareConfigStoreStates = {
       pointCloud: {
         pointSize: 2,
@@ -33,11 +39,7 @@ describe('urlStateShareConfigPolicy', () => {
         backgroundColor: '#101010',
         debugPanelOpen: true,
       },
-      camera: {
-        cameraMode: 'orbit',
-        selectedImageId: 42,
-        navigationHistory: ['runtime-only'],
-      },
+      camera,
       rig: {
         showRigConnections: true,
       },

@@ -12,7 +12,7 @@ import { buildFile, buildLoadedFiles } from '../test/builders';
 import type { CameraViewState } from '../store/types';
 import type { ColmapManifest } from '../types/manifest';
 import { decodeShareData } from '../utils/shareDataCodec';
-import { applySavedViewerState, applyShareConfig, collectShareConfig, generateEmbedUrl } from './useUrlState';
+import { applySavedViewerState, applyShareConfig, collectShareConfig, decodeSharedViewerOverrides, generateEmbedUrl } from './useUrlState';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
@@ -103,7 +103,8 @@ describe('URL state sharing', () => {
     installSavedSplatSources();
     const config = collectShareConfig();
     expect(config.splat?.activeSourceId).toBe('');
-    const decoded = await decodeShareData(new URL(generateEmbedUrl(manifest, viewState, config)).hash);
+    // Decoded the way the URL loader decodes the overrides it hands to applySavedViewerState.
+    const decoded = await decodeSharedViewerOverrides(new URL(generateEmbedUrl(manifest, viewState, config)).hash);
     expect(decoded?.config?.splat?.activeSourceId).toBe('');
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

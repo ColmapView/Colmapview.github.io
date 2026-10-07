@@ -19,7 +19,7 @@ describe('click outside policy', () => {
   it('does not close without a container or DOM node target', () => {
     expect(shouldCloseForOutsideMouseDown(null, document.body)).toBe(false);
     expect(shouldCloseForOutsideMouseDown(document.body, null)).toBe(false);
-    expect(shouldCloseForOutsideMouseDown(document.body, new Event('mousedown'))).toBe(false);
+    expect(shouldCloseForOutsideMouseDown(document.body, new EventTarget())).toBe(false);
   });
 
   it('closes only for Escape key presses', () => {

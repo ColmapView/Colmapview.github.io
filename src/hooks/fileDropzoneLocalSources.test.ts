@@ -57,8 +57,8 @@ describe('file dropzone local source loading', () => {
     const archive = buildArchiveReader();
     const deps = {
       ...makeBaseDeps(),
-      loadZipFromFile: vi.fn(async (_file: File, onProgress: (progress: { percent: number }) => void) => {
-        onProgress({ percent: 40 });
+      loadZipFromFile: vi.fn(async (_file: File, onProgress: (progress: ZipProgress) => void) => {
+        onProgress({ percent: 40, message: 'Reading archive contents...' });
         return { colmapFiles, imageIndex, archive, fileSize: 4096, imageCount: 1 };
       }),
       setActiveZipArchive: vi.fn(),

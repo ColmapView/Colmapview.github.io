@@ -56,7 +56,8 @@ describe('file URL revocation policy', () => {
   it('connects scheduled callbacks to pending URL revocation', () => {
     const pending = new Set<string>();
     const revokeObjectUrl = vi.fn();
-    let scheduledCallback: (() => void) | null = null;
+    // Assigned inside a callback, so its declared type must not narrow to null.
+    let scheduledCallback = null as (() => void) | null;
 
     scheduleBlobUrlRevocation({
       blobUrl: 'blob:image-4',

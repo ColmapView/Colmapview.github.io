@@ -747,7 +747,7 @@ describe('splat discovery robustness', () => {
   });
 
   it('F6: stops paginating on a cyclic next cursor', async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse(
+    const fetchImpl = vi.fn(async (_url: string) => jsonResponse(
       [{ type: 'file', path: 'ds/scene.ply', size: 1 }],
       { headers: { 'Content-Type': 'application/json', Link: `<${HF_API}>; rel="next"` } }
     ));
@@ -784,7 +784,7 @@ describe('splat discovery robustness', () => {
       'property float scale_2', 'property float rot_0', 'property float rot_1',
       'property float rot_2', 'property float rot_3', 'end_header', '',
     ].join('\n');
-    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
       if (init?.headers && 'Range' in (init.headers as Record<string, string>)) {
         return new Response(plyHeader, { status: 206 });
       }
