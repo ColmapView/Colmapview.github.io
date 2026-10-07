@@ -179,4 +179,30 @@ describe('TrackballControls restoring a saved view', () => {
     // U on steps inside the photosphere to the capture center.
     expect(scene.getState().camera.position.distanceTo(panoramaCenter)).toBeLessThan(0.01);
   });
+
+  it('still flies into the selected panorama when a restore without a saved view turns undistortion on', async () => {
+    mountWithSelectedPanorama(false);
+    // No view to keep, so the restored toggle re-flies like the user's own.
+    const saved: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null,
+      config: { camera: { undistortionEnabled: true, selectedImageId: PANORAMA_ID } } };
+
+    await act(async () => { await applySavedViewerState(saved, null); });
+    finishFlights();
+
+    expect(useCameraStore.getState().undistortionEnabled).toBe(true);
+    expect(scene.getState().camera.position.distanceTo(panoramaCenter)).toBeLessThan(0.01);
+  });
+
+  it('flies into the selected panorama when the user turns undistortion on right after a restore', async () => {
+    mountWithSelectedPanorama(true);
+    const saved: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: savedView,
+      config: { camera: { undistortionEnabled: false } } };
+    await act(async () => { await applySavedViewerState(saved, null); });
+
+    // Only the restore's own commit keeps its view: the next toggle re-flies, even before that view is reached.
+    act(() => useCameraStore.getState().setUndistortionEnabled(true));
+    finishFlights();
+
+    expect(scene.getState().camera.position.distanceTo(panoramaCenter)).toBeLessThan(0.01);
+  });
 });
