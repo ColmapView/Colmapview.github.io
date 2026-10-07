@@ -74,9 +74,13 @@ test('manual preview requires a separate project and bounded output/base paths',
 const PUBLICATION_GATES = ['Preflight deployment configuration', 'Build version or dev', 'Build latest', 'Build custom production', 'Smoke prepared artifacts'];
 const UNCONDITIONAL_GATES = new Set(['Preflight deployment configuration', 'Build version or dev', 'Smoke prepared artifacts']);
 const stepLabel = step => step.name ?? step.uses ?? step.run;
-// A failed gate must stop the job (no continue-on-error), and neither a gate nor a publication step may run
-// after a failure, which always(), failure() or cancelled() in its `if` would allow.
-const runsAfterFailure = step => /\b(?:always|failure|cancelled)\s*\(/i.test(String(step.if ?? ''));
+// A failed gate must stop the job (no continue-on-error), and neither a gate nor a publication step may run after a
+// failure, which always(), failure() or cancelled() in its `if` allow. So does success() || …: an explicit status
+// function replaces the implicit success() &&.
+const runsAfterFailure = step => {
+  const condition = String(step.if ?? '');
+  return /\b(?:always|failure|cancelled)\s*\(/i.test(condition) || /\bsuccess\s*\(/i.test(condition) && condition.includes('||');
+};
 
 /** Each gate must exist exactly once, by exact name, before the first gh-pages push or Wrangler upload, and stop the job if it fails. */
 function assertGatesPrecedePublication(workflow) {
@@ -128,6 +132,7 @@ test('publication gate check rejects renamed, removed, moved, conditional or byp
     [steps => { const gate = named(steps, 'Build latest'); gate.if = `always() && ${gate.if}`; }, /Build latest must not run after a failure/],
     [steps => { named(steps, 'Deploy to version directory').if = '${{ !cancelled() }}'; }, /Deploy to version directory must not publish after a failure/],
     [steps => { const step = named(steps, 'Deploy custom production'); step.if = `always() && ${step.if}`; }, /Deploy custom production must not publish after a failure/],
+    [steps => { named(steps, 'Deploy to latest').if = "success() || github.event_name == 'workflow_dispatch'"; }, /Deploy to latest must not publish after a failure/],
   ];
   for (const [mutate, error] of [...variants, ...bypasses]) {
     const copy = structuredClone(workflow);
@@ -374,16 +379,39 @@ test('preview verification uses the branch alias Wrangler reports instead of ass
   }
   assert.throws(() => previewAliasUrl(output({ pages_project: 'colmapview-opsiclear' }), options), /did not report/);
   const previewWorkflow = yaml.load(readFileSync('.github/workflows/deploy-preview.yml', 'utf8'));
+  assert.equal(previewWorkflow.jobs.publish.steps.find(step => step.name === 'Upload preview only').env.WRANGLER_OUTPUT_FILE_PATH, '${{ runner.temp }}/wrangler-preview-output.ndjson');
+  assertPreviewCheckReadsResolvedAlias(previewWorkflow);
+});
+
+/** The public preview check reads the alias preview-url.mjs wrote to GITHUB_ENV, never a rebuilt or overridden URL. */
+function assertPreviewCheckReadsResolvedAlias(previewWorkflow) {
   const publish = previewWorkflow.jobs.publish;
   // The subdomain can differ from the project name, so no form ($NAME, ${NAME}, ${{ vars.NAME }}) may build the URL from it.
-  assert.doesNotMatch(JSON.stringify(publish), /CLOUDFLARE_PREVIEW_PROJECT\s*\}{0,2}\.pages\.dev/);
-  assert.equal(publish.steps.find(step => step.name === 'Upload preview only').env.WRANGLER_OUTPUT_FILE_PATH, '${{ runner.temp }}/wrangler-preview-output.ndjson');
-  // The public check must read the alias the resolver wrote to GITHUB_ENV, never a rebuilt or overridden URL.
+  assert.doesNotMatch(JSON.stringify(publish), /CLOUDFLARE_PREVIEW_PROJECT\s*\}{0,2}\.pages\.dev/, 'The preview URL must not be built from the project name.');
   const liveChecks = publish.steps.filter(step => /check-live\.mjs/.test(step.run ?? ''));
-  assert.deepEqual(liveChecks.map(step => step.name), ['Verify public preview']);
-  assert.equal(liveChecks[0].run, 'node scripts/deployment/check-live.mjs "$PREVIEW_URL" preview --manifest=.tmp/deployment/preview/deployment.json');
+  assert.deepEqual(liveChecks.map(step => step.name), ['Verify public preview'], 'Only "Verify public preview" may run check-live.mjs.');
+  assert.equal(liveChecks[0].run, 'node scripts/deployment/check-live.mjs "$PREVIEW_URL" preview --manifest=.tmp/deployment/preview/deployment.json', 'Verify public preview must read "$PREVIEW_URL".');
   const envs = [previewWorkflow.env, publish.env, ...publish.steps.map(step => step.env)];
-  assert.ok(!envs.some(env => env && Object.hasOwn(env, 'PREVIEW_URL')), 'Only the resolver may set PREVIEW_URL.');
+  assert.ok(!envs.some(env => env && Object.hasOwn(env, 'PREVIEW_URL')), 'No env block may set PREVIEW_URL.');
+  for (const step of publish.steps) assert.doesNotMatch(step.run ?? '', /\bPREVIEW_URL(?:\+?=|<<)/, `${stepLabel(step)} must not write PREVIEW_URL; only preview-url.mjs does.`);
+}
+
+test('preview check rejects a rebuilt, re-read, overridden or rewritten preview URL', () => {
+  const previewWorkflow = yaml.load(readFileSync('.github/workflows/deploy-preview.yml', 'utf8'));
+  const verify = steps => steps.find(step => step.name === 'Verify public preview');
+  const insertBeforeVerify = (steps, step) => steps.splice(steps.indexOf(verify(steps)), 0, step);
+  const variants = [
+    [steps => { verify(steps).run = verify(steps).run.replace('"$PREVIEW_URL"', '"https://${PREVIEW_BRANCH}.${CLOUDFLARE_PREVIEW_PROJECT}.pages.dev/"'); }, /must not be built from the project name/],
+    [steps => { insertBeforeVerify(steps, { name: 'Check subdomain', run: 'node scripts/deployment/check-live.mjs "https://${PREVIEW_BRANCH}.colmapview-preview.pages.dev/" preview' }); }, /Only "Verify public preview" may run check-live/],
+    [steps => { verify(steps).run = verify(steps).run.replace('"$PREVIEW_URL"', '"${{ env.PREVIEW_URL }}"'); }, /must read "\$PREVIEW_URL"/],
+    [steps => { verify(steps).env = { PREVIEW_URL: 'https://preview.colmapview-preview.pages.dev/' }; }, /No env block may set PREVIEW_URL/],
+    [steps => { insertBeforeVerify(steps, { name: 'Pin preview URL', run: 'echo "PREVIEW_URL=https://${PREVIEW_BRANCH}.colmapview-preview.pages.dev/" >> "$GITHUB_ENV"' }); }, /Pin preview URL must not write PREVIEW_URL/],
+  ];
+  for (const [mutate, error] of variants) {
+    const copy = structuredClone(previewWorkflow);
+    mutate(copy.jobs.publish.steps);
+    assert.throws(() => assertPreviewCheckReadsResolvedAlias(copy), error);
+  }
 });
 
 test('preview-url.mjs records only a verified alias in GITHUB_ENV, from the file Wrangler writes', () => {
