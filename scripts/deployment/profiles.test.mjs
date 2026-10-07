@@ -73,19 +73,27 @@ test('manual preview requires a separate project and bounded output/base paths',
 
 const PUBLICATION_GATES = ['Preflight deployment configuration', 'Build version or dev', 'Build latest', 'Build custom production', 'Smoke prepared artifacts'];
 const UNCONDITIONAL_GATES = new Set(['Preflight deployment configuration', 'Build version or dev', 'Smoke prepared artifacts']);
+const stepLabel = step => step.name ?? step.uses ?? step.run;
+// A failed gate must stop the job (no continue-on-error), and neither a gate nor a publication step may run
+// after a failure, which always(), failure() or cancelled() in its `if` would allow.
+const runsAfterFailure = step => /\b(?:always|failure|cancelled)\s*\(/i.test(String(step.if ?? ''));
 
-/** Each gate must exist exactly once, by exact name, before the first gh-pages push or Wrangler upload. */
+/** Each gate must exist exactly once, by exact name, before the first gh-pages push or Wrangler upload, and stop the job if it fails. */
 function assertGatesPrecedePublication(workflow) {
   const steps = workflow.jobs.deploy.steps;
   const mutations = steps.flatMap((step, index) =>
     step.uses?.startsWith('peaceiris/actions-gh-pages@') || /\bwrangler\b/.test(step.run ?? '') ? [index] : []);
   assert.ok(mutations.length > 0, 'deploy.yml must publish through gh-pages or Wrangler');
   const firstMutation = Math.min(...mutations);
+  for (const index of mutations) assert.ok(!runsAfterFailure(steps[index]), `${stepLabel(steps[index])} must not publish after a failure`);
   for (const name of PUBLICATION_GATES) {
     const matches = steps.flatMap((step, index) => step.name === name ? [index] : []);
     assert.equal(matches.length, 1, `deploy.yml must contain exactly one "${name}" step`);
     assert.ok(matches[0] < firstMutation, `${name} must precede publication`);
-    if (UNCONDITIONAL_GATES.has(name)) assert.equal(steps[matches[0]].if, undefined, `${name} must always run`);
+    const gate = steps[matches[0]];
+    assert.ok([undefined, false].includes(gate['continue-on-error']), `${name} must stop the job when it fails`);
+    assert.ok(!runsAfterFailure(gate), `${name} must not run after a failure`);
+    if (UNCONDITIONAL_GATES.has(name)) assert.equal(gate.if, undefined, `${name} must always run`);
   }
 }
 
@@ -103,19 +111,28 @@ test('release workflow gates both real artifacts before first publish and pins W
   assert.ok(validation.jobs.artifacts.steps.some(step => step.run === 'npm run test:deployment'));
 });
 
-test('publication gate check rejects renamed, removed, moved or conditional gates', () => {
+test('publication gate check rejects renamed, removed, moved, conditional or bypassed gates', () => {
   const workflow = yaml.load(readFileSync('.github/workflows/deploy.yml', 'utf8'));
   const smoke = steps => steps.findIndex(step => step.name === 'Smoke prepared artifacts');
+  const named = (steps, name) => steps.find(step => step.name === name);
   const variants = [
     steps => { steps[smoke(steps)].name = 'Smoke artifacts'; },
     steps => { steps.splice(steps.findIndex(step => step.name === 'Preflight deployment configuration'), 1); },
     steps => { steps.push(...steps.splice(smoke(steps), 1)); },
     steps => { steps[smoke(steps)].if = "github.ref_type == 'tag'"; },
+  ].map(mutate => [mutate, /exactly one|must precede publication|must always run/]);
+  const bypasses = [
+    [steps => { steps[smoke(steps)]['continue-on-error'] = true; }, /Smoke prepared artifacts must stop the job/],
+    [steps => { named(steps, 'Preflight deployment configuration')['continue-on-error'] = "${{ github.ref_type != 'tag' }}"; }, /Preflight deployment configuration must stop the job/],
+    [steps => { steps[smoke(steps)].if = 'always()'; }, /Smoke prepared artifacts must not run after a failure/],
+    [steps => { const gate = named(steps, 'Build latest'); gate.if = `always() && ${gate.if}`; }, /Build latest must not run after a failure/],
+    [steps => { named(steps, 'Deploy to version directory').if = '${{ !cancelled() }}'; }, /Deploy to version directory must not publish after a failure/],
+    [steps => { const step = named(steps, 'Deploy custom production'); step.if = `always() && ${step.if}`; }, /Deploy custom production must not publish after a failure/],
   ];
-  for (const mutate of variants) {
+  for (const [mutate, error] of [...variants, ...bypasses]) {
     const copy = structuredClone(workflow);
     mutate(copy.jobs.deploy.steps);
-    assert.throws(() => assertGatesPrecedePublication(copy), /exactly one|must precede publication|must always run/);
+    assert.throws(() => assertGatesPrecedePublication(copy), error);
   }
 });
 
@@ -127,13 +144,14 @@ test('deployment smoke report and traces land in the uploaded .tmp/deployment-sm
   const uploads = ['e2e.yml', 'deploy.yml', 'deploy-preview.yml']
     .flatMap(file => Object.values(yaml.load(readFileSync(`.github/workflows/${file}`, 'utf8')).jobs))
     .flatMap(job => job.steps ?? [])
-    .filter(step => step.uses?.startsWith('actions/upload-artifact@') && /smoke/.test(step.with.name));
+    .filter(step => step.uses?.startsWith('actions/upload-artifact@') && (/smoke/.test(step.with.name) || /deployment-smoke/.test(step.with.path)));
   assert.equal(uploads.length, 4);
-  for (const step of uploads) assert.match(step.with.path, /^\.tmp\/deployment-smoke\/report\/$/m, step.with.name);
-  for (const step of uploads) assert.match(step.with.path, /^\.tmp\/deployment-smoke\/results\/$/m, step.with.name);
+  // Exactly the report and traces: the whole .tmp/deployment-smoke/ would upload the fixture builds again.
+  for (const step of uploads) {
+    const paths = step.with.path.split('\n').map(line => line.trim()).filter(Boolean);
+    assert.deepEqual(paths, ['.tmp/deployment-smoke/report/', '.tmp/deployment-smoke/results/'], step.with.name);
+  }
 });
-
-const stepLabel = step => step.name ?? step.uses ?? step.run;
 
 test('Cloudflare deployment token is scoped only to trusted upload steps', () => {
   const releaseWorkflow = yaml.load(readFileSync('.github/workflows/deploy.yml', 'utf8'));
@@ -355,9 +373,17 @@ test('preview verification uses the branch alias Wrangler reports instead of ass
     assert.throws(() => previewAliasUrl(output({ alias }), options), /unexpected/);
   }
   assert.throws(() => previewAliasUrl(output({ pages_project: 'colmapview-opsiclear' }), options), /did not report/);
-  const publish = yaml.load(readFileSync('.github/workflows/deploy-preview.yml', 'utf8')).jobs.publish;
-  assert.ok(!JSON.stringify(publish).includes('$CLOUDFLARE_PREVIEW_PROJECT.pages.dev'));
+  const previewWorkflow = yaml.load(readFileSync('.github/workflows/deploy-preview.yml', 'utf8'));
+  const publish = previewWorkflow.jobs.publish;
+  // The subdomain can differ from the project name, so no form ($NAME, ${NAME}, ${{ vars.NAME }}) may build the URL from it.
+  assert.doesNotMatch(JSON.stringify(publish), /CLOUDFLARE_PREVIEW_PROJECT\s*\}{0,2}\.pages\.dev/);
   assert.equal(publish.steps.find(step => step.name === 'Upload preview only').env.WRANGLER_OUTPUT_FILE_PATH, '${{ runner.temp }}/wrangler-preview-output.ndjson');
+  // The public check must read the alias the resolver wrote to GITHUB_ENV, never a rebuilt or overridden URL.
+  const liveChecks = publish.steps.filter(step => /check-live\.mjs/.test(step.run ?? ''));
+  assert.deepEqual(liveChecks.map(step => step.name), ['Verify public preview']);
+  assert.equal(liveChecks[0].run, 'node scripts/deployment/check-live.mjs "$PREVIEW_URL" preview --manifest=.tmp/deployment/preview/deployment.json');
+  const envs = [previewWorkflow.env, publish.env, ...publish.steps.map(step => step.env)];
+  assert.ok(!envs.some(env => env && Object.hasOwn(env, 'PREVIEW_URL')), 'Only the resolver may set PREVIEW_URL.');
 });
 
 test('preview-url.mjs records only a verified alias in GITHUB_ENV, from the file Wrangler writes', () => {
