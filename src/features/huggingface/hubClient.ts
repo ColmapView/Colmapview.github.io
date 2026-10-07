@@ -36,7 +36,8 @@ export function createHubClient(getAccessToken: (username: string) => string): H
           if ([401, 403, 404].includes(errorStatus(error) ?? 0)) throw new HfError(`${PUBLIC_SOURCE_REQUIRED} This source dataset is private or no longer available.`);
           throw error;
         });
-      if (info.private || info.gated || info.name !== repoId || !/^[a-f0-9]{40,64}$/i.test(info.sha)) {
+      // The Hub redirects other spellings and renamed repositories (info.name is its current id); the commit pins the files.
+      if (info.private || info.gated || !/^[a-f0-9]{40,64}$/i.test(info.sha)) {
         throw new HfError(PUBLIC_SOURCE_REQUIRED);
       }
       return info.sha;

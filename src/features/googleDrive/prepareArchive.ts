@@ -89,7 +89,8 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
   const resolveRevision = (repoId: string, revision: string) => {
     const key = `${repoId}/${revision}`;
     if (!revisions.has(key)) revisions.set(key, sdk.datasetInfo({ name: repoId, revision, additionalFields: ['sha'], fetch: read }).then(info => {
-      if (info.name !== repoId || !/^[a-f0-9]{40,64}$/i.test(info.sha)) throw new GoogleDrivePublishError('Could not pin the source dataset revision.');
+      // The Hub redirects other spellings and renamed repositories (info.name is its current id); the commit pins the files.
+      if (!/^[a-f0-9]{40,64}$/i.test(info.sha)) throw new GoogleDrivePublishError('Could not pin the source dataset revision.');
       return info.sha;
     }));
     return revisions.get(key)!;

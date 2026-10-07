@@ -138,4 +138,13 @@ describe('Hugging Face transport adapter', () => {
     sdk.datasetInfo.mockResolvedValue({ name: 'owner/scene', sha: 'c'.repeat(40), private: false, gated: false });
     await expect(createHubClient(() => 'test-token').resolveRevision('owner/scene', 'main', signal())).resolves.toBe('c'.repeat(40));
   });
+  it.each(['OpsiClear/NGS', 'lab/renamed-scene'])('pins a public source loaded as opsiclear/ngs that the Hub now names %s', async canonical => {
+    // The Hub redirects other spellings and old names to the repository it now serves; datasetInfo reports that id.
+    sdk.datasetInfo.mockResolvedValue({ name: canonical, sha: 'c'.repeat(40), private: false, gated: false });
+    await expect(createHubClient(() => 'test-token').resolveRevision('opsiclear/ngs', 'main', signal())).resolves.toBe('c'.repeat(40));
+  });
+  it('refuses a source revision the Hub does not pin to a commit', async () => {
+    sdk.datasetInfo.mockResolvedValue({ name: 'owner/scene', sha: 'main', private: false, gated: false });
+    await expect(createHubClient(() => 'test-token').resolveRevision('owner/scene', 'main', signal())).rejects.toThrow('Publication requires a public, ungated Hugging Face dataset.');
+  });
 });

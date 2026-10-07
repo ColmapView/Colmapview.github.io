@@ -142,6 +142,25 @@ describe('Drive remote sources', () => {
     const archive = await prepareDriveArchive(source, new AbortController().signal, () => {}, () => {});
     expect(strFromU8((await entries(archive))['splats/tile.ply'])).toBe('splat bytes');
   });
+  it.each(['OpsiClear/NGS', 'lab/renamed-scene'])('pins a Hub source loaded as opsiclear/ngs that the Hub now names %s', async canonical => {
+    const sha = 'e'.repeat(40);
+    const root = 'https://huggingface.co/datasets/opsiclear/ngs/resolve/';
+    // fetch follows the Hub's 307 to the canonical repository, which answers with its own id.
+    const request = vi.fn(async (url: string) => url.startsWith('https://huggingface.co/api/datasets/opsiclear/ngs/revision/main?')
+      ? Response.json({ _id: 'repo-object-id', id: canonical, sha })
+      : url === `${root}${sha}/images/photo.jpg` ? new Response('original') : new Response(null, { status: 404 }));
+    vi.stubGlobal('fetch', request);
+    const archive = await prepareDriveArchive(remoteInput({ imageUrlBase: `${root}main/images/` }), new AbortController().signal, () => {}, () => {});
+    expect(strFromU8((await entries(archive))['images/photo.jpg'])).toBe('original');
+  });
+  it('refuses a Hub revision that does not resolve to a commit', async () => {
+    const request = vi.fn(async (url: string) => url.includes('/revision/main?') ? Response.json({ _id: 'repo-object-id', id: 'owner/scene', sha: 'main' })
+      : new Response('original'));
+    vi.stubGlobal('fetch', request);
+    await expect(prepareDriveArchive(remoteInput({ imageUrlBase: 'https://huggingface.co/datasets/owner/scene/resolve/main/images/' }),
+      new AbortController().signal, () => {}, () => {})).rejects.toMatchObject({ message: 'Could not pin the source dataset revision.' });
+    expect(request.mock.calls.filter(([url]) => url.includes('/resolve/'))).toEqual([]);
+  });
   it('skips a forbidden mask name like the viewer, as S3 answers missing keys without ListBucket', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => original(url)
       ?? (url === bucket + 'masks/photo.jpg' ? new Response('<Error><Code>AccessDenied</Code></Error>', { status: 403 })
