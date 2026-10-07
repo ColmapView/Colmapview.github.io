@@ -56,6 +56,7 @@ export function clearReconstruction(options?: ClearReconstructionOptions): void 
 /**
  * Set a new reconstruction with proper coordination.
  * Handles WASM wrapper lifecycle and cache clearing.
+ * It is a scene load, even with `preserveView`: the edit revision resets and pending deletion marks are cleared.
  *
  * @param reconstruction - The reconstruction data to set
  * @param wasmWrapper - Optional WASM wrapper for GPU-optimized rendering

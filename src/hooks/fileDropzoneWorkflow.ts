@@ -320,6 +320,11 @@ export async function processFileDropzoneFiles(
     return true;
   };
 
+  // A Reload is silent like the COLMAP path: the rebuilt scene's first-load announcements are not repeated.
+  const announceSceneLoad: FileDropzoneWorkflowDeps['addNotification'] = normalizedOptions.reload
+    ? () => undefined
+    : deps.addNotification;
+
   const pStart = progressRange?.start ?? 0;
   const pEnd = progressRange?.end ?? 100;
   const mapProgress = (localPercent: number) => Math.round(pStart + (localPercent / 100) * (pEnd - pStart));
@@ -354,12 +359,14 @@ export async function processFileDropzoneFiles(
      * reloads it, so a loading state for it would stay up.
      */
     const handOffCommittedSplat = (shownBefore: File | undefined) => {
-      splatFile = deps.getLoadedFiles()?.splatFile ?? splatFile;
-      if (!splatFile || splatFile === shownBefore) {
+      const committed = deps.getLoadedFiles();
+      // An undefined splat is a committed None; only a store that reads nothing back leaves this load's pick.
+      const committedSplat = committed ? committed.splatFile : splatFile;
+      if (!committedSplat || committedSplat === shownBefore) {
         return;
       }
       keepLoadingForInitialSplat = true;
-      deps.setUrlProgress(getSplatLoadingProgress(splatFile, {
+      deps.setUrlProgress(getSplatLoadingProgress(committedSplat, {
         startPercent: splatRendererStartPercent,
       }));
     };
@@ -434,7 +441,8 @@ export async function processFileDropzoneFiles(
             startedNewSplatScene = true;
           }
         } else if (pointCloudFile) {
-          await runNewPointCloudOnlyLoad(files, pointCloudFile, deps, clearCaches, mapProgress, logger.info, load.signal, reportSceneReplacement);
+          await runNewPointCloudOnlyLoad(files, pointCloudFile, { ...deps, addNotification: announceSceneLoad },
+            clearCaches, mapProgress, logger.info, load.signal, reportSceneReplacement);
           load.assertCurrent();
         }
         if (configErrorMessage && throwOnError) {
@@ -474,7 +482,8 @@ export async function processFileDropzoneFiles(
       }
 
       if (pointCloudFile && !splatFile) {
-        await runNewPointCloudOnlyLoad(files, pointCloudFile, deps, clearCaches, mapProgress, logger.info, load.signal, reportSceneReplacement);
+        await runNewPointCloudOnlyLoad(files, pointCloudFile, { ...deps, addNotification: announceSceneLoad },
+          clearCaches, mapProgress, logger.info, load.signal, reportSceneReplacement);
         load.assertCurrent();
         return await complete();
       }
@@ -495,7 +504,7 @@ export async function processFileDropzoneFiles(
           clearCaches,
           setReconstruction: deps.setReconstruction,
           resetView: deps.resetView,
-          addNotification: deps.addNotification,
+          addNotification: announceSceneLoad,
           log: logger.info,
         });
         reportSceneReplacement();

@@ -248,6 +248,7 @@ interface ReconstructionState {
 
   /** Committed edits since the current dataset was loaded. Not persisted. */
   reconstructionEditRevision: number;
+  /** Without `{ edited: true }` this is a scene load: the edit revision resets and pending deletion marks are cleared. */
   setReconstruction: (rec: Reconstruction, options?: { edited?: boolean }) => void;
   setWasmReconstruction: (wasm: ReconstructionSource | null) => void;
   setLoadedFiles: (files: LoadedFiles) => void;
