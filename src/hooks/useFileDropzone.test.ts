@@ -9,6 +9,7 @@ import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE, showOptionalSettingsTimeoutWarning } from './optionalSettingsWarning';
+import { showSplatListTimeoutWarning, SPLAT_LIST_TIMEOUT_MESSAGE } from './splatListWarning';
 import { appLogger, noopLogger } from '../utils/logger';
 
 const { processFileDropzoneFilesMock } = vi.hoisted(() => ({
@@ -63,15 +64,17 @@ describe('useFileDropzone', () => {
     expect(processFileDropzoneFilesMock).toHaveBeenCalled();
   });
 
-  it('removes the previous dataset\'s settings timeout warning when local files are dropped', async () => {
+  it('removes the previous dataset\'s settings and splat list timeout warnings when local files are dropped', async () => {
     showOptionalSettingsTimeoutWarning();
+    showSplatListTimeoutWarning();
     const { result } = renderHook(() => useFileDropzone());
     const event = { preventDefault: vi.fn(), stopPropagation: vi.fn(), dataTransfer: {
       types: ['Files'], items: [], files: [new File(['x'], 'cameras.bin')],
     } } as unknown as DragEvent<HTMLElement>;
     await act(async () => { await result.current.handleDrop(event); });
-    expect(useNotificationStore.getState().notifications).not.toContainEqual(expect.objectContaining({
-      message: OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE }));
+    const { notifications } = useNotificationStore.getState();
+    expect(notifications).not.toContainEqual(expect.objectContaining({ message: OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE }));
+    expect(notifications).not.toContainEqual(expect.objectContaining({ message: SPLAT_LIST_TIMEOUT_MESSAGE }));
   });
 
   it('starts a dropped load with no splat request left by the previous dataset', async () => {
