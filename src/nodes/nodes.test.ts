@@ -403,8 +403,8 @@ describe('Node Actions', () => {
 
     it('setDisplayMode updates store', () => {
       const { result } = renderHook(() => useCamerasNodeActions());
-      act(() => result.current.setDisplayMode('image'));
-      expect(useCameraStore.getState().cameraDisplayMode).toBe('image');
+      act(() => result.current.setDisplayMode('imageplane'));
+      expect(useCameraStore.getState().cameraDisplayMode).toBe('imageplane');
     });
 
     it('setScale updates store', () => {
@@ -415,8 +415,8 @@ describe('Node Actions', () => {
 
     it('setScaleFactor updates store', () => {
       const { result } = renderHook(() => useCamerasNodeActions());
-      act(() => result.current.setScaleFactor('focal'));
-      expect(useCameraStore.getState().cameraScaleFactor).toBe('focal');
+      act(() => result.current.setScaleFactor('10'));
+      expect(useCameraStore.getState().cameraScaleFactor).toBe('10');
     });
 
     it('setColorMode updates store', () => {
@@ -451,8 +451,8 @@ describe('Node Actions', () => {
 
     it('setUndistortionMode updates store', () => {
       const { result } = renderHook(() => useCamerasNodeActions());
-      act(() => result.current.setUndistortionMode('iterative'));
-      expect(useCameraStore.getState().undistortionMode).toBe('iterative');
+      act(() => result.current.setUndistortionMode('cropped'));
+      expect(useCameraStore.getState().undistortionMode).toBe('cropped');
     });
 
     it('toggleVisible toggles store value', () => {
@@ -472,8 +472,8 @@ describe('Node Actions', () => {
 
     it('setColorMode updates store', () => {
       const { result } = renderHook(() => useSelectionNodeActions());
-      act(() => result.current.setColorMode('custom'));
-      expect(useCameraStore.getState().selectionColorMode).toBe('custom');
+      act(() => result.current.setColorMode('static'));
+      expect(useCameraStore.getState().selectionColorMode).toBe('static');
     });
 
     it('setColor updates store', () => {
@@ -556,14 +556,14 @@ describe('Node Actions', () => {
 
     it('setHorizonLock updates store', () => {
       const { result } = renderHook(() => useNavigationNodeActions());
-      act(() => result.current.setHorizonLock('soft'));
-      expect(useCameraStore.getState().horizonLock).toBe('soft');
+      act(() => result.current.setHorizonLock('on'));
+      expect(useCameraStore.getState().horizonLock).toBe('on');
     });
 
     it('setAutoRotateMode updates store', () => {
       const { result } = renderHook(() => useNavigationNodeActions());
-      act(() => result.current.setAutoRotateMode('clockwise'));
-      expect(useCameraStore.getState().autoRotateMode).toBe('clockwise');
+      act(() => result.current.setAutoRotateMode('cw'));
+      expect(useCameraStore.getState().autoRotateMode).toBe('cw');
     });
 
     it('setAutoRotateSpeed updates store', () => {
@@ -683,8 +683,8 @@ describe('Node Actions', () => {
 
     it('setDisplayMode updates store', () => {
       const { result } = renderHook(() => useMatchesNodeActions());
-      act(() => result.current.setDisplayMode('lines'));
-      expect(useUIStore.getState().matchesDisplayMode).toBe('lines');
+      act(() => result.current.setDisplayMode('blink'));
+      expect(useUIStore.getState().matchesDisplayMode).toBe('blink');
     });
 
     it('setOpacity updates store', () => {
@@ -722,8 +722,8 @@ describe('Node Actions', () => {
 
     it('setDisplayMode updates store', () => {
       const { result } = renderHook(() => useRigNodeActions());
-      act(() => result.current.setDisplayMode('lines'));
-      expect(useRigStore.getState().rigDisplayMode).toBe('lines');
+      act(() => result.current.setDisplayMode('blink'));
+      expect(useRigStore.getState().rigDisplayMode).toBe('blink');
     });
 
     it('setColorMode updates store', () => {
@@ -767,8 +767,8 @@ describe('Node Actions', () => {
 
     it('setCoordinateSystem updates store', () => {
       const { result } = renderHook(() => useAxesNodeActions());
-      act(() => result.current.setCoordinateSystem('z-up'));
-      expect(useUIStore.getState().axesCoordinateSystem).toBe('z-up');
+      act(() => result.current.setCoordinateSystem('blender'));
+      expect(useUIStore.getState().axesCoordinateSystem).toBe('blender');
     });
 
     it('setScale updates store', () => {
@@ -779,8 +779,8 @@ describe('Node Actions', () => {
 
     it('setLabelMode updates store', () => {
       const { result } = renderHook(() => useAxesNodeActions());
-      act(() => result.current.setLabelMode('none'));
-      expect(useUIStore.getState().axisLabelMode).toBe('none');
+      act(() => result.current.setLabelMode('off'));
+      expect(useUIStore.getState().axisLabelMode).toBe('off');
     });
 
     it('toggleVisible toggles store value', () => {
@@ -914,12 +914,12 @@ describe('Node/Action Integration', () => {
 
     act(() => actions.current.setScale(0.75));
     act(() => actions.current.setStandbyOpacity(0.5));
-    act(() => actions.current.setDisplayMode('image'));
+    act(() => actions.current.setDisplayMode('imageplane'));
     rerender();
 
     expect(node.current.scale).toBe(0.75);
     expect(node.current.standbyOpacity).toBe(0.5);
-    expect(node.current.displayMode).toBe('image');
+    expect(node.current.displayMode).toBe('imageplane');
   });
 
   it('selection node/actions integration', () => {
@@ -977,13 +977,13 @@ describe('Node/Action Integration', () => {
     const { result: actions } = renderHook(() => useAxesNodeActions());
 
     act(() => actions.current.setScale(3));
-    act(() => actions.current.setCoordinateSystem('z-up'));
-    act(() => actions.current.setLabelMode('arrows'));
+    act(() => actions.current.setCoordinateSystem('blender'));
+    act(() => actions.current.setLabelMode('xyz'));
     rerender();
 
     expect(node.current.scale).toBe(3);
-    expect(node.current.coordinateSystem).toBe('z-up');
-    expect(node.current.labelMode).toBe('arrows');
+    expect(node.current.coordinateSystem).toBe('blender');
+    expect(node.current.labelMode).toBe('xyz');
   });
 });
 
