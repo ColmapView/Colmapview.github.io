@@ -2,7 +2,7 @@
 
 ColmapView can publish the currently loaded COLMAP reconstruction, original images, available masks, and splats to a new public dataset in the connected user's personal Hugging Face account. The resulting viewer link opens without a Hugging Face login and refers to fixed dataset revisions.
 
-**Status:** implemented behind a build flag. Real localhost sign-in, public repository creation, a 168 MB PLY upload, dataset-card rendering, and anonymous reopening passed against the live Hugging Face service on 2026-09-28. Publishing is enabled on colmapview.github.io since v0.15.1 (2026-09-29): release builds use the production settings and `/dev/` the development settings below. Links published from colmapview.github.io open in `/latest/`, or in `/dev/` when published there. Other hosts link to their own viewer page, so links published from a local development server point to `localhost` and work only where that local viewer is running.
+**Status:** implemented behind a build flag. Real localhost sign-in, public repository creation, a 168 MB PLY upload, dataset-card rendering, and anonymous reopening passed against the live Hugging Face service on 2026-09-28. Publishing is enabled on colmapview.github.io since v0.15.1 (2026-09-29): release builds use the production settings and `/dev/` the development settings below. The maintainer decided to keep it enabled. Its hosted checks are still open; see [Live acceptance](#live-acceptance-before-enabling-publication). Links published from colmapview.github.io open in `/latest/`, or in `/dev/` when published there. Other hosts link to their own viewer page, so links published from a local development server point to `localhost` and work only where that local viewer is running.
 
 ## User workflow
 
@@ -43,7 +43,7 @@ ui:
 
 Published files also include `viewer_version`, `view_state`, `transform`, and `splat` metadata. Only validated presentation fields are applied. A saved splat selection loads automatically on desktop, including files above the ordinary discovery download budget. Touch devices retain the large-file selection prompt. Explicit camera/settings values in an incoming viewer link override dataset defaults. Manually opening a dataset uses its saved settings without inheriting the previous scene's URL state. A manifest with an explicit `viewerStatePath` uses that document instead of automatic discovery; an invalid explicitly required document still produces a load error.
 
-The dataset card sets `viewer: false`, so Hugging Face does not convert `images/` to Parquet or show it as a table on the dataset page. The dataset README links **Open in ColmapView** and shows the same **Viewer link** the dialog copies: `https://colmapview.github.io/latest/?url=https://huggingface.co/datasets/<owner>/<name>`. It opens the current viewer (not the version that published it) on the repository's latest revision and restores `colmapview.yaml`. The published `colmapview.json` manifest still pins every file to the data revision, for loading exactly what was published.
+The dataset card sets `viewer: false`, so Hugging Face does not convert `images/` to Parquet or show it as a table on the dataset page. The dataset README links **Open in ColmapView** and shows the same **Viewer link** the dialog copies: `https://colmapview.github.io/latest/?url=https://huggingface.co/datasets/<owner>/<name>`, or `https://colmapview.github.io/dev/?url=…` for a dataset published from `/dev/`; other hosts link to their own viewer page. It opens the current viewer (not the version that published it) on the repository's latest revision and restores `colmapview.yaml`. The published `colmapview.json` manifest still pins every file to the data revision, for loading exactly what was published.
 
 ### Supported inputs and limits
 
@@ -88,7 +88,7 @@ The same public client ID is saved in `HF_OAUTH_CLIENT_ID` and `HF_DEV_OAUTH_CLI
 
 Real sign-in passed in Chrome on Windows using an isolated Vite server at `http://localhost:5186/`: the viewer opened the Hugging Face consent screen, requested no organization access, completed PKCE through the static callback, and displayed **Connected as opsiclear-admin** while retaining the loaded synthetic reconstruction. Hugging Face accepts a different port for an otherwise matching HTTP loopback callback. The test server overrides the local callback to port 5186; the saved development default remains 5173.
 
-At the 2026-09-27 check, both deployed callback URLs returned HTTP 404 because the implementation had not been deployed. Deploy the callback and feature code before testing the hosted flow. Live publication was subsequently verified as described below.
+At the 2026-09-27 check, both deployed callback URLs returned HTTP 404 because the implementation had not been deployed. Deploy the callback and feature code before testing the hosted flow. Live publication was subsequently verified from a localhost viewer, as described below.
 
 ### Live publication verification (2026-09-28)
 
@@ -145,7 +145,7 @@ Use an authorized test account and a disposable, explicitly public dataset:
 4. Exercise cancellation, a temporary network failure, reconnection to the same account, and retry. Check that committed data are retained and no unrelated repository is overwritten.
 5. Record browser/platform results and export/upload memory on representative local and archive datasets. Test each browser to be advertised before enabling it publicly.
 
-Real OAuth consent, deployed callback headers, storage CORS, account permissions, quotas, and real large-file transport are not proven by the mock suite. Publication was enabled on 2026-09-29; if it is withdrawn, keep `HF_PUBLISH_ENABLED=false` until this live check passes again. Disabling new publication does not disable the manifest loader or invalidate existing published links; those links still depend on the owner keeping the dataset accessible.
+Real OAuth consent, deployed callback headers, storage CORS, account permissions, quotas, and real large-file transport are not proven by the mock suite. Publication was enabled on 2026-09-29 (v0.15.1) before any of these steps was recorded on a hosted viewer, and the maintainer decided to keep it enabled. The 2026-09-28 publication above ran parts of steps 2 and 3 from a localhost viewer only. Still open on the hosted viewers: popup sign-in and declined consent through the `/dev/`, `/latest/`, and versioned-release callbacks (step 1); publishing and reopening the copied and README links (steps 2 and 3); cancellation, network failure, reconnection, and retry (step 4); and the browser, platform, and memory record (step 5). If publication is withdrawn, keep `HF_PUBLISH_ENABLED` (or `HF_DEV_PUBLISH_ENABLED` for `/dev/`) at `false` until this live check passes. Disabling new publication does not disable the manifest loader or invalidate existing published links; those links still depend on the owner keeping the dataset accessible.
 
 ## Published package
 
@@ -192,4 +192,10 @@ npx playwright test e2e/dataset-viewer-settings.spec.ts e2e/hugging-face-publish
 
 Playwright always starts its own test server on port 5187 (override with `COLMAP_WEBVIEW_E2E_PORT`) and never reuses an existing one, so a developer's `npm run dev` server with different feature settings cannot be picked up by mistake. The mock browser fixture intercepts Hugging Face requests and receives binary uploads on a temporary loopback endpoint; it uses fake OAuth credentials and creates no real repositories. It also verifies that metadata retries preserve committed assets and that declining consent preserves the loaded dataset. Live service validation is recorded separately above.
 
-For the original design and its rollout gates, see the [implementation plan](hugging-face-dataset-sharing-plan.md); the enablement gate on colmapview.github.io was completed on 2026-09-29 (v0.15.1).
+For the original design and its rollout gates, see the [implementation plan](hugging-face-dataset-sharing-plan.md). Publishing was enabled on colmapview.github.io on 2026-09-29 (v0.15.1) and stays enabled, but these plan items are still open:
+
+- popup sign-in, repository creation, small and large-file commits, abort, and anonymous retrieval from a deployed viewer (Milestone 0);
+- the sign-in callback under `/dev/`, `/latest/`, and versioned viewer paths (Milestone 1);
+- the automated and live acceptance matrix (Milestone 6);
+- verifying the stable `/latest/` callback and anonymous reopening on the deployed viewers (Milestone 6);
+- confirming that a versioned build and `/latest/` carry the same public configuration (Milestone 6).
