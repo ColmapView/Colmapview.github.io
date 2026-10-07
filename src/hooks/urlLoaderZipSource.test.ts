@@ -99,6 +99,7 @@ describe('URL loader ZIP source helpers', () => {
       setActiveArchive: vi.fn(),
       setSourceInfo: vi.fn(),
       setUrlProgress: vi.fn(),
+      beforeSceneCommit: vi.fn(async () => {}),
     };
 
     await expect(loadZipUrlSource('https://example.com/scene.zip', deps)).resolves.toBe(true);
@@ -117,7 +118,9 @@ describe('URL loader ZIP source helpers', () => {
       message: 'Parsing reconstruction...',
     });
     expect(deps.setSourceInfo).toHaveBeenCalledWith('zip', 'https://example.com/scene.zip');
-    expect(deps.processFiles).toHaveBeenCalledWith(colmapFiles, { start: 80, end: 100 }, expect.objectContaining({ throwOnError: true }));
+    // The settings beside the archive settle before its scene appears.
+    expect(deps.processFiles).toHaveBeenCalledWith(colmapFiles, { start: 80, end: 100 },
+      expect.objectContaining({ throwOnError: true, beforeSceneCommit: deps.beforeSceneCommit }));
     expect(deps.setUrlProgress).toHaveBeenLastCalledWith({ percent: 100, message: 'Complete' });
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] ZIP contains 3 COLMAP files, 1 indexed images');
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Calling processFiles...');

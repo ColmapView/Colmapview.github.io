@@ -1006,6 +1006,27 @@ describe('useUrlLoader', () => {
     expect(settingsTimeoutWarnings()).toEqual([expect.objectContaining({ type: 'warning' })]);
   });
 
+  it('keeps a direct splat file off screen until the settings beside it answer', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    let respond: ((response: Response) => void) | undefined;
+    vi.stubGlobal('fetch', vi.fn((url: string | URL) => String(url).endsWith('colmapview.yaml')
+      ? new Promise<Response>(resolve => { respond = resolve; }) : Promise.resolve(new Response('splat bytes'))));
+    // The real loadSplatUrlSource, handing the real workflow the hook the loader gave it.
+    processFilesMock.mockImplementationOnce(async (incoming, _range, options) => { await processWithStore(incoming, options); });
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
+    let pending!: Promise<boolean>;
+    act(() => { pending = result.current.loadFromUrl('https://example.com/project/scene.spz'); });
+    await waitFor(() => expect(useReconstructionStore.getState().urlProgress?.message).toBe('Loading saved view settings...'));
+    expect(useReconstructionStore.getState()).toMatchObject({ reconstruction: null, loadedFiles: null, urlLoading: true });
+
+    await act(async () => {
+      respond!(new Response('ui:\n  background_color: "#123456"\n'));
+      expect(await pending).toBe(true);
+    });
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile?.name).toBe('scene.spz');
+    expect(useUIStore.getState().backgroundColor).toBe('#123456');
+  });
+
   it('warns once when the splat list does not load in time, until the next load starts', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('Blob', NodeBlob);
@@ -1362,7 +1383,7 @@ describe('useUrlLoader', () => {
     const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
     let pending!: Promise<boolean>;
     act(() => { pending = result.current.loadFromUrl('https://example.com/project/scene.zip'); });
-    await waitFor(() => expect(respond).toBeDefined());
+    await waitFor(() => expect(useReconstructionStore.getState().urlProgress?.message).toBe('Loading saved view settings...'));
     // Nothing decodes yet: a Cancel now stops the whole load instead of stranding its settings.
     expect(useReconstructionStore.getState()).toMatchObject({ reconstruction: null, urlLoading: true,
       urlProgress: expect.objectContaining({ message: 'Loading saved view settings...' }) });

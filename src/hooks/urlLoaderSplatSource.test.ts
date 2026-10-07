@@ -41,6 +41,7 @@ describe('URL loader splat source helpers', () => {
       }),
       setSourceInfo: vi.fn(),
       setUrlProgress: vi.fn(),
+      beforeSceneCommit: vi.fn(async () => {}),
     };
 
     await expect(loadSplatUrlSource('https://example.com/scene.spz', deps)).resolves.toBe(true);
@@ -63,6 +64,8 @@ describe('URL loader splat source helpers', () => {
       expect.objectContaining({
         replaceSplatScene: true,
         throwOnError: true,
+        // The settings beside the file settle before its scene appears.
+        beforeSceneCommit: deps.beforeSceneCommit,
       })
     );
     expect(deps.setUrlProgress).not.toHaveBeenCalledWith({ percent: 100, message: 'Complete' });
