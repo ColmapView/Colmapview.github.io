@@ -17,7 +17,7 @@ import { classifyPlyFile, type PlyCloudKind } from '../parsers';
 import type { AppLogger } from '../utils/logger';
 import { appLogger } from '../utils/logger';
 import { preloadSparkModule } from '../utils/sparkSplatRuntime';
-import { carryOverSplatState } from '../utils/splatFileSourcePolicy';
+import { carryOverSplatState, findSplatSourceById } from '../utils/splatFileSourcePolicy';
 import { getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
 import { isReconstructionSnapshot, type ReconstructionSource } from '../wasm/reconstructionService';
 import { getFailedImageCount } from './useAsyncImageCache';
@@ -68,7 +68,8 @@ type ClassifyPlyFile = typeof classifyPlyFile;
 /**
  * Restores saved settings once the load has succeeded. A `splatSelectionRevision` replaces the load's
  * starting revision as the one splat restoration compares against: the commit ignored a choice made
- * for the scene it replaced.
+ * for the scene it replaced. URL loads restore against their own captured revision instead, because a
+ * URL replacement over a visible scene has no UI entry point.
  */
 type OnViewerState = (state: PublishedViewerState, splatSelectionRevision?: number) => void | Promise<void>;
 
@@ -575,13 +576,17 @@ export async function processFileDropzoneFiles(
       && currentSelection.revision !== initialSplatSelectionRevision) {
       // A choice made during the load carries over only when it fits these files: None, or one of
       // their sources. A tile of the scene being replaced keeps the default, and saved settings
-      // restore as if it had not been made.
+      // restore as if it had not been made, unless it names one of these splats by path or file
+      // name: the store re-picks that splat at commit.
       if (currentSelection.sourceId === '') {
         splatFile = undefined;
       } else {
         const chosen = splatFileSources.find(source => source.id === currentSelection.sourceId);
         if (chosen) splatFile = chosen.file;
-        else ignoredSplatSelectionRevision = currentSelection.revision;
+        else if (currentSelection.sourceId === undefined
+          || !findSplatSourceById({ splatFileSources }, currentSelection.sourceId)) {
+          ignoredSplatSelectionRevision = currentSelection.revision;
+        }
       }
     }
     const currentLoadedFiles = deps.getLoadedFiles();

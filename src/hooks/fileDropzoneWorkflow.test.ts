@@ -412,20 +412,24 @@ describe('file dropzone workflow', () => {
 
   /**
    * Replaces a scene showing old/a.spz with files whose own colmapview.yaml selects saved.spz rather than their
-   * default, making `choice` on the scene on screen while they parse. Returns the splat the load leaves showing.
+   * default, making `choice` on the scene on screen while they parse. Of its other tiles, old/c.spz names no
+   * incoming file, b.spz shares its file name with the incoming splats/b.spz, and splats/alternate.spz is an
+   * incoming id. Returns the splat the load leaves showing.
    */
   async function replaceSceneWhileChoosing(choice: string) {
     useReconstructionStore.getState().clear();
     const fixture = workerLoadFixture();
     const state = useReconstructionStore.getState();
-    const [replacedA, replacedB, replacedAlternate] = ['a', 'b', 'alternate'].map(name => new File([`old-${name}`], `${name}.spz`));
-    state.setLoadedFiles(loadedFiles({ splatFile: replacedA, splatFiles: [replacedA, replacedB, replacedAlternate], splatFileSources: [
-      { id: 'old/a.spz', path: 'old/a.spz', file: replacedA }, { id: 'old/b.spz', path: 'old/b.spz', file: replacedB },
-      { id: 'splats/alternate.spz', path: 'splats/alternate.spz', file: replacedAlternate }] }));
-    const incoming = { saved: new File(['saved'], 'saved.spz'), alternate: new File(['new-alt'], 'alternate.spz') };
+    const replaced = ['old/a.spz', 'old/c.spz', 'b.spz', 'splats/alternate.spz'].map(path =>
+      ({ id: path, path, file: new File([`old ${path}`], path.slice(path.lastIndexOf('/') + 1)) }));
+    state.setLoadedFiles(loadedFiles({ splatFile: replaced[0].file, splatFiles: replaced.map(source => source.file),
+      splatFileSources: replaced }));
+    const incoming = { saved: new File(['saved'], 'saved.spz'), alternate: new File(['new-alt'], 'alternate.spz'),
+      b: new File(['new-b'], 'b.spz') };
     fixture.files.set('splats/default.spz', new File(['much-larger-default'], 'default.spz'));
     fixture.files.set('splats/saved.spz', incoming.saved);
     fixture.files.set('splats/alternate.spz', incoming.alternate);
+    fixture.files.set('splats/b.spz', incoming.b);
     const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
       config: { splat: { activeSourceId: 'splats/saved.spz' } } });
     fixture.files.set('colmapview.yaml', Object.assign(file('colmapview.yaml'), { text: async () => yaml }));
@@ -458,10 +462,16 @@ describe('file dropzone workflow', () => {
     }
   }
 
-  it("restores the splat the incoming colmapview.yaml selects after a tile of the replaced scene was chosen", async () => {
+  it('restores the splat the incoming colmapview.yaml selects after a tile of the replaced scene was chosen', async () => {
     // A splat picker left open over the load picks a tile of the scene being replaced.
-    const { incoming, shown } = await replaceSceneWhileChoosing('old/b.spz');
+    const { incoming, shown } = await replaceSceneWhileChoosing('old/c.spz');
     expect(shown).toBe(incoming.saved);
+  });
+
+  it('keeps the incoming splat named like the picked tile over the incoming colmapview.yaml', async () => {
+    // The pick names splats/b.spz by its file name, so the store shows that splat at commit.
+    const { incoming, shown } = await replaceSceneWhileChoosing('b.spz');
+    expect(shown).toBe(incoming.b);
   });
 
   it.each(['None', 'an incoming splat'] as const)('lets %s chosen during the load win over the incoming colmapview.yaml', async choice => {
