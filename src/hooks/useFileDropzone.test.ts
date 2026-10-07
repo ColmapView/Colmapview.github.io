@@ -253,10 +253,10 @@ describe('useFileDropzone', () => {
     const files = new Map([['cameras.bin', buildFile('cameras.bin')]]);
     await act(async () => { await result.current.reloadFiles(files); });
     expect(processFileDropzoneFilesMock).toHaveBeenLastCalledWith(files, expect.anything(),
-      expect.objectContaining({ preserveRemoteSplatSources: true }));
+      expect.objectContaining({ reload: true }));
     await act(async () => { await result.current.processFiles(files); });
     expect(processFileDropzoneFilesMock).toHaveBeenLastCalledWith(files, expect.anything(),
-      expect.objectContaining({ preserveRemoteSplatSources: false }));
+      expect.objectContaining({ reload: false }));
   });
 
   it('re-applies saved source settings only to the files they came with', async () => {
@@ -287,10 +287,9 @@ describe('useFileDropzone', () => {
 
     await act(async () => { await result.current.reloadFiles(files); });
 
-    // The alignment comes back; the saved splat choice does not replace the splat on screen.
+    // The settings go whole to the workflow, which keeps the splat on screen for a reload.
     expect(processFileDropzoneFilesMock).toHaveBeenLastCalledWith(files, expect.anything(),
-      expect.objectContaining({ viewerState: expect.objectContaining({ config: { splat: { transform } } }) }));
-    expect(useReconstructionStore.getState().sourceViewerState?.state.config.splat)
-      .toEqual({ activeSourceId: 'splats/a.spz', transform });
+      expect.objectContaining({ reload: true, viewerState: saved }));
+    expect(useReconstructionStore.getState().sourceViewerState?.state).toBe(saved);
   });
 });

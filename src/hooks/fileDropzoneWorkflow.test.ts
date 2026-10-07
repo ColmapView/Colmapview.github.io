@@ -957,7 +957,7 @@ describe('file dropzone workflow', () => {
     });
     const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, file(name)]));
 
-    await expect(processFileDropzoneFiles(files, deps, { preserveRemoteSplatSources: preserve })).resolves.toBe(true);
+    await expect(processFileDropzoneFiles(files, deps, { reload: preserve })).resolves.toBe(true);
 
     expect(deps.setLoadedFiles).toHaveBeenCalledExactlyOnceWith(expect.objectContaining(preserve
       ? { splatFile: remoteFile, splatFileSources: [expect.objectContaining({ id: 'splats/scene.spz', file: remoteFile })] }
@@ -982,7 +982,7 @@ describe('file dropzone workflow', () => {
     const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, file(name)]));
     files.set('scene.spz', local);
 
-    await expect(processFileDropzoneFiles(files, deps, { preserveRemoteSplatSources: true })).resolves.toBe(true);
+    await expect(processFileDropzoneFiles(files, deps, { reload: true })).resolves.toBe(true);
 
     expect(store.getLoadedFiles()?.splatFile).toBe(local);
     expect(deps.setUrlProgress).not.toHaveBeenCalledWith(expect.objectContaining({ currentFile: 'scene.spz' }));
@@ -1007,10 +1007,184 @@ describe('file dropzone workflow', () => {
     files.set('a.spz', a);
     files.set('b.spz', b);
     try {
-      await expect(processFileDropzoneFiles(files, deps, { preserveRemoteSplatSources: true })).resolves.toBe(true);
+      await expect(processFileDropzoneFiles(files, deps, { reload: true })).resolves.toBe(true);
 
       expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(b);
       expect(deps.setUrlProgress).not.toHaveBeenCalledWith(expect.objectContaining({ currentFile: 'a.spz' }));
+      expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
+    } finally { useReconstructionStore.getState().clear(); }
+  });
+
+  function reloadFixture() {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
+    useTransformStore.setState(useTransformStore.getInitialState(), true);
+    const a = new File(['aa'], 'a.spz');   // larger: the files' default pick
+    const b = new File(['b'], 'b.spz');
+    const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, file(name)]));
+    files.set('a.spz', a);
+    files.set('b.spz', b);
+    useReconstructionStore.getState().setLoadedFiles(loadedFiles({ splatFile: a, splatFiles: [a, b],
+      splatFileSources: [{ id: 'a.spz', path: 'a.spz', file: a }, { id: 'b.spz', path: 'b.spz', file: b }] }));
+    const deps = createDeps({
+      getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
+      setLoadedFiles: useReconstructionStore.getState().setLoadedFiles,
+      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
+      buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
+    });
+    return { a, b, files, deps };
+  }
+
+  it.each(['b.spz', ''])('keeps the splat state on screen (%j) across repeated reloads', async choice => {
+    const { b, files, deps } = reloadFixture();
+    try {
+      await useReconstructionStore.getState().selectSplatSource(choice);
+      for (let reload = 0; reload < 2; reload += 1) {
+        await expect(processFileDropzoneFiles(files, deps, { reload: true })).resolves.toBe(true);
+      }
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(choice ? b : undefined);
+      expect(useReconstructionStore.getState().loadedFiles?.splatFileSources).toHaveLength(2);
+      // Nothing new to load: the renderer is never handed the default splat.
+      expect(deps.setUrlProgress).not.toHaveBeenCalledWith(expect.objectContaining({ currentFile: 'a.spz' }));
+      expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
+    } finally { useReconstructionStore.getState().clear(); }
+  });
+
+  it("does not let the dataset's own settings switch the splat on reload", async () => {
+    const { b, files, deps } = reloadFixture();
+    const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { activeSourceId: 'a.spz' }, ui: { backgroundColor: '#345678' } } });
+    files.set('colmapview.yaml', Object.assign(file('colmapview.yaml'), { text: async () => yaml }));
+    try {
+      await useReconstructionStore.getState().selectSplatSource('b.spz');
+      await expect(processFileDropzoneFiles(files, deps, { reload: true,
+        onViewerState: viewerState => applySavedViewerState(viewerState, null) })).resolves.toBe(true);
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(b);
+      expect(useUIStore.getState().backgroundColor).toBe('#345678');   // the rest still applies
+    } finally { useReconstructionStore.getState().clear(); }
+  });
+
+  it('re-applies the saved alignment on reload but not the saved splat choice', async () => {
+    const { b, files, deps } = reloadFixture();
+    const transform = { ...createIdentityEuler(), translationX: 5 };
+    const saved: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { activeSourceId: 'a.spz', transform } } };
+    try {
+      await useReconstructionStore.getState().selectSplatSource('b.spz');
+      await expect(processFileDropzoneFiles(files, deps, { reload: true, viewerState: saved,
+        onViewerState: viewerState => applySavedViewerState(viewerState, null) })).resolves.toBe(true);
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(b);
+      expect(useTransformStore.getState().splatTransform).toEqual(transform);
+    } finally { useReconstructionStore.getState().clear(); }
+  });
+
+  it('shows the points normally when Reload re-applies splat-tuned display with no splat on screen', async () => {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
+    const a = new File(['aa'], 'a.spz');
+    const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, file(name)]));
+    files.set('a.spz', a);
+    useReconstructionStore.getState().setLoadedFiles(loadedFiles({ splatFile: a, splatFiles: [a],
+      splatFileSources: [{ id: 'a.spz', path: 'a.spz', file: a }] }));
+    await useReconstructionStore.getState().selectSplatSource('');
+    const saved: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null,
+      config: { pointCloud: { colorMode: 'splatPoints', pointSize: 1, pointOpacity: 0.2 } } };
+    const deps = createDeps({
+      getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
+      setLoadedFiles: useReconstructionStore.getState().setLoadedFiles,
+      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
+      buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
+    });
+    try {
+      await expect(processFileDropzoneFiles(files, deps, { reload: true, viewerState: saved,
+        onViewerState: viewerState => applySavedViewerState(viewerState, null) })).resolves.toBe(true);
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+      expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'rgb', pointSize: 2, pointOpacity: 1 });
+    } finally { useReconstructionStore.getState().clear(); }
+  });
+
+  /** A scene without COLMAP files whose own files hold the splats a (their default) and b. */
+  function reloadWithoutColmapFixture(scene: 'splat-only' | 'images-only') {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
+    useTransformStore.setState(useTransformStore.getInitialState(), true);
+    const a = new File(['aa'], 'a.spz');   // larger: the files' default pick
+    const b = new File(['b'], 'b.spz');
+    const photo = file('photo.jpg');
+    const files = new Map([['a.spz', a], ['b.spz', b]]);
+    if (scene === 'images-only') files.set('images/photo.jpg', photo);
+    useReconstructionStore.getState().setLoadedFiles(loadedFiles({ camerasFile: undefined, imagesFile: undefined,
+      points3DFile: undefined, imageFiles: new Map(scene === 'images-only' ? [['photo.jpg', photo]] : []),
+      splatFile: a, splatFiles: [a, b],
+      splatFileSources: [{ id: 'a.spz', path: 'a.spz', file: a }, { id: 'b.spz', path: 'b.spz', file: b }] }));
+    const deps = createDeps({
+      getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
+      setLoadedFiles: useReconstructionStore.getState().setLoadedFiles,
+    });
+    return { b, files, deps };
+  }
+
+  it.each([
+    ['splat-only', 'b.spz'], ['splat-only', ''], ['images-only', 'b.spz'], ['images-only', ''],
+  ] as const)('keeps the splat state on screen across repeated reloads (%s scene, %j)', async (scene, choice) => {
+    const { b, files, deps } = reloadWithoutColmapFixture(scene);
+    try {
+      await useReconstructionStore.getState().selectSplatSource(choice);
+      for (let reload = 0; reload < 2; reload += 1) {
+        await expect(processFileDropzoneFiles(files, deps, { reload: true })).resolves.toBe(true);
+      }
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(choice ? b : undefined);
+      expect(useReconstructionStore.getState().loadedFiles?.splatFileSources).toHaveLength(2);
+      // The files' default splat is never put on screen.
+      expect(deps.setUrlProgress).not.toHaveBeenCalledWith(expect.objectContaining({ currentFile: 'a.spz' }));
+      expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
+    } finally { useReconstructionStore.getState().clear(); }
+  });
+
+  it("does not let a splat-only project's own settings switch the splat on reload", async () => {
+    const { b, files, deps } = reloadWithoutColmapFixture('splat-only');
+    const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { activeSourceId: 'a.spz' }, ui: { backgroundColor: '#345678' } } });
+    files.set('colmapview.yaml', Object.assign(file('colmapview.yaml'), { text: async () => yaml }));
+    try {
+      await useReconstructionStore.getState().selectSplatSource('b.spz');
+      for (let reload = 0; reload < 2; reload += 1) {
+        await expect(processFileDropzoneFiles(files, deps, { reload: true,
+          onViewerState: viewerState => applySavedViewerState(viewerState, null) })).resolves.toBe(true);
+      }
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(b);
+      expect(useUIStore.getState().backgroundColor).toBe('#345678');
+    } finally { useReconstructionStore.getState().clear(); }
+  });
+
+  it.each(['splats/scene.spz', ''])("keeps an images-only scene's remote splat tiles and its splat state (%j) across reloads", async choice => {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
+    useTransformStore.setState(useTransformStore.getInitialState(), true);
+    const remoteFile = new File(['remote'], 'scene.spz');
+    const photo = file('photo.jpg');
+    // The files hold only the images: remote tiles are never among them.
+    const files = new Map([['images/photo.jpg', photo]]);
+    useReconstructionStore.getState().setLoadedFiles(loadedFiles({ camerasFile: undefined, imagesFile: undefined,
+      points3DFile: undefined, imageFiles: new Map([['photo.jpg', photo]]), splatFile: remoteFile, splatFiles: [remoteFile],
+      splatFileSources: [
+        { id: 'splats/scene.spz', path: 'splats/scene.spz', url: 'https://x/splats/scene.spz', size: 6, file: remoteFile },
+        { id: 'splats/other.spz', path: 'splats/other.spz', url: 'https://x/splats/other.spz', size: 9 },
+      ] }));
+    const deps = createDeps({
+      getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
+      setLoadedFiles: useReconstructionStore.getState().setLoadedFiles,
+    });
+    try {
+      await useReconstructionStore.getState().selectSplatSource(choice);
+      for (let reload = 0; reload < 2; reload += 1) {
+        await expect(processFileDropzoneFiles(files, deps, { reload: true })).resolves.toBe(true);
+      }
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(choice ? remoteFile : undefined);
+      expect(useReconstructionStore.getState().loadedFiles?.splatFileSources?.map(source => source.id))
+        .toEqual(['splats/scene.spz', 'splats/other.spz']);
+      // The renderer already shows the kept splat: no splat load is left waiting on it.
+      expect(deps.setUrlProgress).toHaveBeenLastCalledWith({ percent: 95, message: 'Finalizing...' });
       expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
     } finally { useReconstructionStore.getState().clear(); }
   });

@@ -20,7 +20,6 @@ import { processFileDropzoneFiles, type FileDropzoneWorkflowOptions } from './fi
 import { applySavedViewerState } from './useUrlState';
 import { dismissOptionalSettingsTimeoutWarning } from './optionalSettingsWarning';
 import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
-import type { PublishedViewerState } from '../utils/publishedViewerState';
 
 function cancelUrlLoad(): void {
   const { urlLoadController, finishUrlLoad } = useReconstructionStore.getState();
@@ -38,14 +37,6 @@ function beginLocalLoad() {
     onViewerState: (state: Parameters<typeof applySavedViewerState>[0]) =>
       applySavedViewerState(state, null, load.assertCurrent, initialSplatSelectionRevision),
   };
-}
-
-/** Reload keeps the splat on screen; re-apply everything else the dataset saved. */
-function withoutSplatChoice(state: PublishedViewerState): PublishedViewerState {
-  if (state.config.splat?.activeSourceId === undefined) return state;
-  const splat = { ...state.config.splat };
-  delete splat.activeSourceId;
-  return { ...state, config: { ...state.config, splat } };
 }
 
 export function useFileDropzone() {
@@ -70,7 +61,7 @@ export function useFileDropzone() {
   const processFiles = useCallback(async (
     files: Map<string, File>,
     progressRange?: { start: number; end: number },
-    options: Pick<FileDropzoneWorkflowOptions, 'onSceneReplaced' | 'replaceSplatScene' | 'preserveRemoteSplatSources' | 'throwOnError' | 'onViewerState' | 'viewerState' | 'load' | 'signal' | 'initialSplatSelectionRevision'> = {}
+    options: Pick<FileDropzoneWorkflowOptions, 'onSceneReplaced' | 'replaceSplatScene' | 'reload' | 'throwOnError' | 'onViewerState' | 'viewerState' | 'load' | 'signal' | 'initialSplatSelectionRevision'> = {}
   ) => {
     const initialSplatSelectionRevision = options.initialSplatSelectionRevision ?? useReconstructionStore.getState().splatSelectionRevision;
     const load = options.load ?? beginReconstructionLoad();
@@ -124,7 +115,7 @@ export function useFileDropzone() {
         signal: options.signal,
         initialSplatSelectionRevision,
         replaceSplatScene: options.replaceSplatScene ?? false,
-        preserveRemoteSplatSources: options.preserveRemoteSplatSources ?? false,
+        reload: options.reload ?? false,
         throwOnError: options.throwOnError ?? false,
       });
     } finally {
@@ -141,14 +132,13 @@ export function useFileDropzone() {
     resetView,
   ]);
 
-  /** Re-read the current dataset (discarding edits) without dropping its remote splat tiles. */
+  /** Re-read the current dataset (discarding edits), keeping the splat state on screen. */
   const reloadFiles = useCallback((files: Map<string, File>) => {
-    // A URL dataset's saved settings are not among its files; re-apply them like a project's own YAML,
-    // but keep the splat on screen.
+    // A URL dataset's saved settings are not among its files; re-apply them like a project's own YAML.
     const retained = useReconstructionStore.getState().sourceViewerState;
     return processFiles(files, undefined, {
-      preserveRemoteSplatSources: true,
-      viewerState: retained?.files === files ? withoutSplatChoice(retained.state) : undefined,
+      reload: true,
+      viewerState: retained?.files === files ? retained.state : undefined,
     });
   }, [processFiles]);
 

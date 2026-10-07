@@ -23,7 +23,7 @@ export function getNextSplatSourceId(
 
 /** Find a splat source by id, path, or downloaded file name. */
 export function findSplatSourceById(
-  loadedFiles: LoadedFiles | null,
+  loadedFiles: Pick<LoadedFiles, 'splatFileSources'> | null,
   sourceId: string
 ): SplatFileSource | undefined {
   const target = normalizeSplatSourceId(sourceId);
@@ -263,11 +263,14 @@ export function getShareActiveSplatSourceId(loadedFiles: LoadedFiles | null): st
 }
 
 /**
- * A reload re-reads the dataset's own files, which never contain remote (url-bearing) splat
- * tiles. Carry those tiles over with any downloaded bytes, and keep the active splat when it
- * is one of them (byte-less placeholders included). Local files of the same path win.
+ * A reload re-reads the dataset's own files, which never contain remote (url-bearing) splat tiles,
+ * and keeps the splat state on screen. Remote tiles carry over with any downloaded bytes. The splat
+ * that was showing stays: a reloaded local source with its id or path (local files of the same path
+ * win over a remote copy), or a carried remote tile (byte-less placeholders included). Nothing
+ * showing stays nothing, even when the files contain splats; a splat that is no longer listed gives
+ * way to the files' default.
  */
-export function carryOverRemoteSplatSources(
+export function carryOverSplatState(
   current: LoadedFiles | null,
   reloaded: Pick<LoadedFiles, 'splatFile' | 'splatFiles' | 'splatFileSources'>
 ): Pick<LoadedFiles, 'splatFile' | 'splatFiles' | 'splatFileSources'> {
@@ -275,17 +278,29 @@ export function carryOverRemoteSplatSources(
   const reloadedPaths = new Set(reloadedSources.map((source) => normalizeSplatSourceId(source.path)));
   const carried = (current?.splatFileSources ?? []).filter((source) =>
     Boolean(source.url) && !reloadedPaths.has(normalizeSplatSourceId(source.path)));
-  if (!carried.length) {
+  const splatFile = getSplatFileKeptOnReload(current, reloadedSources, carried, reloaded.splatFile);
+  if (!carried.length && splatFile === reloaded.splatFile) {
     return reloaded;
   }
   const sources = [...reloadedSources, ...carried];
-  const activeId = getActiveSplatSourceId(current);
-  const keepsActive = activeId !== null && carried.some((source) => source.id === activeId);
   return {
     splatFileSources: sources,
     splatFiles: sources.map((source) => source.file).filter((file): file is File => Boolean(file)),
-    splatFile: keepsActive ? current?.splatFile : reloaded.splatFile,
+    splatFile,
   };
+}
+
+function getSplatFileKeptOnReload(
+  current: LoadedFiles | null,
+  reloadedSources: SplatFileSource[],
+  carried: readonly SplatFileSource[],
+  defaultFile: File | undefined
+): File | undefined {
+  if (!current) return defaultFile;
+  const activeId = getActiveSplatSourceId(current);
+  if (activeId === null) return undefined;
+  if (carried.some((source) => source.id === activeId)) return current.splatFile;
+  return findSplatSourceById({ splatFileSources: reloadedSources }, activeId)?.file ?? defaultFile;
 }
 
 export function getNextSplatFile(

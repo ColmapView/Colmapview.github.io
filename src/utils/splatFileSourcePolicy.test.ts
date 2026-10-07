@@ -3,7 +3,7 @@ import type { LoadedFiles, SplatFileSource } from '../types/colmap';
 import {
   applyActiveSplatFile,
   applyActiveSplatPlaceholder,
-  carryOverRemoteSplatSources,
+  carryOverSplatState,
   clearActiveSplatFile,
   findSplatSourceById,
   getActiveSplatSourceId,
@@ -344,7 +344,7 @@ describe('mergeRemoteSplatCatalog', () => {
   });
 });
 
-describe('carryOverRemoteSplatSources', () => {
+describe('carryOverSplatState', () => {
   const remoteFile = new File(['remote'], 'scene.spz');
   const remoteActive = { id: 'splats/scene.spz', path: 'splats/scene.spz', url: 'https://x/splats/scene.spz', size: 6, file: remoteFile };
   const remoteLazy = { id: 'splats/other.spz', path: 'splats/other.spz', url: 'https://x/splats/other.spz', size: 9 };
@@ -352,7 +352,7 @@ describe('carryOverRemoteSplatSources', () => {
 
   it('keeps remote tiles and the active remote splat that the reloaded files do not contain', () => {
     const current = loaded({ splatFile: remoteFile, splatFiles: [remoteFile], splatFileSources: [remoteActive, remoteLazy] });
-    const result = carryOverRemoteSplatSources(current, nothingReloaded);
+    const result = carryOverSplatState(current, nothingReloaded);
     expect(result.splatFileSources?.map(source => source.id)).toEqual(['splats/scene.spz', 'splats/other.spz']);
     expect(result.splatFile).toBe(remoteFile);
     expect(result.splatFiles).toEqual([remoteFile]);
@@ -361,21 +361,21 @@ describe('carryOverRemoteSplatSources', () => {
   it('keeps a byte-less placeholder active', () => {
     const placeholder = new File([], 'other.spz');
     const current = loaded({ splatFile: placeholder, splatFiles: [], splatFileSources: [remoteLazy] });
-    const result = carryOverRemoteSplatSources(current, nothingReloaded);
+    const result = carryOverSplatState(current, nothingReloaded);
     expect(result.splatFile).toBe(placeholder);
     expect(result.splatFileSources).toEqual([remoteLazy]);
   });
 
   it('keeps COLMAP only when no splat was showing', () => {
     const current = loaded({ splatFileSources: [remoteLazy] });
-    expect(carryOverRemoteSplatSources(current, nothingReloaded).splatFile).toBeUndefined();
+    expect(carryOverSplatState(current, nothingReloaded).splatFile).toBeUndefined();
   });
 
   it('prefers a reloaded local file over a remote copy of the same path', () => {
     const local = new File(['local'], 'scene.spz');
     const current = loaded({ splatFile: remoteFile, splatFiles: [remoteFile], splatFileSources: [remoteActive] });
     const reloaded = { splatFile: local, splatFiles: [local], splatFileSources: [{ id: 'splats/scene.spz', path: 'splats/scene.spz', file: local }] };
-    expect(carryOverRemoteSplatSources(current, reloaded)).toBe(reloaded);
+    expect(carryOverSplatState(current, reloaded)).toBe(reloaded);
   });
 
   it('lists the reloaded local splats first, then the remote tiles, keeping the remote splat on screen', () => {
@@ -385,7 +385,7 @@ describe('carryOverRemoteSplatSources', () => {
     // A reload re-reads the local files and defaults to their first splat.
     const reloadedFile = new File(['local'], 'local.spz');
     const reloadedLocal = { id: 'local.spz', path: 'local.spz', file: reloadedFile };
-    const result = carryOverRemoteSplatSources(current,
+    const result = carryOverSplatState(current,
       { splatFile: reloadedFile, splatFiles: [reloadedFile], splatFileSources: [reloadedLocal] });
     expect(result.splatFileSources).toEqual([reloadedLocal, remoteActive, remoteLazy]);
     // Rebuilt from the merged sources: the reloaded bytes and the downloaded remote tile, not the lazy one.
@@ -400,6 +400,27 @@ describe('carryOverRemoteSplatSources', () => {
     const local = new File(['local'], 'local.spz');
     const current = loaded({ splatFile: local, splatFiles: [local], splatFileSources: [{ id: 'local.spz', path: 'local.spz', file: local }] });
     const reloaded = { splatFile: local, splatFiles: [local], splatFileSources: [{ id: 'local.spz', path: 'local.spz', file: local }] };
-    expect(carryOverRemoteSplatSources(current, reloaded)).toBe(reloaded);
+    expect(carryOverSplatState(current, reloaded)).toBe(reloaded);
+  });
+
+  const a = new File(['aa'], 'a.spz');
+  const b = new File(['b'], 'b.spz');
+  const local = [{ id: 'a.spz', path: 'a.spz', file: a }, { id: 'b.spz', path: 'b.spz', file: b }];
+  const reloadedLocal = { splatFile: a, splatFiles: [a, b], splatFileSources: local };
+
+  it('keeps the local splat that was showing instead of the default', () => {
+    const current = loaded({ splatFile: b, splatFiles: [a, b], splatFileSources: local });
+    expect(carryOverSplatState(current, reloadedLocal).splatFile).toBe(b);
+  });
+
+  it('keeps COLMAP only when no splat was showing, even with local splats', () => {
+    const current = loaded({ splatFiles: [a, b], splatFileSources: local });
+    expect(carryOverSplatState(current, reloadedLocal).splatFile).toBeUndefined();
+  });
+
+  it('falls back to the default when the splat that was showing is gone', () => {
+    const merged = new File(['m'], 'merged.spz');
+    const current = loaded({ splatFile: merged, splatFiles: [merged], splatFileSources: [{ id: 'merged.spz', path: 'merged.spz', file: merged }] });
+    expect(carryOverSplatState(current, reloadedLocal)).toBe(reloadedLocal);
   });
 });
