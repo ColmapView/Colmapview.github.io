@@ -781,6 +781,18 @@ describe('reconstruction store lazy splat source switching', () => {
     expect(useReconstructionStore.getState().loadedFiles?.splatFile?.name).toBe('a.ply');
   });
 
+  it("clears a failed tile download's error when None is chosen", async () => {
+    const deferreds = stubDeferredFetch();
+    threeLazySources();
+    const pB = useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+    deferreds.get('https://x/splats/b.ply')!.reject(new Error('boom'));
+    await pB;
+
+    await useReconstructionStore.getState().selectSplatSource('');
+
+    expect(useReconstructionStore.getState().urlError).toBeNull();
+  });
+
   it('clears the active splat (COLMAP only) when selecting the empty source', async () => {
     const fileA = new File(['a'], 'a.ply');
     useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
@@ -1403,6 +1415,22 @@ describe('reconstruction store loading cancellation', () => {
     expect(state.requestedSplatSourceId).toBeNull();
     expect(state.splatSelectionRevision).toBe(revision + 1);
     expect(state.urlLoading).toBe(false);
+  });
+
+  it("clears a stale splat error when cancelling the renderer's decode, as choosing None does", () => {
+    const fileA = new File(['a'], 'a.ply');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({
+      splatFile: fileA, splatFiles: [fileA],
+      splatFileSources: [{ id: 'splats/a.ply', path: 'splats/a.ply', file: fileA }],
+    }));
+    // Local loads never clear urlError, so an earlier tile's failure can outlive into this decode.
+    useReconstructionStore.setState({ urlLoading: true, urlProgress: getSplatLoadingProgress(fileA, { startPercent: 60 }),
+      urlError: { type: 'network', message: 'Failed to load splat' } });
+
+    useReconstructionStore.getState().cancelLoading();
+
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(useReconstructionStore.getState().urlError).toBeNull();
   });
 
   it('cancels a same-named tile download without dropping the splat on screen', async () => {

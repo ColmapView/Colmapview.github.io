@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create, type StoreApi } from 'zustand';
 import type { Reconstruction, LoadedFiles, SplatFileSource } from '../types/colmap';
 import type { ReconstructionSource } from '../wasm/reconstructionService';
 import { isReconstructionSnapshot } from '../wasm/reconstructionService';
@@ -53,6 +53,16 @@ function cancelPendingSplatLoad(): void {
  */
 function rendererOwnsSplatProgress({ urlProgress, loadedFiles }: Pick<ReconstructionState, 'urlProgress' | 'loadedFiles'>): boolean {
   return activeSplatController === null && isSplatLoadingProgressForFile(urlProgress, loadedFiles?.splatFile);
+}
+
+/**
+ * "COLMAP only": the splat is deactivated (its source stays listed; re-fetchable bytes are
+ * dropped), nothing is pending for it, and its loading state goes.
+ */
+function showColmapOnly(set: StoreApi<ReconstructionState>['setState'], loadedFiles: LoadedFiles,
+  patch: Partial<ReconstructionState> = {}): void {
+  set({ ...patch, loadedFiles: clearActiveSplatFile(loadedFiles), requestedSplatSourceId: null,
+    urlLoading: false, urlProgress: null, urlError: null });
 }
 
 /** Switch the point cloud into a splat-visible display mode with splat defaults. */
@@ -432,17 +442,10 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     // user's current mode.
     const hadSplatBefore = Boolean(loadedFiles.splatFile);
 
-    // Empty selection -> "COLMAP only": unload the active splat. Also clear any
-    // in-flight download indicator so a superseded lazy fetch can't leave the
-    // loading overlay stuck (there is nothing left to render that would reset it).
+    // Empty selection -> "COLMAP only". Clearing the indicator too keeps a superseded lazy
+    // fetch from leaving the loading overlay stuck (nothing is left to render that would reset it).
     if (!source) {
-      set({
-        requestedSplatSourceId: null,
-        loadedFiles: clearActiveSplatFile(loadedFiles),
-        urlLoading: false,
-        urlProgress: null,
-        urlError: null,
-      });
+      showColmapOnly(set, loadedFiles);
       return;
     }
     // Already downloaded: activate immediately (and offload the previous tile). A superseded
@@ -618,17 +621,13 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     cancelPendingReconstructionLoad();
     // A startup or shared link that never produced a scene would keep the landing page hidden.
     if (!reconstruction) clearUrlLoadRequestFromLocation();
-    set({
-      urlLoading: false,
-      urlLoadActive: false,
-      urlLoadController: null,
-      urlProgress: null,
-      ...(cancelsRendererDecode && loadedFiles ? {
-        loadedFiles: clearActiveSplatFile(loadedFiles),
-        requestedSplatSourceId: null,
-        splatSelectionRevision: splatSelectionRevision + 1,
-      } : {}),
-    });
+    const stopped = { urlLoading: false, urlLoadActive: false, urlLoadController: null, urlProgress: null };
+    // The user's explicit "COLMAP only", exactly like choosing None in the picker.
+    if (cancelsRendererDecode && loadedFiles) {
+      showColmapOnly(set, loadedFiles, { ...stopped, splatSelectionRevision: splatSelectionRevision + 1 });
+    } else {
+      set(stopped);
+    }
   },
 
   clear: () => {
