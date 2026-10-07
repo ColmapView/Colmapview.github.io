@@ -2,13 +2,17 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GoogleDrivePublishButton } from './GoogleDrivePublishButton';
 import { isGoogleDriveEnabled, resolveGoogleDriveHostingConfig } from '../../features/googleDrive/config';
-import { decodeShareData } from '../../utils/shareDataCodec';
+import { decodeShareData, encodeShareData } from '../../utils/shareDataCodec';
 import type { ColmapManifest } from '../../types/manifest';
 
 vi.mock('../../features/googleDrive/config', async importOriginal => ({
   ...await importOriginal<typeof import('../../features/googleDrive/config')>(),
   isGoogleDriveEnabled: vi.fn(() => true),
 }));
+vi.mock('../../utils/shareDataCodec', async importOriginal => {
+  const codec = await importOriginal<typeof import('../../utils/shareDataCodec')>();
+  return { ...codec, encodeShareData: vi.fn(codec.encodeShareData) };
+});
 
 const facade = vi.hoisted(() => ({ handoffSource: null as string | object | null }));
 vi.mock('./useGoogleDrivePublishButtonStoreFacade', () => ({ useGoogleDrivePublishButtonStoreFacade: () => facade }));
@@ -77,6 +81,20 @@ describe('Google Drive publishing toolbar control', () => {
     render(<GoogleDrivePublishButton activePanel={null} setActivePanel={vi.fn()} />);
     const destination = new URL(screen.getByRole('link', { name: 'Use Google Drive' }).getAttribute('href')!);
     expect((await decodeShareData(destination.hash))?.manifest).toMatchObject(manifest);
+  });
+  it('builds the hand-off link once per dataset, not on every toolbar re-render', async () => {
+    vi.mocked(isGoogleDriveEnabled).mockReturnValue(false);
+    vi.mocked(encodeShareData).mockClear();
+    facade.handoffSource = 'https://huggingface.co/datasets/owner/scene/tree/main/sparse';
+    const setActivePanel = vi.fn();
+    const { rerender } = render(<GoogleDrivePublishButton activePanel={null} setActivePanel={setActivePanel} />);
+    rerender(<GoogleDrivePublishButton activePanel="share" setActivePanel={setActivePanel} />);
+    expect(encodeShareData).toHaveBeenCalledOnce();
+    facade.handoffSource = 'https://huggingface.co/datasets/owner/other/tree/main/sparse';
+    rerender(<GoogleDrivePublishButton activePanel={null} setActivePanel={setActivePanel} />);
+    expect(encodeShareData).toHaveBeenCalledTimes(2);
+    const destination = new URL(screen.getByRole('link', { name: 'Use Google Drive' }).getAttribute('href')!);
+    expect((await decodeShareData(destination.hash))?.manifestUrl).toBe('https://huggingface.co/datasets/owner/other/tree/main/sparse');
   });
 
   it.each([

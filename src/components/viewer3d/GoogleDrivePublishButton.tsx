@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { getGoogleDriveClientId } from '../../features/googleDrive/auth';
 import { GOOGLE_DRIVE_ENABLED_ORIGIN, isGoogleDriveEnabled } from '../../features/googleDrive/config';
 import { useDrivePublicationStatus } from '../../features/googleDrive/publicationStatus';
@@ -16,8 +16,10 @@ export const GoogleDrivePublishButton = memo(function GoogleDrivePublishButton({
   const [isOpen, setIsOpen] = useState(false);
   const active = useDrivePublicationStatus(state => state.active);
   const { handoffSource } = useGoogleDrivePublishButtonStoreFacade();
+  // Every toolbar hover re-renders this button, and encoding an inline manifest costs O(manifest).
+  const handoffUrl = useMemo(() => getGoogleDriveHandoffUrl(GOOGLE_DRIVE_ENABLED_ORIGIN, handoffSource), [handoffSource]);
   // A new tab keeps this scene and its edits; a remote dataset reopens there.
-  if (!isGoogleDriveEnabled()) return <a href={getGoogleDriveHandoffUrl(GOOGLE_DRIVE_ENABLED_ORIGIN, handoffSource)}
+  if (!isGoogleDriveEnabled()) return <a href={handoffUrl}
     target="_blank" rel="noopener noreferrer" aria-label="Use Google Drive" className={getControlButtonClass(false, false)}
     {...getTooltipProps(handoffSource ? 'Open this dataset with Google Drive in a new tab' : 'Use Google Drive in a new tab', 'left')}>
     <GoogleDriveIcon className="w-5 h-5" />
