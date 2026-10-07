@@ -13,20 +13,12 @@ import { useTransformStore, type TransformState } from '../stores/transformStore
 import { usePointPickingStore } from '../stores/pointPickingStore.js';
 import { useDeletionStore } from '../stores/deletionStore.js';
 import { useImageMetricsStore } from '../stores/imageMetricsStore.js';
-import type { Sim3dEuler } from '../../types/sim3d.js';
-import { createIdentityEuler } from '../../utils/sim3dTransforms.js';
+import { createIdentityEuler, isSameEuler } from '../../utils/sim3dTransforms.js';
 import { requestConfirmation } from '../../utils/confirmation.js';
-import { findDatasetViewerSettingsEntry, parseDatasetViewerSettings } from '../../utils/datasetViewerSettings.js';
-import { MAX_VIEWER_STATE_BYTES, type PublishedViewerState } from '../../utils/publishedViewerState.js';
+import { resolveDatasetViewerSettings } from '../../utils/datasetViewerSettings.js';
 
 /** The scene and splat alignment that Reload re-applies. */
 export type ReloadBaseline = Pick<TransformState, 'transform' | 'splatTransform'>;
-
-const ALIGNMENT_KEYS = Object.keys(createIdentityEuler()) as (keyof Sim3dEuler)[];
-
-// isIdentityEuler's tolerance, so the identity baseline behaves exactly as that check did.
-const sameAlignment = (current: Sim3dEuler, baseline: Sim3dEuler) =>
-  ALIGNMENT_KEYS.every(key => Math.abs(current[key] - baseline[key]) < 1e-9);
 
 /**
  * Reloading discards both pending changes and committed in-memory edits. An alignment is lost only
@@ -37,22 +29,11 @@ export function hasUnsavedReloadState(
 ): boolean {
   if (useReconstructionStore.getState().reconstructionEditRevision > 0) return true;
   const { transform, splatTransform } = useTransformStore.getState();
-  if (!sameAlignment(transform, baseline.transform)) return true;
-  if (!sameAlignment(splatTransform, baseline.splatTransform)) return true;
+  if (!isSameEuler(transform, baseline.transform)) return true;
+  if (!isSameEuler(splatTransform, baseline.splatTransform)) return true;
   const pending = useDeletionStore.getState().pendingDeletions;
   if (pending && pending.size > 0) return true;
   return false;
-}
-
-/** A settings file Reload cannot read or parse is skipped, as the load skips it. */
-async function readDatasetViewerSettings(files: Map<string, File>): Promise<PublishedViewerState | null> {
-  const file = findDatasetViewerSettingsEntry(files)?.[1];
-  if (!file || file.size > MAX_VIEWER_STATE_BYTES) return null;
-  try {
-    return parseDatasetViewerSettings(await file.text());
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -61,14 +42,14 @@ async function readDatasetViewerSettings(files: Map<string, File>): Promise<Publ
  */
 async function getReloadBaseline(): Promise<ReloadBaseline> {
   const { droppedFiles, sourceViewerState } = useReconstructionStore.getState();
-  // A URL dataset's settings are retained beside its files (an archive's own YAML included);
-  // a local project's are among them.
-  const saved = sourceViewerState && sourceViewerState.files === droppedFiles
-    ? sourceViewerState.state
-    : droppedFiles && await readDatasetViewerSettings(droppedFiles);
+  // Reload hands the load these files and the settings retained beside exactly them (a URL dataset's).
+  const saved = droppedFiles && await resolveDatasetViewerSettings(droppedFiles,
+    sourceViewerState?.files === droppedFiles ? sourceViewerState.state : null);
+  // Files replaced during the read make that reading another dataset's: fall back to identity.
+  const current = useReconstructionStore.getState().droppedFiles === droppedFiles ? saved : null;
   return {
-    transform: saved?.config.transform ?? createIdentityEuler(),
-    splatTransform: saved?.config.splat?.transform ?? createIdentityEuler(),
+    transform: current?.config.transform ?? createIdentityEuler(),
+    splatTransform: current?.config.splat?.transform ?? createIdentityEuler(),
   };
 }
 

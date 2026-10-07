@@ -7,7 +7,7 @@ import { applyDeletionsToData } from './deletionActions';
 import { buildImage, buildReconstruction } from '../../test/builders';
 import { applySavedViewerState, type SharedViewerOverrides } from '../../hooks/useUrlState';
 import { serializeDatasetViewerSettings } from '../../utils/datasetViewerSettings';
-import type { PublishedViewerState } from '../../utils/publishedViewerState';
+import { MAX_VIEWER_STATE_BYTES, type PublishedViewerState } from '../../utils/publishedViewerState';
 import { createIdentityEuler } from '../../utils/sim3dTransforms';
 
 describe('reload confirmation gating', () => {
@@ -111,8 +111,7 @@ describe('reload confirmation gating', () => {
     const datasetFiles = () => new Map([['sparse/0/cameras.bin', new File([''], 'cameras.bin')]]);
 
     /** A URL dataset, as the loader leaves it: its saved settings retained beside its files, then applied. */
-    async function loadPublishedDataset(shared: SharedViewerOverrides | null = null) {
-      const files = datasetFiles();
+    async function loadPublishedDataset(shared: SharedViewerOverrides | null = null, files = datasetFiles()) {
       useReconstructionStore.getState().setDroppedFiles(files);
       useReconstructionStore.getState().setSourceViewerState(saved);
       await applySavedViewerState(saved, shared);
@@ -173,6 +172,56 @@ describe('reload confirmation gating', () => {
     it('does not ask for a local project that shows the alignment of its own colmapview.yaml', async () => {
       await loadLocalProject();
       expect(await asksBeforeReload()).toBe(false);
+    });
+
+    it('measures against the colmapview.yaml among the files over retained settings, as the load lets it win', async () => {
+      const files = await loadLocalProject();
+      const retained: PublishedViewerState = { ...saved, config: { transform: { ...createIdentityEuler(), scale: 2 } } };
+      useReconstructionStore.getState().setSourceViewerState(retained);
+      expect(useReconstructionStore.getState().sourceViewerState?.files).toBe(files);
+      expect(await asksBeforeReload()).toBe(false);
+      await applySavedViewerState(retained, null);
+      expect(await asksBeforeReload()).toBe(true);
+    });
+
+    /** A colmapview.yaml the load skips; read in full, the oversized one would move the alignment elsewhere. */
+    function unusableSettingsFile(mode: 'unreadable' | 'invalid' | 'oversized') {
+      const elsewhere = serializeDatasetViewerSettings({ ...saved, config: { transform: { ...createIdentityEuler(), scale: 3 } } });
+      const text = async () => {
+        if (mode === 'unreadable') throw new Error('Read failed');
+        return mode === 'invalid' ? 'version: 99' : elsewhere;
+      };
+      return Object.assign(new File([mode === 'oversized' ? 'x'.repeat(MAX_VIEWER_STATE_BYTES + 1) : ''], 'colmapview.yaml'), { text });
+    }
+
+    it.each(['unreadable', 'invalid', 'oversized'] as const)(
+      'measures past a %s colmapview.yaml against the retained settings, as the load falls back to them', async mode => {
+        await loadPublishedDataset(null, new Map([...datasetFiles(), ['colmapview.yaml', unusableSettingsFile(mode)]]));
+        expect(await asksBeforeReload()).toBe(false);
+        // Settings retained for another file map are not these files' fallback: the baseline is identity.
+        useReconstructionStore.setState({ sourceViewerState: { files: datasetFiles(), state: saved } });
+        expect(await asksBeforeReload()).toBe(true);
+      });
+
+    it('measures against identity when the files are replaced while their colmapview.yaml is read', async () => {
+      const yaml = serializeDatasetViewerSettings(saved);
+      let finishRead: ((text: string) => void) | undefined;
+      const files = datasetFiles();
+      files.set('colmapview.yaml', Object.assign(new File([yaml], 'colmapview.yaml'), {
+        text: () => new Promise<string>(resolve => { finishRead = resolve; }),
+      }));
+      useReconstructionStore.getState().setDroppedFiles(files);
+      await applySavedViewerState(saved, null);
+      confirmSpy.mockClear();
+
+      const confirming = confirmReload();
+      await vi.waitFor(() => expect(finishRead).toBeDefined());
+      // Another dataset replaced these files mid-read, so this file no longer says what Reload restores.
+      useReconstructionStore.getState().setDroppedFiles(datasetFiles());
+      finishRead!(yaml);
+
+      await expect(confirming).resolves.toBe(true);
+      expect(confirmSpy).toHaveBeenCalledOnce();
     });
 
     it.each([

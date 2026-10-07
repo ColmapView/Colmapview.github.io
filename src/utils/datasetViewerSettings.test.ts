@@ -1,8 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { parseConfigYaml } from '../config/configuration/serializer';
-import { findDatasetViewerSettingsEntry, parseDatasetViewerSettings, resolveDatasetSplatSourceId, serializeDatasetViewerSettings } from './datasetViewerSettings';
+import {
+  findDatasetViewerSettingsEntry, parseDatasetViewerSettings, resolveDatasetSplatSourceId, resolveDatasetViewerSettings,
+  serializeDatasetViewerSettings,
+} from './datasetViewerSettings';
 import { createIdentityEuler } from './sim3dTransforms';
-import type { PublishedViewerState } from './publishedViewerState';
+import { MAX_VIEWER_STATE_BYTES, type PublishedViewerState } from './publishedViewerState';
 
 const state: PublishedViewerState = { version: 1, viewerVersion: 'test',
   viewState: { position: [1, 2, 3], quaternion: [0, 0, 0, 1], target: [0, 0, 0], distance: 4 },
@@ -67,5 +70,51 @@ describe('colmapview.yaml settings', () => {
 
   it('bounds input before parsing YAML', () => {
     expect(() => parseDatasetViewerSettings('#' + 'x'.repeat(256 * 1024))).toThrow('size');
+  });
+});
+
+describe('the saved settings a load of some files applies', () => {
+  const fromSource: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null,
+    config: { ui: { backgroundColor: '#111111' } } };
+  const ownYaml = serializeDatasetViewerSettings({ ...fromSource, config: { ui: { backgroundColor: '#222222' } } });
+  /** jsdom's File has no text(). */
+  const settingsFile = (text: () => Promise<string>, size = 0) =>
+    Object.assign(new File(['x'.repeat(size)], 'colmapview.yaml'), { text });
+
+  it("lets the files' own colmapview.yaml win over the settings from their source", async () => {
+    const files = new Map([['project/colmapview.yaml', settingsFile(async () => ownYaml)]]);
+    await expect(resolveDatasetViewerSettings(files, fromSource))
+      .resolves.toMatchObject({ config: { ui: { backgroundColor: '#222222' } } });
+  });
+
+  it('applies the settings from their source, else none, when the files hold no colmapview.yaml', async () => {
+    const files = new Map([['cameras.bin', new File([''], 'cameras.bin')]]);
+    const onSkipped = vi.fn();
+    await expect(resolveDatasetViewerSettings(files, fromSource, onSkipped)).resolves.toBe(fromSource);
+    await expect(resolveDatasetViewerSettings(files, undefined, onSkipped)).resolves.toBeNull();
+    expect(onSkipped).not.toHaveBeenCalled();
+  });
+
+  it.each(['unreadable', 'invalid', 'oversized'] as const)(
+    'skips a %s colmapview.yaml for the settings from their source, else none', async mode => {
+      // Read in full, the oversized file would be valid settings of its own.
+      const text = vi.fn(async () => {
+        if (mode === 'unreadable') throw new Error('Read failed');
+        return mode === 'invalid' ? 'version: 99' : ownYaml;
+      });
+      const files = new Map([['colmapview.yaml', settingsFile(text, mode === 'oversized' ? MAX_VIEWER_STATE_BYTES + 1 : 0)]]);
+      const onSkipped = vi.fn();
+      await expect(resolveDatasetViewerSettings(files, fromSource, onSkipped)).resolves.toBe(fromSource);
+      await expect(resolveDatasetViewerSettings(files, null, onSkipped)).resolves.toBeNull();
+      expect(onSkipped).toHaveBeenCalledTimes(2);
+      if (mode === 'oversized') expect(text).not.toHaveBeenCalled();
+    });
+
+  it('resolves the saved splat among the files, relative to the colmapview.yaml', async () => {
+    const yaml = serializeDatasetViewerSettings({ ...fromSource, config: { splat: { activeSourceId: 'splats/scene.spz' } } });
+    const files = new Map([['other/splats/scene.spz', new File([''], 'scene.spz')],
+      ['project/splats/scene.spz', new File([''], 'scene.spz')], ['project/colmapview.yaml', settingsFile(async () => yaml)]]);
+    await expect(resolveDatasetViewerSettings(files, null))
+      .resolves.toMatchObject({ config: { splat: { activeSourceId: 'project/splats/scene.spz' } } });
   });
 });

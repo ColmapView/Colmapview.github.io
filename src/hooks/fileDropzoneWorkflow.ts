@@ -32,8 +32,8 @@ import { runSplatOnlyLoad } from './fileDropzoneSplatOnly';
 import { parseColmapFiles } from './fileDropzoneColmapParser';
 import { buildColmapReconstruction } from './fileDropzoneReconstruction';
 import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
-import { findDatasetViewerSettingsEntry, parseDatasetViewerSettings, resolveDatasetSplatSourceId } from '../utils/datasetViewerSettings';
-import { MAX_VIEWER_STATE_BYTES, type PublishedViewerState } from '../utils/publishedViewerState';
+import { findDatasetViewerSettingsEntry, resolveDatasetViewerSettings } from '../utils/datasetViewerSettings';
+import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { anySignal } from '../utils/abortSignals';
 
 type SetUrlProgress = (progress: UrlLoadProgress | null) => void;
@@ -409,20 +409,10 @@ export async function processFileDropzoneFiles(
       deps.setUrlProgress({ percent: mapProgress(0), message: 'Starting...' });
     }
 
-    const settingsEntry = findDatasetViewerSettingsEntry(files);
-    const settingsFile = settingsEntry?.[1];
+    const settingsFile = findDatasetViewerSettingsEntry(files)?.[1];
     if (settingsFile) {
-      try {
-        if (settingsFile.size > MAX_VIEWER_STATE_BYTES) throw new Error('Settings exceed size limit');
-        viewerState = parseDatasetViewerSettings(await settingsFile.text());
-        if (viewerState.config.splat?.activeSourceId) {
-          viewerState.config.splat.activeSourceId = resolveDatasetSplatSourceId(
-            viewerState.config.splat.activeSourceId, settingsEntry![0], files.keys(),
-          );
-        }
-      } catch {
-        logger.warn('[Dataset Loader] Skipping unavailable or invalid colmapview.yaml settings.');
-      }
+      viewerState = await resolveDatasetViewerSettings(files, normalizedOptions.viewerState,
+        () => logger.warn('[Dataset Loader] Skipping unavailable or invalid colmapview.yaml settings.'));
       load.assertCurrent();
     }
     const configFile = settingsFile ? null : findConfigFile(files);

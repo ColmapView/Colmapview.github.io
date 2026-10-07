@@ -208,6 +208,25 @@ describe('file dropzone workflow', () => {
     fixture.service.dispose();
   });
 
+  it.each(['invalid', 'oversized', 'unreadable'] as const)('falls back past %s project YAML to the settings from its source, warning once', async mode => {
+    const fixture = workerLoadFixture();
+    // Read in full, the oversized file would be valid settings of its own.
+    const text = vi.fn(async () => {
+      if (mode === 'unreadable') throw new Error('Read failed');
+      return mode === 'invalid' ? 'version: 99' : 'ui:\n  background_color: "#222222"\n';
+    });
+    fixture.files.set('colmapview.yaml', Object.assign(new File([mode === 'oversized' ? 'x'.repeat(256 * 1024 + 1) : ''], 'colmapview.yaml'), { text }));
+    const fromSource: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null, config: { ui: { backgroundColor: '#111111' } } };
+    const logger = createLogger();
+    const onViewerState = vi.fn();
+    const deps = createDeps({ parseFiles: async () => fixture.parseResult, logger, onViewerState });
+    expect(await processFileDropzoneFiles(fixture.files, deps, { viewerState: fromSource })).toBe(true);
+    expect(onViewerState).toHaveBeenCalledExactlyOnceWith(fromSource);
+    expect(vi.mocked(logger.warn).mock.calls.filter(([message]) => String(message).includes('colmapview.yaml')))
+      .toEqual([['[Dataset Loader] Skipping unavailable or invalid colmapview.yaml settings.']]);
+    fixture.service.dispose();
+  });
+
   it('does not restore project settings when their load is cancelled', async () => {
     let finish!: (text: string) => void;
     const text = vi.fn(() => new Promise<string>(resolve => { finish = resolve; }));

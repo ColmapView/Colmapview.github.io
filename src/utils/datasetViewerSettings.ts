@@ -97,3 +97,32 @@ export function serializeDatasetViewerSettings(input: PublishedViewerState): str
   if (new TextEncoder().encode(yaml).length > MAX_VIEWER_STATE_BYTES) throw new Error('Viewer settings exceed the supported size.');
   return yaml;
 }
+
+/** A settings file among the files, size-checked and parsed, its splat resolved among them; null when unusable. */
+async function readDatasetViewerSettingsFile([path, file]: [string, File],
+  files: ReadonlyMap<string, File>): Promise<PublishedViewerState | null> {
+  if (file.size > MAX_VIEWER_STATE_BYTES) return null;
+  try {
+    const state = parseDatasetViewerSettings(await file.text());
+    const splat = state.config.splat;
+    if (splat?.activeSourceId) splat.activeSourceId = resolveDatasetSplatSourceId(splat.activeSourceId, path, files.keys());
+    return state;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The saved settings a load of these files applies, and so what their Reload re-applies: their own
+ * colmapview.yaml, else the settings that came with them from their source, else none. A settings file
+ * that is too large, unreadable or invalid is skipped (`onSkipped`), never fatal.
+ */
+export async function resolveDatasetViewerSettings(files: ReadonlyMap<string, File>,
+  fromSource: PublishedViewerState | null | undefined, onSkipped?: () => void): Promise<PublishedViewerState | null> {
+  const entry = findDatasetViewerSettingsEntry(files);
+  if (!entry) return fromSource ?? null;
+  const own = await readDatasetViewerSettingsFile(entry, files);
+  if (own) return own;
+  onSkipped?.();
+  return fromSource ?? null;
+}

@@ -298,18 +298,17 @@ export function sim3dToMatrix4(sim3d: Sim3d): THREE.Matrix4 {
   return matrix;
 }
 
+const IDENTITY_EULER = createIdentityEuler();
+const EULER_KEYS = Object.keys(IDENTITY_EULER) as (keyof Sim3dEuler)[];
+
+/** Whether two transforms agree in every component, up to floating-point rounding. */
+export function isSameEuler(a: Sim3dEuler, b: Sim3dEuler): boolean {
+  return EULER_KEYS.every(key => Math.abs(a[key] - b[key]) < 1e-9);
+}
+
 /**
  * Check if a Sim3dEuler represents an identity transform.
  */
 export function isIdentityEuler(euler: Sim3dEuler): boolean {
-  const epsilon = 1e-9;
-  return (
-    Math.abs(euler.scale - 1) < epsilon &&
-    Math.abs(euler.rotationX) < epsilon &&
-    Math.abs(euler.rotationY) < epsilon &&
-    Math.abs(euler.rotationZ) < epsilon &&
-    Math.abs(euler.translationX) < epsilon &&
-    Math.abs(euler.translationY) < epsilon &&
-    Math.abs(euler.translationZ) < epsilon
-  );
+  return isSameEuler(euler, IDENTITY_EULER);
 }
