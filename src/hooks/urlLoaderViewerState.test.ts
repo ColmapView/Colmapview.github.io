@@ -1,7 +1,7 @@
 import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchDatasetViewerSettings, fetchOptionalDatasetViewerSettingsResult, fetchPublishedViewerState,
-  OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS, startOptionalDatasetViewerSettings } from './urlLoaderViewerState';
+  OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS, SKIPPED_SETTINGS_WARNING, startOptionalDatasetViewerSettings } from './urlLoaderViewerState';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import type { ColmapManifest } from '../types/manifest';
@@ -12,7 +12,6 @@ import * as datasetViewerSettings from '../utils/datasetViewerSettings';
 const manifest: ColmapManifest = { version: 1, baseUrl: 'https://huggingface.co/datasets/owner/scene/resolve/abc/',
   files: { cameras: 'cameras.bin', images: 'images.bin', points3D: 'points3D.bin' }, viewerStatePath: 'colmapview-state.json' };
 const state: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null, config: { transform: createIdentityEuler(), splat: { transform: { ...createIdentityEuler(), translationX: 5 } } } };
-const SKIPPED_SETTINGS_WARNING = '[URL Loader] Skipping unavailable or invalid colmapview.yaml settings.';
 /** Lets a request that is already answered finish before anything asks for its result. */
 const flushRequest = () => new Promise(resolve => setTimeout(resolve, 0));
 beforeEach(() => vi.stubGlobal('Blob', NodeBlob));

@@ -19,7 +19,7 @@ import * as archiveSource from './urlLoaderZipSource';
 import { processFileDropzoneFiles } from './fileDropzoneWorkflow';
 import { appLogger, noopLogger } from '../utils/logger';
 import { useNotificationStore } from '../store/stores/notificationStore';
-import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS } from './urlLoaderViewerState';
+import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS, SKIPPED_SETTINGS_WARNING } from './urlLoaderViewerState';
 import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE } from './optionalSettingsWarning';
 
 const { clearAllCachesMock, processFilesMock, detectTouchDeviceMock } = vi.hoisted(() => ({
@@ -62,8 +62,6 @@ function createSplatLoadedFiles(splatFile: File): LoadedFiles {
     hasMasks: false,
   };
 }
-
-const SKIPPED_SETTINGS_WARNING = '[URL Loader] Skipping unavailable or invalid colmapview.yaml settings.';
 
 /** Timeout warnings on screen; pinning the whole list catches a stacked duplicate. */
 function settingsTimeoutWarnings() {
@@ -603,10 +601,11 @@ describe('useUrlLoader', () => {
     vi.stubGlobal('fetch', request);
     processFilesMock.mockImplementationOnce(async () => { useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles()); });
     // The saved background is restored after the catalog merge and just before the load decides
-    // whether to ask, so an earlier open shows here, whichever store update made it.
+    // whether to ask, so an earlier open shows here, whichever store update made it. Only that
+    // restore is recorded: other background writes say nothing about the picker.
     const whenRestored: Array<{ listed: number; picker: boolean }> = [];
     const unsubscribe = useUIStore.subscribe((state, previous) => {
-      if (state.backgroundColor === previous.backgroundColor) return;
+      if (state.backgroundColor !== '#123456' || previous.backgroundColor === '#123456') return;
       const { loadedFiles, showSplatPicker } = useReconstructionStore.getState();
       whenRestored.push({ listed: loadedFiles?.splatFileSources?.length ?? 0, picker: showSplatPicker });
     });

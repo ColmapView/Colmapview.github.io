@@ -10,6 +10,8 @@ import { anySignal } from '../utils/abortSignals';
 
 export const OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS = 3_000;
 
+export const SKIPPED_SETTINGS_WARNING = '[URL Loader] Skipping unavailable or invalid colmapview.yaml settings.';
+
 export interface OptionalViewerSettingsResult { state: PublishedViewerState | null; timedOut: boolean }
 
 /** Automatic settings discovery: the request starts now, its deadline when the result is needed. */
@@ -131,7 +133,7 @@ async function readDatasetViewerSettings(url: string,
     } catch (error) {
       const name = error && typeof error === 'object' && 'name' in error ? error.name : undefined;
       if (name === 'AbortError') throw error;
-      appLogger.warn('[URL Loader] Skipping unavailable or invalid colmapview.yaml settings.');
+      appLogger.warn(SKIPPED_SETTINGS_WARNING);
       return { state: null, timedOut: name === 'TimeoutError' };
     }
   }
