@@ -10,7 +10,7 @@
     "build": "tsc -b && vite build",
     "build:wasm": "cd colmap-wasm && emcmake cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel && node ../scripts/copy-wasm-assets.mjs",
     "build:all": "npm run build:wasm && npm run build",
-    "check": "npm run lint && npm run test:run && npm run build",
+    "check": "npm run lint && npm run typecheck:tests && npm run test:run && npm run build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",

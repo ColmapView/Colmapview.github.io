@@ -99,7 +99,7 @@ function createDeps(overrides: Partial<FileDropzoneWorkflowDeps> = {}): FileDrop
     getFailedImageCount: vi.fn(() => 0),
     getLoadedFiles: vi.fn(() => null),
     getMinTrackLength: vi.fn(() => 1),
-    getSourceInfo: vi.fn(() => ({ imageUrlBase: null, sourceType: 'local' })),
+    getSourceInfo: vi.fn(() => ({ imageUrlBase: null, sourceType: 'local' as const })),
     getUrlLoading: vi.fn(() => false),
     logger: noopLogger,
     resetView: vi.fn(),
@@ -510,7 +510,7 @@ describe('file dropzone workflow', () => {
     state.setSourceInfo('url', 'https://example.com/old/');
     const onSceneReplaced = vi.fn(() => state.setSourceInfo('url', 'https://example.com/new/'));
     const deps = createDeps({
-      classifyPlyFile: vi.fn(async () => 'point-cloud'),
+      classifyPlyFile: vi.fn(async () => 'point-cloud' as const),
       getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
       setLoadedFiles: state.setLoadedFiles, setDroppedFiles: state.setDroppedFiles,
       setWasmReconstruction: state.setWasmReconstruction, setReconstruction: state.setReconstruction,
@@ -611,7 +611,7 @@ describe('file dropzone workflow', () => {
     });
     const deps = createDeps({
       buildReconstruction,
-      getSourceInfo: vi.fn(() => ({ imageUrlBase: null, sourceType: 'local' })),
+      getSourceInfo: vi.fn(() => ({ imageUrlBase: null, sourceType: 'local' as const })),
       logger,
       parseFiles,
     });
