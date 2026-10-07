@@ -106,6 +106,16 @@ describe('UrlInputModal', () => {
     expect(onLoad).toHaveBeenCalledExactlyOnceWith('https://huggingface.co/datasets/user/data/tree/main/reconstruction');
   });
 
+  it('returns to the drop zone after opening Google Drive in a new tab', () => {
+    vi.mocked(isGoogleDriveEnabled).mockReturnValue(false);
+    const onClose = vi.fn();
+    render(<UrlInputModal isOpen onClose={onClose} onLoad={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText(URL_INPUT_PLACEHOLDER), { target: { value: 'https://drive.google.com/file/d/FILE_123/view' } });
+    // Closing must not cancel the click, which is what opens the new tab.
+    expect(fireEvent.click(screen.getByRole('link', { name: 'Use Google Drive' }))).toBe(true);
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it('loads a public Drive URL here when Google Drive is enabled', () => {
     const onLoad = vi.fn();
     render(<UrlInputModal isOpen onClose={vi.fn()} onLoad={onLoad} />);
