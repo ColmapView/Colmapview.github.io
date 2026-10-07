@@ -229,4 +229,20 @@ describe('private Hugging Face archive URLs', () => {
     expect(heads).toHaveLength(2);
     expect(new Headers(heads[1][1]?.headers).get('Authorization')).toBe('Bearer reader-token');
   });
+
+  it('reports an expired connection from the size check instead of downloading anonymously', async () => {
+    const url = 'https://huggingface.co/datasets/owner/private/resolve/main/scene.zip';
+    vi.spyOn(hfAuth, 'getSnapshot').mockReturnValue({ status: 'connected', identity: { username: 'owner' }, error: null });
+    vi.spyOn(hfAuth, 'getReadAccessToken').mockReturnValue('expired-token');
+    const expire = vi.spyOn(hfAuth, 'expire').mockImplementation(() => undefined);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 401 })));
+    vi.mocked(downloadZip).mockClear();
+    vi.mocked(downloadZip).mockResolvedValue(new Blob(['archive']));
+    openArchive.mockResolvedValue(buildArchiveReader({ getFilesArray: async () => colmapEntries() }));
+
+    await expect(loadZipFromUrl(url, vi.fn())).rejects.toMatchObject({ name: 'HfError', status: 401,
+      message: expect.stringContaining('connection expired') });
+    expect(expire).toHaveBeenCalledOnce();
+    expect(downloadZip).not.toHaveBeenCalled();
+  });
 });

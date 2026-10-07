@@ -1,5 +1,6 @@
 import { parseSafeIntegerString } from './numberParsing';
 import { anySignal } from './abortSignals';
+import { HfError } from '../features/huggingface/http';
 
 /** Maximum archive file size (2GB) */
 export const ARCHIVE_SIZE_LIMIT = 2 * 1024 * 1024 * 1024;
@@ -67,6 +68,8 @@ export async function validateZipUrl(
   } catch (err) {
     clearTimeout(timeoutId);
     options.signal?.throwIfAborted();
+    // The signed-in account's answer (expired, denied, sign-in needed) decides the download too.
+    if (err instanceof HfError) throw err;
 
     if (err instanceof Error && err.name === 'AbortError') {
       return { valid: false, error: 'Size check timed out' };

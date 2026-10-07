@@ -5,6 +5,7 @@ import {
   type ZipUrlValidationOptions,
 } from './zipValidation';
 import { buildResponse } from '../test/builders';
+import { HfError } from '../features/huggingface/http';
 
 type FetchImpl = NonNullable<ZipUrlValidationOptions['fetchImpl']>;
 
@@ -88,6 +89,13 @@ describe('zip validation', () => {
     await expect(validateZipUrl('https://example.com/cors.zip', { fetchImpl })).resolves.toEqual({
       valid: true,
     });
+  });
+
+  it('rethrows a Hugging Face account answer from the size check', async () => {
+    const error = new HfError('Your Hugging Face connection expired. Sign in again to open private datasets.', 401);
+    const fetchImpl = vi.fn<FetchImpl>().mockRejectedValue(error);
+    await expect(validateZipUrl('https://huggingface.co/datasets/owner/private/resolve/main/a.zip', { fetchImpl }))
+      .rejects.toBe(error);
   });
 
   it('reports URL size-check timeouts', async () => {
