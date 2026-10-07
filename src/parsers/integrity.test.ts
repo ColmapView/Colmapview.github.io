@@ -88,7 +88,21 @@ function assertIntegrity(images: Map<number, Image>, points3D: Map<bigint, Point
 
 const missingFixture = !hasSparseBinaryFixture(BIN) || !existsSync(WASM_JS) || !existsSync(WASM_BIN);
 
+async function parseBicycleInWasm(): Promise<WasmReconstructionWrapper> {
+  const wasm = await makeWrapperInNode();
+  wasm.parseCameras(toAB(resolve(BIN, 'cameras.bin')));
+  wasm.parseImages(toAB(resolve(BIN, 'images.bin')));
+  wasm.parsePoints3D(toAB(resolve(BIN, 'points3D.bin')));
+  return wasm;
+}
+
+// Parsed once, while this file is collected: no per-test timeout applies there. Every test below
+// exports from this parse and only reads it. Parsing in each test repeated the slowest shared step
+// four times, and one test reached 10.9 s of its 15 s budget under parallel load.
+const bicycleWasm = missingFixture ? null : await parseBicycleInWasm();
+
 describe.skipIf(missingFixture)('exported binary integrity (bicycle, WASM-mode)', () => {
+  const wasm = bicycleWasm!;
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
@@ -99,12 +113,7 @@ describe.skipIf(missingFixture)('exported binary integrity (bicycle, WASM-mode)'
     consoleLogSpy.mockRestore();
   });
 
-  it('round-trips the untransformed reconstruction with consistent tracks', async () => {
-    const wasm = await makeWrapperInNode();
-    wasm.parseCameras(toAB(resolve(BIN, 'cameras.bin')));
-    wasm.parseImages(toAB(resolve(BIN, 'images.bin')));
-    wasm.parsePoints3D(toAB(resolve(BIN, 'points3D.bin')));
-
+  it('round-trips the untransformed reconstruction with consistent tracks', () => {
     // Build JS images with empty points2D (what the app holds in WASM mode)
     const { cameras, images } = buildWasmCameraImageMaps(wasm);
 
@@ -123,12 +132,7 @@ describe.skipIf(missingFixture)('exported binary integrity (bicycle, WASM-mode)'
     assertIntegrity(reImages, rePoints);
   }, FIXTURE_SUITE_TIMEOUT_MS);
 
-  it('survives applyTransformToData-style bake (realizes 2D points before dropping WASM)', async () => {
-    const wasm = await makeWrapperInNode();
-    wasm.parseCameras(toAB(resolve(BIN, 'cameras.bin')));
-    wasm.parseImages(toAB(resolve(BIN, 'images.bin')));
-    wasm.parsePoints3D(toAB(resolve(BIN, 'points3D.bin')));
-
+  it('survives applyTransformToData-style bake (realizes 2D points before dropping WASM)', () => {
     const { cameras, images } = buildWasmCameraImageMaps(wasm);
     const reconstruction: Reconstruction = { cameras, images };
 
@@ -171,12 +175,7 @@ describe.skipIf(missingFixture)('exported binary integrity (bicycle, WASM-mode)'
     expect(totalPoints2D).toBeGreaterThan(0);
   }, FIXTURE_SUITE_TIMEOUT_MS);
 
-  it('survives applyDeletionsToData in WASM mode (realizes points3D, filters tracks)', async () => {
-    const wasm = await makeWrapperInNode();
-    wasm.parseCameras(toAB(resolve(BIN, 'cameras.bin')));
-    wasm.parseImages(toAB(resolve(BIN, 'images.bin')));
-    wasm.parsePoints3D(toAB(resolve(BIN, 'points3D.bin')));
-
+  it('survives applyDeletionsToData in WASM mode (realizes points3D, filters tracks)', () => {
     const { cameras, images } = buildWasmCameraImageMaps(wasm);
     const reconstruction: Reconstruction = {
       cameras,
@@ -214,25 +213,19 @@ describe.skipIf(missingFixture)('exported binary integrity (bicycle, WASM-mode)'
     // No exported image should be a deleted one
     for (const id of reImages.keys()) expect(deleted.has(id)).toBe(false);
 
-    // No track should reference a deleted image
-    for (const point of rePoints.values()) {
-      for (const elem of point.track) {
-        expect(deleted.has(elem.imageId)).toBe(false);
-      }
-    }
+    // No track should reference a deleted image. One assertion for all ~200k track elements: an
+    // expect() per element took over a second of this test's budget on its own.
+    const deletedReferences = [...rePoints.values()].flatMap((point) =>
+      point.track.filter((elem) => deleted.has(elem.imageId)));
+    expect(deletedReferences).toEqual([]);
 
     // Full pycolmap-style integrity
     assertIntegrity(reImages, rePoints);
   }, FIXTURE_SUITE_TIMEOUT_MS);
 
-  it('regression: WITHOUT the applyTransformToData fix, integrity is violated', async () => {
+  it('regression: WITHOUT the applyTransformToData fix, integrity is violated', () => {
     // This test documents the bug the fix targets. We intentionally skip
     // realizing points2D, then assert the integrity check fails.
-    const wasm = await makeWrapperInNode();
-    wasm.parseCameras(toAB(resolve(BIN, 'cameras.bin')));
-    wasm.parseImages(toAB(resolve(BIN, 'images.bin')));
-    wasm.parsePoints3D(toAB(resolve(BIN, 'points3D.bin')));
-
     const { images } = buildWasmCameraImageMaps(wasm);
     const points3D = wasm.buildPoints3DMap();
 

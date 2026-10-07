@@ -37,7 +37,6 @@ function stripComments(source: string): string {
 const SRC_ROOT = resolve(__dirname, '..');
 const SPARK_PACKAGE = '@sparkjsdev/spark';
 const RUNTIME_MODULE_PATH = 'src/utils/sparkSplatRuntime.ts';
-const SPARK_IMPORT_SCAN_TIMEOUT_MS = 15_000;
 
 const SPARK_PRELOAD_ENTRYPOINT = 'preloadSparkModule';
 const SPARK_PRELOAD_START_GATE = 'shouldStartSparkSplatRuntimePreload';
@@ -78,6 +77,16 @@ function toRepoRelative(filePath: string): string {
   return relative(process.cwd(), filePath).replace(/\\/g, '/');
 }
 
+// Walked and read once, while this file is collected: no per-test timeout applies there, and both
+// whole-tree checks below then filter the same in-memory sources in milliseconds. The reads are
+// most of the scan, and on a loaded machine (or a cold, just-edited tree) one in-test scan took
+// 24.4 s against a 15 s budget. Vitest cannot interrupt a synchronous test, so a budget on it only
+// turns a slow-but-correct run into a failure.
+const PRODUCTION_SOURCES = collectSourceFiles(SRC_ROOT).map((file) => ({
+  relativePath: toRepoRelative(file),
+  source: readFileSync(file, 'utf8'),
+}));
+
 // Statement-level imports of the package, in every form that survives to
 // runtime:
 //   import { SplatMesh } from '@sparkjsdev/spark'   — eager
@@ -101,8 +110,7 @@ describe('spark import boundary', () => {
   it('names the spark package in exactly one production module', () => {
     const violations: string[] = [];
 
-    for (const file of collectSourceFiles(SRC_ROOT)) {
-      const relativePath = toRepoRelative(file);
+    for (const { relativePath, source: rawSource } of PRODUCTION_SOURCES) {
       if (relativePath === RUNTIME_MODULE_PATH) continue;
 
       // Cheap substring test before the comment strip. Stripping only ever
@@ -112,7 +120,6 @@ describe('spark import boundary', () => {
       // unconditionally made this walk contend with the sibling fs-walking
       // suite badly enough to push componentStoreBoundary.test.ts from 0.4s to
       // 13.4s against its 15s budget.
-      const rawSource = readFileSync(file, 'utf8');
       if (!rawSource.includes(SPARK_PACKAGE)) continue;
 
       for (const line of stripComments(rawSource).split('\n')) {
@@ -123,7 +130,7 @@ describe('spark import boundary', () => {
     }
 
     expect(violations).toEqual([]);
-  }, SPARK_IMPORT_SCAN_TIMEOUT_MS);
+  });
 
   it('keeps the runtime module free of eager spark imports', () => {
     const source = stripComments(readFileSync(join(process.cwd(), RUNTIME_MODULE_PATH), 'utf8'));
@@ -160,11 +167,12 @@ describe('spark import boundary', () => {
   it('gates every spark download on the START predicate, not NEED', () => {
     const violations: string[] = [];
 
-    for (const file of collectSourceFiles(SRC_ROOT)) {
-      const relativePath = toRepoRelative(file);
+    for (const { relativePath, source: rawSource } of PRODUCTION_SOURCES) {
       if (DOCUMENTED_NON_DOWNLOAD_PRELOAD_SITES.has(relativePath)) continue;
+      // Same cheap pre-check as above: stripping comments never adds a call.
+      if (!rawSource.includes(`${SPARK_PRELOAD_ENTRYPOINT}(`)) continue;
 
-      const source = stripComments(readFileSync(file, 'utf8'));
+      const source = stripComments(rawSource);
       // The call form only: an import or a type position does not start a
       // download.
       if (!source.includes(`${SPARK_PRELOAD_ENTRYPOINT}(`)) continue;
@@ -178,5 +186,5 @@ describe('spark import boundary', () => {
     }
 
     expect(violations).toEqual([]);
-  }, SPARK_IMPORT_SCAN_TIMEOUT_MS);
+  });
 });

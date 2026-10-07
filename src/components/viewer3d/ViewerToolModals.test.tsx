@@ -1,6 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ViewerToolModals } from './ViewerToolModals';
+// ViewerToolModals imports each modal lazily. Loading them with this file keeps a cold module load
+// under parallel runs out of findBy*'s 1 s wait.
+import '../modals/FloorDetectionModal';
+import '../modals/DeletionModal';
+import '../modals/CameraConversionModal';
+import '../modals/AutoHideModal';
 
 interface MockModalProps {
   isOpen: boolean;

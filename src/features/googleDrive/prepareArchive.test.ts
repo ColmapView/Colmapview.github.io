@@ -10,17 +10,24 @@ import { createIdentityEuler } from '../../utils/sim3dTransforms';
 import { parseDatasetViewerSettings } from '../../utils/datasetViewerSettings';
 import { hfAuth } from '../huggingface/auth';
 import { ARCHIVE_SIZE_LIMIT } from '../../utils/zipValidation';
+import { appLogger } from '../../utils/logger';
+// prepareDriveArchive imports the Hub SDK lazily; load it with the file so the first test's budget
+// does not absorb a cold module load under parallel runs.
+import '@huggingface/hub';
 
 vi.mock('../huggingface/auth', () => ({ hfAuth: { getReadAccessToken: vi.fn(), getSnapshot: vi.fn(), expire: vi.fn() } }));
 
 beforeEach(() => { vi.stubGlobal('Blob', NodeBlob); });
-afterEach(() => { vi.unstubAllGlobals(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const asset = (path: string, text: string, kind: PublishAsset['kind'] = 'colmap'): PublishAsset => ({ path, kind, size: text.length, open: async () => new Blob([text]) });
 const prepared = (assets: PublishAsset[]): PreparedPublication => ({ operationId: 'operation', sourceKey: 'source', modelRevision: 0,
   assets, viewerState: { version: 1, viewerVersion: 'test', viewState: null, config: {} }, counts: { cameras: 1, images: 1, points: 1 },
   imageNameToPath: {}, splatPaths: [], viewerBaseUrl: 'https://viewer.example/latest/' });
 
 describe('Drive dataset ZIP packaging', () => {
+  // The fixture reconstructions have no 3D points, which the COLMAP export notes as a warning.
+  beforeEach(() => { vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined); });
+
   it('rejects a catalogued oversized active remote splat before any download', async () => {
     const request = vi.fn(); vi.stubGlobal('fetch', request);
     await expect(prepareDriveArchive({ sourceKey: 'large', modelRevision: 0, source: null,
