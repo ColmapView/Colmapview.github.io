@@ -808,6 +808,28 @@ describe('reconstruction store lazy splat source switching', () => {
     expect(loadedFiles?.splatFileSources?.find((s) => s.id === 'a')?.file).toBeUndefined();
   });
 
+  it('drops the splat point preset when None leaves the points without a splat', async () => {
+    const fileA = new File(['a'], 'a.ply');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({ splatFile: fileA, splatFiles: [fileA],
+      splatFileSources: [{ id: 'splats/a.ply', path: 'splats/a.ply', file: fileA }] }));
+    expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'splatPoints', pointSize: 1, pointOpacity: 0.2 });
+
+    await useReconstructionStore.getState().selectSplatSource('');
+
+    expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'rgb', showSplats: false, pointSize: 2, pointOpacity: 1 });
+  });
+
+  it('keeps a non-splat point display when None is chosen', async () => {
+    const fileA = new File(['a'], 'a.ply');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({ splatFile: fileA, splatFiles: [fileA],
+      splatFileSources: [{ id: 'splats/a.ply', path: 'splats/a.ply', file: fileA }] }));
+    usePointCloudStore.setState({ colorMode: 'error', showSplats: false, pointSize: 5, pointOpacity: 0.9 });
+
+    await useReconstructionStore.getState().selectSplatSource('');
+
+    expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'error', pointSize: 5, pointOpacity: 0.9 });
+  });
+
   it('switches to a splat display mode when activating a downloaded splat from COLMAP-only', async () => {
     const fileB = new File(['b'], 'b.ply');
     // COLMAP-only: the source has a downloaded file but no active splatFile yet.
@@ -1431,6 +1453,17 @@ describe('reconstruction store loading cancellation', () => {
 
     expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
     expect(useReconstructionStore.getState().urlError).toBeNull();
+  });
+
+  it("drops the splat point preset when the renderer's decode is cancelled", () => {
+    const fileA = new File(['a'], 'a.ply');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({ splatFile: fileA, splatFiles: [fileA],
+      splatFileSources: [{ id: 'splats/a.ply', path: 'splats/a.ply', file: fileA }] }));
+    useReconstructionStore.setState({ urlLoading: true, urlProgress: getSplatLoadingProgress(fileA, { startPercent: 60 }) });
+
+    useReconstructionStore.getState().cancelLoading();
+
+    expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'rgb', pointSize: 2, pointOpacity: 1 });
   });
 
   it('cancels a same-named tile download without dropping the splat on screen', async () => {

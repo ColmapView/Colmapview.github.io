@@ -6,6 +6,7 @@ export {
   selectCameraCount,
   hasUrlToLoad,
   abandonUrlAutoLoadRequest,
+  restorePointDisplayWithoutSplat,
 } from './reconstructionStore';
 
 // Domain stores

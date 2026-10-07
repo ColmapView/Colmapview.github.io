@@ -57,12 +57,14 @@ function rendererOwnsSplatProgress({ urlProgress, loadedFiles }: Pick<Reconstruc
 
 /**
  * "COLMAP only": the splat is deactivated (its source stays listed; re-fetchable bytes are
- * dropped), nothing is pending for it, and its loading state goes.
+ * dropped), nothing is pending for it, and its loading state goes. The splat point preset goes
+ * too: with no splat to draw it would hide the points.
  */
 function showColmapOnly(set: StoreApi<ReconstructionState>['setState'], loadedFiles: LoadedFiles,
   patch: Partial<ReconstructionState> = {}): void {
   set({ ...patch, loadedFiles: clearActiveSplatFile(loadedFiles), requestedSplatSourceId: null,
     urlLoading: false, urlProgress: null, urlError: null });
+  restorePointDisplayWithoutSplat();
 }
 
 /** Switch the point cloud into a splat-visible display mode with splat defaults. */
@@ -74,17 +76,15 @@ function applySplatPointDisplayDefaults(): void {
 }
 
 /**
- * Inverse of applySplatPointDisplayDefaults: when a dataset without any splat loads,
- * undo the splat-visible preset carried over from a previous splat dataset. That
- * preset — a splat color mode AND the shrunken point size/opacity (1 / 0.2) — is
- * persisted across sessions, so without this restore it leaks into a later splat-less
- * dataset: the COLMAP points render as tiny, near-invisible dots behind a splat that
- * will never appear, leaving a near-blank view. Drops the splat color mode back to RGB
- * (setShowSplats(false) maps a splat mode to 'rgb' and keeps showSplats in sync) and
- * restores the plain point size/opacity defaults. No-op unless the current mode is
+ * Inverse of applySplatPointDisplayDefaults, for a scene with no splat showing: a splat-less
+ * dataset loads, the splat is deactivated (COLMAP only), or saved display settings land without
+ * their splat. The splat preset — a splat color mode AND the shrunken point size/opacity (1 / 0.2),
+ * persisted across sessions — would render the COLMAP points as tiny, near-invisible dots. Drops the
+ * splat color mode back to RGB (setShowSplats(false) maps a splat mode to 'rgb' and keeps showSplats
+ * in sync) and restores the plain point size/opacity defaults. No-op unless the current mode is
  * actually a splat mode, so a user's own non-splat size/opacity choices are preserved.
  */
-function restorePointDisplayForSplatlessDataset(): void {
+export function restorePointDisplayWithoutSplat(): void {
   const pointCloudStore = usePointCloudStore.getState();
   if (isSplatColorMode(pointCloudStore.colorMode)) {
     pointCloudStore.setShowSplats(false);
@@ -358,7 +358,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       // Inverse of applySplatPointDisplayDefaults for the no-splat case; unreachable
       // when a splat file is present (that hits the branch above), and
       // pickable-but-inactive sources still count as having splats.
-      restorePointDisplayForSplatlessDataset();
+      restorePointDisplayWithoutSplat();
     }
     if (!isActiveSplatFileSwitch) {
       useTransformStore.getState().resetSplatTransform();
