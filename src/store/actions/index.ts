@@ -9,7 +9,7 @@
  * import { clearReconstruction, applyTransformPreset, resetSession } from './store/actions';
  *
  * // Clear with options
- * clearReconstruction({ preserveZip: true });
+ * clearReconstruction({ preserveView: true });
  *
  * // Apply transform preset
  * applyTransformPreset('centerAtOrigin');

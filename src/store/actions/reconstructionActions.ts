@@ -12,9 +12,8 @@ import { useReconstructionStore } from '../reconstructionStore.js';
 import { useImageMetricsStore } from '../stores/imageMetricsStore.js';
 import { useUIStore } from '../stores/uiStore.js';
 
+/** The ZIP archive always goes: the store's clear() releases it with the scene it served. */
 export interface ClearReconstructionOptions {
-  /** If true, preserves the ZIP archive cache for re-processing */
-  preserveZip?: boolean;
   /** If true, preserves the current view state (does not reset camera) */
   preserveView?: boolean;
 }
@@ -38,10 +37,10 @@ export interface SetReconstructionResult {
  * Coordinates cleanup across reconstruction store and cache system.
  */
 export function clearReconstruction(options?: ClearReconstructionOptions): void {
-  const { preserveZip = false, preserveView = false } = options ?? {};
+  const { preserveView = false } = options ?? {};
 
   // Clear caches first (before store clear which disposes WASM)
-  clearAllCaches({ preserveZip });
+  clearAllCaches();
   useImageMetricsStore.getState().clearSplatPsnr();
 
   // Clear reconstruction store
