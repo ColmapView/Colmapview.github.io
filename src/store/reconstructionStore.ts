@@ -33,6 +33,7 @@ import {
   TOUCH_SPLAT_BYTELESS_RETENTION_MIN_BYTES,
 } from '../hooks/urlLoaderPolicy';
 import { detectTouchDevice } from '../hooks/useIsTouchDevice';
+import { dismissOptionalSettingsTimeoutWarning } from '../hooks/optionalSettingsWarning';
 
 const SPLAT_POINT_CLOUD_DEFAULT_SIZE = 1;
 const SPLAT_POINT_CLOUD_DEFAULT_OPACITY = 0.2;
@@ -635,6 +636,8 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     get().urlLoadController?.abort();
     cancelPendingReconstructionLoad();
     clearActiveZipArchive();
+    // The warning describes the scene being cleared.
+    dismissOptionalSettingsTimeoutWarning();
     // Dispose WASM wrapper on clear
     const oldWasm = get().wasmReconstruction;
     if (oldWasm) {

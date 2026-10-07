@@ -6,6 +6,7 @@ import { usePointCloudStore } from './stores/pointCloudStore';
 import { useSplatBackendStore } from './stores/splatBackendStore';
 import { useTransformStore } from './stores/transformStore';
 import { useUIStore } from './stores/uiStore';
+import { useNotificationStore } from './stores/notificationStore';
 import { isSplatColorMode } from './types';
 import {
   clearGaussianCloudLoadCacheForTests,
@@ -18,6 +19,11 @@ import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
 import type { ReconstructionSource } from '../wasm/reconstructionService';
 import { getSplatDownloadProgress, getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
+import {
+  dismissOptionalSettingsTimeoutWarning,
+  OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE,
+  showOptionalSettingsTimeoutWarning,
+} from '../hooks/optionalSettingsWarning';
 
 // Byte-less activation seams: the decode step is mocked (no real gs-toolbox
 // decode in store tests), while seedGaussianCloudLoad / loadGaussianCloudFromFile
@@ -1583,5 +1589,55 @@ describe('reconstruction store loading cancellation', () => {
     useReconstructionStore.getState().finishUrlLoad(first);
     expect(useReconstructionStore.getState().urlLoadController?.signal).toBe(second);
     expect(second!.aborted).toBe(false);
+  });
+});
+
+describe('reconstruction store settings timeout warning', () => {
+  const timeoutWarnings = () => useNotificationStore.getState().notifications
+    .filter(notification => notification.message === OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE);
+
+  beforeEach(() => {
+    window.history.replaceState(null, '', '/');
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
+    useTransformStore.setState(useTransformStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
+  });
+
+  afterEach(() => {
+    useReconstructionStore.getState().clear();
+    dismissOptionalSettingsTimeoutWarning();
+    useNotificationStore.setState(useNotificationStore.getInitialState(), true);
+    window.history.replaceState(null, '', '/');
+  });
+
+  it('takes the warning down with the scene it describes', () => {
+    useReconstructionStore.setState({ reconstruction: buildReconstruction(), loadedFiles: baseLoadedFiles({}) });
+    showOptionalSettingsTimeoutWarning();
+    useReconstructionStore.getState().clear();
+    expect(timeoutWarnings()).toEqual([]);
+  });
+
+  it('takes the warning down when cancelling returns to the landing page', () => {
+    window.history.replaceState(null, '', '/?url=https%3A%2F%2Fexample.com%2Fscene.spz');
+    const splat = new File(['a'], 'scene.spz');
+    useReconstructionStore.getState().setLoadedFiles({ imageFiles: new Map(), hasMasks: false,
+      splatFile: splat, splatFiles: [splat], splatFileSources: [{ id: 'scene.spz', path: 'scene.spz', file: splat }] });
+    useReconstructionStore.setState({ reconstruction: buildReconstruction(), urlLoading: true,
+      urlProgress: getSplatLoadingProgress(splat, { startPercent: 60 }) });
+    showOptionalSettingsTimeoutWarning();
+    useReconstructionStore.getState().cancelLoading();
+    expect(useReconstructionStore.getState().loadedFiles).toBeNull();
+    expect(timeoutWarnings()).toEqual([]);
+  });
+
+  it('keeps the warning while its scene stays on screen', () => {
+    const fileA = new File(['a'], 'a.ply');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({ splatFile: fileA, splatFiles: [fileA],
+      splatFileSources: [{ id: 'splats/a.ply', path: 'splats/a.ply', file: fileA }] }));
+    useReconstructionStore.setState({ urlLoading: true, urlProgress: getSplatLoadingProgress(fileA, { startPercent: 60 }) });
+    showOptionalSettingsTimeoutWarning();
+    useReconstructionStore.getState().cancelLoading();
+    expect(timeoutWarnings()).toHaveLength(1);
   });
 });

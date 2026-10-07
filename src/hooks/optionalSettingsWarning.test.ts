@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { useNotificationStore } from '../store/stores/notificationStore';
-import { dismissOptionalSettingsTimeoutWarning, showOptionalSettingsTimeoutWarning } from './optionalSettingsWarning';
-import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE } from './urlLoaderViewerState';
+import { dismissOptionalSettingsTimeoutWarning, OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE, showOptionalSettingsTimeoutWarning } from './optionalSettingsWarning';
 
 const warnings = () => useNotificationStore.getState().notifications
   .filter(notification => notification.message === OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE);

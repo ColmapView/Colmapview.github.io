@@ -8,8 +8,7 @@ import { buildFile, buildFileSystemFileEntry, buildLoadedFiles, buildReconstruct
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
-import { showOptionalSettingsTimeoutWarning } from './optionalSettingsWarning';
-import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE } from './urlLoaderViewerState';
+import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE, showOptionalSettingsTimeoutWarning } from './optionalSettingsWarning';
 
 const { processFileDropzoneFilesMock } = vi.hoisted(() => ({
   processFileDropzoneFilesMock: vi.fn(async () => true),

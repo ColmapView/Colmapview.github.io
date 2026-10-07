@@ -18,7 +18,8 @@ import * as archiveSource from './urlLoaderZipSource';
 import { processFileDropzoneFiles } from './fileDropzoneWorkflow';
 import { appLogger, noopLogger } from '../utils/logger';
 import { useNotificationStore } from '../store/stores/notificationStore';
-import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE, OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS } from './urlLoaderViewerState';
+import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS } from './urlLoaderViewerState';
+import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE } from './optionalSettingsWarning';
 
 const { clearAllCachesMock, processFilesMock, detectTouchDeviceMock } = vi.hoisted(() => ({
   clearAllCachesMock: vi.fn(),

@@ -9,8 +9,6 @@ import type { ShareConfig } from '../utils/shareDataCodec';
 import { anySignal } from '../utils/abortSignals';
 
 export const OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS = 3_000;
-export const OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE =
-  "This dataset's saved view settings (colmapview.yaml) did not load in time, so default settings are shown. Load the dataset again to retry.";
 
 export interface OptionalViewerSettingsResult { state: PublishedViewerState | null; timedOut: boolean }
 
