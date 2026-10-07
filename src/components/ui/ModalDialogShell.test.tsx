@@ -109,6 +109,70 @@ describe('ModalDialogShell', () => {
     expect(closeUpper).toHaveBeenCalledOnce();
   });
 
+  it('keeps Tab inside the top dialog of a stack, then inside the one underneath once it closes', () => {
+    function Stack({ upperOpen }: { upperOpen: boolean }) {
+      return (
+        <>
+          <ModalDialogShell isOpen onClose={vi.fn()} ariaLabelledBy="lower-tab-title"
+            overlayClassName="fixed inset-0" panelClassName="panel">
+            <h2 id="lower-tab-title">Lower</h2>
+            <button type="button">Lower first</button>
+            <button type="button">Lower last</button>
+          </ModalDialogShell>
+          <ModalDialogShell isOpen={upperOpen} onClose={vi.fn()} ariaLabelledBy="upper-tab-title"
+            overlayClassName="fixed inset-0" panelClassName="panel">
+            <h2 id="upper-tab-title">Upper</h2>
+            <button type="button">Upper first</button>
+            <button type="button">Upper last</button>
+          </ModalDialogShell>
+        </>
+      );
+    }
+    const button = (name: string) => screen.getByRole('button', { name });
+
+    const { rerender } = render(<Stack upperOpen={false} />);
+    rerender(<Stack upperOpen />);
+    button('Upper last').focus();
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(button('Upper first')).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(button('Upper last')).toHaveFocus();
+
+    rerender(<Stack upperOpen={false} />);
+    button('Lower last').focus();
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(button('Lower first')).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(button('Lower last')).toHaveFocus();
+  });
+
+  it('keeps Tab inside the top dialog over one with nothing to focus, whose own trap would pull focus back', () => {
+    function Stack({ upperOpen }: { upperOpen: boolean }) {
+      return (
+        <>
+          <ModalDialogShell isOpen onClose={vi.fn()} ariaLabelledBy="empty-title"
+            overlayClassName="fixed inset-0" panelClassName="panel">
+            <h2 id="empty-title">Nothing to focus</h2>
+          </ModalDialogShell>
+          <ModalDialogShell isOpen={upperOpen} onClose={vi.fn()} ariaLabelledBy="top-title"
+            overlayClassName="fixed inset-0" panelClassName="panel">
+            <h2 id="top-title">Top</h2>
+            <button type="button">Top first</button>
+            <button type="button">Top last</button>
+          </ModalDialogShell>
+        </>
+      );
+    }
+
+    const { rerender } = render(<Stack upperOpen={false} />);
+    rerender(<Stack upperOpen />);
+    screen.getByRole('button', { name: 'Top last' }).focus();
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(screen.getByRole('button', { name: 'Top first' })).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(screen.getByRole('button', { name: 'Top last' })).toHaveFocus();
+  });
+
   it('uses the full focusable selector for dialog descendants', () => {
     const root = document.createElement('div');
     root.innerHTML = `
