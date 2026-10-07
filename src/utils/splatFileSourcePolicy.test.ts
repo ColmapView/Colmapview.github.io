@@ -388,8 +388,9 @@ describe('carryOverSplatState', () => {
     const result = carryOverSplatState(current,
       { splatFile: reloadedFile, splatFiles: [reloadedFile], splatFileSources: [reloadedLocal] });
     expect(result.splatFileSources).toEqual([reloadedLocal, remoteActive, remoteLazy]);
+    // Files are compared one by one: toEqual finds any two jsdom Files equal.
+    expect(result.splatFileSources?.[0].file).toBe(reloadedFile);
     // Rebuilt from the merged sources: the reloaded bytes and the downloaded remote tile, not the lazy one.
-    // Compared one by one: toEqual finds any two jsdom Files equal.
     expect(result.splatFiles).toHaveLength(2);
     expect(result.splatFiles?.[0]).toBe(reloadedFile);
     expect(result.splatFiles?.[1]).toBe(remoteFile);
