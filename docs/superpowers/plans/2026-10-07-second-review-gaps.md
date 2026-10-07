@@ -594,6 +594,8 @@ export const meta = {
 
 const ROOT = 'C:/Users/HEQ/Projects/colmap_webview/colmap-webview'
 const WS = ROOT + '/.superpowers/sdd/2026-10-07-second-review-gaps'
+const SPECS = 'docs/superpowers/specs/2026-10-07-second-review-gaps/ (R1-cancel-reload.md, R2-load-lifecycle.md, R3-publishing-drive.md, R4-hf-access-auth.md, R5-privacy-docs-deploy.md, design.md)'
+const CONSTRAINTS = 'the "Global Constraints" section of docs/superpowers/plans/2026-10-07-second-review-gaps.md (read only that section)'
 const TASKS = args.tasks
 const MAX_TASKS = args.maxConcurrentTasks || 3
 
@@ -629,7 +631,7 @@ const report = t => WS + '/task-' + t.n + '-report.md'
 
 const implementPrompt = t =>
   'You are implementing Task ' + t.n + ': ' + t.title + '.\n' +
-  'Read your brief first; it is your requirements: ' + brief(t) + '. It names the binding spec sections. Where a spec gives code or tests, that code ' +
+  'Read your brief first; it is your requirements: ' + brief(t) + '. It names the binding spec sections; the specs are in ' + SPECS + ', and the rules that bind every task are in ' + CONSTRAINTS + '. Where a spec gives code or tests, that code ' +
   'is the requirement: adapt it only to earlier tasks\' changes and record every deviation.\n' + SHARED + '\n' +
   'Work test-first: write each test, run it RED for the expected reason, implement, run it GREEN. A test that only adds coverage for behaviour ' +
   'that is already correct (for example G15) gets its RED from a mutation of the production code, which you then restore exactly. Before each commit run the full `npx vitest run` ' +
@@ -640,7 +642,7 @@ const implementPrompt = t =>
 
 const reviewPrompt = (t, impl) =>
   'You are reviewing Task ' + t.n + ': ' + t.title + '. This is a task-scoped gate and your review is read-only: never modify the working tree, index or HEAD.\n' +
-  'Brief: ' + brief(t) + '. It names the binding spec sections and a Review focus list; check each focus item with one focused check, naming what you checked. ' +
+  'Brief: ' + brief(t) + '. It names the binding spec sections (specs: ' + SPECS + '; binding rules: ' + CONSTRAINTS + ') and a Review focus list; check each focus item with one focused check, naming what you checked. ' +
   'The implementer\'s report contains unverified claims: ' + report(t) + '. Commits: ' + impl.commits.join(', ') + '. Read them with `git show <sha>`; other tasks\' commits may interleave. ' +
   'Do not run the full suite; run a focused test only for a specific doubt.\n' +
   'Spec compliance: missing, extra or misunderstood items, each with file:line. Quality: correctness, tests that pin real behaviour (would each fail on the old code?), ' +
