@@ -413,7 +413,7 @@ describe('file dropzone workflow', () => {
     try {
       const pending = processFileDropzoneFiles(fixture.files, deps);
       await vi.waitFor(() => expect(buildReconstruction).toHaveBeenCalledOnce());
-      // What the `n` hotkey does to the scene on screen: switch it to its next tile.
+      // Only a splat picker left open can choose during a load (`n` is ignored then): it picks another tile on screen.
       await state.selectSplatSource('old/b.spz');
       finishBuild({ reconstruction: fixture.reconstruction, pointCount: 0 });
       expect(await pending).toBe(true);
