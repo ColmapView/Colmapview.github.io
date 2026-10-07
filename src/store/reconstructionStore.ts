@@ -46,6 +46,15 @@ function cancelPendingSplatLoad(): void {
   activeSplatController = null;
 }
 
+/**
+ * With no tile download pending, splat-loading progress for the active file is the renderer's: it is
+ * still decoding that file. A pending download's progress never is, even for a same-named file, so
+ * ask before cancelPendingSplatLoad() forgets the download.
+ */
+function rendererOwnsSplatProgress({ urlProgress, loadedFiles }: Pick<ReconstructionState, 'urlProgress' | 'loadedFiles'>): boolean {
+  return activeSplatController === null && isSplatLoadingProgressForFile(urlProgress, loadedFiles?.splatFile);
+}
+
 /** Switch the point cloud into a splat-visible display mode with splat defaults. */
 function applySplatPointDisplayDefaults(): void {
   const pointCloudStore = usePointCloudStore.getState();
@@ -416,8 +425,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       return;
     }
     if (!options?.restore) set({ splatSelectionRevision: get().splatSelectionRevision + 1 });
-    // A pending download's progress is never the renderer's, even for a same-named file.
-    const hadPendingDownload = activeSplatController !== null;
+    const rendererDecoding = rendererOwnsSplatProgress(get());
     cancelPendingSplatLoad();
     // Whether a splat was already showing: a fresh activation (COLMAP-only -> splat)
     // switches the viewer into a splat display mode; a tile-to-tile switch keeps the
@@ -441,9 +449,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     // download indicator is cleared, but re-selecting the splat that is already active (a
     // restored choice right after a load) keeps the renderer's progress while it decodes.
     if (source.file) {
-      const rendererOwnsProgress = !hadPendingDownload
-        && source.file === loadedFiles.splatFile
-        && isSplatLoadingProgressForFile(get().urlProgress, source.file);
+      const rendererOwnsProgress = rendererDecoding && source.file === loadedFiles.splatFile;
       set({
         requestedSplatSourceId: source.id,
         loadedFiles: applyActiveSplatFile(loadedFiles, source.id, source.file),
@@ -598,11 +604,9 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   setUrlError: (urlError) => set(urlError ? { urlError, urlLoading: false } : { urlError }),
 
   cancelLoading: () => {
-    const { urlLoadController, urlProgress, loadedFiles, reconstruction, splatSelectionRevision } = get();
-    // With no tile download pending, splat progress for the active file means the renderer is
-    // still decoding it; cancelling that leaves the scene without the splat (COLMAP only).
-    const cancelsRendererDecode = !activeSplatController
-      && isSplatLoadingProgressForFile(urlProgress, loadedFiles?.splatFile);
+    const { urlLoadController, loadedFiles, reconstruction, splatSelectionRevision } = get();
+    // Cancelling the renderer's decode leaves the scene without the splat (COLMAP only).
+    const cancelsRendererDecode = rendererOwnsSplatProgress(get());
     // A splat-only scene would be left empty, with the landing page hidden: go back to it.
     if (cancelsRendererDecode && loadedFiles && !hasSceneBesidesSplats(loadedFiles)) {
       get().clear();

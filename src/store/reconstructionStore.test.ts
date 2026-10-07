@@ -484,7 +484,7 @@ describe('reconstruction store URL load lifecycle', () => {
       splatFileSources: [{ id: 'a.spz', path: 'a.spz', file: fileA }],
     }));
     const progress = getSplatLoadingProgress(fileA, { startPercent: 60 });
-    // The loading state belongs to the renderer, including an error it is showing.
+    // The restore leaves the renderer's loading state alone, urlError included.
     const urlError = { type: 'network' as const, message: 'Failed to load splat' };
     useReconstructionStore.setState({ urlLoading: true, urlProgress: progress, urlError });
 
