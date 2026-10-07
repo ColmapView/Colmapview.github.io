@@ -135,10 +135,9 @@ export function useFileDropzone() {
   /** Re-read the current dataset (discarding edits), keeping the splat state on screen. */
   const reloadFiles = useCallback((files: Map<string, File>) => {
     // A URL dataset's saved settings are not among its files; re-apply them like a project's own YAML.
-    const retained = useReconstructionStore.getState().sourceViewerState;
     return processFiles(files, undefined, {
       reload: true,
-      viewerState: retained?.files === files ? retained.state : undefined,
+      viewerState: useReconstructionStore.getState().getBoundSourceViewerState(files),
     });
   }, [processFiles]);
 

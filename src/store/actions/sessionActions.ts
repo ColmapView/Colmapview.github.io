@@ -41,10 +41,9 @@ export function hasUnsavedReloadState(
  * settings-only imports apply settings that Reload does not bring back.
  */
 async function getReloadBaseline(): Promise<ReloadBaseline> {
-  const { droppedFiles, sourceViewerState } = useReconstructionStore.getState();
+  const { droppedFiles, getBoundSourceViewerState } = useReconstructionStore.getState();
   // Reload hands the load these files and the settings retained beside exactly them (a URL dataset's).
-  const saved = droppedFiles && await resolveDatasetViewerSettings(droppedFiles,
-    sourceViewerState?.files === droppedFiles ? sourceViewerState.state : null);
+  const saved = droppedFiles && await resolveDatasetViewerSettings(droppedFiles, getBoundSourceViewerState(droppedFiles));
   // Files replaced during the read make that reading another dataset's: fall back to identity.
   const current = useReconstructionStore.getState().droppedFiles === droppedFiles ? saved : null;
   return {

@@ -212,6 +212,8 @@ interface ReconstructionState {
    */
   sourceViewerState: { files: Map<string, File>; state: PublishedViewerState } | null;
   setSourceViewerState: (state: PublishedViewerState | null) => void;
+  /** The saved settings retained with exactly these files; none for any other file map. */
+  getBoundSourceViewerState: (files: ReadonlyMap<string, File>) => PublishedViewerState | undefined;
   loading: boolean;
   error: string | null;
   progress: number;
@@ -393,6 +395,11 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   setSourceViewerState: (state) => {
     const files = get().droppedFiles;
     set({ sourceViewerState: state && files ? { files, state } : null });
+  },
+
+  getBoundSourceViewerState: (files) => {
+    const retained = get().sourceViewerState;
+    return retained?.files === files ? retained.state : undefined;
   },
 
   setLoading: (loading) => set({ loading }),

@@ -148,6 +148,18 @@ describe('reconstruction store URL load lifecycle', () => {
     expect(useReconstructionStore.getState().sourceViewerState).toBeNull();
   });
 
+  it('reads saved source settings back only for the files they came with', () => {
+    const state: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null, config: { ui: { backgroundColor: '#123456' } } };
+    const files = new Map([['cameras.bin', new File([''], 'cameras.bin')]]);
+    expect(useReconstructionStore.getState().getBoundSourceViewerState(files)).toBeUndefined();
+
+    useReconstructionStore.getState().setDroppedFiles(files);
+    useReconstructionStore.getState().setSourceViewerState(state);
+    expect(useReconstructionStore.getState().getBoundSourceViewerState(files)).toBe(state);
+    // An equal copy is another file map: the settings belong to the files Reload re-reads.
+    expect(useReconstructionStore.getState().getBoundSourceViewerState(new Map(files))).toBeUndefined();
+  });
+
   it('uses a black default background when a splat file starts loading', () => {
     const splatFile = new File(['splat'], 'scene.spz');
 
