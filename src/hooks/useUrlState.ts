@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useThree } from '@react-three/fiber';
 import { useCameraStore, useImageMetricsStore, useReconstructionStore, usePointCloudStore, useUIStore,
-  useTransformStore, useRigStore, restorePointDisplayWithoutSplat } from '../store';
+  useTransformStore, useRigStore, restorePointDisplayWithoutSplat, type CameraState, type UIState } from '../store';
 import type { CameraViewState } from '../store/types';
 import type { ColmapManifest } from '../types/manifest';
 import { buildShareableFieldsFromRegistry } from '../config/registry';
@@ -98,7 +98,7 @@ async function activateSavedSplat(sourceId: string, assertCurrent: () => void): 
  * the fly-to, a horizon lock change resets the view to the default one, a U toggle with a selected
  * panorama flies to it, and the camera type, field of view, auto-orbit and world up change under it.
  */
-const VIEW_NAVIGATION_FIELDS: Readonly<Record<'camera' | 'ui', readonly string[]>> = {
+const VIEW_NAVIGATION_FIELDS: { readonly camera: readonly (keyof CameraState)[]; readonly ui: readonly (keyof UIState)[] } = {
   camera: ['cameraMode', 'cameraProjection', 'cameraFov', 'horizonLock', 'flyTransitionDuration',
     'autoRotateMode', 'autoRotateSpeed', 'undistortionEnabled'],
   ui: ['axesCoordinateSystem'],
