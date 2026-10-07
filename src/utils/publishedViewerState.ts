@@ -99,16 +99,18 @@ export function sanitizeShareConfig(config: ShareConfig): ShareConfig {
   return result;
 }
 
-export async function readBoundedResponse(response: Response, maxBytes: number): Promise<Blob> {
+/** `tooLarge` lets a caller name the file and its limit instead of the generic message. */
+export async function readBoundedResponse(response: Response, maxBytes: number,
+  tooLarge: () => Error = () => new Error('File exceeds the supported size.')): Promise<Blob> {
   if (!response.ok) throw new Error(`File request failed (${response.status})`);
   const declared = Number(response.headers.get('content-length'));
   if (declared > maxBytes) {
     await response.body?.cancel();
-    throw new Error('File exceeds the supported size.');
+    throw tooLarge();
   }
   if (!response.body) {
     const blob = await response.blob();
-    if (blob.size > maxBytes) throw new Error('File exceeds the supported size.');
+    if (blob.size > maxBytes) throw tooLarge();
     return blob;
   }
   const reader = response.body.getReader();
@@ -119,7 +121,7 @@ export async function readBoundedResponse(response: Response, maxBytes: number):
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > maxBytes) throw new Error('File exceeds the supported size.');
+      if (size > maxBytes) throw tooLarge();
       chunks.push(new Uint8Array(value));
     }
   } catch (error) {

@@ -1,4 +1,6 @@
 import { Blob as NodeBlob } from 'node:buffer';
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDrivePublicationController, normalizeDriveArchiveName } from './publishDataset';
 import { DRIVE_UPLOAD_CHUNK_BYTES, GoogleDrivePublishError, type DrivePublishedFile } from './upload';
@@ -150,5 +152,75 @@ describe('Drive publication lifecycle', () => {
   });
   it.each(['', '../dataset', 'folder/name', 'line\nname', '.'])('validates file names before any API call: %s', name => {
     expect(() => normalizeDriveArchiveName(name)).toThrow('file name');
+  });
+});
+
+/** Force collection: V8 keeps WeakRef targets alive until the current task ends. */
+async function collected(ref: WeakRef<object>): Promise<boolean> {
+  setFlagsFromString('--expose-gc');
+  const gc = runInNewContext('gc') as () => void;
+  for (let attempt = 0; attempt < 10 && ref.deref(); attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    gc();
+  }
+  return ref.deref() === undefined;
+}
+/** Publishes with closures that are the only references to a stand-in for the captured PublicationInput. */
+function publishTracked(controller: ReturnType<typeof fixture>['controller'], prepare: (signal: AbortSignal) => Promise<unknown>) {
+  let ref!: WeakRef<object>;
+  const attempt = (() => {
+    const input = { reconstruction: new Uint8Array(1024) };
+    ref = new WeakRef(input);
+    return controller.publish('scene', false, async signal => { void input; return await prepare(signal) as never; }, () => { void input; });
+  })();
+  return { attempt, ref };
+}
+
+describe('Drive publication memory', () => {
+  it('releases the published dataset once the upload completes', async () => {
+    const { controller, blob } = fixture();
+    const { attempt, ref } = publishTracked(controller, async () => ({ blob, md5: 'fixture-md5', viewerBaseUrl: 'https://viewer.example/latest/' }));
+    await attempt;
+    expect(controller.getSnapshot().phase).toBe('completed');
+    expect(await collected(ref)).toBe(true);
+  });
+  it('releases a failed publication’s dataset when the dataset changes, and never retries it', async () => {
+    const { controller, client, blob } = fixture();
+    client.chunk.mockRejectedValueOnce(new GoogleDrivePublishError('Interrupted'));
+    const { attempt, ref } = publishTracked(controller, async () => ({ blob, md5: 'fixture-md5', viewerBaseUrl: 'https://viewer.example/latest/' }));
+    await attempt;
+    controller.invalidate();
+    await controller.retry();
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: false });
+    expect(client.chunk).toHaveBeenCalledOnce();
+    expect(await collected(ref)).toBe(true);
+  });
+  it('drops a ZIP that finishes preparing after the dataset changed', async () => {
+    const { controller, client } = fixture();
+    let finish!: () => void;
+    let late!: WeakRef<object>;
+    const { attempt, ref } = publishTracked(controller, () => new Promise(resolve => {
+      finish = () => { const blob = new Blob(['late']); late = new WeakRef(blob); resolve({ blob, md5: 'md5', viewerBaseUrl: 'https://viewer.example/' }); };
+    }));
+    controller.invalidate();
+    finish();
+    // The resolver would otherwise keep the settled promise, and so the ZIP, reachable from this test.
+    finish = () => {};
+    await attempt;
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'cancelled', canRetry: false });
+    expect(client.owner).not.toHaveBeenCalled();
+    expect(await collected(ref)).toBe(true);
+    expect(await collected(late)).toBe(true);
+  });
+  it('ends a publication that failed a size limit instead of offering a retry', async () => {
+    const { controller, client } = fixture();
+    const limit = new GoogleDrivePublishError('The mask for photo.jpg exceeds the 128 MiB publication limit for non-splat files.', undefined, true);
+    const { attempt, ref } = publishTracked(controller, async () => { throw limit; });
+    await attempt;
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: false, error: limit.message });
+    await controller.retry();
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: false, error: limit.message });
+    expect(client.owner).not.toHaveBeenCalled();
+    expect(await collected(ref)).toBe(true);
   });
 });

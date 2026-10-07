@@ -4,7 +4,7 @@ import { unzipSync, strFromU8 } from 'fflate';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { packageDriveArchive, prepareDriveArchive } from './prepareArchive';
 import type { PreparedPublication, PublishAsset } from '../datasetPublishing/types';
-import { buildImage, buildReconstruction, buildCamera, buildDatasetState, buildLoadedFiles } from '../../test/builders';
+import { buildImage, buildPoint3D, buildReconstruction, buildCamera, buildDatasetState, buildLoadedFiles } from '../../test/builders';
 import { preparePublication } from '../datasetPublishing/preparePublication';
 import { createIdentityEuler } from '../../utils/sim3dTransforms';
 import { parseDatasetViewerSettings } from '../../utils/datasetViewerSettings';
@@ -74,11 +74,12 @@ describe('Drive dataset ZIP packaging', () => {
     expect(result.blob.type).toBe('application/zip');
     expect(progress).toHaveBeenLastCalledWith('Packaged colmapview.yaml', paths.length, paths.length);
   });
-  it('rejects known oversized datasets before opening any file and also counts ZIP overhead', async () => {
+  it('rejects known oversized datasets before opening any file and also counts ZIP overhead, without offering a retry', async () => {
+    const limit = { message: expect.stringContaining('2 GiB'), permanent: true };
     const open = vi.fn().mockResolvedValue(new Blob(['data']));
-    await expect(packageDriveArchive(prepared([{ path: 'large.sog', kind: 'splat', size: 1000, open }]), new AbortController().signal, () => {}, () => {}, 100)).rejects.toThrow('2 GiB');
+    await expect(packageDriveArchive(prepared([{ path: 'large.sog', kind: 'splat', size: 1000, open }]), new AbortController().signal, () => {}, () => {}, 100)).rejects.toMatchObject(limit);
     expect(open).not.toHaveBeenCalled();
-    await expect(packageDriveArchive(prepared([asset('tiny.bin', 'x')]), new AbortController().signal, () => {}, () => {}, 5)).rejects.toThrow('2 GiB');
+    await expect(packageDriveArchive(prepared([asset('tiny.bin', 'x')]), new AbortController().signal, () => {}, () => {}, 5)).rejects.toMatchObject(limit);
   });
   it('rejects source size changes and stops an aborted reader before packaging the next asset', async () => {
     const source = asset('file.bin', 'data'); source.size = 1;
@@ -104,5 +105,27 @@ describe('Drive dataset ZIP packaging', () => {
     const settings = parseDatasetViewerSettings(await (await result.assets.find(file => file.kind === 'viewer-state')!.open(new AbortController().signal)).text());
     expect(settings.config.splat?.activeSourceId).toBe('splats/active.sog');
     expect(settings.config.splat?.transform?.translationX).toBe(2);
+  });
+});
+
+describe('Drive remote sources', () => {
+  const bucket = 'https://bucket.s3.amazonaws.com/scene/';
+  // One point keeps preparation from warning that there are no points to export.
+  const remoteInput = (dataset: Parameters<typeof buildDatasetState>[0], images = [buildImage({ name: 'photo.jpg' })]) => ({
+    sourceKey: 'remote', modelRevision: 0, source: null, reconstruction: buildReconstruction({ cameras: [buildCamera()], images, points3D: [buildPoint3D()] }),
+    dataset: buildDatasetState({ sourceType: 'url', ...dataset }), activeSplatId: null as string | null,
+    transform: createIdentityEuler(), splatTransform: createIdentityEuler(), config: {}, viewState: null,
+    appVersion: 'test', viewerBaseUrl: 'https://viewer.example/' });
+  const s3Input = () => remoteInput({ imageUrlBase: bucket + 'images/', maskUrlBase: bucket + 'masks/' });
+  const original = (url: string) => url === bucket + 'images/photo.jpg' ? new Response('original') : null;
+
+  it('names an oversized mask and the limit, and does not offer a retry', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => original(url)
+      ?? (url === bucket + 'masks/photo.jpg.png'
+        ? new Response('mask', { headers: { 'content-length': String(128 * 1024 * 1024 + 1) } })
+        : new Response(null, { status: 404 }))));
+    await expect(prepareDriveArchive(s3Input(), new AbortController().signal, () => {}, () => {})).rejects.toMatchObject({
+      message: 'The mask for photo.jpg (photo.jpg.png) exceeds the 128 MiB publication limit for non-splat files. Shrink it in the source dataset, then publish again.',
+      permanent: true });
   });
 });

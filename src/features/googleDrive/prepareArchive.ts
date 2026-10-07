@@ -20,7 +20,7 @@ export async function packageDriveArchive(prepared: PreparedPublication, signal:
   const check = () => { signal.throwIfAborted(); assertCurrent(); };
   check();
   if (prepared.assets.length > 60_000) throw new GoogleDrivePublishError('This dataset has too many files for a Drive ZIP.');
-  const tooLarge = () => new GoogleDrivePublishError('The dataset ZIP exceeds the viewer’s 2 GiB archive limit. Use a smaller dataset or splat.');
+  const tooLarge = () => new GoogleDrivePublishError('The dataset ZIP exceeds the viewer’s 2 GiB archive limit. Use a smaller dataset or splat.', undefined, true);
   if (prepared.assets.reduce((sum, asset) => sum + (asset.size ?? 0), 0) > sizeLimit) throw tooLarge();
   const md5 = await awaitWithAbort(createMD5(), signal);
   check();
@@ -120,7 +120,9 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
       const response = await fetchDatasetResource(await pinAssetUrl(candidate.url), undefined, { signal });
       if (response.status === 404) { await response.body?.cancel(); continue; }
       if (!response.ok) { await response.body?.cancel(); throw new GoogleDrivePublishError(`Could not read the mask for ${name}.`); }
-      return readBoundedResponse(response, MAX_BUFFERED_PUBLICATION_FILE_BYTES);
+      return readBoundedResponse(response, MAX_BUFFERED_PUBLICATION_FILE_BYTES, () => new GoogleDrivePublishError(
+        `The mask for ${name} (${candidate.filename}) exceeds the 128 MiB publication limit for non-splat files. Shrink it in the source dataset, then publish again.`,
+        undefined, true));
     }
     return null;
   };

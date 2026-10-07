@@ -5,7 +5,11 @@ import { assertGoogleDriveHostAllowed, getGoogleDriveConfiguration } from './con
 
 export class GoogleDrivePublishError extends Error {
   readonly status?: number;
-  constructor(message: string, status?: number) { super(message); this.name = 'GoogleDrivePublishError'; this.status = status; }
+  /** Retrying cannot succeed, e.g. a file over a size limit; the dataset itself must change. */
+  readonly permanent: boolean;
+  constructor(message: string, status?: number, permanent = false) {
+    super(message); this.name = 'GoogleDrivePublishError'; this.status = status; this.permanent = permanent;
+  }
 }
 function assertDrivePublishingAllowed(): void {
   try { assertGoogleDriveHostAllowed(); }

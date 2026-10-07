@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parsePublishedViewerState, sanitizeShareConfig } from './publishedViewerState';
+import { parsePublishedViewerState, readBoundedResponse, sanitizeShareConfig } from './publishedViewerState';
 import { createIdentityEuler } from './sim3dTransforms';
 import { decodeShareData, encodeShareData } from './shareDataCodec';
 
@@ -42,5 +42,13 @@ describe('published viewer state', () => {
     expect(modern?.config).toEqual({ transform, splat });
     const legacy = await decodeShareData(encodeShareData('https://example.com/manifest.json', null, { transform }));
     expect(legacy?.config).toEqual({ transform });
+  });
+});
+
+describe('bounded response reads', () => {
+  it('reports a body that overflows while streaming with the caller’s error, or the generic one', async () => {
+    const tooLarge = () => new Error('The mask exceeds the limit.');
+    await expect(readBoundedResponse(new Response('12345'), 4, tooLarge)).rejects.toThrow('The mask exceeds the limit.');
+    await expect(readBoundedResponse(new Response('12345'), 4)).rejects.toThrow('File exceeds the supported size.');
   });
 });

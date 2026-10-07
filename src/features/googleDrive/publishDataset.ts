@@ -28,6 +28,13 @@ interface Job {
   name: string; shared: boolean; operationId: string; prepare: PrepareArchive; assertCurrent: () => void;
   archive?: DriveArchive; ownerId?: string; fileId?: string; sessionUrl?: string; invalid: boolean;
 }
+const staleDataset = () => new GoogleDrivePublishError('The dataset changed. Start a new Drive publication.');
+/** A finished or stale job keeps only its Drive bookkeeping; its closures held the previous dataset. */
+function release(target: Job): void {
+  target.archive = undefined;
+  target.prepare = async () => { throw staleDataset(); };
+  target.assertCurrent = () => { throw staleDataset(); };
+}
 
 /** A pre-generated file ID and private operation marker bind every retry to this upload. */
 export function createDrivePublicationController(client: DriveUploadClient) {
@@ -138,15 +145,19 @@ export function createDrivePublicationController(client: DriveUploadClient) {
       viewerUrl.searchParams.set('url', driveUrl);
       update({ phase: 'completed', message: 'Dataset saved to Google Drive.', canRetry: false, fileUrl: driveUrl,
         receipt: { fileId: current.fileId, driveUrl, viewerUrl: viewerUrl.href, shared: current.shared } });
-      current.archive = undefined;
+      release(current);
     } catch (error) {
+      const permanent = !signal.aborted && error instanceof GoogleDrivePublishError && error.permanent;
       if (current === job) {
         const cancelled = signal.aborted;
         set({ phase: cancelled ? 'cancelled' : 'failed', message: cancelled
           ? current.invalid ? 'The dataset changed. Start a new Drive publication.' : 'Upload cancelled. Completed files may remain in Drive.'
           : 'Drive publication could not finish.', error: cancelled ? undefined : drivePublicationErrorMessage(error),
-          canRetry: !current.invalid });
+          canRetry: !current.invalid && !permanent });
+        // A size limit fails the same way on every retry: end the job, which also releases its dataset.
+        if (permanent) job = null;
       }
+      if (current.invalid) release(current);
     } finally { if (active === controller) active = null; }
   };
   const cancel = () => { if (active) { set({ phase: 'cancelling', message: 'Cancelling upload…' }); active.abort(); } };
@@ -161,7 +172,7 @@ export function createDrivePublicationController(client: DriveUploadClient) {
     },
     retry: run,
     cancel,
-    invalidate() { if (job) { job.invalid = true; cancel(); job.archive = undefined; set({ canRetry: false }); } },
+    invalidate() { if (job) { job.invalid = true; cancel(); release(job); set({ canRetry: false }); } },
     reset() { if (!active) { job = null; state = initial(); listeners.forEach(listener => listener()); } },
   };
 }
