@@ -63,6 +63,7 @@ async function verifyPublicPages(browser) {
   try {
     const unexpected = [];
     const failedAssets = [];
+    const failedRequests = [];
     const errors = [];
     await context.route('**/*', route => {
       if (new URL(route.request().url()).origin === base.origin) return route.continue();
@@ -72,6 +73,8 @@ async function verifyPublicPages(browser) {
     const page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
     page.on('response', response => { if (response.status() >= 400) failedAssets.push(`${response.status()} ${response.url()}`); });
+    // A same-origin request that got no response, such as a lazy chunk, can surface only as a page error.
+    page.on('requestfailed', request => { if (new URL(request.url()).origin === base.origin) failedRequests.push(request.url()); });
     const response = await retryable(page.goto(base.href, { waitUntil: 'networkidle', timeout: 45_000 }));
     transientIf(response.status() >= 500, () => assert.equal(response.status(), 200, 'Viewer navigation must be public HTTP 200.'));
     verifyIndexHtml(await retryable(response.body()), expected);
@@ -83,7 +86,8 @@ async function verifyPublicPages(browser) {
     assert.deepEqual(unexpected, [], 'An idle viewer must not contact provider SDKs/APIs or analytics.');
     transientIf(failedAssets.every(entry => entry.startsWith('5')),
       () => assert.deepEqual(failedAssets, [], 'All application assets must resolve on the public host.'));
-    assert.deepEqual(errors, [], 'The deployed viewer must start without browser exceptions.');
+    transientIf(failedRequests.length > 0,
+      () => assert.deepEqual(errors, [], 'The deployed viewer must start without browser exceptions.'));
   } finally { await context.close(); }
 }
 
