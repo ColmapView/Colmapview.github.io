@@ -96,7 +96,7 @@ describe('publication snapshot preparation', () => {
   });
 
   const tileUrl = 'https://huggingface.co/datasets/owner/source/resolve/main/tile.ply';
-  it.each([[0, null], [undefined, null], [42, 42]] as const)('treats a catalogued splat size of %s as %s bytes', async (size, expected) => {
+  it.each([[0, 'unknown', null], [undefined, 'unknown', null], [42, 'an exact byte count', 42]] as const)('treats a catalogued splat size of %s as %s', async (size, _reading, expected) => {
     const source = input();
     source.dataset.loadedFiles!.splatFileSources = [{ id: 'tile', path: 'tile.ply', url: tileUrl, size }];
     const prepared = await preparePublication(source, new AbortController().signal, deps());

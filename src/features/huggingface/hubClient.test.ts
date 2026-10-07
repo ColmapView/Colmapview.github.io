@@ -123,6 +123,8 @@ describe('Hugging Face transport adapter', () => {
     sdk.datasetInfo.mockRejectedValue(Object.assign(new Error('Repository not found'), { statusCode: status }));
     const error = await createHubClient(() => 'test-token').resolveRevision('owner/private', 'main', signal()).catch((value: unknown) => value);
     expect(publicationErrorMessage(error)).toBe('Publication requires a public, ungated Hugging Face dataset. This source dataset is private or no longer available.');
+    // The message holds only because this read is anonymous; with a token, a 401 would mean an expired connection.
+    expect(sdk.datasetInfo.mock.calls[0][0]).not.toHaveProperty('accessToken');
   });
   it('keeps transient metadata failures retryable', async () => {
     sdk.datasetInfo.mockRejectedValue(Object.assign(new Error('Busy'), { statusCode: 503 }));
