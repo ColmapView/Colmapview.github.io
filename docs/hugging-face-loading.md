@@ -12,9 +12,9 @@ The signed-in session applies to discovery, reconstruction files, ZIP/TAR and ot
 
 Public reads remain anonymous, including checks for optional files a public repo does not have. After a successful authenticated read, subsequent files from that repo use the current session directly. Disconnecting, reconnecting, or token expiry invalidates that routing hint. A failed repository access check leaves the current dataset and caches intact.
 
-Shared links to private datasets still require each recipient to sign in with an account that can read the repository. Reloading the page requires signing in again. The account **Disconnect** button forgets the local token; it does not remove an already downloaded scene.
+Shared links to private datasets still require each recipient to sign in with an account that can read the repository. Reloading the page requires signing in again. The account **Disconnect** button forgets the local token; it does not remove an already downloaded scene. When the sign-in expires (after about 8 hours), the **🤗** button in the viewer toolbar signs in again, so the open scene keeps loading private images. With publishing enabled, that button opens the publishing dialog, which has its own **Sign in** button.
 
-If a private shared link opens while signed out, the viewer returns to **Load Dataset** after the access check fails. Sign in using the account icon, then retry the dataset URL through **Load URL**.
+If a private shared link opens while signed out, the viewer returns to **Load Dataset** after the access check fails. Select the **🤗** account icon and sign in, then select **Retry shared link** in the same dialog. The retry opens the same link, with its view and settings, without reloading the page, which would end the sign-in.
 
 ## Viewer setup
 

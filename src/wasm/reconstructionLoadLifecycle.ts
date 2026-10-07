@@ -2,6 +2,13 @@ import { reconstructionAbortError } from './reconstructionService';
 
 let generation = 0;
 let active: AbortController | null = null;
+const startListeners = new Set<() => void>();
+
+/** Called whenever a dataset load starts, local or from a URL, including one that later fails or is cancelled. */
+export function onReconstructionLoadStart(listener: () => void): () => void {
+  startListeners.add(listener);
+  return () => { startListeners.delete(listener); };
+}
 
 /** A replacement/clear immediately aborts the previous load, including a busy parsing worker. */
 export function beginReconstructionLoad(): { signal: AbortSignal; assertCurrent(): void; finish(): void } {
@@ -9,6 +16,7 @@ export function beginReconstructionLoad(): { signal: AbortSignal; assertCurrent(
   const controller = new AbortController();
   const token = ++generation;
   active = controller;
+  for (const listener of Array.from(startListeners)) listener();
   return {
     signal: controller.signal,
     assertCurrent: () => {

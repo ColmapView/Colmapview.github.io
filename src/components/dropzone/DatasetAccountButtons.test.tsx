@@ -5,6 +5,8 @@ import { googleDriveAuth, loadGoogleOAuthSdk, type GoogleOAuthSdk, type GoogleTo
 import { chooseGoogleDriveArchive, getGoogleDrivePickerConfig } from '../../features/googleDrive/picker';
 import { hfAuth } from '../../features/huggingface/auth';
 import { isGoogleDriveEnabled, resolveGoogleDriveHostingConfig } from '../../features/googleDrive/config';
+import { offerStartupLinkRetry } from '../../appStartupRetry';
+import { useReconstructionStore } from '../../store';
 
 vi.mock('../../features/googleDrive/config', async importOriginal => ({
   ...await importOriginal<typeof import('../../features/googleDrive/config')>(),
@@ -86,6 +88,7 @@ afterEach(() => {
   cleanup();
   document.querySelector('[data-testid="mock-google-picker"]')?.remove();
   googleDriveAuth.disconnect(); hfAuth.disconnect();
+  useReconstructionStore.getState().setUrlError(null);
   vi.unstubAllEnvs(); vi.restoreAllMocks();
 });
 
@@ -352,6 +355,34 @@ describe('Dataset provider account icons', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Load URL' }));
     expect(props.onOpenUrlModal).toHaveBeenCalledOnce();
     expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
+  });
+
+  it('retries a failed shared link from the dialog once signed in to Hugging Face', () => {
+    vi.spyOn(hfAuth, 'getSnapshot').mockReturnValue({ status: 'connected', identity: { username: 'test-user' }, error: null });
+    useReconstructionStore.getState().setUrlError({ type: 'unknown', message: 'Hugging Face dataset not found, or it is private.' });
+    const retry = vi.fn(async () => {});
+    offerStartupLinkRetry(retry);
+    const props = createProps();
+    render(<DatasetAccountButtons {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hugging Face account' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry shared link' }));
+    expect(retry).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(props.onOpenUrlModal).not.toHaveBeenCalled();
+  });
+
+  it('offers no retry before sign-in or without a failed shared link', () => {
+    useReconstructionStore.getState().setUrlError({ type: 'unknown', message: 'Hugging Face dataset not found, or it is private.' });
+    offerStartupLinkRetry(vi.fn(async () => {}));
+    render(<DatasetAccountButtons {...createProps()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hugging Face account' }));
+    expect(screen.queryByRole('button', { name: 'Retry shared link' })).not.toBeInTheDocument();
+    cleanup();
+    useReconstructionStore.getState().setUrlError(null);
+    vi.spyOn(hfAuth, 'getSnapshot').mockReturnValue({ status: 'connected', identity: { username: 'test-user' }, error: null });
+    render(<DatasetAccountButtons {...createProps()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hugging Face account' }));
+    expect(screen.queryByRole('button', { name: 'Retry shared link' })).not.toBeInTheDocument();
   });
 
   it('keeps a pending Hugging Face sign-in instead of letting Load URL cancel it', () => {

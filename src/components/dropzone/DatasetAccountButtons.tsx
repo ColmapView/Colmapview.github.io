@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { flushSync } from 'react-dom';
 import { hfAuth } from '../../features/huggingface/auth';
 import { getHfAccountConfiguration } from '../../features/huggingface/config';
+import { startupLinkRetry } from '../../appStartupRetry';
 import { googleDriveAuth, loadGoogleOAuthSdk, type GoogleOAuthSdk } from '../../features/googleDrive/auth';
 import { chooseGoogleDriveArchive, getGoogleDrivePickerConfig } from '../../features/googleDrive/picker';
 import { GOOGLE_DRIVE_ENABLED_ORIGIN, getGoogleDriveConfiguration, isGoogleDriveEnabled } from '../../features/googleDrive/config';
@@ -30,6 +31,8 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
   const signInUnsubscribeRef = useRef<(() => void) | null>(null);
   const google = useSyncExternalStore(googleDriveAuth.subscribe, googleDriveAuth.getSnapshot);
   const hf = useSyncExternalStore(hfAuth.subscribe, hfAuth.getSnapshot);
+  // A shared link's dataset URL is hidden in its fragment, and a reload would drop the sign-in.
+  const retryLink = useSyncExternalStore(startupLinkRetry.subscribe, startupLinkRetry.getSnapshot);
   const clientId = getGoogleDrivePickerConfig()?.clientId;
   // Drive URLs load with the API key; a reader session exists only through the picker, which needs the key too.
   const googleApiKey = getGoogleDriveConfiguration().apiKey;
@@ -197,8 +200,10 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
               {connected ? 'Disconnect' : 'Cancel sign-in'}
             </button>
             <button type="button" disabled={connecting}
-              className={getButtonClass(connecting ? 'secondary' : 'primary', 'sm', connecting)}
+              className={getButtonClass(connecting ? 'secondary' : retryLink ? 'ghost' : 'primary', 'sm', connecting)}
               onClick={() => { close(); onOpenUrlModal(); }}>Load URL</button>
+            {connected && retryLink && <button type="button" className={getButtonClass('primary', 'sm')}
+              onClick={() => { close(); void retryLink(); }}>Retry shared link</button>}
           </> : <>
             <button type="button" className={getButtonClass(canSignIn ? 'ghost' : 'primary', 'sm')}
               onClick={() => { close(); onOpenUrlModal(); }}>Load URL</button>

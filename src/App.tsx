@@ -9,7 +9,6 @@ import { ConfirmationHost } from './components/ui/ConfirmationHost';
 import { MouseTooltip } from './components/ui/MouseTooltip';
 import { NotificationContainer } from './components/ui/NotificationContainer';
 import {
-  abandonUrlAutoLoadRequest,
   initStoreMigration,
   useCameraStore,
   useExportStore,
@@ -18,14 +17,13 @@ import {
   useUIStore,
 } from './store';
 import { useUrlLoader } from './hooks/useUrlLoader';
-import { decodeShareData, applyShareConfig } from './hooks/useUrlState';
+import { decodeShareData } from './hooks/useUrlState';
 import { detectTouchDevice } from './hooks/useIsTouchDevice';
 import { TOUCH_BREAKPOINTS } from './theme/sizing';
 import { appLogger } from './utils/logger';
-import { runGuardedUrlLoad } from './appUrlLoadGuard';
+import { runStartupLoadPlan } from './appStartupLoad';
 import {
   APP_EMBED_MODE_LOG_MESSAGE,
-  APP_SHARED_CONFIG_LOG_MESSAGE,
   getAppStartupLoadPlan,
   getTouchModeAutoAction,
   getTouchModeUrlActionFromSearch,
@@ -73,48 +71,10 @@ function App() {
     // Async function to handle URL loading
     const checkUrlAndLoad = async () => {
       const shareData = await decodeShareData(window.location.hash);
-      const loadPlan = getAppStartupLoadPlan({
+      await runStartupLoadPlan(getAppStartupLoadPlan({
         shareData,
         legacyManifestUrl: new URLSearchParams(search).get('url'),
-      });
-
-      // Applied before loading so display settings and the requested splat take effect during the load.
-      if (loadPlan.config) {
-        appLogger.info(APP_SHARED_CONFIG_LOG_MESSAGE);
-        applyShareConfig(loadPlan.config);
-      }
-
-      if (loadPlan.kind === 'inline-manifest') {
-        appLogger.info(loadPlan.logMessage);
-        // The loader re-applies the URL's settings after the load (applyUrlOverrides).
-        const loaded = await loadFromManifest(loadPlan.manifest);
-        if (loaded && loadPlan.selectedImageId !== null) {
-          useCameraStore.getState().setSelectedImageId(loadPlan.selectedImageId);
-        }
-        return;
-      }
-
-      if (loadPlan.kind === 'manifest-url') {
-        appLogger.info(loadPlan.logMessage);
-        const loaded = await runGuardedUrlLoad({
-          manifestUrl: loadPlan.manifestUrl,
-          loadFromUrl,
-          onDeclined: abandonUrlAutoLoadRequest,
-        });
-        if (loaded && loadPlan.selectedImageId !== null) {
-          useCameraStore.getState().setSelectedImageId(loadPlan.selectedImageId);
-        }
-        return;
-      }
-
-      if (loadPlan.kind === 'legacy-url') {
-        appLogger.info(loadPlan.logMessage);
-        await runGuardedUrlLoad({
-          manifestUrl: loadPlan.manifestUrl,
-          loadFromUrl,
-          onDeclined: abandonUrlAutoLoadRequest,
-        });
-      }
+      }), { loadFromUrl, loadFromManifest });
     };
 
     checkUrlAndLoad();

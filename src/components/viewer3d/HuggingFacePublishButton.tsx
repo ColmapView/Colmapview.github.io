@@ -1,8 +1,9 @@
 import { memo, useState } from 'react';
-import { getHfConfiguration } from '../../features/huggingface/config';
+import { getHfAccountConfiguration, getHfConfiguration } from '../../features/huggingface/config';
 import { ControlButton, type PanelType } from './ControlComponents';
 import { useHuggingFacePublishButtonStoreFacade } from './useHuggingFacePublishButtonStoreFacade';
 import { LazyToolModal } from './LazyToolModal';
+import { HuggingFaceAccountButton } from './HuggingFaceAccountButton';
 
 const loadPublisher = () => import('../modals/PublishDatasetModal').then(module => ({ default: module.PublishDatasetModal }));
 
@@ -16,7 +17,11 @@ export const HuggingFacePublishButton = memo(function HuggingFacePublishButton({
 }: HuggingFacePublishButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { publicationActive } = useHuggingFacePublishButtonStoreFacade();
-  if (getHfConfiguration().status === 'disabled') return null;
+  if (getHfConfiguration().status === 'disabled') {
+    const account = getHfAccountConfiguration();
+    return account.status === 'ready'
+      ? <HuggingFaceAccountButton config={account.config} activePanel={activePanel} setActivePanel={setActivePanel} /> : null;
+  }
 
   return <>
     <ControlButton
