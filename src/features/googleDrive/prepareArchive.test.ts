@@ -117,8 +117,49 @@ describe('Drive remote sources', () => {
     transform: createIdentityEuler(), splatTransform: createIdentityEuler(), config: {}, viewState: null,
     appVersion: 'test', viewerBaseUrl: 'https://viewer.example/' });
   const s3Input = () => remoteInput({ imageUrlBase: bucket + 'images/', maskUrlBase: bucket + 'masks/' });
+  const entries = async (archive: { blob: Blob }) => unzipSync(new Uint8Array(await archive.blob.arrayBuffer()));
   const original = (url: string) => url === bucket + 'images/photo.jpg' ? new Response('original') : null;
 
+  it('packages an active remote splat whose catalogued size is unknown', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => url === bucket + 'tile.ply' ? new Response('splat bytes') : new Response(null, { status: 404 })));
+    const source = remoteInput({ loadedFiles: buildLoadedFiles({ splatFileSources: [{ id: 'tile', path: 'tile.ply', url: bucket + 'tile.ply', size: 0 }] }) }, []);
+    source.activeSplatId = 'tile';
+    const archive = await prepareDriveArchive(source, new AbortController().signal, () => {}, () => {});
+    expect(strFromU8((await entries(archive))['splats/tile.ply'])).toBe('splat bytes');
+  });
+  it('skips a forbidden mask name like the viewer, as S3 answers missing keys without ListBucket', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => original(url)
+      ?? (url === bucket + 'masks/photo.jpg' ? new Response('<Error><Code>AccessDenied</Code></Error>', { status: 403 })
+        : url === bucket + 'masks/photo.jpg.png' ? new Response('mask') : new Response(null, { status: 500 }))));
+    const files = await entries(await prepareDriveArchive(s3Input(), new AbortController().signal, () => {}, () => {}));
+    expect(strFromU8(files['images/photo.jpg'])).toBe('original');
+    expect(strFromU8(files['masks/photo.jpg.png'])).toBe('mask');
+  });
+  it('publishes without a mask when every mask name is forbidden', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => original(url) ?? new Response(null, { status: 403 })));
+    const files = await entries(await prepareDriveArchive(s3Input(), new AbortController().signal, () => {}, () => {}));
+    expect(Object.keys(files).filter(path => path.startsWith('masks/'))).toEqual([]);
+  });
+  it.each([429, 503])('retries a %i mask response before packaging the mask', async status => {
+    let limited = false;
+    const request = vi.fn(async (url: string) => {
+      if (original(url)) return original(url)!;
+      if (url === bucket + 'masks/photo.jpg') return new Response(null, { status: 404 });
+      if (!limited) { limited = true; return new Response(null, { status, headers: { 'Retry-After': '0' } }); }
+      return new Response('mask');
+    });
+    vi.stubGlobal('fetch', request);
+    const files = await entries(await prepareDriveArchive(s3Input(), new AbortController().signal, () => {}, () => {}));
+    expect(strFromU8(files['masks/photo.jpg.png'])).toBe('mask');
+    expect(request.mock.calls.filter(([url]) => url === bucket + 'masks/photo.jpg.png')).toHaveLength(2);
+  });
+  it('names the mask and status once retries are exhausted', async () => {
+    const request = vi.fn(async (url: string) => original(url) ?? new Response(null, { status: 503, headers: { 'Retry-After': '0' } }));
+    vi.stubGlobal('fetch', request);
+    await expect(prepareDriveArchive(s3Input(), new AbortController().signal, () => {}, () => {}))
+      .rejects.toMatchObject({ message: 'Could not read the mask for photo.jpg (HTTP 503). Retry the publication.', permanent: false });
+    expect(request.mock.calls.filter(([url]) => url === bucket + 'masks/photo.jpg')).toHaveLength(3);
+  });
   it('names an oversized mask and the limit, and does not offer a retry', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => original(url)
       ?? (url === bucket + 'masks/photo.jpg.png'

@@ -10,6 +10,7 @@ import { readBoundedResponse } from '../../utils/publishedViewerState';
 import { buildMaskUrlCandidates } from '../../utils/imageFileLookupPolicy';
 import { awaitWithAbort } from '../../utils/awaitWithAbort';
 import { GoogleDrivePublishError } from './upload';
+import { boundedFetch } from '../huggingface/http';
 
 export interface DriveArchive { blob: Blob; md5: string; viewerBaseUrl: string }
 export type DriveArchiveProgress = (message: string, filesDone: number, filesTotal: number) => void;
@@ -78,6 +79,8 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
   const sdk = await import('@huggingface/hub');
   const read: typeof fetch = (value, init) => fetchDatasetResource(typeof value === 'string' ? value : value instanceof URL ? value.href : value.url,
     undefined, { ...init, signal });
+  // Throttled or briefly unavailable hosts get the same bounded backoff as Hub reads (429/502/503/504).
+  const readMask = boundedFetch(signal, null, read);
   const revisions = new Map<string, Promise<string>>();
   const resolveRevision = (repoId: string, revision: string) => {
     const key = `${repoId}/${revision}`;
@@ -117,9 +120,13 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
     }
     for (const candidate of buildMaskUrlCandidates(base, name)) {
       if (paths && !paths.has(parseHfAssetUrl(candidate.url).path)) continue;
-      const response = await fetchDatasetResource(await pinAssetUrl(candidate.url), undefined, { signal });
-      if (response.status === 404) { await response.body?.cancel(); continue; }
-      if (!response.ok) { await response.body?.cancel(); throw new GoogleDrivePublishError(`Could not read the mask for ${name}.`); }
+      const response = await readMask(await pinAssetUrl(candidate.url));
+      // Like the viewer's mask loader, try the next name: S3 or GCS without list access answers a missing key with 403.
+      if (response.status === 404 || response.status === 403) { await response.body?.cancel(); continue; }
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new GoogleDrivePublishError(`Could not read the mask for ${name} (HTTP ${response.status}). Retry the publication.`);
+      }
       return readBoundedResponse(response, MAX_BUFFERED_PUBLICATION_FILE_BYTES, () => new GoogleDrivePublishError(
         `The mask for ${name} (${candidate.filename}) exceeds the 128 MiB publication limit for non-splat files. Shrink it in the source dataset, then publish again.`,
         undefined, true));
