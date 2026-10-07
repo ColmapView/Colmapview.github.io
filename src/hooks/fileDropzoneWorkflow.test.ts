@@ -14,7 +14,7 @@ import { registerConfirmationHandler } from '../utils/confirmation';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import { getShareActiveSplatSourceId } from '../utils/splatFileSourcePolicy';
-import { buildImage, buildReconstruction as buildTestReconstruction, buildWasmReconstructionWrapper } from '../test/builders';
+import { buildImage, buildPoint3D, buildReconstruction as buildTestReconstruction, buildWasmReconstructionWrapper } from '../test/builders';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 
 function file(name: string): File {
@@ -1455,6 +1455,7 @@ describe('file dropzone workflow', () => {
     ['images', false, [['info', 'Loaded 2 images (gallery only, no 3D data)', 5000]]],
     ['images+splats', false, [['info', 'Loaded 2 images (gallery only, no 3D data)', 5000]]],
     ['splat-only', false, []],
+    ['splat-only', true, []],
   ] as const)('announces a Reload exactly as its first load (%s scene, own colmapview.yaml: %s)', async (scene, ownSettings, announcements) => {
     const { files, deps } = reloadSceneFixture(scene, ownSettings ? 'ui:\n  background_color: "#123456"\n' : undefined);
     try {
@@ -1466,6 +1467,28 @@ describe('file dropzone workflow', () => {
 
       expect(vi.mocked(deps.addNotification).mock.calls).toEqual(announcements);
       expect(deps.addNotification).not.toHaveBeenCalledWith('info', expect.stringContaining('Updated splat file'), expect.anything());
+    } finally { useReconstructionStore.getState().clear(); }
+  });
+
+  it('warns about the points a minimum track length hides on a Reload exactly as on its first load', async () => {
+    const { files, deps } = reloadSceneFixture('COLMAP');
+    // Of two parsed points, the one seen by a single image is under a minimum track length of 2.
+    const points3D = new Map([
+      [1n, buildPoint3D({ point3DId: 1n, track: [{ imageId: 1, point2DIdx: 0 }] })],
+      [2n, buildPoint3D({ point3DId: 2n, track: [{ imageId: 1, point2DIdx: 1 }, { imageId: 2, point2DIdx: 0 }] })],
+    ]);
+    const hiding = { ...deps, getMinTrackLength: () => 2,
+      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D, wasmWrapper: null, usedWasmPath: false })),
+      buildReconstruction: vi.fn(async () => ({ reconstruction: parsedScene(), pointCount: 2 })) };
+    const announcements = [['warning', '1 points (50.0%) hidden due to min track length filter (2). Adjust in Point Cloud settings.']];
+    try {
+      await expect(processFileDropzoneFiles(files, hiding)).resolves.toBe(true);
+      expect(vi.mocked(deps.addNotification).mock.calls).toEqual(announcements);
+      vi.mocked(deps.addNotification).mockClear();
+
+      await expect(processFileDropzoneFiles(files, hiding, { reload: true })).resolves.toBe(true);
+
+      expect(vi.mocked(deps.addNotification).mock.calls).toEqual(announcements);
     } finally { useReconstructionStore.getState().clear(); }
   });
 
