@@ -3,7 +3,7 @@
 Public dataset links work without signing in. To open a private dataset:
 
 1. Select the **🤗 Hugging Face** account icon next to **Upload configuration** in **Load Dataset**.
-2. Select **Sign in with Hugging Face** and approve repository read access. For an organization-owned dataset, also authorize that organization; your account must already be allowed to read the repo.
+2. Select **Sign in with Hugging Face** and approve the requested access: repository read access and, where publishing is enabled, permission to create datasets and write to the ones ColmapView creates. For an organization-owned dataset, also authorize that organization; your account must already be allowed to read the repo.
 3. Select **Load URL** and paste the dataset, revision/folder, manifest, or archive URL.
 
 For example: `https://huggingface.co/datasets/you/private-scene`, a `/tree/main/project` folder, or a `/blob/main/scene.zip` archive. Pinned revisions and encoded branch names are preserved. A private manifest can reference files in the same repo at a different pinned revision.
