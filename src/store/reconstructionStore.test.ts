@@ -1711,6 +1711,74 @@ describe('reconstruction store loading cancellation', () => {
     expect(window.location.hash).toBe('');
   });
 
+  it("lets a URL load that is still settling its scene run on when the renderer's decode is cancelled", () => {
+    const fileA = new File(['a'], 'a.ply');
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({ splatFile: fileA, splatFiles: [fileA],
+      splatFileSources: [{ id: 'splats/a.ply', path: 'splats/a.ply', file: fileA }] }));
+    // The URL load handed its splat to the renderer; its saved settings are on the way.
+    const signal = useReconstructionStore.getState().tryStartUrlLoad()!;
+    useReconstructionStore.setState({ reconstruction: buildReconstruction(), urlLoading: true,
+      urlProgress: getSplatLoadingProgress(fileA, { startPercent: 60 }) });
+
+    useReconstructionStore.getState().cancelLoading();
+
+    const state = useReconstructionStore.getState();
+    // As choosing None does: the splat goes, and the load that applies the settings goes on.
+    expect(state.loadedFiles?.splatFile).toBeUndefined();
+    expect(state.urlLoading).toBe(false);
+    expect(signal.aborted).toBe(false);
+    expect(state.urlLoadActive).toBe(true);
+    expect(state.urlLoadController?.signal).toBe(signal);
+  });
+
+  it('keeps a splat-only scene, with None, when cancelling a decode leaves other splats to show', async () => {
+    window.history.replaceState(null, '', '/?url=https%3A%2F%2Fexample.com%2Fsplats.zip');
+    const a = new File(['a'], 'a.spz');
+    const b = new File(['b'], 'b.spz');
+    useReconstructionStore.getState().setLoadedFiles({ imageFiles: new Map(), hasMasks: false, splatFile: a,
+      splatFiles: [a, b], splatFileSources: [{ id: 'a.spz', path: 'a.spz', file: a }, { id: 'b.spz', path: 'b.spz', file: b }] });
+    const reconstruction = buildReconstruction();
+    useReconstructionStore.setState({ reconstruction });
+    // `n` switches to b, and the renderer starts decoding it.
+    await useReconstructionStore.getState().selectSplatSource('b.spz');
+    useReconstructionStore.setState({ urlLoading: true, urlProgress: getSplatLoadingProgress(b, { startPercent: 60 }) });
+
+    useReconstructionStore.getState().cancelLoading();
+
+    const state = useReconstructionStore.getState();
+    expect(state.reconstruction).toBe(reconstruction);
+    expect(state.loadedFiles?.splatFile).toBeUndefined();
+    expect(state.loadedFiles?.splatFileSources?.map(source => source.file)).toEqual([a, b]);
+    expect(state.urlLoading).toBe(false);
+    expect(hasUrlToLoad()).toBe(true);
+  });
+
+  it('keeps a splat-only scene whose other splat is a remote tile that can still be fetched', () => {
+    const b = new File(['b'], 'b.spz');
+    useReconstructionStore.getState().setLoadedFiles({ imageFiles: new Map(), hasMasks: false, splatFile: b, splatFiles: [b],
+      splatFileSources: [{ id: 'a.spz', path: 'a.spz', url: 'https://x/a.spz', size: 10 }, { id: 'b.spz', path: 'b.spz', file: b }] });
+    useReconstructionStore.setState({ reconstruction: buildReconstruction(), urlLoading: true,
+      urlProgress: getSplatLoadingProgress(b, { startPercent: 60 }) });
+
+    useReconstructionStore.getState().cancelLoading();
+
+    expect(useReconstructionStore.getState().loadedFiles?.splatFileSources?.map(source => source.id)).toEqual(['a.spz', 'b.spz']);
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+  });
+
+  it('returns to the landing page when the only splat is a byte-less tile whose renderer work is cancelled', () => {
+    const placeholder = new File([], 'b.spz');
+    useReconstructionStore.getState().setLoadedFiles({ imageFiles: new Map(), hasMasks: false, splatFile: placeholder, splatFiles: [],
+      splatFileSources: [{ id: 'tiles/b.spz', path: 'tiles/b.spz', url: 'https://x/tiles/b.spz', size: 10 }] });
+    useReconstructionStore.setState({ reconstruction: buildReconstruction(), urlLoading: true,
+      urlProgress: getSplatLoadingProgress(placeholder, { startPercent: 60 }) });
+
+    useReconstructionStore.getState().cancelLoading();
+
+    // The placeholder stands for the tile's own source, so no other splat is left to show.
+    expect(useReconstructionStore.getState().loadedFiles).toBeNull();
+  });
+
   it('keeps the address bar when a scene is already loaded', () => {
     window.history.replaceState(null, '', '/?url=https%3A%2F%2Fexample.com%2Fscene');
     useReconstructionStore.setState({ reconstruction: buildReconstruction(), urlLoading: true,

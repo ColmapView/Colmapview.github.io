@@ -24,6 +24,7 @@ import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE } from './optionalSettingsWarn
 import { dismissSplatListTimeoutWarning, SPLAT_LIST_TIMEOUT_MESSAGE } from './splatListWarning';
 import { SPLAT_DISCOVERY_TIMEOUT_MS } from './urlLoaderManifestSource';
 import { isReconstructionLoadPending } from '../wasm/reconstructionLoadLifecycle';
+import { getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
 
 const { clearAllCachesMock, processFilesMock, detectTouchDeviceMock } = vi.hoisted(() => ({
   clearAllCachesMock: vi.fn(),
@@ -888,6 +889,48 @@ describe('useUrlLoader', () => {
     await act(async () => { responders.get(settingsUrl)!(new Response('ui:\n  background_color: "#123456"')); expect(await pending).toBe(false); });
     expect(useUIStore.getState().backgroundColor).toBe(background);
     expect(processFilesMock).not.toHaveBeenCalled();
+  });
+
+  it.each(['Cancel loading', 'None'] as const)('applies the settings beside a splat archive after %s stops its decode over the open scene', async action => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const alignment = { ...createIdentityEuler(), translationX: 5 };
+    const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null, config: { transform: alignment } });
+    const reconstruction = buildReconstruction();
+    useReconstructionStore.setState({ reconstruction, loadedFiles: buildLoadedFiles({ camerasFile: new File(['c'], 'cameras.bin'),
+      imagesFile: new File(['i'], 'images.bin'), points3DFile: new File(['p'], 'points3D.bin') }) });
+    const splat = new File(['x'], 'scene.spz');
+    let respondSettings: ((response: Response) => void) | undefined;
+    vi.stubGlobal('fetch', vi.fn((url: string | URL, init?: RequestInit) => String(url).endsWith('colmapview.yaml')
+      ? new Promise<Response>((resolve, reject) => {
+        respondSettings = resolve;
+        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+      })
+      : Promise.resolve(new Response(null, { status: 404 }))));
+    vi.spyOn(archiveSource, 'loadZipUrlSource').mockImplementation(async (_url, deps) =>
+      (await deps.processFiles(new Map([['scene.spz', splat]]), { start: 80, end: 100 },
+        { throwOnError: true, signal: deps.signal, beforeSceneCommit: deps.beforeSceneCommit })) !== false);
+    processFilesMock.mockImplementationOnce(async (incoming, _range, options) => { await processWithStore(incoming, options); });
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
+    let pending!: Promise<boolean>;
+    act(() => { pending = result.current.loadFromUrl('https://example.com/project/splats.zip'); });
+    // The archive's splat joined the open scene; the settings beside it are asked for only now.
+    await waitFor(() => expect(respondSettings).toBeDefined());
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(splat);
+    // The renderer takes the splat over with its overlay and Cancel, as SplatLayer does.
+    act(() => useReconstructionStore.setState({ urlLoading: true, urlProgress: getSplatLoadingProgress(splat, { startPercent: 60 }) }));
+
+    if (action === 'Cancel loading') act(() => useReconstructionStore.getState().cancelLoading());
+    else await act(async () => { await useReconstructionStore.getState().selectSplatSource(''); });
+    await act(async () => {
+      respondSettings!(new Response(yaml));
+      expect(await pending).toBe(true);
+    });
+
+    const state = useReconstructionStore.getState();
+    expect(state.reconstruction).toBe(reconstruction);
+    expect(state.loadedFiles?.splatFile).toBeUndefined();
+    expect(state.urlLoading).toBe(false);
+    expect(useTransformStore.getState().transform).toEqual(alignment);
   });
 
   it('restores settings beside a direct splat file hosted outside Hugging Face', async () => {

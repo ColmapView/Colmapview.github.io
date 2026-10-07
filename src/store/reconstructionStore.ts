@@ -21,6 +21,7 @@ import {
   applyActiveSplatPlaceholder,
   clearActiveSplatFile,
   findSplatSourceById,
+  getActiveSplatSourceId,
   getLoadedFilesWithActiveSplatSource,
   loadedFilesHaveSplatData,
   mergeRemoteSplatCatalog as mergeRemoteSplatCatalogIntoLoadedFiles,
@@ -288,8 +289,9 @@ interface ReconstructionState {
   setUrlProgress: (progress: UrlLoadProgress | null) => void;
   setUrlError: (error: UrlLoadError | null) => void;
   /**
-   * Stop the load in progress (URL load, splat download, parse or splat decode) and keep the scene on
-   * screen. A splat-only scene whose decode is cancelled has nothing left, so it returns to the landing page.
+   * Stop the load in progress (URL load, splat download or parse) and keep the scene on screen. Stopping
+   * the renderer's decode is choosing None: a URL load still settling the scene goes on, and a splat-only
+   * scene with no other splat to show returns to the landing page.
    */
   cancelLoading: () => void;
   clear: () => void;
@@ -649,12 +651,16 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
 
   cancelLoading: () => {
     const { urlLoadController, loadedFiles, reconstruction, splatSelectionRevision } = get();
-    // Cancelling the renderer's decode leaves the scene without the splat (COLMAP only).
-    const cancelsRendererDecode = rendererOwnsSplatProgress(get());
-    // A splat-only scene would be left empty, with the landing page hidden: go back to it.
-    if (cancelsRendererDecode && loadedFiles && !hasSceneBesidesSplats(loadedFiles)) {
-      get().clear();
-      clearUrlLoadRequestFromLocation();
+    // Cancelling the renderer's decode is the user's explicit "COLMAP only", exactly like choosing None
+    // in the picker: a URL load still settling the scene (its saved settings) goes on.
+    if (rendererOwnsSplatProgress(get()) && loadedFiles) {
+      // A splat-only scene would be left empty, with the landing page hidden: go back to it.
+      if (!hasSceneBesidesSplats(loadedFiles) && !hasOtherSplatToShow(loadedFiles)) {
+        get().clear();
+        clearUrlLoadRequestFromLocation();
+        return;
+      }
+      showColmapOnly(set, loadedFiles, { splatSelectionRevision: splatSelectionRevision + 1 });
       return;
     }
     const cancelsSplatDownload = activeSplatController !== null;
@@ -663,15 +669,9 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     cancelPendingReconstructionLoad();
     // A startup or shared link that never produced a scene would keep the landing page hidden.
     if (!reconstruction) clearUrlLoadRequestFromLocation();
-    const stopped = { urlLoading: false, urlLoadActive: false, urlLoadController: null, urlProgress: null };
-    // The user's explicit "COLMAP only", exactly like choosing None in the picker.
-    if (cancelsRendererDecode && loadedFiles) {
-      showColmapOnly(set, loadedFiles, { ...stopped, splatSelectionRevision: splatSelectionRevision + 1 });
-    } else {
-      set(stopped);
-      // A splat point style kept for the download would hide the points it leaves without a splat.
-      if (cancelsSplatDownload && get().reconstruction && !get().loadedFiles?.splatFile) restorePointDisplayWithoutSplat();
-    }
+    set({ urlLoading: false, urlLoadActive: false, urlLoadController: null, urlProgress: null });
+    // A splat point style kept for the download would hide the points it leaves without a splat.
+    if (cancelsSplatDownload && get().reconstruction && !get().loadedFiles?.splatFile) restorePointDisplayWithoutSplat();
   },
 
   clear: () => {
@@ -755,6 +755,12 @@ export const selectCameraCount = (state: ReconstructionState) =>
 /** COLMAP files, a point cloud or an image gallery stay on screen without a splat. */
 function hasSceneBesidesSplats(files: LoadedFiles): boolean {
   return Boolean(files.camerasFile || files.imagesFile || files.points3DFile || files.imageFiles.size);
+}
+
+/** Another listed splat the picker, the Point Cloud panel or `n` can still show: its bytes, or a URL to fetch. */
+function hasOtherSplatToShow(files: LoadedFiles): boolean {
+  const activeId = getActiveSplatSourceId(files);
+  return (files.splatFileSources ?? []).some(source => source.id !== activeId && Boolean(source.file || source.url));
 }
 
 function isSplatFileSwitchWithinLoadedDataset(
