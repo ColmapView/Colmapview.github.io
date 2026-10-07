@@ -750,6 +750,7 @@ describe('reconstruction store lazy splat source switching', () => {
 
     expect(useReconstructionStore.getState().loadedFiles?.splatFile?.name).toBe('c.ply');
     expect(useReconstructionStore.getState().urlError).toBeNull();
+    expect(useReconstructionStore.getState().error).toBeNull();
   });
 
   it('COLMAP-only supersedes an in-flight lazy fetch and clears the loading indicator', async () => {
@@ -787,16 +788,61 @@ describe('reconstruction store lazy splat source switching', () => {
     expect(useReconstructionStore.getState().loadedFiles?.splatFile?.name).toBe('a.ply');
   });
 
-  it("clears a failed tile download's error when None is chosen", async () => {
+  it('shows a failed tile download in the error toast and keeps the URL error', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 404 })));
+    threeLazySources();
+
+    await useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+
+    const state = useReconstructionStore.getState();
+    expect(state.urlError).toMatchObject({ message: 'Failed to load splat', details: 'Failed to fetch splat (404)' });
+    expect(state.error).toBe('Failed to load splat b.ply: Failed to fetch splat (404)');
+  });
+
+  it('takes the failed download toast down when a retry succeeds', async () => {
+    const request = vi.fn(async () => new Response(null, { status: 404 }));
+    vi.stubGlobal('fetch', request);
+    threeLazySources();
+    await useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+    expect(useReconstructionStore.getState().error).toContain('Failed to load splat b.ply');
+
+    request.mockImplementation(async () => new Response(new Blob(['b']), { status: 200 }));
+    await useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile?.name).toBe('b.ply');
+    expect(useReconstructionStore.getState().error).toBeNull();
+  });
+
+  it('leaves an unrelated error up when a splat activates after a failed download', async () => {
+    const request = vi.fn(async () => new Response(null, { status: 404 }));
+    vi.stubGlobal('fetch', request);
+    threeLazySources();
+    await useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+    // Another load's error has replaced the toast; it is not the splat download's to take down.
+    useReconstructionStore.getState().setError('Failed to process dropped files');
+
+    request.mockImplementation(async () => new Response(new Blob(['b']), { status: 200 }));
+    await useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile?.name).toBe('b.ply');
+    expect(useReconstructionStore.getState().error).toBe('Failed to process dropped files');
+  });
+
+  it.each([
+    ['None', ''],
+    ['a downloaded splat', 'splats/a.ply'],
+  ])("clears a failed tile download's errors when %s is chosen", async (_choice, sourceId) => {
     const deferreds = stubDeferredFetch();
     threeLazySources();
     const pB = useReconstructionStore.getState().selectSplatSource('splats/b.ply');
     deferreds.get('https://x/splats/b.ply')!.reject(new Error('boom'));
     await pB;
+    expect(useReconstructionStore.getState().error).toBe('Failed to load splat b.ply: boom');
 
-    await useReconstructionStore.getState().selectSplatSource('');
+    await useReconstructionStore.getState().selectSplatSource(sourceId);
 
     expect(useReconstructionStore.getState().urlError).toBeNull();
+    expect(useReconstructionStore.getState().error).toBeNull();
   });
 
   it('clears the active splat (COLMAP only) when selecting the empty source', async () => {
@@ -1233,6 +1279,7 @@ describe('reconstruction store byte-less oversized splat activation', () => {
     expect(state.urlProgress).toBeNull();
     expect(state.urlError?.message).toBe('Failed to load splat');
     expect(state.urlError?.details).toContain('corrupt header');
+    expect(state.error).toBe(`Failed to load splat big.ply: ${state.urlError?.details}`);
     // The failed attempt never activated its placeholder.
     expect(state.loadedFiles?.splatFile).toBeUndefined();
 
@@ -1244,6 +1291,7 @@ describe('reconstruction store byte-less oversized splat activation', () => {
     state = useReconstructionStore.getState();
     expect(state.loadedFiles?.splatFile?.name).toBe('big.ply');
     expect(state.urlError).toBeNull();
+    expect(state.error).toBeNull();
     const seeded = await loadGaussianCloudFromFile(state.loadedFiles!.splatFile!);
     expect(seeded.cloud).toBe(decodedCloud);
   });

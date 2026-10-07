@@ -56,15 +56,24 @@ function rendererOwnsSplatProgress({ urlProgress, loadedFiles }: Pick<Reconstruc
   return activeSplatController === null && isSplatLoadingProgressForFile(urlProgress, loadedFiles?.splatFile);
 }
 
+// The store error (shown as the DropZone toast) that the last failed splat download raised. Activating
+// a splat or choosing None takes it down only while it is still the error showing: another load's
+// error is not the splat's to clear.
+let splatFailureError: string | null = null;
+
+function withoutSplatFailureError({ error }: Pick<ReconstructionState, 'error'>): Partial<ReconstructionState> {
+  return error !== null && error === splatFailureError ? { error: null } : {};
+}
+
 /**
  * "COLMAP only": the splat is deactivated (its source stays listed; re-fetchable bytes are
- * dropped), nothing is pending for it, and its loading state goes. The splat point preset goes
- * too: with no splat to draw it would hide the points.
+ * dropped), nothing is pending for it, and its loading state and failed-download toast go. The
+ * splat point preset goes too: with no splat to draw it would hide the points.
  */
 function showColmapOnly(set: StoreApi<ReconstructionState>['setState'], loadedFiles: LoadedFiles,
   patch: Partial<ReconstructionState> = {}): void {
-  set({ ...patch, loadedFiles: clearActiveSplatFile(loadedFiles), requestedSplatSourceId: null,
-    urlLoading: false, urlProgress: null, urlError: null });
+  set((state) => ({ ...patch, ...withoutSplatFailureError(state), loadedFiles: clearActiveSplatFile(loadedFiles),
+    requestedSplatSourceId: null, urlLoading: false, urlProgress: null, urlError: null }));
   restorePointDisplayWithoutSplat();
 }
 
@@ -457,6 +466,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       set({
         requestedSplatSourceId: source.id,
         loadedFiles: applyActiveSplatFile(loadedFiles, source.id, source.file),
+        ...withoutSplatFailureError(get()),
         ...(rendererOwnsProgress ? {} : { urlLoading: false, urlProgress: null, urlError: null }),
       });
       if (!hadSplatBefore) {
@@ -538,6 +548,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
           // renderer-side file read left to clear the indicator, so clear it here.
           urlLoading: false,
           urlProgress: null,
+          ...withoutSplatFailureError(get()),
         });
         if (!hadSplatBefore) {
           applySplatActivationVisuals();
@@ -554,6 +565,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       set({
         requestedSplatSourceId: source.id,
         loadedFiles: applyActiveSplatFile(latest, source.id, file),
+        ...withoutSplatFailureError(get()),
       });
       if (!hadSplatBefore) {
         applySplatActivationVisuals();
@@ -564,15 +576,19 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       if (signal.aborted) {
         return;
       }
+      const details = err instanceof Error ? err.message : String(err);
+      // urlError only gates the landing panels; over a scene, the error toast is what shows the failure.
+      splatFailureError = `Failed to load splat ${splatName}: ${details}`;
       set({
         urlLoading: false,
         urlProgress: null,
         urlError: {
           type: 'network',
           message: 'Failed to load splat',
-          details: err instanceof Error ? err.message : String(err),
+          details,
           failedFile: source.url,
         },
+        error: splatFailureError,
       });
     } finally {
       if (activeSplatController === controller) {
