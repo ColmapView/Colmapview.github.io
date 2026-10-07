@@ -6,6 +6,8 @@ import { GoogleDriveIcon } from '../../icons';
 import { ControlButton, type PanelType } from './ControlComponents';
 import { LazyToolModal } from './LazyToolModal';
 import { getControlButtonClass, getTooltipProps } from '../../theme';
+import { getGoogleDriveHandoffUrl } from './googleDriveHandoff';
+import { useGoogleDrivePublishButtonStoreFacade } from './useGoogleDrivePublishButtonStoreFacade';
 
 const loadPublisher = () => import('../modals/GoogleDrivePublishModal').then(module => ({ default: module.GoogleDrivePublishModal }));
 export const GoogleDrivePublishButton = memo(function GoogleDrivePublishButton({ activePanel, setActivePanel }: {
@@ -13,8 +15,11 @@ export const GoogleDrivePublishButton = memo(function GoogleDrivePublishButton({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const active = useDrivePublicationStatus(state => state.active);
-  if (!isGoogleDriveEnabled()) return <a href={GOOGLE_DRIVE_ENABLED_ORIGIN} aria-label="Use Google Drive"
-    className={getControlButtonClass(false, false)} {...getTooltipProps('Use Google Drive', 'left')}>
+  const { handoffSource } = useGoogleDrivePublishButtonStoreFacade();
+  // A new tab keeps this scene and its edits; a remote dataset reopens there.
+  if (!isGoogleDriveEnabled()) return <a href={getGoogleDriveHandoffUrl(GOOGLE_DRIVE_ENABLED_ORIGIN, handoffSource)}
+    target="_blank" rel="noopener noreferrer" aria-label="Use Google Drive" className={getControlButtonClass(false, false)}
+    {...getTooltipProps(handoffSource ? 'Open this dataset with Google Drive in a new tab' : 'Use Google Drive in a new tab', 'left')}>
     <GoogleDriveIcon className="w-5 h-5" />
   </a>;
   if (!getGoogleDriveClientId()) return null;

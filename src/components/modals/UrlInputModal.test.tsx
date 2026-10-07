@@ -84,6 +84,8 @@ describe('UrlInputModal', () => {
     const input = screen.getByPlaceholderText(URL_INPUT_PLACEHOLDER);
     fireEvent.change(input, { target: { value: 'https://drive.google.com/open?id=FILE_123&resourcekey=KEY_456&access_token=secret#token=secret' } });
     const handoff = screen.getByRole('link', { name: 'Use Google Drive' });
+    expect(handoff).toHaveAttribute('target', '_blank');
+    expect(handoff).toHaveAttribute('rel', 'noopener noreferrer');
     const destination = new URL(handoff.getAttribute('href')!);
     expect(destination.origin).toBe('https://colmapview.opsiclear.com');
     expect(destination.searchParams.get('url')).toBe('https://drive.google.com/file/d/FILE_123/view?resourcekey=KEY_456');

@@ -143,7 +143,8 @@ export function UrlInputModal({ isOpen, onClose, onLoad, loading = false }: UrlI
           >
             Cancel
           </button>
-          {driveHandoffUrl && !loading ? <a href={driveHandoffUrl} className={getButtonClass('primary', 'lg')}>
+          {driveHandoffUrl && !loading ? <a href={driveHandoffUrl} target="_blank" rel="noopener noreferrer"
+            className={getButtonClass('primary', 'lg')}>
             Use Google Drive
           </a> : <button
             type="button"

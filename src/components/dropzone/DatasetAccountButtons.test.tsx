@@ -156,7 +156,10 @@ describe('Dataset provider account icons', () => {
     vi.mocked(getGoogleDrivePickerConfig).mockReturnValue(pickerConfig);
     const props = createProps();
     render(<DatasetAccountButtons {...props} />);
-    expect(screen.getByRole('link', { name: 'Use Google Drive' })).toHaveAttribute('href', 'https://colmapview.opsiclear.com');
+    const driveLink = screen.getByRole('link', { name: 'Use Google Drive' });
+    expect(driveLink).toHaveAttribute('href', 'https://colmapview.opsiclear.com');
+    expect(driveLink).toHaveAttribute('target', '_blank');
+    expect(driveLink).toHaveAttribute('rel', 'noopener noreferrer');
     expect(screen.getByText('Use Google Drive')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Google Drive account' })).not.toBeInTheDocument();
     expect(screen.queryByText(/setup|configuration/i)).not.toBeInTheDocument();

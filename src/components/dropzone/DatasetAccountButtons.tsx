@@ -147,7 +147,7 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
       aria-pressed={google.status === 'connected'} onClick={() => { setPickerError(null); setProvider('google'); }}>
       <GoogleDriveIcon />
     </button> : <a href={GOOGLE_DRIVE_ENABLED_ORIGIN} className={`${getButtonClass('ghost', 'sm')} whitespace-nowrap`}
-      aria-label="Use Google Drive" data-tooltip="Use Google Drive on colmapview.opsiclear.com">
+      target="_blank" rel="noopener noreferrer" aria-label="Use Google Drive" data-tooltip="Use Google Drive on colmapview.opsiclear.com">
       <GoogleDriveIcon className="w-4 h-4" /><span>Use Google Drive</span>
     </a>}
     <ModalDialogShell isOpen={provider !== null && (provider !== 'google' || googleEnabled) && !pickerOpen} onClose={close} ariaLabelledBy={`${id}-title`}
