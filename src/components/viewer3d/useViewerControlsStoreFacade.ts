@@ -47,6 +47,7 @@ import {
 import type { Reconstruction, SplatFileSource } from '../../types/colmap';
 import { getActiveSplatSourceId, loadedFilesHaveSplatData } from '../../utils/splatFileSourcePolicy';
 import { reconstructionHasSplatMetricCapableCamera } from '../../splat/splatMetricCapability';
+import { isReconstructionLoadPending } from '../../wasm/reconstructionLoadLifecycle';
 
 interface ViewerControlsUiFacade {
   touchMode: boolean;
@@ -96,6 +97,8 @@ interface ViewerControlsSplatFacade {
   hasSplatData: boolean;
   setActiveSplatFile: (file: File) => void;
   selectSplatSource: (sourceId: string) => void;
+  /** Whether a dataset load is replacing the scene these splats belong to. */
+  isDatasetLoadPending: () => boolean;
 }
 
 export interface ViewerControlsStoreFacade {
@@ -219,6 +222,7 @@ export function useViewerControlsStoreFacade(): ViewerControlsStoreFacade {
       hasSplatData: loadedFilesHaveSplatData(loadedFiles),
       setActiveSplatFile,
       selectSplatSource,
+      isDatasetLoadPending: isReconstructionLoadPending,
     },
     reconstruction,
   };

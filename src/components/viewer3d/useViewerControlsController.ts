@@ -91,6 +91,7 @@ export function useViewerControlsController(): ViewerControlsController {
     splatFileSources,
     activeSplatSourceId,
     selectSplatSource,
+    isDatasetLoadPending,
   } = splats;
   const {
     points: pointsActions,
@@ -161,11 +162,16 @@ export function useViewerControlsController(): ViewerControlsController {
   }, [pointsActions, requestDefaultSplatCameraColor]);
 
   const cycleSplatFile = useCallback(() => {
+    // These tiles belong to the scene a dataset load is replacing; switching one would take over
+    // the load's progress overlay and read as a splat choice for the incoming dataset.
+    if (isDatasetLoadPending()) {
+      return;
+    }
     const nextSourceId = getNextSplatSourceId(splatFileSources, activeSplatSourceId);
     if (nextSourceId) {
       selectSplatSource(nextSourceId);
     }
-  }, [activeSplatSourceId, selectSplatSource, splatFileSources]);
+  }, [activeSplatSourceId, isDatasetLoadPending, selectSplatSource, splatFileSources]);
 
   const {
     toggleBackground,

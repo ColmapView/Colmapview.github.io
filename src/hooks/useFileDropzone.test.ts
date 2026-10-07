@@ -198,6 +198,25 @@ describe('useFileDropzone', () => {
     expect(useUIStore.getState().backgroundColor).toBe('#345678');
   });
 
+  it.each(['a local drop', 'processFiles'] as const)('restores saved settings against the revision the workflow passes (%s)', async caller => {
+    const a = buildFile('a.spz');
+    const b = buildFile('b.spz');
+    useReconstructionStore.getState().setLoadedFiles({ ...buildLoadedFiles(), splatFile: a, splatFiles: [a, b],
+      splatFileSources: [{ id: 'a.spz', path: 'a.spz', file: a }, { id: 'b.spz', path: 'b.spz', file: b }],
+    });
+    const { result } = renderHook(() => useFileDropzone());
+    const event = { preventDefault: vi.fn(), stopPropagation: vi.fn(), dataTransfer: {
+      types: ['Files'], items: [], files: [buildFile('colmapview.yaml')],
+    } } as unknown as DragEvent<HTMLElement>;
+    await act(async () => { await (caller === 'processFiles' ? result.current.processFiles(new Map()) : result.current.handleDrop(event)); });
+    const options = processFileDropzoneFilesMock.mock.calls.at(-1)?.[2] as import('./fileDropzoneWorkflow').FileDropzoneWorkflowOptions;
+    // A choice the commit ignored, made for the scene the load replaced.
+    await act(async () => { await useReconstructionStore.getState().selectSplatSource('a.spz'); });
+    await act(async () => { await options.onViewerState?.({ version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { activeSourceId: 'b.spz' } } }, useReconstructionStore.getState().splatSelectionRevision); });
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(b);
+  });
+
   it('rejects saved local settings from a cancelled job without changing the viewer', async () => {
     const deps = await captureWorkflowDeps();
     const initialColor = useUIStore.getState().backgroundColor;

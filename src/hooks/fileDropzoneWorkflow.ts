@@ -65,6 +65,12 @@ type ShouldPreloadSplatRuntime = (splatFile: File) => boolean;
  */
 type OnSplatRuntimePreloadFailed = () => void;
 type ClassifyPlyFile = typeof classifyPlyFile;
+/**
+ * Restores saved settings once the load has succeeded. A `splatSelectionRevision` replaces the load's
+ * starting revision as the one splat restoration compares against: the commit ignored a choice made
+ * for the scene it replaced.
+ */
+type OnViewerState = (state: PublishedViewerState, splatSelectionRevision?: number) => void | Promise<void>;
 
 interface PointCloudPlySource extends SplatFileSource {
   kind: 'point-cloud';
@@ -83,7 +89,7 @@ export interface FileDropzoneWorkflowDeps {
   getSourceInfo: () => SetSourceInfo;
   getUrlLoading: () => boolean;
   importConfig?: ImportConfigFile;
-  onViewerState?: (state: PublishedViewerState) => void | Promise<void>;
+  onViewerState?: OnViewerState;
   logger?: AppLogger;
   parseFiles?: ParseColmapFiles;
   classifyPlyFile?: ClassifyPlyFile;
@@ -116,7 +122,7 @@ export interface FileDropzoneWorkflowOptions {
   reload?: boolean;
   throwOnError?: boolean;
   onSceneReplaced?: () => void;
-  onViewerState?: (state: PublishedViewerState) => void | Promise<void>;
+  onViewerState?: OnViewerState;
   /** Settings that came with these files from their source; a settings file inside them wins. */
   viewerState?: PublishedViewerState;
 }
@@ -293,6 +299,7 @@ export async function processFileDropzoneFiles(
   let sourceInstalled = false;
   let keepLoadingForInitialSplat = false;
   let viewerState: PublishedViewerState | null = normalizedOptions.viewerState ?? null;
+  let ignoredSplatSelectionRevision: number | undefined;
   const logger = deps.logger ?? appLogger;
   const clearCaches = deps.clearCaches ?? clearAllCaches;
   const importConfig = deps.importConfig ?? importConfigFile;
@@ -314,8 +321,12 @@ export async function processFileDropzoneFiles(
 
   const complete = async () => {
     load.assertCurrent();
-    // Reload keeps the splat on screen: saved settings, the files' own included, never switch it.
-    if (viewerState) await onViewerState?.(normalizedOptions.reload ? withoutSplatChoice(viewerState) : viewerState);
+    if (viewerState) {
+      // Reload keeps the splat on screen: saved settings, the files' own included, never switch it.
+      const state = normalizedOptions.reload ? withoutSplatChoice(viewerState) : viewerState;
+      if (ignoredSplatSelectionRevision === undefined) await onViewerState?.(state);
+      else await onViewerState?.(state, ignoredSplatSelectionRevision);
+    }
     load.assertCurrent();
     return true;
   };
@@ -562,7 +573,16 @@ export async function processFileDropzoneFiles(
     const currentSelection = deps.getSplatSelectionState?.();
     if (currentSelection && initialSplatSelectionRevision !== undefined
       && currentSelection.revision !== initialSplatSelectionRevision) {
-      splatFile = splatFileSources.find(source => source.id === currentSelection.sourceId)?.file;
+      // A choice made during the load carries over only when it fits these files: None, or one of
+      // their sources. A tile of the scene being replaced keeps the default, and saved settings
+      // restore as if it had not been made.
+      if (currentSelection.sourceId === '') {
+        splatFile = undefined;
+      } else {
+        const chosen = splatFileSources.find(source => source.id === currentSelection.sourceId);
+        if (chosen) splatFile = chosen.file;
+        else ignoredSplatSelectionRevision = currentSelection.revision;
+      }
     }
     const currentLoadedFiles = deps.getLoadedFiles();
     const splatState = getSplatState(currentLoadedFiles);

@@ -371,6 +371,104 @@ describe('file dropzone workflow', () => {
     } finally { useReconstructionStore.getState().clear(); }
   });
 
+  it('keeps the default splat when parsing ends after a tile of the replaced scene was chosen', async () => {
+    useReconstructionStore.getState().clear();
+    const fixture = workerLoadFixture();
+    const state = useReconstructionStore.getState();
+    const replacedA = new File(['old-a'], 'a.spz');
+    const replacedB = new File(['old-b'], 'b.spz');
+    state.setLoadedFiles(loadedFiles({ splatFile: replacedA, splatFiles: [replacedA, replacedB], splatFileSources: [
+      { id: 'old/a.spz', path: 'old/a.spz', file: replacedA }, { id: 'old/b.spz', path: 'old/b.spz', file: replacedB }] }));
+    const incomingDefault = new File(['incoming-default'], 'default.spz');
+    fixture.files.set('splats/default.spz', incomingDefault);
+    let finishBuild!: (result: { reconstruction: Reconstruction; pointCount: number }) => void;
+    const buildReconstruction = vi.fn(() => new Promise<{ reconstruction: Reconstruction; pointCount: number }>(resolve => { finishBuild = resolve; }));
+    const deps = createDeps({
+      parseFiles: vi.fn(async () => fixture.parseResult), buildReconstruction,
+      getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
+      getSplatSelectionState: () => ({ revision: useReconstructionStore.getState().splatSelectionRevision,
+        sourceId: getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles) ?? undefined }),
+      setLoadedFiles: state.setLoadedFiles, setWasmReconstruction: state.setWasmReconstruction,
+      setReconstruction: state.setReconstruction,
+    });
+    try {
+      const pending = processFileDropzoneFiles(fixture.files, deps);
+      await vi.waitFor(() => expect(buildReconstruction).toHaveBeenCalledOnce());
+      // What the `n` hotkey does to the scene on screen: switch it to its next tile.
+      await state.selectSplatSource('old/b.spz');
+      finishBuild({ reconstruction: fixture.reconstruction, pointCount: 0 });
+      expect(await pending).toBe(true);
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(incomingDefault);
+      expect(useReconstructionStore.getState().requestedSplatSourceId).toBeNull();
+      expect(deps.setUrlProgress).toHaveBeenCalledWith(expect.objectContaining({ message: 'Preparing splat renderer...' }));
+    } finally {
+      fixture.service.dispose();
+      useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+      useTransformStore.setState(useTransformStore.getInitialState(), true);
+      useUIStore.setState(useUIStore.getInitialState(), true);
+      usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
+    }
+  });
+
+  /**
+   * Replaces a scene showing old/a.spz with files whose own colmapview.yaml selects saved.spz rather than their
+   * default, making `choice` on the scene on screen while they parse. Returns the splat the load leaves showing.
+   */
+  async function replaceSceneWhileChoosing(choice: string) {
+    useReconstructionStore.getState().clear();
+    const fixture = workerLoadFixture();
+    const state = useReconstructionStore.getState();
+    const [replacedA, replacedB, replacedAlternate] = ['a', 'b', 'alternate'].map(name => new File([`old-${name}`], `${name}.spz`));
+    state.setLoadedFiles(loadedFiles({ splatFile: replacedA, splatFiles: [replacedA, replacedB, replacedAlternate], splatFileSources: [
+      { id: 'old/a.spz', path: 'old/a.spz', file: replacedA }, { id: 'old/b.spz', path: 'old/b.spz', file: replacedB },
+      { id: 'splats/alternate.spz', path: 'splats/alternate.spz', file: replacedAlternate }] }));
+    const incoming = { saved: new File(['saved'], 'saved.spz'), alternate: new File(['new-alt'], 'alternate.spz') };
+    fixture.files.set('splats/default.spz', new File(['much-larger-default'], 'default.spz'));
+    fixture.files.set('splats/saved.spz', incoming.saved);
+    fixture.files.set('splats/alternate.spz', incoming.alternate);
+    const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { activeSourceId: 'splats/saved.spz' } } });
+    fixture.files.set('colmapview.yaml', Object.assign(file('colmapview.yaml'), { text: async () => yaml }));
+    const startRevision = useReconstructionStore.getState().splatSelectionRevision;
+    let finishBuild!: (result: { reconstruction: Reconstruction; pointCount: number }) => void;
+    const buildReconstruction = vi.fn(() => new Promise<{ reconstruction: Reconstruction; pointCount: number }>(resolve => { finishBuild = resolve; }));
+    const deps = createDeps({
+      parseFiles: vi.fn(async () => fixture.parseResult), buildReconstruction,
+      getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
+      getSplatSelectionState: () => ({ revision: useReconstructionStore.getState().splatSelectionRevision,
+        sourceId: getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles) ?? undefined }),
+      setLoadedFiles: state.setLoadedFiles, setWasmReconstruction: state.setWasmReconstruction,
+      setReconstruction: state.setReconstruction,
+      // Restores like a local drop: against the revision the load started at, unless the workflow passes another.
+      onViewerState: (viewerState, revision = startRevision) => applySavedViewerState(viewerState, null, undefined, revision),
+    });
+    try {
+      const pending = processFileDropzoneFiles(fixture.files, deps);
+      await vi.waitFor(() => expect(buildReconstruction).toHaveBeenCalledOnce());
+      await state.selectSplatSource(choice);
+      finishBuild({ reconstruction: fixture.reconstruction, pointCount: 0 });
+      expect(await pending).toBe(true);
+      return { incoming, shown: useReconstructionStore.getState().loadedFiles?.splatFile };
+    } finally {
+      fixture.service.dispose();
+      useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+      useTransformStore.setState(useTransformStore.getInitialState(), true);
+      useUIStore.setState(useUIStore.getInitialState(), true);
+      usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
+    }
+  }
+
+  it("restores the splat the incoming colmapview.yaml selects after a tile of the replaced scene was chosen", async () => {
+    // A splat picker left open over the load picks a tile of the scene being replaced.
+    const { incoming, shown } = await replaceSceneWhileChoosing('old/b.spz');
+    expect(shown).toBe(incoming.saved);
+  });
+
+  it.each(['None', 'an incoming splat'] as const)('lets %s chosen during the load win over the incoming colmapview.yaml', async choice => {
+    const { incoming, shown } = await replaceSceneWhileChoosing(choice === 'None' ? '' : 'splats/alternate.spz');
+    expect(shown).toBe(choice === 'None' ? undefined : incoming.alternate);
+  });
+
   it('preserves the previous files, source and snapshot after a malformed point-cloud-only replacement', async () => {
     useReconstructionStore.getState().clear();
     const previous = workerLoadFixture();

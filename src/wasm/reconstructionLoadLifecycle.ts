@@ -23,3 +23,8 @@ export function cancelPendingReconstructionLoad(): void {
   active?.abort();
   active = null;
 }
+
+/** A dataset is being scanned, parsed or committed; the scene on screen is the one it replaces. */
+export function isReconstructionLoadPending(): boolean {
+  return active !== null;
+}

@@ -4,7 +4,7 @@ import { ReconstructionService, type ReconstructionServiceOptions } from './reco
 import { isReconstructionRequest, isReconstructionResponse, type ReconstructionRequest, type ReconstructionSnapshotData } from './reconstructionProtocol';
 import { buildReconstruction } from '../test/builders/colmapBuilders';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
-import { beginReconstructionLoad, cancelPendingReconstructionLoad } from './reconstructionLoadLifecycle';
+import { beginReconstructionLoad, cancelPendingReconstructionLoad, isReconstructionLoadPending } from './reconstructionLoadLifecycle';
 import { packPointMembership } from './compactPointMembership';
 import { appLogger } from '../utils/logger';
 
@@ -213,6 +213,19 @@ describe('reconstruction worker lifecycle', () => {
     cancelPendingReconstructionLoad();
     expect(second.signal.aborted).toBe(true);
     expect(() => second.assertCurrent()).toThrow();
+  });
+
+  it('reports a dataset load as pending until the current one finishes or is cancelled', () => {
+    expect(isReconstructionLoadPending()).toBe(false);
+    const first = beginReconstructionLoad();
+    const second = beginReconstructionLoad();
+    first.finish();
+    expect(isReconstructionLoadPending()).toBe(true);
+    second.finish();
+    expect(isReconstructionLoadPending()).toBe(false);
+    beginReconstructionLoad();
+    cancelPendingReconstructionLoad();
+    expect(isReconstructionLoadPending()).toBe(false);
   });
 
   it('validates protocol envelopes and payloads', () => {

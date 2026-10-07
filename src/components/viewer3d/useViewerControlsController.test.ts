@@ -1,3 +1,5 @@
+import { createElement, type ReactNode } from 'react';
+import { HotkeysProvider } from 'react-hotkeys-hook';
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -10,6 +12,7 @@ import {
   useUIStore,
 } from '../../store';
 import { buildFile, buildLoadedFiles, buildReconstruction } from '../../test/builders';
+import { beginReconstructionLoad } from '../../wasm/reconstructionLoadLifecycle';
 import { useViewerControlsController } from './useViewerControlsController';
 
 function setWebGpuSplatMetricsReady() {
@@ -27,6 +30,16 @@ function setWebGpuSplatMetricsPreparing() {
 function setSparkSplatBackendActive() {
   useSplatBackendStore.getState().setSparkBackendAvailable(true);
   useSplatBackendStore.getState().setRequestedBackend('spark');
+}
+
+function hotkeyWrapper({ children }: { children: ReactNode }) {
+  return createElement(HotkeysProvider, { initiallyActiveScopes: ['viewer'] }, children);
+}
+
+function pressKey(key: string) {
+  act(() => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key, code: `Key${key.toUpperCase()}`, bubbles: true }));
+  });
 }
 
 describe('useViewerControlsController', () => {
@@ -190,5 +203,27 @@ describe('useViewerControlsController', () => {
     });
 
     expect(useCameraStore.getState().frustumColorMode).toBe('byCamera');
+  });
+
+  it('ignores N while a dataset load replaces the scene and cycles again once it ends', () => {
+    const first = buildFile('a.spz', 'a');
+    const second = buildFile('b.spz', 'b');
+    useReconstructionStore.setState({
+      reconstruction: buildReconstruction(),
+      loadedFiles: buildLoadedFiles({ splatFile: first, splatFiles: [first, second], splatFileSources: [
+        { id: 'a.spz', path: 'a.spz', file: first }, { id: 'b.spz', path: 'b.spz', file: second }] }),
+    });
+    renderHook(() => useViewerControlsController(), { wrapper: hotkeyWrapper });
+    const revision = useReconstructionStore.getState().splatSelectionRevision;
+    const load = beginReconstructionLoad();
+    try {
+      pressKey('n');
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(first);
+      expect(useReconstructionStore.getState().splatSelectionRevision).toBe(revision);
+    } finally {
+      load.finish();
+    }
+    pressKey('n');
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(second);
   });
 });

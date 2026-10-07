@@ -34,8 +34,8 @@ function beginLocalLoad() {
   return {
     ...load,
     initialSplatSelectionRevision,
-    onViewerState: (state: Parameters<typeof applySavedViewerState>[0]) =>
-      applySavedViewerState(state, null, load.assertCurrent, initialSplatSelectionRevision),
+    onViewerState: (state: Parameters<typeof applySavedViewerState>[0], splatSelectionRevision = initialSplatSelectionRevision) =>
+      applySavedViewerState(state, null, load.assertCurrent, splatSelectionRevision),
   };
 }
 
@@ -66,8 +66,8 @@ export function useFileDropzone() {
     const initialSplatSelectionRevision = options.initialSplatSelectionRevision ?? useReconstructionStore.getState().splatSelectionRevision;
     const load = options.load ?? beginReconstructionLoad();
     const assertCurrent = () => { load.assertCurrent(); options.signal?.throwIfAborted(); };
-    const onViewerState = options.onViewerState ?? ((state: Parameters<typeof applySavedViewerState>[0]) =>
-      applySavedViewerState(state, null, assertCurrent, initialSplatSelectionRevision));
+    const onViewerState = options.onViewerState ?? ((state: Parameters<typeof applySavedViewerState>[0],
+      splatSelectionRevision = initialSplatSelectionRevision) => applySavedViewerState(state, null, assertCurrent, splatSelectionRevision));
     try {
       return await processFileDropzoneFiles(files, {
         addNotification: useNotificationStore.getState().addNotification,
