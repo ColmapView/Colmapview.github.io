@@ -141,6 +141,48 @@ test('publication gate check rejects renamed, removed, moved, conditional or byp
   }
 });
 
+/**
+ * Deploy runs wait in one queue. By default GitHub keeps one pending run per group and cancels it when another
+ * arrives, so a later push to main could drop a waiting tag deploy: the only run that updates the custom host.
+ */
+function assertDeployRunsQueue(workflow, validation) {
+  const { concurrency } = workflow;
+  assert.ok(concurrency !== null && typeof concurrency === 'object', 'deploy.yml must declare concurrency as a mapping with queue: max');
+  assert.equal(concurrency.group, 'pages-deploy', 'every deploy.yml run must share the pages-deploy group so gh-pages pushes take turns');
+  assert.equal(concurrency.queue, 'max', 'deploy.yml runs must wait in line (queue: max) so a later push never cancels a waiting deploy');
+  assert.ok([undefined, false].includes(concurrency['cancel-in-progress']), 'deploy.yml must never cancel a deploy in progress');
+  for (const [name, job] of Object.entries(workflow.jobs)) {
+    assert.equal(job.concurrency, undefined, `deploy.yml job ${name} must not add a concurrency group with its own single pending slot`);
+  }
+  // Every deploy run calls the validation workflow, which may cancel only an older run of the same ref.
+  const inner = validation.concurrency;
+  if (inner !== null && typeof inner === 'object' && ![undefined, false].includes(inner['cancel-in-progress'])) {
+    assert.match(String(inner.group), /\$\{\{\s*github\.ref\s*\}\}/, 'e2e.yml may cancel in progress only within one ref');
+  }
+}
+
+test('deploy runs queue in one group, so no later push cancels a waiting tag deploy', () => {
+  const workflow = yaml.load(readFileSync('.github/workflows/deploy.yml', 'utf8'));
+  const validation = yaml.load(readFileSync('.github/workflows/e2e.yml', 'utf8'));
+  assertDeployRunsQueue(workflow, validation);
+  const variants = [
+    [deploy => { delete deploy.concurrency.queue; }, /queue: max/],
+    [deploy => { deploy.concurrency.queue = 'single'; }, /queue: max/],
+    [deploy => { deploy.concurrency = 'pages-deploy'; }, /mapping/],
+    [deploy => { deploy.concurrency.group = 'pages-deploy-${{ github.ref }}'; }, /share the pages-deploy group/],
+    [deploy => { deploy.concurrency['cancel-in-progress'] = true; }, /never cancel/],
+    [deploy => { deploy.concurrency['cancel-in-progress'] = "${{ github.ref_type != 'tag' }}"; }, /never cancel/],
+    [deploy => { deploy.jobs.deploy.concurrency = { group: 'pages-publish' }; }, /job deploy must not add/],
+    [(deploy, e2e) => { e2e.concurrency.group = 'validation-${{ github.workflow }}'; }, /within one ref/],
+  ];
+  for (const [mutate, error] of variants) {
+    const deploy = structuredClone(workflow);
+    const e2e = structuredClone(validation);
+    mutate(deploy, e2e);
+    assert.throws(() => assertDeployRunsQueue(deploy, e2e), error);
+  }
+});
+
 test('deployment smoke report and traces land in the uploaded .tmp/deployment-smoke directory', () => {
   const config = readFileSync('scripts/deployment/playwright.config.ts', 'utf8');
   const fromConfig = pattern => path.relative(process.cwd(), path.resolve('scripts/deployment', config.match(pattern)[1])).split(path.sep).join('/');

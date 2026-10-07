@@ -12,6 +12,8 @@ permissions:
 concurrency:
   group: pages-deploy
   cancel-in-progress: false
+  # Wait in line. With the default single pending slot, a later push cancels a waiting tag deploy.
+  queue: max
 
 env:
   NODE_VERSION: '22'
