@@ -9,7 +9,7 @@ describe('DOM target guards', () => {
   it('identifies Node event targets', () => {
     expect(isNodeTarget(document.createElement('button'))).toBe(true);
     expect(isNodeTarget(null)).toBe(false);
-    expect(isNodeTarget(new Event('mousedown'))).toBe(false);
+    expect(isNodeTarget(new EventTarget())).toBe(false);
   });
 
   it('checks containment only for Node targets', () => {
@@ -21,7 +21,7 @@ describe('DOM target guards', () => {
     expect(containsEventTarget(container, child)).toBe(true);
     expect(containsEventTarget(container, outside)).toBe(false);
     expect(containsEventTarget(container, null)).toBe(false);
-    expect(containsEventTarget(container, new Event('drag'))).toBe(false);
+    expect(containsEventTarget(container, new EventTarget())).toBe(false);
   });
 
   it('reports outside targets only when a container and Node target exist', () => {
@@ -35,6 +35,6 @@ describe('DOM target guards', () => {
     expect(isEventTargetOutside(container, container)).toBe(false);
     expect(isEventTargetOutside(null, outside)).toBe(false);
     expect(isEventTargetOutside(container, null)).toBe(false);
-    expect(isEventTargetOutside(container, new Event('touchstart'))).toBe(false);
+    expect(isEventTargetOutside(container, new EventTarget())).toBe(false);
   });
 });

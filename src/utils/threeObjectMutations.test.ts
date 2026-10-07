@@ -6,6 +6,12 @@ import {
   syncSceneBackgroundTransparent,
 } from './threeObjectMutations';
 
+function sceneWithBackground(background: THREE.Scene['background']): THREE.Scene {
+  const scene = new THREE.Scene();
+  scene.background = background;
+  return scene;
+}
+
 describe('Three object mutations', () => {
   it('syncs scene background colors only when they change', () => {
     const scene = new THREE.Scene();
@@ -20,8 +26,9 @@ describe('Three object mutations', () => {
   });
 
   it('replaces non-color backgrounds with a color', () => {
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Texture();
+    // Set in a helper: assigned here, the property would stay narrowed to Texture past the call
+    // that replaces it.
+    const scene = sceneWithBackground(new THREE.Texture());
 
     expect(syncSceneBackgroundColor(scene, '#445566')).toBe(true);
     expect(scene.background).toBeInstanceOf(THREE.Color);

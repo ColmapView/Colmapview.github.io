@@ -7,8 +7,9 @@ import {
   getValidTargetModels,
   getConversionPreview,
   PARAM_NAMES,
+  type ConversionResult,
 } from './cameraModelConversions';
-import { Camera, CameraModelId } from '../types/colmap';
+import { CameraModelId, type Camera } from '../types/colmap';
 
 // Helper to create test cameras
 function makeCamera(
@@ -24,6 +25,12 @@ function makeCamera(
     height,
     params,
   };
+}
+
+/** The params of a conversion; an incompatible result has none. */
+function paramsOf(result: ConversionResult): number[] {
+  if (result.type === 'incompatible') throw new Error(`Incompatible conversion: ${result.reason}`);
+  return result.params;
 }
 
 describe('canConvertModel', () => {
@@ -142,7 +149,7 @@ describe('convertCameraModel', () => {
       const result = convertCameraModel(camera, CameraModelId.PINHOLE);
 
       expect(result.type).toBe('exact');
-      expect(result.params).toEqual([1000, 1000, 960, 540]);
+      expect(paramsOf(result)).toEqual([1000, 1000, 960, 540]);
     });
 
     it('converts SIMPLE_RADIAL -> RADIAL', () => {
@@ -150,7 +157,7 @@ describe('convertCameraModel', () => {
       const result = convertCameraModel(camera, CameraModelId.RADIAL);
 
       expect(result.type).toBe('exact');
-      expect(result.params).toEqual([1000, 960, 540, 0.1, 0]);
+      expect(paramsOf(result)).toEqual([1000, 960, 540, 0.1, 0]);
     });
 
     it('converts RADIAL -> OPENCV', () => {
@@ -158,7 +165,7 @@ describe('convertCameraModel', () => {
       const result = convertCameraModel(camera, CameraModelId.OPENCV);
 
       expect(result.type).toBe('exact');
-      expect(result.params).toEqual([1000, 1000, 960, 540, 0.1, 0.05, 0, 0]);
+      expect(paramsOf(result)).toEqual([1000, 1000, 960, 540, 0.1, 0.05, 0, 0]);
     });
 
     it('converts SIMPLE_RADIAL_FISHEYE -> OPENCV_FISHEYE', () => {
@@ -166,7 +173,7 @@ describe('convertCameraModel', () => {
       const result = convertCameraModel(camera, CameraModelId.OPENCV_FISHEYE);
 
       expect(result.type).toBe('exact');
-      expect(result.params).toEqual([1000, 1000, 960, 540, 0.1, 0, 0, 0]);
+      expect(paramsOf(result)).toEqual([1000, 1000, 960, 540, 0.1, 0, 0, 0]);
     });
   });
 
@@ -181,7 +188,7 @@ describe('convertCameraModel', () => {
 
       expect(result.type).toBe('exact');
       // THIN_PRISM_FISHEYE: k1,k2 at 4-5, p1,p2 at 6-7, k3,k4 at 8-9, sx1,sy1 at 10-11
-      expect(result.params).toEqual([
+      expect(paramsOf(result)).toEqual([
         1000, 1000, 960, 540, // fx, fy, cx, cy
         0.1, 0.05,           // k1, k2
         0, 0,                // p1, p2 (new)
@@ -203,7 +210,7 @@ describe('convertCameraModel', () => {
       const result = convertCameraModel(camera, CameraModelId.OPENCV_FISHEYE);
 
       expect(result.type).toBe('exact');
-      expect(result.params).toEqual([
+      expect(paramsOf(result)).toEqual([
         1000, 1000, 960, 540, // fx, fy, cx, cy
         0.1, 0.05,           // k1, k2
         0.01, 0.005,         // k3, k4 moved back to indices 6-7
@@ -233,7 +240,7 @@ describe('convertCameraModel', () => {
       const result = convertCameraModel(camera, CameraModelId.SIMPLE_RADIAL);
 
       expect(result.type).toBe('exact');
-      expect(result.params).toEqual([1000, 960, 540, 0.1]);
+      expect(paramsOf(result)).toEqual([1000, 960, 540, 0.1]);
     });
 
     it('converts RADIAL -> SIMPLE_RADIAL approximately when k2 is significant', () => {
@@ -252,7 +259,7 @@ describe('convertCameraModel', () => {
       const result = convertCameraModel(camera, CameraModelId.RADIAL);
 
       expect(result.type).toBe('exact');
-      expect(result.params).toEqual([1000, 960, 540, 0.1, 0.05]);
+      expect(paramsOf(result)).toEqual([1000, 960, 540, 0.1, 0.05]);
     });
 
     it('converts OPENCV -> RADIAL approximately when tangential params are significant', () => {
@@ -441,13 +448,13 @@ describe('round-trip parameter conversions', () => {
     // Expand: SIMPLE_RADIAL -> RADIAL
     const expanded = convertCameraModel(original, CameraModelId.RADIAL);
     expect(expanded.type).toBe('exact');
-    expect(expanded.params).toEqual([1000, 960, 540, 0.1, 0]);
+    expect(paramsOf(expanded)).toEqual([1000, 960, 540, 0.1, 0]);
 
     // Reduce: RADIAL -> SIMPLE_RADIAL (k2=0, so exact)
-    const expandedCam = makeCamera(CameraModelId.RADIAL, expanded.params);
+    const expandedCam = makeCamera(CameraModelId.RADIAL, paramsOf(expanded));
     const reduced = convertCameraModel(expandedCam, CameraModelId.SIMPLE_RADIAL);
     expect(reduced.type).toBe('exact');
-    expect(reduced.params).toEqual(original.params);
+    expect(paramsOf(reduced)).toEqual(original.params);
   });
 
   it('RADIAL -> OPENCV -> RADIAL preserves params when tangential=0', () => {
@@ -456,13 +463,13 @@ describe('round-trip parameter conversions', () => {
     // Expand: RADIAL -> OPENCV
     const expanded = convertCameraModel(original, CameraModelId.OPENCV);
     expect(expanded.type).toBe('exact');
-    expect(expanded.params).toEqual([1000, 1000, 960, 540, 0.1, 0.05, 0, 0]);
+    expect(paramsOf(expanded)).toEqual([1000, 1000, 960, 540, 0.1, 0.05, 0, 0]);
 
     // Reduce: OPENCV -> RADIAL (p1=p2=0, so exact)
-    const expandedCam = makeCamera(CameraModelId.OPENCV, expanded.params);
+    const expandedCam = makeCamera(CameraModelId.OPENCV, paramsOf(expanded));
     const reduced = convertCameraModel(expandedCam, CameraModelId.RADIAL);
     expect(reduced.type).toBe('exact');
-    expect(reduced.params).toEqual(original.params);
+    expect(paramsOf(reduced)).toEqual(original.params);
   });
 
   it('SIMPLE_PINHOLE -> OPENCV -> RADIAL -> SIMPLE_RADIAL preserves focal length', () => {
@@ -473,17 +480,17 @@ describe('round-trip parameter conversions', () => {
     expect(toOpencv.type).toBe('exact');
 
     // OPENCV -> RADIAL
-    const opencvCam = makeCamera(CameraModelId.OPENCV, toOpencv.params);
+    const opencvCam = makeCamera(CameraModelId.OPENCV, paramsOf(toOpencv));
     const toRadial = convertCameraModel(opencvCam, CameraModelId.RADIAL);
     expect(toRadial.type).toBe('exact');
 
     // RADIAL -> SIMPLE_RADIAL
-    const radialCam = makeCamera(CameraModelId.RADIAL, toRadial.params);
+    const radialCam = makeCamera(CameraModelId.RADIAL, paramsOf(toRadial));
     const toSimpleRadial = convertCameraModel(radialCam, CameraModelId.SIMPLE_RADIAL);
     expect(toSimpleRadial.type).toBe('exact');
 
     // Should preserve original intrinsics with k=0
-    expect(toSimpleRadial.params).toEqual([1000, 960, 540, 0]);
+    expect(paramsOf(toSimpleRadial)).toEqual([1000, 960, 540, 0]);
   });
 
   it('SIMPLE_RADIAL_FISHEYE -> RADIAL_FISHEYE -> SIMPLE_RADIAL_FISHEYE preserves params when k2=0', () => {
@@ -492,13 +499,13 @@ describe('round-trip parameter conversions', () => {
     // Expand
     const expanded = convertCameraModel(original, CameraModelId.RADIAL_FISHEYE);
     expect(expanded.type).toBe('exact');
-    expect(expanded.params).toEqual([1000, 960, 540, 0.1, 0]);
+    expect(paramsOf(expanded)).toEqual([1000, 960, 540, 0.1, 0]);
 
     // Reduce
-    const expandedCam = makeCamera(CameraModelId.RADIAL_FISHEYE, expanded.params);
+    const expandedCam = makeCamera(CameraModelId.RADIAL_FISHEYE, paramsOf(expanded));
     const reduced = convertCameraModel(expandedCam, CameraModelId.SIMPLE_RADIAL_FISHEYE);
     expect(reduced.type).toBe('exact');
-    expect(reduced.params).toEqual(original.params);
+    expect(paramsOf(reduced)).toEqual(original.params);
   });
 
   it('OPENCV_FISHEYE -> THIN_PRISM_FISHEYE -> OPENCV_FISHEYE preserves params when extra=0', () => {
@@ -509,19 +516,19 @@ describe('round-trip parameter conversions', () => {
     const expanded = convertCameraModel(original, CameraModelId.THIN_PRISM_FISHEYE);
     expect(expanded.type).toBe('exact');
     // Verify k3,k4 moved to indices 8-9
-    expect(expanded.params[8]).toBe(0.01);
-    expect(expanded.params[9]).toBe(0.005);
+    expect(paramsOf(expanded)[8]).toBe(0.01);
+    expect(paramsOf(expanded)[9]).toBe(0.005);
     // Verify p1,p2,sx1,sy1 are zero
-    expect(expanded.params[6]).toBe(0);
-    expect(expanded.params[7]).toBe(0);
-    expect(expanded.params[10]).toBe(0);
-    expect(expanded.params[11]).toBe(0);
+    expect(paramsOf(expanded)[6]).toBe(0);
+    expect(paramsOf(expanded)[7]).toBe(0);
+    expect(paramsOf(expanded)[10]).toBe(0);
+    expect(paramsOf(expanded)[11]).toBe(0);
 
     // Reduce - should get original back
-    const expandedCam = makeCamera(CameraModelId.THIN_PRISM_FISHEYE, expanded.params);
+    const expandedCam = makeCamera(CameraModelId.THIN_PRISM_FISHEYE, paramsOf(expanded));
     const reduced = convertCameraModel(expandedCam, CameraModelId.OPENCV_FISHEYE);
     expect(reduced.type).toBe('exact');
-    expect(reduced.params).toEqual(originalParams);
+    expect(paramsOf(reduced)).toEqual(originalParams);
   });
 
   it('RADIAL_FISHEYE -> OPENCV_FISHEYE -> RADIAL_FISHEYE preserves params when k3=k4=0', () => {
@@ -530,13 +537,13 @@ describe('round-trip parameter conversions', () => {
     // Expand
     const expanded = convertCameraModel(original, CameraModelId.OPENCV_FISHEYE);
     expect(expanded.type).toBe('exact');
-    expect(expanded.params).toEqual([1000, 1000, 960, 540, 0.1, 0.05, 0, 0]);
+    expect(paramsOf(expanded)).toEqual([1000, 1000, 960, 540, 0.1, 0.05, 0, 0]);
 
     // Reduce
-    const expandedCam = makeCamera(CameraModelId.OPENCV_FISHEYE, expanded.params);
+    const expandedCam = makeCamera(CameraModelId.OPENCV_FISHEYE, paramsOf(expanded));
     const reduced = convertCameraModel(expandedCam, CameraModelId.RADIAL_FISHEYE);
     expect(reduced.type).toBe('exact');
-    expect(reduced.params).toEqual(original.params);
+    expect(paramsOf(reduced)).toEqual(original.params);
   });
 
   it('round-trip validates with low reprojection error', () => {
@@ -545,9 +552,9 @@ describe('round-trip parameter conversions', () => {
 
     // Expand and reduce
     const expanded = convertCameraModel(original, CameraModelId.OPENCV);
-    const expandedCam = makeCamera(CameraModelId.OPENCV, expanded.params);
+    const expandedCam = makeCamera(CameraModelId.OPENCV, paramsOf(expanded));
     const reduced = convertCameraModel(expandedCam, CameraModelId.SIMPLE_RADIAL);
-    const roundTripped = makeCamera(CameraModelId.SIMPLE_RADIAL, reduced.params);
+    const roundTripped = makeCamera(CameraModelId.SIMPLE_RADIAL, paramsOf(reduced));
 
     // Validate reprojection between original and round-tripped
     // Tolerance accounts for numeric precision in iterative undistortion

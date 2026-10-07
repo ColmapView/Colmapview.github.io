@@ -24,6 +24,8 @@ import {
 describe('splat backend policy', () => {
   const sparkReady: SplatBackendAvailability = { webGpu: 'unsupported', spark: true };
   const webGpuReady: SplatBackendAvailability = { webGpu: 'ready', spark: true };
+  // A caller's availability with the Spark download fields that the NEED gate must ignore.
+  const snapshot = (availability: Pick<SplatBackendAvailability, 'webGpu'> & Partial<SplatBackendAvailability>) => availability;
 
   it('parses valid backend preferences and defaults invalid values to auto', () => {
     expect(parseSplatBackendPreference('?splatBackend=webgpu')).toBe('webgpu');
@@ -123,10 +125,10 @@ describe('splat backend policy', () => {
   it('separates needing Spark from starting another download of it', () => {
     // NEED stays blind to download state — the byte-less loader gate asks what
     // the renderer WILL be, so a failed download must not change its answer.
-    expect(shouldPreloadSparkSplatRuntime('spark', {
+    expect(shouldPreloadSparkSplatRuntime('spark', snapshot({
       webGpu: 'ready',
       sparkPreloadFailed: true,
-    })).toBe(true);
+    }))).toBe(true);
     // START refuses to re-request the chunk: preloadSparkModule drops its memo
     // on rejection, so a second call is a second real ~5 MB download.
     expect(shouldStartSparkSplatRuntimePreload('spark', { webGpu: 'ready' })).toBe(true);
@@ -312,36 +314,36 @@ describe('splat backend policy', () => {
   });
 
   it('preloads Spark for forced Spark or auto fallback paths, ignoring the spark flag', () => {
-    expect(shouldPreloadSparkSplatRuntime('auto', {
+    expect(shouldPreloadSparkSplatRuntime('auto', snapshot({
       webGpu: 'unsupported',
       spark: false,
-    })).toBe(true);
-    expect(shouldPreloadSparkSplatRuntime('spark', {
+    }))).toBe(true);
+    expect(shouldPreloadSparkSplatRuntime('spark', snapshot({
       webGpu: 'ready',
       spark: false,
-    })).toBe(true);
-    expect(shouldPreloadSparkSplatRuntime('auto', {
+    }))).toBe(true);
+    expect(shouldPreloadSparkSplatRuntime('auto', snapshot({
       webGpu: 'unsupported',
       spark: true,
-    })).toBe(true);
-    expect(shouldPreloadSparkSplatRuntime('spark', {
+    }))).toBe(true);
+    expect(shouldPreloadSparkSplatRuntime('spark', snapshot({
       webGpu: 'ready',
       spark: true,
-    })).toBe(true);
-    expect(shouldPreloadSparkSplatRuntime('auto', {
+    }))).toBe(true);
+    expect(shouldPreloadSparkSplatRuntime('auto', snapshot({
       webGpu: 'ready',
       spark: true,
-    })).toBe(false);
+    }))).toBe(false);
     // Capable-but-not-yet-initialized is not a fallback path, whether or not
     // Spark already happens to be loaded.
-    expect(shouldPreloadSparkSplatRuntime('auto', {
+    expect(shouldPreloadSparkSplatRuntime('auto', snapshot({
       webGpu: 'unavailable',
       spark: false,
-    })).toBe(false);
-    expect(shouldPreloadSparkSplatRuntime('auto', {
+    }))).toBe(false);
+    expect(shouldPreloadSparkSplatRuntime('auto', snapshot({
       webGpu: 'unavailable',
       spark: true,
-    })).toBe(false);
+    }))).toBe(false);
   });
 
   it('resolves WebGPU metric PSNR capability when the visible backend is WebGPU or unknown', () => {

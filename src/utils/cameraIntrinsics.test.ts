@@ -6,7 +6,7 @@ import { CameraModelId } from '../types/colmap';
 import type { CameraIntrinsics } from '../types/colmap';
 
 describe('getCameraIntrinsics parity (existing models 0-10)', () => {
-  const parityCases: Array<{ name: string; modelId: number; params: number[]; expected: Partial<CameraIntrinsics> }> = [
+  const parityCases: Array<{ name: string; modelId: CameraModelId; params: number[]; expected: Partial<CameraIntrinsics> }> = [
     { name: 'SIMPLE_PINHOLE', modelId: CameraModelId.SIMPLE_PINHOLE, params: [100, 50, 60], expected: { fx: 100, fy: 100, cx: 50, cy: 60 } },
     { name: 'PINHOLE', modelId: CameraModelId.PINHOLE, params: [100, 110, 50, 60], expected: { fx: 100, fy: 110, cx: 50, cy: 60 } },
     { name: 'SIMPLE_RADIAL', modelId: CameraModelId.SIMPLE_RADIAL, params: [100, 50, 60, 0.1], expected: { fx: 100, fy: 100, cx: 50, cy: 60, k1: 0.1 } },
