@@ -8,14 +8,18 @@ import {
 import type { Sim3dEuler } from '../../types/sim3d';
 import { useTransformGizmoStoreFacade } from './useTransformGizmoStoreFacade';
 
-const { reloadFilesMock } = vi.hoisted(() => ({ reloadFilesMock: vi.fn(async () => true) }));
+const { reloadFilesMock, processFilesMock } = vi.hoisted(() => ({
+  reloadFilesMock: vi.fn(async () => true),
+  processFilesMock: vi.fn(async () => true),
+}));
 
 vi.mock('../../hooks/useFileDropzone', () => ({
-  useFileDropzone: () => ({ reloadFiles: reloadFilesMock, processFiles: vi.fn(async () => true) }),
+  useFileDropzone: () => ({ reloadFiles: reloadFilesMock, processFiles: processFilesMock }),
 }));
 
 describe('useTransformGizmoStoreFacade', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
     useTransformStore.setState(useTransformStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
@@ -44,10 +48,19 @@ describe('useTransformGizmoStoreFacade', () => {
       transform,
       droppedFiles,
     });
-    // The Reload path that keeps remote splat tiles, not a fresh load of the same files.
-    expect(result.current.actions.reloadFiles).toBe(reloadFilesMock);
+    expect(result.current.actions.reloadFiles).toEqual(expect.any(Function));
     expect(result.current.actions.applyTransformToData).toEqual(expect.any(Function));
     expect(result.current.actions.confirmReload).toEqual(expect.any(Function));
+  });
+
+  it('reloads through the Reload path, not a fresh load of the same files', async () => {
+    const files = new Map([['sparse/0/images.bin', new File(['images'], 'images.bin')]]);
+    const { result } = renderHook(() => useTransformGizmoStoreFacade());
+
+    await act(async () => { await result.current.actions.reloadFiles(files); });
+
+    expect(reloadFilesMock).toHaveBeenCalledExactlyOnceWith(files);
+    expect(processFilesMock).not.toHaveBeenCalled();
   });
 
   it('routes transform and gizmo visibility actions back to owning stores', () => {

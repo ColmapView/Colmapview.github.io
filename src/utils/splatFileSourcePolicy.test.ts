@@ -383,12 +383,16 @@ describe('carryOverRemoteSplatSources', () => {
     const current = loaded({ splatFile: remoteFile, splatFiles: [localFile, remoteFile],
       splatFileSources: [{ id: 'local.spz', path: 'local.spz', file: localFile }, remoteActive, remoteLazy] });
     // A reload re-reads the local files and defaults to their first splat.
-    const reloadedLocal = { id: 'local.spz', path: 'local.spz', file: localFile };
+    const reloadedFile = new File(['local'], 'local.spz');
+    const reloadedLocal = { id: 'local.spz', path: 'local.spz', file: reloadedFile };
     const result = carryOverRemoteSplatSources(current,
-      { splatFile: localFile, splatFiles: [localFile], splatFileSources: [reloadedLocal] });
+      { splatFile: reloadedFile, splatFiles: [reloadedFile], splatFileSources: [reloadedLocal] });
     expect(result.splatFileSources).toEqual([reloadedLocal, remoteActive, remoteLazy]);
-    // Rebuilt from the merged sources: the local bytes and the downloaded remote tile, not the lazy one.
-    expect(result.splatFiles).toEqual([localFile, remoteFile]);
+    // Rebuilt from the merged sources: the reloaded bytes and the downloaded remote tile, not the lazy one.
+    // Compared one by one: toEqual finds any two jsdom Files equal.
+    expect(result.splatFiles).toHaveLength(2);
+    expect(result.splatFiles?.[0]).toBe(reloadedFile);
+    expect(result.splatFiles?.[1]).toBe(remoteFile);
     expect(result.splatFile).toBe(remoteFile);
   });
 
