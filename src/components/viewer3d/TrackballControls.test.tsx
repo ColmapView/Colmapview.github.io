@@ -167,6 +167,36 @@ describe('TrackballControls restoring a saved view', () => {
     expectSavedView();
   });
 
+  it('ends at the saved view in the saved camera mode and field of view, before and after a slow splat download', async () => {
+    useReconstructionStore.setState({ reconstruction: buildReconstruction() });
+    useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles({ splatFileSources: [remoteSplat] }));
+    let respond!: (response: Response) => void;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { respond = resolve; })));
+    render(<Viewer />);
+    finishFlights();
+    // The visitor orbits with the default 60° field of view.
+    const saved: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: savedView, config: {
+      splat: { activeSourceId: remoteSplat.id }, camera: { cameraMode: 'fly', cameraFov: 35 } } };
+    const expectSavedCamera = () => {
+      expect(useCameraStore.getState().cameraMode).toBe('fly');
+      expect((scene.getState().camera as THREE.PerspectiveCamera).fov).toBe(35);
+      expectSavedView();
+    };
+
+    let restoration!: Promise<void>;
+    await act(async () => { restoration = applySavedViewerState(saved, null); });
+    finishFlights();
+    expectSavedCamera();
+
+    await act(async () => {
+      respond(new Response(new Blob(['splat']), { status: 200 }));
+      await restoration;
+    });
+    finishFlights();
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeDefined();
+    expectSavedCamera();
+  });
+
   it('ends at the saved view when a restore without a download turns undistortion on over a selected panorama', async () => {
     mountWithSelectedPanorama(false);
     // The dataset lists no splat, so nothing is downloaded between navigation and the rest of the settings.
