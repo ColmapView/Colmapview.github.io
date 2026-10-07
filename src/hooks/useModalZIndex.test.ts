@@ -9,7 +9,7 @@ describe('nextModalZIndex', () => {
   });
 
   it('never reaches the blocking-dialog layer (modalOverlay)', () => {
-    let z = Z_INDEX.modal;
+    let z: number = Z_INDEX.modal;
     for (let i = 0; i < 500; i++) z = nextModalZIndex(z);
     expect(z).toBeLessThan(Z_INDEX.modalOverlay);
   });

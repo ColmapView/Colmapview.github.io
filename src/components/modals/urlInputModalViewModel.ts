@@ -162,7 +162,7 @@ export function getUrlInputHelpIconKind(showHelp: boolean): UrlInputHelpIconKind
   return showHelp ? 'open' : 'closed';
 }
 
-export function getUrlInputModalOverlayStyle(zIndex = Z_INDEX.modalOverlay): CSSProperties {
+export function getUrlInputModalOverlayStyle(zIndex: number = Z_INDEX.modalOverlay): CSSProperties {
   return { zIndex };
 }
 

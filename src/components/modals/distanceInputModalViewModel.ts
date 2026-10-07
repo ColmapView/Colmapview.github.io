@@ -79,7 +79,7 @@ export function getInitialDistanceInputValue(
 
 export function getDistanceInputModalPanelStyle(
   position: DistanceInputModalPosition,
-  zIndex = Z_INDEX.modalOverlay
+  zIndex: number = Z_INDEX.modalOverlay
 ): CSSProperties {
   return {
     left: position.x,

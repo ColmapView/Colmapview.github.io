@@ -179,7 +179,7 @@ export function getAboutLinkHoverColor(link: AboutLink): string {
   return LINK_COLORS[link.color];
 }
 
-export function getHotkeyHelpOverlayStyle(zIndex = Z_INDEX.modalOverlay): CSSProperties {
+export function getHotkeyHelpOverlayStyle(zIndex: number = Z_INDEX.modalOverlay): CSSProperties {
   return { zIndex };
 }
 

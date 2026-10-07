@@ -12,7 +12,7 @@ export function calculateFixedHtmlPosition(): [number, number] {
 
 export function getFixedCursorHtmlStyle(
   position: ScreenPosition,
-  cursorOffset = MODAL_POSITION.cursorOffset
+  cursorOffset: number = MODAL_POSITION.cursorOffset
 ): CSSProperties {
   return {
     position: 'fixed',

@@ -86,7 +86,7 @@ export function getFloorDetectionButtonStyle(): CSSProperties {
 
 export function getFloorAlignModalPanelStyle(
   position: FloorModalPosition,
-  zIndex = Z_INDEX.modalOverlay
+  zIndex: number = Z_INDEX.modalOverlay
 ): CSSProperties {
   return {
     left: position.x,

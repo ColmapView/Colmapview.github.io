@@ -88,8 +88,8 @@ export function shouldClearMouseTooltipOnMouseOut(relatedTarget: EventTarget | n
 
 export function getMouseTooltipStyle(
   position: MouseTooltipPosition,
-  cursorOffset = MODAL_POSITION.cursorOffset,
-  zIndex = Z_INDEX.mouseTooltip
+  cursorOffset: number = MODAL_POSITION.cursorOffset,
+  zIndex: number = Z_INDEX.mouseTooltip
 ): CSSProperties {
   return {
     zIndex,

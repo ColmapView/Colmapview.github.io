@@ -69,7 +69,7 @@ export function getPickingCursorPositionStyle(
 export function getPickingCursorContainerStyle(
   mousePosition: CursorScreenPoint,
   offsetPx = PICKING_CURSOR_OFFSET_PX,
-  zIndex = Z_INDEX.modal,
+  zIndex: number = Z_INDEX.modal,
 ): CSSProperties {
   return {
     ...getPickingCursorPositionStyle(mousePosition, offsetPx),
