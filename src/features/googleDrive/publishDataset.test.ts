@@ -3,6 +3,9 @@ import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HfError } from '../huggingface/http';
+import { buildCamera, buildDatasetState, buildImage, buildPoint3D, buildReconstruction } from '../../test/builders';
+import { createIdentityEuler } from '../../utils/sim3dTransforms';
+import { prepareDriveArchive } from './prepareArchive';
 import { createDrivePublicationController, normalizeDriveArchiveName } from './publishDataset';
 import { DRIVE_UPLOAD_CHUNK_BYTES, GoogleDrivePublishError, type DrivePublishedFile } from './upload';
 
@@ -159,6 +162,22 @@ describe('Drive publication lifecycle', () => {
     await controller.retry();
     expect(prepare).toHaveBeenCalledTimes(2);
     expect(controller.getSnapshot().phase).toBe('completed');
+  });
+  it('ends a publication whose image folder has 10,000 files', async () => {
+    const { controller, client } = fixture();
+    const images = Array.from({ length: 10_000 }, (_, index) => buildImage({ imageId: index + 1, name: `${index}.jpg` }));
+    const input = { sourceKey: 'remote', modelRevision: 0, source: null, activeSplatId: null,
+      reconstruction: buildReconstruction({ cameras: [buildCamera()], images, points3D: [buildPoint3D()] }),
+      dataset: buildDatasetState({ sourceType: 'url', imageUrlBase: 'https://bucket.example/images/' }),
+      transform: createIdentityEuler(), splatTransform: createIdentityEuler(), config: {}, viewState: null, appVersion: 'test', viewerBaseUrl: 'https://viewer.example/' };
+    await controller.publish('scene', false, (signal, progress) => prepareDriveArchive(input, signal, progress, () => {}));
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: false, error: 'A dataset folder has too many files for publication.' });
+    expect(client.owner).not.toHaveBeenCalled();
+  });
+  it('keeps a cancelled publication retryable even when the cancelled step hit a size limit', async () => {
+    const { controller } = fixture();
+    await controller.publish('scene', false, async () => { controller.cancel(); throw new HfError('Limit', undefined, true); });
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'cancelled', canRetry: true });
   });
   it.each(['', '../dataset', 'folder/name', 'line\nname', '.'])('validates file names before any API call: %s', name => {
     expect(() => normalizeDriveArchiveName(name)).toThrow('file name');

@@ -64,7 +64,7 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
   const add = (asset: PublishAsset) => {
     asset.path = publicationPath(asset.path);
     const collisionKey = asset.path.normalize('NFC');
-    if (paths.has(collisionKey)) throw new HfError(`Two selected files use the path ${asset.path}.`);
+    if (paths.has(collisionKey)) throw new HfError(`Two selected files use the path ${asset.path}.`, undefined, true);
     if (asset.size !== null) checkAssetSize(asset.size, asset.path, asset.kind);
     paths.add(collisionKey); assets.push(asset);
   };
@@ -134,7 +134,7 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
     }
     if (isRemote) {
       const url = captured.imageNameToUrl?.[name] || (captured.imageUrlBase ? buildImageUrl(captured.imageUrlBase, name).url : null);
-      if (!url) throw new HfError(`Original image ${name} is unavailable. Load its original file before publishing.`);
+      if (!url) throw new HfError(`Original image ${name} is unavailable. Load its original file before publishing.`, undefined, true);
       return remote(url, path, 'image');
     }
     let failed = false;
@@ -155,7 +155,7 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
       const entry = (mask ? getMaskPathVariants(name) : [name]).map(variant => findZipEntry(variant, index)).find(Boolean);
       if (!entry) {
         if (mask) return null;
-        throw new HfError(`Original image ${name} is missing from the archive.`);
+        throw new HfError(`Original image ${name} is missing from the archive.`, undefined, true);
       }
       checkAssetSize(entry.size, path, mask ? 'mask' : 'image');
       // Archive entries are extracted when uploaded, not while preparing.
@@ -191,7 +191,7 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
       asset.size = source.size !== undefined && source.size > 0 ? source.size : null;
       add(asset);
     }
-    else throw new HfError(`Original splat ${source.path} is unavailable. Load its original file before publishing.`);
+    else throw new HfError(`Original splat ${source.path} is unavailable. Load its original file before publishing.`, undefined, true);
     splatPaths.push(path);
     if (source.id === input.activeSplatId) activeSourceId = path;
   }
@@ -207,19 +207,19 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
   const viewerState = parsePublishedViewerState({ version: 1, viewerVersion: input.appVersion, viewState: input.viewState, config });
   add(fixed(DATASET_VIEWER_SETTINGS_FILE, new Blob([serializeDatasetViewerSettings(viewerState)], { type: 'application/yaml' }), 'viewer-state'));
   check();
-  if (assets.length >= 100_000) throw new HfError('This dataset has too many files for browser publication.');
+  if (assets.length >= 100_000) throw new HfError('This dataset has too many files for browser publication.', undefined, true);
   const folders = new Map<string, Set<string>>();
   for (const path of paths) {
     const parts = path.split('/');
     for (let i = 1; i <= parts.length; i++) {
       const parent = parts.slice(0, i - 1).join('/');
       const key = parts.slice(0, i).join('/');
-      if (i < parts.length && paths.has(key)) throw new HfError('An output file conflicts with a directory.');
+      if (i < parts.length && paths.has(key)) throw new HfError('An output file conflicts with a directory.', undefined, true);
       const entries = folders.get(parent) ?? new Set<string>();
       entries.add(parts[i - 1]); folders.set(parent, entries);
     }
   }
-  if ([...folders.values()].some(entries => entries.size >= 10_000)) throw new HfError('A dataset folder has too many files for publication.');
+  if ([...folders.values()].some(entries => entries.size >= 10_000)) throw new HfError('A dataset folder has too many files for publication.', undefined, true);
   return { operationId: crypto.randomUUID(), sourceKey: input.sourceKey, modelRevision: input.modelRevision,
     assets, viewerState, imageNameToPath, splatPaths, viewerBaseUrl: input.viewerBaseUrl,
     ...(input.preview ? { previewPath: PUBLICATION_PREVIEW_PATH } : {}),

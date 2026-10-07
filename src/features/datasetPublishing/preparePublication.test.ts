@@ -70,6 +70,30 @@ describe('publication snapshot preparation', () => {
       message: 'The file photo.png exceeds the 128 MiB publication limit for non-splat files.', permanent: true }));
   });
 
+  const splats = (source: PublicationInput, paths: string[]) => {
+    const file = new File(['splat'], 'splat.ply');
+    source.dataset.loadedFiles!.splatFileSources = paths.map((path, index) => ({ id: String(index), path, file }));
+  };
+  const numbered = (count: number) => Array.from({ length: count }, (_, index) => `${index}.ply`);
+  it.each([
+    ['two files share a path', 'Two selected files use the path splats/scene.ply.', (source: PublicationInput) => splats(source, ['scene.ply', 'scene.ply'])],
+    ['a remote image has no URL', 'Original image nested/photo.png is unavailable. Load its original file before publishing.',
+      (source: PublicationInput) => { source.dataset.sourceType = 'url'; }],
+    ['an image is missing from the archive', 'Original image nested/photo.png is missing from the archive.',
+      (source: PublicationInput) => { source.dataset.sourceType = 'zip'; setActiveZipArchive(buildArchiveReader(), new Map()); }],
+    ['a splat has no file or URL', 'Original splat tile.ply is unavailable. Load its original file before publishing.',
+      (source: PublicationInput) => { source.dataset.loadedFiles!.splatFileSources = [{ id: 'tile', path: 'tile.ply' }]; }],
+    ['the dataset has 100,000 files', 'This dataset has too many files for browser publication.', (source: PublicationInput) => splats(source, numbered(100_000))],
+    ['a file is also a folder', 'An output file conflicts with a directory.', (source: PublicationInput) => splats(source, ['scene', 'scene/tile.ply'])],
+    ['a folder has 10,000 files', 'A dataset folder has too many files for publication.', (source: PublicationInput) => splats(source, numbered(10_000))],
+  ])('fails in a way no retry can fix when %s', async (_, message, change) => {
+    const source = input();
+    change(source);
+    try {
+      await expect(preparePublication(source, new AbortController().signal, deps())).rejects.toMatchObject({ message, permanent: true });
+    } finally { clearZipCache(); }
+  });
+
   const tileUrl = 'https://huggingface.co/datasets/owner/source/resolve/main/tile.ply';
   it.each([[0, null], [undefined, null], [42, 42]] as const)('treats a catalogued splat size of %s as %s bytes', async (size, expected) => {
     const source = input();
@@ -329,7 +353,7 @@ describe('publication snapshot preparation', () => {
     expect(readme).toContain('colmapview.yaml');
   });
 
-  it.each(['../secret', '/absolute', 'a/../b', 'C:\\file', 'a//b', 'bad\nfile'])('rejects unsafe asset path %s', path => {
-    expect(() => publicationPath(path)).toThrow('filename');
+  it.each(['../secret', '/absolute', 'a/../b', 'C:\\file', 'a//b', 'bad\nfile'])('rejects unsafe asset path %s, which no retry can fix', path => {
+    expect(() => publicationPath(path)).toThrow(expect.objectContaining({ message: 'An asset has an unsafe or unsupported relative filename.', permanent: true }));
   });
 });

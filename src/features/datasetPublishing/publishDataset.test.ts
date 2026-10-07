@@ -330,4 +330,22 @@ describe('publication controller', () => {
     expect(client.reconcile).toHaveBeenCalledTimes(2);
     expect(controller.getSnapshot().phase).toBe('completed');
   });
+
+  it('ends a publication whose file changed size after preparation', async () => {
+    const { controller, client } = setup();
+    const prepared = fixture();
+    prepared.assets[1].open = async () => new Blob(['changed']);
+    await controller.publish('owner', details, async () => prepared);
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: false, uncertain: false,
+      error: 'The size of sparse/0/1.bin changed. Start a new publication.' });
+    expect(client.upload).not.toHaveBeenCalled();
+  });
+
+  it('keeps a cancelled publication retryable even when the cancelled step hit a size limit', async () => {
+    const { controller } = setup();
+    const prepared = fixture();
+    prepared.assets[0].open = async () => { controller.cancel(); throw new HfError('Limit', undefined, true); };
+    await controller.publish('owner', details, async () => prepared);
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'cancelled', canRetry: true });
+  });
 });

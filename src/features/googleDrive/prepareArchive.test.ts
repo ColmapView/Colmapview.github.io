@@ -90,7 +90,8 @@ describe('Drive dataset ZIP packaging', () => {
   });
   it('rejects source size changes and stops an aborted reader before packaging the next asset', async () => {
     const source = asset('file.bin', 'data'); source.size = 1;
-    await expect(packageDriveArchive(prepared([source]), new AbortController().signal, () => {}, () => {})).rejects.toThrow('changed');
+    await expect(packageDriveArchive(prepared([source]), new AbortController().signal, () => {}, () => {}))
+      .rejects.toMatchObject({ message: 'The source file file.bin changed. Publish again.', permanent: true });
     const controller = new AbortController();
     const next = { ...asset('next.bin', 'next'), open: vi.fn() };
     await expect(packageDriveArchive(prepared([asset('first.bin', 'data'), next]), controller.signal,

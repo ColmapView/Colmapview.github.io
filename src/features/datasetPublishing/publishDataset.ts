@@ -115,7 +115,7 @@ export function createPublicationController(client: HubClient,
             set({ phase: 'uploading', message: `Preparing ${asset.path}…` });
             content = await asset.open(signal);
             signal.throwIfAborted(); checkAssetSize(content.size, asset.path, asset.kind);
-            if (asset.size !== null && content.size !== asset.size) throw new HfError(`The size of ${asset.path} changed. Start a new publication.`);
+            if (asset.size !== null && content.size !== asset.size) throw new HfError(`The size of ${asset.path} changed. Start a new publication.`, undefined, true);
           }
           // Other unknown-size files batch by their opened size; one that does not fit starts the next batch.
           if (files.length && bytes + content.size > MAX_PUBLICATION_BATCH_BYTES) { carried = { index: end, content }; break; }

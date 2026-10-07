@@ -48,7 +48,7 @@ export async function packageDriveArchive(prepared: PreparedPublication, signal:
       check();
       if ((asset.size !== null && asset.size !== blob.size) || blob.size + total > sizeLimit) {
         if (blob.size + total > sizeLimit) throw tooLarge();
-        throw new GoogleDrivePublishError(`The source file ${asset.path} changed. Publish again.`);
+        throw new GoogleDrivePublishError(`The source file ${asset.path} changed. Publish again.`, undefined, true);
       }
       const entry = new ZipPassThrough(publicationPath(asset.path));
       zip.add(entry);

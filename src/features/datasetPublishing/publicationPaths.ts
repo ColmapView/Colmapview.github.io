@@ -5,7 +5,7 @@ export function publicationPath(input: string): string {
   if (!path || path.length > 4096 || path.startsWith('/') || /^[a-zA-Z]:/.test(path)
     || [...path].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
     || path.split('/').some(part => !part || part === '.' || part === '..')) {
-    throw new HfError('An asset has an unsafe or unsupported relative filename.');
+    throw new HfError('An asset has an unsafe or unsupported relative filename.', undefined, true);
   }
   return path;
 }
