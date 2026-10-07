@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { jpegHeader, pngHeader, webpHeader } from '../test/imageHeaders';
 import { readImageDimensions } from './imageDimensions';
 
-const blob = (bytes: Uint8Array) => new NodeBlob([bytes]) as unknown as Blob;
+const blob = (bytes: Uint8Array<ArrayBuffer>) => new NodeBlob([bytes]) as unknown as Blob;
 
 describe('image dimensions from headers', () => {
   it.each([

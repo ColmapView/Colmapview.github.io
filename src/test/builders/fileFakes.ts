@@ -366,10 +366,6 @@ class TestDataTransferItemList implements DataTransferItemList {
     this.syncIndexes(previousLength);
   }
 
-  item(index: number): DataTransferItem | null {
-    return this.items[index] ?? null;
-  }
-
   remove(index: number): void {
     if (index < 0 || index >= this.items.length) {
       return;

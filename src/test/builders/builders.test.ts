@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buildCamera,
   buildAnchorElement,
@@ -337,7 +337,7 @@ describe('test builders', () => {
     expect(transfer.files.item(0)).toBe(file);
     expect(transfer.items.length).toBe(1);
     expect(transfer.items[0].webkitGetAsEntry()).toBe(fileSystemEntry);
-    expect(transfer.items.item(0)).toBe(item);
+    expect(transfer.items[0]).toBe(item);
   });
 
   it('builds typed File System API entries and handles for scanning tests', async () => {

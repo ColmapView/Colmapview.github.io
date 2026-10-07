@@ -34,7 +34,7 @@ interface SogBuildOptions {
   entries?: Zippable;
 }
 
-function buildSogBytes({ meta = V2_META, size = [10, 10], omit = [], deflate = false, entries = {} }: SogBuildOptions = {}): Uint8Array {
+function buildSogBytes({ meta = V2_META, size = [10, 10], omit = [], deflate = false, entries = {} }: SogBuildOptions = {}): Uint8Array<ArrayBuffer> {
   const level = deflate ? 6 : 0;
   const files: Zippable = {};
   for (const name of TEXTURES) {
@@ -46,7 +46,7 @@ function buildSogBytes({ meta = V2_META, size = [10, 10], omit = [], deflate = f
   }
   return zipSync({ ...files, ...entries });
 }
-const asBlob = (...parts: Uint8Array[]) => new NodeBlob(parts) as unknown as Blob;
+const asBlob = (...parts: Uint8Array<ArrayBuffer>[]) => new NodeBlob(parts) as unknown as Blob;
 const buildSog = (options: SogBuildOptions = {}) => asBlob(buildSogBytes(options));
 const reason = (promise: Promise<unknown>) => promise.then(() => 'accepted', (error: unknown) =>
   error instanceof SogBundleError ? error.message : `unexpected ${String(error)}`);
@@ -145,7 +145,7 @@ function endRecord({ count, size, offset, comment = 0, disk = 0, directoryDisk =
  * the benign directory + benign end record]. The validator reads the benign (last) end
  * record; Spark's zip reader skips an end record it cannot parse and falls back to the hidden one.
  */
-function smuggledSog(benignTweak: Partial<EndRecord> = {}, benignDirectory = (directory: Uint8Array) => directory): Uint8Array {
+function smuggledSog(benignTweak: Partial<EndRecord> = {}, benignDirectory = (directory: Uint8Array) => directory): Uint8Array<ArrayBuffer> {
   const benign = zipSections(buildSogBytes({ meta: { ...V2_META, count: 100 } }));
   const hidden = zipSections(buildSogBytes({ meta: { ...V2_META, count: 50 } }));
   const hiddenDirectory = shiftLocalOffsets(hidden.directory, benign.locals.length);
@@ -158,7 +158,7 @@ function smuggledSog(benignTweak: Partial<EndRecord> = {}, benignDirectory = (di
     endRecord({ count: benign.count, size: directory.length, offset: hiddenDirectoryOffset + hiddenDirectory.length + 22, ...benignTweak }),
   );
 }
-const SMUGGLED_VARIANTS: [string, () => Uint8Array][] = [
+const SMUGGLED_VARIANTS: [string, () => Uint8Array<ArrayBuffer>][] = [
   ['a pristine second end record', () => smuggledSog()],
   ['an end record on disk 1', () => smuggledSog({ disk: 1 })],
   ['an end record whose directory is on disk 1', () => smuggledSog({ directoryDisk: 1 })],
@@ -170,7 +170,7 @@ const SMUGGLED_VARIANTS: [string, () => Uint8Array][] = [
 
 /** A bundle as a level-0 deflate producer writes it: method 8, 65,535-byte stored blocks, sizes in data descriptors. */
 function levelZeroDeflatedSog(): Blob {
-  const chunks: Uint8Array[] = [];
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
   const zip = new Zip((error, chunk) => {
     if (error) throw error;
     chunks.push(chunk);
