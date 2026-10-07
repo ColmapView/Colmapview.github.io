@@ -134,7 +134,6 @@ export async function loadManifestSource(
   });
   assertCurrent();
   if (processed === false) return false;
-  commitSource();
 
   if (findSplatFileSources(files).length === 0) {
     deps.setUrlProgress({ percent: 100, message: 'Complete' });

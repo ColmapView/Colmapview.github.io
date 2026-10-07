@@ -100,6 +100,7 @@ export async function loadSplatUrlSource(
     committed = true;
   };
 
+  // Only the scene this file replaced installs its source, as for archives.
   const processed = await deps.processFiles(files, { start: 80, end: 100 }, {
     replaceSplatScene: true,
     throwOnError: true,
@@ -109,7 +110,6 @@ export async function loadSplatUrlSource(
   deps.signal?.throwIfAborted();
   deps.assertCurrent?.();
   if (processed === false) return false;
-  commitSource();
 
   log(`[URL Loader] Successfully loaded 3D file from URL: ${splatFile.name}`);
 

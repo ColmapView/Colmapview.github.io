@@ -35,7 +35,10 @@ describe('URL loader splat source helpers', () => {
     const deps = {
       fetchSplatFile: vi.fn(async () => splatFile),
       log: vi.fn(),
-      processFiles: vi.fn(async () => {}),
+      // Like processFiles: report the scene this file replaced.
+      processFiles: vi.fn(async (_files: Map<string, File>, _range?: unknown, options?: { onSceneReplaced?: () => void }) => {
+        options?.onSceneReplaced?.();
+      }),
       setSourceInfo: vi.fn(),
       setUrlProgress: vi.fn(),
     };
@@ -82,6 +85,17 @@ describe('URL loader splat source helpers', () => {
 
     expect(deps.setSourceInfo).not.toHaveBeenCalled();
     expect(deps.processFiles).not.toHaveBeenCalled();
+  });
+
+  it('leaves source metadata alone when processing keeps the open scene', async () => {
+    // Processing that succeeds without reporting a replacement left the open scene in place.
+    const deps = {
+      fetchSplatFile: vi.fn(async () => buildFile('scene.spz')),
+      log: vi.fn(), setSourceInfo: vi.fn(), setUrlProgress: vi.fn(),
+      processFiles: vi.fn(async () => true),
+    };
+    await expect(loadSplatUrlSource('https://example.com/scene.spz', deps)).resolves.toBe(true);
+    expect(deps.setSourceInfo).not.toHaveBeenCalled();
   });
 
   it.each(['failure', 'cancelled'] as const)('keeps the previous source metadata after processing is %s', async outcome => {

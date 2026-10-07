@@ -31,7 +31,10 @@ function makeDeps(files = makeFiles()) {
     fetchColmapFiles: vi.fn(async () => files),
     discoverSplatCatalog: vi.fn(async () => []),
     log: vi.fn(),
-    processFiles: vi.fn(async () => {}),
+    // Like processFiles: report the scene it replaced.
+    processFiles: vi.fn(async (_files: Map<string, File>, _range?: unknown, options?: { onSceneReplaced?: () => void }) => {
+      options?.onSceneReplaced?.();
+    }),
     setSourceInfo: vi.fn(),
     setUrlProgress: vi.fn(),
   };
@@ -159,6 +162,13 @@ describe('URL loader manifest source helpers', () => {
   it('does not commit metadata when processing reports cancellation', async () => {
     const deps = { ...makeDeps(), processFiles: vi.fn(async () => false) };
     await expect(loadManifestSource(manifest, { type: 'manifest' }, deps)).resolves.toBe(false);
+    expect(deps.setSourceInfo).not.toHaveBeenCalled();
+  });
+
+  it('leaves source metadata alone when processing keeps the open scene', async () => {
+    // A splat merged into the open scene: processing succeeds without reporting a replacement.
+    const deps = { ...makeDeps(), processFiles: vi.fn(async () => true) };
+    await expect(loadManifestSource(manifest, { type: 'manifest' }, deps)).resolves.toBe(true);
     expect(deps.setSourceInfo).not.toHaveBeenCalled();
   });
 

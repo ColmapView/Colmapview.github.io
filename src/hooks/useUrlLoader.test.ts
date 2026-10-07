@@ -129,6 +129,8 @@ describe('useUrlLoader', () => {
       return new Response(null, { status: 404 });
     });
     vi.stubGlobal('fetch', request);
+    // Like processFiles, report the scene this load committed.
+    processFilesMock.mockImplementationOnce(async (_files, _range, options) => { options?.onSceneReplaced?.(); });
     const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() } }));
     await act(async () => { expect(await result.current.loadFromUrl(mode === 'manifest' ? base + 'colmapview.json' : repo)).toBe(true); });
     expect(processFilesMock).toHaveBeenCalledOnce();
@@ -994,7 +996,8 @@ describe('useUrlLoader', () => {
     });
     expect(useReconstructionStore.getState().urlLoadController?.signal).toBe(currentSignal);
 
-    processFilesMock.mockResolvedValueOnce();
+    // Like processFiles, report the scene this load committed.
+    processFilesMock.mockImplementationOnce(async (_files, _range, options) => { options?.onSceneReplaced?.(); });
     await act(async () => {
       requests[1].resolve(new Response('new splat'));
       expect(await second).toBe(true);
