@@ -1,6 +1,7 @@
 import { Blob as NodeBlob, File as NodeFile } from 'node:buffer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPublicationPreview, MAX_PREVIEW_INPUT_BYTES, normalizePublicationPreview } from './publicationPreview';
+import type { Canvas2dContextSource } from '../../test/builders';
 import { jpegHeader, pngHeader } from '../../test/imageHeaders';
 
 const png = (width = 4000, height = 2000) => new File([pngHeader(width, height)], 'preview.png', { type: 'image/png' });
@@ -21,7 +22,8 @@ describe('publication preview normalization', () => {
     encodedSize = [];
     drawImage.mockClear(); close.mockClear();
     vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 4000, height: 2000, close }));
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage } as unknown as CanvasRenderingContext2D);
+    vi.spyOn<Canvas2dContextSource, 'getContext'>(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue({ drawImage } as unknown as CanvasRenderingContext2D);
     vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(function (this: HTMLCanvasElement, callback) {
       encodedSize = [this.width, this.height];
       callback(png());

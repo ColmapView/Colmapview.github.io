@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { useScreenshotBlobCapture } from './useScreenshotBlobCapture';
 import { registerWebGpuSplatCanvasHost } from './WebGpuSplatCanvasRuntime';
 import type { ScreenshotCallback } from '../../store/stores/exportStore';
+import type { Canvas2dContextSource } from '../../test/builders';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -15,7 +16,8 @@ describe('useScreenshotBlobCapture', () => {
     const captureFrame = vi.fn(async () => capturedFrame);
     const unregister = registerWebGpuSplatCanvasHost({ canvas: splat, setFrameSnapshot: vi.fn(), captureFrame });
     const drawImage = vi.fn();
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage } as unknown as CanvasRenderingContext2D);
+    vi.spyOn<Canvas2dContextSource, 'getContext'>(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue({ drawImage } as unknown as CanvasRenderingContext2D);
     const blob = new Blob(['screenshot'], { type: 'image/png' });
     vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(blob));
     const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 480;

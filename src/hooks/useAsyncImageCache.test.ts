@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SIZE } from '../theme';
-import { buildCanvas2dContext, buildIdleDeadline, buildImageBitmap } from '../test/builders';
+import { buildCanvas2dContext, buildIdleDeadline, buildImageBitmap, type Canvas2dContextSource } from '../test/builders';
+import type { TwoDimensionalCanvasContext } from '../utils/canvasTypeGuards';
 import { appLogger } from '../utils/logger';
 import { clearFailedImages, hasImageFailed, markImageFailed } from './asyncImageDecode';
 import { createImageCache } from './useAsyncImageCache';
@@ -23,7 +24,8 @@ describe('image cache lifecycle', () => {
     vi.stubGlobal('requestIdleCallback', vi.fn((callback: IdleRequestCallback) => idleCallbacks.push(callback)));
     vi.stubGlobal('OffscreenCanvas', undefined);
     vi.stubGlobal('createImageBitmap', vi.fn(async () => buildImageBitmap({ width: 64, height: 64 })));
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(buildCanvas2dContext());
+    vi.spyOn<Canvas2dContextSource<TwoDimensionalCanvasContext>, 'getContext'>(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(buildCanvas2dContext());
     // The idle scheduler reports its first idle callback at info level.
     vi.spyOn(appLogger, 'info').mockImplementation(() => undefined);
   });

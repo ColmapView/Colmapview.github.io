@@ -508,6 +508,16 @@ export function buildCanvas2dContext({
   };
 }
 
+/**
+ * A canvas seen through its 2D getContext overload, for
+ * `vi.spyOn<Canvas2dContextSource, 'getContext'>(HTMLCanvasElement.prototype, 'getContext')`.
+ * spyOn types an overloaded method by its last overload, which @webgpu/types makes the
+ * 'webgpu' one, so an untyped spy would accept only a GPUCanvasContext.
+ */
+export interface Canvas2dContextSource<TContext = CanvasRenderingContext2D> {
+  getContext(contextId: '2d'): TContext | null;
+}
+
 export function buildClipboardItem({
   types = [],
   blobs = {},

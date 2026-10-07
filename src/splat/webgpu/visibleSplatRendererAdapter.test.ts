@@ -11,6 +11,7 @@ import {
 import type { GpuGaussianSceneRef } from './gaussianSceneResourceManager';
 import type { SplatCameraFrame, SplatRenderSession } from './gaussianRenderer';
 import type { WebGpuSplatDeviceHandle } from './webGpuSplatDevice';
+import type { Canvas2dContextSource } from '../../test/builders';
 
 function makeCloud(): GaussianCloud {
   return {
@@ -217,7 +218,8 @@ describe('visible WebGPU splat renderer adapter', () => {
     await adapter.loadCloud(makeCloud(), { sceneId: 'capture' });
     await flushPromises();
     const drawImage = vi.fn();
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage } as unknown as CanvasRenderingContext2D);
+    vi.spyOn<Canvas2dContextSource, 'getContext'>(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue({ drawImage } as unknown as CanvasRenderingContext2D);
     let submit!: () => void;
     vi.mocked(harness.session!.renderToCanvas).mockImplementationOnce(() => new Promise<void>(resolve => { submit = resolve; }));
     const capture = adapter.captureFrame();
