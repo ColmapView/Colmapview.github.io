@@ -91,6 +91,7 @@ describe('useUrlLoader', () => {
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
     usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
+    useCameraStore.setState(useCameraStore.getInitialState(), true);
     useTransformStore.setState(useTransformStore.getInitialState(), true);
     useNotificationStore.setState(useNotificationStore.getInitialState(), true);
     window.history.replaceState(null, '', '/');
