@@ -134,7 +134,6 @@ export async function loadManifestSource(
       const result = await optionalSettings.settle();
       assertCurrent();
       optionalSettingsTimedOut = result.timedOut;
-      if (result.timedOut) deps.onOptionalSettingsTimeout?.();
       return result.state;
     }
     const result = await explicitSettingsTask!;
@@ -193,6 +192,8 @@ export async function loadManifestSource(
   }
   const [catalog, viewerState] = await settleRestoreInputs();
   assertCurrent();
+  // Raised after the commit: a load cancelled while its splat list still ran never showed this dataset.
+  if (optionalSettingsTimedOut) deps.onOptionalSettingsTimeout?.();
   if (catalog.length) deps.onRemoteSplatCatalog?.(catalog);
   if (viewerState) await deps.onViewerState?.(viewerState);
   assertCurrent();

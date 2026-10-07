@@ -1036,6 +1036,30 @@ describe('useUrlLoader', () => {
     await act(async () => { expect(await next).toBe(false); });
   });
 
+  it('says nothing about late settings of a dataset cancelled while its splat list still runs', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Blob', NodeBlob);
+    const request = vi.fn(async (url: string | URL) => {
+      if (String(url).endsWith('colmapview.yaml') || String(url).includes('/splats/')) return new Promise<Response>(() => {});
+      return new Response(new Uint8Array([1, 2, 3]));
+    });
+    vi.stubGlobal('fetch', request);
+    processFilesMock.mockImplementationOnce(async (files, _range, options) => { await processWithStore(files, options); });
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
+    let pending!: Promise<boolean>;
+    act(() => { pending = result.current.loadFromManifest({ ...createDefaultManifest('https://example.com/slow/'), splats: ['splats/scene.ply'] }); });
+    await act(async () => { await vi.waitFor(() => expect(processFilesMock).toHaveBeenCalledOnce()); });
+    // The settings' deadline passes while the scene still waits for its splat list.
+    await act(async () => { await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS); });
+    expect(useReconstructionStore.getState().reconstruction).toBeNull();
+    expect(useReconstructionStore.getState().urlProgress?.message).toBe('Looking for splats and saved settings...');
+
+    act(() => useReconstructionStore.getState().cancelLoading());
+    await act(async () => { expect(await pending).toBe(false); });
+    expect(useReconstructionStore.getState().reconstruction).toBeNull();
+    expect(settingsTimeoutWarnings()).toEqual([]);
+  });
+
   it.each([
     { inside: false, warnings: 1 },
     { inside: true, warnings: 0 },
