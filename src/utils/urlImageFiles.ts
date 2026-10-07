@@ -1,4 +1,4 @@
-import { buildImageUrl, buildMaskUrlCandidates } from './imageFileLookupPolicy';
+import { buildImageUrl, buildMaskUrlCandidates, URL_MASK_ABSENCE_THRESHOLD } from './imageFileLookupPolicy';
 import { compressAndResizeToJpeg } from './imageFileCompression';
 import { createCoalescedRequestState, createImageFileRequestState } from './imageFileRequestState';
 import type { DatasetAccessError, DatasetAccessOptions } from '../dataset/types';
@@ -14,7 +14,6 @@ const urlRawState = createImageFileRequestState();
 const imageAliases = new Map<string, string>();
 const maskAliases = new Map<string, string[]>();
 const maskAbsence = new Map<string, { misses: number; found: boolean }>();
-const URL_MASK_ABSENCE_THRESHOLD = 8;
 
 function transferError(result: MediaTransferOutcome, url: string): DatasetAccessError | undefined {
   if (result.kind === 'aborted') return { kind: 'aborted', message: 'Media request cancelled.', url };

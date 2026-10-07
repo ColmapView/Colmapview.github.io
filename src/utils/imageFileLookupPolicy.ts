@@ -49,6 +49,9 @@ export interface UrlCandidate {
   filename: string;
 }
 
+/** A mask URL folder with no mask for this many images before its first one is treated as absent. */
+export const URL_MASK_ABSENCE_THRESHOLD = 8;
+
 export function normalizeImagePath(path: string): string {
   return path.replace(/\\/g, '/');
 }

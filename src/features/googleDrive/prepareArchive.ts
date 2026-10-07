@@ -7,13 +7,14 @@ import { MAX_BUFFERED_PUBLICATION_FILE_BYTES } from '../datasetPublishing/types'
 import { fetchDatasetResource } from '../../utils/fetchDatasetResource';
 import { ARCHIVE_SIZE_LIMIT } from '../../utils/zipValidation';
 import { readBoundedResponse } from '../../utils/publishedViewerState';
-import { buildMaskUrlCandidates } from '../../utils/imageFileLookupPolicy';
+import { buildMaskUrlCandidates, URL_MASK_ABSENCE_THRESHOLD } from '../../utils/imageFileLookupPolicy';
 import { awaitWithAbort } from '../../utils/awaitWithAbort';
 import { GoogleDrivePublishError } from './upload';
 import { boundedFetch } from '../huggingface/http';
 
 export interface DriveArchive { blob: Blob; md5: string; viewerBaseUrl: string }
 export type DriveArchiveProgress = (message: string, filesDone: number, filesTotal: number) => void;
+const archiveTooLarge = () => new GoogleDrivePublishError('The dataset ZIP exceeds the viewer’s 2 GiB archive limit. Use a smaller dataset or splat.', undefined, true);
 
 /** Store ZIP entries as browser Blob parts rather than one dataset-sized JS array. */
 export async function packageDriveArchive(prepared: PreparedPublication, signal: AbortSignal,
@@ -21,8 +22,7 @@ export async function packageDriveArchive(prepared: PreparedPublication, signal:
   const check = () => { signal.throwIfAborted(); assertCurrent(); };
   check();
   if (prepared.assets.length > 60_000) throw new GoogleDrivePublishError('This dataset has too many files for a Drive ZIP.', undefined, true);
-  const tooLarge = () => new GoogleDrivePublishError('The dataset ZIP exceeds the viewer’s 2 GiB archive limit. Use a smaller dataset or splat.', undefined, true);
-  if (prepared.assets.reduce((sum, asset) => sum + (asset.size ?? 0), 0) > sizeLimit) throw tooLarge();
+  if (prepared.assets.reduce((sum, asset) => sum + (asset.size ?? 0), 0) > sizeLimit) throw archiveTooLarge();
   const md5 = await awaitWithAbort(createMD5(), signal);
   check();
   const parts: Blob[] = [];
@@ -34,7 +34,7 @@ export async function packageDriveArchive(prepared: PreparedPublication, signal:
   const zip = new Zip((error, data) => {
     if (error) { failure = error; return; }
     total += data.byteLength;
-    if (total > sizeLimit) { failure = tooLarge(); return; }
+    if (total > sizeLimit) { failure = archiveTooLarge(); return; }
     chunks.push(new Uint8Array(data));
     md5.update(data);
     buffered += data.byteLength;
@@ -47,7 +47,7 @@ export async function packageDriveArchive(prepared: PreparedPublication, signal:
       const blob = await awaitWithAbort(asset.open(signal), signal);
       check();
       if ((asset.size !== null && asset.size !== blob.size) || blob.size + total > sizeLimit) {
-        if (blob.size + total > sizeLimit) throw tooLarge();
+        if (blob.size + total > sizeLimit) throw archiveTooLarge();
         throw new GoogleDrivePublishError(`The source file ${asset.path} changed. Publish again.`, undefined, true);
       }
       const entry = new ZipPassThrough(publicationPath(asset.path));
@@ -79,7 +79,7 @@ function parseRemoteUrl(value: string): URL {
 }
 
 export async function prepareDriveArchive(input: PublicationInput, signal: AbortSignal,
-  progress: DriveArchiveProgress, assertCurrent: () => void): Promise<DriveArchive> {
+  progress: DriveArchiveProgress, assertCurrent: () => void, sizeLimit = ARCHIVE_SIZE_LIMIT): Promise<DriveArchive> {
   const sdk = await import('@huggingface/hub');
   const read: typeof fetch = (value, init) => fetchDatasetResource(typeof value === 'string' ? value : value instanceof URL ? value.href : value.url,
     undefined, { ...init, signal });
@@ -104,27 +104,37 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
     parsed.url.pathname = parsed.url.pathname.replace(/(\/resolve\/)[^/]+\//, `$1${sha}/`);
     return parsed.url.href;
   };
-  const maskListings = new Map<string, Promise<Set<string>>>();
-  const readRemoteMask = async (base: string, name: string): Promise<Blob | null> => {
-    let paths: Set<string> | null = null;
+  const maskListings = new Map<string, Promise<Map<string, number>>>();
+  const maskAbsence = new Map<string, { misses: number; found: boolean }>();
+  let heldMaskBytes = 0;
+  const readRemoteMask = async (base: string, name: string): Promise<{ blob: Blob } | { url: string; size: number } | null> => {
     if (parseRemoteUrl(base).origin === 'https://huggingface.co') {
       if (!maskListings.has(base)) maskListings.set(base, (async () => {
         const folder = parseHfAssetUrl(base.replace(/\/?$/, '/'));
         const revision = await resolveRevision(folder.repoId, folder.revision);
-        const files = new Set<string>();
+        const files = new Map<string, number>();
         try {
           for await (const file of sdk.listFiles({ repo: { type: 'dataset', name: folder.repoId }, revision, path: folder.path, recursive: true, fetch: read })) {
-            if (file.type === 'file') files.add(file.path);
+            if (file.type === 'file') files.set(file.path, file.size);
           }
         } catch (error) {
           if (!(error && typeof error === 'object' && 'statusCode' in error && error.statusCode === 404)) throw error;
         }
         return files;
       })());
-      paths = await maskListings.get(base)!;
+      const files = await maskListings.get(base)!;
+      // The listing proves the mask exists, so it downloads with the images while packaging instead of being held.
+      for (const candidate of buildMaskUrlCandidates(base, name)) {
+        const size = files.get(parseHfAssetUrl(candidate.url).path);
+        if (size !== undefined) return { url: candidate.url, size };
+      }
+      return null;
     }
+    // Like the viewer's mask loader, stop asking a folder that had no mask for the first images (masks/ is a default).
+    const absence = maskAbsence.get(base) ?? { misses: 0, found: false };
+    maskAbsence.set(base, absence);
+    if (!absence.found && absence.misses >= URL_MASK_ABSENCE_THRESHOLD) return null;
     for (const candidate of buildMaskUrlCandidates(base, name)) {
-      if (paths && !paths.has(parseHfAssetUrl(candidate.url).path)) continue;
       const response = await readMask(await pinAssetUrl(candidate.url));
       // Like the viewer's mask loader, try the next name: S3 or GCS without list access answers a missing key with 403.
       if (response.status === 404 || response.status === 403) { await response.body?.cancel(); continue; }
@@ -132,15 +142,21 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
         await response.body?.cancel();
         throw new GoogleDrivePublishError(`Could not read the mask for ${name} (HTTP ${response.status}). Retry the publication.`);
       }
-      return readBoundedResponse(response, MAX_BUFFERED_PUBLICATION_FILE_BYTES, () => new GoogleDrivePublishError(
+      const blob = await readBoundedResponse(response, MAX_BUFFERED_PUBLICATION_FILE_BYTES, () => new GoogleDrivePublishError(
         `The mask for ${name} (${candidate.filename}) exceeds the 128 MiB publication limit for non-splat files. Shrink it in the source dataset, then publish again.`,
         undefined, true));
+      absence.found = true;
+      // Without a listing the probe is the download, so the mask is held until packaging; never more than the ZIP can take.
+      heldMaskBytes += blob.size;
+      if (heldMaskBytes > sizeLimit) throw archiveTooLarge();
+      return { blob };
     }
+    absence.misses++;
     return null;
   };
   const prepared = await preparePublication({ ...input, splats: 'active' }, signal, {
-    resolveRevision, listFiles: async () => [], pinAssetUrl, readRemoteMask, assertCurrent, maxAssetBytes: ARCHIVE_SIZE_LIMIT,
+    resolveRevision, listFiles: async () => [], pinAssetUrl, readRemoteMask, assertCurrent, maxAssetBytes: sizeLimit,
     progress: message => progress(message, 0, 0),
   });
-  return packageDriveArchive(prepared, signal, progress, assertCurrent);
+  return packageDriveArchive(prepared, signal, progress, assertCurrent, sizeLimit);
 }

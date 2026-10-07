@@ -34,7 +34,8 @@ interface PrepareDeps {
   assertCurrent: () => void;
   progress: (message: string) => void;
   pinAssetUrl?: (url: string) => Promise<string>;
-  readRemoteMask?: (base: string, name: string, signal: AbortSignal) => Promise<Blob | null>;
+  /** A mask already read while probing, or the listed file to download with the images. */
+  readRemoteMask?: (base: string, name: string, signal: AbortSignal) => Promise<{ blob: Blob } | { url: string; size: number } | null>;
   /** Bound a remote splat while downloading, before it becomes a complete Blob. */
   maxAssetBytes?: number;
 }
@@ -116,9 +117,13 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
     if (isRemote && mask) {
       if (!captured.maskUrlBase) return null;
       if (deps.readRemoteMask) {
-        const value = await deps.readRemoteMask(captured.maskUrlBase, name, signal);
+        const found = await deps.readRemoteMask(captured.maskUrlBase, name, signal);
         check();
-        return value ? fixed(path, value, 'mask') : null;
+        if (!found) return null;
+        if ('blob' in found) return fixed(path, found.blob, 'mask');
+        const asset = await remote(found.url, path, 'mask');
+        asset.size = found.size;
+        return asset;
       }
       const base = captured.maskUrlBase.replace(/\/?$/, '/');
       const available = await listRemoteMasks(base);

@@ -226,6 +226,46 @@ describe('Drive remote sources', () => {
       .rejects.toMatchObject({ message, permanent: true });
     expect(request).not.toHaveBeenCalled();
   });
+  const numbered = (count: number) => Array.from({ length: count }, (_, index) => buildImage({ imageId: index + 1, name: `photo${index}.jpg` }));
+  const masked = (images: ReturnType<typeof numbered>) => remoteInput({ imageUrlBase: bucket + 'images/', maskUrlBase: bucket + 'masks/' }, images);
+  it('stops probing a mask folder after 8 images without a mask, like the viewer', async () => {
+    const request = vi.fn(async (url: string) => url.startsWith(bucket + 'images/') ? new Response('original') : new Response(null, { status: 404 }));
+    vi.stubGlobal('fetch', request);
+    const files = await entries(await prepareDriveArchive(masked(numbered(20)), new AbortController().signal, () => {}, () => {}));
+    expect(Object.keys(files).filter(path => path.startsWith('images/'))).toHaveLength(20);
+    expect(Object.keys(files).filter(path => path.startsWith('masks/'))).toEqual([]);
+    expect(request.mock.calls.filter(([url]) => url.startsWith(bucket + 'masks/'))).toHaveLength(16);
+  });
+  it('keeps probing every image once the folder has produced a mask', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => url.startsWith(bucket + 'images/') ? new Response('original')
+      : [bucket + 'masks/photo0.jpg.png', bucket + 'masks/photo11.jpg.png'].includes(url) ? new Response('mask') : new Response(null, { status: 403 })));
+    const files = await entries(await prepareDriveArchive(masked(numbered(12)), new AbortController().signal, () => {}, () => {}));
+    expect(Object.keys(files).filter(path => path.startsWith('masks/')).sort()).toEqual(['masks/photo0.jpg.png', 'masks/photo11.jpg.png']);
+  });
+  it('stops downloading masks once they alone exceed the archive limit', async () => {
+    const request = vi.fn(async (url: string) => url.startsWith(bucket + 'images/') ? new Response('original')
+      : url.endsWith('.png') ? new Response('mask bytes') : new Response(null, { status: 404 }));
+    vi.stubGlobal('fetch', request);
+    await expect(prepareDriveArchive(masked(numbered(5)), new AbortController().signal, () => {}, () => {}, 25))
+      .rejects.toMatchObject({ message: expect.stringContaining('2 GiB archive limit'), permanent: true });
+    expect(request.mock.calls.filter(([url]) => url.endsWith('.png'))).toHaveLength(3);
+  });
+  it('downloads Hub masks while packaging, as it does images, instead of holding them from preparation', async () => {
+    const sha = 'f'.repeat(40);
+    const root = 'https://huggingface.co/datasets/owner/scene/resolve/';
+    const request = vi.fn(async (url: string) => {
+      if (url.includes('/revision/main?')) return Response.json({ _id: 'repo-object-id', id: 'owner/scene', sha });
+      if (url.includes(`/tree/${sha}/masks`)) return Response.json([{ type: 'file', path: 'masks/a.jpg.png', size: 6 }, { type: 'file', path: 'masks/b.jpg.png', size: 6 }]);
+      if (url.startsWith(`${root}${sha}/`)) return new Response(url.endsWith('.png') ? 'mask!!' : 'original');
+      return new Response(null, { status: 404 });
+    });
+    vi.stubGlobal('fetch', request);
+    const archive = await prepareDriveArchive(remoteInput({ imageUrlBase: `${root}main/images/`, maskUrlBase: `${root}main/masks/` },
+      [buildImage({ imageId: 1, name: 'a.jpg' }), buildImage({ imageId: 2, name: 'b.jpg' })]), new AbortController().signal, () => {}, () => {});
+    expect(request.mock.calls.map(([url]) => url).filter(url => url.includes('/resolve/')).map(url => url.slice(`${root}${sha}/`.length)))
+      .toEqual(['images/a.jpg', 'masks/a.jpg.png', 'images/b.jpg', 'masks/b.jpg.png']);
+    expect(strFromU8((await entries(archive))['masks/b.jpg.png'])).toBe('mask!!');
+  });
   it('names an oversized mask and the limit, and does not offer a retry', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => original(url)
       ?? (url === bucket + 'masks/photo.jpg.png'
