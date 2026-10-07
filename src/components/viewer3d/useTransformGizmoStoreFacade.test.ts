@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   useReconstructionStore,
   useTransformStore,
@@ -7,6 +7,12 @@ import {
 } from '../../store';
 import type { Sim3dEuler } from '../../types/sim3d';
 import { useTransformGizmoStoreFacade } from './useTransformGizmoStoreFacade';
+
+const { reloadFilesMock } = vi.hoisted(() => ({ reloadFilesMock: vi.fn(async () => true) }));
+
+vi.mock('../../hooks/useFileDropzone', () => ({
+  useFileDropzone: () => ({ reloadFiles: reloadFilesMock, processFiles: vi.fn(async () => true) }),
+}));
 
 describe('useTransformGizmoStoreFacade', () => {
   beforeEach(() => {
@@ -38,7 +44,8 @@ describe('useTransformGizmoStoreFacade', () => {
       transform,
       droppedFiles,
     });
-    expect(result.current.actions.reloadFiles).toEqual(expect.any(Function));
+    // The Reload path that keeps remote splat tiles, not a fresh load of the same files.
+    expect(result.current.actions.reloadFiles).toBe(reloadFilesMock);
     expect(result.current.actions.applyTransformToData).toEqual(expect.any(Function));
     expect(result.current.actions.confirmReload).toEqual(expect.any(Function));
   });

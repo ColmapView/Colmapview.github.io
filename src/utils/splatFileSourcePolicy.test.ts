@@ -345,7 +345,6 @@ describe('mergeRemoteSplatCatalog', () => {
 });
 
 describe('carryOverRemoteSplatSources', () => {
-  const loaded = (overrides: Partial<LoadedFiles>): LoadedFiles => ({ imageFiles: new Map(), hasMasks: false, ...overrides });
   const remoteFile = new File(['remote'], 'scene.spz');
   const remoteActive = { id: 'splats/scene.spz', path: 'splats/scene.spz', url: 'https://x/splats/scene.spz', size: 6, file: remoteFile };
   const remoteLazy = { id: 'splats/other.spz', path: 'splats/other.spz', url: 'https://x/splats/other.spz', size: 9 };
@@ -377,6 +376,20 @@ describe('carryOverRemoteSplatSources', () => {
     const current = loaded({ splatFile: remoteFile, splatFiles: [remoteFile], splatFileSources: [remoteActive] });
     const reloaded = { splatFile: local, splatFiles: [local], splatFileSources: [{ id: 'splats/scene.spz', path: 'splats/scene.spz', file: local }] };
     expect(carryOverRemoteSplatSources(current, reloaded)).toBe(reloaded);
+  });
+
+  it('lists the reloaded local splats first, then the remote tiles, keeping the remote splat on screen', () => {
+    const localFile = new File(['local'], 'local.spz');
+    const current = loaded({ splatFile: remoteFile, splatFiles: [localFile, remoteFile],
+      splatFileSources: [{ id: 'local.spz', path: 'local.spz', file: localFile }, remoteActive, remoteLazy] });
+    // A reload re-reads the local files and defaults to their first splat.
+    const reloadedLocal = { id: 'local.spz', path: 'local.spz', file: localFile };
+    const result = carryOverRemoteSplatSources(current,
+      { splatFile: localFile, splatFiles: [localFile], splatFileSources: [reloadedLocal] });
+    expect(result.splatFileSources).toEqual([reloadedLocal, remoteActive, remoteLazy]);
+    // Rebuilt from the merged sources: the local bytes and the downloaded remote tile, not the lazy one.
+    expect(result.splatFiles).toEqual([localFile, remoteFile]);
+    expect(result.splatFile).toBe(remoteFile);
   });
 
   it('changes nothing for datasets without remote tiles', () => {

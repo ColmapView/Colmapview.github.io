@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   useExportStore,
   usePointPickingStore,
@@ -10,8 +10,18 @@ import {
 import type { Sim3dEuler } from '../../../types/sim3d';
 import { useGlobalContextMenuActionStoreFacade } from './useGlobalContextMenuActionStoreFacade';
 
+const { reloadFilesMock, processFilesMock } = vi.hoisted(() => ({
+  reloadFilesMock: vi.fn(async () => true),
+  processFilesMock: vi.fn(async () => true),
+}));
+
+vi.mock('../../../hooks/useFileDropzone', () => ({
+  useFileDropzone: () => ({ reloadFiles: reloadFilesMock, processFiles: processFilesMock }),
+}));
+
 describe('useGlobalContextMenuActionStoreFacade', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     useExportStore.setState(useExportStore.getInitialState(), true);
     usePointPickingStore.setState(usePointPickingStore.getInitialState(), true);
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
@@ -39,6 +49,16 @@ describe('useGlobalContextMenuActionStoreFacade', () => {
     expect(result.current.confirmReload).toEqual(expect.any(Function));
     expect(result.current.applyTransformPreset).toEqual(expect.any(Function));
     expect(result.current.applyTransformToData).toEqual(expect.any(Function));
+  });
+
+  it('reloads through the Reload path, which keeps remote splat tiles', async () => {
+    const files = new Map([['sparse/0/cameras.bin', new File(['c'], 'cameras.bin')]]);
+    const { result } = renderHook(() => useGlobalContextMenuActionStoreFacade());
+
+    await act(async () => { await result.current.reloadFiles(files); });
+
+    expect(reloadFilesMock).toHaveBeenCalledExactlyOnceWith(files);
+    expect(processFilesMock).not.toHaveBeenCalled();
   });
 
   it('routes global context-menu action dependencies back to owning stores', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Reconstruction } from '../types/colmap';
+import type { LoadedFiles, Reconstruction } from '../types/colmap';
 import { noopLogger, type AppLogger } from '../utils/logger';
 import type { FileDropzoneWorkflowDeps } from './fileDropzoneWorkflow';
 import { processFileDropzoneFiles } from './fileDropzoneWorkflow';
@@ -108,6 +108,15 @@ function createDeps(overrides: Partial<FileDropzoneWorkflowDeps> = {}): FileDrop
     setUrlProgress: vi.fn(),
     setWasmReconstruction: vi.fn(),
     ...overrides,
+  };
+}
+
+/** A loaded-files store that, like the real one, reads back what the workflow committed. */
+function loadedFilesStore(initial: LoadedFiles | null) {
+  let current = initial;
+  return {
+    getLoadedFiles: vi.fn(() => current),
+    setLoadedFiles: vi.fn((files: LoadedFiles) => { current = files; }),
   };
 }
 
@@ -937,12 +946,12 @@ describe('file dropzone workflow', () => {
 
   it.each([true, false])('carries remote splat tiles across a reload only when asked (%s)', async preserve => {
     const remoteFile = new File(['remote'], 'scene.spz');
-    const current = loadedFiles({
+    const store = loadedFilesStore(loadedFiles({
       splatFile: remoteFile, splatFiles: [remoteFile],
       splatFileSources: [{ id: 'splats/scene.spz', path: 'splats/scene.spz', url: 'https://x/splats/scene.spz', size: 6, file: remoteFile }],
-    });
+    }));
     const deps = createDeps({
-      getLoadedFiles: vi.fn(() => current),
+      ...store,
       parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
       buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
     });
@@ -950,10 +959,32 @@ describe('file dropzone workflow', () => {
 
     await expect(processFileDropzoneFiles(files, deps, { preserveRemoteSplatSources: preserve })).resolves.toBe(true);
 
-    expect(deps.setLoadedFiles).toHaveBeenCalledWith(expect.objectContaining(preserve
+    expect(deps.setLoadedFiles).toHaveBeenCalledExactlyOnceWith(expect.objectContaining(preserve
       ? { splatFile: remoteFile, splatFileSources: [expect.objectContaining({ id: 'splats/scene.spz', file: remoteFile })] }
       : { splatFile: undefined, splatFileSources: [] }));
-    // The renderer already shows the kept splat, so the overlay must not wait for it.
+    expect(store.getLoadedFiles()?.splatFile).toBe(preserve ? remoteFile : undefined);
+    // Kept: the renderer already shows it. Dropped: nothing is left to render. Either way, no wait.
+    expect(deps.setUrlProgress).not.toHaveBeenCalledWith(expect.objectContaining({ currentFile: 'scene.spz' }));
+    expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
+  });
+
+  it('does not wait on the renderer when a reload re-reads the local splat it already shows', async () => {
+    const local = new File(['local'], 'scene.spz');
+    const store = loadedFilesStore(loadedFiles({
+      splatFile: local, splatFiles: [local], splatFileSources: [{ id: 'scene.spz', path: 'scene.spz', file: local }],
+    }));
+    const deps = createDeps({
+      ...store,
+      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
+      buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
+    });
+    // Reload passes the same dropped files back, so the splat is the very File on screen.
+    const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, file(name)]));
+    files.set('scene.spz', local);
+
+    await expect(processFileDropzoneFiles(files, deps, { preserveRemoteSplatSources: true })).resolves.toBe(true);
+
+    expect(store.getLoadedFiles()?.splatFile).toBe(local);
     expect(deps.setUrlProgress).not.toHaveBeenCalledWith(expect.objectContaining({ currentFile: 'scene.spz' }));
     expect(deps.setUrlLoading).toHaveBeenLastCalledWith(false);
   });
@@ -999,12 +1030,19 @@ describe('file dropzone workflow', () => {
     });
     const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, file(name)]));
 
-    await expect(processFileDropzoneFiles(files, deps, {
-      viewerState: saved,
-      onViewerState: viewerState => applySavedViewerState(viewerState, null),
-    })).resolves.toBe(true);
+    try {
+      await expect(processFileDropzoneFiles(files, deps, {
+        viewerState: saved,
+        onViewerState: viewerState => applySavedViewerState(viewerState, null),
+      })).resolves.toBe(true);
 
-    expect(useTransformStore.getState().splatTransform.translationX).toBe(5);
+      expect(useTransformStore.getState().splatTransform.translationX).toBe(5);
+    } finally {
+      useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+      useTransformStore.setState(useTransformStore.getInitialState(), true);
+      useUIStore.setState(useUIStore.getInitialState(), true);
+      usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
+    }
   });
 
   it('lets a settings file inside the files win over settings from their source', async () => {
@@ -1022,6 +1060,7 @@ describe('file dropzone workflow', () => {
 
     await processFileDropzoneFiles(files, deps, { viewerState: fromSource, onViewerState });
 
-    expect(onViewerState).toHaveBeenCalledWith(expect.objectContaining({ config: { ui: { backgroundColor: '#222222' } } }));
+    // The file inside replaces the source's settings; they are not applied as well.
+    expect(onViewerState).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ config: { ui: { backgroundColor: '#222222' } } }));
   });
 });

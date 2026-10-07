@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useNotificationStore, useReconstructionStore, useSplatBackendStore, useUIStore } from '../store';
 import type { DragEvent } from 'react';
@@ -9,6 +9,7 @@ import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE, showOptionalSettingsTimeoutWarning } from './optionalSettingsWarning';
+import { appLogger, noopLogger } from '../utils/logger';
 
 const { processFileDropzoneFilesMock } = vi.hoisted(() => ({
   processFileDropzoneFilesMock: vi.fn(async () => true),
@@ -17,6 +18,10 @@ const { processFileDropzoneFilesMock } = vi.hoisted(() => ({
 vi.mock('./fileDropzoneWorkflow', () => ({
   processFileDropzoneFiles: processFileDropzoneFilesMock,
 }));
+
+// Loaded while the file is collected, where no timeout applies: the real workflow's module graph
+// is a cold ~1 s transform that one test's 5 s budget should not absorb under parallel load.
+const actualWorkflow = await vi.importActual<typeof import('./fileDropzoneWorkflow')>('./fileDropzoneWorkflow');
 
 async function captureWorkflowDeps(): Promise<FileDropzoneWorkflowDeps> {
   const { result } = renderHook(() => useFileDropzone());
@@ -30,8 +35,15 @@ async function captureWorkflowDeps(): Promise<FileDropzoneWorkflowDeps> {
 const ply = new File(['x'], 'scene.ply');
 
 describe('useFileDropzone', () => {
-  afterEach(() => useReconstructionStore.getState().clear());
+  afterEach(() => {
+    // Unmount first: resetting the store under a mounted hook is an update outside act().
+    cleanup();
+    useReconstructionStore.getState().clear();
+    vi.restoreAllMocks();
+  });
   beforeEach(() => {
+    // The drop handlers log their scan progress through appLogger directly.
+    vi.spyOn(appLogger, 'info').mockImplementation(() => undefined);
     processFileDropzoneFilesMock.mockClear();
     useSplatBackendStore.setState(useSplatBackendStore.getInitialState(), true);
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
@@ -148,9 +160,9 @@ describe('useFileDropzone', () => {
     const deps = await captureWorkflowDeps();
     const a = buildFile('a.spz');
     const b = buildFile('b.spz');
-    useReconstructionStore.getState().setLoadedFiles({ ...buildLoadedFiles(), splatFile: a, splatFiles: [a, b],
+    act(() => useReconstructionStore.getState().setLoadedFiles({ ...buildLoadedFiles(), splatFile: a, splatFiles: [a, b],
       splatFileSources: [{ id: 'a.spz', path: 'a.spz', file: a }, { id: 'b.spz', path: 'b.spz', file: b }],
-    });
+    }));
     await act(async () => { await useReconstructionStore.getState().selectSplatSource(''); });
     await act(async () => { await deps.onViewerState?.({ version: 1, viewerVersion: 'test', viewState: null,
       config: { splat: { activeSourceId: 'b.spz' }, ui: { backgroundColor: '#234567' } },
@@ -172,11 +184,12 @@ describe('useFileDropzone', () => {
     const event = { preventDefault: vi.fn(), stopPropagation: vi.fn(), dataTransfer: {
       types: ['Files'], items: [{ kind: 'file', webkitGetAsEntry: () => entry }], files: [],
     } } as unknown as DragEvent<HTMLElement>;
-    const pending = result.current.handleDrop(event);
+    // The drop shows its loading state synchronously; start it inside act().
+    let pending!: Promise<void>;
+    act(() => { pending = result.current.handleDrop(event); });
     await vi.waitFor(() => expect(resolve).toBeTypeOf('function'));
     await act(async () => { await useReconstructionStore.getState().selectSplatSource(''); });
-    resolve(buildFile('colmapview.yaml'));
-    await act(async () => { await pending; });
+    await act(async () => { resolve(buildFile('colmapview.yaml')); await pending; });
     const options = processFileDropzoneFilesMock.mock.calls.at(-1)?.[2] as import('./fileDropzoneWorkflow').FileDropzoneWorkflowOptions;
     await act(async () => { await options.onViewerState?.({ version: 1, viewerVersion: 'test', viewState: null,
       config: { splat: { activeSourceId: 'b.spz' }, ui: { backgroundColor: '#345678' } },
@@ -188,7 +201,7 @@ describe('useFileDropzone', () => {
   it('rejects saved local settings from a cancelled job without changing the viewer', async () => {
     const deps = await captureWorkflowDeps();
     const initialColor = useUIStore.getState().backgroundColor;
-    useReconstructionStore.getState().clear();
+    act(() => useReconstructionStore.getState().clear());
     await expect(deps.onViewerState?.({ version: 1, viewerVersion: 'test', viewState: null,
       config: { ui: { backgroundColor: '#456789' } },
     })).rejects.toMatchObject({ name: 'AbortError' });
@@ -202,7 +215,6 @@ describe('useFileDropzone', () => {
   });
 
   it('keeps None through actual local COLMAP commit and saved YAML restoration', async () => {
-    const actual = await vi.importActual<typeof import('./fileDropzoneWorkflow')>('./fileDropzoneWorkflow');
     const a = buildFile('a.spz');
     const b = buildFile('b.spz');
     useReconstructionStore.getState().setLoadedFiles({ ...buildLoadedFiles(), splatFile: a, splatFiles: [a, b],
@@ -218,16 +230,19 @@ describe('useFileDropzone', () => {
     files.set('b.spz', b);
     files.set('colmapview.yaml', Object.assign(buildFile('colmapview.yaml'), { text: async () => yaml }));
     let resolve!: () => void;
-    const pending = actual.processFileDropzoneFiles(files, { ...deps,
-      parseFiles: async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), usedWasmPath: false }),
-      buildReconstruction: async () => ({ reconstruction: buildReconstruction(), pointCount: 0 }),
-      delay: () => new Promise<void>(done => { resolve = done; }),
-      clearCaches: vi.fn(), shouldPreloadSplatRuntime: () => false,
-    }, options);
-    await vi.waitFor(() => expect(resolve).toBeTypeOf('function'));
+    let pending!: Promise<boolean>;
+    // The real workflow publishes progress to the mounted hook's store until it reaches the paint delay.
+    await act(async () => {
+      pending = actualWorkflow.processFileDropzoneFiles(files, { ...deps, logger: noopLogger,
+        parseFiles: async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), usedWasmPath: false }),
+        buildReconstruction: async () => ({ reconstruction: buildReconstruction(), pointCount: 0 }),
+        delay: () => new Promise<void>(done => { resolve = done; }),
+        clearCaches: vi.fn(), shouldPreloadSplatRuntime: () => false,
+      }, options);
+      await vi.waitFor(() => expect(resolve).toBeTypeOf('function'));
+    });
     await act(async () => { await useReconstructionStore.getState().selectSplatSource(''); });
-    resolve();
-    await act(async () => { expect(await pending).toBe(true); });
+    await act(async () => { resolve(); expect(await pending).toBe(true); });
     expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
     expect(useReconstructionStore.getState().loadedFiles?.splatFileSources).toHaveLength(2);
     expect(useUIStore.getState().backgroundColor).toBe('#56789a');

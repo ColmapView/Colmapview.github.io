@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   useReconstructionStore,
@@ -9,6 +9,15 @@ import { buildReconstruction } from '../../../test/builders';
 import { createIdentityEuler } from '../../../utils/sim3dTransforms';
 import { TransformPanel, type TransformPanelProps } from './TransformPanel';
 import { TRANSFORM_PENDING_HINT } from './transformPanelViewModel';
+
+const { reloadFilesMock, processFilesMock } = vi.hoisted(() => ({
+  reloadFilesMock: vi.fn(async () => true),
+  processFilesMock: vi.fn(async () => true),
+}));
+
+vi.mock('../../../hooks/useFileDropzone', () => ({
+  useFileDropzone: () => ({ reloadFiles: reloadFilesMock, processFiles: processFilesMock }),
+}));
 
 function renderPanel(overrides: Partial<TransformPanelProps> = {}) {
   const props: TransformPanelProps = {
@@ -22,6 +31,7 @@ function renderPanel(overrides: Partial<TransformPanelProps> = {}) {
 
 describe('TransformPanel', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
     useTransformStore.setState(useTransformStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
@@ -64,5 +74,17 @@ describe('TransformPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
 
     expect(useTransformStore.getState().transform).toEqual(createIdentityEuler());
+  });
+
+  it('reloads the dropped files through the Reload path, which keeps remote splat tiles', async () => {
+    const droppedFiles = new Map([['sparse/0/cameras.bin', new File(['c'], 'cameras.bin')]]);
+    useReconstructionStore.setState({ droppedFiles });
+    renderPanel();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+
+    // waitFor: still holds if this button gains the confirmReload() step the other three have.
+    await waitFor(() => expect(reloadFilesMock).toHaveBeenCalledExactlyOnceWith(droppedFiles));
+    expect(processFilesMock).not.toHaveBeenCalled();
   });
 });
