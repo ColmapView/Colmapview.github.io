@@ -51,8 +51,8 @@ function createDeferred<T>() {
 beforeEach(() => {
   clearZipCache();
   vi.clearAllMocks();
-  // Every extracted mask is reported at info level.
-  vi.spyOn(appLogger, 'info').mockImplementation(() => undefined);
+  // Every extracted mask is reported at debug level.
+  vi.spyOn(appLogger, 'debug').mockImplementation(() => undefined);
 });
 
 afterEach(() => {

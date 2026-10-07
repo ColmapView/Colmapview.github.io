@@ -46,7 +46,7 @@ export async function fetchZipMask(name: string, options?: DatasetAccessOptions)
         try {
           const file = await entry.extract();
           if (!context.isCurrent()) return null;
-          appLogger.info(`[ZIP Mask] Found mask for ${name}`);
+          appLogger.debug(`[ZIP Mask] Found mask for ${name}`);
           return file;
         } catch { extractionFailed = true; /* Try the next candidate. */ }
       }

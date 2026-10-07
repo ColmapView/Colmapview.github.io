@@ -30,8 +30,9 @@ import {
   clearZipCache,
   getMaskPathVariants,
 } from './imageFileUtils';
+import { appLogger } from './logger';
 
-let consoleLog: ReturnType<typeof vi.spyOn>;
+let debugLog: ReturnType<typeof vi.spyOn>;
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -47,11 +48,11 @@ beforeEach(() => {
   clearUrlImageCache();
   clearZipCache();
   vi.clearAllMocks();
-  consoleLog = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+  debugLog = vi.spyOn(appLogger, 'debug').mockImplementation(() => undefined);
 });
 
 afterEach(() => {
-  consoleLog.mockRestore();
+  debugLog.mockRestore();
   vi.unstubAllGlobals();
 });
 
@@ -126,9 +127,9 @@ describe('removeZipMaskCacheEntries', () => {
     await fetchZipMask('cam1/photo2.jpg');
     await fetchZipMask('cam1/photo3.jpg');
 
-    expect(console.log).toHaveBeenCalledWith('[ZIP Mask] Found mask for cam1/photo1.jpg');
-    expect(console.log).toHaveBeenCalledWith('[ZIP Mask] Found mask for cam1/photo2.jpg');
-    expect(console.log).toHaveBeenCalledWith('[ZIP Mask] Found mask for cam1/photo3.jpg');
+    expect(debugLog).toHaveBeenCalledWith('[ZIP Mask] Found mask for cam1/photo1.jpg');
+    expect(debugLog).toHaveBeenCalledWith('[ZIP Mask] Found mask for cam1/photo2.jpg');
+    expect(debugLog).toHaveBeenCalledWith('[ZIP Mask] Found mask for cam1/photo3.jpg');
 
     expect(getZipMaskCacheStats().count).toBe(3);
 
@@ -158,7 +159,7 @@ describe('removeZipMaskCacheEntries', () => {
     });
 
     await fetchZipMask('existing.jpg');
-    expect(console.log).toHaveBeenCalledWith('[ZIP Mask] Found mask for existing.jpg');
+    expect(debugLog).toHaveBeenCalledWith('[ZIP Mask] Found mask for existing.jpg');
     expect(getZipMaskCacheStats().count).toBe(1);
 
     // Remove a name that was never cached
