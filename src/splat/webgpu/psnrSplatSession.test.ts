@@ -97,7 +97,7 @@ function makeRenderSession(): SplatRenderSession {
     resize: vi.fn(),
     renderToCanvas: vi.fn(),
     renderToTexture: vi.fn(async () => undefined),
-    getReadyState: vi.fn(() => 'initializing'),
+    getReadyState: vi.fn<SplatRenderSession['getReadyState']>(() => 'initializing'),
     onFirstFrame: vi.fn(() => vi.fn()),
     dispose: vi.fn(),
   };
@@ -648,9 +648,9 @@ describe('WebGPU splat PSNR session', () => {
   });
 
   it('invokes the default createImageBitmap with the global receiver', async () => {
-    const mutableGlobal = globalThis as typeof globalThis & {
-      createImageBitmap?: typeof createImageBitmap;
-    };
+    // Optional, so the cleanup can delete the stub when no global existed; intersecting with
+    // typeof globalThis made it required.
+    const mutableGlobal: { createImageBitmap?: typeof createImageBitmap } = globalThis;
     const originalCreateImageBitmap = mutableGlobal.createImageBitmap;
     const fakeDevice = makeDevice();
     const harness = createHarness({ device: fakeDevice.device });
@@ -924,7 +924,7 @@ describe('WebGPU splat PSNR session', () => {
 
   it('closes a decoded bitmap if disposed while image decode is pending', async () => {
     const fakeDevice = makeDevice();
-    const bitmapDecode = createDeferred<ImageBitmap>();
+    const bitmapDecode = createDeferred<ReturnType<typeof makeBitmap>>();
     const harness = createHarness({ device: fakeDevice.device });
     harness.deps.createBitmap.mockReturnValueOnce(bitmapDecode.promise);
     const session = await createWebGpuSplatPsnrSession({

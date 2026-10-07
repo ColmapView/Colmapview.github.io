@@ -8,7 +8,7 @@ import {
 import {
   clearVisibleWebGpuSplatSharedRuntimesForTests,
 } from './visibleSplatRuntimeRegistry';
-import type { GpuGaussianSceneRef } from './gaussianSceneResourceManager';
+import type { GaussianSceneResourceManager, GpuGaussianSceneRef } from './gaussianSceneResourceManager';
 import type { SplatCameraFrame, SplatRenderSession } from './gaussianRenderer';
 import type { WebGpuSplatDeviceHandle } from './webGpuSplatDevice';
 import type { Canvas2dContextSource } from '../../test/builders';
@@ -136,7 +136,7 @@ function makeSession(options: {
       firstFrameCallback?.();
     })),
     renderToTexture: vi.fn(),
-    getReadyState: vi.fn(() => 'initializing'),
+    getReadyState: vi.fn<SplatRenderSession['getReadyState']>(() => 'initializing'),
     onFirstFrame: vi.fn((callback: () => void) => {
       firstFrameCallback = callback;
       return vi.fn(() => {
@@ -171,11 +171,10 @@ function createHarness(options: {
   }) satisfies NonNullable<VisibleWebGpuSplatRendererAdapterDeps['initializeDevice']>;
   const sceneRef = makeSceneRef();
   const resourceManager = {
-    acquire: vi.fn(() => sceneRef),
+    acquire: vi.fn<GaussianSceneResourceManager['acquire']>(() => sceneRef),
     dispose: vi.fn(),
   };
-  const sessionHarness = options.session ? null : makeSession();
-  const session = options.session ?? sessionHarness?.session;
+  const session = options.session ?? makeSession().session;
   const createRenderSession = vi.fn(() => session as SplatRenderSession);
   const onFirstFrame = vi.fn();
   const onError = vi.fn();
@@ -188,7 +187,6 @@ function createHarness(options: {
     sceneRef,
     resourceManager,
     session,
-    sessionHarness,
     createRenderSession,
     onFirstFrame,
     onError,
@@ -221,12 +219,12 @@ describe('visible WebGPU splat renderer adapter', () => {
     vi.spyOn<Canvas2dContextSource, 'getContext'>(HTMLCanvasElement.prototype, 'getContext')
       .mockReturnValue({ drawImage } as unknown as CanvasRenderingContext2D);
     let submit!: () => void;
-    vi.mocked(harness.session!.renderToCanvas).mockImplementationOnce(() => new Promise<void>(resolve => { submit = resolve; }));
+    vi.mocked(harness.session.renderToCanvas).mockImplementationOnce(() => new Promise<void>(resolve => { submit = resolve; }));
     const capture = adapter.captureFrame();
     expect(drawImage).not.toHaveBeenCalled();
     submit();
     const frame = await capture;
-    expect(harness.session!.renderToCanvas).toHaveBeenCalledTimes(2);
+    expect(harness.session.renderToCanvas).toHaveBeenCalledTimes(2);
     expect(drawImage).toHaveBeenCalledWith(harness.canvas, 0, 0);
     expect(frame).not.toBe(harness.canvas);
     expect([frame.width, frame.height]).toEqual([16, 8]);
@@ -260,7 +258,7 @@ describe('visible WebGPU splat renderer adapter', () => {
     adapter.setFrameSnapshot(makeFrame());
     await adapter.loadCloud(makeCloud(), { sceneId: 'failed-capture' });
     await flushPromises();
-    vi.mocked(harness.session![method]).mockImplementationOnce(() => { throw new Error('Device lost'); });
+    vi.mocked(harness.session[method]).mockImplementationOnce(() => { throw new Error('Device lost'); });
     await expect(adapter.captureFrame()).rejects.toThrow('Device lost');
     expect(harness.onError).toHaveBeenCalled();
   });
@@ -446,7 +444,8 @@ describe('visible WebGPU splat renderer adapter', () => {
   });
 
   it('coalesces render requests while a frame is in flight', async () => {
-    let resolveRender: (() => void) | null = null;
+    // Assigned inside a callback, so its declared type must not narrow to null.
+    let resolveRender = null as (() => void) | null;
     const sessionHarness = makeSession({
       renderToCanvas: () => new Promise<void>((resolve) => {
         resolveRender = resolve;
@@ -495,7 +494,8 @@ describe('visible WebGPU splat renderer adapter', () => {
   });
 
   it('does not mutate session camera state while a visible frame is in flight', async () => {
-    let resolveRender: (() => void) | null = null;
+    // Assigned inside a callback, so its declared type must not narrow to null.
+    let resolveRender = null as (() => void) | null;
     const sessionHarness = makeSession({
       renderToCanvas: () => new Promise<void>((resolve) => {
         resolveRender = resolve;
@@ -644,7 +644,8 @@ describe('visible WebGPU splat renderer adapter', () => {
     });
 
     await adapter.loadCloud(makeCloud(), { sceneId: 'scene' });
-    harness.onDeviceLost()?.({ message: '', reason: '' } as GPUDeviceLostInfo);
+    // Before the 'unknown' reason existed, browsers left reason undefined for an unexpected loss.
+    harness.onDeviceLost()?.({ message: '', reason: undefined } as unknown as GPUDeviceLostInfo);
 
     expect(harness.onError).toHaveBeenCalledWith('WebGPU device lost');
     expect(harness.session.dispose).toHaveBeenCalledTimes(1);

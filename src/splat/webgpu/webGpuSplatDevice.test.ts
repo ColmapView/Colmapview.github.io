@@ -139,7 +139,7 @@ describe('WebGPU splat device initialization', () => {
       requestAdapter: vi.fn()
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(fallbackAdapter),
-      getPreferredCanvasFormat: vi.fn(() => 'rgba8unorm'),
+      getPreferredCanvasFormat: vi.fn((): GPUTextureFormat => 'rgba8unorm'),
     };
 
     const handle = await initializeWebGpuSplatDevice(canvas, { gpu });
@@ -160,7 +160,7 @@ describe('WebGPU splat device initialization', () => {
       requestAdapter: vi.fn()
         .mockRejectedValueOnce(new Error('No available adapters'))
         .mockResolvedValueOnce(fallbackAdapter),
-      getPreferredCanvasFormat: vi.fn(() => 'rgba8unorm'),
+      getPreferredCanvasFormat: vi.fn((): GPUTextureFormat => 'rgba8unorm'),
     };
 
     const handle = await initializeWebGpuSplatDevice(canvas, { gpu });
@@ -186,7 +186,7 @@ describe('WebGPU splat device initialization', () => {
         requestAdapter: vi.fn()
           .mockReturnValueOnce(pendingAdapterRequest)
           .mockResolvedValueOnce(fallbackAdapter),
-        getPreferredCanvasFormat: vi.fn(() => 'rgba8unorm'),
+        getPreferredCanvasFormat: vi.fn((): GPUTextureFormat => 'rgba8unorm'),
       };
 
       const adapterPromise = requestPreferredWebGpuSplatAdapter(gpu, undefined, 10);
@@ -211,7 +211,7 @@ describe('WebGPU splat device initialization', () => {
           .mockImplementationOnce(() => new Promise((resolve) => {
             setTimeout(() => resolve(lowPowerAdapter), 20);
           })),
-        getPreferredCanvasFormat: vi.fn(() => 'rgba8unorm'),
+        getPreferredCanvasFormat: vi.fn((): GPUTextureFormat => 'rgba8unorm'),
       };
 
       const adapterPromise = requestPreferredWebGpuSplatAdapter(gpu, undefined, 30);
@@ -325,7 +325,8 @@ describe('WebGPU splat device initialization', () => {
     try {
       const { adapter, canvas, context, device, gpu } = createDeviceHarness();
       const pendingDeviceRequest = createDeferred<GPUDevice>();
-      vi.mocked(adapter?.requestDevice).mockReturnValue(pendingDeviceRequest.promise);
+      // The harness builds its default adapter when none is passed.
+      vi.mocked(adapter!.requestDevice).mockReturnValue(pendingDeviceRequest.promise);
 
       const initializePromise = initializeWebGpuSplatDevice(canvas, {
         gpu,

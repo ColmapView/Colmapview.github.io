@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { GaussianCloud } from '../gaussianCloud';
 import {
   uploadPackedWebGpuGaussianSceneResourcesAsync,
@@ -22,7 +22,7 @@ type FakeBuffer = WebGpuUploadedBuffer & {
   label: string;
   size: number;
   usage: number;
-  destroy: ReturnType<typeof vi.fn>;
+  destroy: Mock<() => void>;
 };
 
 function makeCloud(overrides: Partial<GaussianCloud> = {}): GaussianCloud {

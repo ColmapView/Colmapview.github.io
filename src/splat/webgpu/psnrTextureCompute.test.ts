@@ -30,7 +30,8 @@ function makeFakeDevice(
   let readbackIndex = 0;
   const dispatches: Array<[number, number | undefined, number | undefined]> = [];
   const shaderCodes: string[] = [];
-  const bindGroups: GPUBindGroupDescriptor[] = [];
+  // WebGPU types entries as an Iterable; recording them as an array lets tests index them.
+  const bindGroups: Array<Omit<GPUBindGroupDescriptor, 'entries'> & { entries: GPUBindGroupEntry[] }> = [];
   const bufferDescriptors: GPUBufferDescriptor[] = [];
   const writeBuffers: ArrayBuffer[] = [];
   const copySizes: number[] = [];
@@ -80,7 +81,7 @@ function makeFakeDevice(
       } as unknown as GPUBuffer;
     }),
     createBindGroup: vi.fn((descriptor: GPUBindGroupDescriptor) => {
-      bindGroups.push(descriptor);
+      bindGroups.push({ ...descriptor, entries: [...descriptor.entries] });
       return { kind: 'bind-group' } as unknown as GPUBindGroup;
     }),
     createCommandEncoder: vi.fn(() => commandEncoder),
