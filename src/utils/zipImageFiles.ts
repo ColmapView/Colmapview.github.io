@@ -6,6 +6,7 @@ import { getMaskPathVariants } from './imageFileLookupPolicy';
 import { compressAndResizeToJpeg } from './imageFileCompression';
 import { createImageFileRequestState } from './imageFileRequestState';
 import type { DatasetAccessOptions } from '../dataset/types';
+import type { ArchiveEntry } from '../types/libarchive';
 
 const zipImageState = createImageFileRequestState();
 const zipMaskState = createImageFileRequestState();
@@ -31,12 +32,24 @@ export async function fetchZipImageRaw(name: string, options?: DatasetAccessOpti
   return zipRawState.request(name, async () => extractZipImage(name), options, false);
 }
 
+/** One line per archive, not per mask: a masked archive can hold thousands of masks. */
+const summarisedMaskIndexes = new WeakSet<Map<string, ArchiveEntry>>();
+function summariseZipMasks(imageIndex: Map<string, ArchiveEntry>): void {
+  if (summarisedMaskIndexes.has(imageIndex)) return;
+  summarisedMaskIndexes.add(imageIndex);
+  // Each file is indexed under several path suffixes; only the one starting at masks/ is a mask lookup key.
+  let count = 0;
+  for (const key of imageIndex.keys()) if (/^masks\//i.test(key)) count++;
+  if (count) appLogger.info(`[ZIP Mask] Found ${count} mask${count === 1 ? '' : 's'}`);
+}
+
 export async function fetchZipMask(name: string, options?: DatasetAccessOptions): Promise<File | null> {
   if (!hasActiveZipArchive()) return null;
   const cached = options?.signal?.aborted ? undefined : zipMaskState.getCached(name);
   if (cached) return cached;
   const imageIndex = getActiveZipImageIndex();
   if (!imageIndex) return null;
+  summariseZipMasks(imageIndex);
   return zipMaskState.request(name, async context => {
     let extractionFailed = false;
     for (const path of getMaskPathVariants(name)) {
@@ -46,7 +59,6 @@ export async function fetchZipMask(name: string, options?: DatasetAccessOptions)
         try {
           const file = await entry.extract();
           if (!context.isCurrent()) return null;
-          appLogger.debug(`[ZIP Mask] Found mask for ${name}`);
           return file;
         } catch { extractionFailed = true; /* Try the next candidate. */ }
       }

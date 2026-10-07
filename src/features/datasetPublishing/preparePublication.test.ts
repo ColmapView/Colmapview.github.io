@@ -275,8 +275,8 @@ describe('publication snapshot preparation', () => {
       ['masks/nested/photo.png.png', buildArchiveEntry({ name: 'masks/nested/photo.png.png', size: mask.size, extract: extractMask })],
     ]);
     setActiveZipArchive(buildArchiveReader(), index);
-    // Extracting the mask is reported at debug level.
-    vi.spyOn(appLogger, 'debug').mockImplementation(() => undefined);
+    // Reading the archive's first mask reports its mask count at info level.
+    vi.spyOn(appLogger, 'info').mockImplementation(() => undefined);
     try {
       const prepared = await preparePublication(source, new AbortController().signal, deps());
       expect(extractMask).not.toHaveBeenCalled();

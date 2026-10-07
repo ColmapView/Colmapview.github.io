@@ -51,8 +51,8 @@ function createDeferred<T>() {
 beforeEach(() => {
   clearZipCache();
   vi.clearAllMocks();
-  // Every extracted mask is reported at debug level.
-  vi.spyOn(appLogger, 'debug').mockImplementation(() => undefined);
+  // An archive's mask count is reported once, at info level.
+  vi.spyOn(appLogger, 'info').mockImplementation(() => undefined);
 });
 
 afterEach(() => {
@@ -133,6 +133,28 @@ describe('zip image files', () => {
     vi.mocked(findZipEntry).mockClear();
     expect(await fetchZipMask('cam1/photo2.jpg')).toBe(maskFile);
     expect(findZipEntry).not.toHaveBeenCalled();
+  });
+
+  it('reports how many masks each archive holds, once, when its masks are first read', async () => {
+    vi.mocked(hasActiveZipArchive).mockReturnValue(true);
+    vi.mocked(findZipEntry).mockImplementation((path, index) => index.get(path) ?? null);
+    const [maskA, maskB, image] = ['scene/masks/a.jpg.png', 'scene/masks/b.jpg.png', 'scene/images/a.jpg'].map(name => buildArchiveEntry({ name }));
+    // The index keeps every path suffix of each file: each mask file counts once, and images not at all.
+    vi.mocked(getActiveZipImageIndex).mockReturnValue(new Map([
+      ['scene/masks/a.jpg.png', maskA], ['masks/a.jpg.png', maskA], ['scene/masks/b.jpg.png', maskB], ['masks/b.jpg.png', maskB],
+      ['scene/images/a.jpg', image], ['images/a.jpg', image], ['a.jpg', image],
+    ]));
+    await fetchZipMask('a.jpg');
+    await fetchZipMask('b.jpg');
+    expect(appLogger.info).toHaveBeenCalledExactlyOnceWith('[ZIP Mask] Found 2 masks');
+
+    vi.mocked(getActiveZipImageIndex).mockReturnValue(new Map([['masks/c.jpg.png', buildArchiveEntry({ name: 'masks/c.jpg.png' })]]));
+    await fetchZipMask('c.jpg');
+    expect(appLogger.info).toHaveBeenLastCalledWith('[ZIP Mask] Found 1 mask');
+
+    vi.mocked(getActiveZipImageIndex).mockReturnValue(new Map([['images/d.jpg', buildArchiveEntry({ name: 'images/d.jpg' })]]));
+    await fetchZipMask('d.jpg');
+    expect(appLogger.info).toHaveBeenCalledTimes(2);
   });
 
   it('clears ZIP image and mask caches and releases the active archive', async () => {
