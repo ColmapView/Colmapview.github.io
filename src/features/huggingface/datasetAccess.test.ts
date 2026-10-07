@@ -266,6 +266,19 @@ describe('Hugging Face private dataset reads', () => {
     expect(warn).toHaveBeenCalledExactlyOnceWith(CONTINUE_AFTER_FAILED_CHECK, error);
   });
 
+  it('lets the dataset files decide when a stalled Hub API times out on an engine without abort reasons', async () => {
+    vi.useFakeTimers();
+    // Such engines reject the aborted fetch with their own AbortError; fetchWithTimeout reports its timeout.
+    request.mockImplementation((_url, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')));
+    }));
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
+    const checked = checkHuggingFaceDatasetAccess(info, url => fetchDatasetResource(url, 100));
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(checked).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledExactlyOnceWith(CONTINUE_AFTER_FAILED_CHECK, expect.objectContaining({ name: 'TimeoutError' }));
+  });
+
   it.each([
     ['cancellation', new DOMException('Dataset load cancelled', 'AbortError')],
     ['a sign-in answer', new HfError('Sign in with Hugging Face to open private datasets, then retry the URL.', 401)],

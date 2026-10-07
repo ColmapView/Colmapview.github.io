@@ -103,4 +103,36 @@ describe('fetchWithTimeout', () => {
     expect(cancel).toHaveBeenCalledOnce();
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  /** Engines without abort-reason propagation reject an aborted fetch with their own AbortError. */
+  function stubFetchWithoutAbortReasons() {
+    vi.stubGlobal('fetch', vi.fn((_url, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')));
+    })));
+  }
+
+  it('reports its own timeout when fetch rejects with a plain AbortError', async () => {
+    stubFetchWithoutAbortReasons();
+    const rejected = expect(fetchWithTimeout('/stalled', 100)).rejects.toMatchObject({ name: 'TimeoutError' });
+    await vi.advanceTimersByTimeAsync(100);
+    await rejected;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("reports the caller's own reason when fetch rejects with a plain AbortError", async () => {
+    stubFetchWithoutAbortReasons();
+    const controller = new AbortController();
+    const reason = new DOMException('Dataset load cancelled', 'AbortError');
+    const rejected = expect(fetchWithTimeout('/cancel', 100, { signal: controller.signal })).rejects.toBe(reason);
+    controller.abort(reason);
+    await rejected;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('keeps a failure that is not an abort', async () => {
+    const failure = new TypeError('Failed to fetch');
+    vi.stubGlobal('fetch', vi.fn(async () => { throw failure; }));
+    await expect(fetchWithTimeout('/offline', 100)).rejects.toBe(failure);
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });

@@ -546,3 +546,11 @@ describe('toArrayBuffer', () => {
     expect(Array.from(new Uint8Array(buffer))).toEqual([3, 4, 5]);
   });
 });
+
+describe('urlUtils module surface', () => {
+  it('leaves the transport timeout to fetchWithTimeout and fetchDatasetResource', async () => {
+    const urlUtils = await import('./urlUtils');
+    expect(urlUtils).not.toHaveProperty('fetchWithTimeout');
+    expect(urlUtils).not.toHaveProperty('FETCH_TIMEOUT');
+  });
+});

@@ -93,6 +93,8 @@ export async function fetchWithTimeout(
     return result;
   } catch (error) {
     cleanup();
+    // Some engines reject an aborted fetch with their own AbortError instead of the signal's reason.
+    if (controller.signal.aborted && controller.signal.reason !== undefined) throw controller.signal.reason;
     throw error;
   }
 }

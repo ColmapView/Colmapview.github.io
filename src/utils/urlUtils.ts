@@ -8,7 +8,6 @@ import { detectCloudProvider, getCorsInstructions } from './urlCloudStorage';
 import { parseSafeIntegerString } from './numberParsing';
 import { fetchDatasetResource } from './fetchDatasetResource';
 import { normalizeHuggingFaceDatasetUrl } from './huggingFaceUrl';
-export { fetchWithTimeout, FETCH_TIMEOUT } from './fetchWithTimeout';
 
 /** Reports download progress as bytes arrive. totalBytes is 0 when unknown. */
 export type DownloadProgressCallback = (loadedBytes: number, totalBytes: number) => void;
