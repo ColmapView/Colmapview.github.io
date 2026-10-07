@@ -7,7 +7,8 @@ import {
   useCameraStore, usePointCloudStore, usePointPickingStore, useReconstructionStore, useTransformStore, useUIStore,
 } from '../../store';
 import type { CameraViewState } from '../../store/types';
-import { buildLoadedFiles, buildReconstruction } from '../../test/builders';
+import { buildCamera, buildImage, buildLoadedFiles, buildReconstruction } from '../../test/builders';
+import { CameraModelId } from '../../types/colmap';
 import type { PublishedViewerState } from '../../utils/publishedViewerState';
 import { TrackballControls } from './TrackballControls';
 
@@ -47,6 +48,14 @@ const savedView: CameraViewState = {
   target: savedTarget.toArray() as [number, number, number],
   distance: 6,
 };
+
+const PANORAMA_ID = 7;
+// Identity rotation puts the capture center at -tvec, away from the saved view.
+const panoramaCenter = new THREE.Vector3(4, 0, 0);
+const panoramaScene = () => buildReconstruction({
+  cameras: [buildCamera({ cameraId: 3, modelId: CameraModelId.EQUIRECTANGULAR, width: 3840, height: 1920, params: [3840, 1920] })],
+  images: [buildImage({ imageId: PANORAMA_ID, cameraId: 3, tvec: [-4, 0, 0] })],
+});
 
 function Viewer() {
   // As in Scene3D, resetView reaches the controls as a new reset trigger.
@@ -88,6 +97,13 @@ function finishFlights() {
   }
 }
 
+function mountWithSelectedPanorama(undistortionEnabled: boolean) {
+  useReconstructionStore.setState({ reconstruction: panoramaScene() });
+  useCameraStore.setState({ selectedImageId: PANORAMA_ID, undistortionEnabled });
+  render(<Viewer />);
+  finishFlights();
+}
+
 function expectSavedView() {
   const { camera } = scene.getState();
   expect(camera.position.distanceTo(savedPosition)).toBeCloseTo(0, 6);
@@ -121,5 +137,46 @@ describe('TrackballControls restoring a saved view', () => {
     finishFlights();
     expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeDefined();
     expectSavedView();
+  });
+
+  it('ends at the saved view when a restore without a download turns undistortion on over a selected panorama', async () => {
+    mountWithSelectedPanorama(false);
+    // The dataset lists no splat, so nothing is downloaded between navigation and the rest of the settings.
+    const saved: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: savedView,
+      config: { camera: { undistortionEnabled: true, selectedImageId: PANORAMA_ID } } };
+
+    await act(async () => { await applySavedViewerState(saved, null); });
+    finishFlights();
+
+    expect(useCameraStore.getState()).toMatchObject({ undistortionEnabled: true, selectedImageId: PANORAMA_ID });
+    expectSavedView();
+  });
+
+  it('ends at the saved view when Reload turns undistortion back off over a selected panorama', async () => {
+    mountWithSelectedPanorama(true);
+    // Reload re-applies the saved settings without their splat choice, in the same synchronous run that
+    // re-commits the scene and resets the view.
+    const retained: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: savedView,
+      config: { camera: { undistortionEnabled: false } } };
+
+    await act(async () => {
+      useReconstructionStore.getState().setReconstruction(panoramaScene());
+      useUIStore.getState().resetView();
+      await applySavedViewerState(retained, null);
+    });
+    finishFlights();
+
+    expect(useCameraStore.getState()).toMatchObject({ undistortionEnabled: false, selectedImageId: PANORAMA_ID });
+    expectSavedView();
+  });
+
+  it('still flies into the selected panorama when the user turns undistortion on', () => {
+    mountWithSelectedPanorama(false);
+
+    act(() => useCameraStore.getState().setUndistortionEnabled(true));
+    finishFlights();
+
+    // U on steps inside the photosphere to the capture center.
+    expect(scene.getState().camera.position.distanceTo(panoramaCenter)).toBeLessThan(0.01);
   });
 });

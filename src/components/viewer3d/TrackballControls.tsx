@@ -240,9 +240,10 @@ export function TrackballControls({ target, radius, resetTrigger, viewDirection,
   useEffect(() => {
     const toggled = prevUndistortionEnabled.current !== undistortionEnabled;
     prevUndistortionEnabled.current = undistortionEnabled;
-    if (!toggled || selectedSphericalImageId === null) return;
+    // Restored settings bring U in the same commit as their saved view; the re-fly would replace that view.
+    if (!toggled || selectedSphericalImageId === null || flyToViewState) return;
     navActions.flyToImage(selectedSphericalImageId);
-  }, [undistortionEnabled, selectedSphericalImageId, navActions]);
+  }, [undistortionEnabled, selectedSphericalImageId, flyToViewState, navActions]);
 
   useTrackballModeSync({
     cameraMode,
