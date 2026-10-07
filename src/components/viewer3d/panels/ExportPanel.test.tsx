@@ -49,6 +49,21 @@ describe('ExportPanel', () => {
     expect(processFilesMock).not.toHaveBeenCalled();
   });
 
+  it('leaves the transform to the reloaded scene to discard once confirmed', async () => {
+    const droppedFiles = new Map([['sparse/0/cameras.bin', new File(['c'], 'cameras.bin')]]);
+    const transform = { ...createIdentityEuler(), scale: 1.5 };
+    useReconstructionStore.setState({ droppedFiles });
+    useTransformStore.setState({ transform });
+    renderPanel();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+
+    await waitFor(() => expect(reloadFilesMock).toHaveBeenCalledExactlyOnceWith(droppedFiles));
+    expect(requestConfirmationMock).toHaveBeenCalledOnce();
+    // This stand-in never commits a scene, so a cancelled or failed Reload would keep the transform.
+    expect(useTransformStore.getState().transform).toEqual(transform);
+  });
+
   it('asks before a Reload that would discard a pending transform, and stays put when declined', async () => {
     const droppedFiles = new Map([['sparse/0/cameras.bin', new File(['c'], 'cameras.bin')]]);
     const transform = { ...createIdentityEuler(), scale: 1.5 };

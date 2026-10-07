@@ -102,7 +102,8 @@ describe('TransformPanel', () => {
     await waitFor(() => expect(confirm).toHaveBeenCalledOnce());
     if (confirmed) {
       await waitFor(() => expect(reloadFilesMock).toHaveBeenCalledWith(droppedFiles));
-      expect(useTransformStore.getState().transform).toEqual(createIdentityEuler());
+      // Discarded only when the reloaded scene commits, which this stand-in never does.
+      expect(useTransformStore.getState().transform).toEqual(transform);
     } else {
       expect(reloadFilesMock).not.toHaveBeenCalled();
       expect(useTransformStore.getState().transform).toEqual(transform);

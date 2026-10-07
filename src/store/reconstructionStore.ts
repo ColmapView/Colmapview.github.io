@@ -262,7 +262,7 @@ interface ReconstructionState {
 
   /** Committed edits since the current dataset was loaded. Not persisted. */
   reconstructionEditRevision: number;
-  /** Without `{ edited: true }` this is a scene load: the edit revision resets and pending deletion marks are cleared. */
+  /** Without `{ edited: true }` this is a scene load: the edit revision resets, pending deletion marks are cleared and the scene transform returns to identity. */
   setReconstruction: (rec: Reconstruction, options?: { edited?: boolean }) => void;
   setWasmReconstruction: (wasm: ReconstructionSource | null) => void;
   setLoadedFiles: (files: LoadedFiles) => void;
@@ -337,8 +337,12 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       progress: 100,
       error: null
     });
-    // A loaded scene replaces the one whose images the pending deletion marks name.
-    if (!options?.edited) useDeletionStore.getState().clearPendingDeletions();
+    // A loaded scene replaces the one whose images the pending deletion marks name, and starts at
+    // identity: its own saved alignment is applied right after this commit, in the same task.
+    if (!options?.edited) {
+      useDeletionStore.getState().clearPendingDeletions();
+      useTransformStore.getState().resetTransform();
+    }
   },
 
   setWasmReconstruction: (wasmReconstruction) => {

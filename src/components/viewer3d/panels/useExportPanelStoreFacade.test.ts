@@ -83,12 +83,13 @@ describe('useExportPanelStoreFacade', () => {
       translationY: 5,
     });
 
+    // Reload leaves the transform to the reloaded scene's commit; the panel no longer resets it.
+    expect(result.current.transform).not.toHaveProperty('resetTransform');
+
     act(() => {
-      result.current.transform.resetTransform();
       result.current.actions.addNotification('info', 'Export ready', 2500);
     });
 
-    expect(useTransformStore.getState().transform).toEqual(createIdentityEuler());
     expect(useNotificationStore.getState().notifications).toMatchObject([
       {
         type: 'info',

@@ -52,7 +52,6 @@ export const ExportPanel = memo(function ExportPanel({
       getLiveReconstruction,
     },
     transform: {
-      resetTransform,
       getTransform,
       getSplatTransform,
     },
@@ -202,9 +201,8 @@ export const ExportPanel = memo(function ExportPanel({
   const handleReload = useCallback(async () => {
     if (!droppedFiles) return;
     if (!await confirmReload()) return;
-    resetTransform();
     reloadFiles(droppedFiles);
-  }, [droppedFiles, confirmReload, resetTransform, reloadFiles]);
+  }, [droppedFiles, confirmReload, reloadFiles]);
 
   const hasCameras = cameras.length > 0;
   const hasImages = imageNames.length > 0 && dataset.hasImages();

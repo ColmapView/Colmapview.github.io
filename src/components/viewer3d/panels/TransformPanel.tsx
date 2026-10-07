@@ -62,7 +62,6 @@ export const TransformPanel = memo(function TransformPanel({
   const { reloadFiles } = useFileDropzone();
   const reload = async () => {
     if (!droppedFiles || !await confirmReload()) return;
-    resetTransform();
     void reloadFiles(droppedFiles);
   };
 

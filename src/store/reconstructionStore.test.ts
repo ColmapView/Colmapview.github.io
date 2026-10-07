@@ -22,6 +22,7 @@ import { noopLogger } from '../utils/logger';
 import type { ReconstructionSource } from '../wasm/reconstructionService';
 import { getSplatDownloadProgress, getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
+import { createIdentityEuler } from '../utils/sim3dTransforms';
 import {
   dismissOptionalSettingsTimeoutWarning,
   OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE,
@@ -480,6 +481,20 @@ describe('reconstruction store URL load lifecycle', () => {
 
     useReconstructionStore.getState().setReconstruction(buildReconstruction());
     expect(useDeletionStore.getState().pendingDeletions.size).toBe(0);
+  });
+
+  it('starts each loaded scene at identity, keeping its transform across its edits', () => {
+    useTransformStore.setState(useTransformStore.getInitialState(), true);
+    useReconstructionStore.getState().setReconstruction(buildReconstruction());
+    const alignment = { ...createIdentityEuler(), rotationY: 0.5, translationX: 2 };
+    useTransformStore.getState().setTransform(alignment);
+
+    // Applied edits, deletions and camera conversions commit with { edited: true }.
+    useReconstructionStore.getState().setReconstruction(buildReconstruction(), { edited: true });
+    expect(useTransformStore.getState().transform).toEqual(alignment);
+
+    useReconstructionStore.getState().setReconstruction(buildReconstruction());
+    expect(useTransformStore.getState().transform).toEqual(createIdentityEuler());
   });
 
   it('preserves accumulated splat transform when only the active splat file changes', () => {

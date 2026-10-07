@@ -25,7 +25,6 @@ interface ExportPanelDataFacade {
 }
 
 interface ExportPanelTransformFacade {
-  resetTransform: TransformState['resetTransform'];
   getTransform: () => TransformState['transform'];
   getSplatTransform: () => TransformState['splatTransform'];
 }
@@ -52,7 +51,6 @@ export function useExportPanelStoreFacade(): ExportPanelStoreFacade {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const loadedFiles = useReconstructionStore((s) => s.loadedFiles);
   const droppedFiles = useReconstructionStore((s) => s.droppedFiles);
-  const resetTransform = useTransformStore((s) => s.resetTransform);
   const pendingDeletions = useDeletionStore((s) => s.pendingDeletions);
   const addNotification = useNotificationStore((s) => s.addNotification);
 
@@ -70,7 +68,6 @@ export function useExportPanelStoreFacade(): ExportPanelStoreFacade {
       },
     },
     transform: {
-      resetTransform,
       getTransform: () => useTransformStore.getState().transform,
       getSplatTransform: () => useTransformStore.getState().splatTransform,
     },

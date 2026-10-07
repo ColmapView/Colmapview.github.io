@@ -22,7 +22,6 @@ export async function executeTransformGizmoContextMenuAction(
       break;
     case 'reload':
       if (deps.droppedFiles && await deps.confirmReload()) {
-        deps.resetTransform();
         deps.reloadFiles(deps.droppedFiles);
       }
       break;

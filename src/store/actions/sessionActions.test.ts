@@ -4,7 +4,7 @@ import { useTransformStore } from '../stores/transformStore';
 import { useDeletionStore } from '../stores/deletionStore';
 import { useReconstructionStore } from '../reconstructionStore';
 import { applyDeletionsToData } from './deletionActions';
-import { buildImage, buildReconstruction } from '../../test/builders';
+import { buildImage, buildLoadedFiles, buildReconstruction } from '../../test/builders';
 import { applySavedViewerState, type SharedViewerOverrides } from '../../hooks/useUrlState';
 import { serializeDatasetViewerSettings } from '../../utils/datasetViewerSettings';
 import { MAX_VIEWER_STATE_BYTES, type PublishedViewerState } from '../../utils/publishedViewerState';
@@ -161,10 +161,14 @@ describe('reload confirmation gating', () => {
 
     it("never gives a new dataset the previous dataset's baseline", async () => {
       const previous = await loadPublishedDataset();
-      // A dataset without settings leaves the alignment on screen, and its Reload resets it.
+      // A new dataset without settings starts at identity, as its scene commits: its Reload loses nothing.
       useReconstructionStore.getState().setDroppedFiles(datasetFiles());
-      expect(await asksBeforeReload()).toBe(true);
-      // Settings bound to another file map are not this dataset's either.
+      useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles());
+      useReconstructionStore.getState().setReconstruction(buildReconstruction());
+      expect(useTransformStore.getState()).toMatchObject({ transform: createIdentityEuler(), splatTransform: createIdentityEuler() });
+      expect(await asksBeforeReload()).toBe(false);
+      // Settings bound to another file map are not this dataset's either: their alignment, set by hand, is an edit.
+      useTransformStore.getState().setTransform(saved.config.transform!);
       useReconstructionStore.setState({ sourceViewerState: { files: previous, state: saved } });
       expect(await asksBeforeReload()).toBe(true);
     });

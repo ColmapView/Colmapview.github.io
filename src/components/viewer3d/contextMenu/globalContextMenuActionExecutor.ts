@@ -284,7 +284,6 @@ export async function executeGlobalContextMenuAction(
       break;
     case 'reloadData':
       if (deps.droppedFiles && await deps.confirmReload()) {
-        deps.resetTransform();
         await deps.reloadFiles(deps.droppedFiles);
       }
       break;

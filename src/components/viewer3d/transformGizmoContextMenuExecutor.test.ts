@@ -39,7 +39,8 @@ describe('transform gizmo context menu executor', () => {
     await executeTransformGizmoContextMenuAction('reload', deps);
 
     expect(deps.confirmReload).toHaveBeenCalledTimes(1);
-    expect(deps.resetTransform).toHaveBeenCalledTimes(1);
+    // The reloaded scene's commit discards the transform, so a cancelled or failed Reload keeps it.
+    expect(deps.resetTransform).not.toHaveBeenCalled();
     expect(deps.reloadFiles).toHaveBeenCalledWith(files);
     expect(deps.closeContextMenu).toHaveBeenCalledTimes(1);
   });

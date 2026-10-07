@@ -235,7 +235,8 @@ describe('global context menu action executor', () => {
       confirmReload: vi.fn(() => true),
     });
     await executeGlobalContextMenuAction('reloadData', confirmedDeps);
-    expect(confirmedDeps.resetTransform).toHaveBeenCalled();
+    // The reloaded scene's commit discards the transform, so a cancelled or failed Reload keeps it.
+    expect(confirmedDeps.resetTransform).not.toHaveBeenCalled();
     expect(confirmedDeps.reloadFiles).toHaveBeenCalledWith(files);
   });
 
