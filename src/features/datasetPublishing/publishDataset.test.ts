@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HubClient } from '../huggingface/hubClient';
 import { HfError } from '../huggingface/http';
 import { createPublicationController } from './publishDataset';
-import { MAX_PUBLICATION_BATCH_BYTES, type PreparedPublication } from './types';
+import { downloadRemoteFile } from './downloadRemoteFile';
+import { MAX_BUFFERED_PUBLICATION_FILE_BYTES, MAX_PUBLICATION_BATCH_BYTES, MAX_PUBLICATION_BATCH_FILES, type PreparedPublication } from './types';
 import { createIdentityEuler } from '../../utils/sim3dTransforms';
 
 const details = { name: 'scene', title: 'Scene', description: 'Test dataset', license: 'cc-by-4.0' };
@@ -288,5 +289,45 @@ describe('publication controller', () => {
     controller.reset();
     await controller.publish('owner', { ...details, name: 'new-scene' }, async () => fixture());
     expect(controller.getSnapshot().receipt?.repoId).toBe('owner/new-scene');
+  });
+
+  it('ends a publication whose file exceeds a size limit, keeping the files already committed', async () => {
+    const { controller, client } = setup();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('jpeg', { headers: { 'content-length': String(MAX_BUFFERED_PUBLICATION_FILE_BYTES + 1) } })));
+    const open = vi.fn((signal: AbortSignal) => downloadRemoteFile('https://example.test/large.jpg', 'images/large.jpg', signal, MAX_BUFFERED_PUBLICATION_FILE_BYTES));
+    // The first batch commits before the oversized file is downloaded.
+    const prepared = fixture(MAX_PUBLICATION_BATCH_FILES);
+    prepared.assets.push({ path: 'images/large.jpg', kind: 'image', size: null, open });
+    await controller.publish('owner', details, async () => prepared);
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: false, uncertain: false, filesDone: MAX_PUBLICATION_BATCH_FILES,
+      repoUrl: 'https://huggingface.co/datasets/owner/scene', error: 'The file images/large.jpg exceeds the 128 MiB publication limit.' });
+    await controller.retry();
+    expect(open).toHaveBeenCalledOnce();
+    expect(client.upload).toHaveBeenCalledOnce();
+    controller.reset();
+    expect(controller.getSnapshot().phase).toBe('idle');
+  });
+
+  it('keeps the retry when a file download fails transiently', async () => {
+    const { controller } = setup();
+    const open = vi.fn().mockRejectedValueOnce(new HfError('Could not retrieve selected file images/photo.jpg (503).')).mockResolvedValue(new Blob(['jpeg']));
+    const prepared = fixture(MAX_PUBLICATION_BATCH_FILES);
+    prepared.assets.push({ path: 'images/photo.jpg', kind: 'image', size: null, open });
+    await controller.publish('owner', details, async () => prepared);
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: true, uncertain: false,
+      error: 'Could not retrieve selected file images/photo.jpg (503).' });
+    await controller.retry();
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(controller.getSnapshot().phase).toBe('completed');
+  });
+
+  it('keeps the retry for a permanent error while a batch is pending, so the batch is checked first', async () => {
+    const { controller, client } = setup();
+    vi.mocked(client.upload).mockRejectedValueOnce(new HfError('Limit', undefined, true));
+    await controller.publish('owner', details, async () => fixture());
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: true, uncertain: true });
+    await controller.retry();
+    expect(client.reconcile).toHaveBeenCalledTimes(2);
+    expect(controller.getSnapshot().phase).toBe('completed');
   });
 });

@@ -2,6 +2,7 @@ import { Blob as NodeBlob } from 'node:buffer';
 import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { HfError } from '../huggingface/http';
 import { createDrivePublicationController, normalizeDriveArchiveName } from './publishDataset';
 import { DRIVE_UPLOAD_CHUNK_BYTES, GoogleDrivePublishError, type DrivePublishedFile } from './upload';
 
@@ -150,6 +151,15 @@ describe('Drive publication lifecycle', () => {
     expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', fileUrl: expect.stringContaining('drive.google.com'), canRetry: true });
     expect(controller.getSnapshot().receipt).toBeUndefined();
   });
+  it('keeps offering a retry after a transient Hugging Face read failure', async () => {
+    const { controller, prepare } = fixture();
+    prepare.mockRejectedValueOnce(new HfError('x', 503));
+    await controller.publish('scene', false, prepare);
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: true, error: 'x' });
+    await controller.retry();
+    expect(prepare).toHaveBeenCalledTimes(2);
+    expect(controller.getSnapshot().phase).toBe('completed');
+  });
   it.each(['', '../dataset', 'folder/name', 'line\nname', '.'])('validates file names before any API call: %s', name => {
     expect(() => normalizeDriveArchiveName(name)).toThrow('file name');
   });
@@ -220,6 +230,18 @@ describe('Drive publication memory', () => {
     expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: false, error: limit.message });
     await controller.retry();
     expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: false, error: limit.message });
+    expect(client.owner).not.toHaveBeenCalled();
+    expect(await collected(ref)).toBe(true);
+  });
+  it('ends a publication that failed a Hugging Face size limit the same way', async () => {
+    const { controller, client } = fixture();
+    const limit = new HfError('The file images/photo.jpg exceeds the 128 MiB publication limit.', undefined, true);
+    let prepares = 0;
+    const { attempt, ref } = publishTracked(controller, async () => { prepares++; throw limit; });
+    await attempt;
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: false, error: limit.message });
+    await controller.retry();
+    expect(prepares).toBe(1);
     expect(client.owner).not.toHaveBeenCalled();
     expect(await collected(ref)).toBe(true);
   });

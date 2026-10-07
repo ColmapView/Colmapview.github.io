@@ -20,7 +20,7 @@ export async function packageDriveArchive(prepared: PreparedPublication, signal:
   progress: DriveArchiveProgress, assertCurrent: () => void, sizeLimit = ARCHIVE_SIZE_LIMIT): Promise<DriveArchive> {
   const check = () => { signal.throwIfAborted(); assertCurrent(); };
   check();
-  if (prepared.assets.length > 60_000) throw new GoogleDrivePublishError('This dataset has too many files for a Drive ZIP.');
+  if (prepared.assets.length > 60_000) throw new GoogleDrivePublishError('This dataset has too many files for a Drive ZIP.', undefined, true);
   const tooLarge = () => new GoogleDrivePublishError('The dataset ZIP exceeds the viewer’s 2 GiB archive limit. Use a smaller dataset or splat.', undefined, true);
   if (prepared.assets.reduce((sum, asset) => sum + (asset.size ?? 0), 0) > sizeLimit) throw tooLarge();
   const md5 = await awaitWithAbort(createMD5(), signal);

@@ -61,11 +61,13 @@ describe('publication snapshot preparation', () => {
     expect(stream).not.toHaveBeenCalled();
   });
 
-  it('retains size validation and the buffering limit for other assets', () => {
+  it('retains size validation and the buffering limit for other assets, as failures a retry cannot fix', () => {
     for (const size of [-1, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
-      expect(() => checkAssetSize(size, 'large.ply', 'splat')).toThrow('invalid size');
+      expect(() => checkAssetSize(size, 'large.ply', 'splat'))
+        .toThrow(expect.objectContaining({ message: 'The file large.ply has an invalid size.', permanent: true }));
     }
-    expect(() => checkAssetSize(MAX_BUFFERED_PUBLICATION_FILE_BYTES + 1, 'photo.png', 'image')).toThrow('128 MiB');
+    expect(() => checkAssetSize(MAX_BUFFERED_PUBLICATION_FILE_BYTES + 1, 'photo.png', 'image')).toThrow(expect.objectContaining({
+      message: 'The file photo.png exceeds the 128 MiB publication limit for non-splat files.', permanent: true }));
   });
 
   const tileUrl = 'https://huggingface.co/datasets/owner/source/resolve/main/tile.ply';

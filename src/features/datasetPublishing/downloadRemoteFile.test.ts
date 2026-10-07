@@ -33,6 +33,15 @@ describe('remote file download', () => {
     expect(pulls).toBeLessThan(10);
   });
 
+  // Each response trips only one check: a small body under a large declared length, or 2 MiB streamed without one.
+  it.each(['declared', 'streamed'])('rejects a %s size over the limit as permanent, so no retry is offered', async size => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(size === 'declared'
+      ? new Response('jpeg', { headers: { 'content-length': String(1024 * 1024 + 1) } })
+      : new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(2 * 1024 * 1024)); controller.close(); } }))));
+    await expect(downloadRemoteFile('https://huggingface.co/pinned.jpg', 'images/large.jpg', new AbortController().signal, 1024 * 1024))
+      .rejects.toMatchObject({ message: 'The file images/large.jpg exceeds the 1 MiB publication limit.', permanent: true });
+  });
+
   it('keeps a slow download alive while bytes arrive', async () => {
     vi.useFakeTimers();
     let stream!: ReadableStreamDefaultController<Uint8Array>;

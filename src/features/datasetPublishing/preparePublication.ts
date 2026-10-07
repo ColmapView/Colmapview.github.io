@@ -46,9 +46,9 @@ function publicationSplats(dataset: DatasetState): SplatFileSource[] {
 }
 
 export function checkAssetSize(size: number, path: string, kind: PublishAsset['kind']): void {
-  if (!Number.isSafeInteger(size) || size < 0) throw new HfError(`The file ${path} has an invalid size.`);
+  if (!Number.isSafeInteger(size) || size < 0) throw new HfError(`The file ${path} has an invalid size.`, undefined, true);
   if (kind !== 'splat' && size > MAX_BUFFERED_PUBLICATION_FILE_BYTES) {
-    throw new HfError(`The file ${path} exceeds the 128 MiB publication limit for non-splat files.`);
+    throw new HfError(`The file ${path} exceeds the 128 MiB publication limit for non-splat files.`, undefined, true);
   }
 }
 

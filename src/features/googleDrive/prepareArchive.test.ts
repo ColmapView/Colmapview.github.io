@@ -81,6 +81,13 @@ describe('Drive dataset ZIP packaging', () => {
     expect(open).not.toHaveBeenCalled();
     await expect(packageDriveArchive(prepared([asset('tiny.bin', 'x')]), new AbortController().signal, () => {}, () => {}, 5)).rejects.toMatchObject(limit);
   });
+  it('rejects more than 60,000 files before opening any, without offering a retry', async () => {
+    const open = vi.fn();
+    const assets = Array.from({ length: 60_001 }, (_, index): PublishAsset => ({ path: `images/${index}.jpg`, kind: 'image', size: 1, open }));
+    await expect(packageDriveArchive(prepared(assets), new AbortController().signal, () => {}, () => {}))
+      .rejects.toMatchObject({ message: 'This dataset has too many files for a Drive ZIP.', permanent: true });
+    expect(open).not.toHaveBeenCalled();
+  });
   it('rejects source size changes and stops an aborted reader before packaging the next asset', async () => {
     const source = asset('file.bin', 'data'); source.size = 1;
     await expect(packageDriveArchive(prepared([source]), new AbortController().signal, () => {}, () => {})).rejects.toThrow('changed');

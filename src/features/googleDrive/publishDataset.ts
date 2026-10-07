@@ -147,7 +147,7 @@ export function createDrivePublicationController(client: DriveUploadClient) {
         receipt: { fileId: current.fileId, driveUrl, viewerUrl: viewerUrl.href, shared: current.shared } });
       release(current);
     } catch (error) {
-      const permanent = !signal.aborted && error instanceof GoogleDrivePublishError && error.permanent;
+      const permanent = !signal.aborted && (error instanceof GoogleDrivePublishError || error instanceof HfError) && error.permanent;
       if (current === job) {
         const cancelled = signal.aborted;
         set({ phase: cancelled ? 'cancelled' : 'failed', message: cancelled

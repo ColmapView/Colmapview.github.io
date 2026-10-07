@@ -6,7 +6,7 @@ import { createTransferTimeout } from '../huggingface/transferTimeout';
 export async function downloadRemoteFile(url: string, path: string, signal: AbortSignal, maxBytes = Infinity): Promise<Blob> {
   signal.throwIfAborted();
   const transfer = createTransferTimeout(signal);
-  const tooLarge = () => new HfError(`The file ${path} exceeds the ${Math.round(maxBytes / 1024 / 1024)} MiB publication limit.`);
+  const tooLarge = () => new HfError(`The file ${path} exceeds the ${Math.round(maxBytes / 1024 / 1024)} MiB publication limit.`, undefined, true);
   try {
     const response = await boundedFetch(transfer.signal, null, (input, init) =>
       fetchHuggingFaceDatasetRequest(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, init))(url);
