@@ -70,6 +70,7 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
   };
   const close = () => {
     cancelPicker();
+    // Closing abandons a pending sign-in, so Load URL (which closes this dialog) waits for it to settle.
     if (auth.status === 'connecting') {
       if (provider === 'google') googleDriveAuth.disconnect();
       else hfAuth.disconnect();
@@ -182,7 +183,8 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
               onClick={pickerLoading && !connecting ? cancelPicker : disconnect}>
               {connecting ? 'Cancel sign-in' : pickerLoading ? 'Cancel selection' : 'Disconnect'}
             </button>}
-            {canLoadGoogleDriveUrl && <button type="button" className={getButtonClass(clientId ? 'ghost' : 'primary', 'sm')}
+            {canLoadGoogleDriveUrl && <button type="button" disabled={connecting}
+              className={getButtonClass(clientId ? 'ghost' : 'primary', 'sm', connecting)}
               onClick={() => { close(); onOpenUrlModal(); }}>Load URL</button>}
             {clientId && (sdkError && !connected
               ? <button type="button" className={getButtonClass('primary', 'sm')} onClick={() => {
@@ -195,7 +197,8 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
             <button type="button" className={getButtonClass('ghost', 'sm')} onClick={disconnect}>
               {connected ? 'Disconnect' : 'Cancel sign-in'}
             </button>
-            <button type="button" className={getButtonClass(connecting ? 'secondary' : 'primary', 'sm')}
+            <button type="button" disabled={connecting}
+              className={getButtonClass(connecting ? 'secondary' : 'primary', 'sm', connecting)}
               onClick={() => { close(); onOpenUrlModal(); }}>Load URL</button>
           </> : <>
             <button type="button" className={getButtonClass(canSignIn ? 'ghost' : 'primary', 'sm')}

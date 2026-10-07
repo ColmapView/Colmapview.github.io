@@ -248,6 +248,23 @@ describe('Dataset provider account icons', () => {
     expect(props.onLoadGoogleDriveArchive).not.toHaveBeenCalled();
   });
 
+  it('keeps a pending Google sign-in on Load URL and still opens the picker when it completes', async () => {
+    const oauth = configureDrive();
+    vi.mocked(chooseGoogleDriveArchive).mockResolvedValue(selectedArchive);
+    const props = createProps();
+    render(<DatasetAccountButtons {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Choose archive from Drive' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Choose archive from Drive' }));
+    expect(screen.getByRole('status')).toHaveTextContent('Waiting for sign-in');
+    expect(screen.getByRole('button', { name: 'Load URL' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Load URL' }));
+    expect(googleDriveAuth.getSnapshot().status).toBe('connecting');
+    expect(props.onOpenUrlModal).not.toHaveBeenCalled();
+    oauth.authorize();
+    await waitFor(() => expect(props.onLoadGoogleDriveArchive).toHaveBeenCalledExactlyOnceWith(selectedArchive.url));
+  });
+
   it('returns to the account dialog after picker cancellation without loading anything', async () => {
     configureDrive(true);
     let finish: ((value: null) => void) | undefined;
@@ -354,6 +371,28 @@ describe('Dataset provider account icons', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Load URL' }));
     expect(props.onOpenUrlModal).toHaveBeenCalledOnce();
     expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
+  });
+
+  it('keeps a pending Hugging Face sign-in instead of letting Load URL cancel it', () => {
+    vi.stubEnv('VITE_HF_AUTH_ENABLED', 'true');
+    vi.stubEnv('VITE_HF_OAUTH_CLIENT_ID', 'hf-test-client');
+    vi.stubEnv('VITE_HF_OAUTH_REDIRECT_URI', `${window.location.origin}/hf-callback.html`);
+    const popup = { location: { href: '' }, closed: false, close: vi.fn() };
+    vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
+    const props = createProps();
+    render(<DatasetAccountButtons {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hugging Face account' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with Hugging Face' }));
+    expect(screen.getByRole('status')).toHaveTextContent('Waiting for sign-in');
+    expect(screen.getByRole('button', { name: 'Load URL' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Load URL' }));
+    expect(hfAuth.getSnapshot().status).toBe('connecting');
+    expect(popup.close).not.toHaveBeenCalled();
+    expect(props.onOpenUrlModal).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toHaveAccessibleName('Hugging Face');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel sign-in' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Load URL' }));
+    expect(props.onOpenUrlModal).toHaveBeenCalledOnce();
   });
 
   it('clears a stale script error when reopening the account dialog succeeds', async () => {
