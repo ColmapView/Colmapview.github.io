@@ -45,6 +45,8 @@ interface LoadedSplatMesh {
 interface SplatLoadingNotification {
   file: File;
   id: string;
+  /** A dataset load was pending when this splat began loading: the splat is that load's own. */
+  startedDuringDatasetLoad: boolean;
 }
 
 const SPARK_RENDERER_DISPOSE_IDLE_POLL_MS = 50;
@@ -203,6 +205,8 @@ export function SplatLayer({
       getUrlProgress,
       setUrlLoading,
       setUrlProgress,
+      dropFailedSplat,
+      isDatasetLoadPending,
     },
   } = useSplatLayerStoreFacade();
   const { invalidate } = useThree();
@@ -229,18 +233,26 @@ export function SplatLayer({
     setSparkRendererReady(ready);
   }, []);
 
+  // A dataset load that began after this splat began loading owns the overlay, progress and URL error,
+  // although the splat still belongs to the scene on screen until that load commits its own.
+  const yieldsLoadingStateToDatasetLoad = useCallback((file: File) => {
+    const current = loadingNotificationRef.current;
+    return isDatasetLoadPending() && !(current?.file === file && current.startedDuringDatasetLoad);
+  }, [isDatasetLoadPending]);
+
   const clearSplatLoadingNotification = useCallback((file?: File) => {
     const current = loadingNotificationRef.current;
     if (!current || (file && current.file !== file)) {
       return;
     }
 
+    const yieldsLoadingState = yieldsLoadingStateToDatasetLoad(current.file);
     removeNotification(current.id);
     loadingNotificationRef.current = null;
-    if (isSplatLoadingProgressForRenderer(getUrlProgress(), current.file, 'spark')) {
+    if (!yieldsLoadingState && isSplatLoadingProgressForRenderer(getUrlProgress(), current.file, 'spark')) {
       setUrlLoading(false);
     }
-  }, [getUrlProgress, removeNotification, setUrlLoading]);
+  }, [getUrlProgress, removeNotification, setUrlLoading, yieldsLoadingStateToDatasetLoad]);
 
   const startSplatLoadingNotification = useCallback((file: File) => {
     const current = loadingNotificationRef.current;
@@ -262,8 +274,8 @@ export function SplatLayer({
       renderer: 'spark',
     }));
     const id = addNotification('info', `Loading splat: ${file.name}`, 0);
-    loadingNotificationRef.current = { file, id };
-  }, [addNotification, getUrlProgress, removeNotification, setUrlLoading, setUrlProgress]);
+    loadingNotificationRef.current = { file, id, startedDuringDatasetLoad: isDatasetLoadPending() };
+  }, [addNotification, getUrlProgress, isDatasetLoadPending, removeNotification, setUrlLoading, setUrlProgress]);
 
   const getProgressStartPercent = useCallback((file: File) => {
     const current = progressStartRef.current;
@@ -286,7 +298,7 @@ export function SplatLayer({
   }, [getUrlProgress]);
 
   const setSplatPhaseProgress = useCallback((file: File, phase: SplatLoadingPhase) => {
-    if (isSplatProgressOwnedByAnotherRenderer(file)) {
+    if (isSplatProgressOwnedByAnotherRenderer(file) || yieldsLoadingStateToDatasetLoad(file)) {
       return;
     }
 
@@ -294,7 +306,7 @@ export function SplatLayer({
       startPercent: getProgressStartPercent(file),
       renderer: 'spark',
     }));
-  }, [getProgressStartPercent, isSplatProgressOwnedByAnotherRenderer, setUrlProgress]);
+  }, [getProgressStartPercent, isSplatProgressOwnedByAnotherRenderer, setUrlProgress, yieldsLoadingStateToDatasetLoad]);
 
   const ownsSparkSplatLoading = useCallback((file: File) => {
     if (isSplatProgressOwnedByAnotherRenderer(file)) {
@@ -310,21 +322,43 @@ export function SplatLayer({
       return;
     }
 
+    const yieldsLoadingState = yieldsLoadingStateToDatasetLoad(file);
     clearSplatLoadingNotification(file);
-    setUrlProgress(getSplatLoadedProgress(file, { renderer: 'spark' }));
-    setUrlLoading(false);
+    if (!yieldsLoadingState) {
+      setUrlProgress(getSplatLoadedProgress(file, { renderer: 'spark' }));
+      setUrlLoading(false);
+    }
     addNotification('info', `Loaded splat: ${file.name}`, 3000);
-  }, [addNotification, clearSplatLoadingNotification, ownsSparkSplatLoading, setUrlLoading, setUrlProgress]);
+  }, [
+    addNotification,
+    clearSplatLoadingNotification,
+    ownsSparkSplatLoading,
+    setUrlLoading,
+    setUrlProgress,
+    yieldsLoadingStateToDatasetLoad,
+  ]);
 
   const failSplatLoading = useCallback((file: File, message?: string) => {
     if (!ownsSparkSplatLoading(file)) {
       return;
     }
 
+    const yieldsLoadingState = yieldsLoadingStateToDatasetLoad(file);
     clearSplatLoadingNotification(file);
-    setUrlLoading(false);
+    if (!yieldsLoadingState) {
+      setUrlLoading(false);
+    }
     addNotification('warning', message ?? `Failed to load splat: ${file.name}`);
-  }, [addNotification, clearSplatLoadingNotification, ownsSparkSplatLoading, setUrlLoading]);
+    // Spark is the last renderer to try a splat: the points show again without it, as with None.
+    dropFailedSplat(file);
+  }, [
+    addNotification,
+    clearSplatLoadingNotification,
+    dropFailedSplat,
+    ownsSparkSplatLoading,
+    setUrlLoading,
+    yieldsLoadingStateToDatasetLoad,
+  ]);
 
   const replaceLoadedSplat = useCallback((nextLoadedSplat: LoadedSplatMesh | null) => {
     const previousLoadedSplat = loadedSplatRef.current;

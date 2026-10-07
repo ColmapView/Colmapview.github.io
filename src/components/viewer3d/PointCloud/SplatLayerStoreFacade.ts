@@ -10,6 +10,7 @@ import type {
   SplatBackendPreference,
   SplatBackendResolution,
 } from '../../../utils/splatBackendPolicy';
+import { isReconstructionLoadPending } from '../../../wasm/reconstructionLoadLifecycle';
 
 interface SplatLayerDataFacade {
   showSplats: boolean;
@@ -27,6 +28,9 @@ interface SplatLayerActionsFacade {
   getUrlProgress: () => ReturnType<typeof useReconstructionStore.getState>['urlProgress'];
   setUrlLoading: ReturnType<typeof useReconstructionStore.getState>['setUrlLoading'];
   setUrlProgress: ReturnType<typeof useReconstructionStore.getState>['setUrlProgress'];
+  dropFailedSplat: ReturnType<typeof useReconstructionStore.getState>['dropFailedSplat'];
+  /** A dataset load is pending: its overlay, progress and URL error are its own. */
+  isDatasetLoadPending: () => boolean;
 }
 
 export interface SplatLayerStoreFacade {
@@ -43,6 +47,7 @@ export function useSplatLayerStoreFacade(): SplatLayerStoreFacade {
   const removeNotification = useNotificationStore((s) => s.removeNotification);
   const setUrlLoading = useReconstructionStore((s) => s.setUrlLoading);
   const setUrlProgress = useReconstructionStore((s) => s.setUrlProgress);
+  const dropFailedSplat = useReconstructionStore((s) => s.dropFailedSplat);
   const requestedBackend = useSplatBackendStore((s) => s.requestedBackend);
   const splatBackendAvailability = useSplatBackendStore((s) => s.availability);
   const splatBackendResolution = useSplatBackendStore((s) => s.resolution);
@@ -65,6 +70,8 @@ export function useSplatLayerStoreFacade(): SplatLayerStoreFacade {
       getUrlProgress: getCurrentUrlProgress,
       setUrlLoading,
       setUrlProgress,
+      dropFailedSplat,
+      isDatasetLoadPending: isReconstructionLoadPending,
     },
   };
 }

@@ -17,6 +17,8 @@ import type { GaussianCloud } from '../splat/gaussianCloud';
 import { getActiveZipImageIndex, setActiveZipArchive } from '../utils/zipArchiveState';
 import { buildArchiveReader, buildReconstruction } from '../test/builders';
 import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
+import { processFileDropzoneFiles } from '../hooks/fileDropzoneWorkflow';
+import { noopLogger } from '../utils/logger';
 import type { ReconstructionSource } from '../wasm/reconstructionService';
 import { getSplatDownloadProgress, getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
@@ -1797,6 +1799,107 @@ describe('reconstruction store loading cancellation', () => {
     useReconstructionStore.getState().finishUrlLoad(first);
     expect(useReconstructionStore.getState().urlLoadController?.signal).toBe(second);
     expect(second!.aborted).toBe(false);
+  });
+});
+
+/** A URL load that has parsed its files and is settling its saved settings: the scene on screen is still the old one. */
+function holdUrlLoadBeforeSceneCommit() {
+  const store = useReconstructionStore.getState;
+  const signal = store().tryStartUrlLoad()!;
+  const settings: UrlLoadProgress = { percent: 90, message: 'Loading saved view settings...' };
+  const pending = processFileDropzoneFiles(new Map([['photo.jpg', new File(['jpg'], 'photo.jpg')]]), {
+    addNotification: vi.fn(), clearCaches: vi.fn(), getLoadedFiles: () => store().loadedFiles,
+    getMinTrackLength: () => 1, getSourceInfo: () => ({ sourceType: 'url', imageUrlBase: null }),
+    getUrlLoading: () => store().urlLoading, logger: noopLogger, resetView: vi.fn(), setDroppedFiles: vi.fn(),
+    setError: vi.fn(), setLoadedFiles: vi.fn(), setReconstruction: vi.fn(), setUrlLoading: store().setUrlLoading,
+    setUrlProgress: store().setUrlProgress, setWasmReconstruction: vi.fn(),
+  }, {
+    signal,
+    beforeSceneCommit: () => {
+      store().setUrlProgress(settings);
+      // Like the settings fetch, it ends only when the load is cancelled.
+      return new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason)));
+    },
+  });
+  return { pending, settings };
+}
+
+describe('reconstruction store splat the renderer could not draw', () => {
+  const a = new File(['a'], 'a.ply');
+  const b = new File(['b'], 'b.ply');
+
+  beforeEach(() => {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({ splatFile: a, splatFiles: [a, b], splatFileSources: [
+      { id: 'splats/a.ply', path: 'splats/a.ply', file: a },
+      { id: 'splats/b.ply', path: 'splats/b.ply', url: 'https://x/ds/splats/b.ply', size: 20 },
+    ] }));
+  });
+
+  afterEach(() => {
+    useReconstructionStore.getState().clear();
+    vi.unstubAllGlobals();
+  });
+
+  it('shows the points again without it, as None does, and shows the next splat as a fresh one', async () => {
+    useReconstructionStore.setState({ urlLoading: true, urlProgress: getSplatLoadingProgress(a, { startPercent: 60 }) });
+    expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'splatPoints', pointSize: 1, pointOpacity: 0.2 });
+
+    useReconstructionStore.getState().dropFailedSplat(a);
+
+    const state = useReconstructionStore.getState();
+    expect(state.loadedFiles?.splatFile).toBeUndefined();
+    expect(state.loadedFiles?.splatFileSources?.map(source => source.id)).toEqual(['splats/a.ply', 'splats/b.ply']);
+    expect(state).toMatchObject({ urlLoading: false, urlProgress: null });
+    expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'rgb', showSplats: false, pointSize: 2, pointOpacity: 1 });
+
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Blob(['b']))));
+    await useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile?.name).toBe('b.ply');
+    expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'splatPoints', showSplats: true });
+  });
+
+  it('ignores a failure reported for a file that is not the splat on screen', () => {
+    const shown = useReconstructionStore.getState().loadedFiles;
+
+    // Same name, another file: an earlier attempt, superseded since.
+    useReconstructionStore.getState().dropFailedSplat(new File(['a'], 'a.ply'));
+
+    expect(useReconstructionStore.getState().loadedFiles).toBe(shown);
+    expect(usePointCloudStore.getState().colorMode).toBe('splatPoints');
+  });
+
+  it('leaves a tile download in flight to replace the splat that failed', async () => {
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+    })));
+    void useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+    await vi.waitFor(() => expect(useReconstructionStore.getState().urlLoading).toBe(true));
+
+    useReconstructionStore.getState().dropFailedSplat(a);
+
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(a);
+    expect(useReconstructionStore.getState().urlLoading).toBe(true);
+    expect(usePointCloudStore.getState().colorMode).toBe('splatPoints');
+  });
+
+  it('leaves the overlay, progress and Cancel to a dataset load settling before its scene replaces this one', async () => {
+    const { pending, settings } = holdUrlLoadBeforeSceneCommit();
+    await vi.waitFor(() => expect(useReconstructionStore.getState().urlProgress).toEqual(settings));
+
+    useReconstructionStore.getState().dropFailedSplat(a);
+
+    expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true, urlProgress: settings, urlLoadActive: true });
+    // The failed splat still leaves the scene on screen, with the plain point display.
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'rgb', showSplats: false, pointSize: 2, pointOpacity: 1 });
+
+    useReconstructionStore.getState().cancelLoading();
+    expect(await pending).toBe(false);
+    expect(useReconstructionStore.getState().urlLoading).toBe(false);
   });
 });
 

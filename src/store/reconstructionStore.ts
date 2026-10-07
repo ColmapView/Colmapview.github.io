@@ -2,7 +2,7 @@ import { create, type StoreApi } from 'zustand';
 import type { Reconstruction, LoadedFiles, SplatFileSource } from '../types/colmap';
 import type { ReconstructionSource } from '../wasm/reconstructionService';
 import { isReconstructionSnapshot } from '../wasm/reconstructionService';
-import { cancelPendingReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
+import { cancelPendingReconstructionLoad, isReconstructionLoadPending } from '../wasm/reconstructionLoadLifecycle';
 import { clearActiveZipArchive } from '../utils/zipArchiveState';
 import type { UrlLoadProgress, UrlLoadError, ColmapManifest } from '../types/manifest';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
@@ -76,12 +76,13 @@ function withoutSplatFailureError({ error }: Pick<ReconstructionState, 'error'>)
 /**
  * "COLMAP only": the splat is deactivated (its source stays listed; re-fetchable bytes are
  * dropped), nothing is pending for it, and its loading state and failed-download toast go. The
- * splat point preset goes too: with no splat to draw it would hide the points.
+ * splat point preset goes too: with no splat to draw it would hide the points. `keepLoadingState`
+ * leaves the loading state to a dataset load that owns it.
  */
 function showColmapOnly(set: StoreApi<ReconstructionState>['setState'], loadedFiles: LoadedFiles,
-  patch: Partial<ReconstructionState> = {}): void {
+  patch: Partial<ReconstructionState> = {}, { keepLoadingState = false } = {}): void {
   set((state) => ({ ...patch, ...withoutSplatFailureError(state), loadedFiles: clearActiveSplatFile(loadedFiles),
-    requestedSplatSourceId: null, urlLoading: false, urlProgress: null, urlError: null }));
+    requestedSplatSourceId: null, ...(keepLoadingState ? {} : { urlLoading: false, urlProgress: null, urlError: null }) }));
   restorePointDisplayWithoutSplat();
 }
 
@@ -281,6 +282,8 @@ interface ReconstructionState {
   offerSplatPicker: () => void;
   /** Activate a splat source by id, fetching it on demand if not yet downloaded. */
   selectSplatSource: (sourceId: string, options?: { restore?: boolean }) => Promise<void>;
+  /** No renderer is left to draw this splat: like None, the scene shows without it. */
+  dropFailedSplat: (file: File) => void;
   /** Show or hide the splat picker popup. */
   setShowSplatPicker: (show: boolean) => void;
   tryStartUrlLoad: () => AbortSignal | null;
@@ -621,6 +624,14 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
         activeSplatController = null;
       }
     }
+  },
+
+  dropFailedSplat: (file) => {
+    const { loadedFiles } = get();
+    // A newer choice, on screen or still downloading, supersedes the splat that failed.
+    if (!loadedFiles || loadedFiles.splatFile !== file || activeSplatController !== null) return;
+    // A dataset load in progress owns the overlay, progress and URL error, even before its scene replaces this one.
+    showColmapOnly(set, loadedFiles, {}, { keepLoadingState: isReconstructionLoadPending() });
   },
 
   setShowSplatPicker: (showSplatPicker) => set({ showSplatPicker }),

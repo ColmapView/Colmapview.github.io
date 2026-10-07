@@ -9,6 +9,7 @@ import {
 } from '../../../store';
 import { buildFile, buildLoadedFiles } from '../../../test/builders';
 import { useSplatLayerStoreFacade } from './SplatLayerStoreFacade';
+import { beginReconstructionLoad } from '../../../wasm/reconstructionLoadLifecycle';
 
 describe('useSplatLayerStoreFacade', () => {
   beforeEach(() => {
@@ -36,6 +37,28 @@ describe('useSplatLayerStoreFacade', () => {
       requestedBackend: 'webgpu',
     });
     expect(result.current.data.splatBackendResolution.status).toBe('unavailable');
+  });
+
+  it('leaves the scene without a splat the renderer could not draw', () => {
+    const splatFile = buildFile('scene.ply', 'splat');
+    useReconstructionStore.setState({ loadedFiles: buildLoadedFiles({ splatFile,
+      splatFileSources: [{ id: 'scene.ply', path: 'scene.ply', file: splatFile }] }) });
+    const { result } = renderHook(() => useSplatLayerStoreFacade());
+
+    act(() => { result.current.actions.dropFailedSplat(splatFile); });
+
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(useReconstructionStore.getState().loadedFiles?.splatFileSources).toHaveLength(1);
+  });
+
+  it('says whether a dataset load is pending, which then owns the loading state', () => {
+    const { result } = renderHook(() => useSplatLayerStoreFacade());
+    expect(result.current.actions.isDatasetLoadPending()).toBe(false);
+
+    const load = beginReconstructionLoad();
+    expect(result.current.actions.isDatasetLoadPending()).toBe(true);
+    load.finish();
+    expect(result.current.actions.isDatasetLoadPending()).toBe(false);
   });
 
   it('routes splat loading notifications to the notification store', () => {

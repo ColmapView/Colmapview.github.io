@@ -1,10 +1,21 @@
-import { act, render, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { SplatLayer } from './SplatLayer';
 import type { SplatLayerStoreFacade } from './SplatLayerStoreFacade';
 import { appLogger } from '../../../utils/logger';
 import { SogBundleError } from '../../../splat/sogBundle';
+import {
+  useNotificationStore,
+  usePointCloudStore,
+  useReconstructionStore,
+  useSplatBackendStore,
+  useUIStore,
+} from '../../../store';
+import type { UrlLoadProgress } from '../../../types/manifest';
+import { processFileDropzoneFiles } from '../../../hooks/fileDropzoneWorkflow';
+import { noopLogger } from '../../../utils/logger';
+import { buildLoadedFiles } from '../../../test/builders';
 
 const {
   detectTouchDeviceMock,
@@ -139,6 +150,8 @@ function createFacade(overrides: Partial<SplatLayerStoreFacade['data']> = {}): S
       getUrlProgress: vi.fn(() => null),
       setUrlLoading: vi.fn(),
       setUrlProgress: vi.fn(),
+      dropFailedSplat: vi.fn(),
+      isDatasetLoadPending: vi.fn(() => false),
     },
   };
 }
@@ -632,6 +645,61 @@ describe('SplatLayer', () => {
     }
   });
 
+  it('reports a splat that began loading during a dataset load as that load\'s own', async () => {
+    // The splat a load committed, or restored from saved settings, before the load finishes.
+    const initialized = createDeferred<void>();
+    const SparkRenderer = vi.fn(function SparkRenderer(this: { dispose: () => void }) { this.dispose = vi.fn(); });
+    const { SplatMesh } = createSplatMeshConstructor(initialized.promise);
+    preloadSparkModuleMock.mockResolvedValue({ SparkRenderer, SplatMesh });
+    const facade = createFacade();
+    vi.mocked(facade.actions.isDatasetLoadPending).mockReturnValue(true);
+    useSplatLayerStoreFacadeMock.mockReturnValue(facade);
+    // React DOM does not know R3F's <primitive>.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    try {
+      render(<SplatLayer />);
+      await waitFor(() => expect(SplatMesh).toHaveBeenCalledTimes(1));
+      expect(facade.actions.setUrlLoading).toHaveBeenCalledWith(true);
+      expect(facade.actions.setUrlProgress).toHaveBeenCalledWith(expect.objectContaining({ message: 'Initializing splat renderer...' }));
+
+      await act(async () => { initialized.resolve(); });
+
+      await waitFor(() => {
+        expect(facade.actions.setUrlProgress).toHaveBeenCalledWith(expect.objectContaining({ message: 'Complete' }));
+      });
+      expect(facade.actions.setUrlLoading).toHaveBeenLastCalledWith(false);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it('leaves the scene without a splat Spark could not load, so its points show again', async () => {
+    let failInit!: (error: Error) => void;
+    const initialized = new Promise<void>((_resolve, reject) => { failInit = reject; });
+    const SparkRenderer = vi.fn(function SparkRenderer(this: { dispose: () => void }) { this.dispose = vi.fn(); });
+    const { SplatMesh } = createSplatMeshConstructor(initialized);
+    preloadSparkModuleMock.mockResolvedValue({ SparkRenderer, SplatMesh });
+    const splatFile = new File(['splat'], 'scene.ply');
+    const facade = createFacade({ splatFile });
+    useSplatLayerStoreFacadeMock.mockReturnValue(facade);
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
+
+    try {
+      render(<SplatLayer />);
+      await waitFor(() => expect(SplatMesh).toHaveBeenCalledTimes(1));
+
+      await act(async () => { failInit(new Error('decode failed')); });
+
+      await waitFor(() => {
+        expect(facade.actions.addNotification).toHaveBeenCalledWith('warning', 'Failed to load splat: scene.ply');
+      });
+      expect(facade.actions.dropFailedSplat).toHaveBeenCalledExactlyOnceWith(splatFile);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('refuses a damaged SOG with its reason and never creates a Spark mesh', async () => {
     const SparkRenderer = vi.fn(function SparkRenderer(this: { dispose: () => void }) { this.dispose = vi.fn(); });
     const { SplatMesh } = createSplatMeshConstructor(Promise.resolve());
@@ -738,5 +806,126 @@ describe('SplatLayer', () => {
     expect(getSplatMeshSourceOptionsMock).not.toHaveBeenCalled();
     expect(SplatMesh).not.toHaveBeenCalled();
     expect(facade.actions.addNotification).not.toHaveBeenCalledWith('warning', expect.any(String));
+  });
+});
+
+/** A URL load that has parsed its files and is settling its saved settings: the scene on screen is still the old one. */
+function holdUrlLoadBeforeSceneCommit() {
+  const store = useReconstructionStore.getState;
+  const signal = store().tryStartUrlLoad()!;
+  const settings: UrlLoadProgress = { percent: 90, message: 'Loading saved view settings...' };
+  const pending = processFileDropzoneFiles(new Map([['photo.jpg', new File(['jpg'], 'photo.jpg')]]), {
+    addNotification: vi.fn(), clearCaches: vi.fn(), getLoadedFiles: () => store().loadedFiles,
+    getMinTrackLength: () => 1, getSourceInfo: () => ({ sourceType: 'url', imageUrlBase: null }),
+    getUrlLoading: () => store().urlLoading, logger: noopLogger, resetView: vi.fn(), setDroppedFiles: vi.fn(),
+    setError: vi.fn(), setLoadedFiles: vi.fn(), setReconstruction: vi.fn(), setUrlLoading: store().setUrlLoading,
+    setUrlProgress: store().setUrlProgress, setWasmReconstruction: vi.fn(),
+  }, {
+    signal,
+    beforeSceneCommit: () => {
+      store().setUrlProgress(settings);
+      // Like the settings fetch, it ends only when the load is cancelled.
+      return new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason)));
+    },
+  });
+  return { pending, settings };
+}
+
+describe('SplatLayer while a new dataset load settles before replacing the scene', () => {
+  const oldSplat = new File(['splat'], 'old.ply');
+  const notices = () => useNotificationStore.getState().notifications.map(notification => notification.message);
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    getSplatMeshSourceOptionsMock.mockResolvedValue({ file: oldSplat });
+    // The real facade and stores: the overlay, progress and Cancel under test are the store's.
+    const actual = await vi.importActual<typeof import('./SplatLayerStoreFacade')>('./SplatLayerStoreFacade');
+    useSplatLayerStoreFacadeMock.mockImplementation(actual.useSplatLayerStoreFacade);
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
+    useNotificationStore.setState(useNotificationStore.getInitialState(), true);
+    useSplatBackendStore.setState(useSplatBackendStore.getInitialState(), true);
+    useSplatBackendStore.getState().setRequestedBackend('spark');
+    useSplatBackendStore.getState().setSparkBackendAvailable(true);
+    useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles({
+      camerasFile: new File([''], 'cameras.bin'), imagesFile: new File([''], 'images.bin'),
+      points3DFile: new File([''], 'points3D.bin'), splatFile: oldSplat,
+      splatFileSources: [{ id: 'old.ply', path: 'old.ply', file: oldSplat }],
+    }));
+  });
+
+  afterEach(() => {
+    cleanup();
+    useReconstructionStore.getState().clear();
+    useSplatLayerStoreFacadeMock.mockReset();
+  });
+
+  /** The old splat decodes in Spark, then a URL load starts and holds just before its scene commit. */
+  async function holdLoadWhileOldSplatDecodes(sourceOptions?: Promise<unknown>) {
+    let settleInit!: { resolve: () => void; reject: (error: Error) => void };
+    const initialized = new Promise<void>((resolve, reject) => { settleInit = { resolve, reject }; });
+    const SparkRenderer = vi.fn(function SparkRenderer(this: { dispose: () => void }) { this.dispose = vi.fn(); });
+    const { SplatMesh } = createSplatMeshConstructor(initialized);
+    preloadSparkModuleMock.mockResolvedValue({ SparkRenderer, SplatMesh });
+    if (sourceOptions) getSplatMeshSourceOptionsMock.mockReturnValue(sourceOptions);
+
+    render(<SplatLayer />);
+    await waitFor(() => expect(sourceOptions ? getSplatMeshSourceOptionsMock : SplatMesh).toHaveBeenCalledTimes(1));
+    expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true,
+      urlProgress: expect.objectContaining({ currentFile: 'old.ply', splatRenderer: 'spark' }) });
+
+    const load = holdUrlLoadBeforeSceneCommit();
+    await waitFor(() => expect(useReconstructionStore.getState().urlProgress).toEqual(load.settings));
+    return { ...load, settleInit, SplatMesh };
+  }
+
+  async function expectNewLoadKeepsOverlayProgressAndCancel(load: ReturnType<typeof holdUrlLoadBeforeSceneCommit>) {
+    expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true, urlProgress: load.settings, urlLoadActive: true });
+    act(() => useReconstructionStore.getState().cancelLoading());
+    expect(await load.pending).toBe(false);
+    expect(useReconstructionStore.getState().urlLoading).toBe(false);
+  }
+
+  it('keeps them when the old splat fails, and still shows the old scene without it', async () => {
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
+    try {
+      const load = await holdLoadWhileOldSplatDecodes();
+
+      await act(async () => { load.settleInit.reject(new Error('decode failed')); });
+
+      await waitFor(() => expect(notices()).toContain('Failed to load splat: old.ply'));
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+      expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'rgb', pointSize: 2, pointOpacity: 1 });
+      await expectNewLoadKeepsOverlayProgressAndCancel(load);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('keeps them when the old splat finishes loading', async () => {
+    // React DOM does not know R3F's <primitive>.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const load = await holdLoadWhileOldSplatDecodes();
+
+      await act(async () => { load.settleInit.resolve(); });
+
+      await waitFor(() => expect(notices()).toContain('Loaded splat: old.ply'));
+      await expectNewLoadKeepsOverlayProgressAndCancel(load);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it('keeps them when the old splat reports progress', async () => {
+    const sourceOptions = createDeferred<{ file: File }>();
+    const load = await holdLoadWhileOldSplatDecodes(sourceOptions.promise);
+
+    // Spark reports its next phase, initializing the mesh, just before it creates the mesh.
+    await act(async () => { sourceOptions.resolve({ file: oldSplat }); });
+
+    await waitFor(() => expect(load.SplatMesh).toHaveBeenCalledTimes(1));
+    await expectNewLoadKeepsOverlayProgressAndCancel(load);
   });
 });
