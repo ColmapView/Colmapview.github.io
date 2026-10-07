@@ -40,8 +40,12 @@ it('releases its listeners from the other inputs once it aborts (fallback)', () 
   Object.defineProperty(AbortSignal, 'any', { value: undefined, configurable: true, writable: true });
   const first = new AbortController();
   const second = new AbortController();
+  const add = vi.spyOn(second.signal, 'addEventListener');
   const remove = vi.spyOn(second.signal, 'removeEventListener');
   anySignal([first.signal, second.signal]);
+  expect(add).toHaveBeenCalledOnce();
+  const [type, listener] = add.mock.calls[0];
   first.abort();
-  expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+  // The very listener it registered, so the surviving input no longer holds the combined signal.
+  expect(remove).toHaveBeenCalledExactlyOnceWith(type, listener);
 });
