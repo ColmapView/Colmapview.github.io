@@ -76,6 +76,29 @@ describe('URL state sharing', () => {
     return alternateFile;
   }
 
+  function stubPendingDownload() {
+    let respond!: (response: Response) => void;
+    // Like fetch: the restored splat's download rejects once its signal aborts.
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((resolve, reject) => {
+      respond = resolve;
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+    })));
+    return { respond: (response: Response) => respond(response) };
+  }
+
+  // flyToState writes flyToViewState; record what the trackball would read at that moment.
+  function recordNavigationAtFlyTo() {
+    const seen: Array<Record<string, unknown>> = [];
+    const unsubscribe = useCameraStore.subscribe((state, previous) => {
+      if (!state.flyToViewState || state.flyToViewState === previous.flyToViewState) return;
+      const { cameraMode, cameraProjection, cameraFov, horizonLock, flyTransitionDuration, autoRotateMode,
+        autoRotateSpeed, undistortionEnabled } = state;
+      seen.push({ cameraMode, cameraProjection, cameraFov, horizonLock, flyTransitionDuration, autoRotateMode,
+        autoRotateSpeed, undistortionEnabled, axesCoordinateSystem: useUIStore.getState().axesCoordinateSystem });
+    });
+    return { seen, unsubscribe };
+  }
+
   it('round trips COLMAP only and overrides a saved splat without downloading it', async () => {
     installSavedSplatSources();
     const config = collectShareConfig();
@@ -174,6 +197,74 @@ describe('URL state sharing', () => {
     expect(usePointCloudStore.getState().pointSize).toBe(4);
     expect(useTransformStore.getState().splatTransform).toEqual(saved.config.splat?.transform);
     expect(useCameraStore.getState().flyToViewState).toEqual(viewState);
+  });
+
+  it('applies the saved navigation settings before it flies to the saved view', async () => {
+    installSavedSplatSources();
+    stubPendingDownload();
+    const saved = savedSplatState();
+    saved.config.camera = { cameraMode: 'fly', cameraProjection: 'orthographic', cameraFov: 35, horizonLock: 'on',
+      flyTransitionDuration: 0, autoRotateMode: 'cw', autoRotateSpeed: 1.5, undistortionEnabled: true, showCameras: false };
+    saved.config.ui = { ...saved.config.ui, axesCoordinateSystem: 'opengl' };
+    const { seen, unsubscribe } = recordNavigationAtFlyTo();
+    try {
+      const restoration = applySavedViewerState(saved, null);
+      expect(seen).toEqual([{ cameraMode: 'fly', cameraProjection: 'orthographic', cameraFov: 35, horizonLock: 'on',
+        flyTransitionDuration: 0, autoRotateMode: 'cw', autoRotateSpeed: 1.5, undistortionEnabled: true,
+        axesCoordinateSystem: 'opengl' }]);
+      // Frustum and point display still wait for the splat.
+      expect(useCameraStore.getState().showCameras).toBe(true);
+      expect(useUIStore.getState().backgroundColor).not.toBe('#123456');
+      await useReconstructionStore.getState().selectSplatSource('');
+      await restoration;
+    } finally { unsubscribe(); }
+  });
+
+  it("lets the viewer URL's navigation win over the saved one at the fly-to", async () => {
+    installSavedSplatSources();
+    stubPendingDownload();
+    const saved = savedSplatState();
+    saved.config.camera = { horizonLock: 'on' };
+    const { seen, unsubscribe } = recordNavigationAtFlyTo();
+    try {
+      const restoration = applySavedViewerState(saved, { config: { camera: { horizonLock: 'flip' } } });
+      expect(seen.map(values => values.horizonLock)).toEqual(['flip']);
+      await useReconstructionStore.getState().selectSplatSource('');
+      await restoration;
+      expect(useCameraStore.getState().horizonLock).toBe('flip');
+    } finally { unsubscribe(); }
+  });
+
+  it('keeps a navigation change made while the restored splat downloads', async () => {
+    installSavedSplatSources();
+    const download = stubPendingDownload();
+    const saved = savedSplatState();
+    saved.config.camera = { horizonLock: 'on', showCameras: false };
+    const restoration = applySavedViewerState(saved, null);
+    useCameraStore.getState().setHorizonLock('off');
+    download.respond(new Response(new Blob(['splat']), { status: 200 }));
+    await restoration;
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeDefined();
+    expect(useCameraStore.getState().horizonLock).toBe('off');
+    // Display still lands once the splat is in.
+    expect(useCameraStore.getState().showCameras).toBe(false);
+  });
+
+  it('falls back to the plain point display when saved splat display lands on a scene without a splat', async () => {
+    installSavedSplatSources();
+    const saved: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null,
+      config: { pointCloud: { colorMode: 'splatPoints', pointSize: 1, pointOpacity: 0.2 } } };
+    await applySavedViewerState(saved, null);
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'rgb', pointSize: 2, pointOpacity: 1 });
+  });
+
+  it('keeps a saved COLMAP-only display', async () => {
+    installSavedSplatSources();
+    const saved: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { activeSourceId: '' }, pointCloud: { colorMode: 'error', pointSize: 4, pointOpacity: 0.7 } } };
+    await applySavedViewerState(saved, null);
+    expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'error', pointSize: 4, pointOpacity: 0.7 });
   });
 
   it('keeps the loading overlay while the renderer decodes a restored splat that is already loaded', async () => {

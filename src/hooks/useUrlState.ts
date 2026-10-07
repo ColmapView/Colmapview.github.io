@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useThree } from '@react-three/fiber';
-import { useCameraStore, useImageMetricsStore, useReconstructionStore, usePointCloudStore, useUIStore, useTransformStore, useRigStore } from '../store';
+import { useCameraStore, useImageMetricsStore, useReconstructionStore, usePointCloudStore, useUIStore,
+  useTransformStore, useRigStore, restorePointDisplayWithoutSplat } from '../store';
 import type { CameraViewState } from '../store/types';
 import type { ColmapManifest } from '../types/manifest';
 import { buildShareableFieldsFromRegistry } from '../config/registry';
@@ -92,6 +93,24 @@ async function activateSavedSplat(sourceId: string, assertCurrent: () => void): 
   assertCurrent();
 }
 
+/**
+ * Settings the trackball reads while it places, levels or animates the restored view. Applied after
+ * the fly-to, a horizon lock change resets the view to the default one, a U toggle with a selected
+ * panorama flies to it, and the camera type, field of view, auto-orbit and world up change under it.
+ */
+const VIEW_NAVIGATION_FIELDS: Readonly<Record<'camera' | 'ui', readonly string[]>> = {
+  camera: ['cameraMode', 'cameraProjection', 'cameraFov', 'horizonLock', 'flyTransitionDuration',
+    'autoRotateMode', 'autoRotateSpeed', 'undistortionEnabled'],
+  ui: ['axesCoordinateSystem'],
+};
+
+/** The fields of a config section that are (keep) or are not (!keep) among `keys`; undefined when none. */
+function pickSectionFields(values: Record<string, unknown> | undefined, keys: readonly string[],
+  keep: boolean): Record<string, unknown> | undefined {
+  const picked = Object.entries(values ?? {}).filter(([key]) => keys.includes(key) === keep);
+  return picked.length ? Object.fromEntries(picked) : undefined;
+}
+
 /** The splat a finished load restores: the viewer URL's choice, then the saved one, then the automatic pick. */
 export function resolveRestoredSplatSourceId(saved: PublishedViewerState | null, shared: SharedViewerOverrides | null,
   autoSplatSourceId?: string): string | undefined {
@@ -109,28 +128,40 @@ export async function applySavedViewerState(saved: PublishedViewerState | null, 
   autoSplatSourceId?: string): Promise<void> {
   const canRestoreSplatSelection = () => useReconstructionStore.getState().splatSelectionRevision === initialSplatSelectionRevision;
   const restorationConfig = (config: ShareConfig): ShareConfig => {
-    if (!config.splat) return config;
-    // Apply the effective selection once, after merging saved and URL choices.
-    const splat = { ...config.splat };
-    delete splat.activeSourceId;
-    return { ...config, splat };
+    const restored: ShareConfig = {
+      ...config,
+      // Navigation went with the view; applying it again would undo a change made during the download.
+      camera: pickSectionFields(config.camera, VIEW_NAVIGATION_FIELDS.camera, false),
+      ui: pickSectionFields(config.ui, VIEW_NAVIGATION_FIELDS.ui, false),
+    };
+    if (config.splat) {
+      // Apply the effective selection once, after merging saved and URL choices.
+      restored.splat = { ...config.splat };
+      delete restored.splat.activeSourceId;
+    }
+    return restored;
   };
-  // Alignment and view must survive a cancelled splat download. Display waits for the splat:
-  // splat-tuned point styling on a scene left without one can hide the points.
-  const alignmentConfig = (config: ShareConfig): ShareConfig => ({
+  // Alignment, navigation and view must survive a cancelled splat download, and navigation must be in
+  // place before the fly-to. Display waits for the splat: splat-tuned point styling on a scene left
+  // without one can hide the points.
+  const viewConfig = (config: ShareConfig): ShareConfig => ({
     ...(config.transform ? { transform: config.transform } : {}),
     ...(config.splat?.transform ? { splat: { transform: config.splat.transform } } : {}),
+    camera: pickSectionFields(config.camera, VIEW_NAVIGATION_FIELDS.camera, true),
+    ui: pickSectionFields(config.ui, VIEW_NAVIGATION_FIELDS.ui, true),
   });
   const sourceId = resolveRestoredSplatSourceId(saved, shared, autoSplatSourceId);
   assertCurrent();
-  if (saved) applyShareConfig(alignmentConfig(saved.config));
-  if (shared?.config) applyShareConfig(alignmentConfig(shared.config));
+  if (saved) applyShareConfig(viewConfig(saved.config));
+  if (shared?.config) applyShareConfig(viewConfig(shared.config));
   const view = saved ? shared?.viewState ?? saved.viewState : null;
   if (view) useCameraStore.getState().flyToState(view);
   if (sourceId !== undefined && canRestoreSplatSelection()) await activateSavedSplat(sourceId, assertCurrent);
   // A choice made before or during activation wins over both saved and URL source selections.
   if (saved) applyShareConfig(restorationConfig(saved.config));
   if (shared?.config) applyShareConfig(restorationConfig(shared.config));
+  // Display saved for a splat would hide the points of a scene that ended up without one.
+  if (!useReconstructionStore.getState().loadedFiles?.splatFile) restorePointDisplayWithoutSplat();
   if (sourceId !== undefined && canRestoreSplatSelection()) {
     useReconstructionStore.getState().setRequestedSplatSourceId(sourceId || null);
     if (sourceId === '' || useReconstructionStore.getState().loadedFiles?.splatFile) {
