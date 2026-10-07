@@ -73,8 +73,8 @@ describe('reconstruction worker lifecycle', () => {
   });
 
   it('installs compact reverse membership in worker and current-thread modes without boxed Set expansion', async () => {
-    // The current-thread pass reports its fallback as a warning.
-    vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
+    // Only the current-thread pass may warn, to report its fallback.
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
     for (const fallback of [false, true]) {
       const packedData = data();
       packedData.reconstruction.imageToPoint3DIds = new Map();
@@ -98,6 +98,7 @@ describe('reconstruction worker lifecycle', () => {
       expect(snapshot.reconstruction.imageToPoint3DIds.get(42)?.size).toBe(0);
       expect(packedData.reconstruction.imageToPoint3DIds.size).toBe(0);
     }
+    expect(warn).toHaveBeenCalledExactlyOnceWith('[Reconstruction] Using current-thread fallback:', expect.anything());
   });
 
   it('terminates a busy parse immediately, settles cancellation, and ignores late messages', async () => {

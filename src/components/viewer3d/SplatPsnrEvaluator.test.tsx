@@ -536,15 +536,18 @@ describe('SplatPsnrEvaluator', () => {
     useSplatPsnrEvaluatorStoreFacadeMock.mockImplementation(() => facade);
     const warnSpy = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
 
-    render(<SplatPsnrEvaluator />);
+    try {
+      render(<SplatPsnrEvaluator />);
 
-    await waitFor(() => {
-      expect(createWebGpuSplatPsnrSessionMock).toHaveBeenCalledTimes(1);
-    });
-    expect(warnSpy).toHaveBeenCalledExactlyOnceWith(
-      '[PSNR] Retrying scene.ply with SH0-only data after full-SH WebGPU initialization failed: maxStorageBufferBindingSize is below required size'
-    );
-    warnSpy.mockRestore();
+      await waitFor(() => {
+        expect(createWebGpuSplatPsnrSessionMock).toHaveBeenCalledTimes(1);
+      });
+      expect(warnSpy).toHaveBeenCalledExactlyOnceWith(
+        '[PSNR] Retrying scene.ply with SH0-only data after full-SH WebGPU initialization failed: maxStorageBufferBindingSize is below required size'
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
     expect(ensureSplatPsnrWebGpuDeviceMock).toHaveBeenNthCalledWith(1, {
       maxBufferSize: 180,
       maxStorageBufferBindingSize: 180,
