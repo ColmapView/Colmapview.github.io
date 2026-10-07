@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import type { ColmapManifest } from '../types/manifest';
 import { useFileDropzone } from './useFileDropzone';
 import { useReconstructionStore } from '../store';
+import { isSplatDownloadPending } from '../store/reconstructionStore';
 import { useNotificationStore } from '../store/stores/notificationStore';
 import { isManifestUrl } from '../utils/urlUtils';
 import { fetchDatasetResource } from '../utils/fetchDatasetResource';
@@ -227,7 +228,8 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
       if (isCurrent()) {
         finishUrlLoad(signal);
         const state = useReconstructionStore.getState();
-        if (!isSplatLoadingProgressForFile(state.urlProgress, state.loadedFiles?.splatFile)) {
+        // A tile download started during the restore, or the renderer's decode, keeps the overlay and its Cancel.
+        if (!isSplatDownloadPending() && !isSplatLoadingProgressForFile(state.urlProgress, state.loadedFiles?.splatFile)) {
           setUrlLoading(false);
         }
       }

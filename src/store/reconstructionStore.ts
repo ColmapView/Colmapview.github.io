@@ -58,6 +58,11 @@ function rendererOwnsSplatProgress({ urlProgress, loadedFiles }: Pick<Reconstruc
   return activeSplatController === null && isSplatLoadingProgressForFile(urlProgress, loadedFiles?.splatFile);
 }
 
+/** A lazy tile download is in flight: the loading indicator and its Cancel are its own. */
+export function isSplatDownloadPending(): boolean {
+  return activeSplatController !== null;
+}
+
 // The store error (shown as the DropZone toast) that the last failed splat download raised. Activating
 // a splat or choosing None takes it down only while it is still the error showing: another load's
 // error is not the splat's to clear.

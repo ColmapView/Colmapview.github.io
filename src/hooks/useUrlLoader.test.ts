@@ -1339,6 +1339,41 @@ describe('useUrlLoader', () => {
     expect(useReconstructionStore.getState().requestedSplatSourceId).toBeNull();
   });
 
+  it('keeps the overlay and its Cancel for a tile picked while the restored splat downloads', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const baseUrl = 'https://huggingface.co/datasets/owner/pick/resolve/main/';
+    const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
+      config: { splat: { activeSourceId: 'splats/a.spz' } } });
+    const downloads = new Map<string, AbortSignal>();
+    vi.stubGlobal('fetch', vi.fn((url: string | URL, init?: RequestInit): Promise<Response> => {
+      if (String(url).endsWith('colmapview.yaml')) return Promise.resolve(new Response(yaml));
+      if (init?.method === 'HEAD') return Promise.resolve(new Response(null, { headers: { 'content-length': '100' } }));
+      // Like fetch, a splat download rejects once its signal aborts.
+      if (String(url).endsWith('.spz')) return new Promise<Response>((_resolve, reject) => {
+        downloads.set(String(url).slice(baseUrl.length), init!.signal!);
+        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+      });
+      if (String(url).includes('/api/datasets/')) return Promise.resolve(Response.json(hubEntries([
+        { path: 'splats/a.spz', size: 100 }, { path: 'splats/b.spz', size: 100 }])));
+      return Promise.resolve(new Response(new Uint8Array([1, 2, 3])));
+    }));
+    processFilesMock.mockImplementationOnce(async () => { useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles()); });
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
+    let pending!: Promise<boolean>;
+    act(() => { pending = result.current.loadFromUrl(baseUrl); });
+    await waitFor(() => expect(downloads.has('splats/a.spz')).toBe(true));
+    // What n does during the restore: pick the next tile, which cancels the restored download.
+    act(() => { void useReconstructionStore.getState().selectSplatSource('splats/b.spz'); });
+    await act(async () => { expect(await pending).toBe(true); });
+
+    expect(downloads.get('splats/a.spz')?.aborted).toBe(true);
+    expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true,
+      urlProgress: expect.objectContaining({ currentFile: 'b.spz' }) });
+    act(() => useReconstructionStore.getState().cancelLoading());
+    expect(downloads.get('splats/b.spz')?.aborted).toBe(true);
+    expect(useReconstructionStore.getState().urlLoading).toBe(false);
+  });
+
   it('surfaces a skipped oversized lone splat as a lazy source and opens the picker', async () => {
     const baseUrl = 'https://huggingface.co/datasets/Acme/Scene/resolve/main';
     const treeEntries = [
