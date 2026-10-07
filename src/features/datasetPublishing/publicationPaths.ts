@@ -29,11 +29,15 @@ export function datasetFileUrl(repoId: string, revision: string, path: string): 
 
 /** `path` is the decoded repository path after the revision (no trailing slash). */
 export function parseHfAssetUrl(value: string): { repoId: string; revision: string; path: string; url: URL } {
-  const url = new URL(value);
+  // A malformed URL comes from the captured dataset, so it fails the same way on every retry.
+  let url: URL;
+  try { url = new URL(value); } catch { throw new HfError('The dataset has an invalid remote file URL.', undefined, true); }
   const match = /^\/datasets\/([a-zA-Z0-9-]+\/[a-zA-Z0-9_.-]+)\/resolve\/([^/]+)\//.exec(url.pathname);
   if (url.origin !== 'https://huggingface.co' || url.username || url.password || url.hash || url.search || !match) {
     throw new HfError('Copy these remote assets locally before publishing. Only public Hugging Face asset URLs can be pinned.', undefined, true);
   }
-  const path = url.pathname.slice(match[0].length).split('/').filter(Boolean).map(decodeURIComponent).join('/');
-  return { repoId: match[1], revision: decodeURIComponent(match[2]), path, url };
+  try {
+    const path = url.pathname.slice(match[0].length).split('/').filter(Boolean).map(decodeURIComponent).join('/');
+    return { repoId: match[1], revision: decodeURIComponent(match[2]), path, url };
+  } catch { throw new HfError('The dataset has an invalid Hugging Face file URL.', undefined, true); }
 }

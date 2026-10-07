@@ -192,6 +192,21 @@ describe('Drive remote sources', () => {
         .rejects.toMatchObject({ message: 'The dataset has an unsupported remote file URL.', permanent: true });
       expect(request).not.toHaveBeenCalled();
     });
+  it.each([
+    ['a relative image URL', { imageNameToUrl: { 'photo.jpg': 'images/photo.jpg' } }, 'The dataset has an invalid remote file URL.'],
+    ['a relative mask folder', { imageUrlBase: bucket + 'images/', maskUrlBase: 'masks/' }, 'The dataset has an invalid remote file URL.'],
+    ['a broken escape in a Hugging Face file path', { imageNameToUrl: { 'photo.jpg': 'https://huggingface.co/datasets/owner/scene/resolve/main/images/%E0%A4%A.jpg' } },
+      'The dataset has an invalid Hugging Face file URL.'],
+    ['a broken escape in a Hugging Face revision', { imageUrlBase: 'https://huggingface.co/datasets/owner/scene/resolve/v%ZZ/images/' },
+      'The dataset has an invalid Hugging Face file URL.'],
+    ['a broken escape in a Hugging Face mask folder', { imageUrlBase: bucket + 'images/', maskUrlBase: 'https://huggingface.co/datasets/owner/scene/resolve/main/m%Zasks/' },
+      'The dataset has an invalid Hugging Face file URL.'],
+  ])('fails in a way no retry can fix on %s', async (_, dataset, message) => {
+    const request = vi.fn(); vi.stubGlobal('fetch', request);
+    await expect(prepareDriveArchive(remoteInput(dataset), new AbortController().signal, () => {}, () => {}))
+      .rejects.toMatchObject({ message, permanent: true });
+    expect(request).not.toHaveBeenCalled();
+  });
   it('names an oversized mask and the limit, and does not offer a retry', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => original(url)
       ?? (url === bucket + 'masks/photo.jpg.png'

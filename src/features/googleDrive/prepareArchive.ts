@@ -73,6 +73,10 @@ export async function packageDriveArchive(prepared: PreparedPublication, signal:
   } catch (error) { zip.terminate(); throw error; }
 }
 const DRIVE_BLOB_PART_BYTES = 8 * 1024 * 1024;
+/** A malformed URL comes from the captured dataset, so it fails the same way on every retry. */
+function parseRemoteUrl(value: string): URL {
+  try { return new URL(value); } catch { throw new GoogleDrivePublishError('The dataset has an invalid remote file URL.', undefined, true); }
+}
 
 export async function prepareDriveArchive(input: PublicationInput, signal: AbortSignal,
   progress: DriveArchiveProgress, assertCurrent: () => void): Promise<DriveArchive> {
@@ -91,7 +95,7 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
     return revisions.get(key)!;
   };
   const pinAssetUrl = async (value: string): Promise<string> => {
-    const url = new URL(value);
+    const url = parseRemoteUrl(value);
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) throw new GoogleDrivePublishError('The dataset has an unsupported remote file URL.', undefined, true);
     if (url.origin !== 'https://huggingface.co') return url.href;
     const parsed = parseHfAssetUrl(value);
@@ -102,7 +106,7 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
   const maskListings = new Map<string, Promise<Set<string>>>();
   const readRemoteMask = async (base: string, name: string): Promise<Blob | null> => {
     let paths: Set<string> | null = null;
-    if (new URL(base).origin === 'https://huggingface.co') {
+    if (parseRemoteUrl(base).origin === 'https://huggingface.co') {
       if (!maskListings.has(base)) maskListings.set(base, (async () => {
         const folder = parseHfAssetUrl(base.replace(/\/?$/, '/'));
         const revision = await resolveRevision(folder.repoId, folder.revision);

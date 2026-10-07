@@ -174,6 +174,21 @@ describe('Drive publication lifecycle', () => {
     expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: false, error: 'A dataset folder has too many files for publication.' });
     expect(client.owner).not.toHaveBeenCalled();
   });
+  it('ends a publication whose dataset has a malformed remote file URL', async () => {
+    const { controller, client } = fixture();
+    const request = vi.fn(); vi.stubGlobal('fetch', request);
+    const input = { sourceKey: 'remote', modelRevision: 0, source: null, activeSplatId: null,
+      reconstruction: buildReconstruction({ cameras: [buildCamera()], images: [buildImage({ name: 'photo.jpg' })], points3D: [buildPoint3D()] }),
+      dataset: buildDatasetState({ sourceType: 'url', imageNameToUrl: { 'photo.jpg': 'https://huggingface.co/datasets/owner/scene/resolve/main/images/%E0%A4%A.jpg' } }),
+      transform: createIdentityEuler(), splatTransform: createIdentityEuler(), config: {}, viewState: null, appVersion: 'test', viewerBaseUrl: 'https://viewer.example/' };
+    let prepares = 0;
+    await controller.publish('scene', false, (signal, progress) => { prepares++; return prepareDriveArchive(input, signal, progress, () => {}); });
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: false, error: 'The dataset has an invalid Hugging Face file URL.' });
+    await controller.retry();
+    expect(prepares).toBe(1);
+    expect(client.owner).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
   it('keeps a cancelled publication retryable even when the cancelled step hit a size limit', async () => {
     const { controller } = fixture();
     await controller.publish('scene', false, async () => { controller.cancel(); throw new HfError('Limit', undefined, true); });

@@ -315,6 +315,15 @@ describe('publication snapshot preparation', () => {
       message: 'Copy these remote assets locally before publishing. Only public Hugging Face asset URLs can be pinned.', permanent: true });
   });
 
+  it.each([
+    ['an unparsable image URL', 'images/photo.png', 'The dataset has an invalid remote file URL.'],
+    ['a broken escape in a Hugging Face file path', 'https://huggingface.co/datasets/owner/source/resolve/main/images/%E0%A4%A.png',
+      'The dataset has an invalid Hugging Face file URL.'],
+  ])('refuses %s in a way no retry can fix', async (_, url, message) => {
+    const source = input(); source.dataset.sourceType = 'url'; source.dataset.imageNameToUrl = { 'nested/photo.png': url };
+    await expect(preparePublication(source, new AbortController().signal, deps())).rejects.toMatchObject({ message, permanent: true });
+  });
+
   it('keeps downloading a slow remote original while bytes keep arriving', async () => {
     const source = input(); source.dataset.sourceType = 'url'; source.dataset.imageUrlBase = 'https://huggingface.co/datasets/owner/source/resolve/main/images/';
     const prepared = await preparePublication(source, new AbortController().signal, deps());
