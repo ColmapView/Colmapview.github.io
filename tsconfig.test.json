@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    /* Vitest runs the tests in node with jsdom, so they see node and DOM globals. */
+    "types": ["vite/client", "node"]
+  },
+  /* Every source: the tests, the src/test helpers, and the modules they import. */
+  "include": ["src"],
+  "exclude": []
+}

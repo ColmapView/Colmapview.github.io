@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc -b",
+    "typecheck:tests": "tsc -p tsconfig.test.json --noEmit",
     "build": "tsc -b && vite build",
     "build:wasm": "cd colmap-wasm && emcmake cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel && node ../scripts/copy-wasm-assets.mjs",
     "build:all": "npm run build:wasm && npm run build",

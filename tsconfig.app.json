@@ -31,10 +31,10 @@
     "noUncheckedSideEffectImports": true
   },
   "include": ["src"],
-  /* Test sources are checked by vitest, not by the app project, which has no
-     node types. `src/test/cssRootTokens.ts` is a node-only helper shared by the
-     :root contract suites — it reads index.css off disk and never ships — so it
-     belongs on this list beside the *.test.ts files that consume it. It is not
-     unchecked, though: tsconfig.node.json (node types, no DOM) includes it. */
+  /* Vitest strips types without checking them. tsconfig.test.json (`npm run
+     typecheck:tests`) checks every test and src/test helper with the node types
+     this project lacks; *.test.tsx files are still checked here as well.
+     `src/test/cssRootTokens.ts` reads index.css off disk, so it compiles only
+     with node types; tsconfig.node.json checks it too. */
   "exclude": ["src/**/*_test.ts", "src/**/*.test.ts", "src/test/cssRootTokens.ts"]
 }
