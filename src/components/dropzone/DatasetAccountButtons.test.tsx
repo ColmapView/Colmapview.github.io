@@ -108,40 +108,21 @@ describe('Dataset provider account icons', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it.each([false, true])('offers URL loading in an OAuth-only setup only with an existing reader session (connected=%s)', connected => {
+  it.each([false, true])('offers no Drive URL loading without an API key, whatever the reader session (connected=%s)', connected => {
+    // Only the picker, which needs the API key, signs a reader in: connected=true stands in for a session that cannot arise.
     configureDrive(connected);
     vi.stubEnv('VITE_GOOGLE_DRIVE_API_KEY', '');
     vi.stubEnv('VITE_GOOGLE_DRIVE_APP_ID', '');
     vi.mocked(getGoogleDrivePickerConfig).mockReturnValue(null);
-    const props = createProps();
-    render(<DatasetAccountButtons {...props} />);
+    render(<DatasetAccountButtons {...createProps()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
+    expect(screen.getByText('Google Drive loading is unavailable in this viewer.')).toBeVisible();
     expect(screen.getByText('Private file selection is unavailable.')).toBeVisible();
-    expect(screen.queryByText(/public dataset/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/public dataset|previously authorized/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Load URL' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Choose archive from Drive' })).not.toBeInTheDocument();
     expect(loadGoogleOAuthSdk).not.toHaveBeenCalled();
     expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
-    if (connected) {
-      expect(screen.getByText('Load a previously authorized dataset by URL.')).toBeVisible();
-      fireEvent.click(screen.getByRole('button', { name: 'Load URL' }));
-      expect(props.onOpenUrlModal).toHaveBeenCalledOnce();
-    } else {
-      expect(screen.getByText('Google Drive loading is unavailable in this viewer.')).toBeVisible();
-      expect(screen.queryByRole('button', { name: 'Load URL' })).not.toBeInTheDocument();
-      expect(props.onOpenUrlModal).not.toHaveBeenCalled();
-    }
-  });
-
-  it('removes OAuth-only URL loading when the existing reader disconnects', () => {
-    configureDrive(true);
-    vi.stubEnv('VITE_GOOGLE_DRIVE_API_KEY', '');
-    vi.mocked(getGoogleDrivePickerConfig).mockReturnValue(null);
-    render(<DatasetAccountButtons {...createProps()} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
-    expect(screen.getByRole('button', { name: 'Load URL' })).toBeEnabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
-    expect(screen.queryByRole('button', { name: 'Load URL' })).not.toBeInTheDocument();
-    expect(screen.getByText('Google Drive loading is unavailable in this viewer.')).toBeVisible();
   });
 
   it.each([

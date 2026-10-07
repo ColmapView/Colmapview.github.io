@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import { Z_INDEX } from '../../theme';
 import { GOOGLE_DRIVE_ENABLED_ORIGIN } from '../../features/googleDrive/config';
 import { parseGoogleDriveFileUrl } from '../../utils/googleDriveUrl';
+import { getGoogleDriveHandoffUrl } from '../viewer3d/googleDriveHandoff';
 
 export type UrlInputHelpIconKind = 'open' | 'closed';
 
@@ -115,15 +116,12 @@ export function getUrlInputActionState(url: string, loading: boolean): UrlInputA
   };
 }
 
-/** Only carry a canonical file link, never credentials or unrelated viewer state. */
+/** Only carry a canonical file link, never credentials or unrelated viewer state, in the toolbar's #d= form. */
 export function getUrlInputDriveHandoffUrl(url: string, googleDriveEnabled: boolean): string | null {
   if (googleDriveEnabled) return null;
   try {
     const driveFile = parseGoogleDriveFileUrl(url.trim());
-    if (!driveFile) return null;
-    const destination = new URL(GOOGLE_DRIVE_ENABLED_ORIGIN);
-    destination.searchParams.set('url', driveFile.sourceUrl);
-    return destination.href;
+    return driveFile ? getGoogleDriveHandoffUrl(GOOGLE_DRIVE_ENABLED_ORIGIN, driveFile.sourceUrl) : null;
   } catch {
     return null;
   }

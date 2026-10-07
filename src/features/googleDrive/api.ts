@@ -110,7 +110,7 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
     else url.searchParams.set('fields', 'id,name,mimeType,size,capabilities(canDownload),trashed');
     return url.href;
   };
-  let useAccount = !apiKey;
+  let useAccount = false;
   const request = async (url: string, timeout?: number) => {
     assertHosting();
     const headers = new Headers();
@@ -125,7 +125,8 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
     }
     return fetchImpl(url, timeout, { headers, credentials: 'omit', signal: deps.signal });
   };
-  if (!apiKey && !getAccessToken()) {
+  // The account only reaches files chosen in the picker, which also needs the API key.
+  if (!apiKey) {
     throw driveError(reference, 'Google Drive loading is not configured for this viewer. Contact the site administrator.');
   }
   const checkResponse = async (response: Response) => {

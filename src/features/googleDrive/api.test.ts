@@ -43,6 +43,14 @@ describe('Google Drive archive API', () => {
     await expect(resolveGoogleDriveArchive(reference, { fetchImpl })).resolves.toMatchObject({ options: { filename: 'wrapped.zip' } });
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
+  it('refuses Drive URL loading without an API key, even with a reader session', async () => {
+    vi.stubEnv('VITE_GOOGLE_DRIVE_API_KEY', '');
+    const fetchImpl = vi.fn().mockResolvedValue(Response.json(metadata));
+    await expect(resolveGoogleDriveArchive(reference, { fetchImpl, getAccessToken: () => 'reader-token' })).rejects.toMatchObject({
+      message: 'Google Drive loading is not configured for this viewer. Contact the site administrator.', failedFile: reference.sourceUrl });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('does not authenticate a production private fallback without a configured OAuth client', async () => {
     vi.stubEnv('PROD', true);
     vi.stubEnv('DEV', false);

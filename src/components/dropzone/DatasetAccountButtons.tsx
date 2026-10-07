@@ -31,8 +31,8 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
   const google = useSyncExternalStore(googleDriveAuth.subscribe, googleDriveAuth.getSnapshot);
   const hf = useSyncExternalStore(hfAuth.subscribe, hfAuth.getSnapshot);
   const clientId = getGoogleDrivePickerConfig()?.clientId;
+  // Drive URLs load with the API key; a reader session exists only through the picker, which needs the key too.
   const googleApiKey = getGoogleDriveConfiguration().apiKey;
-  const canLoadGoogleDriveUrl = Boolean(googleApiKey) || google.status === 'connected';
   const googleEnabled = isGoogleDriveEnabled();
   const hfConfiguration = getHfAccountConfiguration();
   const title = provider === 'google' ? 'Google Drive' : 'Hugging Face';
@@ -43,8 +43,7 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
   const description = provider === 'google'
     ? clientId
       ? connected ? 'Choose a ZIP or TAR dataset from Google Drive.' : 'Choose a ZIP or TAR from Drive. Sign in to open private files.'
-      : googleApiKey ? 'Load a public dataset by URL.'
-        : canLoadGoogleDriveUrl ? 'Load a previously authorized dataset by URL.' : 'Google Drive loading is unavailable in this viewer.'
+      : googleApiKey ? 'Load a public dataset by URL.' : 'Google Drive loading is unavailable in this viewer.'
     : connected ? 'Load a public or private dataset.' : 'Sign in to open private datasets.';
   const hint = provider === 'google'
     ? clientId ? 'Access is limited to files you choose. Downloads go directly to this browser.'
@@ -183,7 +182,7 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
               onClick={pickerLoading && !connecting ? cancelPicker : disconnect}>
               {connecting ? 'Cancel sign-in' : pickerLoading ? 'Cancel selection' : 'Disconnect'}
             </button>}
-            {canLoadGoogleDriveUrl && <button type="button" disabled={connecting}
+            {googleApiKey && <button type="button" disabled={connecting}
               className={getButtonClass(clientId ? 'ghost' : 'primary', 'sm', connecting)}
               onClick={() => { close(); onOpenUrlModal(); }}>Load URL</button>}
             {clientId && (sdkError && !connected

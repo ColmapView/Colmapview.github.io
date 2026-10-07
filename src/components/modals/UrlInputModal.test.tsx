@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UrlInputModal } from './UrlInputModal';
 import { URL_INPUT_PLACEHOLDER } from './urlInputModalViewModel';
+import { decodeShareData } from '../../utils/shareDataCodec';
 import { isGoogleDriveEnabled, resolveGoogleDriveHostingConfig } from '../../features/googleDrive/config';
 
 vi.mock('../../features/googleDrive/config', async importOriginal => ({
@@ -73,7 +74,7 @@ describe('UrlInputModal', () => {
     { host: 'GitHub Pages', origin: 'https://colmapview.github.io', flag: 'true' },
     { host: 'Cloudflare preview', origin: 'https://preview.colmapview.pages.dev', flag: 'true' },
     { host: 'disabled custom host', origin: 'https://colmapview.opsiclear.com', flag: 'false' },
-  ])('offers a safe Drive handoff on $host and keeps Hugging Face loading here', ({ origin, flag }) => {
+  ])('offers a safe Drive handoff on $host and keeps Hugging Face loading here', async ({ origin, flag }) => {
     vi.mocked(isGoogleDriveEnabled).mockReturnValue(resolveGoogleDriveHostingConfig({ origin, development: false,
       env: { VITE_GOOGLE_DRIVE_ENABLED: flag, VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN: 'https://colmapview.opsiclear.com',
         VITE_GOOGLE_DRIVE_API_KEY: 'test-key' },
@@ -87,9 +88,9 @@ describe('UrlInputModal', () => {
     expect(handoff).toHaveAttribute('target', '_blank');
     expect(handoff).toHaveAttribute('rel', 'noopener noreferrer');
     const destination = new URL(handoff.getAttribute('href')!);
-    expect(destination.origin).toBe('https://colmapview.opsiclear.com');
-    expect(destination.searchParams.get('url')).toBe('https://drive.google.com/file/d/FILE_123/view?resourcekey=KEY_456');
-    expect(handoff.getAttribute('href')).not.toContain('secret');
+    // The file ID travels in the fragment, which the Drive host's server never receives.
+    expect(destination.origin + destination.pathname + destination.search).toBe('https://colmapview.opsiclear.com/');
+    expect((await decodeShareData(destination.hash))?.manifestUrl).toBe('https://drive.google.com/file/d/FILE_123/view?resourcekey=KEY_456');
     expect(screen.queryByRole('button', { name: 'Load' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
     handoff.focus();

@@ -5,6 +5,7 @@ import { gzipSync, zipSync, strToU8 } from 'fflate';
 import { startArtifactServer } from '../static-server.mjs';
 import { verifyIndexHtml } from '../artifact-verification.mjs';
 import { loadTestDataset } from '../../../e2e/fixtures/load-test-data';
+import { decodeShareData } from '../../../src/utils/shareDataCodec';
 
 interface DeploymentMetadata {
   schemaVersion: number;
@@ -144,9 +145,9 @@ for (const directory of profiles) {
         } else {
           const handoff = dialog.getByRole('link', { name: 'Use Google Drive', exact: true });
           const destination = new URL((await handoff.getAttribute('href'))!);
-          expect(destination.origin).toBe(customOrigin);
-          expect(destination.searchParams.get('url')).toBe('https://drive.google.com/file/d/artifact_fixture_file/view?resourcekey=fixture-resource');
-          expect(destination.href).not.toContain('access_token');
+          // The file ID rides in the fragment, which never reaches the custom host's server.
+          expect(destination.origin + destination.pathname + destination.search).toBe(`${customOrigin}/`);
+          expect((await decodeShareData(destination.hash))?.manifestUrl).toBe('https://drive.google.com/file/d/artifact_fixture_file/view?resourcekey=fixture-resource');
           await dialog.locator('input[type="url"]').press('Enter');
           await expect(dialog).toBeVisible();
           expect(traffic.driveRequests).toEqual([]);

@@ -23,6 +23,7 @@ import {
   URL_INPUT_WARNING_TITLE_CLASS,
 } from './urlInputModalViewModel';
 import { Z_INDEX } from '../../theme';
+import { decodeShareData } from '../../utils/shareDataCodec';
 
 describe('URL input modal view model', () => {
   it('derives load action state from URL text and loading state', () => {
@@ -121,20 +122,18 @@ describe('URL input modal view model', () => {
     expect(URL_INPUT_HELP_CODE_CLASS).toBe('text-ds-accent');
   });
 
-  it('hands off only the canonical Drive file and resource key', () => {
+  it('hands off only the canonical Drive file and resource key, in a fragment the Drive host never receives', async () => {
     const link = getUrlInputDriveHandoffUrl('  https://drive.google.com/file/d/FILE_123/view?resourcekey=KEY_456&access_token=secret&state=discard#token=secret  ', false);
     const destination = new URL(link!);
-    expect(destination.origin).toBe('https://colmapview.opsiclear.com');
-    expect([...destination.searchParams.keys()]).toEqual(['url']);
-    expect(destination.searchParams.get('url')).toBe('https://drive.google.com/file/d/FILE_123/view?resourcekey=KEY_456');
-    expect(destination.hash).toBe('');
-    expect(link).not.toContain('secret');
+    expect(destination.origin + destination.pathname + destination.search).toBe('https://colmapview.opsiclear.com/');
+    expect(await decodeShareData(destination.hash)).toEqual({ manifestUrl: 'https://drive.google.com/file/d/FILE_123/view?resourcekey=KEY_456',
+      manifest: null, viewState: null, config: null });
   });
 
-  it('hands off an account-scoped Drive link in canonical form', () => {
+  it('hands off an account-scoped Drive link in canonical form', async () => {
     const destination = new URL(getUrlInputDriveHandoffUrl('https://drive.google.com/file/u/0/d/FILE_123/view?usp=sharing', false)!);
     expect(destination.origin).toBe('https://colmapview.opsiclear.com');
-    expect(destination.searchParams.get('url')).toBe('https://drive.google.com/file/d/FILE_123/view');
+    expect((await decodeShareData(destination.hash))?.manifestUrl).toBe('https://drive.google.com/file/d/FILE_123/view');
   });
 
   it('keeps enabled Drive and other data URLs in the current viewer', () => {

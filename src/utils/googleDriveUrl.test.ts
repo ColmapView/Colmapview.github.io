@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseGoogleDriveFileUrl } from './googleDriveUrl';
 
 describe('Google Drive file links', () => {
@@ -51,4 +51,27 @@ describe('Google Drive multi-account links', () => {
     'rejects %s without calling it a folder', value => {
       expect(() => parseGoogleDriveFileUrl(value)).toThrow('Paste a Google Drive file sharing link');
     });
+});
+
+describe('Google Drive folder link advice', () => {
+  const folder = 'https://drive.google.com/drive/folders/folder123';
+  const picker = { VITE_GOOGLE_DRIVE_API_KEY: 'test-key', VITE_GOOGLE_DRIVE_CLIENT_ID: '123-test.apps.googleusercontent.com', VITE_GOOGLE_DRIVE_APP_ID: '123' };
+  const configure = (env: Record<string, string>) => {
+    for (const [key, value] of Object.entries({ VITE_GOOGLE_DRIVE_ENABLED: 'true', VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN: '',
+      VITE_GOOGLE_DRIVE_API_KEY: '', VITE_GOOGLE_DRIVE_CLIENT_ID: '', VITE_GOOGLE_DRIVE_APP_ID: '', ...env })) vi.stubEnv(key, value);
+  };
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('points to the Drive picker where this viewer has one', () => {
+    configure(picker);
+    expect(() => parseGoogleDriveFileUrl(folder)).toThrow(
+      'Paste a Google Drive file link to a ZIP or TAR archive rather than a folder link. For a private archive, use the Google Drive picker.');
+  });
+  it.each([
+    ['without Google Drive, such as GitHub Pages', { ...picker, VITE_GOOGLE_DRIVE_ENABLED: 'false' }],
+    ['with public Drive links only', { VITE_GOOGLE_DRIVE_API_KEY: 'test-key' }],
+  ])('offers no picker on a viewer %s', (_, env) => {
+    configure(env);
+    expect(() => parseGoogleDriveFileUrl(folder)).toThrow(/^Paste a Google Drive file link to a ZIP or TAR archive rather than a folder link\.$/);
+  });
 });

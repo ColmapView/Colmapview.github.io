@@ -1,3 +1,5 @@
+import { getGoogleDrivePickerConfig } from '../features/googleDrive/picker';
+
 export interface GoogleDriveFileReference {
   fileId: string;
   resourceKey?: string;
@@ -23,7 +25,8 @@ export function parseGoogleDriveFileUrl(value: string): GoogleDriveFileReference
     || (pathId && queryIds.length && queryIds[0] !== pathId)
     || keys.length > 1 || (keys.length && !/^[A-Za-z0-9_-]{1,200}$/.test(keys[0]))) {
     throw new Error(/\/folders\//.test(path)
-      ? 'Paste a Google Drive file link to a ZIP or TAR archive rather than a folder link. For a private archive, use the Google Drive picker.'
+      // Only some viewers have the picker; GitHub Pages has no Drive at all.
+      ? `Paste a Google Drive file link to a ZIP or TAR archive rather than a folder link.${getGoogleDrivePickerConfig() ? ' For a private archive, use the Google Drive picker.' : ''}`
       : 'Paste a Google Drive file sharing link to a ZIP or TAR archive, such as https://drive.google.com/file/d/FILE_ID/view.');
   }
   const source = new URL(`https://drive.google.com/file/d/${fileId}/view`);
