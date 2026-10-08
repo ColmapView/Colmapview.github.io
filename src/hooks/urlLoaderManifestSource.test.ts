@@ -201,6 +201,55 @@ describe('URL loader manifest source helpers', () => {
     expect(onRemoteSplatCatalog.mock.calls[0][0]).toHaveLength(40);
   });
 
+  it('drops a splat listing SPLAT_DISCOVERY_TIMEOUT_MS after its last answer once it stalls partway through a crawl', async () => {
+    vi.useFakeTimers();
+    const deps = makeDeps();
+    const listings = new Map([['https://example.com/dataset/', ['a/', 'b/', 'c/', 'stalled/']],
+      ['https://example.com/dataset/a/', ['tile.spz']]]);
+    const listingSignals: AbortSignal[] = [];
+    let lastAnswerAt: number | undefined;
+    // Every request answers a second after it is made, except the listing of stalled/, which never answers.
+    deps.fetchImpl.mockImplementation((url: string, init?: RequestInit) => new Promise<Response>((resolve, reject) => {
+      if (url.endsWith('colmapview.yaml')) { resolve(new Response('', { status: 404 })); return; }
+      if (init?.signal) listingSignals.push(init.signal);
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
+      if (url.endsWith('/stalled/')) return;
+      setTimeout(() => {
+        lastAnswerAt = Date.now();
+        const entries = listings.get(url);
+        resolve(init?.method === 'HEAD' ? new Response(null, { headers: { 'content-length': '100' } })
+          : new Response((entries ?? []).map(name => `<a href="${name}">${name}</a>`).join('\n')));
+      }, 1_000);
+    }));
+    const onRemoteSplatCatalog = vi.fn();
+    const onSplatListTimeout = vi.fn();
+    let settled = false;
+    const parsedAt = Date.now();
+    const loading = loadManifestSource(manifest, { type: 'manifest' },
+      { ...deps, discoverSplatCatalog: undefined, onRemoteSplatCatalog, onSplatListTimeout, isTouchDevice: false })
+      .finally(() => { settled = true; });
+
+    // The root, a/, tile.spz's size, b/ and c/ answer after parsing; then stalled/ is asked for.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(deps.processFiles).toHaveBeenCalledOnce();
+    expect(deps.fetchImpl).toHaveBeenCalledWith('https://example.com/dataset/stalled/', expect.anything());
+    expect(lastAnswerAt).toBeGreaterThan(parsedAt + 1_000);
+    const lastAnswer = lastAnswerAt!;
+    await vi.advanceTimersByTimeAsync(lastAnswer + SPLAT_DISCOVERY_TIMEOUT_MS - 1_000 - Date.now());
+    expect(settled).toBe(false);
+    expect(onSplatListTimeout).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(onSplatListTimeout).toHaveBeenCalledOnce();
+    expect(Date.now() - parsedAt).toBeLessThan(SPLAT_DISCOVERY_LIMIT_MS);
+
+    await expect(loading).resolves.toBe(true);
+    expect(onSplatListTimeout).toHaveBeenCalledOnce();
+    expect(onRemoteSplatCatalog).not.toHaveBeenCalled();
+    expect(deps.setSourceInfo).toHaveBeenCalledOnce();
+    expect(listingSignals.length).toBeGreaterThan(0);
+    expect(listingSignals.every(signal => signal.aborted)).toBe(true);
+  });
+
   it('drops a splat listing still running SPLAT_DISCOVERY_LIMIT_MS after parsing, however steadily it answers', async () => {
     vi.useFakeTimers();
     const deps = makeDeps();
