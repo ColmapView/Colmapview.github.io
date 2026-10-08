@@ -34,8 +34,6 @@ function beginLocalLoad() {
   return {
     ...load,
     initialSplatSelectionRevision,
-    onViewerState: (state: Parameters<typeof applySavedViewerState>[0], splatSelectionRevision = initialSplatSelectionRevision) =>
-      applySavedViewerState(state, null, load.assertCurrent, splatSelectionRevision),
     // Timeout warnings describe the scene on screen, which a failed or cancelled load leaves in place.
     onSceneReplaced: dismissDatasetTimeoutWarnings,
   };

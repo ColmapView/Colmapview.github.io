@@ -13,7 +13,7 @@ import type { FileDropzoneWorkflowOptions } from './fileDropzoneWorkflow';
 type ProcessFiles = (
   files: Map<string, File>,
   progressRange?: { start: number; end: number },
-  options?: Pick<FileDropzoneWorkflowOptions, 'onSceneReplaced' | 'onViewerState' | 'load' | 'signal' | 'initialSplatSelectionRevision'>
+  options?: Pick<FileDropzoneWorkflowOptions, 'onSceneReplaced' | 'load' | 'signal' | 'initialSplatSelectionRevision'>
 ) => Promise<void | boolean>;
 type ClearCaches = (options?: ClearAllOptions) => void;
 type SetSourceInfo = (type: ReconstructionSourceType, url?: string | null) => void;
@@ -24,7 +24,7 @@ type SetActiveZipArchive = (
   imageCount?: number
 ) => void;
 type LocalSourceLoad = ReturnType<typeof beginReconstructionLoad> &
-  Pick<FileDropzoneWorkflowOptions, 'onViewerState' | 'initialSplatSelectionRevision' | 'onSceneReplaced'>;
+  Pick<FileDropzoneWorkflowOptions, 'initialSplatSelectionRevision' | 'onSceneReplaced'>;
 type LoadZipFromFile = (
   zipFile: File,
   onProgress: (progress: ZipProgress) => void,
@@ -101,6 +101,17 @@ function commitLocalSceneSource(deps: Pick<LocalSourceBaseDeps, 'clearCaches' | 
   deps.setSourceInfo('local', null);
 }
 
+/** Hands the files to the workflow under this load; `install` commits their source once they replace the scene. */
+function processLocalFiles(files: Map<string, File>, load: LocalSourceLoad, deps: Pick<LocalSourceBaseDeps, 'processFiles'>,
+  install: () => void) {
+  return deps.processFiles(files, undefined, {
+    load,
+    signal: load.signal,
+    initialSplatSelectionRevision: load.initialSplatSelectionRevision,
+    onSceneReplaced: () => { load.assertCurrent(); load.onSceneReplaced?.(); install(); },
+  });
+}
+
 export async function loadLocalZipFile(
   zipFile: File,
   deps: LoadLocalZipFileDeps
@@ -140,19 +151,11 @@ export async function loadLocalZipFile(
 
     log(`[ZIP Loader] ZIP contains ${colmapFiles.size} COLMAP files, ${imageCount} indexed images`);
 
-    const processed = await deps.processFiles(colmapFiles, undefined, {
-      load,
-      signal: load.signal,
-      initialSplatSelectionRevision: load.initialSplatSelectionRevision,
-      onViewerState: load.onViewerState,
-      onSceneReplaced: () => {
-        load.assertCurrent();
-        load.onSceneReplaced?.();
-        deps.clearCaches();
-        deps.setActiveZipArchive(archive, imageIndex, fileSize, imageCount);
-        transferred = true;
-        deps.setSourceInfo('zip', null);
-      },
+    const processed = await processLocalFiles(colmapFiles, load, deps, () => {
+      deps.clearCaches();
+      deps.setActiveZipArchive(archive, imageIndex, fileSize, imageCount);
+      transferred = true;
+      deps.setSourceInfo('zip', null);
     });
     load.assertCurrent();
     if (processed === false) return false;
@@ -196,13 +199,7 @@ export async function loadDropPayload(
       (entry, path, files) => deps.scanEntry(entry, path, files, load.signal)), load.signal);
     load.assertCurrent();
 
-    const processed = await deps.processFiles(files, undefined, {
-      load,
-      signal: load.signal,
-      initialSplatSelectionRevision: load.initialSplatSelectionRevision,
-      onViewerState: load.onViewerState,
-      onSceneReplaced: () => { load.assertCurrent(); load.onSceneReplaced?.(); commitLocalSceneSource(deps); },
-    });
+    const processed = await processLocalFiles(files, load, deps, () => commitLocalSceneSource(deps));
     load.assertCurrent();
     return processed !== false;
   } catch (error) {
@@ -258,13 +255,7 @@ export async function loadBrowsedDirectory(
     await awaitWithAbort(deps.scanDirectoryHandle(dirHandle, '', files, load.signal), load.signal);
     load.assertCurrent();
 
-    const processed = await deps.processFiles(files, undefined, {
-      load,
-      signal: load.signal,
-      initialSplatSelectionRevision: load.initialSplatSelectionRevision,
-      onViewerState: load.onViewerState,
-      onSceneReplaced: () => { load.assertCurrent(); load.onSceneReplaced?.(); commitLocalSceneSource(deps); },
-    });
+    const processed = await processLocalFiles(files, load, deps, () => commitLocalSceneSource(deps));
     load.assertCurrent();
     return processed !== false;
   } catch (error) {
