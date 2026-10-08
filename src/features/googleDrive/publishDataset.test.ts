@@ -196,6 +196,16 @@ describe('Drive publication lifecycle', () => {
     await drive.controller.retry();
     expect(drive.controller.getSnapshot()).toEqual(idle);
   });
+  it('returns a finished publication to a fresh form, without its link, when the scene is edited or images are marked for deletion', async () => {
+    const { controller, client, prepare } = fixture();
+    await controller.publish('scene', true, prepare);
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'completed', fileUrl: expect.any(String), receipt: { shared: true } });
+    controller.invalidate('edit');
+    expect(controller.getSnapshot()).toEqual(idle);
+    await controller.retry();
+    expect(controller.getSnapshot()).toEqual(idle);
+    expect(client.chunk).toHaveBeenCalledOnce();
+  });
   it('keeps uploading a built ZIP when the scene is edited or images are marked for deletion, as Hugging Face does', async () => {
     const { controller, client, prepare } = fixture();
     let marked = false;
@@ -247,6 +257,32 @@ describe('Drive publication lifecycle', () => {
     await attempt; await controller.retry();
     expect(controller.getSnapshot()).toMatchObject({ phase: 'cancelled', canRetry: false });
     expect(client.generateId).not.toHaveBeenCalled();
+  });
+  it('cancels the upload of a built ZIP when another dataset loads, so the old dataset never shows a receipt', async () => {
+    const { controller, client, prepare } = fixture();
+    let uploading!: () => void;
+    const chunkStarted = new Promise<void>(resolve => { uploading = resolve; });
+    let answer!: () => void;
+    const upload = client.chunk.getMockImplementation()!;
+    // The chunk's response still arrives after the cancel.
+    client.chunk.mockImplementationOnce(async (...args: unknown[]) => {
+      uploading();
+      await new Promise<void>(resolve => { answer = resolve; });
+      return upload(...args);
+    });
+    const attempt = controller.publish('scene', true, prepare);
+    await chunkStarted;
+    expect(controller.getSnapshot().phase).toBe('uploading');
+    controller.invalidate('dataset');
+    answer();
+    await attempt;
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'cancelled', message: 'The dataset changed. Start a new Drive publication.',
+      canRetry: false });
+    await controller.retry();
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'cancelled', canRetry: false });
+    expect(controller.getSnapshot().receipt).toBeUndefined();
+    expect(client.share).not.toHaveBeenCalled();
+    expect(client.chunk).toHaveBeenCalledOnce();
   });
   it('rejects stalled and forward-jumping acknowledgements without declaring success', async () => {
     const { controller, client, prepare } = fixture(DRIVE_UPLOAD_CHUNK_BYTES + 10);

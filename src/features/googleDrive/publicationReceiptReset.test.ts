@@ -49,6 +49,22 @@ describe('Drive publication receipt', () => {
     expect(drivePublication.getSnapshot()).toMatchObject({ phase: 'idle', canRetry: false });
     expect(drivePublication.getSnapshot().error).toBeUndefined();
   });
+  it.each([
+    ['the model is edited', () => useReconstructionStore.setState(state => ({ reconstructionEditRevision: state.reconstructionEditRevision + 1 }))],
+    ['an image is marked for deletion', () => useDeletionStore.setState({ pendingDeletions: new Set([1]) })],
+  ])('clears a finished Drive receipt when %s', async (_, change) => {
+    const { drivePublication } = await import('./publicationRuntime');
+    try {
+      await drivePublication.publish('d', false, archive);
+      expect(drivePublication.getSnapshot()).toMatchObject({ phase: 'completed', fileUrl: expect.any(String), receipt: { shared: false } });
+      change();
+      expect(drivePublication.getSnapshot()).toMatchObject({ phase: 'idle', canRetry: false });
+      expect(drivePublication.getSnapshot().receipt).toBeUndefined();
+      expect(drivePublication.getSnapshot().fileUrl).toBeUndefined();
+    } finally {
+      useDeletionStore.setState({ pendingDeletions: new Set() });
+    }
+  });
   it('finishes uploading a built ZIP when an image is marked for deletion', async () => {
     const { drivePublication } = await import('./publicationRuntime');
     const input = capturePublicationInput();
