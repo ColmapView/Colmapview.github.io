@@ -20,8 +20,8 @@ import { processFileDropzoneFiles } from './fileDropzoneWorkflow';
 import { appLogger, noopLogger } from '../utils/logger';
 import { useNotificationStore } from '../store/stores/notificationStore';
 import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS, SKIPPED_SETTINGS_WARNING } from './urlLoaderViewerState';
-import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE } from './optionalSettingsWarning';
-import { dismissSplatListTimeoutWarning, SPLAT_LIST_TIMEOUT_MESSAGE } from './splatListWarning';
+import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE, SPLAT_LIST_TIMEOUT_MESSAGE, splatListTimeoutWarning } from './datasetTimeoutWarnings';
+import { notificationsWithMessage } from '../test/notifications';
 import { SPLAT_DISCOVERY_TIMEOUT_MS } from './urlLoaderManifestSource';
 import { isReconstructionLoadPending } from '../wasm/reconstructionLoadLifecycle';
 import { getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
@@ -68,15 +68,8 @@ function createSplatLoadedFiles(splatFile: File): LoadedFiles {
 }
 
 /** Timeout warnings on screen; pinning the whole list catches a stacked duplicate. */
-function settingsTimeoutWarnings() {
-  return useNotificationStore.getState().notifications
-    .filter(notification => notification.message === OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE);
-}
-
-function splatListTimeoutWarnings() {
-  return useNotificationStore.getState().notifications
-    .filter(notification => notification.message === SPLAT_LIST_TIMEOUT_MESSAGE);
-}
+const settingsTimeoutWarnings = () => notificationsWithMessage(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE);
+const splatListTimeoutWarnings = () => notificationsWithMessage(SPLAT_LIST_TIMEOUT_MESSAGE);
 
 function hubEntries(splats: Array<{ path: string; size: number }>) {
   return [
@@ -123,7 +116,7 @@ describe('useUrlLoader', () => {
     usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
     useCameraStore.setState(useCameraStore.getInitialState(), true);
     useTransformStore.setState(useTransformStore.getInitialState(), true);
-    dismissSplatListTimeoutWarning();
+    splatListTimeoutWarning.dismiss();
     useNotificationStore.setState(useNotificationStore.getInitialState(), true);
     window.history.replaceState(null, '', '/');
     vi.unstubAllEnvs();

@@ -18,8 +18,7 @@ import { collectDroppedFiles, collectFileDropPayload, isFileDrop } from './fileD
 import { loadBrowsedDirectory, loadDropPayload, loadLocalZipFile } from './fileDropzoneLocalSources';
 import { processFileDropzoneFiles, type FileDropzoneWorkflowOptions } from './fileDropzoneWorkflow';
 import { applySavedViewerState } from './useUrlState';
-import { dismissOptionalSettingsTimeoutWarning } from './optionalSettingsWarning';
-import { dismissSplatListTimeoutWarning } from './splatListWarning';
+import { dismissDatasetTimeoutWarnings } from './datasetTimeoutWarnings';
 import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
 
 function cancelUrlLoad(): void {
@@ -38,10 +37,7 @@ function beginLocalLoad() {
     onViewerState: (state: Parameters<typeof applySavedViewerState>[0], splatSelectionRevision = initialSplatSelectionRevision) =>
       applySavedViewerState(state, null, load.assertCurrent, splatSelectionRevision),
     // Timeout warnings describe the scene on screen, which a failed or cancelled load leaves in place.
-    onSceneReplaced: () => {
-      dismissOptionalSettingsTimeoutWarning();
-      dismissSplatListTimeoutWarning();
-    },
+    onSceneReplaced: dismissDatasetTimeoutWarnings,
   };
 }
 

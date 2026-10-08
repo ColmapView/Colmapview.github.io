@@ -24,11 +24,13 @@ import { getSplatDownloadProgress, getSplatLoadingProgress } from '../utils/spla
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import {
-  dismissOptionalSettingsTimeoutWarning,
+  dismissDatasetTimeoutWarnings,
   OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE,
-  showOptionalSettingsTimeoutWarning,
-} from '../hooks/optionalSettingsWarning';
-import { dismissSplatListTimeoutWarning, showSplatListTimeoutWarning, SPLAT_LIST_TIMEOUT_MESSAGE } from '../hooks/splatListWarning';
+  optionalSettingsTimeoutWarning,
+  SPLAT_LIST_TIMEOUT_MESSAGE,
+  splatListTimeoutWarning,
+} from '../hooks/datasetTimeoutWarnings';
+import { notificationsWithMessage } from '../test/notifications';
 import { collectShareConfig } from '../hooks/useUrlState';
 
 // Byte-less activation seams: the decode step is mocked (no real gs-toolbox
@@ -2082,8 +2084,7 @@ describe('reconstruction store None choice', () => {
 });
 
 describe('reconstruction store settings timeout warning', () => {
-  const timeoutWarnings = () => useNotificationStore.getState().notifications
-    .filter(notification => notification.message === OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE);
+  const timeoutWarnings = () => notificationsWithMessage(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE);
 
   beforeEach(() => {
     window.history.replaceState(null, '', '/');
@@ -2095,25 +2096,23 @@ describe('reconstruction store settings timeout warning', () => {
 
   afterEach(() => {
     useReconstructionStore.getState().clear();
-    dismissOptionalSettingsTimeoutWarning();
-    dismissSplatListTimeoutWarning();
+    dismissDatasetTimeoutWarnings();
     useNotificationStore.setState(useNotificationStore.getInitialState(), true);
     window.history.replaceState(null, '', '/');
   });
 
   it('takes the warning down with the scene it describes', () => {
     useReconstructionStore.setState({ reconstruction: buildReconstruction(), loadedFiles: baseLoadedFiles({}) });
-    showOptionalSettingsTimeoutWarning();
+    optionalSettingsTimeoutWarning.show();
     useReconstructionStore.getState().clear();
     expect(timeoutWarnings()).toEqual([]);
   });
 
   it('takes the splat list warning down with the scene it describes', () => {
     useReconstructionStore.setState({ reconstruction: buildReconstruction(), loadedFiles: baseLoadedFiles({}) });
-    showSplatListTimeoutWarning();
+    splatListTimeoutWarning.show();
     useReconstructionStore.getState().clear();
-    expect(useNotificationStore.getState().notifications
-      .filter(notification => notification.message === SPLAT_LIST_TIMEOUT_MESSAGE)).toEqual([]);
+    expect(notificationsWithMessage(SPLAT_LIST_TIMEOUT_MESSAGE)).toEqual([]);
   });
 
   it('takes the warning down when cancelling returns to the landing page', () => {
@@ -2123,7 +2122,7 @@ describe('reconstruction store settings timeout warning', () => {
       splatFile: splat, splatFiles: [splat], splatFileSources: [{ id: 'scene.spz', path: 'scene.spz', file: splat }] });
     useReconstructionStore.setState({ reconstruction: buildReconstruction(), urlLoading: true,
       urlProgress: getSplatLoadingProgress(splat, { startPercent: 60 }) });
-    showOptionalSettingsTimeoutWarning();
+    optionalSettingsTimeoutWarning.show();
     useReconstructionStore.getState().cancelLoading();
     expect(useReconstructionStore.getState().loadedFiles).toBeNull();
     expect(timeoutWarnings()).toEqual([]);
@@ -2134,7 +2133,7 @@ describe('reconstruction store settings timeout warning', () => {
     useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({ splatFile: fileA, splatFiles: [fileA],
       splatFileSources: [{ id: 'splats/a.ply', path: 'splats/a.ply', file: fileA }] }));
     useReconstructionStore.setState({ urlLoading: true, urlProgress: getSplatLoadingProgress(fileA, { startPercent: 60 }) });
-    showOptionalSettingsTimeoutWarning();
+    optionalSettingsTimeoutWarning.show();
     useReconstructionStore.getState().cancelLoading();
     expect(timeoutWarnings()).toHaveLength(1);
   });

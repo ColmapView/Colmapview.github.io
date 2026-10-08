@@ -12,8 +12,8 @@ import { buildFile, buildFileSystemFileEntry, buildLoadedFiles, buildReconstruct
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
-import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE, showOptionalSettingsTimeoutWarning } from './optionalSettingsWarning';
-import { showSplatListTimeoutWarning, SPLAT_LIST_TIMEOUT_MESSAGE } from './splatListWarning';
+import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE, optionalSettingsTimeoutWarning, SPLAT_LIST_TIMEOUT_MESSAGE,
+  splatListTimeoutWarning } from './datasetTimeoutWarnings';
 import { appLogger, noopLogger } from '../utils/logger';
 
 const { processFileDropzoneFilesMock } = vi.hoisted(() => ({
@@ -69,8 +69,8 @@ describe('useFileDropzone', () => {
   });
 
   it('removes the previous dataset\'s settings and splat list timeout warnings when dropped local files replace it', async () => {
-    showOptionalSettingsTimeoutWarning();
-    showSplatListTimeoutWarning();
+    optionalSettingsTimeoutWarning.show();
+    splatListTimeoutWarning.show();
     // Like the workflow's commit: the scene is replaced.
     processFileDropzoneFilesMock.mockImplementationOnce(async (_files, _deps, options) => {
       (options as import('./fileDropzoneWorkflow').FileDropzoneWorkflowOptions).onSceneReplaced?.();
@@ -91,8 +91,8 @@ describe('useFileDropzone', () => {
     ['is cancelled', async () => false],
   ])('keeps the timeout warnings of the scene on screen when a dropped load %s', async (_name, outcome) => {
     vi.spyOn(appLogger, 'error').mockImplementation(() => undefined);
-    showOptionalSettingsTimeoutWarning();
-    showSplatListTimeoutWarning();
+    optionalSettingsTimeoutWarning.show();
+    splatListTimeoutWarning.show();
     processFileDropzoneFilesMock.mockImplementationOnce(outcome);
     const { result } = renderHook(() => useFileDropzone());
     const event = { preventDefault: vi.fn(), stopPropagation: vi.fn(), dataTransfer: {

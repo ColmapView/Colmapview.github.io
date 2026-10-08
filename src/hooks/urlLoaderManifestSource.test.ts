@@ -7,7 +7,8 @@ import {
 } from './urlLoaderManifestSource';
 import type { RemoteSplatCandidate } from './urlLoaderPolicy';
 import { useNotificationStore } from '../store/stores/notificationStore';
-import { dismissSplatListTimeoutWarning, showSplatListTimeoutWarning, SPLAT_LIST_TIMEOUT_MESSAGE } from './splatListWarning';
+import { SPLAT_LIST_TIMEOUT_MESSAGE, splatListTimeoutWarning } from './datasetTimeoutWarnings';
+import { notificationsWithMessage } from '../test/notifications';
 
 const manifest: ColmapManifest = {
   version: 1,
@@ -51,12 +52,11 @@ function makeDeps(files = makeFiles()) {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
-  dismissSplatListTimeoutWarning();
+  splatListTimeoutWarning.dismiss();
   useNotificationStore.setState(useNotificationStore.getInitialState(), true);
 });
 
-const splatListWarnings = () => useNotificationStore.getState().notifications
-  .filter(notification => notification.message === SPLAT_LIST_TIMEOUT_MESSAGE);
+const splatListWarnings = () => notificationsWithMessage(SPLAT_LIST_TIMEOUT_MESSAGE);
 
 describe('URL loader manifest source helpers', () => {
   it('loads a URL manifest source with lazy image/mask bases and processing progress', async () => {
@@ -282,7 +282,7 @@ describe('URL loader manifest source helpers', () => {
     const deps = { ...makeDeps(), discoverSplatCatalog: vi.fn(() => new Promise<RemoteSplatCandidate[]>(() => {})) };
     const onRemoteSplatCatalog = vi.fn();
     const loading = loadManifestSource(manifest, { type: 'manifest' },
-      { ...deps, onRemoteSplatCatalog, onSplatListTimeout: showSplatListTimeoutWarning });
+      { ...deps, onRemoteSplatCatalog, onSplatListTimeout: splatListTimeoutWarning.show });
 
     await vi.waitFor(() => expect(deps.processFiles).toHaveBeenCalledOnce());
     await vi.advanceTimersByTimeAsync(SPLAT_DISCOVERY_TIMEOUT_MS - 1_000);
