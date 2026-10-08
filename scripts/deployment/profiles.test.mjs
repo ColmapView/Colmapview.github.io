@@ -243,6 +243,14 @@ test('Cloudflare deployment token is scoped only to trusted upload steps', () =>
   assert.ok(publishSteps.indexOf(trustedSmoke) >= 0 && publishSteps.indexOf(trustedSmoke) < publishSteps.indexOf(upload), 'The trusted smoke must precede the preview upload.');
   assert.ok(trustedSmoke.if === undefined && [undefined, false].includes(trustedSmoke['continue-on-error']), 'The trusted smoke must always run and stop the job when it fails.');
   assert.equal(`${trustedSmoke.env.DEPLOYMENT_SMOKE_ROOT}/${trustedSmoke.env.DEPLOYMENT_SMOKE_PROFILES}`, '.tmp/deployment/preview');
+  // It runs every deployment browser test, artifacts.spec.ts's refusal of _worker.js among them.
+  assert.equal(trustedSmoke.run, 'npm run test:deployment:browser');
+  assert.equal(JSON.parse(readFileSync('package.json', 'utf8')).scripts['test:deployment:browser'],
+    'playwright test --config=scripts/deployment/playwright.config.ts');
+  const smokeConfig = readFileSync('scripts/deployment/playwright.config.ts', 'utf8');
+  assert.equal(smokeConfig.match(/testDir: '([^']+)'/)?.[1], './tests');
+  assert.doesNotMatch(smokeConfig, /\b(?:testMatch|testIgnore|grep|grepInvert)\s*:/);
+  assert.match(readFileSync('scripts/deployment/tests/artifacts.spec.ts', 'utf8'), /\['_worker\.js', '_routes\.json', 'functions'\]/);
   assert.match(upload.run, / pages deploy \.tmp\/deployment\/preview /);
   // Selected-ref code runs in the default branch's cache scope: it must neither restore nor save the npm cache.
   const buildSetup = preview.jobs.build.steps.find(step => step.uses?.startsWith('actions/setup-node@'));
