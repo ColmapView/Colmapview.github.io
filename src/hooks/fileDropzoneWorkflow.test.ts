@@ -437,7 +437,7 @@ describe('file dropzone workflow', () => {
    * incoming file, b.spz shares its file name with the incoming splats/b.spz, and splats/alternate.spz is an
    * incoming id. Returns the splat the load leaves showing.
    */
-  async function replaceSceneWhileChoosing(choice: string) {
+  async function replaceSceneWhileChoosing(choice: string, { withoutStoreRequest = false } = {}) {
     useReconstructionStore.getState().clear();
     const fixture = workerLoadFixture();
     const state = useReconstructionStore.getState();
@@ -472,6 +472,8 @@ describe('file dropzone workflow', () => {
       const pending = processFileDropzoneFiles(fixture.files, deps);
       await vi.waitFor(() => expect(buildReconstruction).toHaveBeenCalledOnce());
       await state.selectSplatSource(choice);
+      // The activation leaves its id requested; the commit must not depend on that leftover.
+      if (withoutStoreRequest) useReconstructionStore.setState({ requestedSplatSourceId: null });
       finishBuild({ reconstruction: fixture.reconstruction, pointCount: 0 });
       expect(await pending).toBe(true);
       return { incoming, shown: useReconstructionStore.getState().loadedFiles?.splatFile };
@@ -490,9 +492,9 @@ describe('file dropzone workflow', () => {
     expect(shown).toBe(incoming.saved);
   });
 
-  it('keeps the incoming splat named like the picked tile over the incoming colmapview.yaml', async () => {
-    // The pick names splats/b.spz by its file name, so the store shows that splat at commit.
-    const { incoming, shown } = await replaceSceneWhileChoosing('b.spz');
+  it.each([false, true])('keeps the incoming splat named like the picked tile over the incoming colmapview.yaml (store request cleared: %s)', async withoutStoreRequest => {
+    // The pick names splats/b.spz by its file name, so the commit shows that splat.
+    const { incoming, shown } = await replaceSceneWhileChoosing('b.spz', { withoutStoreRequest });
     expect(shown).toBe(incoming.b);
   });
 

@@ -226,4 +226,31 @@ describe('useViewerControlsController', () => {
     pressKey('n');
     expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(second);
   });
+
+  it.each([['None', ''], ['another splat', 'b.spz']])(
+    'ignores %s picked in the Point Cloud panel while a dataset load replaces the scene', (_label, sourceId) => {
+      const first = buildFile('a.spz', 'a');
+      const second = buildFile('b.spz', 'b');
+      useReconstructionStore.setState({
+        reconstruction: buildReconstruction(),
+        loadedFiles: buildLoadedFiles({ splatFile: first, splatFiles: [first, second], splatFileSources: [
+          { id: 'a.spz', path: 'a.spz', file: first }, { id: 'b.spz', path: 'b.spz', file: second }] }),
+      });
+      const { result } = renderHook(() => useViewerControlsController(), { wrapper: hotkeyWrapper });
+      const revision = useReconstructionStore.getState().splatSelectionRevision;
+      const parsing = { percent: 20, message: 'Parsing COLMAP files...' };
+      const load = beginReconstructionLoad();
+      try {
+        useReconstructionStore.setState({ urlLoading: true, urlProgress: parsing });
+        act(() => result.current.pointCloudPanel.onSelectSplatSource(sourceId));
+        // The load keeps its overlay and Cancel, and the scene it replaces keeps its splat.
+        expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true, urlProgress: parsing,
+          splatSelectionRevision: revision });
+        expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(first);
+      } finally {
+        load.finish();
+      }
+      act(() => result.current.pointCloudPanel.onSelectSplatSource(sourceId));
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(sourceId ? second : undefined);
+    });
 });

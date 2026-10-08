@@ -583,19 +583,14 @@ export async function processFileDropzoneFiles(
     if (currentSelection && initialSplatSelectionRevision !== undefined
       && currentSelection.revision !== initialSplatSelectionRevision) {
       // A choice made during the load carries over only when it fits these files: None, or one of
-      // their sources. A tile of the scene being replaced keeps the default, and saved settings
-      // restore as if it had not been made, unless it names one of these splats by path or file
-      // name: the store re-picks that splat at commit.
-      if (currentSelection.sourceId === '') {
-        splatFile = undefined;
-      } else {
-        const chosen = splatFileSources.find(source => source.id === currentSelection.sourceId);
-        if (chosen) splatFile = chosen.file;
-        else if (currentSelection.sourceId === undefined
-          || !findSplatSourceById({ splatFileSources }, currentSelection.sourceId)) {
-          ignoredSplatSelectionRevision = currentSelection.revision;
-        }
-      }
+      // their sources by id, path or file name. A tile of the scene being replaced keeps the default,
+      // and saved settings restore as if it had not been made.
+      const { sourceId } = currentSelection;
+      const chosen = sourceId ? splatFileSources.find(source => source.id === sourceId)
+        ?? findSplatSourceById({ splatFileSources }, sourceId) : undefined;
+      if (sourceId === '') splatFile = undefined;
+      else if (chosen) splatFile = chosen.file;
+      else ignoredSplatSelectionRevision = currentSelection.revision;
     }
     const currentLoadedFiles = deps.getLoadedFiles();
     const splatState = getSplatState(currentLoadedFiles);

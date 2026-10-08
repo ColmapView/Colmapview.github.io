@@ -161,17 +161,22 @@ export function useViewerControlsController(): ViewerControlsController {
     requestDefaultSplatCameraColor(nextColorMode);
   }, [pointsActions, requestDefaultSplatCameraColor]);
 
-  const cycleSplatFile = useCallback(() => {
-    // These tiles belong to the scene a dataset load is replacing; switching one would take over
-    // the load's progress overlay and read as a splat choice for the incoming dataset.
+  // `n` and the Point Cloud panel act on the splats of the scene on screen. While a dataset load is
+  // replacing that scene, a switch would take over the load's progress overlay and its Cancel, and read
+  // as a splat choice for the incoming dataset.
+  const selectSceneSplatSource = useCallback((sourceId: string) => {
     if (isDatasetLoadPending()) {
       return;
     }
+    selectSplatSource(sourceId);
+  }, [isDatasetLoadPending, selectSplatSource]);
+
+  const cycleSplatFile = useCallback(() => {
     const nextSourceId = getNextSplatSourceId(splatFileSources, activeSplatSourceId);
     if (nextSourceId) {
-      selectSplatSource(nextSourceId);
+      selectSceneSplatSource(nextSourceId);
     }
-  }, [activeSplatSourceId, isDatasetLoadPending, selectSplatSource, splatFileSources]);
+  }, [activeSplatSourceId, selectSceneSplatSource, splatFileSources]);
 
   const {
     toggleBackground,
@@ -375,7 +380,7 @@ export function useViewerControlsController(): ViewerControlsController {
       hasSplatData: splats.hasSplatData,
       splatFileSources: splats.splatFileSources,
       activeSplatSourceId: splats.activeSplatSourceId,
-      onSelectSplatSource: splats.selectSplatSource,
+      onSelectSplatSource: selectSceneSplatSource,
       selectionColor: selectionNode.color,
       setSelectionColor: selectionActions.setColor,
       selectionAnimationSpeed: selectionNode.animationSpeed,
