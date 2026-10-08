@@ -81,7 +81,7 @@ Tasks 1–18 run in one workflow (Appendix A) that follows this graph. The *Crit
 | 13 | F5, X3, X2 | Q3-T3 | high / high | 7, 12 | yes | 0 | — |
 | 14 | F13 | Q3-T4 | medium / high | 13 | yes | 0 | `e2e/hugging-face-publish.spec.ts` |
 | 15 | F6 part 2 | Q4-T1 | low / medium | — | — | 2 | Deploy |
-| 16 | F14, X4 | Q4-T2 | low / medium | 15 | — | 6 | Deploy |
+| 16 | F14, X4 | Q4-T2 | medium / high | 15 | — | 6 | Deploy |
 | 17 | X12 | Q4-T3 | low / low | — | — | 8 | — |
 | 18 | F6 part 1 | Q4-T4 | low / medium | — | — | 5 | — |
 
@@ -227,7 +227,7 @@ Task 2 waits for Task 1 only for its e2e gate.
 - **Consumers:** Tasks 5, 8, 9 and 13 work on top of this.
 
 **Review focus:**
-- Each way None can be chosen sets the flag: picker, panel, `n`, saved settings and link. Every activation clears it.
+- Each way None can be chosen sets the flag: picker, panel, a decode Cancel (which means None), saved settings and link. Every activation clears it, including one by `n`, which cycles real sources and never chooses None.
 - A sharer whose splat list timed out, or whose splat failed, shares no choice.
 - G11 still holds: an explicit None in a link is honoured before any decode.
 - Publications and embeds follow the same rule. Drive (`prepareArchive.ts:157`) inherits it.
@@ -375,7 +375,14 @@ Task 2 waits for Task 1 only for its e2e gate.
 
 ### Task 16: Previews of older releases pass the trusted check; previews publish static files only (F14, X4)
 
-**Spec:** Q4 §F14 and §X4 (T2) are binding in full. Adapt to Task 15 in `profiles.test.mjs` and `docs/dual-hosting.md`.
+**Spec:** Q4 §F14 and §X4 (T2) are binding, with one amendment from the Codex plan review (design.md, "Codex plan review"). Adapt to Task 15 in `profiles.test.mjs` and `docs/dual-hosting.md`.
+
+**Amendment: trust the directory, not the artifact's label.**
+- **Why:** `metadata.profile` comes from the downloaded artifact's `deployment.json`, which the selected ref controls. A preview relabelled `github` would skip a check placed in the `metadata.profile !== 'github'` block, and then the token step would upload its `_worker.js`.
+- **The fix:**
+  - In the profile loop, first assert `expect(metadata.profile, 'artifact profile').toBe(directory)`. `directory` comes from the trusted `DEPLOYMENT_SMOKE_PROFILES`.
+  - Key the X4 refusal, and F14's preview-only skew guard, on `directory`.
+- **Prove it:** a scratch preview artifact relabelled `profile: 'github'` that carries `_worker.js` must fail the trusted smoke. It passes with Q4's unamended guard. Record both runs in the report.
 
 **Files:**
 - `scripts/deployment/tests/artifacts.spec.ts`
@@ -384,8 +391,8 @@ Task 2 waits for Task 1 only for its e2e gate.
 - `docs/dual-hosting.md:50`
 
 **Review focus:**
-- **Version-skew guard:** it applies to the preview profile only, and the github profile stays strict.
-- **Static files only:** `_worker.js`, `_routes.json` and `functions` are refused before the token step uploads anything.
+- **Version-skew guard:** it applies to the preview directory only, and the github profile stays strict.
+- **Static files only:** `_worker.js`, `_routes.json` and `functions` are refused before the token step uploads anything, whatever profile the artifact claims. The profile assertion comes before every profile-dependent check.
 - **Trust model:** it is documented in `dual-hosting.md` and the workflow comment.
 
 - [ ] **Step 1:** Write the tests and run them RED, implement, and run them GREEN. Run the full checks and `npm run test:deployment`. Commit: "Let previews of older releases pass the trusted check, and publish previews as static files only".
@@ -415,11 +422,11 @@ Task 2 waits for Task 1 only for its e2e gate.
 
 - [ ] **Ledger each task's outcome** from the workflow's result: status, commits, rounds, open findings, concerns and carried Minors. Verify the commit trailers, and check each commit's files against its task.
 - [ ] **Resolve any task that was skipped or stopped.** Resume or re-dispatch it with the missing context, and ledger the ruling.
-- [ ] **Run the full CI gate on a quiet tree:**
+- [ ] **Run the full CI gate on a quiet tree, with `CI=true` as GitHub sets it.** Under `CI`, Playwright forbids `test.only` and uses CI's single worker and two retries, and Vitest also refuses `.only`.
   - `npx tsc -b --force`;
-  - `npm run check` (pristine vitest output);
-  - `npm run test:deployment`;
-  - `npx playwright test --project=chromium --reporter=list`.
+  - `CI=true npm run check` (pristine vitest output);
+  - `CI=true npm run test:deployment`;
+  - `CI=true npx playwright test --project=chromium --reporter=list`.
 - [ ] **Run the Codex gate:** `codex review --base 1984de8 < /dev/null` in the background, and read its findings when it finishes.
 
 ### Task 20: Final review, one fix wave, one re-review *(workflow, Appendix B)*
@@ -434,10 +441,10 @@ Task 2 waits for Task 1 only for its e2e gate.
 
 ### Task 21: Finish *(controller)*
 
-- [ ] Re-run the full CI gate on the final tree.
+- [ ] Re-run the full CI gate, with `CI=true` as in Task 19, on the final tree.
 - [ ] Present the finish options from superpowers:finishing-a-development-branch. The user chose a local merge in the last two rounds.
 - [ ] **After the merge:**
-  - run the full CI gate on `main`;
+  - run the full CI gate on `main`, with `CI=true`;
   - delete the branch;
   - apply Q4's `CLAUDE.md` draft (user decision 5) and show the diff;
   - update memory;
@@ -547,19 +554,20 @@ const stop = (t, why, impl, rounds, minors) => {
 }
 const unusable = r => !r || r.status === 'BLOCKED' || r.status === 'NEEDS_CONTEXT'
 
-async function runTask(t) {
-  const impl = await agent(implementPrompt(t), { label: 'T' + t.n + ' implement', phase: 'Tasks', effort: t.effort, schema: IMPL })
+// ctx keeps what a task has done so far, so an agent call that throws mid-task does not lose its commits.
+async function runTask(t, ctx) {
+  const impl = ctx.impl = await agent(implementPrompt(t), { label: 'T' + t.n + ' implement', phase: 'Tasks', effort: t.effort, schema: IMPL })
   if (unusable(impl) || impl.commits.length === 0) return stop(t, impl ? impl.status + ': ' + impl.concerns.join(' | ') : 'implementer failed', impl)
-  const review = await agent(reviewPrompt(t, impl), { label: 'T' + t.n + ' review', phase: 'Tasks', effort: t.reviewEffort, schema: REVIEW })
+  const review = ctx.review = await agent(reviewPrompt(t, impl), { label: 'T' + t.n + ' review', phase: 'Tasks', effort: t.reviewEffort, schema: REVIEW })
   if (!review) return stop(t, 'review agent failed', impl)
-  const minors = review.findings.filter(f => f.severity === 'minor').map(f => f.where + ': ' + f.problem)
+  const minors = ctx.minors = review.findings.filter(f => f.severity === 'minor').map(f => f.where + ': ' + f.problem)
   let open = review.findings.filter(f => f.severity !== 'minor')
   // A negative verdict with no blocking finding still has to be resolved, never waved through.
   if (!open.length && (review.verdict !== 'approved' || !review.specCompliant)) {
     open = [{ severity: 'important', where: '', problem: 'The reviewer marked the task ' + (review.specCompliant ? 'not approved' : 'not spec compliant') +
       ' without a blocking finding; reconcile the brief and the diff, and fix whatever the reviewer\'s Minor notes imply.' }]
   }
-  const rounds = []
+  const rounds = ctx.rounds = []
   let round = 0
   while (open.length && round < 3) {
     round++
@@ -589,10 +597,11 @@ function schedule(n) {
       return { n, status: 'skipped', blockedBy: stopped.map(d => d.n), minors: [], open: [] }
     }
     if (!t.critical) await acquire(t.prio)
-    try { return await runTask(t) }
+    const ctx = { impl: null, review: null, rounds: [], minors: [] }
+    try { return { review: ctx.review, ...(await runTask(t, ctx)) } }
     catch (error) {
       log('Task ' + n + ' stopped by an error: ' + error)
-      return { n, status: 'stopped', minors: [], open: [String(error)] }
+      return { n, status: 'stopped', why: String(error), impl: ctx.impl, review: ctx.review, rounds: ctx.rounds, minors: ctx.minors, open: [String(error)] }
     }
     finally { if (!t.critical) release() }
   })()
@@ -600,7 +609,9 @@ function schedule(n) {
 }
 
 phase('Tasks')
-const results = await Promise.all(TASKS.map(t => schedule(t.n)))
+// Scheduling in priority order makes the first free slots go to the most urgent ready tasks.
+const byPriority = TASKS.slice().sort((a, b) => a.prio - b.prio || a.n - b.n)
+const results = (await Promise.all(byPriority.map(t => schedule(t.n)))).sort((a, b) => a.n - b.n)
 return {
   results: results.map(r => ({
     n: r.n, status: r.status, why: r.why || '', blockedBy: r.blockedBy || [], open: r.open,
@@ -634,7 +645,7 @@ return {
   { "n": 13, "title": "An over-limit Hub dataset is refused before download; Hub reads retry; Hub model and Space files are copied (F5, X3, X2)", "deps": [7, 12], "critical": true, "prio": 0, "effort": "high", "reviewEffort": "high" },
   { "n": 14, "title": "A splat that changed since loading no longer fails publication; unloaded local images end it (F13)", "deps": [13], "critical": true, "prio": 0, "effort": "medium", "reviewEffort": "high", "e2e": "e2e/hugging-face-publish.spec.ts" },
   { "n": 15, "title": "A release tag that does not match package.json is refused (F6 part 2)", "deps": [], "critical": false, "prio": 2, "effort": "low", "reviewEffort": "medium", "deploy": true },
-  { "n": 16, "title": "Previews of older releases pass the trusted check; previews publish static files only (F14, X4)", "deps": [15], "critical": false, "prio": 6, "effort": "low", "reviewEffort": "medium", "deploy": true },
+  { "n": 16, "title": "Previews of older releases pass the trusted check; previews publish static files only (F14, X4)", "deps": [15], "critical": false, "prio": 6, "effort": "medium", "reviewEffort": "high", "deploy": true },
   { "n": 17, "title": "The OAuth verification doc says how to end the Drive session with a scene open (X12)", "deps": [], "critical": false, "prio": 8, "effort": "low", "reviewEffort": "low" },
   { "n": 18, "title": "Share and embed links made on /dev/ open /dev/ (F6 part 1)", "deps": [], "critical": false, "prio": 5, "effort": "low", "reviewEffort": "medium" }
 ] }
@@ -666,7 +677,7 @@ const FINDINGS = { type: 'object', properties: {
   declined: { type: 'array', items: { type: 'string' } } },
   required: ['ready', 'findings', 'declined'] }
 const IMPL = { type: 'object', properties: {
-  status: { type: 'string' }, commits: { type: 'array', items: { type: 'string' } },
+  status: { type: 'string', enum: ['DONE', 'DONE_WITH_CONCERNS', 'BLOCKED', 'NEEDS_CONTEXT'] }, commits: { type: 'array', items: { type: 'string' } },
   testSummary: { type: 'string' }, concerns: { type: 'array', items: { type: 'string' } } },
   required: ['status', 'commits', 'testSummary', 'concerns'] }
 const REREVIEW = { type: 'object', properties: {
@@ -684,26 +695,35 @@ const review = await agent(
   'Codex findings: ' + JSON.stringify(args.codex) + '\nCarried Minors from task reviews: ' + JSON.stringify(args.minors) + '\nOpen task findings: ' + JSON.stringify(args.open) + '\n' +
   'For every behaviour you set aside as outside the plan, add a "declined" line with the reason. Never dispatch subagents.',
   { label: 'final review', phase: 'Final review', effort: 'max', schema: FINDINGS })
-if (!review || review.findings.length === 0) return { review, fix: null, reReview: null }
+// Every outcome is explicit: a missing review, or a negative verdict without findings, never reads as a clean branch.
+if (!review) return { stopped: 'the final review returned nothing; rerun Appendix B', review: null, findings: [], fix: null, reReview: null }
+let findings = review.findings
+if (!findings.length && review.ready !== 'yes') findings = [{ severity: 'important', where: '',
+  problem: 'The final reviewer marked the branch "' + review.ready + '" without a finding; reconcile its declined list and the diff, and fix whatever stands in the way of a merge.', fix: 'Reconcile, then fix.' }]
+if (!findings.length) return { stopped: '', review, findings, fix: null, reReview: null }
 
 phase('Fix wave')
 const fix = await agent(
   'You are the one final fix wave for branch fix/final-review-gaps (' + ROOT + '). No other agent is running. Fix every finding below, writing the test first wherever behaviour changes. ' +
   'Global constraints are in ' + PLAN + ' (Global Constraints). Before each commit run the full `npx vitest run` (pristine output), `npx tsc -b --force` and `npm run lint`; ' +
-  'at the end run the full CI gate: `npm run check`, `npm run test:deployment`, and `npx playwright test --project=chromium --reporter=list --output=' + SCRATCH + '/e2e-out/final-fix`. ' +
+  'at the end run the full CI gate with CI set, as GitHub does: `CI=true npm run check`, `CI=true npm run test:deployment`, and `CI=true npx playwright test --project=chromium --reporter=list --output=' + SCRATCH + '/e2e-out/final-fix`. ' +
   'Make one commit per finding or tightly related pair, each ending with the Co-Authored-By trailer; never amend or push. ' +
   'Mutation checks: apply the mutation with a targeted edit and revert it with a targeted edit, then confirm with `git diff -- <file>`. Never restore a repo file by copying a backup over it; name any scratch file with the prefix final-fix. ' +
   'Never edit C:/Users/HEQ/Projects/colmap_webview/CLAUDE.md. ' +
-  'Write your report to ' + ROOT + '/.superpowers/sdd/2026-10-07-final-review-gaps/final-fix-wave-report.md.\nFindings:\n' + JSON.stringify(review.findings, null, 1),
+  'Write your report to ' + ROOT + '/.superpowers/sdd/2026-10-07-final-review-gaps/final-fix-wave-report.md.\nFindings:\n' + JSON.stringify(findings, null, 1),
   { label: 'final fix wave', phase: 'Fix wave', effort: 'xhigh', schema: IMPL })
+if (!fix || fix.status === 'BLOCKED' || fix.status === 'NEEDS_CONTEXT') {
+  return { stopped: 'the fix wave ' + (fix ? 'reported ' + fix.status + ': ' + fix.concerns.join(' | ') : 'returned nothing'), review, findings, fix, reReview: null }
+}
 
 phase('Re-review')
-const reReview = fix && fix.commits.length ? await agent(
-  'Re-review the final fix wave on fix/final-review-gaps (' + ROOT + '). Your review is read-only. Fix commits: ' + fix.commits.join(', ') +
+// The re-review runs even without fix commits, so every finding gets an explicit ADDRESSED or NOT ADDRESSED.
+const reReview = await agent(
+  'Re-review the final fix wave on fix/final-review-gaps (' + ROOT + '). Your review is read-only. Fix commits: ' + (fix.commits.length ? fix.commits.join(', ') : 'none (the fix wave made no commits)') +
   '; the report is in .superpowers/sdd/2026-10-07-final-review-gaps/final-fix-wave-report.md. For each finding below decide ADDRESSED or NOT ADDRESSED with file:line evidence, ' +
-  'then inspect the fix diff for new breakage. Never dispatch subagents.\nFindings:\n' + JSON.stringify(review.findings, null, 1),
-  { label: 'final re-review', phase: 'Re-review', effort: 'high', schema: REREVIEW }) : null
-return { review, fix, reReview }
+  'then inspect the fix diff for new breakage. Never dispatch subagents.\nFindings:\n' + JSON.stringify(findings, null, 1),
+  { label: 'final re-review', phase: 'Re-review', effort: 'high', schema: REREVIEW })
+return { stopped: reReview ? '' : 'the re-review returned nothing; re-review the fix commits before Task 21', review, findings, fix, reReview }
 ```
 
 **`args`:**

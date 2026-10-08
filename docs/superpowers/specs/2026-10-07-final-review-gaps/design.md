@@ -68,3 +68,21 @@ Where a spec gives code, that code is the requirement. Where a spec offers optio
 - **Style:** use hand-written CSS only, and add no new classes. Keep comments brief, and only where they explain why.
 - **Line endings:** keep each file's line endings. Check with `git ls-files --eol`, and never rewrite a whole file.
 - **Commits:** messages say what the user sees and end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never amend or push.
+
+## Codex plan review (2026-10-07): dispositions
+
+Codex reviewed the plan read-only and reported six findings. It confirmed three things:
+- every finding and every chosen extra maps to the right task and spec sections;
+- no two tasks that can run at once share a file;
+- the fix logic and rulings show no further regressions.
+
+1. **P1, accepted: amends Q4 §X4.** X4's static-only refusal must not trust the artifact's own label.
+   - `metadata.profile` comes from the downloaded `deployment.json`, which the selected ref controls. A preview relabelled `github` would skip a check placed in the `metadata.profile !== 'github'` block, before the upload that holds the token.
+   - Task 16 now asserts `metadata.profile` equals the trusted directory (`DEPLOYMENT_SMOKE_PROFILES`) before any profile-dependent check. It keys the refusal and F14's preview-only skew guard on that directory.
+   - A spoofed-profile scratch reproduction must fail the smoke.
+   - Task 16 is raised to medium / high.
+2. **P2, accepted.** Appendix B now returns an explicit outcome for a missing review, a negative verdict without findings, and a blocked fix wave. It always runs the re-review once a fix wave has run.
+3. **P2, accepted.** Appendix A keeps a task's implementation, review, rounds and Minors when an agent call throws mid-task, so committed work stays in the ledger.
+4. **P2, accepted.** The controller's gates (Tasks 19 and 21) and the final fix wave run with `CI=true`, as GitHub does. Playwright then forbids `test.only` and uses CI's worker and retry settings, and Vitest refuses `.only`.
+5. **P3, accepted.** Appendix A schedules tasks in priority order, so the first free slots go to the most urgent ready tasks.
+6. **P3, accepted.** Task 7's review focus names a decode Cancel, not `n`, as a way to choose None. `n` cycles real sources and only clears the flag.
