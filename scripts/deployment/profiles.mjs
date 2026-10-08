@@ -52,6 +52,11 @@ export function validateReleaseConfiguration(env, isRelease) {
   return { customEnabled: true };
 }
 
+/** The viewer reports package.json's version and GitHub share links open /v<version>/, so a release tag must name it. */
+export function validateReleaseTag(tag, version) {
+  if (tag !== `v${version}`) throw new Error(`Release tag ${tag} must be v plus package.json's version (${version}). Commit the version bump before tagging.`);
+}
+
 export function validatePreviewConfiguration(env) {
   if (!strictFlag(env.CLOUDFLARE_API_TOKEN_CONFIGURED, 'CLOUDFLARE_API_TOKEN_CONFIGURED')) throw new Error('CLOUDFLARE_API_TOKEN is missing.');
   requireValue(env, 'CLOUDFLARE_ACCOUNT_ID', /^[a-f0-9]{32}$/i);

@@ -1,8 +1,10 @@
-import { appendFileSync } from 'node:fs';
-import { validateGithubHfConfiguration, validatePreviewConfiguration, validateReleaseConfiguration } from './profiles.mjs';
+import { appendFileSync, readFileSync } from 'node:fs';
+import { validateGithubHfConfiguration, validatePreviewConfiguration, validateReleaseConfiguration, validateReleaseTag } from './profiles.mjs';
 
 const preview = process.argv.includes('--preview');
 const isRelease = process.env.GITHUB_REF_TYPE === 'tag';
+// A tag without its version bump would publish /latest/ and the custom host as the previous release.
+if (isRelease && !preview) validateReleaseTag(process.env.GITHUB_REF_NAME, JSON.parse(readFileSync('package.json', 'utf8')).version);
 const result = preview
   ? (validatePreviewConfiguration(process.env), { customEnabled: false })
   : validateReleaseConfiguration(process.env, isRelease);

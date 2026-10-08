@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import path from 'node:path';
 import yaml from 'js-yaml';
-import { CUSTOM_ORIGIN, FIXTURE_GOOGLE_CONFIG, WRANGLER_VERSION, previewAliasUrl, profileEnvironment, safeOutputDirectory, validateBase, validateGithubHfConfiguration, validatePreviewConfiguration, validateReleaseConfiguration } from './profiles.mjs';
+import { CUSTOM_ORIGIN, FIXTURE_GOOGLE_CONFIG, WRANGLER_VERSION, previewAliasUrl, profileEnvironment, safeOutputDirectory, validateBase, validateGithubHfConfiguration, validatePreviewConfiguration, validateReleaseConfiguration, validateReleaseTag } from './profiles.mjs';
 import { fetchVerifiedArtifact, htmlSha256, verifyPolicyHtml } from './artifact-verification.mjs';
 import { cloudflareStaticHeaders } from './headers.mjs';
 import { startArtifactServer } from './static-server.mjs';
@@ -60,6 +60,27 @@ test('enabled release fails before publication if any required field is missing'
   assert.throws(() => validateReleaseConfiguration({ ...release, CLOUDFLARE_PAGES_ENABLED: 'yes' }, true), /true or false/);
   assert.deepEqual(validateReleaseConfiguration({}, true), { customEnabled: false });
   assert.deepEqual(validateReleaseConfiguration(release, false), { customEnabled: false });
+});
+
+test('preflight rejects a release tag that is not v plus the package.json version', () => {
+  validateReleaseTag('v0.16.0', '0.16.0');
+  validateReleaseTag('v0.16.0-beta.1', '0.16.0-beta.1');
+  for (const [tag, version] of [['v0.16.0', '0.15.4'], ['v0.16.0-beta', '0.16.0'], ['v0.16.0', '0.16.0-beta'], ['0.16.0', '0.16.0']]) {
+    assert.throws(() => validateReleaseTag(tag, version), { message: `Release tag ${tag} must be v plus package.json's version (${version}). Commit the version bump before tagging.` });
+  }
+  const version = JSON.parse(readFileSync('package.json', 'utf8')).version;
+  // Blank outputs, so a CI run of this test never writes to its own job's outputs or summary.
+  const preflight = (env, ...args) => spawnSync(process.execPath, ['scripts/deployment/preflight.mjs', ...args], {
+    env: { ...process.env, GITHUB_OUTPUT: '', GITHUB_STEP_SUMMARY: '', CLOUDFLARE_PAGES_ENABLED: 'false', VITE_HF_PUBLISH_ENABLED: 'false', VITE_HF_AUTH_ENABLED: 'false', ...env },
+    encoding: 'utf8',
+  });
+  assert.equal(preflight({ GITHUB_REF_TYPE: 'tag', GITHUB_REF_NAME: `v${version}` }).status, 0);
+  const mismatch = preflight({ GITHUB_REF_TYPE: 'tag', GITHUB_REF_NAME: 'v999.0.0' });
+  assert.notEqual(mismatch.status, 0);
+  assert.match(mismatch.stderr, /Release tag v999\.0\.0 must be v plus package\.json's version/);
+  assert.equal(preflight({ GITHUB_REF_TYPE: 'branch', GITHUB_REF_NAME: 'main' }).status, 0);
+  // A preview can be started from a tag, but it publishes the selected ref, not a release.
+  assert.equal(preflight({ GITHUB_REF_TYPE: 'tag', GITHUB_REF_NAME: 'v999.0.0', ...release, CLOUDFLARE_PREVIEW_PROJECT: 'colmapview-preview' }, '--preview').status, 0);
 });
 
 test('manual preview requires a separate project and bounded output/base paths', () => {

@@ -84,4 +84,4 @@ src/
 
 ## Deployment
 
-GitHub Actions validates lint, unit tests, the production build and Chromium tests before deploying. Pushes to `main` publish `/dev/`; version tags publish `/vX.Y.Z/` and update `/latest/`.
+GitHub Actions validates lint, unit tests, the production build and Chromium tests before deploying. Pushes to `main` publish `/dev/`; version tags publish `/vX.Y.Z/` and update `/latest/`. A tag that is not `v` plus the `package.json` version is rejected before anything is built.
