@@ -83,12 +83,12 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
   const sdk = await import('@huggingface/hub');
   const read: typeof fetch = (value, init) => fetchDatasetResource(typeof value === 'string' ? value : value instanceof URL ? value.href : value.url,
     undefined, { ...init, signal });
-  // Throttled or briefly unavailable hosts get the same bounded backoff as Hub reads (429/502/503/504).
-  const readMask = boundedFetch(signal, null, read);
+  // Throttled or briefly unavailable hosts, the Hub's API included, get a bounded backoff (429/502/503/504).
+  const readSource = boundedFetch(signal, null, read);
   const revisions = new Map<string, Promise<string>>();
   const resolveRevision = (repoId: string, revision: string) => {
     const key = `${repoId}/${revision}`;
-    if (!revisions.has(key)) revisions.set(key, sdk.datasetInfo({ name: repoId, revision, additionalFields: ['sha'], fetch: read }).then(info => {
+    if (!revisions.has(key)) revisions.set(key, sdk.datasetInfo({ name: repoId, revision, additionalFields: ['sha'], fetch: readSource }).then(info => {
       // The Hub redirects other spellings and renamed repositories (info.name is its current id); the commit pins the files.
       if (!/^[a-f0-9]{40,64}$/i.test(info.sha)) throw new GoogleDrivePublishError('Could not pin the source dataset revision.');
       return info.sha;
@@ -114,7 +114,7 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
         const revision = await resolveRevision(folder.repoId, folder.revision);
         const files = new Map<string, number>();
         try {
-          for await (const file of sdk.listFiles({ repo: { type: 'dataset', name: folder.repoId }, revision, path: folder.path, recursive: true, fetch: read })) {
+          for await (const file of sdk.listFiles({ repo: { type: 'dataset', name: folder.repoId }, revision, path: folder.path, recursive: true, fetch: readSource })) {
             if (file.type === 'file') files.set(file.path, file.size);
           }
         } catch (error) {
@@ -139,7 +139,7 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
     for (const candidate of buildMaskUrlCandidates(base, name)) {
       const url = await pinAssetUrl(candidate.url);
       let response: Response;
-      try { response = await readMask(url); } catch (error) {
+      try { response = await readSource(url); } catch (error) {
         // A 404 without CORS headers reaches the browser as a network error; the viewer skips the name too.
         if (signal.aborted || !(error instanceof TypeError)) throw error;
         absent = false; continue;
@@ -163,8 +163,30 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
     if (absent) absence.misses++;
     return null;
   };
+  const folderSizes = new Map<string, Promise<Map<string, number>>>();
+  /** A Hub file's exact size at the pinned revision, from one listing per folder; other hosts list nothing. */
+  const remoteSize = async (value: string): Promise<number | null> => {
+    if (parseRemoteUrl(value).origin !== 'https://huggingface.co') return null;
+    const file = parseHfAssetUrl(value);
+    const revision = await resolveRevision(file.repoId, file.revision);
+    const folder = file.path.slice(0, Math.max(0, file.path.lastIndexOf('/')));
+    const key = `${file.repoId}/${revision}/${folder}`;
+    if (!folderSizes.has(key)) folderSizes.set(key, (async () => {
+      const sizes = new Map<string, number>();
+      try {
+        for await (const entry of sdk.listFiles({ repo: { type: 'dataset', name: file.repoId }, revision, path: folder, fetch: readSource })) {
+          if (entry.type === 'file') sizes.set(entry.path, entry.size);
+        }
+      } catch (error) {
+        // Unknown sizes only lose the early limit check: packaging still stops at the limit.
+        if (signal.aborted) throw error;
+      }
+      return sizes;
+    })());
+    return (await folderSizes.get(key)!).get(file.path) ?? null;
+  };
   const prepared = await preparePublication({ ...input, splats: 'active' }, signal, {
-    resolveRevision, listFiles: async () => [], pinAssetUrl, readRemoteMask, assertCurrent, maxAssetBytes: sizeLimit,
+    resolveRevision, listFiles: async () => [], pinAssetUrl, readRemoteMask, remoteSize, assertCurrent, maxAssetBytes: sizeLimit,
     progress: message => progress(message, 0, 0),
   });
   return packageDriveArchive(prepared, signal, progress, assertCurrent, sizeLimit);

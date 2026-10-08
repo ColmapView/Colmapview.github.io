@@ -38,6 +38,8 @@ interface PrepareDeps {
   readRemoteMask?: (base: string, name: string, signal: AbortSignal) => Promise<{ blob: Blob } | { url: string; size: number } | null>;
   /** Bound a remote splat while downloading, before it becomes a complete Blob. */
   maxAssetBytes?: number;
+  /** The exact size of a remote image or splat at its pinned revision, or null where the host lists none. */
+  remoteSize?: (url: string, signal: AbortSignal) => Promise<number | null>;
 }
 
 function publicationSplats(dataset: DatasetState): SplatFileSource[] {
@@ -141,7 +143,10 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
     if (isRemote) {
       const url = captured.imageNameToUrl?.[name] || (captured.imageUrlBase ? buildImageUrl(captured.imageUrlBase, name).url : null);
       if (!url) throw new HfError(`Original image ${name} is unavailable. Load its original file before publishing.`, undefined, true);
-      return remote(url, path, 'image');
+      const asset = await remote(url, path, 'image');
+      // A listed size lets the Drive ZIP limit refuse an oversized dataset before any image downloads.
+      asset.size = await deps.remoteSize?.(url, signal) ?? null;
+      return asset;
     }
     let failed = false;
     const read = async (targetSignal: AbortSignal) => {

@@ -48,6 +48,7 @@ describe('Drive dataset ZIP packaging', () => {
     const request = vi.fn(async (url: string, init?: RequestInit) => {
       if (!new Headers(init?.headers).has('Authorization')) return new Response(null, { status: 401 });
       if (url.includes('/revision/main')) return Response.json({ id: 'owner/private', _id: 'repo-id', sha, private: true, gated: 'auto' });
+      if (url.includes(`/tree/${sha}/images/nested?`)) return Response.json([{ type: 'file', path: 'images/nested/photo.jpg', size: 8 }]);
       if (url.includes(`/tree/${sha}/masks`)) return Response.json([{ type: 'file', path: 'masks/nested/photo.jpg.png', size: 4 }]);
       if (url === root + sha + '/images/nested/photo.jpg') return new Response('original');
       if (url === root + sha + '/masks/nested/photo.jpg.png') return new Response('mask');
@@ -64,7 +65,7 @@ describe('Drive dataset ZIP packaging', () => {
     expect(strFromU8(entries['images/nested/photo.jpg'])).toBe('original');
     expect(strFromU8(entries['masks/nested/photo.jpg.png'])).toBe('mask');
     const authorized = request.mock.calls.filter(([, init]) => new Headers(init?.headers).has('Authorization'));
-    expect(authorized).toHaveLength(4);
+    expect(authorized).toHaveLength(5);
     expect(authorized.every(([, init]) => new Headers(init?.headers).get('Authorization') === 'Bearer private-source-read-fixture')).toBe(true);
     expect(authorized.filter(([url]) => url.includes('/resolve/')).every(([url]) => url.includes(`/resolve/${sha}/`))).toBe(true);
     expect(request.mock.calls.every(([, init]) => !init?.method || init.method === 'GET')).toBe(true);
@@ -288,6 +289,59 @@ describe('Drive remote sources', () => {
     expect(request.mock.calls.map(([url]) => url).filter(url => url.includes('/resolve/')).map(url => url.slice(`${root}${sha}/`.length)))
       .toEqual(['images/a.jpg', 'masks/a.jpg.png', 'images/b.jpg', 'masks/b.jpg.png']);
     expect(strFromU8((await entries(archive))['masks/b.jpg.png'])).toBe('mask!!');
+  });
+  const hubSha = 'c'.repeat(40);
+  const hubRoot = 'https://huggingface.co/datasets/owner/scene/resolve/';
+  const hubRevision = (url: string) => url.includes('/revision/main?') ? Response.json({ _id: 'repo-object-id', id: 'owner/scene', sha: hubSha }) : null;
+  it.each([
+    // 20 images of 120 MiB each fit the per-file limit but not the ZIP.
+    ['whose listed images exceed the ZIP limit', 20, 120 * 1024 * 1024, '2 GiB archive limit'],
+    ['with a listed image over the per-file limit', 1, 128 * 1024 * 1024 + 1, '128 MiB publication limit'],
+  ])('refuses a Hub dataset %s before downloading any image', async (_, count, size, limit) => {
+    const images = numbered(count);
+    const request = vi.fn(async (url: string) => hubRevision(url)
+      ?? (url.includes(`/tree/${hubSha}/images?`) ? Response.json(images.map(image => ({ type: 'file', path: `images/${image.name}`, size })))
+        : new Response('original')));
+    vi.stubGlobal('fetch', request);
+    await expect(prepareDriveArchive(remoteInput({ imageUrlBase: `${hubRoot}main/images/` }, images), new AbortController().signal, () => {}, () => {}))
+      .rejects.toMatchObject({ message: expect.stringContaining(limit), permanent: true });
+    expect(request.mock.calls.filter(([url]) => url.includes('/resolve/'))).toEqual([]);
+  });
+  it('lists a Hub image folder once and checks each image against its listed size', async () => {
+    const images = numbered(3);
+    const request = vi.fn(async (url: string) => hubRevision(url)
+      ?? (url.includes(`/tree/${hubSha}/images?`) ? Response.json(images.map(image => ({ type: 'file', path: `images/${image.name}`, size: 8 })))
+        : url.startsWith(`${hubRoot}${hubSha}/images/`) ? new Response('original') : new Response(null, { status: 404 })));
+    vi.stubGlobal('fetch', request);
+    const files = await entries(await prepareDriveArchive(remoteInput({ imageUrlBase: `${hubRoot}main/images/` }, images), new AbortController().signal, () => {}, () => {}));
+    expect(Object.keys(files).filter(path => path.startsWith('images/'))).toHaveLength(3);
+    expect(request.mock.calls.filter(([url]) => url.includes('/tree/'))).toHaveLength(1);
+  });
+  it('still publishes Hub images whose folder listing fails, checking the ZIP limit while packaging', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => hubRevision(url)
+      ?? (url.includes('/tree/') ? new Response(null, { status: 500 }) : new Response('original'))));
+    const files = await entries(await prepareDriveArchive(remoteInput({ imageUrlBase: `${hubRoot}main/images/` }, numbered(2)), new AbortController().signal, () => {}, () => {}));
+    expect(Object.keys(files).filter(path => path.startsWith('images/'))).toHaveLength(2);
+  });
+  it('retries throttled Hub revision reads and folder listings, like other Hub reads', async () => {
+    const throttled = new Set<string>();
+    const request = vi.fn(async (url: string) => {
+      const read = url.includes('/revision/main?') ? 'revision' : url.includes('/tree/') ? url.split('?')[0] : null;
+      if (read && !throttled.has(read)) {
+        throttled.add(read);
+        return new Response(null, { status: read === 'revision' ? 429 : 503, headers: { 'Retry-After': '0' } });
+      }
+      return hubRevision(url) ?? (read ? Response.json(read.endsWith('/masks') ? [{ type: 'file', path: 'masks/photo.jpg.png', size: 4 }] : [])
+        : new Response(url.endsWith('.png') ? 'mask' : 'original'));
+    });
+    vi.stubGlobal('fetch', request);
+    const files = await entries(await prepareDriveArchive(remoteInput({ imageUrlBase: `${hubRoot}main/images/`, maskUrlBase: `${hubRoot}main/masks/` }),
+      new AbortController().signal, () => {}, () => {}));
+    expect(strFromU8(files['images/photo.jpg'])).toBe('original');
+    expect(strFromU8(files['masks/photo.jpg.png'])).toBe('mask');
+    expect(request.mock.calls.filter(([url]) => url.includes('/revision/main?'))).toHaveLength(2);
+    // The image folder and the mask folder are each listed after one retry.
+    expect(request.mock.calls.filter(([url]) => url.includes('/tree/'))).toHaveLength(4);
   });
   it('names an oversized mask and the limit, and does not offer a retry', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => original(url)
