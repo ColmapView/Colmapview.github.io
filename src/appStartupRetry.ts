@@ -1,4 +1,5 @@
 import { useReconstructionStore } from './store';
+import { clearUrlLoadRequestFromLocation } from './store/reconstructionStore';
 import { onReconstructionLoadStart } from './wasm/reconstructionLoadLifecycle';
 
 type Retry = () => Promise<void>;
@@ -31,11 +32,17 @@ export function offerStartupLinkRetry(run: Retry): void {
     publish(null);
     return run();
   };
+  // The retry reads the link from the address bar. Withdrawn, the dead link leaves it, so neither a
+  // page reload nor the next scene's camera restore runs it again.
+  const abandon = () => {
+    publish(null);
+    clearUrlLoadRequestFromLocation();
+  };
   publish(retry);
   const stopWatchingError = useReconstructionStore.subscribe(state => {
-    if (state.urlError !== failure) publish(null);
+    if (state.urlError !== failure) abandon();
   });
   // A local load never touches urlError, so its start is seen through the load lifecycle.
-  const stopWatchingLoads = onReconstructionLoadStart(() => publish(null));
+  const stopWatchingLoads = onReconstructionLoadStart(abandon);
   release = () => { stopWatchingError(); stopWatchingLoads(); };
 }

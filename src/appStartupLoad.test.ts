@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runStartupLoadPlan } from './appStartupLoad';
 import { startupLinkRetry } from './appStartupRetry';
 import { getAppStartupLoadPlan } from './appStartupPolicy';
-import { useCameraStore, useReconstructionStore } from './store';
+import { hasUrlToLoad, useCameraStore, useReconstructionStore } from './store';
+import { decodeCameraState } from './hooks/useUrlState';
+import { decodeShareData, encodeShareData } from './utils/shareDataCodec';
+import { beginReconstructionLoad } from './wasm/reconstructionLoadLifecycle';
 import { clearUrlLoadAttempt } from './utils/urlLoadAttemptGuard';
 import { createDefaultManifest } from './hooks/urlLoaderPolicy';
 import { loadBrowsedDirectory, loadDropPayload } from './hooks/fileDropzoneLocalSources';
@@ -114,6 +117,44 @@ describe('startup link loading', () => {
     // The shared link's failure is still the one the landing page shows.
     expect(useReconstructionStore.getState().urlError).toEqual(accessDenied);
     expect(startupLinkRetry.getSnapshot()).toBeNull();
+  });
+
+  describe('a failed link in the address bar', () => {
+    const view = { position: [90, 190, 307] as [number, number, number], quaternion: [0, 0, 0, 1] as [number, number, number, number],
+      target: [90, 190, 290] as [number, number, number], distance: 17 };
+    async function failLinkInAddressBar(loadFromUrl: (url: string) => Promise<boolean> = loader(false)) {
+      window.history.replaceState(null, '', '/?keep=1#' + encodeShareData(datasetUrl, view) + '&other=1');
+      const plan = getAppStartupLoadPlan({ shareData: await decodeShareData(window.location.hash), legacyManifestUrl: null });
+      await runStartupLoadPlan(plan, { loadFromUrl, loadFromManifest: vi.fn() });
+      expect(startupLinkRetry.getSnapshot()).not.toBeNull();
+    }
+    afterEach(() => window.history.replaceState(null, '', '/'));
+
+    it('stays there for its retry, which reads the view from it', async () => {
+      // The App's loader reads the link's view and settings from the address bar.
+      const hashes: string[] = [];
+      const outcomes = loader(false, true);
+      await failLinkInAddressBar(async () => { hashes.push(window.location.hash); return outcomes(); });
+      await startupLinkRetry.getSnapshot()!();
+      expect(hashes).toHaveLength(2);
+      expect(await decodeCameraState(hashes[1])).toEqual(view);
+      expect(hasUrlToLoad()).toBe(true);
+    });
+
+    it.each([
+      ['a local load starts', () => beginReconstructionLoad().finish()],
+      ['a URL load starts', () => useReconstructionStore.getState().setUrlError(null)],
+      ['the viewer is cleared', () => useReconstructionStore.getState().clear()],
+    ])('leaves it, with its view, once %s', async (_name, withdraw) => {
+      await failLinkInAddressBar();
+      withdraw();
+      expect(startupLinkRetry.getSnapshot()).toBeNull();
+      // A reload no longer runs the dead link, and the next scene's view restore finds no view.
+      expect(hasUrlToLoad()).toBe(false);
+      expect(await decodeCameraState(window.location.hash)).toBeNull();
+      expect(window.location.search).toBe('?keep=1');
+      expect(window.location.hash).toBe('#other=1');
+    });
   });
 
   it('keeps the retry when the folder picker is cancelled, since nothing loads', async () => {
