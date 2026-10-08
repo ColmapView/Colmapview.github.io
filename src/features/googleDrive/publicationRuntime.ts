@@ -15,10 +15,11 @@ let modelRevision = useReconstructionStore.getState().reconstructionEditRevision
 const reconstruction = useReconstructionStore.subscribe(state => {
   const nextKey = getPublicationSourceKey(state);
   if (nextKey !== sourceKey || state.reconstructionEditRevision !== modelRevision) {
-    sourceKey = nextKey; modelRevision = state.reconstructionEditRevision; drivePublication.invalidate();
+    const change = nextKey !== sourceKey ? 'dataset' : 'edit';
+    sourceKey = nextKey; modelRevision = state.reconstructionEditRevision; drivePublication.invalidate(change);
   }
 });
-const deletions = useDeletionStore.subscribe(state => { if (state.pendingDeletions.size) drivePublication.invalidate(); });
+const deletions = useDeletionStore.subscribe(state => { if (state.pendingDeletions.size) drivePublication.invalidate('edit'); });
 const beforeUnload = (event: BeforeUnloadEvent) => {
   if (isDrivePublishing(drivePublication.getSnapshot().phase)) { event.preventDefault(); event.returnValue = ''; }
 };

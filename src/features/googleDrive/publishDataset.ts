@@ -52,7 +52,8 @@ export function createDrivePublicationController(client: DriveUploadClient) {
     const check = () => {
       signal.throwIfAborted();
       if (current.invalid || current !== job) throw new GoogleDrivePublishError('The dataset changed. Start a new Drive publication.');
-      current.assertCurrent();
+      // A built ZIP no longer reads the scene; only another dataset (invalidate) stops its upload.
+      if (!current.archive) current.assertCurrent();
     };
     const update = (next: Partial<DrivePublicationState>) => { check(); set(next); };
     const owned = (file: DrivePublishedFile) => {
@@ -161,7 +162,8 @@ export function createDrivePublicationController(client: DriveUploadClient) {
     } finally { if (active === controller) active = null; }
   };
   const cancel = () => { if (active) { set({ phase: 'cancelling', message: 'Cancelling upload…' }); active.abort(); } };
-  const reset = () => { if (!active) { job = null; state = initial(); listeners.forEach(listener => listener()); } };
+  // Callbacks from earlier transfers may still reference the job, so drop its dataset closures before forgetting it.
+  const reset = () => { if (!active) { if (job) release(job); job = null; state = initial(); listeners.forEach(listener => listener()); } };
   return {
     getSnapshot: () => state,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
@@ -173,10 +175,12 @@ export function createDrivePublicationController(client: DriveUploadClient) {
     },
     retry: run,
     cancel,
-    invalidate() {
-      // A finished publication belongs to the previous dataset; the new one starts from a fresh form.
-      if (state.phase === 'completed') { reset(); return; }
-      if (job) { job.invalid = true; cancel(); release(job); set({ canRetry: false }); }
+    /** Another dataset ends any publication; an edit or deletion mark ends one only until its ZIP is built, as on Hugging Face. */
+    invalidate(change: 'dataset' | 'edit' = 'dataset') {
+      if (change === 'edit' && job?.archive) return;
+      if (active && job && state.phase !== 'completed') { job.invalid = true; cancel(); release(job); set({ canRetry: false }); return; }
+      // A finished, failed or cancelled publication belongs to the previous scene; the new one starts from a fresh form.
+      if (job || state.phase !== 'idle') reset();
     },
     reset,
   };

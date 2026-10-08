@@ -175,6 +175,68 @@ describe('Drive publication lifecycle', () => {
     expect(controller.getSnapshot().phase).toBe('idle');
     expect(client.file).toHaveBeenCalledTimes(3);
   });
+  const idle = { phase: 'idle', message: '', bytesDone: 0, bytesTotal: 0, filesDone: 0, filesTotal: 0, canRetry: false };
+  it.each([
+    ['a failed publication', 'failed', (drive: ReturnType<typeof fixture>) => {
+      drive.client.share.mockRejectedValueOnce(new GoogleDrivePublishError('Organization denied sharing', 403));
+    }],
+    ['a cancelled publication', 'cancelled', (drive: ReturnType<typeof fixture>) => {
+      drive.client.chunk.mockImplementationOnce(async (_url, _blob, _offset, signal: AbortSignal) => { drive.controller.cancel(); signal.throwIfAborted(); });
+    }],
+    ['a publication ended by a permanent failure', 'failed', (drive: ReturnType<typeof fixture>) => {
+      drive.prepare.mockRejectedValueOnce(new GoogleDrivePublishError('The source file images/a.jpg changed. Publish again.', undefined, true));
+    }],
+  ])('returns %s to a fresh form when another dataset loads', async (_, phase, stop) => {
+    const drive = fixture();
+    stop(drive);
+    await drive.controller.publish('scene', true, drive.prepare);
+    expect(drive.controller.getSnapshot().phase).toBe(phase);
+    drive.controller.invalidate();
+    expect(drive.controller.getSnapshot()).toEqual(idle);
+    await drive.controller.retry();
+    expect(drive.controller.getSnapshot()).toEqual(idle);
+  });
+  it('keeps uploading a built ZIP when the scene is edited or images are marked for deletion, as Hugging Face does', async () => {
+    const { controller, client, prepare } = fixture();
+    let marked = false;
+    const assertCurrent = () => { if (marked) throw new HfError('The reconstruction changed while preparing. Publish again.'); };
+    const upload = client.chunk.getMockImplementation()!;
+    client.chunk.mockImplementationOnce(async (...args: unknown[]) => { marked = true; controller.invalidate('edit'); return upload(...args); });
+    await controller.publish('scene', false, prepare, assertCurrent);
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'completed', receipt: { shared: false } });
+  });
+  it('offers a retry of a built ZIP while images are marked for deletion', async () => {
+    const { controller, client, prepare } = fixture();
+    let marked = false;
+    const assertCurrent = () => { if (marked) throw new HfError('The reconstruction changed while preparing. Publish again.'); };
+    client.chunk.mockRejectedValueOnce(new GoogleDrivePublishError('Interrupted'));
+    await controller.publish('scene', false, prepare, assertCurrent);
+    marked = true;
+    controller.invalidate('edit');
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: true });
+    await controller.retry();
+    expect(controller.getSnapshot().phase).toBe('completed');
+    expect(prepare).toHaveBeenCalledOnce();
+  });
+  it('still stops a publication whose scene is edited before its ZIP is built', async () => {
+    const { controller, client } = fixture();
+    let resolve!: (value: unknown) => void;
+    const prepare = vi.fn().mockImplementation(() => new Promise(result => { resolve = result; }));
+    const attempt = controller.publish('scene', false, prepare);
+    controller.invalidate('edit');
+    resolve({ blob: new Blob(['late']), md5: 'md5', viewerBaseUrl: 'https://viewer.example/' });
+    await attempt; await controller.retry();
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'cancelled', canRetry: false });
+    expect(client.generateId).not.toHaveBeenCalled();
+  });
+  it('drops a failed preparation once the scene is edited, as its snapshot is stale', async () => {
+    const { controller, prepare } = fixture();
+    prepare.mockRejectedValueOnce(new HfError('x', 503));
+    await controller.publish('scene', false, prepare);
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: true });
+    controller.invalidate('edit');
+    expect(controller.getSnapshot()).toEqual(idle);
+  });
   it('invalidates a changed dataset during preparation and prevents a late upload or retry', async () => {
     const { controller, client } = fixture();
     let resolve!: (value: unknown) => void;
@@ -284,7 +346,7 @@ describe('Drive publication memory', () => {
     await attempt;
     controller.invalidate();
     await controller.retry();
-    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: false });
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'idle', canRetry: false });
     expect(client.chunk).toHaveBeenCalledOnce();
     expect(await collected(ref)).toBe(true);
   });

@@ -38,19 +38,23 @@ describe('Drive publication runtime', () => {
     expect(controller.invalidate).not.toHaveBeenCalled();
     useReconstructionStore.setState({ reconstruction: buildReconstruction(), sourceType: 'url', sourceUrl: 'https://example.test/a/' });
     expect(controller.invalidate).toHaveBeenCalledTimes(1);
+    expect(controller.invalidate).toHaveBeenLastCalledWith('dataset');
     useReconstructionStore.setState({ urlLoading: false });
     expect(controller.invalidate).toHaveBeenCalledTimes(1);
     useReconstructionStore.setState(state => ({ reconstructionEditRevision: state.reconstructionEditRevision + 1 }));
     expect(controller.invalidate).toHaveBeenCalledTimes(2);
+    expect(controller.invalidate).toHaveBeenLastCalledWith('edit');
     useReconstructionStore.setState({ sourceUrl: 'https://example.test/b/' });
     expect(controller.invalidate).toHaveBeenCalledTimes(3);
+    expect(controller.invalidate).toHaveBeenLastCalledWith('dataset');
   });
 
-  it('invalidates the job once deletions are pending', () => {
+  it('invalidates the job as an edit once deletions are pending', () => {
     useDeletionStore.setState({ pendingDeletions: new Set() });
     expect(controller.invalidate).not.toHaveBeenCalled();
     useDeletionStore.setState({ pendingDeletions: new Set([7]) });
     expect(controller.invalidate).toHaveBeenCalledOnce();
+    expect(controller.invalidate).toHaveBeenCalledWith('edit');
   });
 
   it('marks the toolbar until the dialog returns to idle, and guards unloading only while publishing', () => {

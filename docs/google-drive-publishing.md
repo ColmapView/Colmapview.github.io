@@ -5,7 +5,7 @@ Load a COLMAP reconstruction with its original images, then click the **Google D
 1. **Sign in** with Google and allow ColmapView to create and manage the files it creates in Drive.
 2. Choose a ZIP file name. Files are saved privately in **My Drive** by default.
 3. Optionally select **Anyone with the link can view** to publish a shared dataset. ColmapView enables reader access after verifying the upload. An organization's sharing policy can prevent this step.
-4. Click **Save private dataset** or **Publish shared dataset**. After completion, copy the viewer link or open the file in Drive. The finished publication's link is cleared when another dataset loads or the model changes.
+4. Click **Save private dataset** or **Publish shared dataset**. After completion, copy the viewer link or open the file in Drive. Loading another dataset returns the dialog to a new form, clearing a finished publication's link or a stopped one's status; editing the model also clears a finished publication's link.
 
 Public viewer links to supported Drive archives need no sign-in when the viewer's Drive API key is configured. For a private archive, use the loading panel's Drive account control to sign in and **Choose archive from Drive** through Google Picker. The recipient must already have permission to download it; a viewer URL alone does not grant access. Loading supports ZIP and TAR, including compressed TAR; publication creates ZIP output only. Loading and publishing keep separate local sessions, both requesting only `drive.file`.
 
@@ -21,7 +21,7 @@ The complete ZIP must fit the viewer's **2 GiB** archive limit. Individual image
 
 Keep the browser tab open. Closing the dialog leaves publication running; reopen it with the Drive toolbar icon. Closing or reloading the tab loses its upload state and authentication.
 
-Uploads go directly to Google's API using resumable chunks. Retry checks the server's acknowledged position and the file's size and checksum. A pre-generated file ID and publication marker bind retries to the same file. Reconnect the same Google account if sign-in expires. Changing the reconstruction cancels the current publication and requires a new one.
+Uploads go directly to Google's API using resumable chunks. Retry checks the server's acknowledged position and the file's size and checksum. A pre-generated file ID and publication marker bind retries to the same file. Reconnect the same Google account if sign-in expires. Loading another dataset cancels the current publication and requires a new one. Editing the model or marking images for deletion cancels it only while the ZIP is being prepared; a built ZIP keeps uploading, as on Hugging Face.
 
 **Cancel upload** stops transfers. A completed file or sharing change may remain in Drive, so review its Drive link before starting another publication. ColmapView does not automatically delete files. Every new publication creates a new file; existing Drive datasets are not overwritten.
 
