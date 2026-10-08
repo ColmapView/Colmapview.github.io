@@ -6,6 +6,7 @@ import type { DragEvent } from 'react';
 import type { FileDropzoneWorkflowDeps, processFileDropzoneFiles } from './fileDropzoneWorkflow';
 import { useFileDropzone } from './useFileDropzone';
 import { useUrlLoader } from './useUrlLoader';
+import { collectShareConfig } from './useUrlState';
 import { createDefaultManifest } from './urlLoaderPolicy';
 import { buildFile, buildFileSystemFileEntry, buildLoadedFiles, buildReconstruction } from '../test/builders';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
@@ -438,6 +439,9 @@ describe('useFileDropzone', () => {
       const loaded = useReconstructionStore.getState().loadedFiles;
       expect(loaded?.splatFileSources?.map(source => source.path)).toEqual(['default.spz']);
       expect(loaded?.splatFile).toBeUndefined();
+      // The new scene records the None, so share links and publications carry it.
+      expect(useReconstructionStore.getState().splatNoneChosen).toBe(true);
+      expect(collectShareConfig().splat?.activeSourceId).toBe('');
     });
   });
 });

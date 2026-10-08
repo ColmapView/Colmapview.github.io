@@ -250,7 +250,9 @@ interface ReconstructionState {
   splatSelectionRevision: number;
   /**
    * No splat shows because None was chosen for these files: by the user (the picker, the Point Cloud panel,
-   * Cancel of a decode) or by saved settings or a link. A splat that failed, or none loaded, is no choice.
+   * Cancel of a decode), by saved settings or a link, or during the load that committed them. A Reload of
+   * the same files keeps it. A splat that failed, none loaded, or a splat picked (even one still
+   * downloading, failed or cancelled) is no choice; another dataset's files arrive with none.
    */
   splatNoneChosen: boolean;
   /**
@@ -270,7 +272,8 @@ interface ReconstructionState {
   /** Without `{ edited: true }` this is a scene load: the edit revision resets, pending deletion marks are cleared and the scene transform returns to identity. */
   setReconstruction: (rec: Reconstruction, options?: { edited?: boolean }) => void;
   setWasmReconstruction: (wasm: ReconstructionSource | null) => void;
-  setLoadedFiles: (files: LoadedFiles) => void;
+  /** `noneChosen`: these files commit with None, chosen while they loaded. */
+  setLoadedFiles: (files: LoadedFiles, options?: { noneChosen?: boolean }) => void;
   setDroppedFiles: (files: Map<string, File>) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
@@ -362,7 +365,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     set({ wasmReconstruction });
   },
 
-  setLoadedFiles: (loadedFiles) => {
+  setLoadedFiles: (loadedFiles, options) => {
     cancelPendingSplatLoad();
     const previousLoadedFiles = get().loadedFiles;
     const currentSource = get().wasmReconstruction;
@@ -410,8 +413,9 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     set({
       loadedFiles: resolvedLoadedFiles,
       requestedSplatSourceId: requestedSplatSourceId === null ? get().requestedSplatSourceId : null,
-      // A Reload keeps None on screen; another dataset's files arrive with no choice (setDroppedFiles).
-      splatNoneChosen: !hasSplatFile && (requestedSplatSourceId === '' || get().splatNoneChosen),
+      // A Reload keeps None on screen; another dataset's files arrive with no choice (setDroppedFiles)
+      // unless None was chosen while they loaded.
+      splatNoneChosen: !hasSplatFile && (requestedSplatSourceId === '' || options?.noneChosen === true || get().splatNoneChosen),
     });
   },
 
@@ -525,7 +529,8 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     activeSplatController = controller;
     const { signal } = controller;
     const splatName = source.path.split('/').pop() ?? source.path;
-    set({ urlLoading: true, urlProgress: getSplatDownloadProgress(splatName, 0, 0), urlError: null });
+    // A splat is chosen: None no longer is, even if this download fails or is cancelled.
+    set({ urlLoading: true, urlProgress: getSplatDownloadProgress(splatName, 0, 0), urlError: null, splatNoneChosen: false });
     const onDownloadProgress = (loaded: number, total: number) => {
       // Ignore progress from a fetch a newer selection has superseded.
       if (signal.aborted) {

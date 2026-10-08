@@ -9,7 +9,7 @@ import {
   applyDeletionsToData, applyTransformToData, confirmReload, hasUnsavedReloadState,
   useDeletionStore, useReconstructionStore, useTransformStore, useUIStore, usePointCloudStore,
 } from '../store';
-import { applySavedViewerState, applyShareConfig } from './useUrlState';
+import { applySavedViewerState, applyShareConfig, collectShareConfig } from './useUrlState';
 import { registerConfirmationHandler } from '../utils/confirmation';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
@@ -435,7 +435,7 @@ describe('file dropzone workflow', () => {
    * Replaces a scene showing old/a.spz with files whose own colmapview.yaml selects saved.spz rather than their
    * default, making `choice` on the scene on screen while they parse. Of its other tiles, old/c.spz names no
    * incoming file, b.spz shares its file name with the incoming splats/b.spz, and splats/alternate.spz is an
-   * incoming id. Returns the splat the load leaves showing.
+   * incoming id. Returns the splat the load leaves showing, whether it records None and the splat a share carries.
    */
   async function replaceSceneWhileChoosing(choice: string, { withoutStoreRequest = false } = {}) {
     useReconstructionStore.getState().clear();
@@ -463,6 +463,7 @@ describe('file dropzone workflow', () => {
       getSplatSelectionState: () => ({ revision: useReconstructionStore.getState().splatSelectionRevision,
         sourceId: getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles,
           useReconstructionStore.getState().splatNoneChosen) ?? undefined }),
+      setDroppedFiles: state.setDroppedFiles,
       setLoadedFiles: state.setLoadedFiles, setWasmReconstruction: state.setWasmReconstruction,
       setReconstruction: state.setReconstruction,
       // Restores like a local drop: against the revision the load started at, unless the workflow passes another.
@@ -476,7 +477,8 @@ describe('file dropzone workflow', () => {
       if (withoutStoreRequest) useReconstructionStore.setState({ requestedSplatSourceId: null });
       finishBuild({ reconstruction: fixture.reconstruction, pointCount: 0 });
       expect(await pending).toBe(true);
-      return { incoming, shown: useReconstructionStore.getState().loadedFiles?.splatFile };
+      return { incoming, shown: useReconstructionStore.getState().loadedFiles?.splatFile,
+        noneChosen: useReconstructionStore.getState().splatNoneChosen, sharedSplatId: collectShareConfig().splat?.activeSourceId };
     } finally {
       fixture.service.dispose();
       useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
@@ -499,8 +501,11 @@ describe('file dropzone workflow', () => {
   });
 
   it.each(['None', 'an incoming splat'] as const)('lets %s chosen during the load win over the incoming colmapview.yaml', async choice => {
-    const { incoming, shown } = await replaceSceneWhileChoosing(choice === 'None' ? '' : 'splats/alternate.spz');
+    const { incoming, shown, noneChosen, sharedSplatId } = await replaceSceneWhileChoosing(choice === 'None' ? '' : 'splats/alternate.spz');
     expect(shown).toBe(choice === 'None' ? undefined : incoming.alternate);
+    // Share links, embeds and publications of the new scene carry the choice.
+    expect(noneChosen).toBe(choice === 'None');
+    expect(sharedSplatId).toBe(choice === 'None' ? '' : 'splats/alternate.spz');
   });
 
   it('replaces the scene only once beforeSceneCommit settles after parsing', async () => {

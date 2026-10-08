@@ -100,7 +100,8 @@ export interface FileDropzoneWorkflowDeps {
   resetView: () => void;
   setDroppedFiles: (files: Map<string, File>) => void;
   setError: (error: string | null) => void;
-  setLoadedFiles: (files: LoadedFiles) => void;
+  /** `noneChosen`: these files commit with None, chosen while they loaded. */
+  setLoadedFiles: (files: LoadedFiles, options?: { noneChosen?: boolean }) => void;
   setReconstruction: (reconstruction: Reconstruction) => void;
   setUrlLoading: (loading: boolean) => void;
   setUrlProgress: SetUrlProgress;
@@ -580,6 +581,7 @@ export async function processFileDropzoneFiles(
     await settleBeforeCommit();
 
     const currentSelection = deps.getSplatSelectionState?.();
+    let noneChosenDuringLoad = false;
     if (currentSelection && initialSplatSelectionRevision !== undefined
       && currentSelection.revision !== initialSplatSelectionRevision) {
       // A choice made during the load carries over only when it fits these files: None, or one of
@@ -588,7 +590,8 @@ export async function processFileDropzoneFiles(
       const { sourceId } = currentSelection;
       const chosen = sourceId ? splatFileSources.find(source => source.id === sourceId)
         ?? findSplatSourceById({ splatFileSources }, sourceId) : undefined;
-      if (sourceId === '') splatFile = undefined;
+      noneChosenDuringLoad = sourceId === '';
+      if (noneChosenDuringLoad) splatFile = undefined;
       else if (chosen) splatFile = chosen.file;
       else ignoredSplatSelectionRevision = currentSelection.revision;
     }
@@ -603,7 +606,7 @@ export async function processFileDropzoneFiles(
     reportSceneReplacement();
     deps.setDroppedFiles(files);
     deps.clearSplatPsnr?.();
-    deps.setLoadedFiles({
+    const committedFiles: LoadedFiles = {
       camerasFile,
       imagesFile,
       points3DFile,
@@ -612,7 +615,10 @@ export async function processFileDropzoneFiles(
       framesFile,
       imageFiles,
       hasMasks,
-    });
+    };
+    // These files carry the None chosen while they loaded, so share links and publications record it.
+    if (noneChosenDuringLoad) deps.setLoadedFiles(committedFiles, { noneChosen: true });
+    else deps.setLoadedFiles(committedFiles);
     deps.setWasmReconstruction(parseResult.wasmWrapper);
     sourceInstalled = true;
 

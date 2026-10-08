@@ -29,6 +29,7 @@ import {
   showOptionalSettingsTimeoutWarning,
 } from '../hooks/optionalSettingsWarning';
 import { dismissSplatListTimeoutWarning, showSplatListTimeoutWarning, SPLAT_LIST_TIMEOUT_MESSAGE } from '../hooks/splatListWarning';
+import { collectShareConfig } from '../hooks/useUrlState';
 
 // Byte-less activation seams: the decode step is mocked (no real gs-toolbox
 // decode in store tests), while seedGaussianCloudLoad / loadGaussianCloudFromFile
@@ -2048,6 +2049,35 @@ describe('reconstruction store None choice', () => {
     useReconstructionStore.getState().setDroppedFiles(new Map([['splats/a.spz', a]]));
     useReconstructionStore.getState().setLoadedFiles({ ...listed(), splatFile: undefined });
     expect(useReconstructionStore.getState().splatNoneChosen).toBe(false);
+  });
+
+  it.each(['lands', 'fails', 'is cancelled'] as const)('records no None once a lazy splat is picked after it, while it downloads and once it %s', async outcome => {
+    await useReconstructionStore.getState().selectSplatSource('');
+    expect(collectShareConfig().splat?.activeSourceId).toBe('');
+    let respond!: (response: Response) => void;
+    let fail!: (error: Error) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve, reject) => { respond = resolve; fail = reject; }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const pending = useReconstructionStore.getState().selectSplatSource('splats/b.spz');
+
+      expect(useReconstructionStore.getState().splatNoneChosen).toBe(false);
+      expect(collectShareConfig().splat?.activeSourceId).toBeUndefined();
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+      expect(useReconstructionStore.getState().splatNoneChosen).toBe(false);
+      if (outcome === 'fails') fail(new Error('offline'));
+      else {
+        if (outcome === 'is cancelled') useReconstructionStore.getState().cancelLoading();
+        respond(new Response(new Blob(['b']), { status: 200 }));
+      }
+      await pending;
+
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile?.name).toBe(outcome === 'lands' ? 'b.spz' : undefined);
+      expect(useReconstructionStore.getState().splatNoneChosen).toBe(false);
+      expect(collectShareConfig().splat?.activeSourceId).toBe(outcome === 'lands' ? 'splats/b.spz' : undefined);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
