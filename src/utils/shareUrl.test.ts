@@ -38,6 +38,16 @@ describe('share URL helpers', () => {
     }, '0.6.1')).toBe('https://colmapview.github.io/v0.6.1/');
   });
 
+  it('links /dev/ to itself, not to the last release that package.json names', () => {
+    for (const pathname of ['/dev/', '/dev/index.html']) {
+      expect(getShareBaseUrl({
+        hostname: 'colmapview.github.io',
+        origin: 'https://colmapview.github.io',
+        pathname,
+      }, '0.15.4')).toBe('https://colmapview.github.io/dev/');
+    }
+  });
+
   it('uses the current origin and path for non-production hosts', () => {
     expect(getShareBaseUrl({
       hostname: 'localhost',

@@ -18,6 +18,8 @@ export interface BuildShareableUrlOptions {
 
 export function getShareBaseUrl(location: ShareUrlLocation, appVersion: string): string {
   if (location.hostname === 'colmapview.github.io') {
+    // /dev/ is built from main, whose package.json still names the last release.
+    if (location.pathname.startsWith('/dev/')) return 'https://colmapview.github.io/dev/';
     return `https://colmapview.github.io/v${appVersion}/`;
   }
   return location.origin + location.pathname;
