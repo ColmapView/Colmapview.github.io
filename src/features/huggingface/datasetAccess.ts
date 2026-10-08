@@ -21,8 +21,10 @@ function mayBeAccessDenial(response: Response): boolean {
 const MISSING_OR_PRIVATE = 'Hugging Face dataset not found, or it is private. Check the URL. '
   + 'Sign in with Hugging Face to open a private dataset, then retry.';
 
+const isGated = (response: Response) => response.headers.get('X-Error-Code') === 'GatedRepo';
+
 function signedOutDenial(response: Response): HfError {
-  return new HfError(response.headers.get('X-Error-Code') === 'GatedRepo'
+  return new HfError(isGated(response)
     ? 'This Hugging Face dataset is gated: only accounts its owner has approved can open its files.'
     : MISSING_OR_PRIVATE, response.status);
 }
@@ -49,7 +51,9 @@ export async function fetchHuggingFaceDatasetRequest(url: string, init: RequestI
     }
     if (response.status === 403) {
       discard(response);
-      throw new HfError('This Hugging Face account cannot read the dataset. Check repository and organization permissions.', 403);
+      // Without the gated-repos scope, an account its owner approved is refused too.
+      throw new HfError(isGated(response) ? 'This Hugging Face dataset is gated, and this sign-in cannot open its files.'
+        : 'This Hugging Face account cannot read the dataset. Check repository and organization permissions.', 403);
     }
     if (response.ok && hfAuth.getSnapshot() === connection) {
       const repos = privateRepos.get(connection) ?? new Set<string>();

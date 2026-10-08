@@ -192,6 +192,16 @@ describe('Hugging Face private dataset reads', () => {
     await expect(fetchDatasetResource(root + 'sparse/0/cameras.bin')).rejects.toThrow('gated');
   });
 
+  it('names a gated dataset to a signed-in reader its owner has not approved', async () => {
+    connected();
+    // Anonymous reads of a gated repo answer 401; an account without access gets 403, both marked GatedRepo.
+    request.mockImplementation(async (_url, init) => new Response(null, { status: authorization(init) ? 403 : 401,
+      headers: { 'X-Error-Code': 'GatedRepo' } }));
+    await expect(fetchDatasetResource(root + 'sparse/0/cameras.bin')).rejects.toThrow('gated');
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(hfAuth.expire).not.toHaveBeenCalled();
+  });
+
   it('forgets a rejected current token without exposing the provider response', async () => {
     connected();
     request.mockImplementation(async () => new Response('secret provider payload', { status: 401 }));
