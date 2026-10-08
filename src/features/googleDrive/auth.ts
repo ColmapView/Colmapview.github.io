@@ -1,7 +1,6 @@
 import { assertGoogleDriveHostAllowed, getGoogleDriveConfiguration, getGoogleDriveHostingConfig, validateGoogleDriveClientId } from './config';
 
-export const GOOGLE_DRIVE_READ_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-export const GOOGLE_DRIVE_PUBLISH_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+export const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
 export interface GoogleTokenResponse {
   access_token?: string;
@@ -66,7 +65,6 @@ export function getGoogleDriveClientId(): string | null {
 
 /** Tokens stay in this tab's memory, never in viewer state, storage, or shared links. */
 export function createGoogleDriveAuth(purpose: 'read' | 'publish' = 'read') {
-  const scope = purpose === 'publish' ? GOOGLE_DRIVE_PUBLISH_SCOPE : GOOGLE_DRIVE_READ_SCOPE;
   const expired = purpose === 'publish'
     ? 'Google Drive sign-in expired. Sign in again to continue publishing.'
     : 'Google Drive sign-in expired. Sign in again, then choose an archive in the Drive picker.';
@@ -112,7 +110,7 @@ export function createGoogleDriveAuth(purpose: 'read' | 'publish' = 'read') {
       timer = setTimeout(() => fail('Google sign-in timed out. Try again.'), 180_000);
       try {
         const client = sdk.initTokenClient({
-          client_id: clientId, scope, include_granted_scopes: false,
+          client_id: clientId, scope: GOOGLE_DRIVE_SCOPE, include_granted_scopes: false,
           callback: (response) => {
             if (attempt !== generation || state.status !== 'connecting') return;
             if (!getGoogleDriveHostingConfig().hostAllowed) return disconnect();
@@ -120,7 +118,7 @@ export function createGoogleDriveAuth(purpose: 'read' | 'publish' = 'read') {
             const expires = Number(response.expires_in);
             if (!response.access_token || !Number.isFinite(expires) || expires <= 5 || expires > 86400
               || response.token_type?.toLowerCase() !== 'bearer'
-              || !response.scope?.split(' ').includes(scope)) {
+              || !response.scope?.split(' ').includes(GOOGLE_DRIVE_SCOPE)) {
               return fail(purpose === 'publish' ? 'Google Drive upload permission was not granted. Sign in again and allow file access.'
                 : 'Google Drive file permission was not granted. Sign in again, then choose an archive in the Drive picker.');
             }

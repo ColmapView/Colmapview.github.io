@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GOOGLE_DRIVE_READ_SCOPE, googleDriveAuth, type GoogleOAuthSdk } from './auth';
+import { GOOGLE_DRIVE_SCOPE, googleDriveAuth, type GoogleOAuthSdk } from './auth';
 import { chooseGoogleDriveArchive, getGoogleDrivePickerConfig, parseGoogleDriveArchiveSelection, type GooglePickerSdk } from './picker';
 
 function pickerView() {
@@ -33,7 +33,7 @@ function pickerSdk() {
 
 function signIn(expires = 3600) {
   const sdk: GoogleOAuthSdk = { initTokenClient: config => ({ requestAccessToken: () => config.callback({
-    access_token: 'memory-only-test-token', scope: GOOGLE_DRIVE_READ_SCOPE, token_type: 'Bearer', expires_in: expires,
+    access_token: 'memory-only-test-token', scope: GOOGLE_DRIVE_SCOPE, token_type: 'Bearer', expires_in: expires,
   }) }) };
   googleDriveAuth.connect('123456-client.apps.googleusercontent.com', sdk);
 }

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { GOOGLE_DRIVE_PUBLISH_SCOPE, GOOGLE_DRIVE_READ_SCOPE } from './googleDrive/auth';
+import { GOOGLE_DRIVE_SCOPE } from './googleDrive/auth';
 import { HF_SCOPES } from './huggingface/auth';
 
 /** Visible text only: a scope named in markup or a comment is not a disclosure. */
@@ -22,9 +22,9 @@ describe('privacy policy discloses the provider access the code requests', () =>
 
   it('names the Drive scope, the account identifier publication reads and the file marker it writes', () => {
     const policy = privacyPolicyText();
-    const driveScopes = new Set([GOOGLE_DRIVE_READ_SCOPE, GOOGLE_DRIVE_PUBLISH_SCOPE].map(scope => scope.split('/').at(-1)!));
+    const driveScope = GOOGLE_DRIVE_SCOPE.split('/').at(-1)!;
     // upload.ts owner() reads about?fields=user(permissionId); start() writes the operation marker.
-    for (const term of [...driveScopes, 'permission ID', 'appProperties']) {
+    for (const term of [driveScope, 'permission ID', 'appProperties']) {
       expect(policy.includes(term), `privacy.html must name ${term}`).toBe(true);
     }
   });

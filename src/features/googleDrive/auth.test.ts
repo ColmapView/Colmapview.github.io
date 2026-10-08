@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createGoogleDriveAuth, GOOGLE_DRIVE_READ_SCOPE, GOOGLE_DRIVE_PUBLISH_SCOPE, type GoogleOAuthSdk, type GoogleTokenResponse } from './auth';
+import { createGoogleDriveAuth, GOOGLE_DRIVE_SCOPE, type GoogleOAuthSdk, type GoogleTokenResponse } from './auth';
 
 function testSdk() {
   const callbacks: Parameters<GoogleOAuthSdk['initTokenClient']>[0][] = [];
@@ -7,7 +7,7 @@ function testSdk() {
   const sdk = { initTokenClient: vi.fn(config => { callbacks.push(config); return { requestAccessToken }; }) } satisfies GoogleOAuthSdk;
   return { sdk, callbacks, requestAccessToken };
 }
-const validToken: GoogleTokenResponse = { access_token: 'private-test-token', token_type: 'Bearer', expires_in: 3600, scope: GOOGLE_DRIVE_READ_SCOPE };
+const validToken: GoogleTokenResponse = { access_token: 'private-test-token', token_type: 'Bearer', expires_in: 3600, scope: GOOGLE_DRIVE_SCOPE };
 
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
@@ -65,8 +65,8 @@ describe('Google Drive in-memory account session', () => {
     expect(callbacks[0].scope).toBe('https://www.googleapis.com/auth/drive.file');
     callbacks[0].callback(validToken);
     writer.connect('123456-client.apps.googleusercontent.com', sdk);
-    expect(callbacks[1]).toMatchObject({ scope: GOOGLE_DRIVE_PUBLISH_SCOPE, include_granted_scopes: false });
-    callbacks[1].callback({ ...validToken, access_token: 'upload-token', scope: GOOGLE_DRIVE_PUBLISH_SCOPE });
+    expect(callbacks[1]).toMatchObject({ scope: GOOGLE_DRIVE_SCOPE, include_granted_scopes: false });
+    callbacks[1].callback({ ...validToken, access_token: 'upload-token', scope: GOOGLE_DRIVE_SCOPE });
     expect(writer.getAccessToken()).toBe('upload-token');
     writer.disconnect();
     expect(reader.getAccessToken()).toBe('private-test-token');
@@ -85,7 +85,7 @@ describe('Google Drive in-memory account session', () => {
     const auth = createGoogleDriveAuth();
     const { sdk, callbacks, requestAccessToken } = testSdk();
     auth.connect('123456-client.apps.googleusercontent.com', sdk);
-    expect(callbacks[0]).toMatchObject({ client_id: '123456-client.apps.googleusercontent.com', scope: GOOGLE_DRIVE_READ_SCOPE, include_granted_scopes: false });
+    expect(callbacks[0]).toMatchObject({ client_id: '123456-client.apps.googleusercontent.com', scope: GOOGLE_DRIVE_SCOPE, include_granted_scopes: false });
     expect(requestAccessToken).toHaveBeenCalledWith({ prompt: 'select_account' });
     callbacks[0].callback(validToken);
     expect(auth.getSnapshot()).toEqual({ status: 'connected', error: null });
