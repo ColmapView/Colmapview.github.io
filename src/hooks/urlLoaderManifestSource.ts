@@ -18,11 +18,17 @@ import { anySignal } from '../utils/abortSignals';
 export { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS } from './urlLoaderViewerState';
 
 /**
- * How long the parsed scene waits for a splat listing that is still running. Discovery starts with
- * the downloads, so a listing unfinished this long after parsing is stalled; the scene then appears
- * without it, as when discovery fails.
+ * How long the parsed scene waits on a splat listing that has stopped answering: one stalled request.
+ * Discovery starts with the downloads; the wait starts after parsing and again with each answer. A
+ * dropped listing leaves the scene without splats, as when discovery fails.
  */
 export const SPLAT_DISCOVERY_TIMEOUT_MS = FETCH_TIMEOUT;
+
+/**
+ * However steadily a listing answers, the parsed scene waits at most this long after parsing: a folder
+ * crawl at its caps (200 listings and 200 size checks, one at a time) at 300 ms a request.
+ */
+export const SPLAT_DISCOVERY_LIMIT_MS = 120_000;
 
 const RESTORE_INPUTS_PROGRESS = { percent: 90, message: 'Looking for splats and saved settings...' };
 
@@ -51,7 +57,7 @@ export interface LoadManifestSourceDeps {
   onViewerState?: (state: PublishedViewerState) => void | Promise<void>;
   /** Optional dataset settings did not arrive in time; defaults stay in effect. */
   onOptionalSettingsTimeout?: () => void;
-  /** The splat listing outlasted SPLAT_DISCOVERY_TIMEOUT_MS; the scene appears without its splats. */
+  /** The splat listing stopped answering, or outlasted SPLAT_DISCOVERY_LIMIT_MS; the scene appears without its splats. */
   onSplatListTimeout?: () => void;
   fetchImpl?: (url: string, init?: RequestInit) => Promise<Response>;
   fetchColmapFiles?: FetchColmapFiles;
@@ -66,15 +72,25 @@ export interface LoadManifestSourceDeps {
   onAutoSplatSource?: (sourceId: string) => void;
 }
 
-/** Waits up to `ms` for work already running; the load's own cancellation still rejects. */
-async function settleWithin<T>(task: Promise<T>, ms: number, signal?: AbortSignal): Promise<{ value: T } | null> {
+/**
+ * Waits for work already running while it keeps answering: until `idleMs` pass without an answer (counted
+ * from this call at the earliest), and never past `limitMs` after it. The load's own cancellation still rejects.
+ */
+async function settleWhileAnswering<T>(task: Promise<T>, lastAnswerAt: () => number, idleMs: number, limitMs: number,
+  signal?: AbortSignal): Promise<{ value: T } | null> {
+  const start = Date.now();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let cancel: (() => void) | undefined;
   const deadline = new Promise<null>((resolve, reject) => {
     cancel = () => reject(signal?.reason ?? new DOMException('Dataset load cancelled', 'AbortError'));
     if (signal?.aborted) { cancel(); return; }
     signal?.addEventListener('abort', cancel, { once: true });
-    timer = setTimeout(() => resolve(null), ms);
+    const check = () => {
+      const remaining = Math.min(Math.max(start, lastAnswerAt()) + idleMs, start + limitMs) - Date.now();
+      if (remaining <= 0) resolve(null);
+      else timer = setTimeout(check, remaining);
+    };
+    check();
   });
   try {
     return await Promise.race([task.then(value => ({ value })), deadline]);
@@ -102,18 +118,27 @@ export async function loadManifestSource(
   const fetchImpl = deps.fetchImpl ?? ((url, init) => fetchDatasetResource(url, undefined, init));
   const discoveryController = new AbortController();
   const discoverySignal = deps.signal ? anySignal([deps.signal, discoveryController.signal]) : discoveryController.signal;
+  let lastDiscoveryAnswer = 0;
   const discover = deps.discoverSplatCatalog ?? ((target: ColmapManifest) => discoverManifestSplatCatalog(target, {
-    fetchImpl: (url, init) => fetchImpl(url, { ...init, signal: discoverySignal }), log, isTouchDevice: deps.isTouchDevice,
+    // Each answer shows that a long listing is still moving rather than stalled.
+    fetchImpl: async (url, init) => {
+      const response = await fetchImpl(url, { ...init, signal: discoverySignal });
+      lastDiscoveryAnswer = Date.now();
+      return response;
+    },
+    log, isTouchDevice: deps.isTouchDevice,
   }));
   // Discovery and optional settings do not gate required file transfer or parsing.
   const catalogTask = discover(manifest).catch(() => [] as RemoteSplatCandidate[]);
   let catalogSettled: Promise<RemoteSplatCandidate[]> | undefined;
-  /** The listing, given SPLAT_DISCOVERY_TIMEOUT_MS from the first call; a slower one is dropped like a failed one. */
-  const settleCatalog = () => catalogSettled ??= settleWithin(catalogTask, SPLAT_DISCOVERY_TIMEOUT_MS, deps.signal)
+  /** The listing, waited for from the first call while it answers; a stalled or endless one is dropped like a failed one. */
+  const settleCatalog = () => catalogSettled ??= settleWhileAnswering(catalogTask, () => lastDiscoveryAnswer,
+    SPLAT_DISCOVERY_TIMEOUT_MS, SPLAT_DISCOVERY_LIMIT_MS, deps.signal)
     .then(result => {
       if (result) return result.value;
       discoveryController.abort(new DOMException('Splat discovery timed out', 'TimeoutError'));
-      log(`[URL Loader] Splat discovery took longer than ${SPLAT_DISCOVERY_TIMEOUT_MS / 1000} s after parsing; no splats are listed`);
+      log(`[URL Loader] Splat discovery stopped answering for ${SPLAT_DISCOVERY_TIMEOUT_MS / 1000} s, or ran `
+        + `${SPLAT_DISCOVERY_LIMIT_MS / 1000} s after parsing; no splats are listed`);
       deps.onSplatListTimeout?.();
       return [];
     });

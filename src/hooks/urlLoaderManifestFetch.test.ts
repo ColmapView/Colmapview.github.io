@@ -72,6 +72,19 @@ describe('URL loader manifest fetch helpers', () => {
     ]);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
+
+  it.each([
+    [404, false], [410, false], [405, true], [403, true],
+  ] as const)('lists an explicit splat whose size check answers %i: %s', async (status, listed) => {
+    const fetchImpl = vi.fn(async (url: string) => url.endsWith('gone.spz')
+      ? new Response(null, { status }) : new Response(null, { headers: { 'content-length': '1000' } }));
+    const log = vi.fn();
+    const catalog = await discoverManifestSplatCatalog({ ...manifest, splats: ['splats/live.spz', 'splats/gone.spz'] }, {
+      fetchImpl, log, classifySplatUrl: vi.fn(async () => ({ isSplat: true, splatCount: null })), isTouchDevice: false,
+    });
+    expect(catalog.map(candidate => candidate.path).sort()).toEqual(listed ? ['splats/gone.spz', 'splats/live.spz'] : ['splats/live.spz']);
+    if (!listed) expect(log).toHaveBeenCalledWith('[URL Loader] Optional file not found: splats/gone.spz');
+  });
   it('keeps fetched-manifest progress steady before pending splat discovery resolves', async () => {
     const setUrlProgress = vi.fn();
     const fetchedManifest = await fetchUrlManifest('https://example.com/colmapview.json', {

@@ -461,25 +461,30 @@ export async function withDiscoveredColmapPaths(
   return manifest;
 }
 
-async function getRemoteFileContentLength(url: string, fetchImpl: FetchUrl): Promise<number | null> {
+/** A HEAD probe: the size when known, and whether the server says the file is not there. */
+async function probeRemoteFile(url: string, fetchImpl: FetchUrl): Promise<{ size: number | null; missing: boolean }> {
   let response: Response;
   try {
     response = await fetchImpl(url, { method: 'HEAD' });
   } catch {
-    return null;
+    return { size: null, missing: false };
   }
 
   if (!response.ok) {
-    return null;
+    return { size: null, missing: response.status === 404 || response.status === 410 };
   }
 
   const contentLength = response.headers.get('content-length');
   if (!contentLength) {
-    return null;
+    return { size: null, missing: false };
   }
 
   const size = Number(contentLength);
-  return Number.isFinite(size) && size >= 0 ? size : null;
+  return { size: Number.isFinite(size) && size >= 0 ? size : null, missing: false };
+}
+
+async function getRemoteFileContentLength(url: string, fetchImpl: FetchUrl): Promise<number | null> {
+  return (await probeRemoteFile(url, fetchImpl)).size;
 }
 
 export async function discoverDirectoryListingSplatPaths(
@@ -667,8 +672,13 @@ export async function discoverManifestSplatCatalog(
     const paths = [...new Set(manifest.splats)];
     const candidates = await mapWithConcurrency(paths, SPLAT_CLASSIFY_CONCURRENCY, async path => {
       const url = joinManifestUrlPath(manifest.baseUrl, path);
-      const [classification, size] = await Promise.all([classify(url), getRemoteFileContentLength(url, fetchImpl)]);
-      return classification.isSplat ? { path, size: size ?? 0, splatCount: classification.splatCount } : null;
+      const [classification, probe] = await Promise.all([classify(url), probeRemoteFile(url, fetchImpl)]);
+      // A listed splat the server says is gone is left out, as a missing optional file always was.
+      if (probe.missing) {
+        deps.log?.(`[URL Loader] Optional file not found: ${path}`);
+        return null;
+      }
+      return classification.isSplat ? { path, size: probe.size ?? 0, splatCount: classification.splatCount } : null;
     });
     return sortRemoteSplatCandidates(candidates.filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null));
   }

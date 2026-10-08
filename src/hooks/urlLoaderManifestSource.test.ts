@@ -2,7 +2,9 @@ import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildFile } from '../test/builders';
 import type { ColmapManifest } from '../types/manifest';
-import { loadManifestSource, OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS, SPLAT_DISCOVERY_TIMEOUT_MS } from './urlLoaderManifestSource';
+import {
+  loadManifestSource, OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS, SPLAT_DISCOVERY_LIMIT_MS, SPLAT_DISCOVERY_TIMEOUT_MS,
+} from './urlLoaderManifestSource';
 import type { RemoteSplatCandidate } from './urlLoaderPolicy';
 import { useNotificationStore } from '../store/stores/notificationStore';
 import { dismissSplatListTimeoutWarning, showSplatListTimeoutWarning, SPLAT_LIST_TIMEOUT_MESSAGE } from './splatListWarning';
@@ -141,7 +143,7 @@ describe('URL loader manifest source helpers', () => {
     expect(onViewerState).toHaveBeenCalledWith(expect.objectContaining({ config: { ui: { backgroundColor: '#123456' } } }));
   });
 
-  it('shows the scene without a splat listing still running SPLAT_DISCOVERY_TIMEOUT_MS after parsing, and stops it', async () => {
+  it('shows the scene without a splat listing that has not answered for SPLAT_DISCOVERY_TIMEOUT_MS after parsing, and stops it', async () => {
     vi.useFakeTimers();
     const deps = makeDeps();
     const listingSignals: AbortSignal[] = [];
@@ -171,6 +173,61 @@ describe('URL loader manifest source helpers', () => {
     expect(listingSignals.every(signal => signal.aborted)).toBe(true);
   });
 
+  it('keeps waiting for a splat listing that still answers, past SPLAT_DISCOVERY_TIMEOUT_MS after parsing', async () => {
+    vi.useFakeTimers();
+    const deps = makeDeps();
+    const tiles = Array.from({ length: 40 }, (_, index) => `tile_${index}.spz`);
+    const listings = new Map([['https://example.com/dataset/', ['splats/']], ['https://example.com/dataset/splats/', tiles]]);
+    // A slow autoindex host: every request answers a second after it is made, and the crawl makes one at a time.
+    deps.fetchImpl.mockImplementation((url: string, init?: RequestInit) => new Promise<Response>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const entries = listings.get(url);
+        resolve(init?.method === 'HEAD' ? new Response(null, { headers: { 'content-length': '100' } })
+          : entries ? new Response(entries.map(name => `<a href="${name}">${name}</a>`).join('\n'))
+            : new Response('', { status: 404 }));
+      }, 1_000);
+      init?.signal?.addEventListener('abort', () => { clearTimeout(timer); reject(init.signal!.reason); }, { once: true });
+    }));
+    const onRemoteSplatCatalog = vi.fn();
+    const onSplatListTimeout = vi.fn();
+    const loading = loadManifestSource(manifest, { type: 'manifest' },
+      { ...deps, discoverSplatCatalog: undefined, onRemoteSplatCatalog, onSplatListTimeout, isTouchDevice: false });
+
+    // Two listings and 40 size checks: 42 s of answers, nearly all of them after parsing.
+    await vi.advanceTimersByTimeAsync(45_000);
+    await expect(loading).resolves.toBe(true);
+    expect(onSplatListTimeout).not.toHaveBeenCalled();
+    expect(onRemoteSplatCatalog).toHaveBeenCalledOnce();
+    expect(onRemoteSplatCatalog.mock.calls[0][0]).toHaveLength(40);
+  });
+
+  it('drops a splat listing still running SPLAT_DISCOVERY_LIMIT_MS after parsing, however steadily it answers', async () => {
+    vi.useFakeTimers();
+    const deps = makeDeps();
+    const folders = Array.from({ length: 199 }, (_, index) => `folder_${index}/`);
+    deps.fetchImpl.mockImplementation((url: string, init?: RequestInit) => new Promise<Response>((resolve, reject) => {
+      const timer = setTimeout(() => resolve(url === 'https://example.com/dataset/'
+        ? new Response(folders.map(name => `<a href="${name}">${name}</a>`).join('\n'))
+        : new Response('', { status: url.endsWith('colmapview.yaml') ? 404 : 200 })), 1_000);
+      init?.signal?.addEventListener('abort', () => { clearTimeout(timer); reject(init.signal!.reason); }, { once: true });
+    }));
+    const onRemoteSplatCatalog = vi.fn();
+    const onSplatListTimeout = vi.fn();
+    let settled = false;
+    const loading = loadManifestSource(manifest, { type: 'manifest' },
+      { ...deps, discoverSplatCatalog: undefined, onRemoteSplatCatalog, onSplatListTimeout }).finally(() => { settled = true; });
+
+    // 200 folders, one listing a second: the crawl would need 200 s.
+    await vi.advanceTimersByTimeAsync(SPLAT_DISCOVERY_LIMIT_MS - 1_000);
+    expect(settled).toBe(false);
+    expect(onSplatListTimeout).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(onSplatListTimeout).toHaveBeenCalledOnce();
+    await expect(loading).resolves.toBe(true);
+    expect(deps.setSourceInfo).toHaveBeenCalledOnce();
+    expect(onRemoteSplatCatalog).not.toHaveBeenCalled();
+  });
+
   it('says once that a splat listing which never answers was dropped, and commits the scene without it', async () => {
     vi.useFakeTimers();
     const deps = { ...makeDeps(), discoverSplatCatalog: vi.fn(() => new Promise<RemoteSplatCandidate[]>(() => {})) };
@@ -187,6 +244,18 @@ describe('URL loader manifest source helpers', () => {
     expect(deps.setSourceInfo).toHaveBeenCalledOnce();
     expect(onRemoteSplatCatalog).not.toHaveBeenCalled();
     expect(splatListWarnings()).toEqual([expect.objectContaining({ type: 'warning' })]);
+  });
+
+  it('leaves out a listed splat the server says is gone, so nothing offers or downloads it', async () => {
+    const deps = makeDeps();
+    deps.fetchImpl.mockImplementation(async () => new Response('Not Found', { status: 404 }));
+    const onRemoteSplatCatalog = vi.fn();
+    const onAutoSplatSource = vi.fn();
+    await expect(loadManifestSource({ ...manifest, splats: ['tiles/old.spz'] }, { type: 'manifest' },
+      { ...deps, discoverSplatCatalog: undefined, onRemoteSplatCatalog, onAutoSplatSource, isTouchDevice: false })).resolves.toBe(true);
+    expect(onRemoteSplatCatalog).not.toHaveBeenCalled();
+    expect(onAutoSplatSource).not.toHaveBeenCalled();
+    expect(deps.log).toHaveBeenCalledWith('[URL Loader] Optional file not found: tiles/old.spz');
   });
 
   it('keeps a failed splat listing quiet: only a timeout warns', async () => {
