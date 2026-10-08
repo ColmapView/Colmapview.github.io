@@ -55,6 +55,31 @@ describe('DropZone Drive selection loading', () => {
     await waitFor(() => expect(loadFromUrl).toHaveBeenCalledExactlyOnceWith(selectedUrl, { initialSplatSelectionRevision }));
     expect(screen.queryByRole('dialog', { name: 'Load from URL' })).not.toBeInTheDocument();
   });
+
+  it('leaves alone a URL load that already holds the guard', async () => {
+    const loadFromUrl = vi.fn();
+    const setUrlLoading = vi.fn();
+    const setUrlProgress = vi.fn();
+    const setError = vi.fn();
+    vi.mocked(useUrlLoader).mockReturnValue({
+      loadFromUrl, loadFromManifest: vi.fn(), urlLoading: false, urlProgress: null,
+      urlError: null, clearUrlError: vi.fn(), setUrlLoading, setUrlProgress,
+    });
+    vi.mocked(useDropZoneStoreFacade).mockReturnValue({
+      data: { error: null, reconstruction: null, touchMode: false, hasUrlLoadRequest: false },
+      actions: { setError, cancelLoading: vi.fn() },
+    });
+    const holder = useReconstructionStore.getState().tryStartUrlLoad()!;
+    render(<DropZone><div>Viewer</div></DropZone>);
+    fireEvent.click(screen.getByRole('button', { name: 'Select desktop Drive archive' }));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
+    expect(setUrlLoading).not.toHaveBeenCalled();
+    expect(setUrlProgress).not.toHaveBeenCalled();
+    expect(loadFromUrl).not.toHaveBeenCalled();
+    expect(setError).not.toHaveBeenCalled();
+    expect(useReconstructionStore.getState().urlLoadController?.signal).toBe(holder);
+    expect(holder.aborted).toBe(false);
+  });
 });
 
 describe('DropZone preparation cancellation', () => {

@@ -23,6 +23,7 @@ import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS, SKIPPED_SETTINGS_WARNING } from '.
 import { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE, SPLAT_LIST_TIMEOUT_MESSAGE, splatListTimeoutWarning } from './datasetTimeoutWarnings';
 import { notificationsWithMessage } from '../test/notifications';
 import { SPLAT_DISCOVERY_TIMEOUT_MS } from './urlLoaderManifestSource';
+import { URL_LOAD_GUARD_MESSAGE } from './urlLoaderLoadGuard';
 import { isReconstructionLoadPending } from '../wasm/reconstructionLoadLifecycle';
 import { getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
 
@@ -1162,6 +1163,32 @@ describe('useUrlLoader', () => {
     const { result } = renderHook(() => useUrlLoader({ logger: { info: vi.fn(), error: vi.fn() }, applyUrlOverrides: true }));
     await act(async () => { expect(await result.current.loadFromManifest(manifest)).toBe(true); });
     expect(useTransformStore.getState().transform).toEqual(overrideTransform);
+  });
+
+  it.each(['url', 'inline'] as const)('turns away a %s load while another holds the guard, saying so and leaving that load alone', async source => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const holder = useReconstructionStore.getState().tryStartUrlLoad()!;
+    const progress = { percent: 40, message: 'Downloading...' };
+    useReconstructionStore.setState({ urlLoading: true, urlProgress: progress });
+    splatListTimeoutWarning.show();
+    const logger = { error: vi.fn(), info: vi.fn() };
+    const { result } = renderHook(() => useUrlLoader({ logger }));
+
+    await act(async () => {
+      expect(await (source === 'url' ? result.current.loadFromUrl('https://example.com/scene.zip')
+        : result.current.loadFromManifest(createDefaultManifest('https://example.com/scene')))).toBe(false);
+    });
+
+    expect(logger.info).toHaveBeenCalledExactlyOnceWith(URL_LOAD_GUARD_MESSAGE);
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(processFilesMock).not.toHaveBeenCalled();
+    // The holder keeps its guard, overlay and progress, and the warning it may still own.
+    expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true, urlProgress: progress, urlLoadActive: true });
+    expect(useReconstructionStore.getState().urlLoadController?.signal).toBe(holder);
+    expect(holder.aborted).toBe(false);
+    expect(splatListTimeoutWarnings()).toHaveLength(1);
   });
 
   it.each(['complete', 'fail'] as const)('ignores a cleared download that later %ss while a new load is active', async (outcome) => {
