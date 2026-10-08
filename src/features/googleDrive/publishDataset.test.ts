@@ -3,7 +3,7 @@ import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HfError } from '../huggingface/http';
-import { buildCamera, buildDatasetState, buildImage, buildPoint3D, buildReconstruction } from '../../test/builders';
+import { buildCamera, buildDatasetState, buildImage, buildLoadedFiles, buildPoint3D, buildReconstruction } from '../../test/builders';
 import { createIdentityEuler } from '../../utils/sim3dTransforms';
 import { prepareDriveArchive } from './prepareArchive';
 import { createDrivePublicationController, normalizeDriveArchiveName } from './publishDataset';
@@ -283,6 +283,20 @@ describe('Drive publication lifecycle', () => {
       transform: createIdentityEuler(), splatTransform: createIdentityEuler(), config: {}, viewState: null, appVersion: 'test', viewerBaseUrl: 'https://viewer.example/' };
     await controller.publish('scene', false, (signal, progress) => prepareDriveArchive(input, signal, progress, () => {}));
     expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: false, error: 'A dataset folder has too many files for publication.' });
+    expect(client.owner).not.toHaveBeenCalled();
+  });
+  it('ends a publication of a local model dropped without its images', async () => {
+    const { controller, client } = fixture();
+    const input = { sourceKey: 'local', modelRevision: 0, source: null, activeSplatId: null,
+      reconstruction: buildReconstruction({ cameras: [buildCamera()], images: [buildImage({ name: 'photo.jpg' })], points3D: [buildPoint3D()] }),
+      dataset: buildDatasetState({ sourceType: 'local', loadedFiles: buildLoadedFiles({ imageFiles: new Map() }) }),
+      transform: createIdentityEuler(), splatTransform: createIdentityEuler(), config: {}, viewState: null, appVersion: 'test', viewerBaseUrl: 'https://viewer.example/' };
+    let prepares = 0;
+    await controller.publish('scene', false, (signal, progress) => { prepares++; return prepareDriveArchive(input, signal, progress, () => {}); });
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: false,
+      error: 'Original image photo.jpg is unavailable. Load its original file before publishing.' });
+    await controller.retry();
+    expect(prepares).toBe(1);
     expect(client.owner).not.toHaveBeenCalled();
   });
   it('ends a publication whose dataset has a malformed remote file URL', async () => {

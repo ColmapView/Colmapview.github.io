@@ -113,16 +113,21 @@ describe('publication snapshot preparation', () => {
   });
 
   const tileUrl = 'https://huggingface.co/datasets/owner/source/resolve/main/tile.ply';
-  it.each([[0, 'unknown', null], [undefined, 'unknown', null], [42, 'an exact byte count', 42]] as const)('treats a catalogued splat size of %s as %s', async (size, _reading, expected) => {
+  it.each([[0, 'unknown', undefined], [undefined, 'unknown', undefined], [42, 'an estimate it never checks', 42]] as const)('treats a catalogued splat size of %s as %s', async (size, _reading, expected) => {
     const source = input();
     source.dataset.loadedFiles!.splatFileSources = [{ id: 'tile', path: 'tile.ply', url: tileUrl, size }];
     const prepared = await preparePublication(source, new AbortController().signal, deps());
-    expect(prepared.assets.find(asset => asset.kind === 'splat')!.size).toBe(expected);
+    const tile = prepared.assets.find(asset => asset.kind === 'splat')!;
+    expect(tile.size).toBeNull();
+    expect(tile.estimatedSize).toBe(expected);
   });
 
-  it('publishes a lazy remote tile whose size discovery could not read', async () => {
+  it.each([
+    ['whose size discovery could not read', 0, true],
+    ['that changed size since the dataset loaded', 5, false],
+  ])('publishes a lazy remote tile %s', async (_, size, alone) => {
     const source = input();
-    source.dataset.loadedFiles!.splatFileSources = [{ id: 'tile', path: 'tile.ply', url: tileUrl, size: 0 }];
+    source.dataset.loadedFiles!.splatFileSources = [{ id: 'tile', path: 'tile.ply', url: tileUrl, size }];
     vi.stubGlobal('fetch', vi.fn(async () => new Response('remote splat bytes')));
     let commit = 1;
     const client: HubClient = { create: vi.fn().mockResolvedValue('a'.repeat(40)), head: vi.fn(),
@@ -133,7 +138,9 @@ describe('publication snapshot preparation', () => {
       signal => preparePublication(source, signal, deps()));
     expect(controller.getSnapshot()).toMatchObject({ phase: 'completed', error: undefined });
     const batches = vi.mocked(client.upload).mock.calls.map(call => call[1].map(file => file.path));
-    expect(batches).toContainEqual(['splats/tile.ply', 'colmapview-upload.json']);
+    // An unknown size gets its own batch; a load-time estimate still plans batches but is never checked.
+    expect(batches.flat()).toContain('splats/tile.ply');
+    expect(batches).toContainEqual(alone ? ['splats/tile.ply', 'colmapview-upload.json'] : expect.arrayContaining(['sparse/0/cameras.bin', 'splats/tile.ply']));
   });
 
   it('freezes the reviewed preview bytes and embeds their data revision in the README', async () => {
@@ -211,9 +218,10 @@ describe('publication snapshot preparation', () => {
     expect(prepared.viewerState.config.pointCloud).toEqual({ pointSize: 2 });
   });
 
-  it('requires every original image instead of silently publishing an incomplete dataset', async () => {
+  it('requires every original image instead of silently publishing an incomplete dataset, in a way no retry can fix', async () => {
     const source = input(); source.dataset.loadedFiles!.imageFiles.clear();
-    await expect(preparePublication(source, new AbortController().signal, deps())).rejects.toThrow('Could not retrieve');
+    await expect(preparePublication(source, new AbortController().signal, deps())).rejects.toMatchObject({
+      message: 'Original image nested/photo.png is unavailable. Load its original file before publishing.', permanent: true });
   });
 
   it('includes available masks and every splat, preserving the active selection and original bytes', async () => {

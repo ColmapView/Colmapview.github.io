@@ -105,6 +105,16 @@ describe('publication controller', () => {
       'images/0.jpg', 'images/1.jpg', 'images/2.jpg', 'images/3.jpg', 'images/4.jpg', 'colmapview-upload.json']);
   });
 
+  it('plans batches with a remote splat’s load-time estimate but publishes the bytes it downloads', async () => {
+    const { controller, client } = setup();
+    const prepared = fixture();
+    prepared.assets.push({ path: 'splats/tile.ply', kind: 'splat', size: null, estimatedSize: 5, open: async () => new Blob(['changed splat']) });
+    await controller.publish('owner', details, async () => prepared);
+    expect(controller.getSnapshot().phase).toBe('completed');
+    expect(vi.mocked(client.upload).mock.calls[0][1].map(file => file.path)).toEqual(['sparse/0/0.bin', 'sparse/0/1.bin', 'sparse/0/2.bin',
+      'splats/tile.ply', 'colmapview-upload.json']);
+  });
+
   it('carries an unknown-size file that would overflow a batch into the next one without reopening it', async () => {
     const { controller, client } = setup();
     const prepared = fixture(1);

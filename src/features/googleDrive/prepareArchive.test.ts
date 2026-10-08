@@ -361,4 +361,22 @@ describe('Drive remote sources', () => {
       message: 'The mask for photo.jpg (photo.jpg.png) exceeds the 128 MiB publication limit for non-splat files. Shrink it in the source dataset, then publish again.',
       permanent: true });
   });
+  const activeTile = (url: string, size: number) => {
+    const source = remoteInput({ loadedFiles: buildLoadedFiles({ splatFileSources: [{ id: 'tile', path: 'tile.ply', url, size }] }) }, []);
+    source.activeSplatId = 'tile';
+    return source;
+  };
+  it('packages an active remote splat that changed since the dataset loaded', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => url === bucket + 'tile.ply' ? new Response('splat bytes') : new Response(null, { status: 404 })));
+    const archive = await prepareDriveArchive(activeTile(bucket + 'tile.ply', 5), new AbortController().signal, () => {}, () => {});
+    expect(strFromU8((await entries(archive))['splats/tile.ply'])).toBe('splat bytes');
+  });
+  it('checks an active Hub splat against its size at the pinned revision rather than the size seen at load', async () => {
+    const request = vi.fn(async (url: string) => hubRevision(url)
+      ?? (url.includes(`/tree/${hubSha}?`) ? Response.json([{ type: 'file', path: 'tile.ply', size: ARCHIVE_SIZE_LIMIT + 1 }]) : new Response('splat bytes')));
+    vi.stubGlobal('fetch', request);
+    await expect(prepareDriveArchive(activeTile(`${hubRoot}main/tile.ply`, 10), new AbortController().signal, () => {}, () => {}))
+      .rejects.toMatchObject({ message: expect.stringContaining('2 GiB archive limit'), permanent: true });
+    expect(request.mock.calls.filter(([url]) => url.includes('/resolve/'))).toEqual([]);
+  });
 });

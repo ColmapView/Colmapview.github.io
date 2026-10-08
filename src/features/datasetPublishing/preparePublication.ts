@@ -174,7 +174,9 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
     }
     const value = mask ? await manager.getMask(name, { signal, onError: () => { failed = true; } })
       : await manager.getOriginalImage(name, { signal, onError: () => { failed = true; } });
-    if (failed || (!value && !mask)) throw new HfError(`Could not retrieve selected file ${path}.`);
+    if (failed) throw new HfError(`Could not retrieve selected file ${path}.`);
+    // The captured files never gain the original, so a retry would fail the same way.
+    if (!value && !mask) throw new HfError(`Original image ${name} is unavailable. Load its original file before publishing.`, undefined, true);
     if (!value) return null;
     return fixed(path, value, mask ? 'mask' : 'image');
   };
@@ -198,8 +200,9 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
     if (source.file?.size) add(fixed(path, source.file, 'splat'));
     else if (source.url) {
       const asset = await remote(source.url, path, 'splat');
-      // Discovery records an unknown size as 0; only a positive size is a byte count to verify.
-      asset.size = source.size !== undefined && source.size > 0 ? source.size : null;
+      asset.size = await deps.remoteSize?.(source.url, signal) ?? null;
+      // The catalogued size was read at load (0 when unknown); the source may have changed since, so it only plans.
+      if (asset.size === null && source.size !== undefined && source.size > 0) asset.estimatedSize = source.size;
       add(asset);
     }
     else throw new HfError(`Original splat ${source.path} is unavailable. Load its original file before publishing.`, undefined, true);

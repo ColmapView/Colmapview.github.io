@@ -22,7 +22,7 @@ export async function packageDriveArchive(prepared: PreparedPublication, signal:
   const check = () => { signal.throwIfAborted(); assertCurrent(); };
   check();
   if (prepared.assets.length > 60_000) throw new GoogleDrivePublishError('This dataset has too many files for a Drive ZIP.', undefined, true);
-  if (prepared.assets.reduce((sum, asset) => sum + (asset.size ?? 0), 0) > sizeLimit) throw archiveTooLarge();
+  if (prepared.assets.reduce((sum, asset) => sum + (asset.size ?? asset.estimatedSize ?? 0), 0) > sizeLimit) throw archiveTooLarge();
   const md5 = await awaitWithAbort(createMD5(), signal);
   check();
   const parts: Blob[] = [];

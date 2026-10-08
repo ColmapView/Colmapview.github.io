@@ -7,7 +7,10 @@ export const MAX_PUBLICATION_BATCH_FILES = 49; // Plus one atomic batch receipt.
 export interface PublishAsset {
   path: string;
   kind: 'colmap' | 'image' | 'mask' | 'splat' | 'viewer-state' | 'preview';
+  /** The exact byte count, checked against the opened file; null when unknown. */
   size: number | null;
+  /** A size read when the dataset loaded: it plans batches and the ZIP limit, but the source may have changed since, so it is never checked. */
+  estimatedSize?: number;
   open: (signal: AbortSignal) => Promise<Blob>;
 }
 export interface PublicationDetails {

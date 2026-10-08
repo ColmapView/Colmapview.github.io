@@ -109,8 +109,9 @@ export function createPublicationController(client: HubClient,
         while (end < current.prepared.assets.length && files.length < MAX_PUBLICATION_BATCH_FILES) {
           const asset = current.prepared.assets[end];
           // An unknown-size splat may be many gigabytes; never download one alongside a batch.
-          const unbounded = asset.size === null && asset.kind === 'splat';
-          if (files.length && (unbounded || (asset.size !== null && bytes + asset.size > MAX_PUBLICATION_BATCH_BYTES))) break;
+          const planned = asset.size ?? asset.estimatedSize ?? null;
+          const unbounded = planned === null && asset.kind === 'splat';
+          if (files.length && (unbounded || (planned !== null && bytes + planned > MAX_PUBLICATION_BATCH_BYTES))) break;
           let content = carried?.index === end ? carried.content : undefined;
           if (!content) {
             set({ phase: 'uploading', message: `Preparing ${asset.path}…` });
