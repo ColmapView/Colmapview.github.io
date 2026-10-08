@@ -91,7 +91,8 @@ function processWithStore(files: Map<string, File>, options?: Parameters<typeof 
   return processFileDropzoneFiles(files, {
     addNotification: vi.fn(), getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
     getSplatSelectionState: () => ({ revision: useReconstructionStore.getState().splatSelectionRevision,
-      sourceId: getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles) ?? undefined }),
+      sourceId: getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles,
+        useReconstructionStore.getState().splatNoneChosen) ?? undefined }),
     getMinTrackLength: () => 1, getSourceInfo: () => ({ sourceType: 'url', imageUrlBase: null }),
     getUrlLoading: () => useReconstructionStore.getState().urlLoading,
     clearCaches: vi.fn(), logger: noopLogger, resetView: vi.fn(), delay: async () => {},
@@ -504,7 +505,8 @@ describe('useUrlLoader', () => {
       await processFileDropzoneFiles(incoming, {
         addNotification: vi.fn(), getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
         getSplatSelectionState: () => ({ revision: useReconstructionStore.getState().splatSelectionRevision,
-          sourceId: getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles) ?? undefined }),
+          sourceId: getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles,
+            useReconstructionStore.getState().splatNoneChosen) ?? undefined }),
         getMinTrackLength: () => 1, getSourceInfo: () => ({ sourceType: 'zip', imageUrlBase: null }),
         getUrlLoading: () => useReconstructionStore.getState().urlLoading,
         clearCaches: vi.fn(), logger: noopLogger, resetView: vi.fn(), delay: async () => {},

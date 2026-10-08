@@ -1918,6 +1918,78 @@ describe('reconstruction store splat the renderer could not draw', () => {
   });
 });
 
+describe('reconstruction store None choice', () => {
+  const a = new File(['a'], 'a.spz');
+  const listed = () => baseLoadedFiles({ splatFile: a, splatFiles: [a], splatFileSources: [
+    { id: 'splats/a.spz', path: 'splats/a.spz', file: a },
+    { id: 'splats/b.spz', path: 'splats/b.spz', url: 'https://x/ds/splats/b.spz', size: 20 }] });
+
+  beforeEach(() => {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
+    useReconstructionStore.getState().setDroppedFiles(new Map([['splats/a.spz', a]]));
+    useReconstructionStore.getState().setLoadedFiles(listed());
+    useReconstructionStore.setState({ reconstruction: buildReconstruction() });
+  });
+
+  afterEach(() => {
+    useReconstructionStore.getState().clear();
+  });
+
+  it.each([
+    ['the picker or the Point Cloud panel', () => useReconstructionStore.getState().selectSplatSource('')],
+    ['saved settings or a link', () => useReconstructionStore.getState().selectSplatSource('', { restore: true })],
+    ['Cancel of its decode', () => {
+      useReconstructionStore.setState({ urlLoading: true, urlProgress: getSplatLoadingProgress(a, { startPercent: 60 }) });
+      useReconstructionStore.getState().cancelLoading();
+    }],
+  ])('records None chosen through %s until a splat shows again', async (_how, chooseNone) => {
+    expect(useReconstructionStore.getState().splatNoneChosen).toBe(false);
+
+    await chooseNone();
+
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(useReconstructionStore.getState().splatNoneChosen).toBe(true);
+    await useReconstructionStore.getState().selectSplatSource('splats/a.spz');
+    expect(useReconstructionStore.getState().splatNoneChosen).toBe(false);
+  });
+
+  it('records no choice when the splat failed or the dataset loads without one', () => {
+    useReconstructionStore.getState().dropFailedSplat(a);
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(useReconstructionStore.getState().splatNoneChosen).toBe(false);
+
+    useReconstructionStore.getState().setDroppedFiles(new Map());
+    useReconstructionStore.getState().setLoadedFiles(baseLoadedFiles({}));
+    expect(useReconstructionStore.getState().splatNoneChosen).toBe(false);
+  });
+
+  it('records a None a link asked for before its scene existed', () => {
+    useReconstructionStore.getState().clear();
+    useReconstructionStore.getState().setRequestedSplatSourceId('');
+    useReconstructionStore.getState().setDroppedFiles(new Map([['splats/a.spz', a]]));
+    useReconstructionStore.getState().setLoadedFiles(listed());
+
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(useReconstructionStore.getState().splatNoneChosen).toBe(true);
+  });
+
+  it('keeps None over a Reload of the same files and forgets it for another dataset', async () => {
+    const files = useReconstructionStore.getState().droppedFiles!;
+    await useReconstructionStore.getState().selectSplatSource('');
+
+    // A Reload commits the same file map again, keeping None on screen.
+    useReconstructionStore.getState().setDroppedFiles(files);
+    useReconstructionStore.getState().setLoadedFiles({ ...listed(), splatFile: undefined });
+    expect(useReconstructionStore.getState().splatNoneChosen).toBe(true);
+
+    useReconstructionStore.getState().setDroppedFiles(new Map([['splats/a.spz', a]]));
+    useReconstructionStore.getState().setLoadedFiles({ ...listed(), splatFile: undefined });
+    expect(useReconstructionStore.getState().splatNoneChosen).toBe(false);
+  });
+});
+
 describe('reconstruction store settings timeout warning', () => {
   const timeoutWarnings = () => useNotificationStore.getState().notifications
     .filter(notification => notification.message === OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE);

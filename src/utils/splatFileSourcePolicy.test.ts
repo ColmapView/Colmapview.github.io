@@ -20,15 +20,20 @@ function loaded(partial: Partial<LoadedFiles>): LoadedFiles {
 }
 
 describe('share splat source selection', () => {
-  it('keeps explicit COLMAP-only distinct from an absent scene', () => {
-    expect(getShareActiveSplatSourceId(null)).toBeNull();
-    expect(getShareActiveSplatSourceId(loaded({ splatFileSources: [{ id: 'lazy', path: 'lazy.ply', url: 'u/lazy' }] }))).toBe('');
+  it('records COLMAP only when None was chosen, and no choice when nothing shows for another reason', () => {
+    const lazy = loaded({ splatFileSources: [{ id: 'lazy', path: 'lazy.ply', url: 'u/lazy' }] });
+    expect(getShareActiveSplatSourceId(null, false)).toBeNull();
+    expect(getShareActiveSplatSourceId(lazy, true)).toBe('');
+    // A listing that timed out, a failed splat or an unanswered picker: recipients keep the dataset's default.
+    expect(getShareActiveSplatSourceId(lazy, false)).toBeNull();
+    expect(getShareActiveSplatSourceId(loaded({}), false)).toBeNull();
   });
 
   it('uses source identity for a byte-less active placeholder in a lazy catalog', () => {
     const source: SplatFileSource = { id: 'model/b.ply', path: 'model/b.ply', url: 'u/b' };
     const catalog = loaded({ splatFileSources: [source, { id: 'model/a.ply', path: 'model/a.ply', url: 'u/a' }] });
-    expect(getShareActiveSplatSourceId(applyActiveSplatPlaceholder(catalog, source.id, new File([], 'b.ply')))).toBe('model/b.ply');
+    expect(getShareActiveSplatSourceId(applyActiveSplatPlaceholder(catalog, source.id, new File([], 'b.ply')), false))
+      .toBe('model/b.ply');
   });
 });
 

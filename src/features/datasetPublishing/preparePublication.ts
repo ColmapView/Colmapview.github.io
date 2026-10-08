@@ -203,8 +203,11 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
   }
   const config: ShareConfig = sanitizeShareConfig(structuredClone(input.config));
   config.transform = createIdentityEuler();
+  // With no splat showing, COLMAP only is saved just when the publisher chose None; else the first splat.
+  const chosenSourceId = input.activeSplatId !== null ? activeSourceId ?? splatPaths[0] ?? ''
+    : input.config.splat?.activeSourceId === '' ? '' : splatPaths[0];
   config.splat = { transform: sim3dToEuler(composeSim3d(createSim3dFromEuler(input.transform), createSim3dFromEuler(input.splatTransform))),
-    activeSourceId: input.activeSplatId === null ? '' : activeSourceId ?? splatPaths[0] ?? '' };
+    ...(chosenSourceId === undefined ? {} : { activeSourceId: chosenSourceId }) };
   if (config.camera?.selectedImageId !== undefined && !input.reconstruction.images.has(config.camera.selectedImageId as number)) delete config.camera.selectedImageId;
   if (!splatPaths.length && config.pointCloud && ['splats', 'splatPoints', 'splatRainbowPoints'].includes(String(config.pointCloud.colorMode))) {
     config.pointCloud.colorMode = 'rgb';

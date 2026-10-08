@@ -101,6 +101,8 @@ describe('URL state sharing', () => {
 
   it('round trips COLMAP only and overrides a saved splat without downloading it', async () => {
     installSavedSplatSources();
+    // The sharer chose None in the picker or the Point Cloud panel.
+    await useReconstructionStore.getState().selectSplatSource('');
     const config = collectShareConfig();
     expect(config.splat?.activeSourceId).toBe('');
     // Decoded the way the URL loader decodes the overrides it hands to applySavedViewerState.
@@ -114,6 +116,20 @@ describe('URL state sharing', () => {
     expect(useReconstructionStore.getState().requestedSplatSourceId).toBeNull();
     expect(useReconstructionStore.getState().showSplatPicker).toBe(false);
     expect(usePointCloudStore.getState().pointSize).toBe(config.pointCloud?.pointSize);
+  });
+
+  it.each([
+    ['none are listed', () => { useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles()); }],
+    ['the listed splats still wait for a choice', () => { installSavedSplatSources(); }],
+    ['the splat on screen failed to render', async () => {
+      const alternate = installSavedSplatSources();
+      await useReconstructionStore.getState().selectSplatSource('splats/alternate.spz');
+      useReconstructionStore.getState().dropFailedSplat(alternate);
+    }],
+  ])('leaves the splat to the dataset when no splat shows because %s', async (_why, setUp) => {
+    await setUp();
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(collectShareConfig().splat?.activeSourceId).toBeUndefined();
   });
 
   it('keeps a shared source when the saved dataset chooses COLMAP only', async () => {

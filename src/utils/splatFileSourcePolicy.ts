@@ -257,9 +257,14 @@ export function getActiveSplatSourceId(loadedFiles: LoadedFiles | null): string 
   return source?.id ?? loadedFiles.splatFile.name;
 }
 
-export function getShareActiveSplatSourceId(loadedFiles: LoadedFiles | null): string | null {
-  // Empty is an explicit COLMAP-only choice; absence keeps legacy load defaults.
-  return loadedFiles ? getActiveSplatSourceId(loadedFiles) ?? '' : null;
+/**
+ * The splat a share link or a dataset load reads as the choice for the scene on screen: the one showing,
+ * '' when None was chosen, or null for no choice. A splat list that timed out, a splat that failed and a
+ * picker not answered yet are no choice, so a recipient keeps the dataset's own default.
+ */
+export function getShareActiveSplatSourceId(loadedFiles: LoadedFiles | null, noneChosen: boolean): string | null {
+  if (!loadedFiles) return null;
+  return getActiveSplatSourceId(loadedFiles) ?? (noneChosen ? '' : null);
 }
 
 /**

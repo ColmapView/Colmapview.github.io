@@ -59,7 +59,8 @@ export function collectShareConfig(): ShareConfig {
     },
     SHAREABLE_FIELDS
   );
-  const activeSplatSourceId = getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles);
+  const { loadedFiles, splatNoneChosen } = useReconstructionStore.getState();
+  const activeSplatSourceId = getShareActiveSplatSourceId(loadedFiles, splatNoneChosen);
   if (activeSplatSourceId !== null) {
     config.splat = { ...config.splat, activeSourceId: activeSplatSourceId };
   }

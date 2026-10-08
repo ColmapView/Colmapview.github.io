@@ -375,7 +375,8 @@ describe('file dropzone workflow', () => {
       parseFiles: vi.fn(async () => fixture.parseResult), buildReconstruction,
       getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
       getSplatSelectionState: () => ({ revision: useReconstructionStore.getState().splatSelectionRevision,
-        sourceId: getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles) ?? undefined }),
+        sourceId: getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles,
+          useReconstructionStore.getState().splatNoneChosen) ?? undefined }),
       setLoadedFiles: state.setLoadedFiles, setWasmReconstruction: state.setWasmReconstruction,
       setReconstruction: state.setReconstruction,
     });
@@ -406,7 +407,8 @@ describe('file dropzone workflow', () => {
       parseFiles: vi.fn(async () => fixture.parseResult), buildReconstruction,
       getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
       getSplatSelectionState: () => ({ revision: useReconstructionStore.getState().splatSelectionRevision,
-        sourceId: getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles) ?? undefined }),
+        sourceId: getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles,
+          useReconstructionStore.getState().splatNoneChosen) ?? undefined }),
       setLoadedFiles: state.setLoadedFiles, setWasmReconstruction: state.setWasmReconstruction,
       setReconstruction: state.setReconstruction,
     });
@@ -459,7 +461,8 @@ describe('file dropzone workflow', () => {
       parseFiles: vi.fn(async () => fixture.parseResult), buildReconstruction,
       getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
       getSplatSelectionState: () => ({ revision: useReconstructionStore.getState().splatSelectionRevision,
-        sourceId: getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles) ?? undefined }),
+        sourceId: getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles,
+          useReconstructionStore.getState().splatNoneChosen) ?? undefined }),
       setLoadedFiles: state.setLoadedFiles, setWasmReconstruction: state.setWasmReconstruction,
       setReconstruction: state.setReconstruction,
       // Restores like a local drop: against the revision the load started at, unless the workflow passes another.

@@ -249,6 +249,11 @@ interface ReconstructionState {
   /** Explicit source choices supersede pending startup restoration, including choosing None again. */
   splatSelectionRevision: number;
   /**
+   * No splat shows because None was chosen for these files: by the user (the picker, the Point Cloud panel,
+   * Cancel of a decode) or by saved settings or a link. A splat that failed, or none loaded, is no choice.
+   */
+  splatNoneChosen: boolean;
+  /**
    * Whether to show the "select a splat" popup. Only offerSplatPicker opens it, after a URL load
    * settles with splats listed and none showing.
    */
@@ -318,6 +323,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   sourceManifest: null,
   requestedSplatSourceId: null,
   splatSelectionRevision: 0,
+  splatNoneChosen: false,
   showSplatPicker: false,
   // Initialize loading state based on URL params so indicator shows immediately
   urlLoading: initialUrlLoading,
@@ -404,13 +410,16 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     set({
       loadedFiles: resolvedLoadedFiles,
       requestedSplatSourceId: requestedSplatSourceId === null ? get().requestedSplatSourceId : null,
+      // A Reload keeps None on screen; another dataset's files arrive with no choice (setDroppedFiles).
+      splatNoneChosen: !hasSplatFile && (requestedSplatSourceId === '' || get().splatNoneChosen),
     });
   },
 
   setDroppedFiles: (droppedFiles) => set({
     droppedFiles,
-    // Settings belong to the files they came with; another dataset must not inherit them.
+    // Settings and a None choice belong to the files they came with; another dataset must not inherit them.
     ...(get().sourceViewerState?.files === droppedFiles ? {} : { sourceViewerState: null }),
+    ...(get().droppedFiles === droppedFiles ? {} : { splatNoneChosen: false }),
   }),
 
   setSourceViewerState: (state) => {
@@ -488,7 +497,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     // Empty selection -> "COLMAP only". Clearing the indicator too keeps a superseded lazy
     // fetch from leaving the loading overlay stuck (nothing is left to render that would reset it).
     if (!source) {
-      showColmapOnly(set, loadedFiles);
+      showColmapOnly(set, loadedFiles, { splatNoneChosen: true });
       return;
     }
     // Already downloaded: activate immediately (and offload the previous tile). A superseded
@@ -499,6 +508,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       set({
         requestedSplatSourceId: source.id,
         loadedFiles: applyActiveSplatFile(loadedFiles, source.id, source.file),
+        splatNoneChosen: false,
         ...withoutSplatFailureError(get()),
         ...(rendererOwnsProgress ? {} : { urlLoading: false, urlProgress: null, urlError: null }),
       });
@@ -577,6 +587,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
         set({
           requestedSplatSourceId: source.id,
           loadedFiles: applyActiveSplatPlaceholder(latest, source.id, placeholder),
+          splatNoneChosen: false,
           // Download AND decode are done; unlike the retaining path there is no
           // renderer-side file read left to clear the indicator, so clear it here.
           urlLoading: false,
@@ -598,6 +609,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       set({
         requestedSplatSourceId: source.id,
         loadedFiles: applyActiveSplatFile(latest, source.id, file),
+        splatNoneChosen: false,
         ...withoutSplatFailureError(get()),
       });
       if (!hadSplatBefore) {
@@ -675,7 +687,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
         clearUrlLoadRequestFromLocation();
         return;
       }
-      showColmapOnly(set, loadedFiles, { splatSelectionRevision: splatSelectionRevision + 1 });
+      showColmapOnly(set, loadedFiles, { splatSelectionRevision: splatSelectionRevision + 1, splatNoneChosen: true });
       return;
     }
     const cancelsSplatDownload = activeSplatController !== null;
@@ -719,6 +731,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       imageNameToUrl: null,
       sourceManifest: null,
       requestedSplatSourceId: null,
+      splatNoneChosen: false,
       showSplatPicker: false,
       urlLoading: false,
       urlLoadActive: false,

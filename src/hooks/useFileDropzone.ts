@@ -106,8 +106,8 @@ export function useFileDropzone() {
           });
         },
         getSplatSelectionState: () => {
-          const { splatSelectionRevision, loadedFiles } = useReconstructionStore.getState();
-          return { revision: splatSelectionRevision, sourceId: getShareActiveSplatSourceId(loadedFiles) ?? undefined };
+          const { splatSelectionRevision, loadedFiles, splatNoneChosen } = useReconstructionStore.getState();
+          return { revision: splatSelectionRevision, sourceId: getShareActiveSplatSourceId(loadedFiles, splatNoneChosen) ?? undefined };
         },
         onSplatRuntimePreloadFailed: () => useSplatBackendStore.getState().setSparkPreloadFailed(),
       }, {
