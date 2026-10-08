@@ -1915,8 +1915,12 @@ describe('WebGpuSplatCanvasLayer', () => {
   });
 });
 
-/** Scene3D's wiring: the store's loading state and active splat, with the ownership checks it passes. */
-function StoreWiredLayer() {
+/**
+ * Scene3D's wiring: the store's loading state and active splat, with the ownership checks it passes
+ * (Scene3D.webGpuLoadingOwnership.test.ts pins that Scene3D passes them). `mounted` is false while
+ * another backend draws splats.
+ */
+function StoreWiredLayer({ mounted = true }: { mounted?: boolean }) {
   const splatFile = useReconstructionStore((s) => s.loadedFiles?.splatFile);
   const setUrlLoading = useReconstructionStore((s) => s.setUrlLoading);
   const setUrlProgress = useReconstructionStore((s) => s.setUrlProgress);
@@ -1924,7 +1928,7 @@ function StoreWiredLayer() {
   const removeNotification = useNotificationStore((s) => s.removeNotification);
   const getUrlProgress = useCallback(() => useReconstructionStore.getState().urlProgress, []);
   return (
-    <WebGpuSplatCanvasLayer mounted visible splatFile={splatFile} addNotification={addNotification}
+    <WebGpuSplatCanvasLayer mounted={mounted} visible splatFile={splatFile} addNotification={addNotification}
       removeNotification={removeNotification} getUrlProgress={getUrlProgress} setUrlLoading={setUrlLoading}
       setUrlProgress={setUrlProgress} isDatasetLoadPending={isReconstructionLoadPending}
       isSplatDownloadPending={isSplatDownloadPending} />
@@ -1935,7 +1939,8 @@ describe('WebGpuSplatCanvasLayer decoding a splat that another load or download 
   const originalGpu = (navigator as Navigator & { gpu?: unknown }).gpu;
   const old = new File(['old splat'], 'old.spz');
   const colmap = () => new Map(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, new File([name], name)] as [string, File]));
-  let decode: { resolve: (loaded: LoadedGaussianCloud) => void; onProgress?: (progress: GaussianCloudLoadProgress) => void } | undefined;
+  let decode: { resolve: (loaded: LoadedGaussianCloud) => void; reject: (error: Error) => void;
+    onProgress?: (progress: GaussianCloudLoadProgress) => void; } | undefined;
   let firstFrame: (() => void) | undefined;
 
   beforeEach(() => {
@@ -1949,8 +1954,8 @@ describe('WebGpuSplatCanvasLayer decoding a splat that another load or download 
     useDeletionStore.setState(useDeletionStore.getInitialState(), true);
     useTransformStore.setState(useTransformStore.getInitialState(), true);
     useSplatBackendStore.setState(useSplatBackendStore.getInitialState(), true);
-    vi.mocked(loadGaussianCloudFromFile).mockImplementation((_file, options) => new Promise(resolve => {
-      decode = { resolve, onProgress: options?.onProgress };
+    vi.mocked(loadGaussianCloudFromFile).mockImplementation((_file, options) => new Promise((resolve, reject) => {
+      decode = { resolve, reject, onProgress: options?.onProgress };
     }));
     vi.mocked(createLoadedVisibleWebGpuSplatRendererAdapter).mockImplementation(async (_canvas, _cloud, _options, deps) => {
       firstFrame = deps?.onFirstFrame;
@@ -1971,6 +1976,28 @@ describe('WebGpuSplatCanvasLayer decoding a splat that another load or download 
     await act(async () => { decode!.resolve({ file: old, format: 'spz', byteLength: 1, cloud: makeCloud() }); });
     await waitFor(() => expect(firstFrame).toBeDefined());
     act(() => firstFrame!());
+  }
+
+  async function failOldDecode() {
+    vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
+    await act(async () => { decode!.reject(new Error('Corrupt splat')); });
+    expect(appLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to initialize runtime for old.spz'));
+  }
+
+  /** The old splat is listed with a lazy next.spz; a tile download picked with n starts. `mounted` as for StoreWiredLayer. */
+  async function pickTileWhileOldSplatShows({ mounted = true } = {}) {
+    useReconstructionStore.getState().setLoadedFiles({ imageFiles: new Map(), hasMasks: false, splatFile: old, splatFiles: [old],
+      splatFileSources: [{ id: 'old.spz', path: 'old.spz', url: 'https://x/old.spz', file: old },
+        { id: 'next.spz', path: 'next.spz', url: 'https://x/next.spz', size: 9 }] });
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+    })));
+    const view = render(<StoreWiredLayer mounted={mounted} />);
+    if (mounted) await waitFor(() => expect(decode).toBeDefined());
+    act(() => { void useReconstructionStore.getState().selectSplatSource('next.spz'); });
+    const downloadProgress = useReconstructionStore.getState().urlProgress;
+    expect(downloadProgress).toMatchObject({ currentFile: 'next.spz' });
+    return { downloadProgress, view };
   }
 
   /** The old splat decodes with unsaved edits on screen; a Reload of the same files then starts parsing. */
@@ -2035,6 +2062,21 @@ describe('WebGpuSplatCanvasLayer decoding a splat that another load or download 
     expect(await reloading).toBe(true);
   });
 
+  it("keeps a Reload's overlay, progress and Cancel when the old splat fails to decode", async () => {
+    const { reloading, releaseParse } = await reloadWhileOldSplatDecodes();
+
+    await failOldDecode();
+
+    expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true,
+      urlProgress: expect.objectContaining({ message: 'Parsing COLMAP files...' }) });
+    // Cancel still stops the Reload, and the edits stay.
+    act(() => useReconstructionStore.getState().cancelLoading());
+    expect(isReconstructionLoadPending()).toBe(false);
+    releaseParse();
+    expect(await reloading).toBe(false);
+    expect(useTransformStore.getState().transform.scale).toBe(3);
+  });
+
   it("reports a splat that began decoding during a dataset load as that load's own", async () => {
     // The splat the load committed, decoding before the load has restored its settings.
     const load = beginReconstructionLoad();
@@ -2054,21 +2096,32 @@ describe('WebGpuSplatCanvasLayer decoding a splat that another load or download 
   });
 
   it('leaves a tile download picked with n its overlay when the old splat finishes decoding', async () => {
-    useReconstructionStore.getState().setLoadedFiles({ imageFiles: new Map(), hasMasks: false, splatFile: old, splatFiles: [old],
-      splatFileSources: [{ id: 'old.spz', path: 'old.spz', url: 'https://x/old.spz', file: old },
-        { id: 'next.spz', path: 'next.spz', url: 'https://x/next.spz', size: 9 }] });
-    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-    })));
-    render(<StoreWiredLayer />);
-    await waitFor(() => expect(decode).toBeDefined());
-    act(() => { void useReconstructionStore.getState().selectSplatSource('next.spz'); });
-    const downloadProgress = useReconstructionStore.getState().urlProgress;
-    expect(downloadProgress).toMatchObject({ currentFile: 'next.spz' });
+    const { downloadProgress } = await pickTileWhileOldSplatShows();
 
     await finishOldDecode();
 
     expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true, urlProgress: downloadProgress });
+  });
+
+  it('leaves a tile download picked with n its overlay and progress when the old splat fails to decode', async () => {
+    const { downloadProgress } = await pickTileWhileOldSplatShows();
+
+    await failOldDecode();
+
+    expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true, urlProgress: downloadProgress });
+    expect(isSplatDownloadPending()).toBe(true);
+  });
+
+  it('leaves a tile download picked with n its overlay and progress when WebGPU starts decoding the old splat meanwhile', async () => {
+    // Another backend drew the old splat; WebGPU takes it over while the tile downloads.
+    const { downloadProgress, view } = await pickTileWhileOldSplatShows({ mounted: false });
+    expect(decode).toBeUndefined();
+
+    view.rerender(<StoreWiredLayer mounted />);
+    await waitFor(() => expect(decode).toBeDefined());
+
+    expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true, urlProgress: downloadProgress });
+    expect(isSplatDownloadPending()).toBe(true);
   });
 });
 
