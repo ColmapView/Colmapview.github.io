@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseGoogleDriveFileUrl } from '../../utils/googleDriveUrl';
 import { ARCHIVE_SIZE_LIMIT } from '../../utils/zipValidation';
+import { stubGoogleDriveHost } from '../../test/googleDriveHosting';
 import { resolveGoogleDriveArchive } from './api';
 
 const reference = parseGoogleDriveFileUrl('https://drive.google.com/file/d/file123/view?resourcekey=0-key')!;
@@ -11,9 +12,7 @@ afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 describe('Google Drive archive API', () => {
   it.each(['https://opsiclear.github.io', 'https://colmap-webview.pages.dev', 'https://preview.colmap-webview.pages.dev'])('makes no metadata request on disabled host %s despite injected credentials', async origin => {
-    vi.stubGlobal('location', { origin });
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ENABLED', 'true');
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN', 'https://colmapview.opsiclear.com');
+    stubGoogleDriveHost(origin);
     const fetchImpl = vi.fn();
     const getAccessToken = vi.fn(() => 'private-token');
     await expect(resolveGoogleDriveArchive(reference, { ...publicDeps, fetchImpl, getAccessToken }))
@@ -29,11 +28,7 @@ describe('Google Drive archive API', () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
   it('requires valid production action configuration before allowing anonymous requests', async () => {
-    vi.stubEnv('PROD', true);
-    vi.stubEnv('DEV', false);
-    vi.stubGlobal('location', { origin: 'https://colmapview.opsiclear.com' });
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ENABLED', 'true');
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN', 'https://colmapview.opsiclear.com');
+    stubGoogleDriveHost('https://colmapview.opsiclear.com', { production: true });
     vi.stubEnv('VITE_GOOGLE_DRIVE_API_KEY', '');
     vi.stubEnv('VITE_GOOGLE_DRIVE_CLIENT_ID', '');
     const fetchImpl = vi.fn().mockResolvedValue(Response.json(metadata));
@@ -52,11 +47,7 @@ describe('Google Drive archive API', () => {
   });
 
   it('does not authenticate a production private fallback without a configured OAuth client', async () => {
-    vi.stubEnv('PROD', true);
-    vi.stubEnv('DEV', false);
-    vi.stubGlobal('location', { origin: 'https://colmapview.opsiclear.com' });
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ENABLED', 'true');
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN', 'https://colmapview.opsiclear.com');
+    stubGoogleDriveHost('https://colmapview.opsiclear.com', { production: true });
     vi.stubEnv('VITE_GOOGLE_DRIVE_API_KEY', 'app-key');
     vi.stubEnv('VITE_GOOGLE_DRIVE_CLIENT_ID', 'invalid');
     const fetchImpl = vi.fn().mockResolvedValue(Response.json({}, { status: 404 }));

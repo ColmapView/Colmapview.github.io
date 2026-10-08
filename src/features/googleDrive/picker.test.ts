@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { stubGoogleDriveHost } from '../../test/googleDriveHosting';
 import { GOOGLE_DRIVE_SCOPE, googleDriveAuth, type GoogleOAuthSdk } from './auth';
 import { chooseGoogleDriveArchive, getGoogleDrivePickerConfig, parseGoogleDriveArchiveSelection, type GooglePickerSdk } from './picker';
 
@@ -81,9 +82,7 @@ describe('Google Drive archive selection validation', () => {
 describe('Google Drive archive picker lifecycle', () => {
   it('does not invoke an injected Picker SDK on a disabled host, even with complete configuration', async () => {
     const { sdk, builder, dialog } = pickerSdk();
-    vi.stubGlobal('location', { origin: 'https://preview.colmap-webview.pages.dev' });
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ENABLED', 'true');
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN', 'https://colmapview.opsiclear.com');
+    stubGoogleDriveHost('https://preview.colmap-webview.pages.dev');
     await expect(chooseGoogleDriveArchive({ sdk })).rejects.toThrow('available at');
     expect(getGoogleDrivePickerConfig()).toBeNull();
     expect(builder.build).not.toHaveBeenCalled();

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { stubGoogleDriveHost } from '../../test/googleDriveHosting';
 
 const sdkSelector = 'script[src="https://accounts.google.com/gsi/client"]';
 
@@ -17,9 +18,7 @@ afterEach(() => {
 
 describe('Google authorization library loading', () => {
   it('rejects disabled hosts before consulting an existing SDK or inserting a script', async () => {
-    vi.stubGlobal('location', { origin: 'https://opsiclear.github.io' });
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ENABLED', 'true');
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN', 'https://colmapview.opsiclear.com');
+    stubGoogleDriveHost('https://opsiclear.github.io');
     const sdk = { initTokenClient: vi.fn() };
     vi.stubGlobal('google', { accounts: { oauth2: sdk } });
     const { loadGoogleOAuthSdk } = await import('./auth');

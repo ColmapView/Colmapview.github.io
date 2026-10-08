@@ -1,5 +1,6 @@
 import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { stubGoogleDriveHost } from '../../test/googleDriveHosting';
 import { createDriveUploadClient, DRIVE_UPLOAD_CHUNK_BYTES, uploadDriveChunk, validateDriveUploadUrl, type DriveUploadRequest } from './upload';
 
 const fileId = 'DRIVE_FILE_123456789';
@@ -14,9 +15,7 @@ function clientWith(responses: Response[]) {
 
 describe('Drive resumable upload transport', () => {
   it('blocks metadata, sharing, and chunks on disabled hosts before reading a token or calling transports', async () => {
-    vi.stubGlobal('location', { origin: 'https://preview.colmap-webview.pages.dev' });
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ENABLED', 'true');
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN', 'https://colmapview.opsiclear.com');
+    stubGoogleDriveHost('https://preview.colmap-webview.pages.dev');
     const request = vi.fn();
     const getAccessToken = vi.fn(() => 'injected-upload-token');
     const client = createDriveUploadClient({ getAccessToken, fetchImpl: request, uploadImpl: request });
@@ -38,11 +37,7 @@ describe('Drive resumable upload transport', () => {
     expect(request).not.toHaveBeenCalled();
   });
   it('requires a configured OAuth client in production but does not require Picker-only fields for publishing', async () => {
-    vi.stubEnv('PROD', true);
-    vi.stubEnv('DEV', false);
-    vi.stubGlobal('location', { origin: 'https://colmapview.opsiclear.com' });
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ENABLED', 'true');
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN', 'https://colmapview.opsiclear.com');
+    stubGoogleDriveHost('https://colmapview.opsiclear.com', { production: true });
     vi.stubEnv('VITE_GOOGLE_DRIVE_CLIENT_ID', '');
     vi.stubEnv('VITE_GOOGLE_DRIVE_API_KEY', '');
     vi.stubEnv('VITE_GOOGLE_DRIVE_APP_ID', '');

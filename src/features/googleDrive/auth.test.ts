@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { stubGoogleDriveHost } from '../../test/googleDriveHosting';
 import { createGoogleDriveAuth, GOOGLE_DRIVE_SCOPE, type GoogleOAuthSdk, type GoogleTokenResponse } from './auth';
 
 function testSdk() {
@@ -13,9 +14,7 @@ afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs(); 
 
 describe('Google Drive in-memory account session', () => {
   it('does not initiate read or publish authorization on a disabled host with an injected SDK', () => {
-    vi.stubGlobal('location', { origin: 'https://opsiclear.github.io' });
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ENABLED', 'true');
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN', 'https://colmapview.opsiclear.com');
+    stubGoogleDriveHost('https://opsiclear.github.io');
     const { sdk, requestAccessToken } = testSdk();
     for (const purpose of ['read', 'publish'] as const) {
       const auth = createGoogleDriveAuth(purpose);
@@ -38,11 +37,7 @@ describe('Google Drive in-memory account session', () => {
     expect(auth.getSnapshot().status).toBe('disconnected');
   });
   it('requires the configured production OAuth client on the exact enabled host', () => {
-    vi.stubEnv('PROD', true);
-    vi.stubEnv('DEV', false);
-    vi.stubGlobal('location', { origin: 'https://colmapview.opsiclear.com' });
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ENABLED', 'true');
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN', 'https://colmapview.opsiclear.com');
+    stubGoogleDriveHost('https://colmapview.opsiclear.com', { production: true });
     vi.stubEnv('VITE_GOOGLE_DRIVE_CLIENT_ID', '');
     const auth = createGoogleDriveAuth();
     const { sdk, callbacks } = testSdk();

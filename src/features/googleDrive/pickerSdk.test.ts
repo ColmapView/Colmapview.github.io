@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { stubGoogleDriveHost } from '../../test/googleDriveHosting';
 
 const selector = 'script[src="https://apis.google.com/js/api.js"]';
 const sdk = { PickerBuilder: class {}, DocsView: class {}, ViewId: { DOCS: 'docs' }, Action: { PICKED: 'picked', CANCEL: 'cancel', ERROR: 'error' } };
@@ -17,9 +18,7 @@ afterEach(() => {
 
 describe('Google Picker SDK loading', () => {
   it('never calls an available loader or reuses Picker on a disabled preview host', async () => {
-    vi.stubGlobal('location', { origin: 'https://preview.colmap-webview.pages.dev' });
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ENABLED', 'true');
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN', 'https://colmapview.opsiclear.com');
+    stubGoogleDriveHost('https://preview.colmap-webview.pages.dev');
     const load = vi.fn();
     vi.stubGlobal('gapi', { load });
     vi.stubGlobal('google', { picker: sdk });

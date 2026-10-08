@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { stubGoogleDriveHost } from '../../test/googleDriveHosting';
 import { GOOGLE_DRIVE_ENABLED_ORIGIN, getGoogleDriveConfiguration, getGoogleDriveHostingConfig, isGoogleDriveEnabled, resolveGoogleDriveHostingConfig } from './config';
 
 const credentials = {
@@ -71,9 +72,7 @@ describe('Google Drive deployment capability', () => {
     Object.entries(credentials).forEach(([key, value]) => vi.stubEnv(key, value));
     expect(isGoogleDriveEnabled()).toBe(true);
     expect(getGoogleDriveConfiguration()).toMatchObject({ apiKey: credentials.VITE_GOOGLE_DRIVE_API_KEY, clientId: credentials.VITE_GOOGLE_DRIVE_CLIENT_ID, appId: credentials.VITE_GOOGLE_DRIVE_APP_ID });
-    vi.stubGlobal('location', { origin: 'https://opsiclear.github.io' });
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ENABLED', 'true');
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN', GOOGLE_DRIVE_ENABLED_ORIGIN);
+    stubGoogleDriveHost('https://opsiclear.github.io');
     expect(isGoogleDriveEnabled()).toBe(false);
     expect(getGoogleDriveHostingConfig()).toMatchObject({ allowedOrigin: GOOGLE_DRIVE_ENABLED_ORIGIN, hostAllowed: false });
     expect(getGoogleDriveConfiguration()).toMatchObject({ apiKey: null, clientId: null, appId: null });
