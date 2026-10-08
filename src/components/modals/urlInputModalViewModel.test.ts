@@ -92,7 +92,7 @@ describe('URL input modal view model', () => {
     const driveHelp = URL_INPUT_HELP_SECTIONS.find(section => section.title === 'Google Drive');
     expect(driveHelp?.items).toEqual(expect.arrayContaining([
       expect.objectContaining({ text: 'Public ZIP or TAR files shared with Anyone with the link load without sign-in.' }),
-      expect.objectContaining({ text: 'For private ZIP or TAR files, use the Google Drive account icon on the loading page and choose a file.' }),
+      expect.objectContaining({ text: 'For private ZIP or TAR files, use the Google Drive button on the loading page and choose a file.' }),
     ]));
   });
 
@@ -147,7 +147,7 @@ describe('URL input modal view model', () => {
   it('explains Drive handoff without directing disabled-host visitors to a local account control', () => {
     const drive = getUrlInputHelpSections(false).find(section => section.title === 'Google Drive');
     expect(drive?.items.some(item => item.text?.includes('colmapview.opsiclear.com'))).toBe(true);
-    expect(drive?.items.some(item => item.text?.includes('account icon'))).toBe(false);
+    expect(drive?.items.some(item => item.text?.includes('Google Drive button'))).toBe(false);
     expect(getUrlInputHelpSections(true)).toBe(URL_INPUT_HELP_SECTIONS);
   });
 });

@@ -100,7 +100,7 @@ describe('UrlInputModal', () => {
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Supported URL formats' }));
     expect(screen.getByText(/Use Google Drive on colmapview.opsiclear.com to open/)).toBeVisible();
-    expect(screen.queryByText(/Google Drive account icon/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Google Drive button/)).not.toBeInTheDocument();
     fireEvent.change(input, { target: { value: 'https://huggingface.co/datasets/user/data/tree/main/reconstruction' } });
     expect(screen.queryByRole('link', { name: 'Use Google Drive' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Load' }));

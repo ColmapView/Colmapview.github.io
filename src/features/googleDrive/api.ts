@@ -120,7 +120,7 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
         throw driveError(reference, 'Google Drive sign-in is not configured for this viewer.');
       }
       const token = getAccessToken();
-      if (!token) throw driveError(reference, 'Sign in with the Google Drive icon, then choose this archive in the Drive picker.');
+      if (!token) throw driveError(reference, 'Sign in with the Google Drive button, then choose this archive in the Drive picker.');
       headers.set('Authorization', `Bearer ${token}`);
     }
     return fetchImpl(url, timeout, { headers, credentials: 'omit', signal: deps.signal });
@@ -148,7 +148,7 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
     } else if (response.status === 403 || response.status === 404) {
       message = useAccount
         ? 'Choose this archive in the Drive picker to grant file access. If it is still unavailable, check the account and download permissions.'
-        : 'Drive file is unavailable. Share it with Anyone with the link, or use the Google Drive icon to choose the archive in the Drive picker.';
+        : 'Drive file is unavailable. Share it with Anyone with the link, or use the Google Drive button to choose the archive in the Drive picker.';
     } else {
       message = `Google Drive could not download this file (${response.status}). Please retry.`;
     }

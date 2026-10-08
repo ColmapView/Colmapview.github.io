@@ -179,7 +179,7 @@ export async function chooseGoogleDriveArchive(options: ChooseGoogleDriveArchive
   assertGoogleDriveHostAllowed();
   const config = getGoogleDrivePickerConfig();
   if (!config) throw new Error('The Google Drive picker needs an API key, OAuth client ID, and numeric Cloud project number. Contact the site administrator.');
-  if (!googleDriveAuth.getAccessToken()) throw new Error('Sign in with the Google Drive icon, then choose an archive in the Drive picker.');
+  if (!googleDriveAuth.getAccessToken()) throw new Error('Sign in with the Google Drive button, then choose an archive in the Drive picker.');
   if (pickerActive) throw new Error('A Google Drive picker is already open. Finish or cancel it before choosing another archive.');
   pickerActive = true;
   try {

@@ -75,7 +75,9 @@ describe('Google Drive archive API', () => {
     const media = await source.options.fetchImpl!(source.url, 120000);
     expect(new Uint8Array(await media.arrayBuffer())).toEqual(zipBytes);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
-    for (const [, , init] of fetchImpl.mock.calls) {
+    for (const [url, , init] of fetchImpl.mock.calls) {
+      // Without this opt-in, a file picked from the Shared drives tab answers 404.
+      expect(new URL(url).searchParams.get('supportsAllDrives')).toBe('true');
       expect(init.credentials).toBe('omit');
       expect(init.headers.get('Authorization')).toBeNull();
       expect(init.headers.get('X-Goog-Drive-Resource-Keys')).toBe('file123/0-key');
@@ -135,7 +137,7 @@ describe('Google Drive archive API', () => {
   it('does not start an authorization popup for an inaccessible anonymous file', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(Response.json({ error: {} }, { status: 404 }));
     await expect(resolveGoogleDriveArchive(reference, { ...publicDeps, fetchImpl }))
-      .rejects.toMatchObject({ message: expect.stringContaining('Google Drive icon'), failedFile: reference.sourceUrl });
+      .rejects.toMatchObject({ message: expect.stringContaining('Google Drive button'), failedFile: reference.sourceUrl });
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
   it.each([false, true])('handles rejected response cancellation while preserving caller cancellation (%s)', async cancelled => {

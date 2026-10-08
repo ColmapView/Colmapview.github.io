@@ -55,7 +55,7 @@ export const URL_INPUT_HELP_SECTIONS: readonly UrlInputHelpSection[] = [
     items: [
       { code: 'https://drive.google.com/file/d/FILE_ID/view' },
       { text: 'Public ZIP or TAR files shared with Anyone with the link load without sign-in.', muted: true },
-      { text: 'For private ZIP or TAR files, use the Google Drive account icon on the loading page and choose a file.', muted: true },
+      { text: 'For private ZIP or TAR files, use the Google Drive button on the loading page and choose a file.', muted: true },
       { text: 'The complete archive downloads before loading. Maximum archive size: 2GB.', muted: true },
     ],
   },

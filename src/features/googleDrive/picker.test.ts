@@ -128,15 +128,10 @@ describe('Google Drive archive picker lifecycle', () => {
       expect(view.setIncludeFolders).toHaveBeenCalledWith(true);
       expect(view.setSelectFolderEnabled).toHaveBeenCalledWith(false);
     }
-    const [allOfDrive, sharedWithMe, starred, sharedDrives] = views;
-    // Unfiltered, the first tab lists every file the account can open, shared ones included.
-    for (const filter of [allOfDrive.setOwnedByMe, allOfDrive.setStarred, allOfDrive.setEnableDrives]) expect(filter).not.toHaveBeenCalled();
-    expect(sharedWithMe.setOwnedByMe).toHaveBeenCalledWith(false);
-    expect(starred.setStarred).toHaveBeenCalledWith(true);
-    expect(sharedDrives.setEnableDrives).toHaveBeenCalledWith(true);
+    // One filter per tab. Unfiltered, the first lists every file the account can open, shared ones included;
     // Google shows nothing for shared drives limited to files I own, and ignores Starred there.
-    expect(sharedDrives.setOwnedByMe).not.toHaveBeenCalled();
-    expect(sharedDrives.setStarred).not.toHaveBeenCalled();
+    expect(views.map(view => [view.setOwnedByMe.mock.calls, view.setStarred.mock.calls, view.setEnableDrives.mock.calls]))
+      .toEqual([[[], [], []], [[[false]], [], []], [[], [[true]], []], [[], [], [[true]]]]);
     callback({ action: 'cancel' });
     await expect(pending).resolves.toBeNull();
   });
