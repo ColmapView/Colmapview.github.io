@@ -28,7 +28,7 @@ export const HuggingFacePublishButton = memo(function HuggingFacePublishButton({
       panelId="publish"
       activePanel={activePanel}
       setActivePanel={setActivePanel}
-      icon={<span aria-hidden="true" className="text-2xl leading-none">🤗</span>}
+      icon={<span aria-hidden="true" className="text-base leading-none">🤗</span>}
       tooltip="Publish to Hugging Face"
       isActive={isOpen || publicationActive}
       onClick={() => { setActivePanel(null); setIsOpen(true); }}

@@ -1574,6 +1574,11 @@ h3.panel-heading {
   align-items: center;
   gap: var(--sp-1);
 }
+/* A colour emoji fills its box and draws past it, so 13px matches the 16px outline icons and Drive logo beside it. */
+.startup-account-emoji {
+  font-size: 0.8125rem;
+  line-height: 1;
+}
 
 .startup-actions {
   display: grid;

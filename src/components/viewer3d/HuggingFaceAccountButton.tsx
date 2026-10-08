@@ -27,7 +27,7 @@ export function HuggingFaceAccountButton({ config, activePanel, setActivePanel }
   };
   return <>
     <ControlButton panelId="publish" activePanel={activePanel} setActivePanel={setActivePanel}
-      icon={<span aria-hidden="true" className="text-2xl leading-none">🤗</span>}
+      icon={<span aria-hidden="true" className="text-base leading-none">🤗</span>}
       tooltip={connected ? `Hugging Face: ${hf.identity?.username}` : 'Hugging Face account'}
       isActive={isOpen || connected} onClick={() => { setActivePanel(null); setIsOpen(true); }} />
     <ModalDialogShell isOpen={isOpen} onClose={close} ariaLabelledBy={`${id}-title`} ariaDescribedBy={`${id}-description`}

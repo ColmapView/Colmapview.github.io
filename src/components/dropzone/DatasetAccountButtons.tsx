@@ -143,7 +143,7 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
     <button type="button" className={DROP_ZONE_ICON_BUTTON_CLASS} aria-label="Hugging Face account"
       data-tooltip={hf.status === 'connected' ? `Hugging Face: ${hf.identity?.username}` : 'Sign in with Hugging Face'}
       aria-pressed={hf.status === 'connected'} onClick={() => setProvider('hf')}>
-      <span aria-hidden="true" className="text-base leading-none">🤗</span>
+      <span aria-hidden="true" className="startup-account-emoji">🤗</span>
     </button>
     {googleEnabled ? <button type="button" className={`${getButtonClass('ghost', 'sm')} whitespace-nowrap`} aria-label="Google Drive account"
       data-tooltip={clientId ? 'Choose archive from Google Drive' : 'Google Drive'}
