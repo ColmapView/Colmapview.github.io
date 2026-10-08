@@ -62,7 +62,7 @@ export function resolveGoogleDriveHostingConfig(options: {
   const localAllowed = Boolean(local && (!configuredOrigin || allowed?.origin === current?.origin));
   const hostedAllowed = Boolean(current?.origin === GOOGLE_DRIVE_ENABLED_ORIGIN
     && allowed?.origin === GOOGLE_DRIVE_ENABLED_ORIGIN && flag === 'true');
-  const hostAllowed = flag !== 'false' && (flag === undefined || flag === 'true')
+  const hostAllowed = (flag === undefined || flag === 'true')
     && (localAllowed || hostedAllowed);
   const configured = Boolean(validateGoogleDriveApiKey(env.VITE_GOOGLE_DRIVE_API_KEY)
     || validateGoogleDriveClientId(env.VITE_GOOGLE_DRIVE_CLIENT_ID));

@@ -47,7 +47,7 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
     ? clientId
       ? connected ? 'Choose a ZIP or TAR dataset from Google Drive.' : 'Choose a ZIP or TAR from Drive. Sign in to open private files.'
       : googleApiKey ? 'Load a public dataset by URL.' : 'Google Drive loading is unavailable in this viewer.'
-    : connected ? 'Load a public or private dataset.' : 'Sign in to open private datasets.';
+    : connected ? 'Load a public or private dataset.' : canSignIn ? 'Sign in to open private datasets.' : 'Load a public dataset by URL.';
   const hint = provider === 'google'
     ? clientId ? 'Access is limited to files you choose. Downloads go directly to this browser.'
       : googleApiKey ? 'Private file selection is unavailable. You can load public datasets by URL.'
@@ -71,12 +71,8 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
     if (provider === 'google') googleDriveAuth.disconnect(); else hfAuth.disconnect();
   };
   const close = () => {
-    cancelPicker();
     // Closing abandons a pending sign-in, so Load URL (which closes this dialog) waits for it to settle.
-    if (auth.status === 'connecting') {
-      if (provider === 'google') googleDriveAuth.disconnect();
-      else hfAuth.disconnect();
-    }
+    if (auth.status === 'connecting') disconnect(); else cancelPicker();
     setProvider(null);
   };
   const openPicker = () => {
@@ -172,7 +168,7 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
           </span>
         </div>}
         <p id={`${id}-description`} className="m-0 text-ds-secondary">
-          {!canSignIn && provider === 'hf' && !connected ? 'Load a public dataset by URL.' : description}
+          {description}
         </p>
         {(!connected || provider === 'google') && <p className="m-0 mt-1 text-ds-muted text-xs">{hint}</p>}
         <PolicyLinks align="start" />

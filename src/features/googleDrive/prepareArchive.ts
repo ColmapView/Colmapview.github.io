@@ -46,10 +46,8 @@ export async function packageDriveArchive(prepared: PreparedPublication, signal:
       progress(`Packaging ${asset.path}…`, index, prepared.assets.length);
       const blob = await awaitWithAbort(asset.open(signal), signal);
       check();
-      if ((asset.size !== null && asset.size !== blob.size) || blob.size + total > sizeLimit) {
-        if (blob.size + total > sizeLimit) throw archiveTooLarge();
-        throw new GoogleDrivePublishError(`The source file ${asset.path} changed. Publish again.`, undefined, true);
-      }
+      if (blob.size + total > sizeLimit) throw archiveTooLarge();
+      if (asset.size !== null && asset.size !== blob.size) throw new GoogleDrivePublishError(`The source file ${asset.path} changed. Publish again.`, undefined, true);
       const entry = new ZipPassThrough(publicationPath(asset.path));
       zip.add(entry);
       const reader = blob.stream().getReader();

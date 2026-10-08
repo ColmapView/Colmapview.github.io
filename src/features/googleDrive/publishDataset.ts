@@ -51,7 +51,7 @@ export function createDrivePublicationController(client: DriveUploadClient) {
     const signal = controller.signal;
     const check = () => {
       signal.throwIfAborted();
-      if (current.invalid || current !== job) throw new GoogleDrivePublishError('The dataset changed. Start a new Drive publication.');
+      if (current.invalid || current !== job) throw staleDataset();
       // A built ZIP no longer reads the scene; only another dataset (invalidate) stops its upload.
       if (!current.archive) current.assertCurrent();
     };
@@ -64,10 +64,9 @@ export function createDrivePublicationController(client: DriveUploadClient) {
     };
     const complete = (file: DrivePublishedFile) => {
       owned(file);
-      if (Number(file.size) > 0 && (file.size !== String(current.archive!.blob.size) || file.md5Checksum !== current.archive!.md5)) {
-        throw new GoogleDrivePublishError('The uploaded ZIP does not match this publication. Review the file in Drive before starting a new publication.');
-      }
-      return file.size === String(current.archive!.blob.size) && file.md5Checksum === current.archive!.md5;
+      const matches = file.size === String(current.archive!.blob.size) && file.md5Checksum === current.archive!.md5;
+      if (Number(file.size) > 0 && !matches) throw new GoogleDrivePublishError('The uploaded ZIP does not match this publication. Review the file in Drive before starting a new publication.');
+      return matches;
     };
     try {
       update({ phase: 'preparing', message: 'Preparing dataset ZIP…', canRetry: false, error: undefined, receipt: undefined });
