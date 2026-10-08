@@ -131,14 +131,17 @@ export async function applySavedViewerState(saved: PublishedViewerState | null, 
   const restorationConfig = (config: ShareConfig): ShareConfig => {
     const restored: ShareConfig = {
       ...config,
-      // Navigation and the selection went with the view; reapplied, they would undo a change made during the download.
+      // Alignment, navigation and the selection went with the view; reapplied, they would undo a change
+      // made during the download, and an alignment applied to the data then would be applied twice.
       camera: pickSectionFields(config.camera, VIEW_NAVIGATION_FIELDS.camera, false),
       ui: pickSectionFields(config.ui, VIEW_NAVIGATION_FIELDS.ui, false),
     };
+    delete restored.transform;
     if (config.splat) {
       // Apply the effective selection once, after merging saved and URL choices.
       restored.splat = { ...config.splat };
       delete restored.splat.activeSourceId;
+      delete restored.splat.transform;
     }
     return restored;
   };

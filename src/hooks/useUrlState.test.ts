@@ -251,6 +251,28 @@ describe('URL state sharing', () => {
     expect(useCameraStore.getState().showCameras).toBe(false);
   });
 
+  it.each(['saved', 'shared'] as const)('keeps an alignment change made while the restored splat downloads (%s alignment)', async origin => {
+    installSavedSplatSources();
+    const download = stubPendingDownload();
+    const alignment = { transform: { ...createIdentityEuler(), translationX: 5 },
+      splat: { transform: { ...createIdentityEuler(), translationY: 2 } } };
+    const saved = savedSplatState();
+    const restoration = origin === 'saved'
+      ? applySavedViewerState({ ...saved, config: { ...saved.config, ...alignment, splat: { ...saved.config.splat, ...alignment.splat } } }, null)
+      : applySavedViewerState(saved, { config: alignment });
+    // The alignment landed with the view, before the download.
+    expect(useTransformStore.getState()).toMatchObject({ transform: alignment.transform, splatTransform: alignment.splat.transform });
+    const edited = { ...createIdentityEuler(), rotationZ: 30 };
+    useTransformStore.getState().setTransform(edited);
+    useTransformStore.getState().setSplatTransform(createIdentityEuler());
+    download.respond(new Response(new Blob(['splat']), { status: 200 }));
+    await restoration;
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeDefined();
+    expect(useTransformStore.getState()).toMatchObject({ transform: edited, splatTransform: createIdentityEuler() });
+    // Display still lands once the splat is in.
+    expect(useUIStore.getState().backgroundColor).toBe('#123456');
+  });
+
   it("restores the selection with the navigation, the viewer URL's winning, and keeps a selection made during the download", async () => {
     installSavedSplatSources();
     const download = stubPendingDownload();
