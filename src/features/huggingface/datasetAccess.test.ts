@@ -7,7 +7,7 @@ import { fetchDatasetResource } from '../../utils/fetchDatasetResource';
 import { downloadZip } from '../../utils/zipDownload';
 import { UrlMediaScheduler } from '../../dataset/urlMediaScheduler';
 import { getOrLoadFrustumBitmap } from '../../hooks/frustumTextureCache';
-import { fetchOptionalDatasetViewerSettingsResult } from '../../hooks/urlLoaderViewerState';
+import { startOptionalDatasetViewerSettings } from '../../hooks/urlLoaderViewerState';
 import { appLogger } from '../../utils/logger';
 
 vi.mock('./auth', () => ({ hfAuth: { getReadAccessToken: vi.fn(), getSnapshot: vi.fn(), expire: vi.fn() } }));
@@ -173,8 +173,8 @@ describe('Hugging Face private dataset reads', () => {
     request.mockImplementation(async url => url === root + 'colmapview.yaml'
       ? new Response('ui:\n  background_color: "#123456"\n')
       : new Response('Entry not found', { status: 404, headers: { 'X-Error-Code': 'EntryNotFound' } }));
-    await expect(fetchOptionalDatasetViewerSettingsResult(root + 'a/b/scene.spz',
-      (url, init) => fetchDatasetResource(url, undefined, init), true))
+    await expect(startOptionalDatasetViewerSettings(root + 'a/b/scene.spz',
+      (url, init) => fetchDatasetResource(url, undefined, init), true).settle())
       .resolves.toMatchObject({ timedOut: false, state: { config: { ui: { backgroundColor: '#123456' } } } });
     expect(request).toHaveBeenCalledTimes(3);
     expect(request.mock.calls.every(([, init]) => authorization(init) === null)).toBe(true);

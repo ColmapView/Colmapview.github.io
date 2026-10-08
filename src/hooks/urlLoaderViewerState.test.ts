@@ -1,6 +1,6 @@
 import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchDatasetViewerSettings, fetchOptionalDatasetViewerSettingsResult, fetchPublishedViewerState,
+import { fetchDatasetViewerSettings, fetchPublishedViewerState,
   OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS, SKIPPED_SETTINGS_WARNING, startOptionalDatasetViewerSettings } from './urlLoaderViewerState';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
@@ -25,7 +25,7 @@ describe('manifest viewer-state loading', () => {
       requestSignal = init?.signal;
       return new Promise<Response>(() => {});
     });
-    const pending = fetchOptionalDatasetViewerSettingsResult(manifest.baseUrl + 'scene.spz', request, true);
+    const pending = startOptionalDatasetViewerSettings(manifest.baseUrl + 'scene.spz', request, true).settle();
     expect(requestSignal?.aborted).toBe(false);
     await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS);
     await expect(pending).resolves.toEqual({ state: null, timedOut: true });
@@ -34,8 +34,8 @@ describe('manifest viewer-state loading', () => {
 
   it('cancels optional metadata promptly even when an injected fetch does not settle on abort', async () => {
     const controller = new AbortController();
-    const pending = fetchOptionalDatasetViewerSettingsResult(manifest.baseUrl,
-      () => new Promise<Response>(() => {}), false, controller.signal);
+    const pending = startOptionalDatasetViewerSettings(manifest.baseUrl,
+      () => new Promise<Response>(() => {}), false, controller.signal).settle();
     const aborted = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
     controller.abort();
     await aborted;
@@ -174,7 +174,7 @@ describe('manifest viewer-state loading', () => {
     const request = vi.fn((url: string) => new Promise<Response>(resolve => setTimeout(() => resolve(url === deepCandidates[3]
       ? new Response('ui:\n  background_color: "#123456"\n')
       : new Response('Entry not found', { status: 404, headers: { 'X-Error-Code': 'EntryNotFound' } })), 1_000)));
-    const pending = fetchOptionalDatasetViewerSettingsResult(deepFile, request, true);
+    const pending = startOptionalDatasetViewerSettings(deepFile, request, true).settle();
     await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS);
     await expect(pending).resolves.toEqual({
       state: expect.objectContaining({ config: { ui: { backgroundColor: '#123456' } } }), timedOut: false });
@@ -184,7 +184,7 @@ describe('manifest viewer-state loading', () => {
     vi.useFakeTimers();
     const request = vi.fn((url: string) => new Promise<Response>(resolve => setTimeout(() => resolve(new Response(
       `ui:\n  background_color: "${url === deepCandidates[0] ? '#111111' : '#222222'}"\n`)), url === deepCandidates[0] ? 900 : 100)));
-    const pending = fetchOptionalDatasetViewerSettingsResult(deepFile, request, true);
+    const pending = startOptionalDatasetViewerSettings(deepFile, request, true).settle();
     await vi.advanceTimersByTimeAsync(1_000);
     await expect(pending).resolves.toMatchObject({ state: { config: { ui: { backgroundColor: '#111111' } } }, timedOut: false });
   });

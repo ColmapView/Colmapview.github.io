@@ -497,10 +497,6 @@ async function isMissingOnGet(url: string, fetchImpl: FetchUrl): Promise<boolean
   }
 }
 
-async function getRemoteFileContentLength(url: string, fetchImpl: FetchUrl): Promise<number | null> {
-  return (await probeRemoteFile(url, fetchImpl)).size;
-}
-
 export async function discoverDirectoryListingSplatPaths(
   baseUrl: string,
   deps: DiscoverDirectoryListingSplatDeps = {}
@@ -556,7 +552,7 @@ export async function discoverDirectoryListingSplatPaths(
         // Content-Length): the file exists and is a valid splat; dropping it would
         // make it silently vanish on static hosts. Unknown size sorts last and
         // shows no size label.
-        const size = await getRemoteFileContentLength(link.url, fetchImpl);
+        const { size } = await probeRemoteFile(link.url, fetchImpl);
         candidatesByPath.set(link.relativePath, {
           path: link.relativePath,
           size: size ?? 0,

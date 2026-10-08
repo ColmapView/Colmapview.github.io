@@ -64,17 +64,6 @@ export function startOptionalDatasetViewerSettings(url: string,
   };
 }
 
-export async function fetchOptionalDatasetViewerSettingsResult(url: string,
-  fetchImpl: (url: string, init?: RequestInit) => Promise<Response>, isFile = false,
-  signal?: AbortSignal): Promise<OptionalViewerSettingsResult> {
-  const request = startOptionalDatasetViewerSettings(url, fetchImpl, isFile, signal);
-  try {
-    return await request.settle();
-  } finally {
-    request.cancel();
-  }
-}
-
 function settingsUrls(value: string, isFile: boolean): string[] {
   const hfUrls = huggingFaceSettingsUrls(value, DATASET_VIEWER_SETTINGS_FILE, isFile);
   if (hfUrls.length) return hfUrls;
