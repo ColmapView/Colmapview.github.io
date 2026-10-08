@@ -1558,15 +1558,18 @@ h3.panel-heading {
   white-space: normal;
 }
 
+/* Title and close share the first row; the account controls take the second, so the title never wraps. */
 .startup-header {
   position: relative;
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: var(--sp-2);
 }
 
 .startup-config-actions {
+  grid-column: 1 / -1;
+  grid-row: 2;
   display: flex;
   align-items: center;
   gap: var(--sp-1);
@@ -1586,15 +1589,6 @@ h3.panel-heading {
 }
 
 @media (max-width: 479px) {
-  .startup-header {
-    grid-template-columns: 1fr auto;
-  }
-
-  .startup-config-actions {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
-
   .startup-actions {
     grid-template-columns: 1fr;
   }
