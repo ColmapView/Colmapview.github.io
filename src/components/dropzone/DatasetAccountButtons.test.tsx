@@ -414,6 +414,81 @@ describe('Dataset provider account icons', () => {
     expect(props.onOpenUrlModal).toHaveBeenCalledOnce();
   });
 
+  it('abandons a pending Hugging Face sign-in, and only that one, when the dialog closes', () => {
+    vi.stubEnv('VITE_HF_AUTH_ENABLED', 'true');
+    vi.stubEnv('VITE_HF_OAUTH_CLIENT_ID', 'hf-test-client');
+    vi.stubEnv('VITE_HF_OAUTH_REDIRECT_URI', `${window.location.origin}/hf-callback.html`);
+    const popup = { location: { href: '' }, closed: false, close: vi.fn() };
+    vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
+    const googleDisconnect = vi.spyOn(googleDriveAuth, 'disconnect');
+    render(<DatasetAccountButtons {...createProps()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hugging Face account' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with Hugging Face' }));
+    expect(hfAuth.getSnapshot().status).toBe('connecting');
+    fireEvent.click(screen.getByRole('button', { name: 'Close account dialog' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(hfAuth.getSnapshot()).toEqual({ status: 'disconnected', identity: null, error: null });
+    expect(googleDisconnect).not.toHaveBeenCalled();
+  });
+
+  it('abandons a pending Google sign-in, and only that one, when the dialog closes', async () => {
+    const oauth = configureDrive();
+    const hfDisconnect = vi.spyOn(hfAuth, 'disconnect');
+    const props = createProps();
+    render(<DatasetAccountButtons {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Choose archive from Drive' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Choose archive from Drive' }));
+    expect(googleDriveAuth.getSnapshot().status).toBe('connecting');
+    fireEvent.click(screen.getByRole('button', { name: 'Close account dialog' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(googleDriveAuth.getSnapshot()).toEqual({ status: 'disconnected', error: null });
+    expect(hfDisconnect).not.toHaveBeenCalled();
+    oauth.authorize();
+    expect(googleDriveAuth.getSnapshot().status).toBe('disconnected');
+    expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
+    expect(props.onLoadGoogleDriveArchive).not.toHaveBeenCalled();
+  });
+
+  it('keeps a connected Google session when the dialog closes', async () => {
+    configureDrive(true);
+    const disconnect = vi.spyOn(googleDriveAuth, 'disconnect');
+    render(<DatasetAccountButtons {...createProps()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
+    await waitFor(() => expect(loadGoogleOAuthSdk).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button', { name: 'Close account dialog' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(googleDriveAuth.getSnapshot()).toEqual({ status: 'connected', error: null });
+    expect(disconnect).not.toHaveBeenCalled();
+  });
+
+  it('keeps a connected Hugging Face session when the dialog closes', () => {
+    vi.spyOn(hfAuth, 'getSnapshot').mockReturnValue({ status: 'connected', identity: { username: 'test-user' }, error: null });
+    const disconnect = vi.spyOn(hfAuth, 'disconnect');
+    render(<DatasetAccountButtons {...createProps()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hugging Face account' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close account dialog' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(disconnect).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { state: 'signed out without sign-in', setup: () => {}, description: 'Load a public dataset by URL.' },
+    { state: 'signed out with sign-in available', setup: () => {
+      vi.stubEnv('VITE_HF_AUTH_ENABLED', 'true');
+      vi.stubEnv('VITE_HF_OAUTH_CLIENT_ID', 'hf-test-client');
+      vi.stubEnv('VITE_HF_OAUTH_REDIRECT_URI', `${window.location.origin}/hf-callback.html`);
+    }, description: 'Sign in to open private datasets.' },
+    { state: 'connected', setup: () => {
+      vi.spyOn(hfAuth, 'getSnapshot').mockReturnValue({ status: 'connected', identity: { username: 'test-user' }, error: null });
+    }, description: 'Load a public or private dataset.' },
+  ])('describes Hugging Face loading when $state', ({ setup, description }) => {
+    setup();
+    render(<DatasetAccountButtons {...createProps()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hugging Face account' }));
+    expect(screen.getByRole('dialog')).toHaveAccessibleDescription(description);
+  });
+
   it('clears a stale script error when reopening the account dialog succeeds', async () => {
     const oauth = configureDrive();
     vi.mocked(loadGoogleOAuthSdk).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(oauth.sdk);
