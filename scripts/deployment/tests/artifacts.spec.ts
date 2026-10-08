@@ -1,5 +1,5 @@
 import { test, expect, type BrowserContext, type Page } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { gzipSync, zipSync, strToU8 } from 'fflate';
 import { startArtifactServer } from '../static-server.mjs';
@@ -83,15 +83,22 @@ async function routeArtifact(context: BrowserContext, origin: string, serverOrig
   return { externalRequests, driveRequests, assetRequests };
 }
 
+// Profile checks key on the trusted directory name, never on the artifact's own deployment.json, which the selected
+// ref controls: a relabelled preview must not skip the preview-only checks. deploy.yml's `version` is a github build.
+const directoryProfiles: Record<string, DeploymentMetadata['profile']> = { version: 'github', github: 'github', custom: 'custom', preview: 'preview' };
+
 for (const directory of profiles) {
+  const profile = directoryProfiles[directory];
+  if (!profile) throw new Error(`Unknown deployment smoke directory: ${directory}`);
   const output = path.resolve(root, directory);
   const metadata: DeploymentMetadata = JSON.parse(readFileSync(path.join(output, 'deployment.json'), 'utf8'));
   baselineSha ??= metadata.sourceSha;
-  const hosts = metadata.profile === 'custom' ? [customOrigin, 'https://artifact-check.pages.dev', 'https://colmapview.github.io']
-    : metadata.profile === 'github' ? ['https://colmapview.github.io'] : ['https://artifact-check.pages.dev'];
+  const hosts = profile === 'custom' ? [customOrigin, 'https://artifact-check.pages.dev', 'https://colmapview.github.io']
+    : profile === 'github' ? ['https://colmapview.github.io'] : ['https://artifact-check.pages.dev'];
 
   for (const origin of hosts) {
     test(`${directory} artifact at ${origin}: policies, native loading and Drive origin gate`, async ({ page, context }) => {
+      expect(metadata.profile, 'artifact profile').toBe(profile);
       expect(metadata.schemaVersion).toBe(1);
       verifyIndexHtml(readFileSync(path.join(output, 'index.html')), metadata);
       expect(metadata.sourceSha).toMatch(/^[a-f0-9]{40}$/);
@@ -99,16 +106,18 @@ for (const directory of profiles) {
       if (process.env.DEPLOYMENT_SHA) expect(metadata.sourceSha).toBe(process.env.DEPLOYMENT_SHA);
       expect(metadata.version).toMatch(/^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/);
       // Trusted preview checks may run from a newer default branch than the selected preview source.
-      if (metadata.profile !== 'preview') expect(metadata.version).toBe(JSON.parse(readFileSync('package.json', 'utf8')).version);
-      expect(metadata.googleDrive.enabled).toBe(metadata.profile === 'custom');
+      if (profile !== 'preview') expect(metadata.version).toBe(JSON.parse(readFileSync('package.json', 'utf8')).version);
+      expect(metadata.googleDrive.enabled).toBe(profile === 'custom');
       expect(metadata.base).toMatch(/^\/(?:[A-Za-z0-9.+_-]+\/)*$/);
-      if (metadata.profile !== 'github') {
+      if (profile !== 'github') {
         expect(metadata.base).toBe('/');
         const headers = readFileSync(path.join(output, '_headers'), 'utf8');
         expect(headers).toContain('Cross-Origin-Opener-Policy: same-origin-allow-popups');
         expect(headers).not.toContain('Cross-Origin-Embedder-Policy');
+        // Static files only: Cloudflare runs a _worker.js as server code under the deploying account.
+        for (const entry of ['_worker.js', '_routes.json', 'functions']) expect(existsSync(path.join(output, entry)), entry).toBe(false);
       }
-      const enabled = metadata.profile === 'custom' && origin === customOrigin;
+      const enabled = profile === 'custom' && origin === customOrigin;
       const server = await startArtifactServer(output, metadata.base);
       const traffic = await routeArtifact(context, origin, server.origin, enabled);
       const errors: string[] = [];
@@ -118,7 +127,7 @@ for (const directory of profiles) {
         for (const filename of ['about.html', 'privacy.html', 'terms.html']) {
           const response = await page.goto(`${viewer}${filename}`);
           expect(response?.status()).toBe(200);
-          if (metadata.profile !== 'github') expect(response?.headers()['cache-control']).toBe('public, no-cache, no-transform');
+          if (profile !== 'github') expect(response?.headers()['cache-control']).toBe('public, no-cache, no-transform');
           await expect(page.locator('h1')).toBeVisible();
           const links = await page.getByRole('navigation', { name: 'Main navigation', exact: true }).locator('a').evaluateAll(anchors => anchors.map(anchor => (anchor as HTMLAnchorElement).href));
           for (const link of links) expect(new URL(link).origin).toBe(origin);
@@ -126,7 +135,7 @@ for (const directory of profiles) {
         }
         const response = await page.goto(viewer);
         expect(response?.status()).toBe(200);
-        if (metadata.profile !== 'github') {
+        if (profile !== 'github') {
           expect(response?.headers()['cross-origin-opener-policy']).toBe('same-origin-allow-popups');
           expect(response?.headers()['cache-control']).toBe('public, no-cache, no-transform');
         }
@@ -145,9 +154,17 @@ for (const directory of profiles) {
         } else {
           const handoff = dialog.getByRole('link', { name: 'Use Google Drive', exact: true });
           const destination = new URL((await handoff.getAttribute('href'))!);
-          // The file ID rides in the fragment, which never reaches the custom host's server.
-          expect(destination.origin + destination.pathname + destination.search).toBe(`${customOrigin}/`);
-          expect((await decodeShareData(destination.hash))?.manifestUrl).toBe('https://drive.google.com/file/d/artifact_fixture_file/view?resourcekey=fixture-resource');
+          const sharedDriveUrl = 'https://drive.google.com/file/d/artifact_fixture_file/view?resourcekey=fixture-resource';
+          // Trusted preview checks may run on an older preview source, which hands the file over in ?url=.
+          if (profile === 'preview' && destination.searchParams.has('url')) {
+            expect(destination.origin + destination.pathname).toBe(`${customOrigin}/`);
+            expect(destination.searchParams.get('url')).toBe(sharedDriveUrl);
+            expect(destination.href).not.toContain('access_token');
+          } else {
+            // The file ID rides in the fragment, which never reaches the custom host's server.
+            expect(destination.origin + destination.pathname + destination.search).toBe(`${customOrigin}/`);
+            expect((await decodeShareData(destination.hash))?.manifestUrl).toBe(sharedDriveUrl);
+          }
           await dialog.locator('input[type="url"]').press('Enter');
           await expect(dialog).toBeVisible();
           expect(traffic.driveRequests).toEqual([]);
@@ -166,12 +183,13 @@ for (const directory of profiles) {
       } finally { await server.close(); }
     });
   }
-  if (metadata.profile === 'custom') {
+  if (profile === 'custom') {
     for (const driveArchive of [
       { filename: 'artifact.tar', mimeType: 'application/x-tar', body: tarArchive },
       { filename: 'artifact.tar.gz', mimeType: 'application/gzip', body: Buffer.from(gzipSync(tarArchive)) },
     ]) {
       test(`${directory} custom root: native public ${driveArchive.filename} loading`, async ({ page, context }) => {
+        expect(metadata.profile, 'artifact profile').toBe(profile);
         const server = await startArtifactServer(output, '/');
         const traffic = await routeArtifact(context, customOrigin, server.origin, true, driveArchive);
         const errors: string[] = [];

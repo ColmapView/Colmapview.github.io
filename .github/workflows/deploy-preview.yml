@@ -99,6 +99,8 @@ jobs:
           name: isolated-preview-viewer
           path: .tmp/deployment/preview/
       - run: npx playwright install --with-deps chromium
+      # These tests also refuse Pages server code (_worker.js), so the upload below publishes static files only.
+      # They check the folder as the preview profile named here, whatever profile its own deployment.json claims.
       - name: Smoke downloaded preview with trusted tests
         run: npm run test:deployment:browser
         env:

@@ -236,7 +236,14 @@ test('Cloudflare deployment token is scoped only to trusted upload steps', () =>
   for (const step of preview.jobs.publish.steps) {
     if (step.env?.CLOUDFLARE_API_TOKEN) assert.equal(step.name, 'Upload preview only');
   }
-  assert.ok(preview.jobs.publish.steps.some(step => step.name === 'Smoke downloaded preview with trusted tests'));
+  // The trusted smoke refuses Worker code, so it must check the uploaded folder and stop the job before the upload.
+  const publishSteps = preview.jobs.publish.steps;
+  const trustedSmoke = publishSteps.find(step => step.name === 'Smoke downloaded preview with trusted tests');
+  const upload = publishSteps.find(step => step.name === 'Upload preview only');
+  assert.ok(publishSteps.indexOf(trustedSmoke) >= 0 && publishSteps.indexOf(trustedSmoke) < publishSteps.indexOf(upload), 'The trusted smoke must precede the preview upload.');
+  assert.ok(trustedSmoke.if === undefined && [undefined, false].includes(trustedSmoke['continue-on-error']), 'The trusted smoke must always run and stop the job when it fails.');
+  assert.equal(`${trustedSmoke.env.DEPLOYMENT_SMOKE_ROOT}/${trustedSmoke.env.DEPLOYMENT_SMOKE_PROFILES}`, '.tmp/deployment/preview');
+  assert.match(upload.run, / pages deploy \.tmp\/deployment\/preview /);
   // Selected-ref code runs in the default branch's cache scope: it must neither restore nor save the npm cache.
   const buildSetup = preview.jobs.build.steps.find(step => step.uses?.startsWith('actions/setup-node@'));
   assert.equal(buildSetup.with.cache, undefined);
