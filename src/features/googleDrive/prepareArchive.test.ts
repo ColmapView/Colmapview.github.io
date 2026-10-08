@@ -195,15 +195,24 @@ describe('Drive remote sources', () => {
       .rejects.toMatchObject({ message: 'Could not read the mask for photo.jpg (HTTP 503). Retry the publication.', permanent: false });
     expect(request.mock.calls.filter(([url]) => url === bucket + 'masks/photo.jpg')).toHaveLength(3);
   });
-  it.each([
-    ['an image in a Hugging Face model repository', { imageUrlBase: 'https://huggingface.co/owner/scene/resolve/main/images/' }],
-    ['a Hugging Face download link', { imageNameToUrl: { 'photo.jpg': 'https://huggingface.co/datasets/owner/scene/resolve/main/images/photo.jpg?download=true' } }],
-    ['masks in a Hugging Face model repository', { imageUrlBase: bucket + 'images/', maskUrlBase: 'https://huggingface.co/owner/scene/resolve/main/masks/' }],
-  ])('fails in a way no retry can fix on %s, which cannot be pinned', async (_, dataset) => {
+  it('fails in a way no retry can fix on a Hugging Face dataset download link, which cannot be pinned', async () => {
     const request = vi.fn(); vi.stubGlobal('fetch', request);
-    await expect(prepareDriveArchive(remoteInput(dataset), new AbortController().signal, () => {}, () => {})).rejects.toMatchObject({
+    await expect(prepareDriveArchive(remoteInput({ imageNameToUrl: { 'photo.jpg': 'https://huggingface.co/datasets/owner/scene/resolve/main/images/photo.jpg?download=true' } }),
+      new AbortController().signal, () => {}, () => {})).rejects.toMatchObject({
       message: 'Copy these remote assets locally before publishing. Only public Hugging Face asset URLs can be pinned.', permanent: true });
     expect(request).not.toHaveBeenCalled();
+  });
+  it('copies images and masks from Hugging Face model and Space repositories unpinned, like any other host', async () => {
+    const model = 'https://huggingface.co/owner/scene/resolve/main/';
+    const space = 'https://huggingface.co/spaces/owner/app/resolve/main/';
+    const request = vi.fn(async (url: string) => url === `${model}images/photo.jpg` ? new Response('original')
+      : url === `${space}masks/photo.jpg.png` ? new Response('mask') : new Response(null, { status: 404 }));
+    vi.stubGlobal('fetch', request);
+    const files = await entries(await prepareDriveArchive(remoteInput({ imageUrlBase: `${model}images/`, maskUrlBase: `${space}masks/` }),
+      new AbortController().signal, () => {}, () => {}));
+    expect(strFromU8(files['images/photo.jpg'])).toBe('original');
+    expect(strFromU8(files['masks/photo.jpg.png'])).toBe('mask');
+    expect(request.mock.calls.filter(([url]) => url.includes('/api/'))).toEqual([]);
   });
   it.each(['ftp://files.example/scene/images/', 'https://reader:secret@bucket.example/scene/images/'])(
     'fails in a way no retry can fix on the unsupported image location %s', async imageUrlBase => {

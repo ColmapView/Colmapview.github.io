@@ -77,6 +77,11 @@ const DRIVE_BLOB_PART_BYTES = 8 * 1024 * 1024;
 function parseRemoteUrl(value: string): URL {
   try { return new URL(value); } catch { throw new GoogleDrivePublishError('The dataset has an invalid remote file URL.', undefined, true); }
 }
+/** Only Hub dataset files have a revision to pin and a folder to list; model and Space files copy like any other host's. */
+const isHubDatasetFile = (value: string) => {
+  const url = parseRemoteUrl(value);
+  return url.origin === 'https://huggingface.co' && url.pathname.startsWith('/datasets/');
+};
 
 export async function prepareDriveArchive(input: PublicationInput, signal: AbortSignal,
   progress: DriveArchiveProgress, assertCurrent: () => void, sizeLimit = ARCHIVE_SIZE_LIMIT): Promise<DriveArchive> {
@@ -98,7 +103,7 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
   const pinAssetUrl = async (value: string): Promise<string> => {
     const url = parseRemoteUrl(value);
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) throw new GoogleDrivePublishError('The dataset has an unsupported remote file URL.', undefined, true);
-    if (url.origin !== 'https://huggingface.co') return url.href;
+    if (!isHubDatasetFile(value)) return url.href;
     const parsed = parseHfAssetUrl(value);
     const sha = await resolveRevision(parsed.repoId, parsed.revision);
     parsed.url.pathname = parsed.url.pathname.replace(/(\/resolve\/)[^/]+\//, `$1${sha}/`);
@@ -108,7 +113,7 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
   const maskAbsence = new Map<string, { misses: number; found: boolean }>();
   let heldMaskBytes = 0;
   const readRemoteMask = async (base: string, name: string): Promise<{ blob: Blob } | { url: string; size: number } | null> => {
-    if (parseRemoteUrl(base).origin === 'https://huggingface.co') {
+    if (isHubDatasetFile(base)) {
       if (!maskListings.has(base)) maskListings.set(base, (async () => {
         const folder = parseHfAssetUrl(base.replace(/\/?$/, '/'));
         const revision = await resolveRevision(folder.repoId, folder.revision);
@@ -166,7 +171,7 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
   const folderSizes = new Map<string, Promise<Map<string, number>>>();
   /** A Hub file's exact size at the pinned revision, from one listing per folder; other hosts list nothing. */
   const remoteSize = async (value: string): Promise<number | null> => {
-    if (parseRemoteUrl(value).origin !== 'https://huggingface.co') return null;
+    if (!isHubDatasetFile(value)) return null;
     const file = parseHfAssetUrl(value);
     const revision = await resolveRevision(file.repoId, file.revision);
     const folder = file.path.slice(0, Math.max(0, file.path.lastIndexOf('/')));
