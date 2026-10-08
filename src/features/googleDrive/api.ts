@@ -12,7 +12,7 @@ interface DriveApiDeps {
   signal?: AbortSignal;
   fetchImpl?: typeof fetchWithTimeout;
   getAccessToken?: () => string | null;
-  expireSession?: () => void;
+  expireSession?: (token: string) => void;
 }
 
 function driveError(reference: GoogleDriveFileReference, message: string): UrlLoadError {
@@ -111,25 +111,28 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
     return url.href;
   };
   let useAccount = false;
-  const request = async (url: string, timeout?: number) => {
+  /** The answer, with the account token the request sent (null for an anonymous request). */
+  const request = async (url: string, timeout?: number): Promise<[Response, string | null]> => {
     assertHosting();
     const headers = new Headers();
     if (reference.resourceKey) headers.set('X-Goog-Drive-Resource-Keys', `${reference.fileId}/${reference.resourceKey}`);
+    let token: string | null = null;
     if (useAccount) {
       if (import.meta.env.PROD && !configuration.clientId) {
         throw driveError(reference, 'Google Drive sign-in is not configured for this viewer.');
       }
-      const token = getAccessToken();
+      token = getAccessToken();
       if (!token) throw driveError(reference, 'Sign in with the Google Drive button, then choose this archive in the Drive picker.');
       headers.set('Authorization', `Bearer ${token}`);
     }
-    return fetchImpl(url, timeout, { headers, credentials: 'omit', signal: deps.signal });
+    return [await fetchImpl(url, timeout, { headers, credentials: 'omit', signal: deps.signal }), token];
   };
   // The account only reaches files chosen in the picker, which also needs the API key.
   if (!apiKey) {
     throw driveError(reference, 'Google Drive loading is not configured for this viewer. Contact the site administrator.');
   }
-  const checkResponse = async (response: Response) => {
+  // A rejection expires only the session that sent `token`: one signed in while the request ran stays connected.
+  const checkResponse = async (response: Response, token: string | null) => {
     if (response.ok) return;
     let body: unknown;
     try { body = await readJson(response); } catch { deps.signal?.throwIfAborted(); }
@@ -139,14 +142,14 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
       message = 'Google Drive is limiting downloads. Wait a little, then retry.';
     } else if (reasons.some(reason => /API_KEY|SERVICE_DISABLED|accessNotConfigured/.test(reason))) {
       message = 'Google Drive is not configured for this viewer address. Contact the site administrator.';
-    } else if (response.status === 401 && useAccount) {
-      expireSession();
+    } else if (response.status === 401 && token) {
+      expireSession(token);
       message = 'Google Drive sign-in expired or was revoked. Sign in again, then choose the archive in the Drive picker.';
-    } else if (useAccount && reasons.some(reason => /insufficientPermissions|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(reason))) {
-      expireSession();
+    } else if (token && reasons.some(reason => /insufficientPermissions|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(reason))) {
+      expireSession(token);
       message = 'Google Drive file permission is missing. Sign in again, then choose the archive in the Drive picker.';
     } else if (response.status === 403 || response.status === 404) {
-      message = useAccount
+      message = token
         ? 'Choose this archive in the Drive picker to grant file access. If it is still unavailable, check the account and download permissions.'
         : 'Drive file is unavailable. Share it with Anyone with the link, or use the Google Drive button to choose the archive in the Drive picker.';
     } else {
@@ -154,15 +157,15 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
     }
     throw driveError(reference, message);
   };
-  let response = await request(makeUrl(false));
+  let [response, token] = await request(makeUrl(false));
   // Public files stay anonymous. drive.file permits the private fallback only for app-created/selected files.
   if (!useAccount && [403, 404].includes(response.status) && getAccessToken()) {
     await response.body?.cancel().catch(() => {});
     deps.signal?.throwIfAborted();
     useAccount = true;
-    response = await request(makeUrl(false));
+    [response, token] = await request(makeUrl(false));
   }
-  await checkResponse(response);
+  await checkResponse(response, token);
   const data = await readJson(response) as { id?: unknown; name?: unknown; mimeType?: unknown; size?: unknown; trashed?: unknown; capabilities?: { canDownload?: unknown } };
   if (!data || data.id !== reference.fileId || typeof data.name !== 'string' || data.name.length > 1024
     || typeof data.size !== 'string' || !/^\d+$/.test(data.size) || !Number.isSafeInteger(Number(data.size)) || Number(data.size) <= 0) {
@@ -183,8 +186,8 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
     fetchImpl: async (url, timeout) => {
       // The downloader receives only this fixed media endpoint; credentials cannot be sent to arbitrary URLs.
       if (url !== makeUrl(true)) throw driveError(reference, 'Unexpected Google Drive download URL.');
-      const media = await request(url, timeout);
-      await checkResponse(media);
+      const [media, mediaToken] = await request(url, timeout);
+      await checkResponse(media, mediaToken);
       if (media.status !== 200) {
         await media.body?.cancel().catch(() => {});
         throw driveError(reference, 'Google Drive returned an incomplete archive. Please retry.');

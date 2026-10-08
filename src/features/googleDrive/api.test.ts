@@ -3,6 +3,7 @@ import { parseGoogleDriveFileUrl } from '../../utils/googleDriveUrl';
 import { ARCHIVE_SIZE_LIMIT } from '../../utils/zipValidation';
 import { stubGoogleDriveHost } from '../../test/googleDriveHosting';
 import { resolveGoogleDriveArchive } from './api';
+import { GOOGLE_DRIVE_SCOPE, googleDriveAuth } from './auth';
 
 const reference = parseGoogleDriveFileUrl('https://drive.google.com/file/d/file123/view?resourcekey=0-key')!;
 const metadata = { id: reference.fileId, name: 'wrapped.zip', mimeType: 'application/zip', size: '1024', capabilities: { canDownload: true } };
@@ -232,5 +233,60 @@ describe('Google Drive archive API', () => {
   it('bounds malformed API response bodies', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response('a'.repeat(20000)));
     await expect(resolveGoogleDriveArchive(reference, { ...publicDeps, fetchImpl })).rejects.toThrow('oversized');
+  });
+});
+
+describe('Google Drive reader session on a rejected account request', () => {
+  // The viewer's own wiring: no injected token source, so requests read and expire googleDriveAuth.
+  const signIn = (token: string) => googleDriveAuth.connect('123456-client.apps.googleusercontent.com', {
+    initTokenClient: config => ({ requestAccessToken: () => config.callback({ access_token: token, token_type: 'Bearer', expires_in: 3600, scope: GOOGLE_DRIVE_SCOPE }) }),
+  });
+  const pendingAnswer = () => {
+    let answer!: (response: Response) => void;
+    return { promise: new Promise<Response>(resolve => { answer = resolve; }), answer: (response: Response) => answer(response) };
+  };
+  const rejections = [
+    { answer: '401', response: () => Response.json({ error: {} }, { status: 401 }), message: 'sign-in expired or was revoked' },
+    { answer: 'insufficient scope', message: 'file permission is missing',
+      response: () => Response.json({ error: { details: [{ reason: 'ACCESS_TOKEN_SCOPE_INSUFFICIENT' }] } }, { status: 403 }) },
+  ];
+  afterEach(() => { googleDriveAuth.disconnect(); });
+
+  it.each(rejections)('keeps a newer sign-in connected when an older metadata request answers $answer', async ({ response, message }) => {
+    signIn('older-token');
+    const metadataRequest = pendingAnswer();
+    const fetchImpl = vi.fn().mockResolvedValueOnce(Response.json({ error: {} }, { status: 404 })).mockReturnValueOnce(metadataRequest.promise);
+    const pending = resolveGoogleDriveArchive(reference, { apiKey: 'app-key', fetchImpl });
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    expect(fetchImpl.mock.calls[1][2].headers.get('Authorization')).toBe('Bearer older-token');
+    signIn('newer-token');
+    metadataRequest.answer(response());
+    await expect(pending).rejects.toMatchObject({ message: expect.stringContaining(message) });
+    expect(googleDriveAuth.getSnapshot()).toEqual({ status: 'connected', error: null });
+    expect(googleDriveAuth.getAccessToken()).toBe('newer-token');
+  });
+
+  it('keeps a newer sign-in connected when an older archive download answers 401', async () => {
+    signIn('older-token');
+    const mediaRequest = pendingAnswer();
+    const fetchImpl = vi.fn().mockResolvedValueOnce(Response.json({ error: {} }, { status: 404 }))
+      .mockResolvedValueOnce(Response.json(metadata)).mockReturnValueOnce(mediaRequest.promise);
+    const source = await resolveGoogleDriveArchive(reference, { apiKey: 'app-key', fetchImpl });
+    const media = source.options.fetchImpl!(source.url);
+    expect(fetchImpl.mock.calls[2][2].headers.get('Authorization')).toBe('Bearer older-token');
+    signIn('newer-token');
+    mediaRequest.answer(Response.json({ error: {} }, { status: 401 }));
+    await expect(media).rejects.toMatchObject({ message: expect.stringContaining('sign-in expired or was revoked') });
+    expect(googleDriveAuth.getSnapshot()).toEqual({ status: 'connected', error: null });
+    expect(googleDriveAuth.getAccessToken()).toBe('newer-token');
+  });
+
+  it.each(rejections)('still expires the session whose request answers $answer', async ({ response, message }) => {
+    signIn('rejected-token');
+    const fetchImpl = vi.fn().mockResolvedValueOnce(Response.json({ error: {} }, { status: 404 })).mockResolvedValueOnce(response());
+    await expect(resolveGoogleDriveArchive(reference, { apiKey: 'app-key', fetchImpl })).rejects.toMatchObject({ message: expect.stringContaining(message) });
+    expect(googleDriveAuth.getSnapshot()).toEqual({ status: 'disconnected',
+      error: 'Google Drive sign-in expired. Sign in again, then choose an archive in the Drive picker.' });
+    expect(googleDriveAuth.getAccessToken()).toBeNull();
   });
 });

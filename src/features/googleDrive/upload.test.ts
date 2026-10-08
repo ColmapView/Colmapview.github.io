@@ -1,6 +1,7 @@
 import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { stubGoogleDriveHost } from '../../test/googleDriveHosting';
+import { createGoogleDriveAuth, GOOGLE_DRIVE_SCOPE } from './auth';
 import { createDriveUploadClient, DRIVE_UPLOAD_CHUNK_BYTES, uploadDriveChunk, validateDriveUploadUrl, type DriveUploadRequest } from './upload';
 
 const fileId = 'DRIVE_FILE_123456789';
@@ -185,5 +186,38 @@ describe('Drive resumable upload transport', () => {
       expect(instances[0].abort).toHaveBeenCalledOnce();
       expect(vi.getTimerCount()).toBe(0);
     } finally { vi.useRealTimers(); }
+  });
+});
+
+describe('Drive publishing session on a rejected request', () => {
+  // Wired as the publication runtime wires its client to googleDrivePublishAuth.
+  const auth = createGoogleDriveAuth('publish');
+  const signIn = (token: string) => auth.connect('123456-client.apps.googleusercontent.com', {
+    initTokenClient: config => ({ requestAccessToken: () => config.callback({ access_token: token, token_type: 'Bearer', expires_in: 3600, scope: GOOGLE_DRIVE_SCOPE }) }),
+  });
+  const client = (request: DriveUploadRequest) => createDriveUploadClient({
+    getAccessToken: auth.getAccessToken, expireSession: auth.expire, fetchImpl: request, uploadImpl: request,
+  });
+  afterEach(() => { auth.disconnect(); });
+
+  it('keeps a newer sign-in connected when an older chunk upload answers 401', async () => {
+    signIn('older-upload-token');
+    let answer!: (response: Response) => void;
+    const request = vi.fn<DriveUploadRequest>(() => new Promise(resolve => { answer = resolve; }));
+    const upload = client(request).chunk(session, new Blob(['zip']), 0, new AbortController().signal, () => {});
+    expect(new Headers(request.mock.calls[0][1].headers).get('Authorization')).toBe('Bearer older-upload-token');
+    signIn('newer-upload-token');
+    answer(new Response(null, { status: 401 }));
+    await expect(upload).rejects.toMatchObject({ status: 401, message: 'Google Drive sign-in expired. Reconnect the same account, then retry.' });
+    expect(auth.getSnapshot()).toEqual({ status: 'connected', error: null });
+    expect(auth.getAccessToken()).toBe('newer-upload-token');
+  });
+
+  it('still expires the session whose request answers 401', async () => {
+    signIn('rejected-upload-token');
+    const request = vi.fn<DriveUploadRequest>(async () => new Response(null, { status: 401 }));
+    await expect(client(request).owner(new AbortController().signal)).rejects.toMatchObject({ status: 401 });
+    expect(auth.getSnapshot()).toEqual({ status: 'disconnected', error: 'Google Drive sign-in expired. Sign in again to continue publishing.' });
+    expect(auth.getAccessToken()).toBeNull();
   });
 });

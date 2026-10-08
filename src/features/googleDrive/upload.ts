@@ -84,7 +84,7 @@ export function driveSharingUrl(file: Pick<DrivePublishedFile, 'id' | 'resourceK
 }
 
 export function createDriveUploadClient(deps: {
-  getAccessToken: () => string | null; expireSession?: () => void;
+  getAccessToken: () => string | null; expireSession?: (token: string) => void;
   fetchImpl?: DriveUploadRequest; uploadImpl?: DriveUploadRequest;
 }) {
   const fetchImpl = deps.fetchImpl ?? ((url, init) => fetchWithTimeout(url, 60_000, init));
@@ -100,7 +100,7 @@ export function createDriveUploadClient(deps: {
     signal.throwIfAborted();
     if (response.ok || response.status === 308) return response;
     await response.body?.cancel().catch(() => {});
-    if (response.status === 401) deps.expireSession?.();
+    if (response.status === 401) deps.expireSession?.(token);
     const message = response.status === 401 ? 'Google Drive sign-in expired. Reconnect the same account, then retry.'
       : response.status === 403 ? 'Google Drive denied this operation. Check file access, available storage, and your organization’s sharing rules.'
         : response.status === 429 ? 'Google Drive is limiting requests. Wait briefly, then retry.'

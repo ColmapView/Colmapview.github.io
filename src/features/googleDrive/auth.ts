@@ -92,7 +92,8 @@ export function createGoogleDriveAuth(purpose: 'read' | 'publish' = 'read') {
       return session?.token ?? null;
     },
     disconnect: () => disconnect(),
-    expire: () => disconnect(expired),
+    /** Expire the session that holds the rejected token; one signed in while its request ran stays connected. */
+    expire: (token: string) => { if (session?.token === token) disconnect(expired); },
     /** Called synchronously from the sign-in button after the SDK is ready. */
     connect(clientId: string, sdk: GoogleOAuthSdk) {
       try { assertGoogleDriveHostAllowed(); }

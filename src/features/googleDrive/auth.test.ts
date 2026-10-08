@@ -143,4 +143,20 @@ describe('Google Drive in-memory account session', () => {
     callbacks[1].callback(validToken);
     expect(auth.getSnapshot()).toMatchObject({ status: 'disconnected', error: expect.stringContaining('timed out') });
   });
+  it('expires only the session holding a rejected token, sparing a sign-in that is pending or newer', () => {
+    const auth = createGoogleDriveAuth();
+    const { sdk, callbacks } = testSdk();
+    auth.connect('123456-client.apps.googleusercontent.com', sdk);
+    callbacks[0].callback({ ...validToken, access_token: 'older-token' });
+    auth.connect('123456-client.apps.googleusercontent.com', sdk);
+    auth.expire('older-token');
+    expect(auth.getSnapshot()).toEqual({ status: 'connecting', error: null });
+    callbacks[1].callback({ ...validToken, access_token: 'newer-token' });
+    auth.expire('older-token');
+    expect(auth.getSnapshot()).toEqual({ status: 'connected', error: null });
+    expect(auth.getAccessToken()).toBe('newer-token');
+    auth.expire('newer-token');
+    expect(auth.getSnapshot()).toEqual({ status: 'disconnected', error: 'Google Drive sign-in expired. Sign in again, then choose an archive in the Drive picker.' });
+    expect(auth.getAccessToken()).toBeNull();
+  });
 });
