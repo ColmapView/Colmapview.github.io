@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DatasetAccountButtons } from './DatasetAccountButtons';
 import { googleDriveAuth, loadGoogleOAuthSdk, type GoogleOAuthSdk, type GoogleTokenResponse } from '../../features/googleDrive/auth';
@@ -93,6 +93,13 @@ afterEach(() => {
 });
 
 describe('Dataset provider account icons', () => {
+  it('names Google Drive in the button where Drive works, so it is found without hovering', () => {
+    configureDrive();
+    render(<DatasetAccountButtons {...createProps()} />);
+    const driveAccount = screen.getByRole('button', { name: 'Google Drive account' });
+    expect(within(driveAccount).getByText('Google Drive')).toBeVisible();
+    expect(driveAccount).toHaveAttribute('data-tooltip', 'Choose archive from Google Drive');
+  });
   it('keeps public URL loading available when private file selection is unavailable', () => {
     vi.mocked(isGoogleDriveEnabled).mockReturnValue(true);
     vi.stubEnv('VITE_GOOGLE_DRIVE_API_KEY', pickerConfig.apiKey);

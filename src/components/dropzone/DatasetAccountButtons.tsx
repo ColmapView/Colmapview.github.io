@@ -145,10 +145,10 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
       aria-pressed={hf.status === 'connected'} onClick={() => setProvider('hf')}>
       <span aria-hidden="true" className="text-base leading-none">🤗</span>
     </button>
-    {googleEnabled ? <button type="button" className={DROP_ZONE_ICON_BUTTON_CLASS} aria-label="Google Drive account"
+    {googleEnabled ? <button type="button" className={`${getButtonClass('ghost', 'sm')} whitespace-nowrap`} aria-label="Google Drive account"
       data-tooltip={clientId ? 'Choose archive from Google Drive' : 'Google Drive'}
       aria-pressed={google.status === 'connected'} onClick={() => { setPickerError(null); setProvider('google'); }}>
-      <GoogleDriveIcon />
+      <GoogleDriveIcon className="w-4 h-4" /><span>Google Drive</span>
     </button> : <a href={GOOGLE_DRIVE_ENABLED_ORIGIN} className={`${getButtonClass('ghost', 'sm')} whitespace-nowrap`}
       target="_blank" rel="noopener noreferrer" aria-label="Use Google Drive" data-tooltip="Use Google Drive on colmapview.opsiclear.com">
       <GoogleDriveIcon className="w-4 h-4" /><span>Use Google Drive</span>
