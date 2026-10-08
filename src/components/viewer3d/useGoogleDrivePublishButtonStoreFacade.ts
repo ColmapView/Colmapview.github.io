@@ -1,5 +1,4 @@
-import { useReconstructionStore } from '../../store';
-import { useDrivePublicationStatus } from '../../features/googleDrive/publicationStatus';
+import { useReconstructionStore, useDrivePublicationStatus } from '../../store';
 import { getShareSource } from './panels/sharePanelViewModel';
 
 /** The remote source another host can reopen (local drops have neither a URL nor a manifest), and the Drive job's activity. */

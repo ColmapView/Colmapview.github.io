@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useDeletionStore, useReconstructionStore } from '../../store';
+import { useDeletionStore, useDrivePublicationStatus, useReconstructionStore } from '../../store';
 import { buildReconstruction } from '../../test/builders';
-import { useDrivePublicationStatus } from './publicationStatus';
 import './publicationRuntime';
 
 const controller = vi.hoisted(() => {

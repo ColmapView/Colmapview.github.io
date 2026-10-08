@@ -1,7 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useReconstructionStore } from '../../store';
-import { useDrivePublicationStatus } from '../../features/googleDrive/publicationStatus';
+import { useDrivePublicationStatus, useReconstructionStore } from '../../store';
 import type { ColmapManifest } from '../../types/manifest';
 import { useGoogleDrivePublishButtonStoreFacade } from './useGoogleDrivePublishButtonStoreFacade';
 

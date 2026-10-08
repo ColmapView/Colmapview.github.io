@@ -4,7 +4,7 @@ import { createHubClient } from '../huggingface/hubClient';
 import { HfError } from '../huggingface/http';
 import { preparePublication } from './preparePublication';
 import { assertPublicationInputCurrent, capturePublicationInput, getPublicationSourceKey } from './publicationSnapshot';
-export { capturePublicationInput, getPublicationSourceKey } from './publicationSnapshot';
+export { getPublicationSourceKey } from './publicationSnapshot';
 import { createPublicationController, isPublishing } from './publishDataset';
 import type { PublicationDetails } from './types';
 import { createPublicationVerifier } from './publicationVerification';

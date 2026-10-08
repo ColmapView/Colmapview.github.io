@@ -1,10 +1,9 @@
-import { useReconstructionStore, useDeletionStore } from '../../store';
+import { useReconstructionStore, useDeletionStore, useDrivePublicationStatus } from '../../store';
 import { assertPublicationInputCurrent, capturePublicationInput, getPublicationSourceKey } from '../datasetPublishing/publicationSnapshot';
 import { googleDrivePublishAuth } from './auth';
 import { createDriveUploadClient } from './upload';
 import { createDrivePublicationController, isDrivePublishing } from './publishDataset';
 import { prepareDriveArchive } from './prepareArchive';
-import { useDrivePublicationStatus } from './publicationStatus';
 
 export const drivePublication = createDrivePublicationController(createDriveUploadClient({
   getAccessToken: googleDrivePublishAuth.getAccessToken, expireSession: googleDrivePublishAuth.expire,
