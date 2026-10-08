@@ -183,13 +183,10 @@ export async function loadManifestSource(
   deps.setUrlProgress({ percent: 80, message: 'Parsing reconstruction...' });
 
   const sourceInfo = getManifestLoadSourceInfo(manifest, source);
-  let committed = false;
   const commitSource = () => {
     assertCurrent();
-    if (committed) return;
     deps.setSourceInfo(sourceInfo.sourceType, sourceInfo.sourceUrl, sourceInfo.imageUrlBase,
       sourceInfo.maskUrlBase, sourceInfo.sourceManifest, sourceInfo.imageNameToUrl ?? null);
-    committed = true;
   };
   log(`[URL Loader] Image URL base for lazy loading: ${sourceInfo.imageUrlBase}`);
   log(`[URL Loader] Mask URL base for lazy loading: ${sourceInfo.maskUrlBase}`);

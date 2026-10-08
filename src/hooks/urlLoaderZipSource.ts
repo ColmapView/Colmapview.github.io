@@ -83,7 +83,6 @@ export async function loadZipUrlSource(
   const assertCurrent = () => { deps.signal?.throwIfAborted(); deps.assertCurrent?.(); };
   const commitSource = () => {
     assertCurrent();
-    if (committed) return;
     setActiveArchive(archive, imageIndex, fileSize, imageCount);
     deps.setSourceInfo('zip', sourceUrl);
     committed = true;

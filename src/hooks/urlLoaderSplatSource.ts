@@ -92,13 +92,10 @@ export async function loadSplatUrlSource(
     message: 'Parsing 3D scene...',
     currentFile: splatFile.name,
   });
-  let committed = false;
   const commitSource = () => {
     deps.signal?.throwIfAborted();
     deps.assertCurrent?.();
-    if (committed) return;
     deps.setSourceInfo('url', url, null, null);
-    committed = true;
   };
 
   // Only the scene this file replaced installs its source, as for archives.
