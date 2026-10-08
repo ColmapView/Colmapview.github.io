@@ -24,6 +24,20 @@ test('startup profile and info popups match the panel surface', async ({ page },
   await page.screenshot({ path: testInfo.outputPath('info.png') });
 });
 
+test('startup info popover opens under its button and stays open as the pointer moves onto it', async ({ page }) => {
+  await page.goto('/?touch=false');
+  const button = page.getByRole('button', { name: 'Supported files and folder structure' });
+  await button.hover();
+  const info = page.getByRole('tooltip');
+  await expect(info).toBeVisible();
+  const from = (await button.boundingBox())!;
+  const to = (await info.boundingBox())!;
+  // Hover content must be reachable: right under the button, not past the account controls' row.
+  expect(to.y - (from.y + from.height)).toBeLessThan(16);
+  await page.mouse.move(from.x + from.width / 2, to.y + to.height / 2, { steps: 12 });
+  await expect(info).toBeVisible();
+});
+
 for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }, { width: 640, height: 360 }]) {
   test(`URL panel fits expanded help at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport);

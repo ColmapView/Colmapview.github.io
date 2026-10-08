@@ -1594,7 +1594,9 @@ h3.panel-heading {
   }
 }
 
+/* Anchors the info popover to the title row, so the pointer reaches it without crossing the account row. */
 .startup-format-info {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-start;
