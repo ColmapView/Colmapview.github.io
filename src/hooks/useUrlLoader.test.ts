@@ -1334,6 +1334,34 @@ describe('useUrlLoader', () => {
     );
   });
 
+  it('clears caches again when a URL load fails after it replaced the scene', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL) => String(url).endsWith('colmapview.yaml')
+      ? new Response(null, { status: 404 }) : ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        blob: vi.fn(async () => new Blob(['splat'], { type: 'application/octet-stream' })),
+      })));
+    // Like processFiles reporting its commit, then failing.
+    processFilesMock.mockImplementationOnce(async (_files, _range, options) => {
+      options?.onSceneReplaced?.();
+      throw new Error('Failed after the scene was replaced');
+    });
+    const logger = { error: vi.fn(), info: vi.fn() };
+    const { result } = renderHook(() => useUrlLoader({ logger }));
+
+    let loaded = true;
+    await act(async () => {
+      loaded = await result.current.loadFromUrl('https://example.com/scene.spz');
+    });
+
+    expect(loaded).toBe(false);
+    // Once at the commit, and once more for the failure.
+    expect(clearAllCachesMock).toHaveBeenCalledTimes(2);
+    expect(logger.error).toHaveBeenCalledWith('[URL Loader] Error:',
+      expect.objectContaining({ message: 'Failed after the scene was replaced' }));
+  });
+
   describe('a dataset that settles its splat list and saved settings', () => {
     const baseUrl = 'https://huggingface.co/datasets/owner/wait/resolve/main/';
     const view: CameraViewState = { position: [1, 2, 3], target: [0, 0, 0], quaternion: [0, 0, 0, 1], distance: 4 };
