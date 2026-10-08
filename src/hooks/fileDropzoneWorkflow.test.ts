@@ -525,6 +525,23 @@ describe('file dropzone workflow', () => {
     }
   });
 
+  it.each([
+    ['alone', () => new Map([['points.ply', genericPointCloudPly()]])],
+    ['with its settings', () => new Map([['points.ply', genericPointCloudPly()], ['colmapview.yaml', new File(['ui: {}'], 'colmapview.yaml')]])],
+  ])('replaces the scene with a point cloud (%s) only once beforeSceneCommit settles', async (_name, files) => {
+    const order: string[] = [];
+    let settle!: () => void;
+    const deps = createDeps({ setLoadedFiles: vi.fn(() => { order.push('commit'); }) });
+    const pending = processFileDropzoneFiles(files(), deps, {
+      replaceSplatScene: true,
+      beforeSceneCommit: () => new Promise<void>(resolve => { order.push('settle'); settle = resolve; }),
+    });
+    await vi.waitFor(() => expect(order).toEqual(['settle']));
+    settle();
+    expect(await pending).toBe(true);
+    expect(order).toEqual(['settle', 'commit']);
+  });
+
   it('keeps the previous scene when the load is cancelled while the new one settles', async () => {
     const fixture = workerLoadFixture();
     const controller = new AbortController();

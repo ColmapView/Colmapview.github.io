@@ -24,7 +24,7 @@ type SetActiveZipArchive = (
   imageCount?: number
 ) => void;
 type LocalSourceLoad = ReturnType<typeof beginReconstructionLoad> &
-  Pick<FileDropzoneWorkflowOptions, 'onViewerState' | 'initialSplatSelectionRevision'>;
+  Pick<FileDropzoneWorkflowOptions, 'onViewerState' | 'initialSplatSelectionRevision' | 'onSceneReplaced'>;
 type LoadZipFromFile = (
   zipFile: File,
   onProgress: (progress: ZipProgress) => void,
@@ -147,6 +147,7 @@ export async function loadLocalZipFile(
       onViewerState: load.onViewerState,
       onSceneReplaced: () => {
         load.assertCurrent();
+        load.onSceneReplaced?.();
         deps.clearCaches();
         deps.setActiveZipArchive(archive, imageIndex, fileSize, imageCount);
         transferred = true;
@@ -200,7 +201,7 @@ export async function loadDropPayload(
       signal: load.signal,
       initialSplatSelectionRevision: load.initialSplatSelectionRevision,
       onViewerState: load.onViewerState,
-      onSceneReplaced: () => { load.assertCurrent(); commitLocalSceneSource(deps); },
+      onSceneReplaced: () => { load.assertCurrent(); load.onSceneReplaced?.(); commitLocalSceneSource(deps); },
     });
     load.assertCurrent();
     return processed !== false;
@@ -262,7 +263,7 @@ export async function loadBrowsedDirectory(
       signal: load.signal,
       initialSplatSelectionRevision: load.initialSplatSelectionRevision,
       onViewerState: load.onViewerState,
-      onSceneReplaced: () => { load.assertCurrent(); commitLocalSceneSource(deps); },
+      onSceneReplaced: () => { load.assertCurrent(); load.onSceneReplaced?.(); commitLocalSceneSource(deps); },
     });
     load.assertCurrent();
     return processed !== false;

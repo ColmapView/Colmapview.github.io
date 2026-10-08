@@ -28,9 +28,6 @@ function cancelUrlLoad(): void {
 }
 
 function beginLocalLoad() {
-  // Timeout warnings describe the previous load.
-  dismissOptionalSettingsTimeoutWarning();
-  dismissSplatListTimeoutWarning();
   // A splat chosen for the previous dataset must not pick one of these files' splats at their commit.
   useReconstructionStore.getState().setRequestedSplatSourceId(null);
   const initialSplatSelectionRevision = useReconstructionStore.getState().splatSelectionRevision;
@@ -40,6 +37,11 @@ function beginLocalLoad() {
     initialSplatSelectionRevision,
     onViewerState: (state: Parameters<typeof applySavedViewerState>[0], splatSelectionRevision = initialSplatSelectionRevision) =>
       applySavedViewerState(state, null, load.assertCurrent, splatSelectionRevision),
+    // Timeout warnings describe the scene on screen, which a failed or cancelled load leaves in place.
+    onSceneReplaced: () => {
+      dismissOptionalSettingsTimeoutWarning();
+      dismissSplatListTimeoutWarning();
+    },
   };
 }
 

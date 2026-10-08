@@ -248,6 +248,40 @@ describe('file dropzone local source loading', () => {
     expect(deps.setSourceInfo).toHaveBeenCalledWith('local', null);
   });
 
+  it.each([
+    ['a local ZIP', (deps: ReturnType<typeof makeBaseDeps>) => loadLocalZipFile(buildFile('scene.zip'), { ...deps,
+      setActiveZipArchive: vi.fn(), loadZipFromFile: vi.fn(async () => ({ colmapFiles: new Map(), imageIndex: new Map(),
+        archive: buildArchiveReader(), fileSize: 1, imageCount: 0 })) })],
+    ['a dropped folder', (deps: ReturnType<typeof makeBaseDeps>) => loadDropPayload({ singleFile: null, entries: [], fallbackFiles: [buildFile('cameras.bin')] },
+      { ...deps, isArchiveFile: vi.fn(() => false), processZipFile: vi.fn(), scanEntry: vi.fn(),
+        collectDroppedFiles: vi.fn(async () => new Map([['cameras.bin', buildFile('cameras.bin')]])) })],
+    ['a browsed folder', (deps: ReturnType<typeof makeBaseDeps>) => loadBrowsedDirectory({ ...deps,
+      pickDirectory: vi.fn(async () => buildFileSystemDirectoryHandle()), scanDirectoryHandle: vi.fn(async () => {}) })],
+  ])('tells its load when %s replaces the scene, and only then', async (_name, load) => {
+    const onSceneReplaced = vi.fn();
+    const deps = { ...makeBaseDeps(), beginLoad: () => ({ ...beginReconstructionLoad(), onSceneReplaced }) };
+    deps.processFiles.mockImplementationOnce(async () => false);
+    await expect(load(deps)).resolves.toBe(false);
+    expect(onSceneReplaced).not.toHaveBeenCalled();
+    deps.processFiles.mockImplementationOnce(async (_files, _progress, options) => { options?.onSceneReplaced?.(); return true; });
+    await expect(load(deps)).resolves.toBe(true);
+    expect(onSceneReplaced).toHaveBeenCalledOnce();
+  });
+
+  it('reports a folder picker that fails for another reason, without starting a load', async () => {
+    const blocked = Object.assign(new Error('Must be handling a user gesture to show a file picker.'), { name: 'SecurityError' });
+    const deps = { ...makeBaseDeps(), beginLoad: vi.fn(beginReconstructionLoad), scanDirectoryHandle: vi.fn(),
+      pickDirectory: vi.fn(async () => { throw blocked; }) };
+
+    await expect(loadBrowsedDirectory(deps)).resolves.toBe(false);
+
+    expect(deps.errorLog).toHaveBeenCalledWith('Error browsing for folder:', blocked);
+    expect(deps.setError).toHaveBeenCalledWith('Must be handling a user gesture to show a file picker.');
+    expect(deps.beginLoad).not.toHaveBeenCalled();
+    expect(deps.cancelUrlLoad).not.toHaveBeenCalled();
+    expect(deps.scanDirectoryHandle).not.toHaveBeenCalled();
+  });
+
   it('treats cancelled directory browsing as a no-op', async () => {
     const abortError = new Error('cancelled');
     abortError.name = 'AbortError';
