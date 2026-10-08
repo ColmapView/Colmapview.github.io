@@ -134,9 +134,18 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
     const absence = maskAbsence.get(base) ?? { misses: 0, found: false };
     maskAbsence.set(base, absence);
     if (!absence.found && absence.misses >= URL_MASK_ABSENCE_THRESHOLD) return null;
+    // Like the viewer's mask loader, only names that all answer 404 count toward the folder's absence.
+    let absent = true;
     for (const candidate of buildMaskUrlCandidates(base, name)) {
-      const response = await readMask(await pinAssetUrl(candidate.url));
-      // Like the viewer's mask loader, try the next name: S3 or GCS without list access answers a missing key with 403.
+      const url = await pinAssetUrl(candidate.url);
+      let response: Response;
+      try { response = await readMask(url); } catch (error) {
+        // A 404 without CORS headers reaches the browser as a network error; the viewer skips the name too.
+        if (signal.aborted || !(error instanceof TypeError)) throw error;
+        absent = false; continue;
+      }
+      // S3 or GCS without list access answers a missing key with 403, which the viewer skips without counting.
+      if (response.status === 403) absent = false;
       if (response.status === 404 || response.status === 403) { await response.body?.cancel(); continue; }
       if (!response.ok) {
         await response.body?.cancel();
@@ -151,7 +160,7 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
       if (heldMaskBytes > sizeLimit) throw archiveTooLarge();
       return { blob };
     }
-    absence.misses++;
+    if (absent) absence.misses++;
     return null;
   };
   const prepared = await preparePublication({ ...input, splats: 'active' }, signal, {

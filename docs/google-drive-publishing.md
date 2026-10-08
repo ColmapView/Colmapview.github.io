@@ -15,7 +15,7 @@ The ZIP contains the current COLMAP reconstruction in binary format, original im
 
 Publication copies the active splat, rather than every catalogued splat. Originals from local files, archives, and remote URLs are supported. Private Hugging Face source assets require the existing repository read connection; their revision is pinned before copying. The source repository and its visibility are unchanged.
 
-The complete ZIP must fit the viewer's **2 GiB** archive limit. Individual images and masks retain the existing **128 MiB** publication limit; the exported COLMAP files and the splat are bounded only by the ZIP. On hosts without a file listing, masks are treated as absent when none of the first 8 images has one, as in the viewer. ZIP entries are stored without recompressing images or splats. Packing uses browser Blob parts and streams one entry at a time; the finished archive is retained in this tab while uploading or retrying.
+The complete ZIP must fit the viewer's **2 GiB** archive limit. Individual images and masks retain the existing **128 MiB** publication limit; the exported COLMAP files and the splat are bounded only by the ZIP. On hosts without a file listing, masks are treated as absent when every mask name of the first 8 images answers 404, as in the viewer. A host that answers 403 for missing files, or blocks the response, is asked for each image's mask. ZIP entries are stored without recompressing images or splats. Packing uses browser Blob parts and streams one entry at a time; the finished archive is retained in this tab while uploading or retrying.
 
 ## Progress and recovery
 

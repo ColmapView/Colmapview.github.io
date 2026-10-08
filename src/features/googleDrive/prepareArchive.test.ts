@@ -242,6 +242,29 @@ describe('Drive remote sources', () => {
     const files = await entries(await prepareDriveArchive(masked(numbered(12)), new AbortController().signal, () => {}, () => {}));
     expect(Object.keys(files).filter(path => path.startsWith('masks/')).sort()).toEqual(['masks/photo0.jpg.png', 'masks/photo11.jpg.png']);
   });
+  // A 404 without CORS headers (nginx add_header without `always`) reaches the browser as a network error.
+  const unreadable = () => Promise.reject(new TypeError('Failed to fetch'));
+  it('publishes a mask-less dataset whose host answers missing masks without CORS headers, as the viewer loads it', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => url.startsWith(bucket + 'images/') ? new Response('original') : unreadable()));
+    const files = await entries(await prepareDriveArchive(masked(numbered(3)), new AbortController().signal, () => {}, () => {}));
+    expect(Object.keys(files).filter(path => path.startsWith('images/'))).toHaveLength(3);
+    expect(Object.keys(files).filter(path => path.startsWith('masks/'))).toEqual([]);
+  });
+  it.each([
+    ['forbidden (S3 without ListBucket)', () => new Response(null, { status: 403 })],
+    ['unreadable', unreadable],
+  ])('keeps probing past 8 images whose mask names are %s, as only a 404 proves absence to the viewer', async (_, missing) => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => url.startsWith(bucket + 'images/') ? new Response('original')
+      : url === bucket + 'masks/photo11.jpg.png' ? new Response('mask') : missing()));
+    const files = await entries(await prepareDriveArchive(masked(numbered(12)), new AbortController().signal, () => {}, () => {}));
+    expect(Object.keys(files).filter(path => path.startsWith('masks/'))).toEqual(['masks/photo11.jpg.png']);
+  });
+  it('still fails a mask read that times out, which a retry can fix', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => url.startsWith(bucket + 'images/') ? new Response('original')
+      : Promise.reject(new DOMException('Request timed out', 'TimeoutError'))));
+    await expect(prepareDriveArchive(masked(numbered(1)), new AbortController().signal, () => {}, () => {}))
+      .rejects.toMatchObject({ name: 'TimeoutError' });
+  });
   it('stops downloading masks once they alone exceed the archive limit', async () => {
     const request = vi.fn(async (url: string) => url.startsWith(bucket + 'images/') ? new Response('original')
       : url.endsWith('.png') ? new Response('mask bytes') : new Response(null, { status: 404 }));
