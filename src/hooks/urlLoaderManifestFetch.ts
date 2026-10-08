@@ -98,6 +98,8 @@ export interface FetchManifestColmapFilesDeps {
 export interface SplatUrlClassification {
   isSplat: boolean;
   splatCount: number | null;
+  /** The classifier's own ranged GET answered OK: the file is served, whatever a HEAD says. */
+  served?: boolean;
 }
 
 /**
@@ -190,6 +192,7 @@ async function defaultClassifySplatUrl(url: string, fetchImpl: FetchUrl): Promis
     return {
       isSplat: classifyPlyHeaderText(headerText) === 'gaussian-splat',
       splatCount: getPlyHeaderVertexCount(headerText),
+      served: true,
     };
   } catch {
     return { isSplat: true, splatCount: null };
@@ -483,6 +486,17 @@ async function probeRemoteFile(url: string, fetchImpl: FetchUrl): Promise<{ size
   return { size: Number.isFinite(size) && size >= 0 ? size : null, missing: false };
 }
 
+/** One ranged GET for a file whose HEAD said it is gone: whether GET says so too. */
+async function isMissingOnGet(url: string, fetchImpl: FetchUrl): Promise<boolean> {
+  try {
+    const response = await fetchImpl(url, { headers: { Range: 'bytes=0-0' } });
+    void response.body?.cancel().catch(() => {});
+    return response.status === 404 || response.status === 410;
+  } catch {
+    return false;
+  }
+}
+
 async function getRemoteFileContentLength(url: string, fetchImpl: FetchUrl): Promise<number | null> {
   return (await probeRemoteFile(url, fetchImpl)).size;
 }
@@ -673,8 +687,9 @@ export async function discoverManifestSplatCatalog(
     const candidates = await mapWithConcurrency(paths, SPLAT_CLASSIFY_CONCURRENCY, async path => {
       const url = joinManifestUrlPath(manifest.baseUrl, path);
       const [classification, probe] = await Promise.all([classify(url), probeRemoteFile(url, fetchImpl)]);
-      // A listed splat the server says is gone is left out, as a missing optional file always was.
-      if (probe.missing) {
+      // A listed splat the server says is gone is left out, as a missing optional file always was. Some
+      // routes answer HEAD with 404 yet serve GET, so only a GET that says so too counts; the size stays unknown.
+      if (probe.missing && !classification.served && await isMissingOnGet(url, fetchImpl)) {
         deps.log?.(`[URL Loader] Optional file not found: ${path}`);
         return null;
       }

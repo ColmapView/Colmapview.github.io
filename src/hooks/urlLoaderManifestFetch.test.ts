@@ -85,6 +85,44 @@ describe('URL loader manifest fetch helpers', () => {
     expect(catalog.map(candidate => candidate.path).sort()).toEqual(listed ? ['splats/gone.spz', 'splats/live.spz'] : ['splats/live.spz']);
     if (!listed) expect(log).toHaveBeenCalledWith('[URL Loader] Optional file not found: splats/gone.spz');
   });
+
+  const gaussianPlyHeader = [
+    'ply', 'format binary_little_endian 1.0', 'element vertex 3',
+    'property float x', 'property float y', 'property float z',
+    'property float f_dc_0', 'property float f_dc_1', 'property float f_dc_2',
+    'property float opacity', 'property float scale_0', 'property float scale_1',
+    'property float scale_2', 'property float rot_0', 'property float rot_1',
+    'property float rot_2', 'property float rot_3', 'end_header', '',
+  ].join('\n');
+
+  it.each([
+    ['splats/scene.ply', 200], ['splats/scene.ply', 206], ['splats/scene.spz', 200], ['splats/scene.spz', 206],
+  ] as const)('keeps an explicit %s whose HEAD answers 404 while its GET answers %i, at an unknown size', async (path, getStatus) => {
+    // Some file routes serve only GET and answer HEAD with 404.
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'HEAD'
+      ? new Response(null, { status: 404 }) : new Response(gaussianPlyHeader, { status: getStatus }));
+    const log = vi.fn();
+    const catalog = await discoverManifestSplatCatalog({ ...manifest, splats: [path] }, { fetchImpl, log, isTouchDevice: false });
+    expect(catalog).toEqual([{ path, size: 0, splatCount: path.endsWith('.ply') ? 3 : null }]);
+    expect(log).not.toHaveBeenCalledWith(`[URL Loader] Optional file not found: ${path}`);
+    // A .ply's header read already answered; a .spz is confirmed with one byte.
+    const gets = fetchImpl.mock.calls.filter(([, init]) => init?.method !== 'HEAD');
+    expect(gets).toHaveLength(1);
+    if (path.endsWith('.spz')) expect(new Headers(gets[0][1]?.headers).get('Range')).toBe('bytes=0-0');
+  });
+
+  it.each([
+    ['splats/scene.ply', 404], ['splats/scene.ply', 410], ['splats/scene.spz', 404], ['splats/scene.spz', 410],
+  ] as const)('leaves out an explicit %s whose HEAD and GET both answer %i', async (path, status) => {
+    const fetchImpl = vi.fn(async (url: string) => url.endsWith('live.spz')
+      ? new Response(null, { headers: { 'content-length': '1000' } }) : new Response(null, { status }));
+    const log = vi.fn();
+    const catalog = await discoverManifestSplatCatalog({ ...manifest, splats: [path, 'splats/live.spz'] }, {
+      fetchImpl, log, isTouchDevice: false,
+    });
+    expect(catalog.map(candidate => candidate.path)).toEqual(['splats/live.spz']);
+    expect(log).toHaveBeenCalledWith(`[URL Loader] Optional file not found: ${path}`);
+  });
   it('keeps fetched-manifest progress steady before pending splat discovery resolves', async () => {
     const setUrlProgress = vi.fn();
     const fetchedManifest = await fetchUrlManifest('https://example.com/colmapview.json', {
