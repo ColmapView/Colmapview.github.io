@@ -2,10 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GOOGLE_DRIVE_READ_SCOPE, googleDriveAuth, type GoogleOAuthSdk } from './auth';
 import { chooseGoogleDriveArchive, getGoogleDrivePickerConfig, parseGoogleDriveArchiveSelection, type GooglePickerSdk } from './picker';
 
+function pickerView() {
+  return {
+    setMimeTypes: vi.fn().mockReturnThis(), setIncludeFolders: vi.fn().mockReturnThis(), setSelectFolderEnabled: vi.fn().mockReturnThis(),
+    setOwnedByMe: vi.fn().mockReturnThis(), setStarred: vi.fn().mockReturnThis(), setEnableDrives: vi.fn().mockReturnThis(),
+  };
+}
+
 function pickerSdk() {
   let callback: (response: unknown) => void = () => {};
   const dialog = { setVisible: vi.fn(), dispose: vi.fn() };
-  const view = { setMimeTypes: vi.fn().mockReturnThis(), setIncludeFolders: vi.fn().mockReturnThis(), setSelectFolderEnabled: vi.fn().mockReturnThis() };
+  // Each tab is its own DocsView; the first keeps the name the single-view tests use.
+  const view = pickerView();
+  const views: Array<ReturnType<typeof pickerView>> = [];
   const builder = {
     addView: vi.fn().mockReturnThis(), setDeveloperKey: vi.fn().mockReturnThis(), setAppId: vi.fn().mockReturnThis(),
     setOAuthToken: vi.fn().mockReturnThis(), setOrigin: vi.fn().mockReturnThis(), setMaxItems: vi.fn().mockReturnThis(),
@@ -13,11 +22,13 @@ function pickerSdk() {
     setCallback: vi.fn((handler: (response: unknown) => void) => { callback = handler; return builder; }), build: vi.fn(() => dialog),
   };
   const sdk: GooglePickerSdk = {
-    DocsView: class { constructor(_viewId: string) { return view; } } as GooglePickerSdk['DocsView'],
+    DocsView: class {
+      constructor(_viewId: string) { const next = views.length ? pickerView() : view; views.push(next); return next; }
+    } as GooglePickerSdk['DocsView'],
     PickerBuilder: class { constructor() { return builder; } } as GooglePickerSdk['PickerBuilder'],
     ViewId: { DOCS: 'docs' }, Action: { PICKED: 'picked', CANCEL: 'cancel', ERROR: 'error' },
   };
-  return { sdk, view, builder, dialog, callback: (value: unknown) => callback(value) };
+  return { sdk, view, views, builder, dialog, callback: (value: unknown) => callback(value) };
 }
 
 function signIn(expires = 3600) {
@@ -103,6 +114,31 @@ describe('Google Drive archive picker lifecycle', () => {
     expect(dialog.setVisible).toHaveBeenLastCalledWith(false);
     expect(dialog.dispose).toHaveBeenCalledOnce();
     expect(storage).not.toHaveBeenCalled();
+  });
+  it('offers all of Drive, Shared with me, Starred and Shared drives, each showing only archives, with folders to open but not to pick', async () => {
+    const { sdk, builder, views, callback } = pickerSdk();
+    const pending = chooseGoogleDriveArchive({ sdk });
+    await Promise.resolve();
+    expect(views).toHaveLength(4);
+    expect(builder.addView).toHaveBeenCalledTimes(4);
+    views.forEach((view, index) => expect(builder.addView.mock.calls[index][0]).toBe(view));
+    const mimeTypes = builder.setSelectableMimeTypes.mock.calls[0][0];
+    for (const view of views) {
+      expect(view.setMimeTypes).toHaveBeenCalledWith(mimeTypes);
+      expect(view.setIncludeFolders).toHaveBeenCalledWith(true);
+      expect(view.setSelectFolderEnabled).toHaveBeenCalledWith(false);
+    }
+    const [allOfDrive, sharedWithMe, starred, sharedDrives] = views;
+    // Unfiltered, the first tab lists every file the account can open, shared ones included.
+    for (const filter of [allOfDrive.setOwnedByMe, allOfDrive.setStarred, allOfDrive.setEnableDrives]) expect(filter).not.toHaveBeenCalled();
+    expect(sharedWithMe.setOwnedByMe).toHaveBeenCalledWith(false);
+    expect(starred.setStarred).toHaveBeenCalledWith(true);
+    expect(sharedDrives.setEnableDrives).toHaveBeenCalledWith(true);
+    // Google shows nothing for shared drives limited to files I own, and ignores Starred there.
+    expect(sharedDrives.setOwnedByMe).not.toHaveBeenCalled();
+    expect(sharedDrives.setStarred).not.toHaveBeenCalled();
+    callback({ action: 'cancel' });
+    await expect(pending).resolves.toBeNull();
   });
   it.each([
     ['scan_20250416_093245.tar', 'application/x-tar'],

@@ -25,6 +25,9 @@ interface PickerView {
   setMimeTypes(types: string): PickerView;
   setIncludeFolders(include: boolean): PickerView;
   setSelectFolderEnabled(enabled: boolean): PickerView;
+  setOwnedByMe(ownedByMe: boolean): PickerView;
+  setStarred(starred: boolean): PickerView;
+  setEnableDrives(enabled: boolean): PickerView;
 }
 
 interface PickerDialog {
@@ -158,6 +161,16 @@ interface ChooseGoogleDriveArchiveOptions {
   sdk?: GooglePickerSdk;
 }
 
+/**
+ * The picker's tabs, which Google names: everything the account can open, Shared with me, Starred and
+ * Shared drives. Shared drives need their own tab: there Google ignores Starred and owned-by-me shows nothing.
+ */
+function archiveViews(sdk: GooglePickerSdk): PickerView[] {
+  const archives = () => new sdk.DocsView(sdk.ViewId.DOCS)
+    .setMimeTypes(GOOGLE_DRIVE_ARCHIVE_MIME_TYPES).setIncludeFolders(true).setSelectFolderEnabled(false);
+  return [archives(), archives().setOwnedByMe(false), archives().setStarred(true), archives().setEnableDrives(true)];
+}
+
 let pickerActive = false;
 
 /** Cancel returns null; a disconnected/expired account needs an explicit new sign-in. */
@@ -203,10 +216,8 @@ export async function chooseGoogleDriveArchive(options: ChooseGoogleDriveArchive
         const token = googleDriveAuth.getAccessToken();
         if (!token) return checkAccount();
         try {
-          const view = new sdk.DocsView(sdk.ViewId.DOCS)
-            .setMimeTypes(GOOGLE_DRIVE_ARCHIVE_MIME_TYPES).setIncludeFolders(true).setSelectFolderEnabled(false);
-          picker = new sdk.PickerBuilder()
-            .addView(view).setDeveloperKey(config.apiKey).setAppId(config.appId)
+          picker = archiveViews(sdk).reduce((builder, view) => builder.addView(view), new sdk.PickerBuilder())
+            .setDeveloperKey(config.apiKey).setAppId(config.appId)
             .setOAuthToken(token).setOrigin(window.location.origin).setMaxItems(1)
             .setSelectableMimeTypes(GOOGLE_DRIVE_ARCHIVE_MIME_TYPES).setTitle('Choose a dataset archive')
             .setCallback((response: unknown) => {
