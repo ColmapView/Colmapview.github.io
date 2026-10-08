@@ -1,7 +1,7 @@
 import { Zip, ZipPassThrough } from 'fflate';
 import { createMD5 } from 'hash-wasm';
 import { preparePublication, type PublicationInput } from '../datasetPublishing/preparePublication';
-import { parseHfAssetUrl, publicationPath } from '../datasetPublishing/publicationPaths';
+import { parseHfAssetUrl, pinHfAssetUrl, publicationPath } from '../datasetPublishing/publicationPaths';
 import type { PreparedPublication } from '../datasetPublishing/types';
 import { MAX_BUFFERED_PUBLICATION_FILE_BYTES } from '../datasetPublishing/types';
 import { fetchDatasetResource } from '../../utils/fetchDatasetResource';
@@ -101,11 +101,7 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
   const pinAssetUrl = async (value: string): Promise<string> => {
     const url = parseRemoteUrl(value);
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) throw new GoogleDrivePublishError('The dataset has an unsupported remote file URL.', undefined, true);
-    if (!isHubDatasetFile(value)) return url.href;
-    const parsed = parseHfAssetUrl(value);
-    const sha = await resolveRevision(parsed.repoId, parsed.revision);
-    parsed.url.pathname = parsed.url.pathname.replace(/(\/resolve\/)[^/]+\//, `$1${sha}/`);
-    return parsed.url.href;
+    return isHubDatasetFile(value) ? pinHfAssetUrl(value, resolveRevision) : url.href;
   };
   const maskListings = new Map<string, Promise<Map<string, number>>>();
   const maskAbsence = new Map<string, { misses: number; found: boolean }>();

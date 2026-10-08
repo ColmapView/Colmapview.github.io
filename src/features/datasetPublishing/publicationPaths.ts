@@ -41,3 +41,11 @@ export function parseHfAssetUrl(value: string): { repoId: string; revision: stri
     return { repoId: match[1], revision: decodeURIComponent(match[2]), path, url };
   } catch { throw new HfError('The dataset has an invalid Hugging Face file URL.', undefined, true); }
 }
+
+/** The Hub file URL with its revision replaced by the commit it resolves to. */
+export async function pinHfAssetUrl(value: string, resolveRevision: (repoId: string, revision: string) => Promise<string>): Promise<string> {
+  const parsed = parseHfAssetUrl(value);
+  const sha = await resolveRevision(parsed.repoId, parsed.revision);
+  parsed.url.pathname = parsed.url.pathname.replace(/(\/resolve\/)[^/]+\//, `$1${sha}/`);
+  return parsed.url.href;
+}

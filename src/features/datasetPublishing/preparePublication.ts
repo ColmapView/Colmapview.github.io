@@ -12,7 +12,7 @@ import { getZipImageGeneration } from '../../utils/zipImageFiles';
 import { findZipEntry, getActiveZipImageIndex } from '../../utils/zipArchiveState';
 import { buildImageUrl, buildMaskUrlCandidates, getMaskPathVariants } from '../../utils/imageFileLookupPolicy';
 import { HfError } from '../huggingface/http';
-import { parseHfAssetUrl, publicationPath } from './publicationPaths';
+import { parseHfAssetUrl, pinHfAssetUrl, publicationPath } from './publicationPaths';
 import { MAX_BUFFERED_PUBLICATION_FILE_BYTES, type PreparedPublication, type PublishAsset } from './types';
 import { downloadRemoteFile } from './downloadRemoteFile';
 import { DATASET_VIEWER_SETTINGS_FILE, serializeDatasetViewerSettings } from '../../utils/datasetViewerSettings';
@@ -92,13 +92,7 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
     if (!revisions.has(key)) revisions.set(key, deps.resolveRevision(repoId, revision, signal));
     return revisions.get(key)!;
   };
-  const pin = async (value: string) => {
-    if (deps.pinAssetUrl) return deps.pinAssetUrl(value);
-    const parsed = parseHfAssetUrl(value);
-    const sha = await resolveSha(parsed.repoId, parsed.revision);
-    parsed.url.pathname = parsed.url.pathname.replace(/(\/resolve\/)[^/]+\//, `$1${sha}/`);
-    return parsed.url.href;
-  };
+  const pin = async (value: string) => deps.pinAssetUrl ? deps.pinAssetUrl(value) : pinHfAssetUrl(value, resolveSha);
   // One listing of the remote mask folder replaces a request per image; sizes also batch exactly.
   let remoteMasks: Promise<Map<string, number>> | undefined;
   const listRemoteMasks = (base: string) => remoteMasks ??= (async () => {
