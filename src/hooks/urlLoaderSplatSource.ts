@@ -31,7 +31,6 @@ export interface LoadSplatUrlSourceDeps {
   fetchImpl?: FetchUrl;
   fetchSplatFile?: (url: string) => Promise<File>;
   log?: (message: string) => void;
-  onSplatFileFetched?: (file: File) => void;
   processFiles: ProcessFiles;
   setSourceInfo: SetSourceInfo;
   setUrlProgress: SetUrlProgress;
@@ -86,7 +85,6 @@ export async function loadSplatUrlSource(
   const splatFile = await fetchSplatFile(url);
   deps.signal?.throwIfAborted();
   deps.assertCurrent?.();
-  deps.onSplatFileFetched?.(splatFile);
   const files = new Map([[splatFile.name, splatFile]]);
 
   deps.setUrlProgress({

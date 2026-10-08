@@ -64,7 +64,6 @@ interface UrlLoadContext {
   processFiles: ReturnType<typeof useFileDropzone>['processFiles'];
   setSourceInfo: ReconstructionState['setSourceInfo'];
   setUrlProgress: ReconstructionState['setUrlProgress'];
-  clearCachesOnFailure: boolean;
   hasEmbeddedViewerSettings: boolean;
   remoteCatalogMerged: boolean;
   /** This load committed its own file map (not a splat merged into the open scene). */
@@ -173,7 +172,6 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
           onViewerState: load.onViewerState,
           onSceneReplaced: guard(() => {
             clearAllCaches();
-            load.clearCachesOnFailure = true;
             load.sceneReplaced = true;
             options?.onSceneReplaced?.();
           }),
@@ -181,7 +179,6 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
       }),
       setSourceInfo: guard(setSourceInfo),
       setUrlProgress: guard(setUrlProgress),
-      clearCachesOnFailure: false,
       hasEmbeddedViewerSettings: false,
       remoteCatalogMerged: false,
       sceneReplaced: false,
@@ -218,7 +215,7 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
     } catch (error) {
       if (isCurrent()) {
         handleUrlLoadFailure(error, {
-          clearCaches: load.clearCachesOnFailure ? clearAllCaches : () => undefined,
+          clearCaches: load.sceneReplaced ? clearAllCaches : () => undefined,
           contextUrl,
           errorLog: logError,
           setError,
@@ -241,7 +238,6 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
     setUrlError, logError, setError, finishUrlLoad, applyUrlOverrides, mergeRemoteSplatCatalog]);
 
   const loadFromUrl = useCallback((url: string, options: UrlLoadOptions = {}): Promise<boolean> => runLoad(url, async (load) => {
-    load.clearCachesOnFailure = false;
     const driveFile = parseGoogleDriveFileUrl(url);
     if (driveFile) {
       // Startup/share links use this path without passing through the URL dialog.
@@ -264,7 +260,6 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
     }
 
     if (isSplatUrl(normalizedUrl)) {
-      load.clearCachesOnFailure = false;
       load.setUrlProgress({ percent: 0, message: 'Loading 3D file...' });
       const settings = settingsBesideOnce(normalizedUrl, load);
       // A lone file never holds settings of its own: ask for the ones beside it during its download.
@@ -332,7 +327,6 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
     runLoad(manifest.baseUrl, async (load) => {
       const hfInfoUrl = huggingFaceDatasetInfoUrl(manifest.baseUrl);
       if (hfInfoUrl) {
-        load.clearCachesOnFailure = false;
         load.setUrlProgress({ percent: 0, message: 'Checking Hugging Face dataset access...' });
         await checkHuggingFaceDatasetAccess(hfInfoUrl, load.fetchImpl, load.signal);
         load.assertCurrent();
