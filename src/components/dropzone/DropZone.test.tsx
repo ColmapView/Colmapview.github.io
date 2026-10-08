@@ -7,15 +7,20 @@ import { useReconstructionStore } from '../../store/reconstructionStore';
 import { buildLoadedFiles, buildReconstruction } from '../../test/builders';
 
 const selectedUrl = 'https://drive.google.com/file/d/1DpE-bfPPIVp7TwZeMyhmisfEwCrJ0QDd/view?resourcekey=shared-key';
+const { handleDropMock } = vi.hoisted(() => ({ handleDropMock: vi.fn() }));
 
 vi.mock('../../hooks/useFileDropzone', () => ({
-  useFileDropzone: () => ({ handleDrop: vi.fn(), handleDragOver: vi.fn(), handleBrowse: vi.fn() }),
+  useFileDropzone: () => ({ handleDrop: handleDropMock, handleDragOver: vi.fn(), handleBrowse: vi.fn() }),
 }));
 vi.mock('../../hooks/useUrlLoader', () => ({ useUrlLoader: vi.fn() }));
 vi.mock('./useDropZoneStoreFacade', () => ({ useDropZoneStoreFacade: vi.fn() }));
 vi.mock('./DropZonePanels', () => ({
-  DesktopDropZonePanel: ({ onLoadGoogleDriveArchive }: { onLoadGoogleDriveArchive: (url: string) => void }) =>
-    <button type="button" onClick={() => onLoadGoogleDriveArchive(selectedUrl)}>Select desktop Drive archive</button>,
+  DesktopDropZonePanel: ({ onLoadGoogleDriveArchive, onOpenUrlModal }: {
+    onLoadGoogleDriveArchive: (url: string) => void; onOpenUrlModal: () => void;
+  }) => <>
+    <button type="button" onClick={() => onLoadGoogleDriveArchive(selectedUrl)}>Select desktop Drive archive</button>
+    <button type="button" onClick={onOpenUrlModal}>Load URL</button>
+  </>,
   TouchDropZonePanel: ({ onLoadGoogleDriveArchive }: { onLoadGoogleDriveArchive: (url: string) => void }) =>
     <button type="button" onClick={() => onLoadGoogleDriveArchive(selectedUrl)}>Select touch Drive archive</button>,
 }));
@@ -128,6 +133,32 @@ describe('DropZone preparation cancellation', () => {
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
     expect(loadFromUrl).not.toHaveBeenCalled();
     expect(useReconstructionStore.getState().urlLoadActive).toBe(false);
+  });
+});
+
+describe('DropZone drops over an open dialog', () => {
+  it('ignores files dropped on the Load URL dialog, without letting the browser open them', () => {
+    vi.mocked(useUrlLoader).mockReturnValue({
+      loadFromUrl: vi.fn(), loadFromManifest: vi.fn(), urlLoading: false, urlProgress: null,
+      urlError: null, clearUrlError: vi.fn(), setUrlLoading: vi.fn(), setUrlProgress: vi.fn(),
+    });
+    render(<DropZone><div>Viewer</div></DropZone>);
+    fireEvent.click(screen.getByRole('button', { name: 'Load URL' }));
+    const dialog = screen.getByRole('dialog', { name: 'Load from URL' });
+    const dataTransfer = { types: ['Files'], files: [new File(['x'], 'cameras.bin')], items: [] };
+
+    fireEvent.dragEnter(dialog, { dataTransfer });
+    expect(screen.queryByText('Drop dataset folder or ZIP here')).not.toBeInTheDocument();
+    // false: the default was prevented, so the browser does not open the dropped file either.
+    expect(fireEvent.drop(dialog, { dataTransfer })).toBe(false);
+
+    // A load started under the dialog would hide Cancel loading behind it, and leave it open over the scene.
+    expect(handleDropMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Load from URL' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.drop(screen.getByTestId('drop-zone'), { dataTransfer });
+    expect(handleDropMock).toHaveBeenCalledOnce();
   });
 });
 

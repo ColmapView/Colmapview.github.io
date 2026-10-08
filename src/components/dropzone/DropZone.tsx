@@ -22,6 +22,11 @@ interface DropZoneProps {
   children: React.ReactNode;
 }
 
+/** An open dialog covers the page: files dropped on it are not a dataset for the scene underneath. */
+function isOverModalDialog(target: EventTarget): boolean {
+  return target instanceof Element && target.closest('[aria-modal="true"]') !== null;
+}
+
 export function DropZone({ children }: DropZoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isPanelDismissed, setIsPanelDismissed] = useState(false);
@@ -169,7 +174,7 @@ export function DropZone({ children }: DropZoneProps) {
     e.preventDefault();
     e.stopPropagation();
     // Only respond to file drags, not internal UI drags (e.g., dragging in popup panels)
-    if (e.dataTransfer.types.includes('Files')) {
+    if (e.dataTransfer.types.includes('Files') && !isOverModalDialog(e.target)) {
       setIsDragOver(true);
     }
   }, []);
@@ -184,6 +189,12 @@ export function DropZone({ children }: DropZoneProps) {
 
   const onDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
     setIsDragOver(false);
+    if (isOverModalDialog(e.target)) {
+      // Prevented, so the browser does not open the file in place of the viewer either.
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     await handleDrop(e);
   }, [handleDrop]);
 
