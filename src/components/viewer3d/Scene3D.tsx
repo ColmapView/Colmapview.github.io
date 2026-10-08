@@ -345,6 +345,8 @@ export function Scene3D() {
       getUrlProgress,
       setUrlLoading,
       setUrlProgress,
+      isDatasetLoadPending,
+      isSplatDownloadPending,
     },
   } = useSceneContainerStoreFacade();
   const sceneContextMenu = useSceneContextMenuController();
@@ -449,6 +451,8 @@ export function Scene3D() {
         setUrlLoading={setUrlLoading}
         setUrlProgress={setUrlProgress}
         reportLoadingProgress={webGpuSplatCanvasReportsLoading}
+        isDatasetLoadPending={isDatasetLoadPending}
+        isSplatDownloadPending={isSplatDownloadPending}
         onRuntimeReady={handleWebGpuSplatRuntimeReady}
         onMetricRuntimeReady={handleWebGpuSplatMetricRuntimeReady}
         onRuntimeFailed={handleWebGpuSplatRuntimeFailed}

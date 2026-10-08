@@ -489,10 +489,6 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     if (!options?.restore) set({ splatSelectionRevision: get().splatSelectionRevision + 1 });
     const rendererDecoding = rendererOwnsSplatProgress(get());
     cancelPendingSplatLoad();
-    // Whether a splat was already showing: a fresh activation (COLMAP-only -> splat)
-    // switches the viewer into a splat display mode; a tile-to-tile switch keeps the
-    // user's current mode.
-    const hadSplatBefore = Boolean(loadedFiles.splatFile);
 
     // Empty selection -> "COLMAP only". Clearing the indicator too keeps a superseded lazy
     // fetch from leaving the loading overlay stuck (nothing is left to render that would reset it).
@@ -512,7 +508,8 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
         ...withoutSplatFailureError(get()),
         ...(rendererOwnsProgress ? {} : { urlLoading: false, urlProgress: null, urlError: null }),
       });
-      if (!hadSplatBefore) {
+      // A fresh activation switches the viewer into a splat display mode; a tile-to-tile switch keeps the user's.
+      if (!loadedFiles.splatFile) {
         applySplatActivationVisuals();
       }
       return;
@@ -594,7 +591,8 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
           urlProgress: null,
           ...withoutSplatFailureError(get()),
         });
-        if (!hadSplatBefore) {
+        // Read now: a splat that failed while this tile downloaded has already left the scene.
+        if (!latest.splatFile) {
           applySplatActivationVisuals();
         }
         return;
@@ -612,7 +610,8 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
         splatNoneChosen: false,
         ...withoutSplatFailureError(get()),
       });
-      if (!hadSplatBefore) {
+      // Read now: a splat that failed while this tile downloaded has already left the scene.
+      if (!latest.splatFile) {
         applySplatActivationVisuals();
       }
     } catch (err) {
@@ -644,10 +643,17 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
 
   dropFailedSplat: (file) => {
     const { loadedFiles } = get();
-    // A newer choice, on screen or still downloading, supersedes the splat that failed.
-    if (!loadedFiles || loadedFiles.splatFile !== file || activeSplatController !== null) return;
-    // A dataset load in progress owns the overlay, progress and URL error, even before its scene replaces this one.
-    showColmapOnly(set, loadedFiles, {}, { keepLoadingState: isReconstructionLoadPending() });
+    // A newer choice on screen supersedes the splat that failed.
+    if (!loadedFiles || loadedFiles.splatFile !== file) return;
+    // A dataset load, or a tile download replacing this splat, owns the overlay, progress and URL error.
+    const loadingStateOwned = isReconstructionLoadPending() || activeSplatController !== null;
+    // A splat-only scene with nothing else to show would be left empty, with the landing page hidden.
+    if (!loadingStateOwned && !hasSceneBesidesSplats(loadedFiles) && !hasOtherSplatToShow(loadedFiles)) {
+      get().clear();
+      clearUrlLoadRequestFromLocation();
+      return;
+    }
+    showColmapOnly(set, loadedFiles, {}, { keepLoadingState: loadingStateOwned });
   },
 
   setShowSplatPicker: (showSplatPicker) => set({ showSplatPicker }),

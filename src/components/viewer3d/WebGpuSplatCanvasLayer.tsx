@@ -82,6 +82,8 @@ export function WebGpuSplatCanvasLayer({
   setUrlLoading,
   setUrlProgress,
   reportLoadingProgress = true,
+  isDatasetLoadPending,
+  isSplatDownloadPending,
   onRuntimeReady,
   onMetricRuntimeReady,
   onRuntimeFailed,
@@ -96,6 +98,10 @@ export function WebGpuSplatCanvasLayer({
   setUrlLoading?: (loading: boolean) => void;
   setUrlProgress?: (progress: UrlLoadProgress | null) => void;
   reportLoadingProgress?: boolean;
+  /** A dataset load is pending: unless this splat began decoding during it, the loading state is its own. */
+  isDatasetLoadPending?: () => boolean;
+  /** A tile download is pending: the loading state is its own. */
+  isSplatDownloadPending?: () => boolean;
   onRuntimeReady?: () => void;
   onMetricRuntimeReady?: () => void;
   onRuntimeFailed?: (reason: string) => void;
@@ -109,7 +115,17 @@ export function WebGpuSplatCanvasLayer({
   const loadingNotificationRef = useRef<SplatLoadingNotification | null>(null);
   const progressStartRef = useRef<{ file: File; percent: number } | null>(null);
   const reportLoadingProgressRef = useRef(reportLoadingProgress);
+  // Whether this splat began decoding while a dataset load was pending, which makes it that load's own.
+  const attemptRef = useRef<{ file: File; startedDuringDatasetLoad: boolean } | null>(null);
   const shouldMount = mounted ?? visible;
+
+  // A tile download, or a dataset load that began after this splat began decoding, owns the overlay,
+  // progress and URL error, although the splat still belongs to the scene on screen until replaced.
+  const yieldsLoadingState = useCallback((file: File) => {
+    const attempt = attemptRef.current;
+    return Boolean(isSplatDownloadPending?.())
+      || (Boolean(isDatasetLoadPending?.()) && !(attempt?.file === file && attempt.startedDuringDatasetLoad));
+  }, [isDatasetLoadPending, isSplatDownloadPending]);
 
   const dismissSplatLoadingNotification = useCallback((file?: File): SplatLoadingNotification | null => {
     const current = loadingNotificationRef.current;
@@ -124,26 +140,29 @@ export function WebGpuSplatCanvasLayer({
 
   const clearSplatLoadingNotification = useCallback((file?: File) => {
     const dismissed = dismissSplatLoadingNotification(file);
-    if (isSplatLoadingProgressForRenderer(getUrlProgress?.(), dismissed?.file, 'webgpu')) {
+    if (dismissed && !yieldsLoadingState(dismissed.file)
+      && isSplatLoadingProgressForRenderer(getUrlProgress?.(), dismissed.file, 'webgpu')) {
       setUrlLoading?.(false);
     }
     return Boolean(dismissed);
-  }, [dismissSplatLoadingNotification, getUrlProgress, setUrlLoading]);
+  }, [dismissSplatLoadingNotification, getUrlProgress, setUrlLoading, yieldsLoadingState]);
 
   const startSplatLoadingNotification = useCallback((file: File) => {
     if (!reportLoadingProgressRef.current) {
       return;
     }
 
-    setUrlLoading?.(true);
     progressStartRef.current = {
       file,
       percent: getSplatProgressStartPercent(getUrlProgress?.()),
     };
-    setUrlProgress?.(getSplatLoadingProgress(file, {
-      startPercent: progressStartRef.current.percent,
-      renderer: 'webgpu',
-    }));
+    if (!yieldsLoadingState(file)) {
+      setUrlLoading?.(true);
+      setUrlProgress?.(getSplatLoadingProgress(file, {
+        startPercent: progressStartRef.current.percent,
+        renderer: 'webgpu',
+      }));
+    }
 
     if (!addNotification || !removeNotification) {
       return;
@@ -160,7 +179,7 @@ export function WebGpuSplatCanvasLayer({
 
     const id = addNotification('info', `Loading splat: ${file.name}`, 0);
     loadingNotificationRef.current = { file, id };
-  }, [addNotification, getUrlProgress, removeNotification, setUrlLoading, setUrlProgress]);
+  }, [addNotification, getUrlProgress, removeNotification, setUrlLoading, setUrlProgress, yieldsLoadingState]);
 
   const getProgressStartPercent = useCallback((file: File) => {
     const current = progressStartRef.current;
@@ -174,7 +193,7 @@ export function WebGpuSplatCanvasLayer({
   }, [getUrlProgress]);
 
   const setSplatPhaseProgress = useCallback((file: File, phase: SplatLoadingPhase) => {
-    if (!reportLoadingProgressRef.current) {
+    if (!reportLoadingProgressRef.current || yieldsLoadingState(file)) {
       return;
     }
 
@@ -182,7 +201,7 @@ export function WebGpuSplatCanvasLayer({
       startPercent: getProgressStartPercent(file),
       renderer: 'webgpu',
     }));
-  }, [getProgressStartPercent, setUrlProgress]);
+  }, [getProgressStartPercent, setUrlProgress, yieldsLoadingState]);
 
   useLayoutEffect(() => {
     if (!reportLoadingProgress) {
@@ -215,7 +234,7 @@ export function WebGpuSplatCanvasLayer({
   ]);
 
   const setSplatLoadProgress = useCallback((file: File, progress: GaussianCloudLoadProgress) => {
-    if (!reportLoadingProgressRef.current) {
+    if (!reportLoadingProgressRef.current || yieldsLoadingState(file)) {
       return;
     }
 
@@ -239,10 +258,10 @@ export function WebGpuSplatCanvasLayer({
         setUrlProgress?.(getSplatPhaseProgress(file, 'preparingUpload', { startPercent, renderer: 'webgpu' }));
         return;
     }
-  }, [getProgressStartPercent, setUrlProgress]);
+  }, [getProgressStartPercent, setUrlProgress, yieldsLoadingState]);
 
   const setSplatUploadProgress = useCallback((file: File, progress: WebGpuGaussianSceneUploadProgress) => {
-    if (!reportLoadingProgressRef.current) {
+    if (!reportLoadingProgressRef.current || yieldsLoadingState(file)) {
       return;
     }
 
@@ -258,7 +277,7 @@ export function WebGpuSplatCanvasLayer({
       loadedBytes: progress.uploadedBytes,
       totalBytes: progress.totalBytes,
     }));
-  }, [getProgressStartPercent, setUrlProgress]);
+  }, [getProgressStartPercent, setUrlProgress, yieldsLoadingState]);
 
   const ownsWebGpuSplatLoading = useCallback((file: File, options: { claimUntagged?: boolean } = {}) => {
     const progress = getUrlProgress?.();
@@ -279,34 +298,40 @@ export function WebGpuSplatCanvasLayer({
       return;
     }
 
+    const yieldsLoading = yieldsLoadingState(file);
     const hadNotification = clearSplatLoadingNotification(file);
-    setUrlProgress?.(getSplatLoadedProgress(file, { renderer: 'webgpu' }));
-    setUrlLoading?.(false);
+    if (!yieldsLoading) {
+      setUrlProgress?.(getSplatLoadedProgress(file, { renderer: 'webgpu' }));
+      setUrlLoading?.(false);
+    }
     if (!hadNotification || !reportLoadingProgressRef.current) {
       return;
     }
 
     addNotification?.('info', `Loaded splat: ${file.name}`, 3000);
-  }, [addNotification, clearSplatLoadingNotification, ownsWebGpuSplatLoading, setUrlLoading, setUrlProgress]);
+  }, [addNotification, clearSplatLoadingNotification, ownsWebGpuSplatLoading, setUrlLoading, setUrlProgress, yieldsLoadingState]);
 
   const failSplatLoadingNotification = useCallback((file: File) => {
     if (!ownsWebGpuSplatLoading(file, { claimUntagged: reportLoadingProgressRef.current })) {
       return;
     }
 
+    const yieldsLoading = yieldsLoadingState(file);
     const ownsExplicitWebGpuProgress = isSplatLoadingProgressForRenderer(getUrlProgress?.(), file, 'webgpu');
     const hadNotification = clearSplatLoadingNotification(file);
     if (!reportLoadingProgressRef.current && !ownsExplicitWebGpuProgress) {
       return;
     }
 
-    setUrlLoading?.(false);
+    if (!yieldsLoading) {
+      setUrlLoading?.(false);
+    }
     if (!hadNotification || !reportLoadingProgressRef.current) {
       return;
     }
 
     addNotification?.('warning', `Failed to load splat: ${file.name}`);
-  }, [addNotification, clearSplatLoadingNotification, getUrlProgress, ownsWebGpuSplatLoading, setUrlLoading]);
+  }, [addNotification, clearSplatLoadingNotification, getUrlProgress, ownsWebGpuSplatLoading, setUrlLoading, yieldsLoadingState]);
 
   const reportReady = useCallback((file: File) => {
     if (readyReportedRef.current) {
@@ -354,6 +379,7 @@ export function WebGpuSplatCanvasLayer({
     const sourceFile = splatFile;
     rendererRef.current = null;
     readyReportedRef.current = false;
+    attemptRef.current = { file: sourceFile, startedDuringDatasetLoad: isDatasetLoadPending?.() ?? false };
     let cancelled = false;
     let renderer: VisibleWebGpuSplatRendererAdapter | null = null;
     let failureReported = false;
@@ -541,6 +567,7 @@ export function WebGpuSplatCanvasLayer({
   }, [
     clearSplatLoadingNotification,
     failSplatLoadingNotification,
+    isDatasetLoadPending,
     onAdapterUnavailable,
     onMetricRuntimeReady,
     onRuntimeFailed,

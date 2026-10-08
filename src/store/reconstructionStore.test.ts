@@ -1887,18 +1887,79 @@ describe('reconstruction store splat the renderer could not draw', () => {
     expect(usePointCloudStore.getState().colorMode).toBe('splatPoints');
   });
 
-  it('leaves a tile download in flight to replace the splat that failed', async () => {
-    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+  /** `n` picked the lazy tile b while a decoded: b downloads, held until the test answers it. */
+  async function downloadNextTile() {
+    let answer!: { respond: (response: Response) => void; fail: (error: Error) => void };
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((resolve, reject) => {
+      answer = { respond: resolve, fail: reject };
       init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
     })));
-    void useReconstructionStore.getState().selectSplatSource('splats/b.ply');
+    const download = useReconstructionStore.getState().selectSplatSource('splats/b.ply');
     await vi.waitFor(() => expect(useReconstructionStore.getState().urlLoading).toBe(true));
+    return { download, answer, progress: useReconstructionStore.getState().urlProgress };
+  }
+
+  it('drops it under a tile download, which keeps its overlay and then shows as a fresh splat', async () => {
+    const { download, answer, progress } = await downloadNextTile();
 
     useReconstructionStore.getState().dropFailedSplat(a);
 
-    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(a);
-    expect(useReconstructionStore.getState().urlLoading).toBe(true);
-    expect(usePointCloudStore.getState().colorMode).toBe('splatPoints');
+    // The points show again while b downloads; its overlay, progress and Cancel stay.
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'rgb', showSplats: false, pointSize: 2, pointOpacity: 1 });
+    expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true, urlProgress: progress });
+
+    answer.respond(new Response(new Blob(['b'])));
+    await download;
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile?.name).toBe('b.ply');
+    expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'splatPoints', showSplats: true });
+  });
+
+  it('leaves the points shown when the tile download that was to replace it fails too', async () => {
+    const { download, answer } = await downloadNextTile();
+    useReconstructionStore.getState().dropFailedSplat(a);
+
+    answer.fail(new TypeError('network down'));
+    await download;
+
+    expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: false, error: expect.stringContaining('b.ply') });
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'rgb', pointSize: 2, pointOpacity: 1 });
+  });
+
+  it('returns a splat-only scene with nothing else to show to the landing page, as a cancelled decode does', () => {
+    window.history.replaceState(null, '', '/?url=https%3A%2F%2Fhost%2Fscene.sog');
+    const sog = new File(['x'], 'scene.sog');
+    useReconstructionStore.getState().setLoadedFiles({ imageFiles: new Map(), hasMasks: false, splatFile: sog, splatFiles: [sog],
+      splatFileSources: [{ id: 'scene.sog', path: 'scene.sog', file: sog }] });
+    useReconstructionStore.setState({ reconstruction: buildReconstruction() });
+
+    useReconstructionStore.getState().dropFailedSplat(sog);
+
+    expect(useReconstructionStore.getState()).toMatchObject({ reconstruction: null, loadedFiles: null });
+    expect(hasUrlToLoad()).toBe(false);
+  });
+
+  it('keeps a splat-only scene that lists another splat, and one a dataset load is replacing', () => {
+    const only = new File(['x'], 'scene.spz');
+    const splatOnly = (sources: LoadedFiles['splatFileSources']) => {
+      useReconstructionStore.getState().setLoadedFiles({ imageFiles: new Map(), hasMasks: false, splatFile: only,
+        splatFiles: [only], splatFileSources: sources });
+      useReconstructionStore.setState({ reconstruction: buildReconstruction() });
+    };
+    splatOnly([{ id: 'scene.spz', path: 'scene.spz', file: only }, { id: 'b.spz', path: 'b.spz', url: 'https://x/b.spz', size: 1 }]);
+    useReconstructionStore.getState().dropFailedSplat(only);
+    expect(useReconstructionStore.getState().loadedFiles?.splatFileSources).toHaveLength(2);
+
+    splatOnly([{ id: 'scene.spz', path: 'scene.spz', file: only }]);
+    const load = beginReconstructionLoad();
+    try {
+      useReconstructionStore.getState().dropFailedSplat(only);
+      expect(useReconstructionStore.getState().loadedFiles?.splatFileSources).toHaveLength(1);
+      expect(load.signal.aborted).toBe(false);
+    } finally {
+      load.finish();
+    }
   });
 
   it('leaves the overlay, progress and Cancel to a dataset load settling before its scene replaces this one', async () => {

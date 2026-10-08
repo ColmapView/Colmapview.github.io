@@ -21,6 +21,8 @@ import type { UrlLoadProgress } from '../../types/manifest';
 import type { Reconstruction } from '../../types/colmap';
 import type { ReconstructionSource } from '../../wasm/reconstructionService';
 import { shouldHideSceneAutoHideElement } from './scene3dViewModel';
+import { isSplatDownloadPending } from '../../store/reconstructionStore';
+import { isReconstructionLoadPending } from '../../wasm/reconstructionLoadLifecycle';
 
 interface SceneContentDataFacade {
   reconstruction: Reconstruction | null;
@@ -70,6 +72,10 @@ interface SceneContainerActionsFacade {
   getUrlProgress: () => ReturnType<typeof useReconstructionStore.getState>['urlProgress'];
   setUrlLoading: ReturnType<typeof useReconstructionStore.getState>['setUrlLoading'];
   setUrlProgress: ReturnType<typeof useReconstructionStore.getState>['setUrlProgress'];
+  /** A dataset load is pending: unless the splat began decoding during it, the loading state is its own. */
+  isDatasetLoadPending: () => boolean;
+  /** A tile download is pending: the loading state is its own. */
+  isSplatDownloadPending: () => boolean;
 }
 
 export interface SceneContentStoreFacade {
@@ -183,6 +189,8 @@ export function useSceneContainerStoreFacade(): SceneContainerStoreFacade {
       getUrlProgress: getCurrentUrlProgress,
       setUrlLoading,
       setUrlProgress,
+      isDatasetLoadPending: isReconstructionLoadPending,
+      isSplatDownloadPending,
     },
   };
 }

@@ -152,6 +152,7 @@ function createFacade(overrides: Partial<SplatLayerStoreFacade['data']> = {}): S
       setUrlProgress: vi.fn(),
       dropFailedSplat: vi.fn(),
       isDatasetLoadPending: vi.fn(() => false),
+      isSplatDownloadPending: vi.fn(() => false),
     },
   };
 }
@@ -927,5 +928,101 @@ describe('SplatLayer while a new dataset load settles before replacing the scene
 
     await waitFor(() => expect(load.SplatMesh).toHaveBeenCalledTimes(1));
     await expectNewLoadKeepsOverlayProgressAndCancel(load);
+  });
+});
+
+describe('SplatLayer while a tile picked with n downloads', () => {
+  const oldSplat = new File(['splat'], 'old.ply');
+  const notices = () => useNotificationStore.getState().notifications.map(notification => notification.message);
+  let download: { signal?: AbortSignal; fail: (error: Error) => void } | undefined;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    download = undefined;
+    getSplatMeshSourceOptionsMock.mockResolvedValue({ file: oldSplat });
+    // The real facade and stores: the overlay, progress and Cancel under test are the store's.
+    const actual = await vi.importActual<typeof import('./SplatLayerStoreFacade')>('./SplatLayerStoreFacade');
+    useSplatLayerStoreFacadeMock.mockImplementation(actual.useSplatLayerStoreFacade);
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
+    useNotificationStore.setState(useNotificationStore.getInitialState(), true);
+    useSplatBackendStore.setState(useSplatBackendStore.getInitialState(), true);
+    useSplatBackendStore.getState().setRequestedBackend('spark');
+    useSplatBackendStore.getState().setSparkBackendAvailable(true);
+    // A remote dataset: the old tile was downloaded and is active, the next one is listed lazily.
+    useReconstructionStore.getState().setLoadedFiles(buildLoadedFiles({
+      camerasFile: new File([''], 'cameras.bin'), imagesFile: new File([''], 'images.bin'),
+      points3DFile: new File([''], 'points3D.bin'), splatFile: oldSplat, splatFiles: [oldSplat],
+      splatFileSources: [
+        { id: 'tiles/old.ply', path: 'tiles/old.ply', url: 'https://x/tiles/old.ply', file: oldSplat, size: 5 },
+        { id: 'tiles/next.ply', path: 'tiles/next.ply', url: 'https://x/tiles/next.ply', size: 100 },
+      ],
+    }));
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      download = { signal: init?.signal ?? undefined, fail: reject };
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+    })));
+  });
+
+  afterEach(() => {
+    cleanup();
+    useReconstructionStore.getState().clear();
+    useSplatLayerStoreFacadeMock.mockReset();
+    vi.unstubAllGlobals();
+  });
+
+  /** Spark decodes the old tile, then `n` starts downloading the next one, with its own overlay and Cancel. */
+  async function pickNextWhileOldDecodes() {
+    let settleInit!: { resolve: () => void; reject: (error: Error) => void };
+    const initialized = new Promise<void>((resolve, reject) => { settleInit = { resolve, reject }; });
+    const SparkRenderer = vi.fn(function SparkRenderer(this: { dispose: () => void }) { this.dispose = vi.fn(); });
+    const { SplatMesh } = createSplatMeshConstructor(initialized);
+    preloadSparkModuleMock.mockResolvedValue({ SparkRenderer, SplatMesh });
+    render(<SplatLayer />);
+    await waitFor(() => expect(SplatMesh).toHaveBeenCalledTimes(1));
+    act(() => { void useReconstructionStore.getState().selectSplatSource('tiles/next.ply'); });
+    await waitFor(() => expect(download).toBeDefined());
+    const progress = useReconstructionStore.getState().urlProgress;
+    expect(progress).toMatchObject({ currentFile: 'next.ply' });
+    return { settleInit, progress };
+  }
+
+  it('keeps the download overlay when the old splat finishes', async () => {
+    // React DOM does not know R3F's <primitive>.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const { settleInit, progress } = await pickNextWhileOldDecodes();
+
+      await act(async () => { settleInit.resolve(); });
+
+      await waitFor(() => expect(notices()).toContain('Loaded splat: old.ply'));
+      expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true, urlProgress: progress });
+      expect(download?.signal?.aborted).toBe(false);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it('keeps the download overlay when the old splat fails, and shows the points again', async () => {
+    const warn = vi.spyOn(appLogger, 'warn').mockImplementation(() => undefined);
+    try {
+      const { settleInit, progress } = await pickNextWhileOldDecodes();
+
+      await act(async () => { settleInit.reject(new Error('decode failed')); });
+
+      await waitFor(() => expect(notices()).toContain('Failed to load splat: old.ply'));
+      expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true, urlProgress: progress });
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+      expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'rgb', pointSize: 2, pointOpacity: 1 });
+
+      // The download fails as well: nothing is left with the near-invisible splat point display.
+      await act(async () => { download!.fail(new TypeError('network down')); });
+      await waitFor(() => expect(useReconstructionStore.getState().urlLoading).toBe(false));
+      expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+      expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'rgb', pointSize: 2, pointOpacity: 1 });
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

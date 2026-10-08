@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   useCameraStore,
   useNotificationStore,
@@ -11,12 +11,17 @@ import {
 } from '../../store';
 import { buildFile, buildLoadedFiles, buildReconstruction } from '../../test/builders';
 import type { Sim3dEuler } from '../../types/sim3d';
+import { beginReconstructionLoad } from '../../wasm/reconstructionLoadLifecycle';
 import {
   useSceneContainerStoreFacade,
   useSceneContentStoreFacade,
 } from './useScene3DStoreFacade';
 
 describe('useScene3DStoreFacade', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   beforeEach(() => {
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
     useCameraStore.setState(useCameraStore.getInitialState(), true);
@@ -146,6 +151,31 @@ describe('useScene3DStoreFacade', () => {
     expect(useSplatBackendStore.getState().availability.webGpu).toBe('failed');
     expect(useSplatBackendStore.getState().availability.webGpuFailureReason).toBe('adapter lost');
     expect(result.current.actions.getUrlProgress).toBe(initialGetUrlProgress);
+  });
+
+  it('tells the WebGPU canvas when a dataset load or a tile download owns the loading state', async () => {
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+    })));
+    useReconstructionStore.setState({ loadedFiles: buildLoadedFiles({
+      splatFileSources: [{ id: 'tile.spz', path: 'tile.spz', url: 'https://x/tile.spz', size: 1 }] }) });
+    const { result } = renderHook(() => useSceneContainerStoreFacade());
+    expect(result.current.actions.isDatasetLoadPending()).toBe(false);
+    expect(result.current.actions.isSplatDownloadPending()).toBe(false);
+
+    const load = beginReconstructionLoad();
+    expect(result.current.actions.isDatasetLoadPending()).toBe(true);
+    load.finish();
+
+    // The hook reads the loading state the download writes, so its updates go through act.
+    let download!: Promise<void>;
+    act(() => { download = useReconstructionStore.getState().selectSplatSource('tile.spz'); });
+    expect(result.current.actions.isSplatDownloadPending()).toBe(true);
+    await act(async () => {
+      useReconstructionStore.getState().cancelLoading();
+      await download;
+    });
+    expect(result.current.actions.isSplatDownloadPending()).toBe(false);
   });
 
   it('exposes point-layer auto-hide visibility for the outer WebGPU canvas', () => {
