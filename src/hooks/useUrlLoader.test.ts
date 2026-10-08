@@ -1082,9 +1082,9 @@ describe('useUrlLoader', () => {
   });
 
   it.each([
-    { inside: false, warnings: 1 },
-    { inside: true, warnings: 0 },
-  ])('warns about settings beside an archive that do not arrive in time (settings inside: $inside)', async ({ inside, warnings }) => {
+    { inside: false, requests: ['https://example.com/project/colmapview.yaml'], warnings: 1 },
+    { inside: true, requests: [], warnings: 0 },
+  ])('warns about settings beside an archive that do not arrive in time (settings inside: $inside)', async ({ inside, requests, warnings }) => {
     vi.useFakeTimers();
     vi.stubGlobal('Blob', NodeBlob);
     const request = vi.fn((_url: string | URL, _init?: RequestInit) => new Promise<Response>(() => {}));
@@ -1101,11 +1101,37 @@ describe('useUrlLoader', () => {
       await vi.advanceTimersByTimeAsync(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS);
       expect(await pending).toBe(true);
     });
-    // The settings beside it are asked for during the download; settings inside the archive are the
-    // dataset's own, so the load's end aborts that request without a deadline or a warning.
-    expect(request.mock.calls.map(([url]) => String(url))).toEqual(['https://example.com/project/colmapview.yaml']);
-    expect(request.mock.calls[0][1]?.signal?.aborted).toBe(true);
+    // Settings inside the archive are the dataset's own: an archive holding them asks for none beside it.
+    expect(request.mock.calls.map(([url]) => String(url))).toEqual(requests);
+    expect(request.mock.calls.every(([, init]) => init?.signal?.aborted)).toBe(true);
     expect(settingsTimeoutWarnings()).toHaveLength(warnings);
+  });
+
+  it('asks for the settings beside an archive once it is downloaded without its own, while it parses', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const request = vi.fn((_url: string | URL, _init?: RequestInit) => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', request);
+    let finishDownload: (() => void) | undefined;
+    vi.spyOn(archiveSource, 'loadZipUrlSource').mockImplementation(async (_url, deps) => {
+      await new Promise<void>(resolve => { finishDownload = resolve; });
+      return (await deps.processFiles(new Map([['cameras.bin', new File(['c'], 'cameras.bin')]]), undefined,
+        { throwOnError: true, beforeSceneCommit: deps.beforeSceneCommit })) !== false;
+    });
+    let finishParsing: (() => void) | undefined;
+    processFilesMock.mockImplementationOnce(() => new Promise<void>(resolve => { finishParsing = resolve; }));
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
+    let pending!: Promise<boolean>;
+    act(() => { pending = result.current.loadFromUrl('https://example.com/project/scene.zip'); });
+    await waitFor(() => expect(finishDownload).toBeDefined());
+    // While it downloads, nothing yet says whether the archive holds its own settings.
+    expect(request).not.toHaveBeenCalled();
+    act(() => finishDownload!());
+    await waitFor(() => expect(finishParsing).toBeDefined());
+    // Parsing has not finished, and the settings beside the archive are already on their way.
+    await waitFor(() => expect(request.mock.calls.map(([url]) => String(url)))
+      .toEqual(['https://example.com/project/colmapview.yaml']));
+    act(() => useReconstructionStore.getState().cancelLoading());
+    await act(async () => { finishParsing!(); expect(await pending).toBe(false); });
   });
 
   it.each(['document', 'combined', 'binary', 'legacy'] as const)('restores a published view with %s URL precedence', async format => {
