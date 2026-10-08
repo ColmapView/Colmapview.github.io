@@ -289,6 +289,24 @@ describe('URL state sharing', () => {
     expect(useUIStore.getState().backgroundColor).toBe('#123456');
   });
 
+  it.each(['saved', 'shared'] as const)('keeps the restored alignment when the restored splat lands with nothing edited (%s alignment)', async origin => {
+    installSavedSplatSources();
+    const download = stubPendingDownload();
+    const alignment = { transform: { ...createIdentityEuler(), translationX: 5 },
+      splat: { transform: { ...createIdentityEuler(), translationY: 2 } } };
+    const saved = savedSplatState();
+    const restoration = origin === 'saved'
+      ? applySavedViewerState({ ...saved, config: { ...saved.config, ...alignment, splat: { ...saved.config.splat, ...alignment.splat } } }, null)
+      : applySavedViewerState(saved, { config: alignment });
+    download.respond(new Response(new Blob(['splat']), { status: 200 }));
+    await restoration;
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile?.name).toBe('active.spz');
+    // Nothing re-applies the alignment after the download, so the activation must leave it in place.
+    expect(useTransformStore.getState()).toMatchObject({ transform: alignment.transform, splatTransform: alignment.splat.transform });
+    expect(useUIStore.getState().backgroundColor).toBe('#123456');
+    expect(usePointCloudStore.getState().pointSize).toBe(4);
+  });
+
   it("restores the selection with the navigation, the viewer URL's winning, and keeps a selection made during the download", async () => {
     installSavedSplatSources();
     const download = stubPendingDownload();
