@@ -1,7 +1,7 @@
 import { fetchDatasetResource } from './fetchDatasetResource';
 import { parseSafeIntegerString } from './numberParsing';
 import { ARCHIVE_SIZE_LIMIT } from './zipValidation';
-import { hasArchiveStorage, removeArchiveTemporaryFile, storeArchiveStream } from '../archive/temporaryStorage';
+import { ArchiveStorageUnavailableError, canUseArchiveStorage, removeArchiveTemporaryFile, storeArchiveStream } from '../archive/temporaryStorage';
 import { REMOTE_ARCHIVE_RANGE_THRESHOLD } from '../archive/protocol';
 
 /** Progress callback payload for ZIP operations */
@@ -47,6 +47,11 @@ export async function downloadZip(
   onProgress: ZipProgressCallback,
   options: ZipDownloadOptions = {}
 ): Promise<Blob> {
+  return downloadArchive(url, onProgress, options, true);
+}
+
+async function downloadArchive(url: string, onProgress: ZipProgressCallback,
+  options: ZipDownloadOptions, preferDisk: boolean): Promise<Blob> {
   options.signal?.throwIfAborted();
   const fetchImpl = options.fetchImpl
     ?? ((targetUrl, timeout) => fetchDatasetResource(targetUrl, timeout, { signal: options.signal }));
@@ -55,45 +60,50 @@ export async function downloadZip(
   onProgress({ percent: 2, message: 'Starting download...' });
 
   const response = await fetchImpl(url, timeoutMs);
-
-  if (!response.ok) {
-    void response.body?.cancel().catch(() => {});
-    throw new Error(`Failed to download archive (${response.status})`);
-  }
-
-  const contentLength = response.headers.get('content-length');
-  const total = options.expectedSize ?? (contentLength ? parseSafeIntegerString(contentLength) ?? 0 : 0);
-
-  const sizeLimit = options.sizeLimit ?? ARCHIVE_SIZE_LIMIT;
-  try {
-    validateDownloadedSize(total, sizeLimit);
-  } catch (error) {
-    void response.body?.cancel().catch(() => {});
-    throw error;
-  }
-
-  let blob: Blob;
-  if (response.body && (total === 0 || total >= REMOTE_ARCHIVE_RANGE_THRESHOLD) && hasArchiveStorage()) {
-    const name = `download-${crypto.randomUUID()}`;
-    let loaded = 0;
-    blob = await storeArchiveStream(response.body, name, options.signal ?? new AbortController().signal, bytes => {
-      loaded += bytes; validateDownloadedSize(loaded, sizeLimit);
-      onProgress(getDownloadProgress(loaded, total));
-    });
-    temporaryDownloads.set(blob, name);
-  } else {
-    blob = response.body ? await readStreamingResponseBlob(response.body, total, onProgress, sizeLimit, options.signal)
-      : await response.blob();
-  }
   try {
     options.signal?.throwIfAborted();
-    validateDownloadedArchiveSize(blob, sizeLimit);
-    if (options.expectedSize !== undefined && blob.size !== options.expectedSize) {
-      throw new Error('Archive download was incomplete or the file changed. Please retry.');
+    if (!response.ok) throw new Error(`Failed to download archive (${response.status})`);
+
+    const contentLength = response.headers.get('content-length');
+    const total = options.expectedSize ?? (contentLength ? parseSafeIntegerString(contentLength) ?? 0 : 0);
+    const useDisk = Boolean(response.body && preferDisk && (total === 0 || total >= REMOTE_ARCHIVE_RANGE_THRESHOLD)
+      && await canUseArchiveStorage(options.signal));
+    const sizeLimit = useDisk ? options.sizeLimit ?? ARCHIVE_SIZE_LIMIT : Math.min(options.sizeLimit ?? ARCHIVE_SIZE_LIMIT, ARCHIVE_SIZE_LIMIT);
+    validateDownloadedSize(total, sizeLimit);
+
+    let blob: Blob;
+    if (useDisk && response.body) {
+      const name = `download-${crypto.randomUUID()}`;
+      let loaded = 0;
+      try {
+        blob = await storeArchiveStream(response.body, name, options.signal ?? new AbortController().signal, bytes => {
+          loaded += bytes; validateDownloadedSize(loaded, sizeLimit);
+          onProgress(getDownloadProgress(loaded, total));
+        });
+      } catch (error) {
+        options.signal?.throwIfAborted();
+        if (!(error instanceof ArchiveStorageUnavailableError)) throw error;
+        // Setup did not consume the body. Its ownership is settled before a single bounded retry.
+        return downloadArchive(url, onProgress, options, false);
+      }
+      temporaryDownloads.set(blob, name);
+    } else {
+      blob = response.body ? await readStreamingResponseBlob(response.body, total, onProgress, sizeLimit, options.signal)
+        : await response.blob();
     }
-    return blob;
+    try {
+      options.signal?.throwIfAborted();
+      validateDownloadedArchiveSize(blob, sizeLimit);
+      if (options.expectedSize !== undefined && blob.size !== options.expectedSize) {
+        throw new Error('Archive download was incomplete or the file changed. Please retry.');
+      }
+      return blob;
+    } catch (error) {
+      await releaseArchiveDownload(blob).catch(() => {}); throw error;
+    }
   } catch (error) {
-    await releaseArchiveDownload(blob).catch(() => {}); throw error;
+    await response.body?.cancel().catch(() => {});
+    throw error;
   }
 }
 

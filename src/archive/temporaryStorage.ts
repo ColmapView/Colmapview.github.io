@@ -36,6 +36,23 @@ export function hasArchiveStorage(): boolean {
   return typeof navigator !== 'undefined' && typeof navigator.storage?.getDirectory === 'function';
 }
 
+/** API presence alone does not imply access, e.g. when browser storage is disabled. */
+export async function canUseArchiveStorage(signal?: AbortSignal): Promise<boolean> {
+  signal?.throwIfAborted();
+  if (!hasArchiveStorage()) return false;
+  try { await archiveStorageDirectory(); }
+  catch { signal?.throwIfAborted(); return false; }
+  signal?.throwIfAborted();
+  return true;
+}
+
+export class ArchiveStorageUnavailableError extends Error {
+  constructor(cause: unknown) {
+    super(`Browser archive storage is unavailable: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+    this.name = 'ArchiveStorageUnavailableError';
+  }
+}
+
 export async function archiveStorageDirectory(): Promise<FileSystemDirectoryHandle> {
   const root = await navigator.storage.getDirectory();
   return root.getDirectoryHandle(ARCHIVE_STORAGE_DIRECTORY, { create: true });
@@ -59,20 +76,20 @@ export async function removeArchiveTemporaryFile(name: string): Promise<void> {
 /** Disk-backed streaming keeps large compressed/remote archives out of JS/WASM buffers. */
 export async function storeArchiveStream(stream: ReadableStream<Uint8Array>, name: string,
   signal: AbortSignal, onChunk?: (bytes: number) => void): Promise<File> {
-  signal.throwIfAborted();
-  await cleanupArchiveTemporaryFiles();
-  await acquireTemporaryLease(name, signal);
-  const directory = await archiveStorageDirectory();
-  let handle: FileSystemFileHandle, writable: FileSystemWritableFileStream;
-  try {
-    signal.throwIfAborted();
-    handle = await directory.getFileHandle(name, { create: true });
-    writable = await handle.createWritable();
-  } catch (error) { await removeArchiveTemporaryFile(name).catch(() => {}); throw error; }
   const reader = stream.getReader();
   const cancel = () => { void reader.cancel(signal.reason).catch(() => {}); };
   signal.addEventListener('abort', cancel, { once: true });
+  let writable: FileSystemWritableFileStream | undefined;
+  let setupComplete = false, complete = false;
   try {
+    signal.throwIfAborted();
+    await cleanupArchiveTemporaryFiles();
+    await acquireTemporaryLease(name, signal);
+    const directory = await archiveStorageDirectory();
+    signal.throwIfAborted();
+    const handle = await directory.getFileHandle(name, { create: true });
+    writable = await handle.createWritable();
+    setupComplete = true;
     for (;;) {
       signal.throwIfAborted();
       const { done, value } = await reader.read();
@@ -83,14 +100,21 @@ export async function storeArchiveStream(stream: ReadableStream<Uint8Array>, nam
     }
     signal.throwIfAborted();
     await writable.close();
-    return await handle.getFile();
+    const file = await handle.getFile();
+    complete = true;
+    return file;
   } catch (error) {
-    await writable.abort().catch(() => {});
-    await removeArchiveTemporaryFile(name).catch(() => {});
+    signal.throwIfAborted();
+    if (!setupComplete) throw new ArchiveStorageUnavailableError(error);
     throw error;
   } finally {
     signal.removeEventListener('abort', cancel);
     await reader.cancel().catch(() => {});
     reader.releaseLock();
+    if (!complete) {
+      await writable?.abort().catch(() => {});
+      // Removal also releases the lease when storage access itself has failed.
+      await removeArchiveTemporaryFile(name).catch(() => {});
+    }
   }
 }

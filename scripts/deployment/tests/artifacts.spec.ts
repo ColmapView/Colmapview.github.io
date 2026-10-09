@@ -188,6 +188,7 @@ for (const directory of profiles) {
       { filename: 'artifact.tar', mimeType: 'application/x-tar', body: tarArchive, compatibility: false },
       { filename: 'artifact.tar.gz', mimeType: 'application/gzip', body: Buffer.from(gzipSync(tarArchive)), compatibility: false },
       { filename: 'artifact.tgz', mimeType: 'application/gzip', body: Buffer.from(gzipSync(tarArchive)), compatibility: true },
+      { filename: 'artifact-denied.tgz', mimeType: 'application/gzip', body: Buffer.from(gzipSync(tarArchive)), compatibility: true, storageDenied: true },
     ]) {
       test(`${directory} custom root: worker public ${driveArchive.filename} loading`, async ({ page, context }) => {
         expect(metadata.profile, 'artifact profile').toBe(profile);
@@ -197,19 +198,22 @@ for (const directory of profiles) {
         page.on('pageerror', error => errors.push(error.message));
         try {
           if (driveArchive.compatibility) {
-            // Exercise the compiled compatibility codec as on browsers without OPFS.
-            await page.addInitScript(() => {
+            // API presence and usable OPFS access are separate compatibility cases.
+            await page.addInitScript((storageDenied: boolean) => {
               const NativeWorker = Worker;
               window.Worker = class extends NativeWorker {
                 constructor(url: string | URL, options?: WorkerOptions) {
                   if (String(url).includes('archive.worker-')) {
                     const target = new URL(String(url), location.href).href;
-                    const source = `Object.defineProperty(navigator, 'storage', { value: undefined }); import(${JSON.stringify(target)});`;
+                    const setup = storageDenied
+                      ? `Object.defineProperty(navigator.storage, 'getDirectory', { value: async () => { throw new DOMException('Storage denied', 'SecurityError'); } });`
+                      : `Object.defineProperty(navigator, 'storage', { value: undefined });`;
+                    const source = `${setup} import(${JSON.stringify(target)});`;
                     super(URL.createObjectURL(new Blob([source], { type: 'text/javascript' })), options);
                   } else super(url, options);
                 }
               };
-            });
+            }, 'storageDenied' in driveArchive && driveArchive.storageDenied === true);
           }
           await page.goto(`${CUSTOM_ORIGIN}/`);
           const dialog = await enterDriveUrl(page);

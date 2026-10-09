@@ -104,6 +104,22 @@ describe('indexed ZIP reader', () => {
 });
 
 describe('indexed TAR reader', () => {
+  it('distinguishes GNU timestamps from POSIX filename prefixes', async () => {
+    const body = strToU8('original'), gnu = tarHeader('images/photo.jpg', body.length), ustar = tarHeader('photo.png', body.length);
+    gnu.set(strToU8('ustar  \0'), 257);
+    gnu.set(strToU8('15262253174\0'), 345); gnu.set(strToU8('15262253175\0'), 357);
+    ustar.set(strToU8('project/images'), 345);
+    for (const header of [gnu, ustar]) {
+      header.fill(32, 148, 156);
+      header.set(strToU8(`${header.reduce((sum, byte) => sum + byte, 0).toString(8).padStart(6, '0')}\0 `), 148);
+    }
+    const bytes = new Uint8Array(3072);
+    bytes.set(gnu); bytes.set(body, 512); bytes.set(ustar, 1024); bytes.set(body, 1536);
+    const reader = new IndexedTarBackend(source('scene.tar', bytes));
+    expect((await reader.list(signal())).map(entry => entry.path)).toEqual(['images/photo.jpg', 'project/images/photo.png']);
+    expect(await (await reader.extract('images/photo.jpg', signal())).text()).toBe('original');
+    expect(await (await reader.extract('project/images/photo.png', signal())).text()).toBe('original');
+  });
   it('extracts original bytes, skips directories and never extracts masks as previews', async () => {
     const reader = new IndexedTarBackend(source('scene.tar', tar([
       { name: 'images/', body: '', kind: '5' }, { name: 'images/photo.jpg', body: 'original JPEG' }, { name: 'masks/photo.png', body: 'lossless mask' },

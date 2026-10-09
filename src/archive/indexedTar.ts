@@ -75,7 +75,8 @@ export class IndexedTarBackend implements ArchiveBackend {
           throw archiveError('Sparse TAR files require the compatibility decoder.', 'ArchiveUnsupportedFeatureError');
         }
         const prefix = text(header.subarray(345, 500));
-        const ustar = text(header.subarray(257, 263)).startsWith('ustar');
+        // GNU's "ustar  " header uses the POSIX prefix area for timestamps and sparse metadata.
+        const ustar = text(header.subarray(257, 263)) === 'ustar';
         const name = text(header.subarray(0, 100));
         const path = fields.path ?? longName ?? (ustar && prefix ? `${prefix}/${name}` : name);
         if (fields.size !== undefined) {

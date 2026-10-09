@@ -3,7 +3,7 @@ import { IndexedZipBackend } from './indexedZip';
 import { IndexedTarBackend } from './indexedTar';
 import { NativeArchiveBackend } from './nativeArchive';
 import { createArchiveImagePreview } from './imagePreview';
-import { hasArchiveStorage, storeArchiveStream } from './temporaryStorage';
+import { ArchiveStorageUnavailableError, canUseArchiveStorage, storeArchiveStream } from './temporaryStorage';
 import { archiveError, type ArchiveRequest, type ArchiveResponse } from './protocol';
 import type { ArchiveBackend } from './backend';
 
@@ -38,10 +38,16 @@ worker.onmessage = ({ data }) => {
         let name = source.name;
         let diskBacked = operation.diskBacked;
         if (/\.(tar\.gz|tgz)$/i.test(name) && !('kind' in source)
-          && hasArchiveStorage() && typeof DecompressionStream !== 'undefined') {
-          source = await storeArchiveStream(source.stream().pipeThrough(new DecompressionStream('gzip')), operation.temporaryName, controller.signal);
-          name = name.replace(/\.(tar\.gz|tgz)$/i, '.tar');
-          diskBacked = true;
+          && typeof DecompressionStream !== 'undefined' && await canUseArchiveStorage(controller.signal)) {
+          try {
+            source = await storeArchiveStream(source.stream().pipeThrough(new DecompressionStream('gzip')), operation.temporaryName, controller.signal);
+            name = name.replace(/\.(tar\.gz|tgz)$/i, '.tar');
+            diskBacked = true;
+          } catch (error) {
+            controller.signal.throwIfAborted();
+            if (!(error instanceof ArchiveStorageUnavailableError) && (error as Error).name !== 'QuotaExceededError') throw error;
+            // The original compressed File remains readable by the bounded compatibility codec.
+          }
         }
         const bytes = createArchiveByteSource(source, read);
         // OPFS File slices become unreadable after unlink. Returned entries must own their bytes.
@@ -65,7 +71,7 @@ worker.onmessage = ({ data }) => {
         if (!backend) throw new Error('Archive reader is closed.');
         let file = await backend.extract(operation.path, controller.signal);
         controller.signal.throwIfAborted();
-        if (operation.bounds) file = await createArchiveImagePreview(file, operation.bounds);
+        if (operation.bounds) file = await createArchiveImagePreview(file, operation.bounds, controller.signal);
         controller.signal.throwIfAborted();
         worker.postMessage({ kind: 'result', id: data.id, file });
       }

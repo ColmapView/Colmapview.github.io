@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ARCHIVE_SIZE_LIMIT } from './zipValidation';
 import { buildResponse, readBlobAsArrayBuffer } from '../test/builders';
 import {
   downloadZip,
@@ -23,6 +24,38 @@ function createStreamedResponse(chunks: number[][], contentLength?: number): Res
 }
 
 describe('zip download', () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+  it('loads an unknown-size archive in memory when the exposed storage API denies access', async () => {
+    vi.stubGlobal('navigator', { storage: { getDirectory: vi.fn(async () => { throw new DOMException('Storage denied', 'SecurityError'); }) } });
+    const fetchImpl = vi.fn(async () => createStreamedResponse([[1, 2, 3]]));
+    expect((await downloadZip('https://example.com/data.zip', vi.fn(), { fetchImpl })).size).toBe(3);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+  it('caps the memory fallback before reading an oversized download even when indexed archives have no container limit', async () => {
+    vi.stubGlobal('navigator', { storage: { getDirectory: vi.fn(async () => { throw new DOMException('Storage denied', 'SecurityError'); }) } });
+    const cancel = vi.fn(), pull = vi.fn(), body = new ReadableStream<Uint8Array>({ cancel, pull }, { highWaterMark: 0 });
+    await expect(downloadZip('https://example.com/large.tar', vi.fn(), {
+      sizeLimit: Number.MAX_SAFE_INTEGER, expectedSize: ARCHIVE_SIZE_LIMIT + 1,
+      fetchImpl: async () => new Response(body),
+    })).rejects.toThrow('size limit');
+    expect(pull).not.toHaveBeenCalled(); expect(cancel).toHaveBeenCalledOnce();
+  });
+  it('retries in bounded memory after writer setup fails and cancels the unused response', async () => {
+    const directory = { removeEntry: vi.fn(async () => {}), getFileHandle: async () => ({ createWritable: async () => { throw new DOMException('Writing denied', 'NotAllowedError'); } }) };
+    vi.stubGlobal('navigator', { storage: { getDirectory: async () => ({ getDirectoryHandle: async () => directory }) } });
+    const cancel = vi.fn(), body = new ReadableStream<Uint8Array>({ cancel });
+    const fetchImpl = vi.fn().mockResolvedValueOnce(new Response(body)).mockResolvedValueOnce(createStreamedResponse([[1, 2, 3]]));
+    expect((await downloadZip('https://example.com/data.zip', vi.fn(), { fetchImpl })).size).toBe(3);
+    expect(fetchImpl).toHaveBeenCalledTimes(2); expect(cancel).toHaveBeenCalledOnce(); expect(body.locked).toBe(false);
+  });
+  it('cancels the response and preserves cancellation during a storage capability probe', async () => {
+    const controller = new AbortController(), cancel = vi.fn();
+    vi.stubGlobal('navigator', { storage: { getDirectory: async () => { controller.abort(); throw new DOMException('Storage denied', 'SecurityError'); } } });
+    const fetchImpl = vi.fn(async () => new Response(new ReadableStream<Uint8Array>({ cancel })));
+    await expect(downloadZip('https://example.com/data.zip', vi.fn(), { fetchImpl, signal: controller.signal }))
+      .rejects.toMatchObject({ name: 'AbortError' });
+    expect(fetchImpl).toHaveBeenCalledOnce(); expect(cancel).toHaveBeenCalledOnce();
+  });
   it('uses metadata for progress when Content-Length is hidden', async () => {
     const onProgress = vi.fn();
     const blob = await downloadZip('https://www.googleapis.com/drive/v3/files/file123?alt=media', onProgress, {
