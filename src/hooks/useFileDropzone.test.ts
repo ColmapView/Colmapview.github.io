@@ -1,3 +1,4 @@
+import { emptyParseResult, stubbedParsing } from '../test/workflowStubs';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,7 +9,7 @@ import { useFileDropzone } from './useFileDropzone';
 import { useUrlLoader } from './useUrlLoader';
 import { collectShareConfig } from './useUrlState';
 import { createDefaultManifest } from './urlLoaderPolicy';
-import { buildTextFile, buildFile, buildFileSystemFileEntry, buildLoadedFiles, buildReconstruction } from '../test/builders';
+import { buildTextFile, buildFile, buildFileSystemFileEntry, buildLoadedFiles } from '../test/builders';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
@@ -125,9 +126,7 @@ describe('useFileDropzone', () => {
   it("shows the next dropped dataset's own default after a splat was picked on the previous one", async () => {
     // The real workflow over the store this hook wires up, with parsing stubbed.
     const realProcessing: typeof processFileDropzoneFiles = (files, deps, options) => actualWorkflow.processFileDropzoneFiles(files, {
-      ...deps, logger: noopLogger, clearCaches: vi.fn(), delay: async () => {}, shouldPreloadSplatRuntime: () => false,
-      parseFiles: async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false }),
-      buildReconstruction: async () => ({ reconstruction: buildReconstruction(), pointCount: 0 }),
+      ...deps, ...stubbedParsing(),
     }, options);
     processFileDropzoneFilesMock.mockImplementationOnce(realProcessing).mockImplementationOnce(realProcessing);
     const drop = (files: File[]) => ({ preventDefault: vi.fn(), stopPropagation: vi.fn(),
@@ -323,11 +322,8 @@ describe('useFileDropzone', () => {
     let pending!: Promise<boolean>;
     // The real workflow publishes progress to the mounted hook's store until it reaches the paint delay.
     await act(async () => {
-      pending = actualWorkflow.processFileDropzoneFiles(files, { ...deps, logger: noopLogger,
-        parseFiles: async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false }),
-        buildReconstruction: async () => ({ reconstruction: buildReconstruction(), pointCount: 0 }),
+      pending = actualWorkflow.processFileDropzoneFiles(files, { ...deps, ...stubbedParsing(),
         delay: () => new Promise<void>(done => { resolve = done; }),
-        clearCaches: vi.fn(), shouldPreloadSplatRuntime: () => false,
       }, options);
       await vi.waitFor(() => expect(resolve).toBeTypeOf('function'));
     });
@@ -384,12 +380,11 @@ describe('useFileDropzone', () => {
   });
 
   describe('through the real workflow, with parsing stubbed', () => {
-    const parseFiles = vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false }));
+    const parseFiles = vi.fn(async () => emptyParseResult());
     beforeEach(() => {
       parseFiles.mockClear();
       processFileDropzoneFilesMock.mockImplementation((files, deps, options) => actualWorkflow.processFileDropzoneFiles(files, {
-        ...deps, logger: noopLogger, clearCaches: vi.fn(), delay: async () => {}, shouldPreloadSplatRuntime: () => false, parseFiles,
-        buildReconstruction: async () => ({ reconstruction: buildReconstruction(), pointCount: 0 }),
+        ...deps, ...stubbedParsing(), parseFiles,
       }, options));
     });
     afterEach(() => {

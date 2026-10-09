@@ -1,3 +1,4 @@
+import { emptyParseResult, stubbedParsing } from '../test/workflowStubs';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { confirmReload, useDeletionStore, useReconstructionStore, useSplatBackendStore, useTransformStore, useUIStore } from '../store';
@@ -9,7 +10,6 @@ import { buildTextFile, buildFile, buildReconstruction } from '../test/builders'
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
-import { noopLogger } from '../utils/logger';
 
 const { processFileDropzoneFilesMock } = vi.hoisted(() => ({
   processFileDropzoneFilesMock: vi.fn<typeof processFileDropzoneFiles>(),
@@ -26,8 +26,7 @@ const alignment = { ...createIdentityEuler(), rotationY: 0.5, translationX: 2 };
 const saved: PublishedViewerState = { version: 1, viewerVersion: 'test', viewState: null, config: { transform: alignment } };
 const datasetFiles = () => new Map(['cameras.bin', 'images.bin', 'points3D.bin']
   .map((name): [string, File] => [name, buildFile(name)]));
-const parsed: FileDropzoneWorkflowDeps['parseFiles'] = async () => (
-  { cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false });
+const parsed: FileDropzoneWorkflowDeps['parseFiles'] = async () => emptyParseResult();
 
 /** Every load runs the real workflow behind processFiles, with this parse. */
 let parseFiles: FileDropzoneWorkflowDeps['parseFiles'];
@@ -58,9 +57,7 @@ describe('the scene transform across loads and Reloads', () => {
   beforeEach(() => {
     parseFiles = parsed;
     processFileDropzoneFilesMock.mockImplementation((files, deps, options) => actualWorkflow.processFileDropzoneFiles(files, {
-      ...deps, logger: noopLogger, clearCaches: vi.fn(), shouldPreloadSplatRuntime: () => false, delay: async () => undefined,
-      parseFiles: input => parseFiles!(input),
-      buildReconstruction: async () => ({ reconstruction: buildReconstruction(), pointCount: 0 }),
+      ...deps, ...stubbedParsing(), parseFiles: input => parseFiles!(input),
     }, options));
     useSplatBackendStore.setState(useSplatBackendStore.getInitialState(), true);
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);

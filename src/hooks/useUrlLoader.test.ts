@@ -1,3 +1,4 @@
+import { stubbedParsing } from '../test/workflowStubs';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -80,19 +81,17 @@ function hubEntries(splats: Array<{ path: string; size: number }>) {
 }
 
 /** What processFiles does for a URL load: the real workflow over the real store, with parsing stubbed. */
-function processWithStore(files: Map<string, File>, options?: Parameters<typeof processFileDropzoneFiles>[2]) {
+function processWithStore(files: Map<string, File>, options?: Parameters<typeof processFileDropzoneFiles>[2],
+  sourceType: 'url' | 'zip' = 'url') {
   const state = useReconstructionStore.getState();
   return processFileDropzoneFiles(files, {
     addNotification: vi.fn(), getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
     getSplatSelectionState: () => ({ revision: useReconstructionStore.getState().splatSelectionRevision,
       sourceId: getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles,
         useReconstructionStore.getState().splatNoneChosen) ?? undefined }),
-    getMinTrackLength: () => 1, getSourceInfo: () => ({ sourceType: 'url', imageUrlBase: null }),
+    getMinTrackLength: () => 1, getSourceInfo: () => ({ sourceType, imageUrlBase: null }),
     getUrlLoading: () => useReconstructionStore.getState().urlLoading,
-    clearCaches: vi.fn(), logger: noopLogger, resetView: vi.fn(), delay: async () => {},
-    shouldPreloadSplatRuntime: () => false,
-    parseFiles: async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false }),
-    buildReconstruction: async () => ({ reconstruction: buildReconstruction(), pointCount: 0 }),
+    ...stubbedParsing(), resetView: vi.fn(),
     setDroppedFiles: state.setDroppedFiles, setLoadedFiles: state.setLoadedFiles,
     setWasmReconstruction: state.setWasmReconstruction, setReconstruction: state.setReconstruction,
     setUrlProgress: state.setUrlProgress, setUrlLoading: state.setUrlLoading, setError: state.setError,
@@ -493,21 +492,7 @@ describe('useUrlLoader', () => {
     });
     processFilesMock.mockImplementationOnce(async (incoming, _range, options) => {
       expect(options?.initialSplatSelectionRevision).toBe(initialRevision);
-      await processFileDropzoneFiles(incoming, {
-        addNotification: vi.fn(), getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
-        getSplatSelectionState: () => ({ revision: useReconstructionStore.getState().splatSelectionRevision,
-          sourceId: getShareActiveSplatSourceId(useReconstructionStore.getState().loadedFiles,
-            useReconstructionStore.getState().splatNoneChosen) ?? undefined }),
-        getMinTrackLength: () => 1, getSourceInfo: () => ({ sourceType: 'zip', imageUrlBase: null }),
-        getUrlLoading: () => useReconstructionStore.getState().urlLoading,
-        clearCaches: vi.fn(), logger: noopLogger, resetView: vi.fn(), delay: async () => {},
-        shouldPreloadSplatRuntime: () => false,
-        parseFiles: async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false }),
-        buildReconstruction: async () => ({ reconstruction: buildReconstruction(), pointCount: 0 }),
-        setDroppedFiles: state.setDroppedFiles, setLoadedFiles: state.setLoadedFiles,
-        setWasmReconstruction: state.setWasmReconstruction, setReconstruction: state.setReconstruction,
-        setUrlProgress: state.setUrlProgress, setUrlLoading: state.setUrlLoading, setError: state.setError,
-      }, options);
+      await processWithStore(incoming, options, 'zip');
     });
     const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
     await act(async () => {

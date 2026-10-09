@@ -1,3 +1,4 @@
+import { emptyParseResult, stubbedParsing } from '../../test/workflowStubs';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { useCallback } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -38,7 +39,7 @@ import type {
   VisibleWebGpuSplatCloudOptions,
   VisibleWebGpuSplatRendererAdapter,
 } from '../../splat/webgpu/visibleSplatRendererAdapter';
-import { appLogger, noopLogger } from '../../utils/logger';
+import { appLogger } from '../../utils/logger';
 import { useDeletionStore, useNotificationStore, useReconstructionStore, useSplatBackendStore, useTransformStore } from '../../store';
 import { isSplatDownloadPending } from '../../store/reconstructionStore';
 import { beginReconstructionLoad, isReconstructionLoadPending } from '../../wasm/reconstructionLoadLifecycle';
@@ -2017,15 +2018,14 @@ describe('WebGpuSplatCanvasLayer decoding a splat that another load or download 
 
     let releaseParse!: () => void;
     const reloading = processFileDropzoneFiles(files, {
-      addNotification: vi.fn(), clearCaches: vi.fn(), delay: async () => undefined, logger: noopLogger,
+      ...stubbedParsing(), addNotification: vi.fn(),
       getLoadedFiles: () => store().loadedFiles, getMinTrackLength: () => 1,
       getSourceInfo: () => ({ sourceType: 'local', imageUrlBase: null }), getUrlLoading: () => store().urlLoading,
-      resetView: vi.fn(), shouldPreloadSplatRuntime: () => false,
+      resetView: vi.fn(),
       parseFiles: ({ signal }) => new Promise((resolve, reject) => {
-        releaseParse = () => resolve({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false });
+        releaseParse = () => resolve(emptyParseResult());
         signal?.addEventListener('abort', () => reject(signal.reason));
       }),
-      buildReconstruction: async () => ({ reconstruction: buildReconstruction(), pointCount: 0 }),
       setDroppedFiles: store().setDroppedFiles, setLoadedFiles: store().setLoadedFiles,
       setReconstruction: store().setReconstruction, setWasmReconstruction: store().setWasmReconstruction,
       setUrlLoading: store().setUrlLoading, setUrlProgress: store().setUrlProgress, setError: store().setError,

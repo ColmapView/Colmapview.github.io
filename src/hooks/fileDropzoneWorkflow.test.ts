@@ -1,3 +1,4 @@
+import { emptyParseResult } from '../test/workflowStubs';
 import { describe, expect, it, vi } from 'vitest';
 import type { LoadedFiles, Reconstruction } from '../types/colmap';
 import { noopLogger, type AppLogger } from '../utils/logger';
@@ -87,6 +88,13 @@ function createReconstruction(): Reconstruction {
       totalPoints: 0,
     },
     imageToPoint3DIds: new Map(),
+  };
+}
+
+function emptyScene() {
+  return {
+    parseFiles: vi.fn(async () => emptyParseResult()),
+    buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
   };
 }
 
@@ -1160,8 +1168,7 @@ describe('file dropzone workflow', () => {
     }));
     const deps = createDeps({
       ...store,
-      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
-      buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
+      ...emptyScene(),
     });
     const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, file(name)]));
 
@@ -1183,8 +1190,7 @@ describe('file dropzone workflow', () => {
     }));
     const deps = createDeps({
       ...store,
-      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
-      buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
+      ...emptyScene(),
     });
     // Reload passes the same dropped files back, so the splat is the very File on screen.
     const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, file(name)]));
@@ -1208,8 +1214,7 @@ describe('file dropzone workflow', () => {
     const deps = createDeps({
       getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
       setLoadedFiles: useReconstructionStore.getState().setLoadedFiles,
-      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
-      buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
+      ...emptyScene(),
     });
     const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, file(name)]));
     files.set('a.spz', a);
@@ -1237,8 +1242,7 @@ describe('file dropzone workflow', () => {
     const deps = createDeps({
       getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
       setLoadedFiles: useReconstructionStore.getState().setLoadedFiles,
-      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
-      buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
+      ...emptyScene(),
     });
     return { a, b, files, deps };
   }
@@ -1300,8 +1304,7 @@ describe('file dropzone workflow', () => {
     const deps = createDeps({
       getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
       setLoadedFiles: useReconstructionStore.getState().setLoadedFiles,
-      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
-      buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
+      ...emptyScene(),
     });
     try {
       await expect(processFileDropzoneFiles(files, deps, { reload: true, viewerState: saved,
@@ -1438,7 +1441,7 @@ describe('file dropzone workflow', () => {
       parseFiles: vi.fn(async ({ addNotification }) => {
         addNotification('info', 'Loaded 0 points', 5000);
         addNotification('warning', 'Skipped 1 unreadable track');
-        return { cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false };
+        return emptyParseResult();
       }),
       buildReconstruction: vi.fn(async () => ({ reconstruction: parsedScene(), pointCount: 0 })),
     });
@@ -1669,8 +1672,7 @@ describe('file dropzone workflow', () => {
     const deps = createDeps({
       getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,
       setLoadedFiles: useReconstructionStore.getState().setLoadedFiles,
-      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
-      buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
+      ...emptyScene(),
     });
     const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, file(name)]));
 
@@ -1696,8 +1698,7 @@ describe('file dropzone workflow', () => {
       config: { ui: { backgroundColor: '#222222' } } });
     const onViewerState = vi.fn();
     const deps = createDeps({
-      parseFiles: vi.fn(async () => ({ cameras: new Map(), images: new Map(), points3D: new Map(), wasmWrapper: null, usedWasmPath: false })),
-      buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
+      ...emptyScene(),
     });
     const files = new Map<string, File>(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, file(name)]));
     files.set('colmapview.yaml', buildTextFile('colmapview.yaml', inFiles));
