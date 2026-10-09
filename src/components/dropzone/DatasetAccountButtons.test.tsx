@@ -173,7 +173,8 @@ describe('Dataset provider account icons', () => {
     expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
     expect(screen.getByText(/Sign in to choose a ZIP or TAR archive/)).toBeVisible();
     expect(screen.getByText(/Only files you choose are accessible/)).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Privacy' })).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'Privacy' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Terms' })).not.toBeInTheDocument();
   });
 
   it.each([

@@ -15,12 +15,13 @@ interface AccountDialogProps {
   description: string;
   hint?: string | null;
   error?: string | null;
+  showPolicyLinks?: boolean;
   children: ReactNode;
 }
 
 /** Account status, requested access and actions share the same accessible dialog layout. */
 export function AccountDialog({ id, isOpen, onClose, title, status, statusTitle, connected,
-  description, hint, error, children }: AccountDialogProps) {
+  description, hint, error, showPolicyLinks = true, children }: AccountDialogProps) {
   return <ModalDialogShell isOpen={isOpen} onClose={onClose} ariaLabelledBy={`${id}-title`} ariaDescribedBy={`${id}-description`}
     overlayClassName={`${panelStyles.overlay} p-4`} overlayStyle={{ zIndex: Z_INDEX.modalOverlay }}
     panelClassName={`${floatingPanelStyles.dialog} w-full max-w-sm overflow-hidden`} panelStyle={{ maxHeight: '90dvh' }}>
@@ -42,7 +43,7 @@ export function AccountDialog({ id, isOpen, onClose, title, status, statusTitle,
       </p>
       {error && <p role="alert" className="m-0 mt-2 text-ds-warning">{error}</p>}
       <div className="flex flex-wrap items-center justify-end gap-2 mt-3">{children}</div>
-      <PolicyLinks className="mt-2 text-sm" />
+      {showPolicyLinks && <PolicyLinks className="mt-2 text-sm" />}
     </div>
   </ModalDialogShell>;
 }
