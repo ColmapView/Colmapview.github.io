@@ -14,6 +14,7 @@ Core modules should not import from `components/`. Parser and dataset code shoul
 
 - `components/`: render UI, wire events, and compose hooks. Avoid source-specific file loading, storage policies, parser details, and direct browser globals when a shared helper exists.
 - `dataset/`: own image and mask access across local, URL, manifest, and ZIP sources. Components should use `useDataset()` instead of importing image-file utilities.
+- `archive/`: one worker per active archive, indexed ZIP/TAR readers, compatibility codecs, temporary storage, and image previews. All upload, drop, URL, Hugging Face, and Google Drive archive inputs use this boundary.
 - `store/`: own shared app state, persistence, and user actions. Keep UI rendering out of store actions.
 - `nodes/`: expose derived viewer state for camera, selection, navigation, and matches. Use nodes when multiple components need the same derived state.
 - `hooks/`: own reusable React behavior, subscriptions, and component-facing view models.
@@ -26,6 +27,16 @@ Core modules should not import from `components/`. Parser and dataset code shoul
 When a component or hook needs many store selectors, node selectors, and actions, introduce a feature-local facade or controller instead of spreading those subscriptions across render code. Use names that describe the boundary, such as `useViewerControlsController` or `useGlobalContextMenuActionDeps`.
 
 Facades should adapt stores and nodes into typed dependencies. Pure executors and policies should receive those dependencies as parameters and avoid importing stores directly. This keeps behavior testable with plain objects while limiting store wiring to one feature-owned hook.
+
+## Archive Processing
+
+`zipLoader` opens an archive session, extracts reconstruction/settings/splat files, and keeps image entries lazy. The session worker runs one operation at a time and selects waiting work by current consumer priority: selected, visible, metrics, then prefetch. Cancelling a consumer removes its queued work or cancels its current read; replacing or closing the archive terminates its worker. Failed incoming loads leave the installed dataset intact.
+
+ZIP uses the central directory, including ZIP64 offsets, with stored/deflate extraction and size/CRC checks. TAR indexes headers and skips file bodies. These containers do not require a whole-archive WASM allocation. Gzip TAR streams to temporary origin-private browser storage (OPFS) before indexing when the browser supports it; xz/bzip2 TAR, 7z, and uncommon ZIP/TAR features use the compatibility WASM codec inside the same worker. Compatibility archives must fit below 2 GiB. Indexed extraction limits each file to 2 GiB and bounds index size/count; available memory and disk quota still govern usable dataset size.
+
+Known-size remote ZIP/TAR files of at least 32 MiB use validated HTTP byte ranges, with a 4 MiB range cache and provider authentication on the main thread. Servers that cannot expose valid ranges fall back to a complete download. Large or unknown-size downloads stream to OPFS where available; the memory fallback retains the 2 GiB download limit. Closing a session removes its temporary files. Browser locks protect active temporary files across tabs/workers and allow later disk-backed loads to remove files abandoned by reloads or crashes. Files returned from temporary storage own their extracted bytes so they remain readable after cleanup.
+
+Display requests resize in the worker to the existing screen/2048-pixel bounds. Opaque previews use JPEG quality 0.75, suitable JPEGs are reused, and transparency stays PNG. Display images and masks share a 128 MiB byte-budget LRU cache. Raw originals are extracted without resizing or recompression for export and image metrics; masks stay lossless. This cache budget covers retained encoded files, not browser decode/GPU memory.
 
 `useUIStore` remains a shared domain store, so treat workflow-local facades as the documented selector boundary for UI state. A facade can be small when it is the explicit store boundary for a component, but it must stay feature-local, return only the fields the caller needs, and have a colocated test. Do not add a facade as a pass-through for non-store helpers; use direct imports for pure helpers and controllers for workflows that need orchestration.
 

@@ -60,7 +60,7 @@ export async function compressAndResizeToJpeg(
   }
 }
 
-function getMaxCacheDimensions(): CacheDimensionBounds {
+export function getMaxCacheDimensions(): CacheDimensionBounds {
   return getBoundedCacheDimensions({
     devicePixelRatio: typeof window !== 'undefined' ? window.devicePixelRatio : 1,
     screenWidth: typeof screen !== 'undefined' ? screen.width : VIEWPORT_FALLBACK.width,

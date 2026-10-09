@@ -1,9 +1,19 @@
 import { parseSafeIntegerString } from './numberParsing';
 import { anySignal } from './abortSignals';
 import { HfError } from '../features/huggingface/http';
+import { isIndexedArchive } from '../archive/protocol';
+import { hasArchiveStorage } from '../archive/temporaryStorage';
+import { getFilenameFromUrl } from './urlUtils';
 
-/** Maximum archive file size (2GB) */
+/** Safety limit for the compatibility WASM decoder and archive publication. */
 export const ARCHIVE_SIZE_LIMIT = 2 * 1024 * 1024 * 1024;
+
+/** Indexed containers need no whole-archive allocation; gzip can spool to browser storage. */
+export function getArchiveReadSizeLimit(filename: string): number {
+  return isIndexedArchive(filename) || /\.(tar\.gz|tgz)$/i.test(filename)
+    && hasArchiveStorage() && typeof DecompressionStream !== 'undefined'
+    ? Number.MAX_SAFE_INTEGER : ARCHIVE_SIZE_LIMIT;
+}
 
 /** Timeout for archive size validation HEAD requests (5 seconds) */
 const SIZE_CHECK_TIMEOUT = 5000;
@@ -34,7 +44,7 @@ export async function validateZipUrl(
 ): Promise<ZipValidationResult> {
   options.signal?.throwIfAborted();
   const fetchImpl = options.fetchImpl ?? fetch;
-  const sizeLimit = options.sizeLimit ?? ARCHIVE_SIZE_LIMIT;
+  const sizeLimit = options.sizeLimit ?? getArchiveReadSizeLimit(getFilenameFromUrl(url));
   const timeoutMs = options.timeoutMs ?? SIZE_CHECK_TIMEOUT;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -87,11 +97,12 @@ export function validateZipFile(
   file: File,
   options: ZipValidationOptions = {}
 ): ZipValidationResult {
-  const sizeLimit = options.sizeLimit ?? ARCHIVE_SIZE_LIMIT;
+  const sizeLimit = options.sizeLimit ?? getArchiveReadSizeLimit(file.name);
   return validateArchiveSize(file.size, sizeLimit);
 }
 
 export function validateArchiveSize(size: number, sizeLimit = ARCHIVE_SIZE_LIMIT): ZipValidationResult {
+  if (!Number.isSafeInteger(size) || size < 0) return { valid: false, error: 'Invalid archive size.' };
   if (size > sizeLimit) {
     return {
       valid: false,

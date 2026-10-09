@@ -1,4 +1,4 @@
-import type { ArchiveEntry, ArchiveReader } from '../types/libarchive';
+import type { ArchiveEntry, ArchiveReader, ArchiveExtractOptions } from '../types/libarchive';
 import { appLogger } from './logger';
 import { getZipEntryLookupCandidates } from './zipLoaderPolicy';
 
@@ -111,7 +111,7 @@ export function findZipEntry(
 /**
  * Extract an image from the active ZIP archive.
  */
-export async function extractZipImage(imageName: string): Promise<File | null> {
+export async function extractZipImage(imageName: string, options?: ArchiveExtractOptions): Promise<File | null> {
   if (!activeArchive || !activeImageIndex) {
     return null;
   }
@@ -123,7 +123,7 @@ export async function extractZipImage(imageName: string): Promise<File | null> {
   }
 
   try {
-    const file = await entry.extract();
+    const file = options?.bounds && entry.extractPreview ? await entry.extractPreview(options) : await entry.extract(options);
     return activeArchive === archive ? file : null;
   } catch (err) {
     appLogger.warn(`[ZIP] Failed to extract ${imageName}:`, err);

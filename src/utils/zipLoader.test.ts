@@ -1,16 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { Archive } from 'libarchive.js';
+import { openArchiveReader } from '../archive/archiveService';
 import { buildArchiveEntry, buildArchiveReader, buildFile } from '../test/builders';
 import { hfAuth } from '../features/huggingface/auth';
 import { downloadZip, type ZipProgressCallback } from './zipDownload';
 import { isArchiveFile, loadZipFromFile, loadZipFromUrl } from './zipLoader';
 import { appLogger } from './logger';
 import type { ArchiveReader } from '../types/libarchive';
+import { archiveError, REMOTE_ARCHIVE_RANGE_THRESHOLD } from '../archive/protocol';
 
-vi.mock('libarchive.js', () => ({ Archive: { init: vi.fn(), open: vi.fn() } }));
-// libarchive.js types Archive.open with its ArchiveReader class, whose private fields no fake can
-// satisfy. zipLoader only uses the reader through the local ArchiveReader interface.
-const openArchive = vi.mocked(Archive.open) as unknown as Mock<(file: File) => Promise<ArchiveReader>>;
+vi.mock('../archive/archiveService', () => ({ openArchiveReader: vi.fn() }));
+const openArchive = vi.mocked(openArchiveReader) as unknown as Mock<(file: File) => Promise<ArchiveReader>>;
 vi.mock('./zipDownload', async (importOriginal) => ({
   ...await importOriginal<typeof import('./zipDownload')>(),
   downloadZip: vi.fn(),
@@ -134,7 +133,7 @@ describe.each(['local', 'url'] as const)('%s archive reader ownership', (source)
     const pending = source === 'local'
       ? loadZipFromFile(buildFile('scene.tar'), vi.fn(), controller.signal)
       : loadZipFromUrl('https://example.com/scene.tar', vi.fn(), controller.signal);
-    await vi.waitFor(() => expect(Archive.open).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(openArchiveReader).toHaveBeenCalledOnce());
     controller.abort();
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
     resolve(buildArchiveReader({ close, getFilesArray }));
@@ -178,7 +177,7 @@ describe.each(['local', 'url'] as const)('%s archive reader ownership', (source)
         { filename: 'reconstruction.tar', size: 7, fetchImpl });
       expect(result.archive).toBe(archive);
       expect(fetch).not.toHaveBeenCalled();
-      expect(downloadZip).toHaveBeenCalledWith(expect.any(String), expect.any(Function), { signal, expectedSize: 7, fetchImpl });
+      expect(downloadZip).toHaveBeenCalledWith(expect.any(String), expect.any(Function), expect.objectContaining({ signal, expectedSize: 7, fetchImpl }));
       expect(openArchive.mock.calls[0][0].name).toBe('reconstruction.tar');
     });
 
@@ -205,6 +204,33 @@ describe('isArchiveFile', () => {
     // for COLMAP files inside it instead of rendering it.
     expect(isArchiveFile(new File(['PK'], 'scene.sog', { type: 'application/zip' }))).toBe(false);
     expect(isArchiveFile(new File(['PK'], 'dataset.zip', { type: 'application/zip' }))).toBe(true);
+  });
+});
+
+describe('indexed remote archive loading', () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+  it.each(['zip', 'tar'])('uses a remote %s index instead of buffering the whole archive', async extension => {
+    vi.clearAllMocks();
+    const archive = buildArchiveReader({ getFilesArray: async () => colmapEntries() });
+    vi.mocked(openArchiveReader).mockResolvedValue(archive);
+    const fetchImpl = vi.fn(), size = REMOTE_ARCHIVE_RANGE_THRESHOLD + 1;
+    const result = await loadZipFromUrl('https://example.test/archive', vi.fn(), undefined, { filename: `scene.${extension}`, size, fetchImpl });
+    expect(result.archive).toBe(archive); expect(result.fileSize).toBe(size);
+    expect(openArchiveReader).toHaveBeenCalledWith({ kind: 'remote', name: `scene.${extension}`, size }, expect.objectContaining({ read: expect.any(Function) }));
+    expect(downloadZip).not.toHaveBeenCalled();
+  });
+  it('falls back for servers without validated ranges but preserves changed-file and provider errors', async () => {
+    vi.clearAllMocks();
+    const archive = buildArchiveReader({ getFilesArray: async () => colmapEntries() });
+    vi.mocked(openArchiveReader).mockRejectedValueOnce(archiveError('No ranges', 'ArchiveRangeUnsupportedError')).mockResolvedValueOnce(archive);
+    vi.mocked(downloadZip).mockResolvedValue(new Blob(['archive']));
+    const options = { filename: 'scene.zip', size: REMOTE_ARCHIVE_RANGE_THRESHOLD + 1, fetchImpl: vi.fn() };
+    expect((await loadZipFromUrl('https://example.test/archive', vi.fn(), undefined, options)).archive).toBe(archive);
+    expect(downloadZip).toHaveBeenCalledOnce();
+    vi.clearAllMocks();
+    vi.mocked(openArchiveReader).mockRejectedValueOnce(new Error('Archive changed while reading'));
+    await expect(loadZipFromUrl('https://example.test/archive', vi.fn(), undefined, options)).rejects.toThrow('Archive changed');
+    expect(downloadZip).not.toHaveBeenCalled();
   });
 });
 

@@ -143,7 +143,7 @@ describe('Drive dataset ZIP packaging', () => {
     // The declared size passes the early check; the 4 bytes read both differ from it and exceed the limit.
     const source = asset('file.bin', 'data'); source.size = 1;
     await expect(packageDriveArchive(prepared([source]), new AbortController().signal, () => {}, () => {}, 3))
-      .rejects.toMatchObject({ message: 'The dataset ZIP exceeds the viewer’s 2 GiB archive limit. Use a smaller dataset or splat.', permanent: true });
+      .rejects.toMatchObject({ message: 'The dataset ZIP exceeds the Drive publisher’s 2 GiB archive limit. Use a smaller dataset or splat.', permanent: true });
   });
   it('packages only the active splat and restores its saved transform and selection', async () => {
     const photo = new File(['photo'], 'photo.jpg');

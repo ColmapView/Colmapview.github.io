@@ -14,7 +14,7 @@ import { boundedFetch } from '../huggingface/http';
 
 export interface DriveArchive { blob: Blob; md5: string; viewerBaseUrl: string }
 export type DriveArchiveProgress = (message: string, filesDone: number, filesTotal: number) => void;
-const archiveTooLarge = () => new GoogleDrivePublishError('The dataset ZIP exceeds the viewer’s 2 GiB archive limit. Use a smaller dataset or splat.', undefined, true);
+const archiveTooLarge = () => new GoogleDrivePublishError('The dataset ZIP exceeds the Drive publisher’s 2 GiB archive limit. Use a smaller dataset or splat.', undefined, true);
 
 /** Store ZIP entries as browser Blob parts rather than one dataset-sized JS array. */
 export async function packageDriveArchive(prepared: PreparedPublication, signal: AbortSignal,

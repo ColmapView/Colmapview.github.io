@@ -24,7 +24,7 @@ const profiles = (process.env.DEPLOYMENT_SMOKE_PROFILES || PROFILES.join(',')).s
 const driveUrl = 'https://drive.google.com/file/d/artifact_fixture_file/view?resourcekey=fixture-resource&access_token=must-not-transfer';
 const fixture = path.resolve('e2e/fixtures/test-data');
 const archive = Buffer.from(zipSync(Object.fromEntries(['cameras.txt', 'images.txt', 'points3D.txt'].map(name => [name, strToU8(readFileSync(path.join(fixture, 'sparse', name), 'utf8'))]))));
-// A real USTAR fixture exercises native libarchive/WASM at the custom root, beyond mocked API success.
+// A real USTAR fixture exercises archive extraction at the custom root, beyond mocked API success.
 const tarParts: Buffer[] = [];
 for (const name of ['cameras.txt', 'images.txt', 'points3D.txt']) {
   const body = readFileSync(path.join(fixture, 'sparse', name));
@@ -185,16 +185,32 @@ for (const directory of profiles) {
   }
   if (profile === 'custom') {
     for (const driveArchive of [
-      { filename: 'artifact.tar', mimeType: 'application/x-tar', body: tarArchive },
-      { filename: 'artifact.tar.gz', mimeType: 'application/gzip', body: Buffer.from(gzipSync(tarArchive)) },
+      { filename: 'artifact.tar', mimeType: 'application/x-tar', body: tarArchive, compatibility: false },
+      { filename: 'artifact.tar.gz', mimeType: 'application/gzip', body: Buffer.from(gzipSync(tarArchive)), compatibility: false },
+      { filename: 'artifact.tgz', mimeType: 'application/gzip', body: Buffer.from(gzipSync(tarArchive)), compatibility: true },
     ]) {
-      test(`${directory} custom root: native public ${driveArchive.filename} loading`, async ({ page, context }) => {
+      test(`${directory} custom root: worker public ${driveArchive.filename} loading`, async ({ page, context }) => {
         expect(metadata.profile, 'artifact profile').toBe(profile);
         const server = await startArtifactServer(output, '/');
         const traffic = await routeArtifact(context, CUSTOM_ORIGIN, server.origin, true, driveArchive);
         const errors: string[] = [];
         page.on('pageerror', error => errors.push(error.message));
         try {
+          if (driveArchive.compatibility) {
+            // Exercise the compiled compatibility codec as on browsers without OPFS.
+            await page.addInitScript(() => {
+              const NativeWorker = Worker;
+              window.Worker = class extends NativeWorker {
+                constructor(url: string | URL, options?: WorkerOptions) {
+                  if (String(url).includes('archive.worker-')) {
+                    const target = new URL(String(url), location.href).href;
+                    const source = `Object.defineProperty(navigator, 'storage', { value: undefined }); import(${JSON.stringify(target)});`;
+                    super(URL.createObjectURL(new Blob([source], { type: 'text/javascript' })), options);
+                  } else super(url, options);
+                }
+              };
+            });
+          }
           await page.goto(`${CUSTOM_ORIGIN}/`);
           const dialog = await enterDriveUrl(page);
           await dialog.getByRole('button', { name: 'Load', exact: true }).click();
@@ -202,8 +218,9 @@ for (const directory of profiles) {
           await expect(page.getByTestId('scene-3d').locator('canvas')).toBeVisible();
           expect(traffic.driveRequests).toHaveLength(2);
           expect(traffic.driveRequests.every(request => !request.authorization)).toBe(true);
-          expect(traffic.assetRequests.some(url => url.endsWith('/libarchive.wasm'))).toBe(true);
-          expect(traffic.assetRequests.some(url => /worker-bundle.*\.js$/.test(url))).toBe(true);
+          expect(traffic.assetRequests.some(url => /archive\.worker-.*\.js$/.test(url))).toBe(true);
+          expect(traffic.assetRequests.some(url => url.endsWith('/libarchive.wasm'))).toBe(driveArchive.compatibility);
+          expect(traffic.assetRequests.some(url => /worker-bundle.*\.js$/.test(url))).toBe(false);
           expect(traffic.externalRequests).toEqual([]);
           expect(errors).toEqual([]);
         } finally { await server.close(); }

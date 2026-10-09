@@ -1,14 +1,16 @@
 /**
  * ZIP file loading utilities for COLMAP reconstructions.
- * Uses libarchive.js (WASM) for efficient extraction with lazy image loading.
+ * Uses a shared archive worker for indexed extraction and lazy image previews.
  */
 
-import { Archive } from 'libarchive.js';
+import { openArchiveReader, type ArchiveServiceOptions } from '../archive/archiveService';
+import { isIndexedArchive, REMOTE_ARCHIVE_RANGE_THRESHOLD, type ArchiveSource } from '../archive/protocol';
+import { createRemoteArchiveRead } from '../archive/remoteArchive';
+import { hasArchiveStorage } from '../archive/temporaryStorage';
 import type { ArchiveEntry, ArchiveReader } from '../types/libarchive';
-import { publicAsset } from './paths';
 import { isSplatFilePath } from './splatFilePolicy';
 import { getFilenameFromUrl } from './urlUtils';
-import { downloadZip, type ZipDownloadOptions, type ZipProgress } from './zipDownload';
+import { downloadZip, isArchiveDownloadDiskBacked, releaseArchiveDownload, type ZipDownloadOptions, type ZipProgress } from './zipDownload';
 import { findDatasetViewerSettingsEntry, isDatasetViewerSettingsPath } from './datasetViewerSettings';
 import { MAX_VIEWER_STATE_BYTES } from './publishedViewerState';
 import { appLogger } from './logger';
@@ -19,6 +21,8 @@ import {
   validateZipFile,
   validateZipUrl,
   validateArchiveSize,
+  getArchiveReadSizeLimit,
+  ARCHIVE_SIZE_LIMIT,
 } from './zipValidation';
 import {
   buildArchiveEntryPath,
@@ -54,9 +58,6 @@ export {
   type ZipValidationResult,
 } from './zipValidation';
 export { type ZipProgress } from './zipDownload';
-
-/** Whether libarchive.js has been initialized */
-let archiveInitialized = false;
 
 // ============================================================================
 // Types
@@ -107,23 +108,6 @@ export function isArchiveFile(file: File): boolean {
   if (isSplatFilePath(file.name)) return false;
   if (hasArchiveExtension(file.name)) return true;
   return isArchiveMimeType(file.type);
-}
-
-// ============================================================================
-// Archive Initialization
-// ============================================================================
-
-/**
- * Initialize libarchive.js with the correct worker URL.
- */
-async function initializeArchive(): Promise<void> {
-  if (archiveInitialized) return;
-
-  Archive.init({
-    workerUrl: publicAsset('workers/worker-bundle.js'),
-  });
-
-  archiveInitialized = true;
 }
 
 /**
@@ -226,14 +210,15 @@ async function processZipArchive(
 
 /** Transfer reader ownership to the caller only after extraction and validation succeed. */
 async function openZipArchive(
-  file: File,
+  file: ArchiveSource,
   onProgress: (progress: ZipProgress) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  serviceOptions?: ArchiveServiceOptions
 ): Promise<ZipLoadResult> {
   signal?.throwIfAborted();
   onProgress({ percent: 40, message: 'Opening archive...' });
   signal?.throwIfAborted();
-  const archive = await awaitWithAbort(Archive.open(file), signal,
+  const archive = await awaitWithAbort(openArchiveReader(file, { ...serviceOptions, signal }), signal,
     reader => { void closeZipArchive(reader).catch(() => {}); });
   const closeOnAbort = () => { void closeZipArchive(archive).catch(() => {}); };
   signal?.addEventListener('abort', closeOnAbort, { once: true });
@@ -259,8 +244,7 @@ async function openZipArchive(
 }
 
 /**
- * Load a ZIP file from URL.
- * Downloads the ZIP, extracts COLMAP files immediately, and builds an index for lazy image extraction.
+ * Load a remote archive through ranges or a complete download, with lazy image extraction.
  */
 export async function loadZipFromUrl(
   url: string,
@@ -269,15 +253,16 @@ export async function loadZipFromUrl(
   options?: ZipUrlLoadOptions
 ): Promise<ZipLoadResult> {
   signal?.throwIfAborted();
-  // Initialize libarchive.js
-  await initializeArchive();
 
   onProgress({ percent: 0, message: 'Checking archive...' });
 
+  const archiveName = options?.filename ?? (getFilenameFromUrl(url) || 'archive.zip');
+  const sizeLimit = getArchiveReadSizeLimit(archiveName);
+
   // Validate size
   // The size check needs the signed-in account for private Hub archives, like the download.
-  const validation = options ? validateArchiveSize(options.size) : await validateZipUrl(url, {
-    signal,
+  const validation = options ? validateArchiveSize(options.size, sizeLimit) : await validateZipUrl(url, {
+    signal, sizeLimit,
     fetchImpl: (target, init) => fetchDatasetResource(target, undefined, init),
   });
   signal?.throwIfAborted();
@@ -285,16 +270,36 @@ export async function loadZipFromUrl(
     throw new Error(validation.error ?? 'Invalid archive');
   }
 
+  if (isIndexedArchive(archiveName) && validation.size !== undefined && validation.size >= REMOTE_ARCHIVE_RANGE_THRESHOLD) {
+    try {
+      return await openZipArchive({ kind: 'remote', name: archiveName, size: validation.size }, onProgress, signal, {
+        read: createRemoteArchiveRead(url, validation.size, options?.fetchImpl),
+      });
+    } catch (error) {
+      signal?.throwIfAborted();
+      if (!['ArchiveRangeUnsupportedError', 'ArchiveUnsupportedFeatureError', 'TypeError'].includes((error as Error).name)) throw error;
+      onProgress({ percent: 2, message: 'Downloading archive for local access...' });
+    }
+  }
+
   // Download archive
   const blob = await downloadZip(url, onProgress, {
-    signal,
-    ...(options && { expectedSize: options.size, fetchImpl: options.fetchImpl }),
+    signal, sizeLimit: hasArchiveStorage() ? sizeLimit : Math.min(sizeLimit, ARCHIVE_SIZE_LIMIT),
+    ...(validation.size !== undefined && { expectedSize: validation.size }),
+    ...(options && { fetchImpl: options.fetchImpl }),
   });
-  signal?.throwIfAborted();
-
-  // Preserve original filename so libarchive.js can sniff format from extension.
-  const archiveName = options?.filename ?? (getFilenameFromUrl(url) || 'archive.zip');
-  return openZipArchive(new File([blob], archiveName), onProgress, signal);
+  let result: ZipLoadResult | undefined;
+  try {
+    signal?.throwIfAborted();
+    result = await openZipArchive(new File([blob], archiveName), onProgress, signal, { diskBacked: isArchiveDownloadDiskBacked(blob) });
+    signal?.throwIfAborted();
+    const close = result.archive.close.bind(result.archive);
+    result.archive.close = async () => { try { await close(); } finally { await releaseArchiveDownload(blob); } };
+    return result;
+  } catch (error) {
+    if (result) await closeZipArchive(result.archive).catch(() => {});
+    await releaseArchiveDownload(blob).catch(() => {}); throw error;
+  }
 }
 
 /**
@@ -306,9 +311,6 @@ export async function loadZipFromFile(
   onProgress: (progress: ZipProgress) => void,
   signal?: AbortSignal
 ): Promise<ZipLoadResult> {
-  signal?.throwIfAborted();
-  // Initialize libarchive.js
-  await initializeArchive();
   signal?.throwIfAborted();
 
   onProgress({ percent: 0, message: 'Checking archive...' });

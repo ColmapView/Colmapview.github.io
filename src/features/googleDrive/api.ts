@@ -1,7 +1,8 @@
 import type { UrlLoadError } from '../../types/manifest';
 import type { GoogleDriveFileReference } from '../../utils/googleDriveUrl';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
-import { validateArchiveSize } from '../../utils/zipValidation';
+import { getArchiveReadSizeLimit, validateArchiveSize } from '../../utils/zipValidation';
+import { anySignal } from '../../utils/abortSignals';
 import type { ZipUrlLoadOptions } from '../../utils/zipLoader';
 import { googleDriveAuth } from './auth';
 import { isGoogleDriveArchiveFilename } from './archivePolicy';
@@ -112,9 +113,14 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
   };
   let useAccount = false;
   /** The answer, with the account token the request sent (null for an anonymous request). */
-  const request = async (url: string, timeout?: number): Promise<[Response, string | null]> => {
+  const request = async (url: string, timeout?: number, init?: RequestInit): Promise<[Response, string | null]> => {
     assertHosting();
     const headers = new Headers();
+    const range = new Headers(init?.headers).get('range');
+    if (range) {
+      if (!/^bytes=\d+-\d+$/.test(range)) throw driveError(reference, 'Invalid Google Drive byte range.');
+      headers.set('Range', range);
+    }
     if (reference.resourceKey) headers.set('X-Goog-Drive-Resource-Keys', `${reference.fileId}/${reference.resourceKey}`);
     let sentToken: string | null = null;
     if (useAccount) {
@@ -125,7 +131,8 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
       if (!sentToken) throw driveError(reference, 'Sign in with the Google Drive button, then choose this archive in the Drive picker.');
       headers.set('Authorization', `Bearer ${sentToken}`);
     }
-    return [await fetchImpl(url, timeout, { headers, credentials: 'omit', signal: deps.signal }), sentToken];
+    const signal = init?.signal ? (deps.signal ? anySignal([deps.signal, init.signal]) : init.signal) : deps.signal;
+    return [await fetchImpl(url, timeout, { headers, credentials: 'omit', signal }), sentToken];
   };
   // The account only reaches files chosen in the picker, which also needs the API key.
   if (!apiKey) {
@@ -191,20 +198,21 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
     throw driveError(reference, 'This Drive file must be a ZIP or TAR archive, including supported compressed TAR formats. Choose an archive in the Drive picker.');
   }
   const size = Number(data.size);
-  const validation = validateArchiveSize(size);
+  const validation = validateArchiveSize(size, getArchiveReadSizeLimit(filename));
   if (!validation.valid) throw driveError(reference, validation.error ?? 'Archive is too large.');
   return { url: makeUrl(true), options: {
     filename, size,
-    fetchImpl: async (url, timeout) => {
+    fetchImpl: async (url, timeout, init) => {
       // The downloader receives only this fixed media endpoint; credentials cannot be sent to arbitrary URLs.
       if (url !== makeUrl(true)) throw driveError(reference, 'Unexpected Google Drive download URL.');
-      const [media, mediaToken] = await request(url, timeout);
+      const [media, mediaToken] = await request(url, timeout, init);
       await checkResponse(media, mediaToken);
+      if (new Headers(init?.headers).has('range') && (media.status === 200 || media.status === 206)) return media;
       if (media.status !== 200) {
         await media.body?.cancel().catch(() => {});
         throw driveError(reference, 'Google Drive returned an incomplete archive. Please retry.');
       }
-      // The shared libarchive decoder validates TAR variants; valid V7 TARs have no fixed magic string.
+      // The shared archive worker validates TAR variants, including V7 headers without a magic string.
       return filename.toLowerCase().endsWith('.zip') ? requireZipResponse(media, reference) : media;
     },
   } };

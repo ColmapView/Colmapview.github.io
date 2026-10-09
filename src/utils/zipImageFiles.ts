@@ -3,13 +3,16 @@ import {
 } from './zipLoader';
 import { appLogger } from './logger';
 import { getMaskPathVariants } from './imageFileLookupPolicy';
-import { compressAndResizeToJpeg } from './imageFileCompression';
+import { compressAndResizeToJpeg, getMaxCacheDimensions } from './imageFileCompression';
 import { createImageFileRequestState } from './imageFileRequestState';
 import type { DatasetAccessOptions } from '../dataset/types';
 import type { ArchiveEntry } from '../types/libarchive';
+import { createUrlFileCache } from '../dataset/urlFileCache';
 
-const zipImageState = createImageFileRequestState();
-const zipMaskState = createImageFileRequestState();
+// Images and masks share the existing byte-budget LRU policy; raw originals are never retained here.
+const archiveFiles = createUrlFileCache();
+const zipImageState = createImageFileRequestState(archiveFiles.scope('display'));
+const zipMaskState = createImageFileRequestState(archiveFiles.scope('mask'));
 const zipRawState = createImageFileRequestState();
 
 export function getZipImageCached(name: string): File | undefined { return zipImageState.getCached(name); }
@@ -19,17 +22,21 @@ export function isZipLoadingAvailable(): boolean { return hasActiveZipArchive();
 export async function fetchZipImage(name: string, options?: DatasetAccessOptions): Promise<File | null> {
   if (!hasActiveZipArchive()) return null;
   return zipImageState.request(name, async context => {
-    const file = await extractZipImage(name);
+    const index = getActiveZipImageIndex();
+    const workerPreview = Boolean(index && findZipEntry(name, index)?.extractPreview);
+    const file = await extractZipImage(name, {
+      signal: context.signal, getPriority: context.getPriority, bounds: workerPreview ? getMaxCacheDimensions() : undefined,
+    });
     if (!file || !context.isCurrent()) return null;
-    const blob = new Blob([await file.arrayBuffer()]);
-    if (!context.isCurrent()) return null;
-    return compressAndResizeToJpeg(blob, name.split('/').pop() || name);
+    return workerPreview ? file : compressAndResizeToJpeg(file, name.split('/').pop() || name);
   }, options);
 }
 
 export async function fetchZipImageRaw(name: string, options?: DatasetAccessOptions): Promise<File | null> {
   if (!hasActiveZipArchive()) return null;
-  return zipRawState.request(name, async () => extractZipImage(name), options, false);
+  return zipRawState.request(name, async context => extractZipImage(name, {
+    signal: context.signal, getPriority: context.getPriority,
+  }), options, false);
 }
 
 /** One line per archive, not per mask: a masked archive can hold thousands of masks. */
@@ -57,7 +64,7 @@ export async function fetchZipMask(name: string, options?: DatasetAccessOptions)
       const entry = findZipEntry(path, imageIndex);
       if (entry) {
         try {
-          const file = await entry.extract();
+          const file = await entry.extract({ signal: context.signal, getPriority: context.getPriority });
           if (!context.isCurrent()) return null;
           return file;
         } catch { extractionFailed = true; /* Try the next candidate. */ }

@@ -199,7 +199,7 @@ describe('Google Drive archive API', () => {
     [{ ...metadata, name: 'image.jpg' }, 'ZIP or TAR archive'],
     [{ ...metadata, name: 'wrapped.gz' }, 'ZIP or TAR archive'],
     [{ ...metadata, name: 'wrapped.7z' }, 'ZIP or TAR archive'],
-    [{ ...metadata, size: String(ARCHIVE_SIZE_LIMIT + 1) }, 'limit'],
+    [{ ...metadata, name: 'wrapped.tar.xz', size: String(ARCHIVE_SIZE_LIMIT + 1) }, 'limit'],
     [{ ...metadata, size: 'NaN' }, 'uploaded archive'],
     [{ ...metadata, size: '-1' }, 'uploaded archive'],
     [{ ...metadata, mimeType: 'application/vnd.google-apps.folder', size: undefined }, 'uploaded archive'],
@@ -211,6 +211,34 @@ describe('Google Drive archive API', () => {
     await expect(resolveGoogleDriveArchive(reference, { ...publicDeps, fetchImpl }))
       .rejects.toMatchObject({ message: expect.stringContaining(expected) });
     expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+  it.each(['zip', 'tar'])('accepts a public %s over 2 GiB and permits validated partial downloads', async extension => {
+    const size = ARCHIVE_SIZE_LIMIT + 1;
+    const fetchImpl = vi.fn().mockResolvedValueOnce(Response.json({ ...metadata, name: `large.${extension}`, size: String(size) }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), { status: 206, headers: { 'content-range': `bytes 1024-1026/${size}` } }));
+    const source = await resolveGoogleDriveArchive(reference, { ...publicDeps, fetchImpl });
+    const signal = new AbortController().signal;
+    const response = await source.options.fetchImpl!(source.url, 5000, { headers: { Range: 'bytes=1024-1026', Authorization: 'must-not-forward' }, signal });
+    expect(response.status).toBe(206); expect(source.options.size).toBe(size);
+    const init = fetchImpl.mock.calls[1][2];
+    expect(new Headers(init.headers).get('range')).toBe('bytes=1024-1026');
+    expect(new Headers(init.headers).get('Authorization')).toBeNull(); expect(init.signal).toBe(signal);
+  });
+  it('rechecks account access on each private range request and retains the file resource key', async () => {
+    let token: string | null = 'metadata-token';
+    const fetchImpl = vi.fn().mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(Response.json(metadata))
+      .mockResolvedValueOnce(new Response(new Uint8Array(3), { status: 206, headers: { 'content-range': 'bytes 100-102/1024' } }));
+    const source = await resolveGoogleDriveArchive(reference, { ...publicDeps, fetchImpl, getAccessToken: () => token });
+    token = 'current-token';
+    await source.options.fetchImpl!(source.url, 5000, { headers: { Range: 'bytes=100-102' } });
+    const headers = new Headers(fetchImpl.mock.calls[2][2].headers);
+    expect(headers.get('Authorization')).toBe('Bearer current-token'); expect(headers.get('Range')).toBe('bytes=100-102');
+    expect(headers.get('X-Goog-Drive-Resource-Keys')).toBe('file123/0-key');
+    token = null;
+    await expect(source.options.fetchImpl!(source.url, 5000, { headers: { Range: 'bytes=103-105' } }))
+      .rejects.toMatchObject({ message: expect.stringContaining('Sign in') });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
   it.each([
     [403, 'downloadQuotaExceeded', 'limiting downloads'],

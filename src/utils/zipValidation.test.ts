@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   validateZipFile,
   validateZipUrl,
+  getArchiveReadSizeLimit,
+  ARCHIVE_SIZE_LIMIT,
   type ZipUrlValidationOptions,
 } from './zipValidation';
 import { buildResponse } from '../test/builders';
@@ -18,8 +20,23 @@ function createResponse(status: number, contentLength?: string): Response {
 
 describe('zip validation', () => {
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.useRealTimers();
     vi.restoreAllMocks();
+  });
+
+  it('accepts indexed ZIP and TAR containers over 2 GiB while preserving compatibility limits', () => {
+    for (const name of ['large.zip', 'large.tar']) {
+      const file = new File(['placeholder'], name);
+      Object.defineProperty(file, 'size', { value: 3 * 1024 * 1024 * 1024 });
+      expect(validateZipFile(file).valid).toBe(true);
+    }
+    expect(getArchiveReadSizeLimit('large.tar.xz')).toBe(ARCHIVE_SIZE_LIMIT);
+    vi.stubGlobal('navigator', { storage: { getDirectory() {} } });
+    vi.stubGlobal('DecompressionStream', class {});
+    expect(getArchiveReadSizeLimit('large.tar.gz')).toBe(Number.MAX_SAFE_INTEGER);
+    vi.stubGlobal('DecompressionStream', undefined);
+    expect(getArchiveReadSizeLimit('large.tar.gz')).toBe(ARCHIVE_SIZE_LIMIT);
   });
 
   it('validates local archive files against the configured size limit', () => {

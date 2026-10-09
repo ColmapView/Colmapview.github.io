@@ -21,6 +21,7 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     plugins: [react()],
+    worker: { format: 'es' },
 
     test: {
       globals: true,

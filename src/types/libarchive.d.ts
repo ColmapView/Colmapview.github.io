@@ -2,12 +2,22 @@
  * The libarchive.js reader surface the app uses. The package ships its own types, but its
  * ArchiveReader is a class with private fields, so callers and test fakes rely on these instead.
  */
+import type { CacheDimensionBounds } from '../utils/imageFileCachePolicy';
+import type { MediaPriority } from '../dataset/types';
+
+export interface ArchiveExtractOptions {
+  signal?: AbortSignal;
+  priority?: MediaPriority;
+  getPriority?: () => MediaPriority;
+  bounds?: CacheDimensionBounds;
+}
 
 export interface ArchiveEntry {
   name: string;
   size: number;
   lastModified: number;
-  extract(): Promise<File>;
+  extract(options?: ArchiveExtractOptions): Promise<File>;
+  extractPreview?(options: ArchiveExtractOptions): Promise<File>;
 }
 
 export interface ArchiveFileEntry {
