@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { useUrlLoader } from '../../hooks/useUrlLoader';
+import { runUrlLoadPreparation, type UrlLoadPreparation } from '../../hooks/urlLoaderLoadGuard';
 import { clearPersistedSettings } from '../../store/migration';
-import { useReconstructionStore } from '../../store/reconstructionStore';
 import { importConfigFile } from '../../config/configuration';
 import { getRandomDataset, getDatasetUrl } from '../../constants/exampleDatasets';
 import { TIMING, buttonStyles, loadingStyles, toastStyles, dragOverlayStyles } from '../../theme';
@@ -48,39 +48,8 @@ export function DropZone({ children }: DropZoneProps) {
   const configInputRef = useRef<HTMLInputElement>(null);
   const manifestInputRef = useRef<HTMLInputElement>(null);
 
-  const prepareUrlLoad = useCallback(async (
-    message: string,
-    prepare: (assertCurrent: () => void, initialSplatSelectionRevision: number) => Promise<() => Promise<unknown>>,
-  ) => {
-    const signal = useReconstructionStore.getState().tryStartUrlLoad();
-    if (!signal) return;
-    const initialSplatSelectionRevision = useReconstructionStore.getState().splatSelectionRevision;
-    const isCurrent = () => !signal.aborted
-      && useReconstructionStore.getState().urlLoadController?.signal === signal;
-    const assertCurrent = () => {
-      if (!isCurrent()) throw new DOMException('Loading cancelled', 'AbortError');
-    };
-    setUrlLoading(true);
-    setUrlProgress({ percent: 0, message });
-    try {
-      await new Promise(resolve => setTimeout(resolve, 0));
-      assertCurrent();
-      const load = await prepare(assertCurrent, initialSplatSelectionRevision);
-      assertCurrent();
-      // Transfer ownership synchronously to the loader after preparation succeeds.
-      useReconstructionStore.getState().finishUrlLoad(signal);
-      await load();
-    } catch (err) {
-      if (isCurrent()) {
-        setError(err instanceof Error ? err.message : 'Failed to load dataset');
-      }
-    } finally {
-      if (isCurrent()) {
-        useReconstructionStore.getState().finishUrlLoad(signal);
-        setUrlLoading(false);
-      }
-    }
-  }, [setError, setUrlLoading, setUrlProgress]);
+  const prepareUrlLoad = useCallback((message: string, prepare: UrlLoadPreparation) =>
+    runUrlLoadPreparation({ setError, setUrlLoading, setUrlProgress }, message, prepare), [setError, setUrlLoading, setUrlProgress]);
 
   // Handle URL loading from modal
   const handleUrlLoad = useCallback(async (url: string) => {

@@ -20,7 +20,7 @@ import {
   normalizeLoadUrl,
   type RemoteSplatCandidate,
 } from './urlLoaderPolicy';
-import { URL_LOAD_GUARD_MESSAGE } from './urlLoaderLoadGuard';
+import { claimUrlLoad, URL_LOAD_GUARD_MESSAGE } from './urlLoaderLoadGuard';
 import { fetchUrlManifest, withDiscoveredColmapPaths } from './urlLoaderManifestFetch';
 import { handleUrlLoadFailure } from './urlLoaderErrorHandling';
 import { loadZipUrlSource } from './urlLoaderZipSource';
@@ -122,7 +122,6 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
   const setUrlLoading = useReconstructionStore((s) => s.setUrlLoading);
   const setUrlProgress = useReconstructionStore((s) => s.setUrlProgress);
   const setUrlError = useReconstructionStore((s) => s.setUrlError);
-  const tryStartUrlLoad = useReconstructionStore((s) => s.tryStartUrlLoad);
   const finishUrlLoad = useReconstructionStore((s) => s.finishUrlLoad);
 
   const runLoad = useCallback(async (
@@ -130,19 +129,15 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
     work: (load: UrlLoadContext) => Promise<boolean>,
     options: UrlLoadOptions = {}
   ): Promise<boolean> => {
-    const signal = tryStartUrlLoad();
-    if (!signal) {
+    const claim = claimUrlLoad();
+    if (!claim) {
       logInfo(URL_LOAD_GUARD_MESSAGE);
       return false;
     }
+    const { signal, isCurrent, assertCurrent } = claim;
     // Timeout warnings describe the previous load.
     dismissDatasetTimeoutWarnings();
     const initialSplatSelectionRevision = options.initialSplatSelectionRevision ?? useReconstructionStore.getState().splatSelectionRevision;
-    const isCurrent = () => !signal.aborted
-      && useReconstructionStore.getState().urlLoadController?.signal === signal;
-    const assertCurrent = () => {
-      if (!isCurrent()) throw new DOMException('Dataset load cancelled', 'AbortError');
-    };
     // Guard every state publication, including callbacks from parallel downloads.
     const guard = <Args extends unknown[], Result>(callback: (...args: Args) => Result) =>
       (...args: Args): Result => {
@@ -234,7 +229,7 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
         }
       }
     }
-  }, [tryStartUrlLoad, logInfo, processFiles, setSourceInfo, setUrlProgress, setUrlLoading,
+  }, [logInfo, processFiles, setSourceInfo, setUrlProgress, setUrlLoading,
     setUrlError, logError, setError, finishUrlLoad, applyUrlOverrides, mergeRemoteSplatCatalog]);
 
   const loadFromUrl = useCallback((url: string, options: UrlLoadOptions = {}): Promise<boolean> => runLoad(url, async (load) => {

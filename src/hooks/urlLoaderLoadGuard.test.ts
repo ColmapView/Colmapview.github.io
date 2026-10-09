@@ -1,28 +1,53 @@
-import { describe, expect, it, vi } from 'vitest';
-import { createUrlLoadGuard, URL_LOAD_GUARD_MESSAGE } from './urlLoaderLoadGuard';
+import { afterEach, describe, expect, it } from 'vitest';
+import { useReconstructionStore } from '../store/reconstructionStore';
+import { claimUrlLoad } from './urlLoaderLoadGuard';
 
-describe('url loader load guard', () => {
-  it('allows one active load and logs duplicate attempts', () => {
-    const log = vi.fn();
-    const guard = createUrlLoadGuard(log);
+const cancelled = expect.objectContaining({ name: 'AbortError', message: 'Dataset load cancelled' });
 
-    expect(guard.isActive()).toBe(false);
-    expect(guard.tryStart()).toBe(true);
-    expect(guard.isActive()).toBe(true);
-    expect(guard.tryStart()).toBe(false);
-    expect(log).toHaveBeenCalledWith(URL_LOAD_GUARD_MESSAGE);
+afterEach(() => { useReconstructionStore.getState().clear(); });
 
-    guard.finish();
+describe('URL load claim', () => {
+  it('holds the one URL load and refuses another claim while it is held', () => {
+    const claim = claimUrlLoad()!;
 
-    expect(guard.isActive()).toBe(false);
-    expect(guard.tryStart()).toBe(true);
+    expect(useReconstructionStore.getState()).toMatchObject({ urlLoadActive: true });
+    expect(useReconstructionStore.getState().urlLoadController?.signal).toBe(claim.signal);
+    expect(claim.isCurrent()).toBe(true);
+    expect(() => claim.assertCurrent()).not.toThrow();
+    expect(claimUrlLoad()).toBeNull();
+    expect(useReconstructionStore.getState().urlLoadController?.signal).toBe(claim.signal);
   });
 
-  it('is isolated per guard instance', () => {
-    const first = createUrlLoadGuard();
-    const second = createUrlLoadGuard();
+  it('stops being current once its load finishes, which frees the guard', () => {
+    const claim = claimUrlLoad()!;
 
-    expect(first.tryStart()).toBe(true);
-    expect(second.tryStart()).toBe(true);
+    useReconstructionStore.getState().finishUrlLoad(claim.signal);
+
+    expect(claim.signal.aborted).toBe(true);
+    expect(claim.isCurrent()).toBe(false);
+    expect(() => claim.assertCurrent()).toThrow(cancelled);
+    expect(claimUrlLoad()).not.toBeNull();
+  });
+
+  it.each(['cancelLoading', 'clear'] as const)('stops being current after %s, and stays stale once a newer load claims the guard', action => {
+    const claim = claimUrlLoad()!;
+
+    useReconstructionStore.getState()[action]();
+    expect(claim.isCurrent()).toBe(false);
+
+    const next = claimUrlLoad()!;
+    expect(next.isCurrent()).toBe(true);
+    expect(claim.isCurrent()).toBe(false);
+    expect(() => claim.assertCurrent()).toThrow(cancelled);
+  });
+
+  it('is not current once the store no longer holds its controller, even before its signal aborts', () => {
+    const claim = claimUrlLoad()!;
+
+    useReconstructionStore.setState({ urlLoadActive: false, urlLoadController: null });
+
+    expect(claim.signal.aborted).toBe(false);
+    expect(claim.isCurrent()).toBe(false);
+    expect(() => claim.assertCurrent()).toThrow(cancelled);
   });
 });
