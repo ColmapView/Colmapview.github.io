@@ -8,7 +8,7 @@ import { cloudflareStaticHeaders } from './headers.mjs';
 const [profile, ...args] = process.argv.slice(2);
 const value = (name, fallback) => args.find(arg => arg.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
 const base = validateBase(profile, value('base', profile === 'github' ? '/latest/' : '/'));
-const output = safeOutputDirectory(value('out', ` .tmp/deployment/${profile}`.trim()));
+const output = safeOutputDirectory(value('out', `.tmp/deployment/${profile}`));
 const env = profileEnvironment(profile, process.env, args.includes('--fixture'));
 env.VITE_BASE = base;
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));

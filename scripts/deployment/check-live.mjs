@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import { readFileSync } from 'node:fs';
 import { chromium } from '@playwright/test';
-import { CUSTOM_ORIGIN, sourceSha } from './profiles.mjs';
+import { CUSTOM_ORIGIN, GITHUB_ORIGIN, PROFILES, sourceSha } from './profiles.mjs';
 import { fetchVerifiedArtifact, verifyIndexHtml, verifyPolicyHtml } from './artifact-verification.mjs';
 
 const [baseValue, profile, ...args] = process.argv.slice(2);
@@ -11,9 +11,9 @@ if (base.protocol !== 'https:' || base.username || base.password || base.search 
   throw new Error('Live smoke requires a public HTTPS directory URL without credentials, query or fragment.');
 }
 if (profile === 'custom' && (base.origin !== CUSTOM_ORIGIN || base.pathname !== '/')) throw new Error('Custom smoke must use the fixed production origin.');
-if (profile === 'github' && base.origin !== 'https://colmapview.github.io') throw new Error('GitHub smoke must use the independent GitHub host.');
+if (profile === 'github' && base.origin !== GITHUB_ORIGIN) throw new Error('GitHub smoke must use the independent GitHub host.');
 if (profile === 'preview' && !base.hostname.endsWith('.pages.dev')) throw new Error('Preview smoke must use the isolated Pages hostname.');
-if (!['github', 'custom', 'preview'].includes(profile)) throw new Error('Unknown live deployment profile.');
+if (!PROFILES.includes(profile)) throw new Error('Unknown live deployment profile.');
 const expectedSha = sourceSha();
 const manifestPath = args.find(arg => arg.startsWith('--manifest='))?.slice('--manifest='.length);
 if (!manifestPath) throw new Error('Live checks require --manifest=PATH from the exact prepared artifact.');
@@ -36,7 +36,6 @@ for (let attempt = 1; attempt <= readinessAttempts; attempt++) {
     break;
   } catch (error) {
     lastError = error;
-    metadata = undefined;
     console.log(`Waiting for ${profile} artifact (${attempt}/${readinessAttempts}).`);
     if (attempt < readinessAttempts) await delay(5_000);
   }

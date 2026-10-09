@@ -4,6 +4,7 @@ import path from 'node:path';
 import { gzipSync, zipSync, strToU8 } from 'fflate';
 import { startArtifactServer } from '../static-server.mjs';
 import { verifyIndexHtml } from '../artifact-verification.mjs';
+import { CUSTOM_ORIGIN, GITHUB_ORIGIN, PROFILES } from '../profiles.mjs';
 import { loadTestDataset } from '../../../e2e/fixtures/load-test-data';
 import { decodeShareData } from '../../../src/utils/shareDataCodec';
 
@@ -19,8 +20,7 @@ interface DeploymentMetadata {
 }
 
 const root = process.env.DEPLOYMENT_SMOKE_ROOT || '.tmp/deployment-smoke';
-const profiles = (process.env.DEPLOYMENT_SMOKE_PROFILES || 'github,custom,preview').split(',');
-const customOrigin = 'https://colmapview.opsiclear.com';
+const profiles = (process.env.DEPLOYMENT_SMOKE_PROFILES || PROFILES.join(',')).split(',');
 const driveUrl = 'https://drive.google.com/file/d/artifact_fixture_file/view?resourcekey=fixture-resource&access_token=must-not-transfer';
 const fixture = path.resolve('e2e/fixtures/test-data');
 const archive = Buffer.from(zipSync(Object.fromEntries(['cameras.txt', 'images.txt', 'points3D.txt'].map(name => [name, strToU8(readFileSync(path.join(fixture, 'sparse', name), 'utf8'))]))));
@@ -93,8 +93,8 @@ for (const directory of profiles) {
   const output = path.resolve(root, directory);
   const metadata: DeploymentMetadata = JSON.parse(readFileSync(path.join(output, 'deployment.json'), 'utf8'));
   baselineSha ??= metadata.sourceSha;
-  const hosts = profile === 'custom' ? [customOrigin, 'https://artifact-check.pages.dev', 'https://colmapview.github.io']
-    : profile === 'github' ? ['https://colmapview.github.io'] : ['https://artifact-check.pages.dev'];
+  const hosts = profile === 'custom' ? [CUSTOM_ORIGIN, 'https://artifact-check.pages.dev', GITHUB_ORIGIN]
+    : profile === 'github' ? [GITHUB_ORIGIN] : ['https://artifact-check.pages.dev'];
 
   for (const origin of hosts) {
     test(`${directory} artifact at ${origin}: policies, native loading and Drive origin gate`, async ({ page, context }) => {
@@ -117,7 +117,7 @@ for (const directory of profiles) {
         // Static files only: Cloudflare runs a _worker.js as server code under the deploying account.
         for (const entry of ['_worker.js', '_routes.json', 'functions']) expect(existsSync(path.join(output, entry)), entry).toBe(false);
       }
-      const enabled = profile === 'custom' && origin === customOrigin;
+      const enabled = profile === 'custom' && origin === CUSTOM_ORIGIN;
       const server = await startArtifactServer(output, metadata.base);
       const traffic = await routeArtifact(context, origin, server.origin, enabled);
       const errors: string[] = [];
@@ -157,12 +157,12 @@ for (const directory of profiles) {
           const sharedDriveUrl = 'https://drive.google.com/file/d/artifact_fixture_file/view?resourcekey=fixture-resource';
           // Trusted preview checks may run on an older preview source, which hands the file over in ?url=.
           if (profile === 'preview' && destination.searchParams.has('url')) {
-            expect(destination.origin + destination.pathname).toBe(`${customOrigin}/`);
+            expect(destination.origin + destination.pathname).toBe(`${CUSTOM_ORIGIN}/`);
             expect(destination.searchParams.get('url')).toBe(sharedDriveUrl);
             expect(destination.href).not.toContain('access_token');
           } else {
             // The file ID rides in the fragment, which never reaches the custom host's server.
-            expect(destination.origin + destination.pathname + destination.search).toBe(`${customOrigin}/`);
+            expect(destination.origin + destination.pathname + destination.search).toBe(`${CUSTOM_ORIGIN}/`);
             expect((await decodeShareData(destination.hash))?.manifestUrl).toBe(sharedDriveUrl);
           }
           await dialog.locator('input[type="url"]').press('Enter');
@@ -191,11 +191,11 @@ for (const directory of profiles) {
       test(`${directory} custom root: native public ${driveArchive.filename} loading`, async ({ page, context }) => {
         expect(metadata.profile, 'artifact profile').toBe(profile);
         const server = await startArtifactServer(output, '/');
-        const traffic = await routeArtifact(context, customOrigin, server.origin, true, driveArchive);
+        const traffic = await routeArtifact(context, CUSTOM_ORIGIN, server.origin, true, driveArchive);
         const errors: string[] = [];
         page.on('pageerror', error => errors.push(error.message));
         try {
-          await page.goto(`${customOrigin}/`);
+          await page.goto(`${CUSTOM_ORIGIN}/`);
           const dialog = await enterDriveUrl(page);
           await dialog.getByRole('button', { name: 'Load', exact: true }).click();
           await expect(page.getByText('Source:', { exact: false }).first()).toBeVisible({ timeout: 45_000 });

@@ -3,6 +3,7 @@ import path from 'node:path';
 
 export const CUSTOM_ORIGIN = 'https://colmapview.opsiclear.com';
 export const GITHUB_ORIGIN = 'https://colmapview.github.io';
+export const PROFILES = ['github', 'custom', 'preview'];
 export const WRANGLER_VERSION = '4.147.0';
 export const FIXTURE_GOOGLE_CONFIG = {
   CUSTOM_GOOGLE_DRIVE_API_KEY: 'colmapview_artifact_fixture_key',
@@ -12,8 +13,9 @@ export const FIXTURE_GOOGLE_CONFIG = {
 
 const GOOGLE_NAMES = ['API_KEY', 'CLIENT_ID', 'APP_ID'];
 const HF_NAMES = ['AUTH_ENABLED', 'PUBLISH_ENABLED', 'OAUTH_CLIENT_ID', 'OAUTH_REDIRECT_URI'];
+const PAGES_PROJECT = /^[a-z0-9][a-z0-9-]{0,57}[a-z0-9]$/;
 
-export function strictFlag(value, name, fallback = false) {
+function strictFlag(value, name, fallback = false) {
   if (value === undefined || value === '') return fallback;
   if (value === 'true') return true;
   if (value === 'false') return false;
@@ -26,7 +28,7 @@ function requireValue(env, name, pattern) {
   return value;
 }
 
-export function validateCustomConfiguration(env) {
+function validateCustomConfiguration(env) {
   requireValue(env, 'CUSTOM_GOOGLE_DRIVE_API_KEY', /^[A-Za-z0-9_-]{1,256}$/);
   requireValue(env, 'CUSTOM_GOOGLE_DRIVE_CLIENT_ID', /^[0-9]+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/);
   requireValue(env, 'CUSTOM_GOOGLE_DRIVE_APP_ID', /^[1-9]\d{0,29}$/);
@@ -42,12 +44,16 @@ export function validateCustomConfiguration(env) {
   }
 }
 
+function requireCloudflareAccess(env) {
+  if (!strictFlag(env.CLOUDFLARE_API_TOKEN_CONFIGURED, 'CLOUDFLARE_API_TOKEN_CONFIGURED')) throw new Error('CLOUDFLARE_API_TOKEN is missing.');
+  requireValue(env, 'CLOUDFLARE_ACCOUNT_ID', /^[a-f0-9]{32}$/i);
+}
+
 export function validateReleaseConfiguration(env, isRelease) {
   const enabled = strictFlag(env.CLOUDFLARE_PAGES_ENABLED, 'CLOUDFLARE_PAGES_ENABLED');
   if (!enabled || !isRelease) return { customEnabled: false };
-  if (!strictFlag(env.CLOUDFLARE_API_TOKEN_CONFIGURED, 'CLOUDFLARE_API_TOKEN_CONFIGURED')) throw new Error('CLOUDFLARE_API_TOKEN is missing.');
-  requireValue(env, 'CLOUDFLARE_ACCOUNT_ID', /^[a-f0-9]{32}$/i);
-  requireValue(env, 'CLOUDFLARE_PAGES_PROJECT', /^[a-z0-9][a-z0-9-]{0,57}[a-z0-9]$/);
+  requireCloudflareAccess(env);
+  requireValue(env, 'CLOUDFLARE_PAGES_PROJECT', PAGES_PROJECT);
   validateCustomConfiguration(env);
   return { customEnabled: true };
 }
@@ -58,10 +64,9 @@ export function validateReleaseTag(tag, version) {
 }
 
 export function validatePreviewConfiguration(env) {
-  if (!strictFlag(env.CLOUDFLARE_API_TOKEN_CONFIGURED, 'CLOUDFLARE_API_TOKEN_CONFIGURED')) throw new Error('CLOUDFLARE_API_TOKEN is missing.');
-  requireValue(env, 'CLOUDFLARE_ACCOUNT_ID', /^[a-f0-9]{32}$/i);
-  const preview = requireValue(env, 'CLOUDFLARE_PREVIEW_PROJECT', /^[a-z0-9][a-z0-9-]{0,57}[a-z0-9]$/);
-  const production = requireValue(env, 'CLOUDFLARE_PAGES_PROJECT', /^[a-z0-9][a-z0-9-]{0,57}[a-z0-9]$/);
+  requireCloudflareAccess(env);
+  const preview = requireValue(env, 'CLOUDFLARE_PREVIEW_PROJECT', PAGES_PROJECT);
+  const production = requireValue(env, 'CLOUDFLARE_PAGES_PROJECT', PAGES_PROJECT);
   if (preview === production) throw new Error('Preview must use a separate Pages project.');
 }
 
@@ -95,7 +100,7 @@ export function validateGithubHfConfiguration(env, isRelease) {
 
 /** Explicit empty values prevent ignored local .env files from leaking into a hosted build. */
 export function profileEnvironment(profile, source = process.env, fixture = false) {
-  if (!['github', 'custom', 'preview'].includes(profile)) throw new Error('Unknown deployment profile.');
+  if (!PROFILES.includes(profile)) throw new Error('Unknown deployment profile.');
   const env = { ...source };
   env.VITE_GOOGLE_DRIVE_ENABLED = 'false';
   env.VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN = '';
@@ -105,9 +110,7 @@ export function profileEnvironment(profile, source = process.env, fixture = fals
   }
   if (profile !== 'github' || fixture) {
     for (const name of HF_NAMES) env[`VITE_HF_${name}`] = name.endsWith('ENABLED') ? 'false' : '';
-  }
-  // Unprefixed aliases may be used by setup scripts; never inherit them in a custom/preview build.
-  if (profile !== 'github' || fixture) {
+    // Unprefixed aliases must also be cleared for custom, preview and GitHub fixture builds.
     for (const name of HF_NAMES) env[`HF_${name}`] = '';
   }
   if (profile === 'custom') {
@@ -121,8 +124,8 @@ export function profileEnvironment(profile, source = process.env, fixture = fals
   return env;
 }
 
-export function sourceSha(env = process.env) {
-  const sha = env.DEPLOYMENT_SHA || env.GITHUB_SHA || execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+export function sourceSha() {
+  const sha = process.env.DEPLOYMENT_SHA || process.env.GITHUB_SHA || execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   if (!/^[a-f0-9]{40}$/i.test(sha)) throw new Error('Deployment source SHA must be a complete Git commit SHA.');
   return sha;
 }
@@ -133,7 +136,8 @@ export function validateBase(profile, base) {
   return base;
 }
 
-export function safeOutputDirectory(value, cwd = process.cwd()) {
+export function safeOutputDirectory(value) {
+  const cwd = process.cwd();
   const output = path.resolve(cwd, value);
   const scratch = path.resolve(cwd, '.tmp');
   if (output !== path.resolve(cwd, 'dist') && !output.startsWith(`${scratch}${path.sep}`)) {
