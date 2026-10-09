@@ -12,7 +12,7 @@ import {
   useUIStore,
 } from '../../store';
 import { buildFile, buildLoadedFiles, buildReconstruction } from '../../test/builders';
-import { beginReconstructionLoad } from '../../wasm/reconstructionLoadLifecycle';
+import { beginReconstructionLoad, markReconstructionSceneCommitted } from '../../wasm/reconstructionLoadLifecycle';
 import { useViewerControlsController } from './useViewerControlsController';
 
 function setWebGpuSplatMetricsReady() {
@@ -225,6 +225,54 @@ describe('useViewerControlsController', () => {
     }
     pressKey('n');
     expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(second);
+  });
+
+  it.each(['panel None', 'panel tile', 'N'] as const)('keeps a URL download and its Cancel when %s tries to change the old scene', choice => {
+    const first = buildFile('a.spz', 'a');
+    const second = buildFile('b.spz', 'b');
+    useReconstructionStore.setState({
+      reconstruction: buildReconstruction(),
+      loadedFiles: buildLoadedFiles({ splatFile: first, splatFiles: [first, second], splatFileSources: [
+        { id: 'a.spz', path: 'a.spz', file: first }, { id: 'b.spz', path: 'b.spz', file: second }] }),
+    });
+    const { result } = renderHook(() => useViewerControlsController(), { wrapper: hotkeyWrapper });
+    const store = useReconstructionStore.getState;
+    const signal = store().tryStartUrlLoad()!;
+    const revision = store().splatSelectionRevision;
+    const progress = { percent: 25, message: 'Downloading dataset ZIP...' };
+    try {
+      act(() => useReconstructionStore.setState({ urlLoading: true, urlProgress: progress }));
+      if (choice === 'N') pressKey('n');
+      else act(() => result.current.pointCloudPanel.onSelectSplatSource(choice === 'panel None' ? '' : 'b.spz'));
+      expect(store()).toMatchObject({ urlLoading: true, urlLoadActive: true, urlProgress: progress, splatSelectionRevision: revision });
+      expect(store().loadedFiles?.splatFile).toBe(first);
+      act(() => store().cancelLoading());
+      expect(signal.aborted).toBe(true);
+    } finally {
+      act(() => store().finishUrlLoad(signal));
+    }
+  });
+
+  it('allows a scene splat choice once a URL load commits and only its restoration remains', () => {
+    const first = buildFile('a.spz', 'a');
+    const second = buildFile('b.spz', 'b');
+    const store = useReconstructionStore.getState;
+    const signal = store().tryStartUrlLoad()!;
+    const parsing = beginReconstructionLoad();
+    useReconstructionStore.setState({ reconstruction: buildReconstruction(),
+      loadedFiles: buildLoadedFiles({ splatFile: first, splatFiles: [first, second], splatFileSources: [
+        { id: 'a.spz', path: 'a.spz', file: first }, { id: 'b.spz', path: 'b.spz', file: second }] }) });
+    markReconstructionSceneCommitted(parsing.signal, signal);
+    parsing.finish();
+    const { result } = renderHook(() => useViewerControlsController());
+    try {
+      act(() => result.current.pointCloudPanel.onSelectSplatSource('b.spz'));
+      expect(store().loadedFiles?.splatFile).toBe(second);
+      expect(signal.aborted).toBe(false);
+      expect(store().urlLoadActive).toBe(true);
+    } finally {
+      act(() => store().finishUrlLoad(signal));
+    }
   });
 
   it.each([['None', ''], ['another splat', 'b.spz']])(

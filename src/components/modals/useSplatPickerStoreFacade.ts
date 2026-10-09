@@ -1,4 +1,5 @@
 import { useReconstructionStore, useSplatBackendStore } from '../../store';
+import { isDatasetSceneReplacementPending } from '../../store/reconstructionStore';
 import type { SplatFileSource } from '../../types/colmap';
 import type {
   SplatBackendPreference,
@@ -34,6 +35,7 @@ export function useSplatPickerStoreFacade(): SplatPickerStoreFacade {
   const sparkSplatAvailable = useSplatBackendStore((state) => state.availability.spark);
 
   const selectSplatSource = (sourceId: string) => {
+    if (isDatasetSceneReplacementPending()) return;
     void selectSplatSourceAction(sourceId);
   };
 

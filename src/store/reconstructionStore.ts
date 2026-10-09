@@ -63,6 +63,13 @@ export function isSplatDownloadPending(): boolean {
   return activeSplatController !== null;
 }
 
+/** Scene controls must wait for parsing or a URL request that has not installed its scene yet. */
+export function isDatasetSceneReplacementPending(): boolean {
+  if (isReconstructionLoadPending()) return true;
+  const { urlLoadActive, urlLoadController } = useReconstructionStore.getState();
+  return urlLoadActive && !hasReconstructionSceneCommitted(urlLoadController?.signal ?? null);
+}
+
 /** A load keeps its progress until it commits; afterward only the splat on that scene may report renderer progress. */
 export function isDatasetLoadPendingForSplat(file: File): boolean {
   const { loadedFiles, urlLoadActive, urlLoadController } = useReconstructionStore.getState();

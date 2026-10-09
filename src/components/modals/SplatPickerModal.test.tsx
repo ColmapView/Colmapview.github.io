@@ -5,6 +5,7 @@ import { useSplatBackendStore } from '../../store/stores/splatBackendStore';
 import { useUIStore } from '../../store/stores/uiStore';
 import { useIsTouchDevice } from '../../hooks/useIsTouchDevice';
 import { SplatPickerModal } from './SplatPickerModal';
+import { beginReconstructionLoad, markReconstructionSceneCommitted } from '../../wasm/reconstructionLoadLifecycle';
 
 // The device-memory hint must key on the hardware touch signal (detectTouchDevice,
 // which drives the auto-load budget), NOT the UI touchMode flag. Post-T9 a
@@ -105,6 +106,69 @@ describe('SplatPickerModal COLMAP-only selection', () => {
     expect(state.urlError).toBeNull();
     expect(state.urlLoading).toBe(false);
     expect(request).toHaveBeenCalledOnce();
+  });
+});
+
+describe('SplatPickerModal while a dataset replaces its scene', () => {
+  beforeEach(() => {
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
+    mockUseIsTouchDevice.mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    cleanup();
+    useReconstructionStore.getState().clear();
+  });
+
+  function openPicker() {
+    const file = new File(['splat'], 'scene.spz');
+    useReconstructionStore.setState({ showSplatPicker: true,
+      loadedFiles: { imageFiles: new Map(), hasMasks: false, splatFiles: [file],
+        splatFileSources: [{ id: file.name, path: file.name, file }] } });
+    render(<SplatPickerModal />);
+    return file;
+  }
+
+  describe.each(['parsing', 'URL download'] as const)('during %s', phase => {
+    it.each(['None', 'tile', 'Skip', 'Escape'] as const)('keeps the dataset progress and Cancel after %s in the old picker', choice => {
+      openPicker();
+      const store = useReconstructionStore.getState;
+      const parsing = phase === 'parsing' ? beginReconstructionLoad() : null;
+      const signal = parsing?.signal ?? store().tryStartUrlLoad()!;
+      const progress = { percent: 25, message: phase === 'parsing' ? 'Parsing COLMAP files...' : 'Downloading dataset ZIP...' };
+      const revision = store().splatSelectionRevision;
+      try {
+        act(() => useReconstructionStore.setState({ urlLoading: true, urlProgress: progress }));
+        if (choice === 'Escape') fireEvent.keyDown(document, { key: 'Escape' });
+        else fireEvent.click(screen.getByRole('button', { name: choice === 'None' ? 'None - COLMAP only'
+          : choice === 'Skip' ? 'Skip (COLMAP only)' : 'scene.spz' }));
+        expect(store()).toMatchObject({ urlLoading: true, urlProgress: progress, splatSelectionRevision: revision });
+        expect(store().loadedFiles?.splatFile).toBeUndefined();
+        act(() => store().cancelLoading());
+        expect(signal.aborted).toBe(true);
+      } finally {
+        parsing?.finish();
+        if (!parsing) act(() => store().finishUrlLoad(signal));
+      }
+    });
+  });
+
+  it('allows picking the committed scene while its URL restoration continues', () => {
+    const file = openPicker();
+    const store = useReconstructionStore.getState;
+    const signal = store().tryStartUrlLoad()!;
+    const parsing = beginReconstructionLoad();
+    markReconstructionSceneCommitted(parsing.signal, signal);
+    parsing.finish();
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'scene.spz' }));
+      expect(store().loadedFiles?.splatFile).toBe(file);
+      expect(signal.aborted).toBe(false);
+      expect(store().urlLoadActive).toBe(true);
+    } finally {
+      act(() => store().finishUrlLoad(signal));
+    }
   });
 });
 

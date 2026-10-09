@@ -47,7 +47,7 @@ import {
 import type { Reconstruction, SplatFileSource } from '../../types/colmap';
 import { getActiveSplatSourceId, loadedFilesHaveSplatData } from '../../utils/splatFileSourcePolicy';
 import { reconstructionHasSplatMetricCapableCamera } from '../../splat/splatMetricCapability';
-import { isReconstructionLoadPending } from '../../wasm/reconstructionLoadLifecycle';
+import { isDatasetSceneReplacementPending } from '../../store/reconstructionStore';
 
 interface ViewerControlsUiFacade {
   touchMode: boolean;
@@ -222,7 +222,7 @@ export function useViewerControlsStoreFacade(): ViewerControlsStoreFacade {
       hasSplatData: loadedFilesHaveSplatData(loadedFiles),
       setActiveSplatFile,
       selectSplatSource,
-      isDatasetLoadPending: isReconstructionLoadPending,
+      isDatasetLoadPending: isDatasetSceneReplacementPending,
     },
     reconstruction,
   };
