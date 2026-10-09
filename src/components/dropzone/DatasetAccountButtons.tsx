@@ -44,11 +44,11 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
   const canSignIn = provider === 'google' ? Boolean(clientId) : hfConfiguration.status === 'ready';
   const description = provider === 'google'
     ? clientId
-      ? connected ? 'Choose a ZIP or TAR dataset from Google Drive.' : 'Choose a ZIP or TAR from Drive. Sign in to open private files.'
+      ? connected ? 'Open ZIP or TAR archives.' : 'Sign in to choose a ZIP or TAR archive.'
       : googleApiKey ? 'Load a public dataset by URL.' : 'Google Drive loading is unavailable in this viewer.'
     : connected ? 'Load a public or private dataset.' : canSignIn ? 'Sign in to open private datasets.' : 'Load a public dataset by URL.';
   const hint = provider === 'google'
-    ? clientId ? 'Access is limited to files you choose. Downloads go directly to this browser.'
+    ? clientId ? 'Only files you choose are accessible. Downloads go directly to your browser.'
       : googleApiKey ? 'Private file selection is unavailable. You can load public datasets by URL.'
         : 'Private file selection is unavailable.'
     : hfConfiguration.status === 'ready'
@@ -167,9 +167,9 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
           ? <button type="button" className={getButtonClass('primary', 'sm')} onClick={() => {
             setSdkError(null); setSdkAttempt(value => value + 1);
           }}>Retry sign-in</button>
-          : <button type="button" disabled={(!connected && !sdk) || connecting || pickerLoading}
+          : <button type="button" aria-label={!connected && !sdk ? undefined : 'Choose archive from Drive'} disabled={(!connected && !sdk) || connecting || pickerLoading}
             className={getButtonClass('primary', 'sm', (!connected && !sdk) || connecting || pickerLoading)}
-            onClick={chooseArchive}>{!connected && !sdk ? 'Loading sign-in…' : 'Choose archive from Drive'}</button>)}
+            onClick={chooseArchive}>{!connected && !sdk ? 'Loading sign-in…' : 'Choose archive'}</button>)}
       </> : connected || connecting ? <>
         <button type="button" className={getButtonClass('ghost', 'sm')} onClick={disconnect}>
           {connected ? 'Disconnect' : 'Cancel sign-in'}
@@ -182,8 +182,8 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
       </> : <>
         <button type="button" className={getButtonClass(canSignIn ? 'ghost' : 'primary', 'sm')}
           onClick={() => { close(); onOpenUrlModal(); }}>Load URL</button>
-        {provider === 'hf' && hfConfiguration.status === 'ready' ? <button type="button" className={getButtonClass('primary', 'sm')}
-            onClick={() => { void hfAuth.connect(hfConfiguration.config); }}>Sign in with Hugging Face</button> : null}
+        {provider === 'hf' && hfConfiguration.status === 'ready' ? <button type="button" aria-label="Sign in with Hugging Face" className={getButtonClass('primary', 'sm')}
+            onClick={() => { void hfAuth.connect(hfConfiguration.config); }}>Sign in</button> : null}
       </>}
     </AccountDialog>
   </>;

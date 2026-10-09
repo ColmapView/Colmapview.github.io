@@ -31,14 +31,14 @@ export function HuggingFaceAccountButton({ config, activePanel, setActivePanel }
     <AccountDialog id={id} isOpen={isOpen} onClose={close} title="Hugging Face" connected={connected}
       status={connected || connecting ? connected ? `Connected as ${hf.identity?.username}` : 'Waiting for sign-in…' : null}
       statusTitle={hf.identity?.username}
-      description={connected ? 'Files from private datasets load with this account.' : 'Sign in to keep loading files from private datasets.'}
+      description={connected ? 'Load private datasets with this account.' : 'Sign in to open private datasets.'}
       hint={!connected ? describeHfAccess(config) : null} error={hf.error}>
       {connected || connecting
         ? <button type="button" className={getButtonClass('ghost', 'sm')} onClick={() => hfAuth.disconnect()}>
           {connected ? 'Disconnect' : 'Cancel sign-in'}
         </button>
-        : <button type="button" className={getButtonClass('primary', 'sm')} onClick={() => { void hfAuth.connect(config); }}>
-          Sign in with Hugging Face
+        : <button type="button" aria-label="Sign in with Hugging Face" className={getButtonClass('primary', 'sm')} onClick={() => { void hfAuth.connect(config); }}>
+          Sign in
         </button>}
     </AccountDialog>
   </>;

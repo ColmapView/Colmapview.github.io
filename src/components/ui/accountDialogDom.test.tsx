@@ -31,8 +31,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-// Captured from the two original dialogs before extracting their shared skeleton.
-// Keep the generated IDs too: moving useId into the skeleton would change the DOM.
+// Keep both account entry points consistent, including generated IDs and access notices.
 describe.each(['landing', 'toolbar'] as const)('%s account dialog DOM', surface => {
   function open() {
     if (surface === 'landing') render(<DatasetAccountButtons onOpenUrlModal={vi.fn()} onLoadGoogleDriveArchive={vi.fn()} />);
@@ -45,9 +44,11 @@ describe.each(['landing', 'toolbar'] as const)('%s account dialog DOM', surface 
     vi.spyOn(hfAuth, 'getSnapshot').mockReturnValue(state);
     const dialog = open();
     expect(dialog).toHaveAccessibleName('Hugging Face');
-    expect(dialog).toHaveAccessibleDescription(surface === 'landing'
+    const description = surface === 'landing'
       ? state.status === 'connected' ? 'Load a public or private dataset.' : 'Sign in to open private datasets.'
-      : state.status === 'connected' ? 'Files from private datasets load with this account.' : 'Sign in to keep loading files from private datasets.');
+      : state.status === 'connected' ? 'Load private datasets with this account.' : 'Sign in to open private datasets.';
+    expect(dialog).toHaveAccessibleDescription(state.status === 'connected'
+      ? description : `${description} Allows reading your repositories, including private datasets.`);
     expect(dialog.outerHTML).toMatchSnapshot();
   });
 
@@ -56,7 +57,7 @@ describe.each(['landing', 'toolbar'] as const)('%s account dialog DOM', surface 
     try {
       vi.spyOn(hfAuth, 'getSnapshot').mockReturnValue(states[0][1]);
       const dialog = open();
-      expect(screen.getByText('Allows reading private repositories and creating datasets with this app.')).toBeVisible();
+      expect(screen.getByText('Allows reading private repositories and creating datasets.')).toBeVisible();
       expect(dialog.outerHTML).toMatchSnapshot();
     } finally { config.readOnly = true; }
   });

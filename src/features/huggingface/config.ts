@@ -4,7 +4,7 @@ export interface HfConfig { clientId: string; redirectUri: string; readOnly?: bo
 export function describeHfAccess(config: HfConfig): string {
   return config.readOnly
     ? 'Allows reading your repositories, including private datasets.'
-    : 'Allows reading private repositories and creating datasets with this app.';
+    : 'Allows reading private repositories and creating datasets.';
 }
 
 export type HfConfiguration =

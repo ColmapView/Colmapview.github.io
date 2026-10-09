@@ -171,8 +171,8 @@ describe('Dataset provider account icons', () => {
     expect(connect).not.toHaveBeenCalled();
     expect(oauth.requestAccessToken).not.toHaveBeenCalled();
     expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
-    expect(screen.getByText('Choose a ZIP or TAR from Drive. Sign in to open private files.')).toBeVisible();
-    expect(screen.getByText(/Access is limited to files you choose/)).toBeVisible();
+    expect(screen.getByText(/Sign in to choose a ZIP or TAR archive/)).toBeVisible();
+    expect(screen.getByText(/Only files you choose are accessible/)).toBeVisible();
     expect(screen.getByRole('link', { name: 'Privacy' })).toBeVisible();
   });
 
@@ -473,12 +473,12 @@ describe('Dataset provider account icons', () => {
   });
 
   it.each([
-    { state: 'signed out without sign-in', setup: () => {}, description: 'Load a public dataset by URL.' },
+    { state: 'signed out without sign-in', setup: () => {}, description: 'Load a public dataset by URL. Hugging Face sign-in is unavailable in this viewer.' },
     { state: 'signed out with sign-in available', setup: () => {
       vi.stubEnv('VITE_HF_AUTH_ENABLED', 'true');
       vi.stubEnv('VITE_HF_OAUTH_CLIENT_ID', 'hf-test-client');
       vi.stubEnv('VITE_HF_OAUTH_REDIRECT_URI', `${window.location.origin}/hf-callback.html`);
-    }, description: 'Sign in to open private datasets.' },
+    }, description: 'Sign in to open private datasets. Allows reading your repositories, including private datasets.' },
     { state: 'connected', setup: () => {
       vi.spyOn(hfAuth, 'getSnapshot').mockReturnValue({ status: 'connected', identity: { username: 'test-user' }, error: null });
     }, description: 'Load a public or private dataset.' },
