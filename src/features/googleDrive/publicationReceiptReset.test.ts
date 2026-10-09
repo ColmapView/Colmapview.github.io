@@ -1,9 +1,10 @@
 import { Blob as NodeBlob } from 'node:buffer';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDeletionStore, useReconstructionStore } from '../../store';
 import { buildReconstruction } from '../../test/builders';
 import { assertPublicationInputCurrent, capturePublicationInput } from '../datasetPublishing/publicationSnapshot';
 import { GoogleDrivePublishError } from './upload';
+import { drivePublication } from './publicationRuntime';
 
 const client = vi.hoisted(() => {
   const files = new Map<string, Record<string, unknown>>();
@@ -30,9 +31,16 @@ vi.mock('./upload', async importOriginal => ({ ...await importOriginal<typeof im
 const archive = async () => ({ blob: new Blob(['zip']), md5: 'md5', viewerBaseUrl: 'https://viewer.example/' });
 
 describe('Drive publication receipt', () => {
-  it('clears a finished Drive receipt when another dataset loads', async () => {
+  beforeEach(() => {
     vi.stubGlobal('Blob', NodeBlob);
-    const { drivePublication } = await import('./publicationRuntime');
+    drivePublication.reset();
+    client.hooks.beforeChunk = () => {};
+    useDeletionStore.setState({ pendingDeletions: new Set() });
+    useReconstructionStore.setState({ ...useReconstructionStore.getInitialState(),
+      reconstruction: buildReconstruction(), sourceType: 'url', sourceUrl: 'https://example.test/fixture/' }, true);
+  });
+
+  it('clears a finished Drive receipt when another dataset loads', async () => {
     useReconstructionStore.setState({ reconstruction: buildReconstruction(), sourceType: 'url', sourceUrl: 'https://example.test/a/' });
     await drivePublication.publish('a', false, archive);
     expect(drivePublication.getSnapshot().phase).toBe('completed');
@@ -41,7 +49,6 @@ describe('Drive publication receipt', () => {
     expect(drivePublication.getSnapshot().receipt).toBeUndefined();
   });
   it('clears a failed Drive publication when another dataset loads', async () => {
-    const { drivePublication } = await import('./publicationRuntime');
     client.hooks.beforeChunk = () => { client.hooks.beforeChunk = () => {}; throw new GoogleDrivePublishError('Interrupted'); };
     await drivePublication.publish('b', false, archive);
     expect(drivePublication.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: true, error: 'Interrupted' });
@@ -53,7 +60,6 @@ describe('Drive publication receipt', () => {
     ['the model is edited', () => useReconstructionStore.setState(state => ({ reconstructionEditRevision: state.reconstructionEditRevision + 1 }))],
     ['an image is marked for deletion', () => useDeletionStore.setState({ pendingDeletions: new Set([1]) })],
   ])('clears a finished Drive receipt when %s', async (_, change) => {
-    const { drivePublication } = await import('./publicationRuntime');
     try {
       await drivePublication.publish('d', false, archive);
       expect(drivePublication.getSnapshot()).toMatchObject({ phase: 'completed', fileUrl: expect.any(String), receipt: { shared: false } });
@@ -66,7 +72,6 @@ describe('Drive publication receipt', () => {
     }
   });
   it('finishes uploading a built ZIP when an image is marked for deletion', async () => {
-    const { drivePublication } = await import('./publicationRuntime');
     const input = capturePublicationInput();
     client.hooks.beforeChunk = () => { useDeletionStore.setState({ pendingDeletions: new Set([1]) }); };
     try {
