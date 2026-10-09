@@ -233,8 +233,8 @@ export function SplatLayer({
     setSparkRendererReady(ready);
   }, []);
 
-  const yieldsLoadingState = useCallback((file: File) =>
-    splatAttemptYieldsLoadingState(file, loadingNotificationRef.current, isSplatDownloadPending, isDatasetLoadPending),
+  const yieldsLoadingState = useCallback((file: File, attempt: SplatLoadAttempt | null = loadingNotificationRef.current) =>
+    splatAttemptYieldsLoadingState(file, attempt, isSplatDownloadPending, isDatasetLoadPending),
   [isDatasetLoadPending, isSplatDownloadPending]);
 
   const clearSplatLoadingNotification = useCallback((file?: File) => {
@@ -261,18 +261,21 @@ export function SplatLayer({
       removeNotification(current.id);
     }
 
-    setUrlLoading(true);
+    const attempt = { file, startedDuringDatasetLoad: isDatasetLoadPending() };
     progressStartRef.current = {
       file,
       percent: getSplatProgressStartPercent(getUrlProgress()),
     };
-    setUrlProgress(getSplatLoadingProgress(file, {
-      startPercent: progressStartRef.current.percent,
-      renderer: 'spark',
-    }));
+    if (!yieldsLoadingState(file, attempt)) {
+      setUrlLoading(true);
+      setUrlProgress(getSplatLoadingProgress(file, {
+        startPercent: progressStartRef.current.percent,
+        renderer: 'spark',
+      }));
+    }
     const id = addNotification('info', `Loading splat: ${file.name}`, 0);
-    loadingNotificationRef.current = { file, id, startedDuringDatasetLoad: isDatasetLoadPending() };
-  }, [addNotification, getUrlProgress, isDatasetLoadPending, removeNotification, setUrlLoading, setUrlProgress]);
+    loadingNotificationRef.current = { ...attempt, id };
+  }, [addNotification, getUrlProgress, isDatasetLoadPending, removeNotification, setUrlLoading, setUrlProgress, yieldsLoadingState]);
 
   const getProgressStartPercent = useCallback((file: File) => {
     const current = progressStartRef.current;

@@ -988,6 +988,29 @@ describe('SplatLayer while a tile picked with n downloads', () => {
     return { settleInit, progress };
   }
 
+  it('leaves the tile download its overlay, progress, URL error and Cancel when Spark starts meanwhile', async () => {
+    // Spark takes over a tile another renderer was showing after the next tile's download began.
+    const initialized = createDeferred<void>();
+    const SparkRenderer = vi.fn(function SparkRenderer(this: { dispose: () => void }) { this.dispose = vi.fn(); });
+    const { SplatMesh } = createSplatMeshConstructor(initialized.promise);
+    preloadSparkModuleMock.mockResolvedValue({ SparkRenderer, SplatMesh });
+    let selecting!: Promise<void>;
+    act(() => { selecting = useReconstructionStore.getState().selectSplatSource('tiles/next.ply'); });
+    await waitFor(() => expect(download).toBeDefined());
+    const progress = useReconstructionStore.getState().urlProgress;
+    const urlError = { type: 'network' as const, message: 'Earlier URL error' };
+    useReconstructionStore.setState({ urlError });
+
+    render(<SplatLayer />);
+    await waitFor(() => expect(SplatMesh).toHaveBeenCalledTimes(1));
+
+    expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true, urlProgress: progress, urlError });
+    expect(download!.signal!.aborted).toBe(false);
+    await act(async () => { useReconstructionStore.getState().cancelLoading(); await selecting; });
+    expect(download!.signal!.aborted).toBe(true);
+    expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: false, urlProgress: null });
+  });
+
   it('keeps the download overlay when the old splat finishes', async () => {
     // React DOM does not know R3F's <primitive>.
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
