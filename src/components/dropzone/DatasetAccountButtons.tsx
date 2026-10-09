@@ -1,15 +1,14 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { flushSync } from 'react-dom';
 import { hfAuth } from '../../features/huggingface/auth';
-import { getHfAccountConfiguration } from '../../features/huggingface/config';
+import { describeHfAccess, getHfAccountConfiguration } from '../../features/huggingface/config';
 import { startupLinkRetry } from '../../appStartupRetry';
 import { googleDriveAuth, loadGoogleOAuthSdk, type GoogleOAuthSdk } from '../../features/googleDrive/auth';
 import { chooseGoogleDriveArchive, getGoogleDrivePickerConfig } from '../../features/googleDrive/picker';
 import { GOOGLE_DRIVE_ENABLED_ORIGIN, getGoogleDriveConfiguration, isGoogleDriveEnabled } from '../../features/googleDrive/config';
-import { floatingPanelStyles, getButtonClass, modalStyles, panelStyles, Z_INDEX } from '../../theme';
-import { CheckIcon, CloseIcon, GoogleDriveIcon } from '../../icons';
-import { ModalDialogShell } from '../ui/ModalDialogShell';
-import { PolicyLinks } from '../PolicyLinks';
+import { getButtonClass } from '../../theme';
+import { GoogleDriveIcon } from '../../icons';
+import { AccountDialog } from '../ui/AccountDialog';
 import { DROP_ZONE_ICON_BUTTON_CLASS } from './dropZonePanelViewModel';
 
 interface DatasetAccountButtonsProps {
@@ -53,9 +52,7 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
       : googleApiKey ? 'Private file selection is unavailable. You can load public datasets by URL.'
         : 'Private file selection is unavailable.'
     : hfConfiguration.status === 'ready'
-      ? hfConfiguration.config.readOnly
-        ? 'Allows reading your repositories, including private datasets.'
-        : 'Allows reading private repositories and creating datasets with this app.'
+      ? describeHfAccess(hfConfiguration.config)
       : 'Hugging Face sign-in is unavailable in this viewer.';
   const cancelPicker = () => {
     signInUnsubscribeRef.current?.();
@@ -149,65 +146,45 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
       target="_blank" rel="noopener noreferrer" aria-label="Use Google Drive" data-tooltip="Use Google Drive on colmapview.opsiclear.com">
       <GoogleDriveIcon className="w-4 h-4" /><span>Use Google Drive</span>
     </a>}
-    <ModalDialogShell isOpen={provider !== null && (provider !== 'google' || googleEnabled) && !pickerOpen} onClose={close} ariaLabelledBy={`${id}-title`}
-      ariaDescribedBy={`${id}-description`}
-      overlayClassName={`${panelStyles.overlay} p-4`} overlayStyle={{ zIndex: Z_INDEX.modalOverlay }}
-      panelClassName={`${floatingPanelStyles.dialog} w-full max-w-sm overflow-hidden`} panelStyle={{ maxHeight: '90dvh' }}>
-      <div className={`${modalStyles.popupHeader} flex-shrink-0`}>
-        <h3 id={`${id}-title`} className={modalStyles.toolHeaderTitle}>{title}</h3>
-        <button type="button" className={modalStyles.toolHeaderClose} aria-label="Close account dialog" onClick={close}>
-          <CloseIcon className="w-3.5 h-3.5" />
+    <AccountDialog id={id} isOpen={provider !== null && (provider !== 'google' || googleEnabled) && !pickerOpen}
+      onClose={close} title={title} connected={connected}
+      status={connected || connecting || pickerLoading
+        ? provider === 'google' && connected && pickerLoading ? 'Opening Drive picker…'
+          : connected ? provider === 'hf' && hf.identity?.username ? `Connected as ${hf.identity.username}` : 'Connected' : 'Waiting for sign-in…'
+        : null}
+      statusTitle={provider === 'hf' ? hf.identity?.username : undefined} description={description}
+      hint={!connected || provider === 'google' ? hint : null}
+      error={auth.error || (provider === 'google' ? sdkError || pickerError : null)}>
+      {provider === 'google' ? <>
+        {(connected || connecting || pickerLoading) && <button type="button" className={getButtonClass('ghost', 'sm')}
+          onClick={pickerLoading && !connecting ? cancelPicker : disconnect}>
+          {connecting ? 'Cancel sign-in' : pickerLoading ? 'Cancel selection' : 'Disconnect'}
+        </button>}
+        {googleApiKey && <button type="button" disabled={connecting}
+          className={getButtonClass(clientId ? 'ghost' : 'primary', 'sm', connecting)}
+          onClick={() => { close(); onOpenUrlModal(); }}>Load URL</button>}
+        {clientId && (sdkError && !connected
+          ? <button type="button" className={getButtonClass('primary', 'sm')} onClick={() => {
+            setSdkError(null); setSdkAttempt(value => value + 1);
+          }}>Retry sign-in</button>
+          : <button type="button" disabled={(!connected && !sdk) || connecting || pickerLoading}
+            className={getButtonClass('primary', 'sm', (!connected && !sdk) || connecting || pickerLoading)}
+            onClick={chooseArchive}>{!connected && !sdk ? 'Loading sign-in…' : 'Choose archive from Drive'}</button>)}
+      </> : connected || connecting ? <>
+        <button type="button" className={getButtonClass('ghost', 'sm')} onClick={disconnect}>
+          {connected ? 'Disconnect' : 'Cancel sign-in'}
         </button>
-      </div>
-      <div className={`${panelStyles.scrollBody} text-sm`}>
-        {(connected || connecting || pickerLoading) && <div role="status" className="flex items-center gap-1.5 mb-2 text-ds-primary">
-          {connected && <CheckIcon className="w-3.5 h-3.5 text-ds-success flex-shrink-0" />}
-          <span className="min-w-0 truncate" title={provider === 'hf' ? hf.identity?.username : undefined}>
-            {provider === 'google' && connected && pickerLoading ? 'Opening Drive picker…'
-              : connected ? provider === 'hf' && hf.identity?.username ? `Connected as ${hf.identity.username}` : 'Connected' : 'Waiting for sign-in…'}
-          </span>
-        </div>}
-        <p id={`${id}-description`} className="m-0 text-ds-secondary">
-          {description}
-        </p>
-        {(!connected || provider === 'google') && <p className="m-0 mt-1 text-ds-muted text-xs">{hint}</p>}
-        <PolicyLinks align="start" />
-        {(auth.error || (provider === 'google' && (sdkError || pickerError))) && <p role="alert" className="m-0 mt-3 text-ds-warning text-xs">
-          {auth.error || sdkError || pickerError}
-        </p>}
-        <div className="flex flex-wrap items-center justify-end gap-2 mt-4">
-          {provider === 'google' ? <>
-            {(connected || connecting || pickerLoading) && <button type="button" className={getButtonClass('ghost', 'sm')}
-              onClick={pickerLoading && !connecting ? cancelPicker : disconnect}>
-              {connecting ? 'Cancel sign-in' : pickerLoading ? 'Cancel selection' : 'Disconnect'}
-            </button>}
-            {googleApiKey && <button type="button" disabled={connecting}
-              className={getButtonClass(clientId ? 'ghost' : 'primary', 'sm', connecting)}
-              onClick={() => { close(); onOpenUrlModal(); }}>Load URL</button>}
-            {clientId && (sdkError && !connected
-              ? <button type="button" className={getButtonClass('primary', 'sm')} onClick={() => {
-                setSdkError(null); setSdkAttempt(value => value + 1);
-              }}>Retry sign-in</button>
-              : <button type="button" disabled={(!connected && !sdk) || connecting || pickerLoading}
-                className={getButtonClass('primary', 'sm', (!connected && !sdk) || connecting || pickerLoading)}
-                onClick={chooseArchive}>{!connected && !sdk ? 'Loading sign-in…' : 'Choose archive from Drive'}</button>)}
-          </> : connected || connecting ? <>
-            <button type="button" className={getButtonClass('ghost', 'sm')} onClick={disconnect}>
-              {connected ? 'Disconnect' : 'Cancel sign-in'}
-            </button>
-            <button type="button" disabled={connecting}
-              className={getButtonClass(connecting ? 'secondary' : retryLink ? 'ghost' : 'primary', 'sm', connecting)}
-              onClick={() => { close(); onOpenUrlModal(); }}>Load URL</button>
-            {connected && retryLink && <button type="button" className={getButtonClass('primary', 'sm')}
-              onClick={() => { close(); void retryLink(); }}>Retry shared link</button>}
-          </> : <>
-            <button type="button" className={getButtonClass(canSignIn ? 'ghost' : 'primary', 'sm')}
-              onClick={() => { close(); onOpenUrlModal(); }}>Load URL</button>
-            {provider === 'hf' && hfConfiguration.status === 'ready' ? <button type="button" className={getButtonClass('primary', 'sm')}
-                onClick={() => { void hfAuth.connect(hfConfiguration.config); }}>Sign in with Hugging Face</button> : null}
-          </>}
-        </div>
-      </div>
-    </ModalDialogShell>
+        <button type="button" disabled={connecting}
+          className={getButtonClass(connecting ? 'secondary' : retryLink ? 'ghost' : 'primary', 'sm', connecting)}
+          onClick={() => { close(); onOpenUrlModal(); }}>Load URL</button>
+        {connected && retryLink && <button type="button" className={getButtonClass('primary', 'sm')}
+          onClick={() => { close(); void retryLink(); }}>Retry shared link</button>}
+      </> : <>
+        <button type="button" className={getButtonClass(canSignIn ? 'ghost' : 'primary', 'sm')}
+          onClick={() => { close(); onOpenUrlModal(); }}>Load URL</button>
+        {provider === 'hf' && hfConfiguration.status === 'ready' ? <button type="button" className={getButtonClass('primary', 'sm')}
+            onClick={() => { void hfAuth.connect(hfConfiguration.config); }}>Sign in with Hugging Face</button> : null}
+      </>}
+    </AccountDialog>
   </>;
 }

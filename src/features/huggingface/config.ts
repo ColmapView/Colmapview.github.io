@@ -1,5 +1,12 @@
 export interface HfConfig { clientId: string; redirectUri: string; readOnly?: boolean }
 
+/** The privacy policy promises that the account control states the access it requests. */
+export function describeHfAccess(config: HfConfig): string {
+  return config.readOnly
+    ? 'Allows reading your repositories, including private datasets.'
+    : 'Allows reading private repositories and creating datasets with this app.';
+}
+
 export type HfConfiguration =
   | { status: 'disabled' }
   | { status: 'unavailable'; message: string; viewerUrl?: string }
