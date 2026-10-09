@@ -5,7 +5,6 @@ import {
   DROP_ZONE_BROWSE_LABEL,
   DROP_ZONE_DESKTOP_MESSAGE,
   DROP_ZONE_DESKTOP_OVERLAY_CLASS,
-  DROP_ZONE_DESKTOP_TITLE,
   DROP_ZONE_INFO_LINES,
   DROP_ZONE_RESET_CONFIG_TOOLTIP,
   DROP_ZONE_TOUCH_FOOTER,
@@ -29,7 +28,6 @@ describe('drop zone panel view model', () => {
   });
 
   it('keeps desktop and touch panel copy together', () => {
-    expect(DROP_ZONE_DESKTOP_TITLE).toBe('Load Dataset');
     expect(DROP_ZONE_DESKTOP_MESSAGE).toBe(
       'or drag and drop a COLMAP dataset or image-only folder',
     );

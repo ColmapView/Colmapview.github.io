@@ -24,7 +24,6 @@ export const DROP_ZONE_UPLOAD_CONFIG_TOOLTIP = 'Upload configuration file (.yaml
 export const DROP_ZONE_RESET_CONFIG_TOOLTIP = 'Reset all settings to defaults';
 export const DROP_ZONE_DISMISS_TOOLTIP = 'Dismiss this panel';
 
-export const DROP_ZONE_DESKTOP_TITLE = 'Load Dataset';
 export const DROP_ZONE_DESKTOP_MESSAGE = 'or drag and drop a COLMAP dataset or image-only folder';
 export const DROP_ZONE_TOUCH_TITLE = 'ColmapView';
 export const DROP_ZONE_TOUCH_SUBTITLE = 'View COLMAP reconstructions and image galleries';

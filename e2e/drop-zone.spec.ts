@@ -57,8 +57,16 @@ test.describe('DropZone', () => {
     await expect(dropZone).toBeVisible();
   });
 
-  test('should show Load Dataset title', async ({ page }) => {
-    // The empty state should show the title (DROP_ZONE_DESKTOP_TITLE)
-    await expect(page.locator('h2:has-text("Load Dataset")')).toBeVisible();
+  test('should show a compact control row with info next to reset', async ({ page }) => {
+    const header = page.locator('.startup-header');
+    await expect(header.getByRole('heading')).toHaveCount(0);
+    const reset = header.getByRole('button', { name: 'Reset all settings to defaults' });
+    const info = header.getByRole('button', { name: 'Supported files and folder structure' });
+    await expect(info).toBeVisible();
+    const resetBounds = (await reset.boundingBox())!;
+    const infoBounds = (await info.boundingBox())!;
+    expect(infoBounds.x).toBeGreaterThan(resetBounds.x);
+    expect(infoBounds.x - (resetBounds.x + resetBounds.width)).toBeLessThanOrEqual(8);
+    expect(infoBounds.y).toBe(resetBounds.y);
   });
 });

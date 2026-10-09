@@ -2,7 +2,6 @@ import { useId, useState } from 'react';
 import {
   emptyStateStyles,
   floatingPanelStyles,
-  panelStyles,
 } from '../../theme';
 import {
   CloseIcon,
@@ -24,7 +23,6 @@ import {
   DROP_ZONE_DESKTOP_ACTION_BUTTON_ICON_CLASS,
   DROP_ZONE_DESKTOP_MESSAGE,
   DROP_ZONE_DESKTOP_OVERLAY_CLASS,
-  DROP_ZONE_DESKTOP_TITLE,
   DROP_ZONE_DISMISS_TOOLTIP,
   DROP_ZONE_ICON_BUTTON_CLASS,
   DROP_ZONE_INFO_LINES,
@@ -87,44 +85,6 @@ export function DesktopDropZonePanel({
     <div className={DROP_ZONE_DESKTOP_OVERLAY_CLASS} style={getDropZonePanelOverlayStyle()}>
       <div className={`${floatingPanelStyles.dialog} startup-panel w-full max-w-[520px]`}>
         <div className="startup-header">
-          <div
-            className="startup-format-info"
-            onMouseLeave={() => setShowFormatInfo(false)}
-            onBlur={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget)) setShowFormatInfo(false);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                setShowFormatInfo(false);
-                event.stopPropagation();
-              }
-            }}
-          >
-            <h2 className={panelStyles.startupTitle}>{DROP_ZONE_DESKTOP_TITLE}</h2>
-            <button
-              type="button"
-              className={DROP_ZONE_ICON_BUTTON_CLASS}
-              aria-label="Supported files and folder structure"
-              aria-describedby={showFormatInfo ? formatInfoId : undefined}
-              onMouseEnter={() => setShowFormatInfo(true)}
-              onFocus={() => setShowFormatInfo(true)}
-              onClick={() => setShowFormatInfo(true)}
-            >
-              <InfoIcon className="w-4 h-4" />
-            </button>
-            {showFormatInfo && (
-              <div className="startup-format-popover">
-                <div id={formatInfoId} role="tooltip" className={`${floatingPanelStyles.surface} startup-format-content`}>
-                  {DROP_ZONE_INFO_LINES.map((line) => (
-                    <div key={`${line.label ?? ''}${line.text}`} className={getDropZoneInfoLineClass(false)}>
-                      {line.label && <strong>{line.label}</strong>}
-                      {line.label ? ` ${line.text}` : line.text}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
           <div className="startup-config-actions">
             <ProfileDropdown />
             <div className="w-px h-5 bg-ds-muted/30 mx-1" />
@@ -147,6 +107,43 @@ export function DesktopDropZonePanel({
             >
               <ResetIcon className="w-4 h-4" />
             </button>
+            <div
+              className="startup-format-info"
+              onMouseLeave={() => setShowFormatInfo(false)}
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) setShowFormatInfo(false);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  setShowFormatInfo(false);
+                  event.stopPropagation();
+                }
+              }}
+            >
+              <button
+                type="button"
+                className={DROP_ZONE_ICON_BUTTON_CLASS}
+                aria-label="Supported files and folder structure"
+                aria-describedby={showFormatInfo ? formatInfoId : undefined}
+                onMouseEnter={() => setShowFormatInfo(true)}
+                onFocus={() => setShowFormatInfo(true)}
+                onClick={() => setShowFormatInfo(true)}
+              >
+                <InfoIcon className="w-4 h-4" />
+              </button>
+              {showFormatInfo && (
+                <div className="startup-format-popover">
+                  <div id={formatInfoId} role="tooltip" className={`${floatingPanelStyles.surface} startup-format-content`}>
+                    {DROP_ZONE_INFO_LINES.map((line) => (
+                      <div key={`${line.label ?? ''}${line.text}`} className={getDropZoneInfoLineClass(false)}>
+                        {line.label && <strong>{line.label}</strong>}
+                        {line.label ? ` ${line.text}` : line.text}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <button
             type="button"

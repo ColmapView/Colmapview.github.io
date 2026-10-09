@@ -1558,7 +1558,6 @@ h3.panel-heading {
   white-space: normal;
 }
 
-/* Title and close share the first row; the account controls take the second, so the title never wraps. */
 .startup-header {
   position: relative;
   display: grid;
@@ -1568,8 +1567,6 @@ h3.panel-heading {
 }
 
 .startup-config-actions {
-  grid-column: 1 / -1;
-  grid-row: 2;
   display: flex;
   align-items: center;
   gap: var(--sp-1);
@@ -1599,14 +1596,11 @@ h3.panel-heading {
   }
 }
 
-/* Anchors the info popover to the title row, so the pointer reaches it without crossing the account row. */
+/* The header anchors the popover so its width is independent of the info icon. */
 .startup-format-info {
-  position: relative;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: var(--sp-1);
-  width: 100%;
+  align-self: stretch;
 }
 
 .startup-format-popover {

@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DatasetAccountButtons } from './DatasetAccountButtons';
 import { googleDriveAuth, loadGoogleOAuthSdk, type GoogleOAuthSdk, type GoogleTokenResponse } from '../../features/googleDrive/auth';
@@ -93,11 +93,11 @@ afterEach(() => {
 });
 
 describe('Dataset provider account icons', () => {
-  it('names Google Drive in the button where Drive works, so it is found without hovering', () => {
+  it('keeps the icon-only Google Drive button accessible and explains it on hover', () => {
     configureDrive();
     render(<DatasetAccountButtons {...createProps()} />);
     const driveAccount = screen.getByRole('button', { name: 'Google Drive account' });
-    expect(within(driveAccount).getByText('Google Drive')).toBeVisible();
+    expect(driveAccount.textContent).toBe('');
     expect(driveAccount).toHaveAttribute('data-tooltip', 'Choose archive from Google Drive');
   });
   it('keeps public URL loading available when private file selection is unavailable', () => {
@@ -151,7 +151,7 @@ describe('Dataset provider account icons', () => {
     expect(driveLink).toHaveAttribute('href', 'https://colmapview.opsiclear.com');
     expect(driveLink).toHaveAttribute('target', '_blank');
     expect(driveLink).toHaveAttribute('rel', 'noopener noreferrer');
-    expect(screen.getByText('Use Google Drive')).toBeVisible();
+    expect(driveLink.textContent).toBe('');
     expect(screen.queryByRole('button', { name: 'Google Drive account' })).not.toBeInTheDocument();
     expect(screen.queryByText(/setup|configuration/i)).not.toBeInTheDocument();
     expect(loadGoogleOAuthSdk).not.toHaveBeenCalled();

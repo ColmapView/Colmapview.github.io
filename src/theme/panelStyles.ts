@@ -14,7 +14,6 @@ export const panelStyles = {
   header,
   draggableHeader: `${header} cursor-move`,
   title,
-  startupTitle: 'panel-heading text-ds-primary text-lg font-semibold',
   close: buttonStyles.close,
   body: 'px-4 py-3',
   scrollBody: 'px-4 py-3 overflow-y-auto min-h-0',
