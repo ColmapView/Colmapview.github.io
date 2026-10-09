@@ -2,7 +2,7 @@ import { Zip, ZipPassThrough } from 'fflate';
 import { createMD5 } from 'hash-wasm';
 import { preparePublication, type PublicationInput } from '../datasetPublishing/preparePublication';
 import { parseHfAssetUrl, pinHfAssetUrl, publicationPath } from '../datasetPublishing/publicationPaths';
-import type { PreparedPublication } from '../datasetPublishing/types';
+import type { PreparedPublication, PublishAsset } from '../datasetPublishing/types';
 import { MAX_BUFFERED_PUBLICATION_FILE_BYTES } from '../datasetPublishing/types';
 import { fetchDatasetResource } from '../../utils/fetchDatasetResource';
 import { ARCHIVE_SIZE_LIMIT } from '../../utils/zipValidation';
@@ -20,55 +20,63 @@ const archiveTooLarge = () => new GoogleDrivePublishError('The dataset ZIP excee
 export async function packageDriveArchive(prepared: PreparedPublication, signal: AbortSignal,
   progress: DriveArchiveProgress, assertCurrent: () => void, sizeLimit = ARCHIVE_SIZE_LIMIT): Promise<DriveArchive> {
   const check = () => { signal.throwIfAborted(); assertCurrent(); };
-  check();
-  if (prepared.assets.length > 60_000) throw new GoogleDrivePublishError('This dataset has too many files for a Drive ZIP.', undefined, true);
-  if (prepared.assets.reduce((sum, asset) => sum + (asset.size ?? asset.estimatedSize ?? 0), 0) > sizeLimit) throw archiveTooLarge();
-  const md5 = await awaitWithAbort(createMD5(), signal);
-  check();
-  const parts: Blob[] = [];
-  let chunks: Uint8Array<ArrayBuffer>[] = [];
-  let buffered = 0;
-  let total = 0;
-  let failure: Error | null = null;
-  const flush = () => { if (chunks.length) parts.push(new Blob(chunks)); chunks = []; buffered = 0; };
-  const zip = new Zip((error, data) => {
-    if (error) { failure = error; return; }
-    total += data.byteLength;
-    if (total > sizeLimit) { failure = archiveTooLarge(); return; }
-    chunks.push(new Uint8Array(data));
-    md5.update(data);
-    buffered += data.byteLength;
-    if (buffered >= DRIVE_BLOB_PART_BYTES) flush();
-  });
+  const release = (asset: PublishAsset) => {
+    const dropBuffer = asset.release;
+    delete asset.release;
+    dropBuffer?.();
+  };
   try {
-    for (const [index, asset] of prepared.assets.entries()) {
-      check();
-      progress(`Packaging ${asset.path}…`, index, prepared.assets.length);
-      const blob = await awaitWithAbort(asset.open(signal), signal);
-      check();
-      if (blob.size + total > sizeLimit) throw archiveTooLarge();
-      if (asset.size !== null && asset.size !== blob.size) throw new GoogleDrivePublishError(`The source file ${asset.path} changed. Publish again.`, undefined, true);
-      const entry = new ZipPassThrough(publicationPath(asset.path));
-      zip.add(entry);
-      const reader = blob.stream().getReader();
-      try {
-        for (;;) {
-          const result = await awaitWithAbort(reader.read(), signal);
-          check();
-          if (result.done) { entry.push(new Uint8Array(), true); break; }
-          entry.push(result.value);
-          if (failure) throw failure;
-        }
-      } finally { void reader.cancel().catch(() => {}); }
-      if (failure) throw failure;
-      progress(`Packaged ${asset.path}`, index + 1, prepared.assets.length);
-    }
     check();
-    zip.end();
-    if (failure) throw failure;
-    flush();
-    return { blob: new Blob(parts, { type: 'application/zip' }), md5: md5.digest(), viewerBaseUrl: prepared.viewerBaseUrl };
-  } catch (error) { zip.terminate(); throw error; }
+    if (prepared.assets.length > 60_000) throw new GoogleDrivePublishError('This dataset has too many files for a Drive ZIP.', undefined, true);
+    if (prepared.assets.reduce((sum, asset) => sum + (asset.size ?? asset.estimatedSize ?? 0), 0) > sizeLimit) throw archiveTooLarge();
+    const md5 = await awaitWithAbort(createMD5(), signal);
+    check();
+    const parts: Blob[] = [];
+    let chunks: Uint8Array<ArrayBuffer>[] = [];
+    let buffered = 0;
+    let total = 0;
+    let failure: Error | null = null;
+    const flush = () => { if (chunks.length) parts.push(new Blob(chunks)); chunks = []; buffered = 0; };
+    const zip = new Zip((error, data) => {
+      if (error) { failure = error; return; }
+      total += data.byteLength;
+      if (total > sizeLimit) { failure = archiveTooLarge(); return; }
+      chunks.push(new Uint8Array(data));
+      md5.update(data);
+      buffered += data.byteLength;
+      if (buffered >= DRIVE_BLOB_PART_BYTES) flush();
+    });
+    try {
+      for (const [index, asset] of prepared.assets.entries()) {
+        check();
+        progress(`Packaging ${asset.path}…`, index, prepared.assets.length);
+        const blob = await awaitWithAbort(asset.open(signal), signal);
+        check();
+        if (blob.size + total > sizeLimit) throw archiveTooLarge();
+        if (asset.size !== null && asset.size !== blob.size) throw new GoogleDrivePublishError(`The source file ${asset.path} changed. Publish again.`, undefined, true);
+        const entry = new ZipPassThrough(publicationPath(asset.path));
+        zip.add(entry);
+        const reader = blob.stream().getReader();
+        try {
+          for (;;) {
+            const result = await awaitWithAbort(reader.read(), signal);
+            check();
+            if (result.done) { entry.push(new Uint8Array(), true); break; }
+            entry.push(result.value);
+            if (failure) throw failure;
+          }
+        } finally { void reader.cancel().catch(() => {}); }
+        if (failure) throw failure;
+        release(asset);
+        progress(`Packaged ${asset.path}`, index + 1, prepared.assets.length);
+      }
+      check();
+      zip.end();
+      if (failure) throw failure;
+      flush();
+      return { blob: new Blob(parts, { type: 'application/zip' }), md5: md5.digest(), viewerBaseUrl: prepared.viewerBaseUrl };
+    } catch (error) { zip.terminate(); throw error; }
+  } finally { prepared.assets.forEach(release); }
 }
 const DRIVE_BLOB_PART_BYTES = 8 * 1024 * 1024;
 /** A malformed URL comes from the captured dataset, so it fails the same way on every retry. */
@@ -83,7 +91,11 @@ const isHubDatasetFile = (value: string) => {
 
 export async function prepareDriveArchive(input: PublicationInput, signal: AbortSignal,
   progress: DriveArchiveProgress, assertCurrent: () => void, sizeLimit = ARCHIVE_SIZE_LIMIT): Promise<DriveArchive> {
-  const sdk = await import('@huggingface/hub');
+  let sdkPromise: Promise<typeof import('@huggingface/hub')> | undefined;
+  const sdk = () => {
+    signal.throwIfAborted();
+    return awaitWithAbort(sdkPromise ??= import('@huggingface/hub'), signal);
+  };
   const read: typeof fetch = (value, init) => fetchDatasetResource(typeof value === 'string' ? value : value instanceof URL ? value.href : value.url,
     undefined, { ...init, signal });
   // Throttled or briefly unavailable hosts, the Hub's API included, get a bounded backoff (429/502/503/504).
@@ -91,11 +103,12 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
   const revisions = new Map<string, Promise<string>>();
   const resolveRevision = (repoId: string, revision: string) => {
     const key = `${repoId}/${revision}`;
-    if (!revisions.has(key)) revisions.set(key, sdk.datasetInfo({ name: repoId, revision, additionalFields: ['sha'], fetch: readSource }).then(info => {
+    if (!revisions.has(key)) revisions.set(key, (async () => {
+      const info = await (await sdk()).datasetInfo({ name: repoId, revision, additionalFields: ['sha'], fetch: readSource });
       // The Hub redirects other spellings and renamed repositories (info.name is its current id); the commit pins the files.
       if (!/^[a-f0-9]{40,64}$/i.test(info.sha)) throw new GoogleDrivePublishError('Could not pin the source dataset revision.');
       return info.sha;
-    }));
+    })());
     return revisions.get(key)!;
   };
   const pinAssetUrl = async (value: string): Promise<string> => {
@@ -113,7 +126,7 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
         const revision = await resolveRevision(folder.repoId, folder.revision);
         const files = new Map<string, number>();
         try {
-          for await (const file of sdk.listFiles({ repo: { type: 'dataset', name: folder.repoId }, revision, path: folder.path, recursive: true, fetch: readSource })) {
+          for await (const file of (await sdk()).listFiles({ repo: { type: 'dataset', name: folder.repoId }, revision, path: folder.path, recursive: true, fetch: readSource })) {
             if (file.type === 'file') files.set(file.path, file.size);
           }
         } catch (error) {
@@ -173,7 +186,7 @@ export async function prepareDriveArchive(input: PublicationInput, signal: Abort
     if (!folderSizes.has(key)) folderSizes.set(key, (async () => {
       const sizes = new Map<string, number>();
       try {
-        for await (const entry of sdk.listFiles({ repo: { type: 'dataset', name: file.repoId }, revision, path: folder, fetch: readSource })) {
+        for await (const entry of (await sdk()).listFiles({ repo: { type: 'dataset', name: file.repoId }, revision, path: folder, fetch: readSource })) {
           if (entry.type === 'file') sizes.set(entry.path, entry.size);
         }
       } catch (error) {

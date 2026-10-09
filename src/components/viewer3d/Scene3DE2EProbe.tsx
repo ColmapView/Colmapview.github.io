@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useDataset } from '../../dataset';
-import { useUrlLoader } from '../../hooks/useUrlLoader';
+import { useUrlLoadActions } from '../../hooks/useUrlLoader';
 import type { CameraDisplayMode } from '../../store/types';
 import type { ColmapManifest } from '../../types/manifest';
 import { resetSession } from '../../store/actions';
@@ -391,7 +391,7 @@ function getFrustumTargetWorldPoint(
 export function Scene3DE2EProbe() {
   const { camera, gl, scene } = useThree();
   const dataset = useDataset();
-  const { loadFromManifest } = useUrlLoader();
+  const { loadFromManifest } = useUrlLoadActions();
   const {
     data: {
       reconstruction,

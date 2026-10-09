@@ -16,7 +16,7 @@ import {
   useRigStore,
   useUIStore,
 } from './store';
-import { useUrlLoader } from './hooks/useUrlLoader';
+import { useUrlLoadActions } from './hooks/useUrlLoader';
 import { decodeShareData } from './hooks/useUrlState';
 import { detectTouchDevice } from './hooks/useIsTouchDevice';
 import { TOUCH_BREAKPOINTS } from './theme/sizing';
@@ -44,7 +44,7 @@ if (initStoreMigration()) {
 }
 
 function App() {
-  const { loadFromUrl, loadFromManifest } = useUrlLoader({ applyUrlOverrides: true });
+  const { loadFromUrl, loadFromManifest } = useUrlLoadActions({ applyUrlOverrides: true });
   const hasCheckedUrl = useRef(false);
 
   // Check for URL parameter on mount

@@ -12,6 +12,8 @@ export interface PublishAsset {
   /** A size read when the dataset loaded: it plans batches and the ZIP limit, but the source may have changed since, so it is never checked. */
   estimatedSize?: number;
   open: (signal: AbortSignal) => Promise<Blob>;
+  /** Drop preparation-owned buffers after consumption or when ZIP packaging ends. */
+  release?: () => void;
 }
 export interface PublicationDetails {
   name: string; title: string; description: string; license: string;

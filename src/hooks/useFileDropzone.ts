@@ -40,16 +40,14 @@ function beginLocalLoad() {
 }
 
 export function useFileDropzone() {
-  const {
-    setReconstruction,
-    setWasmReconstruction,
-    setLoadedFiles,
-    setDroppedFiles,
-    setError,
-    setSourceInfo,
-    setUrlLoading,
-    setUrlProgress,
-  } = useReconstructionStore();
+  const setReconstruction = useReconstructionStore((s) => s.setReconstruction);
+  const setWasmReconstruction = useReconstructionStore((s) => s.setWasmReconstruction);
+  const setLoadedFiles = useReconstructionStore((s) => s.setLoadedFiles);
+  const setDroppedFiles = useReconstructionStore((s) => s.setDroppedFiles);
+  const setError = useReconstructionStore((s) => s.setError);
+  const setSourceInfo = useReconstructionStore((s) => s.setSourceInfo);
+  const setUrlLoading = useReconstructionStore((s) => s.setUrlLoading);
+  const setUrlProgress = useReconstructionStore((s) => s.setUrlProgress);
   const resetView = useUIStore((s) => s.resetView);
 
   /**

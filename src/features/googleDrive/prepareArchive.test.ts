@@ -82,6 +82,39 @@ describe('Drive dataset ZIP packaging', () => {
     expect(result.blob.type).toBe('application/zip');
     expect(progress).toHaveBeenLastCalledWith('Packaged colmapview.yaml', paths.length, paths.length);
   });
+  it('releases transient buffers after each ZIP entry, before packaging the next file', async () => {
+    const buffers: Array<Blob | null> = [new Blob(['first mask']), new Blob(['second mask'])];
+    const assets = buffers.map((buffer, index): PublishAsset => ({
+      path: `masks/${index}.png`, kind: 'mask', size: buffer!.size,
+      open: async () => buffers[index]!, release: vi.fn(() => { buffers[index] = null; }),
+    }));
+    const releases = assets.map(asset => asset.release!);
+    const progress = (message: string) => {
+      if (message.startsWith('Packaged masks/0.png')) {
+        expect(buffers[0]).toBeNull();
+        expect(buffers[1]).not.toBeNull();
+      }
+    };
+    const archive = await packageDriveArchive(prepared(assets), new AbortController().signal, progress, () => {});
+    const entries = unzipSync(new Uint8Array(await archive.blob.arrayBuffer()));
+    expect(strFromU8(entries['masks/0.png'])).toBe('first mask');
+    expect(strFromU8(entries['masks/1.png'])).toBe('second mask');
+    expect(buffers).toEqual([null, null]);
+    releases.forEach(release => expect(release).toHaveBeenCalledOnce());
+  });
+  it.each(['cancelled', 'read failed', 'too large'] as const)('releases all transient buffers when packaging is %s', async outcome => {
+    const releases = [vi.fn(), vi.fn()];
+    const assets = [asset('masks/first.png', 'first'), asset('masks/second.png', 'second')]
+      .map((item, index) => ({ ...item, open: vi.fn(item.open), release: releases[index] }));
+    const controller = new AbortController();
+    if (outcome === 'read failed') assets[0].open.mockRejectedValueOnce(new Error('Source unavailable'));
+    const progress = (message: string) => {
+      if (outcome === 'cancelled' && message.startsWith('Packaged masks/first.png')) controller.abort();
+    };
+    await expect(packageDriveArchive(prepared(assets), controller.signal, progress, () => {}, outcome === 'too large' ? 1 : 1000)).rejects.toThrow();
+    releases.forEach(release => expect(release).toHaveBeenCalledOnce());
+    expect(assets[1].open).not.toHaveBeenCalled();
+  });
   it('rejects known oversized datasets before opening any file and also counts ZIP overhead, without offering a retry', async () => {
     const limit = { message: expect.stringContaining('2 GiB'), permanent: true };
     const open = vi.fn().mockResolvedValue(new Blob(['data']));

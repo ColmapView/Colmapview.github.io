@@ -35,6 +35,25 @@ beforeEach(() => { vi.stubGlobal('Blob', NodeBlob); vi.stubGlobal('File', NodeFi
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('publication snapshot preparation', () => {
+  it('releases a transient probed mask without taking ownership of the original input files', async () => {
+    const source = input();
+    source.dataset = buildDatasetState({ sourceType: 'url', imageUrlBase: 'https://bucket.example/images/',
+      maskUrlBase: 'https://bucket.example/masks/' });
+    const maskBlob = new Blob(['probed mask']);
+    const signal = new AbortController().signal;
+    const prepare = () => preparePublication(source, signal, { ...deps(), pinAssetUrl: async url => url,
+      readRemoteMask: async () => ({ blob: maskBlob }) });
+    const prepared = await prepare();
+    const mask = prepared.assets.find(asset => asset.kind === 'mask')!;
+    expect(await mask.open(signal)).toBe(maskBlob);
+    expect(mask.release).toBeTypeOf('function');
+    mask.release!();
+    await expect(mask.open(signal)).rejects.toThrow();
+    expect((await prepared.assets.find(asset => asset.kind === 'colmap')!.open(signal)).size).toBeGreaterThan(0);
+    expect(await maskBlob.text()).toBe('probed mask');
+    // A retry prepares a new mask owner from the captured dataset.
+    expect(await (await prepare()).assets.find(asset => asset.kind === 'mask')!.open(signal)).toBe(maskBlob);
+  });
   it('publishes available splats while preserving COLMAP only in the saved viewer settings', async () => {
     const source = input();
     const splat = new File(['available splat'], 'scene.ply');

@@ -56,6 +56,20 @@ export function checkAssetSize(size: number, path: string, kind: PublishAsset['k
   }
 }
 
+/** Probed masks belong to this preparation, so the ZIP can release them entry by entry. */
+function bufferedMask(path: string, content: Blob): PublishAsset {
+  const size = content.size;
+  let buffer: Blob | null = content;
+  return { path, kind: 'mask', size,
+    open: async signal => {
+      signal.throwIfAborted();
+      if (!buffer) throw new HfError('Prepare the publication again before opening its masks.');
+      return buffer;
+    },
+    release: () => { buffer = null; },
+  };
+}
+
 export async function preparePublication(input: PublicationInput, signal: AbortSignal, deps: PrepareDeps): Promise<PreparedPublication> {
   const check = () => { signal.throwIfAborted(); deps.assertCurrent(); };
   check();
@@ -117,7 +131,7 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
         const found = await deps.readRemoteMask(captured.maskUrlBase, name, signal);
         check();
         if (!found) return null;
-        if ('blob' in found) return fixed(path, found.blob, 'mask');
+        if ('blob' in found) return bufferedMask(path, found.blob);
         const asset = await remote(found.url, path, 'mask');
         asset.size = found.size;
         return asset;

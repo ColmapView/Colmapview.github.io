@@ -108,17 +108,14 @@ function requestSplatForLoad(shared: SharedViewerOverrides | null): void {
   store.setRequestedSplatSourceId(store.loadedFiles ? null : shared?.config?.splat?.activeSourceId ?? null);
 }
 
-/** Owns URL discovery, downloading, and the handoff to reconstruction parsing. */
-export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: UseUrlLoaderDeps = {}) {
+/** URL load commands; consumers need not subscribe to their progress. */
+export function useUrlLoadActions({ logger = appLogger, applyUrlOverrides = false }: UseUrlLoaderDeps = {}) {
   const { processFiles } = useFileDropzone();
   const logError = logger.error;
   const logInfo = logger.info;
   const setError = useReconstructionStore((s) => s.setError);
   const setSourceInfo = useReconstructionStore((s) => s.setSourceInfo);
   const mergeRemoteSplatCatalog = useReconstructionStore((s) => s.mergeRemoteSplatCatalog);
-  const urlLoading = useReconstructionStore((s) => s.urlLoading);
-  const urlProgress = useReconstructionStore((s) => s.urlProgress);
-  const urlError = useReconstructionStore((s) => s.urlError);
   const setUrlLoading = useReconstructionStore((s) => s.setUrlLoading);
   const setUrlProgress = useReconstructionStore((s) => s.setUrlProgress);
   const setUrlError = useReconstructionStore((s) => s.setUrlError);
@@ -333,6 +330,14 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
     }, options), [runLoad, logInfo]);
 
   const clearUrlError = useCallback(() => setUrlError(null), [setUrlError]);
-  return { loadFromUrl, loadFromManifest, urlLoading, urlProgress, urlError,
-    clearUrlError, setUrlLoading, setUrlProgress };
+  return { loadFromUrl, loadFromManifest, clearUrlError, setUrlLoading, setUrlProgress };
+}
+
+/** Load commands and reactive status for the loading UI. */
+export function useUrlLoader(deps: UseUrlLoaderDeps = {}) {
+  const actions = useUrlLoadActions(deps);
+  const urlLoading = useReconstructionStore((s) => s.urlLoading);
+  const urlProgress = useReconstructionStore((s) => s.urlProgress);
+  const urlError = useReconstructionStore((s) => s.urlError);
+  return { ...actions, urlLoading, urlProgress, urlError };
 }
