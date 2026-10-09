@@ -1,3 +1,4 @@
+import { holdUrlLoadBeforeSceneCommit } from '../test/urlLoadHolds';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LoadedFiles } from '../types/colmap';
 import type { UrlLoadProgress } from '../types/manifest';
@@ -17,8 +18,6 @@ import type { GaussianCloud } from '../splat/gaussianCloud';
 import { getActiveZipImageIndex, setActiveZipArchive } from '../utils/zipArchiveState';
 import { buildArchiveReader, buildReconstruction } from '../test/builders';
 import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
-import { processFileDropzoneFiles } from '../hooks/fileDropzoneWorkflow';
-import { noopLogger } from '../utils/logger';
 import type { ReconstructionSource } from '../wasm/reconstructionService';
 import { getSplatDownloadProgress, getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
@@ -1819,28 +1818,6 @@ describe('reconstruction store loading cancellation', () => {
     expect(second!.aborted).toBe(false);
   });
 });
-
-/** A URL load that has parsed its files and is settling its saved settings: the scene on screen is still the old one. */
-function holdUrlLoadBeforeSceneCommit() {
-  const store = useReconstructionStore.getState;
-  const signal = store().tryStartUrlLoad()!;
-  const settings: UrlLoadProgress = { percent: 90, message: 'Loading saved view settings...' };
-  const pending = processFileDropzoneFiles(new Map([['photo.jpg', new File(['jpg'], 'photo.jpg')]]), {
-    addNotification: vi.fn(), clearCaches: vi.fn(), getLoadedFiles: () => store().loadedFiles,
-    getMinTrackLength: () => 1, getSourceInfo: () => ({ sourceType: 'url', imageUrlBase: null }),
-    getUrlLoading: () => store().urlLoading, logger: noopLogger, resetView: vi.fn(), setDroppedFiles: vi.fn(),
-    setError: vi.fn(), setLoadedFiles: vi.fn(), setReconstruction: vi.fn(), setUrlLoading: store().setUrlLoading,
-    setUrlProgress: store().setUrlProgress, setWasmReconstruction: vi.fn(),
-  }, {
-    signal,
-    beforeSceneCommit: () => {
-      store().setUrlProgress(settings);
-      // Like the settings fetch, it ends only when the load is cancelled.
-      return new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason)));
-    },
-  });
-  return { pending, settings };
-}
 
 describe('reconstruction store splat the renderer could not draw', () => {
   const a = new File(['a'], 'a.ply');
