@@ -46,7 +46,7 @@ import { processFileDropzoneFiles } from '../../hooks/fileDropzoneWorkflow';
 import type { GaussianCloudLoadProgress } from '../../splat/gaussianCloudLoader';
 import { getSplatLoadingProgress } from '../../utils/splatLoadingProgressPolicy';
 import { createIdentityEuler } from '../../utils/sim3dTransforms';
-import { buildReconstruction } from '../../test/builders';
+import { buildPendingFetch, buildReconstruction } from '../../test/builders';
 
 vi.mock('../../splat/webgpu/visibleSplatRendererAdapter', () => ({
   createLoadedVisibleWebGpuSplatRendererAdapter: vi.fn(),
@@ -1989,9 +1989,8 @@ describe('WebGpuSplatCanvasLayer decoding a splat that another load or download 
     useReconstructionStore.getState().setLoadedFiles({ imageFiles: new Map(), hasMasks: false, splatFile: old, splatFiles: [old],
       splatFileSources: [{ id: 'old.spz', path: 'old.spz', url: 'https://x/old.spz', file: old },
         { id: 'next.spz', path: 'next.spz', url: 'https://x/next.spz', size: 9 }] });
-    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-    })));
+    const pendingFetch = buildPendingFetch();
+    vi.stubGlobal('fetch', vi.fn(pendingFetch.fetch));
     const view = render(<StoreWiredLayer mounted={mounted} />);
     if (mounted) await waitFor(() => expect(decode).toBeDefined());
     act(() => { void useReconstructionStore.getState().selectSplatSource('next.spz'); });

@@ -1,6 +1,6 @@
 import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildFile } from '../test/builders';
+import { buildPendingFetch, buildFile } from '../test/builders';
 import type { ColmapManifest } from '../types/manifest';
 import {
   loadManifestSource, OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS, SPLAT_DISCOVERY_LIMIT_MS, SPLAT_DISCOVERY_TIMEOUT_MS,
@@ -206,21 +206,22 @@ describe('URL loader manifest source helpers', () => {
     const deps = makeDeps();
     const listings = new Map([['https://example.com/dataset/', ['a/', 'b/', 'c/', 'stalled/']],
       ['https://example.com/dataset/a/', ['tile.spz']]]);
-    const listingSignals: AbortSignal[] = [];
+    const pendingFetch = buildPendingFetch();
     let lastAnswerAt: number | undefined;
     // Every request answers a second after it is made, except the listing of stalled/, which never answers.
-    deps.fetchImpl.mockImplementation((url: string, init?: RequestInit) => new Promise<Response>((resolve, reject) => {
-      if (url.endsWith('colmapview.yaml')) { resolve(new Response('', { status: 404 })); return; }
-      if (init?.signal) listingSignals.push(init.signal);
-      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
-      if (url.endsWith('/stalled/')) return;
+    deps.fetchImpl.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith('colmapview.yaml')) return Promise.resolve(new Response('', { status: 404 }));
+      const response = pendingFetch.fetch(url, init);
+      const request = pendingFetch.requests.at(-1)!;
+      if (url.endsWith('/stalled/')) return response;
       setTimeout(() => {
         lastAnswerAt = Date.now();
         const entries = listings.get(url);
-        resolve(init?.method === 'HEAD' ? new Response(null, { headers: { 'content-length': '100' } })
+        request.respond(init?.method === 'HEAD' ? new Response(null, { headers: { 'content-length': '100' } })
           : new Response((entries ?? []).map(name => `<a href="${name}">${name}</a>`).join('\n')));
       }, 1_000);
-    }));
+      return response;
+    });
     const onRemoteSplatCatalog = vi.fn();
     const onSplatListTimeout = vi.fn();
     let settled = false;
@@ -246,8 +247,8 @@ describe('URL loader manifest source helpers', () => {
     expect(onSplatListTimeout).toHaveBeenCalledOnce();
     expect(onRemoteSplatCatalog).not.toHaveBeenCalled();
     expect(deps.setSourceInfo).toHaveBeenCalledOnce();
-    expect(listingSignals.length).toBeGreaterThan(0);
-    expect(listingSignals.every(signal => signal.aborted)).toBe(true);
+    expect(pendingFetch.requests.length).toBeGreaterThan(0);
+    expect(pendingFetch.requests.every(({ signal }) => signal?.aborted)).toBe(true);
   });
 
   it('drops a splat listing still running SPLAT_DISCOVERY_LIMIT_MS after parsing, however steadily it answers', async () => {

@@ -11,7 +11,7 @@ import type { CameraViewState } from '../store/types';
 import type { ColmapManifest } from '../types/manifest';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
-import { buildLoadedFiles, buildReconstruction } from '../test/builders';
+import { buildPendingFetch, buildLoadedFiles, buildReconstruction } from '../test/builders';
 import { createDefaultManifest } from './urlLoaderPolicy';
 import { getActiveSplatSourceId, getShareActiveSplatSourceId } from '../utils/splatFileSourcePolicy';
 import { hfAuth, type HfAuthState } from '../features/huggingface/auth';
@@ -207,9 +207,8 @@ describe('useUrlLoader', () => {
   it('cancels a private repository check without clearing or replacing the current scene', async () => {
     const loadedFiles = buildLoadedFiles();
     useReconstructionStore.setState({ loadedFiles });
-    const request = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-    }));
+    const pendingFetch = buildPendingFetch();
+    const request = vi.fn((url: string, init?: RequestInit) => pendingFetch.fetch(String(url), init));
     vi.stubGlobal('fetch', request);
     const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
     let pending!: Promise<boolean>;
@@ -229,14 +228,13 @@ describe('useUrlLoader', () => {
     const repo = 'https://huggingface.co/datasets/owner/public';
     const base = `${repo}/resolve/main/`;
     let allowAccess!: (response: Response) => void;
+    const pendingFetch = buildPendingFetch();
     const request = vi.fn((url: string, init?: RequestInit): Promise<Response> => {
       if (url === 'https://huggingface.co/api/datasets/owner/public?expand=private') {
         return new Promise(resolve => { allowAccess = resolve; });
       }
       if (url.includes('/tree/')) {
-        return new Promise((_resolve, reject) => {
-          init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-        });
+        return pendingFetch.fetch(String(url), init);
       }
       return Promise.resolve(new Response(null, { status: 404 }));
     });
@@ -271,13 +269,12 @@ describe('useUrlLoader', () => {
     { filename: 'scene.spz', message: 'Loading 3D file...' },
     { filename: 'colmapview.json', message: 'Fetching manifest...' },
   ])('leaves the access-check status before downloading a public HF $filename', async ({ filename, message }) => {
+    const pendingFetch = buildPendingFetch();
     const request = vi.fn((url: string, init?: RequestInit): Promise<Response> => {
       if (url === 'https://huggingface.co/api/datasets/owner/public?expand=private') {
         return Promise.resolve(Response.json({ id: 'owner/public', private: false }));
       }
-      return new Promise((_resolve, reject) => {
-        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-      });
+      return pendingFetch.fetch(String(url), init);
     });
     vi.stubGlobal('fetch', request);
     const messages: string[] = [];
@@ -703,13 +700,12 @@ describe('useUrlLoader', () => {
       config: { splat: { transform: alignment }, ui: { backgroundColor: '#123456' },
         camera: { horizonLock: 'on', cameraProjection: 'orthographic', showCameras: false } } });
     const background = useUIStore.getState().backgroundColor;
+    const pendingFetch = buildPendingFetch();
     const request = vi.fn((url: string | URL, init?: RequestInit): Promise<Response> => {
       if (String(url).endsWith('colmapview.yaml')) return Promise.resolve(new Response(yaml));
       if (init?.method === 'HEAD') return Promise.resolve(new Response(null, { headers: { 'content-length': '100' } }));
       // Like fetch, the splat download rejects once its signal aborts.
-      if (String(url).endsWith('.spz')) return new Promise<Response>((_resolve, reject) => {
-        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-      });
+      if (String(url).endsWith('.spz')) return pendingFetch.fetch(String(url), init);
       if (String(url).includes('/api/datasets/')) return Promise.resolve(Response.json(hubEntries([{ path: 'splats/scene.spz', size: 100 }])));
       return Promise.resolve(new Response(new Uint8Array([1, 2, 3])));
     });
@@ -740,13 +736,12 @@ describe('useUrlLoader', () => {
     const baseUrl = 'https://huggingface.co/datasets/owner/cancel/resolve/main/';
     const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
       config: { splat: { activeSourceId: 'splats/scene.spz' } } });
+    const pendingFetch = buildPendingFetch();
     const request = vi.fn((url: string | URL, init?: RequestInit): Promise<Response> => {
       if (String(url).endsWith('colmapview.yaml')) return Promise.resolve(new Response(yaml));
       if (init?.method === 'HEAD') return Promise.resolve(new Response(null, { headers: { 'content-length': '100' } }));
       // Like fetch, the splat download rejects once its signal aborts.
-      if (String(url).endsWith('.spz')) return new Promise<Response>((_resolve, reject) => {
-        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-      });
+      if (String(url).endsWith('.spz')) return pendingFetch.fetch(String(url), init);
       if (String(url).includes('/api/datasets/')) return Promise.resolve(Response.json(hubEntries([{ path: 'splats/scene.spz', size: 100 }])));
       return Promise.resolve(new Response(new Uint8Array([1, 2, 3])));
     });
@@ -864,14 +859,12 @@ describe('useUrlLoader', () => {
   it('does not apply YAML that arrives after its dataset load was cancelled', async () => {
     vi.stubGlobal('Blob', NodeBlob);
     const settingsUrl = 'https://huggingface.co/datasets/owner/scene/resolve/main/colmapview.yaml';
-    const responders = new Map<string, (response: Response) => void>();
+    const pendingFetch = buildPendingFetch();
+    const settingsRequest = () => pendingFetch.requests.find(({ url }) => url === settingsUrl);
     // Like fetch, pending requests reject when their load is aborted.
     const request = vi.fn((url: string, init?: RequestInit) => {
       if (String(url) === 'https://huggingface.co/api/datasets/owner/scene?expand=private') return Promise.resolve(Response.json({ id: 'owner/scene' }));
-      return new Promise<Response>((resolve, reject) => {
-        responders.set(String(url), resolve);
-        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-      });
+      return pendingFetch.fetch(url, init);
     });
     vi.stubGlobal('fetch', request);
     const manifest: ColmapManifest = { version: 1, baseUrl: 'https://huggingface.co/datasets/owner/scene/resolve/main/',
@@ -880,9 +873,9 @@ describe('useUrlLoader', () => {
     const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
     let pending!: Promise<boolean>;
     act(() => { pending = result.current.loadFromManifest(manifest); });
-    await waitFor(() => expect(responders.has(settingsUrl)).toBe(true));
+    await waitFor(() => expect(Boolean(settingsRequest())).toBe(true));
     act(() => useReconstructionStore.getState().clear());
-    await act(async () => { responders.get(settingsUrl)!(new Response('ui:\n  background_color: "#123456"')); expect(await pending).toBe(false); });
+    await act(async () => { settingsRequest()!.respond(new Response('ui:\n  background_color: "#123456"')); expect(await pending).toBe(false); });
     expect(useUIStore.getState().backgroundColor).toBe(background);
     expect(processFilesMock).not.toHaveBeenCalled();
   });
@@ -895,12 +888,9 @@ describe('useUrlLoader', () => {
     useReconstructionStore.setState({ reconstruction, loadedFiles: buildLoadedFiles({ camerasFile: new File(['c'], 'cameras.bin'),
       imagesFile: new File(['i'], 'images.bin'), points3DFile: new File(['p'], 'points3D.bin') }) });
     const splat = new File(['x'], 'scene.spz');
-    let respondSettings: ((response: Response) => void) | undefined;
+    const pendingFetch = buildPendingFetch();
     vi.stubGlobal('fetch', vi.fn((url: string | URL, init?: RequestInit) => String(url).endsWith('colmapview.yaml')
-      ? new Promise<Response>((resolve, reject) => {
-        respondSettings = resolve;
-        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-      })
+      ? pendingFetch.fetch(String(url), init)
       : Promise.resolve(new Response(null, { status: 404 }))));
     vi.spyOn(archiveSource, 'loadZipUrlSource').mockImplementation(async (_url, deps) =>
       (await deps.processFiles(new Map([['scene.spz', splat]]), { start: 80, end: 100 },
@@ -910,7 +900,7 @@ describe('useUrlLoader', () => {
     let pending!: Promise<boolean>;
     act(() => { pending = result.current.loadFromUrl('https://example.com/project/splats.zip'); });
     // The archive's splat joined the open scene; the settings beside it are asked for only now.
-    await waitFor(() => expect(respondSettings).toBeDefined());
+    await waitFor(() => expect(pendingFetch.requests.at(-1)?.respond).toBeDefined());
     expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(splat);
     // The renderer takes the splat over with its overlay and Cancel, as SplatLayer does.
     act(() => useReconstructionStore.setState({ urlLoading: true, urlProgress: getSplatLoadingProgress(splat, { startPercent: 60 }) }));
@@ -918,7 +908,7 @@ describe('useUrlLoader', () => {
     if (action === 'Cancel loading') act(() => useReconstructionStore.getState().cancelLoading());
     else await act(async () => { await useReconstructionStore.getState().selectSplatSource(''); });
     await act(async () => {
-      respondSettings!(new Response(yaml));
+      pendingFetch.requests.at(-1)!.respond(new Response(yaml));
       expect(await pending).toBe(true);
     });
 
@@ -1544,15 +1534,13 @@ describe('useUrlLoader', () => {
     const baseUrl = 'https://huggingface.co/datasets/owner/pick/resolve/main/';
     const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
       config: { splat: { activeSourceId: 'splats/a.spz' } } });
-    const downloads = new Map<string, AbortSignal>();
+    const pendingFetch = buildPendingFetch();
+    const downloadRequest = (path: string) => pendingFetch.requests.find(({ url }) => url === baseUrl + path);
     vi.stubGlobal('fetch', vi.fn((url: string | URL, init?: RequestInit): Promise<Response> => {
       if (String(url).endsWith('colmapview.yaml')) return Promise.resolve(new Response(yaml));
       if (init?.method === 'HEAD') return Promise.resolve(new Response(null, { headers: { 'content-length': '100' } }));
       // Like fetch, a splat download rejects once its signal aborts.
-      if (String(url).endsWith('.spz')) return new Promise<Response>((_resolve, reject) => {
-        downloads.set(String(url).slice(baseUrl.length), init!.signal!);
-        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-      });
+      if (String(url).endsWith('.spz')) return pendingFetch.fetch(String(url), init);
       if (String(url).includes('/api/datasets/')) return Promise.resolve(Response.json(hubEntries([
         { path: 'splats/a.spz', size: 100 }, { path: 'splats/b.spz', size: 100 }])));
       return Promise.resolve(new Response(new Uint8Array([1, 2, 3])));
@@ -1561,16 +1549,16 @@ describe('useUrlLoader', () => {
     const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
     let pending!: Promise<boolean>;
     act(() => { pending = result.current.loadFromUrl(baseUrl); });
-    await waitFor(() => expect(downloads.has('splats/a.spz')).toBe(true));
+    await waitFor(() => expect(Boolean(downloadRequest('splats/a.spz'))).toBe(true));
     // What n does during the restore: pick the next tile, which cancels the restored download.
     act(() => { void useReconstructionStore.getState().selectSplatSource('splats/b.spz'); });
     await act(async () => { expect(await pending).toBe(true); });
 
-    expect(downloads.get('splats/a.spz')?.aborted).toBe(true);
+    expect(downloadRequest('splats/a.spz')?.signal?.aborted).toBe(true);
     expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true,
       urlProgress: expect.objectContaining({ currentFile: 'b.spz' }) });
     act(() => useReconstructionStore.getState().cancelLoading());
-    expect(downloads.get('splats/b.spz')?.aborted).toBe(true);
+    expect(downloadRequest('splats/b.spz')?.signal?.aborted).toBe(true);
     expect(useReconstructionStore.getState().urlLoading).toBe(false);
   });
 

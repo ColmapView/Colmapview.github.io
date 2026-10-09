@@ -7,7 +7,7 @@ import {
   useReconstructionStore,
   useSplatBackendStore,
 } from '../../../store';
-import { buildFile, buildLoadedFiles } from '../../../test/builders';
+import { buildPendingFetch, buildFile, buildLoadedFiles } from '../../../test/builders';
 import { useSplatLayerStoreFacade } from './SplatLayerStoreFacade';
 import { beginReconstructionLoad } from '../../../wasm/reconstructionLoadLifecycle';
 
@@ -67,9 +67,8 @@ describe('useSplatLayerStoreFacade', () => {
   });
 
   it('says whether a tile download is pending, which then owns the loading state', async () => {
-    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-    })));
+    const pendingFetch = buildPendingFetch();
+    vi.stubGlobal('fetch', vi.fn(pendingFetch.fetch));
     useReconstructionStore.setState({ loadedFiles: buildLoadedFiles({
       splatFileSources: [{ id: 'tile.ply', path: 'tile.ply', url: 'https://x/tile.ply', size: 1 }] }) });
     const { result } = renderHook(() => useSplatLayerStoreFacade());

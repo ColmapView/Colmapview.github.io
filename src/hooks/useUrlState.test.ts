@@ -8,7 +8,7 @@ import {
   useTransformStore,
   useUIStore,
 } from '../store';
-import { buildFile, buildLoadedFiles } from '../test/builders';
+import { buildPendingFetch, buildFile, buildLoadedFiles } from '../test/builders';
 import type { CameraViewState } from '../store/types';
 import type { ColmapManifest } from '../types/manifest';
 import { decodeShareData } from '../utils/shareDataCodec';
@@ -77,13 +77,9 @@ describe('URL state sharing', () => {
   }
 
   function stubPendingDownload() {
-    let respond!: (response: Response) => void;
-    // Like fetch: the restored splat's download rejects once its signal aborts.
-    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((resolve, reject) => {
-      respond = resolve;
-      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-    })));
-    return { respond: (response: Response) => respond(response) };
+    const pendingFetch = buildPendingFetch();
+    vi.stubGlobal('fetch', vi.fn(pendingFetch.fetch));
+    return { respond: (response: Response) => pendingFetch.requests.at(-1)!.respond(response) };
   }
 
   // flyToState writes flyToViewState; record what the trackball would read at that moment.

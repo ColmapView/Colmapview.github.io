@@ -13,7 +13,7 @@ import {
   useSplatBackendStore,
   useUIStore,
 } from '../../../store';
-import { buildLoadedFiles } from '../../../test/builders';
+import { buildPendingFetch, buildLoadedFiles } from '../../../test/builders';
 
 const {
   detectTouchDeviceMock,
@@ -919,11 +919,11 @@ describe('SplatLayer while a new dataset load settles before replacing the scene
 describe('SplatLayer while a tile picked with n downloads', () => {
   const oldSplat = new File(['splat'], 'old.ply');
   const notices = () => useNotificationStore.getState().notifications.map(notification => notification.message);
-  let download: { signal?: AbortSignal; fail: (error: Error) => void } | undefined;
+  let pendingFetch: ReturnType<typeof buildPendingFetch>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    download = undefined;
+    pendingFetch = buildPendingFetch();
     getSplatMeshSourceOptionsMock.mockResolvedValue({ file: oldSplat });
     await resetRealSplatStores(buildLoadedFiles({
       camerasFile: new File([''], 'cameras.bin'), imagesFile: new File([''], 'images.bin'),
@@ -933,10 +933,7 @@ describe('SplatLayer while a tile picked with n downloads', () => {
         { id: 'tiles/next.ply', path: 'tiles/next.ply', url: 'https://x/tiles/next.ply', size: 100 },
       ],
     }));
-    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-      download = { signal: init?.signal ?? undefined, fail: reject };
-      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-    })));
+    vi.stubGlobal('fetch', vi.fn(pendingFetch.fetch));
   });
 
   afterEach(() => {
@@ -950,7 +947,7 @@ describe('SplatLayer while a tile picked with n downloads', () => {
   async function pickNextWhileOldDecodes() {
     const { settleInit } = await decodeOldSplatInSpark();
     act(() => { void useReconstructionStore.getState().selectSplatSource('tiles/next.ply'); });
-    await waitFor(() => expect(download).toBeDefined());
+    await waitFor(() => expect(pendingFetch.requests.at(-1)).toBeDefined());
     const progress = useReconstructionStore.getState().urlProgress;
     expect(progress).toMatchObject({ currentFile: 'next.ply' });
     return { settleInit, progress };
@@ -964,7 +961,7 @@ describe('SplatLayer while a tile picked with n downloads', () => {
     preloadSparkModuleMock.mockResolvedValue({ SparkRenderer, SplatMesh });
     let selecting!: Promise<void>;
     act(() => { selecting = useReconstructionStore.getState().selectSplatSource('tiles/next.ply'); });
-    await waitFor(() => expect(download).toBeDefined());
+    await waitFor(() => expect(pendingFetch.requests.at(-1)).toBeDefined());
     const progress = useReconstructionStore.getState().urlProgress;
     const urlError = { type: 'network' as const, message: 'Earlier URL error' };
     useReconstructionStore.setState({ urlError });
@@ -973,9 +970,9 @@ describe('SplatLayer while a tile picked with n downloads', () => {
     await waitFor(() => expect(SplatMesh).toHaveBeenCalledTimes(1));
 
     expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true, urlProgress: progress, urlError });
-    expect(download!.signal!.aborted).toBe(false);
+    expect(pendingFetch.requests.at(-1)!.signal!.aborted).toBe(false);
     await act(async () => { useReconstructionStore.getState().cancelLoading(); await selecting; });
-    expect(download!.signal!.aborted).toBe(true);
+    expect(pendingFetch.requests.at(-1)!.signal!.aborted).toBe(true);
     expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: false, urlProgress: null });
   });
 
@@ -989,7 +986,7 @@ describe('SplatLayer while a tile picked with n downloads', () => {
 
       await waitFor(() => expect(notices()).toContain('Loaded splat: old.ply'));
       expect(useReconstructionStore.getState()).toMatchObject({ urlLoading: true, urlProgress: progress });
-      expect(download?.signal?.aborted).toBe(false);
+      expect(pendingFetch.requests.at(-1)?.signal?.aborted).toBe(false);
     } finally {
       consoleError.mockRestore();
     }
@@ -1008,7 +1005,7 @@ describe('SplatLayer while a tile picked with n downloads', () => {
       expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'rgb', pointSize: 2, pointOpacity: 1 });
 
       // The download fails as well: nothing is left with the near-invisible splat point display.
-      await act(async () => { download!.fail(new TypeError('network down')); });
+      await act(async () => { pendingFetch.requests.at(-1)!.fail(new TypeError('network down')); });
       await waitFor(() => expect(useReconstructionStore.getState().urlLoading).toBe(false));
       expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
       expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'rgb', pointSize: 2, pointOpacity: 1 });

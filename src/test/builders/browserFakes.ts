@@ -698,3 +698,21 @@ export function buildVideoFrame({
 }: VideoFrameBuilderOptions = {}): VideoFrame {
   return new TestVideoFrame({ close, timestamp });
 }
+
+export interface PendingFetchRequest {
+  url: string;
+  signal?: AbortSignal;
+  respond: (response: Response) => void;
+  fail: (error: Error) => void;
+}
+
+/** Like fetch: responses wait for the test, and aborted requests reject with their signal's reason. */
+export function buildPendingFetch() {
+  const requests: PendingFetchRequest[] = [];
+  const fetch = (url: string, init?: RequestInit) => new Promise<Response>((respond, fail) => {
+    const signal = init?.signal ?? undefined;
+    requests.push({ url, signal, respond, fail });
+    signal?.addEventListener('abort', () => fail(signal.reason), { once: true });
+  });
+  return { fetch, requests };
+}

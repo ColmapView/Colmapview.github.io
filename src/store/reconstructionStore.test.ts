@@ -16,7 +16,7 @@ import {
 } from '../splat/gaussianCloudLoader';
 import type { GaussianCloud } from '../splat/gaussianCloud';
 import { getActiveZipImageIndex, setActiveZipArchive } from '../utils/zipArchiveState';
-import { buildArchiveReader, buildReconstruction } from '../test/builders';
+import { buildPendingFetch, buildArchiveReader, buildReconstruction } from '../test/builders';
 import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
 import type { ReconstructionSource } from '../wasm/reconstructionService';
 import { getSplatDownloadProgress, getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
@@ -609,9 +609,8 @@ describe('reconstruction store URL load lifecycle', () => {
         { id: 'b/scene.spz', path: 'b/scene.spz', url: 'https://x/b/scene.spz', size: 5 },
       ],
     }));
-    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-    })));
+    const pendingFetch = buildPendingFetch();
+    vi.stubGlobal('fetch', vi.fn(pendingFetch.fetch));
     try {
       const pending = useReconstructionStore.getState().selectSplatSource('b/scene.spz');
       expect(useReconstructionStore.getState().urlProgress?.currentFile).toBe('scene.spz');
@@ -1517,20 +1516,17 @@ describe('reconstruction store loading cancellation', () => {
         { id: 'splats/b.ply', path: 'splats/b.ply', url: 'https://x/ds/splats/b.ply', size: 20 },
       ],
     }));
-    let requestSignal: AbortSignal | null | undefined;
-    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-      requestSignal = init?.signal;
-      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-    })));
+    const pendingFetch = buildPendingFetch();
+    vi.stubGlobal('fetch', vi.fn(pendingFetch.fetch));
     const pending = useReconstructionStore.getState().selectSplatSource('splats/b.ply');
-    await vi.waitFor(() => expect(requestSignal).toBeDefined());
+    await vi.waitFor(() => expect(pendingFetch.requests[0]?.signal).toBeDefined());
     expect(useReconstructionStore.getState().urlLoading).toBe(true);
 
     useReconstructionStore.getState().cancelLoading();
     await pending;
 
     const state = useReconstructionStore.getState();
-    expect(requestSignal?.aborted).toBe(true);
+    expect(pendingFetch.requests[0]?.signal?.aborted).toBe(true);
     expect(state.loadedFiles?.splatFile).toBe(fileA);
     expect(state.urlLoading).toBe(false);
     expect(state.urlError).toBeNull();
@@ -1595,13 +1591,10 @@ describe('reconstruction store loading cancellation', () => {
     }));
     // Over a COLMAP scene, where a cancelled download that left no splat would restore the plain points.
     useReconstructionStore.setState({ reconstruction: buildReconstruction() });
-    let requestSignal: AbortSignal | null | undefined;
-    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-      requestSignal = init?.signal;
-      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-    })));
+    const pendingFetch = buildPendingFetch();
+    vi.stubGlobal('fetch', vi.fn(pendingFetch.fetch));
     const pending = useReconstructionStore.getState().selectSplatSource('b/scene.spz');
-    await vi.waitFor(() => expect(requestSignal).toBeDefined());
+    await vi.waitFor(() => expect(pendingFetch.requests[0]?.signal).toBeDefined());
     // The download's progress names the same file as the splat on screen.
     expect(useReconstructionStore.getState().urlProgress?.currentFile).toBe(fileA.name);
     const splatDisplay = { colorMode: 'splatPoints', pointSize: 1, pointOpacity: 0.2 };
@@ -1611,7 +1604,7 @@ describe('reconstruction store loading cancellation', () => {
     await pending;
 
     const state = useReconstructionStore.getState();
-    expect(requestSignal?.aborted).toBe(true);
+    expect(pendingFetch.requests[0]?.signal?.aborted).toBe(true);
     expect(state.loadedFiles?.splatFile).toBe(fileA);
     expect(state.urlLoading).toBe(false);
     // Only "COLMAP only" restores the plain point display; the splat on screen keeps its own.
@@ -1626,19 +1619,16 @@ describe('reconstruction store loading cancellation', () => {
       splatFileSources: [{ id: 'splats/b.ply', path: 'splats/b.ply', url: 'https://x/ds/splats/b.ply', size: 20 }],
     }));
     useReconstructionStore.setState({ reconstruction: buildReconstruction() });
-    let requestSignal: AbortSignal | null | undefined;
-    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-      requestSignal = init?.signal;
-      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-    })));
+    const pendingFetch = buildPendingFetch();
+    vi.stubGlobal('fetch', vi.fn(pendingFetch.fetch));
     const pending = useReconstructionStore.getState().selectSplatSource('splats/b.ply', { restore: true });
-    await vi.waitFor(() => expect(requestSignal).toBeDefined());
+    await vi.waitFor(() => expect(pendingFetch.requests[0]?.signal).toBeDefined());
     expect(usePointCloudStore.getState()).toMatchObject(splatDisplay);
 
     useReconstructionStore.getState().cancelLoading();
     await pending;
 
-    expect(requestSignal?.aborted).toBe(true);
+    expect(pendingFetch.requests[0]?.signal?.aborted).toBe(true);
     expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
     expect(usePointCloudStore.getState()).toMatchObject({ colorMode: 'rgb', pointSize: 2, pointOpacity: 1 });
   });
@@ -1869,14 +1859,11 @@ describe('reconstruction store splat the renderer could not draw', () => {
 
   /** `n` picked the lazy tile b while a decoded: b downloads, held until the test answers it. */
   async function downloadNextTile() {
-    let answer!: { respond: (response: Response) => void; fail: (error: Error) => void };
-    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((resolve, reject) => {
-      answer = { respond: resolve, fail: reject };
-      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-    })));
+    const pendingFetch = buildPendingFetch();
+    vi.stubGlobal('fetch', vi.fn(pendingFetch.fetch));
     const download = useReconstructionStore.getState().selectSplatSource('splats/b.ply');
     await vi.waitFor(() => expect(useReconstructionStore.getState().urlLoading).toBe(true));
-    return { download, answer, progress: useReconstructionStore.getState().urlProgress };
+    return { download, answer: pendingFetch.requests[0]!, progress: useReconstructionStore.getState().urlProgress };
   }
 
   it('drops it under a tile download, which keeps its overlay and then shows as a fresh splat', async () => {

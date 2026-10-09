@@ -9,7 +9,7 @@ import {
   useTransformStore,
   useUIStore,
 } from '../../store';
-import { buildFile, buildLoadedFiles, buildReconstruction } from '../../test/builders';
+import { buildPendingFetch, buildFile, buildLoadedFiles, buildReconstruction } from '../../test/builders';
 import type { Sim3dEuler } from '../../types/sim3d';
 import { beginReconstructionLoad } from '../../wasm/reconstructionLoadLifecycle';
 import {
@@ -154,9 +154,8 @@ describe('useScene3DStoreFacade', () => {
   });
 
   it('tells the WebGPU canvas when a dataset load or a tile download owns the loading state', async () => {
-    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
-    })));
+    const pendingFetch = buildPendingFetch();
+    vi.stubGlobal('fetch', vi.fn(pendingFetch.fetch));
     useReconstructionStore.setState({ loadedFiles: buildLoadedFiles({
       splatFileSources: [{ id: 'tile.spz', path: 'tile.spz', url: 'https://x/tile.spz', size: 1 }] }) });
     const { result } = renderHook(() => useSceneContainerStoreFacade());
