@@ -147,7 +147,7 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
       <GoogleDriveIcon className="w-4 h-4" />
     </a>}
     <AccountDialog id={id} isOpen={provider !== null && (provider !== 'google' || googleEnabled) && !pickerOpen}
-      onClose={close} title={title} connected={connected} showPolicyLinks={provider !== 'google'}
+      onClose={close} title={title} connected={connected}
       status={connected || connecting || pickerLoading
         ? provider === 'google' && connected && pickerLoading ? 'Opening Drive picker…'
           : connected ? provider === 'hf' && hf.identity?.username ? `Connected as ${hf.identity.username}` : 'Connected' : 'Waiting for sign-in…'
