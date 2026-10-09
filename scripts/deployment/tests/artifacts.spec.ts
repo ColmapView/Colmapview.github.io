@@ -139,7 +139,7 @@ for (const directory of profiles) {
           expect(response?.headers()['cross-origin-opener-policy']).toBe('same-origin-allow-popups');
           expect(response?.headers()['cache-control']).toBe('public, no-cache, no-transform');
         }
-        await expect(page.getByRole('heading', { name: 'Load Dataset', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Browse for a COLMAP dataset folder', exact: true })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Google Drive account', exact: true })).toHaveCount(enabled ? 1 : 0);
         await expect(page.getByRole('button', { name: 'Publish to Google Drive', exact: true })).toHaveCount(enabled ? 1 : 0);
         expect(await page.evaluate(() => location.origin)).toBe(origin);

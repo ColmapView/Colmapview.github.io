@@ -78,7 +78,7 @@ async function verifyPublicPages(browser) {
     transientIf(response.status() >= 500, () => assert.equal(response.status(), 200, 'Viewer navigation must be public HTTP 200.'));
     verifyIndexHtml(await retryable(response.body()), expected);
     assert.equal(new URL(page.url()).origin, base.origin, 'Viewer must stay on its independent host.');
-    await retryable(page.getByRole('heading', { name: 'Load Dataset', exact: true }).waitFor());
+    await retryable(page.getByRole('button', { name: 'Browse for a COLMAP dataset folder', exact: true }).waitFor());
     const expectedControls = profile === 'custom' ? 1 : 0;
     assert.equal(await page.getByRole('button', { name: 'Google Drive account', exact: true }).count(), expectedControls);
     assert.equal(await page.getByRole('button', { name: 'Publish to Google Drive', exact: true }).count(), expectedControls);
