@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { readdirSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { readProductionSources, stripComments } from '../test/sourceTree';
 import { readRootTokens, resolveValueToPixels } from '../test/cssRootTokens';
 import { TOUCH } from './sizing';
 
@@ -14,18 +15,6 @@ import { TOUCH } from './sizing';
  * the reference removed) in the same change that introduces it. There is no
  * allowlist — re-introducing one is a deliberate act, not a shortcut.
  */
-
-// Comment prose is not markup. Doc comments here routinely name utilities in
-// backticks *because* they do not exist (splatPickerViewModel documents
-// `z-[600]` while deliberately applying the z-index inline), and the literal
-// scanner cannot tell that prose from a className. The same strip runs over the
-// CSS side: a class named only inside a /* … */ note is documentation, not a
-// rule, and must not satisfy the contract.
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/(^|[^:\w'"`\\])\/\/[^\n]*/g, '$1');
-}
 
 // ---- collect defined classes from index.css ----
 const CSS_PATH = resolve(__dirname, '../index.css');
@@ -42,32 +31,9 @@ function collectDefinedClasses(): Set<string> {
 const defined = collectDefinedClasses();
 
 // ---- collect candidate tokens from source string literals ----
-// Deliberately a synchronous fs walk, not `import.meta.glob(..., { eager: true })`:
-// the eager glob made Vite transform every file under src/ before this file's body
-// could run (~40s), which starved the other fs-walking suites and produced timeout
-// failures across the run. Same idiom as components/componentStoreBoundary.test.ts.
-const SRC_ROOT = resolve(__dirname, '..');
-
-// Test files are excluded at the walk: they pin class strings verbatim, so
-// scanning them would report the same token twice and let a test keep a deleted
-// class "referenced". classContract's own source is excluded for the same reason.
-function isScannableSource(name: string): boolean {
-  if (!name.endsWith('.ts') && !name.endsWith('.tsx')) return false;
-  if (name.includes('.test.') || name.includes('.spec.')) return false;
-  return !name.startsWith('classContract');
-}
-
-function collectSourceFiles(directory: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const entryPath = join(directory, entry.name);
-    if (entry.isDirectory()) {
-      collectSourceFiles(entryPath, out);
-    } else if (isScannableSource(entry.name)) {
-      out.push(entryPath);
-    }
-  }
-  return out;
-}
+// Test literals and the contract's own source must not keep a deleted class referenced.
+const PRODUCTION_SOURCES = readProductionSources().filter(({ relativePath }) =>
+  !relativePath.split('/').at(-1)!.startsWith('classContract'));
 
 const VARIANT_RE = /^(?:hover|focus|active|disabled|group-hover(?:\/[\w-]+)?):/;
 const SINGLE_WORD_UTILITIES = new Set([
@@ -142,8 +108,8 @@ function isCandidate(token: string): boolean {
 
 function harvest(): Set<string> {
   const tokens = new Set<string>();
-  for (const file of collectSourceFiles(SRC_ROOT)) {
-    const source = stripComments(readFileSync(file, 'utf8'));
+  for (const { source: rawSource } of PRODUCTION_SOURCES) {
+    const source = stripComments(rawSource);
     for (const m of source.matchAll(/'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"|`((?:[^`\\]|\\.)*)`/g)) {
       const literal = m[1] ?? m[2] ?? m[3] ?? '';
       for (const segment of literal.split(/\$\{[^}]*\}/)) {

@@ -1,8 +1,6 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import path from 'node:path';
+import { listFiles, readProductionSources, toRepoRelative } from '../test/sourceTree';
 import { describe, expect, it } from 'vitest';
 
-const SRC_ROOT = path.join(process.cwd(), 'src');
 const HOOK_CALL_PATTERN = /\b(use[A-Z][A-Za-z0-9]*)\s*\(/g;
 const STORE_EXPORT_PATTERN = /export\s+const\s+(use[A-Za-z0-9]+)\s*=\s*create\b/g;
 const ZUSTAND_CREATE_IMPORT_PATTERN = /import\s*\{[^}]*\bcreate\b[^}]*\}\s*from\s*['"]zustand['"]/;
@@ -29,16 +27,6 @@ const DOCUMENTED_STORE_BOUNDARY_CALLERS = new Set([
   'src/nodes/hooks/useSelectionNode.ts',
 ]);
 
-function isProductionSourceFile(filePath: string): boolean {
-  return (
-    (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) &&
-    !filePath.endsWith('.test.ts') &&
-    !filePath.endsWith('.test.tsx') &&
-    !filePath.endsWith('.spec.ts') &&
-    !filePath.endsWith('.spec.tsx')
-  );
-}
-
 function isStoreFacadeFile(relativePath: string): boolean {
   return relativePath.includes('StoreFacade') || relativePath.includes('modalErrorBoundaryStoreFacade');
 }
@@ -47,32 +35,13 @@ function isStoreModule(relativePath: string): boolean {
   return relativePath.startsWith('src/store/');
 }
 
-function collectFiles(directory: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const entryPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      collectFiles(entryPath, out);
-    } else {
-      out.push(entryPath);
-    }
-  }
-  return out;
-}
-
-function toRepoRelative(filePath: string): string {
-  return path.relative(process.cwd(), filePath).replace(/\\/g, '/');
-}
-
 // Walked and read once, while this file is collected: no per-test timeout applies there, and every
 // check below then filters the same in-memory tree. Read inside the first test, the scan took 2.3 s
 // of a quiet full run and hit its 15 s budget under parallel load, where a budget only turns a
 // slow-but-correct scan into a failure.
-const TREE_FILES = collectFiles(SRC_ROOT);
+const TREE_FILES = listFiles();
 const TREE_PATHS = new Set(TREE_FILES.map(toRepoRelative));
-const PRODUCTION_SOURCES = TREE_FILES.filter(isProductionSourceFile).map((file) => ({
-  relativePath: toRepoRelative(file),
-  source: readFileSync(file, 'utf8'),
-}));
+const PRODUCTION_SOURCES = readProductionSources(TREE_FILES);
 const COMPONENT_SOURCES = PRODUCTION_SOURCES.filter(({ relativePath }) => relativePath.startsWith('src/components/'));
 // Every store under src/store counts by its exported name too, so one named without the Store suffix
 // (useDrivePublicationStatus) cannot escape the checks below.

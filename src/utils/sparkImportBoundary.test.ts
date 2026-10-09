@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { readdirSync, readFileSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { readProductionSources, stripComments } from '../test/sourceTree';
 
 /**
  * Contract: the Spark splat renderer stays behind ONE cached dynamic import.
@@ -20,21 +21,6 @@ import { join, relative, resolve } from 'node:path';
  * may be the call-form `import('@sparkjsdev/spark')`.
  */
 
-// Copied verbatim from src/theme/classContract.test.ts. Prose is not code: a doc
-// comment explaining why Spark is lazy would otherwise read as a violation of
-// the very rule it documents.
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/(^|[^:\w'"`\\])\/\/[^\n]*/g, '$1');
-}
-
-// Deliberately a synchronous fs walk, not `import.meta.glob(..., { eager: true })`:
-// the eager glob makes Vite transform every file under src/ before the body can
-// run (~40s), which starves the other fs-walking suites and produces timeouts
-// across the run. Same idiom as theme/classContract.test.ts and
-// components/componentStoreBoundary.test.ts.
-const SRC_ROOT = resolve(__dirname, '..');
 const SPARK_PACKAGE = '@sparkjsdev/spark';
 const RUNTIME_MODULE_PATH = 'src/utils/sparkSplatRuntime.ts';
 
@@ -53,39 +39,12 @@ const DOCUMENTED_NON_DOWNLOAD_PRELOAD_SITES = new Set([
   'src/hooks/fileDropzoneWorkflow.ts',
 ]);
 
-// Test files are excluded at the walk: they name the package in mocks and in
-// pinned literals, neither of which ships. That exclusion also covers this
-// file's own source, which necessarily contains the specifier.
-function isScannableSource(name: string): boolean {
-  if (!name.endsWith('.ts') && !name.endsWith('.tsx')) return false;
-  return !name.includes('.test.') && !name.includes('.spec.');
-}
-
-function collectSourceFiles(directory: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const entryPath = join(directory, entry.name);
-    if (entry.isDirectory()) {
-      collectSourceFiles(entryPath, out);
-    } else if (isScannableSource(entry.name)) {
-      out.push(entryPath);
-    }
-  }
-  return out;
-}
-
-function toRepoRelative(filePath: string): string {
-  return relative(process.cwd(), filePath).replace(/\\/g, '/');
-}
-
 // Walked and read once, while this file is collected: no per-test timeout applies there, and both
 // whole-tree checks below then filter the same in-memory sources in milliseconds. The reads are
 // most of the scan, and on a loaded machine (or a cold, just-edited tree) one in-test scan took
 // 24.4 s against a 15 s budget. Vitest cannot interrupt a synchronous test, so a budget on it only
 // turns a slow-but-correct run into a failure.
-const PRODUCTION_SOURCES = collectSourceFiles(SRC_ROOT).map((file) => ({
-  relativePath: toRepoRelative(file),
-  source: readFileSync(file, 'utf8'),
-}));
+const PRODUCTION_SOURCES = readProductionSources();
 
 // Statement-level imports of the package, in every form that survives to
 // runtime:
