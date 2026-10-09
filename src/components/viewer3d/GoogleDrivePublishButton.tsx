@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from 'react';
 import { getGoogleDriveClientId } from '../../features/googleDrive/auth';
-import { GOOGLE_DRIVE_ENABLED_ORIGIN, isGoogleDriveEnabled } from '../../features/googleDrive/config';
+import { GOOGLE_DRIVE_ENABLED_ORIGIN, GOOGLE_DRIVE_HANDOFF_TOOLTIP, isGoogleDriveEnabled } from '../../features/googleDrive/config';
 import { GoogleDriveIcon } from '../../icons';
 import { ControlButton, type PanelType } from './ControlComponents';
 import { LazyToolModal } from './LazyToolModal';
@@ -19,7 +19,7 @@ export const GoogleDrivePublishButton = memo(function GoogleDrivePublishButton({
   // A new tab keeps this scene and its edits; a remote dataset reopens there.
   if (!isGoogleDriveEnabled()) return <a href={handoffUrl}
     target="_blank" rel="noopener noreferrer" aria-label="Use Google Drive" className={getControlButtonClass(false, false)}
-    {...getTooltipProps(handoffSource ? 'Open this dataset with Google Drive in a new tab' : 'Use Google Drive in a new tab', 'left')}>
+    {...getTooltipProps(handoffSource ? `${GOOGLE_DRIVE_HANDOFF_TOOLTIP}\nThis dataset will reopen there.` : GOOGLE_DRIVE_HANDOFF_TOOLTIP, 'left')}>
     <GoogleDriveIcon className="w-5 h-5" />
   </a>;
   if (!getGoogleDriveClientId()) return null;

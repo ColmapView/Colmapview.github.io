@@ -5,7 +5,7 @@ import { describeHfAccess, getHfAccountConfiguration } from '../../features/hugg
 import { startupLinkRetry } from '../../appStartupRetry';
 import { googleDriveAuth, loadGoogleOAuthSdk, type GoogleOAuthSdk } from '../../features/googleDrive/auth';
 import { chooseGoogleDriveArchive, getGoogleDrivePickerConfig } from '../../features/googleDrive/picker';
-import { GOOGLE_DRIVE_ENABLED_ORIGIN, getGoogleDriveConfiguration, isGoogleDriveEnabled } from '../../features/googleDrive/config';
+import { GOOGLE_DRIVE_ENABLED_ORIGIN, GOOGLE_DRIVE_HANDOFF_TOOLTIP, getGoogleDriveConfiguration, isGoogleDriveEnabled } from '../../features/googleDrive/config';
 import { getButtonClass } from '../../theme';
 import { GoogleDriveIcon } from '../../icons';
 import { AccountDialog } from '../ui/AccountDialog';
@@ -143,7 +143,7 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
       aria-pressed={google.status === 'connected'} onClick={() => { setPickerError(null); setProvider('google'); }}>
       <GoogleDriveIcon className="w-4 h-4" />
     </button> : <a href={GOOGLE_DRIVE_ENABLED_ORIGIN} className={DROP_ZONE_ICON_BUTTON_CLASS}
-      target="_blank" rel="noopener noreferrer" aria-label="Use Google Drive" data-tooltip="Use Google Drive on colmapview.opsiclear.com">
+      target="_blank" rel="noopener noreferrer" aria-label="Use Google Drive" data-tooltip={GOOGLE_DRIVE_HANDOFF_TOOLTIP}>
       <GoogleDriveIcon className="w-4 h-4" />
     </a>}
     <AccountDialog id={id} isOpen={provider !== null && (provider !== 'google' || googleEnabled) && !pickerOpen}
