@@ -8,7 +8,7 @@ import { useFileDropzone } from './useFileDropzone';
 import { useUrlLoader } from './useUrlLoader';
 import { collectShareConfig } from './useUrlState';
 import { createDefaultManifest } from './urlLoaderPolicy';
-import { buildFile, buildFileSystemFileEntry, buildLoadedFiles, buildReconstruction } from '../test/builders';
+import { buildTextFile, buildFile, buildFileSystemFileEntry, buildLoadedFiles, buildReconstruction } from '../test/builders';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
@@ -318,7 +318,7 @@ describe('useFileDropzone', () => {
     const files = new Map(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, buildFile(name)]));
     files.set('a.spz', a);
     files.set('b.spz', b);
-    files.set('colmapview.yaml', Object.assign(buildFile('colmapview.yaml'), { text: async () => yaml }));
+    files.set('colmapview.yaml', buildTextFile('colmapview.yaml', yaml));
     let resolve!: () => void;
     let pending!: Promise<boolean>;
     // The real workflow publishes progress to the mounted hook's store until it reaches the paint delay.

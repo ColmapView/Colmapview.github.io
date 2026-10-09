@@ -5,7 +5,7 @@ import type { FileDropzoneWorkflowDeps, processFileDropzoneFiles } from './fileD
 import { useFileDropzone } from './useFileDropzone';
 import { executeTransformGizmoContextMenuAction } from '../components/viewer3d/transformGizmoContextMenuExecutor';
 import { applySavedViewerState } from './useUrlState';
-import { buildFile, buildReconstruction } from '../test/builders';
+import { buildTextFile, buildFile, buildReconstruction } from '../test/builders';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
@@ -197,7 +197,7 @@ describe('the scene transform across loads and Reloads', () => {
     const yaml = serializeDatasetViewerSettings(saved);
     const next = datasetFiles();
     // jsdom's File has no text().
-    next.set('colmapview.yaml', Object.assign(new File([yaml], 'colmapview.yaml'), { text: async () => yaml }));
+    next.set('colmapview.yaml', buildTextFile('colmapview.yaml', yaml));
 
     await act(async () => { expect(await result.current.processFiles(next)).toBe(true); });
 

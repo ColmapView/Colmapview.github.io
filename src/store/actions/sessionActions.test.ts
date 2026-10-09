@@ -4,7 +4,7 @@ import { useTransformStore } from '../stores/transformStore';
 import { useDeletionStore } from '../stores/deletionStore';
 import { useReconstructionStore } from '../reconstructionStore';
 import { applyDeletionsToData } from './deletionActions';
-import { buildImage, buildLoadedFiles, buildReconstruction } from '../../test/builders';
+import { buildTextFile, buildImage, buildLoadedFiles, buildReconstruction } from '../../test/builders';
 import { applySavedViewerState, type SharedViewerOverrides } from '../../hooks/useUrlState';
 import { serializeDatasetViewerSettings } from '../../utils/datasetViewerSettings';
 import { MAX_VIEWER_STATE_BYTES, type PublishedViewerState } from '../../utils/publishedViewerState';
@@ -123,7 +123,7 @@ describe('reload confirmation gating', () => {
       const yaml = serializeDatasetViewerSettings(saved);
       const files = datasetFiles();
       // jsdom's File has no text().
-      files.set('colmapview.yaml', Object.assign(new File([yaml], 'colmapview.yaml'), { text: async () => yaml }));
+      files.set('colmapview.yaml', buildTextFile('colmapview.yaml', yaml));
       useReconstructionStore.getState().setDroppedFiles(files);
       await applySavedViewerState(saved, null);
       return files;

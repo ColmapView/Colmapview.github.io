@@ -14,7 +14,7 @@ import { registerConfirmationHandler } from '../utils/confirmation';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import { getShareActiveSplatSourceId } from '../utils/splatFileSourcePolicy';
-import { buildImage, buildPoint3D, buildReconstruction as buildTestReconstruction, buildWasmReconstructionWrapper } from '../test/builders';
+import { buildTextFile, buildImage, buildPoint3D, buildReconstruction as buildTestReconstruction, buildWasmReconstructionWrapper } from '../test/builders';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 
 function file(name: string): File {
@@ -156,7 +156,7 @@ describe('file dropzone workflow', () => {
     const files = new Map([...fixture.files].map(([path, value]) => ['project/' + path, value]));
     files.set('project/splats/default.spz', preferred);
     files.set('project/splats/active.spz', active);
-    files.set('project/colmapview.yaml', Object.assign(file('colmapview.yaml'), { text: async () => yaml }));
+    files.set('project/colmapview.yaml', buildTextFile('colmapview.yaml', yaml));
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
     try {
       const deps = createDeps({ parseFiles: async () => fixture.parseResult,
@@ -453,7 +453,7 @@ describe('file dropzone workflow', () => {
     fixture.files.set('splats/b.spz', incoming.b);
     const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
       config: { splat: { activeSourceId: 'splats/saved.spz' } } });
-    fixture.files.set('colmapview.yaml', Object.assign(file('colmapview.yaml'), { text: async () => yaml }));
+    fixture.files.set('colmapview.yaml', buildTextFile('colmapview.yaml', yaml));
     const startRevision = useReconstructionStore.getState().splatSelectionRevision;
     let finishBuild!: (result: { reconstruction: Reconstruction; pointCount: number }) => void;
     const buildReconstruction = vi.fn(() => new Promise<{ reconstruction: Reconstruction; pointCount: number }>(resolve => { finishBuild = resolve; }));
@@ -1262,7 +1262,7 @@ describe('file dropzone workflow', () => {
     const { b, files, deps } = reloadFixture();
     const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
       config: { splat: { activeSourceId: 'a.spz' }, ui: { backgroundColor: '#345678' } } });
-    files.set('colmapview.yaml', Object.assign(file('colmapview.yaml'), { text: async () => yaml }));
+    files.set('colmapview.yaml', buildTextFile('colmapview.yaml', yaml));
     try {
       await useReconstructionStore.getState().selectSplatSource('b.spz');
       await expect(processFileDropzoneFiles(files, deps, { reload: true,
@@ -1353,7 +1353,7 @@ describe('file dropzone workflow', () => {
     const { b, files, deps } = reloadWithoutColmapFixture('splat-only');
     const yaml = serializeDatasetViewerSettings({ version: 1, viewerVersion: 'test', viewState: null,
       config: { splat: { activeSourceId: 'a.spz' }, ui: { backgroundColor: '#345678' } } });
-    files.set('colmapview.yaml', Object.assign(file('colmapview.yaml'), { text: async () => yaml }));
+    files.set('colmapview.yaml', buildTextFile('colmapview.yaml', yaml));
     try {
       await useReconstructionStore.getState().selectSplatSource('b.spz');
       for (let reload = 0; reload < 2; reload += 1) {
@@ -1431,7 +1431,7 @@ describe('file dropzone workflow', () => {
     if (scene === 'COLMAP') for (const name of ['cameras.bin', 'images.bin', 'points3D.bin']) files.set(name, file(name));
     if (scene === 'images+splats' || scene === 'images') for (const name of ['one.jpg', 'two.jpg']) files.set(`images/${name}`, file(name));
     if (scene === 'point cloud') files.set('points.ply', genericPointCloudPly());
-    if (settings) files.set('colmapview.yaml', Object.assign(file('colmapview.yaml'), { text: async () => settings }));
+    if (settings) files.set('colmapview.yaml', buildTextFile('colmapview.yaml', settings));
     const deps = realStoreDeps({
       onViewerState: viewerState => applySavedViewerState(viewerState, null),
       // Announces like the real parser: the points it loaded, then its warnings.
@@ -1700,7 +1700,7 @@ describe('file dropzone workflow', () => {
       buildReconstruction: vi.fn(async () => ({ reconstruction: createReconstruction(), pointCount: 0 })),
     });
     const files = new Map<string, File>(['cameras.bin', 'images.bin', 'points3D.bin'].map(name => [name, file(name)]));
-    files.set('colmapview.yaml', Object.assign(file('colmapview.yaml'), { text: async () => inFiles }));
+    files.set('colmapview.yaml', buildTextFile('colmapview.yaml', inFiles));
 
     await processFileDropzoneFiles(files, deps, { viewerState: fromSource, onViewerState });
 
