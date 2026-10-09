@@ -210,6 +210,7 @@ export function useUrlLoader({ logger = appLogger, applyUrlOverrides = false }: 
     } catch (error) {
       if (isCurrent()) {
         handleUrlLoadFailure(error, {
+          // A replaced scene may have filled caches before restoration failed; a failed fetch keeps the old scene's caches.
           clearCaches: load.sceneReplaced ? clearAllCaches : () => undefined,
           contextUrl,
           errorLog: logError,

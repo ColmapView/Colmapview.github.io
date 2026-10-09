@@ -56,7 +56,7 @@
 - The warning texts, the show and dismiss timing, and which loads dismiss which warning are unchanged.
 - Cache clearing happens on exactly the same paths.
 
-- [ ] One commit per item, or per tightly related pair, with subjects that say what changed.
+- [x] One commit per item, or per tightly related pair, with subjects that say what changed.
 
 ### Task 2: Bigger load-path refactors (S1-7, S1-8)
 
@@ -68,7 +68,7 @@
 - **S1-7:** `DropZone`'s preparation moves out of the component and shares `runLoad`'s URL-load claim. The overlay, progress text, Cancel, `?url=` stripping and the in-load splat revision behave identically. The component reaches the store only through a facade.
 - **S1-8:** only the dead eager-splat path goes, and the ported tests still pin the deferred path, including the publication test.
 
-- [ ] Commit S1-7 and S1-8 separately.
+- [x] Commit S1-7 and S1-8 separately.
 
 ### Task 3: Store and renderer simplifications, plus Bug 1 (S2-1, S2-4, S2-5, S2-6, S2-7, S2-8)
 
@@ -89,7 +89,7 @@
 - `reconstructionActions.ts` has no consumers.
 - The `reloadFiles` wrapper removal keeps the global menu's await-then-close order.
 
-- [ ] Commit the simplifications and the Bug 1 fix separately.
+- [x] Commit the simplifications and the Bug 1 fix separately.
 
 ### Task 4: Publishing and accounts simplifications, plus Bug 2 (S3-1, S3-2, S3-3, S3-5, S3-6)
 
@@ -107,7 +107,7 @@
 - `pinHfAssetUrl` behaves identically at both sites.
 - Bug 2 doesn't keep a really expired session alive: the session that made the request still expires.
 
-- [ ] Commit the simplifications and the Bug 2 fix separately.
+- [x] Commit the simplifications and the Bug 2 fix separately.
 
 ### Task 5: One account-dialog skeleton for the two Hugging Face account dialogs (S3-4)
 
@@ -119,7 +119,7 @@
 - The DOM and the accessible names of both dialogs are identical before and after.
 - The privacy-mandated access hint still appears wherever it did.
 
-- [ ] One commit.
+- [x] One commit.
 
 ### Task 6: Deploy scripts and UI shell (S4-4, S4-5, S4-6, S4-7)
 
@@ -134,7 +134,7 @@
 - **S4-5:** the `PolicyLinks` DOM is identical at all three call sites.
 - **S4-7:** the three contract scans still see exactly the same files and still catch their violations. Prove this with a mutation each.
 
-- [ ] One commit per item.
+- [x] One commit per item.
 
 ### Task 7: Test-support consolidation (S2-2/S4-1, S2-3, S4-2, which also covers S1-6)
 
@@ -150,4 +150,16 @@
 - No test became vacuous. Spot-check with mutations.
 - The full suite's test count changes only where duplicates merged.
 
-- [ ] One commit per helper.
+- [x] One commit per helper.
+
+## Execution record
+
+Claude completed and reviewed Tasks 1 and 4. After its rate limit interrupted Tasks 2 and 5, Codex resumed the remaining work directly and completed Tasks 2, 3, 5, 6 and 7. The takeover used the same scope, behavior constraints, pinning tests, mutation checks and release gates; new Codex commits carry no Claude attribution.
+
+- Both approved bugs are fixed: Spark preserves a pending tile download's overlay and Cancel, and rejected Drive requests expire only the session that sent their token.
+- Ten account-dialog DOM snapshots and the policy-link DOM pins passed before and after extraction.
+- The three contract scans retain the same source paths and comment stripping; each rejected an intentional violation. Consolidated test helpers also rejected the held-load, cancellation and selection-revision mutations.
+- Final Codex review found no blocking issue. The carried cache-clearing comment, timeout-warning comment and shadowed token names were cleaned up.
+- Final gates passed with CI enabled: 4,901 unit tests, TypeScript, lint, production build, 90 Chromium E2E tests, 20 deployment configuration tests and 7 deployment browser smoke tests across GitHub, custom and preview profiles.
+
+Detailed task evidence and logs are recorded in the existing local SDD ledger and .tmp/pre-release-simplify/ artifacts.

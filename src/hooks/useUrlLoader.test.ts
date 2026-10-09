@@ -69,7 +69,7 @@ function createSplatLoadedFiles(splatFile: File): LoadedFiles {
   };
 }
 
-/** Timeout warnings on screen; pinning the whole list catches a stacked duplicate. */
+/** Timeout warnings on screen. */
 const settingsTimeoutWarnings = () => notificationsWithMessage(OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MESSAGE);
 const splatListTimeoutWarnings = () => notificationsWithMessage(SPLAT_LIST_TIMEOUT_MESSAGE);
 
