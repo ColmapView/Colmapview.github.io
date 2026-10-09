@@ -81,7 +81,7 @@ function HotkeyHelpAboutPanel() {
         <dt>{ABOUT_COLMAP_CREDIT_PREFIX}</dt>
         <dd><AboutLinkAnchor link={ABOUT_COLMAP_LINK} /></dd>
       </dl>
-      <PolicyLinks includeAbout aboutLabel="Website" align="start" className="hotkey-help-about-policies" />
+      <PolicyLinks aboutLabel="Website" className="hotkey-help-about-policies" />
     </div>
   );
 }

@@ -37,7 +37,7 @@ export function AccountDialog({ id, isOpen, onClose, title, status, statusTitle,
       </div>}
       <p id={`${id}-description`} className="m-0 text-ds-secondary">{description}</p>
       {hint && <p className="m-0 mt-1 text-ds-muted text-xs">{hint}</p>}
-      <PolicyLinks align="start" />
+      <PolicyLinks />
       {error && <p role="alert" className="m-0 mt-3 text-ds-warning text-xs">{error}</p>}
       <div className="flex flex-wrap items-center justify-end gap-2 mt-4">{children}</div>
     </div>
