@@ -10,7 +10,6 @@ import {
   ABOUT_MAINTAINER_LINE,
   ABOUT_PRODUCT_LINE_CLASS,
   ABOUT_PROJECT_LINKS,
-  ABOUT_ROW_CLASS,
   ABOUT_TAB_ID,
   ABOUT_TAB_TITLE,
   ESSENTIALS_TAB_ID,
@@ -437,6 +436,5 @@ describe('about tab view model', () => {
     // status bar; px-4 lines the block up with the hotkey rows' inset.
     expect(ABOUT_PANEL_CLASS).toBe('flex flex-col gap-2 px-4 py-1 text-sm text-ds-secondary');
     expect(ABOUT_PRODUCT_LINE_CLASS).toBe('text-ds-primary font-medium');
-    expect(ABOUT_ROW_CLASS).toBe('flex items-center gap-4');
   });
 });

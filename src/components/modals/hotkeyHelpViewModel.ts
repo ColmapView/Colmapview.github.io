@@ -168,12 +168,10 @@ export const ABOUT_MAINTAINER_LINE = 'by OpsiClear';
 export const ABOUT_LICENSE_LABEL = 'AGPL 3.0';
 export const ABOUT_COLMAP_CREDIT_PREFIX = 'Based on';
 
-// Plain stacked block on the panel surface. text-ds-secondary keeps the links'
-// rest color (inherit) identical to the status bar they came from; the rows
-// reuse the tab panel's px-4 inset so About lines up with the hotkey rows.
+// Plain stacked block on the panel surface: links inherit text-ds-secondary,
+// and the panel's px-4 inset lines About up with the hotkey rows.
 export const ABOUT_PANEL_CLASS = 'flex flex-col gap-2 px-4 py-1 text-sm text-ds-secondary';
 export const ABOUT_PRODUCT_LINE_CLASS = 'text-ds-primary font-medium';
-export const ABOUT_ROW_CLASS = 'flex items-center gap-4';
 
 export function getAboutLinkHoverColor(link: AboutLink): string {
   return LINK_COLORS[link.color];
