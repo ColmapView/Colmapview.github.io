@@ -95,6 +95,61 @@ describe('Drive publication lifecycle', () => {
     expect(client.file).toHaveBeenCalledTimes(2);
     expect(client.chunk).not.toHaveBeenCalled();
   });
+  it.each(['anyone', 'domain'])('does not fill an empty file granted %s access between a lost create response and Retry', async type => {
+    const { controller, client, prepare, setFile, uploaded } = fixture();
+    let interruptedFile!: DrivePublishedFile;
+    client.start.mockImplementationOnce(async (_id, filename, marker) => {
+      interruptedFile = { ...uploaded(), name: filename, appProperties: { colmapviewOperation: marker }, size: '0', md5Checksum: undefined };
+      setFile(interruptedFile);
+      throw new GoogleDrivePublishError('Lost create response.');
+    });
+    await controller.publish('scene', false, prepare);
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: true });
+    interruptedFile.permissions!.push({ type, role: 'reader' });
+    client.chunk.mockImplementationOnce(async () => {
+      interruptedFile.size = '20'; interruptedFile.md5Checksum = 'fixture-md5';
+      return { complete: true, offset: 20 };
+    });
+    await controller.retry();
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: true,
+      error: 'This file was shared outside the publication. Review its sharing settings in Drive.' });
+    expect(client.start).toHaveBeenCalledOnce();
+    expect(client.chunk).not.toHaveBeenCalled();
+    expect(client.status).not.toHaveBeenCalled();
+    expect(client.share).not.toHaveBeenCalled();
+  });
+  it.each(['anyone', 'domain'])('does not resume a private upload after its file gains %s access', async type => {
+    const { controller, client, prepare, setFile, uploaded } = fixture();
+    let interruptedFile!: DrivePublishedFile;
+    client.chunk.mockImplementationOnce(async () => {
+      interruptedFile = { ...uploaded(), size: '0', md5Checksum: undefined };
+      setFile(interruptedFile);
+      throw new GoogleDrivePublishError('Network interrupted.');
+    });
+    await controller.publish('scene', false, prepare);
+    interruptedFile.permissions!.push({ type, role: 'reader' });
+    await controller.retry();
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: true,
+      error: 'This file was shared outside the publication. Review its sharing settings in Drive.' });
+    expect(client.status).not.toHaveBeenCalled();
+    expect(client.start).toHaveBeenCalledOnce();
+    expect(client.chunk).toHaveBeenCalledOnce();
+    expect(client.share).not.toHaveBeenCalled();
+  });
+  it.each(['anyone', 'domain'])('does not adopt an empty file with %s access after a 409', async type => {
+    const { controller, client, prepare, setFile, uploaded } = fixture();
+    client.start.mockImplementationOnce(async (_id, filename, marker) => {
+      setFile({ ...uploaded(), name: filename, appProperties: { colmapviewOperation: marker }, size: '0', md5Checksum: undefined,
+        permissions: [{ type: 'user', role: 'owner' }, { type, role: 'reader' }] });
+      throw new GoogleDrivePublishError('The file already exists.', 409);
+    });
+    await controller.publish('scene', false, prepare);
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: true,
+      error: 'This file was shared outside the publication. Review its sharing settings in Drive.' });
+    expect(client.start).toHaveBeenCalledOnce();
+    expect(client.chunk).not.toHaveBeenCalled();
+    expect(client.share).not.toHaveBeenCalled();
+  });
   it.each(['anyone', 'domain'])('does not report a private save while the file grants %s access', async type => {
     const { controller, client, prepare, setFile, uploaded } = fixture();
     client.chunk.mockImplementationOnce(async () => {

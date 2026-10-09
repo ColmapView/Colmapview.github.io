@@ -61,6 +61,10 @@ export function createDrivePublicationController(client: DriveUploadClient) {
         || file.appProperties?.[DRIVE_OPERATION_KEY] !== current.operationId) {
         throw new GoogleDrivePublishError('The Drive file changed outside this publication. Start a new publication.');
       }
+      // A retry must reject changed sharing before it fills an empty file or resumes its session.
+      if (!current.shared && file.permissions?.some(permission => permission.type === 'anyone' || permission.type === 'domain')) {
+        throw new GoogleDrivePublishError('This file was shared outside the publication. Review its sharing settings in Drive.');
+      }
     };
     const complete = (file: DrivePublishedFile) => {
       owned(file);
@@ -137,8 +141,6 @@ export function createDrivePublicationController(client: DriveUploadClient) {
         if (!file || !complete(file) || publicPermission()?.role !== 'reader' || publicPermission()?.allowFileDiscovery !== false) {
           throw new GoogleDrivePublishError('The ZIP uploaded, but link sharing was not confirmed. Retry or review the file in Drive.');
         }
-      } else if (file.permissions?.some(permission => permission.type === 'anyone' || permission.type === 'domain')) {
-        throw new GoogleDrivePublishError('This file was shared outside the publication. Review its sharing settings in Drive.');
       }
       const driveUrl = driveSharingUrl(file);
       const viewerUrl = new URL(archive.viewerBaseUrl);
