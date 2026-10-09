@@ -10,8 +10,7 @@ import type {
   SplatBackendPreference,
   SplatBackendResolution,
 } from '../../../utils/splatBackendPolicy';
-import { isReconstructionLoadPending } from '../../../wasm/reconstructionLoadLifecycle';
-import { isSplatDownloadPending } from '../../../store/reconstructionStore';
+import { isDatasetLoadPendingForSplat, isSplatDownloadPending } from '../../../store/reconstructionStore';
 
 interface SplatLayerDataFacade {
   showSplats: boolean;
@@ -30,8 +29,8 @@ interface SplatLayerActionsFacade {
   setUrlLoading: ReturnType<typeof useReconstructionStore.getState>['setUrlLoading'];
   setUrlProgress: ReturnType<typeof useReconstructionStore.getState>['setUrlProgress'];
   dropFailedSplat: ReturnType<typeof useReconstructionStore.getState>['dropFailedSplat'];
-  /** A dataset load is pending: its overlay, progress and URL error are its own. */
-  isDatasetLoadPending: () => boolean;
+  /** A pending dataset load has not handed this splat to its renderer yet. */
+  isDatasetLoadPendingForSplat: (file: File) => boolean;
   /** A tile download is pending: the overlay, progress and URL error are its own. */
   isSplatDownloadPending: () => boolean;
 }
@@ -74,7 +73,7 @@ export function useSplatLayerStoreFacade(): SplatLayerStoreFacade {
       setUrlLoading,
       setUrlProgress,
       dropFailedSplat,
-      isDatasetLoadPending: isReconstructionLoadPending,
+      isDatasetLoadPendingForSplat,
       isSplatDownloadPending,
     },
   };

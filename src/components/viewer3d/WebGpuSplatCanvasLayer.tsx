@@ -47,8 +47,7 @@ import {
   getSplatUploadProgress,
   isSplatLoadingProgressForFile,
   isSplatLoadingProgressForRenderer,
-  splatAttemptYieldsLoadingState,
-  type SplatLoadAttempt,
+  splatYieldsLoadingState,
   type SplatLoadingPhase,
 } from '../../utils/splatLoadingProgressPolicy';
 import type { GaussianCloudLoadProgress } from '../../splat/gaussianCloudLoader';
@@ -84,7 +83,7 @@ export function WebGpuSplatCanvasLayer({
   setUrlLoading,
   setUrlProgress,
   reportLoadingProgress = true,
-  isDatasetLoadPending,
+  isDatasetLoadPendingForSplat,
   isSplatDownloadPending,
   onRuntimeReady,
   onMetricRuntimeReady,
@@ -100,8 +99,8 @@ export function WebGpuSplatCanvasLayer({
   setUrlLoading?: (loading: boolean) => void;
   setUrlProgress?: (progress: UrlLoadProgress | null) => void;
   reportLoadingProgress?: boolean;
-  /** A dataset load is pending: unless this splat began decoding during it, the loading state is its own. */
-  isDatasetLoadPending?: () => boolean;
+  /** A pending dataset load has not handed this splat to its renderer yet. */
+  isDatasetLoadPendingForSplat?: (file: File) => boolean;
   /** A tile download is pending: the loading state is its own. */
   isSplatDownloadPending?: () => boolean;
   onRuntimeReady?: () => void;
@@ -117,13 +116,11 @@ export function WebGpuSplatCanvasLayer({
   const loadingNotificationRef = useRef<SplatLoadingNotification | null>(null);
   const progressStartRef = useRef<{ file: File; percent: number } | null>(null);
   const reportLoadingProgressRef = useRef(reportLoadingProgress);
-  // Whether this splat began decoding while a dataset load was pending, which makes it that load's own.
-  const attemptRef = useRef<SplatLoadAttempt | null>(null);
   const shouldMount = mounted ?? visible;
 
   const yieldsLoadingState = useCallback((file: File) =>
-    splatAttemptYieldsLoadingState(file, attemptRef.current, isSplatDownloadPending, isDatasetLoadPending),
-  [isDatasetLoadPending, isSplatDownloadPending]);
+    splatYieldsLoadingState(file, isSplatDownloadPending, isDatasetLoadPendingForSplat),
+  [isDatasetLoadPendingForSplat, isSplatDownloadPending]);
 
   const dismissSplatLoadingNotification = useCallback((file?: File): SplatLoadingNotification | null => {
     const current = loadingNotificationRef.current;
@@ -377,7 +374,6 @@ export function WebGpuSplatCanvasLayer({
     const sourceFile = splatFile;
     rendererRef.current = null;
     readyReportedRef.current = false;
-    attemptRef.current = { file: sourceFile, startedDuringDatasetLoad: isDatasetLoadPending?.() ?? false };
     let cancelled = false;
     let renderer: VisibleWebGpuSplatRendererAdapter | null = null;
     let failureReported = false;
@@ -565,7 +561,6 @@ export function WebGpuSplatCanvasLayer({
   }, [
     clearSplatLoadingNotification,
     failSplatLoadingNotification,
-    isDatasetLoadPending,
     onAdapterUnavailable,
     onMetricRuntimeReady,
     onRuntimeFailed,

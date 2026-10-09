@@ -24,8 +24,7 @@ import {
   getSplatProgressStartPercent,
   isSplatLoadingProgressForFile,
   isSplatLoadingProgressForRenderer,
-  splatAttemptYieldsLoadingState,
-  type SplatLoadAttempt,
+  splatYieldsLoadingState,
   type SplatLoadingPhase,
 } from '../../../utils/splatLoadingProgressPolicy';
 
@@ -44,7 +43,8 @@ interface LoadedSplatMesh {
   mesh: SplatMeshInstance;
 }
 
-interface SplatLoadingNotification extends SplatLoadAttempt {
+interface SplatLoadingNotification {
+  file: File;
   id: string;
 }
 
@@ -205,7 +205,7 @@ export function SplatLayer({
       setUrlLoading,
       setUrlProgress,
       dropFailedSplat,
-      isDatasetLoadPending,
+      isDatasetLoadPendingForSplat,
       isSplatDownloadPending,
     },
   } = useSplatLayerStoreFacade();
@@ -233,9 +233,9 @@ export function SplatLayer({
     setSparkRendererReady(ready);
   }, []);
 
-  const yieldsLoadingState = useCallback((file: File, attempt: SplatLoadAttempt | null = loadingNotificationRef.current) =>
-    splatAttemptYieldsLoadingState(file, attempt, isSplatDownloadPending, isDatasetLoadPending),
-  [isDatasetLoadPending, isSplatDownloadPending]);
+  const yieldsLoadingState = useCallback((file: File) =>
+    splatYieldsLoadingState(file, isSplatDownloadPending, isDatasetLoadPendingForSplat),
+  [isDatasetLoadPendingForSplat, isSplatDownloadPending]);
 
   const clearSplatLoadingNotification = useCallback((file?: File) => {
     const current = loadingNotificationRef.current;
@@ -261,12 +261,11 @@ export function SplatLayer({
       removeNotification(current.id);
     }
 
-    const attempt = { file, startedDuringDatasetLoad: isDatasetLoadPending() };
     progressStartRef.current = {
       file,
       percent: getSplatProgressStartPercent(getUrlProgress()),
     };
-    if (!yieldsLoadingState(file, attempt)) {
+    if (!yieldsLoadingState(file)) {
       setUrlLoading(true);
       setUrlProgress(getSplatLoadingProgress(file, {
         startPercent: progressStartRef.current.percent,
@@ -274,8 +273,8 @@ export function SplatLayer({
       }));
     }
     const id = addNotification('info', `Loading splat: ${file.name}`, 0);
-    loadingNotificationRef.current = { ...attempt, id };
-  }, [addNotification, getUrlProgress, isDatasetLoadPending, removeNotification, setUrlLoading, setUrlProgress, yieldsLoadingState]);
+    loadingNotificationRef.current = { file, id };
+  }, [addNotification, getUrlProgress, removeNotification, setUrlLoading, setUrlProgress, yieldsLoadingState]);
 
   const getProgressStartPercent = useCallback((file: File) => {
     const current = progressStartRef.current;

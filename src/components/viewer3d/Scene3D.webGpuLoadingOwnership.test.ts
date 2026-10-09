@@ -18,7 +18,7 @@ describe('Scene3D WebGPU splat loading ownership', () => {
     expect(open).toBeGreaterThan(-1);
     expect(close).toBeGreaterThan(open);
     const element = source.slice(open, close);
-    expect(element).toContain('isDatasetLoadPending={isDatasetLoadPending}');
+    expect(element).toContain('isDatasetLoadPendingForSplat={isDatasetLoadPendingForSplat}');
     expect(element).toContain('isSplatDownloadPending={isSplatDownloadPending}');
   });
 });

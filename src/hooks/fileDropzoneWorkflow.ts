@@ -31,7 +31,7 @@ import { runPointCloudOnlyLoad } from './fileDropzonePointCloudOnly';
 import { runSplatOnlyLoad } from './fileDropzoneSplatOnly';
 import { parseColmapFiles } from './fileDropzoneColmapParser';
 import { buildColmapReconstruction } from './fileDropzoneReconstruction';
-import { beginReconstructionLoad } from '../wasm/reconstructionLoadLifecycle';
+import { beginReconstructionLoad, markReconstructionSceneCommitted } from '../wasm/reconstructionLoadLifecycle';
 import { findDatasetViewerSettingsEntry, resolveDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { anySignal } from '../utils/abortSignals';
@@ -336,6 +336,7 @@ export async function processFileDropzoneFiles(
 
   const complete = async () => {
     load.assertCurrent();
+    markReconstructionSceneCommitted(job.signal, normalizedOptions.signal);
     if (viewerState) {
       // Reload keeps the splat on screen: saved settings, the files' own included, never switch it.
       const state = normalizedOptions.reload ? withoutSplatChoice(viewerState) : viewerState;

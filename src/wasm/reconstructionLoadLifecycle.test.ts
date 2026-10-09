@@ -3,12 +3,43 @@ import {
   beginReconstructionLoad,
   cancelPendingReconstructionLoad,
   getReconstructionLoadGeneration,
+  hasReconstructionSceneCommitted,
+  markReconstructionSceneCommitted,
   onReconstructionLoadStart,
 } from './reconstructionLoadLifecycle';
 
 afterEach(() => cancelPendingReconstructionLoad());
 
 describe('reconstruction load lifecycle', () => {
+  it('keeps the committed scene associated with its URL request after parsing finishes, until cancellation', () => {
+    const source = new AbortController();
+    const load = beginReconstructionLoad();
+    expect(hasReconstructionSceneCommitted()).toBe(false);
+    expect(hasReconstructionSceneCommitted(source.signal)).toBe(false);
+    markReconstructionSceneCommitted(load.signal, source.signal);
+    expect(hasReconstructionSceneCommitted()).toBe(true);
+    load.finish();
+    expect(hasReconstructionSceneCommitted()).toBe(false);
+    expect(hasReconstructionSceneCommitted(source.signal)).toBe(true);
+    beginReconstructionLoad();
+    expect(hasReconstructionSceneCommitted()).toBe(false);
+    source.abort();
+    expect(hasReconstructionSceneCommitted(source.signal)).toBe(false);
+  });
+
+  it('does not let a superseded parse or an aborted source hand progress to its renderer', () => {
+    const stale = beginReconstructionLoad();
+    const current = beginReconstructionLoad();
+    const source = new AbortController();
+    markReconstructionSceneCommitted(stale.signal, source.signal);
+    expect(hasReconstructionSceneCommitted()).toBe(false);
+    expect(hasReconstructionSceneCommitted(source.signal)).toBe(false);
+    source.abort();
+    markReconstructionSceneCommitted(current.signal, source.signal);
+    expect(hasReconstructionSceneCommitted()).toBe(false);
+    expect(hasReconstructionSceneCommitted(source.signal)).toBe(false);
+  });
+
   it('tells listeners when a dataset load starts, and only then', () => {
     const listener = vi.fn();
     const stop = onReconstructionLoadStart(listener);

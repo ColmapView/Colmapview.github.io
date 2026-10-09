@@ -58,12 +58,13 @@ describe('useSplatLayerStoreFacade', () => {
 
   it('says whether a dataset load is pending, which then owns the loading state', () => {
     const { result } = renderHook(() => useSplatLayerStoreFacade());
-    expect(result.current.actions.isDatasetLoadPending()).toBe(false);
+    const splat = buildFile('scene.ply');
+    expect(result.current.actions.isDatasetLoadPendingForSplat(splat)).toBe(false);
 
     const load = beginReconstructionLoad();
-    expect(result.current.actions.isDatasetLoadPending()).toBe(true);
+    expect(result.current.actions.isDatasetLoadPendingForSplat(splat)).toBe(true);
     load.finish();
-    expect(result.current.actions.isDatasetLoadPending()).toBe(false);
+    expect(result.current.actions.isDatasetLoadPendingForSplat(splat)).toBe(false);
   });
 
   it('says whether a tile download is pending, which then owns the loading state', async () => {

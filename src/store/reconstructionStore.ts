@@ -2,7 +2,7 @@ import { create, type StoreApi } from 'zustand';
 import type { Reconstruction, LoadedFiles, SplatFileSource } from '../types/colmap';
 import type { ReconstructionSource } from '../wasm/reconstructionService';
 import { isReconstructionSnapshot } from '../wasm/reconstructionService';
-import { cancelPendingReconstructionLoad, isReconstructionLoadPending } from '../wasm/reconstructionLoadLifecycle';
+import { cancelPendingReconstructionLoad, hasReconstructionSceneCommitted, isReconstructionLoadPending } from '../wasm/reconstructionLoadLifecycle';
 import { clearActiveZipArchive } from '../utils/zipArchiveState';
 import type { UrlLoadProgress, UrlLoadError, ColmapManifest } from '../types/manifest';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
@@ -61,6 +61,16 @@ function rendererOwnsSplatProgress({ urlProgress, loadedFiles }: Pick<Reconstruc
 /** A lazy tile download is in flight: the loading indicator and its Cancel are its own. */
 export function isSplatDownloadPending(): boolean {
   return activeSplatController !== null;
+}
+
+/** A load keeps its progress until it commits; afterward only the splat on that scene may report renderer progress. */
+export function isDatasetLoadPendingForSplat(file: File): boolean {
+  const { loadedFiles, urlLoadActive, urlLoadController } = useReconstructionStore.getState();
+  const reconstructionPending = isReconstructionLoadPending();
+  if (!reconstructionPending && !urlLoadActive) return false;
+  return (reconstructionPending && !hasReconstructionSceneCommitted())
+    || (urlLoadActive && !hasReconstructionSceneCommitted(urlLoadController?.signal ?? null))
+    || loadedFiles?.splatFile !== file;
 }
 
 // The store error (shown as the DropZone toast) that the last failed splat download raised. Activating
@@ -644,7 +654,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     // A newer choice on screen supersedes the splat that failed.
     if (!loadedFiles || loadedFiles.splatFile !== file) return;
     // A dataset load, or a tile download replacing this splat, owns the overlay, progress and URL error.
-    const loadingStateOwned = isReconstructionLoadPending() || activeSplatController !== null;
+    const loadingStateOwned = isReconstructionLoadPending() || get().urlLoadActive || activeSplatController !== null;
     if (!loadingStateOwned && returnToLandingIfOnlySplat(loadedFiles, get().clear)) return;
     showColmapOnly(set, loadedFiles, {}, { keepLoadingState: loadingStateOwned });
   },

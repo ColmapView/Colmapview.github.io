@@ -1,6 +1,7 @@
 import { emptyParseResult, stubbedParsing } from '../../test/workflowStubs';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { useCallback } from 'react';
+import { holdUrlLoadBeforeSceneCommit } from '../../test/urlLoadHolds';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import {
@@ -41,8 +42,8 @@ import type {
 } from '../../splat/webgpu/visibleSplatRendererAdapter';
 import { appLogger } from '../../utils/logger';
 import { useDeletionStore, useNotificationStore, useReconstructionStore, useSplatBackendStore, useTransformStore } from '../../store';
-import { isSplatDownloadPending } from '../../store/reconstructionStore';
-import { beginReconstructionLoad, isReconstructionLoadPending } from '../../wasm/reconstructionLoadLifecycle';
+import { isDatasetLoadPendingForSplat, isSplatDownloadPending } from '../../store/reconstructionStore';
+import { beginReconstructionLoad, isReconstructionLoadPending, markReconstructionSceneCommitted } from '../../wasm/reconstructionLoadLifecycle';
 import { processFileDropzoneFiles } from '../../hooks/fileDropzoneWorkflow';
 import type { GaussianCloudLoadProgress } from '../../splat/gaussianCloudLoader';
 import { getSplatLoadingProgress } from '../../utils/splatLoadingProgressPolicy';
@@ -1931,7 +1932,7 @@ function StoreWiredLayer({ mounted = true }: { mounted?: boolean }) {
   return (
     <WebGpuSplatCanvasLayer mounted={mounted} visible splatFile={splatFile} addNotification={addNotification}
       removeNotification={removeNotification} getUrlProgress={getUrlProgress} setUrlLoading={setUrlLoading}
-      setUrlProgress={setUrlProgress} isDatasetLoadPending={isReconstructionLoadPending}
+      setUrlProgress={setUrlProgress} isDatasetLoadPendingForSplat={isDatasetLoadPendingForSplat}
       isSplatDownloadPending={isSplatDownloadPending} />
   );
 }
@@ -2035,6 +2036,37 @@ describe('WebGpuSplatCanvasLayer decoding a splat that another load or download 
     return { reloading, releaseParse: () => releaseParse() };
   }
 
+  it.each(['download', 'before scene commit'] as const)('keeps a new dataset %s when WebGPU begins decoding the old scene afterward', async phase => {
+    const store = useReconstructionStore.getState;
+    const files = colmap();
+    store().setLoadedFiles({ camerasFile: files.get('cameras.bin'), imagesFile: files.get('images.bin'),
+      points3DFile: files.get('points3D.bin'), imageFiles: new Map(), hasMasks: false, splatFile: old,
+      splatFileSources: [{ id: 'old.spz', path: 'old.spz', file: old }] });
+    const load = phase === 'before scene commit' ? holdUrlLoadBeforeSceneCommit() : null;
+    const signal = load ? store().urlLoadController!.signal : store().tryStartUrlLoad()!;
+    const progress = load?.settings ?? { percent: 25, message: 'Downloading dataset ZIP...' };
+    try {
+      if (load) await waitFor(() => expect(store().urlProgress).toEqual(progress));
+      else store().setUrlProgress(progress);
+      store().setUrlLoading(true);
+      render(<StoreWiredLayer />);
+      await waitFor(() => expect(decode).toBeDefined());
+      act(() => decode!.onProgress?.({ phase: 'decoding' } as GaussianCloudLoadProgress));
+      expect(store()).toMatchObject({ urlLoading: true, urlLoadActive: true, urlProgress: progress });
+      await finishOldDecode();
+      expect(store()).toMatchObject({ urlLoading: true, urlProgress: progress });
+      act(() => store().cancelLoading());
+      expect(signal.aborted).toBe(true);
+      if (load) expect(await load.pending).toBe(false);
+    } finally {
+      await act(async () => {
+        store().urlLoadController?.abort();
+        if (load) await load.pending;
+        store().finishUrlLoad(signal);
+      });
+    }
+  });
+
   it("keeps a Reload's progress over the old splat's, so Cancel loading stops the Reload and the edits stay", async () => {
     const { reloading, releaseParse } = await reloadWhileOldSplatDecodes();
 
@@ -2076,12 +2108,13 @@ describe('WebGpuSplatCanvasLayer decoding a splat that another load or download 
     expect(useTransformStore.getState().transform.scale).toBe(3);
   });
 
-  it("reports a splat that began decoding during a dataset load as that load's own", async () => {
+  it('reports the splat already committed by a pending dataset load', async () => {
     // The splat the load committed, decoding before the load has restored its settings.
     const load = beginReconstructionLoad();
     try {
       useReconstructionStore.getState().setLoadedFiles({ imageFiles: new Map(), hasMasks: false, splatFile: old,
         splatFiles: [old], splatFileSources: [{ id: 'old.spz', path: 'old.spz', file: old }] });
+      markReconstructionSceneCommitted(load.signal);
       useReconstructionStore.setState({ urlLoading: true, urlProgress: getSplatLoadingProgress(old, { startPercent: 60 }) });
       render(<StoreWiredLayer />);
       await waitFor(() => expect(decode).toBeDefined());

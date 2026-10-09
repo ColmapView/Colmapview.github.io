@@ -159,11 +159,12 @@ describe('useScene3DStoreFacade', () => {
     useReconstructionStore.setState({ loadedFiles: buildLoadedFiles({
       splatFileSources: [{ id: 'tile.spz', path: 'tile.spz', url: 'https://x/tile.spz', size: 1 }] }) });
     const { result } = renderHook(() => useSceneContainerStoreFacade());
-    expect(result.current.actions.isDatasetLoadPending()).toBe(false);
+    const splat = new File(['splat'], 'scene.spz');
+    expect(result.current.actions.isDatasetLoadPendingForSplat(splat)).toBe(false);
     expect(result.current.actions.isSplatDownloadPending()).toBe(false);
 
     const load = beginReconstructionLoad();
-    expect(result.current.actions.isDatasetLoadPending()).toBe(true);
+    expect(result.current.actions.isDatasetLoadPendingForSplat(splat)).toBe(true);
     load.finish();
 
     // The hook reads the loading state the download writes, so its updates go through act.
