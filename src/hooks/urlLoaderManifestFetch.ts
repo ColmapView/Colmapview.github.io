@@ -68,21 +68,20 @@ export interface FetchManifestFileOptions {
 }
 
 export interface FetchManifestColmapFilesDeps {
-  /** Fetch COLMAP first; the caller discovers/activates splats after viewer settings settle. */
-  deferSplatDownloads?: boolean;
   fetchImpl?: FetchUrl;
   fetchFile?: FetchManifestFile;
   log?: (message: string) => void;
   setUrlProgress: SetUrlProgress;
+}
+
+/** Dependencies for discovering selectable splats without downloading their bytes. */
+export interface DiscoverManifestSplatDeps extends DiscoverHuggingFaceSplatDeps {
+  log?: (message: string) => void;
   /**
    * Receives the full discovered remote splat catalog (all tiles, with sizes)
-   * so the caller can list every tile as a lazy, on-demand source. At most the
-   * lone discovered splat is eager-downloaded, and only within the auto-load
-   * size budget.
+   * so the caller can list every tile as a lazy, on-demand source.
    */
   onRemoteSplatCatalog?: (catalog: RemoteSplatCandidate[]) => void;
-  /** Override splat classification (defaults to reading the PLY header). */
-  classifySplatUrl?: ClassifySplatUrl;
   /**
    * Override touch-device detection for the splat auto-load budget
    * (defaults to detecting from the environment).
@@ -397,7 +396,7 @@ export function deriveMasksPathFromImages(imagesPath: string): string | null {
  */
 export async function withDiscoveredColmapPaths(
   manifest: ColmapManifest,
-  deps: Pick<FetchManifestColmapFilesDeps, 'fetchImpl' | 'log' | 'isTouchDevice'> & {
+  deps: Pick<DiscoverManifestSplatDeps, 'fetchImpl' | 'log' | 'isTouchDevice'> & {
     onLargeDatasetWarning?: (message: string) => void;
   } = {}
 ): Promise<ColmapManifest> {
@@ -607,7 +606,7 @@ function applyDiscoveredSplats(
   manifest: ColmapManifest,
   candidates: readonly RemoteSplatCandidate[],
   source: 'Hugging Face' | 'directory',
-  deps: Pick<FetchManifestColmapFilesDeps, 'log' | 'onRemoteSplatCatalog' | 'isTouchDevice'>
+  deps: Pick<DiscoverManifestSplatDeps, 'log' | 'onRemoteSplatCatalog' | 'isTouchDevice'>
 ): ColmapManifest {
   deps.log?.(getDiscoveredSplatLogMessage(source, candidates));
   // Surface the full catalog so the loader can list every tile as a lazy,
@@ -637,7 +636,7 @@ function applyDiscoveredSplats(
 
 async function withDiscoveredRemoteSplats(
   manifest: ColmapManifest,
-  deps: Pick<FetchManifestColmapFilesDeps, 'fetchImpl' | 'log' | 'onRemoteSplatCatalog' | 'classifySplatUrl' | 'isTouchDevice'>
+  deps: Pick<DiscoverManifestSplatDeps, 'fetchImpl' | 'log' | 'onRemoteSplatCatalog' | 'classifySplatUrl' | 'isTouchDevice'>
 ): Promise<ColmapManifest> {
   if (manifest.splats?.length) {
     return manifest;
@@ -674,7 +673,7 @@ async function withDiscoveredRemoteSplats(
 /** Discover selectable tiles without transferring full splat files. */
 export async function discoverManifestSplatCatalog(
   manifest: ColmapManifest,
-  deps: Pick<FetchManifestColmapFilesDeps, 'fetchImpl' | 'log' | 'classifySplatUrl' | 'isTouchDevice'> = {}
+  deps: Pick<DiscoverManifestSplatDeps, 'fetchImpl' | 'log' | 'classifySplatUrl' | 'isTouchDevice'> = {}
 ): Promise<RemoteSplatCandidate[]> {
   if (manifest.splats?.length) {
     const fetchImpl = deps.fetchImpl ?? defaultFetchUrl;
@@ -768,18 +767,9 @@ export async function fetchManifestColmapFiles(
     ?? ((baseUrl, relativePath, onProgress) =>
       fetchManifestFile(baseUrl, relativePath, { fetchImpl: deps.fetchImpl, onProgress }));
   const log = deps.log ?? appLogger.info;
-  if (!deps.deferSplatDownloads && !manifest.splats?.length) {
-    deps.setUrlProgress({ percent: 5, message: 'Discovering splat files...' });
-  }
-  const manifestWithDiscoveredSplats = deps.deferSplatDownloads ? { ...manifest, splats: [] } : await withDiscoveredRemoteSplats(manifest, {
-    fetchImpl: deps.fetchImpl,
-    log,
-    onRemoteSplatCatalog: deps.onRemoteSplatCatalog,
-    classifySplatUrl: deps.classifySplatUrl,
-    isTouchDevice: deps.isTouchDevice,
-  });
-  const { baseUrl } = manifestWithDiscoveredSplats;
-  const { requiredFiles, optionalFiles } = getManifestColmapFileEntries(manifestWithDiscoveredSplats);
+  // The caller discovers and activates splats after viewer settings settle.
+  const { baseUrl } = manifest;
+  const { requiredFiles, optionalFiles } = getManifestColmapFileEntries({ ...manifest, splats: [] });
 
   const totalFiles = requiredFiles.length;
   let downloadedCount = 0;

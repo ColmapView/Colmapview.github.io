@@ -113,7 +113,6 @@ export async function loadManifestSource(
       fetchImpl: deps.fetchImpl,
       log: (message) => log(message),
       setUrlProgress: deps.setUrlProgress,
-      deferSplatDownloads: true,
     }));
   const fetchImpl = deps.fetchImpl ?? ((url, init) => fetchDatasetResource(url, undefined, init));
   const discoveryController = new AbortController();

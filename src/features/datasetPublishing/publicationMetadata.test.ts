@@ -1,6 +1,6 @@
 import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchManifestColmapFiles } from '../../hooks/urlLoaderManifestFetch';
+import { discoverManifestSplatCatalog, fetchManifestColmapFiles } from '../../hooks/urlLoaderManifestFetch';
 import { getManifestLoadSourceInfo } from '../../hooks/urlLoaderPolicy';
 import { buildImageUrl } from '../../utils/imageFileLookupPolicy';
 import { getPublicationViewerBaseUrl, publicationManifest, publicationMetadata, publicationReceipt, validatePublicationDetails } from './publicationMetadata';
@@ -93,14 +93,15 @@ describe('published manifest', () => {
       ? new Response(JSON.stringify(tree), { headers: { 'Content-Type': 'application/json' } })
       : new Response(null, { status: 404 }));
     const fetchFile = vi.fn(async (_baseUrl: string, path: string) => new File(['x'], path.split('/').pop()!));
-    const onRemoteSplatCatalog = vi.fn();
 
-    const files = await fetchManifestColmapFiles(manifest, { fetchImpl, fetchFile, setUrlProgress: vi.fn(), onRemoteSplatCatalog,
+    const files = await fetchManifestColmapFiles(manifest, { fetchImpl, fetchFile, setUrlProgress: vi.fn(), log: vi.fn() });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    const catalog = await discoverManifestSplatCatalog(manifest, { fetchImpl,
       classifySplatUrl: async () => ({ isSplat: true, splatCount: null }), isTouchDevice: false, log: vi.fn() });
 
     expect(fetchFile.mock.calls.map(([, path]) => path).filter(path => path.startsWith('splats/'))).toEqual([]);
     expect([...files.keys()].some(key => key.startsWith('splats/'))).toBe(false);
-    expect(onRemoteSplatCatalog).toHaveBeenCalledWith([
+    expect(catalog).toEqual([
       expect.objectContaining({ path: 'splats/tile-a.ply', size: TILE_BYTES }),
       expect.objectContaining({ path: 'splats/tile-b.ply', size: TILE_BYTES }),
     ]);

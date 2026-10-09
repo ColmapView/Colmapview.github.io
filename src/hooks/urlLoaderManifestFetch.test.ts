@@ -47,11 +47,11 @@ function missingResponse(): Response {
 }
 
 describe('URL loader manifest fetch helpers', () => {
-  it('fetches required COLMAP independently of splat discovery and listed splat downloads when deferred', async () => {
+  it('fetches required COLMAP independently of splat discovery and listed splat downloads without deferring options', async () => {
     const fetchImpl = vi.fn();
     const fetchFile = vi.fn(async (_base: string, path: string) => buildFile(path));
     const files = await fetchManifestColmapFiles({ ...manifest, splats: ['splats/a.spz', 'splats/b.spz'] }, {
-      deferSplatDownloads: true, fetchImpl, fetchFile, setUrlProgress: vi.fn(), log: vi.fn(),
+      fetchImpl, fetchFile, setUrlProgress: vi.fn(), log: vi.fn(),
     });
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(fetchFile.mock.calls.map(([, path]) => path).filter(path => path.endsWith('.spz'))).toEqual([]);
@@ -123,34 +123,6 @@ describe('URL loader manifest fetch helpers', () => {
     expect(catalog.map(candidate => candidate.path)).toEqual(['splats/live.spz']);
     expect(log).toHaveBeenCalledWith(`[URL Loader] Optional file not found: ${path}`);
   });
-  it('keeps fetched-manifest progress steady before pending splat discovery resolves', async () => {
-    const setUrlProgress = vi.fn();
-    const fetchedManifest = await fetchUrlManifest('https://example.com/colmapview.json', {
-      fetchImpl: vi.fn(async () => jsonResponse({
-        ...manifest, baseUrl: 'https://huggingface.co/datasets/owner/scene/resolve/main/',
-      })),
-      setUrlProgress,
-    });
-    expect(setUrlProgress).toHaveBeenLastCalledWith({ percent: 5, message: 'Manifest loaded' });
-    let resolveTree!: (response: Response) => void;
-    const fetchImpl = vi.fn((url: string): Promise<Response> => url.includes('/tree/')
-      ? new Promise(resolve => { resolveTree = resolve; }) : Promise.resolve(missingResponse()));
-    const fetchFile = vi.fn(async (_baseUrl: string, path: string) => buildFile(path));
-    const pending = fetchManifestColmapFiles(fetchedManifest, { fetchImpl, fetchFile, setUrlProgress, log: vi.fn() });
-
-    expect(setUrlProgress).toHaveBeenLastCalledWith({ percent: 5, message: 'Discovering splat files...' });
-    expect(setUrlProgress.mock.calls.map(([progress]) => progress.percent)).toEqual([2, 5, 5]);
-    expect(fetchImpl).toHaveBeenCalledOnce();
-    expect(fetchFile).not.toHaveBeenCalled();
-    expect(setUrlProgress.mock.invocationCallOrder.at(-1)).toBeLessThan(fetchImpl.mock.invocationCallOrder[0]);
-
-    resolveTree(jsonResponse([]));
-    const files = await pending;
-    expect(files.has('sparse/0/cameras.bin')).toBe(true);
-    expect(setUrlProgress.mock.calls.filter(([progress]) => progress.message === 'Discovering splat files...')).toHaveLength(1);
-    expect(setUrlProgress).toHaveBeenCalledWith(expect.objectContaining({ message: 'Downloading COLMAP files...' }));
-  });
-
   it('fetches and validates a manifest while reporting progress', async () => {
     const setUrlProgress = vi.fn();
     const fetchImpl = vi.fn(async () => jsonResponse(manifest));
@@ -255,62 +227,8 @@ describe('URL loader manifest fetch helpers', () => {
     expect(log).toHaveBeenCalledWith('[URL Loader] Optional file not found: custom/frames.bin');
   });
 
-  it('downloads optional manifest splat entries into the returned file map', async () => {
-    const setUrlProgress = vi.fn();
-    const log = vi.fn();
-    const fetchFile = vi.fn(async (_baseUrl: string, path: string) =>
-      buildFile(path.split('/').pop() ?? path)
-    );
-
-    const files = await fetchManifestColmapFiles({
-      ...manifest,
-      splats: ['splats/small.ply', 'splats/large.ply'],
-    }, {
-      fetchFile,
-      log,
-      setUrlProgress,
-    });
-
-    expect([...files.keys()]).toContain('splats/small.ply');
-    expect([...files.keys()]).toContain('splats/large.ply');
-    // The third arg is the optional byte-progress callback for splat files.
-    expect(fetchFile).toHaveBeenCalledWith('https://example.com/dataset', 'splats/small.ply', expect.anything());
-    expect(fetchFile).toHaveBeenCalledWith('https://example.com/dataset', 'splats/large.ply', expect.anything());
-    expect(setUrlProgress).toHaveBeenCalledWith({
-      percent: 30,
-      message: 'Downloading splat files...',
-      filesDownloaded: 0,
-      totalFiles: 2,
-    });
-    const splatProgressUpdates = setUrlProgress.mock.calls
-      .map(([progress]) => progress)
-      .filter((progress) =>
-        progress?.message === 'Downloading splat files...' && progress.currentFile
-      );
-    expect(splatProgressUpdates).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        percent: 55,
-        filesDownloaded: 1,
-        totalFiles: 2,
-      }),
-      expect.objectContaining({
-        percent: 80,
-        filesDownloaded: 2,
-        totalFiles: 2,
-      }),
-    ]));
-    expect(splatProgressUpdates.map((progress) => progress.currentFile).sort()).toEqual([
-      'splats/large.ply',
-      'splats/small.ply',
-    ]);
-    expect(log).toHaveBeenCalledWith('[URL Loader] Optional file loaded: splats/small.ply');
-    expect(log).toHaveBeenCalledWith('[URL Loader] Optional file loaded: splats/large.ply');
-  });
-
   it('does not auto-load any splat when multiple are discovered, but surfaces the catalog', async () => {
-    const setUrlProgress = vi.fn();
     const log = vi.fn();
-    const onRemoteSplatCatalog = vi.fn();
     const baseUrl = 'https://huggingface.co/datasets/OpsiClear/NGS/resolve/main/objects/scan_toy';
     const fetchImpl = vi.fn(async () => jsonResponse([
       { type: 'directory', path: 'objects/scan_toy/images', size: 0 },
@@ -320,32 +238,20 @@ describe('URL loader manifest fetch helpers', () => {
       { type: 'file', path: 'objects/scan_toy/folder/folder/folder/surface_gaussians.ply', size: 228_935_787 },
       { type: 'file', path: 'objects/scan_toy/splats/surface_gaussians.spz', size: 40_000_000 },
     ]));
-    const fetchFile = vi.fn(async (_baseUrl: string, path: string) =>
-      buildFile(path.split('/').pop() ?? path)
-    );
-
-    const files = await fetchManifestColmapFiles({
+    const catalog = await discoverManifestSplatCatalog({
       ...manifest,
       baseUrl,
       splats: undefined,
     }, {
       fetchImpl,
-      fetchFile,
       log,
-      setUrlProgress,
-      onRemoteSplatCatalog,
     });
 
     expect(fetchImpl).toHaveBeenCalledWith(
       'https://huggingface.co/api/datasets/OpsiClear/NGS/tree/main/objects/scan_toy?recursive=true'
     );
-    // No splat is eager-downloaded when there are multiple; the user picks one.
-    expect(fetchFile).not.toHaveBeenCalledWith(baseUrl, 'splats/surface_gaussians.spz');
-    expect(fetchFile).not.toHaveBeenCalledWith(baseUrl, 'inside_gaussians.ply');
-    expect([...files.keys()].some((key) => key.endsWith('.ply') || key.endsWith('.spz'))).toBe(false);
-    // The full catalog (all 5 splats) is surfaced for lazy on-demand loading.
-    expect(onRemoteSplatCatalog).toHaveBeenCalledTimes(1);
-    expect(onRemoteSplatCatalog.mock.calls[0][0].map((candidate: { path: string }) => candidate.path)).toEqual([
+    // All five tiles remain selectable without transferring full splat files.
+    expect(catalog.map(candidate => candidate.path)).toEqual([
       'splats/surface_gaussians.spz',
       'folder/folder/folder/surface_gaussians.ply',
       '3dgs/surface_gaussians.ply',
@@ -354,137 +260,6 @@ describe('URL loader manifest fetch helpers', () => {
     ]);
     expect(log).toHaveBeenCalledWith(
       '[URL Loader] 5 splats found; none auto-loaded - select one to display'
-    );
-  });
-
-  it('auto-loads the splat when exactly one is discovered', async () => {
-    const setUrlProgress = vi.fn();
-    const onRemoteSplatCatalog = vi.fn();
-    const baseUrl = 'https://huggingface.co/datasets/OpsiClear/NGS/resolve/main/objects/scan_single';
-    const fetchImpl = vi.fn(async () => jsonResponse([
-      { type: 'file', path: 'objects/scan_single/splats/scene.spz', size: 40_000_000 },
-    ]));
-    const fetchFile = vi.fn(async (_baseUrl: string, path: string) =>
-      buildFile(path.split('/').pop() ?? path)
-    );
-
-    const files = await fetchManifestColmapFiles({
-      ...manifest,
-      baseUrl,
-      splats: undefined,
-    }, {
-      fetchImpl,
-      fetchFile,
-      log: vi.fn(),
-      setUrlProgress,
-      onRemoteSplatCatalog,
-    });
-
-    expect(fetchFile).toHaveBeenCalledWith(baseUrl, 'splats/scene.spz', expect.anything());
-    expect([...files.keys()]).toContain('splats/scene.spz');
-  });
-
-  it('does not auto-download a single discovered splat above the auto-load budget', async () => {
-    const setUrlProgress = vi.fn();
-    const log = vi.fn();
-    const onRemoteSplatCatalog = vi.fn();
-    const baseUrl = 'https://huggingface.co/datasets/Jamesbass/bigsur-360-colmap/resolve/main';
-    const fetchImpl = vi.fn(async () => jsonResponse([
-      { type: 'file', path: 'splats/huge.spz', size: 1_040_000_634 },
-    ]));
-    const fetchFile = vi.fn(async (_baseUrl: string, path: string) =>
-      buildFile(path.split('/').pop() ?? path)
-    );
-
-    const files = await fetchManifestColmapFiles({
-      ...manifest,
-      baseUrl,
-      splats: undefined,
-    }, {
-      fetchImpl,
-      fetchFile,
-      isTouchDevice: false,
-      log,
-      setUrlProgress,
-      onRemoteSplatCatalog,
-    });
-
-    // The lone splat is over budget: never eager-downloaded, only cataloged.
-    expect(fetchFile).not.toHaveBeenCalledWith(baseUrl, 'splats/huge.spz', expect.anything());
-    expect([...files.keys()].some((key) => key.endsWith('.spz'))).toBe(false);
-    expect(onRemoteSplatCatalog).toHaveBeenCalledWith([
-      { path: 'splats/huge.spz', size: 1_040_000_634, splatCount: null },
-    ]);
-    expect(log).toHaveBeenCalledWith(
-      '[URL Loader] Splat splats/huge.spz (1040 MB) exceeds the 150 MB auto-load limit; select it from the splat picker to download'
-    );
-  });
-
-  it('applies the stricter touch budget to single-splat auto-load', async () => {
-    const setUrlProgress = vi.fn();
-    const log = vi.fn();
-    const baseUrl = 'https://huggingface.co/datasets/OpsiClear/NGS/resolve/main/objects/scan_touch';
-    const fetchImpl = vi.fn(async () => jsonResponse([
-      { type: 'file', path: 'objects/scan_touch/splats/scene.spz', size: 60_000_000 },
-    ]));
-    const fetchFile = vi.fn(async (_baseUrl: string, path: string) =>
-      buildFile(path.split('/').pop() ?? path)
-    );
-
-    const files = await fetchManifestColmapFiles({
-      ...manifest,
-      baseUrl,
-      splats: undefined,
-    }, {
-      fetchImpl,
-      fetchFile,
-      isTouchDevice: true,
-      log,
-      setUrlProgress,
-    });
-
-    expect(fetchFile).not.toHaveBeenCalledWith(baseUrl, 'splats/scene.spz', expect.anything());
-    expect([...files.keys()].some((key) => key.endsWith('.spz'))).toBe(false);
-    expect(log).toHaveBeenCalledWith(
-      '[URL Loader] Splat splats/scene.spz (60 MB) exceeds the 50 MB auto-load limit; select it from the splat picker to download'
-    );
-  });
-
-  it('holds back a lone SOG on touch by estimated splat count, without probing it as a PLY', async () => {
-    const setUrlProgress = vi.fn();
-    const log = vi.fn();
-    const onRemoteSplatCatalog = vi.fn();
-    const baseUrl = 'https://huggingface.co/datasets/OpsiClear/NGS/resolve/main/objects/scan_sog';
-    const fetchImpl = vi.fn(async () => jsonResponse([
-      { type: 'file', path: 'objects/scan_sog/splats/scene.sog', size: 40_000_000 },
-    ]));
-    const fetchFile = vi.fn(async (_baseUrl: string, path: string) =>
-      buildFile(path.split('/').pop() ?? path)
-    );
-
-    const files = await fetchManifestColmapFiles({
-      ...manifest,
-      baseUrl,
-      splats: undefined,
-    }, {
-      fetchImpl,
-      fetchFile,
-      isTouchDevice: true,
-      log,
-      setUrlProgress,
-      onRemoteSplatCatalog,
-    });
-
-    // Only the tree listing was fetched: no PLY header Range request against the SOG.
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(onRemoteSplatCatalog).toHaveBeenCalledWith([
-      { path: 'splats/scene.sog', size: 40_000_000, splatCount: null },
-    ]);
-    // 40 MB fits the 50 MB touch byte budget, but ~4M estimated splats exceed the 3M ceiling.
-    expect(fetchFile).not.toHaveBeenCalledWith(baseUrl, 'splats/scene.sog', expect.anything());
-    expect([...files.keys()].some((key) => key.endsWith('.sog'))).toBe(false);
-    expect(log).toHaveBeenCalledWith(
-      '[URL Loader] Splat splats/scene.sog (40 MB, ~4.0M splats) exceeds the 3M-splat auto-load limit for this device; select it from the splat picker to download'
     );
   });
 
@@ -544,7 +319,6 @@ describe('URL loader manifest fetch helpers', () => {
   });
 
   it('discovers generic directory-listing splats without auto-downloading when multiple', async () => {
-    const setUrlProgress = vi.fn();
     const log = vi.fn();
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === 'HEAD') {
@@ -566,11 +340,7 @@ describe('URL loader manifest fetch helpers', () => {
 
       return missingResponse();
     });
-    const fetchFile = vi.fn(async (_baseUrl: string, path: string) =>
-      buildFile(path.split('/').pop() ?? path)
-    );
-
-    const files = await fetchManifestColmapFiles({
+    const catalog = await discoverManifestSplatCatalog({
       ...manifest,
       files: {
         cameras: 'sparse/0/cameras.bin',
@@ -580,16 +350,13 @@ describe('URL loader manifest fetch helpers', () => {
       splats: undefined,
     }, {
       fetchImpl,
-      fetchFile,
       log,
-      setUrlProgress,
     });
 
-    // Multiple discovered -> none auto-loaded; user selects from the catalog.
-    expect(fetchFile).not.toHaveBeenCalledWith('https://example.com/dataset', '3dgs/model.ply');
-    expect(fetchFile).not.toHaveBeenCalledWith('https://example.com/dataset', 'output/model.spz');
-    expect([...files.keys()]).not.toContain('output/model.spz');
-    expect([...files.keys()]).not.toContain('3dgs/model.ply');
+    expect(catalog).toEqual([
+      { path: 'output/model.spz', size: 50 },
+      { path: '3dgs/model.ply', size: 200 },
+    ]);
     expect(log).toHaveBeenCalledWith(
       '[URL Loader] Discovered 2 directory splat files: output/model.spz (50 bytes), 3dgs/model.ply (200 bytes)'
     );
@@ -599,27 +366,21 @@ describe('URL loader manifest fetch helpers', () => {
   });
 
   it('keeps explicit manifest splats instead of querying Hugging Face discovery', async () => {
-    const setUrlProgress = vi.fn();
     const log = vi.fn();
     const baseUrl = 'https://huggingface.co/datasets/OpsiClear/NGS/resolve/main/objects/scan_toy';
     const fetchImpl = vi.fn(async () => jsonResponse([]));
-    const fetchFile = vi.fn(async (_baseUrl: string, path: string) =>
-      buildFile(path.split('/').pop() ?? path)
-    );
-
-    await fetchManifestColmapFiles({
+    const catalog = await discoverManifestSplatCatalog({
       ...manifest,
       baseUrl,
       splats: ['manual_splat.ply'],
     }, {
       fetchImpl,
-      fetchFile,
       log,
-      setUrlProgress,
+      classifySplatUrl: async () => ({ isSplat: true, splatCount: null }),
     });
 
-    expect(fetchImpl).not.toHaveBeenCalled();
-    expect(fetchFile).toHaveBeenCalledWith(baseUrl, 'manual_splat.ply', expect.anything());
+    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith(`${baseUrl}/manual_splat.ply`, { method: 'HEAD' });
+    expect(catalog).toEqual([{ path: 'manual_splat.ply', size: 0, splatCount: null }]);
   });
 
   it('rethrows required file UrlLoadError values without reclassification', async () => {
@@ -987,34 +748,6 @@ describe('initial-load byte counting for COLMAP files', () => {
     expect(anyBytes).toBe(false);
   });
 
-  it('aggregates bytes across the eager manifest-splat downloads', async () => {
-    const setUrlProgress = vi.fn();
-    const splatSizes: Record<string, number> = {
-      'splats/a.ply': 50_000,
-      'splats/b.ply': 120_000,
-    };
-    const fetchImpl = vi.fn(async (url: string) => {
-      for (const [path, size] of Object.entries(splatSizes)) {
-        if (url.endsWith(path)) return streamingBinResponse(size);
-      }
-      if (url.endsWith('.bin')) return streamingBinResponse(1000); // required + rigs/frames
-      return missingResponse();
-    });
-
-    await fetchManifestColmapFiles(
-      { ...manifest, splats: ['splats/a.ply', 'splats/b.ply'] },
-      { fetchImpl, setUrlProgress, log: vi.fn() }
-    );
-
-    const splatByteCalls = setUrlProgress.mock.calls
-      .map(([p]) => p)
-      .filter((p) => p && p.message === 'Downloading splat files...' && p.bytesTotal !== undefined);
-
-    const expectedTotal = 50_000 + 120_000;
-    expect(splatByteCalls.length).toBeGreaterThan(0);
-    expect(splatByteCalls.every((p) => p.bytesTotal === expectedTotal)).toBe(true);
-    expect(Math.max(...splatByteCalls.map((p) => p.bytesLoaded as number))).toBe(expectedTotal);
-  });
 });
 
 describe('large-dataset warning during layout discovery', () => {
