@@ -1,5 +1,22 @@
 import type { UrlLoadProgress } from '../types/manifest';
 
+export interface SplatLoadAttempt {
+  file: File;
+  /** A dataset load was pending when this splat began loading: the splat is that load's own. */
+  startedDuringDatasetLoad: boolean;
+}
+
+/** A tile download, or a dataset load that began after this splat's attempt, owns the loading state. */
+export function splatAttemptYieldsLoadingState(
+  file: File,
+  attempt: SplatLoadAttempt | null,
+  isSplatDownloadPending?: () => boolean,
+  isDatasetLoadPending?: () => boolean,
+): boolean {
+  return Boolean(isSplatDownloadPending?.())
+    || (Boolean(isDatasetLoadPending?.()) && !(attempt?.file === file && attempt.startedDuringDatasetLoad));
+}
+
 export const SPLAT_LOADING_PROGRESS_PERCENT = 92;
 export const SPLAT_LOADING_PROGRESS_MESSAGE = 'Preparing splat renderer...';
 const SPLAT_PROGRESS_COMPLETE_GATE_PERCENT = 99;

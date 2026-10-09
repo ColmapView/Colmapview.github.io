@@ -77,8 +77,8 @@ export async function decodeSharedViewerOverrides(hash: string): Promise<SharedV
 }
 
 /**
- * Saved settings explicitly select a lazy remote splat. Desktop restores it at any size;
- * constrained touch devices keep the download prompt.
+ * Restore the splat choice a finished load resolved: None, a listed splat with its bytes, or a
+ * lazy remote one. Desktop fetches it at any size; constrained touch devices keep the download prompt.
  */
 async function activateSavedSplat(sourceId: string, assertCurrent: () => void): Promise<void> {
   if (sourceId === '') {

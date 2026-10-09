@@ -55,10 +55,7 @@ export function useGlobalContextMenuActionStoreFacade(): GlobalContextMenuAction
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
   const hasSplatData = loadedFilesHaveSplatData(loadedFiles);
   const hasPinholeCameras = reconstructionHasPinholeCameras(reconstruction);
-  const { reloadFiles: reloadDatasetFiles } = useFileDropzone();
-  const reloadFiles = useCallback(async (files: Map<string, File>) => {
-    await reloadDatasetFiles(files);
-  }, [reloadDatasetFiles]);
+  const { reloadFiles } = useFileDropzone();
 
   const takeScreenshot = useExportStore((s) => s.takeScreenshot);
   const setExportFormat = useExportStore((s) => s.setExportFormat);

@@ -71,15 +71,6 @@ export { initStoreMigration } from './migration';
 
 // Coordinated actions (cross-store operations)
 export {
-  // Reconstruction actions
-  clearReconstruction,
-  setNewReconstruction,
-  getReconstructionForTransform,
-  hasReconstruction,
-  getPointCount,
-  type ClearReconstructionOptions,
-  type SetReconstructionOptions,
-  type SetReconstructionResult,
   // Transform actions
   applyTransformPreset,
   applyTransformToData,

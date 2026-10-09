@@ -24,6 +24,8 @@ import {
   getSplatProgressStartPercent,
   isSplatLoadingProgressForFile,
   isSplatLoadingProgressForRenderer,
+  splatAttemptYieldsLoadingState,
+  type SplatLoadAttempt,
   type SplatLoadingPhase,
 } from '../../../utils/splatLoadingProgressPolicy';
 
@@ -42,11 +44,8 @@ interface LoadedSplatMesh {
   mesh: SplatMeshInstance;
 }
 
-interface SplatLoadingNotification {
-  file: File;
+interface SplatLoadingNotification extends SplatLoadAttempt {
   id: string;
-  /** A dataset load was pending when this splat began loading: the splat is that load's own. */
-  startedDuringDatasetLoad: boolean;
 }
 
 const SPARK_RENDERER_DISPOSE_IDLE_POLL_MS = 50;
@@ -234,13 +233,9 @@ export function SplatLayer({
     setSparkRendererReady(ready);
   }, []);
 
-  // A tile download, or a dataset load that began after this splat began loading, owns the overlay,
-  // progress and URL error, although the splat still belongs to the scene on screen until replaced.
-  const yieldsLoadingState = useCallback((file: File) => {
-    const current = loadingNotificationRef.current;
-    return isSplatDownloadPending()
-      || (isDatasetLoadPending() && !(current?.file === file && current.startedDuringDatasetLoad));
-  }, [isDatasetLoadPending, isSplatDownloadPending]);
+  const yieldsLoadingState = useCallback((file: File) =>
+    splatAttemptYieldsLoadingState(file, loadingNotificationRef.current, isSplatDownloadPending, isDatasetLoadPending),
+  [isDatasetLoadPending, isSplatDownloadPending]);
 
   const clearSplatLoadingNotification = useCallback((file?: File) => {
     const current = loadingNotificationRef.current;

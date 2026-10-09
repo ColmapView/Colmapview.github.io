@@ -117,7 +117,7 @@ export interface GlobalContextMenuActionExecutorDeps {
   applyTransformToData: () => void;
   droppedFiles: Map<string, File> | null;
   confirmReload: () => MaybePromise<boolean>;
-  reloadFiles: (files: Map<string, File>) => MaybePromise<void>;
+  reloadFiles: (files: Map<string, File>) => MaybePromise<unknown>;
   takeScreenshot: () => void;
   setExportFormat: Setter<ExportFormat>;
   triggerExport: () => void;

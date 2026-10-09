@@ -6,10 +6,10 @@
  *
  * Usage:
  * ```typescript
- * import { clearReconstruction, applyTransformPreset, resetSession } from './store/actions';
+ * import { deselectAll, applyTransformPreset, resetSession } from './store/actions';
  *
- * // Clear with options
- * clearReconstruction({ preserveView: true });
+ * // Clear the current selection
+ * deselectAll();
  *
  * // Apply transform preset
  * applyTransformPreset('centerAtOrigin');
@@ -18,18 +18,6 @@
  * resetSession();
  * ```
  */
-
-// Reconstruction actions
-export {
-  clearReconstruction,
-  setNewReconstruction,
-  getReconstructionForTransform,
-  hasReconstruction,
-  getPointCount,
-  type ClearReconstructionOptions,
-  type SetReconstructionOptions,
-  type SetReconstructionResult,
-} from './reconstructionActions.js';
 
 // Transform actions
 export {

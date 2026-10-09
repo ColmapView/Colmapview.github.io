@@ -18,11 +18,11 @@ import { requestConfirmation } from '../../utils/confirmation.js';
 import { resolveDatasetViewerSettings } from '../../utils/datasetViewerSettings.js';
 
 /** The scene and splat alignment that Reload re-applies. */
-export type ReloadBaseline = Pick<TransformState, 'transform' | 'splatTransform'>;
+type ReloadBaseline = Pick<TransformState, 'transform' | 'splatTransform'>;
 
 /**
  * Reloading discards both pending changes and committed in-memory edits. An alignment is lost only
- * where it differs from what Reload re-applies; synchronous callers without that baseline get identity.
+ * where it differs from what Reload re-applies; callers without a baseline (tests) get identity.
  */
 export function hasUnsavedReloadState(
   baseline: ReloadBaseline = { transform: createIdentityEuler(), splatTransform: createIdentityEuler() },

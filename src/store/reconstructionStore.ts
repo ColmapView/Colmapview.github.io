@@ -76,13 +76,35 @@ function withoutSplatFailureError({ error }: Pick<ReconstructionState, 'error'>)
  * "COLMAP only": the splat is deactivated (its source stays listed; re-fetchable bytes are
  * dropped), nothing is pending for it, and its loading state and failed-download toast go. The
  * splat point preset goes too: with no splat to draw it would hide the points. `keepLoadingState`
- * leaves the loading state to a dataset load that owns it.
+ * leaves the loading state to the dataset load or tile download that owns it.
  */
 function showColmapOnly(set: StoreApi<ReconstructionState>['setState'], loadedFiles: LoadedFiles,
   patch: Partial<ReconstructionState> = {}, { keepLoadingState = false } = {}): void {
   set((state) => ({ ...patch, ...withoutSplatFailureError(state), loadedFiles: clearActiveSplatFile(loadedFiles),
     requestedSplatSourceId: null, ...(keepLoadingState ? {} : { urlLoading: false, urlProgress: null, urlError: null }) }));
   restorePointDisplayWithoutSplat();
+}
+
+/** Activate a splat, applying its display defaults only when no splat was showing. */
+function showSplat(
+  set: StoreApi<ReconstructionState>['setState'],
+  previous: LoadedFiles,
+  loadedFiles: LoadedFiles,
+  sourceId: string,
+  patch: Partial<ReconstructionState> = {},
+): void {
+  set(state => ({ requestedSplatSourceId: sourceId, loadedFiles, splatNoneChosen: false,
+    ...withoutSplatFailureError(state), ...patch }));
+  // Read after any await: a splat that failed while this tile downloaded has already left the scene.
+  if (!previous.splatFile) applySplatActivationVisuals();
+}
+
+/** A splat-only scene with nothing else to show returns to the landing page. */
+function returnToLandingIfOnlySplat(files: LoadedFiles, clear: () => void): boolean {
+  if (hasSceneBesidesSplats(files) || hasOtherSplatToShow(files)) return false;
+  clear();
+  clearUrlLoadRequestFromLocation();
+  return true;
 }
 
 /** Switch the point cloud into a splat-visible display mode with splat defaults. */
@@ -411,7 +433,8 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
 
     set({
       loadedFiles: resolvedLoadedFiles,
-      requestedSplatSourceId: requestedSplatSourceId === null ? get().requestedSplatSourceId : null,
+      // Every commit consumes the request, None ('') included.
+      requestedSplatSourceId: null,
       // A Reload keeps None on screen; another dataset's files arrive with no choice (setDroppedFiles)
       // unless None was chosen while they loaded.
       splatNoneChosen: !hasSplatFile && (requestedSplatSourceId === '' || options?.noneChosen === true || get().splatNoneChosen),
@@ -504,17 +527,8 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     // restored choice right after a load) keeps the renderer's progress while it decodes.
     if (source.file) {
       const rendererOwnsProgress = rendererDecoding && source.file === loadedFiles.splatFile;
-      set({
-        requestedSplatSourceId: source.id,
-        loadedFiles: applyActiveSplatFile(loadedFiles, source.id, source.file),
-        splatNoneChosen: false,
-        ...withoutSplatFailureError(get()),
-        ...(rendererOwnsProgress ? {} : { urlLoading: false, urlProgress: null, urlError: null }),
-      });
-      // A fresh activation switches the viewer into a splat display mode; a tile-to-tile switch keeps the user's.
-      if (!loadedFiles.splatFile) {
-        applySplatActivationVisuals();
-      }
+      showSplat(set, loadedFiles, applyActiveSplatFile(loadedFiles, source.id, source.file), source.id,
+        rendererOwnsProgress ? {} : { urlLoading: false, urlProgress: null, urlError: null });
       return;
     }
 
@@ -585,20 +599,9 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
           return;
         }
         const latest = get().loadedFiles ?? loadedFiles;
-        set({
-          requestedSplatSourceId: source.id,
-          loadedFiles: applyActiveSplatPlaceholder(latest, source.id, placeholder),
-          splatNoneChosen: false,
-          // Download AND decode are done; unlike the retaining path there is no
-          // renderer-side file read left to clear the indicator, so clear it here.
-          urlLoading: false,
-          urlProgress: null,
-          ...withoutSplatFailureError(get()),
-        });
-        // Read now: a splat that failed while this tile downloaded has already left the scene.
-        if (!latest.splatFile) {
-          applySplatActivationVisuals();
-        }
+        // Download and decode are done; no renderer-side file read remains to clear the indicator.
+        showSplat(set, latest, applyActiveSplatPlaceholder(latest, source.id, placeholder), source.id,
+          { urlLoading: false, urlProgress: null });
         return;
       }
       const file = await fetchRemoteSplatFile(source.url, onDownloadProgress, signal);
@@ -608,16 +611,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
         return;
       }
       const latest = get().loadedFiles ?? loadedFiles;
-      set({
-        requestedSplatSourceId: source.id,
-        loadedFiles: applyActiveSplatFile(latest, source.id, file),
-        splatNoneChosen: false,
-        ...withoutSplatFailureError(get()),
-      });
-      // Read now: a splat that failed while this tile downloaded has already left the scene.
-      if (!latest.splatFile) {
-        applySplatActivationVisuals();
-      }
+      showSplat(set, latest, applyActiveSplatFile(latest, source.id, file), source.id);
     } catch (err) {
       // Fetch and byte-less decode failures land here alike; a superseded
       // attempt's failure must not clobber the winner's state.
@@ -651,12 +645,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     if (!loadedFiles || loadedFiles.splatFile !== file) return;
     // A dataset load, or a tile download replacing this splat, owns the overlay, progress and URL error.
     const loadingStateOwned = isReconstructionLoadPending() || activeSplatController !== null;
-    // A splat-only scene with nothing else to show would be left empty, with the landing page hidden.
-    if (!loadingStateOwned && !hasSceneBesidesSplats(loadedFiles) && !hasOtherSplatToShow(loadedFiles)) {
-      get().clear();
-      clearUrlLoadRequestFromLocation();
-      return;
-    }
+    if (!loadingStateOwned && returnToLandingIfOnlySplat(loadedFiles, get().clear)) return;
     showColmapOnly(set, loadedFiles, {}, { keepLoadingState: loadingStateOwned });
   },
 
@@ -691,12 +680,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     // Cancelling the renderer's decode is the user's explicit "COLMAP only", exactly like choosing None
     // in the picker: a URL load still settling the scene (its saved settings) goes on.
     if (rendererOwnsSplatProgress(get()) && loadedFiles) {
-      // A splat-only scene would be left empty, with the landing page hidden: go back to it.
-      if (!hasSceneBesidesSplats(loadedFiles) && !hasOtherSplatToShow(loadedFiles)) {
-        get().clear();
-        clearUrlLoadRequestFromLocation();
-        return;
-      }
+      if (returnToLandingIfOnlySplat(loadedFiles, get().clear)) return;
       showColmapOnly(set, loadedFiles, { splatSelectionRevision: splatSelectionRevision + 1, splatNoneChosen: true });
       return;
     }

@@ -47,6 +47,8 @@ import {
   getSplatUploadProgress,
   isSplatLoadingProgressForFile,
   isSplatLoadingProgressForRenderer,
+  splatAttemptYieldsLoadingState,
+  type SplatLoadAttempt,
   type SplatLoadingPhase,
 } from '../../utils/splatLoadingProgressPolicy';
 import type { GaussianCloudLoadProgress } from '../../splat/gaussianCloudLoader';
@@ -116,16 +118,12 @@ export function WebGpuSplatCanvasLayer({
   const progressStartRef = useRef<{ file: File; percent: number } | null>(null);
   const reportLoadingProgressRef = useRef(reportLoadingProgress);
   // Whether this splat began decoding while a dataset load was pending, which makes it that load's own.
-  const attemptRef = useRef<{ file: File; startedDuringDatasetLoad: boolean } | null>(null);
+  const attemptRef = useRef<SplatLoadAttempt | null>(null);
   const shouldMount = mounted ?? visible;
 
-  // A tile download, or a dataset load that began after this splat began decoding, owns the overlay,
-  // progress and URL error, although the splat still belongs to the scene on screen until replaced.
-  const yieldsLoadingState = useCallback((file: File) => {
-    const attempt = attemptRef.current;
-    return Boolean(isSplatDownloadPending?.())
-      || (Boolean(isDatasetLoadPending?.()) && !(attempt?.file === file && attempt.startedDuringDatasetLoad));
-  }, [isDatasetLoadPending, isSplatDownloadPending]);
+  const yieldsLoadingState = useCallback((file: File) =>
+    splatAttemptYieldsLoadingState(file, attemptRef.current, isSplatDownloadPending, isDatasetLoadPending),
+  [isDatasetLoadPending, isSplatDownloadPending]);
 
   const dismissSplatLoadingNotification = useCallback((file?: File): SplatLoadingNotification | null => {
     const current = loadingNotificationRef.current;
