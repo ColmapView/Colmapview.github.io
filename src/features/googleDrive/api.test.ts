@@ -89,6 +89,50 @@ describe('Google Drive archive API', () => {
       expect(call[2].credentials).toBe('omit');
     }
   });
+  it('rechecks an anonymous download restriction with the connected owner and uses that metadata for media', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(Response.json({ ...metadata, capabilities: { canDownload: false } }))
+      .mockResolvedValueOnce(Response.json({ ...metadata, name: 'owner.zip', size: '2048' }))
+      .mockResolvedValueOnce(new Response(zipBytes));
+    const source = await resolveGoogleDriveArchive(reference, { apiKey: 'app-key', getAccessToken: () => 'owner-token', fetchImpl });
+    expect(source.options).toMatchObject({ filename: 'owner.zip', size: 2048 });
+    const media = await source.options.fetchImpl!(source.url);
+    expect(new Uint8Array(await media.arrayBuffer())).toEqual(zipBytes);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl.mock.calls[0][2].headers.get('Authorization')).toBeNull();
+    for (const [, , init] of fetchImpl.mock.calls.slice(1)) {
+      expect(init.headers.get('Authorization')).toBe('Bearer owner-token');
+      expect(init.headers.get('X-Goog-Drive-Resource-Keys')).toBe('file123/0-key');
+      expect(init.credentials).toBe('omit');
+    }
+  });
+  it('still denies an anonymous download restriction when the connected account cannot download either', async () => {
+    const fetchImpl = vi.fn().mockImplementation(async () => Response.json({ ...metadata, capabilities: { canDownload: false } }));
+    const expireSession = vi.fn();
+    await expect(resolveGoogleDriveArchive(reference, { apiKey: 'app-key', getAccessToken: () => 'reader-token', fetchImpl, expireSession }))
+      .rejects.toMatchObject({ message: expect.stringContaining('Downloading is disabled') });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls[1][2].headers.get('Authorization')).toBe('Bearer reader-token');
+    expect(expireSession).not.toHaveBeenCalled();
+  });
+  it('does not retry an anonymous download restriction after cancellation', async () => {
+    const controller = new AbortController();
+    const fetchImpl = vi.fn().mockImplementationOnce(async () => {
+      controller.abort();
+      return Response.json({ ...metadata, capabilities: { canDownload: false } });
+    });
+    await expect(resolveGoogleDriveArchive(reference, { apiKey: 'app-key', getAccessToken: () => 'owner-token', fetchImpl, signal: controller.signal }))
+      .rejects.toBe(controller.signal.reason);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+  it('revalidates the owner metadata after an anonymous download restriction', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(Response.json({ ...metadata, capabilities: { canDownload: false } }))
+      .mockResolvedValueOnce(Response.json({ ...metadata, id: 'another-file' }));
+    await expect(resolveGoogleDriveArchive(reference, { apiKey: 'app-key', getAccessToken: () => 'owner-token', fetchImpl }))
+      .rejects.toMatchObject({ message: expect.stringContaining('uploaded archive file') });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
   it.each([
     ['wrapped.tar', 'application/x-tar'], ['wrapped.tar', 'application/octet-stream'],
     ['wrapped.tar.gz', 'application/gzip'], ['wrapped.tgz', 'application/octet-stream'],

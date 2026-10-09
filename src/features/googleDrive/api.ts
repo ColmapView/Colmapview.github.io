@@ -157,6 +157,16 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
     }
     throw driveError(reference, message);
   };
+  const readMetadata = async (response: Response, requestToken: string | null) => {
+    await checkResponse(response, requestToken);
+    const data = await readJson(response) as { id?: unknown; name?: unknown; mimeType?: unknown; size?: unknown; trashed?: unknown; capabilities?: { canDownload?: unknown } };
+    deps.signal?.throwIfAborted();
+    if (!data || data.id !== reference.fileId || typeof data.name !== 'string' || data.name.length > 1024
+      || typeof data.size !== 'string' || !/^\d+$/.test(data.size) || !Number.isSafeInteger(Number(data.size)) || Number(data.size) <= 0) {
+      throw driveError(reference, 'This Drive link must point to an uploaded archive file, rather than a folder or Google document.');
+    }
+    return { ...data, name: data.name, size: data.size };
+  };
   let [response, metadataToken] = await request(makeUrl(false));
   // Public files stay anonymous. drive.file permits the private fallback only for app-created/selected files.
   if (!useAccount && [403, 404].includes(response.status) && getAccessToken()) {
@@ -165,11 +175,13 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
     useAccount = true;
     [response, metadataToken] = await request(makeUrl(false));
   }
-  await checkResponse(response, metadataToken);
-  const data = await readJson(response) as { id?: unknown; name?: unknown; mimeType?: unknown; size?: unknown; trashed?: unknown; capabilities?: { canDownload?: unknown } };
-  if (!data || data.id !== reference.fileId || typeof data.name !== 'string' || data.name.length > 1024
-    || typeof data.size !== 'string' || !/^\d+$/.test(data.size) || !Number.isSafeInteger(Number(data.size)) || Number(data.size) <= 0) {
-    throw driveError(reference, 'This Drive link must point to an uploaded archive file, rather than a folder or Google document.');
+  let data = await readMetadata(response, metadataToken);
+  // canDownload describes the requester: a connected owner may download a file its anonymous readers cannot.
+  if (!useAccount && !data.trashed && data.capabilities?.canDownload === false && getAccessToken()) {
+    deps.signal?.throwIfAborted();
+    useAccount = true;
+    [response, metadataToken] = await request(makeUrl(false));
+    data = await readMetadata(response, metadataToken);
   }
   if (data.trashed || data.capabilities?.canDownload === false) {
     throw driveError(reference, 'Downloading is disabled for this Drive file. Ask the owner to allow downloads.');
