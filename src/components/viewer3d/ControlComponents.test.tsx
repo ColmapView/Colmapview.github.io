@@ -133,6 +133,23 @@ it('preserves tab order through a portaled panel and back to the next control', 
   expect(screen.queryByRole('region')).not.toBeInTheDocument();
 });
 
+it.each([false, true])('preserves tab order through details with open=%s', (expanded) => {
+  render(<Harness>
+    <details open={expanded}>
+      <summary>Advanced options</summary>
+      <button>Advanced action</button>
+    </details>
+  </Harness>);
+  fireEvent.keyDown(screen.getByRole('button', { name: 'Settings' }), { key: 'ArrowDown' });
+  const summary = screen.getByText('Advanced options');
+  expect(summary).toHaveFocus();
+  const lastControl = expanded ? screen.getByRole('button', { name: 'Advanced action' }) : summary;
+  act(() => lastControl.focus());
+  fireEvent.keyDown(lastControl, { key: 'Tab' });
+  expect(screen.getByRole('button', { name: 'Outside' })).toHaveFocus();
+  expect(screen.queryByRole('region')).not.toBeInTheDocument();
+});
+
 it('keeps dropdown arrow keys local while allowing their native behavior and change handler', () => {
   const onChange = vi.fn();
   render(

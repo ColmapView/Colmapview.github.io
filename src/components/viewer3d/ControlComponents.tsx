@@ -43,11 +43,16 @@ const FOCUSABLE_CONTROL_SELECTOR = [
   'select:not([disabled])',
   'textarea:not([disabled])',
   'a[href]',
+  'summary',
   '[tabindex]:not([tabindex="-1"])',
 ].join(', ');
 
 function getFocusableControls(parent: ParentNode): HTMLElement[] {
   return [...parent.querySelectorAll<HTMLElement>(FOCUSABLE_CONTROL_SELECTOR)].filter(element => {
+    // Closed details expose only their summary, including inside nested details.
+    for (let details = element.closest('details:not([open])'); details; details = details.parentElement?.closest('details:not([open])') ?? null) {
+      if (!details.querySelector(':scope > summary')?.contains(element)) return false;
+    }
     const style = getComputedStyle(element);
     return element.tabIndex >= 0
       && !element.closest('[hidden], [aria-hidden="true"]')
