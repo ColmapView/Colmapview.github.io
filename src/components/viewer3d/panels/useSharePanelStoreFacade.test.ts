@@ -1,8 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   useCameraStore,
-  useExportStore,
   useNotificationStore,
   useReconstructionStore,
   usePublicationStatusStore,
@@ -34,7 +33,6 @@ describe('useSharePanelStoreFacade', () => {
   beforeEach(() => {
     useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
     useCameraStore.setState(useCameraStore.getInitialState(), true);
-    useExportStore.setState(useExportStore.getInitialState(), true);
     useNotificationStore.setState(useNotificationStore.getInitialState(), true);
     usePublicationStatusStore.setState({ phase: 'idle' });
     useDrivePublicationStatus.setState({ active: false });
@@ -42,14 +40,12 @@ describe('useSharePanelStoreFacade', () => {
 
   it('collects share data dependencies from owning stores', () => {
     const reconstruction = buildReconstruction();
-    const getScreenshotBlob = vi.fn().mockResolvedValue(new Blob(['screenshot']));
     useReconstructionStore.setState({
       reconstruction,
       sourceUrl: 'https://example.com/manifest.json',
       sourceManifest: manifest,
     });
     useCameraStore.setState({ currentViewState: viewState });
-    useExportStore.setState({ getScreenshotBlob });
 
     const { result } = renderHook(() => useSharePanelStoreFacade());
 
@@ -58,7 +54,6 @@ describe('useSharePanelStoreFacade', () => {
       sourceUrl: 'https://example.com/manifest.json',
       sourceManifest: manifest,
       currentViewState: viewState,
-      getScreenshotBlob,
     });
   });
 

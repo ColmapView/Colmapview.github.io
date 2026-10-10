@@ -2276,14 +2276,14 @@ h3.panel-heading {
    never beats it: the bottom 2.5rem of the column is painted over and eats no
    clicks at all. Budget = viewport height − status-bar height.
 
-   With all 18 buttons (publishing destinations live inside Share; toolbarColumnHeight.test.ts
+   With all 16 buttons (publishing and social destinations live inside Share; toolbarColumnHeight.test.ts
    recomputes this from the CSS + the toolbar source and fails if a new button
    outgrows a tier):
-     40px / 8px gap  -> needs 935px of viewport
-     32px / 4px gap  -> needs 711px
-     28px / 2px gap  -> needs 599px
-     26px / 2px gap  -> needs 563px
-     24px / 1px gap  -> needs 507px
+     40px / 8px gap  -> needs 839px of viewport
+     32px / 4px gap  -> needs 639px
+     28px / 2px gap  -> needs 539px
+     26px / 2px gap  -> needs 507px
+     24px / 1px gap  -> needs 457px
    The existing tiers leave extra height before switching sizes.
    The smallest tiers also apply to touch controls in short windows.
    --------------------------------------------------------------------------- */

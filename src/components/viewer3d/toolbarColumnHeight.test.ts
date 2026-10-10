@@ -101,7 +101,7 @@ function countToolbarItems(): { buttons: number; dividers: number } {
   const body = toolbarSource.slice(toolbarSource.indexOf('export function ViewerControlsToolbar'));
   const tags = [...body.matchAll(/<([A-Z][A-Za-z0-9]*)/g)].map((match) => match[1]);
   const dividers = tags.filter((tag) => tag === 'ToolbarDivider').length;
-  // Share keeps its shared options and handlers with three sibling controls.
+  // Count the actual controls rendered by Share, including any sibling controls.
   const shareButtons = [...readFileSync(SHARE_PANEL_PATH, 'utf8').matchAll(/<ControlButton\b/g)].length;
   const buttons = tags.filter(tag => tag !== 'ToolbarDivider')
     .reduce((count, tag) => count + (tag === 'SharePanel' ? shareButtons : 1), 0);

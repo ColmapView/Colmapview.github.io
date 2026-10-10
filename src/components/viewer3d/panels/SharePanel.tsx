@@ -8,7 +8,6 @@ import { getButtonClass } from '../../../theme';
 import { ShareIcon, CheckIcon, BucketIcon, GoogleDriveIcon } from '../../../icons';
 import { ControlButton, ToggleRow, type PanelType } from '../ControlComponents';
 import { generateShareableUrl, generateEmbedUrl, generateIframeHtml, copyWithFeedback } from '../../../hooks/useUrlState';
-import { copyScreenshotToClipboard } from '../../../utils/clipboard';
 import {
   buildLinkedInShareContent,
   buildSocialSharePayload,
@@ -45,7 +44,6 @@ export const SharePanel = memo(function SharePanel({
   const [copiedEmbedUrl, setCopiedEmbedUrl] = useState(false);
   const [copiedEmbedHtml, setCopiedEmbedHtml] = useState(false);
   const [includeShareLink, setIncludeShareLink] = useState(true);
-  const [includeScreenshot, setIncludeScreenshot] = useState(true);
   const [destination, setDestination] = useState<Destination>(null);
   const shareButtonRef = useRef<HTMLButtonElement>(null);
   const { loadUrl } = useBucketStorageButtonStoreFacade();
@@ -60,7 +58,6 @@ export const SharePanel = memo(function SharePanel({
       sourceUrl,
       sourceManifest,
       currentViewState,
-      getScreenshotBlob,
     },
     addNotification,
   } = useSharePanelStoreFacade();
@@ -103,14 +100,8 @@ export const SharePanel = memo(function SharePanel({
     await copyWithFeedback(iframeHtml, setCopiedEmbedHtml);
   }, [shareSource, sourceViewState, sourceConfig]);
 
-  const handleCopyScreenshotToClipboard = useCallback(async () => {
-    return copyScreenshotToClipboard(getScreenshotBlob, {
-      addNotification,
-    });
-  }, [addNotification, getScreenshotBlob]);
-
   // Handle share to X (Twitter)
-  const handleShareToX = useCallback(async () => {
+  const handleShareToX = useCallback(() => {
     const sharePayload = buildSocialSharePayload({
       currentViewState: sourceViewState,
       generateShareableUrl: (source, view) => generateShareableUrl(source, view, sourceConfig),
@@ -119,14 +110,9 @@ export const SharePanel = memo(function SharePanel({
       shareSource,
     });
 
-    // Copy screenshot to clipboard for easy pasting (if enabled)
-    if (includeScreenshot) {
-      await handleCopyScreenshotToClipboard();
-    }
-
     // Open X share dialog
     window.open(buildXShareUrl(sharePayload), '_blank', 'width=700,height=600,noopener,noreferrer');
-  }, [shareSource, sourceViewState, sourceConfig, reconstruction, handleCopyScreenshotToClipboard, includeShareLink, includeScreenshot]);
+  }, [shareSource, sourceViewState, sourceConfig, reconstruction, includeShareLink]);
 
   // Handle share to LinkedIn
   const handleShareToLinkedIn = useCallback(async () => {
@@ -139,28 +125,15 @@ export const SharePanel = memo(function SharePanel({
     });
     const shareContent = buildLinkedInShareContent(sharePayload);
 
-    // Copy text + screenshot together so a single paste provides both
-    try {
-      const items: Record<string, Blob> = {
-        'text/plain': new Blob([shareContent], { type: 'text/plain' }),
-      };
-      if (includeScreenshot && getScreenshotBlob) {
-        const blob = await getScreenshotBlob();
-        if (blob) items['image/png'] = blob;
-      }
-      await navigator.clipboard.write([new ClipboardItem(items)]);
-      const msg = items['image/png']
-        ? 'Text + screenshot copied! Paste in LinkedIn post'
-        : 'Message copied! Paste in LinkedIn post';
-      addNotification('info', msg, 4000);
-    } catch {
-      // Fallback - try text only
-      try { await navigator.clipboard.writeText(shareContent); } catch { /* noop */ }
-    }
-
-    // Open LinkedIn - go to feed to create new post
+    // Open during the click so clipboard permissions cannot block the popup.
     window.open('https://www.linkedin.com/feed/', '_blank', 'width=700,height=600,noopener,noreferrer');
-  }, [shareSource, sourceViewState, sourceConfig, reconstruction, getScreenshotBlob, includeShareLink, includeScreenshot, addNotification]);
+    try {
+      await navigator.clipboard.writeText(shareContent);
+      addNotification('info', 'Message copied! Paste in LinkedIn post', 4000);
+    } catch {
+      // LinkedIn remains open when clipboard access is unavailable.
+    }
+  }, [shareSource, sourceViewState, sourceConfig, reconstruction, includeShareLink, addNotification]);
 
   return <>
     <ControlButton
@@ -234,31 +207,22 @@ export const SharePanel = memo(function SharePanel({
               )}
             </button>
           </div>}
+          <div className="flex gap-2">
+            <button type="button" onClick={handleShareToX} aria-label="Share to X" className={`${actionButton} flex-1 min-w-0 share-destination`}>
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor" aria-hidden="true">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+              </svg>X
+            </button>
+            <button type="button" onClick={handleShareToLinkedIn} aria-label="Share to LinkedIn" className={`${actionButton} flex-1 min-w-0 share-destination`}>
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor" aria-hidden="true">
+                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+              </svg>LinkedIn
+            </button>
+          </div>
           {canShare && <ToggleRow label="Include link" checked={includeShareLink} onChange={setIncludeShareLink} />}
-          <ToggleRow label="Copy screenshot" checked={includeScreenshot} onChange={setIncludeScreenshot} />
         </div>
       </div>
     </ControlButton>
-    <ControlButton
-      panelId="shareX"
-      activePanel={activePanel}
-      setActivePanel={setActivePanel}
-      tooltip="Share to X"
-      onClick={handleShareToX}
-      icon={<svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor" aria-hidden="true">
-        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-      </svg>}
-    />
-    <ControlButton
-      panelId="shareLinkedIn"
-      activePanel={activePanel}
-      setActivePanel={setActivePanel}
-      tooltip="Share to LinkedIn"
-      onClick={handleShareToLinkedIn}
-      icon={<svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor" aria-hidden="true">
-        <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-      </svg>}
-    />
     {destination === 'bucket' && <Suspense fallback={<span role="status">Opening bucket storage…</span>}>
       <BucketStorageModal isOpen onClose={closeDestination} onLoadUrl={loadUrl} />
     </Suspense>}

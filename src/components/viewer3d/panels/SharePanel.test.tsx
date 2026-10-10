@@ -11,7 +11,7 @@ import { buildReconstruction } from '../../../test/builders';
 const facade = vi.hoisted(() => ({ data: {
   hasEdits: false, publicationActive: false, reconstruction: null as ReturnType<typeof buildReconstruction> | null,
   sourceUrl: null as string | null, sourceManifest: null as object | null,
-  currentViewState: null, getScreenshotBlob: vi.fn(),
+  currentViewState: null,
 }, addNotification: vi.fn() }));
 const urlActions = vi.hoisted(() => ({
   generateShareableUrl: vi.fn(() => 'https://viewer.example/shared'),
@@ -19,11 +19,9 @@ const urlActions = vi.hoisted(() => ({
   generateIframeHtml: vi.fn(() => '<iframe></iframe>'),
   copyWithFeedback: vi.fn(async (_value: string, copied: (value: boolean) => void) => copied(true)),
 }));
-const socialClipboard = vi.hoisted(() => ({ copyScreenshotToClipboard: vi.fn(async () => true) }));
 vi.mock('./useSharePanelStoreFacade', () => ({ useSharePanelStoreFacade: () => facade }));
 vi.mock('../../bucket/useBucketStorageButtonStoreFacade', () => ({ useBucketStorageButtonStoreFacade: () => ({ loadUrl: vi.fn() }) }));
 vi.mock('../../../hooks/useUrlState', () => urlActions);
-vi.mock('../../../utils/clipboard', () => socialClipboard);
 vi.mock('../useControlButtonStoreFacade', () => ({ useControlButtonStoreFacade: () => ({ touchMode: false, contextMenuOpen: false }) }));
 vi.mock('../../../features/googleDrive/config', async importOriginal => ({
   ...await importOriginal<typeof import('../../../features/googleDrive/config')>(), isGoogleDriveEnabled: vi.fn(() => true),
@@ -66,22 +64,20 @@ beforeEach(() => {
   Object.assign(facade.data, { hasEdits: false, publicationActive: false, reconstruction: null, sourceUrl: null, sourceManifest: null });
   vi.mocked(encodeShareData).mockClear();
   Object.values(urlActions).forEach(action => action.mockClear());
-  socialClipboard.copyScreenshotToClipboard.mockClear();
-  facade.data.getScreenshotBlob.mockClear();
+  facade.addNotification.mockClear();
 });
 afterEach(() => { cleanup(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Share destinations and dialog lifetime', () => {
   it('exposes one Share control with destinations inside its popup', () => {
     render(<ShareHarness initiallyOpen={false} />);
-    expect(screen.getAllByRole('button')).toEqual([
-      share(), screen.getByRole('button', { name: 'Share to X' }), screen.getByRole('button', { name: 'Share to LinkedIn' }),
-    ]);
+    expect(screen.getAllByRole('button')).toEqual([share()]);
     reopen();
     const panel = screen.getByRole('region', { name: 'Share' });
     expect(panel.querySelector('details')).toBeNull();
-    expect(within(panel).queryByRole('button', { name: 'Share to X' })).toBeNull();
-    expect(within(panel).queryByRole('button', { name: 'Share to LinkedIn' })).toBeNull();
+    expect(within(panel).getByRole('button', { name: 'Share to X' })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: 'Share to LinkedIn' })).toBeInTheDocument();
+    expect(within(panel).queryByRole('switch', { name: 'Copy screenshot' })).toBeNull();
     for (const name of ['Bucket storage', 'Publish to Hugging Face', 'Publish to Google Drive']) {
       expect(within(panel).getByRole('button', { name })).toBeInTheDocument();
     }
@@ -194,7 +190,20 @@ describe('Share destinations and dialog lifetime', () => {
 });
 
 describe('Share links and social actions', () => {
-  beforeEach(() => { facade.data.reconstruction = buildReconstruction(); facade.data.sourceUrl = 'https://example.test/scene/'; });
+  const clipboard = { writeText: vi.fn(async (_text: string) => undefined), write: vi.fn() };
+  let originalClipboard: PropertyDescriptor | undefined;
+  beforeEach(() => {
+    facade.data.reconstruction = buildReconstruction();
+    facade.data.sourceUrl = 'https://example.test/scene/';
+    clipboard.writeText.mockReset().mockResolvedValue(undefined);
+    clipboard.write.mockClear();
+    originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: clipboard });
+  });
+  afterEach(() => {
+    if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+    else Reflect.deleteProperty(navigator, 'clipboard');
+  });
   it('copies the existing source link', async () => {
     render(<ShareHarness />);
     fireEvent.click(screen.getByRole('button', { name: 'Copy link' }));
@@ -217,46 +226,50 @@ describe('Share links and social actions', () => {
     expect(urlActions.copyWithFeedback).toHaveBeenCalledWith('<iframe></iframe>', expect.any(Function));
   });
 
-  it('shares to X directly from the toolbar without opening Share', async () => {
+  it('shares to X from Share without copying a screenshot', () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
-    render(<ShareHarness initiallyOpen={false} />);
+    render(<ShareHarness />);
     fireEvent.click(screen.getByRole('button', { name: 'Share to X' }));
-    await waitFor(() => expect(open).toHaveBeenCalledOnce());
+    expect(open).toHaveBeenCalledOnce();
     const target = new URL(String(open.mock.calls[0][0]));
     expect(target.origin + target.pathname).toBe('https://twitter.com/intent/tweet');
     expect(target.searchParams.get('url')).toBe('https://viewer.example/shared');
-    expect(socialClipboard.copyScreenshotToClipboard).toHaveBeenCalledOnce();
-    expect(screen.queryByRole('region', { name: 'Share' })).toBeNull();
+    expect(clipboard.write).not.toHaveBeenCalled();
+    expect(clipboard.writeText).not.toHaveBeenCalled();
+    expect(screen.queryByRole('switch', { name: 'Copy screenshot' })).toBeNull();
   });
 
-  it('keeps social options when the Share panel closes', async () => {
+  it('keeps the link option when the Share panel closes and reopens', () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
     render(<ShareHarness />);
     fireEvent.click(screen.getByRole('switch', { name: 'Include link' }));
-    fireEvent.click(screen.getByRole('switch', { name: 'Copy screenshot' }));
     fireEvent.keyDown(share(), { key: 'Escape' });
+    reopen();
     fireEvent.click(screen.getByRole('button', { name: 'Share to X' }));
-    await waitFor(() => expect(open).toHaveBeenCalledOnce());
+    expect(open).toHaveBeenCalledOnce();
     expect(new URL(String(open.mock.calls[0][0])).searchParams.has('url')).toBe(false);
-    expect(socialClipboard.copyScreenshotToClipboard).not.toHaveBeenCalled();
+    expect(clipboard.write).not.toHaveBeenCalled();
   });
 
-  it('shares to LinkedIn directly and keeps the text-copy fallback', async () => {
+  it('shares to LinkedIn from Share and copies only the message', async () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
-    const writeText = vi.fn(async () => undefined);
-    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
-    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
-    vi.stubGlobal('ClipboardItem', undefined);
-    try {
-      render(<ShareHarness initiallyOpen={false} />);
-      fireEvent.click(screen.getByRole('button', { name: 'Share to LinkedIn' }));
-      await waitFor(() => expect(open).toHaveBeenCalledOnce());
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('https://viewer.example/shared'));
-      expect(open).toHaveBeenCalledWith('https://www.linkedin.com/feed/', '_blank', expect.any(String));
-      expect(screen.queryByRole('region', { name: 'Share' })).toBeNull();
-    } finally {
-      if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
-      else Reflect.deleteProperty(navigator, 'clipboard');
-    }
+    render(<ShareHarness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Share to LinkedIn' }));
+    expect(open).toHaveBeenCalledWith('https://www.linkedin.com/feed/', '_blank', expect.any(String));
+    expect(clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('https://viewer.example/shared'));
+    expect(clipboard.write).not.toHaveBeenCalled();
+    await waitFor(() => expect(facade.addNotification).toHaveBeenCalledWith('info', 'Message copied! Paste in LinkedIn post', 4000));
+  });
+
+  it('opens LinkedIn while clipboard access is pending and survives a denial', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    let rejectClipboard!: (reason: Error) => void;
+    clipboard.writeText.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectClipboard = reject; }));
+    render(<ShareHarness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Share to LinkedIn' }));
+    expect(open).toHaveBeenCalledWith('https://www.linkedin.com/feed/', '_blank', expect.any(String));
+    rejectClipboard(new Error('Clipboard permission denied'));
+    await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledOnce());
+    expect(facade.addNotification).not.toHaveBeenCalled();
   });
 });

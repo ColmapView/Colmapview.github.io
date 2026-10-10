@@ -1,12 +1,10 @@
 import {
   useCameraStore,
-  useExportStore,
   useNotificationStore,
   useReconstructionStore,
   useDeletionStore,
   usePublicationStatusStore,
   useDrivePublicationStatus,
-  type ExportState,
   type NotificationState,
 } from '../../../store';
 import type { CameraViewState } from '../../../store/types';
@@ -20,7 +18,6 @@ interface SharePanelDataFacade {
   sourceUrl: string | null;
   sourceManifest: ColmapManifest | null;
   currentViewState: CameraViewState | null;
-  getScreenshotBlob: ExportState['getScreenshotBlob'];
 }
 
 export interface SharePanelStoreFacade {
@@ -35,7 +32,6 @@ export function useSharePanelStoreFacade(): SharePanelStoreFacade {
   const sourceUrl = useReconstructionStore((s) => s.sourceUrl);
   const sourceManifest = useReconstructionStore((s) => s.sourceManifest);
   const currentViewState = useCameraStore((s) => s.currentViewState);
-  const getScreenshotBlob = useExportStore((s) => s.getScreenshotBlob);
   const addNotification = useNotificationStore((s) => s.addNotification);
   const hfPublicationActive = usePublicationStatusStore((s) => s.phase !== 'idle');
   const drivePublicationActive = useDrivePublicationStatus((s) => s.active);
@@ -48,7 +44,6 @@ export function useSharePanelStoreFacade(): SharePanelStoreFacade {
       sourceUrl,
       sourceManifest,
       currentViewState,
-      getScreenshotBlob,
     },
     addNotification,
   };
