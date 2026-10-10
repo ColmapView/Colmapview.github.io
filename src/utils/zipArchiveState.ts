@@ -1,4 +1,4 @@
-import type { ArchiveEntry, ArchiveReader, ArchiveExtractOptions } from '../types/libarchive';
+import type { ArchiveEntry, ArchiveReader, ArchiveExtractOptions } from '../archive/types';
 import { appLogger } from './logger';
 import { getZipEntryLookupCandidates } from './zipLoaderPolicy';
 

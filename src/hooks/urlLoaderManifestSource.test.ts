@@ -5,7 +5,7 @@ import type { ColmapManifest } from '../types/manifest';
 import {
   loadManifestSource, OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS, SPLAT_DISCOVERY_LIMIT_MS, SPLAT_DISCOVERY_TIMEOUT_MS,
 } from './urlLoaderManifestSource';
-import type { RemoteSplatCandidate } from './urlLoaderPolicy';
+import type { RemoteSplatCandidate } from '../splat/loadingPolicy';
 import { useNotificationStore } from '../store/stores/notificationStore';
 import { SPLAT_LIST_TIMEOUT_MESSAGE, splatListTimeoutWarning } from './datasetTimeoutWarnings';
 import { notificationsWithMessage } from '../test/notifications';

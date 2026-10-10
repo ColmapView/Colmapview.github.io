@@ -13,12 +13,8 @@ import {
 } from './statusBarViewModel';
 import { getAutoHiddenChromeProps, shouldHideChromeWithButtons } from './autoHideChromePolicy';
 import { useStatusBarStoreFacade } from './useStatusBarStoreFacade';
-import {
-  computeMeanPsnrFromMetrics,
-  computeMeanSsimFromMetrics,
-  formatMeanPsnrValue,
-  formatMeanSsimValue,
-} from './statHistogramViewModel';
+import { formatMeanPsnrValue, formatMeanSsimValue } from './statHistogramViewModel';
+import { computeMeanPsnrFromMetrics, computeMeanSsimFromMetrics } from '../../utils/histogram';
 
 export function StatusBar() {
   const {

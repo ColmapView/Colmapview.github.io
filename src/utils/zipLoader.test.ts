@@ -5,7 +5,7 @@ import { hfAuth } from '../features/huggingface/auth';
 import { downloadZip, type ZipProgressCallback } from './zipDownload';
 import { isArchiveFile, loadZipFromFile, loadZipFromUrl } from './zipLoader';
 import { appLogger } from './logger';
-import type { ArchiveReader } from '../types/libarchive';
+import type { ArchiveReader } from '../archive/types';
 import { archiveError, REMOTE_ARCHIVE_RANGE_THRESHOLD } from '../archive/protocol';
 
 vi.mock('../archive/archiveService', () => ({ openArchiveReader: vi.fn() }));

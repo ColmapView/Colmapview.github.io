@@ -15,6 +15,7 @@ Core modules should not import from `components/`. Parser and dataset code shoul
 - `components/`: render UI, wire events, and compose hooks. Avoid source-specific file loading, storage policies, parser details, and direct browser globals when a shared helper exists.
 - `dataset/`: own image and mask access across local, URL, manifest, and ZIP sources. Components should use `useDataset()` instead of importing image-file utilities.
 - `archive/`: one worker per active archive, indexed ZIP/TAR readers, compatibility codecs, temporary storage, and image previews. All upload, drop, URL, Hugging Face, and Google Drive archive inputs use this boundary.
+- `splat/`: splat decoding, renderer backends, and shared loading policy. Device budgets, automatic loading, and eligibility for loading without retained file bytes belong in `splat/loadingPolicy.ts`; stores, URL loaders, and the picker import that policy directly.
 - `store/`: own shared app state, persistence, and user actions. Keep UI rendering out of store actions.
 - `nodes/`: expose derived viewer state for camera, selection, navigation, and matches. Use nodes when multiple components need the same derived state.
 - `hooks/`: own reusable React behavior, subscriptions, and component-facing view models.
@@ -28,9 +29,13 @@ When a component or hook needs many store selectors, node selectors, and actions
 
 Facades should adapt stores and nodes into typed dependencies. Pure executors and policies should receive those dependencies as parameters and avoid importing stores directly. This keeps behavior testable with plain objects while limiting store wiring to one feature-owned hook.
 
+Shared reconstruction calculations live in `utils/floorPlaneAlignment.ts` and `utils/histogram.ts`. The reconstruction worker and UI use these same calculations and data types. Modal styles, labels, and chart layout stay in the component policies; computation modules must not depend on those UI modules.
+
 ## Archive Processing
 
 `zipLoader` opens an archive session, extracts reconstruction/settings/splat files, and keeps image entries lazy. Readers expose entry listing and closing; every entry supports original extraction and worker previews. Repeated close callers wait for the same cleanup and receive the same failure. The session worker runs one operation at a time and selects waiting work by current consumer priority: selected, visible, metrics, then prefetch. Cancelling a consumer removes its queued work or cancels its current read; replacing or closing the archive terminates its worker. Failed incoming loads leave the installed dataset intact.
+
+Application reader and entry contracts belong to `archive/types.ts`. They describe the session API shared by loaders, lazy image access, and test builders; vendor codec declarations stay separate from this public boundary.
 
 ZIP uses the central directory, including ZIP64 offsets, with stored/deflate extraction and size/CRC checks. TAR indexes headers and skips file bodies, distinguishing POSIX filename prefixes from GNU timestamp fields. These containers do not require a whole-archive WASM allocation. Gzip TAR streams to temporary origin-private browser storage (OPFS) before indexing when storage access is usable; unavailable storage or quota failures use the bounded compatibility codec. xz/bzip2 TAR, 7z, and uncommon ZIP/TAR features use that WASM codec inside the same worker. Compatibility archives must fit below 2 GiB. Indexed extraction limits each file to 2 GiB and bounds index size/count; available memory and disk quota still govern usable dataset size.
 
@@ -71,6 +76,6 @@ Run the narrowest relevant command while editing, then `npm run check` before ha
 ESLint guards the first high-risk boundaries:
 
 - `src/components/**` must not import `utils/imageFileUtils` directly.
-- `src/dataset/**`, `src/parsers/**`, and `src/store/**` must not import UI components.
+- `src/archive/**`, `src/dataset/**`, `src/parsers/**`, `src/splat/**`, `src/store/**`, and `src/wasm/**` must not import UI components.
 
 If a future change needs to cross these boundaries, add a small public API in the owning module instead of importing through the boundary.

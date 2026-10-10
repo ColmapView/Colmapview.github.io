@@ -1,6 +1,6 @@
 import type { ClearAllOptions } from '../cache';
 import type { ReconstructionSourceType } from '../store/reconstructionStore';
-import type { ArchiveEntry, ArchiveReader } from '../types/libarchive';
+import type { ArchiveEntry, ArchiveReader } from '../archive/types';
 import type { UrlLoadProgress } from '../types/manifest';
 import { appLogger } from '../utils/logger';
 import { awaitWithAbort } from '../utils/awaitWithAbort';

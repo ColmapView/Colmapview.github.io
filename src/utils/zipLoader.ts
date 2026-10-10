@@ -6,7 +6,7 @@
 import { openArchiveReader, type ArchiveServiceOptions } from '../archive/archiveService';
 import { isIndexedArchive, REMOTE_ARCHIVE_RANGE_THRESHOLD, type ArchiveSource } from '../archive/protocol';
 import { createRemoteArchiveRead } from '../archive/remoteArchive';
-import type { ArchiveEntry, ArchiveReader } from '../types/libarchive';
+import type { ArchiveEntry, ArchiveReader } from '../archive/types';
 import { isSplatFilePath } from './splatFilePolicy';
 import { getFilenameFromUrl } from './urlUtils';
 import { downloadZip, isArchiveDownloadDiskBacked, releaseArchiveDownload, type ZipDownloadOptions, type ZipProgress } from './zipDownload';

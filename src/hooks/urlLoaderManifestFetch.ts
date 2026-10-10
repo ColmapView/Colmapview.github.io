@@ -20,7 +20,6 @@ import { classifyPlyHeaderText, getPlyHeaderVertexCount } from '../parsers';
 import {
   getDirectoryListingLinks,
   getDirectoryListingRootUrl,
-  getEstimatedSplatCount,
   getHuggingFaceColmapPaths,
   getHuggingFaceColmapTotalBytes,
   getHuggingFaceDatasetTreeRequest,
@@ -29,14 +28,17 @@ import {
   getLargeColmapDatasetWarning,
   getManifestColmapFileEntries,
   getRelativeHuggingFaceTreePaths,
-  getSplatAutoLoadDecision,
   joinManifestUrlPath,
   sortRemoteSplatCandidates,
-  TOUCH_SPLAT_DISABLE_MIN_SPLATS,
   type HuggingFaceColmapPaths,
   type HuggingFaceDatasetTreeEntry,
-  type RemoteSplatCandidate,
 } from './urlLoaderPolicy';
+import {
+  getEstimatedSplatCount,
+  getSplatAutoLoadDecision,
+  TOUCH_SPLAT_DISABLE_MIN_SPLATS,
+  type RemoteSplatCandidate,
+} from '../splat/loadingPolicy';
 import { isUrlLoadError } from './urlLoaderErrorHandling';
 import { detectTouchDevice } from './useIsTouchDevice';
 import { fetchDatasetResource } from '../utils/fetchDatasetResource';

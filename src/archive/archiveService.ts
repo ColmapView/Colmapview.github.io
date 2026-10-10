@@ -1,4 +1,4 @@
-import type { ArchiveExtractOptions, ArchiveFileEntry, ArchiveReader } from '../types/libarchive';
+import type { ArchiveExtractOptions, ArchiveFileEntry, ArchiveReader } from '../archive/types';
 import { MEDIA_PRIORITY_ORDER } from '../utils/imageFileRequestState';
 import { publicAsset } from '../utils/paths';
 import { ARCHIVE_INITIALIZATION_TIMEOUT_MS, archiveError, type ArchiveMetadata, type ArchiveOperation,

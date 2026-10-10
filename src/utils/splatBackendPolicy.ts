@@ -322,7 +322,7 @@ export function resolveSplatBackend(
  * forward-looking property of the backend choice alone, deliberately blind to
  * whether the module is downloaded, downloading, or unreachable. Consumers
  * outside the download path depend on exactly that — Scene3D and SplatLayer
- * ask what the renderer WILL be, and urlLoaderPolicy's byte-less loader gate
+ * ask what the renderer WILL be, and loadingPolicy's byte-less loader gate
  * reasons about the same question — so its semantics must not absorb download
  * state. Two derived predicates below add that state:
  * shouldStartSparkSplatRuntimePreload (should a download begin now?) and

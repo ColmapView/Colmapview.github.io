@@ -1,4 +1,4 @@
-import type { ArchiveEntry, ArchiveFileEntry, ArchiveReader } from '../../types/libarchive';
+import type { ArchiveEntry, ArchiveFileEntry, ArchiveReader } from '../../archive/types';
 import { buildFile } from './colmapBuilders';
 
 interface ArchiveEntryBuilderOptions {

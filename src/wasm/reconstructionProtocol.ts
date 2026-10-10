@@ -2,7 +2,7 @@ import type { Camera, Point2D, Reconstruction } from '../types/colmap';
 import type { Sim3dEuler } from '../types/sim3d';
 import type { BoundingBox } from './types';
 import type { Plane } from '../utils/ransac';
-import type { HistogramData } from '../components/layout/statHistogramViewModel';
+import type { HistogramData } from '../utils/histogram';
 import { assertCompactPointMembership, pointMembershipTransfers, type CompactPointMembership } from './compactPointMembership';
 
 /** Read-only rendering contract. Returned arrays belong to the source and must not be mutated. */

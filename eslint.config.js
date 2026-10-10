@@ -61,7 +61,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['src/{dataset,parsers,store}/**/*.{ts,tsx}'],
+    files: ['src/{archive,dataset,parsers,splat,store,wasm}/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': ['error', {
         patterns: [

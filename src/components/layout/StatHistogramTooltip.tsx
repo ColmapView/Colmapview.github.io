@@ -1,3 +1,4 @@
+import type { HistogramBin } from '../../utils/histogram';
 import { useRef, useLayoutEffect, useState } from 'react';
 import { histogramStyles, CHART_COLORS } from '../../theme';
 import {
@@ -11,12 +12,6 @@ import {
   getStatHistogramMaxPercentage,
   getStatHistogramTooltipStyle,
 } from './statHistogramViewModel';
-
-export interface HistogramBin {
-  label: string;
-  count: number;
-  percentage: number;
-}
 
 export interface StatHistogramTooltipProps {
   title: string;

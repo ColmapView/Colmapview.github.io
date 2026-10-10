@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { Z_INDEX } from '../../theme/zIndex';
 import type { SplatFileSource } from '../../types/colmap';
-import { getSplatDeviceAssessment, type SplatDeviceHint, type SplatDeviceTier } from '../../hooks/urlLoaderPolicy';
+import { getSplatDeviceAssessment, type SplatDeviceHint, type SplatDeviceTier } from '../../splat/loadingPolicy';
 import { supportsWebGpuRenderer } from '../../utils/splatFilePolicy';
 
 export interface SplatPickerItem {

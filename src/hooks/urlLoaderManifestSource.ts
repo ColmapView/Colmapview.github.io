@@ -1,12 +1,8 @@
 import type { ColmapManifest, UrlLoadProgress } from '../types/manifest';
 import { findSplatFileSources } from '../utils/fileClassification';
 import { appLogger } from '../utils/logger';
-import {
-  getManifestLoadSourceInfo,
-  getSplatAutoLoadDecision,
-  type ManifestLoadSource,
-  type RemoteSplatCandidate,
-} from './urlLoaderPolicy';
+import { getManifestLoadSourceInfo, type ManifestLoadSource } from './urlLoaderPolicy';
+import { getSplatAutoLoadDecision, type RemoteSplatCandidate } from '../splat/loadingPolicy';
 import { discoverManifestSplatCatalog, fetchManifestColmapFiles } from './urlLoaderManifestFetch';
 import { fetchPublishedViewerState, startOptionalDatasetViewerSettings } from './urlLoaderViewerState';
 import type { PublishedViewerState } from '../utils/publishedViewerState';

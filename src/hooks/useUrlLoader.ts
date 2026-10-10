@@ -18,8 +18,8 @@ import {
   getManifestLoadedLogMessage,
   getUrlNormalizationLogMessage,
   normalizeLoadUrl,
-  type RemoteSplatCandidate,
 } from './urlLoaderPolicy';
+import { type RemoteSplatCandidate } from '../splat/loadingPolicy';
 import { claimUrlLoad, URL_LOAD_GUARD_MESSAGE } from './urlLoaderLoadGuard';
 import { fetchUrlManifest, withDiscoveredColmapPaths } from './urlLoaderManifestFetch';
 import { handleUrlLoadFailure } from './urlLoaderErrorHandling';

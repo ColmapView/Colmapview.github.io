@@ -30,10 +30,7 @@ import { isSplatColorMode } from './types';
 import { getSplatRendererRequirement, supportsWebGpuRenderer } from '../utils/splatFilePolicy';
 import { fetchRemoteSplatBytes, fetchRemoteSplatFile, toArrayBuffer } from '../utils/urlUtils';
 import { getSplatDownloadProgress, getSplatPhaseProgress, isSplatLoadingProgressForFile } from '../utils/splatLoadingProgressPolicy';
-import {
-  canUseByteLessSplatLoader,
-  TOUCH_SPLAT_BYTELESS_RETENTION_MIN_BYTES,
-} from '../hooks/urlLoaderPolicy';
+import { canUseByteLessSplatLoader, TOUCH_SPLAT_BYTELESS_RETENTION_MIN_BYTES } from '../splat/loadingPolicy';
 import { detectTouchDevice } from '../hooks/useIsTouchDevice';
 import { dismissDatasetTimeoutWarnings } from '../hooks/datasetTimeoutWarnings';
 

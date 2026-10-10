@@ -16,8 +16,8 @@ import { getWasmMemoryStats, releaseColmapWasmModuleCache } from './init';
 import { buildPointMembershipFromWasm, packPointMembership } from './compactPointMembership';
 import { createSim3dFromEuler, transformReconstruction } from '../utils/sim3dTransforms';
 import { filterReconstructionByImageIds } from '../utils/filterReconstruction';
-import { detectFloorPlaneFromPositions, getFloorNormalFlippedForCameraDownSide } from '../components/modals/floorPlaneAlignmentPolicy';
-import { computeHistogramFromMap, computeHistogramFromWasm } from '../components/layout/statHistogramViewModel';
+import { detectFloorPlaneFromPositions, getFloorNormalFlippedForCameraDownSide } from '../utils/floorPlaneAlignment';
+import { computeHistogramFromMap, computeHistogramFromWasm } from '../utils/histogram';
 import type {
   ReconstructionExportFiles, ReconstructionExportPayload, ReconstructionLoadFiles,
   ReconstructionPhase, ReconstructionRequest, ReconstructionOperationResults, ReconstructionSnapshotData,

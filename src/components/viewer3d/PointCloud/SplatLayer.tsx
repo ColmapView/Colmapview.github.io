@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } f
 import { useThree } from '@react-three/fiber';
 import type { Matrix4 } from 'three';
 import { detectTouchDevice } from '../../../hooks/useIsTouchDevice';
-import { TOUCH_SPLAT_DISABLE_MIN_SPLATS } from '../../../hooks/urlLoaderPolicy';
+import { TOUCH_SPLAT_DISABLE_MIN_SPLATS } from '../../../splat/loadingPolicy';
 import { SogBundleError, validateSogBundle } from '../../../splat/sogBundle';
 import { appLogger } from '../../../utils/logger';
 import {

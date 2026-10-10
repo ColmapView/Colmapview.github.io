@@ -4,18 +4,18 @@ import type { ReconstructionSource } from '../../wasm/reconstructionService';
 import { isReconstructionSnapshot } from '../../wasm/reconstructionService';
 import { appLogger } from '../../utils/logger';
 import { StatHistogramTooltip } from './StatHistogramTooltip';
+import { getStatHistogramTitle } from './statHistogramViewModel';
 import {
   computeHistogramFromMap,
   computeHistogramFromPsnrMetrics,
   computeHistogramFromSsimMetrics,
   computeHistogramFromWasm,
-  getStatHistogramTitle,
   type PsnrHistogramMetric,
   type HistogramType,
   type HistogramData,
-} from './statHistogramViewModel';
+} from '../../utils/histogram';
 
-export type { HistogramType } from './statHistogramViewModel';
+export type { HistogramType } from '../../utils/histogram';
 
 interface StatWithHistogramProps {
   label: string;

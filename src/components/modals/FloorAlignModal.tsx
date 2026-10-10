@@ -5,15 +5,13 @@ import { useHotkeys } from 'react-hotkeys-hook';
 import { modalStyles } from '../../theme';
 import { CloseIcon } from '../../icons';
 import { useModalDrag } from '../../hooks/useModalDrag';
+import { FLOOR_ALIGN_MODAL_ESTIMATED_HEIGHT, FLOOR_ALIGN_MODAL_ESTIMATED_WIDTH, getFloorAlignModalPanelStyle } from './floorPlaneAlignmentPolicy';
 import {
-  FLOOR_ALIGN_MODAL_ESTIMATED_HEIGHT,
-  FLOOR_ALIGN_MODAL_ESTIMATED_WIDTH,
   computeFloorAlignmentTransform,
   detectFloorPlaneFromPositions,
-  getFloorAlignModalPanelStyle,
   getFloorNormalFlippedForCameraDownSide,
   getFloorTargetUpVector,
-} from './floorPlaneAlignmentPolicy';
+} from '../../utils/floorPlaneAlignment';
 import { useFloorAlignStoreFacade } from './useFloorAlignStoreFacade';
 
 /**

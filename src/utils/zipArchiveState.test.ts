@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildArchiveEntry, buildArchiveReader } from '../test/builders';
-import type { ArchiveEntry } from '../types/libarchive';
+import type { ArchiveEntry } from '../archive/types';
 import {
   clearActiveZipArchive,
   closeZipArchive,

@@ -16,8 +16,6 @@ import {
   FLOOR_COLOR_MODE_OPTIONS,
   FLOOR_DETECTION_MODAL_ESTIMATED_HEIGHT,
   FLOOR_DETECTION_MODAL_ESTIMATED_WIDTH,
-  computeFloorAlignmentTransform,
-  detectFloorPlaneFromPositions,
   formatFloorSampleCount,
   getFloorDetectionButtonStyle,
   getFloorColorModeAfterDetection,
@@ -25,12 +23,16 @@ import {
   getFloorDetectedPlaneActionState,
   getFloorDetectionActionState,
   getFloorDetectionStatusInfo,
-  getFloorNormalFlippedForCameraDownSide,
   getFloorModalHeaderDragStyle,
   getFloorModalOverlayStyle,
   getFloorPlaneControlState,
-  getFloorTargetUpVector,
 } from './floorPlaneAlignmentPolicy';
+import {
+  computeFloorAlignmentTransform,
+  detectFloorPlaneFromPositions,
+  getFloorNormalFlippedForCameraDownSide,
+  getFloorTargetUpVector,
+} from '../../utils/floorPlaneAlignment';
 import { useFloorDetectionStoreFacade } from './useFloorDetectionStoreFacade';
 
 const styles = controlPanelStyles;

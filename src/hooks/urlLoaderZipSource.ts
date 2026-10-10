@@ -1,5 +1,5 @@
 import type { ReconstructionSourceType } from '../store/reconstructionStore';
-import type { ArchiveEntry, ArchiveReader } from '../types/libarchive';
+import type { ArchiveEntry, ArchiveReader } from '../archive/types';
 import type { UrlLoadProgress } from '../types/manifest';
 import { findSplatFileSources } from '../utils/fileClassification';
 import { appLogger } from '../utils/logger';

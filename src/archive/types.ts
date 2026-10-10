@@ -1,4 +1,4 @@
-/** Worker-backed archive contracts shared by dataset loading and test fakes. */
+/** Public contracts for the shared archive session, independent of its codecs. */
 import type { CacheDimensionBounds } from '../utils/imageFileCachePolicy';
 import type { MediaPriority } from '../dataset/types';
 

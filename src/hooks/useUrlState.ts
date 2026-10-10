@@ -17,7 +17,7 @@ import { appLogger } from '../utils/logger';
 import { findSplatSourceById, getShareActiveSplatSourceId } from '../utils/splatFileSourcePolicy';
 import { SHARED_CONFIG_SECTIONS, sanitizeShareConfig, type PublishedViewerState } from '../utils/publishedViewerState';
 import { decodeShareData } from '../utils/shareDataCodec';
-import { getSplatAutoLoadDecision } from './urlLoaderPolicy';
+import { getSplatAutoLoadDecision } from '../splat/loadingPolicy';
 import { detectTouchDevice } from './useIsTouchDevice';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import { getControlsViewState } from './urlStateControlsPolicy';

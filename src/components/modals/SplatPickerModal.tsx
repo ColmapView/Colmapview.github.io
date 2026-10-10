@@ -3,7 +3,7 @@ import { modalStyles, floatingPanelStyles, panelStyles } from '../../theme';
 import { CloseIcon } from '../../icons';
 import { ModalDialogShell } from '../ui/ModalDialogShell';
 import { useIsTouchDevice } from '../../hooks/useIsTouchDevice';
-import { canUseByteLessSplatLoader } from '../../hooks/urlLoaderPolicy';
+import { canUseByteLessSplatLoader } from '../../splat/loadingPolicy';
 import {
   getSplatPickerDescription,
   getSplatPickerItems,

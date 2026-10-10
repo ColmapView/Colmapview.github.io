@@ -6,7 +6,7 @@ import { getMaskPathVariants } from './imageFileLookupPolicy';
 import { getMaxCacheDimensions } from './imageFileCompression';
 import { createImageFileRequestState } from './imageFileRequestState';
 import type { DatasetAccessOptions } from '../dataset/types';
-import type { ArchiveEntry } from '../types/libarchive';
+import type { ArchiveEntry } from '../archive/types';
 import { createUrlFileCache } from '../dataset/urlFileCache';
 
 // Images and masks share the existing byte-budget LRU policy; raw originals are never retained here.
