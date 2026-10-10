@@ -35,6 +35,7 @@
     "@react-three/fiber": "^9.5.0",
     "@sparkjsdev/spark": "^2.2.0",
     "@tanstack/react-virtual": "^3.13.18",
+    "aws4fetch": "1.0.20",
     "fflate": "^0.8.2",
     "gif.js": "^0.2.0",
     "gs-toolbox": "file:vendor/gs-toolbox",

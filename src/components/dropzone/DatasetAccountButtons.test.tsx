@@ -71,7 +71,7 @@ function configureDrive(connected = false) {
 }
 
 function createProps() {
-  return { onOpenUrlModal: vi.fn(), onLoadGoogleDriveArchive: vi.fn() };
+  return { onOpenUrlModal: vi.fn(), onLoadRemoteDataset: vi.fn() };
 }
 
 beforeEach(() => {
@@ -113,7 +113,7 @@ describe('Dataset provider account icons', () => {
     expect(loadGoogleOAuthSdk).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Load URL' }));
     expect(props.onOpenUrlModal).toHaveBeenCalledOnce();
-    expect(props.onLoadGoogleDriveArchive).not.toHaveBeenCalled();
+    expect(props.onLoadRemoteDataset).not.toHaveBeenCalled();
     expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
@@ -196,7 +196,7 @@ describe('Dataset provider account icons', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Waiting for sign-in');
     expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
     oauth.authorize();
-    await waitFor(() => expect(props.onLoadGoogleDriveArchive).toHaveBeenCalledExactlyOnceWith(selection.url));
+    await waitFor(() => expect(props.onLoadRemoteDataset).toHaveBeenCalledExactlyOnceWith(selection.url));
     expect(chooseGoogleDriveArchive).toHaveBeenCalledOnce();
     expect(props.onOpenUrlModal).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -209,7 +209,7 @@ describe('Dataset provider account icons', () => {
     render(<DatasetAccountButtons {...props} />);
     fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
     fireEvent.click(screen.getByRole('button', { name: 'Choose archive from Drive' }));
-    await waitFor(() => expect(props.onLoadGoogleDriveArchive).toHaveBeenCalledExactlyOnceWith(selectedArchive.url));
+    await waitFor(() => expect(props.onLoadRemoteDataset).toHaveBeenCalledExactlyOnceWith(selectedArchive.url));
     expect(oauth.requestAccessToken).toHaveBeenCalledOnce();
   });
 
@@ -237,7 +237,7 @@ describe('Dataset provider account icons', () => {
     expect(googleDriveAuth.getSnapshot().status).toBe('disconnected');
     expect(screen.getByRole('button', { name: 'Choose archive from Drive' })).toBeEnabled();
     expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
-    expect(props.onLoadGoogleDriveArchive).not.toHaveBeenCalled();
+    expect(props.onLoadRemoteDataset).not.toHaveBeenCalled();
   });
 
   it('keeps a pending Google sign-in on Load URL and still opens the picker when it completes', async () => {
@@ -254,7 +254,7 @@ describe('Dataset provider account icons', () => {
     expect(googleDriveAuth.getSnapshot().status).toBe('connecting');
     expect(props.onOpenUrlModal).not.toHaveBeenCalled();
     oauth.authorize();
-    await waitFor(() => expect(props.onLoadGoogleDriveArchive).toHaveBeenCalledExactlyOnceWith(selectedArchive.url));
+    await waitFor(() => expect(props.onLoadRemoteDataset).toHaveBeenCalledExactlyOnceWith(selectedArchive.url));
   });
 
   it('returns to the account dialog after picker cancellation without loading anything', async () => {
@@ -282,7 +282,7 @@ describe('Dataset provider account icons', () => {
     await act(async () => finish?.(null));
     expect(screen.getByRole('dialog')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Choose archive from Drive' })).toBeEnabled();
-    expect(props.onLoadGoogleDriveArchive).not.toHaveBeenCalled();
+    expect(props.onLoadRemoteDataset).not.toHaveBeenCalled();
     expect(props.onOpenUrlModal).not.toHaveBeenCalled();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
@@ -304,7 +304,7 @@ describe('Dataset provider account icons', () => {
     expect(signal?.aborted).toBe(true);
     await act(async () => finish?.(selectedArchive));
     expect(screen.getByRole('button', { name: 'Choose archive from Drive' })).toBeEnabled();
-    expect(props.onLoadGoogleDriveArchive).not.toHaveBeenCalled();
+    expect(props.onLoadRemoteDataset).not.toHaveBeenCalled();
   });
 
   it('shows picker errors and allows retrying the selection', async () => {
@@ -316,9 +316,9 @@ describe('Dataset provider account icons', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
     fireEvent.click(screen.getByRole('button', { name: 'Choose archive from Drive' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Choose a ZIP or TAR archive from Google Drive.');
-    expect(props.onLoadGoogleDriveArchive).not.toHaveBeenCalled();
+    expect(props.onLoadRemoteDataset).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Choose archive from Drive' }));
-    await waitFor(() => expect(props.onLoadGoogleDriveArchive).toHaveBeenCalledExactlyOnceWith(selectedArchive.url));
+    await waitFor(() => expect(props.onLoadRemoteDataset).toHaveBeenCalledExactlyOnceWith(selectedArchive.url));
   });
 
   it('opens the existing Hugging Face account controls and URL action', () => {
@@ -329,7 +329,7 @@ describe('Dataset provider account icons', () => {
     expect(screen.queryByRole('button', { name: 'Choose archive from Drive' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Load URL' }));
     expect(props.onOpenUrlModal).toHaveBeenCalledOnce();
-    expect(props.onLoadGoogleDriveArchive).not.toHaveBeenCalled();
+    expect(props.onLoadRemoteDataset).not.toHaveBeenCalled();
     expect(loadGoogleOAuthSdk).not.toHaveBeenCalled();
   });
 
@@ -448,7 +448,7 @@ describe('Dataset provider account icons', () => {
     oauth.authorize();
     expect(googleDriveAuth.getSnapshot().status).toBe('disconnected');
     expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
-    expect(props.onLoadGoogleDriveArchive).not.toHaveBeenCalled();
+    expect(props.onLoadRemoteDataset).not.toHaveBeenCalled();
   });
 
   it('keeps a connected Google session when the dialog closes', async () => {

@@ -1,5 +1,5 @@
 import { HfError, boundedFetch } from '../huggingface/http';
-import { fetchHuggingFaceDatasetRequest } from '../huggingface/datasetAccess';
+import { fetchDatasetRequest } from '../../utils/fetchDatasetResource';
 import { createTransferTimeout } from '../huggingface/transferTimeout';
 
 /** Downloads while bytes keep arriving; only a stalled transfer times out. */
@@ -9,7 +9,7 @@ export async function downloadRemoteFile(url: string, path: string, signal: Abor
   const tooLarge = () => new HfError(`The file ${path} exceeds the ${Math.round(maxBytes / 1024 / 1024)} MiB publication limit.`, undefined, true);
   try {
     const response = await boundedFetch(transfer.signal, null, (input, init) =>
-      fetchHuggingFaceDatasetRequest(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, init))(url);
+      fetchDatasetRequest(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, init))(url);
     transfer.activity();
     if (!response.ok || !response.body) throw new HfError(`Could not retrieve selected file ${path} (${response.status}).`);
     if (Number(response.headers.get('content-length')) > maxBytes) {

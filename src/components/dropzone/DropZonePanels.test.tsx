@@ -12,15 +12,15 @@ vi.mock('./ProfileDropdown', () => ({
   ProfileDropdown: () => <div data-testid="profile-dropdown" />,
 }));
 vi.mock('./DatasetAccountButtons', () => ({
-  DatasetAccountButtons: ({ onLoadGoogleDriveArchive }: { onLoadGoogleDriveArchive: (url: string) => void }) =>
-    <button type="button" onClick={() => onLoadGoogleDriveArchive('https://drive.google.com/file/d/chosen-archive/view')}>Choose test Drive archive</button>,
+  DatasetAccountButtons: ({ onLoadRemoteDataset }: { onLoadRemoteDataset: (url: string) => void }) =>
+    <button type="button" onClick={() => onLoadRemoteDataset('https://drive.google.com/file/d/chosen-archive/view')}>Choose test Drive archive</button>,
 }));
 
 function createDesktopProps() {
   return {
     urlLoading: false,
     onOpenUrlModal: vi.fn(),
-    onLoadGoogleDriveArchive: vi.fn(),
+    onLoadRemoteDataset: vi.fn(),
     onOpenManifestFile: vi.fn(),
     onLoadToy: vi.fn(),
     onBrowse: vi.fn(),
@@ -133,7 +133,7 @@ describe('DropZone panels', () => {
       <TouchDropZonePanel
         urlLoading={false}
         onOpenUrlModal={onOpenUrlModal}
-        onLoadGoogleDriveArchive={vi.fn()}
+        onLoadRemoteDataset={vi.fn()}
         onLoadToy={onLoadToy}
         onDismiss={onDismiss}
       />
@@ -152,7 +152,7 @@ describe('DropZone panels', () => {
     const props = createDesktopProps();
     render(mode === 'desktop' ? <DesktopDropZonePanel {...props} /> : <TouchDropZonePanel {...props} />);
     fireEvent.click(screen.getByRole('button', { name: 'Choose test Drive archive' }));
-    expect(props.onLoadGoogleDriveArchive).toHaveBeenCalledExactlyOnceWith('https://drive.google.com/file/d/chosen-archive/view');
+    expect(props.onLoadRemoteDataset).toHaveBeenCalledExactlyOnceWith('https://drive.google.com/file/d/chosen-archive/view');
     expect(props.onOpenUrlModal).not.toHaveBeenCalled();
   });
 });

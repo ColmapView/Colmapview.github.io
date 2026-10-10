@@ -31,6 +31,12 @@ Facades should adapt stores and nodes into typed dependencies. Pure executors an
 
 Shared reconstruction calculations live in `utils/floorPlaneAlignment.ts` and `utils/histogram.ts`. The reconstruction worker and UI use these same calculations and data types. Modal styles, labels, and chart layout stay in the component policies; computation modules must not depend on those UI modules.
 
+## Storage Providers
+
+Storage providers own authentication and transport under `features/`. `bucketStorage/connection.ts` keeps S3 credentials in a tab-local closure and exposes a redacted render snapshot. `fetchDatasetResource` composes bucket and Hugging Face request policies for discovery, lazy media, ranges, and re-publication; authenticated bucket requests stay within the configured bucket root. Provider credentials never enter reconstruction state or published manifests.
+
+Bucket listing, multipart transfers, and manifest-last publication have independent, dependency-injected boundaries. Store subscriptions and scene invalidation live in `bucketStorage/publicationRuntime.ts`; the dialog consumes component facades. `datasetPublishing/prepareTransferPublication.ts` shares original-media preparation between Drive ZIP packaging and bucket object uploads. See [bucket storage](bucket-storage.md) for connection formats, permissions, and CORS.
+
 ## Archive Processing
 
 `zipLoader` opens an archive session, extracts reconstruction/settings/splat files, and keeps image entries lazy. Readers expose entry listing and closing; every entry supports original extraction and worker previews. Repeated close callers wait for the same cleanup and receive the same failure. The session worker runs one operation at a time and selects waiting work by current consumer priority: selected, visible, metrics, then prefetch. Cancelling a consumer removes its queued work or cancels its current read; replacing or closing the archive terminates its worker. Failed incoming loads leave the installed dataset intact.

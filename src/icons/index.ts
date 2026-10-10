@@ -18,6 +18,7 @@ export { GoogleDriveIcon } from './brands';
 // Common UI icons
 export {
   HoverIcon,
+  BucketIcon,
   CloseIcon,
   PlusIcon,
   CheckIcon,

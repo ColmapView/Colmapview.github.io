@@ -212,7 +212,7 @@ export function DropZone({ children }: DropZoneProps) {
         <DesktopDropZonePanel
           urlLoading={urlLoading}
           onOpenUrlModal={() => setIsUrlModalOpen(true)}
-          onLoadGoogleDriveArchive={handleUrlLoad}
+          onLoadRemoteDataset={handleUrlLoad}
           onOpenManifestFile={() => manifestInputRef.current?.click()}
           onLoadToy={handleLucky}
           onBrowse={handleBrowse}
@@ -228,7 +228,7 @@ export function DropZone({ children }: DropZoneProps) {
         <TouchDropZonePanel
           urlLoading={urlLoading}
           onOpenUrlModal={() => setIsUrlModalOpen(true)}
-          onLoadGoogleDriveArchive={handleUrlLoad}
+          onLoadRemoteDataset={handleUrlLoad}
           onLoadToy={handleLucky}
           onDismiss={() => setIsPanelDismissed(true)}
         />

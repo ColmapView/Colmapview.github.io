@@ -34,7 +34,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 // Keep both account entry points consistent, including generated IDs and access notices.
 describe.each(['landing', 'toolbar'] as const)('%s account dialog DOM', surface => {
   function open() {
-    if (surface === 'landing') render(<DatasetAccountButtons onOpenUrlModal={vi.fn()} onLoadGoogleDriveArchive={vi.fn()} />);
+    if (surface === 'landing') render(<DatasetAccountButtons onOpenUrlModal={vi.fn()} onLoadRemoteDataset={vi.fn()} />);
     else render(<HuggingFaceAccountButton config={config} activePanel={null} setActivePanel={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: /Hugging Face/ }));
     return screen.getByRole('dialog', { name: 'Hugging Face' });

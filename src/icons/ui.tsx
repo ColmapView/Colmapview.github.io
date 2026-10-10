@@ -5,6 +5,13 @@
 
 import type { IconProps, HoverIconProps } from './types';
 
+export function BucketIcon({ className = 'w-4 h-4' }: IconProps) {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
+    <ellipse cx="12" cy="5" rx="8" ry="3" />
+    <path d="M4 5l2 14c.5 3 11.5 3 12 0l2-14M5 11c2 3 12 3 14 0" />
+  </svg>;
+}
+
 // Icon wrapper that shows text abbreviation on hover (uses CSS group-hover from parent button)
 export function HoverIcon({ icon, label }: HoverIconProps) {
   return (

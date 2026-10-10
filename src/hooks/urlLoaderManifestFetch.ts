@@ -42,6 +42,7 @@ import {
 import { isUrlLoadError } from './urlLoaderErrorHandling';
 import { detectTouchDevice } from './useIsTouchDevice';
 import { fetchDatasetResource } from '../utils/fetchDatasetResource';
+import { discoverBucketManifest } from '../features/bucketStorage/discovery';
 
 type FetchUrl = (url: string, init?: RequestInit) => Promise<Response>;
 type FetchManifestFile = (
@@ -402,6 +403,12 @@ export async function withDiscoveredColmapPaths(
     onLargeDatasetWarning?: (message: string) => void;
   } = {}
 ): Promise<ColmapManifest> {
+  try {
+    const bucketManifest = await discoverBucketManifest(manifest.baseUrl, deps.fetchImpl);
+    if (bucketManifest) return { ...manifest, ...bucketManifest };
+  } catch {
+    // Public object access does not imply ListBucket permission; conventional paths still load.
+  }
   try {
     const layout = await discoverHuggingFaceLayout(manifest.baseUrl, {
       fetchImpl: deps.fetchImpl,

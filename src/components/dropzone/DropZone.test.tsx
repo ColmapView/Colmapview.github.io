@@ -15,14 +15,14 @@ vi.mock('../../hooks/useFileDropzone', () => ({
 vi.mock('../../hooks/useUrlLoader', () => ({ useUrlLoader: vi.fn() }));
 vi.mock('./useDropZoneStoreFacade', () => ({ useDropZoneStoreFacade: vi.fn() }));
 vi.mock('./DropZonePanels', () => ({
-  DesktopDropZonePanel: ({ onLoadGoogleDriveArchive, onOpenUrlModal }: {
-    onLoadGoogleDriveArchive: (url: string) => void; onOpenUrlModal: () => void;
+  DesktopDropZonePanel: ({ onLoadRemoteDataset, onOpenUrlModal }: {
+    onLoadRemoteDataset: (url: string) => void; onOpenUrlModal: () => void;
   }) => <>
-    <button type="button" onClick={() => onLoadGoogleDriveArchive(selectedUrl)}>Select desktop Drive archive</button>
+    <button type="button" onClick={() => onLoadRemoteDataset(selectedUrl)}>Select desktop Drive archive</button>
     <button type="button" onClick={onOpenUrlModal}>Load URL</button>
   </>,
-  TouchDropZonePanel: ({ onLoadGoogleDriveArchive }: { onLoadGoogleDriveArchive: (url: string) => void }) =>
-    <button type="button" onClick={() => onLoadGoogleDriveArchive(selectedUrl)}>Select touch Drive archive</button>,
+  TouchDropZonePanel: ({ onLoadRemoteDataset }: { onLoadRemoteDataset: (url: string) => void }) =>
+    <button type="button" onClick={() => onLoadRemoteDataset(selectedUrl)}>Select touch Drive archive</button>,
 }));
 
 beforeEach(() => {

@@ -19,6 +19,8 @@ import {
 import type { ViewerControlsController } from './useViewerControlsController';
 import { HuggingFacePublishButton } from './HuggingFacePublishButton';
 import { GoogleDrivePublishButton } from './GoogleDrivePublishButton';
+import { BucketStorageButton } from '../bucket/BucketStorageButton';
+import { getControlButtonClass } from '../../theme';
 import {
   TOOLBAR_GROUP_CLASS,
   TOOLBAR_GROUP_LABELS,
@@ -102,6 +104,7 @@ export function ViewerControlsToolbar({ controller }: ViewerControlsToolbarProps
         <SharePanel {...sharePanel} />
         <HuggingFacePublishButton {...sharePanel} />
         <GoogleDrivePublishButton {...sharePanel} />
+        <BucketStorageButton className={getControlButtonClass(false, false)} onOpen={() => sharePanel.setActivePanel(null)} />
         <ExportPanel {...exportPanel} />
       </div>
 

@@ -45,7 +45,7 @@ import {
 export interface DesktopDropZonePanelProps {
   urlLoading: boolean;
   onOpenUrlModal: () => void;
-  onLoadGoogleDriveArchive: (url: string) => void;
+  onLoadRemoteDataset: (url: string) => void;
   onOpenManifestFile: () => void;
   onLoadToy: () => void;
   onBrowse: () => void;
@@ -59,7 +59,7 @@ export interface DesktopDropZonePanelProps {
 export interface TouchDropZonePanelProps {
   urlLoading: boolean;
   onOpenUrlModal: () => void;
-  onLoadGoogleDriveArchive: (url: string) => void;
+  onLoadRemoteDataset: (url: string) => void;
   onLoadToy: () => void;
   onDismiss: () => void;
 }
@@ -67,7 +67,7 @@ export interface TouchDropZonePanelProps {
 export function DesktopDropZonePanel({
   urlLoading,
   onOpenUrlModal,
-  onLoadGoogleDriveArchive,
+  onLoadRemoteDataset,
   onOpenManifestFile,
   onLoadToy,
   onBrowse,
@@ -97,7 +97,7 @@ export function DesktopDropZonePanel({
             >
               <UploadIcon className="w-4 h-4" />
             </button>
-            <DatasetAccountButtons onOpenUrlModal={onOpenUrlModal} onLoadGoogleDriveArchive={onLoadGoogleDriveArchive} />
+            <DatasetAccountButtons onOpenUrlModal={onOpenUrlModal} onLoadRemoteDataset={onLoadRemoteDataset} />
             <button
               type="button"
               className={DROP_ZONE_ICON_BUTTON_CLASS}
@@ -247,7 +247,7 @@ export function DesktopDropZonePanel({
 export function TouchDropZonePanel({
   urlLoading,
   onOpenUrlModal,
-  onLoadGoogleDriveArchive,
+  onLoadRemoteDataset,
   onLoadToy,
   onDismiss,
 }: TouchDropZonePanelProps) {
@@ -255,7 +255,7 @@ export function TouchDropZonePanel({
     <div className={DROP_ZONE_TOUCH_OVERLAY_CLASS} style={getDropZonePanelOverlayStyle()}>
       <div className={`${floatingPanelStyles.dialog} startup-panel-touch p-4 w-full max-w-xs`}>
         <div className="flex items-center justify-end gap-2 mb-4">
-          <DatasetAccountButtons onOpenUrlModal={onOpenUrlModal} onLoadGoogleDriveArchive={onLoadGoogleDriveArchive} />
+          <DatasetAccountButtons onOpenUrlModal={onOpenUrlModal} onLoadRemoteDataset={onLoadRemoteDataset} />
           <button
             type="button"
             className={DROP_ZONE_TOUCH_CLOSE_BUTTON_CLASS}

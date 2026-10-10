@@ -2273,18 +2273,18 @@ h3.panel-heading {
    never beats it: the bottom 2.5rem of the column is painted over and eats no
    clicks at all. Budget = viewport height − status-bar height.
 
-   With all 18 buttons, including Hugging Face and Drive (toolbarColumnHeight.test.ts
+   With all 19 buttons, including Hugging Face, Drive, and bucket storage (toolbarColumnHeight.test.ts
    recomputes this from the CSS + the toolbar source and fails if a new button
    outgrows a tier):
-     40px / 8px gap  -> needs 935px of viewport
-     32px / 4px gap  -> needs 711px
-     28px / 2px gap  -> needs 599px
-     26px / 2px gap  -> needs 563px
-     24px / 2px gap  -> needs 527px
+     40px / 8px gap  -> needs 983px of viewport
+     32px / 4px gap  -> needs 747px
+     28px / 2px gap  -> needs 629px
+     26px / 2px gap  -> needs 591px
+     24px / 1px gap  -> needs 532px
    Breakpoints leave about 40px of spare height before switching tiers.
    The smallest tiers also apply to touch controls in short windows.
    --------------------------------------------------------------------------- */
-@media (max-height: 980px) {
+@media (max-height: 1020px) {
   .control-button-responsive {
     width: 2rem !important;
     height: 2rem !important;
@@ -2301,7 +2301,7 @@ h3.panel-heading {
   }
 }
 
-@media (max-height: 760px) {
+@media (max-height: 800px) {
   .control-button-responsive {
     width: 1.75rem !important;   /* 28px — same tier touch mode uses */
     height: 1.75rem !important;
@@ -2336,7 +2336,7 @@ h3.panel-heading {
   height: 1rem;
 }
 
-@media (max-height: 650px) {
+@media (max-height: 680px) {
   .control-button-responsive,
   .touch-control-panel .control-button-responsive {
     width: 1.625rem !important;
@@ -2348,7 +2348,7 @@ h3.panel-heading {
   }
 }
 
-@media (max-height: 600px) {
+@media (max-height: 630px) {
   .control-button-responsive,
   .touch-control-panel .control-button-responsive {
     width: 1.5rem !important;
@@ -2356,7 +2356,7 @@ h3.panel-heading {
   }
 
   .control-panel-responsive {
-    gap: 0.125rem !important;
+    gap: 0.0625rem !important;
   }
 }
 

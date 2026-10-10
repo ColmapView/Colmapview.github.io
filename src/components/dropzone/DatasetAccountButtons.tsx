@@ -10,14 +10,15 @@ import { getButtonClass } from '../../theme';
 import { GoogleDriveIcon } from '../../icons';
 import { AccountDialog } from '../ui/AccountDialog';
 import { DROP_ZONE_ICON_BUTTON_CLASS } from './dropZonePanelViewModel';
+import { BucketStorageButton } from '../bucket/BucketStorageButton';
 
 interface DatasetAccountButtonsProps {
   onOpenUrlModal: () => void;
-  onLoadGoogleDriveArchive: (url: string) => void;
+  onLoadRemoteDataset: (url: string) => void;
 }
 type Provider = 'google' | 'hf';
 
-export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive }: DatasetAccountButtonsProps) {
+export function DatasetAccountButtons({ onOpenUrlModal, onLoadRemoteDataset }: DatasetAccountButtonsProps) {
   const id = useId();
   const [provider, setProvider] = useState<Provider | null>(null);
   const [sdk, setSdk] = useState<GoogleOAuthSdk | null>(null);
@@ -83,7 +84,7 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
     }).then(selection => {
       if (!selection || controller.signal.aborted || pickerAbortRef.current !== controller) return;
       setProvider(null);
-      onLoadGoogleDriveArchive(selection.url);
+      onLoadRemoteDataset(selection.url);
     }).catch(error => {
       if (controller.signal.aborted || pickerAbortRef.current !== controller) return;
       setPickerError(error instanceof Error ? error.message : 'Could not open Google Drive. Try again.');
@@ -133,6 +134,7 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadGoogleDriveArchive
   }, [provider, clientId, sdkAttempt]);
 
   return <>
+    <BucketStorageButton className={DROP_ZONE_ICON_BUTTON_CLASS} onLoadUrl={onLoadRemoteDataset} />
     <button type="button" className={DROP_ZONE_ICON_BUTTON_CLASS} aria-label="Hugging Face account"
       data-tooltip={hf.status === 'connected' ? `Hugging Face: ${hf.identity?.username}` : 'Sign in with Hugging Face'}
       aria-pressed={hf.status === 'connected'} onClick={() => setProvider('hf')}>
