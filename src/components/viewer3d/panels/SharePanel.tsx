@@ -162,6 +162,28 @@ export const SharePanel = memo(function SharePanel({
                 hasEdits ? 'Copy original dataset link' : 'Copy link'
               )}
             </button>
+            <button
+              type="button"
+              onClick={handleCopyEmbedUrl}
+              className={`${copiedEmbedUrl ? copiedButton : actionButton} w-full`}
+            >
+              {copiedEmbedUrl ? (
+                <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
+              ) : (
+                'Embed URL'
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={handleCopyEmbedHtml}
+              className={`${copiedEmbedHtml ? copiedButton : actionButton} w-full`}
+            >
+              {copiedEmbedHtml ? (
+                <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
+              ) : (
+                'Embed HTML'
+              )}
+            </button>
           </div>
         )}
         <div className="flex flex-col gap-2">
@@ -182,30 +204,6 @@ export const SharePanel = memo(function SharePanel({
           </a>}
         </div>
         <div className="flex flex-col gap-2">
-          {canShare && <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={handleCopyEmbedUrl}
-              className={`${copiedEmbedUrl ? copiedButton : actionButton} flex-1 min-w-0`}
-            >
-              {copiedEmbedUrl ? (
-                <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
-              ) : (
-                'Embed URL'
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={handleCopyEmbedHtml}
-              className={`${copiedEmbedHtml ? copiedButton : actionButton} flex-1 min-w-0`}
-            >
-              {copiedEmbedHtml ? (
-                <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
-              ) : (
-                'Embed HTML'
-              )}
-            </button>
-          </div>}
           <div className="flex flex-col gap-2">
             <h3 className={`${controlPanelStyles.panelSectionLabel} m-0 font-normal`}>Social media</h3>
             <button type="button" onClick={handleShareToX} aria-label="Share to X" className={`${actionButton} w-full`}>
