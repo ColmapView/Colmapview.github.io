@@ -17,18 +17,18 @@ describe('gallery toggle button view-model helpers', () => {
     });
   });
 
-  it('uses desktop gallery collapsed state outside touch mode', () => {
+  it('hides the desktop toolbar toggle because the gallery border provides it', () => {
     expect(getGalleryToggleButtonState({
       embedMode: false,
       touchMode: false,
       galleryCollapsed: false,
       touchGalleryDrawer: false,
     })).toEqual({
-      isVisible: true,
+      isVisible: false,
       isOpen: true,
       icon: 'collapse',
       tooltip: 'Hide gallery',
-      action: 'toggleDesktopGallery',
+      action: null,
     });
 
     expect(getGalleryToggleButtonState({
@@ -37,11 +37,11 @@ describe('gallery toggle button view-model helpers', () => {
       galleryCollapsed: true,
       touchGalleryDrawer: true,
     })).toEqual({
-      isVisible: true,
+      isVisible: false,
       isOpen: false,
       icon: 'expand',
       tooltip: 'Show gallery',
-      action: 'toggleDesktopGallery',
+      action: null,
     });
   });
 

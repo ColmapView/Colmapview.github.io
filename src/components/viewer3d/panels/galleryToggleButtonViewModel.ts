@@ -2,11 +2,7 @@ export type GalleryToggleAction = 'toggleDesktopGallery' | 'toggleTouchGalleryDr
 export type GalleryToggleIcon = 'collapse' | 'expand';
 
 /**
- * Copy shared by every gallery-visibility control. The toolbar button and the
- * gallery edge handle (src/components/layout/GalleryCollapseHandle.tsx) toggle
- * the same store flag, so they read from these constants rather than each
- * spelling the wording out — two controls for one state must never disagree
- * about what the state is called.
+ * Copy shared by the touch drawer opener and the desktop gallery edge handle.
  */
 export const GALLERY_TOGGLE_TOOLTIP_OPEN = 'Hide gallery';
 export const GALLERY_TOGGLE_TOOLTIP_COLLAPSED = 'Show gallery';
@@ -45,10 +41,11 @@ export function getGalleryToggleButtonState({
   const isOpen = touchMode ? touchGalleryDrawer : !galleryCollapsed;
 
   return {
-    isVisible: true,
+    // Desktop already has a toggle on the gallery border.
+    isVisible: touchMode,
     isOpen,
     icon: isOpen ? 'collapse' : 'expand',
     tooltip: isOpen ? GALLERY_TOGGLE_TOOLTIP_OPEN : GALLERY_TOGGLE_TOOLTIP_COLLAPSED,
-    action: touchMode ? 'toggleTouchGalleryDrawer' : 'toggleDesktopGallery',
+    action: touchMode ? 'toggleTouchGalleryDrawer' : null,
   };
 }

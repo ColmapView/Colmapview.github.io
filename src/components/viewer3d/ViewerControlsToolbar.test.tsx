@@ -20,7 +20,7 @@ afterEach(cleanup);
 /**
  * Contract: the toolbar's four visual clusters are also announced clusters.
  * The hairline dividers are aria-hidden decoration, so without the group
- * wrappers a screen reader hears one flat run of sixteen controls.
+ * wrappers a screen reader hears one flat run of up to sixteen controls.
  */
 function ToolbarHarness() {
   const controller = useViewerControlsController();
@@ -78,6 +78,15 @@ describe('ViewerControlsToolbar cluster semantics', () => {
     expect(screen.queryByRole('button', { name: 'Bucket storage' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Share to X' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Share to LinkedIn' })).toBeNull();
+  });
+
+  it('omits the duplicate desktop gallery toggle and keeps the touch drawer opener', () => {
+    const { rerender } = render(<ToolbarHarness />);
+    const app = screen.getByRole('group', { name: TOOLBAR_GROUP_LABELS.app });
+    expect(within(app).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Settings']);
+    act(() => useUIStore.setState({ touchMode: true }));
+    rerender(<ToolbarHarness />);
+    expect(within(app).getByRole('button', { name: 'Show gallery' })).toBeInTheDocument();
   });
 
   it('updates Matches availability as the selected camera family changes in a mixed Image Plane session', () => {

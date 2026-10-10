@@ -2257,9 +2257,6 @@ h3.panel-heading {
   .tool-modal-responsive .text-sm { font-size: 0.75rem; line-height: 1rem; }
 }
 
-.share-panel { width: 280px; }
-.share-panel .share-destination { justify-content: flex-start; text-decoration: none; }
-
 /* ---------------------------------------------------------------------------
    Short-viewport control column (height-only; complements the width query
    above, which does nothing for a wide-but-short window).
@@ -2269,14 +2266,13 @@ h3.panel-heading {
    shrink the buttons and gaps so the column fits above the status bar.
    Hover panels are portaled to the body and constrained to the viewport.
 
-   Falling off the bottom is not a cosmetic clip. The last item is the gallery
-   toggle — the only mouse-reachable gallery control — and the status bar is
+   Falling off the bottom makes controls unreachable. The status bar is
    `absolute bottom-0 z-sticky` in the ROOT stacking context while the whole
    toolbar is trapped inside Scene3D's `relative isolate` box, so z-tooltip
    never beats it: the bottom 2.5rem of the column is painted over and eats no
    clicks at all. Budget = viewport height − status-bar height.
 
-   With all 16 buttons (publishing and social destinations live inside Share; toolbarColumnHeight.test.ts
+   With up to 16 buttons (the gallery drawer toggle is touch-only; toolbarColumnHeight.test.ts
    recomputes this from the CSS + the toolbar source and fails if a new button
    outgrows a tier):
      40px / 8px gap  -> needs 839px of viewport

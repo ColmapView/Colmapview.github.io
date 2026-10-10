@@ -11,9 +11,8 @@ import { controlPanelStyles, statusBarStyles } from '../../theme';
  * with no max-height and no overflow — and it cannot get one, because
  * `overflow-y` forces `overflow-x` to `auto`, which would clip the hover panels
  * that sit outside its left edge (`right-full`). Its bottom edge therefore grows
- * with every button added, and the last item is the gallery toggle: the only
- * mouse-reachable way to re-open a collapsed gallery (there is no gallery
- * hotkey; the context-menu entry is the only other path).
+ * with every button added. Every control must remain reachable, including the
+ * gallery drawer opener that appears only in touch mode.
  *
  * The budget is the viewport height minus the status bar, not the full viewport.
  * StatusBar is `absolute bottom-0 z-sticky` in the ROOT stacking context while

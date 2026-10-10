@@ -4,7 +4,7 @@
  */
 
 import { useState, useCallback, useMemo, useRef, lazy, Suspense, memo } from 'react';
-import { getButtonClass } from '../../../theme';
+import { controlPanelStyles } from '../../../theme';
 import { ShareIcon, CheckIcon, BucketIcon, GoogleDriveIcon } from '../../../icons';
 import { ControlButton, ToggleRow, type PanelType } from '../ControlComponents';
 import { generateShareableUrl, generateEmbedUrl, generateIframeHtml, copyWithFeedback } from '../../../hooks/useUrlState';
@@ -24,8 +24,8 @@ import { getGoogleDriveHandoffUrl } from '../googleDriveHandoff';
 import { HuggingFaceAccountDialog } from '../HuggingFaceAccountDialog';
 import { LazyToolModal } from '../LazyToolModal';
 
-const actionButton = getButtonClass('secondary', 'sm');
-const copiedButton = getButtonClass('primary', 'sm');
+const actionButton = controlPanelStyles.actionButton;
+const copiedButton = controlPanelStyles.actionButtonPrimary;
 const loadHfPublisher = () => import('../../modals/PublishDatasetModal').then(module => ({ default: module.PublishDatasetModal }));
 const loadDrivePublisher = () => import('../../modals/GoogleDrivePublishModal').then(module => ({ default: module.GoogleDrivePublishModal }));
 const BucketStorageModal = lazy(() => import('../../bucket/BucketStorageModal').then(module => ({ default: module.BucketStorageModal })));
@@ -144,7 +144,6 @@ export const SharePanel = memo(function SharePanel({
       icon={<ShareIcon className="w-6 h-6" />}
       tooltip="Share"
       panelTitle="Share"
-      panelClassName="share-panel"
       isActive={Boolean(destination) || publicationActive}
       onClick={() => setActivePanel('share')}
     >
@@ -166,19 +165,19 @@ export const SharePanel = memo(function SharePanel({
           </div>
         )}
         <div className="flex flex-col gap-2">
-          <p className="m-0 text-ds-secondary">{canShare ? 'Upload dataset' : 'Upload to get a shareable link.'}</p>
-          <button type="button" className={`${actionButton} w-full share-destination`} aria-label="Bucket storage" onClick={() => openDestination('bucket')}>
+          <h3 className={`${controlPanelStyles.panelSectionLabel} m-0 font-normal`}>Storage</h3>
+          <button type="button" className={`${actionButton} w-full`} aria-label="Bucket storage" onClick={() => openDestination('bucket')}>
             <BucketIcon className="w-4 h-4" />Bucket
           </button>
-          {(hfPublishing || hfAccount.status === 'ready') && <button type="button" className={`${actionButton} w-full share-destination`}
+          {(hfPublishing || hfAccount.status === 'ready') && <button type="button" className={`${actionButton} w-full`}
             aria-label={hfPublishing ? 'Publish to Hugging Face' : 'Hugging Face account'} onClick={() => openDestination('hf')}>
             <span aria-hidden="true">🤗</span>Hugging Face
           </button>}
-          {driveEnabled ? getGoogleDriveClientId() && <button type="button" className={`${actionButton} w-full share-destination`}
+          {driveEnabled ? getGoogleDriveClientId() && <button type="button" className={`${actionButton} w-full`}
             aria-label="Publish to Google Drive" onClick={() => openDestination('drive')}>
             <GoogleDriveIcon className="w-4 h-4" />Google Drive
           </button> : <a href={handoffUrl!} target="_blank" rel="noopener noreferrer" aria-label="Use Google Drive"
-            className={`${actionButton} w-full share-destination`} data-tooltip={shareSource ? `${GOOGLE_DRIVE_HANDOFF_TOOLTIP}\nThis dataset will reopen there.` : GOOGLE_DRIVE_HANDOFF_TOOLTIP}>
+            className={`${actionButton} w-full no-underline`} data-tooltip={shareSource ? `${GOOGLE_DRIVE_HANDOFF_TOOLTIP}\nThis dataset will reopen there.` : GOOGLE_DRIVE_HANDOFF_TOOLTIP}>
             <GoogleDriveIcon className="w-4 h-4" />Google Drive ↗
           </a>}
         </div>
@@ -208,12 +207,13 @@ export const SharePanel = memo(function SharePanel({
             </button>
           </div>}
           <div className="flex flex-col gap-2">
-            <button type="button" onClick={handleShareToX} aria-label="Share to X" className={`${actionButton} w-full share-destination`}>
+            <h3 className={`${controlPanelStyles.panelSectionLabel} m-0 font-normal`}>Social media</h3>
+            <button type="button" onClick={handleShareToX} aria-label="Share to X" className={`${actionButton} w-full`}>
               <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor" aria-hidden="true">
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
               </svg>X
             </button>
-            <button type="button" onClick={handleShareToLinkedIn} aria-label="Share to LinkedIn" className={`${actionButton} w-full share-destination`}>
+            <button type="button" onClick={handleShareToLinkedIn} aria-label="Share to LinkedIn" className={`${actionButton} w-full`}>
               <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor" aria-hidden="true">
                 <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
               </svg>LinkedIn
