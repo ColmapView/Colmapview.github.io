@@ -69,6 +69,15 @@ describe('ViewerControlsToolbar cluster semantics', () => {
     }
   });
 
+  it('groups storage destinations under Share instead of adding toolbar controls', () => {
+    render(<ToolbarHarness />);
+    const capture = screen.getByRole('group', { name: TOOLBAR_GROUP_LABELS.capture });
+    expect(within(capture).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
+      'Save screenshot', 'Share', 'Export (no data loaded)',
+    ]);
+    expect(screen.queryByRole('button', { name: 'Bucket storage' })).toBeNull();
+  });
+
   it('updates Matches availability as the selected camera family changes in a mixed Image Plane session', () => {
     useReconstructionStore.setState({ reconstruction: buildReconstruction({
       cameras: [buildCamera(), buildCamera({ cameraId: 2, modelId: CameraModelId.EQUIRECTANGULAR })],

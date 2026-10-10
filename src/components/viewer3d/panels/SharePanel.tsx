@@ -1,11 +1,11 @@
 /**
  * Share panel extracted from ViewerControls.tsx.
- * Handles URL sharing, embed codes, and social media sharing.
+ * Shares links and opens dataset publishing destinations.
  */
 
-import { useState, useCallback, memo } from 'react';
-import { controlPanelStyles } from '../../../theme';
-import { ShareIcon, CheckIcon } from '../../../icons';
+import { useState, useCallback, useMemo, useRef, lazy, Suspense, memo } from 'react';
+import { getButtonClass } from '../../../theme';
+import { ShareIcon, CheckIcon, BucketIcon, GoogleDriveIcon } from '../../../icons';
 import { ControlButton, ToggleRow, type PanelType } from '../ControlComponents';
 import { generateShareableUrl, generateEmbedUrl, generateIframeHtml, copyWithFeedback } from '../../../hooks/useUrlState';
 import { copyScreenshotToClipboard } from '../../../utils/clipboard';
@@ -14,11 +14,23 @@ import {
   buildSocialSharePayload,
   buildXShareUrl,
   canShareReconstruction,
-  getSocialShareButtonStyle,
   getShareSource,
 } from './sharePanelViewModel';
 import { useSharePanelStoreFacade } from './useSharePanelStoreFacade';
-const styles = controlPanelStyles;
+import { useBucketStorageButtonStoreFacade } from '../../bucket/useBucketStorageButtonStoreFacade';
+import { getHfAccountConfiguration, getHfConfiguration } from '../../../features/huggingface/config';
+import { getGoogleDriveClientId } from '../../../features/googleDrive/auth';
+import { GOOGLE_DRIVE_ENABLED_ORIGIN, GOOGLE_DRIVE_HANDOFF_TOOLTIP, isGoogleDriveEnabled } from '../../../features/googleDrive/config';
+import { getGoogleDriveHandoffUrl } from '../googleDriveHandoff';
+import { HuggingFaceAccountDialog } from '../HuggingFaceAccountDialog';
+import { LazyToolModal } from '../LazyToolModal';
+
+const actionButton = `${getButtonClass('secondary', 'sm')} w-full`;
+const copiedButton = `${getButtonClass('primary', 'sm')} w-full`;
+const loadHfPublisher = () => import('../../modals/PublishDatasetModal').then(module => ({ default: module.PublishDatasetModal }));
+const loadDrivePublisher = () => import('../../modals/GoogleDrivePublishModal').then(module => ({ default: module.GoogleDrivePublishModal }));
+const BucketStorageModal = lazy(() => import('../../bucket/BucketStorageModal').then(module => ({ default: module.BucketStorageModal })));
+type Destination = 'bucket' | 'hf' | 'drive' | null;
 
 export interface SharePanelProps {
   activePanel: PanelType;
@@ -34,9 +46,16 @@ export const SharePanel = memo(function SharePanel({
   const [copiedEmbedHtml, setCopiedEmbedHtml] = useState(false);
   const [includeShareLink, setIncludeShareLink] = useState(true);
   const [includeScreenshot, setIncludeScreenshot] = useState(true);
+  const [destination, setDestination] = useState<Destination>(null);
+  const shareButtonRef = useRef<HTMLButtonElement>(null);
+  const { loadUrl } = useBucketStorageButtonStoreFacade();
+  const hfPublishing = getHfConfiguration().status !== 'disabled';
+  const hfAccount = getHfAccountConfiguration();
+  const driveEnabled = isGoogleDriveEnabled();
   const {
     data: {
       hasEdits,
+      publicationActive,
       reconstruction,
       sourceUrl,
       sourceManifest,
@@ -48,11 +67,19 @@ export const SharePanel = memo(function SharePanel({
 
   // Share is possible whenever we have a URL-addressable source (url, manifest,
   // or zip-from-URL). Local drops (including local zips) leave both sourceUrl
-  // and sourceManifest null, which correctly hides the buttons.
+  // and sourceManifest null, which hides the source-link actions.
   const shareSource = getShareSource(sourceUrl, sourceManifest);
+  const handoffUrl = useMemo(() => driveEnabled ? null : getGoogleDriveHandoffUrl(GOOGLE_DRIVE_ENABLED_ORIGIN, shareSource), [driveEnabled, shareSource]);
   const canShare = canShareReconstruction(shareSource, reconstruction);
   const sourceViewState = hasEdits ? null : currentViewState;
   const sourceConfig = hasEdits ? null : undefined;
+  const openDestination = (next: Destination) => {
+    // The popup's row unmounts on open; keep a stable opener for dialog focus restoration.
+    shareButtonRef.current?.focus({ preventScroll: true });
+    setActivePanel(null);
+    setDestination(next);
+  };
+  const closeDestination = () => setDestination(null);
 
   // Handle share link copy
   const handleCopyShareLink = useCallback(async () => {
@@ -135,33 +162,61 @@ export const SharePanel = memo(function SharePanel({
     window.open('https://www.linkedin.com/feed/', '_blank', 'width=700,height=600,noopener,noreferrer');
   }, [shareSource, sourceViewState, sourceConfig, reconstruction, getScreenshotBlob, includeShareLink, includeScreenshot, addNotification]);
 
-  return (
+  return <>
     <ControlButton
       panelId="share"
-      activePanel={activePanel}
+      activePanel={destination ? null : activePanel}
       setActivePanel={setActivePanel}
+      buttonRef={shareButtonRef}
       icon={<ShareIcon className="w-6 h-6" />}
       tooltip="Share"
       panelTitle="Share"
+      panelClassName="share-panel"
+      isActive={Boolean(destination) || publicationActive}
+      onClick={() => setActivePanel('share')}
     >
-      <div className={styles.panelContent}>
+      <div className="flex flex-col gap-3 text-sm">
         {canShare && (
-          <>
-            <div className="text-ds-primary text-sm mb-1">{hasEdits ? 'Original dataset links (edits excluded):' : 'Links:'}</div>
-            <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2">
+            {hasEdits && <p className="m-0 text-ds-secondary">This link opens the original dataset. Upload to share edits.</p>}
+            <button
+              type="button"
+              onClick={handleCopyShareLink}
+              className={copiedShareLink ? copiedButton : actionButton}
+            >
+              {copiedShareLink ? (
+                <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
+              ) : (
+                hasEdits ? 'Copy original dataset link' : 'Copy link'
+              )}
+            </button>
+          </div>
+        )}
+        <div className="flex flex-col gap-2">
+          <p className="m-0 text-ds-secondary">{canShare ? 'Upload dataset' : 'Upload to get a shareable link.'}</p>
+          <button type="button" className={`${actionButton} share-destination`} aria-label="Bucket storage" onClick={() => openDestination('bucket')}>
+            <BucketIcon className="w-4 h-4" />Bucket
+          </button>
+          {(hfPublishing || hfAccount.status === 'ready') && <button type="button" className={`${actionButton} share-destination`}
+            aria-label={hfPublishing ? 'Publish to Hugging Face' : 'Hugging Face account'} onClick={() => openDestination('hf')}>
+            <span aria-hidden="true">🤗</span>Hugging Face
+          </button>}
+          {driveEnabled ? getGoogleDriveClientId() && <button type="button" className={`${actionButton} share-destination`}
+            aria-label="Publish to Google Drive" onClick={() => openDestination('drive')}>
+            <GoogleDriveIcon className="w-4 h-4" />Google Drive
+          </button> : <a href={handoffUrl!} target="_blank" rel="noopener noreferrer" aria-label="Use Google Drive"
+            className={`${actionButton} share-destination`} data-tooltip={shareSource ? `${GOOGLE_DRIVE_HANDOFF_TOOLTIP}\nThis dataset will reopen there.` : GOOGLE_DRIVE_HANDOFF_TOOLTIP}>
+            <GoogleDriveIcon className="w-4 h-4" />Google Drive ↗
+          </a>}
+        </div>
+        <details>
+          <summary className="cursor-pointer text-ds-secondary">Embed &amp; social</summary>
+          <div className="flex flex-col gap-2 mt-2">
+            {canShare && <div className="flex gap-2">
               <button
-                onClick={handleCopyShareLink}
-                className={copiedShareLink ? styles.actionButtonPrimary : styles.actionButton}
-              >
-                {copiedShareLink ? (
-                  <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
-                ) : (
-                  hasEdits ? 'Copy original dataset link' : 'Copy Link'
-                )}
-              </button>
-              <button
+                type="button"
                 onClick={handleCopyEmbedUrl}
-                className={copiedEmbedUrl ? styles.actionButtonPrimary : styles.actionButton}
+                className={copiedEmbedUrl ? copiedButton : actionButton}
               >
                 {copiedEmbedUrl ? (
                   <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
@@ -170,8 +225,9 @@ export const SharePanel = memo(function SharePanel({
                 )}
               </button>
               <button
+                type="button"
                 onClick={handleCopyEmbedHtml}
-                className={copiedEmbedHtml ? styles.actionButtonPrimary : styles.actionButton}
+                className={copiedEmbedHtml ? copiedButton : actionButton}
               >
                 {copiedEmbedHtml ? (
                   <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
@@ -179,37 +235,40 @@ export const SharePanel = memo(function SharePanel({
                   'Embed HTML'
                 )}
               </button>
+            </div>}
+            {canShare && <ToggleRow label="Include link" checked={includeShareLink} onChange={setIncludeShareLink} />}
+            <ToggleRow label="Copy screenshot" checked={includeScreenshot} onChange={setIncludeScreenshot} />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleShareToX}
+                className={actionButton}
+                aria-label="Share to X"
+              >
+                <svg viewBox="0 0 24 24" className="w-5 h-5 mx-auto" fill="currentColor">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={handleShareToLinkedIn}
+                className={actionButton}
+                aria-label="Share to LinkedIn"
+              >
+                <svg viewBox="0 0 24 24" className="w-5 h-5 mx-auto" fill="currentColor">
+                  <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                </svg>
+              </button>
             </div>
-          </>
-        )}
-        <div className={`text-ds-primary text-sm mb-1 ${canShare ? 'mt-3' : ''}`}>Social Media:</div>
-        {canShare && <ToggleRow label="Include Link" checked={includeShareLink} onChange={setIncludeShareLink} />}
-        <ToggleRow label="Screen to Clipboard" checked={includeScreenshot} onChange={setIncludeScreenshot} />
-          <div className="flex gap-2 mt-2">
-            <button
-              onClick={handleShareToX}
-              className={styles.actionButton}
-              style={getSocialShareButtonStyle()}
-              data-tooltip="Share to X"
-              data-tooltip-pos="bottom"
-            >
-              <svg viewBox="0 0 24 24" className="w-5 h-5 mx-auto" fill="currentColor">
-                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-              </svg>
-            </button>
-            <button
-              onClick={handleShareToLinkedIn}
-              className={styles.actionButton}
-              style={getSocialShareButtonStyle()}
-              data-tooltip="Share to LinkedIn"
-              data-tooltip-pos="bottom"
-            >
-              <svg viewBox="0 0 24 24" className="w-5 h-5 mx-auto" fill="currentColor">
-                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-              </svg>
-            </button>
           </div>
-        </div>
+        </details>
+      </div>
     </ControlButton>
-  );
+    {destination === 'bucket' && <Suspense fallback={<span role="status">Opening bucket storage…</span>}>
+      <BucketStorageModal isOpen onClose={closeDestination} onLoadUrl={loadUrl} />
+    </Suspense>}
+    {hfPublishing ? <LazyToolModal title="Publish dataset" load={loadHfPublisher} isOpen={destination === 'hf'} onClose={closeDestination} />
+      : hfAccount.status === 'ready' && <HuggingFaceAccountDialog config={hfAccount.config} isOpen={destination === 'hf'} onClose={closeDestination} />}
+    {driveEnabled && getGoogleDriveClientId() && <LazyToolModal title="Publish to Google Drive" load={loadDrivePublisher} isOpen={destination === 'drive'} onClose={closeDestination} />}
+  </>;
 });

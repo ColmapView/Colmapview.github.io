@@ -141,7 +141,14 @@ for (const directory of profiles) {
         }
         await expect(page.getByRole('button', { name: 'Browse for a COLMAP dataset folder', exact: true })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Google Drive account', exact: true })).toHaveCount(enabled ? 1 : 0);
-        await expect(page.getByRole('button', { name: 'Publish to Google Drive', exact: true })).toHaveCount(enabled ? 1 : 0);
+        await expect(page.getByRole('button', { name: 'Publish to Google Drive', exact: true })).toHaveCount(0);
+        await page.getByRole('button', { name: 'Dismiss this panel', exact: true }).click();
+        await page.getByRole('button', { name: 'Share', exact: true }).click();
+        const share = page.getByRole('region', { name: 'Share', exact: true });
+        await expect(share.getByRole('button', { name: 'Bucket storage', exact: true })).toBeVisible();
+        await expect(share.getByRole('button', { name: 'Publish to Google Drive', exact: true })).toHaveCount(enabled ? 1 : 0);
+        await expect(share.getByRole('link', { name: 'Use Google Drive', exact: true })).toHaveCount(enabled ? 0 : 1);
+        await page.goto(viewer);
         expect(await page.evaluate(() => location.origin)).toBe(origin);
         const dialog = await enterDriveUrl(page);
         if (enabled) {

@@ -81,7 +81,13 @@ async function verifyPublicPages(browser) {
     await retryable(page.getByRole('button', { name: 'Browse for a COLMAP dataset folder', exact: true }).waitFor());
     const expectedControls = profile === 'custom' ? 1 : 0;
     assert.equal(await page.getByRole('button', { name: 'Google Drive account', exact: true }).count(), expectedControls);
-    assert.equal(await page.getByRole('button', { name: 'Publish to Google Drive', exact: true }).count(), expectedControls);
+    assert.equal(await page.getByRole('button', { name: 'Publish to Google Drive', exact: true }).count(), 0);
+    await page.getByRole('button', { name: 'Dismiss this panel', exact: true }).click();
+    await page.getByRole('button', { name: 'Share', exact: true }).click();
+    const share = page.getByRole('region', { name: 'Share', exact: true });
+    await share.waitFor({ state: 'visible' });
+    assert.equal(await share.getByRole('button', { name: 'Publish to Google Drive', exact: true }).count(), expectedControls);
+    assert.equal(await share.getByRole('link', { name: 'Use Google Drive', exact: true }).count(), profile === 'custom' ? 0 : 1);
     assert.deepEqual(unexpected, [], 'An idle viewer must not contact provider SDKs/APIs or analytics.');
     transientIf(failedAssets.every(entry => entry.startsWith('5')),
       () => assert.deepEqual(failedAssets, [], 'All application assets must resolve on the public host.'));

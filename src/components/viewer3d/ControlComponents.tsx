@@ -57,7 +57,7 @@ function getFocusableControls(parent: ParentNode): HTMLElement[] {
 }
 
 // Panel type for control buttons
-export type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'share' | 'publish' | 'publishDrive' | 'export' | 'transform' | 'align' | 'gallery' | 'rig' | 'settings' | null;
+export type PanelType = 'view' | 'points' | 'scale' | 'matches' | 'selectionColor' | 'axes' | 'bg' | 'camera' | 'prefetch' | 'frustumColor' | 'screenshot' | 'share' | 'export' | 'transform' | 'align' | 'gallery' | 'rig' | 'settings' | null;
 
 export interface PanelWrapperProps {
   id?: string;
@@ -65,9 +65,10 @@ export interface PanelWrapperProps {
   children: ReactNode;
   anchorRef: RefObject<HTMLElement | null>;
   onReady?: (panel: HTMLDivElement) => void;
+  panelClassName?: string;
 }
 
-export const PanelWrapper = memo(function PanelWrapper({ id, title, children, anchorRef, onReady }: PanelWrapperProps) {
+export const PanelWrapper = memo(function PanelWrapper({ id, title, children, anchorRef, onReady, panelClassName = '' }: PanelWrapperProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<ControlPanelPosition | null>(null);
 
@@ -150,7 +151,7 @@ export const PanelWrapper = memo(function PanelWrapper({ id, title, children, an
         paddingRight: position?.opensRight ? 0 : CONTROL_PANEL_VIEWPORT_MARGIN,
       }}
     >
-      <div className={styles.panel} style={{ maxWidth: '100%', maxHeight: 'inherit', overflowY: 'auto' }}>
+      <div className={`${styles.panel} ${panelClassName}`} style={{ maxWidth: '100%', maxHeight: 'inherit', overflowY: 'auto' }}>
         <div className={styles.panelTitle}>{title}</div>
         {children}
       </div>
@@ -169,6 +170,8 @@ export interface ControlButtonProps {
   onClick?: () => void;
   onDoubleClick?: () => void;
   panelTitle?: string;
+  panelClassName?: string;
+  buttonRef?: RefObject<HTMLButtonElement | null>;
   children?: ReactNode;
   disabled?: boolean;
 }
@@ -183,11 +186,14 @@ export const ControlButton = memo(function ControlButton({
   onClick,
   onDoubleClick,
   panelTitle,
+  panelClassName,
+  buttonRef,
   children,
   disabled = false,
 }: ControlButtonProps) {
   const contentId = useId();
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const internalTriggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = buttonRef ?? internalTriggerRef;
   const restoringFocus = useRef(false);
   const keyboardFocus = useRef(false);
   const pendingPanelFocus = useRef(false);
@@ -269,7 +275,7 @@ export const ControlButton = memo(function ControlButton({
         if (!event.currentTarget.contains(event.relatedTarget) && !document.getElementById(contentId)?.contains(event.relatedTarget)) {
           keyboardFocus.current = false;
           pendingPanelFocus.current = false;
-          setActivePanel(null);
+          if (activePanel === panelId) setActivePanel(null);
         }
       }}
       onKeyDown={(event) => {
@@ -332,7 +338,7 @@ export const ControlButton = memo(function ControlButton({
         isHovered,
         disabled,
       }) && (
-        <PanelWrapper id={contentId} title={panelTitle!} anchorRef={containerRef} onReady={handlePanelReady}>
+        <PanelWrapper id={contentId} title={panelTitle!} anchorRef={containerRef} onReady={handlePanelReady} panelClassName={panelClassName}>
           {children}
         </PanelWrapper>
       )}

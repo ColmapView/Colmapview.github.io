@@ -6,7 +6,7 @@ ColmapView can publish the currently loaded COLMAP reconstruction, original imag
 
 ## User workflow
 
-1. Load a COLMAP reconstruction, then click the **🤗 Publish to Hugging Face** button in the main viewer toolbar, beside Share. This publishes the current reconstruction, including applied edits; existing source links in Share remain labeled as the original dataset.
+1. Load a COLMAP reconstruction, then choose **Share → Hugging Face** in the viewer toolbar. This publishes the current reconstruction, including applied edits; existing source links in Share remain labeled as the original dataset.
 2. Select **Sign in** in the dialog header, next to the close button, and connect your Hugging Face account in the sign-in popup. The header then shows your account and **Sign out**. The reconstruction stays open in its original tab.
 3. Inspect **Dataset preview**, shown beside the details (above them on narrow screens) and captured from the current view each time the dialog opens. Click the image to choose a custom PNG, JPEG, or WebP instead; a custom image stays until you choose another or load a different dataset. The preview will appear in the dataset card.
 4. Enter a new repository name, dataset title, description, and a license you can grant: Creative Commons 4.0 (BY, BY-SA, BY-NC, BY-NC-SA, BY-ND, BY-NC-ND), CC0 1.0, MIT, Apache 2.0, or a custom license. Original images, available masks, and all loaded splats are included automatically; there are no content checkboxes.

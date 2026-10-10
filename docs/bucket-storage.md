@@ -1,6 +1,6 @@
 # Bucket storage
 
-Use the bucket icon on the loading panel or viewer toolbar to read datasets from AWS S3, Cloudflare R2, or MinIO, or upload the current COLMAP scene. Transfers go directly between your browser and the bucket.
+Use the bucket icon on the loading panel, or choose **Share → Bucket** in the viewer, to read datasets from AWS S3, Cloudflare R2, or MinIO, or upload the current COLMAP scene. Transfers go directly between your browser and the bucket.
 
 ## Public reads
 

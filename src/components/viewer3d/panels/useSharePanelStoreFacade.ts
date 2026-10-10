@@ -4,6 +4,8 @@ import {
   useNotificationStore,
   useReconstructionStore,
   useDeletionStore,
+  usePublicationStatusStore,
+  useDrivePublicationStatus,
   type ExportState,
   type NotificationState,
 } from '../../../store';
@@ -13,6 +15,7 @@ import type { ColmapManifest } from '../../../types/manifest';
 
 interface SharePanelDataFacade {
   hasEdits: boolean;
+  publicationActive: boolean;
   reconstruction: Reconstruction | null;
   sourceUrl: string | null;
   sourceManifest: ColmapManifest | null;
@@ -34,10 +37,13 @@ export function useSharePanelStoreFacade(): SharePanelStoreFacade {
   const currentViewState = useCameraStore((s) => s.currentViewState);
   const getScreenshotBlob = useExportStore((s) => s.getScreenshotBlob);
   const addNotification = useNotificationStore((s) => s.addNotification);
+  const hfPublicationActive = usePublicationStatusStore((s) => s.phase !== 'idle');
+  const drivePublicationActive = useDrivePublicationStatus((s) => s.active);
 
   return {
     data: {
       hasEdits: revision > 0 || pending > 0,
+      publicationActive: hfPublicationActive || drivePublicationActive,
       reconstruction,
       sourceUrl,
       sourceManifest,

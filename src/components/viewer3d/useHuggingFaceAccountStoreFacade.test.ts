@@ -1,7 +1,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { hfAuth } from '../../features/huggingface/auth';
-import { useHuggingFaceAccountButtonStoreFacade } from './useHuggingFaceAccountButtonStoreFacade';
+import { useHuggingFaceAccountStoreFacade } from './useHuggingFaceAccountStoreFacade';
 
 afterEach(() => {
   cleanup();
@@ -9,9 +9,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('useHuggingFaceAccountButtonStoreFacade', () => {
+describe('useHuggingFaceAccountStoreFacade', () => {
   it('follows the Hugging Face session as it changes', () => {
-    const { result } = renderHook(() => useHuggingFaceAccountButtonStoreFacade());
+    const { result } = renderHook(() => useHuggingFaceAccountStoreFacade());
     expect(result.current.hf.status).toBe('disconnected');
     const popup = { location: { href: '' }, closed: false, close: vi.fn() };
     vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);

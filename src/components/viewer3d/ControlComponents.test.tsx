@@ -67,6 +67,29 @@ it('closes when focus leaves the document', () => {
   expect(screen.queryByRole('region')).not.toBeInTheDocument();
 });
 
+it('keeps the hovered panel open when focus moves from a different toolbar control into it', () => {
+  const chooseDestination = vi.fn();
+  function TwoControls() {
+    const [activePanel, setActivePanel] = useState<PanelType>('view');
+    return <>
+      <ControlButton panelId="view" activePanel={activePanel} setActivePanel={setActivePanel} icon="V" tooltip="View" panelTitle="View">
+        <button>View action</button>
+      </ControlButton>
+      <ControlButton panelId="share" activePanel={activePanel} setActivePanel={setActivePanel} icon="S" tooltip="Share" panelTitle="Share">
+        <button onClick={chooseDestination}>Destination</button>
+      </ControlButton>
+    </>;
+  }
+  render(<TwoControls />);
+  act(() => screen.getByRole('button', { name: 'View' }).focus());
+  fireEvent.mouseEnter(screen.getByRole('button', { name: 'Share' }).parentElement!);
+  const destination = screen.getByRole('button', { name: 'Destination' });
+  act(() => destination.focus());
+  expect(screen.getByRole('region', { name: 'Share' })).toBeInTheDocument();
+  fireEvent.click(destination);
+  expect(chooseDestination).toHaveBeenCalledOnce();
+});
+
 it('keeps the portaled panel open when the pointer crosses from its trigger to the panel', () => {
   render(<Harness />);
   const trigger = screen.getByRole('button', { name: 'Settings' });

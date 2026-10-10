@@ -1,4 +1,3 @@
-import type { CSSProperties } from 'react';
 import type { CameraViewState } from '../../../store/types';
 import type { Reconstruction } from '../../../types/colmap';
 import type { ColmapManifest } from '../../../types/manifest';
@@ -101,8 +100,4 @@ export function buildXShareUrl({ text, url }: SocialSharePayload): string {
 
 export function buildLinkedInShareContent({ text, url }: SocialSharePayload): string {
   return url ? `${text}\n${url}` : text;
-}
-
-export function getSocialShareButtonStyle(): CSSProperties {
-  return { flex: 1, padding: '8px' };
 }

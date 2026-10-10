@@ -2,6 +2,14 @@ import { test, expect } from './fixtures/test-fixtures';
 import { loadTestDataset } from './fixtures/load-test-data';
 import { createMockHuggingFace } from './fixtures/mock-hugging-face';
 import { readFileSync } from 'node:fs';
+import type { Page } from '@playwright/test';
+
+async function openPublisher(page: Page) {
+  const toolbar = (await page.getByTestId('viewer-controls').boundingBox())!;
+  await page.mouse.move(toolbar.x + toolbar.width / 2, toolbar.y + 16);
+  await page.getByRole('button', { name: 'Share', exact: true }).hover();
+  await page.getByRole('region', { name: 'Share', exact: true }).getByRole('button', { name: 'Publish to Hugging Face', exact: true }).click();
+}
 
 const mocks = new Set<ReturnType<typeof createMockHuggingFace>>();
 const mockHub = (options: { lfs?: boolean } = {}) => {
@@ -32,7 +40,7 @@ test.describe('Hugging Face dataset publication', () => {
     const publishedBackground = await scene.evaluate(element => getComputedStyle(element).backgroundColor);
     // Large fixture decoding can outlast the idle timeout; Tab wakes the controls.
     await page.keyboard.press('Tab');
-    await page.getByRole('button', { name: 'Publish to Hugging Face', exact: true }).click();
+    await openPublisher(page);
     const dialog = page.getByRole('dialog', { name: 'Publish to Hugging Face' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: 'Sign in', exact: true }).click();
@@ -105,7 +113,7 @@ test.describe('Hugging Face dataset publication', () => {
     const image = readFileSync(new URL('./fixtures/test-data/masks/photo.jpg.png', import.meta.url)).toString('base64');
     await loadTestDataset(page, ['photo.jpg', 'photo-2.jpg'].map(name => ({ relativePath: `images/${name}`, name, base64: image })));
     await expect(page.getByText('Source:', { exact: false }).first()).toBeVisible({ timeout: 45000 });
-    await page.getByRole('button', { name: 'Publish to Hugging Face', exact: true }).click();
+    await openPublisher(page);
     const dialog = page.getByRole('dialog', { name: 'Publish to Hugging Face' });
     await dialog.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(dialog.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
@@ -116,7 +124,7 @@ test.describe('Hugging Face dataset publication', () => {
     await expect(dialog.getByRole('button', { name: 'Check previous upload and retry' })).toBeVisible({ timeout: 45000 });
     const dataCommit = hub.commits[0].id;
     await dialog.getByRole('button', { name: 'Close publish dataset' }).click();
-    await page.getByRole('button', { name: 'Publish to Hugging Face', exact: true }).click();
+    await openPublisher(page);
     await dialog.getByRole('button', { name: 'Check previous upload and retry' }).click();
     await expect(dialog.getByRole('region', { name: 'Published dataset' })).toBeVisible({ timeout: 45000 });
     expect(hub.commits).toHaveLength(3);
@@ -133,7 +141,7 @@ test.describe('Hugging Face dataset publication', () => {
     const image = readFileSync(new URL('./fixtures/test-data/masks/photo.jpg.png', import.meta.url)).toString('base64');
     await loadTestDataset(page, ['photo.jpg', 'photo-2.jpg'].map(name => ({ relativePath: `images/${name}`, name, base64: image })));
     await expect(page.getByText('Source:', { exact: false }).first()).toBeVisible({ timeout: 45000 });
-    await page.getByRole('button', { name: 'Publish to Hugging Face', exact: true }).click();
+    await openPublisher(page);
     const dialog = page.getByRole('dialog', { name: 'Publish to Hugging Face' });
     await dialog.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(dialog.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
@@ -151,7 +159,7 @@ test.describe('Hugging Face dataset publication', () => {
     const hub = mockHub();
     await hub.attach(context, baseURL!); await page.goto('/'); await loadTestDataset(page);
     await expect(page.getByText('Source:', { exact: false }).first()).toBeVisible({ timeout: 45000 });
-    await page.getByRole('button', { name: 'Publish to Hugging Face', exact: true }).click();
+    await openPublisher(page);
     const dialog = page.getByRole('dialog', { name: 'Publish to Hugging Face' });
     const preview = dialog.getByRole('region', { name: 'Dataset preview' });
     const fields = dialog.getByRole('region', { name: 'Dataset details' });
@@ -176,7 +184,7 @@ test.describe('Hugging Face dataset publication', () => {
     const hub = mockHub(); hub.denyConsent();
     await hub.attach(context, baseURL!); await page.goto('/'); await loadTestDataset(page);
     await expect(page.getByText('Source:', { exact: false }).first()).toBeVisible({ timeout: 45000 });
-    await page.getByRole('button', { name: 'Publish to Hugging Face', exact: true }).click();
+    await openPublisher(page);
     const dialog = page.getByRole('dialog', { name: 'Publish to Hugging Face' });
     await dialog.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(dialog.getByRole('alert')).toHaveText('Hugging Face sign-in was declined.');

@@ -1,6 +1,6 @@
 # Publish datasets to Google Drive
 
-Load a COLMAP reconstruction with its original images, then click the **Google Drive** icon in the viewer toolbar's Capture group.
+Load a COLMAP reconstruction with its original images, then choose **Share → Google Drive** in the viewer toolbar.
 
 1. **Sign in** with Google and allow ColmapView to create and manage the files it creates in Drive.
 2. Choose a ZIP file name. Files are saved privately in **My Drive** by default.
@@ -19,7 +19,7 @@ The complete ZIP must fit the Drive publisher's **2 GiB** archive limit. Hugging
 
 ## Progress and recovery
 
-Keep the browser tab open. Closing the dialog leaves publication running; reopen it with the Drive toolbar icon. Closing or reloading the tab loses its upload state and authentication.
+Keep the browser tab open. Closing the dialog leaves publication running; reopen it with **Share → Google Drive**. Closing or reloading the tab loses its upload state and authentication.
 
 Uploads go directly to Google's API using resumable chunks. Retry checks the server's acknowledged position and the file's size and checksum. A pre-generated file ID and publication marker bind retries to the same file. Reconnect the same Google account if sign-in expires. Loading another dataset cancels the current publication and requires a new one. Editing the model or marking images for deletion cancels it only while the ZIP is being prepared; a built ZIP keeps uploading, as on Hugging Face.
 

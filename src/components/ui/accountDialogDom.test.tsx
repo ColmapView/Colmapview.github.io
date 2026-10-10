@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DatasetAccountButtons } from '../dropzone/DatasetAccountButtons';
-import { HuggingFaceAccountButton } from '../viewer3d/HuggingFaceAccountButton';
+import { HuggingFaceAccountDialog } from '../viewer3d/HuggingFaceAccountDialog';
 import { hfAuth, type HfAuthState } from '../../features/huggingface/auth';
 import { getHfAccountConfiguration } from '../../features/huggingface/config';
 
@@ -35,8 +35,8 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 describe.each(['landing', 'toolbar'] as const)('%s account dialog DOM', surface => {
   function open() {
     if (surface === 'landing') render(<DatasetAccountButtons onOpenUrlModal={vi.fn()} onLoadRemoteDataset={vi.fn()} />);
-    else render(<HuggingFaceAccountButton config={config} activePanel={null} setActivePanel={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: /Hugging Face/ }));
+    else render(<HuggingFaceAccountDialog config={config} isOpen onClose={vi.fn()} />);
+    if (surface === 'landing') fireEvent.click(screen.getByRole('button', { name: /Hugging Face/ }));
     return screen.getByRole('dialog', { name: 'Hugging Face' });
   }
 

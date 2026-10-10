@@ -9,7 +9,6 @@ import {
   buildXShareUrl,
   canShareReconstruction,
   formatShareCount,
-  getSocialShareButtonStyle,
   getShareSource,
 } from './sharePanelViewModel';
 
@@ -121,7 +120,4 @@ describe('share panel view-model helpers', () => {
     expect(buildLinkedInShareContent({ text: 'hello world', url: null })).toBe('hello world');
   });
 
-  it('builds the compact social share button style', () => {
-    expect(getSocialShareButtonStyle()).toEqual({ flex: 1, padding: '8px' });
-  });
 });

@@ -2257,6 +2257,9 @@ h3.panel-heading {
   .tool-modal-responsive .text-sm { font-size: 0.75rem; line-height: 1rem; }
 }
 
+.share-panel { width: 280px; }
+.share-panel .share-destination { justify-content: flex-start; text-decoration: none; }
+
 /* ---------------------------------------------------------------------------
    Short-viewport control column (height-only; complements the width query
    above, which does nothing for a wide-but-short window).
@@ -2273,15 +2276,15 @@ h3.panel-heading {
    never beats it: the bottom 2.5rem of the column is painted over and eats no
    clicks at all. Budget = viewport height − status-bar height.
 
-   With all 19 buttons, including Hugging Face, Drive, and bucket storage (toolbarColumnHeight.test.ts
+   With all 16 buttons (publishing destinations live inside Share; toolbarColumnHeight.test.ts
    recomputes this from the CSS + the toolbar source and fails if a new button
    outgrows a tier):
-     40px / 8px gap  -> needs 983px of viewport
-     32px / 4px gap  -> needs 747px
-     28px / 2px gap  -> needs 629px
-     26px / 2px gap  -> needs 591px
-     24px / 1px gap  -> needs 532px
-   Breakpoints leave about 40px of spare height before switching tiers.
+     40px / 8px gap  -> needs 839px of viewport
+     32px / 4px gap  -> needs 639px
+     28px / 2px gap  -> needs 539px
+     26px / 2px gap  -> needs 507px
+     24px / 1px gap  -> needs 457px
+   The existing tiers leave extra height before switching sizes.
    The smallest tiers also apply to touch controls in short windows.
    --------------------------------------------------------------------------- */
 @media (max-height: 1020px) {
