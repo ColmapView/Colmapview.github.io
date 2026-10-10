@@ -73,6 +73,7 @@ describe('Share destinations and dialog lifetime', () => {
     expect(screen.getAllByRole('button')).toEqual([share()]);
     reopen();
     const panel = screen.getByRole('region', { name: 'Share' });
+    expect(panel.querySelector('details')).toBeNull();
     for (const name of ['Bucket storage', 'Publish to Hugging Face', 'Publish to Google Drive']) {
       expect(within(panel).getByRole('button', { name })).toBeInTheDocument();
     }
@@ -184,7 +185,7 @@ describe('Share destinations and dialog lifetime', () => {
   });
 });
 
-describe('Share links and optional actions', () => {
+describe('Share links and social actions', () => {
   beforeEach(() => { facade.data.reconstruction = buildReconstruction(); facade.data.sourceUrl = 'https://example.test/scene/'; });
   it('copies the existing source link', async () => {
     render(<ShareHarness />);
@@ -199,9 +200,8 @@ describe('Share links and optional actions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Copy original dataset link' }));
     expect(urlActions.generateShareableUrl).toHaveBeenCalledWith(facade.data.sourceUrl, null, null);
   });
-  it('retains both embed formats in the optional section', () => {
+  it('offers both embed formats directly', () => {
     render(<ShareHarness />);
-    fireEvent.click(screen.getByText('Embed & social'));
     fireEvent.click(screen.getByRole('button', { name: 'Embed URL' }));
     expect(urlActions.copyWithFeedback).toHaveBeenCalledWith('https://viewer.example/embed', expect.any(Function));
     fireEvent.click(screen.getByRole('button', { name: 'Embed HTML' }));
