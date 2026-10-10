@@ -60,7 +60,7 @@ describe('archive worker session', () => {
   it('sends preview bounds only for display requests and leaves original extraction untouched', async () => {
     const { worker, reader, entries } = await open();
     const bounds = { maxWidth: 800, maxHeight: 600 };
-    const preview = entries[0].extractPreview!({ bounds });
+    const preview = entries[0].extractPreview({ bounds });
     expect(worker.requests().at(-1)?.operation).toMatchObject({ bounds }); worker.finish(); await preview;
     const raw = entries[0].extract({ bounds });
     expect(worker.requests().at(-1)?.operation).toMatchObject({ bounds: undefined }); worker.finish(); await raw;

@@ -3,7 +3,7 @@ import {
 } from './zipLoader';
 import { appLogger } from './logger';
 import { getMaskPathVariants } from './imageFileLookupPolicy';
-import { compressAndResizeToJpeg, getMaxCacheDimensions } from './imageFileCompression';
+import { getMaxCacheDimensions } from './imageFileCompression';
 import { createImageFileRequestState } from './imageFileRequestState';
 import type { DatasetAccessOptions } from '../dataset/types';
 import type { ArchiveEntry } from '../types/libarchive';
@@ -22,13 +22,10 @@ export function isZipLoadingAvailable(): boolean { return hasActiveZipArchive();
 export async function fetchZipImage(name: string, options?: DatasetAccessOptions): Promise<File | null> {
   if (!hasActiveZipArchive()) return null;
   return zipImageState.request(name, async context => {
-    const index = getActiveZipImageIndex();
-    const workerPreview = Boolean(index && findZipEntry(name, index)?.extractPreview);
     const file = await extractZipImage(name, {
-      signal: context.signal, getPriority: context.getPriority, bounds: workerPreview ? getMaxCacheDimensions() : undefined,
+      signal: context.signal, getPriority: context.getPriority, bounds: getMaxCacheDimensions(),
     });
-    if (!file || !context.isCurrent()) return null;
-    return workerPreview ? file : compressAndResizeToJpeg(file, name.split('/').pop() || name);
+    return context.isCurrent() ? file : null;
   }, options);
 }
 

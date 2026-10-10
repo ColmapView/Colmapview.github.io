@@ -3,6 +3,7 @@ import { buildArchiveEntry, buildArchiveReader } from '../test/builders';
 import type { ArchiveEntry } from '../types/libarchive';
 import {
   clearActiveZipArchive,
+  closeZipArchive,
   extractZipImage,
   findZipEntry,
   getActiveZipImageIndex,
@@ -99,6 +100,34 @@ describe('zip archive state', () => {
     expect(secondClose).toHaveBeenCalledOnce();
   });
 
+  it('keeps every close caller waiting for the same pending cleanup', async () => {
+    let finishCleanup!: () => void;
+    const cleanup = new Promise<void>(resolve => { finishCleanup = resolve; });
+    const close = vi.fn(() => cleanup);
+    const archive = buildArchiveReader({ close });
+    const finished: string[] = [];
+    const first = closeZipArchive(archive).then(() => { finished.push('first'); });
+    const second = closeZipArchive(archive).then(() => { finished.push('second'); });
+    await Promise.resolve();
+    expect(finished).toEqual([]);
+    expect(close).toHaveBeenCalledOnce();
+    finishCleanup();
+    await Promise.all([first, second]);
+    expect(finished).toEqual(['first', 'second']);
+  });
+
+  it.each(['synchronous', 'asynchronous'] as const)('preserves %s cleanup failures for repeated close callers', async mode => {
+    const error = new Error('cleanup failed');
+    const close = vi.fn(() => {
+      if (mode === 'synchronous') throw error;
+      return Promise.reject(error);
+    });
+    const archive = buildArchiveReader({ close });
+    await expect(closeZipArchive(archive)).rejects.toBe(error);
+    await expect(closeZipArchive(archive)).rejects.toBe(error);
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it('ignores an image extracted after its archive was replaced', async () => {
     let resolve!: (file: File) => void;
     const entry = makeEntry('photo.jpg');
@@ -187,6 +216,24 @@ describe('zip archive state', () => {
 
     await expect(extractZipImage('photo.jpg')).resolves.toBe(file);
     expect(entry.extract).toHaveBeenCalledOnce();
+  });
+
+  it('routes bounded display requests to previews and raw requests to original extraction', async () => {
+    const original = new File(['original'], 'photo.png');
+    const preview = new File(['preview'], 'photo.jpg');
+    const extract = vi.fn(async () => original);
+    const extractPreview = vi.fn(async () => preview);
+    const entry = buildArchiveEntry({ name: 'photo.png', extract, extractPreview });
+    setActiveZipArchive(buildArchiveReader(), new Map([['photo.png', entry]]));
+    const signal = new AbortController().signal;
+    const options = { signal, bounds: { maxWidth: 800, maxHeight: 600 } };
+
+    await expect(extractZipImage('photo.png', options)).resolves.toBe(preview);
+    expect(extractPreview).toHaveBeenCalledExactlyOnceWith(options);
+    expect(extract).not.toHaveBeenCalled();
+    await expect(extractZipImage('photo.png', { signal })).resolves.toBe(original);
+    expect(extract).toHaveBeenCalledExactlyOnceWith({ signal });
+    expect(extractPreview).toHaveBeenCalledOnce();
   });
 
   it('returns null when extraction is unavailable, missing, or fails', async () => {

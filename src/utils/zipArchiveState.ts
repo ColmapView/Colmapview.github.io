@@ -14,17 +14,20 @@ let activeZipFileSize = 0;
 /** Actual count of unique images in the archive. */
 let activeZipImageCount = 0;
 
-const closedArchives = new WeakSet<ArchiveReader>();
+const archiveClosePromises = new WeakMap<ArchiveReader, Promise<void>>();
 
 /** Closing may be requested by both cancellation and ownership cleanup. */
 export function closeZipArchive(archive: ArchiveReader): Promise<void> {
-  if (closedArchives.has(archive)) return Promise.resolve();
-  closedArchives.add(archive);
+  const previous = archiveClosePromises.get(archive);
+  if (previous) return previous;
+  let closing: Promise<void>;
   try {
-    return archive.close();
+    closing = archive.close();
   } catch (error) {
-    return Promise.reject(error);
+    closing = Promise.reject(error);
   }
+  archiveClosePromises.set(archive, closing);
+  return closing;
 }
 
 /**
@@ -123,7 +126,7 @@ export async function extractZipImage(imageName: string, options?: ArchiveExtrac
   }
 
   try {
-    const file = options?.bounds && entry.extractPreview ? await entry.extractPreview(options) : await entry.extract(options);
+    const file = options?.bounds ? await entry.extractPreview(options) : await entry.extract(options);
     return activeArchive === archive ? file : null;
   } catch (err) {
     appLogger.warn(`[ZIP] Failed to extract ${imageName}:`, err);

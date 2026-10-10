@@ -1,4 +1,4 @@
-import type { ArchiveEntry, ArchiveExtractOptions, ArchiveFileEntry, ArchiveReader } from '../types/libarchive';
+import type { ArchiveExtractOptions, ArchiveFileEntry, ArchiveReader } from '../types/libarchive';
 import { MEDIA_PRIORITY_ORDER } from '../utils/imageFileRequestState';
 import { publicAsset } from '../utils/paths';
 import { ARCHIVE_INITIALIZATION_TIMEOUT_MS, archiveError, type ArchiveMetadata, type ArchiveOperation,
@@ -137,19 +137,5 @@ export async function openArchiveReader(source: ArchiveSource, options: ArchiveS
       extractPreview: extractOptions => extract(item.path, extractOptions),
     } };
   });
-  const getObject = async (extractAll = false, callback?: (entry: ArchiveFileEntry) => void) => {
-    const result: Record<string, ArchiveEntry | object> = Object.create(null);
-    for (const entry of entries) {
-      let parent = result;
-      for (const part of entry.path.split('/').filter(Boolean)) {
-        if (!parent[part]) parent[part] = Object.create(null);
-        parent = parent[part] as Record<string, ArchiveEntry | object>;
-      }
-      parent[entry.file.name] = extractAll ? await entry.file.extract() : entry.file;
-      callback?.(entry);
-    }
-    return result;
-  };
-  return { getFilesArray: async () => entries, getFilesObject: () => getObject(),
-    extractFiles: callback => getObject(true, callback), extractSingleFile: path => extract(path), close };
+  return { getFilesArray: async () => entries, close };
 }

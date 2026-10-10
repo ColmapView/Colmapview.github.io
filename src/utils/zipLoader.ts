@@ -6,7 +6,6 @@
 import { openArchiveReader, type ArchiveServiceOptions } from '../archive/archiveService';
 import { isIndexedArchive, REMOTE_ARCHIVE_RANGE_THRESHOLD, type ArchiveSource } from '../archive/protocol';
 import { createRemoteArchiveRead } from '../archive/remoteArchive';
-import { hasArchiveStorage } from '../archive/temporaryStorage';
 import type { ArchiveEntry, ArchiveReader } from '../types/libarchive';
 import { isSplatFilePath } from './splatFilePolicy';
 import { getFilenameFromUrl } from './urlUtils';
@@ -22,7 +21,6 @@ import {
   validateZipUrl,
   validateArchiveSize,
   getArchiveReadSizeLimit,
-  ARCHIVE_SIZE_LIMIT,
 } from './zipValidation';
 import {
   buildArchiveEntryPath,
@@ -284,7 +282,7 @@ export async function loadZipFromUrl(
 
   // Download archive
   const blob = await downloadZip(url, onProgress, {
-    signal, sizeLimit: hasArchiveStorage() ? sizeLimit : Math.min(sizeLimit, ARCHIVE_SIZE_LIMIT),
+    signal, sizeLimit,
     ...(validation.size !== undefined && { expectedSize: validation.size }),
     ...(options && { fetchImpl: options.fetchImpl }),
   });

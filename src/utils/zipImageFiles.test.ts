@@ -15,11 +15,7 @@ vi.mock('./zipLoader', () => ({
 
 vi.mock('./imageFileCompression', () => ({
   getMaxCacheDimensions: vi.fn(() => ({ maxWidth: 800, maxHeight: 600 })),
-  compressAndResizeToJpeg: vi.fn(async (_blob: Blob, filename: string) => {
-    return new File([filename], filename.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' });
-  }),
 }));
-import { compressAndResizeToJpeg } from './imageFileCompression';
 
 import {
   clearActiveZipArchive,
@@ -71,10 +67,10 @@ describe('zip image files', () => {
     expect(isZipLoadingAvailable()).toBe(true);
   });
 
-  it('dedupes concurrent image extraction and caches the compressed file', async () => {
+  it('dedupes concurrent image extraction and caches the worker preview', async () => {
     vi.mocked(hasActiveZipArchive).mockReturnValue(true);
 
-    const extractedFile = buildReadableFile({ name: 'photo.png', contents: '123' });
+    const preview = buildFile('photo.jpg', '123', 'image/jpeg');
     const deferred = createDeferred<File | null>();
 
     vi.mocked(extractZipImage).mockReturnValue(deferred.promise);
@@ -84,11 +80,12 @@ describe('zip image files', () => {
 
     expect(extractZipImage).toHaveBeenCalledTimes(1);
 
-    deferred.resolve(extractedFile);
+    deferred.resolve(preview);
 
     const [firstResult, secondResult] = await Promise.all([first, second]);
 
     expect(firstResult).toBe(secondResult);
+    expect(firstResult).toBe(preview);
     expect(firstResult?.name).toBe('photo.jpg');
     expect(getZipImageCached('cam1/photo.png')).toBe(firstResult);
     expect(getZipImageCacheStats()).toEqual({ count: 1, sizeBytes: firstResult?.size ?? 0 });
@@ -115,13 +112,13 @@ describe('zip image files', () => {
 
   it('uses worker previews without decoding or recompressing them on the main thread', async () => {
     vi.mocked(hasActiveZipArchive).mockReturnValue(true);
-    vi.mocked(getActiveZipImageIndex).mockReturnValue(new Map());
+    vi.stubGlobal('createImageBitmap', vi.fn());
     const preview = buildFile('photo.jpg', 'preview', 'image/jpeg');
-    vi.mocked(findZipEntry).mockReturnValue({ ...buildArchiveEntry({ name: 'photo.png' }), extractPreview: async () => preview });
     vi.mocked(extractZipImage).mockResolvedValue(preview);
     expect(await fetchZipImage('photo.png')).toBe(preview);
     expect(extractZipImage).toHaveBeenCalledWith('photo.png', expect.objectContaining({ bounds: { maxWidth: 800, maxHeight: 600 } }));
-    expect(compressAndResizeToJpeg).not.toHaveBeenCalled();
+    expect(createImageBitmap).not.toHaveBeenCalled();
+    expect(findZipEntry).not.toHaveBeenCalled();
   });
 
   it('shares a byte budget between display images and masks and bypasses oversized files', async () => {
@@ -131,8 +128,8 @@ describe('zip image files', () => {
       const file = buildFile(name, 'placeholder', 'image/png');
       Object.defineProperty(file, 'size', { value: size }); return file;
     };
-    vi.mocked(findZipEntry).mockImplementation(path => ({ ...buildArchiveEntry({ name: path,
-      extract: async () => largeFile(path, 64 * 1024 * 1024) }), extractPreview: async () => buildFile(path) }));
+    vi.mocked(findZipEntry).mockImplementation(path => buildArchiveEntry({ name: path,
+      extract: async () => largeFile(path, 64 * 1024 * 1024) }));
     vi.mocked(extractZipImage).mockImplementation(async name => largeFile(name, (name === 'oversized.png' ? 129 : 64) * 1024 * 1024));
     await fetchZipImage('first.png'); await fetchZipImage('second.png'); await fetchZipMask('second.png');
     expect(getZipImageCached('first.png')).toBeUndefined(); expect(getZipImageCached('second.png')).toBeDefined();

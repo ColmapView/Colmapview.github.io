@@ -6,13 +6,11 @@ interface ArchiveEntryBuilderOptions {
   size?: number;
   lastModified?: number;
   extract?: ArchiveEntry['extract'];
+  extractPreview?: ArchiveEntry['extractPreview'];
 }
 
 interface ArchiveReaderBuilderOptions {
   getFilesArray?: ArchiveReader['getFilesArray'];
-  getFilesObject?: ArchiveReader['getFilesObject'];
-  extractFiles?: ArchiveReader['extractFiles'];
-  extractSingleFile?: ArchiveReader['extractSingleFile'];
   close?: ArchiveReader['close'];
 }
 
@@ -532,27 +530,23 @@ export function buildArchiveEntry({
   size = 100,
   lastModified = 0,
   extract = () => Promise.resolve(buildFile(name)),
+  extractPreview = extract,
 }: ArchiveEntryBuilderOptions = {}): ArchiveEntry {
   return {
     name,
     size,
     lastModified,
     extract,
+    extractPreview,
   };
 }
 
 export function buildArchiveReader({
   getFilesArray = () => Promise.resolve<ArchiveFileEntry[]>([]),
-  getFilesObject = () => Promise.resolve({}),
-  extractFiles = () => Promise.resolve({}),
-  extractSingleFile = (path: string) => Promise.resolve(buildFile(path)),
   close = () => Promise.resolve(),
 }: ArchiveReaderBuilderOptions = {}): ArchiveReader {
   return {
     getFilesArray,
-    getFilesObject,
-    extractFiles,
-    extractSingleFile,
     close,
   };
 }
