@@ -10,7 +10,7 @@ For browsing an anonymously readable S3 bucket, choose **S3 bucket**, enter its 
 
 ## Private reads and uploads
 
-Enter the complete **Bucket URL**, then expand **Access keys**:
+Enter the complete **Bucket URL**, then fill in **Access key ID** and **Secret key**:
 
 | Service | Bucket URL | Region |
 | --- | --- | --- |
@@ -27,7 +27,7 @@ Read access needs `GetObject`, plus `ListBucket` to browse/discover folders. Upl
 
 Cancel stops the transfer and attempts to abort unfinished multipart uploads. Completed objects remain in the new folder, and an incomplete dataset has no published manifest. A new upload starts a new folder. Configure your bucket's lifecycle rule to remove incomplete multipart uploads if the tab closes or a cleanup request cannot reach the service.
 
-For an R2 public custom domain or other public endpoint, expand **Connection options** and supply the public bucket root. This section also contains the region override and optional session token. The public root must serve the same object keys as the S3 endpoint. Generated manifests and viewer links then use that public domain. This setting does not make a private bucket public. Private links contain no credentials; viewers connect to the bucket themselves and retry the link.
+For an R2 public custom domain or other public endpoint, expand **More options** and supply the public bucket root. This section also contains the region override and optional session token. The public root must serve the same object keys as the S3 endpoint. Generated manifests and viewer links then use that public domain. This setting does not make a private bucket public. Private links contain no credentials; viewers connect to the bucket themselves and retry the link.
 
 ## Browser CORS
 

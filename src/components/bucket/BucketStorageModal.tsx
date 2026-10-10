@@ -10,6 +10,7 @@ import { BucketIcon, ChevronRightIcon, CloseIcon } from '../../icons';
 import { copyToClipboard } from '../../utils/clipboard';
 
 const fieldClass = `${inputStyles.base} ${inputStyles.sizes.sm} w-full min-w-0`;
+const connectionLabelClass = 'w-24 flex-shrink-0 font-normal text-ds-secondary';
 const primary = getButtonClass('primary', 'sm');
 const secondary = getButtonClass('secondary', 'sm');
 const ghost = getButtonClass('ghost', 'sm');
@@ -116,27 +117,34 @@ export function BucketStorageModal({ isOpen, onClose, onLoadUrl }: {
         <div className="flex justify-end"><button type="submit" className={primary}>Load dataset</button></div>
       </form> : <>
         {!connected ? <form className="flex flex-col gap-2" onSubmit={event => { event.preventDefault(); connect(); }}>
-          <p className="m-0 text-ds-secondary">Keys stay in this tab. Leave them empty for public access.</p>
-          <label htmlFor={`${id}-root`} className="sr-only">Bucket URL</label>
-          <input id={`${id}-root`} className={fieldClass} type="url" required value={baseUrl} onChange={event => setBaseUrl(event.target.value)} placeholder="https://endpoint.example/my-bucket/" autoComplete="off" />
+          <p className="m-0 text-ds-secondary">Keys are optional and stay in this tab.</p>
+          <div className="flex items-center gap-2">
+            <label htmlFor={`${id}-root`} className={connectionLabelClass}>Bucket URL</label>
+            <input id={`${id}-root`} className={`${fieldClass} flex-1`} type="url" required value={baseUrl} onChange={event => setBaseUrl(event.target.value)} placeholder="https://endpoint.example/my-bucket/" autoComplete="off" />
+          </div>
+          <div className="flex items-center gap-2">
+            <label htmlFor={`${id}-access`} className={connectionLabelClass}>Access key ID</label>
+            <input id={`${id}-access`} className={`${fieldClass} flex-1`} value={accessKeyId} onChange={event => setAccessKeyId(event.target.value)} autoComplete="off" spellCheck={false} />
+          </div>
+          <div className="flex items-center gap-2">
+            <label htmlFor={`${id}-secret`} className={connectionLabelClass}>Secret key</label>
+            <input id={`${id}-secret`} aria-label="Secret access key" className={`${fieldClass} flex-1`} type="password" value={secretAccessKey} onChange={event => setSecretAccessKey(event.target.value)} autoComplete="off" />
+          </div>
           <details>
-            <summary className="cursor-pointer text-ds-secondary">Access keys</summary>
+            <summary className="cursor-pointer text-ds-secondary">More options</summary>
             <div className="flex flex-col gap-2 mt-2">
-              <label htmlFor={`${id}-access`}>Access key ID</label>
-              <input id={`${id}-access`} className={fieldClass} value={accessKeyId} onChange={event => setAccessKeyId(event.target.value)} autoComplete="off" spellCheck={false} />
-              <label htmlFor={`${id}-secret`}>Secret access key</label>
-              <input id={`${id}-secret`} className={fieldClass} type="password" value={secretAccessKey} onChange={event => setSecretAccessKey(event.target.value)} autoComplete="off" />
-            </div>
-          </details>
-          <details>
-            <summary className="cursor-pointer text-ds-secondary">Connection options</summary>
-            <div className="flex flex-col gap-2 mt-2">
-              <label htmlFor={`${id}-region`}>Region</label>
-              <input id={`${id}-region`} className={fieldClass} value={region} onChange={event => setRegion(event.target.value)} placeholder={inferBucketRegion(baseUrl)} autoComplete="off" />
-              <label htmlFor={`${id}-public`}>Public bucket URL (optional)</label>
-              <input id={`${id}-public`} className={fieldClass} type="url" value={publicBaseUrl} onChange={event => setPublicBaseUrl(event.target.value)} placeholder="https://public.example/" autoComplete="off" />
-              <label htmlFor={`${id}-token`}>Session token (optional)</label>
-              <input id={`${id}-token`} className={fieldClass} type="password" value={sessionToken} onChange={event => setSessionToken(event.target.value)} autoComplete="off" />
+              <div className="flex items-center gap-2">
+                <label htmlFor={`${id}-region`} className={connectionLabelClass}>Region</label>
+                <input id={`${id}-region`} className={`${fieldClass} flex-1`} value={region} onChange={event => setRegion(event.target.value)} placeholder={inferBucketRegion(baseUrl)} autoComplete="off" />
+              </div>
+              <div className="flex items-center gap-2">
+                <label htmlFor={`${id}-public`} className={connectionLabelClass}>Public URL</label>
+                <input id={`${id}-public`} aria-label="Public bucket URL (optional)" className={`${fieldClass} flex-1`} type="url" value={publicBaseUrl} onChange={event => setPublicBaseUrl(event.target.value)} placeholder="https://public.example/" autoComplete="off" />
+              </div>
+              <div className="flex items-center gap-2">
+                <label htmlFor={`${id}-token`} className={connectionLabelClass}>Session token</label>
+                <input id={`${id}-token`} aria-label="Session token (optional)" className={`${fieldClass} flex-1`} type="password" value={sessionToken} onChange={event => setSessionToken(event.target.value)} autoComplete="off" />
+              </div>
             </div>
           </details>
           <div className="flex items-center justify-between gap-2">

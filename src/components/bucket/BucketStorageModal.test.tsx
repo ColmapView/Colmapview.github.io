@@ -34,7 +34,6 @@ function chooseBucket(credentials = false) {
   fireEvent.click(screen.getByRole('button', { name: 'S3 bucket' }));
   fireEvent.change(screen.getByLabelText('Bucket URL'), { target: { value: root } });
   if (credentials) {
-    fireEvent.click(screen.getByText('Access keys'));
     fireEvent.change(screen.getByLabelText('Access key ID'), { target: { value: 'fixture-access' } });
     fireEvent.change(screen.getByLabelText('Secret access key'), { target: { value: 'fixture-secret' } });
   }
