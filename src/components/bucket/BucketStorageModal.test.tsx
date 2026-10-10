@@ -34,6 +34,7 @@ function chooseBucket(credentials = false) {
   fireEvent.click(screen.getByRole('button', { name: 'S3 bucket' }));
   fireEvent.change(screen.getByLabelText('Bucket URL'), { target: { value: root } });
   if (credentials) {
+    fireEvent.click(screen.getByText('Access keys'));
     fireEvent.change(screen.getByLabelText('Access key ID'), { target: { value: 'fixture-access' } });
     fireEvent.change(screen.getByLabelText('Secret access key'), { target: { value: 'fixture-secret' } });
   }
@@ -53,6 +54,9 @@ describe('bucket storage dialog', () => {
   });
   it('browses a public bucket without authorization and loads the exact encoded object key', async () => {
     const props = open(); chooseBucket();
+    expect(request).not.toHaveBeenCalled();
+    expect(screen.queryByRole('list', { name: 'Bucket objects' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Browse files' }));
     const load = await screen.findByRole('button', { name: 'Load scene +#.tar' });
     expect(new Headers(request.mock.calls[0][1].headers).has('Authorization')).toBe(false);
     expect(screen.queryByRole('button', { name: 'Upload dataset' })).toBeNull();
@@ -63,6 +67,7 @@ describe('bucket storage dialog', () => {
     open();
     const persist = vi.spyOn(Storage.prototype, 'setItem');
     chooseBucket(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Browse files' }));
     await screen.findByRole('button', { name: 'Load scene +#.tar' });
     expect(new Headers(request.mock.calls[0][1].headers).has('Authorization')).toBe(true);
     expect(persist).not.toHaveBeenCalled();
@@ -77,10 +82,11 @@ describe('bucket storage dialog', () => {
   it('keeps direct object reads available when ListBucket access is denied', async () => {
     request.mockImplementation(async () => new Response('<Error>do-not-show-this-secret</Error>', { status: 403 }));
     const props = open(); chooseBucket();
+    fireEvent.click(screen.getByRole('button', { name: 'Browse files' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('access was denied');
     expect(screen.getByRole('alert')).not.toHaveTextContent('do-not-show');
-    fireEvent.change(screen.getByRole('textbox', { name: 'Object path' }), { target: { value: 'scene/manifest.json' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Load object' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Dataset path' }), { target: { value: 'scene/manifest.json' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load dataset' }));
     expect(props.onLoadUrl).toHaveBeenCalledWith(root + 'scene/manifest.json');
   });
   it('cancels a pending listing on unmount while retaining the tab connection', async () => {
@@ -88,6 +94,7 @@ describe('bucket storage dialog', () => {
       init.signal!.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
     }));
     const props = open(); chooseBucket();
+    fireEvent.click(screen.getByRole('button', { name: 'Browse files' }));
     await waitFor(() => expect(request).toHaveBeenCalledOnce());
     const pendingSignal = request.mock.calls[0][1].signal!;
     props.unmount();
@@ -98,14 +105,87 @@ describe('bucket storage dialog', () => {
     let resolveListing!: (response: Response) => void;
     request.mockImplementation(() => new Promise(resolve => { resolveListing = resolve; }));
     open(); chooseBucket();
+    fireEvent.click(screen.getByRole('button', { name: 'Browse files' }));
     await waitFor(() => expect(request).toHaveBeenCalledOnce());
     const pendingSignal = request.mock.calls[0][1].signal!;
-    fireEvent.change(screen.getByRole('textbox', { name: 'Bucket folder' }), { target: { value: 'another/' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Dataset path' }), { target: { value: 'another/' } });
     expect(pendingSignal.aborted).toBe(true);
     await act(async () => { resolveListing(new Response(listing)); });
     expect(screen.queryByRole('button', { name: 'Load scene +#.tar' })).toBeNull();
-    expect(screen.queryByText('Listing objects…')).toBeNull();
-    expect(screen.getByRole('textbox', { name: 'Bucket folder' })).toHaveValue('another/');
+    expect(screen.queryByText('Listing files…')).toBeNull();
+    expect(screen.getByRole('textbox', { name: 'Dataset path' })).toHaveValue('another/');
+  });
+  it.each([
+    ['scene', 'scene/'],
+    ['scene/', 'scene/'],
+    ['', ''],
+    [' scene +#.tar ', 'scene%20%2B%23.tar'],
+    ['scene/manifest.json', 'scene/manifest.json'],
+  ])('loads the folder or object at %j through the same path field', (path, encodedPath) => {
+    const props = open(); chooseBucket();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Dataset path' }), { target: { value: path } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load dataset' }));
+    expect(props.onLoadUrl).toHaveBeenCalledExactlyOnceWith(root + encodedPath);
+    expect(request).not.toHaveBeenCalled();
+  });
+  it('browses back to the parent and keeps source files out of the dataset list', async () => {
+    request.mockImplementation(async url => {
+      const prefix = new URL(url).searchParams.get('prefix');
+      return new Response(prefix === 'nested/'
+        ? '<ListBucketResult><Contents><Key>nested/cameras.txt</Key><Size>10</Size></Contents><Contents><Key>nested/manifest.json</Key><Size>10</Size></Contents><IsTruncated>false</IsTruncated></ListBucketResult>'
+        : listing);
+    });
+    open(); chooseBucket();
+    fireEvent.click(screen.getByRole('button', { name: 'Browse files' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'nested/' }));
+    await screen.findByRole('button', { name: 'Load nested/manifest.json' });
+    expect(screen.getByRole('textbox', { name: 'Dataset path' })).toHaveValue('nested/');
+    expect(screen.queryByText('cameras.txt')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Up one folder' }));
+    await screen.findByRole('button', { name: 'Load scene +#.tar' });
+    expect(screen.getByRole('textbox', { name: 'Dataset path' })).toHaveValue('');
+  });
+  it('opens the parent folder when browsing from a file path', async () => {
+    request.mockImplementation(async () => new Response('<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>'));
+    open(); chooseBucket();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Dataset path' }), { target: { value: 'nested/scene.tar' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Browse files' }));
+    await screen.findByText('No datasets in this folder.');
+    expect(new URL(request.mock.calls[0][0]).searchParams.get('prefix')).toBe('nested/');
+    expect(screen.getByRole('textbox', { name: 'Dataset path' })).toHaveValue('nested/');
+  });
+  it('keeps pagination available when a page contains only source files', async () => {
+    request.mockImplementation(async url => new Response(new URL(url).searchParams.has('continuation-token') ? listing
+      : '<ListBucketResult><Contents><Key>photo.jpg</Key><Size>10</Size></Contents><NextContinuationToken>next</NextContinuationToken><IsTruncated>true</IsTruncated></ListBucketResult>'));
+    open(); chooseBucket();
+    fireEvent.click(screen.getByRole('button', { name: 'Browse files' }));
+    await screen.findByText('No datasets on this page.');
+    expect(screen.queryByText('photo.jpg')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'More files' }));
+    await screen.findByRole('button', { name: 'Load scene +#.tar' });
+    expect(new URL(request.mock.calls[1][0]).searchParams.get('continuation-token')).toBe('next');
+  });
+  it('aborts a listing when browsing is collapsed and retains the connection', async () => {
+    let resolveListing!: (response: Response) => void;
+    request.mockImplementation(() => new Promise(resolve => { resolveListing = resolve; }));
+    open(); chooseBucket();
+    const browse = screen.getByRole('button', { name: 'Browse files' });
+    fireEvent.click(browse);
+    await waitFor(() => expect(request).toHaveBeenCalledOnce());
+    fireEvent.click(browse);
+    expect(request.mock.calls[0][1].signal!.aborted).toBe(true);
+    await act(async () => { resolveListing(new Response(listing)); });
+    expect(browse).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('list', { name: 'Bucket objects' })).toBeNull();
+    expect(bucketConnection.getSession()).not.toBeNull();
+  });
+  it('uses the default upload destination without opening its options', () => {
+    act(() => bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' }));
+    act(() => useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }) }));
+    open();
+    expect(screen.getByLabelText('Upload folder').closest('details')).not.toHaveAttribute('open');
+    fireEvent.click(screen.getByRole('button', { name: 'Upload dataset' }));
+    expect(publication.publish).toHaveBeenCalledExactlyOnceWith('dataset');
   });
   it('enables upload only for loaded COLMAP data and blocks pending deletions', async () => {
     act(() => bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' }));
@@ -114,6 +194,7 @@ describe('bucket storage dialog', () => {
     expect(button).toBeDisabled();
     act(() => useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }) }));
     expect(button).toBeEnabled();
+    fireEvent.click(screen.getByText('Upload destination'));
     fireEvent.change(screen.getByRole('textbox', { name: 'Upload folder' }), { target: { value: 'datasets/my-scene' } });
     fireEvent.click(button);
     expect(publication.publish).toHaveBeenCalledExactlyOnceWith('datasets/my-scene');

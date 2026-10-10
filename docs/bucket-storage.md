@@ -4,13 +4,13 @@ Use the bucket icon on the loading panel or viewer toolbar to read datasets from
 
 ## Public reads
 
-Choose **Public URL** and paste a dataset folder, `manifest.json`, ZIP, TAR, or splat URL. Public objects need no access key or secret. A bucket can allow object reads while denying listing: use the object's URL or **Load object** in that case.
+Choose **Public URL** and paste a dataset folder, `manifest.json`, ZIP, TAR, or splat URL. Public objects need no access key or secret. A bucket can allow object reads while denying listing: use the object's URL or enter its key in **Dataset path** and choose **Load dataset** in that case.
 
-For browsing an anonymously readable S3 bucket, choose **S3 bucket**, enter its complete bucket URL, and leave credentials empty. Folder discovery uses the S3 API and requires listing permission. Without listing permission, conventional `sparse/0/` and `images/` paths still work through the URL loader.
+For browsing an anonymously readable S3 bucket, choose **S3 bucket**, enter its complete bucket URL, and leave credentials empty. After connecting, enter a folder or file in **Dataset path** and choose **Load dataset**, or open **Browse files** to select one. Browsing requires listing permission and shows folders and loadable files. **Up one folder** returns to the parent. Without listing permission, conventional `sparse/0/` and `images/` paths still work through the URL loader.
 
 ## Private reads and uploads
 
-Enter the complete **Bucket URL**, then expand **Credentials for private reads and uploads**:
+Enter the complete **Bucket URL**, then expand **Access keys**:
 
 | Service | Bucket URL | Region |
 | --- | --- | --- |
@@ -23,11 +23,11 @@ Supply an S3 access key ID and secret access key. Temporary credentials can also
 
 Read access needs `GetObject`, plus `ListBucket` to browse/discover folders. Uploads also need `PutObject` and `AbortMultipartUpload`. ColmapView verifies the uploaded manifest by reading it back, so upload credentials need read access too. ColmapView does not create buckets or change bucket permissions.
 
-**Upload dataset** saves the edited COLMAP model, original images and masks, all selected splat sources, and `colmapview.yaml`. Each upload uses a new UUID subfolder under your chosen destination, preserving previous uploads. The manifest is written after every asset succeeds and verified before showing a viewer link. Files of 32 MiB or more use multipart upload with native Blob slices; the browser does not assemble another archive or a whole-file JavaScript buffer.
+**Upload dataset** saves the edited COLMAP model, original images and masks, all selected splat sources, and `colmapview.yaml`. The default destination is `dataset/`; expand **Upload destination** to change it. Each upload uses a new UUID subfolder under that destination, preserving previous uploads. The manifest is written after every asset succeeds and verified before showing a viewer link. Files of 32 MiB or more use multipart upload with native Blob slices; the browser does not assemble another archive or a whole-file JavaScript buffer.
 
 Cancel stops the transfer and attempts to abort unfinished multipart uploads. Completed objects remain in the new folder, and an incomplete dataset has no published manifest. A new upload starts a new folder. Configure your bucket's lifecycle rule to remove incomplete multipart uploads if the tab closes or a cleanup request cannot reach the service.
 
-For an R2 public custom domain or other public endpoint, expand **Region and public URL** and supply the public bucket root. It must serve the same object keys as the S3 endpoint. Generated manifests and viewer links then use that public domain. This setting does not make a private bucket public. Private links contain no credentials; viewers connect to the bucket themselves and retry the link.
+For an R2 public custom domain or other public endpoint, expand **Connection options** and supply the public bucket root. This section also contains the region override and optional session token. The public root must serve the same object keys as the S3 endpoint. Generated manifests and viewer links then use that public domain. This setting does not make a private bucket public. Private links contain no credentials; viewers connect to the bucket themselves and retry the link.
 
 ## Browser CORS
 
