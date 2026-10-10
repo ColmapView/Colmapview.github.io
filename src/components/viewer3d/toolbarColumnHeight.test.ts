@@ -22,12 +22,13 @@ import { controlPanelStyles, statusBarStyles } from '../../theme';
  * takes no clicks.
  *
  * This test re-derives the column height from the toolbar source + the CSS size
- * tiers, so adding a 17th button (or widening a tier) fails here unless the
+ * tiers, so adding a button (or widening a tier) fails here unless the
  * corresponding `@media (max-height: …)` breakpoint moves with it.
  */
 
 const CSS_PATH = resolve(__dirname, '../../index.css');
 const TOOLBAR_PATH = resolve(__dirname, 'ViewerControlsToolbar.tsx');
+const SHARE_PANEL_PATH = resolve(__dirname, 'panels/SharePanel.tsx');
 
 // Comments are stripped before anything is scanned: they sit between
 // declarations (so a `;`-anchored lookup would miss the next property) and
@@ -100,7 +101,11 @@ function countToolbarItems(): { buttons: number; dividers: number } {
   const body = toolbarSource.slice(toolbarSource.indexOf('export function ViewerControlsToolbar'));
   const tags = [...body.matchAll(/<([A-Z][A-Za-z0-9]*)/g)].map((match) => match[1]);
   const dividers = tags.filter((tag) => tag === 'ToolbarDivider').length;
-  return { buttons: tags.length - dividers, dividers };
+  // Share keeps its shared options and handlers with three sibling controls.
+  const shareButtons = [...readFileSync(SHARE_PANEL_PATH, 'utf8').matchAll(/<ControlButton\b/g)].length;
+  const buttons = tags.filter(tag => tag !== 'ToolbarDivider')
+    .reduce((count, tag) => count + (tag === 'SharePanel' ? shareButtons : 1), 0);
+  return { buttons, dividers };
 }
 
 const { buttons, dividers } = countToolbarItems();

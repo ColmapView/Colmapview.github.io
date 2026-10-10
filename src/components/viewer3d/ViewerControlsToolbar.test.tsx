@@ -20,7 +20,7 @@ afterEach(cleanup);
 /**
  * Contract: the toolbar's four visual clusters are also announced clusters.
  * The hairline dividers are aria-hidden decoration, so without the group
- * wrappers a screen reader hears one flat run of sixteen controls.
+ * wrappers a screen reader hears one flat run of eighteen controls.
  */
 function ToolbarHarness() {
   const controller = useViewerControlsController();
@@ -73,7 +73,7 @@ describe('ViewerControlsToolbar cluster semantics', () => {
     render(<ToolbarHarness />);
     const capture = screen.getByRole('group', { name: TOOLBAR_GROUP_LABELS.capture });
     expect(within(capture).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
-      'Save screenshot', 'Share', 'Export (no data loaded)',
+      'Save screenshot', 'Share', 'Share to X', 'Share to LinkedIn', 'Export (no data loaded)',
     ]);
     expect(screen.queryByRole('button', { name: 'Bucket storage' })).toBeNull();
   });
