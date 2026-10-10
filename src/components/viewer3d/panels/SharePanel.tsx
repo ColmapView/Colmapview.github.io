@@ -25,8 +25,8 @@ import { getGoogleDriveHandoffUrl } from '../googleDriveHandoff';
 import { HuggingFaceAccountDialog } from '../HuggingFaceAccountDialog';
 import { LazyToolModal } from '../LazyToolModal';
 
-const actionButton = `${getButtonClass('secondary', 'sm')} w-full`;
-const copiedButton = `${getButtonClass('primary', 'sm')} w-full`;
+const actionButton = getButtonClass('secondary', 'sm');
+const copiedButton = getButtonClass('primary', 'sm');
 const loadHfPublisher = () => import('../../modals/PublishDatasetModal').then(module => ({ default: module.PublishDatasetModal }));
 const loadDrivePublisher = () => import('../../modals/GoogleDrivePublishModal').then(module => ({ default: module.GoogleDrivePublishModal }));
 const BucketStorageModal = lazy(() => import('../../bucket/BucketStorageModal').then(module => ({ default: module.BucketStorageModal })));
@@ -182,7 +182,7 @@ export const SharePanel = memo(function SharePanel({
             <button
               type="button"
               onClick={handleCopyShareLink}
-              className={copiedShareLink ? copiedButton : actionButton}
+              className={`${copiedShareLink ? copiedButton : actionButton} w-full`}
             >
               {copiedShareLink ? (
                 <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
@@ -194,18 +194,18 @@ export const SharePanel = memo(function SharePanel({
         )}
         <div className="flex flex-col gap-2">
           <p className="m-0 text-ds-secondary">{canShare ? 'Upload dataset' : 'Upload to get a shareable link.'}</p>
-          <button type="button" className={`${actionButton} share-destination`} aria-label="Bucket storage" onClick={() => openDestination('bucket')}>
+          <button type="button" className={`${actionButton} w-full share-destination`} aria-label="Bucket storage" onClick={() => openDestination('bucket')}>
             <BucketIcon className="w-4 h-4" />Bucket
           </button>
-          {(hfPublishing || hfAccount.status === 'ready') && <button type="button" className={`${actionButton} share-destination`}
+          {(hfPublishing || hfAccount.status === 'ready') && <button type="button" className={`${actionButton} w-full share-destination`}
             aria-label={hfPublishing ? 'Publish to Hugging Face' : 'Hugging Face account'} onClick={() => openDestination('hf')}>
             <span aria-hidden="true">🤗</span>Hugging Face
           </button>}
-          {driveEnabled ? getGoogleDriveClientId() && <button type="button" className={`${actionButton} share-destination`}
+          {driveEnabled ? getGoogleDriveClientId() && <button type="button" className={`${actionButton} w-full share-destination`}
             aria-label="Publish to Google Drive" onClick={() => openDestination('drive')}>
             <GoogleDriveIcon className="w-4 h-4" />Google Drive
           </button> : <a href={handoffUrl!} target="_blank" rel="noopener noreferrer" aria-label="Use Google Drive"
-            className={`${actionButton} share-destination`} data-tooltip={shareSource ? `${GOOGLE_DRIVE_HANDOFF_TOOLTIP}\nThis dataset will reopen there.` : GOOGLE_DRIVE_HANDOFF_TOOLTIP}>
+            className={`${actionButton} w-full share-destination`} data-tooltip={shareSource ? `${GOOGLE_DRIVE_HANDOFF_TOOLTIP}\nThis dataset will reopen there.` : GOOGLE_DRIVE_HANDOFF_TOOLTIP}>
             <GoogleDriveIcon className="w-4 h-4" />Google Drive ↗
           </a>}
         </div>
@@ -216,7 +216,7 @@ export const SharePanel = memo(function SharePanel({
               <button
                 type="button"
                 onClick={handleCopyEmbedUrl}
-                className={copiedEmbedUrl ? copiedButton : actionButton}
+                className={`${copiedEmbedUrl ? copiedButton : actionButton} flex-1 min-w-0`}
               >
                 {copiedEmbedUrl ? (
                   <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
@@ -227,7 +227,7 @@ export const SharePanel = memo(function SharePanel({
               <button
                 type="button"
                 onClick={handleCopyEmbedHtml}
-                className={copiedEmbedHtml ? copiedButton : actionButton}
+                className={`${copiedEmbedHtml ? copiedButton : actionButton} flex-1 min-w-0`}
               >
                 {copiedEmbedHtml ? (
                   <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
@@ -242,7 +242,7 @@ export const SharePanel = memo(function SharePanel({
               <button
                 type="button"
                 onClick={handleShareToX}
-                className={actionButton}
+                className={`${actionButton} flex-1 min-w-0`}
                 aria-label="Share to X"
               >
                 <svg viewBox="0 0 24 24" className="w-5 h-5 mx-auto" fill="currentColor">
@@ -252,7 +252,7 @@ export const SharePanel = memo(function SharePanel({
               <button
                 type="button"
                 onClick={handleShareToLinkedIn}
-                className={actionButton}
+                className={`${actionButton} flex-1 min-w-0`}
                 aria-label="Share to LinkedIn"
               >
                 <svg viewBox="0 0 24 24" className="w-5 h-5 mx-auto" fill="currentColor">
