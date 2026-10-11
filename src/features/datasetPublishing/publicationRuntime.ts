@@ -2,7 +2,7 @@ import { useReconstructionStore, usePublicationStatusStore } from '../../store';
 import { hfAuth } from '../huggingface/auth';
 import { createHubClient } from '../huggingface/hubClient';
 import { HfError } from '../huggingface/http';
-import { preparePublication } from './preparePublication';
+import { prepareTransferPublication } from './prepareTransferPublication';
 import { assertPublicationInputCurrent, capturePublicationInput, getPublicationSourceKey } from './publicationSnapshot';
 export { getPublicationSourceKey } from './publicationSnapshot';
 import { createPublicationController, isPublishing } from './publishDataset';
@@ -28,8 +28,6 @@ export function publishCurrentDataset(username: string, details: PublicationDeta
     const input = capturePublicationInput();
     if (!preview) throw new HfError('Choose a preview image before publishing.');
     input.preview = preview;
-    return preparePublication(input, signal, { progress, resolveRevision: client.resolveRevision,
-      listFiles: (repoId, revision, path, listSignal) => client.files(repoId, revision, listSignal, path),
-      assertCurrent: () => assertPublicationInputCurrent(input) });
+    return prepareTransferPublication(input, signal, progress, () => assertPublicationInputCurrent(input));
   });
 }

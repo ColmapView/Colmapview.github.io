@@ -15,8 +15,10 @@ export interface PublishAsset {
   /** Drop preparation-owned buffers after consumption or when ZIP packaging ends. */
   release?: () => void;
 }
+export type PublicationVisibility = 'private' | 'public';
 export interface PublicationDetails {
   name: string; title: string; description: string; license: string;
+  visibility: PublicationVisibility;
   licenseName?: string; licenseUrl?: string;
 }
 export interface PreparedPublication {
@@ -33,6 +35,7 @@ export interface PreparedPublication {
 }
 export interface PublicationReceipt {
   repoId: string; repoUrl: string; dataCommit: string; metadataCommit: string; viewerUrl: string;
+  visibility: PublicationVisibility;
 }
 export type PublicationPhase = 'idle' | 'preparing' | 'creating-repo' | 'uploading'
   | 'publishing-metadata' | 'verifying' | 'reconciling' | 'cancelling' | 'cancelled' | 'failed' | 'completed';

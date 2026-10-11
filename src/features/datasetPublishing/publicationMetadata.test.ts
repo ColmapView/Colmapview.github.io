@@ -20,7 +20,7 @@ function prepared(splatPaths: string[]): PreparedPublication {
 
 describe('publication receipt', () => {
   it('shares the viewer followed by the Hugging Face dataset page', () => {
-    const receipt = publicationReceipt(prepared([]), 'owner/scene', DATA_COMMIT, 'e'.repeat(40));
+    const receipt = publicationReceipt(prepared([]), 'owner/scene', DATA_COMMIT, 'e'.repeat(40), 'public');
     expect(receipt.viewerUrl).toBe('https://viewer.example/?url=https://huggingface.co/datasets/owner/scene');
     expect(new URL(receipt.viewerUrl).searchParams.get('url')).toBe('https://huggingface.co/datasets/owner/scene');
   });
@@ -43,7 +43,7 @@ describe('dataset card', () => {
 
   it('links the viewer to the dataset page, the same clean link the dialog shares', async () => {
     vi.stubGlobal('Blob', NodeBlob);
-    const checked = validatePublicationDetails({ name: 'scene', title: 'Scene', description: '', license: 'cc-by-4.0' });
+    const checked = validatePublicationDetails({ name: 'scene', title: 'Scene', description: '', license: 'cc-by-4.0', visibility: 'public' });
     const readme = await publicationMetadata(prepared([]), checked, 'owner/scene', DATA_COMMIT, [])
       .find(file => file.path === 'README.md')!.content.text();
     const link = 'https://viewer.example/?url=https://huggingface.co/datasets/owner/scene';
@@ -59,9 +59,24 @@ describe('dataset card', () => {
 describe('dataset card license', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('allows a private save without granting a license and explains recipient access', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const checked = validatePublicationDetails({ name: 'scene', title: 'Scene', description: '', license: '', visibility: 'private' });
+    const readme = await publicationMetadata(prepared([]), checked, 'owner/scene', DATA_COMMIT, []).find(file => file.path === 'README.md')!.content.text();
+    expect(readme).not.toMatch(/^license:/m);
+    expect(readme).toContain('Private dataset. Sign in to Hugging Face');
+    const receipt = publicationReceipt(prepared([]), 'owner/scene', DATA_COMMIT, 'e'.repeat(40), 'private');
+    expect(receipt.visibility).toBe('private');
+    expect(receipt.viewerUrl).toBe('https://viewer.example/?url=https://huggingface.co/datasets/owner/scene');
+  });
+
+  it('still requires a license for a public dataset', () => {
+    expect(() => validatePublicationDetails({ name: 'scene', title: 'Scene', description: '', license: '', visibility: 'public' })).toThrow('Choose the license');
+  });
+
   it.each(['cc-by-nc-4.0', 'cc-by-nc-sa-4.0', 'cc-by-nd-4.0', 'cc-by-nc-nd-4.0'])('publishes the %s license identifier', async license => {
     vi.stubGlobal('Blob', NodeBlob);
-    const checked = validatePublicationDetails({ name: 'scene', title: 'Scene', description: '', license });
+    const checked = validatePublicationDetails({ name: 'scene', title: 'Scene', description: '', license, visibility: 'public' });
     const readme = publicationMetadata(prepared([]), checked, 'owner/scene', DATA_COMMIT, []).find(file => file.path === 'README.md')!;
     expect(await readme.content.text()).toContain(`license: ${license}\n`);
   });

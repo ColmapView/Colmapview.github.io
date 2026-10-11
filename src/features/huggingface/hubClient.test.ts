@@ -1,7 +1,7 @@
 import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHubClient, commitTitle } from './hubClient';
-import { HfError, publicationErrorMessage } from './http';
+import { HfError } from './http';
 import { TRANSFER_IDLE_TIMEOUT_MS } from './transferTimeout';
 
 const sdk = vi.hoisted(() => ({ createRepo: vi.fn(), listCommits: vi.fn(), uploadFilesWithProgress: vi.fn(), datasetInfo: vi.fn(), listFiles: vi.fn() }));
@@ -12,6 +12,7 @@ const signal = () => new AbortController().signal;
 beforeEach(() => {
   vi.resetAllMocks(); vi.stubGlobal('Blob', NodeBlob);
   sdk.listCommits.mockImplementation(async function* () { yield { oid: parent, title: 'initial' }; });
+  sdk.datasetInfo.mockResolvedValue({ private: false, gated: false });
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
@@ -78,33 +79,36 @@ describe('Hugging Face transport adapter', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('recovers a lost create response only with its exact operation marker', async () => {
+  it.each(['private', 'public'] as const)('recovers a lost %s create response only with its exact operation and visibility', async visibility => {
     sdk.createRepo.mockRejectedValue(new HfError('Lost response'));
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ version: 1, operationId: 'op', repoId: 'owner/scene' }))));
+    sdk.datasetInfo.mockResolvedValue({ private: visibility === 'private', gated: false });
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ version: 2, operationId: 'op', repoId: 'owner/scene', visibility })));
+    vi.stubGlobal('fetch', request);
     const client = createHubClient(() => 'test-token');
-    await expect(client.create('owner/scene', 'op', signal())).resolves.toBe(parent);
-    expect(sdk.createRepo).toHaveBeenCalledWith(expect.objectContaining({ visibility: 'public' }));
+    await expect(client.create('owner/scene', 'op', visibility, signal())).resolves.toBe(parent);
+    expect(sdk.createRepo).toHaveBeenCalledWith(expect.objectContaining({ visibility }));
+    expect(sdk.listCommits).toHaveBeenCalledWith(expect.objectContaining({ accessToken: 'test-token' }));
+    expect(new Headers(request.mock.calls[0][1].headers).get('Authorization')).toBe('Bearer test-token');
   });
 
   it('does not adopt a similarly named existing repository', async () => {
     sdk.createRepo.mockRejectedValue(new HfError('Exists', 409));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ version: 1, operationId: 'someone-else', repoId: 'owner/scene' }))));
-    await expect(createHubClient(() => 'test-token').create('owner/scene', 'op', signal())).rejects.toMatchObject({ status: 409 });
+    await expect(createHubClient(() => 'test-token').create('owner/scene', 'op', 'private', signal())).rejects.toMatchObject({ status: 409 });
   });
 
-  it('lists one folder and reports a missing folder as empty', async () => {
-    const failing = (error: unknown) => ({ [Symbol.asyncIterator]: () => ({ next: () => Promise.reject(error) }) });
+  it.each(['private', 'public'] as const)('lists the full pinned inventory with %s verification access', async visibility => {
     sdk.listFiles.mockImplementation(async function* () {
       yield { type: 'file', path: 'masks/a.png', size: 3, oid: 'blob' };
       yield { type: 'directory', path: 'masks/nested', size: 0 };
     });
     const client = createHubClient(() => 'test-token');
-    await expect(client.files('owner/source', 'sha', signal(), 'masks')).resolves.toEqual([{ path: 'masks/a.png', size: 3, oid: 'blob' }]);
-    expect(sdk.listFiles).toHaveBeenCalledWith(expect.objectContaining({ path: 'masks', revision: 'sha', recursive: true }));
-    sdk.listFiles.mockImplementation(() => failing(Object.assign(new Error('Missing'), { statusCode: 404 })));
-    await expect(client.files('owner/source', 'sha', signal(), 'masks')).resolves.toEqual([]);
-    sdk.listFiles.mockImplementation(() => failing(Object.assign(new Error('Server error'), { statusCode: 500 })));
-    await expect(client.files('owner/source', 'sha', signal(), 'masks')).rejects.toThrow('Server error');
+    await expect(client.files('owner/scene', parent, visibility, signal())).resolves.toEqual([{ path: 'masks/a.png', size: 3, oid: 'blob' }]);
+    expect(sdk.listFiles).toHaveBeenCalledWith(expect.objectContaining({ revision: parent, recursive: true }));
+    const request = vi.fn().mockResolvedValue(new Response('[]'));
+    vi.stubGlobal('fetch', request);
+    await sdk.listFiles.mock.calls[0][0].fetch(`https://huggingface.co/api/datasets/owner/scene/tree/${parent}`);
+    expect(new Headers(request.mock.calls[0][1].headers).get('Authorization')).toBe(visibility === 'private' ? 'Bearer test-token' : null);
   });
 
   it('requires the atomic receipt as well as the commit marker and parent', async () => {
@@ -119,32 +123,42 @@ describe('Hugging Face transport adapter', () => {
     await expect(client.reconcile('owner/scene', parent, 'op:0', 'exact receipt', signal())).rejects.toThrow('changed');
   });
 
-  it.each([401, 403, 404])('explains an unreadable source (%i) instead of an expired connection', async status => {
-    sdk.datasetInfo.mockRejectedValue(Object.assign(new Error('Repository not found'), { statusCode: status }));
-    const error = await createHubClient(() => 'test-token').resolveRevision('owner/private', 'main', signal()).catch((value: unknown) => value);
-    expect(publicationErrorMessage(error)).toBe('Publication requires a public, ungated Hugging Face dataset. This source dataset is private or no longer available.');
-    // The message holds only because this read is anonymous; with a token, a 401 would mean an expired connection.
-    expect(sdk.datasetInfo.mock.calls[0][0]).not.toHaveProperty('accessToken');
+  it.each(['private', 'public'] as const)('rejects a destination changed from %s access', async visibility => {
+    sdk.datasetInfo.mockResolvedValue({ private: visibility !== 'private', gated: false });
+    await expect(createHubClient(() => 'test-token').assertVisibility('owner/scene', visibility, signal())).rejects.toMatchObject({ permanent: true });
   });
-  it('keeps transient metadata failures retryable', async () => {
-    sdk.datasetInfo.mockRejectedValue(Object.assign(new Error('Busy'), { statusCode: 503 }));
-    await expect(createHubClient(() => 'test-token').resolveRevision('owner/scene', 'main', signal())).rejects.toMatchObject({ statusCode: 503 });
+
+  it('checks current visibility with an authenticated uncached metadata request', async () => {
+    sdk.datasetInfo.mockImplementation(async ({ fetch: request }) => (await request('https://huggingface.co/api/datasets/owner/scene/revision/HEAD')).json());
+    const request = vi.fn().mockResolvedValue(Response.json({ private: true, gated: false }));
+    const token = vi.fn().mockReturnValue('test-token'); vi.stubGlobal('fetch', request);
+    await createHubClient(token).assertVisibility('owner/scene', 'private', signal());
+    expect(token).toHaveBeenCalledWith('owner');
+    expect(new Headers(request.mock.calls[0][1].headers).get('Authorization')).toBe('Bearer test-token');
+    expect(request.mock.calls[0][1]).toMatchObject({ credentials: 'omit', cache: 'no-store' });
   });
-  it.each([{ private: true }, { gated: 'auto' }])('refuses a readable non-public source: %o', async flags => {
-    sdk.datasetInfo.mockResolvedValue({ name: 'owner/scene', sha: 'c'.repeat(40), private: false, gated: false, ...flags });
-    await expect(createHubClient(() => 'test-token').resolveRevision('owner/scene', 'main', signal())).rejects.toThrow('Publication requires a public, ungated Hugging Face dataset.');
+
+  it('does not recover a create operation whose marker records a different visibility', async () => {
+    sdk.createRepo.mockRejectedValue(new HfError('Lost response'));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ version: 2, operationId: 'op', repoId: 'owner/scene', visibility: 'public' })));
+    await expect(createHubClient(() => 'test-token').create('owner/scene', 'op', 'private', signal())).rejects.toThrow('Lost response');
+    expect(sdk.datasetInfo).not.toHaveBeenCalled();
   });
-  it('pins a public source', async () => {
-    sdk.datasetInfo.mockResolvedValue({ name: 'owner/scene', sha: 'c'.repeat(40), private: false, gated: false });
-    await expect(createHubClient(() => 'test-token').resolveRevision('owner/scene', 'main', signal())).resolves.toBe('c'.repeat(40));
+
+  it.each(['https://other.example/file', 'https://huggingface.co/datasets/another/scene/resolve/main/file',
+    'https://huggingface.co/api/datasets/owner/other/tree/main'])('refuses to send destination credentials to %s', async url => {
+    const token = vi.fn().mockReturnValue('test-token');
+    const request = vi.fn(); vi.stubGlobal('fetch', request);
+    await expect(createHubClient(token).request('owner/scene', 'private', signal())(url)).rejects.toThrow('outside its repository');
+    expect(token).not.toHaveBeenCalled(); expect(request).not.toHaveBeenCalled();
   });
-  it.each(['OpsiClear/NGS', 'lab/renamed-scene'])('pins a public source loaded as opsiclear/ngs that the Hub now names %s', async canonical => {
-    // The Hub redirects other spellings and old names to the repository it now serves; datasetInfo reports that id.
-    sdk.datasetInfo.mockResolvedValue({ name: canonical, sha: 'c'.repeat(40), private: false, gated: false });
-    await expect(createHubClient(() => 'test-token').resolveRevision('opsiclear/ngs', 'main', signal())).resolves.toBe('c'.repeat(40));
-  });
-  it('refuses a source revision the Hub does not pin to a commit', async () => {
-    sdk.datasetInfo.mockResolvedValue({ name: 'owner/scene', sha: 'main', private: false, gated: false });
-    await expect(createHubClient(() => 'test-token').resolveRevision('owner/scene', 'main', signal())).rejects.toThrow('Publication requires a public, ungated Hugging Face dataset.');
+
+  it('never uses a token for public verification, even when an authorization header is supplied', async () => {
+    const token = vi.fn(); const request = vi.fn().mockResolvedValue(new Response('data')); vi.stubGlobal('fetch', request);
+    await createHubClient(token).request('owner/scene', 'public', signal())('https://huggingface.co/datasets/owner/scene/resolve/main/file',
+      { headers: { Authorization: 'Bearer stale-token', Range: 'bytes=0-255' } });
+    expect(token).not.toHaveBeenCalled();
+    expect(new Headers(request.mock.calls[0][1].headers).get('Authorization')).toBeNull();
+    expect(new Headers(request.mock.calls[0][1].headers).get('Range')).toBe('bytes=0-255');
   });
 });

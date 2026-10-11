@@ -53,6 +53,14 @@ export function createPublicationController(client: HubClient,
     signal.throwIfAborted();
     set({ phase: batch.metadata ? 'publishing-metadata' : 'uploading', message: batch.metadata ? 'Publishing dataset description and viewer link…' : 'Uploading selected files…', uncertain: true });
     for (let attempt = 0; ; attempt++) {
+      // Never resume a private upload into a repository whose visibility changed.
+      try { await client.assertVisibility(current.repoId, current.details.visibility, signal); }
+      catch (error) {
+        // This batch has not been sent. Preserve uncertain batches until reconciliation confirms their outcome.
+        if (error instanceof HfError && error.permanent && !batch.outcomeUnknown) current.pending = undefined;
+        throw error;
+      }
+      signal.throwIfAborted();
       try {
         batch.outcomeUnknown = true;
         record(current, await client.upload(current.repoId, batch.files, batch.parent, batch.marker, signal,
@@ -95,8 +103,8 @@ export function createPublicationController(client: HubClient,
         return;
       }
       if (!current.head) {
-        set({ phase: 'creating-repo', message: 'Creating your public dataset repository…', repoUrl: `https://huggingface.co/datasets/${current.repoId}` });
-        current.head = await client.create(current.repoId, current.prepared.operationId, signal);
+        set({ phase: 'creating-repo', message: `Creating your ${current.details.visibility} dataset repository…`, repoUrl: `https://huggingface.co/datasets/${current.repoId}` });
+        current.head = await client.create(current.repoId, current.prepared.operationId, current.details.visibility, signal);
       }
       signal.throwIfAborted();
       if (current.pending) await commit(current, signal, true);
@@ -136,8 +144,9 @@ export function createPublicationController(client: HubClient,
         await commit(current, signal, false);
       }
       signal.throwIfAborted();
-      const receipt = publicationReceipt(current.prepared, current.repoId, current.dataCommit, current.metadataCommit!);
-      set({ phase: 'verifying', message: 'Checking that recipients can open the dataset without signing in…' });
+      const receipt = publicationReceipt(current.prepared, current.repoId, current.dataCommit, current.metadataCommit!, current.details.visibility);
+      set({ phase: 'verifying', message: current.details.visibility === 'private'
+        ? 'Verifying your private dataset…' : 'Checking that recipients can open the dataset without signing in…' });
       await verify(receipt, current.prepared, current.inventory, signal);
       signal.throwIfAborted();
       job = null;

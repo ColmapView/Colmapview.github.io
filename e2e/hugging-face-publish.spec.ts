@@ -48,6 +48,8 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByLabel('Repository name', { exact: true }).fill('scene');
     await dialog.getByLabel('Dataset title', { exact: true }).fill('Browser test scene');
     await dialog.getByLabel('Dataset license', { exact: true }).selectOption('cc-by-4.0');
+    await expect(dialog.getByRole('combobox', { name: 'Access' })).toHaveValue('private');
+    await dialog.getByRole('combobox', { name: 'Access' }).selectOption('public');
     await expect(dialog.getByRole('checkbox')).toHaveCount(0);
     await expect(dialog.getByText(/public, discoverable dataset/)).toBeVisible();
     await dialog.screenshot({ path: test.info().outputPath('publication-form.png') });
@@ -76,7 +78,8 @@ test.describe('Hugging Face dataset publication', () => {
     expect(viewerUrl).toBe(`${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene`);
     expect(readmeViewerUrl).toBe(viewerUrl);
     expect(readme).toContain(`Viewer link: <${viewerUrl}>`);
-    expect(hub.reads.every(read => !read.authorization)).toBe(true);
+    expect(hub.visibility).toBe('public');
+    expect(hub.reads.filter(read => /\/(resolve|tree)\//.test(read.path)).every(read => !read.authorization)).toBe(true);
     for (const mode of ['shared', 'manual'] as const) {
       const recipient = await browser.newContext();
       try {
@@ -107,7 +110,8 @@ test.describe('Hugging Face dataset publication', () => {
     }
   });
 
-  test('recovers a rejected metadata commit without uploading data again', async ({ page, context, baseURL }) => {
+  test('recovers a private upload and opens its link only after a recipient signs in', async ({ page, context, browser, baseURL }) => {
+    test.setTimeout(120_000);
     const hub = mockHub(); hub.failMetadata();
     await hub.attach(context, baseURL!); await page.goto('/');
     const image = readFileSync(new URL('./fixtures/test-data/masks/photo.jpg.png', import.meta.url)).toString('base64');
@@ -120,7 +124,7 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByLabel('Repository name', { exact: true }).fill('scene');
     await dialog.getByLabel('Dataset title', { exact: true }).fill('Complete dataset');
     await dialog.getByLabel('Dataset license', { exact: true }).selectOption('cc0-1.0');
-    await dialog.getByRole('button', { name: 'Publish public dataset', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Save private dataset', exact: true }).click();
     await expect(dialog.getByRole('button', { name: 'Check previous upload and retry' })).toBeVisible({ timeout: 45000 });
     const dataCommit = hub.commits[0].id;
     await dialog.getByRole('button', { name: 'Close publish dataset' }).click();
@@ -132,6 +136,28 @@ test.describe('Hugging Face dataset publication', () => {
     expect(JSON.parse(hub.files.get('colmapview.json')!.toString()).skipImages).toBe(false);
     expect(hub.files.has('images/photo.jpg')).toBe(true);
     expect(hub.files.has('masks/photo.jpg.png')).toBe(true);
+    expect(hub.visibility).toBe('private');
+    expect(hub.reads.every(read => read.authorization === 'Bearer hf_browser_test_only')).toBe(true);
+    await expect(dialog.getByText('Private. Viewers must sign in to Hugging Face with an account that has access.')).toBeVisible();
+    const viewerUrl = await dialog.getByLabel('Viewer link', { exact: true }).inputValue();
+    expect(viewerUrl).toBe(`${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene`);
+    const recipient = await browser.newContext();
+    try {
+      await hub.attach(recipient, baseURL!);
+      const recipientPage = await recipient.newPage();
+      const readStart = hub.reads.length;
+      await recipientPage.goto(viewerUrl);
+      await recipientPage.getByRole('button', { name: 'Hugging Face account', exact: true }).click();
+      const account = recipientPage.getByRole('dialog', { name: 'Hugging Face', exact: true });
+      expect(hub.reads.slice(readStart).some(read => !read.authorization)).toBe(true);
+      await expect(recipientPage.getByText('Source:', { exact: false }).first()).not.toBeVisible();
+      await account.getByRole('button', { name: 'Sign in with Hugging Face', exact: true }).click();
+      await account.getByRole('button', { name: 'Retry shared link', exact: true }).click();
+      await expect(recipientPage.getByText('Source:', { exact: false }).first()).toBeVisible({ timeout: 45000 });
+      const fileReads = hub.reads.slice(readStart).filter(read => /\/resolve\//.test(read.path));
+      expect(fileReads.some(read => read.path.endsWith('/colmapview.yaml') && read.authorization)).toBe(true);
+      expect(fileReads.filter(read => read.authorization).every(read => read.authorization === 'Bearer hf_browser_test_only')).toBe(true);
+    } finally { await recipient.close(); }
   });
 
   test('returns to the editable form when the repository name is taken', async ({ page, context, baseURL }) => {
@@ -148,6 +174,7 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByLabel('Repository name', { exact: true }).fill('scene');
     await dialog.getByLabel('Dataset title', { exact: true }).fill('Taken name');
     await dialog.getByLabel('Dataset license', { exact: true }).selectOption('cc0-1.0');
+    await dialog.getByRole('combobox', { name: 'Access' }).selectOption('public');
     await dialog.getByRole('button', { name: 'Publish public dataset', exact: true }).click();
     await expect(dialog.getByRole('alert')).toContainText('already exists', { timeout: 45000 });
     await expect(dialog.getByLabel('Repository name', { exact: true })).toBeEditable();

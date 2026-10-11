@@ -19,8 +19,9 @@ export function createMockHuggingFace(options: { lfs?: boolean } = {}) {
   let failedMetadata = false;
   let denyConsent = false;
   let failMetadataOnce = false;
+  let privateRepo = false;
   // Like the Hub, `main` names the latest commit.
-  const snapshotAt = (revision: string) => snapshots.get(revision === 'main' ? commits[0]?.id ?? '' : revision);
+  const snapshotAt = (revision: string) => snapshots.get(['main', 'HEAD'].includes(revision) ? commits[0]?.id ?? '' : revision);
   const save = (title: string, message = '') => {
     const id = (++sequence).toString(16).padStart(40, '0');
     snapshots.set(id, new Map(files));
@@ -83,14 +84,24 @@ export function createMockHuggingFace(options: { lfs?: boolean } = {}) {
         await json({ access_token: 'hf_browser_test_only', expires_in: 3600, scope: 'openid profile read-repos contribute-repos' }); return;
       }
       if (path === '/oauth/userinfo') { await json({ preferred_username: 'publisher' }); return; }
-      if (path === '/api/datasets/publisher/scene') { await json({ id: 'publisher/scene', private: false }); return; }
+      const datasetRead = request.method() === 'GET' && (path.startsWith('/api/datasets/publisher/scene') || path.startsWith('/datasets/publisher/scene/resolve/'));
+      if (datasetRead) {
+        reads.push({ path, authorization: request.headers().authorization });
+        if (privateRepo && request.headers().authorization !== 'Bearer hf_browser_test_only') {
+          await json({ error: 'private dataset' }, 404); return;
+        }
+      }
+      if (/^\/api\/datasets\/publisher\/scene(?:\/revision\/[^/]+)?$/.test(path)) {
+        await json({ id: 'publisher/scene', private: privateRepo, gated: false, sha: commits[0]?.id }); return;
+      }
       if (request.method() === 'POST') writes.push(path);
       if (path === '/api/repos/create') {
         if (commits.length) { await json({ error: 'already exists' }, 409); return; }
         const body = request.postDataJSON();
-        if (body.organization !== 'publisher' || body.type !== 'dataset' || body.visibility !== 'public') {
+        if (body.organization !== 'publisher' || body.type !== 'dataset' || !['private', 'public'].includes(body.visibility)) {
           await json({ error: 'wrong destination' }, 400); return;
         }
+        privateRepo = body.visibility === 'private';
         for (const file of body.files) files.set(file.path, Buffer.from(file.content, 'base64'));
         save('Initial commit');
         await json({ id: 'test-id', url: 'https://huggingface.co/datasets/publisher/scene' }); return;
@@ -147,14 +158,12 @@ export function createMockHuggingFace(options: { lfs?: boolean } = {}) {
       }
       const tree = /\/tree\/([^/]+)/.exec(path);
       if (tree) {
-        reads.push({ path, authorization: request.headers().authorization });
         const snapshot = snapshotAt(tree[1]);
         if (!snapshot) { await json({ error: 'unknown revision' }, 404); return; }
         await json([...snapshot].map(([path, content]) => ({ path, size: content.length, type: 'file', oid: createHash('sha1').update(content).digest('hex') }))); return;
       }
       const resolved = /\/resolve\/([^/]+)\/(.+)$/.exec(path);
       if (resolved) {
-        reads.push({ path, authorization: request.headers().authorization });
         const content = snapshotAt(resolved[1])?.get(decodeURIComponent(resolved[2]));
         if (!content) { await json({ error: 'not found' }, 404); return; }
         await route.fulfill({ status: 200, headers: { ...headers, 'content-length': String(content.length) }, body: content }); return;
@@ -166,7 +175,7 @@ export function createMockHuggingFace(options: { lfs?: boolean } = {}) {
     if (!uploadServer) { resolve(); return; }
     uploadServer.close(() => resolve()); uploadServer.closeAllConnections();
   });
-  return { attach, close, reads, writes, commits, snapshots, get files() { return files; },
+  return { attach, close, reads, writes, commits, snapshots, get files() { return files; }, get visibility() { return privateRepo ? 'private' : 'public'; },
     denyConsent: () => { denyConsent = true; }, failMetadata: () => { failMetadataOnce = true; },
     /** Someone else's repository already uses the name. */
     occupy: () => { save('Unrelated dataset'); } };

@@ -1,60 +1,75 @@
-import { boundedFetch, errorStatus, HfError } from './http';
+import { boundedFetch, HfError } from './http';
 import { datasetFileUrl } from '../datasetPublishing/publicationPaths';
 import { readBoundedResponse } from '../../utils/publishedViewerState';
 import { awaitWithAbort } from '../../utils/awaitWithAbort';
 import { timeoutSignal } from '../../utils/abortSignals';
 import { createTransferTimeout } from './transferTimeout';
+import { huggingFaceDatasetReadRepoId } from '../../utils/huggingFaceUrl';
+import type { PublicationVisibility } from '../datasetPublishing/types';
 
 export interface UploadFile { path: string; content: Blob }
 export interface HubFile { path: string; size: number; oid?: string }
 export interface HubHead { oid: string; title: string; previous?: string }
 export interface HubClient {
-  create: (repoId: string, operationId: string, signal: AbortSignal) => Promise<string>;
+  create: (repoId: string, operationId: string, visibility: PublicationVisibility, signal: AbortSignal) => Promise<string>;
+  assertVisibility: (repoId: string, visibility: PublicationVisibility, signal: AbortSignal) => Promise<void>;
+  /** Private verification is authenticated; public verification must prove anonymous access. */
+  request: (repoId: string, visibility: PublicationVisibility, signal: AbortSignal) => typeof fetch;
   head: (repoId: string, signal: AbortSignal) => Promise<HubHead>;
   upload: (repoId: string, files: UploadFile[], parent: string, marker: string, signal: AbortSignal, progress: (message: string) => void) => Promise<string>;
   reconcile: (repoId: string, parent: string, marker: string, receipt: string, signal: AbortSignal) => Promise<string | null>;
-  /** Lists every file at a revision, or only under `path` (empty when that folder is missing). */
-  files: (repoId: string, revision: string, signal: AbortSignal, path?: string) => Promise<HubFile[]>;
-  resolveRevision: (repoId: string, revision: string, signal: AbortSignal) => Promise<string>;
+  /** Lists the complete inventory with the same access used to verify the publication. */
+  files: (repoId: string, revision: string, visibility: PublicationVisibility, signal: AbortSignal) => Promise<HubFile[]>;
 }
 
 export const BATCH_RECEIPT_PATH = 'colmapview-upload.json';
 export const CREATION_MARKER_PATH = 'colmapview-publication.json';
-const PUBLIC_SOURCE_REQUIRED = 'Publication requires a public, ungated Hugging Face dataset.';
 export const commitTitle = (marker: string) => `ColmapView publication ${marker}`;
 
 export function createHubClient(getAccessToken: (username: string) => string): HubClient {
   const sdk = () => import('@huggingface/hub');
   const repo = (name: string) => ({ type: 'dataset' as const, name });
   const token = (repoId: string) => getAccessToken(repoId.split('/')[0]);
-  const readText = async (url: string, signal: AbortSignal) =>
-    (await readBoundedResponse(await boundedFetch(signal)(url), 512 * 1024)).text();
+  const readText = async (repoId: string, url: string, signal: AbortSignal) =>
+    (await readBoundedResponse(await client.request(repoId, 'private', signal)(url), 512 * 1024)).text();
   const client: HubClient = {
-    async resolveRevision(repoId, revision, signal) {
-      const info = await (await sdk()).datasetInfo({ name: repoId, revision, additionalFields: ['sha'], fetch: boundedFetch(signal) })
-        .catch((error: unknown): never => {
-          // This read is anonymous: 401/403/404 mean a private, gated or missing source, never an expired connection.
-          if ([401, 403, 404].includes(errorStatus(error) ?? 0)) throw new HfError(`${PUBLIC_SOURCE_REQUIRED} This source dataset is private or no longer available.`);
-          throw error;
-        });
-      // The Hub redirects other spellings and renamed repositories (info.name is its current id); the commit pins the files.
-      if (info.private || info.gated || !/^[a-f0-9]{40,64}$/i.test(info.sha)) {
-        throw new HfError(PUBLIC_SOURCE_REQUIRED);
+    request(repoId, visibility, signal) {
+      return boundedFetch(signal, 30_000, async (input, init) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+        if (!['GET', 'HEAD'].includes(method) || huggingFaceDatasetReadRepoId(url) !== repoId) {
+          throw new HfError('The published dataset requested a file outside its repository.', undefined, true);
+        }
+        const headers = new Headers(init?.headers);
+        headers.delete('Authorization');
+        if (visibility === 'private') headers.set('Authorization', `Bearer ${token(repoId)}`);
+        const response = await fetch(url, { ...init, headers, credentials: 'omit', cache: 'no-store' });
+        if ([401, 403].includes(response.status)) {
+          await response.body?.cancel();
+          throw visibility === 'private' ? new HfError('Hugging Face denied access to the private dataset.', response.status)
+            : new HfError('The public dataset cannot be opened without signing in. Review its access on Hugging Face.');
+        }
+        return response;
+      });
+    },
+    async assertVisibility(repoId, visibility, signal) {
+      const info = await (await sdk()).datasetInfo({ name: repoId, fetch: client.request(repoId, 'private', signal) });
+      if (info.private !== (visibility === 'private') || (visibility === 'public' && info.gated)) {
+        throw new HfError('Repository access changed during this upload. Review it on Hugging Face before starting a new upload.', undefined, true);
       }
-      return info.sha;
     },
     async head(repoId, signal) {
-      const entries = (await sdk()).listCommits({ repo: repo(repoId), batchSize: 2, fetch: boundedFetch(signal) });
+      const entries = (await sdk()).listCommits({ repo: repo(repoId), accessToken: token(repoId), batchSize: 2, fetch: boundedFetch(signal) });
       const first = await entries.next();
       const second = await entries.next();
       await entries.return(undefined);
       if (first.done || !first.value.oid) throw new HfError('Could not determine the repository revision.');
       return { oid: first.value.oid, title: first.value.title, previous: second.done ? undefined : second.value.oid };
     },
-    async create(repoId, operationId, signal) {
-      const marker = JSON.stringify({ version: 1, operationId, repoId });
+    async create(repoId, operationId, visibility, signal) {
+      const marker = JSON.stringify({ version: 2, operationId, repoId, visibility });
       try {
-        await (await sdk()).createRepo({ repo: repo(repoId), accessToken: token(repoId), visibility: 'public',
+        await (await sdk()).createRepo({ repo: repo(repoId), accessToken: token(repoId), visibility,
           files: [{ path: CREATION_MARKER_PATH, content: new Blob([marker]) },
             { path: 'README.md', content: new Blob(['# Dataset publication in progress\n\nCreated with ColmapView.\n']) }],
           fetch: boundedFetch(signal),
@@ -64,7 +79,10 @@ export function createHubClient(getAccessToken: (username: string) => string): H
         const check = timeoutSignal(20_000);
         try {
           const head = await client.head(repoId, check);
-          if (await readText(datasetFileUrl(repoId, head.oid, CREATION_MARKER_PATH), check) === marker) return head.oid;
+          if (await readText(repoId, datasetFileUrl(repoId, head.oid, CREATION_MARKER_PATH), check) === marker) {
+            await client.assertVisibility(repoId, visibility, check);
+            return head.oid;
+          }
         } catch { /* Preserve original error and retain operation ID for same-tab retry. */ }
         throw error;
       }
@@ -105,22 +123,16 @@ export function createHubClient(getAccessToken: (username: string) => string): H
       const head = await client.head(repoId, signal);
       if (head.oid === parent) return null;
       if (head.title !== commitTitle(marker) || head.previous !== parent
-        || await readText(datasetFileUrl(repoId, head.oid, BATCH_RECEIPT_PATH), signal) !== receipt) {
+        || await readText(repoId, datasetFileUrl(repoId, head.oid, BATCH_RECEIPT_PATH), signal) !== receipt) {
         throw new HfError('The repository changed outside this publication. Start with a new repository.', 409);
       }
       // Parent, unique commit marker, and atomic receipt bind the full batch to this job.
       return head.oid;
     },
-    async files(repoId, revision, signal, path) {
+    async files(repoId, revision, visibility, signal) {
       const result: HubFile[] = [];
-      try {
-        for await (const file of (await sdk()).listFiles({ repo: repo(repoId), revision, path, recursive: true, fetch: boundedFetch(signal) })) {
-          if (file.type === 'file') result.push({ path: file.path, size: file.size, oid: file.lfs?.oid ?? file.oid ?? file.xetHash });
-        }
-      } catch (error) {
-        // A missing folder has no files; the repository revision itself was already resolved.
-        if (path && errorStatus(error) === 404) return [];
-        throw error;
+      for await (const file of (await sdk()).listFiles({ repo: repo(repoId), revision, recursive: true, fetch: client.request(repoId, visibility, signal) })) {
+        if (file.type === 'file') result.push({ path: file.path, size: file.size, oid: file.lfs?.oid ?? file.oid ?? file.xetHash });
       }
       return result;
     },

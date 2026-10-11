@@ -6,9 +6,10 @@ import { BucketStorageModal } from './BucketStorageModal';
 import { bucketConnection } from '../../features/bucketStorage/connection';
 import { useDeletionStore, useReconstructionStore } from '../../store';
 import { buildCamera, buildReconstruction } from '../../test/builders';
+import type { BucketPublicationState } from '../../features/bucketStorage/publishDataset';
 
 const publication = vi.hoisted(() => ({
-  publish: vi.fn(), cancel: vi.fn(), reset: vi.fn(), state: { phase: 'idle', message: '', filesDone: 0, filesTotal: 0, bytesDone: 0 },
+  publish: vi.fn(), cancel: vi.fn(), reset: vi.fn(), state: { phase: 'idle', message: '', filesDone: 0, filesTotal: 0, bytesDone: 0 } as BucketPublicationState,
 }));
 vi.mock('../../features/bucketStorage/publicationRuntime', () => ({ publishCurrentDatasetToBucket: publication.publish, bucketPublication: {
   getSnapshot: () => publication.state, subscribe: () => () => {}, cancel: publication.cancel, reset: publication.reset,
@@ -23,6 +24,7 @@ beforeEach(() => {
   useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
   useDeletionStore.setState(useDeletionStore.getInitialState(), true);
   publication.publish.mockReset(); publication.cancel.mockReset();
+  publication.reset.mockReset(); publication.state = { phase: 'idle', message: '', filesDone: 0, filesTotal: 0, bytesDone: 0 };
 });
 afterEach(() => { cleanup(); bucketConnection.disconnect(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 function open() {
@@ -178,13 +180,27 @@ describe('bucket storage dialog', () => {
     expect(screen.queryByRole('list', { name: 'Bucket objects' })).toBeNull();
     expect(bucketConnection.getSession()).not.toBeNull();
   });
-  it('uses the default upload destination without opening its options', () => {
+  it('shows the upload destination and existing bucket permissions directly', () => {
     act(() => bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' }));
     act(() => useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }) }));
     open();
-    expect(screen.getByLabelText('Upload folder').closest('details')).not.toHaveAttribute('open');
+    expect(screen.getByLabelText('Upload folder').closest('details')).toBeNull();
+    expect(screen.getByRole('textbox', { name: 'Access' })).toHaveValue('Bucket permissions');
+    expect(screen.getByRole('textbox', { name: 'Access' })).toHaveAttribute('readonly');
     fireEvent.click(screen.getByRole('button', { name: 'Upload dataset' }));
     expect(publication.publish).toHaveBeenCalledExactlyOnceWith('dataset');
+  });
+  it('shows the same viewer link and result actions without claiming the bucket is public', () => {
+    act(() => bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' }));
+    publication.state = { phase: 'completed', message: 'Dataset uploaded.', filesDone: 2, filesTotal: 2, bytesDone: 10,
+      viewerUrl: 'https://viewer.example/?url=https://s3.example/bucket/dataset/manifest.json' };
+    open();
+    expect(screen.getByLabelText('Bucket viewer link')).toHaveValue(publication.state.viewerUrl);
+    expect(screen.getByText('Access follows your bucket permissions. Viewers need bucket access for private files.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open viewer' })).toHaveAttribute('href', publication.state.viewerUrl);
+    fireEvent.click(screen.getByRole('button', { name: 'Upload another dataset' }));
+    expect(publication.reset).toHaveBeenCalledOnce();
   });
   it('enables upload only for loaded COLMAP data and blocks pending deletions', async () => {
     act(() => bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' }));
@@ -193,7 +209,6 @@ describe('bucket storage dialog', () => {
     expect(button).toBeDisabled();
     act(() => useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }) }));
     expect(button).toBeEnabled();
-    fireEvent.click(screen.getByText('Upload destination'));
     fireEvent.change(screen.getByRole('textbox', { name: 'Upload folder' }), { target: { value: 'datasets/my-scene' } });
     fireEvent.click(button);
     expect(publication.publish).toHaveBeenCalledExactlyOnceWith('datasets/my-scene');

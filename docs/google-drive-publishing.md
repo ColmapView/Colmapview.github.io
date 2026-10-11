@@ -4,7 +4,7 @@ Load a COLMAP reconstruction with its original images, then choose **Share → G
 
 1. **Sign in** with Google and allow ColmapView to create and manage the files it creates in Drive.
 2. Choose a ZIP file name. Files are saved privately in **My Drive** by default.
-3. Optionally select **Anyone with the link can view** to publish a shared dataset. ColmapView enables reader access after verifying the upload. An organization's sharing policy can prevent this step.
+3. Leave **Access → Private** selected, or choose **Anyone with the link** to publish a shared dataset. ColmapView enables reader access after verifying the upload. An organization's sharing policy can prevent this step.
 4. Click **Save private dataset** or **Publish shared dataset**. After completion, copy the viewer link or open the file in Drive. Loading another dataset returns the dialog to a new form, clearing a finished publication's link or a stopped one's status; editing the model also clears a finished publication's link.
 
 Public viewer links to supported Drive archives need no sign-in when the viewer's Drive API key is configured. For a private archive, use the loading panel's Drive account control to sign in and **Choose archive from Drive** through Google Picker. The recipient must already have permission to download it; a viewer URL alone does not grant access. Loading supports ZIP and TAR, including compressed TAR; publication creates ZIP output only. Loading and publishing keep separate local sessions, both requesting only `drive.file`.

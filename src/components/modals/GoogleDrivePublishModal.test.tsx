@@ -37,11 +37,12 @@ describe('Google Drive publishing dialog', () => {
     render(<GoogleDrivePublishModal isOpen onClose={vi.fn()} />);
     expect(screen.getByLabelText('File name')).toHaveValue('dataset.zip');
     expect(screen.getByText(/ZIP limit: 2 GiB/)).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Anyone with the link can view' })).not.toBeChecked();
+    expect(screen.getByRole('combobox', { name: 'Access' })).toHaveValue('private');
     fireEvent.change(screen.getByLabelText('File name'), { target: { value: 'my-scene' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save private dataset' }));
     await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('my-scene', false));
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Anyone with the link can view' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'public' } });
+    expect(screen.getByText('Link sharing is enabled after the upload is verified.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Publish shared dataset' }));
     await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('my-scene', true));
   });

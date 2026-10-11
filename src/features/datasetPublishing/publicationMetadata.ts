@@ -2,7 +2,7 @@ import { dump } from 'js-yaml';
 import type { ColmapManifest } from '../../types/manifest';
 import { HfError } from '../huggingface/http';
 import { datasetFileUrl, validateRepositoryName } from './publicationPaths';
-import type { PreparedPublication, PublicationDetails, PublicationReceipt } from './types';
+import type { PreparedPublication, PublicationDetails, PublicationReceipt, PublicationVisibility } from './types';
 import type { UploadFile } from '../huggingface/hubClient';
 import { DATASET_VIEWER_SETTINGS_FILE } from '../../utils/datasetViewerSettings';
 import { buildImageUrl } from '../../utils/imageFileLookupPolicy';
@@ -21,10 +21,13 @@ export const PUBLICATION_LICENSES = [
   { id: 'other', label: 'Custom license' },
 ] as const;
 export function validatePublicationDetails(details: PublicationDetails): PublicationDetails {
+  if (!['private', 'public'].includes(details.visibility)) throw new HfError('Choose private or public access for this dataset.');
   const name = validateRepositoryName(details.name);
   const title = details.title.trim();
   if (!title || title.length > 200 || details.description.length > 10_000) throw new HfError('Enter a title of 1–200 characters and a description under 10,000 characters.');
-  if (!PUBLICATION_LICENSES.some(license => license.id === details.license)) throw new HfError('Choose the license you are authorized to use for this dataset.');
+  if (!(details.visibility === 'private' && details.license === '') && !PUBLICATION_LICENSES.some(license => license.id === details.license)) {
+    throw new HfError('Choose the license you are authorized to use for this dataset.');
+  }
   if (details.license === 'other') {
     let validUrl = false;
     try { const url = new URL(details.licenseUrl ?? ''); validUrl = url.protocol === 'https:' && !url.username && !url.password; } catch { /* Invalid custom license. */ }
@@ -72,9 +75,10 @@ export function makeRepositoryViewerLink(prepared: PreparedPublication, repoUrl:
   return `${url.href}?url=${repoUrl}`;
 }
 
-export function publicationReceipt(prepared: PreparedPublication, repoId: string, dataCommit: string, metadataCommit: string): PublicationReceipt {
+export function publicationReceipt(prepared: PreparedPublication, repoId: string, dataCommit: string, metadataCommit: string,
+  visibility: PublicationVisibility): PublicationReceipt {
   const repoUrl = `https://huggingface.co/datasets/${repoId}`;
-  return { repoId, repoUrl, dataCommit, metadataCommit, viewerUrl: makeRepositoryViewerLink(prepared, repoUrl) };
+  return { repoId, repoUrl, dataCommit, metadataCommit, visibility, viewerUrl: makeRepositoryViewerLink(prepared, repoUrl) };
 }
 
 export function publicationMetadata(prepared: PreparedPublication, details: PublicationDetails, repoId: string, dataCommit: string,
@@ -82,7 +86,7 @@ export function publicationMetadata(prepared: PreparedPublication, details: Publ
   const manifest = publicationManifest(prepared, repoId, dataCommit, details.title);
   const viewerLink = makeRepositoryViewerLink(prepared, `https://huggingface.co/datasets/${repoId}`);
   const markdown = (text: string) => text.replace(/[\\`*_[\]<>]/g, '\\$&');
-  const card = dump({ license: details.license,
+  const card = dump({ ...(details.license ? { license: details.license } : {}),
     ...(details.license === 'other' ? { license_name: details.licenseName, license_link: details.licenseUrl } : {}),
     tags: ['colmap', 'photogrammetry', '3d', 'colmapview'],
     // Not a tabular dataset: without this, Hugging Face converts images/ to Parquet for its table viewer.
@@ -92,6 +96,7 @@ export function publicationMetadata(prepared: PreparedPublication, details: Publ
     + (prepared.previewPath ? `![Dataset preview](${datasetFileUrl(repoId, dataCommit, prepared.previewPath)})\n\n` : '')
     + `[Open in ColmapView](${viewerLink})\n\n`
     + `Viewer link: <${viewerLink}>\n\n`
+    + (details.visibility === 'private' ? 'Private dataset. Sign in to Hugging Face in the viewer with an account that has access.\n\n' : '')
     + `Published by ${markdown(repoId.split('/')[0])} with ColmapView ${prepared.viewerState.viewerVersion}.\n\n`
     + `## Contents\n\n${prepared.counts.cameras} cameras, ${prepared.counts.images} registered images, ${prepared.counts.points} points.\n\n`
     + `COLMAP binary files are in sparse/0/. Original images are in images/.\n`

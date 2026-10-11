@@ -35,6 +35,8 @@ Shared reconstruction calculations live in `utils/floorPlaneAlignment.ts` and `u
 
 Storage providers own authentication and transport under `features/`. `bucketStorage/connection.ts` keeps S3 credentials in a tab-local closure and exposes a redacted render snapshot. `fetchDatasetResource` composes bucket and Hugging Face request policies for discovery, lazy media, ranges, and re-publication; authenticated bucket requests stay within the configured bucket root. Provider credentials never enter reconstruction state or published manifests.
 
+Upload dialogs share access, progress, and result controls under `components/upload/`. The provider controllers retain their own transport and permission rules. All three use `prepareTransferPublication` to pin source revisions and copy original assets, including authorized private sources. Hugging Face captures the chosen visibility with the upload job and receipt, checks it before each commit, verifies private destinations with repository-scoped authentication, and verifies public files anonymously. Bucket uploads preserve existing bucket permissions.
+
 Bucket listing, multipart transfers, and manifest-last publication have independent, dependency-injected boundaries. Store subscriptions and scene invalidation live in `bucketStorage/publicationRuntime.ts`; the dialog consumes component facades. `datasetPublishing/prepareTransferPublication.ts` shares original-media preparation between Drive ZIP packaging and bucket object uploads. See [bucket storage](bucket-storage.md) for connection formats, permissions, and CORS.
 
 ## Archive Processing

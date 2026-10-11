@@ -2,6 +2,8 @@
 .publication-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .publication-header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .publication-account { max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.publication-note { color: var(--text-muted); line-height: 1.5; margin: 0; }
+.publication-access { display: grid; gap: 6px; min-width: 0; }
 
 .publication-section { display: grid; gap: 10px; padding: 16px 0; border-bottom: 1px solid var(--border-color); }
 .publication-section:first-child { padding-top: 0; }
@@ -28,8 +30,8 @@
 .publication-preview-empty { display: grid; place-items: center; min-height: 135px; padding: 12px; }
 
 /* Compact label-beside-field rows. */
-.publication-fields { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 12px; align-items: center; }
-.publication-fields > label { font-size: 0.75rem; color: var(--text-secondary); }
+.publication-fields { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 12px; align-items: start; }
+.publication-fields > label { font-size: 0.875rem; color: var(--text-secondary); padding-top: 6px; }
 .publication-fields > .publication-label-top { align-self: start; padding-top: 6px; }
 .publication-fields textarea { resize: vertical; }
 /* The account prefix is joined to the name field, so every field starts at the same edge. */
@@ -47,18 +49,19 @@
 .publication-body a.publication-button-link { color: inherit; text-decoration: none; }
 /* Centred beside the preview, with the two links sharing the row equally. */
 .publication-layout-result { align-items: center; }
-.publication-result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.publication-result-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
 .publication-result-actions a { display: flex; justify-content: center; }
 
 .publication-submit { display: grid; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color); }
 .publication-submit p { margin: 0; line-height: 1.5; }
 .publication-body > .publication-section + .publication-submit { border-top: 0; margin-top: 0; }
-.publication-submit-row { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.publication-submit-row { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
 
 @media (max-width: 640px) {
   .publication-layout { grid-template-columns: minmax(0, 1fr); }
   .publication-fields { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .publication-fields > label:not(:first-child) { margin-top: 6px; }
+  .publication-fields > label { padding-top: 0; }
   .publication-fields > .publication-label-top { padding-top: 0; }
   .publication-preview { max-height: 180px; }
 }

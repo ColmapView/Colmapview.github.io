@@ -1,5 +1,5 @@
 import type { HubClient } from '../huggingface/hubClient';
-import { HfError, boundedFetch, delay } from '../huggingface/http';
+import { HfError, delay, errorStatus } from '../huggingface/http';
 import type { PreparedPublication, PublicationReceipt } from './types';
 import { datasetFileUrl } from './publicationPaths';
 import { validateColmapManifest } from '../../utils/manifestValidation';
@@ -12,7 +12,8 @@ export function createPublicationVerifier(client: HubClient) {
     for (let attempt = 0; ; attempt++) {
       signal.throwIfAborted();
       try {
-        const request = boundedFetch(signal, 30_000);
+        await client.assertVisibility(receipt.repoId, receipt.visibility, signal);
+        const request = client.request(receipt.repoId, receipt.visibility, signal);
         const response = await request(datasetFileUrl(receipt.repoId, receipt.metadataCommit, 'colmapview.json'));
         const document = JSON.parse(await (await readBoundedResponse(response, 16 * 1024 * 1024)).text());
         const result = validateColmapManifest(document);
@@ -22,7 +23,7 @@ export function createPublicationVerifier(client: HubClient) {
         }
         const view = await fetchPublishedViewerState(result.manifest, request);
         if (JSON.stringify(view) !== JSON.stringify(prepared.viewerState)) throw new HfError('The saved viewer state could not be verified.');
-        const files = new Map((await client.files(receipt.repoId, receipt.dataCommit, signal)).map(file => [file.path, file]));
+        const files = new Map((await client.files(receipt.repoId, receipt.dataCommit, receipt.visibility, signal)).map(file => [file.path, file]));
         for (const expected of inventory) {
           const file = files.get(expected.path);
           if (!file || file.size !== expected.size || !file.oid) throw new HfError(`Published file ${expected.path} could not be verified.`);
@@ -40,7 +41,7 @@ export function createPublicationVerifier(client: HubClient) {
         return;
       } catch (error) {
         signal.throwIfAborted();
-        if (attempt >= 2) throw error;
+        if (attempt >= 2 || [401, 403].includes(errorStatus(error) ?? 0) || (error instanceof HfError && error.permanent)) throw error;
         await delay(500 * 2 ** attempt, signal);
       }
     }

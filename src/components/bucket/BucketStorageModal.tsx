@@ -7,7 +7,7 @@ import { inferBucketRegion } from '../../features/bucketStorage/paths';
 import { isBucketPublishing } from '../../features/bucketStorage/publishDataset';
 import { getButtonClass, inputStyles, modalStyles, panelStyles, Z_INDEX } from '../../theme';
 import { BucketIcon, ChevronRightIcon, CloseIcon } from '../../icons';
-import { copyToClipboard } from '../../utils/clipboard';
+import { UploadProgress, UploadResult } from '../upload/UploadParts';
 
 const fieldClass = `${inputStyles.base} ${inputStyles.sizes.sm} w-full min-w-0`;
 const connectionLabelClass = 'w-24 flex-shrink-0 font-normal text-ds-secondary';
@@ -37,7 +37,6 @@ export function BucketStorageModal({ isOpen, onClose, onLoadUrl }: {
   const [page, setPage] = useState<BucketPage | null>(null);
   const [listing, setListing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const listingRef = useRef<AbortController | null>(null);
   const connected = Boolean(connection.config);
   const busy = isBucketPublishing(publication.phase);
@@ -94,7 +93,7 @@ export function BucketStorageModal({ isOpen, onClose, onLoadUrl }: {
     setBrowsing(!browsing);
   };
   const publish = async () => {
-    setError(null); setCopied(false);
+    setError(null);
     try { await facade.publishDataset(folder); } catch (failure) { setError(bucketErrorMessage(failure)); }
   };
 
@@ -183,35 +182,45 @@ export function BucketStorageModal({ isOpen, onClose, onLoadUrl }: {
               {page?.nextToken && <button type="button" className={secondary} disabled={listing} onClick={() => { void browse(prefix, page.nextToken!); }}>More files</button>}
             </div>}
           </section>
-          {connection.canWrite && <section className="flex flex-col gap-2 border-t border-ds pt-3" aria-label="Bucket upload">
+          {connection.canWrite && <section className="publication-body flex flex-col gap-3 border-t border-ds pt-3" aria-label="Bucket upload">
+            <h3 className="m-0 font-semibold">Upload dataset</h3>
             {publication.phase === 'idle' ? <>
-              <p className="m-0 text-ds-secondary">Upload this dataset with original images and settings.</p>
               <form className="flex flex-col gap-2" onSubmit={event => { event.preventDefault(); void publish(); }}>
-                <details>
-                  <summary className="cursor-pointer text-ds-secondary">Upload destination</summary>
-                  <label htmlFor={`${id}-destination`} className="sr-only">Upload folder</label>
-                  <input id={`${id}-destination`} className={`${fieldClass} mt-2`} value={folder} onChange={event => setFolder(event.target.value)} autoComplete="off" />
-                  <p className="m-0 mt-2 text-ds-secondary">Each upload creates a new subfolder.</p>
-                </details>
-                <div className="flex justify-end"><button type="submit" className={secondary} disabled={!facade.canPublish}>Upload dataset</button></div>
+                <div className="publication-fields">
+                  <label htmlFor={`${id}-bucket-access`}>Access</label>
+                  <div className="publication-access">
+                    <input id={`${id}-bucket-access`} className={fieldClass} value="Bucket permissions" readOnly aria-describedby={`${id}-bucket-access-hint`} />
+                    <p id={`${id}-bucket-access-hint`} className="publication-note">Uses your bucket's existing public or private access.</p>
+                  </div>
+                  <label htmlFor={`${id}-destination`}>Upload folder</label>
+                  <div className="publication-access">
+                    <input id={`${id}-destination`} className={fieldClass} value={folder} onChange={event => setFolder(event.target.value)} autoComplete="off" />
+                    <p className="publication-note">Each upload creates a new subfolder.</p>
+                  </div>
+                </div>
+                <div className="publication-submit">
+                  <p className="publication-note">Includes original images, masks, splats, and viewer settings. Original image metadata is retained.</p>
+                  <div className="publication-submit-row"><button type="submit" className={primary} disabled={!facade.canPublish}>Upload dataset</button></div>
+                </div>
               </form>
               {!facade.canPublish && <p className="m-0 text-ds-secondary">{facade.pendingDeletions ? 'Apply or clear pending deletions first.' : 'Load a COLMAP dataset to upload it.'}</p>}
             </> : <>
-              <p role="status" className="m-0">{publication.message}</p>
-              {busy && <><progress className="w-full" aria-label="Bucket upload progress" max={publication.filesTotal || 1} value={publication.filesDone} />
-                <div className="flex items-center gap-2"><span className="text-ds-secondary">{publication.filesDone}/{publication.filesTotal} files · {(publication.bytesDone / 1024 / 1024).toFixed(1)} MiB</span>
-                  <button type="button" className={`${secondary} ml-auto`} disabled={publication.phase === 'cancelling'} onClick={bucketPublication.cancel}>Cancel upload</button></div></>}
-              {publication.viewerUrl && <>
-                <p className="m-0 text-ds-secondary">Private links require bucket access.</p>
-                <div className="flex gap-2"><input className={fieldClass} aria-label="Bucket viewer link" readOnly value={publication.viewerUrl} onFocus={event => event.target.select()} />
-                  <button type="button" className={primary} onClick={() => { void copyToClipboard(publication.viewerUrl!).then(setCopied); }}>{copied ? 'Copied' : 'Copy link'}</button></div>
-              </>}
-              {!busy && <button type="button" className={secondary} onClick={bucketPublication.reset}>New upload</button>}
+              {busy && <UploadProgress label="Bucket publication progress" message={publication.message} progressLabel="Bucket upload progress"
+                max={publication.filesTotal} value={publication.filesDone}
+                detail={publication.filesTotal > 0 ? `${publication.filesDone} / ${publication.filesTotal} files · ${(publication.bytesDone / 1024 / 1024).toFixed(1)} MiB` : undefined}
+                cancelDisabled={publication.phase === 'cancelling'} onCancel={bucketPublication.cancel} />}
+              {publication.viewerUrl && <UploadResult label="Published bucket dataset" title="Dataset saved to bucket storage"
+                notice="Access follows your bucket permissions. Viewers need bucket access for private files."
+                viewerUrl={publication.viewerUrl} linkLabel="Bucket viewer link" onReset={bucketPublication.reset} />}
+              {!busy && !publication.viewerUrl && <section className="publication-section" aria-label="Bucket upload recovery">
+                <p role="status">{publication.message}</p>
+                <div className="publication-actions"><button type="button" className={secondary} onClick={bucketPublication.reset}>Start a new publication</button></div>
+              </section>}
             </>}
           </section>}
         </>}
       </>}
-      {(error || publication.error) && <p role="alert" className="m-0 text-ds-warning">{error || publication.error}</p>}
+      {(error || publication.error) && <p role="alert" className="m-0 text-ds-error">{error || publication.error}</p>}
     </div>
   </ModalDialogShell>;
 }

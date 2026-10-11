@@ -7,7 +7,7 @@ import { downloadRemoteFile } from './downloadRemoteFile';
 import { MAX_BUFFERED_PUBLICATION_FILE_BYTES, MAX_PUBLICATION_BATCH_BYTES, MAX_PUBLICATION_BATCH_FILES, type PreparedPublication } from './types';
 import { createIdentityEuler } from '../../utils/sim3dTransforms';
 
-const details = { name: 'scene', title: 'Scene', description: 'Test dataset', license: 'cc-by-4.0' };
+const details = { name: 'scene', title: 'Scene', description: 'Test dataset', license: 'cc-by-4.0', visibility: 'public' as const };
 function fixture(count = 3): PreparedPublication {
   return { operationId: 'test-operation', sourceKey: 'source', modelRevision: 1, counts: { cameras: 1, images: 1, points: 1 },
     imageNameToPath: {}, splatPaths: [], viewerBaseUrl: 'https://viewer.example/',
@@ -19,7 +19,7 @@ function setup() {
   let commit = 1;
   const client: HubClient = { create: vi.fn().mockResolvedValue('a'.repeat(40)), head: vi.fn(),
     upload: vi.fn().mockImplementation(async () => (++commit).toString(16).padStart(40, '0')),
-    reconcile: vi.fn().mockResolvedValue(null), files: vi.fn(), resolveRevision: vi.fn() };
+    reconcile: vi.fn().mockResolvedValue(null), files: vi.fn(), request: vi.fn(), assertVisibility: vi.fn().mockResolvedValue(undefined) };
   const verify = vi.fn().mockResolvedValue(undefined);
   return { client, verify, controller: createPublicationController(client, verify) };
 }
@@ -27,6 +27,28 @@ beforeEach(() => vi.stubGlobal('Blob', NodeBlob));
 afterEach(() => vi.unstubAllGlobals());
 
 describe('publication controller', () => {
+  it('keeps private access through a failed upload and retry even if the form details change', async () => {
+    const { controller, client, verify } = setup();
+    const privateDetails = { ...details, visibility: 'private' as 'private' | 'public', license: '' };
+    vi.mocked(client.upload).mockRejectedValueOnce(new HfError('Offline'));
+    await controller.publish('owner', privateDetails, async () => fixture());
+    privateDetails.visibility = 'public';
+    await controller.retry();
+    expect(client.create).toHaveBeenCalledExactlyOnceWith('owner/scene', 'test-operation', 'private', expect.any(AbortSignal));
+    expect(verify).toHaveBeenCalledWith(expect.objectContaining({ visibility: 'private' }), expect.anything(), expect.anything(), expect.any(AbortSignal));
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'completed', receipt: { visibility: 'private' } });
+  });
+
+  it('stops before transferring files if private access changed and allows a fresh destination', async () => {
+    const { controller, client } = setup();
+    vi.mocked(client.assertVisibility).mockRejectedValueOnce(new HfError('Repository access changed.', undefined, true));
+    await controller.publish('owner', { ...details, visibility: 'private' }, async () => fixture());
+    expect(client.upload).not.toHaveBeenCalled();
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', canRetry: false, uncertain: false });
+    controller.reset();
+    expect(controller.getSnapshot().phase).toBe('idle');
+  });
+
   it('prepares, then commits data and metadata and verifies before success in one publish', async () => {
     const { controller, client, verify } = setup();
     const work = vi.fn(async () => {
