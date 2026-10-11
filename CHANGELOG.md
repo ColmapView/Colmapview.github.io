@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-10-10
+
+### Fixed
+
+- Remove unused CSS tooltip boxes that created horizontal scrollbars in Align, Share and other scrollable controls, while preserving visible mouse and keyboard hints.
+- Keep loading help cards within the viewport and outside the startup panel's scroll bounds, and prevent them from blocking storage buttons when keyboard focus returns after closing a dialog.
+- Let the startup toolbar wrap on narrow screens so its controls and dismiss button remain reachable.
+
 ## 0.16.0 - 2026-10-10
 
 ### Added
