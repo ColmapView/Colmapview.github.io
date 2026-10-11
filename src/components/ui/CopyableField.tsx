@@ -20,7 +20,7 @@ export function CopyableField({ label, value }: { label: string; value: string }
     <div className="flex gap-2 min-w-0">
       <input ref={inputRef} aria-label={label} readOnly value={value} onFocus={event => event.target.select()}
         aria-describedby={current?.copied === false ? `${id}-error` : undefined}
-        className={`${inputStyles.base} ${inputStyles.sizes.sm} flex-1 min-w-0 text-ellipsis`} />
+        className={`${inputStyles.base} ${inputStyles.sizes.sm} flex-1 min-w-0 overflow-ellipsis`} />
       <button type="button" className={getButtonClass('primary', 'sm')} aria-live="polite" onClick={() => { void copy(); }}>
         {current?.copied ? 'Copied' : 'Copy'}
       </button>
