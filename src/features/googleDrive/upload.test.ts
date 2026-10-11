@@ -190,8 +190,8 @@ describe('Drive resumable upload transport', () => {
 });
 
 describe('Drive publishing session on a rejected request', () => {
-  // Wired as the publication runtime wires its client to googleDrivePublishAuth.
-  const auth = createGoogleDriveAuth('publish');
+  // Uses the same per-file session contract as reading and publication.
+  const auth = createGoogleDriveAuth();
   const signIn = (token: string) => auth.connect('123456-client.apps.googleusercontent.com', {
     initTokenClient: config => ({ requestAccessToken: () => config.callback({ access_token: token, token_type: 'Bearer', expires_in: 3600, scope: GOOGLE_DRIVE_SCOPE }) }),
   });
@@ -217,7 +217,7 @@ describe('Drive publishing session on a rejected request', () => {
     signIn('rejected-upload-token');
     const request = vi.fn<DriveUploadRequest>(async () => new Response(null, { status: 401 }));
     await expect(client(request).owner(new AbortController().signal)).rejects.toMatchObject({ status: 401 });
-    expect(auth.getSnapshot()).toEqual({ status: 'disconnected', error: 'Google Drive sign-in expired. Sign in again to continue publishing.' });
+    expect(auth.getSnapshot()).toEqual({ status: 'disconnected', error: 'Google Drive sign-in expired. Sign in again to continue.' });
     expect(auth.getAccessToken()).toBeNull();
   });
 });

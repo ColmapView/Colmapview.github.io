@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DatasetAccountButtons } from './DatasetAccountButtons';
 import { googleDriveAuth, loadGoogleOAuthSdk, type GoogleOAuthSdk, type GoogleTokenResponse } from '../../features/googleDrive/auth';
@@ -7,6 +7,14 @@ import { hfAuth } from '../../features/huggingface/auth';
 import { isGoogleDriveEnabled, resolveGoogleDriveHostingConfig } from '../../features/googleDrive/config';
 import { offerStartupLinkRetry } from '../../appStartupRetry';
 import { useReconstructionStore } from '../../store';
+import { useGoogleDrivePublishStoreFacade } from '../modals/useGoogleDrivePublishStoreFacade';
+
+vi.mock('../../features/googleDrive/publicationRuntime', () => {
+  const state = { phase: 'idle', message: '', filesDone: 0, filesTotal: 0, bytesDone: 0 };
+  return { publishCurrentDatasetToDrive: vi.fn(), drivePublication: {
+    getSnapshot: () => state, subscribe: () => () => {},
+  } };
+});
 
 vi.mock('../../features/googleDrive/config', async importOriginal => ({
   ...await importOriginal<typeof import('../../features/googleDrive/config')>(),
@@ -93,6 +101,25 @@ afterEach(() => {
 });
 
 describe('Dataset provider account icons', () => {
+  it('shares sign-in and disconnect with publishing instead of opening a second session', async () => {
+    const oauth = configureDrive();
+    vi.mocked(chooseGoogleDriveArchive).mockResolvedValue(null);
+    render(<DatasetAccountButtons {...createProps()} />);
+    const { result } = renderHook(useGoogleDrivePublishStoreFacade);
+    const account = screen.getByRole('button', { name: 'Google Drive account' });
+    fireEvent.click(account);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Choose archive from Drive' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Choose archive from Drive' }));
+    oauth.authorize();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Disconnect' })).toBeVisible());
+    expect(result.current.auth.status).toBe('connected');
+    expect(result.current.googleDriveAuth.getAccessToken()).toBe('test-token');
+    expect(account).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+    expect(result.current.auth.status).toBe('disconnected');
+    expect(result.current.googleDriveAuth.getAccessToken()).toBeNull();
+    expect(account).toHaveAttribute('aria-pressed', 'false');
+  });
   it('keeps the icon-only Google Drive button accessible and explains it on hover', () => {
     configureDrive();
     render(<DatasetAccountButtons {...createProps()} />);
@@ -172,7 +199,7 @@ describe('Dataset provider account icons', () => {
     expect(oauth.requestAccessToken).not.toHaveBeenCalled();
     expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
     expect(screen.getByText(/Sign in to choose a ZIP or TAR archive/)).toBeVisible();
-    expect(screen.getByText(/Only files you choose are accessible/)).toBeVisible();
+    expect(screen.getByText(/Only files you choose or create here are accessible/)).toBeVisible();
     expect(screen.queryByRole('link', { name: 'Privacy' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Terms' })).not.toBeInTheDocument();
   });

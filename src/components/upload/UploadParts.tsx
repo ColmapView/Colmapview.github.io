@@ -1,11 +1,9 @@
-import { useState, type ReactNode } from 'react';
-import { copyToClipboard } from '../../utils/clipboard';
+import { type ReactNode } from 'react';
+import { CopyableField } from '../ui/CopyableField';
 import { getButtonClass, inputStyles } from '../../theme';
 import './upload.css';
 
-const fieldClass = `${inputStyles.base} ${inputStyles.sizes.sm} w-full min-w-0`;
 const secondary = getButtonClass('secondary', 'sm');
-const primary = getButtonClass('primary', 'sm');
 
 /** Lives inside publication-fields, so every provider uses the same access row. */
 export function UploadAccessField({ id, shared, onChange, publicLabel, hint }: {
@@ -42,16 +40,10 @@ export function UploadResult({ label, title, notice, viewerUrl, linkLabel = 'Vie
   label: string; title: ReactNode; notice: string; viewerUrl: string; linkLabel?: string;
   providerLink?: { url: string; label: string }; onReset: () => void;
 }) {
-  const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   return <section className="publication-section" aria-label={label}>
     <p role="status" className="publication-result-title"><span className="publication-result-check" aria-hidden="true">✓ </span>{title}</p>
     <p className="publication-note">{notice}</p>
-    <div className="publication-link-row">
-      <input className={fieldClass} aria-label={linkLabel} readOnly value={viewerUrl} onFocus={event => event.target.select()} />
-      <button type="button" className={primary} onClick={() => { void copyToClipboard(viewerUrl).then(ok => setCopiedUrl(ok ? viewerUrl : null)); }}>
-        {copiedUrl === viewerUrl ? 'Copied' : 'Copy'}
-      </button>
-    </div>
+    <CopyableField label={linkLabel} value={viewerUrl} />
     <div className="publication-result-actions">
       <a className={`${secondary} publication-button-link`} href={viewerUrl} target="_blank" rel="noopener noreferrer">Open viewer<span aria-hidden="true"> ↗</span></a>
       {providerLink && <a className={`${secondary} publication-button-link`} href={providerLink.url} target="_blank" rel="noopener noreferrer">

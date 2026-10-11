@@ -47,12 +47,43 @@ describe('LazyToolModal', () => {
     expect(load).toHaveBeenCalledTimes(1);
   });
 
-  it('announces failure and retries the loader', async () => {
-    const load = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ default: StatefulModal });
-    render(<LazyToolModal title="Test" load={load} isOpen onClose={vi.fn()} />);
+  it('offers explicit reload recovery instead of retrying the cached import, including after reopening', async () => {
+    const load = vi.fn().mockRejectedValue(new Error('offline'));
+    const close = vi.fn();
+    const view = render(<LazyToolModal title="Test" load={load} isOpen onClose={close} />);
     expect(await screen.findByRole('alert')).toHaveTextContent('could not load');
-    fireEvent.click(screen.getByRole('button', { name: 'Retry loading' }));
-    expect(await screen.findByRole('textbox')).toHaveValue('draft');
-    expect(load).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('button', { name: 'Reload viewer' })).toBeEnabled();
+    expect(screen.getByText(/Unsaved changes will be lost/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Retry loading' })).toBeNull();
+    view.rerender(<LazyToolModal title="Test" load={load} isOpen={false} onClose={close} />);
+    view.rerender(<LazyToolModal title="Test" load={load} isOpen onClose={close} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('could not load');
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the modal focus policy while loading and after failure, then restores the opener', async () => {
+    let reject!: (error: Error) => void;
+    const load = () => new Promise<{ default: typeof StatefulModal }>((_resolve, fail) => { reject = fail; });
+    const close = vi.fn();
+    const view = render(<><button>Before</button><LazyToolModal modal title="Test" load={load} isOpen={false} onClose={close} /></>);
+    const opener = screen.getByRole('button', { name: 'Before' });
+    opener.focus();
+    view.rerender(<><button>Before</button><LazyToolModal modal title="Test" load={load} isOpen onClose={close} /></>);
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
+    const closeButton = screen.getByRole('button', { name: 'Close test' });
+    expect(closeButton).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(closeButton).toHaveFocus();
+    await act(async () => reject(new Error('offline')));
+    const reload = screen.getByRole('button', { name: 'Reload viewer' });
+    reload.focus();
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(closeButton).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(reload).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(close).toHaveBeenCalledOnce();
+    view.rerender(<><button>Before</button><LazyToolModal modal title="Test" load={load} isOpen={false} onClose={close} /></>);
+    expect(opener).toHaveFocus();
   });
 });

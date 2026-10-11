@@ -1,12 +1,12 @@
 import { useReconstructionStore, useDeletionStore, useDrivePublicationStatus } from '../../store';
 import { assertPublicationInputCurrent, capturePublicationInput, getPublicationSourceKey } from '../datasetPublishing/publicationSnapshot';
-import { googleDrivePublishAuth } from './auth';
+import { googleDriveAuth } from './auth';
 import { createDriveUploadClient } from './upload';
 import { createDrivePublicationController, isDrivePublishing } from './publishDataset';
 import { prepareDriveArchive } from './prepareArchive';
 
 export const drivePublication = createDrivePublicationController(createDriveUploadClient({
-  getAccessToken: googleDrivePublishAuth.getAccessToken, expireSession: googleDrivePublishAuth.expire,
+  getAccessToken: googleDriveAuth.getAccessToken, expireSession: googleDriveAuth.expire,
 }));
 const status = drivePublication.subscribe(() => useDrivePublicationStatus.setState({ active: drivePublication.getSnapshot().phase !== 'idle' }));
 let sourceKey = getPublicationSourceKey();
@@ -25,7 +25,7 @@ const beforeUnload = (event: BeforeUnloadEvent) => {
 window.addEventListener('beforeunload', beforeUnload);
 if (import.meta.hot) import.meta.hot.dispose(() => {
   status(); reconstruction(); deletions(); window.removeEventListener('beforeunload', beforeUnload);
-  drivePublication.cancel(); googleDrivePublishAuth.disconnect();
+  drivePublication.cancel();
 });
 
 export function publishCurrentDatasetToDrive(name: string, shared: boolean): Promise<void> {

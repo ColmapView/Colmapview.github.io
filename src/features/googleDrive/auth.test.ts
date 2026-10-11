@@ -13,15 +13,13 @@ const validToken: GoogleTokenResponse = { access_token: 'private-test-token', to
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 describe('Google Drive in-memory account session', () => {
-  it('does not initiate read or publish authorization on a disabled host with an injected SDK', () => {
+  it('does not initiate per-file authorization on a disabled host with an injected SDK', () => {
     stubGoogleDriveHost('https://opsiclear.github.io');
     const { sdk, requestAccessToken } = testSdk();
-    for (const purpose of ['read', 'publish'] as const) {
-      const auth = createGoogleDriveAuth(purpose);
-      auth.connect('123456-client.apps.googleusercontent.com', sdk);
-      expect(auth.getSnapshot()).toMatchObject({ status: 'disconnected', error: expect.stringContaining('available at') });
-      expect(auth.getAccessToken()).toBeNull();
-    }
+    const auth = createGoogleDriveAuth();
+    auth.connect('123456-client.apps.googleusercontent.com', sdk);
+    expect(auth.getSnapshot()).toMatchObject({ status: 'disconnected', error: expect.stringContaining('available at') });
+    expect(auth.getAccessToken()).toBeNull();
     expect(sdk.initTokenClient).not.toHaveBeenCalled();
     expect(requestAccessToken).not.toHaveBeenCalled();
   });
@@ -52,27 +50,12 @@ describe('Google Drive in-memory account session', () => {
     auth.disconnect();
   });
 
-  it('keeps selected-file reading and publishing in separate sessions with only drive.file scope', () => {
-    const reader = createGoogleDriveAuth();
-    const writer = createGoogleDriveAuth('publish');
-    const { sdk, callbacks } = testSdk();
-    reader.connect('123456-client.apps.googleusercontent.com', sdk);
-    expect(callbacks[0].scope).toBe('https://www.googleapis.com/auth/drive.file');
-    callbacks[0].callback(validToken);
-    writer.connect('123456-client.apps.googleusercontent.com', sdk);
-    expect(callbacks[1]).toMatchObject({ scope: GOOGLE_DRIVE_SCOPE, include_granted_scopes: false });
-    callbacks[1].callback({ ...validToken, access_token: 'upload-token', scope: GOOGLE_DRIVE_SCOPE });
-    expect(writer.getAccessToken()).toBe('upload-token');
-    writer.disconnect();
-    expect(reader.getAccessToken()).toBe('private-test-token');
-    reader.disconnect();
-  });
-  it('rejects a read-only grant for publishing', () => {
-    const writer = createGoogleDriveAuth('publish');
+  it('rejects a broad read-only grant instead of selected-file access', () => {
+    const writer = createGoogleDriveAuth();
     const { sdk, callbacks } = testSdk();
     writer.connect('123456-client.apps.googleusercontent.com', sdk);
     callbacks[0].callback({ ...validToken, scope: 'https://www.googleapis.com/auth/drive.readonly' });
-    expect(writer.getSnapshot()).toMatchObject({ status: 'disconnected', error: expect.stringContaining('upload permission') });
+    expect(writer.getSnapshot()).toMatchObject({ status: 'disconnected', error: expect.stringContaining('file permission') });
     expect(writer.getAccessToken()).toBeNull();
   });
   it('requests selected-file access explicitly and keeps tokens out of snapshots and storage', () => {
@@ -156,7 +139,7 @@ describe('Google Drive in-memory account session', () => {
     expect(auth.getSnapshot()).toEqual({ status: 'connected', error: null });
     expect(auth.getAccessToken()).toBe('newer-token');
     auth.expire('newer-token');
-    expect(auth.getSnapshot()).toEqual({ status: 'disconnected', error: 'Google Drive sign-in expired. Sign in again, then choose an archive in the Drive picker.' });
+    expect(auth.getSnapshot()).toEqual({ status: 'disconnected', error: 'Google Drive sign-in expired. Sign in again to continue.' });
     expect(auth.getAccessToken()).toBeNull();
   });
 });

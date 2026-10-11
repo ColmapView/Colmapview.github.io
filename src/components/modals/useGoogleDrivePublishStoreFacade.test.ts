@@ -12,7 +12,7 @@ const external = vi.hoisted(() => ({
   publishListeners: new Set<() => void>(),
   publishDataset: vi.fn(),
 }));
-vi.mock('../../features/googleDrive/auth', () => ({ googleDrivePublishAuth: {
+vi.mock('../../features/googleDrive/auth', () => ({ googleDriveAuth: {
   getSnapshot: () => external.auth,
   subscribe: (listener: () => void) => { external.authListeners.add(listener); return () => external.authListeners.delete(listener); },
 } }));

@@ -202,6 +202,34 @@ describe('bucket storage dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Upload another dataset' }));
     expect(publication.reset).toHaveBeenCalledOnce();
   });
+  it.each(['failed', 'cancelled'] as const)('identifies and browses the %s upload folder including source files before reset', async phase => {
+    bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
+    const prefix = 'dataset/partial +#/';
+    publication.state = { phase, message: 'Completed objects remain in the new folder.', prefix, filesDone: 2, filesTotal: 4, bytesDone: 10 };
+    request.mockImplementation(async url => {
+      const listingPrefix = new URL(url).searchParams.get('prefix');
+      const contents = listingPrefix === prefix
+        ? `<CommonPrefixes><Prefix>${prefix}sparse/</Prefix></CommonPrefixes>`
+        : listingPrefix === `${prefix}sparse/`
+          ? `<CommonPrefixes><Prefix>${prefix}sparse/0/</Prefix></CommonPrefixes>`
+          : `<Contents><Key>${prefix}sparse/0/cameras.bin</Key><Size>8</Size></Contents>`;
+      return new Response(`<ListBucketResult>${contents}<IsTruncated>false</IsTruncated></ListBucketResult>`);
+    });
+    open();
+    expect(screen.getByRole('textbox', { name: 'Upload folder' })).toHaveValue(prefix);
+    expect(screen.getByRole('textbox', { name: 'Upload folder' })).toHaveAttribute('readonly');
+    fireEvent.click(screen.getByRole('button', { name: 'Browse uploaded files' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'sparse/' }));
+    fireEvent.click(await screen.findByRole('button', { name: '0/' }));
+    expect(await screen.findByText('cameras.bin')).toBeVisible();
+    expect(screen.queryByText('No datasets in this folder.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Load dataset/partial +#/sparse/0/cameras.bin' })).toBeNull();
+    expect(screen.getByRole('textbox', { name: 'Dataset path' })).toHaveValue(`${prefix}sparse/0/`);
+    expect(new URL(request.mock.calls[0][0]).searchParams.get('prefix')).toBe(prefix);
+    expect(publication.reset).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Start a new publication' }));
+    expect(publication.reset).toHaveBeenCalledOnce();
+  });
   it('enables upload only for loaded COLMAP data and blocks pending deletions', async () => {
     act(() => bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' }));
     open();

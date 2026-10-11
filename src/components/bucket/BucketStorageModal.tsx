@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { ModalDialogShell } from '../ui/ModalDialogShell';
+import { CopyableField } from '../ui/CopyableField';
 import { useBucketStorageStoreFacade } from './useBucketStorageStoreFacade';
 import { bucketErrorMessage, type BucketPage } from '../../features/bucketStorage/types';
 import { bucketKeyUrl, listBucketPage } from '../../features/bucketStorage/client';
@@ -40,7 +41,10 @@ export function BucketStorageModal({ isOpen, onClose, onLoadUrl }: {
   const listingRef = useRef<AbortController | null>(null);
   const connected = Boolean(connection.config);
   const busy = isBucketPublishing(publication.phase);
-  const objects = page?.objects.filter(object => loadable(object.key)) ?? [];
+  const uploadPrefix = publication.prefix;
+  // Inspecting this upload includes its source files, even when no manifest was committed.
+  const inspectingUpload = Boolean(uploadPrefix && prefix.startsWith(uploadPrefix));
+  const objects = page?.objects.filter(object => inspectingUpload || loadable(object.key)) ?? [];
   const path = prefix.trim();
   const browsePrefix = loadable(path) ? path.slice(0, path.lastIndexOf('/') + 1) : folderPath(path);
   useEffect(() => () => { listingRef.current?.abort(); }, []);
@@ -176,7 +180,10 @@ export function BucketStorageModal({ isOpen, onClose, onLoadUrl }: {
                 {page.directories.map(key => <div key={key} role="listitem"><button type="button" className="flex w-full items-center justify-between gap-2 text-left px-3 py-1.5 hover-bg-ds-secondary" title={key} onClick={() => { void browse(key); }}>
                   <span className="truncate">{key.slice(prefix.length) || key}</span><ChevronRightIcon className="w-3.5 h-3.5 flex-shrink-0" />
                 </button></div>)}
-                {objects.map(object => <div key={object.key} role="listitem"><button type="button" className="w-full truncate text-left px-3 py-1.5 hover-bg-ds-secondary" disabled={busy} title={`${object.key} · ${(object.size / 1024 / 1024).toFixed(1)} MiB`} aria-label={`Load ${object.key}`} onClick={() => loadObject(object.key)}>{object.key.slice(prefix.length) || object.key}</button></div>)}
+                {objects.map(object => <div key={object.key} role="listitem">
+                  {loadable(object.key) ? <button type="button" className="w-full truncate text-left px-3 py-1.5 hover-bg-ds-secondary" disabled={busy} title={`${object.key} · ${(object.size / 1024 / 1024).toFixed(1)} MiB`} aria-label={`Load ${object.key}`} onClick={() => loadObject(object.key)}>{object.key.slice(prefix.length) || object.key}</button>
+                    : <span className="block truncate px-3 py-1.5 text-ds-secondary" title={`${object.key} · ${(object.size / 1024 / 1024).toFixed(1)} MiB`}>{object.key.slice(prefix.length) || object.key}</span>}
+                </div>)}
               </div>}
               {page && !listing && !page.directories.length && !objects.length && <p className="m-0 text-ds-secondary">{page.nextToken ? 'No datasets on this page.' : 'No datasets in this folder.'}</p>}
               {page?.nextToken && <button type="button" className={secondary} disabled={listing} onClick={() => { void browse(prefix, page.nextToken!); }}>More files</button>}
@@ -214,6 +221,10 @@ export function BucketStorageModal({ isOpen, onClose, onLoadUrl }: {
                 viewerUrl={publication.viewerUrl} linkLabel="Bucket viewer link" onReset={bucketPublication.reset} />}
               {!busy && !publication.viewerUrl && <section className="publication-section" aria-label="Bucket upload recovery">
                 <p role="status">{publication.message}</p>
+                {uploadPrefix && <>
+                  <CopyableField label="Upload folder" value={uploadPrefix} />
+                  <div className="publication-actions"><button type="button" className={secondary} onClick={() => { setBrowsing(true); void browse(uploadPrefix); }}>Browse uploaded files</button></div>
+                </>}
                 <div className="publication-actions"><button type="button" className={secondary} onClick={bucketPublication.reset}>Start a new publication</button></div>
               </section>}
             </>}

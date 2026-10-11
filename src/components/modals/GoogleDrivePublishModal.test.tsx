@@ -12,7 +12,7 @@ vi.mock('./useGoogleDrivePublishStoreFacade', () => ({ useGoogleDrivePublishStor
   auth: actions.auth, publish: actions.publish, reconstruction: actions.reconstruction, pendingDeletions: actions.pending,
   publishDataset: actions.publishDataset, applyDeletionsToData: actions.apply,
   publication: { retry: actions.retry, reset: actions.reset, cancel: actions.cancel },
-  googleDrivePublishAuth: { connect: actions.connect, disconnect: actions.disconnect },
+  googleDriveAuth: { connect: actions.connect, disconnect: actions.disconnect },
 }) }));
 vi.mock('../../features/googleDrive/auth', async importOriginal => ({
   ...await importOriginal<typeof import('../../features/googleDrive/auth')>(),

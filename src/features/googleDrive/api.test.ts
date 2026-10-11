@@ -358,7 +358,7 @@ describe('Google Drive reader session on a rejected account request', () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce(Response.json({ error: {} }, { status: 404 })).mockResolvedValueOnce(response());
     await expect(resolveGoogleDriveArchive(reference, { apiKey: 'app-key', fetchImpl })).rejects.toMatchObject({ message: expect.stringContaining(message) });
     expect(googleDriveAuth.getSnapshot()).toEqual({ status: 'disconnected',
-      error: 'Google Drive sign-in expired. Sign in again, then choose an archive in the Drive picker.' });
+      error: 'Google Drive sign-in expired. Sign in again to continue.' });
     expect(googleDriveAuth.getAccessToken()).toBeNull();
   });
 });

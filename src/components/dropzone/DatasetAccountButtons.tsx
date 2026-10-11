@@ -34,7 +34,7 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadRemoteDataset }: D
   // A shared link's dataset URL is hidden in its fragment, and a reload would drop the sign-in.
   const retryLink = useSyncExternalStore(startupLinkRetry.subscribe, startupLinkRetry.getSnapshot);
   const clientId = getGoogleDrivePickerConfig()?.clientId;
-  // Drive URLs load with the API key; a reader session exists only through the picker, which needs the key too.
+  // Drive URLs need an API key; private archive selection also needs a matching Picker configuration.
   const googleApiKey = getGoogleDriveConfiguration().apiKey;
   const googleEnabled = isGoogleDriveEnabled();
   const hfConfiguration = getHfAccountConfiguration();
@@ -49,7 +49,7 @@ export function DatasetAccountButtons({ onOpenUrlModal, onLoadRemoteDataset }: D
       : googleApiKey ? 'Load a public dataset by URL.' : 'Google Drive loading is unavailable in this viewer.'
     : connected ? 'Load a public or private dataset.' : canSignIn ? 'Sign in to open private datasets.' : 'Load a public dataset by URL.';
   const hint = provider === 'google'
-    ? clientId ? 'Only files you choose are accessible. Downloads go directly to your browser.'
+    ? clientId ? 'Only files you choose or create here are accessible. Downloads go directly to your browser.'
       : googleApiKey ? 'Private file selection is unavailable. You can load public datasets by URL.'
         : 'Private file selection is unavailable.'
     : hfConfiguration.status === 'ready'

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.2] - 2026-10-11
+
+### Added
+
+- Publish to private Hugging Face repositories and copy viewer links that prompt recipients to sign in when access is required.
+
+### Changed
+
+- Use consistent upload controls, progress, cancellation and result links across Hugging Face, Google Drive and bucket storage.
+- Share one Google Drive connection between loading and publishing, so connecting or disconnecting applies to both.
+
+### Fixed
+
+- Keep loading and error dialogs within narrow viewports and preserve the tool's keyboard focus behavior while its code loads.
+- Recover failed tool imports by reloading the viewer instead of retrying a cached failed import.
+- Show the exact bucket upload destination after a partial failure and allow browsing its uploaded source files and nested folders.
+- Provide copy confirmation and a selectable manual fallback when the browser refuses clipboard access.
+
 ## [0.16.1] - 2026-10-10
 
 ### Fixed
@@ -659,7 +677,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript for type safety
 - Deno native test runner for testing
 
-[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.4...HEAD
+[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.16.2...HEAD
+[0.16.2]: https://github.com/ColmapView/colmapview.github.io/compare/v0.16.1...v0.16.2
+[0.16.1]: https://github.com/ColmapView/colmapview.github.io/compare/v0.16.0...v0.16.1
+[0.16.0]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.4...v0.16.0
 [0.15.4]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.3...v0.15.4
 [0.15.3]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.2...v0.15.3
 [0.15.2]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.1...v0.15.2

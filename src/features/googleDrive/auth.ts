@@ -64,10 +64,8 @@ export function getGoogleDriveClientId(): string | null {
 }
 
 /** Tokens stay in this tab's memory, never in viewer state, storage, or shared links. */
-export function createGoogleDriveAuth(purpose: 'read' | 'publish' = 'read') {
-  const expired = purpose === 'publish'
-    ? 'Google Drive sign-in expired. Sign in again to continue publishing.'
-    : 'Google Drive sign-in expired. Sign in again, then choose an archive in the Drive picker.';
+export function createGoogleDriveAuth() {
+  const expired = 'Google Drive sign-in expired. Sign in again to continue.';
   let session: { token: string; expiresAt: number } | null = null;
   let generation = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -120,8 +118,7 @@ export function createGoogleDriveAuth(purpose: 'read' | 'publish' = 'read') {
             if (!response.access_token || !Number.isFinite(expires) || expires <= 5 || expires > 86400
               || response.token_type?.toLowerCase() !== 'bearer'
               || !response.scope?.split(' ').includes(GOOGLE_DRIVE_SCOPE)) {
-              return fail(purpose === 'publish' ? 'Google Drive upload permission was not granted. Sign in again and allow file access.'
-                : 'Google Drive file permission was not granted. Sign in again, then choose an archive in the Drive picker.');
+              return fail('Google Drive file permission was not granted. Sign in again and allow file access.');
             }
             clearTimeout(timer);
             session = { token: response.access_token, expiresAt: Date.now() + expires * 1000 };
@@ -138,5 +135,4 @@ export function createGoogleDriveAuth(purpose: 'read' | 'publish' = 'read') {
 }
 
 export const googleDriveAuth = createGoogleDriveAuth();
-// Both use app-created/selected-file access, with independent memory-only sessions.
-export const googleDrivePublishAuth = createGoogleDriveAuth('publish');
+if (import.meta.hot) import.meta.hot.dispose(() => googleDriveAuth.disconnect());

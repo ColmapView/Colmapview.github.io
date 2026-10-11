@@ -44,8 +44,6 @@
 /* Published result. */
 .publication-result-title { font-weight: 600; }
 .publication-result-check { color: var(--success); }
-.publication-link-row { display: flex; gap: 8px; min-width: 0; }
-.publication-link-row input { flex: 1; min-width: 0; text-overflow: ellipsis; }
 .publication-body a.publication-button-link { color: inherit; text-decoration: none; }
 /* Centred beside the preview, with the two links sharing the row equally. */
 .publication-layout-result { align-items: center; }

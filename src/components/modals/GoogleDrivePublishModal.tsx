@@ -14,7 +14,7 @@ const bytes = (value: number) => `${(value / 1024 / 1024).toFixed(1)} MiB`;
 
 export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const facade = useGoogleDrivePublishStoreFacade();
-  const { auth, publish, publication, googleDrivePublishAuth } = facade;
+  const { auth, publish, publication, googleDriveAuth } = facade;
   const id = useId();
   const clientId = getGoogleDriveClientId();
   const [name, setName] = useState('dataset.zip');
@@ -39,7 +39,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
     try { await facade.publishDataset(name, shared); }
     catch (error) { setFormError(drivePublicationErrorMessage(error)); }
   };
-  const signOut = () => { publication.cancel(); googleDrivePublishAuth.disconnect(); };
+  const signOut = () => { publication.cancel(); googleDriveAuth.disconnect(); };
   const applyDeletions = async () => {
     setApplying(true);
     try { if (!await facade.applyDeletionsToData()) setFormError('Deletions could not be applied. Review the current reconstruction.'); }
@@ -57,7 +57,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
         {clientId && (auth.status === 'connected' || auth.status === 'connecting'
           ? <button type="button" className={getButtonClass('secondary', 'xs')} onClick={signOut}>{auth.status === 'connecting' ? 'Cancel sign-in' : 'Sign out'}</button>
           : <button type="button" className={getButtonClass('primary', 'xs')} disabled={!sdk} aria-label="Sign in with Google"
-            onClick={() => { if (sdk) googleDrivePublishAuth.connect(clientId, sdk); }}>Sign in</button>)}
+            onClick={() => { if (sdk) googleDriveAuth.connect(clientId, sdk); }}>Sign in</button>)}
         <button type="button" className={modalStyles.toolHeaderClose} onClick={onClose} aria-label="Close Drive publication"><CloseIcon className="w-3.5 h-3.5" /></button>
       </div>
     </header>

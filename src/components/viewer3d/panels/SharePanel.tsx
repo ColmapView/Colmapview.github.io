@@ -224,8 +224,8 @@ export const SharePanel = memo(function SharePanel({
     {destination === 'bucket' && <Suspense fallback={<span role="status">Opening bucket storage…</span>}>
       <BucketStorageModal isOpen onClose={closeDestination} onLoadUrl={loadUrl} />
     </Suspense>}
-    {hfPublishing ? <LazyToolModal title="Publish dataset" load={loadHfPublisher} isOpen={destination === 'hf'} onClose={closeDestination} />
+    {hfPublishing ? <LazyToolModal modal title="Publish dataset" load={loadHfPublisher} isOpen={destination === 'hf'} onClose={closeDestination} />
       : hfAccount.status === 'ready' && <HuggingFaceAccountDialog config={hfAccount.config} isOpen={destination === 'hf'} onClose={closeDestination} />}
-    {driveEnabled && getGoogleDriveClientId() && <LazyToolModal title="Publish to Google Drive" load={loadDrivePublisher} isOpen={destination === 'drive'} onClose={closeDestination} />}
+    {driveEnabled && getGoogleDriveClientId() && <LazyToolModal modal title="Publish to Google Drive" load={loadDrivePublisher} isOpen={destination === 'drive'} onClose={closeDestination} />}
   </>;
 });
