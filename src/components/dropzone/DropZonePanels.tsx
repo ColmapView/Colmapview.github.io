@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import {
   emptyStateStyles,
   floatingPanelStyles,
@@ -80,6 +80,9 @@ export function DesktopDropZonePanel({
   const [hoveredButton, setHoveredButton] = useState<HoveredDropZoneButton>(null);
   const [showFormatInfo, setShowFormatInfo] = useState(false);
   const formatInfoId = useId();
+  const urlButtonRef = useRef<HTMLButtonElement>(null);
+  const manifestButtonRef = useRef<HTMLButtonElement>(null);
+  const toyButtonRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div className={DROP_ZONE_DESKTOP_OVERLAY_CLASS} style={getDropZonePanelOverlayStyle()}>
@@ -181,6 +184,7 @@ export function DesktopDropZonePanel({
               <button
                 type="button"
                 onClick={onOpenUrlModal}
+                ref={urlButtonRef}
                 onMouseEnter={() => setHoveredButton('url')}
                 onFocus={() => setHoveredButton('url')}
                 onBlur={() => setHoveredButton(null)}
@@ -191,13 +195,14 @@ export function DesktopDropZonePanel({
                 <LinkIcon className={DROP_ZONE_DESKTOP_ACTION_BUTTON_ICON_CLASS} />
                 {DROP_ZONE_ACTION_LABELS.loadUrl}
               </button>
-              {hoveredButton === 'url' && <LoadUrlHoverCard />}
+              {hoveredButton === 'url' && <LoadUrlHoverCard anchorRef={urlButtonRef} />}
             </div>
 
             <div className="relative">
               <button
                 type="button"
                 onClick={onOpenManifestFile}
+                ref={manifestButtonRef}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   onDownloadExampleManifest();
@@ -212,13 +217,14 @@ export function DesktopDropZonePanel({
                 <FileJsonIcon className={DROP_ZONE_DESKTOP_ACTION_BUTTON_ICON_CLASS} />
                 {DROP_ZONE_ACTION_LABELS.loadJson}
               </button>
-              {hoveredButton === 'json' && <LoadJsonHoverCard />}
+              {hoveredButton === 'json' && <LoadJsonHoverCard anchorRef={manifestButtonRef} />}
             </div>
 
             <div className="relative">
               <button
                 type="button"
                 onClick={onLoadToy}
+                ref={toyButtonRef}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   onOpenExampleDataset();
@@ -233,7 +239,7 @@ export function DesktopDropZonePanel({
                 <img src={publicAsset('LOGO.png')} alt="" className={DROP_ZONE_DESKTOP_ACTION_BUTTON_ICON_CLASS} />
                 {DROP_ZONE_ACTION_LABELS.tryToy}
               </button>
-              {hoveredButton === 'toy' && <ToyHoverCard />}
+              {hoveredButton === 'toy' && <ToyHoverCard anchorRef={toyButtonRef} />}
             </div>
           </div>
 

@@ -10,7 +10,7 @@ export interface DropZoneHoverCardHintRow {
 }
 
 export const DROP_ZONE_HOVER_CARD_POSITION_CLASS =
-  'absolute left-1/2 -translate-x-1/2 bottom-full mb-2';
+  'fixed pointer-events-none startup-help-card';
 
 export const LOAD_URL_HOVER_CARD_TITLE = 'Load from URL';
 export const LOAD_URL_DIRECT_EXAMPLE = `Direct URL expects:

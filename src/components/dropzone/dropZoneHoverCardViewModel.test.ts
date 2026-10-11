@@ -55,7 +55,7 @@ describe('drop zone hover card view model', () => {
   });
 
   it('keeps hover card placement stable without dynamic Tailwind z-index classes', () => {
-    expect(DROP_ZONE_HOVER_CARD_POSITION_CLASS).toContain('absolute left-1/2');
+    expect(DROP_ZONE_HOVER_CARD_POSITION_CLASS).toContain('fixed pointer-events-none');
     expect(DROP_ZONE_HOVER_CARD_POSITION_CLASS).not.toContain('z-[');
     expect(getDropZoneHoverCardStyle()).toEqual({
       zIndex: Z_INDEX.dropdown,

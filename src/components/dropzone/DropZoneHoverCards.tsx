@@ -1,5 +1,8 @@
+import { useEffect, useRef, useState, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { hoverCardStyles, ICON_SIZES } from '../../theme';
 import { MouseLeftIcon, MouseRightIcon } from '../../icons';
+import { getClampedTooltipPosition } from '../ui/mouseTooltipPolicy';
 import {
   DROP_ZONE_HOVER_CARD_POSITION_CLASS,
   getArchiveUrlCopy,
@@ -21,18 +24,56 @@ import {
   type DropZoneHoverCardHintRow,
 } from './dropZoneHoverCardViewModel';
 
-interface DropZoneHoverCardShellProps {
+interface DropZoneHoverCardProps {
+  anchorRef: RefObject<HTMLButtonElement | null>;
+}
+
+interface DropZoneHoverCardShellProps extends DropZoneHoverCardProps {
   children: React.ReactNode;
 }
 
-function DropZoneHoverCardShell({ children }: DropZoneHoverCardShellProps) {
-  return (
+function DropZoneHoverCardShell({ anchorRef, children }: DropZoneHoverCardShellProps) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+
+  useEffect(() => {
+    const card = cardRef.current;
+    const anchor = anchorRef.current;
+    if (!card || !anchor) return;
+    const measure = () => {
+      const bounds = anchor.getBoundingClientRect();
+      const size = card.getBoundingClientRect();
+      const next = getClampedTooltipPosition(
+        { x: bounds.left + (bounds.width - size.width) / 2, y: bounds.top },
+        size,
+        { width: window.innerWidth, height: window.innerHeight },
+        true,
+      );
+      setPosition(current => current?.left === next.left && current.top === next.top ? current : next);
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(card);
+    observer?.observe(anchor);
+    window.addEventListener('resize', measure);
+    document.addEventListener('scroll', measure, true);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+      document.removeEventListener('scroll', measure, true);
+    };
+  }, [anchorRef]);
+
+  // Help must neither enlarge the startup panel's scroll bounds nor block its controls.
+  return createPortal(
     <div
+      ref={cardRef}
       className={`${DROP_ZONE_HOVER_CARD_POSITION_CLASS} ${hoverCardStyles.container}`}
-      style={getDropZoneHoverCardStyle()}
+      style={{ ...getDropZoneHoverCardStyle(), ...position, visibility: position ? 'visible' : 'hidden' }}
     >
       {children}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -55,11 +96,11 @@ function DropZoneHoverCardHintRows({ rows }: { rows: readonly DropZoneHoverCardH
   );
 }
 
-export function LoadUrlHoverCard() {
+export function LoadUrlHoverCard({ anchorRef }: DropZoneHoverCardProps) {
   return (
-    <DropZoneHoverCardShell>
+    <DropZoneHoverCardShell anchorRef={anchorRef}>
       <div className={hoverCardStyles.title}>{LOAD_URL_HOVER_CARD_TITLE}</div>
-      <div className={`${hoverCardStyles.subtitle} whitespace-pre mt-1`}>{LOAD_URL_DIRECT_EXAMPLE}</div>
+      <div className={`${hoverCardStyles.subtitle} whitespace-pre-wrap mt-1`}>{LOAD_URL_DIRECT_EXAMPLE}</div>
       <div className={`${hoverCardStyles.subtitle} mt-2`}>{getArchiveUrlCopy()}</div>
       <div className={`${hoverCardStyles.subtitle} mt-1 text-ds-muted/70`}>{LOAD_URL_SUPPORTED_SOURCES}</div>
       <div className={`${hoverCardStyles.subtitle} mt-1 text-ds-muted/70`}>{LOAD_URL_LOCAL_SERVER_HINT}</div>
@@ -68,11 +109,11 @@ export function LoadUrlHoverCard() {
   );
 }
 
-export function LoadJsonHoverCard() {
+export function LoadJsonHoverCard({ anchorRef }: DropZoneHoverCardProps) {
   return (
-    <DropZoneHoverCardShell>
+    <DropZoneHoverCardShell anchorRef={anchorRef}>
       <div className={hoverCardStyles.title}>{LOAD_JSON_HOVER_CARD_TITLE}</div>
-      <div className={`${hoverCardStyles.subtitle} whitespace-pre mt-1 font-mono text-xs`}>
+      <div className={`${hoverCardStyles.subtitle} whitespace-pre-wrap mt-1 font-mono text-xs`}>
         {LOAD_JSON_MANIFEST_EXAMPLE}
       </div>
       <DropZoneHoverCardHintRows rows={LOAD_JSON_HINT_ROWS} />
@@ -80,9 +121,9 @@ export function LoadJsonHoverCard() {
   );
 }
 
-export function ToyHoverCard() {
+export function ToyHoverCard({ anchorRef }: DropZoneHoverCardProps) {
   return (
-    <DropZoneHoverCardShell>
+    <DropZoneHoverCardShell anchorRef={anchorRef}>
       <div className={hoverCardStyles.title}>{TOY_HOVER_CARD_TITLE}</div>
       <div className={hoverCardStyles.subtitle}>{TOY_HOVER_CARD_SUBTITLE}</div>
       <div className={`${hoverCardStyles.subtitle} text-ds-muted/70`}>{TOY_HOVER_CARD_SOURCE}</div>

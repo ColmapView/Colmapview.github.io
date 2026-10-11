@@ -1561,13 +1561,15 @@ h3.panel-heading {
 .startup-header {
   position: relative;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--sp-2);
 }
 
 .startup-config-actions {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
   align-items: center;
   gap: var(--sp-1);
 }
@@ -1588,6 +1590,14 @@ h3.panel-heading {
 .startup-actions button {
   min-width: 0;
   padding-inline: var(--sp-3);
+}
+
+.startup-help-card {
+  width: min(440px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 479px) {
@@ -1688,53 +1698,10 @@ h3.panel-heading {
    TOOLTIP SYSTEM
    ============================================ */
 
+/* MouseTooltip renders hints outside scrollable controls. Hidden pseudo-elements
+   still contribute to scroll bounds, so targets must not generate tooltip boxes. */
 [data-tooltip] {
   position: relative;
-}
-
-[data-tooltip]::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%) translateY(-4px);
-  padding: 6px 10px;
-  background-color: var(--bg-elevated);
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: 0.875rem;
-  white-space: nowrap;
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  border: 1px solid var(--border-light);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity var(--transition-fast), visibility var(--transition-fast);
-  pointer-events: none;
-  z-index: var(--z-tooltip);
-}
-
-/* CSS tooltips disabled - using MouseTooltip component instead */
-
-[data-tooltip-pos="bottom"]::after {
-  bottom: auto;
-  top: 100%;
-  transform: translateX(-50%) translateY(4px);
-}
-
-[data-tooltip-pos="left"]::after {
-  bottom: auto;
-  left: auto;
-  right: 100%;
-  top: 50%;
-  transform: translateX(-4px) translateY(-50%);
-}
-
-[data-tooltip-pos="right"]::after {
-  bottom: auto;
-  left: 100%;
-  top: 50%;
-  transform: translateX(4px) translateY(-50%);
 }
 
 /* ============================================
@@ -1982,8 +1949,7 @@ h3.panel-heading {
    the footer logo <a> carries .idle-hideable directly, so a blind click in its
    hot-zone follows the link — unchanged from the pre-visibility baseline, where
    the faded-out anchor was hit-testable too.
-   ::before, not ::after: tooltips own ::after, and an absolutely
-   positioned ::before paints beneath positioned children, so control buttons
+   An absolutely positioned ::before paints beneath positioned children, so control buttons
    still win the hit test while they are visible during the fade. pointer-events
    is inherited, so the pointer-lock rule below still disables this in fly mode. */
 .scene-3d-container[data-idle="true"] .idle-hideable::before,
@@ -2361,8 +2327,8 @@ h3.panel-heading {
 
 /* Invisible tap-target expansion (--tap-target-min, mirroring TOUCH.minTapTarget)
    for compact touch controls. Visual size unchanged (the pseudo paints nothing);
-   tooltips own ::after, so ::before is free. Requires position:relative on the
-   element. */
+   ::before keeps the expansion beneath button contents. Requires
+   position:relative on the element. */
 
 /* Control panel: compact buttons on a 28–30px pitch, so the boxes overlap their
    neighbours. z-index:-1 keeps each box beneath every sibling button, so it can

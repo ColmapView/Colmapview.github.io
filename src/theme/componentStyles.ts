@@ -101,7 +101,7 @@ export const tableStyles = {
  * Tooltip system using data attributes.
  * Usage: <element data-tooltip="Tooltip text" data-tooltip-pos="left">
  *
- * The actual CSS is in index.css using ::after pseudo-elements.
+ * MouseTooltip renders content separately so hints do not affect target layout.
  * This object defines the data attribute names and position values.
  */
 export const tooltipStyles = {
