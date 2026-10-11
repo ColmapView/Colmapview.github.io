@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "sourceSha": "bbe2ad74d22861574c14ff7527b023b1ea1c22ef",
+  "version": "0.16.0",
+  "release": "v0.16.0",
+  "profile": "github",
+  "base": "/latest/",
+  "indexHtmlSha256": "ac38bdf813ca73d2ff859a8bb4d26b6df6c8f3bcaab334c3ea741a8c4debd035",
+  "googleDrive": {
+    "enabled": false,
+    "allowedOrigin": null
+  }
+}
