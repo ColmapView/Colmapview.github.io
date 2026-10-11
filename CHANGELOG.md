@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.16.0 - 2026-10-10
+
+### Added
+
+- Load Google Drive ZIP and TAR datasets through the native file picker or a public file link, and publish the current scene as a private or shared ZIP on the configured custom-domain viewer.
+- Read and upload datasets in S3-compatible storage, including AWS S3, Cloudflare R2 and MinIO. Public URLs need no keys; pasted access keys and secrets stay in the current tab.
+- Sign in to Hugging Face to read private datasets and retry shared links after connecting.
+
+### Changed
+
+- Share archive extraction and JPEG preview processing in a worker across local files, URLs and cloud storage, with bounded decoding and recovery from browser storage failures.
+- Simplify loading and account dialogs, group storage and social actions under Share, and make popup sizing and keyboard navigation consistent.
+- Consolidate dataset loading, cancellation and splat activation to reduce duplicate work and stale updates.
+
+### Fixed
+
+- Preserve the current scene, loading overlay, Cancel control and restored view or alignment through failed, cancelled and superseded loads.
+- Respect COLMAP-only selections in reloads and saved viewer settings, and defer optional splat downloads until a selection is made.
+- Keep a new Google Drive sign-in connected when an older request expires, and recheck file access and private sharing before retrying.
+- Handle encoded filenames, missing optional assets, slow provider responses and late settings without carrying warnings into another scene.
+- Preserve original images during publication and verify uploaded manifests or Drive archive checksums before completing publication.
+
+### Privacy and deployment
+
+- Remove automatic Google Analytics collection and load provider SDKs only when their controls are used.
+- Restrict Drive access to its configured HTTPS origin and offer an explicit handoff from unsupported hosts without transferring account credentials.
+- Keep custom production, GitHub and preview builds isolated, reject mismatched release versions and refuse server code in static preview uploads.
+
 ## [0.15.4] - 2026-10-04
 
 ### Fixed
