@@ -16,8 +16,9 @@ interface DriveApiDeps {
   expireSession?: (token: string) => void;
 }
 
-function driveError(reference: GoogleDriveFileReference, message: string): UrlLoadError {
-  return { type: 'unknown', message, failedFile: reference.sourceUrl };
+function driveError(reference: GoogleDriveFileReference, message: string, needsAccess = false): UrlLoadError {
+  return { type: needsAccess ? 'auth' : 'unknown', message, failedFile: reference.sourceUrl,
+    ...(needsAccess ? { access: { provider: 'google' as const } } : {}) };
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -128,7 +129,7 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
         throw driveError(reference, 'Google Drive sign-in is not configured for this viewer.');
       }
       sentToken = getAccessToken();
-      if (!sentToken) throw driveError(reference, 'Sign in with the Google Drive button, then choose this archive in the Drive picker.');
+      if (!sentToken) throw driveError(reference, 'Sign in with Google Drive, then choose this archive in the Drive picker.', true);
       headers.set('Authorization', `Bearer ${sentToken}`);
     }
     const signal = init?.signal ? (deps.signal ? anySignal([deps.signal, init.signal]) : init.signal) : deps.signal;
@@ -145,24 +146,28 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
     try { body = await readJson(response); } catch { deps.signal?.throwIfAborted(); }
     const reasons = apiReasons(body);
     let message: string;
+    let needsAccess = false;
     if (reasons.some(reason => /rateLimit|quota|downloadQuota|RESOURCE_EXHAUSTED/i.test(reason)) || response.status === 429) {
       message = 'Google Drive is limiting downloads. Wait a little, then retry.';
     } else if (reasons.some(reason => /API_KEY|SERVICE_DISABLED|accessNotConfigured/.test(reason))) {
       message = 'Google Drive is not configured for this viewer address. Contact the site administrator.';
     } else if (response.status === 401 && requestToken) {
+      needsAccess = true;
       expireSession(requestToken);
       message = 'Google Drive sign-in expired or was revoked. Sign in again, then choose the archive in the Drive picker.';
     } else if (requestToken && reasons.some(reason => /insufficientPermissions|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(reason))) {
+      needsAccess = true;
       expireSession(requestToken);
       message = 'Google Drive file permission is missing. Sign in again, then choose the archive in the Drive picker.';
     } else if (response.status === 403 || response.status === 404) {
+      needsAccess = true;
       message = requestToken
         ? 'Choose this archive in the Drive picker to grant file access. If it is still unavailable, check the account and download permissions.'
         : 'Drive file is unavailable. Share it with Anyone with the link, or use the Google Drive button to choose the archive in the Drive picker.';
     } else {
       message = `Google Drive could not download this file (${response.status}). Please retry.`;
     }
-    throw driveError(reference, message);
+    throw driveError(reference, message, needsAccess);
   };
   const readMetadata = async (response: Response, requestToken: string | null) => {
     await checkResponse(response, requestToken);

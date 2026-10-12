@@ -1,4 +1,5 @@
 import type { CacheDimensionBounds } from '../utils/imageFileCachePolicy';
+import type { StorageAccessRequest } from '../types/manifest';
 
 export interface ArchiveMetadata {
   path: string;
@@ -15,11 +16,11 @@ export type ArchiveOperation =
 export type ArchiveRequest =
   | { kind: 'request'; id: number; operation: ArchiveOperation }
   | { kind: 'cancel'; id: number }
-  | { kind: 'bytes'; id: number; bytes?: ArrayBuffer; error?: string; errorName?: string };
+  | { kind: 'bytes'; id: number; bytes?: ArrayBuffer; error?: string; errorName?: string; access?: StorageAccessRequest };
 
 export type ArchiveResponse =
   | { kind: 'ready' }
-  | { kind: 'result'; id: number; entries?: ArchiveMetadata[]; file?: File; error?: string; errorName?: string }
+  | { kind: 'result'; id: number; entries?: ArchiveMetadata[]; file?: File; error?: string; errorName?: string; access?: StorageAccessRequest }
   | { kind: 'read'; id: number; offset: number; length: number };
 
 export const ARCHIVE_INITIALIZATION_TIMEOUT_MS = 30_000;
@@ -30,6 +31,6 @@ export const REMOTE_ARCHIVE_RANGE_THRESHOLD = 32 * 1024 * 1024;
 
 export const isIndexedArchive = (name: string) => /\.(zip|tar)$/i.test(name);
 
-export function archiveError(message: string, name = 'Error'): Error {
-  return Object.assign(new Error(message), { name });
+export function archiveError(message: string, name = 'Error', access?: StorageAccessRequest): Error {
+  return Object.assign(new Error(message), { name, ...(access ? { access } : {}) });
 }

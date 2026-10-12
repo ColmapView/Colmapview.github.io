@@ -15,12 +15,13 @@ const secondary = getButtonClass('secondary', 'sm');
 const ghost = getButtonClass('ghost', 'sm');
 
 /** Loading lives under Load; publishing has its own dialog under Share. */
-export function BucketStorageModal({ isOpen, onClose, onLoadUrl }: {
+export function BucketStorageModal({ isOpen, onClose, onLoadUrl, accessRequest }: {
   isOpen: boolean; onClose: () => void; onLoadUrl: (url: string) => void;
+  accessRequest?: { bucketUrl: string; message: string; retry: () => Promise<void> };
 }) {
   const id = useId();
   const { connection, bucketConnection, retryLink } = useBucketStorageStoreFacade();
-  const [mode, setMode] = useState<'url' | 'bucket'>(connection.config ? 'bucket' : 'url');
+  const [mode, setMode] = useState<'url' | 'bucket'>(accessRequest || connection.config ? 'bucket' : 'url');
   const [publicUrl, setPublicUrl] = useState('');
   const [browsing, setBrowsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +49,11 @@ export function BucketStorageModal({ isOpen, onClose, onLoadUrl }: {
       <button type="button" className={modalStyles.toolHeaderClose} aria-label="Close bucket storage" onClick={onClose}><CloseIcon className="w-3.5 h-3.5" /></button>
     </header>
     <div className={`${panelStyles.scrollBody} flex flex-col gap-3 text-sm text-ds-primary`}>
+      {accessRequest && <p className="m-0 text-ds-secondary">{accessRequest.message}</p>}
+      {accessRequest ?
+        <BucketConnectionForm access="private-read" initialBaseUrl={accessRequest.bucketUrl} submitLabel="Connect and retry"
+          onConnected={() => { onClose(); void accessRequest.retry(); }} />
+      : <>
       <div className="flex gap-2" role="group" aria-label="Bucket access">
         <button type="button" className={mode === 'url' ? secondary : ghost} aria-pressed={mode === 'url'} onClick={() => setMode('url')}>Public URL</button>
         <button type="button" className={mode === 'bucket' ? secondary : ghost} aria-pressed={mode === 'bucket'} onClick={() => setMode('bucket')}>S3 bucket</button>
@@ -79,6 +85,7 @@ export function BucketStorageModal({ isOpen, onClose, onLoadUrl }: {
           </form>
           {browsing && <div id={`${id}-files`}><BucketFileList browser={browser} onLoad={loadObject} /></div>}
         </section>
+      </>}
       </>}
       {error && <p role="alert" className="m-0 text-ds-error">{error}</p>}
     </div>

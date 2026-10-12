@@ -26,7 +26,7 @@ const isGated = (response: Response) => response.headers.get('X-Error-Code') ===
 function signedOutDenial(response: Response): HfError {
   return new HfError(isGated(response)
     ? 'This Hugging Face dataset is gated: only accounts its owner has approved can open its files.'
-    : MISSING_OR_PRIVATE, response.status);
+    : MISSING_OR_PRIVATE, response.status, false, { provider: 'hf' });
 }
 
 /** Public reads stay anonymous. Private reads use only the tab's current OAuth session. */
@@ -47,13 +47,13 @@ export async function fetchHuggingFaceDatasetRequest(url: string, init: RequestI
     if (response.status === 401) {
       discard(response);
       if (hfAuth.getSnapshot() === connection && hfAuth.getReadAccessToken() === token) hfAuth.expire();
-      throw new HfError('Your Hugging Face connection expired. Sign in again to open private datasets.', 401);
+      throw new HfError('Your Hugging Face connection expired. Sign in again to open private datasets.', 401, false, { provider: 'hf' });
     }
     if (response.status === 403) {
       discard(response);
       // Without the gated-repos scope, an account its owner approved is refused too.
       throw new HfError(isGated(response) ? 'This Hugging Face dataset is gated, and this sign-in cannot open its files.'
-        : 'This Hugging Face account cannot read the dataset. Check repository and organization permissions.', 403);
+        : 'This Hugging Face account cannot read the dataset. Check repository and organization permissions.', 403, false, { provider: 'hf' });
     }
     if (response.ok && hfAuth.getSnapshot() === connection) {
       const repos = privateRepos.get(connection) ?? new Set<string>();
@@ -111,7 +111,7 @@ export async function checkHuggingFaceDatasetAccess(infoUrl: string,
   if (response.ok) return;
   if (response.status === 404) throw new HfError(hfAuth.getReadAccessToken()
     ? 'Hugging Face dataset not found or unavailable to this account. Check the URL and repository permissions.'
-    : MISSING_OR_PRIVATE, 404);
+    : MISSING_OR_PRIVATE, 404, false, hfAuth.getReadAccessToken() ? undefined : { provider: 'hf' });
   if (isTransientStatus(response.status)) {
     appLogger.warn(`[Hugging Face] Dataset access check returned ${response.status}; continuing with the dataset files.`);
     return;

@@ -1,8 +1,9 @@
 import { AwsClient } from 'aws4fetch';
 import { anySignal } from '../../utils/abortSignals';
-import { isPreSignedUrl } from '../../utils/urlCloudStorage';
-import { bucketKeyFromUrl, bucketObjectUrl, validateBucketConfig } from './paths';
+import { getStorageCorsOrigins, isPreSignedUrl } from '../../utils/urlCloudStorage';
+import { bucketKeyFromUrl, bucketObjectUrl, inferBucketRootUrl, validateBucketConfig } from './paths';
 import { BucketError, type BucketConfig, type BucketCredentials, type BucketSession } from './types';
+import { recordStorageAccessFailure, storageAccessFailure } from '../storageAccess';
 
 interface BucketConnectionState { config: Readonly<BucketConfig> | null; canWrite: boolean }
 type FetchRequest = (url: string, init: RequestInit) => Promise<Response>;
@@ -61,7 +62,7 @@ export function createBucketConnection(fetchImpl: FetchRequest = (url, init) => 
         } catch (error) {
           signal?.throwIfAborted();
           if (error instanceof BucketError) throw error;
-          throw new BucketError('Could not reach the bucket. Check its URL, region, and CORS policy for this viewer.');
+          throw new BucketError(`Could not reach the bucket. Check its URL, region, and CORS policy. Whitelist these viewer origins: ${getStorageCorsOrigins().join(', ')}.`);
         }
       };
       const next: BucketSession = Object.freeze({ config, canWrite: Boolean(client), signal: controller.signal, request,
@@ -88,7 +89,21 @@ if (import.meta.hot) import.meta.hot.dispose(() => bucketConnection.disconnect()
 /** Null delegates to the other provider policies. Presigned and unrelated requests remain untouched. */
 export function fetchBucketDatasetRequest(url: string, init: RequestInit = {}): Promise<Response> | null {
   const session = bucketConnection.getSession();
-  if (!session || !['GET', 'HEAD'].includes((init.method ?? 'GET').toUpperCase()) || isPreSignedUrl(url)
-    || bucketKeyFromUrl(session.config.baseUrl, url) === null) return null;
-  return session.request(url, init);
+  if (!['GET', 'HEAD'].includes((init.method ?? 'GET').toUpperCase()) || isPreSignedUrl(url)) return null;
+  const connected = session && bucketKeyFromUrl(session.config.baseUrl, url) !== null ? session : null;
+  const bucketUrl = connected?.config.baseUrl ?? inferBucketRootUrl(url);
+  if (!bucketUrl) return null;
+  const denied = () => storageAccessFailure({ provider: 'bucket', bucketUrl },
+    'Connect to this bucket with an access key to open the dataset. Check that the key has permission to read it.', url);
+  // R2's S3 API always requires signing; an anonymous request hides its auth error behind CORS.
+  if (new URL(url).hostname.endsWith('.r2.cloudflarestorage.com') && !connected?.canWrite) {
+    init.signal?.throwIfAborted();
+    return Promise.reject(denied());
+  }
+  if (!connected) return null;
+  return connected.request(url, init).then(response => {
+    init.signal?.throwIfAborted();
+    recordStorageAccessFailure(response, { provider: 'bucket', bucketUrl });
+    return response;
+  });
 }

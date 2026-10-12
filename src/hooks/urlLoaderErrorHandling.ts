@@ -1,11 +1,12 @@
 import type { UrlLoadError, UrlLoadErrorType } from '../types/manifest';
 import { appLogger } from '../utils/logger';
 import { classifyFetchErrorWithCloudContext } from '../utils/urlUtils';
+import { canRecoverStorageAccess, getStorageAccessRequest } from '../features/storageAccess';
 
 type ClassifyUrlLoadError = (error: unknown, url?: string) => UrlLoadError;
 type ClearCaches = () => void;
 type SetUrlError = (error: UrlLoadError) => void;
-type SetError = (error: string) => void;
+type SetError = (error: string | null) => void;
 type ErrorLog = (message: string, error: unknown) => void;
 
 export interface HandleUrlLoadFailureDeps {
@@ -23,6 +24,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isUrlLoadErrorType(value: unknown): value is UrlLoadErrorType {
   switch (value) {
+    case 'auth':
     case 'network':
     case 'cors':
     case 'not_found':
@@ -48,7 +50,8 @@ export function isUrlLoadError(error: unknown): error is UrlLoadError {
     isUrlLoadErrorType(error.type) &&
     typeof error.message === 'string' &&
     isOptionalString(error.details) &&
-    isOptionalString(error.failedFile)
+    isOptionalString(error.failedFile) &&
+    (error.type !== 'auth' || Boolean(getStorageAccessRequest(error)))
   );
 }
 
@@ -74,7 +77,7 @@ export function handleUrlLoadFailure(error: unknown, deps: HandleUrlLoadFailureD
 
   const urlError = resolveUrlLoadError(error, deps.contextUrl, deps.classifyError);
   deps.setUrlError(urlError);
-  deps.setError(formatUrlLoadError(urlError));
+  deps.setError(urlError.access && canRecoverStorageAccess(urlError.access) ? null : formatUrlLoadError(urlError));
 
   return urlError;
 }

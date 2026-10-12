@@ -7,6 +7,7 @@ import { encodePublicationJpeg } from './publicationJpeg';
 import { ArchiveStorageUnavailableError, canUseArchiveStorage, storeArchiveStream } from './temporaryStorage';
 import { archiveError, type ArchiveRequest, type ArchiveResponse } from './protocol';
 import type { ArchiveBackend } from './backend';
+import { getStorageAccessRequest } from '../features/storageAccess';
 
 const worker = self as unknown as {
   onmessage: (event: MessageEvent<ArchiveRequest>) => void;
@@ -24,7 +25,7 @@ worker.onmessage = ({ data }) => {
   if (data.kind === 'bytes') {
     const pending = reads.get(data.id); reads.delete(data.id);
     if (data.bytes) pending?.resolve(data.bytes);
-    else pending?.reject(archiveError(data.error ?? 'Could not read archive bytes.', data.errorName));
+    else pending?.reject(archiveError(data.error ?? 'Could not read archive bytes.', data.errorName, data.access));
     return;
   }
   if (data.kind === 'cancel') { if (active?.id === data.id) active.controller.abort(); return; }
@@ -82,7 +83,7 @@ worker.onmessage = ({ data }) => {
       }
     } catch (error) {
       worker.postMessage({ kind: 'result', id: data.id, error: error instanceof Error ? error.message : 'Archive operation failed.',
-        errorName: error instanceof Error ? error.name : 'Error' });
+        errorName: error instanceof Error ? error.name : 'Error', access: getStorageAccessRequest(error) });
     } finally { active = undefined; }
   })();
 };

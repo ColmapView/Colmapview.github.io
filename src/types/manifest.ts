@@ -104,6 +104,7 @@ export interface UrlLoadProgress {
  * Error types for URL loading
  */
 export type UrlLoadErrorType =
+  | 'auth'         // Storage connection or file access is required
   | 'network'      // Network error (fetch failed)
   | 'cors'         // CORS error
   | 'not_found'    // 404 error
@@ -116,7 +117,12 @@ export interface UrlLoadError {
   message: string;
   details?: string;
   failedFile?: string;
+  access?: StorageAccessRequest;
 }
+
+export type StorageAccessRequest =
+  | { provider: 'bucket'; bucketUrl: string }
+  | { provider: 'hf' | 'google' };
 
 /**
  * Supported cloud storage providers

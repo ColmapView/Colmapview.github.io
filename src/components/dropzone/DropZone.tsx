@@ -17,6 +17,7 @@ import { getDropZoneProgressFillStyle } from './dropZoneLoadingViewModel';
 import { createExampleManifest, parseManifestContent } from './dropZoneManifestPolicy';
 import { useDropZoneStoreFacade } from './useDropZoneStoreFacade';
 import { CloseIcon, PlusIcon } from '../../icons';
+import { StorageAccessPrompt } from './StorageAccessPrompt';
 
 interface DropZoneProps {
   children: React.ReactNode;
@@ -289,6 +290,7 @@ export function DropZone({ children }: DropZoneProps) {
       )}
 
       {/* URL Input Modal */}
+      <StorageAccessPrompt onOpenUrlModal={() => setIsUrlModalOpen(true)} onLoadRemoteDataset={handleUrlLoad} />
       <UrlInputModal
         isOpen={isUrlModalOpen}
         onClose={() => setIsUrlModalOpen(false)}

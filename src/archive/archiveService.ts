@@ -5,6 +5,7 @@ import { ARCHIVE_INITIALIZATION_TIMEOUT_MS, archiveError, type ArchiveMetadata, 
   type ArchiveRequest, type ArchiveResponse, type ArchiveSource } from './protocol';
 import { validateByteRange } from './byteSource';
 import { removeArchiveTemporaryFile } from './temporaryStorage';
+import { getStorageAccessRequest } from '../features/storageAccess';
 
 export type ArchiveWorker = Pick<Worker, 'postMessage' | 'terminate' | 'addEventListener' | 'removeEventListener'>;
 export interface ArchiveServiceOptions {
@@ -103,13 +104,13 @@ function createArchiveSession(source: ArchiveSource | undefined, options: Archiv
         } catch (error) {
           if (!closed) worker.postMessage({ kind: 'bytes', id: response.id,
             error: error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Archive range read failed.',
-            errorName: error instanceof Error ? error.name : 'Error' } satisfies ArchiveRequest);
+            errorName: error instanceof Error ? error.name : 'Error', access: getStorageAccessRequest(error) } satisfies ArchiveRequest);
         }
       })();
       return;
     }
     if (!active || response.id !== active.id) return;
-    settle(active, response.error ? archiveError(response.error, response.errorName) : undefined, response);
+    settle(active, response.error ? archiveError(response.error, response.errorName, response.access) : undefined, response);
     active = undefined; dispatch();
   };
   worker.addEventListener('message', onMessage);

@@ -27,6 +27,9 @@ import { SPLAT_DISCOVERY_TIMEOUT_MS } from './urlLoaderManifestSource';
 import { URL_LOAD_GUARD_MESSAGE } from './urlLoaderLoadGuard';
 import { isReconstructionLoadPending } from '../wasm/reconstructionLoadLifecycle';
 import { getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
+import { startupLinkRetry } from '../appStartupRetry';
+import { bucketConnection } from '../features/bucketStorage/connection';
+import { webcrypto } from 'node:crypto';
 
 const { clearAllCachesMock, processFilesMock, detectTouchDeviceMock } = vi.hoisted(() => ({
   clearAllCachesMock: vi.fn(),
@@ -122,6 +125,33 @@ describe('useUrlLoader', () => {
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  it('retains a non-startup private bucket load and retries it after connecting', async () => {
+    vi.stubGlobal('Blob', NodeBlob); vi.stubGlobal('crypto', webcrypto);
+    const root = 'https://account.r2.cloudflarestorage.com/bucket/';
+    const url = root + 'dataset/manifest.json';
+    const request = vi.fn(async (url: string, init?: RequestInit) => {
+      if (!new Headers(init?.headers).has('Authorization')) return new Response(null, { status: 403 });
+      if (url.endsWith('/manifest.json')) return Response.json(createDefaultManifest(root + 'dataset/'));
+      if (/(cameras|images|points3D)\.bin$/.test(url)) return new Response(new Uint8Array([1, 2, 3]));
+      return new Response(null, { status: 404 });
+    });
+    vi.stubGlobal('fetch', request);
+    const { result } = renderHook(() => useUrlLoader({ logger: noopLogger }));
+    try {
+      await act(async () => { expect(await result.current.loadFromUrl(url)).toBe(false); });
+      expect(useReconstructionStore.getState().urlError).toMatchObject({ type: 'auth', access: { provider: 'bucket', bucketUrl: root } });
+      expect(useReconstructionStore.getState().error).toBeNull();
+      expect(request).not.toHaveBeenCalled();
+      const retry = startupLinkRetry.getSnapshot(); expect(retry).not.toBeNull();
+      bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
+      await act(async () => { await retry!(); });
+      expect(processFilesMock).toHaveBeenCalledOnce();
+      expect(useReconstructionStore.getState().urlError).toBeNull();
+      expect(startupLinkRetry.getSnapshot()).toBeNull();
+      expect(request.mock.calls.every(([, init]) => new Headers(init?.headers).has('Authorization'))).toBe(true);
+    } finally { bucketConnection.disconnect(); }
   });
 
   it.each([401, 403, 404])('preserves the existing dataset when private Hugging Face access returns %s', async status => {

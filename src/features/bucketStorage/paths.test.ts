@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { bucketFolder, bucketKeyFromUrl, bucketObjectUrl, inferBucketRegion, normalizeBucketRoot, validateBucketConfig } from './paths';
+import { bucketFolder, bucketKeyFromUrl, bucketObjectUrl, inferBucketRegion, inferBucketRootUrl, normalizeBucketRoot, validateBucketConfig } from './paths';
 
 describe('bucket addressing', () => {
+  it.each([
+    ['https://account.r2.cloudflarestorage.com/bucket/dataset/manifest.json', 'https://account.r2.cloudflarestorage.com/bucket/'],
+    ['https://bucket.s3.amazonaws.com/dataset/manifest.json', 'https://bucket.s3.amazonaws.com/'],
+    ['https://bucket.s3.dualstack.eu-west-1.amazonaws.com/dataset/scene.zip', 'https://bucket.s3.dualstack.eu-west-1.amazonaws.com/'],
+    ['https://s3.eu-west-1.amazonaws.com/bucket/dataset/scene.zip', 'https://s3.eu-west-1.amazonaws.com/bucket/'],
+    ['https://pub-example.r2.dev/dataset/scene.zip', null],
+    ['https://s3.example/dataset/scene.zip', null],
+    ['https://bucket.s3.amazonaws.com.evil.example/dataset/scene.zip', null],
+    ['https://user:secret@account.r2.cloudflarestorage.com/bucket/scene.zip', null],
+  ])('infers an exact supported bucket root for recovery: %s', (url, root) => {
+    expect(inferBucketRootUrl(url)).toBe(root);
+  });
   it.each(['https://bucket.s3.eu-west-2.amazonaws.com', 'https://account.r2.cloudflarestorage.com/bucket', 'http://localhost:9000/bucket'])('normalizes a supported bucket root: %s', value => {
     expect(normalizeBucketRoot(value)).toBe(value + '/');
   });

@@ -3,6 +3,7 @@ import { createArchiveImageEncoder, openArchiveReader, type ArchiveWorker } from
 import type { ArchiveRequest, ArchiveResponse } from './protocol';
 import type { MediaPriority } from '../dataset/types';
 import { removeArchiveTemporaryFile } from './temporaryStorage';
+import { HfError } from '../features/huggingface/http';
 
 vi.mock('./temporaryStorage', () => ({ removeArchiveTemporaryFile: vi.fn(async () => {}) }));
 class FakeWorker extends EventTarget {
@@ -110,6 +111,19 @@ describe('archive worker session', () => {
     vi.useFakeTimers();
     const pending = openArchiveReader(new File([], 'scene.zip'), { createWorker: () => new FakeWorker() as unknown as ArchiveWorker });
     const timeout = expect(pending).rejects.toThrow('initialization timed out'); await vi.advanceTimersByTimeAsync(30000); await timeout;
+  });
+  it('preserves sign-in recovery when an archive range read crosses the worker boundary', async () => {
+    const worker = new FakeWorker();
+    const access = { provider: 'hf' as const };
+    const read = vi.fn().mockRejectedValue(new HfError('Sign in again.', 401, false, access));
+    const pending = openArchiveReader({ kind: 'remote', name: 'scene.zip', size: 1024 }, { read, createWorker: () => worker as unknown as ArchiveWorker });
+    const failure = expect(pending).rejects.toMatchObject({ message: 'Sign in again.', access });
+    worker.emit({ kind: 'ready' }); worker.emit({ kind: 'read', id: 1, offset: 0, length: 512 });
+    await vi.waitFor(() => expect(worker.messages.at(-1)).toMatchObject({ kind: 'bytes', error: 'Sign in again.', access }));
+    const bytes = worker.messages.at(-1) as Extract<ArchiveRequest, { kind: 'bytes' }>;
+    worker.emit({ kind: 'result', id: worker.requests()[0].id, error: bytes.error, errorName: bytes.errorName, access: bytes.access });
+    await failure;
+    expect(worker.terminate).toHaveBeenCalledOnce();
   });
   it('validates remote byte requests and aborts the provider read when its consumer cancels', async () => {
     const worker = new FakeWorker();

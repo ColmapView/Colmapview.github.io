@@ -3,8 +3,8 @@ import { readBoundedResponse } from '../../utils/publishedViewerState';
 import { bucketObjectUrl, validateBucketKey } from './paths';
 import { BucketError, type BucketPage, type BucketSession } from './types';
 
-export async function bucketXml(response: Response, expectedRoot: string): Promise<Element> {
-  await assertBucketResponse(response);
+export async function bucketXml(response: Response, expectedRoot: string, bucketUrl?: string): Promise<Element> {
+  await assertBucketResponse(response, bucketUrl);
   const text = await (await readBoundedResponse(response, 8 * 1024 * 1024,
     () => new BucketError('The bucket returned an oversized metadata response.'))).text();
   const document = new DOMParser().parseFromString(text, 'application/xml');
@@ -18,10 +18,11 @@ export function xmlValue(element: Element, name: string): string {
   return [...element.children].find(child => child.localName === name)?.textContent ?? '';
 }
 
-export async function assertBucketResponse(response: Response): Promise<void> {
+export async function assertBucketResponse(response: Response, bucketUrl?: string): Promise<void> {
   if (response.ok) return;
   await response.body?.cancel().catch(() => {});
-  if (response.status === 401 || response.status === 403) throw new BucketError('Bucket access was denied. Check the credentials and permissions, or open a public object URL.', response.status);
+  if (response.status === 401 || response.status === 403) throw new BucketError('Bucket access was denied. Check the credentials and permissions, or open a public object URL.',
+    response.status, bucketUrl ? { provider: 'bucket', bucketUrl } : undefined);
   if (response.status === 404) throw new BucketError('The bucket or object was not found.', 404);
   throw new BucketError(`Bucket request failed (HTTP ${response.status}). Try again.`, response.status);
 }
@@ -40,7 +41,7 @@ export async function listBucketPage(session: BucketSession, prefix: string, sig
   url.searchParams.set('encoding-type', 'url');
   if (!options.recursive) url.searchParams.set('delimiter', '/');
   if (options.token) url.searchParams.set('continuation-token', options.token);
-  const root = await bucketXml(await bucketRequest(session, url.href, { signal }), 'ListBucketResult');
+  const root = await bucketXml(await bucketRequest(session, url.href, { signal }), 'ListBucketResult', session.config.baseUrl);
   const decode = (value: string) => {
     let key: string;
     try { key = decodeURIComponent(value); } catch { throw new BucketError('The bucket returned an invalid object path.'); }

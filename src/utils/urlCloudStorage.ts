@@ -147,19 +147,24 @@ export function normalizeCloudStorageUrl(url: string): string {
 /**
  * Get provider-specific CORS setup instructions.
  */
+export function getStorageCorsOrigins(viewerOrigin = typeof window === 'undefined' ? '' : window.location.origin): string[] {
+  return [...new Set(['https://colmapview.opsiclear.com', 'https://colmapview.github.io', viewerOrigin].filter(Boolean))];
+}
+
 export function getCorsInstructions(provider: CloudProvider): string {
+  const origins = getStorageCorsOrigins();
   switch (provider) {
     case 's3':
       return `AWS S3 CORS Configuration:
 1. Go to your S3 bucket in the AWS Console
 2. Navigate to Permissions -> CORS configuration
-3. Add a CORS rule allowing your origin:
+3. Whitelist the viewer domains in a CORS rule:
    [
      {
-       "AllowedOrigins": ["*"],
-       "AllowedMethods": ["GET", "HEAD"],
+       "AllowedOrigins": ${JSON.stringify(origins)},
+       "AllowedMethods": ["GET", "HEAD", "PUT", "POST", "DELETE"],
        "AllowedHeaders": ["*"],
-       "ExposeHeaders": ["Content-Length", "Content-Type"],
+       "ExposeHeaders": ["ETag", "Content-Length", "Content-Range", "Accept-Ranges"],
        "MaxAgeSeconds": 3600
      }
    ]
@@ -170,7 +175,7 @@ export function getCorsInstructions(provider: CloudProvider): string {
 1. Create a cors.json file:
    [
      {
-       "origin": ["*"],
+       "origin": ${JSON.stringify(origins)},
        "method": ["GET", "HEAD"],
        "responseHeader": ["Content-Type", "Content-Length"],
        "maxAgeSeconds": 3600
@@ -184,9 +189,10 @@ export function getCorsInstructions(provider: CloudProvider): string {
 1. Go to your R2 bucket in Cloudflare Dashboard
 2. Navigate to Settings -> CORS Policy
 3. Add a CORS rule:
-   - Allowed Origins: * (or your specific domain)
-   - Allowed Methods: GET, HEAD
+   - Allowed Origins (whitelist): ${origins.join(', ')}
+   - Allowed Methods: GET, HEAD, PUT, POST, DELETE
    - Allowed Headers: *
+   - Expose Headers: ETag, Content-Length, Content-Range, Accept-Ranges
    - Max Age: 3600
 4. Save the configuration`;
 

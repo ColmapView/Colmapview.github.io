@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   detectCloudProvider,
   getCorsInstructions,
+  getStorageCorsOrigins,
   isPreSignedUrl,
   normalizeCloudStorageUrl,
 } from './urlCloudStorage';
@@ -33,5 +34,16 @@ describe('url cloud storage policy', () => {
     expect(getCorsInstructions('gcs')).toContain('gsutil cors set');
     expect(getCorsInstructions('r2')).toContain('Cloudflare R2');
     expect(getCorsInstructions('dropbox')).toContain('Anyone with the link');
+    for (const provider of ['s3', 'gcs', 'r2'] as const) {
+      expect(getCorsInstructions(provider)).toContain('https://colmapview.opsiclear.com');
+      expect(getCorsInstructions(provider)).toContain('https://colmapview.github.io');
+      expect(getCorsInstructions(provider)).not.toMatch(/"(?:AllowedOrigins|origin)": \["\*"\]/);
+    }
+  });
+  it('includes the current development origin without duplicating deployed origins', () => {
+    expect(getStorageCorsOrigins('http://127.0.0.1:5199')).toEqual([
+      'https://colmapview.opsiclear.com', 'https://colmapview.github.io', 'http://127.0.0.1:5199',
+    ]);
+    expect(getStorageCorsOrigins('https://colmapview.opsiclear.com')).toHaveLength(2);
   });
 });

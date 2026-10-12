@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { bucketConnection, createBucketConnection, fetchBucketDatasetRequest } from './connection';
 import { fetchDatasetResource } from '../../utils/fetchDatasetResource';
 import { downloadRemoteFile } from '../datasetPublishing/downloadRemoteFile';
+import { assertStorageReadAccess } from '../storageAccess';
 
 const config = { baseUrl: 'https://s3.example/my-bucket/', region: 'us-east-1' };
 const credentials = { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' };
@@ -11,6 +12,39 @@ beforeEach(() => { vi.stubGlobal('crypto', webcrypto); vi.stubGlobal('Blob', Nod
 afterEach(() => { bucketConnection.disconnect(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe('tab-only bucket connection', () => {
+  it('asks for a connection before unsigned R2 requests can be misreported as CORS', async () => {
+    const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
+    const root = 'https://account.r2.cloudflarestorage.com/private-bucket/';
+    await expect(fetchDatasetResource(root + 'dataset/manifest.json')).rejects.toMatchObject({
+      type: 'auth', access: { provider: 'bucket', bucketUrl: root }, failedFile: root + 'dataset/manifest.json',
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    bucketConnection.connect({ baseUrl: root, region: 'auto' });
+    await expect(fetchDatasetResource(root + 'scene.zip')).rejects.toMatchObject({ type: 'auth' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it('allows anonymous public S3 reads, but offers connection after an access denial', async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(new Response('public')).mockResolvedValueOnce(new Response('denied', { status: 403 }));
+    vi.stubGlobal('fetch', fetch);
+    const root = 'https://dataset.s3.us-east-1.amazonaws.com/';
+    expect(await (await fetchDatasetResource(root + 'public.json')).text()).toBe('public');
+    const denied = await fetchDatasetResource(root + 'private.json');
+    expect(denied.status).toBe(403);
+    expect(() => assertStorageReadAccess(denied, root + 'private.json')).toThrow(expect.objectContaining({
+      type: 'auth', access: { provider: 'bucket', bucketUrl: root },
+    }));
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+  it('preserves genuine network/CORS failures and bypasses signed and public R2 URLs', async () => {
+    const fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch')); vi.stubGlobal('fetch', fetch);
+    await expect(fetchDatasetResource('https://dataset.s3.amazonaws.com/scene.zip')).rejects.toThrow('Failed to fetch');
+    expect(fetchBucketDatasetRequest('https://pub-example.r2.dev/scene.zip')).toBeNull();
+    expect(fetchBucketDatasetRequest('https://account.r2.cloudflarestorage.com/bucket/scene.zip?X-Amz-Signature=fixture')).toBeNull();
+  });
+  it('does not replace a cancelled request with an authentication prompt', () => {
+    const controller = new AbortController(); controller.abort();
+    expect(() => fetchBucketDatasetRequest('https://account.r2.cloudflarestorage.com/bucket/scene.zip', { signal: controller.signal })).toThrow('aborted');
+  });
   it('reads public objects without authorization or credentials', async () => {
     const fetch = vi.fn().mockResolvedValue(new Response('public'));
     const connection = createBucketConnection(fetch);

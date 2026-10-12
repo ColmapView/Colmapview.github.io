@@ -38,6 +38,7 @@ import { assertGoogleDriveHostAllowed } from '../features/googleDrive/config';
 import { huggingFaceDatasetInfoUrl } from '../utils/huggingFaceUrl';
 import { checkHuggingFaceDatasetAccess } from '../features/huggingface/datasetAccess';
 import { anySignal } from '../utils/abortSignals';
+import { offerUrlLoadRetry } from '../appStartupRetry';
 
 export interface UseUrlLoaderDeps {
   logger?: Pick<AppLogger, 'error' | 'info'>;
@@ -121,11 +122,11 @@ export function useUrlLoadActions({ logger = appLogger, applyUrlOverrides = fals
   const setUrlError = useReconstructionStore((s) => s.setUrlError);
   const finishUrlLoad = useReconstructionStore((s) => s.finishUrlLoad);
 
-  const runLoad = useCallback(async (
+  const runLoad = useCallback(async function runLoad(
     contextUrl: string,
     work: (load: UrlLoadContext) => Promise<boolean>,
     options: UrlLoadOptions = {}
-  ): Promise<boolean> => {
+  ): Promise<boolean> {
     const claim = claimUrlLoad();
     if (!claim) {
       logInfo(URL_LOAD_GUARD_MESSAGE);
@@ -206,7 +207,7 @@ export function useUrlLoadActions({ logger = appLogger, applyUrlOverrides = fals
       return loaded;
     } catch (error) {
       if (isCurrent()) {
-        handleUrlLoadFailure(error, {
+        const failure = handleUrlLoadFailure(error, {
           // A replaced scene may have filled caches before restoration failed; a failed fetch keeps the old scene's caches.
           clearCaches: load.sceneReplaced ? clearAllCaches : () => undefined,
           contextUrl,
@@ -214,6 +215,7 @@ export function useUrlLoadActions({ logger = appLogger, applyUrlOverrides = fals
           setError,
           setUrlError,
         });
+        if (failure.access) offerUrlLoadRetry(async () => { await runLoad(contextUrl, work, options); });
       }
       return false;
     } finally {

@@ -107,3 +107,16 @@ export function getGoogleDriveConfiguration(): {
     appId: hosting.hostAllowed ? validateGoogleDriveAppId(import.meta.env.VITE_GOOGLE_DRIVE_APP_ID) : null,
   };
 }
+
+export interface GoogleDrivePickerConfig {
+  apiKey: string; clientId: string;
+  /** The numeric Cloud project number, not its project ID or OAuth client ID. */
+  appId: string;
+}
+
+/** Reading deployment capabilities must not import the Picker SDK or archive loaders. */
+export function getGoogleDrivePickerConfig(): GoogleDrivePickerConfig | null {
+  const { apiKey, clientId, appId } = getGoogleDriveConfiguration();
+  if (!apiKey || !clientId || !appId) return null;
+  return { apiKey, clientId, appId };
+}

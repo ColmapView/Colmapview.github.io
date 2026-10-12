@@ -1,11 +1,13 @@
 import { anySignal, timeoutSignal } from '../../utils/abortSignals';
+import type { StorageAccessRequest } from '../../types/manifest';
 
 export class HfError extends Error {
   readonly status?: number;
   /** Retrying cannot succeed, e.g. a file over a size limit; the dataset itself must change. */
   readonly permanent: boolean;
-  constructor(message: string, status?: number, permanent = false) {
-    super(message); this.name = 'HfError'; this.status = status; this.permanent = permanent;
+  readonly access?: StorageAccessRequest;
+  constructor(message: string, status?: number, permanent = false, access?: StorageAccessRequest) {
+    super(message); this.name = 'HfError'; this.status = status; this.permanent = permanent; this.access = access;
   }
 }
 

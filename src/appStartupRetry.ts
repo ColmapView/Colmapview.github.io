@@ -25,7 +25,12 @@ export const startupLinkRetry = {
 };
 
 /** Kept while its failure is the one on screen: any later load, success or clear withdraws it. */
-export function offerStartupLinkRetry(run: Retry): void {
+export function offerStartupLinkRetry(run: Retry): void { offerRetry(run, true); }
+
+/** URL dialog and file-manifest loads retain their exact command too. */
+export function offerUrlLoadRetry(run: Retry): void { offerRetry(run, false); }
+
+function offerRetry(run: Retry, clearLocation: boolean): void {
   const failure = useReconstructionStore.getState().urlError;
   if (!failure) return;
   const retry: Retry = () => {
@@ -36,7 +41,7 @@ export function offerStartupLinkRetry(run: Retry): void {
   // page reload nor the next scene's camera restore runs it again.
   const abandon = () => {
     publish(null);
-    clearUrlLoadRequestFromLocation();
+    if (clearLocation) clearUrlLoadRequestFromLocation();
   };
   publish(retry);
   const stopWatchingError = useReconstructionStore.subscribe(state => {

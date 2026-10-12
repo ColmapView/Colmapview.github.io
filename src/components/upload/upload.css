@@ -58,6 +58,9 @@
 .publication-body > .publication-section + .publication-submit { border-top: 0; margin-top: 0; }
 .publication-submit-row { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
 
+/* Expanded connection help owns its row so domain names stay readable on phones. */
+.bucket-cors-help[open] { flex-basis: 100%; }
+
 @media (max-width: 640px) {
   .publication-header { grid-template-columns: minmax(0, 1fr) auto; }
   .publication-header-actions { grid-column: 1 / -1; grid-row: 2; justify-content: flex-end; }

@@ -3,6 +3,7 @@ import { parseSafeIntegerString } from './numberParsing';
 import { ARCHIVE_SIZE_LIMIT } from './zipValidation';
 import { ArchiveStorageUnavailableError, canUseArchiveStorage, removeArchiveTemporaryFile, storeArchiveStream } from '../archive/temporaryStorage';
 import { REMOTE_ARCHIVE_RANGE_THRESHOLD } from '../archive/protocol';
+import { assertStorageReadAccess } from '../features/storageAccess';
 
 /** Progress callback payload for ZIP operations */
 export interface ZipProgress {
@@ -62,7 +63,10 @@ async function downloadArchive(url: string, onProgress: ZipProgressCallback,
   const response = await fetchImpl(url, timeoutMs);
   try {
     options.signal?.throwIfAborted();
-    if (!response.ok) throw new Error(`Failed to download archive (${response.status})`);
+    if (!response.ok) {
+      assertStorageReadAccess(response, url);
+      throw new Error(`Failed to download archive (${response.status})`);
+    }
 
     const contentLength = response.headers.get('content-length');
     const total = options.expectedSize ?? (contentLength ? parseSafeIntegerString(contentLength) ?? 0 : 0);

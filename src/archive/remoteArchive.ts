@@ -3,6 +3,7 @@ import { anySignal, timeoutSignal } from '../utils/abortSignals';
 import type { ZipDownloadOptions } from '../utils/zipDownload';
 import { validateByteRange } from './byteSource';
 import { archiveError } from './protocol';
+import { assertStorageReadAccess } from '../features/storageAccess';
 
 const METADATA_BLOCK_SIZE = 64 * 1024;
 const DATA_BLOCK_SIZE = 1024 * 1024;
@@ -16,6 +17,7 @@ export function createRemoteArchiveRead(url: string, size: number, fetchImpl: Zi
   const fetchRange = async (offset: number, length: number, signal: AbortSignal) => {
     signal.throwIfAborted();
     const response = await fetchImpl!(url, REQUEST_TIMEOUT_MS, { headers: { Range: `bytes=${offset}-${offset + length - 1}` }, signal });
+    assertStorageReadAccess(response, url);
     const discard = () => { void response.body?.cancel().catch(() => {}); };
     if (response.status === 200 || response.status === 206 && !response.headers.get('content-range')) {
       discard(); throw archiveError('The server does not expose validated byte ranges.', 'ArchiveRangeUnsupportedError');

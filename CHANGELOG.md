@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.7] - 2026-10-12
+
+### Added
+
+- Open the appropriate bucket, Hugging Face, or Google Drive connection dialog when a dataset load needs access and sign-in is available. Bucket recovery prefills the endpoint and retries the failed load without keeping credentials outside the tab.
+- Include both deployed viewer origins and the current development origin in CORS whitelist guidance, with readable expanded help on narrow screens.
+
+### Fixed
+
+- Identify unsigned private R2 endpoints before their authentication error can appear as a CORS failure.
+- Preserve storage access information through required model downloads and archive worker range reads, while keeping optional missing masks optional.
+
+### Changed
+
+- Reuse the same account dialogs for manual entry and load recovery, and represent public reads, private reads, and uploads with explicit bucket connection modes.
+
 ## [0.16.6] - 2026-10-12
 
 ### Added

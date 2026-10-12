@@ -4,10 +4,11 @@
  */
 
 import type { UrlLoadError } from '../types/manifest';
-import { detectCloudProvider, getCorsInstructions } from './urlCloudStorage';
+import { detectCloudProvider, getCorsInstructions, getStorageCorsOrigins } from './urlCloudStorage';
 import { parseSafeIntegerString } from './numberParsing';
 import { fetchDatasetResource } from './fetchDatasetResource';
 import { normalizeHuggingFaceDatasetUrl } from './huggingFaceUrl';
+import { getStorageAccessRequest, storageAccessFailure } from '../features/storageAccess';
 
 /** Reports download progress as bytes arrive. totalBytes is 0 when unknown. */
 export type DownloadProgressCallback = (loadedBytes: number, totalBytes: number) => void;
@@ -23,6 +24,9 @@ export {
  * Classify error type from fetch error.
  */
 export function classifyFetchError(err: unknown, url?: string): UrlLoadError {
+  const access = getStorageAccessRequest(err);
+  if (access) return storageAccessFailure(access,
+    err instanceof Error ? err.message : (err as UrlLoadError).message, (err as UrlLoadError).failedFile ?? url);
   if (err instanceof Error) {
     // AbortError from timeout
     if (err.name === 'AbortError' || err.name === 'TimeoutError') {
@@ -43,7 +47,7 @@ export function classifyFetchError(err: unknown, url?: string): UrlLoadError {
       return {
         type: 'cors',
         message: 'Cross-origin request blocked',
-        details: 'This URL does not allow cross-origin requests. The server needs to include CORS headers.',
+        details: `The browser could not read this response. Check your connection and file access. For CORS setup, whitelist these viewer origins on the server: ${getStorageCorsOrigins().join(', ')}.`,
         failedFile: url,
       };
     }
@@ -355,7 +359,7 @@ export function classifyFetchErrorWithCloudContext(
     const provider = detectCloudProvider(url);
     if (provider) {
       const instructions = getCorsInstructions(provider);
-      baseError.details = `This ${provider.toUpperCase()} bucket does not allow cross-origin requests.\n\n${instructions}`;
+      baseError.details = `The browser could not read this ${provider.toUpperCase()} response. Check bucket access and whitelist the viewer domains in its CORS policy.\n\n${instructions}`;
     }
   }
 

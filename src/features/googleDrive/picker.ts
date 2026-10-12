@@ -1,18 +1,11 @@
 import { googleDriveAuth } from './auth';
-import { assertGoogleDriveHostAllowed, getGoogleDriveConfiguration } from './config';
+import { assertGoogleDriveHostAllowed, getGoogleDrivePickerConfig } from './config';
 import { GOOGLE_DRIVE_ARCHIVE_MIME_TYPES, isGoogleDriveArchiveFilename } from './archivePolicy';
+export { getGoogleDrivePickerConfig, type GoogleDrivePickerConfig } from './config';
 
 const PICKER_SCRIPT_URL = 'https://apis.google.com/js/api.js';
 const SAFE_DRIVE_ID = /^[A-Za-z0-9_-]{1,200}$/;
 const PICKER_LOAD_ERROR = 'Could not load the Google Drive picker. Check your connection and try again.';
-
-export interface GoogleDrivePickerConfig {
-  apiKey: string;
-  clientId: string;
-  /** The numeric Cloud project number, not its project ID or OAuth client ID. */
-  appId: string;
-}
-
 export interface GoogleDriveArchiveSelection {
   fileId: string;
   name: string;
@@ -127,11 +120,6 @@ export function loadGooglePickerSdk(): Promise<GooglePickerSdk> {
   return pending;
 }
 
-export function getGoogleDrivePickerConfig(): GoogleDrivePickerConfig | null {
-  const { apiKey, clientId, appId } = getGoogleDriveConfiguration();
-  if (!apiKey || !clientId || !appId) return null;
-  return { apiKey, clientId, appId };
-}
 
 /** Validate the provider's selection and retain only the file reference. */
 export function parseGoogleDriveArchiveSelection(value: unknown): GoogleDriveArchiveSelection {

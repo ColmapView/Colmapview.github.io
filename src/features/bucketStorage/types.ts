@@ -1,4 +1,5 @@
 import { HfError } from '../huggingface/http';
+import type { StorageAccessRequest } from '../../types/manifest';
 
 export interface BucketConfig {
   /** Complete bucket root: a virtual-hosted AWS URL, or an endpoint with /bucket/. */
@@ -28,7 +29,10 @@ export interface BucketPage { objects: BucketObject[]; directories: string[]; ne
 
 export class BucketError extends Error {
   readonly status?: number;
-  constructor(message: string, status?: number) { super(message); this.name = 'BucketError'; this.status = status; }
+  readonly access?: StorageAccessRequest;
+  constructor(message: string, status?: number, access?: StorageAccessRequest) {
+    super(message); this.name = 'BucketError'; this.status = status; this.access = access;
+  }
 }
 
 /** Remote errors may contain credentials; show only messages owned by this application. */

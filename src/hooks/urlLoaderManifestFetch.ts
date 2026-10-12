@@ -43,6 +43,7 @@ import { isUrlLoadError } from './urlLoaderErrorHandling';
 import { detectTouchDevice } from './useIsTouchDevice';
 import { fetchDatasetResource } from '../utils/fetchDatasetResource';
 import { discoverBucketManifest } from '../features/bucketStorage/discovery';
+import { assertStorageReadAccess } from '../features/storageAccess';
 
 type FetchUrl = (url: string, init?: RequestInit) => Promise<Response>;
 type FetchManifestFile = (
@@ -716,6 +717,7 @@ export async function fetchUrlManifest(
   const response = await fetchImpl(manifestUrl);
 
   if (!response.ok) {
+    assertStorageReadAccess(response, manifestUrl);
     const errorType: UrlLoadErrorType = response.status === 404 ? 'not_found' : 'network';
     const error: UrlLoadError = {
       type: errorType,
@@ -752,6 +754,7 @@ export async function fetchManifestFile(
   const response = await fetchImpl(fullUrl);
 
   if (!response.ok) {
+    assertStorageReadAccess(response, fullUrl);
     const errorType: UrlLoadErrorType = response.status === 404 ? 'not_found' : 'network';
     const error: UrlLoadError = {
       type: errorType,

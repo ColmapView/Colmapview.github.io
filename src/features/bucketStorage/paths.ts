@@ -1,5 +1,23 @@
 import { BucketError, type BucketConfig } from './types';
 
+/** Recognized S3 endpoints give the connection dialog a bucket root, never a dataset subfolder. */
+export function inferBucketRootUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.username || url.password) return null;
+    const host = url.hostname;
+    const pathStyle = host.endsWith('.r2.cloudflarestorage.com')
+      || /^s3(?:[.-](?:dualstack\.)?[a-z0-9-]+)?\.amazonaws\.com$/.test(host);
+    const virtualHosted = /^[a-z0-9.-]+\.s3(?:[.-](?:dualstack\.)?[a-z0-9-]+)?\.amazonaws\.com$/.test(host);
+    if (!pathStyle && !virtualHosted) return null;
+    const bucket = url.pathname.split('/')[1];
+    if (pathStyle && !bucket) return null;
+    url.pathname = pathStyle ? `/${bucket}/` : '/';
+    url.search = ''; url.hash = '';
+    return normalizeBucketRoot(url.href);
+  } catch { return null; }
+}
+
 export function normalizeBucketRoot(value: string): string {
   let url: URL;
   try { url = new URL(value.trim()); } catch { throw new BucketError('Enter a complete bucket URL.'); }

@@ -6,8 +6,24 @@ import {
   isUrlLoadError,
   resolveUrlLoadError,
 } from './urlLoaderErrorHandling';
+import { HfError } from '../features/huggingface/http';
 
 describe('URL loader error handling', () => {
+  it('preserves provider access context through required-file classification', () => {
+    const error = new HfError('Sign in to read this dataset.', 401, false, { provider: 'hf' });
+    expect(resolveUrlLoadError(error, 'https://huggingface.co/datasets/owner/private/resolve/main/cameras.bin')).toMatchObject({
+      type: 'auth', access: { provider: 'hf' }, message: error.message,
+    });
+  });
+  it('opens recovery instead of writing a duplicate warning for supported access failures', () => {
+    const urlError: UrlLoadError = { type: 'auth', message: 'Connect to this bucket.',
+      access: { provider: 'bucket', bucketUrl: 'https://account.r2.cloudflarestorage.com/bucket/' } };
+    const deps = { clearCaches: vi.fn(), errorLog: vi.fn(), setError: vi.fn(), setUrlError: vi.fn() };
+    handleUrlLoadFailure(urlError, deps);
+    expect(deps.setUrlError).toHaveBeenCalledWith(urlError);
+    expect(deps.setError).toHaveBeenCalledWith(null);
+    expect(isUrlLoadError({ type: 'auth', message: 'Sign in' })).toBe(false);
+  });
   it('formats URL load errors for the shared store error string', () => {
     expect(formatUrlLoadError({
       type: 'network',
