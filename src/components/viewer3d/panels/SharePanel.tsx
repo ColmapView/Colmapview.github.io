@@ -3,7 +3,7 @@
  * Shares links and opens dataset publishing destinations.
  */
 
-import { useState, useCallback, useMemo, useRef, lazy, Suspense, memo } from 'react';
+import { useState, useCallback, useMemo, useRef, memo } from 'react';
 import { controlPanelStyles } from '../../../theme';
 import { ShareIcon, CheckIcon, BucketIcon, GoogleDriveIcon } from '../../../icons';
 import { ControlButton, ToggleRow, type PanelType } from '../ControlComponents';
@@ -16,7 +16,6 @@ import {
   getShareSource,
 } from './sharePanelViewModel';
 import { useSharePanelStoreFacade } from './useSharePanelStoreFacade';
-import { useBucketStorageButtonStoreFacade } from '../../bucket/useBucketStorageButtonStoreFacade';
 import { getHfAccountConfiguration, getHfConfiguration } from '../../../features/huggingface/config';
 import { getGoogleDriveClientId } from '../../../features/googleDrive/auth';
 import { GOOGLE_DRIVE_ENABLED_ORIGIN, GOOGLE_DRIVE_HANDOFF_TOOLTIP, isGoogleDriveEnabled } from '../../../features/googleDrive/config';
@@ -28,7 +27,7 @@ const actionButton = controlPanelStyles.actionButton;
 const copiedButton = controlPanelStyles.actionButtonPrimary;
 const loadHfPublisher = () => import('../../modals/PublishDatasetModal').then(module => ({ default: module.PublishDatasetModal }));
 const loadDrivePublisher = () => import('../../modals/GoogleDrivePublishModal').then(module => ({ default: module.GoogleDrivePublishModal }));
-const BucketStorageModal = lazy(() => import('../../bucket/BucketStorageModal').then(module => ({ default: module.BucketStorageModal })));
+const loadBucketPublisher = () => import('../../bucket/BucketPublishModal').then(module => ({ default: module.BucketPublishModal }));
 type Destination = 'bucket' | 'hf' | 'drive' | null;
 
 export interface SharePanelProps {
@@ -46,7 +45,6 @@ export const SharePanel = memo(function SharePanel({
   const [includeShareLink, setIncludeShareLink] = useState(true);
   const [destination, setDestination] = useState<Destination>(null);
   const shareButtonRef = useRef<HTMLButtonElement>(null);
-  const { loadUrl } = useBucketStorageButtonStoreFacade();
   const hfPublishing = getHfConfiguration().status !== 'disabled';
   const hfAccount = getHfAccountConfiguration();
   const driveEnabled = isGoogleDriveEnabled();
@@ -221,9 +219,7 @@ export const SharePanel = memo(function SharePanel({
         </div>
       </div>
     </ControlButton>
-    {destination === 'bucket' && <Suspense fallback={<span role="status">Opening bucket storage…</span>}>
-      <BucketStorageModal isOpen onClose={closeDestination} onLoadUrl={loadUrl} />
-    </Suspense>}
+    <LazyToolModal modal title="Publish to bucket" load={loadBucketPublisher} isOpen={destination === 'bucket'} onClose={closeDestination} />
     {hfPublishing ? <LazyToolModal modal title="Publish dataset" load={loadHfPublisher} isOpen={destination === 'hf'} onClose={closeDestination} />
       : hfAccount.status === 'ready' && <HuggingFaceAccountDialog config={hfAccount.config} isOpen={destination === 'hf'} onClose={closeDestination} />}
     {driveEnabled && getGoogleDriveClientId() && <LazyToolModal modal title="Publish to Google Drive" load={loadDrivePublisher} isOpen={destination === 'drive'} onClose={closeDestination} />}

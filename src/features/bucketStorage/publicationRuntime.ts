@@ -1,6 +1,7 @@
 import { useReconstructionStore, useDeletionStore } from '../../store';
 import { assertPublicationInputCurrent, capturePublicationInput, getPublicationSourceKey } from '../datasetPublishing/publicationSnapshot';
 import { prepareTransferPublication } from '../datasetPublishing/prepareTransferPublication';
+import type { PublicationFormat } from '../datasetPublishing/types';
 import { bucketConnection } from './connection';
 import { createBucketPublicationController, isBucketPublishing } from './publishDataset';
 import { BucketError } from './types';
@@ -24,11 +25,11 @@ if (import.meta.hot) import.meta.hot.dispose(() => {
   bucketPublication.cancel();
 });
 
-export function publishCurrentDatasetToBucket(folder: string): Promise<void> {
+export function publishCurrentDatasetToBucket(folder: string, format: PublicationFormat = 'folder'): Promise<void> {
   const session = bucketConnection.getSession();
   if (!session) throw new BucketError('Connect to a bucket before uploading.');
   const input = capturePublicationInput();
   const assertCurrent = () => assertPublicationInputCurrent(input);
   return bucketPublication.publish(session, folder,
-    (signal, progress) => prepareTransferPublication(input, signal, progress, assertCurrent), assertCurrent);
+    (signal, progress) => prepareTransferPublication(input, signal, progress, assertCurrent, { format }), assertCurrent);
 }

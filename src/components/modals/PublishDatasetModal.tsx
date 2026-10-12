@@ -1,15 +1,13 @@
 import { useId, useRef, useState } from 'react';
-import { ModalDialogShell } from '../ui/ModalDialogShell';
 import { getHfConfiguration } from '../../features/huggingface/config';
 import { PUBLICATION_LICENSES, validatePublicationDetails } from '../../features/datasetPublishing/publicationMetadata';
 import { isPublishing } from '../../features/datasetPublishing/publishDataset';
 import { publicationErrorMessage } from '../../features/huggingface/http';
 import { usePublishDatasetStoreFacade } from './usePublishDatasetStoreFacade';
-import { UploadAccessField, UploadProgress, UploadResult } from '../upload/UploadParts';
-import type { PublicationVisibility } from '../../features/datasetPublishing/types';
+import { UploadAccessField, UploadDialog, UploadFormatField, UploadLayout, UploadProgress, UploadResult } from '../upload/UploadParts';
+import type { PublicationFormat, PublicationVisibility } from '../../features/datasetPublishing/types';
 import { usePublicationPreview } from './usePublicationPreview';
-import { CloseIcon } from '../../icons';
-import { getButtonClass, inputStyles, modalStyles, panelStyles, Z_INDEX } from '../../theme';
+import { getButtonClass, inputStyles } from '../../theme';
 
 const bytes = (value: number) => `${(value / 1024 / 1024).toFixed(1)} MiB`;
 const fieldClass = `${inputStyles.base} ${inputStyles.sizes.sm} w-full min-w-0`;
@@ -29,6 +27,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
   const [licenseName, setLicenseName] = useState('');
   const [licenseUrl, setLicenseUrl] = useState('');
   const [visibility, setVisibility] = useState<PublicationVisibility>('private');
+  const [format, setFormat] = useState<PublicationFormat>('folder');
   const [formError, setFormError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const configuration = getHfConfiguration();
@@ -37,7 +36,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
   // Once a repository exists, its own section offers retry or a new publication; until then the form stays editable.
   const selecting = !busy && !publish.repoUrl && publish.phase !== 'completed';
   const preview = usePublicationPreview(facade.sourceKey, isOpen && selecting && !!config, facade.getScreenshotBlob);
-  const details = { name, title, description, license, licenseName, licenseUrl, visibility };
+  const details = { name, title, description, license, licenseName, licenseUrl, visibility, format };
 
   const publishNow = async () => {
     setFormError(null);
@@ -59,12 +58,8 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
     </a>
   </p>;
 
-  return <ModalDialogShell isOpen={isOpen} onClose={onClose} ariaLabelledBy={`${id}-title`}
-    overlayClassName={`${panelStyles.overlay} p-4`} overlayStyle={{ zIndex: Z_INDEX.modalOverlay }}
-    panelClassName={`${panelStyles.dialog} w-full publication-dialog overflow-hidden`} panelStyle={{ maxHeight: '90dvh' }} closeOnBackdrop={false}>
-    <header className={`${modalStyles.popupHeader} flex-shrink-0`}>
-      <h2 id={`${id}-title`} className={`${modalStyles.toolHeaderTitle} publication-title`}><span aria-hidden="true">🤗 </span>Publish to Hugging Face</h2>
-      <div className="publication-header-actions">
+  return <UploadDialog isOpen={isOpen} onClose={onClose} closeLabel="Close publish dataset"
+    title={<><span aria-hidden="true">🤗 </span>Publish to Hugging Face</>} headerActions={<>
         {config && (auth.status === 'connected' ? <>
           <span className="publication-account text-ds-muted text-xs" title={auth.identity?.username}>{auth.identity?.username}</span>
           <button type="button" className={accountButtonClass} onClick={signOut}>Sign out</button>
@@ -73,12 +68,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
           : <button type="button" className={getButtonClass('primary', 'xs')} onClick={() => { void hfAuth.connect(config); }}>
             <span aria-hidden="true">🤗 </span>Sign in
           </button>)}
-        <button type="button" className={modalStyles.toolHeaderClose} onClick={onClose} aria-label="Close publish dataset">
-          <CloseIcon className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </header>
-    <div className={`${panelStyles.scrollBody} publication-body text-sm text-ds-primary`}>
+    </>}>
     {!config ? <section className="publication-section" aria-label="Publishing setup">
       <p>{configuration.status === 'unavailable' ? configuration.message : 'Dataset publishing is not enabled for this viewer.'}</p>
       {configuration.status === 'unavailable' && configuration.viewerUrl && <a href={configuration.viewerUrl} target="_blank" rel="noopener noreferrer">
@@ -88,7 +78,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
       {auth.status !== 'connected' && <p className="publication-note">
         Sign-in lets ColmapView read private repositories and create datasets.
       </p>}
-      <div className={`publication-layout${publish.receipt ? ' publication-layout-result' : ''}`}>
+      <UploadLayout completed={Boolean(publish.receipt)}>
         <section className="publication-preview-panel" aria-label="Dataset preview">
           <button type="button" className="publication-preview-button" disabled={!selecting} aria-label="Replace preview image"
             title={selecting ? 'Click to use your own image' : undefined} onClick={() => previewInput.current?.click()}>
@@ -107,6 +97,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
           {selecting && <section className="publication-fields" aria-label="Dataset details">
             <UploadAccessField id={`${id}-access`} shared={visibility === 'public'} onChange={shared => setVisibility(shared ? 'public' : 'private')}
               publicLabel="Public" hint={visibility === 'public' ? 'A public, discoverable dataset that anyone can download.' : 'Requires sign-in with a Hugging Face account that has access.'} />
+            <UploadFormatField id={`${id}-format`} value={format} onChange={setFormat} />
             <label htmlFor={`${id}-name`}>Repository name</label>
             <div className="publication-repo">
               <span className="publication-repo-prefix" title={auth.identity?.username}>
@@ -149,7 +140,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
             viewerUrl={publish.receipt.viewerUrl} providerLink={{ url: publish.receipt.repoUrl, label: 'Hugging Face page' }}
             onReset={() => { publication.reset(); setFormError(null); }} />}
         </div>
-      </div>
+      </UploadLayout>
       {selecting && <section className="publication-submit" aria-label="Dataset contents">
         {facade.pendingDeletions > 0 && <div className="publication-actions">
           <p>Apply {facade.pendingDeletions} pending image deletions before publishing.</p>
@@ -166,6 +157,5 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
       </section>}
       {(formError || publish.error || auth.error) && <p role="alert" className="text-ds-error">{formError ?? publish.error ?? auth.error}</p>}
     </>}
-    </div>
-  </ModalDialogShell>;
+  </UploadDialog>;
 }

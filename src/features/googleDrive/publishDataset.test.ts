@@ -34,7 +34,7 @@ describe('Drive publication lifecycle', () => {
     const { controller, client, prepare } = fixture();
     await controller.publish('scene', false, prepare);
     expect(controller.getSnapshot()).toMatchObject({ phase: 'completed', bytesDone: 20, receipt: { shared: false,
-      driveUrl: 'https://drive.google.com/file/d/DRIVE_FILE_123456789/view', viewerUrl: 'https://viewer.example/latest/?url=https%3A%2F%2Fdrive.google.com%2Ffile%2Fd%2FDRIVE_FILE_123456789%2Fview' } });
+      driveUrl: 'https://drive.google.com/file/d/DRIVE_FILE_123456789/view', viewerUrl: 'https://viewer.example/latest/?url=https://drive.google.com/file/d/DRIVE_FILE_123456789/view' } });
     expect(client.share).not.toHaveBeenCalled();
     expect(client.file).toHaveBeenCalledTimes(2);
     await controller.retry();

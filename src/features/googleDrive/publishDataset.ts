@@ -1,6 +1,7 @@
 import { HfError } from '../huggingface/http';
 import type { DriveArchive, DriveArchiveProgress } from './prepareArchive';
 import { DRIVE_OPERATION_KEY, DRIVE_UPLOAD_CHUNK_BYTES, driveSharingUrl, GoogleDrivePublishError, type DrivePublishedFile, type DriveUploadClient } from './upload';
+import { makePublicationViewerLink } from '../datasetPublishing/publicationLinks';
 
 export type DrivePublicationPhase = 'idle' | 'preparing' | 'uploading' | 'verifying' | 'sharing' | 'cancelling' | 'cancelled' | 'failed' | 'completed';
 export interface DrivePublicationReceipt { fileId: string; driveUrl: string; viewerUrl: string; shared: boolean }
@@ -143,10 +144,8 @@ export function createDrivePublicationController(client: DriveUploadClient) {
         }
       }
       const driveUrl = driveSharingUrl(file);
-      const viewerUrl = new URL(archive.viewerBaseUrl);
-      viewerUrl.searchParams.set('url', driveUrl);
       update({ phase: 'completed', message: 'Dataset saved to Google Drive.', canRetry: false, fileUrl: driveUrl,
-        receipt: { fileId: current.fileId, driveUrl, viewerUrl: viewerUrl.href, shared: current.shared } });
+        receipt: { fileId: current.fileId, driveUrl, viewerUrl: makePublicationViewerLink(archive.viewerBaseUrl, driveUrl), shared: current.shared } });
       release(current);
     } catch (error) {
       const permanent = !signal.aborted && (error instanceof GoogleDrivePublishError || error instanceof HfError) && error.permanent;

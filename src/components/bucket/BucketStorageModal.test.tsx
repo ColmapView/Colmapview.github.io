@@ -4,16 +4,6 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BucketStorageModal } from './BucketStorageModal';
 import { bucketConnection } from '../../features/bucketStorage/connection';
-import { useDeletionStore, useReconstructionStore } from '../../store';
-import { buildCamera, buildReconstruction } from '../../test/builders';
-import type { BucketPublicationState } from '../../features/bucketStorage/publishDataset';
-
-const publication = vi.hoisted(() => ({
-  publish: vi.fn(), cancel: vi.fn(), reset: vi.fn(), state: { phase: 'idle', message: '', filesDone: 0, filesTotal: 0, bytesDone: 0 } as BucketPublicationState,
-}));
-vi.mock('../../features/bucketStorage/publicationRuntime', () => ({ publishCurrentDatasetToBucket: publication.publish, bucketPublication: {
-  getSnapshot: () => publication.state, subscribe: () => () => {}, cancel: publication.cancel, reset: publication.reset,
-} }));
 const listing = '<ListBucketResult><Contents><Key>scene +#.tar</Key><Size>10</Size></Contents><CommonPrefixes><Prefix>nested/</Prefix></CommonPrefixes><IsTruncated>false</IsTruncated></ListBucketResult>';
 const root = 'https://s3.example/bucket/';
 const request = vi.fn<(url: string, init: RequestInit) => Promise<Response>>();
@@ -21,10 +11,6 @@ beforeEach(() => {
   vi.stubGlobal('Blob', NodeBlob); vi.stubGlobal('crypto', webcrypto); vi.stubGlobal('fetch', request);
   request.mockReset().mockImplementation(async () => new Response(listing));
   bucketConnection.disconnect();
-  useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
-  useDeletionStore.setState(useDeletionStore.getInitialState(), true);
-  publication.publish.mockReset(); publication.cancel.mockReset();
-  publication.reset.mockReset(); publication.state = { phase: 'idle', message: '', filesDone: 0, filesTotal: 0, bytesDone: 0 };
 });
 afterEach(() => { cleanup(); bucketConnection.disconnect(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 function open() {
@@ -180,68 +166,9 @@ describe('bucket storage dialog', () => {
     expect(screen.queryByRole('list', { name: 'Bucket objects' })).toBeNull();
     expect(bucketConnection.getSession()).not.toBeNull();
   });
-  it('shows the upload destination and existing bucket permissions directly', () => {
-    act(() => bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' }));
-    act(() => useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }) }));
-    open();
-    expect(screen.getByLabelText('Upload folder').closest('details')).toBeNull();
-    expect(screen.getByRole('textbox', { name: 'Access' })).toHaveValue('Bucket permissions');
-    expect(screen.getByRole('textbox', { name: 'Access' })).toHaveAttribute('readonly');
-    fireEvent.click(screen.getByRole('button', { name: 'Upload dataset' }));
-    expect(publication.publish).toHaveBeenCalledExactlyOnceWith('dataset');
-  });
-  it('shows the same viewer link and result actions without claiming the bucket is public', () => {
-    act(() => bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' }));
-    publication.state = { phase: 'completed', message: 'Dataset uploaded.', filesDone: 2, filesTotal: 2, bytesDone: 10,
-      viewerUrl: 'https://viewer.example/?url=https://s3.example/bucket/dataset/manifest.json' };
-    open();
-    expect(screen.getByLabelText('Bucket viewer link')).toHaveValue(publication.state.viewerUrl);
-    expect(screen.getByText('Access follows your bucket permissions. Viewers need bucket access for private files.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open viewer' })).toHaveAttribute('href', publication.state.viewerUrl);
-    fireEvent.click(screen.getByRole('button', { name: 'Upload another dataset' }));
-    expect(publication.reset).toHaveBeenCalledOnce();
-  });
-  it.each(['failed', 'cancelled'] as const)('identifies and browses the %s upload folder including source files before reset', async phase => {
-    bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
-    const prefix = 'dataset/partial +#/';
-    publication.state = { phase, message: 'Completed objects remain in the new folder.', prefix, filesDone: 2, filesTotal: 4, bytesDone: 10 };
-    request.mockImplementation(async url => {
-      const listingPrefix = new URL(url).searchParams.get('prefix');
-      const contents = listingPrefix === prefix
-        ? `<CommonPrefixes><Prefix>${prefix}sparse/</Prefix></CommonPrefixes>`
-        : listingPrefix === `${prefix}sparse/`
-          ? `<CommonPrefixes><Prefix>${prefix}sparse/0/</Prefix></CommonPrefixes>`
-          : `<Contents><Key>${prefix}sparse/0/cameras.bin</Key><Size>8</Size></Contents>`;
-      return new Response(`<ListBucketResult>${contents}<IsTruncated>false</IsTruncated></ListBucketResult>`);
-    });
-    open();
-    expect(screen.getByRole('textbox', { name: 'Upload folder' })).toHaveValue(prefix);
-    expect(screen.getByRole('textbox', { name: 'Upload folder' })).toHaveAttribute('readonly');
-    fireEvent.click(screen.getByRole('button', { name: 'Browse uploaded files' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'sparse/' }));
-    fireEvent.click(await screen.findByRole('button', { name: '0/' }));
-    expect(await screen.findByText('cameras.bin')).toBeVisible();
-    expect(screen.queryByText('No datasets in this folder.')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Load dataset/partial +#/sparse/0/cameras.bin' })).toBeNull();
-    expect(screen.getByRole('textbox', { name: 'Dataset path' })).toHaveValue(`${prefix}sparse/0/`);
-    expect(new URL(request.mock.calls[0][0]).searchParams.get('prefix')).toBe(prefix);
-    expect(publication.reset).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Start a new publication' }));
-    expect(publication.reset).toHaveBeenCalledOnce();
-  });
-  it('enables upload only for loaded COLMAP data and blocks pending deletions', async () => {
-    act(() => bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' }));
-    open();
-    const button = screen.getByRole('button', { name: 'Upload dataset' });
-    expect(button).toBeDisabled();
-    act(() => useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }) }));
-    expect(button).toBeEnabled();
-    fireEvent.change(screen.getByRole('textbox', { name: 'Upload folder' }), { target: { value: 'datasets/my-scene' } });
-    fireEvent.click(button);
-    expect(publication.publish).toHaveBeenCalledExactlyOnceWith('datasets/my-scene');
-    act(() => useDeletionStore.setState({ pendingDeletions: new Set([1]) }));
-    expect(button).toBeDisabled();
-    expect(screen.getByText('Apply or clear pending deletions first.')).toBeVisible();
+  it('keeps uploading out of the loader even with signing credentials', () => {
+    open(); chooseBucket(true);
+    expect(screen.getByRole('button', { name: 'Load dataset' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Upload dataset' })).toBeNull();
   });
 });

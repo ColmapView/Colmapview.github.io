@@ -205,6 +205,16 @@ test.describe('Hugging Face dataset publication', () => {
     fieldsBox = (await fields.boundingBox())!;
     expect(previewBox.y + previewBox.height).toBeLessThanOrEqual(fieldsBox.y + 1);
     await dialog.screenshot({ path: test.info().outputPath('publication-phone.png') });
+    await page.setViewportSize({ width: 320, height: 568 });
+    const heading = dialog.getByRole('heading', { name: 'Publish to Hugging Face' });
+    const expectReadableHeader = async () => {
+      await expect.poll(() => heading.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+      await expect(dialog.getByRole('button', { name: 'Close publish dataset', exact: true })).toBeInViewport();
+    };
+    await expectReadableHeader();
+    await dialog.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(dialog.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible({ timeout: 30000 });
+    await expectReadableHeader();
   });
 
   test('keeps the loaded dataset when sign-in consent is declined', async ({ page, context, baseURL }) => {

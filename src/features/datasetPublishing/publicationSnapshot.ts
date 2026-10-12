@@ -1,7 +1,7 @@
 import { useReconstructionStore, useTransformStore, useCameraStore, useDeletionStore } from '../../store';
 import { isReconstructionSnapshot } from '../../wasm/reconstructionService';
 import { collectShareConfig } from '../../hooks/useUrlState';
-import { getPublicationViewerBaseUrl } from './publicationMetadata';
+import { getPublicationViewerBaseUrl } from './publicationLinks';
 import { getActiveSplatSourceId } from '../../utils/splatFileSourcePolicy';
 import { getZipImageGeneration } from '../../utils/zipImageFiles';
 import { HfError } from '../huggingface/http';

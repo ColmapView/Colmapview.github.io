@@ -3,8 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { discoverManifestSplatCatalog, fetchManifestColmapFiles } from '../../hooks/urlLoaderManifestFetch';
 import { getManifestLoadSourceInfo } from '../../hooks/urlLoaderPolicy';
 import { buildImageUrl } from '../../utils/imageFileLookupPolicy';
-import { getPublicationViewerBaseUrl, publicationManifest, publicationMetadata, publicationReceipt, validatePublicationDetails } from './publicationMetadata';
+import { publicationManifest, publicationMetadata, publicationReceipt, validatePublicationDetails } from './publicationMetadata';
 import { datasetFileUrl } from './publicationPaths';
+import { bucketPublicationManifest } from '../bucketStorage/publishDataset';
 import type { PreparedPublication } from './types';
 
 const DATA_COMMIT = 'd'.repeat(40);
@@ -19,6 +20,14 @@ function prepared(splatPaths: string[]): PreparedPublication {
 }
 
 describe('publication receipt', () => {
+  it('pins ZIP links to the uploaded data revision instead of treating the repository as a loose folder', () => {
+    const input = prepared([]);
+    input.archive = { path: 'dataset.zip', size: 100, files: [{ path: 'sparse/0/cameras.bin', size: 1 }] };
+    const receipt = publicationReceipt(input, 'owner/scene', DATA_COMMIT, 'e'.repeat(40), 'private');
+    expect(new URL(receipt.viewerUrl).searchParams.get('url')).toBe(datasetFileUrl('owner/scene', DATA_COMMIT, 'dataset.zip'));
+    expect(receipt.repoUrl).toBe('https://huggingface.co/datasets/owner/scene');
+    expect(receipt.visibility).toBe('private');
+  });
   it('shares the viewer followed by the Hugging Face dataset page', () => {
     const receipt = publicationReceipt(prepared([]), 'owner/scene', DATA_COMMIT, 'e'.repeat(40), 'public');
     expect(receipt.viewerUrl).toBe('https://viewer.example/?url=https://huggingface.co/datasets/owner/scene');
@@ -26,20 +35,25 @@ describe('publication receipt', () => {
   });
 });
 
-describe('publication viewer base', () => {
-  it.each([
-    ['https://colmapview.github.io', '/v0.15.2/', 'https://colmapview.github.io/latest/'],
-    ['https://colmapview.github.io', '/latest/', 'https://colmapview.github.io/latest/'],
-    ['https://colmapview.github.io', '/dev/', 'https://colmapview.github.io/dev/'],
-    ['http://localhost:5173', '/', 'http://localhost:5173/'],
-  ])('links %s%s datasets to %s', (origin, pathname, expected) => {
-    const { hostname } = new URL(origin);
-    expect(getPublicationViewerBaseUrl({ origin, hostname, pathname })).toBe(expected);
-  });
-});
-
 describe('dataset card', () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it('documents ZIP contents and uses the same pinned link without publishing a broken loose-file manifest', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const input = prepared(['splats/scene.sog']);
+    input.archive = { path: 'dataset.zip', size: 100, files: [{ path: 'masks/photo.jpg.png', size: 4 }] };
+    const details = { name: 'scene', title: 'Scene', description: '', license: '', visibility: 'private' as const, format: 'zip' as const };
+    const inventory = [{ path: 'dataset.zip', size: 100 }];
+    const files = publicationMetadata(input, details, 'owner/scene', DATA_COMMIT, inventory);
+    expect(files.map(file => file.path)).toEqual(['README.md', 'colmapview-inventory.json']);
+    const readme = await files[0].content.text();
+    const receipt = publicationReceipt(input, 'owner/scene', DATA_COMMIT, 'e'.repeat(40), 'private');
+    expect(readme).toContain(`[Open in ColmapView](${receipt.viewerUrl})`);
+    expect(readme).toContain(`[dataset.zip](${datasetFileUrl('owner/scene', DATA_COMMIT, 'dataset.zip')})`);
+    expect(readme).toContain('1 masks and 1 original splat files');
+    expect(readme).toContain('Private dataset. Sign in');
+    expect(JSON.parse(await files[1].content.text())).toMatchObject({ dataCommit: DATA_COMMIT, files: inventory, archive: input.archive });
+  });
 
   it('links the viewer to the dataset page, the same clean link the dialog shares', async () => {
     vi.stubGlobal('Blob', NodeBlob);
@@ -83,6 +97,24 @@ describe('dataset card license', () => {
 });
 
 describe('published manifest', () => {
+  it.each([
+    { optional: [] }, { optional: ['rigs'] }, { optional: ['frames'] }, { optional: ['rigs', 'frames'] },
+  ])('keeps HF and bucket model layouts aligned with optional files: $optional', ({ optional }) => {
+    const input = prepared(['splats/scene.sog']);
+    for (const name of optional) input.assets.push({ path: `sparse/0/${name}.bin`, kind: 'colmap', size: 1, open: async () => new Blob(['x']) });
+    // A similarly named non-model file must not create a model-file reference.
+    input.assets.push({ path: 'images/rigs.bin', kind: 'image', size: 1, open: async () => new Blob(['x']) });
+    const hf = publicationManifest(input, 'owner/scene', DATA_COMMIT, 'Scene');
+    const bucket = bucketPublicationManifest(input, 'https://bucket.example/scene/', 'Scene');
+    const expected = { cameras: 'sparse/0/cameras.bin', images: 'sparse/0/images.bin', points3D: 'sparse/0/points3D.bin',
+      ...Object.fromEntries(optional.map(name => [name, `sparse/0/${name}.bin`])) };
+    expect(hf.files).toEqual(expected);
+    expect(bucket.files).toEqual(expected);
+    expect(hf.splats).toBeUndefined();
+    expect(bucket.splats).toEqual(input.splatPaths);
+    expect(hf.masksPath).toBe('masks/');
+    expect(bucket.masksPath).toBeUndefined();
+  });
   it('lists only image paths the viewer cannot derive while every image still resolves to its upload', () => {
     const names = ['a.jpg', 'nested/b#1.jpg', 'dir\\c.jpg', 'images/d.jpg', 'Images/e.jpg'];
     const uploaded = Object.fromEntries(names.map(name => [name, `images/${name.replace(/\\/g, '/')}`]));

@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useDeletionStore, useReconstructionStore } from '../../store';
+import { useDeletionStore, useReconstructionStore, useExportStore } from '../../store';
 import { applyDeletionsToData } from '../../store/actions/deletionActions';
 import { buildReconstruction } from '../../test/builders';
 import { useGoogleDrivePublishStoreFacade } from './useGoogleDrivePublishStoreFacade';
@@ -27,12 +27,35 @@ vi.mock('../../features/googleDrive/publicationRuntime', () => ({
 beforeEach(() => {
   useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
   useDeletionStore.setState(useDeletionStore.getInitialState(), true);
+  useExportStore.setState(useExportStore.getInitialState(), true);
   external.auth = { status: 'disconnected', error: null };
   external.publish = { phase: 'idle' };
 });
-afterEach(() => { cleanup(); useReconstructionStore.getState().clear(); });
+afterEach(() => { cleanup(); useReconstructionStore.getState().clear(); useExportStore.setState(useExportStore.getInitialState(), true); });
 
 describe('Google Drive publish store facade', () => {
+  it('updates preview source and capture callback when the scene or renderer changes', () => {
+    const capture = vi.fn<() => Promise<Blob | null>>().mockResolvedValue(null);
+    const replacementCapture = vi.fn<() => Promise<Blob | null>>().mockResolvedValue(null);
+    const { result } = renderHook(useGoogleDrivePublishStoreFacade);
+    expect(result.current.sourceKey).toBe('');
+    expect(result.current.getScreenshotBlob).toBeNull();
+    act(() => {
+      useReconstructionStore.setState({ reconstruction: buildReconstruction() });
+      useExportStore.setState({ getScreenshotBlob: capture });
+    });
+    const firstSource = result.current.sourceKey;
+    expect(firstSource).not.toBe('');
+    expect(result.current.getScreenshotBlob).toBe(capture);
+    act(() => {
+      useReconstructionStore.setState({ reconstruction: buildReconstruction() });
+      useExportStore.setState({ getScreenshotBlob: replacementCapture });
+    });
+    expect(result.current.sourceKey).not.toBe(firstSource);
+    expect(result.current.getScreenshotBlob).toBe(replacementCapture);
+    expect(capture).not.toHaveBeenCalled();
+    expect(replacementCapture).not.toHaveBeenCalled();
+  });
   it('tracks the current scene and pending edits while exposing the explicit publication actions', () => {
     const { result } = renderHook(useGoogleDrivePublishStoreFacade);
     const reconstruction = buildReconstruction();

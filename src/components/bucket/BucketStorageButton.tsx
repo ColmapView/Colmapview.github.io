@@ -11,7 +11,7 @@ export function BucketStorageButton({ className, onLoadUrl }: {
   const [open, setOpen] = useState(false);
   const { loadUrl } = useBucketStorageButtonStoreFacade();
   return <>
-    <button type="button" className={className} aria-label="Bucket storage" data-tooltip="Read or upload a bucket dataset"
+    <button type="button" className={className} aria-label="Bucket storage" data-tooltip="Load a bucket dataset"
       onClick={() => setOpen(true)}><BucketIcon /></button>
     {open && <Suspense fallback={<span role="status">Opening bucket storage…</span>}>
       <BucketStorageModal isOpen onClose={() => setOpen(false)} onLoadUrl={onLoadUrl ?? loadUrl} />

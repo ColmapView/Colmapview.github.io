@@ -2,6 +2,8 @@ import { dump } from 'js-yaml';
 import type { ColmapManifest } from '../../types/manifest';
 import { HfError } from '../huggingface/http';
 import { datasetFileUrl, validateRepositoryName } from './publicationPaths';
+import { makePublicationViewerLink } from './publicationLinks';
+import { publicationModelFiles, PUBLICATION_MODEL_DIRECTORY } from './publicationAssets';
 import type { PreparedPublication, PublicationDetails, PublicationReceipt, PublicationVisibility } from './types';
 import type { UploadFile } from '../huggingface/hubClient';
 import { DATASET_VIEWER_SETTINGS_FILE } from '../../utils/datasetViewerSettings';
@@ -21,6 +23,7 @@ export const PUBLICATION_LICENSES = [
   { id: 'other', label: 'Custom license' },
 ] as const;
 export function validatePublicationDetails(details: PublicationDetails): PublicationDetails {
+  if (details.format !== undefined && !['folder', 'zip'].includes(details.format)) throw new HfError('Choose Folder or ZIP archive format.');
   if (!['private', 'public'].includes(details.visibility)) throw new HfError('Choose private or public access for this dataset.');
   const name = validateRepositoryName(details.name);
   const title = details.title.trim();
@@ -37,16 +40,13 @@ export function validatePublicationDetails(details: PublicationDetails): Publica
 }
 
 export function publicationManifest(prepared: PreparedPublication, repoId: string, dataCommit: string, title: string): ColmapManifest {
-  const coreFiles = new Set(prepared.assets.filter(asset => asset.kind === 'colmap').map(asset => asset.path));
   const baseUrl = new URL('.', datasetFileUrl(repoId, dataCommit, DATASET_VIEWER_SETTINGS_FILE)).href;
   // The viewer derives most image URLs from imagesPath; list only names it would resolve elsewhere.
   const imageNameToPath = Object.fromEntries(Object.entries(prepared.imageNameToPath).filter(([name, path]) =>
     buildImageUrl(`${baseUrl}images/`, name).url !== datasetFileUrl(repoId, dataCommit, path)));
   return {
     version: 1, name: title, baseUrl,
-    files: { cameras: 'sparse/0/cameras.bin', images: 'sparse/0/images.bin', points3D: 'sparse/0/points3D.bin',
-      ...(coreFiles.has('sparse/0/rigs.bin') ? { rigs: 'sparse/0/rigs.bin' } : {}),
-      ...(coreFiles.has('sparse/0/frames.bin') ? { frames: 'sparse/0/frames.bin' } : {}) },
+    files: publicationModelFiles(prepared.assets),
     viewerStatePath: DATASET_VIEWER_SETTINGS_FILE, imagesPath: 'images/', masksPath: 'masks/',
     skipImages: false, ...(Object.keys(imageNameToPath).length ? { imageNameToPath } : {}),
     // No `splats`: explicit entries download eagerly. Repository discovery lists them
@@ -55,36 +55,21 @@ export function publicationManifest(prepared: PreparedPublication, repoId: strin
 }
 
 /**
- * The viewer a published dataset links to. On colmapview.github.io that is /latest/ (the root's
- * redirect drops the query), so links keep opening the current viewer rather than the version
- * that published them; /dev/ stays on /dev/, and other hosts link to the page they run on.
+ * The dialog and dataset card share one link. Folder publications follow the repository page;
+ * ZIP publications open the archive pinned to its uploaded revision.
  */
-export function getPublicationViewerBaseUrl(location: Pick<Location, 'origin' | 'hostname' | 'pathname'>): string {
-  if (location.hostname !== 'colmapview.github.io') return location.origin + location.pathname;
-  return `${location.origin}/${location.pathname.startsWith('/dev/') ? 'dev' : 'latest'}/`;
-}
-
-/**
- * The shareable link, used by the dialog and the dataset card: the viewer followed by the dataset
- * page, which follows the repository's latest revision and its saved colmapview.yaml settings.
- * The page URL stays unescaped for readability; repository ids contain no query-significant characters.
- */
-export function makeRepositoryViewerLink(prepared: PreparedPublication, repoUrl: string): string {
-  const url = new URL(prepared.viewerBaseUrl);
-  url.search = ''; url.hash = '';
-  return `${url.href}?url=${repoUrl}`;
-}
-
 export function publicationReceipt(prepared: PreparedPublication, repoId: string, dataCommit: string, metadataCommit: string,
   visibility: PublicationVisibility): PublicationReceipt {
   const repoUrl = `https://huggingface.co/datasets/${repoId}`;
-  return { repoId, repoUrl, dataCommit, metadataCommit, visibility, viewerUrl: makeRepositoryViewerLink(prepared, repoUrl) };
+  const sourceUrl = prepared.archive ? datasetFileUrl(repoId, dataCommit, prepared.archive.path) : repoUrl;
+  return { repoId, repoUrl, dataCommit, metadataCommit, visibility, viewerUrl: makePublicationViewerLink(prepared.viewerBaseUrl, sourceUrl) };
 }
 
 export function publicationMetadata(prepared: PreparedPublication, details: PublicationDetails, repoId: string, dataCommit: string,
   inventory: Array<{ path: string; size: number }>): UploadFile[] {
-  const manifest = publicationManifest(prepared, repoId, dataCommit, details.title);
-  const viewerLink = makeRepositoryViewerLink(prepared, `https://huggingface.co/datasets/${repoId}`);
+  const sourceUrl = prepared.archive ? datasetFileUrl(repoId, dataCommit, prepared.archive.path) : `https://huggingface.co/datasets/${repoId}`;
+  const viewerLink = makePublicationViewerLink(prepared.viewerBaseUrl, sourceUrl);
+  const payload = prepared.archive?.files ?? inventory;
   const markdown = (text: string) => text.replace(/[\\`*_[\]<>]/g, '\\$&');
   const card = dump({ ...(details.license ? { license: details.license } : {}),
     ...(details.license === 'other' ? { license_name: details.licenseName, license_link: details.licenseUrl } : {}),
@@ -99,16 +84,19 @@ export function publicationMetadata(prepared: PreparedPublication, details: Publ
     + (details.visibility === 'private' ? 'Private dataset. Sign in to Hugging Face in the viewer with an account that has access.\n\n' : '')
     + `Published by ${markdown(repoId.split('/')[0])} with ColmapView ${prepared.viewerState.viewerVersion}.\n\n`
     + `## Contents\n\n${prepared.counts.cameras} cameras, ${prepared.counts.images} registered images, ${prepared.counts.points} points.\n\n`
-    + `COLMAP binary files are in sparse/0/. Original images are in images/.\n`
-    + `${inventory.filter(file => file.path.startsWith('masks/')).length} masks and ${prepared.splatPaths.length} original splat files were included.\n\n`
+    + (prepared.archive ? `Download [${prepared.archive.path}](${sourceUrl}) for the complete dataset. Inside the ZIP, ` : '')
+    + `COLMAP binary files are in ${PUBLICATION_MODEL_DIRECTORY}/. Original images are in images/.\n`
+    + `${payload.filter(file => file.path.startsWith('masks/')).length} masks and ${prepared.splatPaths.length} original splat files were included.\n\n`
     + `The reviewed scene transform is baked into the COLMAP model. Original splat bytes retain their original coordinates; `
     + `their alignment and the saved camera view are recorded in colmapview.yaml at the dataset root. `
     + `ColmapView restores these settings when opening the dataset from a URL, local folder, or supported archive.\n\n`
     + `Dataset files are pinned to revision ${dataCommit}. See colmapview-inventory.json for filenames and sizes.\n`;
   const files: Record<string, string> = {
-    'README.md': readme, 'colmapview.json': JSON.stringify(manifest, null, 2),
+    'README.md': readme,
+    ...(!prepared.archive ? { 'colmapview.json': JSON.stringify(publicationManifest(prepared, repoId, dataCommit, details.title), null, 2) } : {}),
     'colmapview-inventory.json': JSON.stringify({ version: 1, operationId: prepared.operationId,
-      viewerVersion: prepared.viewerState.viewerVersion, dataCommit, counts: prepared.counts, files: inventory }, null, 2),
+      viewerVersion: prepared.viewerState.viewerVersion, dataCommit, counts: prepared.counts, files: inventory,
+      ...(prepared.archive ? { archive: prepared.archive } : {}) }, null, 2),
   };
   return Object.entries(files).map(([path, text]) => ({ path, content: new Blob([text]) }));
 }

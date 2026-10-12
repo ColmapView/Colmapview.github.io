@@ -126,7 +126,7 @@ describe('Drive dataset ZIP packaging', () => {
     const open = vi.fn();
     const assets = Array.from({ length: 60_001 }, (_, index): PublishAsset => ({ path: `images/${index}.jpg`, kind: 'image', size: 1, open }));
     await expect(packageDriveArchive(prepared(assets), new AbortController().signal, () => {}, () => {}))
-      .rejects.toMatchObject({ message: 'This dataset has too many files for a Drive ZIP.', permanent: true });
+      .rejects.toMatchObject({ message: 'This dataset has too many files for a ZIP archive.', permanent: true });
     expect(open).not.toHaveBeenCalled();
   });
   it('rejects source size changes and stops an aborted reader before packaging the next asset', async () => {
@@ -143,7 +143,7 @@ describe('Drive dataset ZIP packaging', () => {
     // The declared size passes the early check; the 4 bytes read both differ from it and exceed the limit.
     const source = asset('file.bin', 'data'); source.size = 1;
     await expect(packageDriveArchive(prepared([source]), new AbortController().signal, () => {}, () => {}, 3))
-      .rejects.toMatchObject({ message: 'The dataset ZIP exceeds the Drive publisher’s 2 GiB archive limit. Use a smaller dataset or splat.', permanent: true });
+      .rejects.toMatchObject({ message: 'The dataset ZIP exceeds the 2 GiB archive limit. Use a smaller dataset or splat.', permanent: true });
   });
   it('packages only the active splat and restores its saved transform and selection', async () => {
     const photo = new File(['photo'], 'photo.jpg');

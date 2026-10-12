@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.4] - 2026-10-11
+
+### Added
+
+- Choose Folder or ZIP archive format for Hugging Face and bucket uploads. ZIP links open the archive directly, retain original dataset files and viewer settings, and share the Google Drive packager.
+
+### Changed
+
+- Bucket uploads under Share use the same preview, form, progress, and result layout as Hugging Face. Bucket URL loading and file browsing stay under Load.
+- Google Drive uploads use the shared upload layout and current-view preview, while retaining their ZIP file and sharing options.
+- Upload dialog account controls wrap below the title on narrow screens.
+- Share viewer-link generation and temporary-file cleanup across upload providers, and release confirmed Hugging Face upload buffers before preparing the next batch.
+- Use one COLMAP publication layout for exports and storage manifests, with direct Folder and ZIP metadata verification.
+
 ## [0.16.3] - 2026-10-11
 
 ### Added
@@ -677,7 +691,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript for type safety
 - Deno native test runner for testing
 
-[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.16.3...HEAD
+[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.16.4...HEAD
+[0.16.4]: https://github.com/ColmapView/colmapview.github.io/compare/v0.16.3...v0.16.4
 [0.16.3]: https://github.com/ColmapView/colmapview.github.io/compare/v0.16.1...v0.16.3
 [0.16.1]: https://github.com/ColmapView/colmapview.github.io/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/ColmapView/colmapview.github.io/compare/v0.15.4...v0.16.0

@@ -1,12 +1,12 @@
 import type { PublishedViewerState } from '../../utils/publishedViewerState';
 
-// Splat files use native Blob transfers and the exported COLMAP model is generated in memory; both are exempt.
+// Splats and ZIPs use native Blob transfers; the exported COLMAP model is already in memory. These are exempt.
 export const MAX_BUFFERED_PUBLICATION_FILE_BYTES = 128 * 1024 * 1024;
 export const MAX_PUBLICATION_BATCH_BYTES = 128 * 1024 * 1024;
 export const MAX_PUBLICATION_BATCH_FILES = 49; // Plus one atomic batch receipt.
 export interface PublishAsset {
   path: string;
-  kind: 'colmap' | 'image' | 'mask' | 'splat' | 'viewer-state' | 'preview';
+  kind: 'colmap' | 'image' | 'mask' | 'splat' | 'viewer-state' | 'preview' | 'archive';
   /** The exact byte count, checked against the opened file; null when unknown. */
   size: number | null;
   /** A size read when the dataset loaded: it plans batches and the ZIP limit, but the source may have changed since, so it is never checked. */
@@ -16,9 +16,11 @@ export interface PublishAsset {
   release?: () => void;
 }
 export type PublicationVisibility = 'private' | 'public';
+export type PublicationFormat = 'folder' | 'zip';
 export interface PublicationDetails {
   name: string; title: string; description: string; license: string;
   visibility: PublicationVisibility;
+  format?: PublicationFormat;
   licenseName?: string; licenseUrl?: string;
 }
 export interface PreparedPublication {
@@ -32,6 +34,8 @@ export interface PreparedPublication {
   splatPaths: string[];
   viewerBaseUrl: string;
   previewPath?: string;
+  /** ZIP payload inventory; assets contain the ZIP and repository sidecars instead of loose dataset files. */
+  archive?: { path: string; size: number; files: Array<{ path: string; size: number }> };
 }
 export interface PublicationReceipt {
   repoId: string; repoUrl: string; dataCommit: string; metadataCommit: string; viewerUrl: string;

@@ -17,6 +17,7 @@ import { MAX_BUFFERED_PUBLICATION_FILE_BYTES, type PreparedPublication, type Pub
 import { downloadRemoteFile } from './downloadRemoteFile';
 import { DATASET_VIEWER_SETTINGS_FILE, serializeDatasetViewerSettings } from '../../utils/datasetViewerSettings';
 import { PUBLICATION_PREVIEW_PATH, MAX_PREVIEW_INPUT_BYTES } from './publicationPreview';
+import { PUBLICATION_MODEL_DIRECTORY } from './publicationAssets';
 
 export interface PublicationInput {
   sourceKey: string; modelRevision: number; reconstruction: Reconstruction; source: ReconstructionSource | null;
@@ -51,7 +52,7 @@ function publicationSplats(dataset: DatasetState): SplatFileSource[] {
 export function checkAssetSize(size: number, path: string, kind: PublishAsset['kind']): void {
   if (!Number.isSafeInteger(size) || size < 0) throw new HfError(`The file ${path} has an invalid size.`, undefined, true);
   // The export already holds the COLMAP model in memory, so capping it frees nothing.
-  if (kind !== 'splat' && kind !== 'colmap' && size > MAX_BUFFERED_PUBLICATION_FILE_BYTES) {
+  if (kind !== 'splat' && kind !== 'colmap' && kind !== 'archive' && size > MAX_BUFFERED_PUBLICATION_FILE_BYTES) {
     throw new HfError(`The file ${path} exceeds the 128 MiB publication limit for non-splat files.`, undefined, true);
   }
 }
@@ -88,7 +89,7 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
   };
   const fixed = (path: string, content: Blob, kind: PublishAsset['kind']): PublishAsset =>
     ({ path, kind, size: content.size, open: async targetSignal => { targetSignal.throwIfAborted(); return content; } });
-  for (const [name, content] of Object.entries(exported)) add(fixed(`sparse/0/${name}`, content, 'colmap'));
+  for (const [name, content] of Object.entries(exported)) add(fixed(`${PUBLICATION_MODEL_DIRECTORY}/${name}`, content, 'colmap'));
   if (input.preview) {
     if (input.preview.type !== 'image/png' || !input.preview.size || input.preview.size > MAX_PREVIEW_INPUT_BYTES) {
       throw new HfError('Choose a valid preview image before publishing.');

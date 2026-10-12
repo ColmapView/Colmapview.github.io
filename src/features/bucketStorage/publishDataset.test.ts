@@ -2,6 +2,8 @@ import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBucketConnection } from './connection';
 import { createBucketPublicationController } from './publishDataset';
+import { packageZipPublication } from '../datasetPublishing/packagePublicationZip';
+import { unzipSync, strFromU8 } from 'fflate';
 import type { PreparedPublication } from '../datasetPublishing/types';
 import { ColmapManifestSchema } from '../../types/manifest';
 
@@ -19,6 +21,60 @@ function session(publicUrl = false) {
     { accessKeyId: 'fixture-key', secretAccessKey: 'fixture-secret' });
 }
 describe('bucket dataset publication', () => {
+  it.each([false, true])('uploads a single ZIP and verifies it through the signed session before sharing (public domain: %s)', async publicUrl => {
+    const blobs = new Map<string, Blob>();
+    const request = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input);
+      const method = input instanceof Request ? input.method : init?.method;
+      const headers = input instanceof Request ? input.headers : new Headers(init?.headers);
+      expect(headers.has('Authorization')).toBe(true);
+      const key = decodeURIComponent(new URL(url).pathname.replace('/bucket/', ''));
+      const blob = blobs.get(key)!;
+      return method === 'HEAD' ? new Response(null, { headers: { 'Content-Length': String(blob.size) } })
+        : new Response(await blob.slice(0, 4).arrayBuffer(), { status: 206 });
+    });
+    vi.stubGlobal('fetch', request);
+    const input = prepared();
+    const publisher = createBucketPublicationController({ upload: async (_session, key, blob) => { blobs.set(key, blob); } });
+    await publisher.publish(session(publicUrl), 'datasets/scene',
+      (signal, progress) => packageZipPublication(input, signal, progress, () => {}), () => {});
+    const state = publisher.getSnapshot();
+    expect(state.phase).toBe('completed');
+    expect([...blobs.keys()]).toEqual([state.prefix + 'dataset.zip']);
+    const bytes = new Uint8Array(await [...blobs.values()][0].arrayBuffer());
+    const files = unzipSync(bytes);
+    expect(Object.keys(files)).toEqual(input.assets.map(asset => asset.path));
+    expect(strFromU8(files['images/photo.jpg'])).toBe('images/photo.jpg');
+    expect(state.manifestUrl).toBeUndefined();
+    expect(new URL(state.viewerUrl!).searchParams.get('url')).toBe((publicUrl ? 'https://public.example/' : 'https://s3.example/bucket/') + state.prefix + 'dataset.zip');
+    expect(state.filesDone).toBe(1);
+    expect(state.filesTotal).toBe(1);
+    expect(JSON.stringify(state)).not.toMatch(/fixture-key|fixture-secret|X-Amz-/);
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not share a ZIP when readback verification fails or the bucket disconnects', async () => {
+    const target = session();
+    const publisher = createBucketPublicationController({ upload: vi.fn(), verifyArchive: async () => { throw new Error('unavailable'); } });
+    await publisher.publish(target, 'scene', (signal, progress) => packageZipPublication(prepared(), signal, progress, () => {}), () => {});
+    expect(publisher.getSnapshot().phase).toBe('failed');
+    expect(publisher.getSnapshot().viewerUrl).toBeUndefined();
+    const verifyArchive = vi.fn();
+    const disconnected = createBucketPublicationController({ upload: async () => { disconnected.cancel(); }, verifyArchive });
+    await disconnected.publish(target, 'scene', (signal, progress) => packageZipPublication(prepared(), signal, progress, () => {}), () => {});
+    expect(disconnected.getSnapshot().phase).toBe('cancelled');
+    expect(verifyArchive).not.toHaveBeenCalled();
+  });
+
+  it('cancels ZIP packaging before creating any bucket objects', async () => {
+    const upload = vi.fn();
+    const publisher = createBucketPublicationController({ upload });
+    await publisher.publish(session(), 'scene', (signal, progress) => packageZipPublication(prepared(), signal, message => {
+      progress(message); if (message.startsWith('Packaged')) publisher.cancel();
+    }, () => {}), () => {});
+    expect(publisher.getSnapshot().phase).toBe('cancelled');
+    expect(upload).not.toHaveBeenCalled();
+  });
   it.each([false, true])('publishes assets before a verified manifest and makes credential-free viewer links (public domain: %s)', async publicUrl => {
     const blobs = new Map<string, Blob>();
     const input = prepared();

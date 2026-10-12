@@ -1,5 +1,7 @@
 .publication-dialog { max-width: 760px; }
+.publication-header { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; }
 .publication-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.publication-header-close { grid-column: -2; grid-row: 1; }
 .publication-header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .publication-account { max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .publication-note { color: var(--text-muted); line-height: 1.5; margin: 0; }
@@ -22,8 +24,9 @@
 .publication-main { display: grid; gap: 10px; min-width: 0; }
 .publication-preview-panel { display: grid; gap: 6px; }
 .publication-preview-panel p { margin: 0; }
-.publication-preview-button { display: block; width: 100%; padding: 0; overflow: hidden; cursor: pointer;
+.publication-preview-frame, .publication-preview-button { display: block; width: 100%; padding: 0; overflow: hidden;
   background: var(--bg-primary); border: 1px solid var(--border-light); border-radius: 6px; }
+.publication-preview-button { cursor: pointer; }
 .publication-preview-button:hover:not(:disabled), .publication-preview-button:focus-visible { border-color: var(--accent-hover); }
 .publication-body .publication-preview-button:disabled { opacity: 1; }
 .publication-preview { display: block; width: 100%; height: auto; max-height: 200px; object-fit: contain; }
@@ -56,6 +59,8 @@
 .publication-submit-row { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
 
 @media (max-width: 640px) {
+  .publication-header { grid-template-columns: minmax(0, 1fr) auto; }
+  .publication-header-actions { grid-column: 1 / -1; grid-row: 2; justify-content: flex-end; }
   .publication-layout { grid-template-columns: minmax(0, 1fr); }
   .publication-fields { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .publication-fields > label:not(:first-child) { margin-top: 6px; }

@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HubClient } from '../huggingface/hubClient';
 import { HfError } from '../huggingface/http';
 import { createPublicationController } from './publishDataset';
+import { packageZipPublication } from './packagePublicationZip';
+import { unzipSync } from 'fflate';
 import { downloadRemoteFile } from './downloadRemoteFile';
 import { MAX_BUFFERED_PUBLICATION_FILE_BYTES, MAX_PUBLICATION_BATCH_BYTES, MAX_PUBLICATION_BATCH_FILES, type PreparedPublication } from './types';
 import { createIdentityEuler } from '../../utils/sim3dTransforms';
@@ -27,6 +29,100 @@ beforeEach(() => vi.stubGlobal('Blob', NodeBlob));
 afterEach(() => vi.unstubAllGlobals());
 
 describe('publication controller', () => {
+  it('releases each confirmed batch before uploading the next one, and only once', async () => {
+    const { controller, client, verify } = setup();
+    const input = fixture(MAX_PUBLICATION_BATCH_FILES + 1);
+    const releases = input.assets.map(asset => asset.release = vi.fn());
+    let commits = 0;
+    vi.mocked(client.upload).mockImplementation(async () => {
+      if (commits === 1) {
+        releases.slice(0, MAX_PUBLICATION_BATCH_FILES).forEach(release => expect(release).toHaveBeenCalledOnce());
+        expect(releases.at(-1)).not.toHaveBeenCalled();
+      }
+      return (++commits).toString(16).padStart(40, '0');
+    });
+    verify.mockImplementation(async () => { releases.forEach(release => expect(release).toHaveBeenCalledOnce()); });
+    await controller.publish('owner', details, async () => input);
+    expect(controller.getSnapshot().phase).toBe('completed');
+    releases.forEach(release => expect(release).toHaveBeenCalledOnce());
+  });
+
+  it('retains failed batches for retry and releases their buffers after confirmation', async () => {
+    const { controller, client } = setup();
+    const input = fixture();
+    const releases = input.assets.map(asset => asset.release = vi.fn());
+    vi.mocked(client.upload).mockRejectedValueOnce(new HfError('Offline'));
+    await controller.publish('owner', details, async () => input);
+    expect(controller.getSnapshot().canRetry).toBe(true);
+    releases.forEach(release => expect(release).not.toHaveBeenCalled());
+    await controller.retry();
+    expect(controller.getSnapshot().phase).toBe('completed');
+    releases.forEach(release => expect(release).toHaveBeenCalledOnce());
+  });
+
+  it.each(['conflict', 'reset'] as const)('releases unused preparation buffers when a publication is discarded by %s', async reason => {
+    const { controller, client } = setup();
+    const input = fixture();
+    const releases = input.assets.map(asset => asset.release = vi.fn());
+    vi.mocked(client.create).mockRejectedValueOnce(new HfError('Unavailable', reason === 'conflict' ? 409 : undefined));
+    await controller.publish('owner', details, async () => input);
+    if (reason === 'reset') {
+      releases.forEach(release => expect(release).not.toHaveBeenCalled());
+      controller.reset();
+    }
+    releases.forEach(release => expect(release).toHaveBeenCalledOnce());
+    expect(client.upload).not.toHaveBeenCalled();
+  });
+
+  it('releases a prepared snapshot returned after cancellation instead of leaving it unowned', async () => {
+    const { controller, client } = setup();
+    const input = fixture();
+    const releases = input.assets.map(asset => asset.release = vi.fn());
+    await controller.publish('owner', details, async () => { controller.cancel(); return input; });
+    expect(controller.getSnapshot().phase).toBe('cancelled');
+    releases.forEach(release => expect(release).toHaveBeenCalledOnce());
+    expect(client.create).not.toHaveBeenCalled();
+  });
+  it('retries the captured ZIP without reopening released sources or adopting a changed format', async () => {
+    const { controller, client } = setup();
+    const settings = { ...details, format: 'zip' as 'zip' | 'folder' };
+    const work = vi.fn((signal: AbortSignal, progress: (message: string) => void) => packageZipPublication(fixture(), signal, progress, () => {}));
+    vi.mocked(client.upload).mockRejectedValueOnce(new HfError('Offline'));
+    await controller.publish('owner', settings, work);
+    settings.format = 'folder';
+    await controller.retry();
+    expect(controller.getSnapshot().phase).toBe('completed');
+    expect(work).toHaveBeenCalledOnce();
+    const uploads = vi.mocked(client.upload).mock.calls;
+    expect(uploads[0][1][0].path).toBe('dataset.zip');
+    expect(uploads[1][1][0].content).toBe(uploads[0][1][0].content);
+    expect(uploads[2][1].some(file => file.path === 'colmapview.json')).toBe(false);
+  });
+  it('uploads ZIP as a native Blob with repository metadata and a pinned private viewer link', async () => {
+    const { controller, client } = setup();
+    const input = fixture();
+    await controller.publish('owner', { ...details, format: 'zip', visibility: 'private', license: '' },
+      (signal, progress) => packageZipPublication(input, signal, progress, () => {}, { repositorySidecars: true }));
+    expect(controller.getSnapshot().phase).toBe('completed');
+    const data = vi.mocked(client.upload).mock.calls[0][1];
+    expect(data.map(file => file.path)).toEqual(['dataset.zip', 'colmapview.yaml', 'colmapview-upload.json']);
+    expect(Object.keys(unzipSync(new Uint8Array(await data[0].content.arrayBuffer())))).toEqual(input.assets.map(file => file.path));
+    const metadata = vi.mocked(client.upload).mock.calls[1][1];
+    expect(metadata.map(file => file.path)).toEqual(['README.md', 'colmapview-inventory.json', 'colmapview-upload.json']);
+    const receipt = controller.getSnapshot().receipt!;
+    expect(new URL(receipt.viewerUrl).searchParams.get('url')).toBe(`https://huggingface.co/datasets/owner/scene/resolve/${receipt.dataCommit}/dataset.zip`);
+    expect(receipt.visibility).toBe('private');
+  });
+
+  it('cancels ZIP packaging before creating a repository', async () => {
+    const { controller, client } = setup();
+    await controller.publish('owner', { ...details, format: 'zip' }, (signal, progress) => packageZipPublication(fixture(), signal, message => {
+      progress(message); if (message.startsWith('Packaged')) controller.cancel();
+    }, () => {}));
+    expect(controller.getSnapshot().phase).toBe('cancelled');
+    expect(client.create).not.toHaveBeenCalled();
+    expect(client.upload).not.toHaveBeenCalled();
+  });
   it('keeps private access through a failed upload and retry even if the form details change', async () => {
     const { controller, client, verify } = setup();
     const privateDetails = { ...details, visibility: 'private' as 'private' | 'public', license: '' };

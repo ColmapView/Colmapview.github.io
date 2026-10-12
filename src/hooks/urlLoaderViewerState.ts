@@ -146,7 +146,7 @@ export async function fetchDatasetViewerSettings(url: string,
   return (await readDatasetViewerSettings(url, fetchImpl, isFile)).state;
 }
 
-export async function fetchPublishedViewerState(manifest: ColmapManifest,
+export async function fetchPublishedViewerState(manifest: Pick<ColmapManifest, 'baseUrl' | 'viewerStatePath'>,
   fetchImpl: (url: string, init?: RequestInit) => Promise<Response>): Promise<PublishedViewerState | null> {
   const path = manifest.viewerStatePath;
   if (path === undefined) return fetchDatasetViewerSettings(manifest.baseUrl, fetchImpl);

@@ -33,6 +33,19 @@ afterEach(() => { cleanup(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 const header = () => screen.getByRole('button', { name: 'Close publish dataset' }).closest('header')!;
 
 describe('PublishDatasetModal', () => {
+  it.each(['private', 'public'] as const)('offers ZIP independently of %s access, with Folder as the default', async visibility => {
+    render(<PublishDatasetModal isOpen onClose={vi.fn()} />);
+    expect(screen.getByRole('combobox', { name: 'Format' })).toHaveValue('folder');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Format' }), { target: { value: 'zip' } });
+    expect(screen.getByRole('combobox', { name: 'Access' })).toHaveValue('private');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: visibility } });
+    fireEvent.change(screen.getByLabelText('Repository name'), { target: { value: 'scene' } });
+    fireEvent.change(screen.getByLabelText('Dataset title'), { target: { value: 'Scene' } });
+    if (visibility === 'public') fireEvent.change(screen.getByLabelText('Dataset license'), { target: { value: 'cc0-1.0' } });
+    fireEvent.click(screen.getByRole('button', { name: visibility === 'private' ? 'Save private dataset' : 'Publish public dataset' }));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('publisher',
+      expect.objectContaining({ format: 'zip', visibility }), expect.any(File)));
+  });
   it('replaces the preview by clicking the image, without separate image buttons', () => {
     render(<PublishDatasetModal isOpen onClose={vi.fn()} />);
     const preview = screen.getByRole('region', { name: 'Dataset preview' });

@@ -3,6 +3,7 @@ import { BATCH_RECEIPT_PATH } from '../huggingface/hubClient';
 import { HfError, publicationErrorMessage, errorStatus, delay } from '../huggingface/http';
 import { timeoutSignal } from '../../utils/abortSignals';
 import { checkAssetSize } from './preparePublication';
+import { releasePublicationAssets } from './publicationAssets';
 import { publicationMetadata, publicationReceipt, validatePublicationDetails } from './publicationMetadata';
 import { MAX_PUBLICATION_BATCH_BYTES, MAX_PUBLICATION_BATCH_FILES,
   type PreparedPublication, type PublicationDetails, type PublicationReceipt, type PublicationState } from './types';
@@ -31,11 +32,16 @@ export function createPublicationController(client: HubClient,
     state = { ...state, ...change, canRetry: job !== null };
     listeners.forEach(listener => listener());
   };
+  const discardJob = () => {
+    if (job) releasePublicationAssets(job.prepared.assets);
+    job = null;
+  };
   const record = (current: Job, oid: string) => {
     const batch = current.pending!;
     current.head = oid;
     if (batch.metadata) current.metadataCommit = oid;
     else {
+      releasePublicationAssets(current.prepared.assets.slice(current.next, batch.end));
       current.next = batch.end;
       current.inventory.push(...batch.files.filter(file => file.path !== BATCH_RECEIPT_PATH).map(file => ({ path: file.path, size: file.content.size })));
     }
@@ -98,7 +104,7 @@ export function createPublicationController(client: HubClient,
           if (existing) record(current, existing);
           current.pending = undefined;
         }
-        job = null;
+        discardJob();
         set({ phase: 'cancelled', uncertain: false, message: 'The previous publication is stopped. Start a new publication for the current dataset.' });
         return;
       }
@@ -149,22 +155,22 @@ export function createPublicationController(client: HubClient,
         ? 'Verifying your private dataset…' : 'Checking that recipients can open the dataset without signing in…' });
       await verify(receipt, current.prepared, current.inventory, signal);
       signal.throwIfAborted();
-      job = null;
+      discardJob();
       set({ phase: 'completed', message: 'Your dataset is ready to share.', receipt, error: undefined, uncertain: false });
     } catch (error) {
       if (errorStatus(error) === 409 && !current.head && !invalidated) {
         // The name is taken and nothing was uploaded: back to the form so only the name changes.
-        job = null;
+        discardJob();
         set({ phase: 'failed', message: '', uncertain: false, repoUrl: undefined, error: publicationErrorMessage(error) });
         return;
       }
       if (errorStatus(error) === 409) {
         // A confirmed foreign head cannot be resumed. Allow a new destination.
         current.pending = undefined;
-        job = null; invalidated = true;
+        discardJob(); invalidated = true;
       }
       // A failure bound to the captured input fails the same way on every retry. With no batch to reconcile, end the job.
-      if (!signal.aborted && error instanceof HfError && error.permanent && !current.pending) job = null;
+      if (!signal.aborted && error instanceof HfError && error.permanent && !current.pending) discardJob();
       // A cancelled batch the repository confirmed absent can be abandoned; a retry still reconciles it first.
       set({ phase: signal.aborted ? 'cancelled' : 'failed',
         uncertain: signal.aborted ? Boolean(current.pending?.outcomeUnknown) : Boolean(current.pending),
@@ -174,7 +180,7 @@ export function createPublicationController(client: HubClient,
   };
   const reset = () => {
     if (controller || state.uncertain) return;
-    job = null; invalidated = false;
+    discardJob(); invalidated = false;
     state = { phase: 'idle', message: '', filesDone: 0, filesTotal: 0, bytesDone: 0, canRetry: false }; listeners.forEach(listener => listener());
   };
   return {
@@ -194,11 +200,12 @@ export function createPublicationController(client: HubClient,
       invalidated = false;
       set({ phase: 'preparing', message: 'Preparing dataset…', error: undefined, receipt: undefined, uncertain: false,
         repoUrl: undefined, filesDone: 0, filesTotal: 0, bytesDone: 0 });
-      let prepared: PreparedPublication;
+      let prepared: PreparedPublication | undefined;
       try {
         prepared = await work(owner.signal, message => { if (!owner.signal.aborted) set({ message }); });
         owner.signal.throwIfAborted();
       } catch (error) {
+        if (prepared) releasePublicationAssets(prepared.assets);
         set({ phase: owner.signal.aborted ? 'cancelled' : 'failed', message: '', error: owner.signal.aborted ? undefined : publicationErrorMessage(error) });
         return;
       } finally { if (controller === owner) controller = null; }

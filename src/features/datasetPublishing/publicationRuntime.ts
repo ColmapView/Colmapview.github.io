@@ -28,6 +28,7 @@ export function publishCurrentDataset(username: string, details: PublicationDeta
     const input = capturePublicationInput();
     if (!preview) throw new HfError('Choose a preview image before publishing.');
     input.preview = preview;
-    return prepareTransferPublication(input, signal, progress, () => assertPublicationInputCurrent(input));
+    const assertCurrent = () => assertPublicationInputCurrent(input);
+    return prepareTransferPublication(input, signal, progress, assertCurrent, { format: details.format, repositorySidecars: true });
   });
 }

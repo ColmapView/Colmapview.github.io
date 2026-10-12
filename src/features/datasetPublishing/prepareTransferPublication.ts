@@ -1,6 +1,8 @@
 import { preparePublication, type PublicationInput } from './preparePublication';
 import { parseHfAssetUrl, pinHfAssetUrl } from './publicationPaths';
-import { MAX_BUFFERED_PUBLICATION_FILE_BYTES, type PreparedPublication } from './types';
+import { MAX_BUFFERED_PUBLICATION_FILE_BYTES, type PreparedPublication, type PublicationFormat } from './types';
+import { packageZipPublication } from './packagePublicationZip';
+import { ARCHIVE_SIZE_LIMIT } from '../../utils/zipValidation';
 import { fetchDatasetResource } from '../../utils/fetchDatasetResource';
 import { readBoundedResponse } from '../../utils/publishedViewerState';
 import { buildMaskUrlCandidates, URL_MASK_ABSENCE_THRESHOLD } from '../../utils/imageFileLookupPolicy';
@@ -20,7 +22,8 @@ const isHubDatasetFile = (value: string) => {
 /** Shared source pinning and lazy media preparation for object storage and archive publication. */
 export async function prepareTransferPublication(input: PublicationInput, signal: AbortSignal,
   progress: (message: string) => void, assertCurrent: () => void,
-  options: { maxAssetBytes?: number; maxBufferedMaskBytes?: number; maskLimitError?: () => Error; splats?: 'all' | 'active' } = {}): Promise<PreparedPublication> {
+  options: { maxAssetBytes?: number; maxBufferedMaskBytes?: number; maskLimitError?: () => Error; splats?: 'all' | 'active';
+    format?: PublicationFormat; repositorySidecars?: boolean } = {}): Promise<PreparedPublication> {
   let sdkPromise: Promise<typeof import('@huggingface/hub')> | undefined;
   const sdk = () => {
     signal.throwIfAborted();
@@ -130,8 +133,10 @@ export async function prepareTransferPublication(input: PublicationInput, signal
     return (await folderSizes.get(key)!).get(file.path) ?? null;
   };
   const prepared = await preparePublication({ ...input, ...(options.splats ? { splats: options.splats } : {}) }, signal, {
-    resolveRevision, listFiles: async () => [], pinAssetUrl, readRemoteMask, remoteSize, assertCurrent, maxAssetBytes: options.maxAssetBytes,
+    resolveRevision, listFiles: async () => [], pinAssetUrl, readRemoteMask, remoteSize, assertCurrent,
+    maxAssetBytes: options.maxAssetBytes ?? (options.format === 'zip' ? ARCHIVE_SIZE_LIMIT : undefined),
     progress,
   });
-  return prepared;
+  return options.format === 'zip' ? packageZipPublication(prepared, signal, progress, assertCurrent,
+    { repositorySidecars: options.repositorySidecars }) : prepared;
 }

@@ -20,7 +20,6 @@ const urlActions = vi.hoisted(() => ({
   copyWithFeedback: vi.fn(async (_value: string, copied: (value: boolean) => void) => copied(true)),
 }));
 vi.mock('./useSharePanelStoreFacade', () => ({ useSharePanelStoreFacade: () => facade }));
-vi.mock('../../bucket/useBucketStorageButtonStoreFacade', () => ({ useBucketStorageButtonStoreFacade: () => ({ loadUrl: vi.fn() }) }));
 vi.mock('../../../hooks/useUrlState', () => urlActions);
 vi.mock('../useControlButtonStoreFacade', () => ({ useControlButtonStoreFacade: () => ({ touchMode: false, contextMenuOpen: false }) }));
 vi.mock('../../../features/googleDrive/config', async importOriginal => ({
@@ -35,14 +34,6 @@ vi.mock('../LazyToolModal', async () => {
   return { LazyToolModal: ({ title, isOpen, onClose }: { title: string; isOpen: boolean; onClose: () => void }) =>
     <ModalDialogShell isOpen={isOpen} onClose={onClose} ariaLabelledBy="test-publisher-title" overlayClassName="" panelClassName="">
       <h2 id="test-publisher-title">{title}</h2>
-      <button onClick={onClose}>Close publisher</button>
-    </ModalDialogShell> };
-});
-vi.mock('../../bucket/BucketStorageModal', async () => {
-  const { ModalDialogShell } = await import('../../ui/ModalDialogShell');
-  return { BucketStorageModal: ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) =>
-    <ModalDialogShell isOpen={isOpen} onClose={onClose} ariaLabelledBy="test-bucket-title" overlayClassName="" panelClassName="">
-      <h2 id="test-bucket-title">Bucket storage</h2>
       <button onClick={onClose}>Close publisher</button>
     </ModalDialogShell> };
 });
@@ -86,7 +77,7 @@ describe('Share destinations and dialog lifetime', () => {
   });
 
   it.each([
-    ['Bucket storage', 'Bucket storage'],
+    ['Bucket storage', 'Publish to bucket'],
     ['Publish to Hugging Face', 'Publish dataset'],
     ['Publish to Google Drive', 'Publish to Google Drive'],
   ])('keeps %s open when the popup closes and restores focus on close', async (button, dialog) => {
