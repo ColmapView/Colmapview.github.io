@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures/test-fixtures';
+import { Z_INDEX } from '../src/theme/zIndex';
 
 test.describe('Modal Dialogs', () => {
   test.beforeEach(async ({ page }) => {
@@ -13,7 +14,7 @@ test.describe('Modal Dialogs', () => {
       const dialog = page.getByRole('dialog', { name: 'Load from URL' });
       await expect(dialog).toBeVisible();
       await expect(dialog).toHaveAttribute('aria-modal', 'true');
-      await expect(dialog).toHaveCSS('z-index', '1100');
+      await expect(dialog).toHaveCSS('z-index', String(Z_INDEX.modalOverlay));
 
       const input = page.locator('[data-testid="url-modal"] input[type="url"]');
       await expect(input).toBeVisible();
@@ -105,7 +106,7 @@ test.describe('Modal Dialogs', () => {
 
       const dialog = page.getByRole('dialog', { name: 'Reset settings?' });
       await expect(dialog).toBeVisible();
-      await expect(dialog).toHaveCSS('z-index', '10000');
+      await expect(dialog).toHaveCSS('z-index', String(Z_INDEX.mouseTooltip + 1));
 
       const panelMetrics = await dialog.evaluate((element) => {
         const panel = element.querySelector(':scope > div');
