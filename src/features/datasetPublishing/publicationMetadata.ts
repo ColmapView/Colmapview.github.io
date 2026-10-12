@@ -4,7 +4,7 @@ import { HfError } from '../huggingface/http';
 import { datasetFileUrl, validateRepositoryName } from './publicationPaths';
 import { makePublicationViewerLink } from './publicationLinks';
 import { publicationModelFiles, PUBLICATION_MODEL_DIRECTORY } from './publicationAssets';
-import type { PreparedPublication, PublicationDetails, PublicationReceipt, PublicationVisibility } from './types';
+import { PUBLICATION_JPEG_QUALITY, type PreparedPublication, type PublicationDetails, type PublicationReceipt, type PublicationVisibility } from './types';
 import type { UploadFile } from '../huggingface/hubClient';
 import { DATASET_VIEWER_SETTINGS_FILE } from '../../utils/datasetViewerSettings';
 import { buildImageUrl } from '../../utils/imageFileLookupPolicy';
@@ -24,6 +24,8 @@ export const PUBLICATION_LICENSES = [
 ] as const;
 export function validatePublicationDetails(details: PublicationDetails): PublicationDetails {
   if (details.format !== undefined && !['folder', 'zip'].includes(details.format)) throw new HfError('Choose Folder or ZIP archive format.');
+  if (details.imageFormat !== undefined && !['original', 'jpeg'].includes(details.imageFormat)) throw new HfError('Choose Original images or JPEG copies.');
+  if (details.imageFormat === 'jpeg' && details.format !== 'zip') throw new HfError('JPEG image conversion requires ZIP archive format.');
   if (!['private', 'public'].includes(details.visibility)) throw new HfError('Choose private or public access for this dataset.');
   const name = validateRepositoryName(details.name);
   const title = details.title.trim();
@@ -85,7 +87,8 @@ export function publicationMetadata(prepared: PreparedPublication, details: Publ
     + `Published by ${markdown(repoId.split('/')[0])} with ColmapView ${prepared.viewerState.viewerVersion}.\n\n`
     + `## Contents\n\n${prepared.counts.cameras} cameras, ${prepared.counts.images} registered images, ${prepared.counts.points} points.\n\n`
     + (prepared.archive ? `Download [${prepared.archive.path}](${sourceUrl}) for the complete dataset. Inside the ZIP, ` : '')
-    + `COLMAP binary files are in ${PUBLICATION_MODEL_DIRECTORY}/. Original images are in images/.\n`
+    + `COLMAP binary files are in ${PUBLICATION_MODEL_DIRECTORY}/. ${prepared.imageFormat === 'jpeg'
+      ? `Full-resolution JPEG image copies (${Math.round(PUBLICATION_JPEG_QUALITY * 100)}% quality, without image metadata) are in images/.` : 'Original images are in images/.'}\n`
     + `${payload.filter(file => file.path.startsWith('masks/')).length} masks and ${prepared.splatPaths.length} original splat files were included.\n\n`
     + `The reviewed scene transform is baked into the COLMAP model. Original splat bytes retain their original coordinates; `
     + `their alignment and the saved camera view are recorded in colmapview.yaml at the dataset root. `

@@ -6,14 +6,14 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Z_INDEX } from '../theme';
 
-/** Tool windows stack in [Z_INDEX.modal, Z_INDEX.modalOverlay). The clamp keeps
- * a long session from pushing tool windows above blocking dialogs (1100),
- * toasts (1500), or tooltips (2000). At the cap, ties resolve by DOM order.
+/** Tool windows stack in [Z_INDEX.modal, Z_INDEX.toast). The clamp keeps
+ * a long session from pushing tool windows above notifications or blocking
+ * dialogs. At the cap, ties resolve by DOM order.
  * It is a backstop rather than the usual bound: the counter rewinds whenever the
  * last open window closes, so only a session that keeps at least one window open
  * continuously can walk all 99 steps up to the cap. */
 export function nextModalZIndex(counter: number): number {
-  return Math.min(counter + 1, Z_INDEX.modalOverlay - 1);
+  return Math.min(counter + 1, Z_INDEX.toast - 1);
 }
 
 // Global counter shared across all modal instances.

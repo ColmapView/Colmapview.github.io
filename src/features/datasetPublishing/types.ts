@@ -17,10 +17,13 @@ export interface PublishAsset {
 }
 export type PublicationVisibility = 'private' | 'public';
 export type PublicationFormat = 'folder' | 'zip';
+export type PublicationImageFormat = 'original' | 'jpeg';
+export const PUBLICATION_JPEG_QUALITY = 0.85;
 export interface PublicationDetails {
   name: string; title: string; description: string; license: string;
   visibility: PublicationVisibility;
   format?: PublicationFormat;
+  imageFormat?: PublicationImageFormat;
   licenseName?: string; licenseUrl?: string;
 }
 export interface PreparedPublication {
@@ -34,6 +37,8 @@ export interface PreparedPublication {
   splatPaths: string[];
   viewerBaseUrl: string;
   previewPath?: string;
+  /** ZIP image encoding, applied while packaging. Loose publications retain originals. */
+  imageFormat?: PublicationImageFormat;
   /** ZIP payload inventory; assets contain the ZIP and repository sidecars instead of loose dataset files. */
   archive?: { path: string; size: number; files: Array<{ path: string; size: number }> };
 }

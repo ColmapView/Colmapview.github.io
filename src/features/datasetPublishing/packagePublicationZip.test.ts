@@ -1,4 +1,4 @@
-import { Blob as NodeBlob } from 'node:buffer';
+import { Blob as NodeBlob, File as NodeFile } from 'node:buffer';
 import { createHash } from 'node:crypto';
 import { unzipSync, strFromU8 } from 'fflate';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -6,7 +6,7 @@ import { packagePublicationZip, packageZipPublication } from './packagePublicati
 import type { PreparedPublication, PublishAsset } from './types';
 import { parseDatasetViewerSettings, serializeDatasetViewerSettings } from '../../utils/datasetViewerSettings';
 
-beforeEach(() => vi.stubGlobal('Blob', NodeBlob));
+beforeEach(() => { vi.stubGlobal('Blob', NodeBlob); vi.stubGlobal('File', NodeFile); });
 afterEach(() => vi.unstubAllGlobals());
 const signal = () => new AbortController().signal;
 const asset = (path: string, kind: PublishAsset['kind'], bytes: string | Uint8Array): PublishAsset => {
@@ -26,6 +26,44 @@ function prepared(): PreparedPublication {
 }
 
 describe('shared publication ZIP', () => {
+  it('converts only images in one encoder and counts encoded sizes so oversized originals can produce a fitting ZIP', async () => {
+    const first = asset('images/first.jpg', 'image', new Uint8Array(5000)), second = asset('images/second.jpg', 'image', new Uint8Array(5000));
+    const assets = [first, asset('masks/first.jpg.png', 'mask', 'lossless mask'), asset('sparse/0/images.bin', 'colmap', 'model'),
+      second, asset('splats/scene.sog', 'splat', 'splat'), asset('cover.png', 'preview', 'cover')];
+    const releases = assets.map(item => item.release!);
+    const encode = vi.fn(async () => new File([new Uint8Array([255, 216, 255, 217])], 'image.jpg', { type: 'image/jpeg' }));
+    const close = vi.fn(async () => {}), createImageEncoder = vi.fn(() => ({ encode, close }));
+    const result = await packagePublicationZip(assets, signal(), () => {}, () => {}, { imageFormat: 'jpeg', sizeLimit: 3000, createImageEncoder });
+    const files = unzipSync(new Uint8Array(await result.blob.arrayBuffer()));
+    expect(createImageEncoder).toHaveBeenCalledOnce(); expect(encode).toHaveBeenCalledTimes(2); expect(close).toHaveBeenCalledOnce();
+    expect(encode).toHaveBeenCalledWith(expect.any(Blob), 0.85, expect.any(AbortSignal));
+    expect([...files['images/first.jpg']]).toEqual([255, 216, 255, 217]);
+    expect(strFromU8(files['masks/first.jpg.png'])).toBe('lossless mask');
+    expect(strFromU8(files['sparse/0/images.bin'])).toBe('model'); expect(strFromU8(files['splats/scene.sog'])).toBe('splat');
+    expect(strFromU8(files['cover.png'])).toBe('cover');
+    expect(result.files.find(file => file.path === first.path)?.size).toBe(4);
+    releases.forEach(release => expect(release).toHaveBeenCalledOnce());
+  });
+  it('never starts an encoder when original-byte output is selected', async () => {
+    const encode = vi.fn(), close = vi.fn(async () => {}), createImageEncoder = vi.fn(() => ({ encode, close }));
+    const result = await packagePublicationZip([asset('images/photo.jpg', 'image', 'original')], signal(), () => {}, () => {}, { createImageEncoder });
+    expect(strFromU8(unzipSync(new Uint8Array(await result.blob.arrayBuffer()))['images/photo.jpg'])).toBe('original');
+    expect(createImageEncoder).not.toHaveBeenCalled();
+  });
+  it.each(['cancel', 'failure', 'source-change'] as const)('disposes the encoder and source buffers after JPEG %s', async reason => {
+    const owner = new AbortController(), assets = [asset('images/photo.jpg', 'image', 'source'), asset('images/next.jpg', 'image', 'next')];
+    const releases = assets.map(item => item.release!);
+    if (reason === 'source-change') assets[0].size = 100;
+    const encode = vi.fn(async () => {
+      if (reason === 'cancel') owner.abort();
+      if (reason === 'failure') throw new Error('Choose Original images instead.');
+      return new File(['jpeg'], 'image.jpg', { type: 'image/jpeg' });
+    });
+    const close = vi.fn(async () => {}), createImageEncoder = vi.fn(() => ({ encode, close }));
+    await expect(packagePublicationZip(assets, owner.signal, () => {}, () => {}, { imageFormat: 'jpeg', createImageEncoder })).rejects.toThrow();
+    if (reason === 'source-change') expect(createImageEncoder).not.toHaveBeenCalled(); else expect(close).toHaveBeenCalledOnce();
+    expect(assets[1].open).not.toHaveBeenCalled(); releases.forEach(release => expect(release).toHaveBeenCalledOnce());
+  });
   it('preserves nested names and exact original bytes, and makes a complete portable object', async () => {
     const input = prepared();
     const releases = input.assets.map(item => item.release!);

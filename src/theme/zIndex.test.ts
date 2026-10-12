@@ -15,11 +15,16 @@ describe('z-index scale', () => {
       fab: 999,
       modal: 1000,
       contextMenu: 2100,
-      modalOverlay: 1100,
-      toast: 1500,
+      toast: 1100,
+      modalOverlay: 1200,
       tooltip: 2000,
       mouseTooltip: 9999,
     });
+  });
+
+  it('keeps blocking dialogs above notifications and notifications above tool windows', () => {
+    expect(Z_INDEX.modalOverlay).toBeGreaterThan(Z_INDEX.toast);
+    expect(Z_INDEX.toast).toBeGreaterThan(Z_INDEX.modal);
   });
 
   it('keeps context menus above viewer hover panels', () => {

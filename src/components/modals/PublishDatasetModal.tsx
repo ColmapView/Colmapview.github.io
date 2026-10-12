@@ -4,8 +4,8 @@ import { PUBLICATION_LICENSES, validatePublicationDetails } from '../../features
 import { isPublishing } from '../../features/datasetPublishing/publishDataset';
 import { publicationErrorMessage } from '../../features/huggingface/http';
 import { usePublishDatasetStoreFacade } from './usePublishDatasetStoreFacade';
-import { UploadAccessField, UploadDialog, UploadFormatField, UploadLayout, UploadProgress, UploadResult } from '../upload/UploadParts';
-import type { PublicationFormat, PublicationVisibility } from '../../features/datasetPublishing/types';
+import { UploadAccessField, UploadDialog, UploadFormatField, UploadImageFormatField, UploadLayout, UploadProgress, UploadResult } from '../upload/UploadParts';
+import type { PublicationFormat, PublicationVisibility, PublicationImageFormat } from '../../features/datasetPublishing/types';
 import { usePublicationPreview } from './usePublicationPreview';
 import { getButtonClass, inputStyles } from '../../theme';
 
@@ -28,6 +28,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
   const [licenseUrl, setLicenseUrl] = useState('');
   const [visibility, setVisibility] = useState<PublicationVisibility>('private');
   const [format, setFormat] = useState<PublicationFormat>('folder');
+  const [imageFormat, setImageFormat] = useState<PublicationImageFormat>('original');
   const [formError, setFormError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const configuration = getHfConfiguration();
@@ -36,7 +37,8 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
   // Once a repository exists, its own section offers retry or a new publication; until then the form stays editable.
   const selecting = !busy && !publish.repoUrl && publish.phase !== 'completed';
   const preview = usePublicationPreview(facade.sourceKey, isOpen && selecting && !!config, facade.getScreenshotBlob);
-  const details = { name, title, description, license, licenseName, licenseUrl, visibility, format };
+  const selectedImageFormat = format === 'zip' ? imageFormat : 'original';
+  const details = { name, title, description, license, licenseName, licenseUrl, visibility, format, imageFormat: selectedImageFormat };
 
   const publishNow = async () => {
     setFormError(null);
@@ -98,6 +100,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
             <UploadAccessField id={`${id}-access`} shared={visibility === 'public'} onChange={shared => setVisibility(shared ? 'public' : 'private')}
               publicLabel="Public" hint={visibility === 'public' ? 'A public, discoverable dataset that anyone can download.' : 'Requires sign-in with a Hugging Face account that has access.'} />
             <UploadFormatField id={`${id}-format`} value={format} onChange={setFormat} />
+            {format === 'zip' && <UploadImageFormatField id={`${id}-images`} value={imageFormat} onChange={setImageFormat} />}
             <label htmlFor={`${id}-name`}>Repository name</label>
             <div className="publication-repo">
               <span className="publication-repo-prefix" title={auth.identity?.username}>
@@ -146,7 +149,8 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
           <p>Apply {facade.pendingDeletions} pending image deletions before publishing.</p>
           <button type="button" className={buttonClass} disabled={applying} onClick={() => { void applyDeletions(); }}>Apply deletions and continue</button>
         </div>}
-        <p className="publication-note">Includes original images, available masks, splats, and viewer settings. Original image metadata is retained.
+        <p className="publication-note">Includes {selectedImageFormat === 'jpeg' ? 'JPEG image copies' : 'original images'}, available masks, splats, and viewer settings.
+          {selectedImageFormat === 'original' && ' Original image metadata is retained.'}
           {visibility === 'public' ? ' Files become public during upload.' : ' Saved privately on Hugging Face.'} Cancelling keeps committed files.</p>
         <div className="publication-submit-row">
           {auth.status !== 'connected' && <span className="publication-note">Sign in to publish.</span>}

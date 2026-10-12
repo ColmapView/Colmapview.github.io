@@ -3,7 +3,7 @@ import { ModalDialogShell } from '../ui/ModalDialogShell';
 import { CloseIcon } from '../../icons';
 import { CopyableField } from '../ui/CopyableField';
 import { getButtonClass, inputStyles, modalStyles, panelStyles, Z_INDEX } from '../../theme';
-import type { PublicationFormat } from '../../features/datasetPublishing/types';
+import { PUBLICATION_JPEG_QUALITY, type PublicationFormat, type PublicationImageFormat } from '../../features/datasetPublishing/types';
 import './upload.css';
 
 const secondary = getButtonClass('secondary', 'sm');
@@ -71,6 +71,23 @@ export function UploadFormatField({ id, value, onChange }: {
       <option value="folder">Folder</option>
       <option value="zip">ZIP archive (up to 2 GiB)</option>
     </select>
+  </>;
+}
+
+export function UploadImageFormatField({ id, value, onChange }: {
+  id: string; value: PublicationImageFormat; onChange: (value: PublicationImageFormat) => void;
+}) {
+  return <>
+    <label htmlFor={id}>Images</label>
+    <div className="publication-access">
+      <select id={id} className={`${inputStyles.select} ${inputStyles.selectSizes.sm} w-full min-w-0`}
+        value={value} onChange={event => onChange(event.target.value === 'jpeg' ? 'jpeg' : 'original')}
+        aria-describedby={value === 'jpeg' ? `${id}-hint` : undefined}>
+        <option value="original">Original files</option>
+        <option value="jpeg">JPEG ({Math.round(PUBLICATION_JPEG_QUALITY * 100)}% quality)</option>
+      </select>
+      {value === 'jpeg' && <p id={`${id}-hint`} className="publication-note">Lossy, full resolution. Metadata removed; transparency turns white.</p>}
+    </div>
   </>;
 }
 

@@ -26,8 +26,8 @@ import { Z_INDEX } from '../../theme';
 describe('popup layer contract', () => {
   it('pins the current shared z-index scale', () => {
     expect(Z_INDEX.modal).toBe(1000);
-    expect(Z_INDEX.modalOverlay).toBe(1100);
-    expect(Z_INDEX.toast).toBe(1500);
+    expect(Z_INDEX.modalOverlay).toBe(1200);
+    expect(Z_INDEX.toast).toBe(1100);
     expect(Z_INDEX.tooltip).toBe(2000);
     expect(Z_INDEX.contextMenu).toBe(2100);
     expect(Z_INDEX.mouseTooltip).toBe(9999);

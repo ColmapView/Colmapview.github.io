@@ -63,16 +63,14 @@ export class BinaryReader {
   }
 
   /**
-   * Read a null-terminated string (ASCII)
-   * Uses array + join pattern to avoid O(n²) string concatenation
+   * Read a null-terminated UTF-8 filename without allocating one string per byte.
    */
   readString(): string {
-    const chars: string[] = [];
-    let char: number;
-    while ((char = this.readUint8()) !== 0) {
-      chars.push(String.fromCharCode(char));
-    }
-    return chars.join('');
+    const start = this.offset;
+    while (this.view.getUint8(this.offset) !== 0) this.offset++;
+    const bytes = new Uint8Array(this.view.buffer, this.view.byteOffset + start, this.offset - start);
+    this.offset++;
+    return new TextDecoder().decode(bytes);
   }
 
   skip(bytes: number): void {

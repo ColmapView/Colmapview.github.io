@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.5] - 2026-10-12
+
+### Added
+
+- Optional full-resolution JPEG image copies at 85% quality for ZIP uploads to Hugging Face, bucket storage, and Google Drive. Original files remain the default. Conversion runs in one worker, updates image and mask references, and removes source image metadata without changing the model's pixel coordinates.
+
+### Fixed
+
+- Keep blocking dialog headers and controls above notifications while preserving the floating tool window layer.
+- Preserve UTF-8 image filenames in the JavaScript COLMAP binary reader and writer.
+
 ## [0.16.4] - 2026-10-11
 
 ### Added

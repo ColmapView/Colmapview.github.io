@@ -35,6 +35,23 @@ beforeEach(() => { vi.stubGlobal('Blob', NodeBlob); vi.stubGlobal('File', NodeFi
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('publication snapshot preparation', () => {
+  it('exports JPEG names and associated mask names without mutating the scene or changing observations', async () => {
+    const source = input(); source.imageFormat = 'jpeg';
+    source.dataset = buildDatasetState({ sourceType: 'url', imageUrlBase: 'https://source.example/images/', maskUrlBase: 'https://source.example/masks/' });
+    const signal = new AbortController().signal, mask = new Blob(['original mask']);
+    const readRemoteMask = vi.fn(async () => ({ blob: mask }));
+    const prepared = await preparePublication(source, signal, { ...deps(), pinAssetUrl: async url => url, readRemoteMask });
+    expect(prepared.imageFormat).toBe('jpeg');
+    expect(prepared.imageNameToPath).toEqual({ 'nested/photo.jpg': 'images/nested/photo.jpg' });
+    expect(prepared.assets.filter(asset => ['image', 'mask'].includes(asset.kind)).map(asset => asset.path))
+      .toEqual(['images/nested/photo.jpg', 'masks/nested/photo.jpg.png']);
+    expect(readRemoteMask).toHaveBeenCalledWith('https://source.example/masks/', 'nested/photo.png', signal);
+    expect(await prepared.assets.find(asset => asset.kind === 'mask')!.open(signal)).toBe(mask);
+    const file = await prepared.assets.find(asset => asset.path.endsWith('/images.bin'))!.open(signal);
+    const image = parseImagesBinary(await file.arrayBuffer()).get(1)!;
+    expect(image.name).toBe('nested/photo.jpg'); expect(image.points2D).toEqual(source.reconstruction.images.get(1)!.points2D);
+    expect(source.reconstruction.images.get(1)!.name).toBe('nested/photo.png');
+  });
   it('releases a transient probed mask without taking ownership of the original input files', async () => {
     const source = input();
     source.dataset = buildDatasetState({ sourceType: 'url', imageUrlBase: 'https://bucket.example/images/',

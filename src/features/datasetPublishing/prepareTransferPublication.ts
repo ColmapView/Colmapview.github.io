@@ -1,6 +1,6 @@
 import { preparePublication, type PublicationInput } from './preparePublication';
 import { parseHfAssetUrl, pinHfAssetUrl } from './publicationPaths';
-import { MAX_BUFFERED_PUBLICATION_FILE_BYTES, type PreparedPublication, type PublicationFormat } from './types';
+import { MAX_BUFFERED_PUBLICATION_FILE_BYTES, type PreparedPublication, type PublicationFormat, type PublicationImageFormat } from './types';
 import { packageZipPublication } from './packagePublicationZip';
 import { ARCHIVE_SIZE_LIMIT } from '../../utils/zipValidation';
 import { fetchDatasetResource } from '../../utils/fetchDatasetResource';
@@ -23,7 +23,7 @@ const isHubDatasetFile = (value: string) => {
 export async function prepareTransferPublication(input: PublicationInput, signal: AbortSignal,
   progress: (message: string) => void, assertCurrent: () => void,
   options: { maxAssetBytes?: number; maxBufferedMaskBytes?: number; maskLimitError?: () => Error; splats?: 'all' | 'active';
-    format?: PublicationFormat; repositorySidecars?: boolean } = {}): Promise<PreparedPublication> {
+    format?: PublicationFormat; repositorySidecars?: boolean; imageFormat?: PublicationImageFormat } = {}): Promise<PreparedPublication> {
   let sdkPromise: Promise<typeof import('@huggingface/hub')> | undefined;
   const sdk = () => {
     signal.throwIfAborted();
@@ -132,7 +132,7 @@ export async function prepareTransferPublication(input: PublicationInput, signal
     })());
     return (await folderSizes.get(key)!).get(file.path) ?? null;
   };
-  const prepared = await preparePublication({ ...input, ...(options.splats ? { splats: options.splats } : {}) }, signal, {
+  const prepared = await preparePublication({ ...input, ...(options.splats ? { splats: options.splats } : {}), imageFormat: options.imageFormat }, signal, {
     resolveRevision, listFiles: async () => [], pinAssetUrl, readRemoteMask, remoteSize, assertCurrent,
     maxAssetBytes: options.maxAssetBytes ?? (options.format === 'zip' ? ARCHIVE_SIZE_LIMIT : undefined),
     progress,

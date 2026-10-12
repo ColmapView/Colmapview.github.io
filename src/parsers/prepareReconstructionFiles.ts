@@ -5,6 +5,7 @@ import { createSim3dFromEuler, isIdentityEuler, transformReconstruction } from '
 import { getPoints3DForExport } from './reconstructionExportData';
 import { writeCamerasBinary, writeImagesBinary, writePoints3DBinary, writeRigsBinary, writeFramesBinary } from './colmapBinaryWriters';
 import { awaitWithAbort } from '../utils/awaitWithAbort';
+import { renameImagesBinary } from './renameImagesBinary';
 
 /** Serialize the current model without scheduling browser downloads. */
 export async function prepareReconstructionFiles(
@@ -12,18 +13,21 @@ export async function prepareReconstructionFiles(
   source: ReconstructionSource | null,
   transform: Sim3dEuler,
   signal: AbortSignal,
+  imageNames?: ReadonlyMap<number, string>,
 ): Promise<Record<string, Blob>> {
   signal.throwIfAborted();
   const baked = !isIdentityEuler(transform);
   if (isReconstructionSnapshot(source)) {
     const bytes = await awaitWithAbort(source.export({ format: 'binary', transform: baked ? transform : undefined }, signal), signal);
     signal.throwIfAborted();
-    return Object.fromEntries(Object.entries(bytes).map(([name, data]) => [name, new Blob([new Uint8Array(data)])]));
+    return Object.fromEntries(Object.entries(bytes).map(([name, data]) => [name,
+      name === 'images.bin' && imageNames ? renameImagesBinary(new Uint8Array(data), imageNames) : new Blob([new Uint8Array(data)])]));
   }
   const model = baked ? transformReconstruction(createSim3dFromEuler(transform), reconstruction, source) : reconstruction;
   const files: Record<string, Blob> = {
     'cameras.bin': new Blob([writeCamerasBinary(model.cameras)]),
-    'images.bin': new Blob([writeImagesBinary(model.images, source)]),
+    'images.bin': imageNames ? renameImagesBinary(new Uint8Array(writeImagesBinary(model.images, source)), imageNames)
+      : new Blob([writeImagesBinary(model.images, source)]),
     'points3D.bin': new Blob([writePoints3DBinary(getPoints3DForExport(model, source))]),
   };
   if (model.rigData?.rigs.size) files['rigs.bin'] = new Blob([writeRigsBinary(model.rigData.rigs)]);

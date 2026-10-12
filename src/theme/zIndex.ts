@@ -13,8 +13,8 @@ export const Z_INDEX = {
   fab: 999,           // Reserved floating-action layer (no current consumer)
   modal: 1000,        // Modal dialogs
   contextMenu: 2100,  // Context menus must sit above hover panels and native select popups.
-  modalOverlay: 1100, // Blocking dialogs — tool windows are clamped below this layer (see useModalZIndex)
-  toast: 1500,        // Toast notifications
+  toast: 1100,        // Notifications stay above tool windows and below blocking dialogs.
+  modalOverlay: 1200, // Blocking dialogs keep their headers and controls above notifications.
   tooltip: 2000,      // Tooltips, control panels (always on top)
   mouseTooltip: 9999, // Mouse-following tooltip (always topmost)
 } as const;

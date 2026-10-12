@@ -67,9 +67,8 @@ const PREFIXES = [
   'hover',
 ];
 
-// Enum strings that read as `hover-*` classes but are not markup. Checked before
-// the prefix match so the bare 'hover' prefix above stays safe.
-const NON_CLASS_TOKENS = new Set(['hover-card']);
+// Domain and Web API enum strings are not markup, even when a utility prefix matches.
+const NON_CLASS_TOKENS = new Set(['hover-card', 'from-image']);
 
 // Positional utilities take numeric, fractional, arbitrary or keyword values —
 // never direction words. This keeps `bottom-4` / `top-full` in scope while
@@ -125,6 +124,10 @@ function harvest(): Set<string> {
 const found = harvest();
 
 describe('utility class contract', () => {
+  it('excludes image orientation enums while still recognizing gradient utility names', () => {
+    expect(isCandidate('from-image')).toBe(false);
+    expect(isCandidate('from-ds-primary')).toBe(true);
+  });
   it('recognizes unsupported arbitrary selector variants rather than silently skipping them', () => {
     expect(isCandidate('[&::-webkit-slider-thumb]:bg-white')).toBe(true);
     expect(isCandidate('[&:focus-visible]:outline-none')).toBe(true);

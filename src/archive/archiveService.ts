@@ -25,7 +25,7 @@ interface Job {
 }
 
 /** One worker and one active operation; live consumer priorities order the waiting queue. */
-export async function openArchiveReader(source: ArchiveSource, options: ArchiveServiceOptions = {}): Promise<ArchiveReader> {
+function createArchiveSession(source: ArchiveSource | undefined, options: ArchiveServiceOptions) {
   options.signal?.throwIfAborted();
   const worker = options.createWorker?.() ?? new Worker(new URL('./archive.worker.ts', import.meta.url), { type: 'module' });
   const temporaryName = `archive-${crypto.randomUUID()}`;
@@ -67,7 +67,7 @@ export async function openArchiveReader(source: ArchiveSource, options: ArchiveS
   }
   function close(): Promise<void> {
     if (closing) return closing;
-    closing = Promise.resolve().then(() => !('kind' in source) && /\.(tar\.gz|tgz)$/i.test(source.name)
+    closing = Promise.resolve().then(() => source && !('kind' in source) && /\.(tar\.gz|tgz)$/i.test(source.name)
       ? removeArchiveTemporaryFile(temporaryName) : undefined);
     closed = true; clearTimeout(initializationTimer);
     worker.removeEventListener('message', onMessage);
@@ -94,7 +94,7 @@ export async function openArchiveReader(source: ArchiveSource, options: ArchiveS
       const ownedJob = active;
       void (async () => {
         try {
-          if (!ownedJob || !options.read) throw new Error('Archive byte source is unavailable.');
+          if (!ownedJob || !options.read || !source) throw new Error('Archive byte source is unavailable.');
           validateByteRange(source.size, response.offset, response.length);
           ownedJob.controller.signal.throwIfAborted();
           const bytes = await options.read(response.offset, response.length, ownedJob.controller.signal);
@@ -116,6 +116,11 @@ export async function openArchiveReader(source: ArchiveSource, options: ArchiveS
   worker.addEventListener('error', onError);
   worker.addEventListener('messageerror', onError);
   options.signal?.addEventListener('abort', abortOpen, { once: true });
+  return { request, close, temporaryName, detachSignal: () => options.signal?.removeEventListener('abort', abortOpen) };
+}
+
+export async function openArchiveReader(source: ArchiveSource, options: ArchiveServiceOptions = {}): Promise<ArchiveReader> {
+  const { request, close, temporaryName, detachSignal } = createArchiveSession(source, options);
   let metadata: ArchiveMetadata[];
   try {
     metadata = (await request({ kind: 'open', source, temporaryName, diskBacked: options.diskBacked,
@@ -123,7 +128,7 @@ export async function openArchiveReader(source: ArchiveSource, options: ArchiveS
     options.signal?.throwIfAborted();
   } catch (error) { await close().catch(() => {}); throw error; }
   // Once loaded, caller owns the reader; cancelling its old load must not dispose the installed scene.
-  options.signal?.removeEventListener('abort', abortOpen);
+  detachSignal();
   const extract = async (path: string, extractOptions: ArchiveExtractOptions = {}) => {
     const result = await request({ kind: 'extract', path, bounds: extractOptions.bounds }, extractOptions);
     if (!result.file) throw new Error('Archive worker returned no file.');
@@ -138,4 +143,17 @@ export async function openArchiveReader(source: ArchiveSource, options: ArchiveS
     } };
   });
   return { getFilesArray: async () => entries, close };
+}
+
+/** A publication owns one encoder session; each image uses the same queued worker and is released before the next. */
+export function createArchiveImageEncoder(options: ArchiveServiceOptions = {}) {
+  const session = createArchiveSession(undefined, options);
+  return {
+    async encode(blob: Blob, quality: number, signal: AbortSignal): Promise<File> {
+      const response = await session.request({ kind: 'encode-jpeg', blob, quality }, { signal });
+      if (!response.file) throw new Error('Image worker returned no JPEG.');
+      return response.file;
+    },
+    close: session.close,
+  };
 }

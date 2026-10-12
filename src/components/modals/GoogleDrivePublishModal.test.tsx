@@ -39,6 +39,15 @@ async function renderOpenDialog(onClose: () => void = vi.fn()) {
 }
 
 describe('Google Drive publishing dialog', () => {
+  it('offers opt-in JPEG copies and forwards the selected encoding without changing private access', async () => {
+    await renderOpenDialog();
+    expect(screen.getByRole('combobox', { name: 'Images' })).toHaveValue('original');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Images' }), { target: { value: 'jpeg' } });
+    expect(screen.getByText(/Lossy, full resolution/)).toBeVisible();
+    expect(screen.queryByText(/Original image metadata is retained/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Save private dataset' }));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('dataset.zip', false, 'jpeg'));
+  });
   it('shows a read-only current-view preview without cover editing or loading controls', async () => {
     await renderOpenDialog();
     expect(screen.getByRole('dialog', { name: 'Publish to Google Drive' })).toBeVisible();
@@ -57,7 +66,7 @@ describe('Google Drive publishing dialog', () => {
     expect(screen.getByText(message)).toBeVisible();
     expect(screen.getByRole('button', { name: 'Save private dataset' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'Save private dataset' }));
-    await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('dataset.zip', false));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('dataset.zip', false, 'original'));
   });
   it('asks for a dataset and disables upload before a scene is loaded', async () => {
     actions.reconstruction = null; actions.sourceKey = ''; actions.preview = { url: null, busy: false };
@@ -85,11 +94,11 @@ describe('Google Drive publishing dialog', () => {
     expect(screen.getByRole('combobox', { name: 'Access' })).toHaveValue('private');
     fireEvent.change(screen.getByLabelText('File name'), { target: { value: 'my-scene' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save private dataset' }));
-    await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('my-scene', false));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('my-scene', false, 'original'));
     fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'public' } });
     expect(screen.getByText('Link sharing is enabled after the upload is verified.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Publish shared dataset' }));
-    await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('my-scene', true));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('my-scene', true, 'original'));
   });
   it('keeps upload disabled until sign-in, and does not publish when sign-in starts', async () => {
     actions.auth = { status: 'disconnected', error: null };

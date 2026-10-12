@@ -1,14 +1,14 @@
 import { useId, useState } from 'react';
 import { CopyableField } from '../ui/CopyableField';
 import { usePublicationPreview } from '../modals/usePublicationPreview';
-import { UploadDialog, UploadFormatField, UploadLayout, UploadProgress, UploadResult, UploadViewPreview } from '../upload/UploadParts';
+import { UploadDialog, UploadFormatField, UploadImageFormatField, UploadLayout, UploadProgress, UploadResult, UploadViewPreview } from '../upload/UploadParts';
 import { BucketConnectionForm } from './BucketConnectionForm';
 import { BucketFileList } from './BucketFileBrowser';
 import { useBucketBrowser } from './useBucketBrowser';
 import { useBucketPublishStoreFacade } from './useBucketPublishStoreFacade';
 import { isBucketPublishing } from '../../features/bucketStorage/publishDataset';
 import { bucketErrorMessage } from '../../features/bucketStorage/types';
-import type { PublicationFormat } from '../../features/datasetPublishing/types';
+import type { PublicationFormat, PublicationImageFormat } from '../../features/datasetPublishing/types';
 import { BucketIcon } from '../../icons';
 import { getButtonClass, inputStyles } from '../../theme';
 
@@ -21,16 +21,18 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
   const { connection, publication, bucketConnection, bucketPublication } = facade;
   const [folder, setFolder] = useState('dataset');
   const [format, setFormat] = useState<PublicationFormat>('folder');
+  const [imageFormat, setImageFormat] = useState<PublicationImageFormat>('original');
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [inspecting, setInspecting] = useState(false);
   const browser = useBucketBrowser(isOpen);
   const busy = isBucketPublishing(publication.phase);
   const selecting = publication.phase === 'idle';
+  const selectedImageFormat = format === 'zip' ? imageFormat : 'original';
   const preview = usePublicationPreview(facade.sourceKey, isOpen && selecting, facade.getScreenshotBlob);
   const publish = async () => {
     setError(null);
-    try { await facade.publishDataset(folder, format); } catch (failure) { setError(bucketErrorMessage(failure)); }
+    try { await facade.publishDataset(folder, format, selectedImageFormat); } catch (failure) { setError(bucketErrorMessage(failure)); }
   };
   const disconnect = () => {
     browser.cancel(); setInspecting(false); bucketPublication.cancel(); bucketConnection.disconnect();
@@ -56,6 +58,7 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
             <p id={`${id}-access-hint`} className="publication-note">Uses your bucket's existing public or private access.</p>
           </div>
           <UploadFormatField id={`${id}-format`} value={format} onChange={setFormat} />
+          {format === 'zip' && <UploadImageFormatField id={`${id}-images`} value={imageFormat} onChange={setImageFormat} />}
           <label htmlFor={`${id}-destination`}>Upload folder</label>
           <div className="publication-access">
             <input id={`${id}-destination`} className={fieldClass} value={folder} onChange={event => setFolder(event.target.value)} autoComplete="off" />
@@ -87,7 +90,8 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
         <p>Apply {facade.pendingDeletions} pending image deletions before publishing.</p>
         <button type="button" className={secondary} disabled={applying} onClick={() => { void applyDeletions(); }}>Apply deletions and continue</button>
       </div>}
-      <p className="publication-note">Includes original images, masks, splats, and viewer settings. Original image metadata is retained. Cancelling keeps completed files.</p>
+      <p className="publication-note">Includes {selectedImageFormat === 'jpeg' ? 'JPEG image copies' : 'original images'}, masks, splats, and viewer settings.
+        {selectedImageFormat === 'original' && ' Original image metadata is retained.'} Cancelling keeps completed files.</p>
       <div className="publication-submit-row">
         {!facade.reconstruction && <span className="publication-note">Load a COLMAP dataset to upload it.</span>}
         <button type="button" className={getButtonClass('primary', 'sm')} disabled={!connection.canWrite || !facade.canPublish || applying}

@@ -33,6 +33,25 @@ afterEach(() => { cleanup(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 const header = () => screen.getByRole('button', { name: 'Close publish dataset' }).closest('header')!;
 
 describe('PublishDatasetModal', () => {
+  it('offers JPEG copies only for ZIPs and returns to originals when Folder is selected', async () => {
+    render(<PublishDatasetModal isOpen onClose={vi.fn()} />);
+    expect(screen.queryByRole('combobox', { name: 'Images' })).toBeNull();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Format' }), { target: { value: 'zip' } });
+    expect(screen.getByRole('combobox', { name: 'Images' })).toHaveValue('original');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Images' }), { target: { value: 'jpeg' } });
+    expect(screen.getByText(/Lossy, full resolution/)).toBeVisible();
+    expect(screen.queryByText(/Original image metadata is retained/)).toBeNull();
+    fireEvent.change(screen.getByLabelText('Repository name'), { target: { value: 'scene' } });
+    fireEvent.change(screen.getByLabelText('Dataset title'), { target: { value: 'Scene' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save private dataset' }));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('publisher',
+      expect.objectContaining({ format: 'zip', imageFormat: 'jpeg' }), expect.any(File)));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Format' }), { target: { value: 'folder' } });
+    expect(screen.queryByRole('combobox', { name: 'Images' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Save private dataset' }));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('publisher',
+      expect.objectContaining({ format: 'folder', imageFormat: 'original' }), expect.any(File)));
+  });
   it.each(['private', 'public'] as const)('offers ZIP independently of %s access, with Folder as the default', async visibility => {
     render(<PublishDatasetModal isOpen onClose={vi.fn()} />);
     expect(screen.getByRole('combobox', { name: 'Format' })).toHaveValue('folder');

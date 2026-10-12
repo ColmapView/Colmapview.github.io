@@ -13,11 +13,12 @@ import { findZipEntry, getActiveZipImageIndex } from '../../utils/zipArchiveStat
 import { buildImageUrl, buildMaskUrlCandidates, getMaskPathVariants } from '../../utils/imageFileLookupPolicy';
 import { HfError } from '../huggingface/http';
 import { parseHfAssetUrl, pinHfAssetUrl, publicationPath } from './publicationPaths';
-import { MAX_BUFFERED_PUBLICATION_FILE_BYTES, type PreparedPublication, type PublishAsset } from './types';
+import { MAX_BUFFERED_PUBLICATION_FILE_BYTES, type PreparedPublication, type PublishAsset, type PublicationImageFormat } from './types';
 import { downloadRemoteFile } from './downloadRemoteFile';
 import { DATASET_VIEWER_SETTINGS_FILE, serializeDatasetViewerSettings } from '../../utils/datasetViewerSettings';
 import { PUBLICATION_PREVIEW_PATH, MAX_PREVIEW_INPUT_BYTES } from './publicationPreview';
 import { PUBLICATION_MODEL_DIRECTORY } from './publicationAssets';
+import { publicationJpegNames } from './publicationImageNames';
 
 export interface PublicationInput {
   sourceKey: string; modelRevision: number; reconstruction: Reconstruction; source: ReconstructionSource | null;
@@ -27,6 +28,7 @@ export interface PublicationInput {
   preview?: Blob;
   /** Drive packages the active scene; Hub publications keep all splat sources by default. */
   splats?: 'all' | 'active';
+  imageFormat?: PublicationImageFormat;
 }
 interface PrepareDeps {
   resolveRevision: (repoId: string, revision: string, signal: AbortSignal) => Promise<string>;
@@ -75,7 +77,9 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
   const check = () => { signal.throwIfAborted(); deps.assertCurrent(); };
   check();
   deps.progress('Exporting current COLMAP reconstruction…');
-  const exported = await prepareReconstructionFiles(input.reconstruction, input.source, input.transform, signal);
+  const imageNames = input.imageFormat === 'jpeg' ? publicationJpegNames(input.reconstruction.images) : undefined;
+  const outputNames = imageNames ? new Map([...input.reconstruction.images].map(([id, image]) => [image.name, imageNames.get(id)!])) : undefined;
+  const exported = await prepareReconstructionFiles(input.reconstruction, input.source, input.transform, signal, imageNames);
   check();
   if (!['cameras.bin', 'images.bin', 'points3D.bin'].every(name => exported[name])) throw new HfError('The reconstruction export is incomplete.');
   const assets: PublishAsset[] = [];
@@ -125,7 +129,8 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
   const isRemote = captured.sourceType === 'url' || captured.sourceType === 'manifest';
   const media = async (name: string, mask: boolean): Promise<PublishAsset | null> => {
     // Masks go where buildMaskUrlCandidates looks: masks/<name without a leading images/>.png.
-    const path = mask ? `masks/${publicationPath(name).replace(/^images\//i, '')}.png` : `images/${publicationPath(name)}`;
+    const outputName = publicationPath(outputNames?.get(name) ?? name);
+    const path = mask ? `masks/${outputName.replace(/^images\//i, '')}.png` : `images/${outputName}`;
     if (isRemote && mask) {
       if (!captured.maskUrlBase) return null;
       if (deps.readRemoteMask) {
@@ -197,7 +202,7 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
     const image = await media(name, false);
     if (!image) throw new HfError(`Original image ${name} is missing.`);
     add(image);
-    imageNameToPath[name] = image.path;
+    imageNameToPath[outputNames?.get(name) ?? name] = image.path;
     const mask = await media(name, true);
     if (mask) add(mask);
   }
@@ -248,6 +253,7 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
   if ([...folders.values()].some(entries => entries.size >= 10_000)) throw new HfError('A dataset folder has too many files for publication.', undefined, true);
   return { operationId: crypto.randomUUID(), sourceKey: input.sourceKey, modelRevision: input.modelRevision,
     assets, viewerState, imageNameToPath, splatPaths, viewerBaseUrl: input.viewerBaseUrl,
+    ...(input.imageFormat === 'jpeg' ? { imageFormat: input.imageFormat } : {}),
     ...(input.preview ? { previewPath: PUBLICATION_PREVIEW_PATH } : {}),
     counts: { cameras: input.reconstruction.cameras.size, images: input.reconstruction.images.size,
       points: input.reconstruction.globalStats?.totalPoints ?? input.reconstruction.points3D?.size ?? 0 } };

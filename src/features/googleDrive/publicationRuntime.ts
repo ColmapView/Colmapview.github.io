@@ -4,6 +4,8 @@ import { googleDriveAuth } from './auth';
 import { createDriveUploadClient } from './upload';
 import { createDrivePublicationController, isDrivePublishing } from './publishDataset';
 import { prepareDriveArchive } from './prepareArchive';
+import { ARCHIVE_SIZE_LIMIT } from '../../utils/zipValidation';
+import type { PublicationImageFormat } from '../datasetPublishing/types';
 
 export const drivePublication = createDrivePublicationController(createDriveUploadClient({
   getAccessToken: googleDriveAuth.getAccessToken, expireSession: googleDriveAuth.expire,
@@ -28,8 +30,9 @@ if (import.meta.hot) import.meta.hot.dispose(() => {
   drivePublication.cancel();
 });
 
-export function publishCurrentDatasetToDrive(name: string, shared: boolean): Promise<void> {
+export function publishCurrentDatasetToDrive(name: string, shared: boolean, imageFormat: PublicationImageFormat = 'original'): Promise<void> {
   const input = capturePublicationInput();
   const assertCurrent = () => assertPublicationInputCurrent(input);
-  return drivePublication.publish(name, shared, (signal, progress) => prepareDriveArchive(input, signal, progress, assertCurrent), assertCurrent);
+  return drivePublication.publish(name, shared,
+    (signal, progress) => prepareDriveArchive(input, signal, progress, assertCurrent, ARCHIVE_SIZE_LIMIT, imageFormat), assertCurrent);
 }

@@ -3,6 +3,7 @@ import { IndexedZipBackend } from './indexedZip';
 import { IndexedTarBackend } from './indexedTar';
 import { NativeArchiveBackend } from './nativeArchive';
 import { createArchiveImagePreview } from './imagePreview';
+import { encodePublicationJpeg } from './publicationJpeg';
 import { ArchiveStorageUnavailableError, canUseArchiveStorage, storeArchiveStream } from './temporaryStorage';
 import { archiveError, type ArchiveRequest, type ArchiveResponse } from './protocol';
 import type { ArchiveBackend } from './backend';
@@ -67,6 +68,10 @@ worker.onmessage = ({ data }) => {
         }
         controller.signal.throwIfAborted();
         worker.postMessage({ kind: 'result', id: data.id, entries });
+      } else if (operation.kind === 'encode-jpeg') {
+        const file = await encodePublicationJpeg(operation.blob, operation.quality, controller.signal);
+        controller.signal.throwIfAborted();
+        worker.postMessage({ kind: 'result', id: data.id, file });
       } else {
         if (!backend) throw new Error('Archive reader is closed.');
         let file = await backend.extract(operation.path, controller.signal);

@@ -50,7 +50,7 @@ async function readPngOrientation(blob: Blob, signal?: AbortSignal): Promise<num
 }
 
 /** Walk JPEG segments to the frame header, reading only a few bytes per segment. */
-async function readJpegDimensions(blob: Blob, options: ImageDimensionsOptions): Promise<ImageDimensions | null> {
+async function readJpegMetadata(blob: Blob, options: ImageDimensionsOptions): Promise<{ size: ImageDimensions | null; orientation: number } | null> {
   let offset = 2, orientation = 1;
   let frame: ImageDimensions | null = null;
   for (let segments = 0; segments < 1024 && offset + 9 <= blob.size; segments++) {
@@ -67,7 +67,7 @@ async function readJpegDimensions(blob: Blob, options: ImageDimensionsOptions): 
     if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
       if (length < 8) return null;
       frame = dimensions(view.getUint16(7), view.getUint16(5));
-      if (!options.applyOrientation) return frame;
+      if (!options.applyOrientation) return { size: frame, orientation };
     }
     if (marker === 0xe1 && options.applyOrientation && length >= 8) {
       const prefix = new DataView(await blob.slice(offset + 4, offset + 10).arrayBuffer());
@@ -77,7 +77,7 @@ async function readJpegDimensions(blob: Blob, options: ImageDimensionsOptions): 
     }
     offset += 2 + length;
   }
-  return options.applyOrientation ? orient(frame, orientation) : frame;
+  return { size: frame, orientation };
 }
 
 /** Read common raster headers without decoding pixels; orientation is opt-in for display previews. */
@@ -102,7 +102,10 @@ export async function readImageDimensions(blob: Blob, options: ImageDimensionsOp
     }
     return null;
   }
-  if (head.byteLength >= 2 && head.getUint16(0) === 0xffd8) return readJpegDimensions(blob, options);
+  if (head.byteLength >= 2 && head.getUint16(0) === 0xffd8) {
+    const metadata = await readJpegMetadata(blob, options);
+    return options.applyOrientation ? orient(metadata?.size ?? null, metadata?.orientation ?? 1) : metadata?.size ?? null;
+  }
   if (head.byteLength >= 10 && ['GIF87a', 'GIF89a'].includes(ascii(head, 0, 6))) {
     return dimensions(head.getUint16(6, true), head.getUint16(8, true));
   }
@@ -116,4 +119,29 @@ export async function readImageDimensions(blob: Blob, options: ImageDimensionsOp
     return metadata ? options.applyOrientation ? orient(metadata.size, metadata.orientation) : metadata.size : null;
   }
   return null;
+}
+
+/** Read the orientation the browser applies, so a full-resolution export can undo it and retain model pixel coordinates. */
+export async function readImageOrientation(blob: Blob, signal?: AbortSignal): Promise<number> {
+  signal?.throwIfAborted();
+  const head = new DataView(await blob.slice(0, 12).arrayBuffer());
+  if (head.byteLength >= 2 && head.getUint16(0) === 0xffd8) return (await readJpegMetadata(blob, { applyOrientation: true, signal }))?.orientation ?? 1;
+  if (head.byteLength >= 8 && head.getUint32(0) === 0x89504e47) return readPngOrientation(blob, signal);
+  if (head.byteLength >= 12 && ascii(head, 0, 4) === 'RIFF' && ascii(head, 8, 4) === 'WEBP') {
+    for (let offset = 12, chunks = 0; chunks < 1024 && offset + 8 <= blob.size; chunks++) {
+      signal?.throwIfAborted();
+      const header = new DataView(await blob.slice(offset, offset + 8).arrayBuffer());
+      const size = header.getUint32(4, true), end = offset + 8 + size;
+      if (end > blob.size) break;
+      if (ascii(header, 0, 4) === 'EXIF') {
+        let exif = blob.slice(offset + 8, end);
+        const prefix = new DataView(await exif.slice(0, 6).arrayBuffer());
+        if (prefix.byteLength === 6 && ascii(prefix, 0, 6) === 'Exif\0\0') exif = exif.slice(6);
+        return (await readTiffMetadata(exif))?.orientation ?? 1;
+      }
+      offset = end + size % 2;
+    }
+  }
+  if (head.byteLength >= 8 && [0x4949, 0x4d4d].includes(head.getUint16(0))) return (await readTiffMetadata(blob))?.orientation ?? 1;
+  return 1;
 }

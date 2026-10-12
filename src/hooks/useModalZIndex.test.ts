@@ -8,9 +8,10 @@ describe('nextModalZIndex', () => {
     expect(nextModalZIndex(Z_INDEX.modal)).toBe(Z_INDEX.modal + 1);
   });
 
-  it('never reaches the blocking-dialog layer (modalOverlay)', () => {
+  it('never reaches notifications or blocking dialogs, even after repeated activation', () => {
     let z: number = Z_INDEX.modal;
     for (let i = 0; i < 500; i++) z = nextModalZIndex(z);
+    expect(z).toBeLessThan(Z_INDEX.toast);
     expect(z).toBeLessThan(Z_INDEX.modalOverlay);
   });
 });

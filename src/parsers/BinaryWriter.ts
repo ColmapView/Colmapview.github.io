@@ -82,13 +82,11 @@ export class BinaryWriter {
   }
 
   /**
-   * Write a null-terminated ASCII string.
+   * Write a null-terminated UTF-8 filename.
    * Matches COLMAP's string format in binary files.
    */
   writeString(str: string): void {
-    for (let i = 0; i < str.length; i++) {
-      this.writeUint8(str.charCodeAt(i));
-    }
+    for (const byte of new TextEncoder().encode(str)) this.writeUint8(byte);
     this.writeUint8(0); // null terminator
   }
 

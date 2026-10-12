@@ -2,10 +2,11 @@ import { useEffect, useId, useState } from 'react';
 import { getGoogleDriveClientId, loadGoogleOAuthSdk, type GoogleOAuthSdk } from '../../features/googleDrive/auth';
 import { drivePublicationErrorMessage, isDrivePublishing } from '../../features/googleDrive/publishDataset';
 import { useGoogleDrivePublishStoreFacade } from './useGoogleDrivePublishStoreFacade';
-import { UploadAccessField, UploadDialog, UploadLayout, UploadProgress, UploadResult, UploadViewPreview } from '../upload/UploadParts';
+import { UploadAccessField, UploadDialog, UploadImageFormatField, UploadLayout, UploadProgress, UploadResult, UploadViewPreview } from '../upload/UploadParts';
 import { usePublicationPreview } from './usePublicationPreview';
 import { GoogleDriveIcon } from '../../icons';
 import { getButtonClass, inputStyles } from '../../theme';
+import type { PublicationImageFormat } from '../../features/datasetPublishing/types';
 
 const fieldClass = `${inputStyles.base} ${inputStyles.sizes.sm} w-full min-w-0`;
 const secondary = getButtonClass('secondary', 'sm');
@@ -19,6 +20,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
   const clientId = getGoogleDriveClientId();
   const [name, setName] = useState('dataset.zip');
   const [shared, setShared] = useState(false);
+  const [imageFormat, setImageFormat] = useState<PublicationImageFormat>('original');
   const [sdk, setSdk] = useState<GoogleOAuthSdk | null>(null);
   const [sdkAttempt, setSdkAttempt] = useState(0);
   const [sdkError, setSdkError] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
   }, [isOpen, clientId, sdkAttempt]);
   const publishNow = async () => {
     setFormError(null);
-    try { await facade.publishDataset(name, shared); }
+    try { await facade.publishDataset(name, shared, imageFormat); }
     catch (error) { setFormError(drivePublicationErrorMessage(error)); }
   };
   const signOut = () => { publication.cancel(); googleDriveAuth.disconnect(); };
@@ -63,6 +65,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
           {selecting && <section className="publication-fields" aria-label="Drive dataset details">
             <UploadAccessField id={`${id}-access`} shared={shared} onChange={setShared} publicLabel="Anyone with the link"
               hint={shared ? 'Link sharing is enabled after the upload is verified.' : 'Saved privately in My Drive. You can share it later in Drive.'} />
+            <UploadImageFormatField id={`${id}-images`} value={imageFormat} onChange={setImageFormat} />
             <label htmlFor={`${id}-name`}>File name</label>
             <input id={`${id}-name`} className={fieldClass} value={name} maxLength={180} onChange={event => setName(event.target.value)} autoComplete="off" />
           </section>}
@@ -91,7 +94,8 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
           <p>Apply {facade.pendingDeletions} pending image deletions before publishing.</p>
           <button type="button" className={secondary} disabled={applying} onClick={() => { void applyDeletions(); }}>Apply deletions and continue</button>
         </div>}
-        <p className="publication-note">Includes original images, masks, the active splat, and viewer settings. Original image metadata is retained. ZIP limit: 2 GiB.</p>
+        <p className="publication-note">Includes {imageFormat === 'jpeg' ? 'JPEG image copies' : 'original images'}, masks, the active splat, and viewer settings.
+          {imageFormat === 'original' && ' Original image metadata is retained.'} ZIP limit: 2 GiB.</p>
         <div className="publication-submit-row">
           {auth.status !== 'connected' && <span className="publication-note">Sign in to publish.</span>}
           <button type="button" className={primary} disabled={auth.status !== 'connected' || !facade.reconstruction || facade.pendingDeletions > 0 || applying}

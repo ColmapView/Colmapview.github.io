@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { openArchiveReader, type ArchiveWorker } from './archiveService';
+import { createArchiveImageEncoder, openArchiveReader, type ArchiveWorker } from './archiveService';
 import type { ArchiveRequest, ArchiveResponse } from './protocol';
 import type { MediaPriority } from '../dataset/types';
 import { removeArchiveTemporaryFile } from './temporaryStorage';
@@ -26,6 +26,30 @@ async function open(worker = new FakeWorker(), name = 'scene.zip') {
 afterEach(() => { vi.clearAllMocks(); vi.useRealTimers(); });
 
 describe('archive worker session', () => {
+  it('encodes publication images in one worker without opening an archive and disposes it once', async () => {
+    const worker = new FakeWorker();
+    const encoder = createArchiveImageEncoder({ createWorker: () => worker });
+    const source = new Blob(['png']);
+    const first = encoder.encode(source, 0.85, new AbortController().signal);
+    const second = encoder.encode(source, 0.85, new AbortController().signal);
+    worker.emit({ kind: 'ready' });
+    expect(worker.requests()).toHaveLength(1);
+    expect(worker.requests()[0].operation).toEqual({ kind: 'encode-jpeg', blob: source, quality: 0.85 });
+    worker.finish(new File(['first'], 'first.jpg', { type: 'image/jpeg' }));
+    expect(worker.requests()).toHaveLength(2);
+    worker.finish(new File(['second'], 'second.jpg', { type: 'image/jpeg' }));
+    expect((await first).name).toBe('first.jpg'); expect((await second).name).toBe('second.jpg');
+    await encoder.close(); await encoder.close();
+    expect(worker.terminate).toHaveBeenCalledOnce(); expect(removeArchiveTemporaryFile).not.toHaveBeenCalled();
+  });
+  it('terminates a publication encoder and rejects pending work when its owning upload is cancelled', async () => {
+    const worker = new FakeWorker(), owner = new AbortController();
+    const encoder = createArchiveImageEncoder({ createWorker: () => worker, signal: owner.signal });
+    const pending = encoder.encode(new Blob(['png']), 0.85, owner.signal);
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    worker.emit({ kind: 'ready' }); owner.abort(); await rejected; await encoder.close();
+    expect(worker.terminate).toHaveBeenCalledOnce();
+  });
   it('serializes work and re-evaluates live priorities when consumers promote queued images', async () => {
     const { worker, reader, entries } = await open();
     let priority: MediaPriority = 'prefetch';

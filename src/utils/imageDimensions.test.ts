@@ -1,11 +1,25 @@
 import { Blob as NodeBlob } from 'node:buffer';
 import { describe, expect, it } from 'vitest';
 import { bmpHeader, gifHeader, jpegExifHeader, jpegHeader, pngHeader, tiffHeader, webpHeader } from '../test/imageHeaders';
-import { readImageDimensions } from './imageDimensions';
+import { readImageDimensions, readImageOrientation } from './imageDimensions';
 
 const blob = (bytes: Uint8Array<ArrayBuffer>) => new NodeBlob([bytes]) as unknown as Blob;
 
 describe('image dimensions from headers', () => {
+  it.each([1, 2, 3, 4, 5, 6, 7, 8])('reports JPEG orientation %i independently of the raw pixel dimensions', async orientation => {
+    const image = blob(jpegExifHeader(800, 600, orientation));
+    await expect(readImageOrientation(image)).resolves.toBe(orientation);
+    await expect(readImageDimensions(image)).resolves.toEqual({ width: 800, height: 600 });
+  });
+  it('reads WebP orientation with both raw TIFF and Exif-prefixed metadata', async () => {
+    for (const prefix of [new Uint8Array(), new TextEncoder().encode('Exif\0\0')]) {
+      const webp = webpHeader('VP8X', 800, 600), exif = tiffHeader(800, 600, 7);
+      const metadata = new Uint8Array(8 + prefix.length + exif.length);
+      metadata.set(new TextEncoder().encode('EXIF')); new DataView(metadata.buffer).setUint32(4, prefix.length + exif.length, true);
+      metadata.set(prefix, 8); metadata.set(exif, 8 + prefix.length);
+      await expect(readImageOrientation(new NodeBlob([webp, metadata]) as unknown as Blob)).resolves.toBe(7);
+    }
+  });
   it.each([
     ['PNG', pngHeader(30_000, 20_000), { width: 30_000, height: 20_000 }],
     ['JPEG after an Exif segment', jpegHeader(30_000, 20_000), { width: 30_000, height: 20_000 }],

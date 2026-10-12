@@ -36,6 +36,18 @@ describe('publication receipt', () => {
 });
 
 describe('dataset card', () => {
+  it('describes JPEG copies accurately and rejects the conversion for loose Folder uploads', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const input = prepared([]); input.imageFormat = 'jpeg'; input.archive = { path: 'dataset.zip', size: 100, files: [] };
+    const details = { name: 'scene', title: 'Scene', description: '', license: '', visibility: 'private' as const,
+      format: 'zip' as const, imageFormat: 'jpeg' as const };
+    expect(validatePublicationDetails(details).imageFormat).toBe('jpeg');
+    expect(() => validatePublicationDetails({ ...details, format: 'folder' })).toThrow('requires ZIP');
+    const files = publicationMetadata(input, details, 'owner/scene', DATA_COMMIT, []);
+    const card = await files[0].content.text();
+    expect(card).toContain('Full-resolution JPEG image copies (85% quality, without image metadata)');
+    expect(card).not.toContain('Original images are in images/');
+  });
   afterEach(() => vi.unstubAllGlobals());
 
   it('documents ZIP contents and uses the same pinned link without publishing a broken loose-file manifest', async () => {
