@@ -141,23 +141,33 @@ test.describe('Hugging Face dataset publication', () => {
     await expect(dialog.getByText('Private. Viewers must sign in to Hugging Face with an account that has access.')).toBeVisible();
     const viewerUrl = await dialog.getByLabel('Viewer link', { exact: true }).inputValue();
     expect(viewerUrl).toBe(`${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene`);
-    const recipient = await browser.newContext();
-    try {
-      await hub.attach(recipient, baseURL!);
-      const recipientPage = await recipient.newPage();
-      const readStart = hub.reads.length;
-      await recipientPage.goto(viewerUrl);
-      await recipientPage.getByRole('button', { name: 'Hugging Face account', exact: true }).click();
-      const account = recipientPage.getByRole('dialog', { name: 'Hugging Face', exact: true });
-      expect(hub.reads.slice(readStart).some(read => !read.authorization)).toBe(true);
-      await expect(recipientPage.getByText('Source:', { exact: false }).first()).not.toBeVisible();
-      await account.getByRole('button', { name: 'Sign in with Hugging Face', exact: true }).click();
-      await account.getByRole('button', { name: 'Retry shared link', exact: true }).click();
-      await expect(recipientPage.getByText('Source:', { exact: false }).first()).toBeVisible({ timeout: 45000 });
-      const fileReads = hub.reads.slice(readStart).filter(read => /\/resolve\//.test(read.path));
-      expect(fileReads.some(read => read.path.endsWith('/colmapview.yaml') && read.authorization)).toBe(true);
-      expect(fileReads.filter(read => read.authorization).every(read => read.authorization === 'Bearer hf_browser_test_only')).toBe(true);
-    } finally { await recipient.close(); }
+    for (const mode of ['shared', 'manual'] as const) {
+      const recipient = await browser.newContext();
+      try {
+        await hub.attach(recipient, baseURL!);
+        const recipientPage = await recipient.newPage();
+        const readStart = hub.reads.length;
+        if (mode === 'manual') {
+          await recipientPage.goto('/');
+          await recipientPage.getByRole('button', { name: 'Load URL', exact: true }).click();
+          const inputDialog = recipientPage.getByRole('dialog', { name: 'Load from URL' });
+          await inputDialog.locator('input[type="url"]').fill(new URL(viewerUrl).searchParams.get('url')!);
+          await inputDialog.getByRole('button', { name: 'Load', exact: true }).click();
+        } else {
+          await recipientPage.goto(viewerUrl);
+        }
+        const account = recipientPage.getByRole('dialog', { name: 'Hugging Face', exact: true });
+        await expect(account).toBeVisible();
+        expect(hub.reads.slice(readStart).some(read => !read.authorization)).toBe(true);
+        await expect(recipientPage.getByText('Source:', { exact: false }).first()).not.toBeVisible();
+        await account.getByRole('button', { name: 'Sign in with Hugging Face', exact: true }).click();
+        await account.getByRole('button', { name: 'Retry loading', exact: true }).click();
+        await expect(recipientPage.getByText('Source:', { exact: false }).first()).toBeVisible({ timeout: 45000 });
+        const fileReads = hub.reads.slice(readStart).filter(read => /\/resolve\//.test(read.path));
+        expect(fileReads.some(read => read.path.endsWith('/colmapview.yaml') && read.authorization)).toBe(true);
+        expect(fileReads.filter(read => read.authorization).every(read => read.authorization === 'Bearer hf_browser_test_only')).toBe(true);
+      } finally { await recipient.close(); }
+    }
   });
 
   test('returns to the editable form when the repository name is taken', async ({ page, context, baseURL }) => {
