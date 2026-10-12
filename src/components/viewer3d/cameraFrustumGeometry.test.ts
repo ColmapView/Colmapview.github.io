@@ -257,7 +257,7 @@ describe('camera frustum geometry helpers', () => {
     expect(planeSize.height).toBeCloseTo(2);
     expect(planeSize.depth).toBe(2);
     expect(planeSize.offsetX).toBeCloseTo(-0.1);
-    expect(planeSize.offsetY).toBeCloseTo(-0.05);
+    expect(planeSize.offsetY).toBeCloseTo(0.05);
 
     const geometry = buildFrustumLineGeometryData([frustum], 2, {
       frustumColorMode: 'single',
@@ -270,34 +270,44 @@ describe('camera frustum geometry helpers', () => {
       0,
       0,
       -4.099999904632568,
-      -1.0499999523162842,
+      -0.949999988079071,
       2,
     ]);
   });
 
-  it('places frustum image-plane edges on the matching COLMAP pinhole rays', () => {
-    const camera = buildCamera({
-      width: 800,
-      height: 400,
-      params: [200, 400, 410, 190],
-    });
+  it.each([
+    { name: 'off-center pinhole with separate focal axes', modelId: CameraModelId.PINHOLE,
+      width: 800, height: 400, fx: 200, fy: 400, cx: 410, cy: 190,
+      params: [200, 400, 410, 190] },
+    { name: 'centered pinhole', modelId: CameraModelId.PINHOLE,
+      width: 640, height: 480, fx: 500, fy: 500, cx: 320, cy: 240,
+      params: [500, 500, 320, 240] },
+    { name: 'Cam43 calibration', modelId: CameraModelId.SIMPLE_RADIAL,
+      width: 2048, height: 2448, fx: 2354.8411128, fy: 2354.8411128,
+      cx: 1008.7641493, cy: 1252.6265913,
+      params: [2354.8411128, 1008.7641493, 1252.6265913, -0.0133410700] },
+  ])('projects actual PlaneGeometry UVs onto COLMAP pixel rays: $name', (fixture) => {
+    const camera = buildCamera(fixture);
     const planeSize = getFrustumPlaneSize(camera, 2);
+    const geometry = new THREE.PlaneGeometry(planeSize.width, planeSize.height, 4, 4);
+    const mesh = new THREE.Mesh(geometry);
+    mesh.position.set(planeSize.offsetX, planeSize.offsetY, planeSize.depth);
+    mesh.updateMatrixWorld();
+    const positions = geometry.getAttribute('position');
+    const uvs = geometry.getAttribute('uv');
 
-    const getPlanePointForPixel = (u: number, v: number) => ({
-      x: planeSize.offsetX - planeSize.width / 2 + planeSize.width * u / camera.width,
-      y: planeSize.offsetY + planeSize.height / 2 - planeSize.height * v / camera.height,
-      z: planeSize.depth,
-    });
-
-    expect(getPlanePointForPixel(0, 0).x).toBeCloseTo(-4.1);
-    expect(getPlanePointForPixel(0, 0).y).toBeCloseTo(0.95);
-    expect(getPlanePointForPixel(0, 0).z).toBeCloseTo(2);
-    expect(getPlanePointForPixel(410, 190).x).toBeCloseTo(0);
-    expect(getPlanePointForPixel(410, 190).y).toBeCloseTo(0);
-    expect(getPlanePointForPixel(410, 190).z).toBeCloseTo(2);
-    expect(getPlanePointForPixel(800, 400).x).toBeCloseTo(3.9);
-    expect(getPlanePointForPixel(800, 400).y).toBeCloseTo(-1.05);
-    expect(getPlanePointForPixel(800, 400).z).toBeCloseTo(2);
+    try {
+      for (let index = 0; index < positions.count; index++) {
+        const ray = new THREE.Vector3().fromBufferAttribute(positions, index).applyMatrix4(mesh.matrixWorld);
+        // Project in COLMAP's X-right, Y-down, Z-forward camera frame.
+        // An unflipped ImageBitmap maps UV y=0 to the source image's top row.
+        expect(fixture.fx * ray.x / ray.z + fixture.cx).toBeCloseTo(uvs.getX(index) * camera.width, 3);
+        expect(fixture.fy * ray.y / ray.z + fixture.cy).toBeCloseTo(uvs.getY(index) * camera.height, 3);
+      }
+    } finally {
+      geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
+    }
   });
 });
 

@@ -140,7 +140,7 @@ describe('camera frustum view-model helpers', () => {
     expect(planeSize.width).toBeCloseTo(8);
     expect(planeSize.height).toBeCloseTo(2);
     expect(planeSize.offsetX).toBeCloseTo(-0.1);
-    expect(planeSize.offsetY).toBeCloseTo(-0.05);
+    expect(planeSize.offsetY).toBeCloseTo(0.05);
   });
 
   it('calculates auto-FOV adjustments only when image planes are outside the target range', () => {

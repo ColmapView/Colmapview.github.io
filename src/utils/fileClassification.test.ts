@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildFile } from '../test/builders';
+import { collectImageFiles, getImageFile } from './imageFileUtils';
+import { resolveColmapPaths, resolveImagesDir } from './colmapPathResolver';
 import {
   createEmptyReconstruction,
   createImagesOnlyReconstruction,
@@ -17,6 +19,37 @@ function fileMap(entries: Array<[string, File]>): Map<string, File> {
 }
 
 describe('file classification helpers', () => {
+  it('selects sparse/0 and the source images amid full-model and intermediate artifacts', () => {
+    const cameras = buildFile('cameras.bin');
+    const images = buildFile('images.bin');
+    const points = buildFile('points3D.bin');
+    const sourceImage = buildFile('000000.jpg');
+    const files = fileMap([
+      ['colmap/full-model/cameras.bin', buildFile('cameras.bin')],
+      ['colmap/full-model/images.bin', buildFile('images.bin')],
+      ['colmap/full-model/points3D.bin', buildFile('points3D.bin')],
+      ['colmap/sparse/intermediate/cameras.bin', buildFile('cameras.bin')],
+      ['colmap/sparse/intermediate/images.bin', buildFile('images.bin')],
+      ['colmap/sparse/intermediate/points3D.bin', buildFile('points3D.bin')],
+      ['colmap/undistorted/cam43/000000.jpg', buildFile('000000.jpg')],
+      ['colmap/database.db', buildFile('database.db')],
+      ['colmap/sparse/0/cameras.txt', buildFile('cameras.txt')],
+      ['colmap/sparse/0/cameras.bin', cameras],
+      ['colmap/sparse/0/images.bin', images],
+      ['colmap/sparse/0/points3D.bin', points],
+      ['colmap/images/cam43/000000.jpg', sourceImage],
+    ]);
+
+    for (const entries of [Array.from(files), Array.from(files).reverse()]) {
+      const fileMap = new Map(entries);
+      const selected = resolveColmapPaths(fileMap.keys());
+      expect(selected?.dir).toBe('colmap/sparse/0');
+      expect(findColmapFiles(fileMap)).toMatchObject({ camerasFile: cameras, imagesFile: images, points3DFile: points });
+      expect(resolveImagesDir(fileMap.keys(), { modelDir: selected!.dir })).toBe('colmap/images');
+      expect(getImageFile(collectImageFiles(fileMap), 'cam43/000000.jpg')).toBe(sourceImage);
+    }
+  });
+
   it('finds the preferred complete COLMAP directory and binary files', () => {
     const rootCameras = buildFile('cameras.bin');
     const rootImages = buildFile('images.bin');

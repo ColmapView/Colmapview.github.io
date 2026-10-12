@@ -9,6 +9,9 @@ import type { ProjectionClass } from '../utils/cameraModelRegistry';
  * distortion and is treated as identity here; dedicated photosphere
  * rendering ships separately.
  *
+ * Frustum textures use unflipped ImageBitmaps: UV y=0 samples the image's
+ * top row, matching COLMAP's +Y-down camera coordinates.
+ *
  * Two modes:
  * 1. Cropped mode (fullFrame=false): Output is rectangular perspective projection.
  *    For each output pixel, find where to sample in the distorted image.
@@ -84,7 +87,7 @@ const int EUCM = 16;
 // Convert UV to normalized camera coordinates (distorted space)
 vec2 uvToDistortedNormalized(vec2 uv) {
   float px = uv.x * imageWidth;
-  float py = (1.0 - uv.y) * imageHeight;
+  float py = uv.y * imageHeight;
   return vec2((px - cx) / fx, (py - cy) / fy);
 }
 
@@ -355,7 +358,7 @@ void main() {
   float undistortedPx = undistortedNorm.x * fx + cx;
   float undistortedPy = undistortedNorm.y * fy + cy;
   float undistortedU = undistortedPx / imageWidth;
-  float undistortedV = 1.0 - (undistortedPy / imageHeight);
+  float undistortedV = undistortedPy / imageHeight;
 
   // Compute new position using plane dimensions passed as uniforms
   // PlaneGeometry maps UV (0-1) to position (-width/2 to width/2)
@@ -429,7 +432,7 @@ const int EUCM = 16;
 vec2 uvToNormalized(vec2 uv) {
   // UV goes from 0-1, convert to pixel coordinates
   float px = uv.x * imageWidth;
-  float py = (1.0 - uv.y) * imageHeight; // Flip Y for image coordinate system
+  float py = uv.y * imageHeight;
 
   // Convert to normalized camera coordinates (centered at principal point)
   float x = (px - cx) / fx;
@@ -444,9 +447,9 @@ vec2 normalizedToUv(vec2 normalized) {
   float px = normalized.x * fx + cx;
   float py = normalized.y * fy + cy;
 
-  // Convert to UV (0-1), flip Y back
+  // Convert to UV (0-1), with y=0 at the image's top row
   float u = px / imageWidth;
-  float v = 1.0 - (py / imageHeight);
+  float v = py / imageHeight;
 
   return vec2(u, v);
 }

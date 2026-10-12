@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.9] - 2026-10-12
+
+### Fixed
+
+- Align calibrated camera image planes with COLMAP pixel rays when the principal point is off-center, using the same Y-down convention in plane geometry and cropped/full-frame undistortion shaders.
+- Correct regression tests that assumed Y-up image coordinates, and verify actual ImageBitmap loading, GPU texture upload, and radial/tangential distortion with independent negative controls.
+
 ## [0.16.8] - 2026-10-12
 
 ### Added

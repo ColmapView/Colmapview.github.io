@@ -174,12 +174,14 @@ export function getFrustumPlaneSize(camera: Camera, scale: number): FrustumPlane
     return invalidPlaneSize;
   }
 
+  // The frustum retains COLMAP's +Y-down camera frame. PlaneGeometry's UV
+  // y=0 is at -height/2 and samples the unflipped ImageBitmap's top row.
   return {
     width: scale * camera.width / fx,
     height: scale * camera.height / fy,
     depth: scale,
     offsetX: scale * (camera.width / 2 - cx) / fx,
-    offsetY: scale * (cy - camera.height / 2) / fy,
+    offsetY: scale * (camera.height / 2 - cy) / fy,
   };
 }
 
