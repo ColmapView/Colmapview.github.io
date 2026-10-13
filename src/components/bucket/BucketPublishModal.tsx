@@ -11,6 +11,8 @@ import { bucketErrorMessage } from '../../features/bucketStorage/types';
 import type { PublicationFormat, PublicationImageFormat } from '../../features/datasetPublishing/types';
 import { BucketIcon } from '../../icons';
 import { getButtonClass, inputStyles } from '../../theme';
+import { HubLinkOptions } from '../upload/HubLink';
+import { useHubLink } from '../upload/useHubLink';
 
 const fieldClass = `${inputStyles.base} ${inputStyles.sizes.sm} w-full min-w-0`;
 const secondary = getButtonClass('secondary', 'sm');
@@ -30,9 +32,10 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
   const selecting = publication.phase === 'idle';
   const selectedImageFormat = format === 'zip' ? imageFormat : 'original';
   const preview = usePublicationPreview(facade.sourceKey, isOpen && selecting, facade.getScreenshotBlob);
+  const hub = useHubLink('bucket', facade.sourceKey);
   const publish = async () => {
     setError(null);
-    try { await facade.publishDataset(folder, format, selectedImageFormat); } catch (failure) { setError(bucketErrorMessage(failure)); }
+    try { await facade.publishDataset(folder, format, selectedImageFormat, ...(hub.listed || preview.file ? hub.options(preview.file) : [])); } catch (failure) { setError(bucketErrorMessage(failure)); }
   };
   const disconnect = () => {
     browser.cancel(); setInspecting(false); bucketPublication.cancel(); bucketConnection.disconnect();
@@ -71,7 +74,7 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
           cancelDisabled={publication.phase === 'cancelling'} onCancel={bucketPublication.cancel} />}
         {publication.viewerUrl && <UploadResult label="Published bucket dataset" title="Dataset saved to bucket storage"
           notice="Access follows your bucket permissions. Viewers need bucket access for private files."
-          viewerUrl={publication.viewerUrl} linkLabel="Bucket viewer link" onReset={reset} />}
+          viewerUrl={publication.viewerUrl} linkLabel="Bucket viewer link" onReset={reset} hub={hub} />}
         {!busy && !selecting && !publication.viewerUrl && <section className="publication-section" aria-label="Bucket upload recovery">
           <p role="status">{publication.message}</p>
           {publication.prefix && <>
@@ -86,6 +89,7 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
       </div>
     </UploadLayout>
     {selecting && <section className="publication-submit" aria-label="Dataset contents">
+      <HubLinkOptions hub={hub} publicAccess={false} uncertain />
       {facade.pendingDeletions > 0 && <div className="publication-actions">
         <p>Apply {facade.pendingDeletions} pending image deletions before publishing.</p>
         <button type="button" className={secondary} disabled={applying} onClick={() => { void applyDeletions(); }}>Apply deletions and continue</button>
@@ -94,7 +98,7 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
         {selectedImageFormat === 'original' && ' Original image metadata is retained.'} Cancelling keeps completed files.</p>
       <div className="publication-submit-row">
         {!facade.reconstruction && <span className="publication-note">Load a COLMAP dataset to upload it.</span>}
-        <button type="button" className={getButtonClass('primary', 'sm')} disabled={!connection.canWrite || !facade.canPublish || applying}
+        <button type="button" className={getButtonClass('primary', 'sm')} disabled={!connection.canWrite || !facade.canPublish || applying || hub.state.phase === 'creating'}
           onClick={() => { void publish(); }}>Upload dataset</button>
       </div>
     </section>}

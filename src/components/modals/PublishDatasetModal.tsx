@@ -8,6 +8,8 @@ import { UploadAccessField, UploadDialog, UploadFormatField, UploadImageFormatFi
 import type { PublicationFormat, PublicationVisibility, PublicationImageFormat } from '../../features/datasetPublishing/types';
 import { usePublicationPreview } from './usePublicationPreview';
 import { getButtonClass, inputStyles } from '../../theme';
+import { HubLinkOptions } from '../upload/HubLink';
+import { useHubLink } from '../upload/useHubLink';
 
 const bytes = (value: number) => `${(value / 1024 / 1024).toFixed(1)} MiB`;
 const fieldClass = `${inputStyles.base} ${inputStyles.sizes.sm} w-full min-w-0`;
@@ -37,6 +39,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
   // Once a repository exists, its own section offers retry or a new publication; until then the form stays editable.
   const selecting = !busy && !publish.repoUrl && publish.phase !== 'completed';
   const preview = usePublicationPreview(facade.sourceKey, isOpen && selecting && !!config, facade.getScreenshotBlob);
+  const hub = useHubLink('huggingFace', facade.sourceKey);
   const selectedImageFormat = format === 'zip' ? imageFormat : 'original';
   const details = { name, title, description, license, licenseName, licenseUrl, visibility, format, imageFormat: selectedImageFormat };
 
@@ -46,7 +49,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
     catch (error) { setFormError(publicationErrorMessage(error)); return; }
     if (!preview.file || preview.busy) { setFormError('Choose a preview image before publishing.'); return; }
     if (!auth.identity) return;
-    await facade.publishDataset(auth.identity.username, details, preview.file);
+    await facade.publishDataset(auth.identity.username, details, preview.file, ...(visibility === 'public' && hub.listed ? hub.options(preview.file) : []));
   };
   const applyDeletions = async () => {
     setApplying(true);
@@ -141,10 +144,11 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
           {publish.receipt && <UploadResult label="Published dataset" title={<>Published <strong>{publish.receipt.repoId}</strong></>}
             notice={publish.receipt.visibility === 'private' ? 'Private. Viewers must sign in to Hugging Face with an account that has access.' : 'Anyone can open this link without signing in.'}
             viewerUrl={publish.receipt.viewerUrl} providerLink={{ url: publish.receipt.repoUrl, label: 'Hugging Face page' }}
-            onReset={() => { publication.reset(); setFormError(null); }} />}
+            onReset={() => { publication.reset(); setFormError(null); }} hub={hub} />}
         </div>
       </UploadLayout>
       {selecting && <section className="publication-submit" aria-label="Dataset contents">
+        <HubLinkOptions hub={hub} publicAccess={visibility === 'public'} />
         {facade.pendingDeletions > 0 && <div className="publication-actions">
           <p>Apply {facade.pendingDeletions} pending image deletions before publishing.</p>
           <button type="button" className={buttonClass} disabled={applying} onClick={() => { void applyDeletions(); }}>Apply deletions and continue</button>
@@ -155,7 +159,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
         <div className="publication-submit-row">
           {auth.status !== 'connected' && <span className="publication-note">Sign in to publish.</span>}
           <button type="button" className={primaryButtonClass}
-            disabled={auth.status !== 'connected' || !facade.reconstruction || facade.pendingDeletions > 0 || applying || preview.busy || !preview.file}
+            disabled={auth.status !== 'connected' || !facade.reconstruction || facade.pendingDeletions > 0 || applying || preview.busy || !preview.file || hub.state.phase === 'creating'}
             onClick={() => { void publishNow(); }}>{visibility === 'private' ? 'Save private dataset' : 'Publish public dataset'}</button>
         </div>
       </section>}

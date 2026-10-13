@@ -9,6 +9,8 @@ Load a COLMAP reconstruction with its original images, then choose **Share → G
 
 Public viewer links to supported Drive archives need no sign-in when the viewer's Drive API key is configured. For a private archive, use the loading panel's Drive account control to sign in and **Choose archive from Drive** through Google Picker. The recipient must already have permission to download it; a viewer URL alone does not grant access. Loading supports ZIP and TAR, including compressed TAR; publication creates ZIP output only. Loading and publishing share one tab-only connection requesting `drive.file`. Sign-in never starts an upload. Disconnect or Sign out ends that connection for both workflows.
 
+Once public sharing is verified, ColmapView automatically creates a Hub short link with the current-view thumbnail and metadata. **List on Hub** is a separate option, off by default. Private uploads retain their direct viewer link and send nothing to Hub. Save the private **Manage Hub link** URL to remove the card later. If shortening fails, **Retry shortening** retries only that step; it never repeats the Drive upload.
+
 ## Dataset contents
 
 The ZIP contains the current COLMAP reconstruction in binary format, original images, available masks, the active splat, and embedded `colmapview.yaml` settings. Pending reconstruction transforms are applied to exported COLMAP data, with the splat transform and current viewer settings saved for reopening. Apply pending image deletions before publishing.

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.10] - 2026-10-12
+
+### Added
+
+- Automatically shorten verified public Hugging Face and shared Google Drive upload links with ColmapView Hub. Bucket uploads are checked without credentials before shortening; private uploads retain their direct viewer links and send nothing to the Hub.
+- Save a small base64 JPEG preview, supplied license information, and dataset metadata with each Hub link. Optional "List on Hub" listing stays off by default.
+- Retry failed shortening without repeating the storage upload, and provide a private management link to remove the Hub record and its listing.
+
+### Changed
+
+- Use the same short-link result and management controls across all three upload dialogs. Link creation runs after verified upload completion and continues when the dialog is closed.
+
 ## [0.16.9] - 2026-10-12
 
 ### Fixed

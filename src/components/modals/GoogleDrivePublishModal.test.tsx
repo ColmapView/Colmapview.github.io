@@ -39,6 +39,19 @@ async function renderOpenDialog(onClose: () => void = vi.fn()) {
 }
 
 describe('Google Drive publishing dialog', () => {
+  it('lists only shared datasets when explicitly selected and drops Hub options for private uploads', async () => {
+    await renderOpenDialog();
+    expect(screen.queryByRole('checkbox', { name: 'List on Hub' })).toBeNull();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'public' } });
+    expect(screen.getByRole('checkbox', { name: 'List on Hub' })).not.toBeChecked();
+    expect(screen.queryByRole('checkbox', { name: 'Shorten URL' })).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'List on Hub' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Publish shared dataset' }));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('dataset.zip', true, 'original', { listed: true }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'private' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save private dataset' }));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('dataset.zip', false, 'original'));
+  });
   it('offers opt-in JPEG copies and forwards the selected encoding without changing private access', async () => {
     await renderOpenDialog();
     expect(screen.getByRole('combobox', { name: 'Images' })).toHaveValue('original');

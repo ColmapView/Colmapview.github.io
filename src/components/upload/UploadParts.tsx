@@ -5,6 +5,8 @@ import { CopyableField } from '../ui/CopyableField';
 import { getButtonClass, inputStyles, modalStyles, panelStyles, Z_INDEX } from '../../theme';
 import { PUBLICATION_JPEG_QUALITY, type PublicationFormat, type PublicationImageFormat } from '../../features/datasetPublishing/types';
 import './upload.css';
+import { HubLinkResult } from './HubLink';
+import type { HubLink } from './useHubLink';
 
 const secondary = getButtonClass('secondary', 'sm');
 
@@ -105,20 +107,26 @@ export function UploadProgress({ label, message, progressLabel, max, value, deta
   </section>;
 }
 
-export function UploadResult({ label, title, notice, viewerUrl, linkLabel = 'Viewer link', providerLink, onReset }: {
+export function UploadResult({ label, title, notice, viewerUrl, linkLabel = 'Viewer link', providerLink, onReset, hub }: {
   label: string; title: ReactNode; notice: string; viewerUrl: string; linkLabel?: string;
   providerLink?: { url: string; label: string }; onReset: () => void;
+  hub?: HubLink;
 }) {
+  const hubState = hub?.state.viewerUrl === viewerUrl ? hub.state : undefined;
+  const link = hubState?.url ?? viewerUrl;
   return <section className="publication-section" aria-label={label}>
     <p role="status" className="publication-result-title"><span className="publication-result-check" aria-hidden="true">✓ </span>{title}</p>
     <p className="publication-note">{notice}</p>
-    <CopyableField label={linkLabel} value={viewerUrl} />
+    <CopyableField label={linkLabel} value={link} />
     <div className="publication-result-actions">
-      <a className={`${secondary} publication-button-link`} href={viewerUrl} target="_blank" rel="noopener noreferrer">Open viewer<span aria-hidden="true"> ↗</span></a>
+      <a className={`${secondary} publication-button-link`} href={link} target="_blank" rel="noopener noreferrer">{hubState?.url ? 'Open preview' : 'Open viewer'}<span aria-hidden="true"> ↗</span></a>
       {providerLink && <a className={`${secondary} publication-button-link`} href={providerLink.url} target="_blank" rel="noopener noreferrer">
         {providerLink.label}<span aria-hidden="true"> ↗</span>
       </a>}
     </div>
-    <div className="publication-actions"><button type="button" className={secondary} onClick={onReset}>Upload another dataset</button></div>
+    {hub && hubState && <HubLinkResult state={hubState} controller={hub.controller} />}
+    <div className="publication-actions"><button type="button" className={secondary} disabled={hubState?.phase === 'creating'} onClick={() => {
+      hub?.setListed(false); onReset();
+    }}>Upload another dataset</button></div>
   </section>;
 }

@@ -7,6 +7,8 @@ import { usePublicationPreview } from './usePublicationPreview';
 import { GoogleDriveIcon } from '../../icons';
 import { getButtonClass, inputStyles } from '../../theme';
 import type { PublicationImageFormat } from '../../features/datasetPublishing/types';
+import { HubLinkOptions } from '../upload/HubLink';
+import { useHubLink } from '../upload/useHubLink';
 
 const fieldClass = `${inputStyles.base} ${inputStyles.sizes.sm} w-full min-w-0`;
 const secondary = getButtonClass('secondary', 'sm');
@@ -29,6 +31,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
   const busy = isDrivePublishing(publish.phase);
   const selecting = publish.phase === 'idle';
   const preview = usePublicationPreview(facade.sourceKey, isOpen && selecting && Boolean(clientId), facade.getScreenshotBlob);
+  const hub = useHubLink('googleDrive', facade.sourceKey);
   useEffect(() => {
     if (!isOpen || !clientId) return;
     let cancelled = false;
@@ -39,7 +42,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
   }, [isOpen, clientId, sdkAttempt]);
   const publishNow = async () => {
     setFormError(null);
-    try { await facade.publishDataset(name, shared, imageFormat); }
+    try { await facade.publishDataset(name, shared, imageFormat, ...(shared && (hub.listed || preview.file) ? hub.options(preview.file) : [])); }
     catch (error) { setFormError(drivePublicationErrorMessage(error)); }
   };
   const signOut = () => { publication.cancel(); googleDriveAuth.disconnect(); };
@@ -86,10 +89,11 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
           {publish.receipt && <UploadResult label="Published Drive dataset" title="Dataset saved to Google Drive"
             notice={publish.receipt.shared ? 'Anyone with the link can view.' : 'Private. Viewers need permission to this file and must choose it in the Drive picker.'}
             viewerUrl={publish.receipt.viewerUrl} providerLink={{ url: publish.receipt.driveUrl, label: 'Google Drive' }}
-            onReset={() => { publication.reset(); setFormError(null); }} />}
+            onReset={() => { publication.reset(); setFormError(null); }} hub={hub} />}
         </div>
       </UploadLayout>
       {selecting && <section className="publication-submit" aria-label="Drive dataset contents">
+        <HubLinkOptions hub={hub} publicAccess={shared} />
         {facade.pendingDeletions > 0 && <div className="publication-actions">
           <p>Apply {facade.pendingDeletions} pending image deletions before publishing.</p>
           <button type="button" className={secondary} disabled={applying} onClick={() => { void applyDeletions(); }}>Apply deletions and continue</button>
@@ -98,7 +102,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
           {imageFormat === 'original' && ' Original image metadata is retained.'} ZIP limit: 2 GiB.</p>
         <div className="publication-submit-row">
           {auth.status !== 'connected' && <span className="publication-note">Sign in to publish.</span>}
-          <button type="button" className={primary} disabled={auth.status !== 'connected' || !facade.reconstruction || facade.pendingDeletions > 0 || applying}
+          <button type="button" className={primary} disabled={auth.status !== 'connected' || !facade.reconstruction || facade.pendingDeletions > 0 || applying || hub.state.phase === 'creating'}
             onClick={() => { void publishNow(); }}>{shared ? 'Publish shared dataset' : 'Save private dataset'}</button>
         </div>
       </section>}

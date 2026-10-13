@@ -4,6 +4,23 @@ import { createMockHuggingFace } from './fixtures/mock-hugging-face';
 import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 
+const shorteningEndpoint = 'https://colmapview.opsiclear.com/hub/api/links';
+const shortUrl = 'https://colmapview.opsiclear.com/hub/HappyTree-AAAAAAAAAAAAAAAA';
+interface ShorteningRequest {
+  viewerUrl: string; title: string; thumbnailBase64: string; listed: boolean; managementSecret: string;
+  license?: { id?: string };
+}
+const shorteningRequests = new Map<Page, ShorteningRequest[]>();
+
+test.beforeEach(async ({ page }) => {
+  const requests: ShorteningRequest[] = [];
+  shorteningRequests.set(page, requests);
+  await page.route(shorteningEndpoint, async route => {
+    requests.push(route.request().postDataJSON() as ShorteningRequest);
+    await route.fulfill({ json: { url: shortUrl, managementPath: '/hub/manage/HappyTree-AAAAAAAAAAAAAAAA' } });
+  });
+});
+
 async function openPublisher(page: Page) {
   const toolbar = (await page.getByTestId('viewer-controls').boundingBox())!;
   await page.mouse.move(toolbar.x + toolbar.width / 2, toolbar.y + 16);
@@ -15,7 +32,7 @@ const mocks = new Set<ReturnType<typeof createMockHuggingFace>>();
 const mockHub = (options: { lfs?: boolean } = {}) => {
   const hub = createMockHuggingFace(options); mocks.add(hub); return hub;
 };
-test.afterEach(async () => { await Promise.all([...mocks].map(hub => hub.close())); mocks.clear(); });
+test.afterEach(async ({ page }) => { await Promise.all([...mocks].map(hub => hub.close())); mocks.clear(); shorteningRequests.delete(page); });
 
 test.describe('Hugging Face dataset publication', () => {
   test('publishes settings and originals and reopens the shared link and pinned manifest anonymously', async ({ page, context, browser, baseURL }) => {
@@ -50,7 +67,8 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByLabel('Dataset license', { exact: true }).selectOption('cc-by-4.0');
     await expect(dialog.getByRole('combobox', { name: 'Access' })).toHaveValue('private');
     await dialog.getByRole('combobox', { name: 'Access' }).selectOption('public');
-    await expect(dialog.getByRole('checkbox')).toHaveCount(0);
+    await expect(dialog.getByRole('checkbox', { name: 'Shorten URL', exact: true })).toHaveCount(0);
+    await expect(dialog.getByRole('checkbox', { name: 'List on Hub', exact: true })).not.toBeChecked();
     await expect(dialog.getByText(/public, discoverable dataset/)).toBeVisible();
     await dialog.screenshot({ path: test.info().outputPath('publication-form.png') });
     expect(hub.writes).toHaveLength(0);
@@ -62,7 +80,21 @@ test.describe('Hugging Face dataset publication', () => {
     expect(hub.files.has('masks/photo.jpg.png')).toBe(true);
     expect(hub.writes.some(path => path.endsWith('/info/lfs/objects/batch'))).toBe(true);
     expect(hub.writes.some(path => path.startsWith('/mock-complete/'))).toBe(true);
-    const viewerUrl = await dialog.getByLabel('Viewer link', { exact: true }).inputValue();
+    await expect(dialog.getByLabel('Viewer link', { exact: true })).toHaveValue(shortUrl);
+    const requests = shorteningRequests.get(page)!;
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ title: 'Browser test scene', listed: false, license: { id: 'cc-by-4.0' } });
+    expect(requests[0].managementSecret).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(JSON.stringify(requests[0])).not.toContain('hf_browser_test_only');
+    const thumbnail = Buffer.from(requests[0].thumbnailBase64, 'base64');
+    expect(thumbnail.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
+    expect(thumbnail.byteLength).toBeLessThanOrEqual(64 * 1024);
+    const dimensions = await page.evaluate(async base64 => {
+      const blob = await (await fetch(`data:image/jpeg;base64,${base64}`)).blob();
+      const bitmap = await createImageBitmap(blob);
+      try { return [bitmap.width, bitmap.height]; } finally { bitmap.close(); }
+    }, requests[0].thumbnailBase64);
+    expect(dimensions).toEqual([600, 315]);
     const manifest = JSON.parse(hub.files.get('colmapview.json')!.toString());
     expect(manifest.baseUrl).not.toContain('/main/');
     expect(manifest.viewerStatePath).toBe('colmapview.yaml');
@@ -74,10 +106,11 @@ test.describe('Hugging Face dataset publication', () => {
     expect(readme).toContain(`![Dataset preview](${manifest.baseUrl}colmapview-preview.png)`);
     expect(hub.reads.some(read => read.path.endsWith('/colmapview-preview.png') && !read.authorization)).toBe(true);
     const readmeViewerUrl = /\[Open in ColmapView\]\(([^)]+)\)/.exec(readme)![1];
-    // The dialog and the dataset card share one clean link: the viewer followed by the dataset page.
-    expect(viewerUrl).toBe(`${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene`);
+    // The storage card keeps the direct viewer link; the upload result shares the Hub card.
+    const viewerUrl = `${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene`;
     expect(readmeViewerUrl).toBe(viewerUrl);
     expect(readme).toContain(`Viewer link: <${viewerUrl}>`);
+    expect(requests[0].viewerUrl).toBe('https://colmapview.opsiclear.com/?url=https://huggingface.co/datasets/publisher/scene');
     expect(hub.visibility).toBe('public');
     expect(hub.reads.filter(read => /\/(resolve|tree)\//.test(read.path)).every(read => !read.authorization)).toBe(true);
     for (const mode of ['shared', 'manual'] as const) {
@@ -124,6 +157,7 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByLabel('Repository name', { exact: true }).fill('scene');
     await dialog.getByLabel('Dataset title', { exact: true }).fill('Complete dataset');
     await dialog.getByLabel('Dataset license', { exact: true }).selectOption('cc0-1.0');
+    await expect(dialog.getByRole('checkbox', { name: 'List on Hub', exact: true })).toHaveCount(0);
     await dialog.getByRole('button', { name: 'Save private dataset', exact: true }).click();
     await expect(dialog.getByRole('button', { name: 'Check previous upload and retry' })).toBeVisible({ timeout: 45000 });
     const dataCommit = hub.commits[0].id;
@@ -137,6 +171,7 @@ test.describe('Hugging Face dataset publication', () => {
     expect(hub.files.has('images/photo.jpg')).toBe(true);
     expect(hub.files.has('masks/photo.jpg.png')).toBe(true);
     expect(hub.visibility).toBe('private');
+    expect(shorteningRequests.get(page)).toHaveLength(0);
     expect(hub.reads.every(read => read.authorization === 'Bearer hf_browser_test_only')).toBe(true);
     await expect(dialog.getByText('Private. Viewers must sign in to Hugging Face with an account that has access.')).toBeVisible();
     const viewerUrl = await dialog.getByLabel('Viewer link', { exact: true }).inputValue();
@@ -168,6 +203,45 @@ test.describe('Hugging Face dataset publication', () => {
         expect(fileReads.filter(read => read.authorization).every(read => read.authorization === 'Bearer hf_browser_test_only')).toBe(true);
       } finally { await recipient.close(); }
     }
+  });
+
+  test('retries automatic shortening without repeating a public upload and honors opt-in listing', async ({ page, context, baseURL }) => {
+    const hub = mockHub();
+    await hub.attach(context, baseURL!);
+    let attempts = 0;
+    await page.unroute(shorteningEndpoint);
+    await page.route(shorteningEndpoint, async route => {
+      shorteningRequests.get(page)!.push(route.request().postDataJSON() as ShorteningRequest);
+      attempts++;
+      await route.fulfill(attempts === 1 ? { status: 503, contentType: 'text/plain', body: 'Temporary failure' }
+        : { json: { url: shortUrl, managementPath: '/hub/manage/HappyTree-AAAAAAAAAAAAAAAA' } });
+    });
+    await page.goto('/');
+    const image = readFileSync(new URL('./fixtures/test-data/masks/photo.jpg.png', import.meta.url)).toString('base64');
+    await loadTestDataset(page, ['photo.jpg', 'photo-2.jpg'].map(name => ({ relativePath: `images/${name}`, name, base64: image })));
+    await expect(page.getByText('Source:', { exact: false }).first()).toBeVisible({ timeout: 45000 });
+    await openPublisher(page);
+    const dialog = page.getByRole('dialog', { name: 'Publish to Hugging Face' });
+    await dialog.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(dialog.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
+    await dialog.getByLabel('Repository name', { exact: true }).fill('scene');
+    await dialog.getByLabel('Dataset title', { exact: true }).fill('Listed scene');
+    await dialog.getByLabel('Dataset license', { exact: true }).selectOption('cc0-1.0');
+    await dialog.getByRole('combobox', { name: 'Access' }).selectOption('public');
+    await dialog.getByRole('checkbox', { name: 'List on Hub', exact: true }).check();
+    await dialog.getByRole('button', { name: 'Publish public dataset', exact: true }).click();
+    await expect(dialog.getByRole('button', { name: 'Retry shortening', exact: true })).toBeVisible();
+    await expect(dialog.getByLabel('Viewer link', { exact: true })).toHaveValue(`${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene`);
+    const writes = [...hub.writes];
+    await dialog.getByRole('button', { name: 'Retry shortening', exact: true }).click();
+    await expect(dialog.getByLabel('Viewer link', { exact: true })).toHaveValue(shortUrl);
+    expect(shorteningRequests.get(page)).toHaveLength(2);
+    const requests = shorteningRequests.get(page)!;
+    expect(requests[0].listed).toBe(true);
+    expect(requests[1]).toEqual(requests[0]);
+    expect(hub.writes).toEqual(writes);
+    await dialog.getByText('Manage Hub link', { exact: true }).click();
+    await expect(dialog.getByLabel('Hub management link', { exact: true })).toHaveValue(`https://colmapview.opsiclear.com/hub/manage/HappyTree-AAAAAAAAAAAAAAAA#${requests[0].managementSecret}`);
   });
 
   test('returns to the editable form when the repository name is taken', async ({ page, context, baseURL }) => {

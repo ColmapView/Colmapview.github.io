@@ -6,13 +6,16 @@ import './publicationRuntime';
 const controller = vi.hoisted(() => {
   const listeners = new Set<() => void>();
   let phase = 'idle';
+  let receipt: { shared: boolean; viewerUrl: string } | undefined;
   return {
     invalidate: vi.fn(), cancel: vi.fn(),
-    getSnapshot: () => ({ phase }),
+    getSnapshot: () => ({ phase, receipt }),
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    emit(next: string) { phase = next; listeners.forEach(listener => listener()); },
+    emit(next: string, nextReceipt?: typeof receipt) { phase = next; receipt = nextReceipt; listeners.forEach(listener => listener()); },
   };
 });
+const hub = vi.hoisted(() => ({ finish: vi.fn(), prepare: vi.fn(), getSnapshot: vi.fn(() => ({ phase: 'idle' })) }));
+vi.mock('../colmapviewHub/publication', () => ({ hubPublications: { googleDrive: hub } }));
 vi.mock('./publishDataset', async importOriginal => ({
   ...await importOriginal<typeof import('./publishDataset')>(),
   createDrivePublicationController: () => controller,
@@ -30,6 +33,26 @@ describe('Drive publication runtime', () => {
     useDeletionStore.setState(useDeletionStore.getInitialState(), true);
     controller.emit('idle');
     controller.invalidate.mockClear();
+    hub.finish.mockClear();
+    hub.getSnapshot.mockReturnValue({ phase: 'idle' });
+  });
+
+  it('shortens only after a completed receipt confirms public sharing', () => {
+    const viewerUrl = 'https://colmapview.opsiclear.com/?url=https://drive.google.com/file/d/public-id/view';
+    controller.emit('uploading', { shared: true, viewerUrl });
+    expect(hub.finish).not.toHaveBeenCalled();
+    controller.emit('completed', { shared: false, viewerUrl });
+    expect(hub.finish).not.toHaveBeenCalled();
+    controller.emit('completed', { shared: true, viewerUrl });
+    expect(hub.finish).toHaveBeenCalledExactlyOnceWith(viewerUrl);
+  });
+
+  it('keeps the tab-close warning while automatic shortening is still creating the link', () => {
+    controller.emit('completed');
+    hub.getSnapshot.mockReturnValue({ phase: 'creating' });
+    expect(unloading()).toBe(true);
+    hub.getSnapshot.mockReturnValue({ phase: 'ready' });
+    expect(unloading()).toBe(false);
   });
 
   it('invalidates the job when another dataset loads or the model is edited, and only then', () => {

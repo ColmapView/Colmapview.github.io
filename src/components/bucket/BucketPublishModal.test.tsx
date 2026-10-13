@@ -35,6 +35,17 @@ function open() {
 vi.mock('../modals/usePublicationPreview', () => ({ usePublicationPreview: () => ({ url: 'blob:current-view', busy: false }) }));
 
 describe('bucket publisher', () => {
+  it('explains automatic public-link checks and defaults gallery listing to off', async () => {
+    bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
+    useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }) });
+    open();
+    expect(screen.getByText(/Private uploads keep their original link/)).toBeVisible();
+    expect(screen.getByRole('checkbox', { name: 'List on Hub' })).not.toBeChecked();
+    expect(screen.queryByRole('checkbox', { name: 'Shorten URL' })).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'List on Hub' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload dataset' }));
+    await waitFor(() => expect(publication.publish).toHaveBeenLastCalledWith('dataset', 'folder', 'original', { listed: true }));
+  });
   it('offers JPEG copies for ZIPs and keeps Folder uploads on original images', async () => {
     bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
     useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }) });
