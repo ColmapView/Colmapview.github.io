@@ -199,7 +199,7 @@ Accept `access`, refuse listings while they're off, and widen the credential den
   - constants: `origin`, `base`, `ip`, `owner`, `words`, `assets`, `listings`;
   - types: `LinkResult`, `LinkPayload`;
   - functions: `input()`, `request(path, init?, clientIp?, overrides?)`, `post()`, `create()`, `remove()`, `guard()`, `resetState()`.
-  - `request` calls the Worker module directly with `{ ...env, ...overrides }`, so tests can override bindings.
+  - `request` calls the Worker module directly with an env proxy that applies `overrides`, so tests can override bindings.
 
 - [ ] **Step 1: Create the branch**
 
@@ -241,13 +241,19 @@ export function input(overrides: Partial<LinkPayload> = {}): LinkPayload {
     description: 'A small test scene.', thumbnailBase64: preview, managementSecret: owner, listed: false, publicAcknowledged: true, ...overrides };
 }
 
+/** The test env with some bindings replaced. A proxy, so it works whether or not binding properties are enumerable. */
+function withOverrides(overrides: Partial<Env>): Env {
+  if (!Object.keys(overrides).length) return env;
+  return new Proxy(env, { get: (target, key) => (key in overrides ? overrides[key as keyof Env] : Reflect.get(target, key)) }) as Env;
+}
+
 /** Calls the Worker module directly, so a test can override bindings such as the listings flag. */
 export function request(path: string, init: RequestInit = {}, clientIp = ip, overrides: Partial<Env> = {}): Promise<Response> {
   const hubOrigin = overrides.HUB_ORIGIN ?? env.HUB_ORIGIN;
   const headers = new Headers(init.headers);
   headers.set('CF-Connecting-IP', clientIp);
   if (['POST', 'DELETE', 'OPTIONS'].includes(init.method ?? 'GET') && !headers.has('Origin')) headers.set('Origin', hubOrigin);
-  return worker.fetch(new Request(`${hubOrigin}${env.HUB_PATH}${path}`, { ...init, headers }), { ...env, ...overrides });
+  return worker.fetch(new Request(`${hubOrigin}${env.HUB_PATH}${path}`, { ...init, headers }), withOverrides(overrides));
 }
 
 export function post(payload: object, clientIp = ip, overrides: Partial<Env> = {}): Promise<Response> {
@@ -1937,11 +1943,12 @@ export function errorPage(location: HubLocation, message: string): string {
 
 ```ts
 const path = document.documentElement.dataset.hubPath ?? '';
-const status = document.querySelector<HTMLElement>('#status');
+// Not named `status`: this file is a script, and the DOM library already declares a global `status`.
+const statusLine = document.querySelector<HTMLElement>('#status');
 const say = (text: string, focus = false) => {
-  if (!status) return;
-  status.textContent = text;
-  if (focus) status.focus();
+  if (!statusLine) return;
+  statusLine.textContent = text;
+  if (focus) statusLine.focus();
 };
 
 const play = document.querySelector<HTMLButtonElement>('#play');
@@ -2721,13 +2728,17 @@ describe('listings flag', () => {
     expect((await remove(listed.id)).status).toBe(204);
   });
 
-  it('caches the gallery for a minute while on', async () => {
+  it('caches the gallery for a minute, refreshing its first page when a listing is created or deleted', async () => {
     const listed = await create(input({ listed: true, title: 'Listed result' }), ip, listings);
     const page = await request('/', {}, ip, listings);
     expect(page.headers.get('Cache-Control')).toBe('public, max-age=60');
     expect(await page.text()).toContain(listed.id);
     const cached = await caches.default.match(new Request(`${origin}/hub/`));
     expect(await cached?.text()).toContain(listed.id);
+    expect((await remove(listed.id)).status).toBe(204);
+    expect(await (await request('/', {}, ip, listings)).text()).not.toContain(listed.id);
+    const another = await create(input({ listed: true, title: 'Another result', managementSecret: 'B'.repeat(43) }), ip, listings);
+    expect(await (await request('/', {}, ip, listings)).text()).toContain(another.id);
   });
 });
 
@@ -2877,6 +2888,24 @@ async function home(request: Request, env: Env, location: HubLocation, url: URL)
   await caches.default.put(key, page.clone());
   return page;
 }
+```
+
+7. Keep the cached first gallery page current. The existing test `has no submission form and shows only explicit listings` expects a deleted listing to disappear at once.
+   - Change the import to `import { ID_PATTERN, isListedId } from '../shared/model';`.
+   - In `createLink`, replace `if (stored) return created(id);` with:
+
+```ts
+    if (stored) {
+      if (record.listed) await caches.default.delete(new Request(`${location.base}/`));
+      return created(id);
+    }
+```
+
+   - In `deleteLink`, after `await env.LINKS.delete(recordKey(id));`, add:
+
+```ts
+  // A deleted listing leaves the first gallery page at once; later pages expire within a minute.
+  if (isListedId(id)) await caches.default.delete(new Request(`${location.base}/`));
 ```
 
 - [ ] **Step 6: Declare the optional secret (`src/worker/env.d.ts`)**
@@ -3160,7 +3189,8 @@ const result = { url: `${HUB}/HappyTree-AAAAAAAAAAAAAAAA`, managementUrl: `${HUB
 ```
 
 3. Add `baseUrl: () => HUB` to every `createHubPublication({ … })` call.
-4. In `waits for the verified upload URL…`, change the expected `managementUrl` to `` `${result.managementUrl}#${payload.managementSecret}` ``.
+4. The request mock now receives `(baseUrl, payload)`, so every `request.mock.calls[n][0]` that reads the payload becomes `request.mock.calls[n][1]`. That covers the tests `waits for…`, `retries lost responses…`, `keeps the verified asset inventory…` and `bounds card metadata…`.
+5. In `waits for the verified upload URL…`, change the expected `managementUrl` to `` `${result.managementUrl}#${payload.managementSecret}` ``.
 5. Add two tests:
 
 ```ts
@@ -4530,8 +4560,13 @@ export interface HubLinkState {
 }
 
 export class HubRequestError extends Error {
-  constructor(message: string, readonly kind: HubFailureKind, readonly retryAfterMs = 0) {
+  // Plain fields: the viewer's erasableSyntaxOnly setting forbids constructor parameter properties.
+  readonly kind: HubFailureKind;
+  readonly retryAfterMs: number;
+  constructor(message: string, kind: HubFailureKind, retryAfterMs = 0) {
     super(message);
+    this.kind = kind;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 
@@ -4912,7 +4947,12 @@ export type HubLink = ReturnType<typeof useHubLink>;
 
 4. In `GoogleDrivePublishModal.test.tsx`, add `null` as the fourth expected argument of every `publishDataset` call expectation, for example `toHaveBeenLastCalledWith('dataset.zip', true, 'original', null)`. That is six places.
 
-5. In `BucketPublishModal.test.tsx`, do the same for the three `publication.publish` expectations, for example `toHaveBeenLastCalledWith('dataset', 'folder', 'original', null)`.
+5. In `BucketPublishModal.test.tsx`, do the same for all five `publication.publish` expectations:
+   - the three `toHaveBeenLastCalledWith('dataset', …)` calls;
+   - `toHaveBeenCalledExactlyOnceWith('dataset', 'folder', 'original')`;
+   - `toHaveBeenCalledExactlyOnceWith('datasets/my-scene', 'folder', 'original')`.
+
+   For example: `toHaveBeenLastCalledWith('dataset', 'folder', 'original', null)`.
 
 6. In `src/features/googleDrive/publicationRuntime.test.ts`:
    - Change the hub mock to `const hub = vi.hoisted(() => ({ finish: vi.fn(), prepare: vi.fn(), blocksUnload: vi.fn(() => false) }));`.
@@ -5126,10 +5166,30 @@ describe('getPublicationDatasetName', () => {
 ```
 
 3. In `GoogleDrivePublishModal.test.tsx`:
-   - Add `datasetName: 'garden'` to the facade mock object.
-   - Change the default-name expectations from `'dataset.zip'` to `'garden.zip'`: `toHaveValue('dataset.zip')` and the four `publishDataset` expectations that use `'dataset.zip'`.
+   - Add `datasetName: 'dataset'` to the hoisted `actions` object.
+   - Pass `datasetName: actions.datasetName` in the facade mock, and reset it to `'dataset'` in `beforeEach`. The existing `'dataset.zip'` expectations keep holding.
+   - Append:
 
-4. In `BucketPublishModal.test.tsx`, the facade is real, so the dataset name comes from the store: add `sourceName: 'garden'` to the two `useReconstructionStore.setState({ reconstruction: … })` calls in the first two tests. Change their expected folder from `'dataset'` to `'garden'`.
+```ts
+  it('names the ZIP after the dataset until the name is edited', async () => {
+    actions.datasetName = 'garden';
+    await renderOpenDialog();
+    expect(screen.getByLabelText('File name')).toHaveValue('garden.zip');
+  });
+```
+
+4. In `BucketPublishModal.test.tsx`, the facade is real, so the name comes from the store.
+   - In `beforeEach`, after the store resets, add `useReconstructionStore.setState({ sourceName: 'dataset' });`. The existing `'dataset'` expectations keep holding.
+   - Append:
+
+```ts
+  it('names the upload folder after the dataset until the name is edited', () => {
+    bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
+    useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }), sourceName: 'garden' });
+    open();
+    expect(screen.getByLabelText('Upload folder')).toHaveValue('garden');
+  });
+```
 
 - [ ] **Step 2: Run them and watch them fail**
 
@@ -5274,6 +5334,7 @@ Covers §2.4's result and lifecycle UI, §2.7 focus (progress and result) and co
 - Modify:
   - `src/components/upload/HubLink.tsx` (replace), `src/components/upload/UploadParts.tsx`, `src/components/upload/useHubLink.ts`, `src/components/upload/upload.css`;
   - `src/components/modals/PublishDatasetModal.tsx`, `src/components/modals/GoogleDrivePublishModal.tsx`, `src/components/bucket/BucketPublishModal.tsx`;
+  - their three test files;
   - `e2e/hugging-face-publish.spec.ts`.
 
 **Interfaces:**
@@ -5561,6 +5622,15 @@ In `PublishDatasetModal.tsx`, `GoogleDrivePublishModal.tsx` and `BucketPublishMo
 
 In `BucketPublishModal.tsx`, also remove the `linkLabel="Bucket viewer link"` prop.
 
+Update the existing dialog tests that read the old result labels:
+- `GoogleDrivePublishModal.test.tsx`, test `shows the verified private viewer link with the correct access requirement`:
+  - both `getByLabelText('Viewer link')` become `getByLabelText('Share link')`;
+  - `getByRole('link', { name: /Open viewer/ })` becomes `getByRole('link', { name: 'Open link' })`.
+- `PublishDatasetModal.test.tsx`, test `shows a consistent %s result using the verified access choice`: the same two changes for `'Viewer link'` and `'Open viewer'`.
+- `BucketPublishModal.test.tsx`, test `shows the same viewer link and result actions without claiming the bucket is public`:
+  - both `getByLabelText('Bucket viewer link')` become `getByLabelText('Share link')`;
+  - `getByRole('link', { name: 'Open viewer' })` becomes `getByRole('link', { name: 'Open link' })`.
+
 - [ ] **Step 8: Use the new labels in the HF e2e**
 
 In `e2e/hugging-face-publish.spec.ts`:
@@ -5790,6 +5860,16 @@ vi.mock('../upload/useHubLink', () => ({ useHubLink: () => hubLink.value }));
 ```
 
 5. Change `'Secret access key'` to `'Secret key'` in `BucketStorageModal.test.tsx` (three places), `StorageAccessPrompt.test.tsx` (one place) and `e2e/drop-zone.spec.ts` (one place).
+
+6. Update three existing dialog tests that this task changes:
+   - `PublishDatasetModal.test.tsx`, `shows a consistent %s result using the verified access choice`: the title now depends on access. Replace `expect(screen.getByRole('status')).toHaveTextContent('Published publisher/scene');` with:
+
+```ts
+    expect(screen.getByRole('status')).toHaveTextContent(visibility === 'private' ? 'Saved publisher/scene privately' : 'Published publisher/scene');
+```
+
+   - `BucketPublishModal.test.tsx`, `shows the upload destination and existing bucket permissions directly`: rename it `shows the upload destination without a read-only Access row`, and replace its two `textbox` `Access` expectations with `expect(screen.queryByRole('textbox', { name: 'Access' })).toBeNull();`.
+   - `BucketPublishModal.test.tsx`, `shows the same viewer link and result actions without claiming the bucket is public`: make its first line `hubLink.value = { ...hubLink.value, enabled: false };`. With the Hub off the result keeps the general notice, which the test expects.
 
 - [ ] **Step 2: Run them and watch them fail**
 
@@ -6281,7 +6361,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 Covers §4's E2E list: Hugging Face public and private, a private bucket upload, the Previous upload block, and the Share panel copying the Hub link.
 
-The spec lists "the Previous upload block after an edit". The browser test resets the result by loading a new dataset, which the spec also names as a reset trigger (§2.4). Edits and deletion marks are covered by the runtime unit tests, because the app has no scripted way to mark deletions from e2e.
+The Previous upload check makes an edit in the spec's sense: it marks an image for deletion through the store module the dev server serves. `e2e/reconstruction-worker.spec.ts` uses the same dynamic-import pattern.
 
 **Files:**
 - Create: `colmap-webview/e2e/fixtures/mock-bucket.ts`, `e2e/hub-upload.spec.ts`
@@ -6393,16 +6473,19 @@ test('gives a private bucket upload an unguessable Hub link and keeps it after t
     expect(bucket.anonymousReads).toEqual([]);
     const deleteLink = await result.getByLabel('Private delete link', { exact: true }).inputValue();
     expect(deleteLink).toMatch(new RegExp(`^https://hub\\.invalid/hub/manage/${longId}#[A-Za-z0-9_-]{43}$`));
-    await dialog.getByRole('button', { name: 'Close bucket publication' }).click();
-    // A new dataset resets the upload result; the Hub link stays in Previous upload until the next upload.
-    await loadTestDataset(page, dataset);
-    await expect(page.getByText('Source:', { exact: false }).first()).toBeVisible({ timeout: 45000 });
-    await openBucketPublisher(page);
-    // The dialog stays mounted, so it switches from the old result to the form once the new scene replaces the old one.
+    // Marking an image for deletion is an edit: it resets the upload result, and the Hub link moves to Previous upload.
+    await page.evaluate(async () => {
+      const storePath = '/src/store/reconstructionStore.ts';
+      const deletionStorePath = '/src/store/stores/deletionStore.ts';
+      const { useReconstructionStore } = await import(/* @vite-ignore */ storePath);
+      const { useDeletionStore } = await import(/* @vite-ignore */ deletionStorePath);
+      const [firstImage] = useReconstructionStore.getState().reconstruction.images.keys();
+      useDeletionStore.getState().markForDeletion(firstImage);
+    });
     const previous = dialog.getByRole('region', { name: 'Previous upload' });
-    await expect(previous.getByLabel('Share link', { exact: true })).toHaveValue(longUrl, { timeout: 45000 });
+    await expect(previous.getByLabel('Share link', { exact: true })).toHaveValue(longUrl);
     await expect(previous.getByLabel('Private delete link', { exact: true })).toHaveValue(deleteLink);
-    await expect(dialog.getByRole('button', { name: 'Upload dataset', exact: true })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Apply deletions and continue' })).toBeVisible();
   } finally { await bucket.close(); }
 });
 ```
