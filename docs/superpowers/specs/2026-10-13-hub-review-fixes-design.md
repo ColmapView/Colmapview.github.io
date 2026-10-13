@@ -1,13 +1,13 @@
 # ColmapView Hub review fixes: design
 
 - **Date:** 2026-10-13
-- **Status:** approved in chat; written spec awaiting review
+- **Status:** approved in chat; revised after the owner's review ("The design should be consistent with ColmapView"); awaiting review
 - **Repos:** `colmap-webview` (viewer, v0.16.12) and `colmapview_hub` (Hub Worker, v0.3.0). Both use the branch `hub-review-fixes`.
 - **Source:** the 2026-10-13 review (private artifact https://claude.ai/artifact/S7BDHZq2DyLTvpir1jsmM6). It has 33 findings (H1–H5, M1–M11, L1–L17) plus its conciseness, optimization and simplification items.
 
 ## Goal
 
-Fix every finding and listed improvement in both repos, with tests. Keep the owner's deliberate choices: public by default, one-click publish, readable word-pair names, and no User-Agent exemptions.
+Fix every finding and listed improvement in both repos, with tests. Hub pages and new viewer UI follow ColmapView's existing design. Keep the owner's deliberate choices: public by default, one-click publish, readable word-pair names, and no User-Agent exemptions.
 
 **Done means:**
 - Every row in the traceability table (§6) has a fix and a test.
@@ -29,6 +29,7 @@ This work pushes, tags, deploys and configures nothing. Versions are bumped at r
 | Opt-out | None. The disclosure line states what happens, and the private delete link removes a card. (Owner: "Private uploads get long links".) |
 | Gallery listings | Off by default, behind `HUB_LISTINGS_ENABLED`. |
 | Deploy order | Hub first, then the viewer release. |
+| Look | Hub pages use a copy of the viewer's public-page stylesheet and its header and footer. New viewer UI reuses the upload dialog's parts (§1.6, §2.7). |
 
 ## Hub API contract
 
@@ -69,7 +70,7 @@ This work pushes, tags, deploys and configures nothing. Versions are bumped at r
   - Remove the legacy probe from public creation (`index.ts:63-67`). Keep legacy reads.
 - **Private cards:**
   - They show the preview and the line "Viewers need access to open this dataset."
-  - "Open in viewer ↗" replaces Play 3D, because signing in inside an iframe is unreliable.
+  - "Open in ColmapView ↗" replaces Play 3D, because signing in inside an iframe is unreliable.
 
 ### 1.2 Lookup guard (H2, H3, M1)
 
@@ -144,20 +145,55 @@ This work pushes, tags, deploys and configures nothing. Versions are bumped at r
 - **Play 3D:** the frame grows to 70% of the viewport height (`70vh`) and receives focus.
 - **Manage page:**
   - It reads the record, counted like a card lookup, and shows "Delete Hub link “<title>”?", its thumbnail and "The dataset stays where it is."
-  - It has one "Delete permanently" button, with no checkbox, in a red with at least 4.5:1 contrast.
+  - It has one "Delete permanently" button in the danger style (§1.6), with no checkbox.
   - On load, the script checks that the fragment holds a well-formed key. If it doesn't, the page says so and disables the button.
   - After deletion, focus moves to the status message.
-- **Other pages:**
-  - Not found: "Link not found. Check the address, or ask for a new link."
-  - Blocked: "Too many missing links from your network. Try again in N minutes."
-  - Landing page (listings off): "Share links for ColmapView results." and [Open ColmapView].
-  - Every page gets a footer with links to the viewer's Privacy and Terms pages.
+- **Other pages** (heading, then lede):
+  - Not found: "Link not found" / "Check the address, or ask for a new link."
+  - Blocked: "Try again in N minutes" / "Too many missing links from your network."
+  - Unavailable: "ColmapView Hub is unavailable" / "Try again in a few minutes."
+  - Landing page (listings off): "Share links for ColmapView results." / "Links are created when you publish from ColmapView." Then [Open ColmapView].
   - Gallery images use `alt=""`, because the card text already names the link.
 
-### 1.6 Delivery and cleanup (L10, simplifications)
+### 1.6 Look and feel (owner request)
+
+Hub pages look and read like ColmapView's public pages (`about.html`, `privacy.html`, `terms.html`).
+
+- **Stylesheets:**
+  - `public/hub/colmapview.css` is a byte-for-byte copy of the viewer's `public/policy.css`. It provides IBM Plex Sans, the color and spacing tokens, the light scheme (`prefers-color-scheme`), and the header, nav, footer, button, intro and card styles.
+  - `public/hub/styles.css` loads after it and adds only the Hub's parts: the player, the primary and danger buttons, the asset line, and status and error text. It uses the copied tokens, plus `--bg-void` and `--error` from the viewer's `index.css` in both schemes.
+  - The font file and its `OFL.txt` are copied into `public/hub/fonts/`, where the copied stylesheet expects them, and `favicon.ico` into `public/hub/`. The CSP adds `font-src 'self'`.
+- **Drift check:**
+  - A test in each repo compares the SHA-256 of `policy.css` (viewer) or `colmapview.css` (Hub), with line endings normalized, against the same pinned value.
+  - The failure message names the other repo's file, so changing one side fails until both match.
+- **Page frame:**
+  - Header and footer as on the viewer's public pages:
+    - the "ColmapView" brand;
+    - nav "Open viewer", "About", "Privacy" and "Terms";
+    - the footer "ColmapView · Maintained by OpsiClear LLC" with About, Privacy, Terms and Contact.
+    - Links go to `https://colmapview.opsiclear.com/`.
+  - Each page has the skip link, the eyebrow "ColmapView Hub", an `h1`, and a lede when there's text for one. Titles end in "· ColmapView Hub".
+  - Targets stay at least 44 px tall, with the shared focus ring.
+- **Buttons:**
+  - Primary (Play 3D): `--accent` background and `--bg-void` text, the viewer's primary pairing.
+  - Danger (Delete permanently): `--error` background and `--bg-void` text, at least 4.5:1 in both schemes. The viewer's danger button uses white text, which is 3.9:1 on dark.
+  - Everything else uses the shared `.button`.
+- **Layouts:**
+  - Card:
+    - the eyebrow, the title, the description as the lede, then the asset line with the license;
+    - the preview in a card frame with Play 3D centered on it, then [Open in ColmapView ↗];
+    - a playing viewer fills the 752 px content column at `70vh`.
+  - Manage: the same intro, the thumbnail in a card frame, then the danger button and the status line.
+  - Gallery: the shared two-column `.cards` grid.
+- **Wording:**
+  - Sentence case and no exclamation marks.
+  - "↗" marks links that open a new tab, as in the viewer.
+  - "Open in ColmapView ↗" matches the Hugging Face dataset card.
+
+### 1.7 Delivery and cleanup (L10, simplifications)
 
 - `run_worker_first` lists only dynamic routes.
-  - `styles.css` and `client.js` move to `public/hub/`, and Cloudflare serves them without invoking the Worker, with its default ETag revalidation.
+  - `styles.css`, `client.js` and the §1.6 files live in `public/hub/`, and Cloudflare serves them without invoking the Worker, with its default ETag revalidation.
   - `public/_headers` keeps `nosniff` on them.
 - Remove the unreachable owner check in `replay` and the alarm's redundant reset.
 - Split the long one-line templates (`pages.ts:48`, `index.ts:17`).
@@ -258,6 +294,10 @@ One line next to the publish button:
   - After Publish, the progress status.
   - On completion, the result title.
   - After Retry, the Hub status.
+- **Consistency:**
+  - The new viewer UI reuses the upload dialog's parts: `publication-section`, `publication-note`, `publication-result-title`, `publication-result-actions`, `CopyableField` and the `getButtonClass` variants. That covers the disclosure line, the Hub status, the delete row and the Previous upload block.
+  - Failures use `text-ds-error`, toasts use the notification store, and links that open a new tab end in "↗".
+  - No new colors or sizes.
 
 ### 2.8 Code
 
@@ -294,6 +334,7 @@ One line next to the publish button:
   - Access and long names; the listings flag.
   - The verified-bot rule and the cross-site rule: AGENTS.md's "same three-miss cooldown" rule gains these two exceptions.
   - Guard storage, and local development with `VITE_HUB_BASE_URL`.
+  - The copied stylesheet and how to update it with its hash (§1.6).
 
 ## 4. Testing (M11)
 
@@ -324,7 +365,13 @@ One line next to the publish button:
   - private card;
   - manage page (key check, focus, contrast);
   - taller player with focus;
-  - landing page and footer.
+  - landing page, header and footer;
+  - look, in both color schemes:
+    - IBM Plex Sans loads and the copied tokens apply;
+    - the primary and danger buttons reach 4.5:1;
+    - targets are at least 44 px tall;
+    - there's no horizontal scroll at 360 px.
+- **Drift check:** the pinned-hash test in each repo (§1.6).
 - **Viewer unit and component tests:**
   - Rules:
     - base URL rules;
@@ -392,16 +439,17 @@ One line next to the publish button:
 | L7 | Whitespace, word-boundary cut, "…" | 2.6 |
 | L8 | HTML error pages | 1.4 |
 | L9 | 308 for a trailing slash; letter-case resolution | 1.4 |
-| L10 | Assets served without the Worker; preview caching | 1.6, 1.4 |
+| L10 | Assets served without the Worker; preview caching | 1.7, 1.4 |
 | L11 | Presigned-URL credential parameters | 1.3 |
 | L12 | `If-None-Match` header | 1.4 |
 | L13 | Manage page | 1.5 |
 | L14 | Taller player; cover-crop thumbnail | 1.5, 2.6 |
 | L15 | Focus, accessible names, `alt=""` | 1.5, 2.7 |
-| L16 | README; footer links | 3, 1.5 |
+| L16 | README; footer links | 3, 1.6 |
 | L17 | Preview released; private bucket drafts are now intended | 2.6 |
+| Owner | Hub pages and new viewer UI match ColmapView | 1.6, 2.7 |
 
-The conciseness, optimization and simplification items are covered in §1.2, §1.4–§1.6, §2.4 and §2.8.
+The conciseness, optimization and simplification items are covered in §1.2, §1.4, §1.5, §1.7, §2.4 and §2.8.
 
 ## Out of scope
 
