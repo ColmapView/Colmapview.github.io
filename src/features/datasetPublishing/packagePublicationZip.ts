@@ -6,6 +6,7 @@ import { HfError } from '../huggingface/http';
 import { publicationPath } from './publicationPaths';
 import { createArchiveImageEncoder } from '../../archive/archiveService';
 import { releasePublicationAsset, releasePublicationAssets } from './publicationAssets';
+import { summarizePublicationAssets } from './publicationSummary';
 import { PUBLICATION_JPEG_QUALITY, type PreparedPublication, type PublishAsset, type PublicationImageFormat } from './types';
 
 export type ArchiveProgress = (message: string, filesDone: number, filesTotal: number) => void;
@@ -109,7 +110,8 @@ export async function packageZipPublication(prepared: PreparedPublication, signa
       sidecars.push({ path: DATASET_VIEWER_SETTINGS_FILE, kind: 'viewer-state', size: settings.size,
         open: async target => { target.throwIfAborted(); return settings; } });
     }
-    return { ...prepared, archive: { path, size: blob.size, files }, assets: [
+    const summary = summarizePublicationAssets({ ...prepared, assets: [...payload, ...sidecars] }, 'zip');
+    return { ...prepared, archive: { path, size: blob.size, files, summary }, assets: [
       { path, kind: 'archive', size: blob.size, open: async target => { target.throwIfAborted(); return blob; } }, ...sidecars,
     ] };
   } catch (error) { releasePublicationAssets(sidecars); throw error; }

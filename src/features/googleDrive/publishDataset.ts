@@ -2,9 +2,10 @@ import { HfError } from '../huggingface/http';
 import type { DriveArchive, DriveArchiveProgress } from './prepareArchive';
 import { DRIVE_OPERATION_KEY, DRIVE_UPLOAD_CHUNK_BYTES, driveSharingUrl, GoogleDrivePublishError, type DrivePublishedFile, type DriveUploadClient } from './upload';
 import { makePublicationViewerLink } from '../datasetPublishing/publicationLinks';
+import type { PublicationAssetSummary } from '../datasetPublishing/types';
 
 export type DrivePublicationPhase = 'idle' | 'preparing' | 'uploading' | 'verifying' | 'sharing' | 'cancelling' | 'cancelled' | 'failed' | 'completed';
-export interface DrivePublicationReceipt { fileId: string; driveUrl: string; viewerUrl: string; shared: boolean }
+export interface DrivePublicationReceipt { fileId: string; driveUrl: string; viewerUrl: string; shared: boolean; assets?: PublicationAssetSummary }
 export interface DrivePublicationState {
   phase: DrivePublicationPhase; message: string; bytesDone: number; bytesTotal: number;
   filesDone: number; filesTotal: number; canRetry: boolean; fileUrl?: string;
@@ -145,7 +146,8 @@ export function createDrivePublicationController(client: DriveUploadClient) {
       }
       const driveUrl = driveSharingUrl(file);
       update({ phase: 'completed', message: 'Dataset saved to Google Drive.', canRetry: false, fileUrl: driveUrl,
-        receipt: { fileId: current.fileId, driveUrl, viewerUrl: makePublicationViewerLink(archive.viewerBaseUrl, driveUrl), shared: current.shared } });
+        receipt: { fileId: current.fileId, driveUrl, viewerUrl: makePublicationViewerLink(archive.viewerBaseUrl, driveUrl), shared: current.shared,
+          ...(archive.assets ? { assets: archive.assets } : {}) } });
       release(current);
     } catch (error) {
       const permanent = !signal.aborted && (error instanceof GoogleDrivePublishError || error instanceof HfError) && error.permanent;

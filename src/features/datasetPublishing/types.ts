@@ -19,6 +19,16 @@ export type PublicationVisibility = 'private' | 'public';
 export type PublicationFormat = 'folder' | 'zip';
 export type PublicationImageFormat = 'original' | 'jpeg';
 export const PUBLICATION_JPEG_QUALITY = 0.85;
+export interface PublicationAssetSummary {
+  format: PublicationFormat;
+  imageFormat: PublicationImageFormat;
+  colmap: { files: number; cameras: number; points: number };
+  images: number;
+  masks: number;
+  splats: number;
+  viewerSettings: boolean;
+  preview: boolean;
+}
 export interface PublicationDetails {
   name: string; title: string; description: string; license: string;
   visibility: PublicationVisibility;
@@ -40,11 +50,12 @@ export interface PreparedPublication {
   /** ZIP image encoding, applied while packaging. Loose publications retain originals. */
   imageFormat?: PublicationImageFormat;
   /** ZIP payload inventory; assets contain the ZIP and repository sidecars instead of loose dataset files. */
-  archive?: { path: string; size: number; files: Array<{ path: string; size: number }> };
+  archive?: { path: string; size: number; files: Array<{ path: string; size: number }>; summary?: PublicationAssetSummary };
 }
 export interface PublicationReceipt {
   repoId: string; repoUrl: string; dataCommit: string; metadataCommit: string; viewerUrl: string;
   visibility: PublicationVisibility;
+  assets?: PublicationAssetSummary;
 }
 export type PublicationPhase = 'idle' | 'preparing' | 'creating-repo' | 'uploading'
   | 'publishing-metadata' | 'verifying' | 'reconciling' | 'cancelling' | 'cancelled' | 'failed' | 'completed';

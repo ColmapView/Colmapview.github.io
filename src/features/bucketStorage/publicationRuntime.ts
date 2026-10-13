@@ -10,7 +10,7 @@ import { hubPublications, type HubPublicationOptions } from '../colmapviewHub/pu
 export const bucketPublication = createBucketPublicationController();
 const hubStatus = bucketPublication.subscribe(() => {
   const current = bucketPublication.getSnapshot();
-  if (current.phase === 'completed' && current.viewerUrl) void hubPublications.bucket.finish(current.viewerUrl);
+  if (current.phase === 'completed' && current.viewerUrl) void hubPublications.bucket.finish(current.viewerUrl, current.assets);
 });
 let sourceKey = getPublicationSourceKey();
 let modelRevision = useReconstructionStore.getState().reconstructionEditRevision;

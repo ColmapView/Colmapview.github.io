@@ -14,7 +14,7 @@ export const drivePublication = createDrivePublicationController(createDriveUplo
 const status = drivePublication.subscribe(() => useDrivePublicationStatus.setState({ active: drivePublication.getSnapshot().phase !== 'idle' }));
 const hubStatus = drivePublication.subscribe(() => {
   const current = drivePublication.getSnapshot();
-  if (current.phase === 'completed' && current.receipt?.shared) void hubPublications.googleDrive.finish(current.receipt.viewerUrl);
+  if (current.phase === 'completed' && current.receipt?.shared) void hubPublications.googleDrive.finish(current.receipt.viewerUrl, current.receipt.assets);
 });
 let sourceKey = getPublicationSourceKey();
 let modelRevision = useReconstructionStore.getState().reconstructionEditRevision;

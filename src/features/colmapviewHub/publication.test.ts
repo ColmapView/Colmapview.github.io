@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createHubPublication, hubViewerUrl } from './publication';
+import type { PublicationAssetSummary } from '../datasetPublishing/types';
 
 const preview = new File(['normalized preview'], 'preview.png', { type: 'image/png' });
 const viewer = 'https://colmapview.opsiclear.com/?url=https%3A%2F%2Fstorage.example%2Fmanifest.json#camera=43';
@@ -47,6 +48,22 @@ describe('automatic Hub step after public upload', () => {
     expect(request.mock.calls[1][0].listed).toBe(true);
     expect(thumbnail).toHaveBeenCalledOnce();
     expect(controller.getSnapshot().phase).toBe('ready');
+  });
+
+  it('keeps the verified asset inventory through a thumbnail failure and retry', async () => {
+    const assets: PublicationAssetSummary = { format: 'zip', imageFormat: 'jpeg', colmap: { files: 3, cameras: 2, points: 1000 },
+      images: 2, masks: 1, splats: 1, viewerSettings: true, preview: false };
+    const original = structuredClone(assets);
+    const request = vi.fn().mockResolvedValue(result);
+    const thumbnail = vi.fn().mockRejectedValueOnce(new Error('Preview decode failed')).mockResolvedValue('jpeg');
+    const controller = createHubPublication({ request, thumbnail });
+    controller.prepare({ title: 'Scene' }, { listed: false, preview });
+    await controller.finish(viewer, assets);
+    expect(request).not.toHaveBeenCalled();
+    assets.masks = 99;
+    await controller.retry();
+    expect(request).toHaveBeenCalledOnce();
+    expect(request.mock.calls[0][0].assets).toEqual(original);
   });
 
   it('ignores duplicate completion notifications while creating a link', async () => {

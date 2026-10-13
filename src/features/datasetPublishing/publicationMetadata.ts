@@ -4,6 +4,7 @@ import { HfError } from '../huggingface/http';
 import { datasetFileUrl, validateRepositoryName } from './publicationPaths';
 import { makePublicationViewerLink } from './publicationLinks';
 import { publicationModelFiles, PUBLICATION_MODEL_DIRECTORY } from './publicationAssets';
+import { publicationAssetSummary } from './publicationSummary';
 import { PUBLICATION_JPEG_QUALITY, type PreparedPublication, type PublicationDetails, type PublicationReceipt, type PublicationVisibility } from './types';
 import type { UploadFile } from '../huggingface/hubClient';
 import { DATASET_VIEWER_SETTINGS_FILE } from '../../utils/datasetViewerSettings';
@@ -57,14 +58,15 @@ export function publicationManifest(prepared: PreparedPublication, repoId: strin
 }
 
 /**
- * The dialog and dataset card share one link. Folder publications follow the repository page;
+ * Direct dataset links follow the repository page for folder publications;
  * ZIP publications open the archive pinned to its uploaded revision.
  */
 export function publicationReceipt(prepared: PreparedPublication, repoId: string, dataCommit: string, metadataCommit: string,
   visibility: PublicationVisibility): PublicationReceipt {
   const repoUrl = `https://huggingface.co/datasets/${repoId}`;
   const sourceUrl = prepared.archive ? datasetFileUrl(repoId, dataCommit, prepared.archive.path) : repoUrl;
-  return { repoId, repoUrl, dataCommit, metadataCommit, visibility, viewerUrl: makePublicationViewerLink(prepared.viewerBaseUrl, sourceUrl) };
+  return { repoId, repoUrl, dataCommit, metadataCommit, visibility, viewerUrl: makePublicationViewerLink(prepared.viewerBaseUrl, sourceUrl),
+    assets: publicationAssetSummary(prepared) };
 }
 
 export function publicationMetadata(prepared: PreparedPublication, details: PublicationDetails, repoId: string, dataCommit: string,

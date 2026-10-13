@@ -2,13 +2,16 @@ import { test, expect } from './fixtures/test-fixtures';
 import { loadTestDataset } from './fixtures/load-test-data';
 import { createMockHuggingFace } from './fixtures/mock-hugging-face';
 import { readFileSync } from 'node:fs';
+import { unzipSync } from 'fflate';
 import type { Page } from '@playwright/test';
+import type { PublicationAssetSummary } from '../src/features/datasetPublishing/types';
 
 const shorteningEndpoint = 'https://colmapview.opsiclear.com/hub/api/links';
 const shortUrl = 'https://colmapview.opsiclear.com/hub/HappyTree-AAAAAAAAAAAAAAAA';
 interface ShorteningRequest {
   viewerUrl: string; title: string; thumbnailBase64: string; listed: boolean; managementSecret: string;
   license?: { id?: string };
+  assets?: PublicationAssetSummary;
 }
 const shorteningRequests = new Map<Page, ShorteningRequest[]>();
 
@@ -86,6 +89,13 @@ test.describe('Hugging Face dataset publication', () => {
     expect(requests[0]).toMatchObject({ title: 'Browser test scene', listed: false, license: { id: 'cc-by-4.0' } });
     expect(requests[0].managementSecret).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(JSON.stringify(requests[0])).not.toContain('hf_browser_test_only');
+    const paths = [...hub.files.keys()];
+    expect(requests[0].assets).toEqual({ format: 'folder', imageFormat: 'original',
+      colmap: { files: paths.filter(path => path.startsWith('sparse/0/')).length,
+        cameras: Number(hub.files.get('sparse/0/cameras.bin')!.readBigUInt64LE(0)),
+        points: Number(hub.files.get('sparse/0/points3D.bin')!.readBigUInt64LE(0)) },
+      images: paths.filter(path => path.startsWith('images/')).length, masks: paths.filter(path => path.startsWith('masks/')).length,
+      splats: paths.filter(path => path.startsWith('splats/')).length, viewerSettings: true, preview: true });
     const thumbnail = Buffer.from(requests[0].thumbnailBase64, 'base64');
     expect(thumbnail.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
     expect(thumbnail.byteLength).toBeLessThanOrEqual(64 * 1024);
@@ -217,7 +227,11 @@ test.describe('Hugging Face dataset publication', () => {
         : { json: { url: shortUrl, managementPath: '/hub/manage/HappyTree-AAAAAAAAAAAAAAAA' } });
     });
     await page.goto('/');
-    const image = readFileSync(new URL('./fixtures/test-data/masks/photo.jpg.png', import.meta.url)).toString('base64');
+    const image = await page.evaluate(() => {
+      const canvas = document.createElement('canvas'); canvas.width = 4; canvas.height = 3;
+      const context = canvas.getContext('2d')!; context.fillStyle = '#d04030'; context.fillRect(0, 0, 4, 3);
+      return canvas.toDataURL('image/png').split(',')[1];
+    });
     await loadTestDataset(page, ['photo.jpg', 'photo-2.jpg'].map(name => ({ relativePath: `images/${name}`, name, base64: image })));
     await expect(page.getByText('Source:', { exact: false }).first()).toBeVisible({ timeout: 45000 });
     await openPublisher(page);
@@ -229,15 +243,29 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByLabel('Dataset license', { exact: true }).selectOption('cc0-1.0');
     await dialog.getByRole('combobox', { name: 'Access' }).selectOption('public');
     await dialog.getByRole('checkbox', { name: 'List on Hub', exact: true }).check();
+    await dialog.getByRole('combobox', { name: 'Format' }).selectOption('zip');
+    await dialog.getByRole('combobox', { name: 'Images' }).selectOption('jpeg');
     await dialog.getByRole('button', { name: 'Publish public dataset', exact: true }).click();
-    await expect(dialog.getByRole('button', { name: 'Retry shortening', exact: true })).toBeVisible();
-    await expect(dialog.getByLabel('Viewer link', { exact: true })).toHaveValue(`${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene`);
+    await expect(dialog.getByRole('button', { name: 'Retry shortening', exact: true })).toBeVisible({ timeout: 45000 });
+    // Archive and repository sidecars can use separate data batches before the final metadata commit.
+    const dataCommit = hub.commits.at(-2)!.id;
+    await expect(dialog.getByLabel('Viewer link', { exact: true })).toHaveValue(`${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene/resolve/${dataCommit}/dataset.zip`);
     const writes = [...hub.writes];
     await dialog.getByRole('button', { name: 'Retry shortening', exact: true }).click();
     await expect(dialog.getByLabel('Viewer link', { exact: true })).toHaveValue(shortUrl);
     expect(shorteningRequests.get(page)).toHaveLength(2);
     const requests = shorteningRequests.get(page)!;
     expect(requests[0].listed).toBe(true);
+    const archive = unzipSync(hub.files.get('dataset.zip')!);
+    const paths = Object.keys(archive);
+    for (const path of paths.filter(path => path.startsWith('images/'))) expect([...archive[path].subarray(0, 2)]).toEqual([0xff, 0xd8]);
+    expect(requests[0].assets).toEqual({ format: 'zip', imageFormat: 'jpeg',
+      colmap: { files: paths.filter(path => path.startsWith('sparse/0/')).length,
+        cameras: Number(Buffer.from(archive['sparse/0/cameras.bin']).readBigUInt64LE(0)),
+        points: Number(Buffer.from(archive['sparse/0/points3D.bin']).readBigUInt64LE(0)) },
+      images: paths.filter(path => path.startsWith('images/')).length, masks: paths.filter(path => path.startsWith('masks/')).length,
+      splats: paths.filter(path => path.startsWith('splats/')).length,
+      viewerSettings: 'colmapview.yaml' in archive, preview: hub.files.has('colmapview-preview.png') });
     expect(requests[1]).toEqual(requests[0]);
     expect(hub.writes).toEqual(writes);
     await dialog.getByText('Manage Hub link', { exact: true }).click();

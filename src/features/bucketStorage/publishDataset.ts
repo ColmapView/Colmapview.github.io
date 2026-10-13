@@ -1,7 +1,8 @@
 import type { ColmapManifest } from '../../types/manifest';
 import { DATASET_VIEWER_SETTINGS_FILE } from '../../utils/datasetViewerSettings';
 import { readBoundedResponse } from '../../utils/publishedViewerState';
-import type { PreparedPublication } from '../datasetPublishing/types';
+import type { PreparedPublication, PublicationAssetSummary } from '../datasetPublishing/types';
+import { publicationAssetSummary } from '../datasetPublishing/publicationSummary';
 import { publicationModelFiles, releasePublicationAsset, releasePublicationAssets } from '../datasetPublishing/publicationAssets';
 import { makePublicationViewerLink } from '../datasetPublishing/publicationLinks';
 import { verifyPublicationZip } from '../datasetPublishing/verifyPublicationZip';
@@ -20,6 +21,7 @@ export interface BucketPublicationState {
   prefix?: string;
   viewerUrl?: string;
   manifestUrl?: string;
+  assets?: PublicationAssetSummary;
   error?: string;
 }
 export const isBucketPublishing = (phase: BucketPublicationPhase) => ['preparing', 'uploading', 'verifying', 'cancelling'].includes(phase);
@@ -119,7 +121,8 @@ export function createBucketPublicationController(deps: PublishDeps = {}) {
         }
         check();
         set({ phase: 'completed', message: 'Dataset uploaded.',
-          viewerUrl: makePublicationViewerLink(prepared.viewerBaseUrl, sourceUrl), manifestUrl: archive ? undefined : sourceUrl });
+          viewerUrl: makePublicationViewerLink(prepared.viewerBaseUrl, sourceUrl), manifestUrl: archive ? undefined : sourceUrl,
+          assets: publicationAssetSummary(prepared) });
       } catch (error) {
         set({ phase: signal.aborted ? 'cancelled' : 'failed', message: signal.aborted
           ? 'Upload cancelled. Completed objects remain in the new folder.' : 'Upload could not finish. Completed objects remain in the new folder.',

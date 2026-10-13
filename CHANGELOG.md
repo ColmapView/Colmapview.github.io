@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.11] - 2026-10-13
+
+### Added
+
+- Include the actual upload inventory in Hub metadata: COLMAP file, camera and point counts; images, masks and Gaussian splats; viewer settings and cover presence; folder/ZIP format and original/JPEG encoding.
+- Retain the inner asset inventory when packaging ZIPs and forward it only after verified upload completion. Shortening retries keep the same metadata snapshot.
+
 ## [0.16.10] - 2026-10-12
 
 ### Added

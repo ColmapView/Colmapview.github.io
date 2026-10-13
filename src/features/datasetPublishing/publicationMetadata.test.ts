@@ -27,11 +27,14 @@ describe('publication receipt', () => {
     expect(new URL(receipt.viewerUrl).searchParams.get('url')).toBe(datasetFileUrl('owner/scene', DATA_COMMIT, 'dataset.zip'));
     expect(receipt.repoUrl).toBe('https://huggingface.co/datasets/owner/scene');
     expect(receipt.visibility).toBe('private');
+    expect(receipt.assets).toBeUndefined();
   });
   it('shares the viewer followed by the Hugging Face dataset page', () => {
     const receipt = publicationReceipt(prepared([]), 'owner/scene', DATA_COMMIT, 'e'.repeat(40), 'public');
     expect(receipt.viewerUrl).toBe('https://viewer.example/?url=https://huggingface.co/datasets/owner/scene');
     expect(new URL(receipt.viewerUrl).searchParams.get('url')).toBe('https://huggingface.co/datasets/owner/scene');
+    expect(receipt.assets).toEqual({ format: 'folder', imageFormat: 'original', colmap: { files: 3, cameras: 1, points: 1 },
+      images: 0, masks: 0, splats: 0, viewerSettings: false, preview: false });
   });
 });
 

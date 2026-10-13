@@ -73,13 +73,16 @@ describe('Drive dataset ZIP packaging', () => {
   it('round-trips binary, image, mask, splat and YAML entries and matches Drive’s MD5 checksum', async () => {
     const paths = ['sparse/0/cameras.bin', 'sparse/0/images.bin', 'sparse/0/points3D.bin', 'images/nested/photo.jpg', 'masks/nested/photo.jpg.png', 'splats/scene.sog', 'colmapview.yaml'];
     const progress = vi.fn();
-    const result = await packageDriveArchive(prepared(paths.map(path => asset(path, path))), new AbortController().signal, progress, () => {});
+    const kinds: PublishAsset['kind'][] = ['colmap', 'colmap', 'colmap', 'image', 'mask', 'splat', 'viewer-state'];
+    const result = await packageDriveArchive(prepared(paths.map((path, index) => asset(path, path, kinds[index]))), new AbortController().signal, progress, () => {});
     const bytes = new Uint8Array(await result.blob.arrayBuffer());
     const files = unzipSync(bytes);
     expect(Object.keys(files)).toEqual(paths);
     for (const path of paths) expect(strFromU8(files[path])).toBe(path);
     expect(result.md5).toBe(createHash('md5').update(bytes).digest('hex'));
     expect(result.blob.type).toBe('application/zip');
+    expect(result.assets).toEqual({ format: 'zip', imageFormat: 'original', colmap: { files: 3, cameras: 1, points: 1 },
+      images: 1, masks: 1, splats: 1, viewerSettings: true, preview: false });
     expect(progress).toHaveBeenLastCalledWith('Packaged colmapview.yaml', paths.length, paths.length);
   });
   it('releases transient buffers after each ZIP entry, before packaging the next file', async () => {

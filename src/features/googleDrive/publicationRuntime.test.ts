@@ -2,11 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDeletionStore, useDrivePublicationStatus, useReconstructionStore } from '../../store';
 import { buildReconstruction } from '../../test/builders';
 import './publicationRuntime';
+import type { PublicationAssetSummary } from '../datasetPublishing/types';
 
 const controller = vi.hoisted(() => {
   const listeners = new Set<() => void>();
   let phase = 'idle';
-  let receipt: { shared: boolean; viewerUrl: string } | undefined;
+  let receipt: { shared: boolean; viewerUrl: string; assets?: PublicationAssetSummary } | undefined;
   return {
     invalidate: vi.fn(), cancel: vi.fn(),
     getSnapshot: () => ({ phase, receipt }),
@@ -39,12 +40,14 @@ describe('Drive publication runtime', () => {
 
   it('shortens only after a completed receipt confirms public sharing', () => {
     const viewerUrl = 'https://colmapview.opsiclear.com/?url=https://drive.google.com/file/d/public-id/view';
-    controller.emit('uploading', { shared: true, viewerUrl });
+    const assets: PublicationAssetSummary = { format: 'zip', imageFormat: 'original', colmap: { files: 3, cameras: 1, points: 0 },
+      images: 1, masks: 0, splats: 0, viewerSettings: true, preview: false };
+    controller.emit('uploading', { shared: true, viewerUrl, assets });
     expect(hub.finish).not.toHaveBeenCalled();
-    controller.emit('completed', { shared: false, viewerUrl });
+    controller.emit('completed', { shared: false, viewerUrl, assets });
     expect(hub.finish).not.toHaveBeenCalled();
-    controller.emit('completed', { shared: true, viewerUrl });
-    expect(hub.finish).toHaveBeenCalledExactlyOnceWith(viewerUrl);
+    controller.emit('completed', { shared: true, viewerUrl, assets });
+    expect(hub.finish).toHaveBeenCalledExactlyOnceWith(viewerUrl, assets);
   });
 
   it('keeps the tab-close warning while automatic shortening is still creating the link', () => {

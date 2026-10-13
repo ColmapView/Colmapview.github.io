@@ -50,6 +50,9 @@ export async function loadTestDataset(
 ): Promise<void> {
   const files = [...collectFiles(TEST_DATA_DIR), ...extraFiles];
 
+  // Navigation can finish before React mounts the drop target.
+  await page.getByTestId('drop-zone').waitFor({ state: 'attached' });
+
   await page.evaluate(async (fileData: TestDatasetFileEntry[]) => {
     // Helper: build a nested tree from flat paths
     type TreeNode = { name: string; children: Map<string, TreeNode>; file?: File };

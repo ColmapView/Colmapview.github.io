@@ -3,13 +3,14 @@ import type { PublicationInput } from '../datasetPublishing/preparePublication';
 import { prepareTransferPublication } from '../datasetPublishing/prepareTransferPublication';
 import { packagePublicationZip, type ArchiveProgress } from '../datasetPublishing/packagePublicationZip';
 import { releasePublicationAssets } from '../datasetPublishing/publicationAssets';
-import type { PreparedPublication, PublicationImageFormat } from '../datasetPublishing/types';
+import type { PreparedPublication, PublicationAssetSummary, PublicationImageFormat } from '../datasetPublishing/types';
+import { summarizePublicationAssets } from '../datasetPublishing/publicationSummary';
 import { ARCHIVE_SIZE_LIMIT } from '../../utils/zipValidation';
 import { awaitWithAbort } from '../../utils/awaitWithAbort';
 import { HfError } from '../huggingface/http';
 import { GoogleDrivePublishError } from './upload';
 
-export interface DriveArchive { blob: Blob; md5: string; viewerBaseUrl: string }
+export interface DriveArchive { blob: Blob; md5: string; viewerBaseUrl: string; assets?: PublicationAssetSummary }
 export type DriveArchiveProgress = ArchiveProgress;
 const archiveTooLarge = () => new GoogleDrivePublishError('The dataset ZIP exceeds the Drive publisher’s 2 GiB archive limit. Use a smaller dataset or splat.', undefined, true);
 
@@ -21,7 +22,7 @@ export async function packageDriveArchive(prepared: PreparedPublication, signal:
     const md5 = await awaitWithAbort(createMD5(), signal);
     const { blob } = await packagePublicationZip(prepared.assets, signal, progress, assertCurrent,
       { sizeLimit, onChunk: bytes => md5.update(bytes), imageFormat: prepared.imageFormat });
-    return { blob, md5: md5.digest(), viewerBaseUrl: prepared.viewerBaseUrl };
+    return { blob, md5: md5.digest(), viewerBaseUrl: prepared.viewerBaseUrl, assets: summarizePublicationAssets(prepared, 'zip') };
   } catch (error) {
     if (error instanceof HfError) throw new GoogleDrivePublishError(error.message, error.status, error.permanent);
     throw error;

@@ -2,10 +2,11 @@ import { makeHubThumbnail } from './thumbnail';
 import { timeoutSignal } from '../../utils/abortSignals';
 import { useExportStore } from '../../store';
 import { isPublishedBucketPublic } from '../bucketStorage/publicAccess';
+import type { PublicationAssetSummary } from '../datasetPublishing/types';
 
 export const HUB_BASE_URL = 'https://colmapview.opsiclear.com/hub';
 export interface HubLicense { id?: string; name?: string; url?: string }
-export interface HubMetadata { title: string; description?: string; license?: HubLicense }
+export interface HubMetadata { title: string; description?: string; license?: HubLicense; assets?: PublicationAssetSummary }
 export interface HubPublicationOptions { listed: boolean; preview?: File }
 export interface HubLinkState {
   phase: 'idle' | 'creating' | 'ready' | 'failed';
@@ -17,6 +18,7 @@ export interface HubLinkState {
 interface LinkInput {
   viewerUrl: string; title: string; description: string; thumbnailBase64: string;
   managementSecret: string; listed: boolean; publicAcknowledged: true; license?: HubLicense;
+  assets?: PublicationAssetSummary;
 }
 interface LinkResponse { url: string; managementPath: string }
 interface Dependencies {
@@ -84,6 +86,7 @@ export function createHubPublication(deps: Dependencies = {}) {
         thumbnailBase64: await thumbnail(preview), managementSecret: draft.secret,
         listed: draft.options.listed, publicAcknowledged: true,
         ...(metadata.license ? { license: metadata.license } : {}),
+        ...(metadata.assets ? { assets: metadata.assets } : {}),
       };
       const result = await request(input);
       set({ phase: 'ready', viewerUrl, url: result.url, managementUrl: `${new URL(result.managementPath, HUB_BASE_URL).href}#${draft.secret}` });
@@ -102,7 +105,10 @@ export function createHubPublication(deps: Dependencies = {}) {
         secret: btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '') } : null;
       set({ phase: 'idle' });
     },
-    finish,
+    finish(viewerUrl: string, assets?: PublicationAssetSummary) {
+      if (draft && assets && state.phase === 'idle') draft.metadata.assets = structuredClone(assets);
+      return finish(viewerUrl);
+    },
     retry: () => state.viewerUrl ? finish(state.viewerUrl, true) : Promise.resolve(),
   };
 }

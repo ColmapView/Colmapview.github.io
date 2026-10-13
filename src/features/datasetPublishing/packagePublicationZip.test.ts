@@ -78,6 +78,8 @@ describe('shared publication ZIP', () => {
     expect(strFromU8(files['splats/scene.sog'])).toBe('original splat');
     expect(parseDatasetViewerSettings(strFromU8(files['colmapview.yaml']))).toEqual(input.viewerState);
     expect(result.archive?.files).toEqual(Object.entries(files).map(([path, bytes]) => ({ path, size: bytes.length })));
+    expect(result.archive?.summary).toEqual({ format: 'zip', imageFormat: 'original', colmap: { files: 3, cameras: 1, points: 1 },
+      images: 1, masks: 1, splats: 1, viewerSettings: true, preview: true });
     releases.forEach(release => expect(release).toHaveBeenCalledOnce());
   });
 
@@ -90,6 +92,8 @@ describe('shared publication ZIP', () => {
     expect(strFromU8(archive['colmapview.yaml'])).toBe(await (await result.assets[2].open(signal())).text());
     expect(result.previewPath).toBe('cover.png');
     expect(result.counts).toEqual(input.counts);
+    expect(result.archive?.summary).toEqual({ format: 'zip', imageFormat: 'original', colmap: { files: 3, cameras: 1, points: 1 },
+      images: 1, masks: 1, splats: 1, viewerSettings: true, preview: true });
   });
 
   it.each(['images/a.jpg', '../escape.jpg', '/absolute.jpg'])('rejects duplicate or unsafe paths before reading sources: %s', async path => {

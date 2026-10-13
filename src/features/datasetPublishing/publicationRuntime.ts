@@ -15,7 +15,7 @@ export const publication = createPublicationController(client, createPublication
 const unsubscribeStatus = publication.subscribe(() => usePublicationStatusStore.setState({ phase: publication.getSnapshot().phase }));
 const unsubscribeHub = publication.subscribe(() => {
   const current = publication.getSnapshot();
-  if (current.phase === 'completed' && current.receipt?.visibility === 'public') void hubPublications.huggingFace.finish(current.receipt.viewerUrl);
+  if (current.phase === 'completed' && current.receipt?.visibility === 'public') void hubPublications.huggingFace.finish(current.receipt.viewerUrl, current.receipt.assets);
 });
 let activeSourceKey = getPublicationSourceKey();
 const unsubscribe = useReconstructionStore.subscribe(() => {
