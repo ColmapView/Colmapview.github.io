@@ -1565,6 +1565,7 @@ Covers §1.5, §1.6 and §1.7 (findings L10, L13, L14, L15 and L16, plus the own
 - [ ] **Step 1: Write the failing Workers tests in `tests/pages.test.ts`**
 
 ```ts
+import { env } from 'cloudflare:workers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assets, base, create, input, ip, listings, request, resetState } from './helpers';
 
@@ -1648,6 +1649,21 @@ describe('Hub pages', () => {
     const html = await (await request('/', {}, ip, listings)).text();
     expect(html).toContain(`<img src="/hub/${link.id}/preview.jpg" width="600" height="315" loading="lazy" alt="">`);
     expect(html).not.toContain('alt="Listed result"');
+  });
+
+  it('keeps pagination when a whole page of listings is skipped as invalid', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // These keys sort before every test word pair, so they fill the first page.
+    for (let index = 0; index < 12; index++) {
+      await env.LINKS.put(`listed/Aaa${String(index).padStart(2, '0')}.json`, '{}', { customMetadata: { title: '', createdAt: 'never' } });
+    }
+    const valid = await create(input({ listed: true, title: 'Listed result' }), ip, listings);
+    const first = await (await request('/', {}, ip, listings)).text();
+    expect(first).not.toContain(valid.id);
+    expect(first).not.toContain('No results listed yet.');
+    const next = /href="\/hub\/\?cursor=([^"]+)"/.exec(first);
+    expect(next).not.toBeNull();
+    expect(await (await request(`/?cursor=${next![1]}`, {}, ip, listings)).text()).toContain(valid.id);
   });
 });
 ```
@@ -1911,9 +1927,10 @@ export function galleryPage(location: HubLocation, { links, cursor }: { links: L
       + `<img src="${location.path}/${link.id}/preview.jpg" width="${PREVIEW_WIDTH}" height="${PREVIEW_HEIGHT}" loading="lazy" alt="">`
       + `<span class="gallery-title">${escapeHtml(link.title)}</span>${assets ? `<span class="meta">${escapeHtml(assets)}</span>` : ''}</a>`;
   }).join('');
+  // A page whose entries were all skipped as invalid still links onward.
   const more = cursor ? `<div class="actions"><a class="button" href="${location.path}/?cursor=${encodeURIComponent(cursor)}">More results</a></div>` : '';
   return page(location, 'Shared results', intro('Shared results', 'Results listed by their creators.')
-    + (cards ? `<div class="cards">${cards}</div>${more}` : '<p>No results listed yet.</p>'));
+    + (cards ? `<div class="cards">${cards}</div>` : cursor ? '' : '<p>No results listed yet.</p>') + more);
 }
 
 export function landingPage(location: HubLocation): string {
@@ -3387,6 +3404,18 @@ describe('hubText', () => {
     const combining = hubText('é'.repeat(100), 120);
     expect(graphemes(combining.slice(0, -1)).every(part => part === 'é')).toBe(true);
   });
+
+  it('keeps graphemes whole in browsers without Intl.Segmenter', () => {
+    const segmenter = Intl.Segmenter;
+    Object.defineProperty(Intl, 'Segmenter', { value: undefined, configurable: true, writable: true });
+    try {
+      expect(hubText('é'.repeat(100), 120)).toBe(`${'é'.repeat(59)}…`);
+      expect(hubText('👍🏽'.repeat(70), 120)).toBe(`${'👍🏽'.repeat(29)}…`);
+      expect(hubText(`${'x'.repeat(115)}👩‍👩‍👧`, 120)).toBe(`${'x'.repeat(115)}…`);
+    } finally {
+      Object.defineProperty(Intl, 'Segmenter', { value: segmenter, configurable: true, writable: true });
+    }
+  });
 });
 
 describe('buildHubPayload', () => {
@@ -3619,14 +3648,34 @@ function collapse(value: string): string {
   return text.trim().replace(/\s+/g, ' ');
 }
 
-function graphemeEnds(text: string): number[] {
-  if (typeof Intl.Segmenter === 'function') {
-    return [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)].map(({ index, segment }) => index + segment.length);
-  }
-  const ends: number[] = [];
+/** Code points that belong to the character before them: marks, the zero-width joiner, variation selectors, skin tones. */
+function joinsPrevious(codePoint: number): boolean {
+  return codePoint === 0x200d || codePoint === 0xfe0e || codePoint === 0xfe0f || (codePoint >= 0x1f3fb && codePoint <= 0x1f3ff)
+    || /\p{M}/u.test(String.fromCodePoint(codePoint));
+}
+
+/** The last grapheme boundary at or before `room` UTF-16 units. */
+function graphemeCut(text: string, room: number): number {
   let end = 0;
-  for (const character of text) { end += character.length; ends.push(end); }
-  return ends;
+  if (typeof Intl.Segmenter === 'function') {
+    for (const { index, segment } of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)) {
+      if (index + segment.length > room) break;
+      end = index + segment.length;
+    }
+    return end;
+  }
+  // Without Intl.Segmenter: cut at a code point, then step back while the cut would split a sequence.
+  for (const character of text) {
+    if (end + character.length > room) break;
+    end += character.length;
+  }
+  while (end > 0) {
+    const next = text.codePointAt(end);
+    const previous = text.charCodeAt(end - 1);
+    if (!(next !== undefined && joinsPrevious(next)) && previous !== 0x200d) break;
+    end -= end > 1 && previous >= 0xdc00 && previous <= 0xdfff ? 2 : 1;
+  }
+  return end;
 }
 
 /**
@@ -3638,14 +3687,7 @@ export function hubText(value: string, limit: number): string {
   if (text.length <= limit) return text;
   const room = limit - 1;
   const space = text.lastIndexOf(' ', room);
-  let end = space;
-  if (space < Math.ceil(limit * 0.6)) {
-    end = 0;
-    for (const boundary of graphemeEnds(text)) {
-      if (boundary > room) break;
-      end = boundary;
-    }
-  }
+  const end = space >= Math.ceil(limit * 0.6) ? space : graphemeCut(text, room);
   return `${text.slice(0, end).trimEnd()}…`;
 }
 
@@ -3996,7 +4038,7 @@ describe('bucketAccess', () => {
   it('treats internal hosts as private without any request', async () => {
     const request = vi.fn();
     vi.stubGlobal('fetch', request);
-    for (const host of ['localhost', '127.0.0.1', '10.1.2.3', '192.168.1.20', 'minio', 'nas.local', '[fd12:3456::1]']) {
+    for (const host of ['localhost', '127.0.0.1', '10.1.2.3', '192.168.1.20', 'minio', 'nas.local', '[fd12:3456::1]', '[::ffff:127.0.0.1]', '[::ffff:c0a8:114]']) {
       expect(await bucketAccess(viewer(`http://${host}:9000/bucket/scene.zip`)), host).toBe('private');
     }
     expect(request).not.toHaveBeenCalled();
@@ -4012,7 +4054,9 @@ describe('isInternalHost', () => {
     ['localhost', true], ['127.0.0.1', true], ['10.0.0.1', true], ['172.16.0.1', true], ['172.31.255.255', true], ['192.168.0.1', true],
     ['169.254.1.1', true], ['100.64.0.1', true], ['0.0.0.0', true], ['minio', true], ['bucket.local', true], ['s3.internal', true], ['nas.lan', true],
     ['printer.home.arpa', true], ['[::1]', true], ['[fd00::1]', true], ['[fe80::1]', true], ['host.localhost', true],
+    ['[::ffff:127.0.0.1]', true], ['[::ffff:7f00:1]', true], ['[::ffff:c0a8:1]', true], ['[::ffff:a9fe:101]', true],
     ['172.32.0.1', false], ['8.8.8.8', false], ['bucket.s3.amazonaws.com', false], ['example.com', false], ['[2001:db8::1]', false],
+    ['[::ffff:808:808]', false],
   ])('%s is internal: %s', (host, internal) => expect(isInternalHost(host)).toBe(internal));
 });
 ```
@@ -4038,6 +4082,13 @@ const LOCAL_SUFFIXES = ['.local', '.internal', '.lan', '.home.arpa', '.localhost
 export function isInternalHost(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
   if (host === 'localhost' || host === 'home.arpa' || LOCAL_SUFFIXES.some(suffix => host.endsWith(suffix))) return true;
+  // An IPv4-mapped IPv6 address is judged as its IPv4 address; URLs rewrite ::ffff:127.0.0.1 as ::ffff:7f00:1.
+  const mapped = /^::ffff:(?:(\d{1,3}(?:\.\d{1,3}){3})|([0-9a-f]{1,4}):([0-9a-f]{1,4}))$/.exec(host);
+  if (mapped) {
+    if (mapped[1]) return isInternalHost(mapped[1]);
+    const [high, low] = [Number.parseInt(mapped[2], 16), Number.parseInt(mapped[3], 16)];
+    return isInternalHost([high >> 8, high & 255, low >> 8, low & 255].join('.'));
+  }
   const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
   if (v4) {
     const [a, b] = [Number(v4[1]), Number(v4[2])];
@@ -4132,7 +4183,7 @@ Covers:
 - §2.8 `bindHubPublication`, the `prepare` shape and capture injection.
 
 **Files:**
-- Create: `colmap-webview/src/features/colmapviewHub/hubShareLinks.ts`, `hubShareLinks.test.ts`, `bindHubPublication.ts`, `bindHubPublication.test.ts`
+- Create: `colmap-webview/src/features/colmapviewHub/hubShareLinks.ts`, `hubShareLinks.test.ts`, `bindHubPublication.ts`, `bindHubPublication.test.ts`, `src/features/datasetPublishing/publicationRuntime.test.ts`
 - Replace: `src/features/colmapviewHub/publication.ts`, `src/features/colmapviewHub/publication.test.ts`
 - Modify:
   - `src/features/datasetPublishing/publicationSnapshot.ts`;
@@ -4255,7 +4306,60 @@ describe('bindHubPublication', () => {
 });
 ```
 
-3. Replace `src/features/colmapviewHub/publication.test.ts`:
+3. `src/features/datasetPublishing/publicationRuntime.test.ts` (new). §2.4 needs a finished Hugging Face result to reset on edits and deletion marks too, as Drive and bucket results do.
+
+```ts
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useDeletionStore, useReconstructionStore } from '../../store';
+import { buildReconstruction } from '../../test/builders';
+import './publicationRuntime';
+
+const controller = vi.hoisted(() => {
+  const listeners = new Set<() => void>();
+  let phase = 'idle';
+  return {
+    invalidate: vi.fn(), reset: vi.fn(), cancel: vi.fn(), publish: vi.fn(), retry: vi.fn(),
+    getSnapshot: () => ({ phase }),
+    subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    emit(next: string) { phase = next; listeners.forEach(listener => listener()); },
+  };
+});
+vi.mock('../colmapviewHub/publication', () => ({ hubPublications: { huggingFace: { finish: vi.fn(), prepare: vi.fn(), blocksUnload: vi.fn(() => false) } } }));
+vi.mock('./publishDataset', async importOriginal => ({
+  ...await importOriginal<typeof import('./publishDataset')>(),
+  createPublicationController: () => controller,
+}));
+
+describe('Hugging Face publication runtime', () => {
+  beforeEach(() => {
+    useReconstructionStore.setState({ ...useReconstructionStore.getInitialState(), reconstruction: buildReconstruction(),
+      sourceType: 'url', sourceUrl: 'https://example.test/a/' }, true);
+    useDeletionStore.setState(useDeletionStore.getInitialState(), true);
+    controller.emit('idle');
+    vi.clearAllMocks();
+  });
+
+  it('clears a finished result after an edit or a deletion mark', () => {
+    controller.emit('completed');
+    useReconstructionStore.setState(state => ({ reconstructionEditRevision: state.reconstructionEditRevision + 1 }));
+    expect(controller.reset).toHaveBeenCalledOnce();
+    expect(controller.invalidate).not.toHaveBeenCalled();
+    useDeletionStore.setState({ pendingDeletions: new Set([1]) });
+    expect(controller.reset).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves a running upload alone on edits, and invalidates it when the dataset changes', () => {
+    controller.emit('uploading');
+    useReconstructionStore.setState(state => ({ reconstructionEditRevision: state.reconstructionEditRevision + 1 }));
+    useDeletionStore.setState({ pendingDeletions: new Set([1]) });
+    expect(controller.reset).not.toHaveBeenCalled();
+    useReconstructionStore.setState({ sourceUrl: 'https://example.test/b/' });
+    expect(controller.invalidate).toHaveBeenCalledOnce();
+  });
+});
+```
+
+4. Replace `src/features/colmapviewHub/publication.test.ts`:
 
 ```ts
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -4481,9 +4585,9 @@ describe('requestHubLink', () => {
 
 - [ ] **Step 2: Run them and watch them fail**
 
-Run: `cd colmap-webview && npx vitest run src/features/colmapviewHub`
+Run: `cd colmap-webview && npx vitest run src/features/colmapviewHub src/features/datasetPublishing/publicationRuntime.test.ts`
 
-Expected: FAIL to compile, because `./hubShareLinks`, `./bindHubPublication`, `HubRequestError` and `requestHubLink` don't exist.
+Expected: FAIL. The Hub tests fail to compile because `./hubShareLinks`, `./bindHubPublication`, `HubRequestError` and `requestHubLink` don't exist. The runtime test fails because a finished Hugging Face result survives an edit.
 
 - [ ] **Step 3: Create `src/features/colmapviewHub/hubShareLinks.ts`**
 
@@ -4799,7 +4903,7 @@ These rewrites delete the dead HMR teardown, since `vite.config.ts` sets `hmr: f
 1. Replace `src/features/datasetPublishing/publicationRuntime.ts`:
 
 ```ts
-import { useReconstructionStore, usePublicationStatusStore } from '../../store';
+import { useDeletionStore, useReconstructionStore, usePublicationStatusStore } from '../../store';
 import { hfAuth } from '../huggingface/auth';
 import { createHubClient } from '../huggingface/hubClient';
 import { HfError } from '../huggingface/http';
@@ -4821,10 +4925,18 @@ bindHubPublication(publication, hubPublications.huggingFace, current => ({
   completed: current.phase === 'completed' && current.receipt ? { viewerUrl: current.receipt.viewerUrl, assets: current.receipt.assets } : undefined,
 }));
 let activeSourceKey = getPublicationSourceKey();
-useReconstructionStore.subscribe(() => {
-  const sourceKey = getPublicationSourceKey();
-  if (sourceKey !== activeSourceKey) { activeSourceKey = sourceKey; publication.invalidate(); }
+let editRevision = useReconstructionStore.getState().reconstructionEditRevision;
+/** An edit or deletion mark makes a finished result stale, while the Hub link stays in Previous upload. A running upload is left alone. */
+const clearFinishedResult = () => { if (publication.getSnapshot().phase === 'completed') publication.reset(); };
+useReconstructionStore.subscribe(state => {
+  const sourceKey = getPublicationSourceKey(state);
+  if (sourceKey !== activeSourceKey) {
+    activeSourceKey = sourceKey; editRevision = state.reconstructionEditRevision; publication.invalidate();
+  } else if (state.reconstructionEditRevision !== editRevision) {
+    editRevision = state.reconstructionEditRevision; clearFinishedResult();
+  }
 });
+useDeletionStore.subscribe(state => { if (state.pendingDeletions.size) clearFinishedResult(); });
 
 export function publishCurrentDataset(username: string, details: PublicationDetails, preview: File): Promise<void> {
   hubPublications.huggingFace.prepare({ title: details.title, description: details.description, license: publicationLicenseInfo(details) },
