@@ -107,9 +107,9 @@ export function UploadProgress({ label, message, progressLabel, max, value, deta
   </section>;
 }
 
-export function UploadResult({ label, title, notice, viewerUrl, linkLabel = 'Viewer link', providerLink, onReset, hub }: {
+export function UploadResult({ label, title, notice, viewerUrl, linkLabel = 'Viewer link', providerLink, hub }: {
   label: string; title: ReactNode; notice: string; viewerUrl: string; linkLabel?: string;
-  providerLink?: { url: string; label: string }; onReset: () => void;
+  providerLink?: { url: string; label: string };
   hub?: HubLink;
 }) {
   const hubState = hub?.state.viewerUrl === viewerUrl ? hub.state : undefined;
@@ -125,8 +125,5 @@ export function UploadResult({ label, title, notice, viewerUrl, linkLabel = 'Vie
       </a>}
     </div>
     {hub && hubState && <HubLinkResult state={hubState} controller={hub.controller} />}
-    <div className="publication-actions"><button type="button" className={secondary} disabled={hubState?.phase === 'creating'} onClick={() => {
-      hub?.setListed(false); onReset();
-    }}>Upload another dataset</button></div>
   </section>;
 }

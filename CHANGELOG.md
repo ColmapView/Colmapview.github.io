@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.12] - 2026-10-13
+
+### Changed
+
+- Default Hugging Face and Google Drive uploads to public access, while retaining the Private choice. Bucket uploads continue to use the bucket's configured permissions and public endpoint.
+- Simplify all upload forms by removing Hub listing controls and the extra contents and shortening notes. Public uploads still receive an unlisted short link automatically.
+- Keep completed upload results available when reopening the dialog, without an "Upload another dataset" action.
+
 ## [0.16.11] - 2026-10-13
 
 ### Added

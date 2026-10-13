@@ -3,13 +3,13 @@
 Load a COLMAP reconstruction with its original images, then choose **Share → Google Drive** in the viewer toolbar.
 
 1. **Sign in** with Google and allow ColmapView to create and manage the files it creates in Drive.
-2. Choose a ZIP file name. Files are saved privately in **My Drive** by default.
-3. Leave **Access → Private** selected, or choose **Anyone with the link** to publish a shared dataset. ColmapView enables reader access after verifying the upload. An organization's sharing policy can prevent this step.
+2. Choose a ZIP file name. Files are saved in **My Drive**.
+3. **Access → Anyone with the link** is the default. Choose **Private** to restrict access. ColmapView enables reader access after verifying the upload. An organization's sharing policy can prevent this step.
 4. Click **Save private dataset** or **Publish shared dataset**. After completion, copy the viewer link or open the file in Drive. Loading another dataset returns the dialog to a new form, clearing a finished publication's link or a stopped one's status; editing the model also clears a finished publication's link.
 
 Public viewer links to supported Drive archives need no sign-in when the viewer's Drive API key is configured. For a private archive, use the loading panel's Drive account control to sign in and **Choose archive from Drive** through Google Picker. The recipient must already have permission to download it; a viewer URL alone does not grant access. Loading supports ZIP and TAR, including compressed TAR; publication creates ZIP output only. Loading and publishing share one tab-only connection requesting `drive.file`. Sign-in never starts an upload. Disconnect or Sign out ends that connection for both workflows.
 
-Once public sharing is verified, ColmapView automatically creates a Hub short link with the current-view thumbnail and metadata. **List on Hub** is a separate option, off by default. Private uploads retain their direct viewer link and send nothing to Hub. Save the private **Manage Hub link** URL to remove the card later. If shortening fails, **Retry shortening** retries only that step; it never repeats the Drive upload.
+Once public sharing is verified, ColmapView automatically creates an unlisted Hub short link with the current-view thumbnail and metadata. Private uploads retain their direct viewer link and send nothing to Hub. Save the private **Manage Hub link** URL to remove the card later. If shortening fails, **Retry shortening** retries only that step; it never repeats the Drive upload. Reopening the dialog keeps the completed result available.
 
 ## Dataset contents
 

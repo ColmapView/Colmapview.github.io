@@ -7,7 +7,7 @@ import type { Page } from '@playwright/test';
 import type { PublicationAssetSummary } from '../src/features/datasetPublishing/types';
 
 const shorteningEndpoint = 'https://colmapview.opsiclear.com/hub/api/links';
-const shortUrl = 'https://colmapview.opsiclear.com/hub/HappyTree-AAAAAAAAAAAAAAAA';
+const shortUrl = 'https://colmapview.opsiclear.com/hub/HappyTree';
 interface ShorteningRequest {
   viewerUrl: string; title: string; thumbnailBase64: string; listed: boolean; managementSecret: string;
   license?: { id?: string };
@@ -20,7 +20,7 @@ test.beforeEach(async ({ page }) => {
   shorteningRequests.set(page, requests);
   await page.route(shorteningEndpoint, async route => {
     requests.push(route.request().postDataJSON() as ShorteningRequest);
-    await route.fulfill({ json: { url: shortUrl, managementPath: '/hub/manage/HappyTree-AAAAAAAAAAAAAAAA' } });
+    await route.fulfill({ json: { url: shortUrl, managementPath: '/hub/manage/HappyTree' } });
   });
 });
 
@@ -68,15 +68,16 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByLabel('Repository name', { exact: true }).fill('scene');
     await dialog.getByLabel('Dataset title', { exact: true }).fill('Browser test scene');
     await dialog.getByLabel('Dataset license', { exact: true }).selectOption('cc-by-4.0');
-    await expect(dialog.getByRole('combobox', { name: 'Access' })).toHaveValue('private');
-    await dialog.getByRole('combobox', { name: 'Access' }).selectOption('public');
+    await expect(dialog.getByRole('combobox', { name: 'Access' })).toHaveValue('public');
     await expect(dialog.getByRole('checkbox', { name: 'Shorten URL', exact: true })).toHaveCount(0);
-    await expect(dialog.getByRole('checkbox', { name: 'List on Hub', exact: true })).not.toBeChecked();
+    await expect(dialog.getByRole('checkbox', { name: 'List on Hub', exact: true })).toHaveCount(0);
+    await expect(dialog.getByText(/Public uploads receive|Includes .*images/)).toHaveCount(0);
     await expect(dialog.getByText(/public, discoverable dataset/)).toBeVisible();
     await dialog.screenshot({ path: test.info().outputPath('publication-form.png') });
     expect(hub.writes).toHaveLength(0);
     await dialog.getByRole('button', { name: 'Publish public dataset', exact: true }).click();
     await expect(dialog.getByRole('region', { name: 'Published dataset' })).toBeVisible({ timeout: 45000 });
+    await expect(dialog.getByRole('button', { name: 'Upload another dataset' })).toHaveCount(0);
     await dialog.screenshot({ path: test.info().outputPath('publication-result.png') });
     expect(publisherErrors).toEqual([]);
     expect(hub.files.get('images/photo.jpg')).toEqual(Buffer.from(original, 'base64'));
@@ -84,6 +85,12 @@ test.describe('Hugging Face dataset publication', () => {
     expect(hub.writes.some(path => path.endsWith('/info/lfs/objects/batch'))).toBe(true);
     expect(hub.writes.some(path => path.startsWith('/mock-complete/'))).toBe(true);
     await expect(dialog.getByLabel('Viewer link', { exact: true })).toHaveValue(shortUrl);
+    const completedWrites = [...hub.writes];
+    await dialog.getByRole('button', { name: 'Close publish dataset' }).click();
+    await openPublisher(page);
+    await expect(dialog.getByLabel('Viewer link', { exact: true })).toHaveValue(shortUrl);
+    await expect(dialog.getByLabel('Repository name', { exact: true })).toHaveCount(0);
+    expect(hub.writes).toEqual(completedWrites);
     const requests = shorteningRequests.get(page)!;
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({ title: 'Browser test scene', listed: false, license: { id: 'cc-by-4.0' } });
@@ -168,6 +175,7 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByLabel('Dataset title', { exact: true }).fill('Complete dataset');
     await dialog.getByLabel('Dataset license', { exact: true }).selectOption('cc0-1.0');
     await expect(dialog.getByRole('checkbox', { name: 'List on Hub', exact: true })).toHaveCount(0);
+    await dialog.getByRole('combobox', { name: 'Access' }).selectOption('private');
     await dialog.getByRole('button', { name: 'Save private dataset', exact: true }).click();
     await expect(dialog.getByRole('button', { name: 'Check previous upload and retry' })).toBeVisible({ timeout: 45000 });
     const dataCommit = hub.commits[0].id;
@@ -215,7 +223,7 @@ test.describe('Hugging Face dataset publication', () => {
     }
   });
 
-  test('retries automatic shortening without repeating a public upload and honors opt-in listing', async ({ page, context, baseURL }) => {
+  test('retries automatic shortening without repeating a public upload or listing it', async ({ page, context, baseURL }) => {
     const hub = mockHub();
     await hub.attach(context, baseURL!);
     let attempts = 0;
@@ -224,7 +232,7 @@ test.describe('Hugging Face dataset publication', () => {
       shorteningRequests.get(page)!.push(route.request().postDataJSON() as ShorteningRequest);
       attempts++;
       await route.fulfill(attempts === 1 ? { status: 503, contentType: 'text/plain', body: 'Temporary failure' }
-        : { json: { url: shortUrl, managementPath: '/hub/manage/HappyTree-AAAAAAAAAAAAAAAA' } });
+        : { json: { url: shortUrl, managementPath: '/hub/manage/HappyTree' } });
     });
     await page.goto('/');
     const image = await page.evaluate(() => {
@@ -239,10 +247,10 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(dialog.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
     await dialog.getByLabel('Repository name', { exact: true }).fill('scene');
-    await dialog.getByLabel('Dataset title', { exact: true }).fill('Listed scene');
+    await dialog.getByLabel('Dataset title', { exact: true }).fill('Public scene');
     await dialog.getByLabel('Dataset license', { exact: true }).selectOption('cc0-1.0');
     await dialog.getByRole('combobox', { name: 'Access' }).selectOption('public');
-    await dialog.getByRole('checkbox', { name: 'List on Hub', exact: true }).check();
+    await expect(dialog.getByRole('checkbox', { name: 'List on Hub', exact: true })).toHaveCount(0);
     await dialog.getByRole('combobox', { name: 'Format' }).selectOption('zip');
     await dialog.getByRole('combobox', { name: 'Images' }).selectOption('jpeg');
     await dialog.getByRole('button', { name: 'Publish public dataset', exact: true }).click();
@@ -255,7 +263,7 @@ test.describe('Hugging Face dataset publication', () => {
     await expect(dialog.getByLabel('Viewer link', { exact: true })).toHaveValue(shortUrl);
     expect(shorteningRequests.get(page)).toHaveLength(2);
     const requests = shorteningRequests.get(page)!;
-    expect(requests[0].listed).toBe(true);
+    expect(requests[0].listed).toBe(false);
     const archive = unzipSync(hub.files.get('dataset.zip')!);
     const paths = Object.keys(archive);
     for (const path of paths.filter(path => path.startsWith('images/'))) expect([...archive[path].subarray(0, 2)]).toEqual([0xff, 0xd8]);
@@ -269,7 +277,7 @@ test.describe('Hugging Face dataset publication', () => {
     expect(requests[1]).toEqual(requests[0]);
     expect(hub.writes).toEqual(writes);
     await dialog.getByText('Manage Hub link', { exact: true }).click();
-    await expect(dialog.getByLabel('Hub management link', { exact: true })).toHaveValue(`https://colmapview.opsiclear.com/hub/manage/HappyTree-AAAAAAAAAAAAAAAA#${requests[0].managementSecret}`);
+    await expect(dialog.getByLabel('Hub management link', { exact: true })).toHaveValue(`https://colmapview.opsiclear.com/hub/manage/HappyTree#${requests[0].managementSecret}`);
   });
 
   test('returns to the editable form when the repository name is taken', async ({ page, context, baseURL }) => {

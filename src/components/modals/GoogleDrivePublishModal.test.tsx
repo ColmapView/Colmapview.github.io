@@ -39,27 +39,26 @@ async function renderOpenDialog(onClose: () => void = vi.fn()) {
 }
 
 describe('Google Drive publishing dialog', () => {
-  it('lists only shared datasets when explicitly selected and drops Hub options for private uploads', async () => {
+  it('defaults to public without Hub listing controls and still allows private uploads', async () => {
     await renderOpenDialog();
     expect(screen.queryByRole('checkbox', { name: 'List on Hub' })).toBeNull();
-    fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'public' } });
-    expect(screen.getByRole('checkbox', { name: 'List on Hub' })).not.toBeChecked();
+    expect(screen.getByRole('combobox', { name: 'Access' })).toHaveValue('public');
     expect(screen.queryByRole('checkbox', { name: 'Shorten URL' })).toBeNull();
-    fireEvent.click(screen.getByRole('checkbox', { name: 'List on Hub' }));
+    expect(screen.queryByText(/Public uploads receive|Includes .*images/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Publish shared dataset' }));
-    await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('dataset.zip', true, 'original', { listed: true }));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('dataset.zip', true, 'original'));
     fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'private' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save private dataset' }));
     await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('dataset.zip', false, 'original'));
   });
-  it('offers opt-in JPEG copies and forwards the selected encoding without changing private access', async () => {
+  it('offers opt-in JPEG copies and forwards the selected encoding without changing public access', async () => {
     await renderOpenDialog();
     expect(screen.getByRole('combobox', { name: 'Images' })).toHaveValue('original');
     fireEvent.change(screen.getByRole('combobox', { name: 'Images' }), { target: { value: 'jpeg' } });
     expect(screen.getByText(/Lossy, full resolution/)).toBeVisible();
     expect(screen.queryByText(/Original image metadata is retained/)).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Save private dataset' }));
-    await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('dataset.zip', false, 'jpeg'));
+    fireEvent.click(screen.getByRole('button', { name: 'Publish shared dataset' }));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('dataset.zip', true, 'jpeg'));
   });
   it('shows a read-only current-view preview without cover editing or loading controls', async () => {
     await renderOpenDialog();
@@ -77,15 +76,15 @@ describe('Google Drive publishing dialog', () => {
     actions.preview = { url: null, busy };
     await renderOpenDialog();
     expect(screen.getByText(message)).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Save private dataset' })).toBeEnabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Save private dataset' }));
-    await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('dataset.zip', false, 'original'));
+    expect(screen.getByRole('button', { name: 'Publish shared dataset' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Publish shared dataset' }));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('dataset.zip', true, 'original'));
   });
   it('asks for a dataset and disables upload before a scene is loaded', async () => {
     actions.reconstruction = null; actions.sourceKey = ''; actions.preview = { url: null, busy: false };
     await renderOpenDialog();
     expect(screen.getByText('Load a COLMAP dataset to preview it.')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Save private dataset' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Publish shared dataset' })).toBeDisabled();
   });
   it('retains the preview during upload and stops capture when busy or hidden', async () => {
     const close = vi.fn();
@@ -100,23 +99,23 @@ describe('Google Drive publishing dialog', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(actions.cancel).not.toHaveBeenCalled();
   });
-  it('defaults to private and requires an explicit choice for public link sharing', async () => {
+  it('defaults to public sharing and allows an explicit private choice', async () => {
     render(<GoogleDrivePublishModal isOpen onClose={vi.fn()} />);
     expect(screen.getByLabelText('File name')).toHaveValue('dataset.zip');
-    expect(screen.getByText(/ZIP limit: 2 GiB/)).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Access' })).toHaveValue('private');
+    expect(screen.queryByText(/ZIP limit: 2 GiB/)).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Access' })).toHaveValue('public');
     fireEvent.change(screen.getByLabelText('File name'), { target: { value: 'my-scene' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save private dataset' }));
-    await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('my-scene', false, 'original'));
-    fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'public' } });
     expect(screen.getByText('Link sharing is enabled after the upload is verified.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Publish shared dataset' }));
     await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('my-scene', true, 'original'));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'private' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save private dataset' }));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('my-scene', false, 'original'));
   });
   it('keeps upload disabled until sign-in, and does not publish when sign-in starts', async () => {
     actions.auth = { status: 'disconnected', error: null };
     render(<GoogleDrivePublishModal isOpen onClose={vi.fn()} />);
-    expect(screen.getByRole('button', { name: 'Save private dataset' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Publish shared dataset' })).toBeDisabled();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
     expect(actions.connect).toHaveBeenCalledOnce();
@@ -135,7 +134,7 @@ describe('Google Drive publishing dialog', () => {
   it('cancels publication when signing out and disables upload with unapplied deletions', async () => {
     actions.pending = 2;
     await renderOpenDialog();
-    expect(screen.getByRole('button', { name: 'Save private dataset' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Publish shared dataset' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Apply deletions and continue' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(actions.cancel).toHaveBeenCalledOnce();
@@ -143,11 +142,20 @@ describe('Google Drive publishing dialog', () => {
   });
   it('shows the verified private viewer link with the correct access requirement', async () => {
     actions.publish = { phase: 'completed', receipt: { fileId: 'FILE_ID', driveUrl: 'https://drive.google.com/file/d/FILE_ID/view', viewerUrl: 'https://viewer.example/?url=drive-link', shared: false } };
-    await renderOpenDialog();
+    const onClose = vi.fn();
+    const { rerender } = await renderOpenDialog(onClose);
     expect(screen.getByLabelText('Viewer link')).toHaveValue('https://viewer.example/?url=drive-link');
     expect(screen.getByText('Private. Viewers need permission to this file and must choose it in the Drive picker.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Open viewer/ })).toHaveAttribute('href', actions.publish.receipt!.viewerUrl);
     expect(screen.queryByRole('button', { name: 'Save private dataset' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Upload another dataset' })).toBeNull();
+    rerender(<GoogleDrivePublishModal isOpen={false} onClose={onClose} />);
+    rerender(<GoogleDrivePublishModal isOpen onClose={onClose} />);
+    await act(async () => Promise.resolve());
+    expect(screen.getByLabelText('Viewer link')).toHaveValue(actions.publish.receipt!.viewerUrl);
+    expect(screen.queryByLabelText('File name')).toBeNull();
+    expect(actions.reset).not.toHaveBeenCalled();
+    expect(actions.publishDataset).not.toHaveBeenCalled();
   });
   it('provides a retry and Drive file link for a partially completed publication', async () => {
     actions.publish = { phase: 'failed', fileUrl: 'https://drive.google.com/file/d/FILE_ID/view', message: 'Upload stopped.', error: 'Sharing was denied.', canRetry: true };

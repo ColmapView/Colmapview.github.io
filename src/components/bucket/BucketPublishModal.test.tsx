@@ -35,16 +35,15 @@ function open() {
 vi.mock('../modals/usePublicationPreview', () => ({ usePublicationPreview: () => ({ url: 'blob:current-view', busy: false }) }));
 
 describe('bucket publisher', () => {
-  it('explains automatic public-link checks and defaults gallery listing to off', async () => {
+  it('uploads without Hub listing controls or extra contents notes', async () => {
     bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
     useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }) });
     open();
-    expect(screen.getByText(/Private uploads keep their original link/)).toBeVisible();
-    expect(screen.getByRole('checkbox', { name: 'List on Hub' })).not.toBeChecked();
+    expect(screen.queryByText(/Private uploads keep|Includes .*images/)).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: 'List on Hub' })).toBeNull();
     expect(screen.queryByRole('checkbox', { name: 'Shorten URL' })).toBeNull();
-    fireEvent.click(screen.getByRole('checkbox', { name: 'List on Hub' }));
     fireEvent.click(screen.getByRole('button', { name: 'Upload dataset' }));
-    await waitFor(() => expect(publication.publish).toHaveBeenLastCalledWith('dataset', 'folder', 'original', { listed: true }));
+    await waitFor(() => expect(publication.publish).toHaveBeenLastCalledWith('dataset', 'folder', 'original'));
   });
   it('offers JPEG copies for ZIPs and keeps Folder uploads on original images', async () => {
     bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
@@ -161,13 +160,18 @@ describe('bucket publisher', () => {
     act(() => bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' }));
     publication.state = { phase: 'completed', message: 'Dataset uploaded.', filesDone: 2, filesTotal: 2, bytesDone: 10,
       viewerUrl: 'https://viewer.example/?url=https://s3.example/bucket/dataset/manifest.json' };
-    open();
+    const props = open();
     expect(screen.getByLabelText('Bucket viewer link')).toHaveValue(publication.state.viewerUrl);
     expect(screen.getByText('Access follows your bucket permissions. Viewers need bucket access for private files.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open viewer' })).toHaveAttribute('href', publication.state.viewerUrl);
-    fireEvent.click(screen.getByRole('button', { name: 'Upload another dataset' }));
-    expect(publication.reset).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('button', { name: 'Upload another dataset' })).toBeNull();
+    props.rerender(<BucketPublishModal isOpen={false} onClose={props.onClose} />);
+    props.rerender(<BucketPublishModal isOpen onClose={props.onClose} />);
+    expect(screen.getByLabelText('Bucket viewer link')).toHaveValue(publication.state.viewerUrl);
+    expect(screen.queryByLabelText('Upload folder')).toBeNull();
+    expect(publication.reset).not.toHaveBeenCalled();
+    expect(publication.publish).not.toHaveBeenCalled();
   });
   it.each(['failed', 'cancelled'] as const)('identifies and browses the %s upload folder including source files before reset', async phase => {
     bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
