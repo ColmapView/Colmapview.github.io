@@ -1,15 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createHubPublication, hubViewerUrl } from './publication';
+import { createHubPublication } from './publication';
 import type { PublicationAssetSummary } from '../datasetPublishing/types';
 
 const preview = new File(['normalized preview'], 'preview.png', { type: 'image/png' });
 const viewer = 'https://colmapview.opsiclear.com/?url=https%3A%2F%2Fstorage.example%2Fmanifest.json#camera=43';
-const result = { url: 'https://colmapview.opsiclear.com/hub/HappyTree-AAAAAAAAAAAAAAAA', managementPath: '/hub/manage/HappyTree-AAAAAAAAAAAAAAAA' };
+const HUB = 'https://colmapview.opsiclear.com/hub';
+const result = { url: `${HUB}/HappyTree-AAAAAAAAAAAAAAAA`, managementUrl: `${HUB}/manage/HappyTree-AAAAAAAAAAAAAAAA` };
 
 describe('automatic Hub step after public upload', () => {
   it('saves nothing when the private upload has no Hub draft', async () => {
     const request = vi.fn();
-    const controller = createHubPublication({ request });
+    const controller = createHubPublication({ request, baseUrl: () => HUB });
     controller.prepare({ title: 'Scene' });
     await controller.finish(viewer);
     expect(request).not.toHaveBeenCalled();
@@ -19,17 +20,17 @@ describe('automatic Hub step after public upload', () => {
   it('waits for the verified upload URL, keeps license and view settings, and does not save provider credentials', async () => {
     const thumbnail = vi.fn().mockResolvedValue('small-jpeg-base64');
     const request = vi.fn().mockResolvedValue(result);
-    const controller = createHubPublication({ thumbnail, request });
+    const controller = createHubPublication({ thumbnail, request, baseUrl: () => HUB });
     const license = { id: 'cc-by-4.0', name: 'CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' };
     controller.prepare({ title: 'Scene', description: 'Reconstruction', license }, { listed: false, preview });
     expect(request).not.toHaveBeenCalled();
     await controller.finish(viewer);
-    const payload = request.mock.calls[0][0];
+    const payload = request.mock.calls[0][1];
     expect(payload).toEqual({ viewerUrl: viewer, title: 'Scene', description: 'Reconstruction', license,
       thumbnailBase64: 'small-jpeg-base64', managementSecret: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/), listed: false, publicAcknowledged: true });
     expect(thumbnail).toHaveBeenCalledWith(preview);
     expect(controller.getSnapshot()).toEqual({ phase: 'ready', viewerUrl: viewer, url: result.url,
-      managementUrl: `https://colmapview.opsiclear.com${result.managementPath}#${payload.managementSecret}` });
+      managementUrl: `${result.managementUrl}#${payload.managementSecret}` });
     await controller.finish(viewer);
     expect(request).toHaveBeenCalledOnce();
   });
@@ -37,15 +38,15 @@ describe('automatic Hub step after public upload', () => {
   it('retries lost responses with the same payload and ownership key without repeating the storage upload', async () => {
     const thumbnail = vi.fn().mockResolvedValue('small-jpeg-base64');
     const request = vi.fn().mockRejectedValueOnce(new Error('Connection lost')).mockResolvedValue(result);
-    const controller = createHubPublication({ thumbnail, request });
+    const controller = createHubPublication({ thumbnail, request, baseUrl: () => HUB });
     controller.prepare({ title: 'Scene' }, { listed: true, preview });
     await controller.finish(viewer);
     expect(controller.getSnapshot()).toEqual({ phase: 'failed', viewerUrl: viewer, error: 'Connection lost' });
     await controller.finish(viewer);
     expect(request).toHaveBeenCalledOnce();
     await controller.retry();
-    expect(request.mock.calls[1][0]).toBe(request.mock.calls[0][0]);
-    expect(request.mock.calls[1][0].listed).toBe(true);
+    expect(request.mock.calls[1][1]).toBe(request.mock.calls[0][1]);
+    expect(request.mock.calls[1][1].listed).toBe(true);
     expect(thumbnail).toHaveBeenCalledOnce();
     expect(controller.getSnapshot().phase).toBe('ready');
   });
@@ -56,20 +57,20 @@ describe('automatic Hub step after public upload', () => {
     const original = structuredClone(assets);
     const request = vi.fn().mockResolvedValue(result);
     const thumbnail = vi.fn().mockRejectedValueOnce(new Error('Preview decode failed')).mockResolvedValue('jpeg');
-    const controller = createHubPublication({ request, thumbnail });
+    const controller = createHubPublication({ request, thumbnail, baseUrl: () => HUB });
     controller.prepare({ title: 'Scene' }, { listed: false, preview });
     await controller.finish(viewer, assets);
     expect(request).not.toHaveBeenCalled();
     assets.masks = 99;
     await controller.retry();
     expect(request).toHaveBeenCalledOnce();
-    expect(request.mock.calls[0][0].assets).toEqual(original);
+    expect(request.mock.calls[0][1].assets).toEqual(original);
   });
 
   it('ignores duplicate completion notifications while creating a link', async () => {
     let resolve!: (value: typeof result) => void;
     const request = vi.fn(() => new Promise<typeof result>(done => { resolve = done; }));
-    const controller = createHubPublication({ thumbnail: async () => 'jpeg', request });
+    const controller = createHubPublication({ thumbnail: async () => 'jpeg', request, baseUrl: () => HUB });
     controller.prepare({ title: 'Scene' }, { listed: false, preview });
     const first = controller.finish(viewer);
     await Promise.resolve();
@@ -83,29 +84,44 @@ describe('automatic Hub step after public upload', () => {
 
   it('bounds card metadata without altering the original upload details', async () => {
     const request = vi.fn().mockResolvedValue(result);
-    const controller = createHubPublication({ thumbnail: async () => 'jpeg', request });
+    const controller = createHubPublication({ thumbnail: async () => 'jpeg', request, baseUrl: () => HUB });
     const metadata = { title: 'A'.repeat(200), description: 'B'.repeat(10000) };
     controller.prepare(metadata, { listed: false, preview });
     await controller.finish(viewer);
-    expect(request.mock.calls[0][0].title).toHaveLength(120);
-    expect(request.mock.calls[0][0].description).toHaveLength(280);
+    expect(request.mock.calls[0][1].title).toHaveLength(120);
+    expect(request.mock.calls[0][1].description).toHaveLength(280);
     expect(metadata.title).toHaveLength(200);
     expect(metadata.description).toHaveLength(10000);
   });
 
-  it('uses the hosted viewer for local links while preserving the source URL and camera fragment', () => {
-    const local = new URL(viewer);
-    local.protocol = 'http:';
-    local.host = 'localhost:5199';
-    expect(hubViewerUrl(local.href)).toBe(viewer);
-    expect(hubViewerUrl('https://colmapview.github.io/latest/?url=https://storage.example/manifest.json#camera=43'))
-      .toBe('https://colmapview.github.io/latest/?url=https://storage.example/manifest.json#camera=43');
+  it('creates nothing when the Hub is off for this host', async () => {
+    const request = vi.fn();
+    const controller = createHubPublication({ request, baseUrl: () => null, thumbnail: async () => 'jpeg' });
+    controller.prepare({ title: 'Scene' }, { listed: false, preview });
+    await controller.finish(viewer);
+    expect(request).not.toHaveBeenCalled();
+    expect(controller.getSnapshot()).toEqual({ phase: 'idle' });
+  });
+
+  it('sends the viewer link unchanged and accepts only links under the configured Hub', async () => {
+    const local = 'http://localhost:5173/?url=https%3A%2F%2Fstorage.example%2Fscene.zip';
+    const fetch = vi.fn(async (_url: string, _init: RequestInit) =>
+      Response.json({ url: 'https://elsewhere.example/hub/X', managementPath: '/hub/manage/X' }, { status: 201 }));
+    vi.stubGlobal('fetch', fetch);
+    const controller = createHubPublication({ baseUrl: () => 'https://hub.invalid/hub', thumbnail: async () => 'jpeg' });
+    controller.prepare({ title: 'Scene' }, { listed: false, preview });
+    await controller.finish(local);
+    const [url, init] = fetch.mock.calls[0];
+    expect(url).toBe('https://hub.invalid/hub/api/links');
+    expect(JSON.parse(String(init.body)).viewerUrl).toBe(local);
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', error: 'The Hub returned an invalid link.' });
+    vi.unstubAllGlobals();
   });
 
   it('skips a private bucket without preparing or uploading its thumbnail', async () => {
     const request = vi.fn();
     const thumbnail = vi.fn();
-    const controller = createHubPublication({ request, thumbnail, publicAccess: async () => false });
+    const controller = createHubPublication({ request, thumbnail, publicAccess: async () => false, baseUrl: () => HUB });
     controller.prepare({ title: 'Private scene' }, { listed: true, preview });
     await controller.finish(viewer);
     expect(request).not.toHaveBeenCalled();
@@ -117,7 +133,7 @@ describe('automatic Hub step after public upload', () => {
     const capture = vi.fn().mockResolvedValue(preview);
     const thumbnail = vi.fn().mockResolvedValue('jpeg');
     const request = vi.fn().mockResolvedValue(result);
-    const controller = createHubPublication({ request, thumbnail, capture });
+    const controller = createHubPublication({ request, thumbnail, capture, baseUrl: () => HUB });
     controller.prepare({ title: 'Scene' }, { listed: false });
     await Promise.resolve();
     expect(capture).toHaveBeenCalledOnce();

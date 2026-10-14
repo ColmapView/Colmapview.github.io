@@ -13,6 +13,7 @@ interface ImportMetaEnv {
   readonly VITE_HF_AUTH_ENABLED?: string;
   readonly VITE_HF_OAUTH_CLIENT_ID?: string;
   readonly VITE_HF_OAUTH_REDIRECT_URI?: string;
+  readonly VITE_HUB_BASE_URL?: string;
 }
 
 // File System Access API types

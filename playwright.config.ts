@@ -116,6 +116,7 @@ export default defineConfig({
       VITE_HF_PUBLISH_ENABLED: 'true',
       VITE_HF_OAUTH_CLIENT_ID: 'colmapview-browser-test',
       VITE_HF_OAUTH_REDIRECT_URI: `${testOrigin}/hf-callback.html`,
+      VITE_HUB_BASE_URL: 'https://hub.invalid/hub',
     },
     timeout: 120000,
   },

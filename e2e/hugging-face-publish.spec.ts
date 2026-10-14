@@ -6,8 +6,8 @@ import { unzipSync } from 'fflate';
 import type { Page } from '@playwright/test';
 import type { PublicationAssetSummary } from '../src/features/datasetPublishing/types';
 
-const shorteningEndpoint = 'https://colmapview.opsiclear.com/hub/api/links';
-const shortUrl = 'https://colmapview.opsiclear.com/hub/HappyTree';
+const shorteningEndpoint = 'https://hub.invalid/hub/api/links';
+const shortUrl = 'https://hub.invalid/hub/HappyTree';
 interface ShorteningRequest {
   viewerUrl: string; title: string; thumbnailBase64: string; listed: boolean; managementSecret: string;
   license?: { id?: string };
@@ -127,7 +127,7 @@ test.describe('Hugging Face dataset publication', () => {
     const viewerUrl = `${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene`;
     expect(readmeViewerUrl).toBe(viewerUrl);
     expect(readme).toContain(`Viewer link: <${viewerUrl}>`);
-    expect(requests[0].viewerUrl).toBe('https://colmapview.opsiclear.com/?url=https://huggingface.co/datasets/publisher/scene');
+    expect(requests[0].viewerUrl).toBe(viewerUrl);
     expect(hub.visibility).toBe('public');
     expect(hub.reads.filter(read => /\/(resolve|tree)\//.test(read.path)).every(read => !read.authorization)).toBe(true);
     for (const mode of ['shared', 'manual'] as const) {
@@ -277,7 +277,7 @@ test.describe('Hugging Face dataset publication', () => {
     expect(requests[1]).toEqual(requests[0]);
     expect(hub.writes).toEqual(writes);
     await dialog.getByText('Manage Hub link', { exact: true }).click();
-    await expect(dialog.getByLabel('Hub management link', { exact: true })).toHaveValue(`https://colmapview.opsiclear.com/hub/manage/HappyTree#${requests[0].managementSecret}`);
+    await expect(dialog.getByLabel('Hub management link', { exact: true })).toHaveValue(`https://hub.invalid/hub/manage/HappyTree#${requests[0].managementSecret}`);
   });
 
   test('returns to the editable form when the repository name is taken', async ({ page, context, baseURL }) => {

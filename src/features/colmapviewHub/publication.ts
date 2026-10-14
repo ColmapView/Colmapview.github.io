@@ -1,10 +1,10 @@
+import { getHubBaseUrl } from './config';
 import { makeHubThumbnail } from './thumbnail';
 import { timeoutSignal } from '../../utils/abortSignals';
 import { useExportStore } from '../../store';
 import { isPublishedBucketPublic } from '../bucketStorage/publicAccess';
 import type { PublicationAssetSummary } from '../datasetPublishing/types';
 
-export const HUB_BASE_URL = 'https://colmapview.opsiclear.com/hub';
 export interface HubLicense { id?: string; name?: string; url?: string }
 export interface HubMetadata { title: string; description?: string; license?: HubLicense; assets?: PublicationAssetSummary }
 export interface HubPublicationOptions { listed: boolean; preview?: File }
@@ -20,28 +20,17 @@ interface LinkInput {
   managementSecret: string; listed: boolean; publicAcknowledged: true; license?: HubLicense;
   assets?: PublicationAssetSummary;
 }
-interface LinkResponse { url: string; managementPath: string }
+interface LinkResponse { url: string; managementUrl: string }
 interface Dependencies {
+  baseUrl?: () => string | null;
   thumbnail?: typeof makeHubThumbnail;
-  request?: (input: LinkInput) => Promise<LinkResponse>;
+  request?: (baseUrl: string, input: LinkInput) => Promise<LinkResponse>;
   capture?: () => Promise<Blob | null>;
   publicAccess?: (viewerUrl: string) => Promise<boolean>;
 }
 
-/** Local publishing uses the hosted viewer for its public card; source URL and settings stay intact. */
-export function hubViewerUrl(value: string): string {
-  const url = new URL(value);
-  if (['localhost', '127.0.0.1'].includes(url.hostname)) {
-    const hosted = new URL('https://colmapview.opsiclear.com/');
-    hosted.search = url.search;
-    hosted.hash = url.hash;
-    return hosted.href;
-  }
-  return url.href;
-}
-
-async function requestLink(input: LinkInput): Promise<LinkResponse> {
-  const response = await fetch(`${HUB_BASE_URL}/api/links`, {
+async function requestLink(baseUrl: string, input: LinkInput): Promise<LinkResponse> {
+  const response = await fetch(`${baseUrl}/api/links`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal: timeoutSignal(15000),
   });
   const result: unknown = await response.json().catch(() => null);
@@ -51,11 +40,11 @@ async function requestLink(input: LinkInput): Promise<LinkResponse> {
   }
   if (!result || typeof result !== 'object' || !('url' in result) || typeof result.url !== 'string'
     || !('managementPath' in result) || typeof result.managementPath !== 'string') throw new Error('The Hub returned an invalid link.');
+  const root = `${baseUrl}/`;
   const url = new URL(result.url);
-  const management = new URL(result.managementPath, HUB_BASE_URL);
-  if (url.origin !== new URL(HUB_BASE_URL).origin || !url.pathname.startsWith('/hub/') || management.origin !== url.origin
-    || !management.pathname.startsWith('/hub/manage/')) throw new Error('The Hub returned an invalid link.');
-  return { url: url.href, managementPath: management.href };
+  const management = new URL(result.managementPath, root);
+  if (!url.href.startsWith(root) || !management.href.startsWith(`${root}manage/`)) throw new Error('The Hub returned an invalid link.');
+  return { url: url.href, managementUrl: management.href };
 }
 
 /** Automatic step after a public storage upload. Retries keep the ownership key and exact payload. */
@@ -67,9 +56,11 @@ export function createHubPublication(deps: Dependencies = {}) {
   const set = (next: HubLinkState) => { state = next; listeners.forEach(listener => listener()); };
   const thumbnail = deps.thumbnail ?? makeHubThumbnail;
   const request = deps.request ?? requestLink;
+  const baseUrl = deps.baseUrl ?? (() => getHubBaseUrl());
   const capture = deps.capture ?? (() => useExportStore.getState().getScreenshotBlob?.() ?? Promise.resolve(null));
   const finish = async (viewerUrl: string, retry = false): Promise<void> => {
-    if (!draft || state.phase === 'creating' || (!retry && state.viewerUrl === viewerUrl)) return;
+    const base = baseUrl();
+    if (!base || !draft || state.phase === 'creating' || (!retry && state.viewerUrl === viewerUrl)) return;
     set({ phase: 'creating', viewerUrl });
     try {
       if (deps.publicAccess && !await deps.publicAccess(viewerUrl)) {
@@ -81,15 +72,15 @@ export function createHubPublication(deps: Dependencies = {}) {
       const preview = await draft.preview;
       if (!preview) throw new Error('The upload preview is unavailable.');
       input ??= {
-        viewerUrl: hubViewerUrl(viewerUrl), title: metadata.title.trim().slice(0, 120),
+        viewerUrl, title: metadata.title.trim().slice(0, 120),
         description: (metadata.description ?? '').trim().slice(0, 280),
         thumbnailBase64: await thumbnail(preview), managementSecret: draft.secret,
         listed: draft.options.listed, publicAcknowledged: true,
         ...(metadata.license ? { license: metadata.license } : {}),
         ...(metadata.assets ? { assets: metadata.assets } : {}),
       };
-      const result = await request(input);
-      set({ phase: 'ready', viewerUrl, url: result.url, managementUrl: `${new URL(result.managementPath, HUB_BASE_URL).href}#${draft.secret}` });
+      const result = await request(base, input);
+      set({ phase: 'ready', viewerUrl, url: result.url, managementUrl: `${result.managementUrl}#${draft.secret}` });
     } catch (error) {
       set({ phase: 'failed', viewerUrl, error: error instanceof Error ? error.message : 'The Hub could not save this link.' });
     }
@@ -100,7 +91,7 @@ export function createHubPublication(deps: Dependencies = {}) {
     prepare(metadata: HubMetadata, options?: HubPublicationOptions) {
       if (state.phase === 'creating') throw new Error('Wait for the current short link to finish.');
       input = null;
-      draft = options ? { metadata: structuredClone(metadata), options: { ...options },
+      draft = options && baseUrl() ? { metadata: structuredClone(metadata), options: { ...options },
         preview: options.preview ? Promise.resolve(options.preview) : Promise.resolve().then(capture).catch(() => null),
         secret: btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '') } : null;
       set({ phase: 'idle' });
