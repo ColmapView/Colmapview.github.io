@@ -34,7 +34,7 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
   const hub = useHubLink('bucket');
   const publish = async () => {
     setError(null);
-    try { await facade.publishDataset(folder, format, selectedImageFormat, ...(preview.file ? hub.options(preview.file) : [])); } catch (failure) { setError(bucketErrorMessage(failure)); }
+    try { await facade.publishDataset(folder, format, selectedImageFormat, preview.file ?? null); } catch (failure) { setError(bucketErrorMessage(failure)); }
   };
   const disconnect = () => {
     browser.cancel(); setInspecting(false); bucketPublication.cancel(); bucketConnection.disconnect();

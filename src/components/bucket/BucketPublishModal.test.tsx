@@ -43,7 +43,7 @@ describe('bucket publisher', () => {
     expect(screen.queryByRole('checkbox', { name: 'List on Hub' })).toBeNull();
     expect(screen.queryByRole('checkbox', { name: 'Shorten URL' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Upload dataset' }));
-    await waitFor(() => expect(publication.publish).toHaveBeenLastCalledWith('dataset', 'folder', 'original'));
+    await waitFor(() => expect(publication.publish).toHaveBeenLastCalledWith('dataset', 'folder', 'original', null));
   });
   it('offers JPEG copies for ZIPs and keeps Folder uploads on original images', async () => {
     bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
@@ -55,11 +55,11 @@ describe('bucket publisher', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Images' }), { target: { value: 'jpeg' } });
     expect(screen.getByText(/Lossy, full resolution/)).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Upload dataset' }));
-    await waitFor(() => expect(publication.publish).toHaveBeenLastCalledWith('dataset', 'zip', 'jpeg'));
+    await waitFor(() => expect(publication.publish).toHaveBeenLastCalledWith('dataset', 'zip', 'jpeg', null));
     fireEvent.change(screen.getByRole('combobox', { name: 'Format' }), { target: { value: 'folder' } });
     expect(screen.queryByRole('combobox', { name: 'Images' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Upload dataset' }));
-    await waitFor(() => expect(publication.publish).toHaveBeenLastCalledWith('dataset', 'folder', 'original'));
+    await waitFor(() => expect(publication.publish).toHaveBeenLastCalledWith('dataset', 'folder', 'original', null));
   });
   it('offers a ZIP option without changing bucket access or adding loading controls', async () => {
     bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
@@ -69,7 +69,7 @@ describe('bucket publisher', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Format' }), { target: { value: 'zip' } });
     expect(screen.getByRole('textbox', { name: 'Access' })).toHaveValue('Bucket permissions');
     fireEvent.click(screen.getByRole('button', { name: 'Upload dataset' }));
-    await waitFor(() => expect(publication.publish).toHaveBeenCalledExactlyOnceWith('dataset', 'zip', 'original'));
+    await waitFor(() => expect(publication.publish).toHaveBeenCalledExactlyOnceWith('dataset', 'zip', 'original', null));
     expect(screen.queryByRole('button', { name: 'Load dataset' })).toBeNull();
   });
   it('opens an upload connection form with a current-view preview and no loading tabs', () => {
@@ -154,7 +154,7 @@ describe('bucket publisher', () => {
     expect(screen.getByRole('textbox', { name: 'Access' })).toHaveValue('Bucket permissions');
     expect(screen.getByRole('textbox', { name: 'Access' })).toHaveAttribute('readonly');
     fireEvent.click(screen.getByRole('button', { name: 'Upload dataset' }));
-    expect(publication.publish).toHaveBeenCalledExactlyOnceWith('dataset', 'folder', 'original');
+    expect(publication.publish).toHaveBeenCalledExactlyOnceWith('dataset', 'folder', 'original', null);
   });
   it('shows the same viewer link and result actions without claiming the bucket is public', () => {
     act(() => bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' }));
@@ -211,7 +211,7 @@ describe('bucket publisher', () => {
     expect(button).toBeEnabled();
     fireEvent.change(screen.getByRole('textbox', { name: 'Upload folder' }), { target: { value: 'datasets/my-scene' } });
     fireEvent.click(button);
-    expect(publication.publish).toHaveBeenCalledExactlyOnceWith('datasets/my-scene', 'folder', 'original');
+    expect(publication.publish).toHaveBeenCalledExactlyOnceWith('datasets/my-scene', 'folder', 'original', null);
     act(() => useDeletionStore.setState({ pendingDeletions: new Set([1]) }));
     expect(button).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Apply deletions and continue' })).toBeVisible();

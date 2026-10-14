@@ -1,117 +1,224 @@
-import { getHubBaseUrl } from './config';
 import { makeHubThumbnail } from './thumbnail';
+import { getHubBaseUrl } from './config';
+import { buildHubPayload, type HubAccess, type HubLinkPayload, type HubMetadata } from './payload';
+import { hubShareLinks, type HubSource } from './hubShareLinks';
 import { timeoutSignal } from '../../utils/abortSignals';
-import { useExportStore } from '../../store';
-import { bucketAccess } from '../bucketStorage/publicAccess';
+import { useNotificationStore } from '../../store';
+import { bucketAccess, type BucketAccess } from '../bucketStorage/publicAccess';
 import type { PublicationAssetSummary } from '../datasetPublishing/types';
 
-export interface HubLicense { id?: string; name?: string; url?: string }
-export interface HubMetadata { title: string; description?: string; license?: HubLicense; assets?: PublicationAssetSummary }
-export interface HubPublicationOptions { listed: boolean; preview?: File }
+export type { HubAccess, HubMetadata } from './payload';
+export type { BucketAccess } from '../bucketStorage/publicAccess';
+export type HubCapture = () => Promise<Blob | null>;
+export type HubProvider = 'huggingFace' | 'googleDrive' | 'bucket';
+export interface HubPrepareOptions {
+  /** 'check' decides after the upload, from the anonymous bucket check. */
+  access: HubAccess | 'check';
+  source: HubSource;
+  preview?: File | null;
+  /** Captures the current view when there is no preview, and again on Retry after a preview failure. */
+  capture?: HubCapture | null;
+}
+export type HubFailureKind = 'network' | 'timeout' | 'rate-limited' | 'unavailable' | 'rejected' | 'preview';
 export interface HubLinkState {
-  phase: 'idle' | 'creating' | 'ready' | 'failed';
+  phase: 'idle' | 'checking' | 'creating' | 'ready' | 'failed';
   viewerUrl?: string;
+  bucketAccess?: BucketAccess;
   url?: string;
   managementUrl?: string;
   error?: string;
+  retryable?: boolean;
+  /** Set until a 429's Retry-After passes; the controller clears it then. */
+  retryAfter?: number;
+  deleteLinkSeen?: boolean;
 }
-interface LinkInput {
-  viewerUrl: string; title: string; description: string; thumbnailBase64: string;
-  managementSecret: string; listed: boolean; publicAcknowledged: true; license?: HubLicense;
-  assets?: PublicationAssetSummary;
+
+export class HubRequestError extends Error {
+  // Plain fields: the viewer's erasableSyntaxOnly setting forbids constructor parameter properties.
+  readonly kind: HubFailureKind;
+  readonly retryAfterMs: number;
+  constructor(message: string, kind: HubFailureKind, retryAfterMs = 0) {
+    super(message);
+    this.kind = kind;
+    this.retryAfterMs = retryAfterMs;
+  }
 }
-interface LinkResponse { url: string; managementUrl: string }
+
+const RETRYABLE = new Set<HubFailureKind>(['network', 'timeout', 'rate-limited', 'unavailable', 'preview']);
+const READY_TOAST = 'Hub link ready. Reopen the upload dialog to copy it and its delete link.';
+const FAILED_TOAST = 'Hub link not created. Reopen the upload dialog to retry.';
+const INVALID_LINK = 'ColmapView Hub returned an invalid link.';
+
+/** POST /api/links with typed failures. The returned links must lie under the configured Hub. */
+export async function requestHubLink(baseUrl: string, payload: HubLinkPayload): Promise<{ url: string; managementUrl: string }> {
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/api/links`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload), signal: timeoutSignal(15000) });
+  } catch (error) {
+    const timedOut = error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError');
+    throw timedOut ? new HubRequestError("ColmapView Hub didn't respond.", 'timeout') : new HubRequestError("Couldn't reach ColmapView Hub.", 'network');
+  }
+  const result: unknown = await response.json().catch(() => null);
+  const field = (key: string): unknown => (result && typeof result === 'object' ? (result as Record<string, unknown>)[key] : undefined);
+  if (response.status === 429) {
+    // Cross-origin callers can read Retry-After only because the Hub exposes it; otherwise wait a minute.
+    const seconds = Math.max(1, Number(response.headers.get('Retry-After')) || 60);
+    throw new HubRequestError(`Too many requests from your network; try again in ${Math.ceil(seconds / 60)} min.`, 'rate-limited', seconds * 1000);
+  }
+  if (response.status >= 500) throw new HubRequestError('ColmapView Hub is unavailable.', 'unavailable');
+  if (!response.ok) {
+    const message = field('error');
+    throw new HubRequestError(typeof message === 'string' && message ? message : 'ColmapView Hub rejected this link.', 'rejected');
+  }
+  const [url, managementPath] = [field('url'), field('managementPath')];
+  if (typeof url !== 'string' || typeof managementPath !== 'string') throw new HubRequestError(INVALID_LINK, 'rejected');
+  const root = `${baseUrl}/`;
+  let link: URL;
+  let management: URL;
+  try { link = new URL(url); management = new URL(managementPath, root); }
+  catch { throw new HubRequestError(INVALID_LINK, 'rejected'); }
+  if (!link.href.startsWith(root) || !management.href.startsWith(`${root}manage/`)) throw new HubRequestError(INVALID_LINK, 'rejected');
+  return { url: link.href, managementUrl: management.href };
+}
+
+interface Draft {
+  metadata: HubMetadata;
+  access: HubAccess | 'check';
+  source: HubSource;
+  secret: string;
+  capture: HubCapture | null;
+  preview: Promise<Blob | null> | null;
+  bucketAccess?: BucketAccess;
+}
+
 interface Dependencies {
   baseUrl?: () => string | null;
-  thumbnail?: typeof makeHubThumbnail;
-  request?: (baseUrl: string, input: LinkInput) => Promise<LinkResponse>;
-  capture?: () => Promise<Blob | null>;
-  publicAccess?: (viewerUrl: string) => Promise<boolean>;
+  thumbnail?: (preview: Blob) => Promise<string>;
+  request?: typeof requestHubLink;
+  checkBucket?: (viewerUrl: string) => Promise<BucketAccess>;
+  notify?: (type: 'info' | 'warning', message: string) => void;
+  now?: () => number;
 }
 
-/** Null instead of a TypeError, so a relative or malformed Hub answer fails as an invalid link. */
-function parseUrl(value: string, base?: string): URL | null {
-  try { return new URL(value, base); } catch { return null; }
-}
+const newSecret = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
+  .replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+const startCapture = (capture: HubCapture) => Promise.resolve().then(capture).catch(() => null);
 
-async function requestLink(baseUrl: string, input: LinkInput): Promise<LinkResponse> {
-  const response = await fetch(`${baseUrl}/api/links`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal: timeoutSignal(15000),
-  });
-  const result: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    const error = result && typeof result === 'object' && 'error' in result && typeof result.error === 'string' ? result.error : 'The Hub could not save this link.';
-    throw new Error(error);
-  }
-  if (!result || typeof result !== 'object' || !('url' in result) || typeof result.url !== 'string'
-    || !('managementPath' in result) || typeof result.managementPath !== 'string') throw new Error('The Hub returned an invalid link.');
-  const root = `${baseUrl}/`;
-  const url = parseUrl(result.url);
-  const management = parseUrl(result.managementPath, root);
-  if (!url?.href.startsWith(root) || !management?.href.startsWith(`${root}manage/`)) throw new Error('The Hub returned an invalid link.');
-  return { url: url.href, managementUrl: management.href };
-}
-
-/** Automatic step after a public storage upload. Retries keep the ownership key and exact payload. */
-export function createHubPublication(deps: Dependencies = {}) {
-  let state: HubLinkState = { phase: 'idle' };
-  let draft: { metadata: HubMetadata; options: HubPublicationOptions; secret: string; preview: Promise<Blob | null> } | null = null;
-  let input: LinkInput | null = null;
-  const listeners = new Set<() => void>();
-  const set = (next: HubLinkState) => { state = next; listeners.forEach(listener => listener()); };
-  const thumbnail = deps.thumbnail ?? makeHubThumbnail;
-  const request = deps.request ?? requestLink;
+/** The Hub step after an upload. Its state outlives the upload receipt; retries keep the ownership key and payload. */
+export function createHubPublication(provider: HubProvider, deps: Dependencies = {}) {
   const baseUrl = deps.baseUrl ?? (() => getHubBaseUrl());
-  const capture = deps.capture ?? (() => useExportStore.getState().getScreenshotBlob?.() ?? Promise.resolve(null));
-  const finish = async (viewerUrl: string, retry = false): Promise<void> => {
+  const thumbnail = deps.thumbnail ?? makeHubThumbnail;
+  const request = deps.request ?? requestHubLink;
+  const checkBucket = deps.checkBucket ?? bucketAccess;
+  const notify = deps.notify ?? ((type, message) => { useNotificationStore.getState().addNotification(type, message, 10_000); });
+  const now = deps.now ?? Date.now;
+  let state: HubLinkState = { phase: 'idle' };
+  let draft: Draft | null = null;
+  let payload: HubLinkPayload | null = null;
+  let dialogOpen = false;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  const listeners = new Set<() => void>();
+  const set = (next: HubLinkState) => {
+    const finished = state.phase === 'creating' && (next.phase === 'ready' || next.phase === 'failed');
+    state = next;
+    listeners.forEach(listener => listener());
+    if (finished && !dialogOpen) notify(next.phase === 'ready' ? 'info' : 'warning', next.phase === 'ready' ? READY_TOAST : FAILED_TOAST);
+  };
+  const busy = () => state.phase === 'checking' || state.phase === 'creating';
+
+  const run = async (viewerUrl: string): Promise<void> => {
     const base = baseUrl();
-    if (!base || !draft || state.phase === 'creating' || (!retry && state.viewerUrl === viewerUrl)) return;
-    set({ phase: 'creating', viewerUrl });
+    const current = draft;
+    if (!base || !current) return;
     try {
-      if (deps.publicAccess && !await deps.publicAccess(viewerUrl)) {
-        draft = null;
-        set({ phase: 'idle', viewerUrl });
-        return;
+      let access: HubAccess;
+      if (current.access === 'check') {
+        if (!current.bucketAccess) {
+          set({ phase: 'checking', viewerUrl });
+          current.bucketAccess = await checkBucket(viewerUrl);
+        }
+        access = current.bucketAccess === 'public' ? 'public' : 'private';
+      } else access = current.access;
+      set({ phase: 'creating', viewerUrl, bucketAccess: current.bucketAccess });
+      if (!payload) {
+        const preview = await current.preview;
+        // The payload replaces the full-size preview; Retry captures a new one if building fails.
+        current.preview = null;
+        if (!preview) throw new HubRequestError('The upload preview is unavailable.', 'preview');
+        let thumbnailBase64: string;
+        try { thumbnailBase64 = await thumbnail(preview); }
+        catch { throw new HubRequestError('The card preview could not be created.', 'preview'); }
+        payload = buildHubPayload({ viewerUrl, metadata: current.metadata, access, thumbnailBase64, managementSecret: current.secret });
       }
-      const metadata = draft.metadata;
-      const preview = await draft.preview;
-      if (!preview) throw new Error('The upload preview is unavailable.');
-      input ??= {
-        viewerUrl, title: metadata.title.trim().slice(0, 120),
-        description: (metadata.description ?? '').trim().slice(0, 280),
-        thumbnailBase64: await thumbnail(preview), managementSecret: draft.secret,
-        listed: draft.options.listed, publicAcknowledged: true,
-        ...(metadata.license ? { license: metadata.license } : {}),
-        ...(metadata.assets ? { assets: metadata.assets } : {}),
-      };
-      const result = await request(base, input);
-      set({ phase: 'ready', viewerUrl, url: result.url, managementUrl: `${result.managementUrl}#${draft.secret}` });
+      const link = await request(base, payload);
+      set({ phase: 'ready', viewerUrl, bucketAccess: current.bucketAccess, url: link.url,
+        managementUrl: `${link.managementUrl}#${current.secret}`, deleteLinkSeen: false });
+      hubShareLinks.set(provider, { url: link.url, source: current.source, readyAt: now() });
     } catch (error) {
-      set({ phase: 'failed', viewerUrl, error: error instanceof Error ? error.message : 'The Hub could not save this link.' });
+      const failure = error instanceof HubRequestError ? error
+        : new HubRequestError(error instanceof Error && error.message ? error.message : 'ColmapView Hub could not save this link.', 'rejected');
+      const retryable = RETRYABLE.has(failure.kind) && (failure.kind !== 'preview' || Boolean(current.capture));
+      set({ phase: 'failed', viewerUrl, bucketAccess: current.bucketAccess, error: failure.message, retryable,
+        ...(failure.retryAfterMs ? { retryAfter: now() + failure.retryAfterMs } : {}) });
+      if (failure.retryAfterMs) {
+        clearTimeout(retryTimer);
+        const failed = state;
+        retryTimer = setTimeout(() => { if (state === failed) set({ ...failed, retryAfter: undefined }); }, failure.retryAfterMs);
+      }
     }
   };
+
   return {
     getSnapshot: () => state,
-    subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    prepare(metadata: HubMetadata, options?: HubPublicationOptions) {
-      if (state.phase === 'creating') throw new Error('Wait for the current short link to finish.');
-      input = null;
-      draft = options && baseUrl() ? { metadata: structuredClone(metadata), options: { ...options },
-        preview: options.preview ? Promise.resolve(options.preview) : Promise.resolve().then(capture).catch(() => null),
-        secret: btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '') } : null;
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
+    isEnabled: () => baseUrl() !== null,
+    isBusy: busy,
+    /** Busy, or a link exists whose delete row has not been shown yet. */
+    blocksUnload: () => busy() || (state.phase === 'ready' && !state.deleteLinkSeen),
+    /**
+     * Starts a draft for the next upload. The disclosure line renders exactly when the Hub is enabled
+     * (hubDisclosure), so a draft always follows a shown disclosure; that is what publicAcknowledged confirms.
+     */
+    prepare(metadata: HubMetadata, options: HubPrepareOptions) {
+      if (busy()) throw new Error('Wait for the current Hub link to finish.');
+      clearTimeout(retryTimer);
+      payload = null;
+      hubShareLinks.set(provider, null);
+      draft = baseUrl() ? {
+        metadata: structuredClone(metadata), access: options.access, source: options.source, secret: newSecret(), capture: options.capture ?? null,
+        preview: options.preview ? Promise.resolve(options.preview) : options.capture ? startCapture(options.capture) : null,
+      } : null;
       set({ phase: 'idle' });
     },
-    finish(viewerUrl: string, assets?: PublicationAssetSummary) {
-      if (draft && assets && state.phase === 'idle') draft.metadata.assets = structuredClone(assets);
-      return finish(viewerUrl);
+    /** Called when the upload is verified. Later notifications for the same draft are ignored. */
+    finish(viewerUrl: string, assets?: PublicationAssetSummary): Promise<void> {
+      if (!draft || state.phase !== 'idle') return Promise.resolve();
+      if (assets) draft.metadata.assets = structuredClone(assets);
+      return run(viewerUrl);
     },
-    retry: () => state.viewerUrl ? finish(state.viewerUrl, true) : Promise.resolve(),
+    retry(): Promise<void> {
+      if (state.phase !== 'failed' || !state.retryable || state.retryAfter !== undefined || !state.viewerUrl || !draft) return Promise.resolve();
+      if (!payload && !draft.preview && draft.capture) draft.preview = startCapture(draft.capture);
+      return run(state.viewerUrl);
+    },
+    markDeleteLinkSeen() {
+      if (state.phase !== 'ready' || state.deleteLinkSeen) return;
+      state = { ...state, deleteLinkSeen: true };
+      listeners.forEach(listener => listener());
+    },
+    setDialogOpen(open: boolean) {
+      dialogOpen = open;
+    },
   };
 }
 
 export const hubPublications = {
-  huggingFace: createHubPublication(),
-  googleDrive: createHubPublication(),
-  bucket: createHubPublication({ publicAccess: async viewerUrl => await bucketAccess(viewerUrl) === 'public' }),
+  huggingFace: createHubPublication('huggingFace'),
+  googleDrive: createHubPublication('googleDrive'),
+  bucket: createHubPublication('bucket'),
 };
 export type HubPublication = ReturnType<typeof createHubPublication>;

@@ -1,4 +1,4 @@
-import { useReconstructionStore, useTransformStore, useCameraStore, useDeletionStore } from '../../store';
+import { useReconstructionStore, useTransformStore, useCameraStore, useDeletionStore, useExportStore } from '../../store';
 import { isReconstructionSnapshot } from '../../wasm/reconstructionService';
 import { collectShareConfig } from '../../hooks/useUrlState';
 import { getPublicationViewerBaseUrl } from './publicationLinks';
@@ -40,4 +40,14 @@ export function assertPublicationInputCurrent(input: PublicationInput): void {
     || current.reconstructionEditRevision !== input.modelRevision || useDeletionStore.getState().pendingDeletions.size) {
     throw new HfError('The reconstruction changed while preparing. Publish again.');
   }
+}
+
+/** What a Hub link records as its dataset state. */
+export function getHubSource(state = useReconstructionStore.getState()): { key: string; revision: number } {
+  return { key: getPublicationSourceKey(state), revision: state.reconstructionEditRevision };
+}
+
+/** The view capture the Hub uses when an upload has no preview. */
+export function captureCurrentView(): Promise<Blob | null> {
+  return useExportStore.getState().getScreenshotBlob?.() ?? Promise.resolve(null);
 }

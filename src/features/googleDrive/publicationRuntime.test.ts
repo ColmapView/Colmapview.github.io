@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDeletionStore, useDrivePublicationStatus, useReconstructionStore } from '../../store';
-import { buildReconstruction } from '../../test/builders';
-import './publicationRuntime';
+import { buildCamera, buildReconstruction } from '../../test/builders';
+import { publishCurrentDatasetToDrive } from './publicationRuntime';
 import type { PublicationAssetSummary } from '../datasetPublishing/types';
 
 const controller = vi.hoisted(() => {
@@ -9,13 +9,13 @@ const controller = vi.hoisted(() => {
   let phase = 'idle';
   let receipt: { shared: boolean; viewerUrl: string; assets?: PublicationAssetSummary } | undefined;
   return {
-    invalidate: vi.fn(), cancel: vi.fn(),
+    invalidate: vi.fn(), cancel: vi.fn(), publish: vi.fn(),
     getSnapshot: () => ({ phase, receipt }),
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     emit(next: string, nextReceipt?: typeof receipt) { phase = next; receipt = nextReceipt; listeners.forEach(listener => listener()); },
   };
 });
-const hub = vi.hoisted(() => ({ finish: vi.fn(), prepare: vi.fn(), getSnapshot: vi.fn(() => ({ phase: 'idle' })) }));
+const hub = vi.hoisted(() => ({ finish: vi.fn(), prepare: vi.fn(), blocksUnload: vi.fn(() => false) }));
 vi.mock('../colmapviewHub/publication', () => ({ hubPublications: { googleDrive: hub } }));
 vi.mock('./publishDataset', async importOriginal => ({
   ...await importOriginal<typeof import('./publishDataset')>(),
@@ -35,27 +35,34 @@ describe('Drive publication runtime', () => {
     controller.emit('idle');
     controller.invalidate.mockClear();
     hub.finish.mockClear();
-    hub.getSnapshot.mockReturnValue({ phase: 'idle' });
+    hub.blocksUnload.mockReturnValue(false);
   });
 
-  it('shortens only after a completed receipt confirms public sharing', () => {
-    const viewerUrl = 'https://colmapview.opsiclear.com/?url=https://drive.google.com/file/d/public-id/view';
+  it('finishes the Hub link after every completed upload, shared or private', () => {
+    const viewerUrl = 'https://colmapview.opsiclear.com/?url=https://drive.google.com/file/d/file-id/view';
     const assets: PublicationAssetSummary = { format: 'zip', imageFormat: 'original', colmap: { files: 3, cameras: 1, points: 0 },
       images: 1, masks: 0, splats: 0, viewerSettings: true, preview: false };
     controller.emit('uploading', { shared: true, viewerUrl, assets });
     expect(hub.finish).not.toHaveBeenCalled();
     controller.emit('completed', { shared: false, viewerUrl, assets });
-    expect(hub.finish).not.toHaveBeenCalled();
-    controller.emit('completed', { shared: true, viewerUrl, assets });
     expect(hub.finish).toHaveBeenCalledExactlyOnceWith(viewerUrl, assets);
   });
 
-  it('keeps the tab-close warning while automatic shortening is still creating the link', () => {
+  it('keeps the tab-close warning while the Hub link still needs the tab', () => {
     controller.emit('completed');
-    hub.getSnapshot.mockReturnValue({ phase: 'creating' });
+    hub.blocksUnload.mockReturnValue(true);
     expect(unloading()).toBe(true);
-    hub.getSnapshot.mockReturnValue({ phase: 'ready' });
+    hub.blocksUnload.mockReturnValue(false);
     expect(unloading()).toBe(false);
+  });
+
+  it('prepares a public Hub link for shared uploads and a private one otherwise, recording the dataset state', () => {
+    useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }), sourceType: 'url', sourceUrl: 'https://example.test/a/' });
+    void publishCurrentDatasetToDrive('scene.zip', true);
+    expect(hub.prepare).toHaveBeenLastCalledWith({ title: 'scene' },
+      expect.objectContaining({ access: 'public', preview: null, source: { key: expect.stringContaining('https://example.test/a/'), revision: 0 } }));
+    void publishCurrentDatasetToDrive('scene.zip', false);
+    expect(hub.prepare).toHaveBeenLastCalledWith({ title: 'scene' }, expect.objectContaining({ access: 'private' }));
   });
 
   it('invalidates the job when another dataset loads or the model is edited, and only then', () => {

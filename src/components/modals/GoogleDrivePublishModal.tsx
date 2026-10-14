@@ -41,7 +41,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
   }, [isOpen, clientId, sdkAttempt]);
   const publishNow = async () => {
     setFormError(null);
-    try { await facade.publishDataset(name, shared, imageFormat, ...(shared && preview.file ? hub.options(preview.file) : [])); }
+    try { await facade.publishDataset(name, shared, imageFormat, preview.file ?? null); }
     catch (error) { setFormError(drivePublicationErrorMessage(error)); }
   };
   const signOut = () => { publication.cancel(); googleDriveAuth.disconnect(); };

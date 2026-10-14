@@ -8,9 +8,11 @@ import type { PublicationAssetSummary } from '../src/features/datasetPublishing/
 
 const shorteningEndpoint = 'https://hub.invalid/hub/api/links';
 const shortUrl = 'https://hub.invalid/hub/HappyTree';
+const longId = 'HappyTree-AAAAAAAAAAAAAAAA';
+const longUrl = `https://hub.invalid/hub/${longId}`;
 interface ShorteningRequest {
-  viewerUrl: string; title: string; thumbnailBase64: string; listed: boolean; managementSecret: string;
-  license?: { id?: string };
+  viewerUrl: string; title: string; thumbnailBase64: string; access: 'public' | 'private'; managementSecret: string;
+  license?: { name: string; url?: string };
   assets?: PublicationAssetSummary;
 }
 const shorteningRequests = new Map<Page, ShorteningRequest[]>();
@@ -19,8 +21,10 @@ test.beforeEach(async ({ page }) => {
   const requests: ShorteningRequest[] = [];
   shorteningRequests.set(page, requests);
   await page.route(shorteningEndpoint, async route => {
-    requests.push(route.request().postDataJSON() as ShorteningRequest);
-    await route.fulfill({ json: { url: shortUrl, managementPath: '/hub/manage/HappyTree' } });
+    const request = route.request().postDataJSON() as ShorteningRequest;
+    requests.push(request);
+    const id = request.access === 'private' ? longId : 'HappyTree';
+    await route.fulfill({ json: { id, url: `https://hub.invalid/hub/${id}`, managementPath: `/hub/manage/${id}` } });
   });
 });
 
@@ -93,7 +97,9 @@ test.describe('Hugging Face dataset publication', () => {
     expect(hub.writes).toEqual(completedWrites);
     const requests = shorteningRequests.get(page)!;
     expect(requests).toHaveLength(1);
-    expect(requests[0]).toMatchObject({ title: 'Browser test scene', listed: false, license: { id: 'cc-by-4.0' } });
+    expect(requests[0]).toMatchObject({ title: 'Browser test scene', access: 'public',
+      license: { name: 'CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' } });
+    expect(requests[0]).not.toHaveProperty('listed');
     expect(requests[0].managementSecret).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(JSON.stringify(requests[0])).not.toContain('hf_browser_test_only');
     const paths = [...hub.files.keys()];
@@ -189,10 +195,13 @@ test.describe('Hugging Face dataset publication', () => {
     expect(hub.files.has('images/photo.jpg')).toBe(true);
     expect(hub.files.has('masks/photo.jpg.png')).toBe(true);
     expect(hub.visibility).toBe('private');
-    expect(shorteningRequests.get(page)).toHaveLength(0);
+    const requests = shorteningRequests.get(page)!;
+    expect(requests).toHaveLength(1);
+    expect(requests[0].access).toBe('private');
     expect(hub.reads.every(read => read.authorization === 'Bearer hf_browser_test_only')).toBe(true);
     await expect(dialog.getByText('Private. Viewers must sign in to Hugging Face with an account that has access.')).toBeVisible();
-    const viewerUrl = await dialog.getByLabel('Viewer link', { exact: true }).inputValue();
+    await expect(dialog.getByLabel('Viewer link', { exact: true })).toHaveValue(longUrl);
+    const viewerUrl = `${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene`;
     expect(viewerUrl).toBe(`${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene`);
     for (const mode of ['shared', 'manual'] as const) {
       const recipient = await browser.newContext();
@@ -263,7 +272,7 @@ test.describe('Hugging Face dataset publication', () => {
     await expect(dialog.getByLabel('Viewer link', { exact: true })).toHaveValue(shortUrl);
     expect(shorteningRequests.get(page)).toHaveLength(2);
     const requests = shorteningRequests.get(page)!;
-    expect(requests[0].listed).toBe(false);
+    expect(requests[0].access).toBe('public');
     const archive = unzipSync(hub.files.get('dataset.zip')!);
     const paths = Object.keys(archive);
     for (const path of paths.filter(path => path.startsWith('images/'))) expect([...archive[path].subarray(0, 2)]).toEqual([0xff, 0xd8]);

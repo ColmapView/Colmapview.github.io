@@ -46,10 +46,10 @@ describe('Google Drive publishing dialog', () => {
     expect(screen.queryByRole('checkbox', { name: 'Shorten URL' })).toBeNull();
     expect(screen.queryByText(/Public uploads receive|Includes .*images/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Publish shared dataset' }));
-    await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('dataset.zip', true, 'original'));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('dataset.zip', true, 'original', null));
     fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'private' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save private dataset' }));
-    await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('dataset.zip', false, 'original'));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('dataset.zip', false, 'original', null));
   });
   it('offers opt-in JPEG copies and forwards the selected encoding without changing public access', async () => {
     await renderOpenDialog();
@@ -58,7 +58,7 @@ describe('Google Drive publishing dialog', () => {
     expect(screen.getByText(/Lossy, full resolution/)).toBeVisible();
     expect(screen.queryByText(/Original image metadata is retained/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Publish shared dataset' }));
-    await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('dataset.zip', true, 'jpeg'));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('dataset.zip', true, 'jpeg', null));
   });
   it('shows a read-only current-view preview without cover editing or loading controls', async () => {
     await renderOpenDialog();
@@ -78,7 +78,7 @@ describe('Google Drive publishing dialog', () => {
     expect(screen.getByText(message)).toBeVisible();
     expect(screen.getByRole('button', { name: 'Publish shared dataset' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'Publish shared dataset' }));
-    await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('dataset.zip', true, 'original'));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('dataset.zip', true, 'original', null));
   });
   it('asks for a dataset and disables upload before a scene is loaded', async () => {
     actions.reconstruction = null; actions.sourceKey = ''; actions.preview = { url: null, busy: false };
@@ -107,10 +107,10 @@ describe('Google Drive publishing dialog', () => {
     fireEvent.change(screen.getByLabelText('File name'), { target: { value: 'my-scene' } });
     expect(screen.getByText('Link sharing is enabled after the upload is verified.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Publish shared dataset' }));
-    await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('my-scene', true, 'original'));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('my-scene', true, 'original', null));
     fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'private' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save private dataset' }));
-    await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('my-scene', false, 'original'));
+    await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('my-scene', false, 'original', null));
   });
   it('keeps upload disabled until sign-in, and does not publish when sign-in starts', async () => {
     actions.auth = { status: 'disconnected', error: null };
