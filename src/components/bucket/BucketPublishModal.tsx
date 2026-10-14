@@ -33,7 +33,7 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
   const selecting = publication.phase === 'idle';
   const selectedImageFormat = format === 'zip' ? imageFormat : 'original';
   const preview = usePublicationPreview(facade.sourceKey, isOpen && selecting, facade.getScreenshotBlob);
-  const hub = useHubLink('bucket');
+  const hub = useHubLink('bucket', isOpen);
   const publish = async () => {
     setError(null);
     try { await facade.publishDataset(folder, format, selectedImageFormat, preview.file ?? null); } catch (failure) { setError(bucketErrorMessage(failure)); }
@@ -75,7 +75,7 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
           cancelDisabled={publication.phase === 'cancelling'} onCancel={bucketPublication.cancel} />}
         {publication.viewerUrl && <UploadResult label="Published bucket dataset" title="Dataset saved to bucket storage"
           notice="Access follows your bucket permissions. Viewers need bucket access for private files."
-          viewerUrl={publication.viewerUrl} linkLabel="Bucket viewer link" hub={hub} />}
+          viewerUrl={publication.viewerUrl} hub={hub} />}
         {!busy && !selecting && !publication.viewerUrl && <section className="publication-section" aria-label="Bucket upload recovery">
           <p role="status">{publication.message}</p>
           {publication.prefix && <>
@@ -96,7 +96,7 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
       </div>}
       <div className="publication-submit-row">
         {!facade.reconstruction && <span className="publication-note">Load a COLMAP dataset to upload it.</span>}
-        <button type="button" className={getButtonClass('primary', 'sm')} disabled={!connection.canWrite || !facade.canPublish || applying || hub.state.phase === 'creating'}
+        <button type="button" className={getButtonClass('primary', 'sm')} disabled={!connection.canWrite || !facade.canPublish || applying || hub.busy}
           onClick={() => { void publish(); }}>Upload dataset</button>
       </div>
     </section>}

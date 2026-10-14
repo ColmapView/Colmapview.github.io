@@ -88,11 +88,11 @@ test.describe('Hugging Face dataset publication', () => {
     expect(hub.files.has('masks/photo.jpg.png')).toBe(true);
     expect(hub.writes.some(path => path.endsWith('/info/lfs/objects/batch'))).toBe(true);
     expect(hub.writes.some(path => path.startsWith('/mock-complete/'))).toBe(true);
-    await expect(dialog.getByLabel('Viewer link', { exact: true })).toHaveValue(shortUrl);
+    await expect(dialog.getByLabel('Share link', { exact: true })).toHaveValue(shortUrl);
     const completedWrites = [...hub.writes];
     await dialog.getByRole('button', { name: 'Close publish dataset' }).click();
     await openPublisher(page);
-    await expect(dialog.getByLabel('Viewer link', { exact: true })).toHaveValue(shortUrl);
+    await expect(dialog.getByLabel('Share link', { exact: true })).toHaveValue(shortUrl);
     await expect(dialog.getByLabel('Repository name', { exact: true })).toHaveCount(0);
     expect(hub.writes).toEqual(completedWrites);
     const requests = shorteningRequests.get(page)!;
@@ -200,7 +200,7 @@ test.describe('Hugging Face dataset publication', () => {
     expect(requests[0].access).toBe('private');
     expect(hub.reads.every(read => read.authorization === 'Bearer hf_browser_test_only')).toBe(true);
     await expect(dialog.getByText('Private. Viewers must sign in to Hugging Face with an account that has access.')).toBeVisible();
-    await expect(dialog.getByLabel('Viewer link', { exact: true })).toHaveValue(longUrl);
+    await expect(dialog.getByLabel('Share link', { exact: true })).toHaveValue(longUrl);
     const viewerUrl = `${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene`;
     expect(viewerUrl).toBe(`${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene`);
     for (const mode of ['shared', 'manual'] as const) {
@@ -263,13 +263,14 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByRole('combobox', { name: 'Format' }).selectOption('zip');
     await dialog.getByRole('combobox', { name: 'Images' }).selectOption('jpeg');
     await dialog.getByRole('button', { name: 'Publish public dataset', exact: true }).click();
-    await expect(dialog.getByRole('button', { name: 'Retry shortening', exact: true })).toBeVisible({ timeout: 45000 });
+    await expect(dialog.getByRole('button', { name: 'Retry Hub link', exact: true })).toBeVisible({ timeout: 45000 });
+    await expect(dialog.getByRole('alert')).toHaveText('Hub link not created: ColmapView Hub is unavailable. The link above still works.');
     // Archive and repository sidecars can use separate data batches before the final metadata commit.
     const dataCommit = hub.commits.at(-2)!.id;
-    await expect(dialog.getByLabel('Viewer link', { exact: true })).toHaveValue(`${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene/resolve/${dataCommit}/dataset.zip`);
+    await expect(dialog.getByLabel('Share link', { exact: true })).toHaveValue(`${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene/resolve/${dataCommit}/dataset.zip`);
     const writes = [...hub.writes];
-    await dialog.getByRole('button', { name: 'Retry shortening', exact: true }).click();
-    await expect(dialog.getByLabel('Viewer link', { exact: true })).toHaveValue(shortUrl);
+    await dialog.getByRole('button', { name: 'Retry Hub link', exact: true }).click();
+    await expect(dialog.getByLabel('Share link', { exact: true })).toHaveValue(shortUrl);
     expect(shorteningRequests.get(page)).toHaveLength(2);
     const requests = shorteningRequests.get(page)!;
     expect(requests[0].access).toBe('public');
@@ -285,8 +286,9 @@ test.describe('Hugging Face dataset publication', () => {
       viewerSettings: 'colmapview.yaml' in archive, preview: hub.files.has('colmapview-preview.png') });
     expect(requests[1]).toEqual(requests[0]);
     expect(hub.writes).toEqual(writes);
-    await dialog.getByText('Manage Hub link', { exact: true }).click();
-    await expect(dialog.getByLabel('Hub management link', { exact: true })).toHaveValue(`https://hub.invalid/hub/manage/HappyTree#${requests[0].managementSecret}`);
+    const deleteLink = `https://hub.invalid/hub/manage/HappyTree#${requests[0].managementSecret}`;
+    await expect(dialog.getByLabel('Private delete link', { exact: true })).toHaveValue(deleteLink);
+    await expect(dialog.getByRole('link', { name: 'Delete Hub link' })).toHaveAttribute('href', deleteLink);
   });
 
   test('returns to the editable form when the repository name is taken', async ({ page, context, baseURL }) => {

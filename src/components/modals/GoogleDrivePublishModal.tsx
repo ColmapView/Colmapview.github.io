@@ -32,7 +32,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
   const busy = isDrivePublishing(publish.phase);
   const selecting = publish.phase === 'idle';
   const preview = usePublicationPreview(facade.sourceKey, isOpen && selecting && Boolean(clientId), facade.getScreenshotBlob);
-  const hub = useHubLink('googleDrive');
+  const hub = useHubLink('googleDrive', isOpen);
   useEffect(() => {
     if (!isOpen || !clientId) return;
     let cancelled = false;
@@ -100,7 +100,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
         </div>}
         <div className="publication-submit-row">
           {auth.status !== 'connected' && <span className="publication-note">Sign in to publish.</span>}
-          <button type="button" className={primary} disabled={auth.status !== 'connected' || !facade.reconstruction || facade.pendingDeletions > 0 || applying || hub.state.phase === 'creating'}
+          <button type="button" className={primary} disabled={auth.status !== 'connected' || !facade.reconstruction || facade.pendingDeletions > 0 || applying || hub.busy}
             onClick={() => { void publishNow(); }}>{shared ? 'Publish shared dataset' : 'Save private dataset'}</button>
         </div>
       </section>}

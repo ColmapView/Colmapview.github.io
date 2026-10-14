@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { ModalDialogShell } from '../ui/ModalDialogShell';
 import { CloseIcon } from '../../icons';
 import { CopyableField } from '../ui/CopyableField';
@@ -97,9 +97,11 @@ export function UploadProgress({ label, message, progressLabel, max, value, deta
   label: string; message: string; progressLabel: string; max: number; value: number; detail?: string;
   onCancel: () => void; cancelDisabled?: boolean; children?: ReactNode;
 }) {
+  const statusRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => { statusRef.current?.focus(); }, []);
   return <section className="publication-section" aria-label={label}>
     {children}
-    <p role="status" aria-live="polite">{message}</p>
+    <p ref={statusRef} tabIndex={-1} role="status" aria-live="polite">{message}</p>
     <progress max={Math.max(1, max)} value={value} aria-label={progressLabel} />
     {detail && <p className="publication-note">{detail}</p>}
     <div className="publication-actions"><button type="button" className={secondary} disabled={cancelDisabled} onClick={onCancel}>Cancel upload</button></div>
@@ -107,23 +109,44 @@ export function UploadProgress({ label, message, progressLabel, max, value, deta
   </section>;
 }
 
-export function UploadResult({ label, title, notice, viewerUrl, linkLabel = 'Viewer link', providerLink, hub }: {
-  label: string; title: ReactNode; notice: string; viewerUrl: string; linkLabel?: string;
-  providerLink?: { url: string; label: string };
-  hub?: HubLink;
-}) {
-  const hubState = hub?.state.viewerUrl === viewerUrl ? hub.state : undefined;
-  const link = hubState?.url ?? viewerUrl;
-  return <section className="publication-section" aria-label={label}>
-    <p role="status" className="publication-result-title"><span className="publication-result-check" aria-hidden="true">✓ </span>{title}</p>
-    <p className="publication-note">{notice}</p>
-    <CopyableField label={linkLabel} value={link} />
+/** The link to share: the Hub link once it is ready, otherwise the viewer link; then the Hub status. */
+function ShareLink({ viewerUrl, hub, providerLink }: { viewerUrl: string; hub?: HubLink; providerLink?: { url: string; label: string } }) {
+  const hubState = hub?.enabled && hub.state.viewerUrl === viewerUrl ? hub.state : undefined;
+  const link = hubState?.phase === 'ready' && hubState.url ? hubState.url : viewerUrl;
+  return <>
+    <CopyableField label="Share link" value={link} />
     <div className="publication-result-actions">
-      <a className={`${secondary} publication-button-link`} href={link} target="_blank" rel="noopener noreferrer">{hubState?.url ? 'Open preview' : 'Open viewer'}<span aria-hidden="true"> ↗</span></a>
+      <a className={`${secondary} publication-button-link`} href={link} target="_blank" rel="noopener noreferrer">Open link<span aria-hidden="true"> ↗</span></a>
       {providerLink && <a className={`${secondary} publication-button-link`} href={providerLink.url} target="_blank" rel="noopener noreferrer">
         {providerLink.label}<span aria-hidden="true"> ↗</span>
       </a>}
     </div>
-    {hub && hubState && <HubLinkResult state={hubState} controller={hub.controller} />}
+    {hub && hubState && <HubLinkResult state={hubState} onRetry={hub.retry} onDeleteLinkShown={hub.markDeleteLinkSeen} />}
+  </>;
+}
+
+export function UploadResult({ label, title, notice, viewerUrl, providerLink, hub }: {
+  label: string; title: ReactNode; notice?: string; viewerUrl: string;
+  providerLink?: { url: string; label: string };
+  hub?: HubLink;
+}) {
+  const titleRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => { titleRef.current?.focus(); }, []);
+  return <section className="publication-section" aria-label={label}>
+    <p ref={titleRef} tabIndex={-1} role="status" className="publication-result-title">
+      <span className="publication-result-check" aria-hidden="true">✓ </span>{title}
+    </p>
+    {notice && <p className="publication-note">{notice}</p>}
+    <ShareLink viewerUrl={viewerUrl} hub={hub} providerLink={providerLink} />
+  </section>;
+}
+
+/** After an edit, a deletion mark or a new dataset resets the result, the last Hub link stays here until the next upload. */
+export function PreviousUpload({ hub }: { hub: HubLink }) {
+  const { state } = hub;
+  if (!hub.enabled || state.phase === 'idle' || !state.viewerUrl) return null;
+  return <section className="publication-section" aria-label="Previous upload">
+    <h3 className="publication-result-title">Previous upload</h3>
+    <ShareLink viewerUrl={state.viewerUrl} hub={hub} />
   </section>;
 }

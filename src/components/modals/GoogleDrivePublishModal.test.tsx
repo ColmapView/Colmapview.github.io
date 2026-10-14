@@ -145,15 +145,15 @@ describe('Google Drive publishing dialog', () => {
     actions.publish = { phase: 'completed', receipt: { fileId: 'FILE_ID', driveUrl: 'https://drive.google.com/file/d/FILE_ID/view', viewerUrl: 'https://viewer.example/?url=drive-link', shared: false } };
     const onClose = vi.fn();
     const { rerender } = await renderOpenDialog(onClose);
-    expect(screen.getByLabelText('Viewer link')).toHaveValue('https://viewer.example/?url=drive-link');
+    expect(screen.getByLabelText('Share link')).toHaveValue('https://viewer.example/?url=drive-link');
     expect(screen.getByText('Private. Viewers need permission to this file and must choose it in the Drive picker.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Open viewer/ })).toHaveAttribute('href', actions.publish.receipt!.viewerUrl);
+    expect(screen.getByRole('link', { name: 'Open link' })).toHaveAttribute('href', actions.publish.receipt!.viewerUrl);
     expect(screen.queryByRole('button', { name: 'Save private dataset' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Upload another dataset' })).toBeNull();
     rerender(<GoogleDrivePublishModal isOpen={false} onClose={onClose} />);
     rerender(<GoogleDrivePublishModal isOpen onClose={onClose} />);
     await act(async () => Promise.resolve());
-    expect(screen.getByLabelText('Viewer link')).toHaveValue(actions.publish.receipt!.viewerUrl);
+    expect(screen.getByLabelText('Share link')).toHaveValue(actions.publish.receipt!.viewerUrl);
     expect(screen.queryByLabelText('File name')).toBeNull();
     expect(actions.reset).not.toHaveBeenCalled();
     expect(actions.publishDataset).not.toHaveBeenCalled();

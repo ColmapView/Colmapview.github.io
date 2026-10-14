@@ -7,6 +7,7 @@ import { bucketConnection } from '../../features/bucketStorage/connection';
 import { useDeletionStore, useReconstructionStore } from '../../store';
 import { buildCamera, buildReconstruction } from '../../test/builders';
 import type { BucketPublicationState } from '../../features/bucketStorage/publishDataset';
+import { hubPublications } from '../../features/colmapviewHub/publication';
 
 const publication = vi.hoisted(() => ({
   publish: vi.fn(), cancel: vi.fn(), reset: vi.fn(), state: { phase: 'idle', message: '', filesDone: 0, filesTotal: 0, bytesDone: 0 } as BucketPublicationState,
@@ -45,6 +46,14 @@ describe('bucket publisher', () => {
     expect(screen.queryByRole('checkbox', { name: 'Shorten URL' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Upload dataset' }));
     await waitFor(() => expect(publication.publish).toHaveBeenLastCalledWith('dataset', 'folder', 'original', null));
+  });
+  it('waits for the Hub to finish checking access before another upload', () => {
+    bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
+    useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }) });
+    vi.spyOn(hubPublications.bucket, 'getSnapshot').mockReturnValue({ phase: 'checking', viewerUrl: 'https://viewer.example/?url=old' });
+    vi.spyOn(hubPublications.bucket, 'isBusy').mockReturnValue(true);
+    open();
+    expect(screen.getByRole('button', { name: 'Upload dataset' })).toBeDisabled();
   });
   it('offers JPEG copies for ZIPs and keeps Folder uploads on original images', async () => {
     bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
@@ -162,14 +171,14 @@ describe('bucket publisher', () => {
     publication.state = { phase: 'completed', message: 'Dataset uploaded.', filesDone: 2, filesTotal: 2, bytesDone: 10,
       viewerUrl: 'https://viewer.example/?url=https://s3.example/bucket/dataset/manifest.json' };
     const props = open();
-    expect(screen.getByLabelText('Bucket viewer link')).toHaveValue(publication.state.viewerUrl);
+    expect(screen.getByLabelText('Share link')).toHaveValue(publication.state.viewerUrl);
     expect(screen.getByText('Access follows your bucket permissions. Viewers need bucket access for private files.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open viewer' })).toHaveAttribute('href', publication.state.viewerUrl);
+    expect(screen.getByRole('link', { name: 'Open link' })).toHaveAttribute('href', publication.state.viewerUrl);
     expect(screen.queryByRole('button', { name: 'Upload another dataset' })).toBeNull();
     props.rerender(<BucketPublishModal isOpen={false} onClose={props.onClose} />);
     props.rerender(<BucketPublishModal isOpen onClose={props.onClose} />);
-    expect(screen.getByLabelText('Bucket viewer link')).toHaveValue(publication.state.viewerUrl);
+    expect(screen.getByLabelText('Share link')).toHaveValue(publication.state.viewerUrl);
     expect(screen.queryByLabelText('Upload folder')).toBeNull();
     expect(publication.reset).not.toHaveBeenCalled();
     expect(publication.publish).not.toHaveBeenCalled();

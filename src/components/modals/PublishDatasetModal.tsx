@@ -38,7 +38,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
   // Once a repository exists, its own section offers retry or a new publication; until then the form stays editable.
   const selecting = !busy && !publish.repoUrl && publish.phase !== 'completed';
   const preview = usePublicationPreview(facade.sourceKey, isOpen && selecting && !!config, facade.getScreenshotBlob);
-  const hub = useHubLink('huggingFace');
+  const hub = useHubLink('huggingFace', isOpen);
   const selectedImageFormat = format === 'zip' ? imageFormat : 'original';
   const details = { name, title, description, license, licenseName, licenseUrl, visibility, format, imageFormat: selectedImageFormat };
 
@@ -154,7 +154,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
         <div className="publication-submit-row">
           {auth.status !== 'connected' && <span className="publication-note">Sign in to publish.</span>}
           <button type="button" className={primaryButtonClass}
-            disabled={auth.status !== 'connected' || !facade.reconstruction || facade.pendingDeletions > 0 || applying || preview.busy || !preview.file || hub.state.phase === 'creating'}
+            disabled={auth.status !== 'connected' || !facade.reconstruction || facade.pendingDeletions > 0 || applying || preview.busy || !preview.file || hub.busy}
             onClick={() => { void publishNow(); }}>{visibility === 'private' ? 'Save private dataset' : 'Publish public dataset'}</button>
         </div>
       </section>}

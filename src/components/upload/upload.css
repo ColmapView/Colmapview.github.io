@@ -11,7 +11,7 @@
 .publication-section:first-child { padding-top: 0; }
 .publication-section:last-child { border-bottom: 0; }
 .publication-section p { line-height: 1.5; margin: 0; }
-.publication-section h3 { font-weight: 600; }
+.publication-section h3 { font-weight: 600; margin: 0; }
 .publication-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .publication-body button:disabled { opacity: .5; cursor: default; }
 .publication-body a { color: var(--accent-hover); text-decoration: underline; overflow-wrap: anywhere; }
@@ -57,6 +57,9 @@
 .publication-submit p { margin: 0; line-height: 1.5; }
 .publication-body > .publication-section + .publication-submit { border-top: 0; margin-top: 0; }
 .publication-submit-row { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+
+/* The Hub disclosure sits beside the publish button and wraps above it on narrow dialogs. */
+.publication-disclosure { flex: 1 1 16rem; min-width: 0; }
 
 /* Expanded connection help owns its row so domain names stay readable on phones. */
 .bucket-cors-help[open] { flex-basis: 100%; }

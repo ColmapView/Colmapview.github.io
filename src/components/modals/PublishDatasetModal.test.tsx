@@ -209,10 +209,10 @@ describe('PublishDatasetModal', () => {
     const onClose = vi.fn();
     const { rerender } = render(<PublishDatasetModal isOpen onClose={onClose} />);
     expect(screen.getByRole('status')).toHaveTextContent('Published publisher/scene');
-    const field = screen.getByLabelText('Viewer link');
+    const field = screen.getByLabelText('Share link');
     expect(field).toHaveValue(viewerUrl);
     expect(within(field.parentElement!).getByRole('button', { name: 'Copy' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open viewer' })).toHaveAttribute('href', viewerUrl);
+    expect(screen.getByRole('link', { name: 'Open link' })).toHaveAttribute('href', viewerUrl);
     expect(repositoryLinks()).toHaveLength(1);
     expect(repositoryLinks()[0]).toHaveAccessibleName('Hugging Face page');
     expect(screen.getByText(visibility === 'private'
@@ -220,7 +220,7 @@ describe('PublishDatasetModal', () => {
     expect(screen.queryByRole('button', { name: 'Upload another dataset' })).toBeNull();
     rerender(<PublishDatasetModal isOpen={false} onClose={onClose} />);
     rerender(<PublishDatasetModal isOpen onClose={onClose} />);
-    expect(screen.getByLabelText('Viewer link')).toHaveValue(viewerUrl);
+    expect(screen.getByLabelText('Share link')).toHaveValue(viewerUrl);
     expect(screen.queryByLabelText('Repository name')).toBeNull();
     expect(actions.reset).not.toHaveBeenCalled();
     expect(actions.publishDataset).not.toHaveBeenCalled();
