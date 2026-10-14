@@ -183,4 +183,16 @@ describe('Google Drive publishing dialog', () => {
     await renderOpenDialog();
     expect(screen.getByLabelText('File name')).toHaveValue('garden.zip');
   });
+
+  it('keeps an edited file name for its dataset only, then returns to the next dataset\'s default', async () => {
+    actions.datasetName = 'garden';
+    const { rerender } = await renderOpenDialog();
+    fireEvent.change(screen.getByLabelText('File name'), { target: { value: 'my-edit.zip' } });
+    actions.datasetName = 'garden-renamed';
+    rerender(<GoogleDrivePublishModal isOpen onClose={vi.fn()} />);
+    expect(screen.getByLabelText('File name')).toHaveValue('my-edit.zip');
+    actions.sourceKey = 'next-scene'; actions.datasetName = 'harbor';
+    rerender(<GoogleDrivePublishModal isOpen onClose={vi.fn()} />);
+    expect(screen.getByLabelText('File name')).toHaveValue('harbor.zip');
+  });
 });

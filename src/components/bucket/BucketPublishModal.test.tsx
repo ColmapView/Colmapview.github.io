@@ -224,4 +224,14 @@ describe('bucket publisher', () => {
     open();
     expect(screen.getByLabelText('Upload folder')).toHaveValue('garden');
   });
+
+  it('keeps an edited upload folder for its dataset only, then returns to the next dataset\'s default', () => {
+    bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
+    useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }), sourceName: 'garden' });
+    open();
+    fireEvent.change(screen.getByLabelText('Upload folder'), { target: { value: 'datasets/my-edit' } });
+    expect(screen.getByLabelText('Upload folder')).toHaveValue('datasets/my-edit');
+    act(() => useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }), sourceName: 'harbor' }));
+    expect(screen.getByLabelText('Upload folder')).toHaveValue('harbor');
+  });
 });

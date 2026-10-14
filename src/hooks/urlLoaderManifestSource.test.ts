@@ -95,6 +95,16 @@ describe('URL loader manifest source helpers', () => {
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Successfully loaded 3 files from URL');
   });
 
+  it('records a URL-loaded manifest\'s name for upload defaults when the scene commits', async () => {
+    const deps = { ...makeDeps(), setSourceName: vi.fn() };
+    await expect(loadManifestSource(manifest, { type: 'url', sourceUrl: 'https://example.com/manifest.json' }, deps)).resolves.toBe(true);
+    expect(deps.setSourceName).toHaveBeenLastCalledWith('test scene');
+    expect(deps.setSourceName.mock.invocationCallOrder[0]).toBeGreaterThan(deps.setSourceInfo.mock.invocationCallOrder[0]);
+    const unnamed = { ...makeDeps(), setSourceName: vi.fn() };
+    await loadManifestSource({ ...manifest, name: undefined }, { type: 'url', sourceUrl: 'https://example.com/manifest.json' }, unnamed);
+    expect(unnamed.setSourceName).toHaveBeenLastCalledWith(null);
+  });
+
   it('loads an inline manifest source and stores the manifest for embedding', async () => {
     const deps = makeDeps();
 

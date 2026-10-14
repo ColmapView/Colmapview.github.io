@@ -5,6 +5,7 @@ import { getPublicationViewerBaseUrl } from './publicationLinks';
 import { getActiveSplatSourceId } from '../../utils/splatFileSourcePolicy';
 import { getZipImageGeneration } from '../../utils/zipImageFiles';
 import { HfError } from '../huggingface/http';
+import { archiveName } from '../../hooks/fileDropzoneLocalSources';
 import type { PublicationInput } from './preparePublication';
 
 const identities = new WeakMap<object, number>();
@@ -55,18 +56,39 @@ export function captureCurrentView(): Promise<Blob | null> {
 /** URL segments that name a file format rather than a dataset. */
 const GENERIC_SEGMENTS = new Set(['view', 'manifest', 'colmapview', 'download', 'index', 'resolve', 'main']);
 
+/** The Drive file name limit (180 UTF-16 units) less the ".zip" the default appends. */
+export const PUBLICATION_DATASET_NAME_MAX = 180 - '.zip'.length;
+
+/** The last URL segment, without an archive or JSON extension; dotted names such as "scan_2024.10.01" stay whole. */
 function urlName(value: string | null): string | null {
   if (!value) return null;
   try {
-    const segment = decodeURIComponent(new URL(value).pathname.split('/').filter(Boolean).at(-1) ?? '').replace(/\.[^.]+$/, '');
+    const segment = archiveName(decodeURIComponent(new URL(value).pathname.split('/').filter(Boolean).at(-1) ?? ''))?.replace(/\.json$/i, '');
     return segment && !GENERIC_SEGMENTS.has(segment.toLowerCase()) ? segment : null;
   } catch { return null; }
 }
 
-/** A default name for uploads: the manifest name, the source URL's last segment, the recorded local name, or "colmap-dataset". */
+/** A name Drive and bucket paths accept: no control characters or slashes, single spaces, capped length; null when nothing usable is left. */
+function cleanDatasetName(value: string | null | undefined): string | null {
+  if (!value) return null;
+  let printable = '';
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+    printable += code < 32 || code === 127 ? ' ' : char;
+  }
+  let name = '';
+  for (const char of printable.replace(/[\\/]+/g, '-').replace(/\s+/g, ' ').trim()) {
+    if (name.length + char.length > PUBLICATION_DATASET_NAME_MAX) break;
+    name += char;
+  }
+  name = name.trim();
+  return name && !/^\.+$/.test(name) ? name : null;
+}
+
+/** A default name for uploads: the manifest name (inline, or recorded when a manifest URL loads), the recorded local name, the source URL's last segment, or "colmap-dataset". */
 export function getPublicationDatasetName(state = useReconstructionStore.getState()): string {
-  for (const candidate of [state.sourceManifest?.name, urlName(state.sourceUrl), state.sourceName]) {
-    const name = candidate?.replace(/[\\/]+/g, '-').trim();
+  for (const candidate of [state.sourceManifest?.name, state.sourceName, urlName(state.sourceUrl)]) {
+    const name = cleanDatasetName(candidate);
     if (name) return name;
   }
   return 'colmap-dataset';

@@ -61,6 +61,8 @@ export interface LoadManifestSourceDeps {
   log?: Log;
   processFiles: ProcessFiles;
   setSourceInfo: SetSourceInfo;
+  /** Records the manifest's name for upload defaults; URL manifests are not stored, so their name would be lost. */
+  setSourceName?: (name: string | null) => void;
   setUrlProgress: SetUrlProgress;
   /** Installs discovered sources after parsing, before restoring viewer settings. */
   onRemoteSplatCatalog?: (catalog: RemoteSplatCandidate[]) => void;
@@ -182,6 +184,7 @@ export async function loadManifestSource(
     assertCurrent();
     deps.setSourceInfo(sourceInfo.sourceType, sourceInfo.sourceUrl, sourceInfo.imageUrlBase,
       sourceInfo.maskUrlBase, sourceInfo.sourceManifest, sourceInfo.imageNameToUrl ?? null);
+    deps.setSourceName?.(manifest.name ?? null);
   };
   log(`[URL Loader] Image URL base for lazy loading: ${sourceInfo.imageUrlBase}`);
   log(`[URL Loader] Mask URL base for lazy loading: ${sourceInfo.maskUrlBase}`);

@@ -110,7 +110,7 @@ function droppedFolderName(payload: FileDropPayload): string | null {
 
 /** An archive's file name without its archive extension. */
 export function archiveName(name: string): string | null {
-  return name.replace(/\.(?:tar\.(?:gz|bz2|xz|zst)|tgz|zip|tar|7z)$/i, '') || null;
+  return name.replace(/\.(?:tar\.(?:gz|bz2|xz|zst)|tgz|tbz2|tbz|txz|zip|tar|7z)$/i, '') || null;
 }
 
 /** Hands the files to the workflow under this load; `install` commits their source once they replace the scene. */
