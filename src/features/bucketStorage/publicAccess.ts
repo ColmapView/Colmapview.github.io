@@ -1,3 +1,4 @@
+import { joinManifestUrlPath } from '../../hooks/urlLoaderPolicy';
 import { ColmapManifestSchema } from '../../types/manifest';
 import { timeoutSignal } from '../../utils/abortSignals';
 import { readBoundedResponse } from '../../utils/publishedViewerState';
@@ -90,8 +91,10 @@ async function probe(source: string): Promise<BucketAccess> {
   const manifest = ColmapManifestSchema.parse(JSON.parse(await (await readBoundedResponse(response, 8 * 1024 * 1024)).text()));
   const files = [...Object.values(manifest.files), manifest.viewerStatePath, manifest.splats?.[0],
     Object.values(manifest.imageNameToPath ?? {})[0] ?? manifest.images?.[0]].filter((file): file is string => Boolean(file));
-  // Settle every check, so a failed request for one file can't hide a refusal of another.
-  const settled = await Promise.allSettled(files.map(async file => sample(new URL(file, manifest.baseUrl).href)));
+  // Probe the URLs viewers load: manifests keep paths raw, so each segment is encoded (a tile may be named 5x5#-5.ply)
+  // and joined below the base even without a trailing slash. Settle every check, so a failed request for one file
+  // can't hide a refusal of another.
+  const settled = await Promise.allSettled(files.map(async file => sample(joinManifestUrlPath(manifest.baseUrl, file))));
   const results = settled.map(result => result.status === 'fulfilled' ? result.value : 'unknown');
   return results.includes('private') ? 'private' : results.every(result => result === 'public') ? 'public' : 'unknown';
 }

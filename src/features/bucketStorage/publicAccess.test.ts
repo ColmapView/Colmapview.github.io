@@ -21,6 +21,25 @@ describe('bucketAccess', () => {
     expect(request).toHaveBeenCalledTimes(6);
   });
 
+  it('requests raw manifest paths encoded, as viewers load them', async () => {
+    const scene = { ...manifest, splats: ['5x5#-5.ply'], imageNameToPath: { photo: 'images/50% off?.jpg' } };
+    const keys = ['manifest.json', 'cameras.bin', 'images.bin', 'points3D.bin', 'colmapview.yaml', '5x5%23-5.ply', 'images/50%25%20off%3F.jpg'];
+    // Like an S3 bucket that allows GetObject but not ListBucket: a key that doesn't exist is refused.
+    const request = vi.fn(async (url: string) => !keys.some(key => url === `https://public.example/scene/${key}`) ? new Response('Forbidden', { status: 403 })
+      : url.endsWith('manifest.json') ? Response.json(scene) : new Response(new Uint8Array([1, 2, 3, 4]), { status: 206 }));
+    vi.stubGlobal('fetch', request);
+    expect(await bucketAccess(viewer('https://public.example/scene/manifest.json'))).toBe('public');
+    expect(request.mock.calls.map(([url]) => url)).toEqual(expect.arrayContaining(['https://public.example/scene/5x5%23-5.ply', 'https://public.example/scene/images/50%25%20off%3F.jpg']));
+  });
+
+  it('requests files below a base URL without a trailing slash, as viewers do', async () => {
+    const request = vi.fn(async (url: string) => url.endsWith('manifest.json') ? Response.json({ ...manifest, baseUrl: 'https://public.example/scene' })
+      : new Response(new Uint8Array([1, 2, 3, 4]), { status: 206 }));
+    vi.stubGlobal('fetch', request);
+    expect(await bucketAccess(viewer('https://public.example/scene/manifest.json'))).toBe('public');
+    expect(request.mock.calls.map(([url]) => url)).toContain('https://public.example/scene/cameras.bin');
+  });
+
   it.each([
     ['a refused model file', 'private', (url: string) => url.endsWith('manifest.json') ? Response.json(manifest) : new Response('Forbidden', { status: 403 })],
     ['a refused manifest', 'private', () => new Response('Forbidden', { status: 401 })],
