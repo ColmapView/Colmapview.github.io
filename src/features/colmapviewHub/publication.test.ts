@@ -13,7 +13,7 @@ const source = { key: '1:url:https://storage.example/manifest.json:', revision: 
 function controller(overrides: NonNullable<Parameters<typeof createHubPublication>[1]> = {}) {
   const request = vi.fn().mockResolvedValue(link);
   const thumbnail = vi.fn().mockResolvedValue('small-jpeg');
-  const hub = createHubPublication('huggingFace', { baseUrl: () => HUB, thumbnail, request, notify: vi.fn(), ...overrides });
+  const hub = createHubPublication('huggingFace', { baseUrl: () => HUB, thumbnail, request, notify: vi.fn(), currentSource: () => source, ...overrides });
   return { hub, request, thumbnail };
 }
 
@@ -125,6 +125,34 @@ describe('Hub controller', () => {
     without.hub.prepare({ title: 'Scene' }, { access: 'public', source });
     await without.hub.finish(viewer);
     expect(without.hub.getSnapshot()).toMatchObject({ phase: 'failed', retryable: false });
+  });
+
+  it('captures nothing on Retry once another dataset is on screen, and offers no further Retry', async () => {
+    const capture = vi.fn().mockResolvedValueOnce(null).mockResolvedValue(preview);
+    let onScreen = source;
+    const { hub, request } = controller({ currentSource: () => onScreen });
+    hub.prepare({ title: 'Scene' }, { access: 'public', source, capture });
+    await hub.finish(viewer);
+    expect(hub.getSnapshot()).toMatchObject({ phase: 'failed', retryable: true });
+    onScreen = { key: '2:url:https://storage.example/other.json:', revision: 0 };
+    await hub.retry();
+    expect(capture).toHaveBeenCalledOnce();
+    expect(request).not.toHaveBeenCalled();
+    expect(hub.getSnapshot()).toMatchObject({ phase: 'failed', viewerUrl: viewer, retryable: false,
+      error: "The dataset changed, so its preview can't be captured. Upload again to create a Hub link." });
+    onScreen = source;
+    await hub.retry();
+    expect(capture).toHaveBeenCalledOnce();
+  });
+
+  it('captures nothing on Retry after an edit to the same dataset', async () => {
+    const capture = vi.fn().mockResolvedValueOnce(null).mockResolvedValue(preview);
+    const { hub } = controller({ currentSource: () => ({ ...source, revision: 1 }) });
+    hub.prepare({ title: 'Scene' }, { access: 'public', source, capture });
+    await hub.finish(viewer);
+    await hub.retry();
+    expect(capture).not.toHaveBeenCalled();
+    expect(hub.getSnapshot()).toMatchObject({ phase: 'failed', retryable: false });
   });
 
   it('shows one toast when a link finishes while its dialog is closed, and none while it is open', async () => {

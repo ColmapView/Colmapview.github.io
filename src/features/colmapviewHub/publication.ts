@@ -6,6 +6,7 @@ import { timeoutSignal } from '../../utils/abortSignals';
 import { useNotificationStore } from '../../store';
 import { bucketAccess, type BucketAccess } from '../bucketStorage/publicAccess';
 import type { PublicationAssetSummary } from '../datasetPublishing/types';
+import { getHubSource } from '../datasetPublishing/publicationSnapshot';
 
 export type { HubAccess, HubMetadata } from './payload';
 export type { BucketAccess } from '../bucketStorage/publicAccess';
@@ -48,6 +49,7 @@ const RETRYABLE = new Set<HubFailureKind>(['network', 'timeout', 'rate-limited',
 const READY_TOAST = 'Hub link ready. Reopen the upload dialog to copy it and its delete link.';
 const FAILED_TOAST = 'Hub link not created. Reopen the upload dialog to retry.';
 const INVALID_LINK = 'ColmapView Hub returned an invalid link.';
+const SOURCE_CHANGED = "The dataset changed, so its preview can't be captured. Upload again to create a Hub link.";
 
 /** POST /api/links with typed failures. The returned links must lie under the configured Hub. */
 export async function requestHubLink(baseUrl: string, payload: HubLinkPayload): Promise<{ url: string; managementUrl: string }> {
@@ -99,6 +101,8 @@ interface Dependencies {
   checkBucket?: (viewerUrl: string) => Promise<BucketAccess>;
   notify?: (type: 'info' | 'warning', message: string) => void;
   now?: () => number;
+  /** The dataset state on screen; a preview is captured only while it matches the draft's source. */
+  currentSource?: () => HubSource;
 }
 
 const newSecret = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
@@ -113,6 +117,12 @@ export function createHubPublication(provider: HubProvider, deps: Dependencies =
   const checkBucket = deps.checkBucket ?? bucketAccess;
   const notify = deps.notify ?? ((type, message) => { useNotificationStore.getState().addNotification(type, message, 10_000); });
   const now = deps.now ?? Date.now;
+  const currentSource = deps.currentSource ?? (() => getHubSource());
+  /** Whether the dataset on screen is still the one a draft was made from, so a capture shows it. */
+  const onScreen = (source: HubSource) => {
+    const current = currentSource();
+    return current.key === source.key && current.revision === source.revision;
+  };
   let state: HubLinkState = { phase: 'idle' };
   let draft: Draft | null = null;
   let payload: HubLinkPayload | null = null;
@@ -190,7 +200,8 @@ export function createHubPublication(provider: HubProvider, deps: Dependencies =
       hubShareLinks.set(provider, null);
       draft = baseUrl() ? {
         metadata: structuredClone(metadata), access: options.access, source: options.source, secret: newSecret(), capture: options.capture ?? null,
-        preview: options.preview ? Promise.resolve(options.preview) : options.capture ? startCapture(options.capture) : null,
+        preview: options.preview ? Promise.resolve(options.preview)
+          : options.capture && onScreen(options.source) ? startCapture(options.capture) : null,
       } : null;
       set({ phase: 'idle' });
     },
@@ -202,7 +213,14 @@ export function createHubPublication(provider: HubProvider, deps: Dependencies =
     },
     retry(): Promise<void> {
       if (state.phase !== 'failed' || !state.retryable || state.retryAfter !== undefined || !state.viewerUrl || !draft) return Promise.resolve();
-      if (!payload && !draft.preview && draft.capture) draft.preview = startCapture(draft.capture);
+      if (!payload && !draft.preview && draft.capture) {
+        // The view on screen belongs to another dataset now; its screenshot must not become this card's preview.
+        if (!onScreen(draft.source)) {
+          set({ ...state, error: SOURCE_CHANGED, retryable: false });
+          return Promise.resolve();
+        }
+        draft.preview = startCapture(draft.capture);
+      }
       return run(state.viewerUrl);
     },
     markDeleteLinkSeen() {
