@@ -2,7 +2,7 @@ import { getHubBaseUrl } from './config';
 import { makeHubThumbnail } from './thumbnail';
 import { timeoutSignal } from '../../utils/abortSignals';
 import { useExportStore } from '../../store';
-import { isPublishedBucketPublic } from '../bucketStorage/publicAccess';
+import { bucketAccess } from '../bucketStorage/publicAccess';
 import type { PublicationAssetSummary } from '../datasetPublishing/types';
 
 export interface HubLicense { id?: string; name?: string; url?: string }
@@ -112,6 +112,6 @@ export function createHubPublication(deps: Dependencies = {}) {
 export const hubPublications = {
   huggingFace: createHubPublication(),
   googleDrive: createHubPublication(),
-  bucket: createHubPublication({ publicAccess: isPublishedBucketPublic }),
+  bucket: createHubPublication({ publicAccess: async viewerUrl => await bucketAccess(viewerUrl) === 'public' }),
 };
 export type HubPublication = ReturnType<typeof createHubPublication>;
