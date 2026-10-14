@@ -225,6 +225,15 @@ describe('PublishDatasetModal', () => {
     expect(actions.reset).not.toHaveBeenCalled();
     expect(actions.publishDataset).not.toHaveBeenCalled();
   });
+
+  it('strips control characters as you type and limits the custom license fields like the Hub', () => {
+    render(<PublishDatasetModal isOpen onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('Dataset title'), { target: { value: 'Sce\u0007ne' } });
+    expect(screen.getByLabelText('Dataset title')).toHaveValue('Scene');
+    fireEvent.change(screen.getByLabelText('Dataset license'), { target: { value: 'other' } });
+    expect(screen.getByLabelText('Custom license name')).toHaveAttribute('maxLength', '160');
+    expect(screen.getByLabelText('Custom license URL')).toHaveAttribute('maxLength', '2048');
+  });
 });
 
 const repoUrl = 'https://huggingface.co/datasets/publisher/scene';

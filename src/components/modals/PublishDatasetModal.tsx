@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from 'react';
 import { getHfConfiguration } from '../../features/huggingface/config';
-import { PUBLICATION_LICENSES, validatePublicationDetails } from '../../features/datasetPublishing/publicationMetadata';
+import { PUBLICATION_LICENSE_NAME_LIMIT, PUBLICATION_LICENSE_URL_LIMIT, PUBLICATION_LICENSES, stripControlCharacters, validatePublicationDetails } from '../../features/datasetPublishing/publicationMetadata';
 import { isPublishing } from '../../features/datasetPublishing/publishDataset';
 import { publicationErrorMessage } from '../../features/huggingface/http';
 import { usePublishDatasetStoreFacade } from './usePublishDatasetStoreFacade';
@@ -111,7 +111,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
               <input id={`${id}-name`} className={fieldClass} value={name} maxLength={96} onChange={event => setName(event.target.value)} autoComplete="off" />
             </div>
             <label htmlFor={`${id}-dataset-title`}>Dataset title</label>
-            <input id={`${id}-dataset-title`} className={fieldClass} value={title} maxLength={200} onChange={event => setTitle(event.target.value)} />
+            <input id={`${id}-dataset-title`} className={fieldClass} value={title} maxLength={200} onChange={event => setTitle(stripControlCharacters(event.target.value))} />
             <label htmlFor={`${id}-license`}>Dataset license</label>
             <select id={`${id}-license`} className={`${inputStyles.select} ${inputStyles.selectSizes.sm} w-full min-w-0`} value={license} onChange={event => setLicense(event.target.value)}>
               <option value="">{visibility === 'private' ? 'No license specified' : 'Choose a license you can grant'}</option>
@@ -119,12 +119,12 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
             </select>
             {license === 'other' && <>
               <label htmlFor={`${id}-license-name`}>Custom license name</label>
-              <input id={`${id}-license-name`} className={fieldClass} value={licenseName} maxLength={200} onChange={event => setLicenseName(event.target.value)} />
+              <input id={`${id}-license-name`} className={fieldClass} value={licenseName} maxLength={PUBLICATION_LICENSE_NAME_LIMIT} onChange={event => setLicenseName(stripControlCharacters(event.target.value))} />
               <label htmlFor={`${id}-license-url`}>Custom license URL</label>
-              <input id={`${id}-license-url`} className={fieldClass} type="url" value={licenseUrl} onChange={event => setLicenseUrl(event.target.value)} />
+              <input id={`${id}-license-url`} className={fieldClass} type="url" value={licenseUrl} maxLength={PUBLICATION_LICENSE_URL_LIMIT} onChange={event => setLicenseUrl(stripControlCharacters(event.target.value))} />
             </>}
             <label htmlFor={`${id}-description`} className="publication-label-top">Description</label>
-            <textarea id={`${id}-description`} className={fieldClass} value={description} maxLength={10000} rows={3} onChange={event => setDescription(event.target.value)} />
+            <textarea id={`${id}-description`} className={fieldClass} value={description} maxLength={10000} rows={3} onChange={event => setDescription(stripControlCharacters(event.target.value, true))} />
           </section>}
           {busy && <UploadProgress label="Publication progress" message={publish.message} progressLabel="Files committed"
             max={publish.filesTotal} value={publish.filesDone}

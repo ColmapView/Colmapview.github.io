@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { discoverManifestSplatCatalog, fetchManifestColmapFiles } from '../../hooks/urlLoaderManifestFetch';
 import { getManifestLoadSourceInfo } from '../../hooks/urlLoaderPolicy';
 import { buildImageUrl } from '../../utils/imageFileLookupPolicy';
-import { publicationManifest, publicationMetadata, publicationReceipt, validatePublicationDetails } from './publicationMetadata';
+import { PUBLICATION_LICENSES, publicationLicenseInfo, publicationManifest, publicationMetadata, publicationReceipt, stripControlCharacters, validatePublicationDetails } from './publicationMetadata';
 import { datasetFileUrl } from './publicationPaths';
 import { bucketPublicationManifest } from '../bucketStorage/publishDataset';
 import type { PreparedPublication } from './types';
@@ -167,5 +167,33 @@ describe('published manifest', () => {
       expect.objectContaining({ path: 'splats/tile-a.ply', size: TILE_BYTES }),
       expect.objectContaining({ path: 'splats/tile-b.ply', size: TILE_BYTES }),
     ]);
+  });
+});
+
+describe('license names, links and form text rules', () => {
+  it('gives every known license a short name and an HTTPS link', () => {
+    for (const option of PUBLICATION_LICENSES.filter(option => option.id !== 'other')) {
+      expect(publicationLicenseInfo({ license: option.id })).toEqual({ name: expect.any(String), url: expect.stringMatching(/^https:\/\//) });
+    }
+    expect(publicationLicenseInfo({ license: 'cc-by-4.0' })).toEqual({ name: 'CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' });
+  });
+
+  it('uses the entered custom license, and nothing when there is no license', () => {
+    expect(publicationLicenseInfo({ license: 'other', licenseName: ' Research only ', licenseUrl: 'https://example.com/l' }))
+      .toEqual({ name: 'Research only', url: 'https://example.com/l' });
+    expect(publicationLicenseInfo({ license: '' })).toBeUndefined();
+  });
+
+  it('strips control characters, keeping line breaks and tabs only in multi-line fields', () => {
+    expect(stripControlCharacters('Sce\u0000ne\u0007\n')).toBe('Scene');
+    expect(stripControlCharacters('Line\u0000 one\n\ttwo\r\n', true)).toBe('Line one\n\ttwo\r\n');
+  });
+
+  it('caps a custom license name at 160 characters and its URL at 2048, like the Hub', () => {
+    const details = { name: 'scene', title: 'Scene', description: '', license: 'other', visibility: 'public' as const, licenseUrl: 'https://example.com/l' };
+    expect(() => validatePublicationDetails({ ...details, licenseName: 'L'.repeat(160) })).not.toThrow();
+    expect(() => validatePublicationDetails({ ...details, licenseName: 'L'.repeat(161) })).toThrow('Shorten the custom license name to 160 characters and its URL to 2,048.');
+    expect(() => validatePublicationDetails({ ...details, licenseName: 'Custom', licenseUrl: `https://example.com/${'a'.repeat(2048)}` }))
+      .toThrow('Shorten the custom license name to 160 characters and its URL to 2,048.');
   });
 });

@@ -10,19 +10,43 @@ import type { UploadFile } from '../huggingface/hubClient';
 import { DATASET_VIEWER_SETTINGS_FILE } from '../../utils/datasetViewerSettings';
 import { buildImageUrl } from '../../utils/imageFileLookupPolicy';
 
-/** Hugging Face repository-card license identifiers, with labels for the publish dialog. */
+/** Hugging Face repository-card license identifiers, with labels for the publish dialog and names and links for Hub cards. */
 export const PUBLICATION_LICENSES = [
-  { id: 'cc-by-4.0', label: 'CC BY 4.0 (attribution)' },
-  { id: 'cc-by-sa-4.0', label: 'CC BY-SA 4.0 (share alike)' },
-  { id: 'cc-by-nc-4.0', label: 'CC BY-NC 4.0 (non-commercial)' },
-  { id: 'cc-by-nc-sa-4.0', label: 'CC BY-NC-SA 4.0 (non-commercial, share alike)' },
-  { id: 'cc-by-nd-4.0', label: 'CC BY-ND 4.0 (no derivatives)' },
-  { id: 'cc-by-nc-nd-4.0', label: 'CC BY-NC-ND 4.0 (non-commercial, no derivatives)' },
-  { id: 'cc0-1.0', label: 'CC0 1.0 (public domain)' },
-  { id: 'mit', label: 'MIT' },
-  { id: 'apache-2.0', label: 'Apache 2.0' },
+  { id: 'cc-by-4.0', label: 'CC BY 4.0 (attribution)', name: 'CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' },
+  { id: 'cc-by-sa-4.0', label: 'CC BY-SA 4.0 (share alike)', name: 'CC BY-SA 4.0', url: 'https://creativecommons.org/licenses/by-sa/4.0/' },
+  { id: 'cc-by-nc-4.0', label: 'CC BY-NC 4.0 (non-commercial)', name: 'CC BY-NC 4.0', url: 'https://creativecommons.org/licenses/by-nc/4.0/' },
+  { id: 'cc-by-nc-sa-4.0', label: 'CC BY-NC-SA 4.0 (non-commercial, share alike)', name: 'CC BY-NC-SA 4.0', url: 'https://creativecommons.org/licenses/by-nc-sa/4.0/' },
+  { id: 'cc-by-nd-4.0', label: 'CC BY-ND 4.0 (no derivatives)', name: 'CC BY-ND 4.0', url: 'https://creativecommons.org/licenses/by-nd/4.0/' },
+  { id: 'cc-by-nc-nd-4.0', label: 'CC BY-NC-ND 4.0 (non-commercial, no derivatives)', name: 'CC BY-NC-ND 4.0', url: 'https://creativecommons.org/licenses/by-nc-nd/4.0/' },
+  { id: 'cc0-1.0', label: 'CC0 1.0 (public domain)', name: 'CC0 1.0', url: 'https://creativecommons.org/publicdomain/zero/1.0/' },
+  { id: 'mit', label: 'MIT', name: 'MIT', url: 'https://opensource.org/license/mit' },
+  { id: 'apache-2.0', label: 'Apache 2.0', name: 'Apache 2.0', url: 'https://www.apache.org/licenses/LICENSE-2.0' },
   { id: 'other', label: 'Custom license' },
 ] as const;
+export const PUBLICATION_LICENSE_NAME_LIMIT = 160;
+export const PUBLICATION_LICENSE_URL_LIMIT = 2048;
+
+/** The license as a name and link, for the Hub card. */
+export function publicationLicenseInfo(details: Pick<PublicationDetails, 'license' | 'licenseName' | 'licenseUrl'>): { name: string; url?: string } | undefined {
+  if (details.license === 'other') {
+    const name = details.licenseName?.trim();
+    return name ? { name, ...(details.licenseUrl ? { url: details.licenseUrl } : {}) } : undefined;
+  }
+  const known = PUBLICATION_LICENSES.find(option => option.id === details.license);
+  return known && 'url' in known ? { name: known.name, url: known.url } : undefined;
+}
+
+/** Removes control characters from a form value; multi-line fields keep tabs and line breaks. */
+export function stripControlCharacters(value: string, multiline = false): string {
+  let text = '';
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if ((code < 32 || code === 127) && !(multiline && (code === 9 || code === 10 || code === 13))) continue;
+    text += character;
+  }
+  return text;
+}
+
 export function validatePublicationDetails(details: PublicationDetails): PublicationDetails {
   if (details.format !== undefined && !['folder', 'zip'].includes(details.format)) throw new HfError('Choose Folder or ZIP archive format.');
   if (details.imageFormat !== undefined && !['original', 'jpeg'].includes(details.imageFormat)) throw new HfError('Choose Original images or JPEG copies.');
@@ -38,6 +62,9 @@ export function validatePublicationDetails(details: PublicationDetails): Publica
     let validUrl = false;
     try { const url = new URL(details.licenseUrl ?? ''); validUrl = url.protocol === 'https:' && !url.username && !url.password; } catch { /* Invalid custom license. */ }
     if (!details.licenseName?.trim() || !validUrl) throw new HfError('Provide a custom license name and HTTPS license URL.');
+    if (details.licenseName.trim().length > PUBLICATION_LICENSE_NAME_LIMIT || (details.licenseUrl ?? '').length > PUBLICATION_LICENSE_URL_LIMIT) {
+      throw new HfError('Shorten the custom license name to 160 characters and its URL to 2,048.');
+    }
   }
   return { ...details, name, title };
 }
