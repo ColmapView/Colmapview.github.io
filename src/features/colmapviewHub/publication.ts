@@ -29,6 +29,11 @@ interface Dependencies {
   publicAccess?: (viewerUrl: string) => Promise<boolean>;
 }
 
+/** Null instead of a TypeError, so a relative or malformed Hub answer fails as an invalid link. */
+function parseUrl(value: string, base?: string): URL | null {
+  try { return new URL(value, base); } catch { return null; }
+}
+
 async function requestLink(baseUrl: string, input: LinkInput): Promise<LinkResponse> {
   const response = await fetch(`${baseUrl}/api/links`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal: timeoutSignal(15000),
@@ -41,9 +46,9 @@ async function requestLink(baseUrl: string, input: LinkInput): Promise<LinkRespo
   if (!result || typeof result !== 'object' || !('url' in result) || typeof result.url !== 'string'
     || !('managementPath' in result) || typeof result.managementPath !== 'string') throw new Error('The Hub returned an invalid link.');
   const root = `${baseUrl}/`;
-  const url = new URL(result.url);
-  const management = new URL(result.managementPath, root);
-  if (!url.href.startsWith(root) || !management.href.startsWith(`${root}manage/`)) throw new Error('The Hub returned an invalid link.');
+  const url = parseUrl(result.url);
+  const management = parseUrl(result.managementPath, root);
+  if (!url?.href.startsWith(root) || !management?.href.startsWith(`${root}manage/`)) throw new Error('The Hub returned an invalid link.');
   return { url: url.href, managementUrl: management.href };
 }
 

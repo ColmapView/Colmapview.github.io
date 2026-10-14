@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHubPublication } from './publication';
 import type { PublicationAssetSummary } from '../datasetPublishing/types';
 
@@ -7,7 +7,19 @@ const viewer = 'https://colmapview.opsiclear.com/?url=https%3A%2F%2Fstorage.exam
 const HUB = 'https://colmapview.opsiclear.com/hub';
 const result = { url: `${HUB}/HappyTree-AAAAAAAAAAAAAAAA`, managementUrl: `${HUB}/manage/HappyTree-AAAAAAAAAAAAAAAA` };
 
+/** Publishes through the real Hub request, answered by a stubbed Hub at https://hub.invalid/hub. */
+async function publishThroughHub(body: unknown, viewerUrl = viewer) {
+  const fetch = vi.fn(async (_url: string, _init: RequestInit) => Response.json(body, { status: 201 }));
+  vi.stubGlobal('fetch', fetch);
+  const controller = createHubPublication({ baseUrl: () => 'https://hub.invalid/hub', thumbnail: async () => 'jpeg' });
+  controller.prepare({ title: 'Scene' }, { listed: false, preview });
+  await controller.finish(viewerUrl);
+  return { fetch, controller };
+}
+
 describe('automatic Hub step after public upload', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
   it('saves nothing when the private upload has no Hub draft', async () => {
     const request = vi.fn();
     const controller = createHubPublication({ request, baseUrl: () => HUB });
@@ -103,19 +115,43 @@ describe('automatic Hub step after public upload', () => {
     expect(controller.getSnapshot()).toEqual({ phase: 'idle' });
   });
 
+  it('takes no screenshot for the card when the Hub is off for this host', async () => {
+    const capture = vi.fn().mockResolvedValue(preview);
+    const request = vi.fn();
+    const controller = createHubPublication({ request, capture, baseUrl: () => null });
+    controller.prepare({ title: 'Scene' }, { listed: false });
+    await Promise.resolve();
+    await controller.finish(viewer);
+    expect(capture).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+    expect(controller.getSnapshot()).toEqual({ phase: 'idle' });
+  });
+
   it('sends the viewer link unchanged and accepts only links under the configured Hub', async () => {
     const local = 'http://localhost:5173/?url=https%3A%2F%2Fstorage.example%2Fscene.zip';
-    const fetch = vi.fn(async (_url: string, _init: RequestInit) =>
-      Response.json({ url: 'https://elsewhere.example/hub/X', managementPath: '/hub/manage/X' }, { status: 201 }));
-    vi.stubGlobal('fetch', fetch);
-    const controller = createHubPublication({ baseUrl: () => 'https://hub.invalid/hub', thumbnail: async () => 'jpeg' });
-    controller.prepare({ title: 'Scene' }, { listed: false, preview });
-    await controller.finish(local);
+    const { fetch, controller } = await publishThroughHub({ url: 'https://elsewhere.example/hub/X', managementPath: '/hub/manage/X' }, local);
     const [url, init] = fetch.mock.calls[0];
     expect(url).toBe('https://hub.invalid/hub/api/links');
     expect(JSON.parse(String(init.body)).viewerUrl).toBe(local);
     expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', error: 'The Hub returned an invalid link.' });
-    vi.unstubAllGlobals();
+  });
+
+  it('returns absolute Hub links, with the delete key in the management link fragment', async () => {
+    const { fetch, controller } = await publishThroughHub({ id: 'HappyTree', url: 'https://hub.invalid/hub/HappyTree', managementPath: '/hub/manage/HappyTree' });
+    const { managementSecret } = JSON.parse(String(fetch.mock.calls[0][1].body));
+    expect(controller.getSnapshot()).toEqual({ phase: 'ready', viewerUrl: viewer, url: 'https://hub.invalid/hub/HappyTree',
+      managementUrl: `https://hub.invalid/hub/manage/HappyTree#${managementSecret}` });
+  });
+
+  it.each([
+    ['a relative link', { url: '/hub/Name', managementPath: '/hub/manage/Name' }],
+    ['a link under /hubX', { url: 'https://hub.invalid/hubX/Name', managementPath: '/hub/manage/Name' }],
+    ['a delete link on another host', { url: 'https://hub.invalid/hub/Name', managementPath: 'https://elsewhere.example/hub/manage/Name' }],
+    ['a delete link outside /hub/manage/', { url: 'https://hub.invalid/hub/Name', managementPath: '/hub/Name' }],
+    ['a malformed delete link', { url: 'https://hub.invalid/hub/Name', managementPath: 'https://[' }],
+  ])('rejects %s as an invalid link', async (_case, body) => {
+    const { controller } = await publishThroughHub(body);
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', error: 'The Hub returned an invalid link.' });
   });
 
   it('skips a private bucket without preparing or uploading its thumbnail', async () => {

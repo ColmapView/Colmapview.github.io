@@ -11,7 +11,8 @@ export function getHubBaseUrl(env: { VITE_HUB_BASE_URL?: string } = import.meta.
   if (configured) {
     try {
       const url = new URL(configured);
-      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) return null;
+      // A literal ? or # in the serialized URL means a query or fragment, even an empty one that search and hash report as ''.
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || /[?#]/.test(url.href)) return null;
       return url.href.replace(/\/+$/, '');
     } catch { return null; }
   }

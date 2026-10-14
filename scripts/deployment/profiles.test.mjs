@@ -17,7 +17,7 @@ const release = {
 };
 
 test('disabled profiles erase inherited test credentials and preview erases provider auth', () => {
-  const inherited = { VITE_GOOGLE_DRIVE_API_KEY: 'private-fixture', GOOGLE_DRIVE_API_KEY: 'private-alias', VITE_GOOGLE_DRIVE_ENABLED: 'true', VITE_HF_AUTH_ENABLED: 'true', VITE_HF_OAUTH_CLIENT_ID: 'test-app', HF_OAUTH_CLIENT_ID: 'inherited-alias' };
+  const inherited = { VITE_GOOGLE_DRIVE_API_KEY: 'private-fixture', GOOGLE_DRIVE_API_KEY: 'private-alias', VITE_GOOGLE_DRIVE_ENABLED: 'true', VITE_HF_AUTH_ENABLED: 'true', VITE_HF_OAUTH_CLIENT_ID: 'test-app', HF_OAUTH_CLIENT_ID: 'inherited-alias', VITE_HUB_BASE_URL: 'http://localhost:5201/hub' };
   for (const profile of ['github', 'preview']) {
     const env = profileEnvironment(profile, inherited);
     assert.equal(env.VITE_GOOGLE_DRIVE_ENABLED, 'false');
@@ -32,6 +32,12 @@ test('disabled profiles erase inherited test credentials and preview erases prov
   assert.equal(profileEnvironment('github', inherited, true).HF_OAUTH_CLIENT_ID, '');
   for (const profile of ['preview', 'custom']) {
     assert.equal(profileEnvironment(profile, { ...FIXTURE_GOOGLE_CONFIG, ...inherited }).HF_OAUTH_CLIENT_ID, '', profile);
+  }
+  // A development Hub endpoint never reaches a hosted build, fixture builds included.
+  for (const profile of ['github', 'custom', 'preview']) {
+    for (const fixture of [false, true]) {
+      assert.equal(profileEnvironment(profile, { ...FIXTURE_GOOGLE_CONFIG, ...inherited }, fixture).VITE_HUB_BASE_URL, '', `${profile} fixture=${fixture}`);
+    }
   }
   // The job env holds the channel HF settings deploy.yml selected: only real GitHub builds may keep them.
   const devHf = { VITE_HF_PUBLISH_ENABLED: 'true', VITE_HF_AUTH_ENABLED: 'true', VITE_HF_OAUTH_CLIENT_ID: 'dev-id', VITE_HF_OAUTH_REDIRECT_URI: 'https://colmapview.github.io/dev/hf-callback.html' };

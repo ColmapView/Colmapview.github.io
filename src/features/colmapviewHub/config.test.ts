@@ -16,7 +16,8 @@ describe('getHubBaseUrl', () => {
     expect(getHubBaseUrl({}, { protocol, hostname })).toBeNull();
   });
 
-  it.each(['ftp://hub.example/hub', 'https://hub.example/hub?debug=1', 'https://hub.example/hub#x', 'https://user:pw@hub.example/hub', 'not a url'])(
+  it.each(['ftp://hub.example/hub', 'https://hub.example/hub?debug=1', 'https://hub.example/hub#x', 'https://hub.example/hub?', 'https://hub.example/hub#',
+    'https://user:pw@hub.example/hub', 'not a url'])(
     'is off for an invalid VITE_HUB_BASE_URL %s, even on a production host', value => {
       expect(getHubBaseUrl({ VITE_HUB_BASE_URL: value }, production)).toBeNull();
     });

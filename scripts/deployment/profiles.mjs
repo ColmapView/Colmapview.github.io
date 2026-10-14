@@ -108,6 +108,8 @@ export function profileEnvironment(profile, source = process.env, fixture = fals
     env[`VITE_GOOGLE_DRIVE_${name}`] = '';
     env[`GOOGLE_DRIVE_${name}`] = '';
   }
+  // A development Hub endpoint never reaches a hosted build: config.ts picks the production Hub by host, and previews get none.
+  env.VITE_HUB_BASE_URL = '';
   if (profile !== 'github' || fixture) {
     for (const name of HF_NAMES) env[`VITE_HF_${name}`] = name.endsWith('ENABLED') ? 'false' : '';
     // Unprefixed aliases must also be cleared for custom, preview and GitHub fixture builds.
