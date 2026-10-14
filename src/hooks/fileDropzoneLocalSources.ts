@@ -55,6 +55,7 @@ interface LocalSourceBaseDeps {
   setUrlProgress: (progress: UrlLoadProgress | null) => void;
   setError: (error: string | null) => void;
   setSourceInfo: SetSourceInfo;
+  setSourceName?: (name: string | null) => void;
   clearCaches: ClearCaches;
   processFiles: ProcessFiles;
   waitForPaint?: () => Promise<void>;
@@ -96,9 +97,20 @@ async function yieldToPaint(deps: Pick<LocalSourceBaseDeps, 'waitForPaint'>): Pr
   await (deps.waitForPaint ?? waitForBrowserPaint)();
 }
 
-function commitLocalSceneSource(deps: Pick<LocalSourceBaseDeps, 'clearCaches' | 'setSourceInfo'>): void {
+function commitLocalSceneSource(deps: Pick<LocalSourceBaseDeps, 'clearCaches' | 'setSourceInfo' | 'setSourceName'>, name: string | null): void {
   deps.clearCaches();
   deps.setSourceInfo('local', null);
+  deps.setSourceName?.(name);
+}
+
+/** A single dropped folder's name; several dropped entries share no name. */
+function droppedFolderName(payload: FileDropPayload): string | null {
+  return payload.entries.length === 1 && payload.entries[0].isDirectory ? payload.entries[0].name || null : null;
+}
+
+/** An archive's file name without its archive extension. */
+export function archiveName(name: string): string | null {
+  return name.replace(/\.(?:tar\.(?:gz|bz2|xz|zst)|tgz|zip|tar|7z)$/i, '') || null;
 }
 
 /** Hands the files to the workflow under this load; `install` commits their source once they replace the scene. */
@@ -156,6 +168,7 @@ export async function loadLocalZipFile(
       deps.setActiveZipArchive(archive, imageIndex, fileSize, imageCount);
       transferred = true;
       deps.setSourceInfo('zip', null);
+      deps.setSourceName?.(archiveName(zipFile.name));
     });
     load.assertCurrent();
     if (processed === false) return false;
@@ -199,7 +212,7 @@ export async function loadDropPayload(
       (entry, path, files) => deps.scanEntry(entry, path, files, load.signal)), load.signal);
     load.assertCurrent();
 
-    const processed = await processLocalFiles(files, load, deps, () => commitLocalSceneSource(deps));
+    const processed = await processLocalFiles(files, load, deps, () => commitLocalSceneSource(deps, droppedFolderName(payload)));
     load.assertCurrent();
     return processed !== false;
   } catch (error) {
@@ -255,7 +268,7 @@ export async function loadBrowsedDirectory(
     await awaitWithAbort(deps.scanDirectoryHandle(dirHandle, '', files, load.signal), load.signal);
     load.assertCurrent();
 
-    const processed = await processLocalFiles(files, load, deps, () => commitLocalSceneSource(deps));
+    const processed = await processLocalFiles(files, load, deps, () => commitLocalSceneSource(deps, dirHandle.name || null));
     load.assertCurrent();
     return processed !== false;
   } catch (error) {

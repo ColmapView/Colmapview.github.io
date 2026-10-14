@@ -10,6 +10,7 @@ import {
   buildFileSystemDirectoryHandle,
 } from '../test/builders';
 import {
+  archiveName,
   loadBrowsedDirectory,
   loadDropPayload,
   loadLocalZipFile,
@@ -403,5 +404,40 @@ describe('file dropzone local source loading', () => {
     expect(deps.beginLoad).not.toHaveBeenCalled();
     expect(deps.cancelUrlLoad).not.toHaveBeenCalled();
     expect(deps.scanDirectoryHandle).not.toHaveBeenCalled();
+  });
+
+  it('records a single dropped folder name for upload defaults, and none for several entries', async () => {
+    const files = new Map([['sparse/0/cameras.bin', buildFile('cameras.bin')]]);
+    const make = () => {
+      const deps = { ...makeBaseDeps(), setSourceName: vi.fn(), collectDroppedFiles: vi.fn(async () => files), isArchiveFile: () => false,
+        processZipFile: vi.fn(), scanEntry: vi.fn() };
+      deps.processFiles.mockImplementation(async (_files, _progress, options) => { options?.onSceneReplaced?.(); return true; });
+      return deps;
+    };
+    const folder = (name: string) => ({ name, isDirectory: true, isFile: false }) as FileSystemEntry;
+    const single = make();
+    await loadDropPayload({ singleFile: null, entries: [folder('garden')], fallbackFiles: [] }, single);
+    expect(single.setSourceInfo).toHaveBeenLastCalledWith('local', null);
+    expect(single.setSourceName).toHaveBeenLastCalledWith('garden');
+    const several = make();
+    await loadDropPayload({ singleFile: null, entries: [folder('garden'), folder('more')], fallbackFiles: [] }, several);
+    expect(several.setSourceName).toHaveBeenLastCalledWith(null);
+  });
+
+  it('records a picked folder name and a local archive name', async () => {
+    const browse = { ...makeBaseDeps(), setSourceName: vi.fn(), pickDirectory: vi.fn(async () => buildFileSystemDirectoryHandle({ name: 'garden' })),
+      scanDirectoryHandle: vi.fn(async (_handle: FileSystemDirectoryHandle, _path: string, found: Map<string, File>) => { found.set('cameras.bin', buildFile('cameras.bin')); }) };
+    browse.processFiles.mockImplementation(async (_files, _progress, options) => { options?.onSceneReplaced?.(); return true; });
+    await loadBrowsedDirectory(browse);
+    expect(browse.setSourceName).toHaveBeenLastCalledWith('garden');
+    const zip = { ...makeBaseDeps(), setSourceName: vi.fn(), setActiveZipArchive: vi.fn(),
+      loadZipFromFile: vi.fn(async () => ({ colmapFiles: new Map([['cameras.bin', buildFile('cameras.bin')]]), imageIndex: new Map(), archive: buildArchiveReader(), fileSize: 1, imageCount: 0 })) };
+    zip.processFiles.mockImplementation(async (_files, _progress, options) => { options?.onSceneReplaced?.(); return true; });
+    await loadLocalZipFile(buildFile('garden.v2.zip'), zip);
+    expect(zip.setSourceName).toHaveBeenLastCalledWith('garden.v2');
+  });
+
+  it.each([['scene.zip', 'scene'], ['Garden.TAR.GZ', 'Garden'], ['scene.tgz', 'scene'], ['scene.7z', 'scene'], ['.zip', null]])('names the archive %s as %j', (name, expected) => {
+    expect(archiveName(name)).toBe(expected);
   });
 });

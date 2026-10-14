@@ -276,6 +276,8 @@ interface ReconstructionState {
   imageNameToUrl: Record<string, string> | null;
   /** Manifest object (only set when sourceType is 'manifest', for inline embedding in URLs) */
   sourceManifest: ColmapManifest | null;
+  /** A dropped or picked folder's name, or a local archive's name without its extension, for upload defaults; null for other sources. */
+  sourceName: string | null;
   /**
    * The splat the next commit shows, by id, path or file name ('' for None). Every dataset load starts
    * with only its own, so a choice never reaches another dataset's commit.
@@ -314,6 +316,7 @@ interface ReconstructionState {
   setError: (error: string | null) => void;
   setProgress: (progress: number) => void;
   setSourceInfo: (type: ReconstructionSourceType, url?: string | null, imageUrlBase?: string | null, maskUrlBase?: string | null, manifest?: ColmapManifest | null, imageNameToUrl?: Record<string, string> | null) => void;
+  setSourceName: (name: string | null) => void;
   /** Applies to the scene on screen when it can; with no scene yet, it waits for the first commit ('' for None). */
   setRequestedSplatSourceId: (sourceId: string | null) => void;
   /** Merge a discovered remote splat catalog so all tiles are listed (lazy). Never opens the picker. */
@@ -359,6 +362,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   maskUrlBase: null,
   imageNameToUrl: null,
   sourceManifest: null,
+  sourceName: null,
   requestedSplatSourceId: null,
   splatSelectionRevision: 0,
   splatNoneChosen: false,
@@ -481,7 +485,9 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
 
   setProgress: (progress) => set({ progress }),
 
-  setSourceInfo: (sourceType, sourceUrl = null, imageUrlBase = null, maskUrlBase = null, sourceManifest = null, imageNameToUrl = null) => set({ sourceType, sourceUrl, imageUrlBase, maskUrlBase, sourceManifest, imageNameToUrl }),
+  setSourceInfo: (sourceType, sourceUrl = null, imageUrlBase = null, maskUrlBase = null, sourceManifest = null, imageNameToUrl = null) =>
+    set({ sourceType, sourceUrl, imageUrlBase, maskUrlBase, sourceManifest, imageNameToUrl, sourceName: null }),
+  setSourceName: (sourceName) => set({ sourceName }),
 
   setRequestedSplatSourceId: (requestedSplatSourceId) => {
     const loadedFiles = get().loadedFiles;
@@ -737,6 +743,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       maskUrlBase: null,
       imageNameToUrl: null,
       sourceManifest: null,
+      sourceName: null,
       requestedSplatSourceId: null,
       splatNoneChosen: false,
       showSplatPicker: false,

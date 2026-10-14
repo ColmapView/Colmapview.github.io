@@ -46,6 +46,7 @@ export function useFileDropzone() {
   const setDroppedFiles = useReconstructionStore((s) => s.setDroppedFiles);
   const setError = useReconstructionStore((s) => s.setError);
   const setSourceInfo = useReconstructionStore((s) => s.setSourceInfo);
+  const setSourceName = useReconstructionStore((s) => s.setSourceName);
   const setUrlLoading = useReconstructionStore((s) => s.setUrlLoading);
   const setUrlProgress = useReconstructionStore((s) => s.setUrlProgress);
   const resetView = useUIStore((s) => s.resetView);
@@ -152,6 +153,7 @@ export function useFileDropzone() {
       setUrlProgress,
       setError,
       setSourceInfo,
+      setSourceName,
       clearCaches: clearAllCaches,
       processFiles,
       loadZipFromFile,
@@ -159,7 +161,7 @@ export function useFileDropzone() {
       errorLog: appLogger.error,
       setActiveZipArchive,
     });
-  }, [processFiles, setUrlLoading, setUrlProgress, setError, setSourceInfo]);
+  }, [processFiles, setUrlLoading, setUrlProgress, setError, setSourceInfo, setSourceName]);
 
   const handleDrop = useCallback(async (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
@@ -183,6 +185,7 @@ export function useFileDropzone() {
       setUrlProgress,
       setError,
       setSourceInfo,
+      setSourceName,
       clearCaches: clearAllCaches,
       processFiles,
       collectDroppedFiles: (payload, scanDroppedEntry) => collectDroppedFiles(payload, scanDroppedEntry, appLogger.info),
@@ -192,7 +195,7 @@ export function useFileDropzone() {
       processZipFile,
       scanEntry,
     });
-  }, [processFiles, processZipFile, setUrlLoading, setUrlProgress, setError, setSourceInfo]);
+  }, [processFiles, processZipFile, setUrlLoading, setUrlProgress, setError, setSourceInfo, setSourceName]);
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
@@ -208,6 +211,7 @@ export function useFileDropzone() {
       setUrlProgress,
       setError,
       setSourceInfo,
+      setSourceName,
       clearCaches: clearAllCaches,
       processFiles,
       log: appLogger.info,
@@ -217,7 +221,7 @@ export function useFileDropzone() {
         : undefined,
       scanDirectoryHandle,
     });
-  }, [processFiles, setError, setUrlLoading, setUrlProgress, setSourceInfo]);
+  }, [processFiles, setError, setUrlLoading, setUrlProgress, setSourceInfo, setSourceName]);
 
   return {
     handleDrop,

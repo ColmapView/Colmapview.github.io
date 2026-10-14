@@ -10,10 +10,11 @@ const actions = vi.hoisted(() => ({
   publish: { phase: 'idle' } as Partial<DrivePublicationState>, pending: 0, reconstruction: {} as object | null,
   sourceKey: 'current-scene', capture: vi.fn<() => Promise<Blob | null>>(),
   preview: { url: 'blob:current-view' as string | null, busy: false },
+  datasetName: 'dataset',
 }));
 vi.mock('./useGoogleDrivePublishStoreFacade', () => ({ useGoogleDrivePublishStoreFacade: () => ({
   auth: actions.auth, publish: actions.publish, reconstruction: actions.reconstruction, pendingDeletions: actions.pending,
-  sourceKey: actions.sourceKey, getScreenshotBlob: actions.capture,
+  sourceKey: actions.sourceKey, getScreenshotBlob: actions.capture, datasetName: actions.datasetName,
   publishDataset: actions.publishDataset, applyDeletionsToData: actions.apply,
   publication: { retry: actions.retry, reset: actions.reset, cancel: actions.cancel },
   googleDriveAuth: { connect: actions.connect, disconnect: actions.disconnect },
@@ -26,7 +27,7 @@ vi.mock('../../features/googleDrive/auth', async importOriginal => ({
 beforeEach(() => {
   vi.clearAllMocks();
   actions.auth = { status: 'connected', error: null }; actions.publish = { phase: 'idle' }; actions.pending = 0; actions.reconstruction = {};
-  actions.sourceKey = 'current-scene'; actions.preview = { url: 'blob:current-view', busy: false };
+  actions.sourceKey = 'current-scene'; actions.preview = { url: 'blob:current-view', busy: false }; actions.datasetName = 'dataset';
   vi.stubEnv('VITE_GOOGLE_DRIVE_CLIENT_ID', '123456-test.apps.googleusercontent.com');
 });
 afterEach(() => { cleanup(); vi.unstubAllEnvs(); });
@@ -175,5 +176,11 @@ describe('Google Drive publishing dialog', () => {
     expect(screen.getByText('Google Drive publishing is unavailable in this viewer.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Sign in with Google' })).not.toBeInTheDocument();
     expect(usePublicationPreview).toHaveBeenLastCalledWith('current-scene', false, actions.capture);
+  });
+
+  it('names the ZIP after the dataset until the name is edited', async () => {
+    actions.datasetName = 'garden';
+    await renderOpenDialog();
+    expect(screen.getByLabelText('File name')).toHaveValue('garden.zip');
   });
 });

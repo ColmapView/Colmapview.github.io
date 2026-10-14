@@ -23,6 +23,7 @@ beforeEach(() => {
   bucketConnection.disconnect();
   useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
   useDeletionStore.setState(useDeletionStore.getInitialState(), true);
+  useReconstructionStore.setState({ sourceName: 'dataset' });
   publication.publish.mockReset(); publication.cancel.mockReset();
   publication.reset.mockReset(); publication.state = { phase: 'idle', message: '', filesDone: 0, filesTotal: 0, bytesDone: 0 };
 });
@@ -215,5 +216,12 @@ describe('bucket publisher', () => {
     act(() => useDeletionStore.setState({ pendingDeletions: new Set([1]) }));
     expect(button).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Apply deletions and continue' })).toBeVisible();
+  });
+
+  it('names the upload folder after the dataset until the name is edited', () => {
+    bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
+    useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }), sourceName: 'garden' });
+    open();
+    expect(screen.getByLabelText('Upload folder')).toHaveValue('garden');
   });
 });

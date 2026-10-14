@@ -19,7 +19,8 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
   const { auth, publish, publication, googleDriveAuth } = facade;
   const id = useId();
   const clientId = getGoogleDriveClientId();
-  const [name, setName] = useState('dataset.zip');
+  const [nameEdit, setNameEdit] = useState<string | null>(null);
+  const name = nameEdit ?? `${facade.datasetName}.zip`;
   const [shared, setShared] = useState(true);
   const [imageFormat, setImageFormat] = useState<PublicationImageFormat>('original');
   const [sdk, setSdk] = useState<GoogleOAuthSdk | null>(null);
@@ -69,7 +70,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
               hint={shared ? 'Link sharing is enabled after the upload is verified.' : 'Saved privately in My Drive. You can share it later in Drive.'} />
             <UploadImageFormatField id={`${id}-images`} value={imageFormat} onChange={setImageFormat} />
             <label htmlFor={`${id}-name`}>File name</label>
-            <input id={`${id}-name`} className={fieldClass} value={name} maxLength={180} onChange={event => setName(event.target.value)} autoComplete="off" />
+            <input id={`${id}-name`} className={fieldClass} value={name} maxLength={180} onChange={event => setNameEdit(event.target.value)} autoComplete="off" />
           </section>}
           {busy && <UploadProgress label="Drive publication progress" message={publish.message}
             progressLabel={publish.bytesTotal > 0 ? 'Drive upload progress' : 'Files packaged'}

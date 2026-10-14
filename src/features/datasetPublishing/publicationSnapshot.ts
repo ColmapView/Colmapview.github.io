@@ -51,3 +51,23 @@ export function getHubSource(state = useReconstructionStore.getState()): { key: 
 export function captureCurrentView(): Promise<Blob | null> {
   return useExportStore.getState().getScreenshotBlob?.() ?? Promise.resolve(null);
 }
+
+/** URL segments that name a file format rather than a dataset. */
+const GENERIC_SEGMENTS = new Set(['view', 'manifest', 'colmapview', 'download', 'index', 'resolve', 'main']);
+
+function urlName(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const segment = decodeURIComponent(new URL(value).pathname.split('/').filter(Boolean).at(-1) ?? '').replace(/\.[^.]+$/, '');
+    return segment && !GENERIC_SEGMENTS.has(segment.toLowerCase()) ? segment : null;
+  } catch { return null; }
+}
+
+/** A default name for uploads: the manifest name, the source URL's last segment, the recorded local name, or "colmap-dataset". */
+export function getPublicationDatasetName(state = useReconstructionStore.getState()): string {
+  for (const candidate of [state.sourceManifest?.name, urlName(state.sourceUrl), state.sourceName]) {
+    const name = candidate?.replace(/[\\/]+/g, '-').trim();
+    if (name) return name;
+  }
+  return 'colmap-dataset';
+}

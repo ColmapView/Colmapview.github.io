@@ -20,7 +20,8 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
   const id = useId();
   const facade = useBucketPublishStoreFacade();
   const { connection, publication, bucketConnection, bucketPublication } = facade;
-  const [folder, setFolder] = useState('dataset');
+  const [folderEdit, setFolderEdit] = useState<string | null>(null);
+  const folder = folderEdit ?? facade.datasetName;
   const [format, setFormat] = useState<PublicationFormat>('folder');
   const [imageFormat, setImageFormat] = useState<PublicationImageFormat>('original');
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +64,7 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
           {format === 'zip' && <UploadImageFormatField id={`${id}-images`} value={imageFormat} onChange={setImageFormat} />}
           <label htmlFor={`${id}-destination`}>Upload folder</label>
           <div className="publication-access">
-            <input id={`${id}-destination`} className={fieldClass} value={folder} onChange={event => setFolder(event.target.value)} autoComplete="off" />
+            <input id={`${id}-destination`} className={fieldClass} value={folder} onChange={event => setFolderEdit(event.target.value)} autoComplete="off" />
             <p className="publication-note">Each upload creates a new subfolder.</p>
           </div>
         </section>)}
