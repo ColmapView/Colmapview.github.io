@@ -22,14 +22,33 @@ describe('bucketAccess', () => {
   });
 
   it.each([
-    ['a refused model file', (url: string) => url.endsWith('manifest.json') ? Response.json(manifest) : new Response('Forbidden', { status: 403 }), 'private'],
-    ['a refused manifest', () => new Response('Forbidden', { status: 401 }), 'private'],
-    ['a sign-in page with status 200', (url: string) => url.endsWith('manifest.json') ? Response.json(manifest) : new Response('<html>Sign in</html>', { headers: { 'Content-Type': 'text/html' } }), 'private'],
-    ['a missing manifest', () => new Response('Not found', { status: 404 }), 'unknown'],
-    ['a failing file', (url: string) => url.endsWith('manifest.json') ? Response.json(manifest) : new Response('Error', { status: 500 }), 'unknown'],
-    ['a CORS or network failure', () => { throw new TypeError('Failed to fetch'); }, 'unknown'],
-  ] as const)('answers %s with %s', async (_name, respond, expected) => {
+    ['a refused model file', 'private', (url: string) => url.endsWith('manifest.json') ? Response.json(manifest) : new Response('Forbidden', { status: 403 })],
+    ['a refused manifest', 'private', () => new Response('Forbidden', { status: 401 })],
+    ['a sign-in page with status 200', 'private', (url: string) => url.endsWith('manifest.json') ? Response.json(manifest) : new Response('<html>Sign in</html>', { headers: { 'Content-Type': 'text/html' } })],
+    ['a sign-in page with an upper-case media type', 'private', (url: string) => url.endsWith('manifest.json') ? Response.json(manifest) : new Response('<html>Sign in</html>', { headers: { 'Content-Type': 'Text/HTML; charset=UTF-8' } })],
+    ['an XHTML sign-in page', 'private', (url: string) => url.endsWith('manifest.json') ? Response.json(manifest) : new Response('<html>Sign in</html>', { headers: { 'Content-Type': 'application/xhtml+xml' } })],
+    ['a sign-in page instead of the manifest', 'private', () => new Response('<html>Sign in</html>', { headers: { 'Content-Type': 'text/html' } })],
+    ['a missing manifest', 'unknown', () => new Response('Not found', { status: 404 })],
+    ['an HTML 404 page instead of the manifest', 'unknown', () => new Response('<html>Not found</html>', { status: 404, headers: { 'Content-Type': 'text/html' } })],
+    ['a failing file', 'unknown', (url: string) => url.endsWith('manifest.json') ? Response.json(manifest) : new Response('Error', { status: 500 })],
+    ['an HTML 502 error page', 'unknown', (url: string) => url.endsWith('manifest.json') ? Response.json(manifest) : new Response('<html>Bad gateway</html>', { status: 502, headers: { 'Content-Type': 'text/html; charset=utf-8' } })],
+    ['a CORS or network failure', 'unknown', () => { throw new TypeError('Failed to fetch'); }],
+  ] as const)('answers %s with %s', async (_name, expected, respond) => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => respond(url)));
+    expect(await bucketAccess(viewer('https://public.example/scene/manifest.json'))).toBe(expected);
+  });
+
+  it.each([
+    ['a refusal and failed checks on the other files', 'private', (url: string) => {
+      if (url.endsWith('cameras.bin')) return new Response('Forbidden', { status: 403 });
+      throw new TypeError('Failed to fetch');
+    }],
+    ['public files and one failed check', 'unknown', (url: string) => {
+      if (url.endsWith('cameras.bin')) throw new TypeError('Failed to fetch');
+      return new Response(new Uint8Array([1, 2, 3, 4]), { status: 206 });
+    }],
+  ] as const)('answers %s with %s: private outweighs unknown, which outweighs public', async (_name, expected, respond) => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('manifest.json') ? Response.json(manifest) : respond(url)));
     expect(await bucketAccess(viewer('https://public.example/scene/manifest.json'))).toBe(expected);
   });
 
@@ -43,13 +62,48 @@ describe('bucketAccess', () => {
     expect(new Headers(request.mock.calls[0][1].headers).get('Range')).toBe('bytes=0-3');
   });
 
+  it.each([
+    ['a ZIP with a wrong signature', 'unknown', () => new Response(new Uint8Array([1, 2, 3, 4]), { status: 206 })],
+    ['a refused ZIP', 'private', () => new Response('Forbidden', { status: 403 })],
+    ['a sign-in page instead of a ZIP', 'private', () => new Response('<html>Sign in</html>', { headers: { 'Content-Type': 'text/html' } })],
+  ] as const)('answers %s with %s', async (_name, expected, respond) => {
+    vi.stubGlobal('fetch', vi.fn(async () => respond()));
+    expect(await bucketAccess(viewer('https://public.example/dataset.zip'))).toBe(expected);
+  });
+
+  it('keeps a refusal private when the rest of its body cannot be cancelled', async () => {
+    const refusal = () => new Response(new ReadableStream({ cancel() { throw new Error('Connection reset'); } }), { status: 403 });
+    vi.stubGlobal('fetch', vi.fn(async () => refusal()));
+    expect(await bucketAccess(viewer('https://public.example/dataset.zip'))).toBe('private');
+    expect(await bucketAccess(viewer('https://public.example/scene/manifest.json'))).toBe('private');
+  });
+
   it('treats internal hosts as private without any request', async () => {
     const request = vi.fn();
     vi.stubGlobal('fetch', request);
-    for (const host of ['localhost', '127.0.0.1', '10.1.2.3', '192.168.1.20', 'minio', 'nas.local', '[fd12:3456::1]', '[::ffff:127.0.0.1]', '[::ffff:c0a8:114]']) {
+    for (const host of ['localhost', '127.0.0.1', '127.1', '0x7f.1', '10.1.2.3', '192.168.1.20', 'minio', 'nas.local', '[fd12:3456::1]', '[::ffff:127.0.0.1]', '[::ffff:c0a8:114]']) {
       expect(await bucketAccess(viewer(`http://${host}:9000/bucket/scene.zip`)), host).toBe('private');
     }
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it('treats files the manifest places on an internal host as private without requesting them', async () => {
+    const request = vi.fn(async () => Response.json({ ...manifest, baseUrl: 'http://10.0.0.5/scene/' }));
+    vi.stubGlobal('fetch', request);
+    expect(await bucketAccess(viewer('https://public.example/scene/manifest.json'))).toBe('private');
+    expect(request).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['the manifest', 'manifest.json'],
+    ['a model file', 'cameras.bin'],
+  ] as const)('treats a redirect of %s to an internal host as private', async (_name, file) => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const response = url.endsWith('manifest.json') ? Response.json(manifest) : new Response(new Uint8Array([1, 2, 3, 4]), { status: 206 });
+      // fetch follows redirects and reports where it ended in response.url.
+      return url.endsWith(file) ? Object.defineProperty(response, 'url', { value: `http://192.168.1.20/bucket/${file}` }) : response;
+    }));
+    expect(await bucketAccess(viewer('https://public.example/scene/manifest.json'))).toBe('private');
   });
 
   it('answers unknown for a viewer link without a source', async () => {
@@ -63,7 +117,9 @@ describe('isInternalHost', () => {
     ['169.254.1.1', true], ['100.64.0.1', true], ['0.0.0.0', true], ['minio', true], ['bucket.local', true], ['s3.internal', true], ['nas.lan', true],
     ['printer.home.arpa', true], ['[::1]', true], ['[fd00::1]', true], ['[fe80::1]', true], ['host.localhost', true],
     ['[::ffff:127.0.0.1]', true], ['[::ffff:7f00:1]', true], ['[::ffff:c0a8:1]', true], ['[::ffff:a9fe:101]', true],
+    ['127.1', true], ['0x7f.1', true], ['0177.0.0.1', true], ['0:0:0:0:0:0:0:1', true], ['[::]', true], ['fc00::1', true],
+    ['localhost.', true], ['10.0.0.1.', true], ['NAS.Local.', true],
     ['172.32.0.1', false], ['8.8.8.8', false], ['bucket.s3.amazonaws.com', false], ['example.com', false], ['[2001:db8::1]', false],
-    ['[::ffff:808:808]', false],
+    ['[::ffff:808:808]', false], ['example.com.', false],
   ])('%s is internal: %s', (host, internal) => expect(isInternalHost(host)).toBe(internal));
 });
