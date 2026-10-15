@@ -10,7 +10,6 @@ import {
   buildFileSystemDirectoryHandle,
 } from '../test/builders';
 import {
-  archiveName,
   loadBrowsedDirectory,
   loadDropPayload,
   loadLocalZipFile,
@@ -435,9 +434,5 @@ describe('file dropzone local source loading', () => {
     zip.processFiles.mockImplementation(async (_files, _progress, options) => { options?.onSceneReplaced?.(); return true; });
     await loadLocalZipFile(buildFile('garden.v2.zip'), zip);
     expect(zip.setSourceName).toHaveBeenLastCalledWith('garden.v2');
-  });
-
-  it.each([['scene.zip', 'scene'], ['Garden.TAR.GZ', 'Garden'], ['scene.tgz', 'scene'], ['scene.7z', 'scene'], ['.zip', null]])('names the archive %s as %j', (name, expected) => {
-    expect(archiveName(name)).toBe(expected);
   });
 });

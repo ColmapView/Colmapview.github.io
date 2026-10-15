@@ -1,5 +1,5 @@
 import type { LoadedFiles, SplatFileSource } from '../types/colmap';
-import { encodeUrlPath } from './urlUtils';
+import { joinManifestUrlPath } from './urlUtils';
 
 export function normalizeSplatSourceId(sourceId: string): string {
   return sourceId.replace(/\\/g, '/').replace(/^\/+/, '');
@@ -136,11 +136,6 @@ export function isByteLessActiveSplatFile(loadedFiles: LoadedFiles | null): bool
   return Boolean(findByteLessActiveSplatSource(loadedFiles));
 }
 
-function joinSplatUrl(baseUrl: string, path: string): string {
-  const encoded = encodeUrlPath(path);
-  return baseUrl.endsWith('/') ? `${baseUrl}${encoded}` : `${baseUrl}/${encoded}`;
-}
-
 /**
  * Merge a discovered remote splat catalog into the loaded files so every tile is
  * listed as a source. Tiles already downloaded (by path) keep their `file`;
@@ -161,7 +156,7 @@ export function mergeRemoteSplatCatalog(
     return {
       id: existing?.id ?? entry.path,
       path: entry.path,
-      url: joinSplatUrl(baseUrl, entry.path),
+      url: joinManifestUrlPath(baseUrl, entry.path),
       size: entry.size,
       file: existing?.file,
       // Preserve a previously known count when the incoming entry lacks one.

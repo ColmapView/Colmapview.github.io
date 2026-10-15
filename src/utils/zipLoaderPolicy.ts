@@ -48,6 +48,13 @@ export function hasArchiveExtension(pathname: string): boolean {
   return ARCHIVE_EXTENSIONS.some(ext => lower.endsWith(ext));
 }
 
+/** A file name without its archive extension; null when nothing is left. */
+export function stripArchiveExtension(name: string): string | null {
+  const lower = name.toLowerCase();
+  const extension = ARCHIVE_EXTENSIONS.find(ext => lower.endsWith(ext));
+  return (extension ? name.slice(0, -extension.length) : name) || null;
+}
+
 export function isArchiveMimeType(type: string): boolean {
   return ARCHIVE_MIME_TYPES.has(type);
 }

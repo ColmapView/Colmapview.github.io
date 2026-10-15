@@ -7,6 +7,7 @@ import {
   getColmapArchiveKey,
   getZipEntryLookupCandidates,
   hasArchiveExtension,
+  stripArchiveExtension,
   hasRequiredColmapArchiveFiles,
   isArchiveColmapPath,
   isArchiveImagePath,
@@ -172,4 +173,11 @@ describe('zip loader policy', () => {
       'sparse/0/photo.jpg',
     ]);
   });
+});
+
+describe('stripArchiveExtension', () => {
+  it.each([['scene.zip', 'scene'], ['Garden.TAR.GZ', 'Garden'], ['scene.tgz', 'scene'], ['scene.7z', 'scene'], ['scan_2024.10.01', 'scan_2024.10.01'], ['.zip', null]])(
+    'names the archive %s as %j', (name, expected) => {
+      expect(stripArchiveExtension(name)).toBe(expected);
+    });
 });

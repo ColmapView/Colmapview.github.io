@@ -39,10 +39,11 @@ export function useSharePanelStoreFacade(): SharePanelStoreFacade {
   const addNotification = useNotificationStore((s) => s.addNotification);
   const hfPublicationActive = usePublicationStatusStore((s) => s.phase !== 'idle');
   const drivePublicationActive = useDrivePublicationStatus((s) => s.active);
-  const sourceKey = useReconstructionStore(getHubSourceKey);
-  useSyncExternalStore(hubShareLinks.subscribe, hubShareLinks.getVersion);
+  const hasHubLinks = useSyncExternalStore(hubShareLinks.subscribe, hubShareLinks.hasAny);
+  // The source key is computed only while some Hub link could match it.
+  const sourceKey = useReconstructionStore((s) => (hasHubLinks ? getHubSourceKey(s) : ''));
   // The Hub link opens the view saved at upload, so it is offered only for that exact dataset state.
-  const hubLink = hubShareLinks.match({ key: sourceKey, revision }, pending);
+  const hubLink = useSyncExternalStore(hubShareLinks.subscribe, () => hubShareLinks.match({ key: sourceKey, revision }, pending));
 
   return {
     data: {

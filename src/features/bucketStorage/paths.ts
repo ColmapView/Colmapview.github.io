@@ -1,4 +1,5 @@
 import { BucketError, type BucketConfig } from './types';
+import { hasControlCharacters } from '../../utils/controlCharacters';
 
 /** Recognized S3 endpoints give the connection dialog a bucket root, never a dataset subfolder. */
 export function inferBucketRootUrl(value: string): string | null {
@@ -45,7 +46,7 @@ export function validateBucketConfig(config: BucketConfig): Readonly<BucketConfi
 }
 
 export function validateBucketKey(key: string): string {
-  if (new TextEncoder().encode(key).byteLength > 1024 || [...key].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) || key.includes('\\')
+  if (new TextEncoder().encode(key).byteLength > 1024 || hasControlCharacters(key) || key.includes('\\')
     || key.split('/').some(part => part === '.' || part === '..')) {
     throw new BucketError('The bucket path is unsupported. Use a path under 1,024 bytes without dot segments or control characters.');
   }
@@ -70,10 +71,13 @@ export function bucketKeyFromUrl(root: string, value: string): string | null {
   } catch { return null; }
 }
 
+/** The destination folder limit, in UTF-8 bytes. */
+export const BUCKET_FOLDER_MAX_BYTES = 512;
+
 export function bucketFolder(value: string): string {
   const folder = value.trim().replace(/^\/+|\/+$/g, '');
   if (!folder) throw new BucketError('Enter a destination folder.');
   validateBucketKey(folder);
-  if (new TextEncoder().encode(folder).byteLength > 512) throw new BucketError('Use a destination folder under 512 bytes.');
+  if (new TextEncoder().encode(folder).byteLength > BUCKET_FOLDER_MAX_BYTES) throw new BucketError(`Use a destination folder under ${BUCKET_FOLDER_MAX_BYTES} bytes.`);
   return folder;
 }

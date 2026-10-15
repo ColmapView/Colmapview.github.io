@@ -1,4 +1,5 @@
 import { HfError } from '../huggingface/http';
+import { hasControlCharacters } from '../../utils/controlCharacters';
 import type { DriveArchive, DriveArchiveProgress } from './prepareArchive';
 import { DRIVE_OPERATION_KEY, DRIVE_UPLOAD_CHUNK_BYTES, driveSharingUrl, GoogleDrivePublishError, type DrivePublishedFile, type DriveUploadClient } from './upload';
 import { makePublicationViewerLink } from '../datasetPublishing/publicationLinks';
@@ -16,11 +17,12 @@ export function drivePublicationErrorMessage(error: unknown): string {
   return error instanceof GoogleDrivePublishError || error instanceof HfError ? error.message
     : 'Drive publication could not finish. Check your connection and retry in this tab.';
 }
+/** Drive's file name limit, in UTF-16 units. */
+export const DRIVE_FILE_NAME_MAX = 180;
 export function normalizeDriveArchiveName(input: string): string {
   const name = input.trim();
-  if (!name || name.length > 180 || /[\\/]/.test(name) || /^\.+$/.test(name)
-    || [...name].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {
-    throw new GoogleDrivePublishError('Choose a file name without slashes or control characters (up to 180 characters).');
+  if (!name || name.length > DRIVE_FILE_NAME_MAX || /[\\/]/.test(name) || /^\.+$/.test(name) || hasControlCharacters(name)) {
+    throw new GoogleDrivePublishError(`Choose a file name without slashes or control characters (up to ${DRIVE_FILE_NAME_MAX} characters).`);
   }
   return /\.zip$/i.test(name) ? name : `${name}.zip`;
 }

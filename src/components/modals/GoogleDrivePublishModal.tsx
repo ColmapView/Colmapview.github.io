@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { getGoogleDriveClientId, loadGoogleOAuthSdk, type GoogleOAuthSdk } from '../../features/googleDrive/auth';
-import { drivePublicationErrorMessage, isDrivePublishing } from '../../features/googleDrive/publishDataset';
+import { DRIVE_FILE_NAME_MAX, drivePublicationErrorMessage, isDrivePublishing } from '../../features/googleDrive/publishDataset';
 import { useGoogleDrivePublishStoreFacade } from './useGoogleDrivePublishStoreFacade';
 import { UploadAccessField, UploadDialog, UploadImageFormatField, UploadLayout, UploadProgress, UploadResult, UploadViewPreview, PreviousUpload } from '../upload/UploadParts';
 import { usePublicationPreview } from './usePublicationPreview';
@@ -80,7 +80,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
               hint={shared ? 'Link sharing is enabled after the upload is verified.' : 'Saved privately in My Drive. You can share it later in Drive.'} />
             <UploadImageFormatField id={`${id}-images`} value={imageFormat} onChange={setImageFormat} />
             <label htmlFor={`${id}-name`}>File name</label>
-            <input id={`${id}-name`} className={fieldClass} value={name} maxLength={180} onChange={event => setNameEdit({ key: facade.sourceKey, value: event.target.value })} autoComplete="off" />
+            <input id={`${id}-name`} className={fieldClass} value={name} maxLength={DRIVE_FILE_NAME_MAX} onChange={event => setNameEdit({ key: facade.sourceKey, value: event.target.value })} autoComplete="off" />
           </section>}
           {busy && <UploadProgress label="Drive publication progress" message={publish.message}
             progressLabel={publish.bytesTotal > 0 ? 'Drive upload progress' : 'Files packaged'}

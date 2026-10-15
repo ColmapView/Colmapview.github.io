@@ -1,8 +1,10 @@
 import { makeHubThumbnail } from './thumbnail';
 import { getHubBaseUrl } from './config';
 import { buildHubPayload, type HubAccess, type HubLinkPayload, type HubMetadata } from './payload';
-import { hubShareLinks, type HubSource } from './hubShareLinks';
+import { hubShareLinks, sameHubSource, type HubSource } from './hubShareLinks';
 import { timeoutSignal } from '../../utils/abortSignals';
+import { toBase64Url } from '../../utils/urlCameraStateCodec';
+import { retryAfterDeadline } from '../../dataset/urlMediaScheduler';
 import { useNotificationStore } from '../../store';
 import { bucketAccess, type BucketAccess } from '../bucketStorage/publicAccess';
 import type { PublicationAssetSummary } from '../datasetPublishing/types';
@@ -74,8 +76,10 @@ export async function requestHubLink(baseUrl: string, payload: HubLinkPayload): 
   const field = (key: string): unknown => (result && typeof result === 'object' ? (result as Record<string, unknown>)[key] : undefined);
   if (response.status === 429) {
     // Cross-origin callers can read Retry-After only because the Hub exposes it; otherwise wait a minute.
-    const seconds = Math.max(1, Number(response.headers.get('Retry-After')) || 60);
-    throw new HubRequestError(`Too many requests from your network; try again in ${Math.ceil(seconds / 60)} min.`, 'rate-limited', seconds * 1000);
+    const now = Date.now();
+    const deadline = retryAfterDeadline(response.headers.get('Retry-After'), now);
+    const waitMs = deadline !== null && deadline > now ? Math.max(1000, deadline - now) : 60_000;
+    throw new HubRequestError(`Too many requests from your network; try again in ${Math.ceil(waitMs / 60_000)} min.`, 'rate-limited', waitMs);
   }
   if (response.status >= 500) throw new HubRequestError('ColmapView Hub is unavailable.', 'unavailable');
   if (bodyError !== undefined) throw transportError(bodyError);
@@ -115,8 +119,7 @@ interface Dependencies {
   currentSource?: () => HubSource;
 }
 
-const newSecret = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
-  .replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+const newSecret = () => toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
 const startCapture = (capture: HubCapture) => Promise.resolve().then(capture).catch(() => null);
 
 /** The Hub step after an upload. Its state outlives the upload receipt; retries keep the ownership key and payload. */
@@ -129,10 +132,7 @@ export function createHubPublication(provider: HubProvider, deps: Dependencies =
   const now = deps.now ?? Date.now;
   const currentSource = deps.currentSource ?? (() => getHubSource());
   /** Whether the dataset on screen is still the one a draft was made from, so a capture shows it. */
-  const onScreen = (source: HubSource) => {
-    const current = currentSource();
-    return current.key === source.key && current.revision === source.revision;
-  };
+  const onScreen = (source: HubSource) => sameHubSource(currentSource(), source);
   let state: HubLinkState = { phase: 'idle' };
   let draft: Draft | null = null;
   let payload: HubLinkPayload | null = null;

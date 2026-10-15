@@ -1,3 +1,5 @@
+import { bytesToBase64 } from '../../utils/base64';
+
 export const HUB_PREVIEW_WIDTH = 600;
 export const HUB_PREVIEW_HEIGHT = 315;
 const MAX_PREVIEW_BYTES = 64 * 1024;
@@ -36,12 +38,6 @@ export function stripJpegMetadata(bytes: Uint8Array): Uint8Array {
   let at = 0;
   for (const part of kept) { result.set(part, at); at += part.length; }
   return result;
-}
-
-export function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
-  return btoa(binary);
 }
 
 /** The card image: the upload's preview cropped to fill 600 × 315, as a JPEG of at most 64 KiB. */

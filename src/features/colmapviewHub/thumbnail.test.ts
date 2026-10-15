@@ -1,6 +1,7 @@
 import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { bytesToBase64, coverCrop, makeHubThumbnail, stripJpegMetadata } from './thumbnail';
+import { coverCrop, makeHubThumbnail, stripJpegMetadata } from './thumbnail';
+import { bytesToBase64 } from '../../utils/base64';
 
 const segment = (marker: number, payload: number[]) => [0xff, marker, (payload.length + 2) >> 8, (payload.length + 2) & 255, ...payload];
 const ascii = (text: string) => [...text].map(character => character.charCodeAt(0));

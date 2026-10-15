@@ -1,17 +1,12 @@
 import type { CameraViewState } from '../store/types';
 import { parseFiniteNumberString } from './numberParsing';
+import { bytesToBase64 } from './base64';
 
 /**
  * Convert Uint8Array to Base64URL string (URL-safe, no padding).
  */
 export function toBase64Url(bytes: Uint8Array): string {
-  const chunkSize = 0x8000;
-  const chunks: string[] = [];
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + chunkSize)));
-  }
-  const base64 = btoa(chunks.join(''));
-  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return bytesToBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 /**

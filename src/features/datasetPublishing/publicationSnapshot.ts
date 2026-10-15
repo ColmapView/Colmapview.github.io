@@ -5,8 +5,11 @@ import { getPublicationViewerBaseUrl } from './publicationLinks';
 import { getActiveSplatSourceId } from '../../utils/splatFileSourcePolicy';
 import { getZipImageGeneration } from '../../utils/zipImageFiles';
 import { HfError } from '../huggingface/http';
-import { archiveName } from '../../hooks/fileDropzoneLocalSources';
+import { stripArchiveExtension } from '../../utils/zipLoaderPolicy';
 import type { PublicationInput } from './preparePublication';
+import { replaceControlCharacters } from '../../utils/controlCharacters';
+import { DRIVE_FILE_NAME_MAX } from '../googleDrive/publishDataset';
+import { BUCKET_FOLDER_MAX_BYTES } from '../bucketStorage/paths';
 
 const identities = new WeakMap<object, number>();
 let nextIdentity = 0;
@@ -78,16 +81,16 @@ export function captureCurrentView(): Promise<Blob | null> {
 /** URL segments that name a file format rather than a dataset. */
 const GENERIC_SEGMENTS = new Set(['view', 'manifest', 'colmapview', 'download', 'index', 'resolve', 'main']);
 
-/** The Drive file name limit (180 UTF-16 units) less the ".zip" the default appends. */
-export const PUBLICATION_DATASET_NAME_MAX = 180 - '.zip'.length;
-/** The bucket folder limit in UTF-8 bytes (see bucketFolder), which the shared default name also fits. */
-export const PUBLICATION_DATASET_NAME_MAX_BYTES = 512;
+/** The Drive file name limit less the ".zip" the default appends. */
+export const PUBLICATION_DATASET_NAME_MAX = DRIVE_FILE_NAME_MAX - '.zip'.length;
+/** The bucket folder limit in UTF-8 bytes, which the shared default name also fits. */
+export const PUBLICATION_DATASET_NAME_MAX_BYTES = BUCKET_FOLDER_MAX_BYTES;
 
 /** The last URL segment, without an archive or JSON extension; dotted names such as "scan_2024.10.01" stay whole. */
 function urlName(value: string | null): string | null {
   if (!value) return null;
   try {
-    const segment = archiveName(decodeURIComponent(new URL(value).pathname.split('/').filter(Boolean).at(-1) ?? ''))?.replace(/\.json$/i, '');
+    const segment = stripArchiveExtension(decodeURIComponent(new URL(value).pathname.split('/').filter(Boolean).at(-1) ?? ''))?.replace(/\.json$/i, '');
     return segment && !GENERIC_SEGMENTS.has(segment.toLowerCase()) ? segment : null;
   } catch { return null; }
 }
@@ -99,15 +102,10 @@ function urlName(value: string | null): string | null {
  */
 function cleanDatasetName(value: string | null | undefined): string | null {
   if (!value) return null;
-  let printable = '';
-  for (const char of value) {
-    const code = char.charCodeAt(0);
-    printable += code < 32 || code === 127 ? ' ' : char;
-  }
   const encoder = new TextEncoder();
   let name = '';
   let bytes = 0;
-  for (const char of printable.replace(/[\\/]+/g, '-').replace(/\s+/g, ' ').trim()) {
+  for (const char of replaceControlCharacters(value, ' ').replace(/[\\/]+/g, '-').replace(/\s+/g, ' ').trim()) {
     const charBytes = encoder.encode(char).byteLength;
     if (name.length + char.length > PUBLICATION_DATASET_NAME_MAX || bytes + charBytes > PUBLICATION_DATASET_NAME_MAX_BYTES) break;
     name += char;

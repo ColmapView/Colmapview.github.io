@@ -5,6 +5,7 @@ import type { UrlLoadProgress } from '../types/manifest';
 import { appLogger } from '../utils/logger';
 import { awaitWithAbort } from '../utils/awaitWithAbort';
 import { closeZipArchive } from '../utils/zipArchiveState';
+import { stripArchiveExtension } from '../utils/zipLoaderPolicy';
 import { beginReconstructionLoad, getReconstructionLoadGeneration } from '../wasm/reconstructionLoadLifecycle';
 import type { ZipLoadResult, ZipProgress } from '../utils/zipLoader';
 import type { FileDropPayload } from './fileDropzoneDropPayload';
@@ -108,11 +109,6 @@ function droppedFolderName(payload: FileDropPayload): string | null {
   return payload.entries.length === 1 && payload.entries[0].isDirectory ? payload.entries[0].name || null : null;
 }
 
-/** An archive's file name without its archive extension. */
-export function archiveName(name: string): string | null {
-  return name.replace(/\.(?:tar\.(?:gz|bz2|xz|zst)|tgz|tbz2|tbz|txz|zip|tar|7z)$/i, '') || null;
-}
-
 /** Hands the files to the workflow under this load; `install` commits their source once they replace the scene. */
 function processLocalFiles(files: Map<string, File>, load: LocalSourceLoad, deps: Pick<LocalSourceBaseDeps, 'processFiles'>,
   install: () => void) {
@@ -168,7 +164,7 @@ export async function loadLocalZipFile(
       deps.setActiveZipArchive(archive, imageIndex, fileSize, imageCount);
       transferred = true;
       deps.setSourceInfo('zip', null);
-      deps.setSourceName?.(archiveName(zipFile.name));
+      deps.setSourceName?.(stripArchiveExtension(zipFile.name));
     });
     load.assertCurrent();
     if (processed === false) return false;

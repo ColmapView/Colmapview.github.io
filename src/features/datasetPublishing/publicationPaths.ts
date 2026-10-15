@@ -1,9 +1,10 @@
 import { HfError } from '../huggingface/http';
+import { hasControlCharacters } from '../../utils/controlCharacters';
 
 export function publicationPath(input: string): string {
   const path = input.replace(/\\/g, '/');
   if (!path || path.length > 4096 || path.startsWith('/') || /^[a-zA-Z]:/.test(path)
-    || [...path].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
+    || hasControlCharacters(path)
     || path.split('/').some(part => !part || part === '.' || part === '..')) {
     throw new HfError('An asset has an unsafe or unsupported relative filename.', undefined, true);
   }

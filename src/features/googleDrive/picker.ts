@@ -1,6 +1,7 @@
 import { googleDriveAuth } from './auth';
 import { assertGoogleDriveHostAllowed, getGoogleDrivePickerConfig } from './config';
 import { GOOGLE_DRIVE_ARCHIVE_MIME_TYPES, isGoogleDriveArchiveFilename } from './archivePolicy';
+import { hasControlCharacters } from '../../utils/controlCharacters';
 export { getGoogleDrivePickerConfig, type GoogleDrivePickerConfig } from './config';
 
 const PICKER_SCRIPT_URL = 'https://apis.google.com/js/api.js';
@@ -126,7 +127,7 @@ export function parseGoogleDriveArchiveSelection(value: unknown): GoogleDriveArc
   const item = value as { id?: unknown; name?: unknown; resourceKey?: unknown; driveSuccess?: unknown; driveError?: unknown } | null;
   if (!item || typeof item.id !== 'string' || !SAFE_DRIVE_ID.test(item.id)
     || typeof item.name !== 'string' || !item.name || item.name.length > 1024
-    || Array.from(item.name).some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {
+    || hasControlCharacters(item.name)) {
     throw new Error('The Google Drive picker returned an invalid file. Choose the archive again.');
   }
   if (!isGoogleDriveArchiveFilename(item.name)) throw new Error('Choose a ZIP or TAR archive, including supported compressed TAR formats, in the Google Drive picker.');

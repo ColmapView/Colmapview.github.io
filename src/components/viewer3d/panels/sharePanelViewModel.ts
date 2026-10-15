@@ -11,6 +11,15 @@ export function getShareSource(
   return sourceUrl ?? sourceManifest;
 }
 
+/** The link to share: a ready Hub link, else a viewer link generated for the source, else none. */
+export function resolveShareUrl(
+  hubUrl: string | null | undefined,
+  shareSource: ShareSource,
+  generate: (source: NonNullable<ShareSource>) => string
+): string | null {
+  return hubUrl ?? (shareSource ? generate(shareSource) : null);
+}
+
 export function canShareReconstruction(
   shareSource: ShareSource,
   reconstruction: Reconstruction | null
@@ -85,7 +94,7 @@ export function buildSocialSharePayload({
   shareSource,
   hubUrl,
 }: BuildSocialSharePayloadOptions): SocialSharePayload {
-  const url = hubUrl ?? (shareSource ? generateShareableUrl(shareSource, currentViewState) : null);
+  const url = resolveShareUrl(hubUrl, shareSource, (source) => generateShareableUrl(source, currentViewState));
   const willIncludeLink = includeShareLink && Boolean(url);
   const text = buildSocialShareText({ reconstruction, withShareLink: willIncludeLink });
 

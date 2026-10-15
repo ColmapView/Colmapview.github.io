@@ -1,14 +1,13 @@
 import type { PublicationAssetSummary } from '../datasetPublishing/types';
+import { replaceControlCharacters } from '../../utils/controlCharacters';
+import { isPublicationLicenseUrl, PUBLICATION_LICENSE_NAME_LIMIT, type PublicationLicense } from '../datasetPublishing/publicationMetadata';
 
 /** The Hub's creation limits, in UTF-16 units. */
 export const HUB_TITLE_LIMIT = 120;
 export const HUB_DESCRIPTION_LIMIT = 280;
-export const HUB_LICENSE_NAME_LIMIT = 160;
-export const HUB_LICENSE_URL_LIMIT = 2048;
 
 export type HubAccess = 'public' | 'private';
-export interface HubLicense { name: string; url?: string }
-export interface HubMetadata { title: string; description?: string; license?: HubLicense; assets?: PublicationAssetSummary }
+export interface HubMetadata { title: string; description?: string; license?: PublicationLicense; assets?: PublicationAssetSummary }
 export interface HubLinkPayload {
   viewerUrl: string;
   title: string;
@@ -18,18 +17,13 @@ export interface HubLinkPayload {
   /** Sent only for private links: a missing access means public, and the older Hub rejects the key. */
   access?: HubAccess;
   publicAcknowledged: true;
-  license?: HubLicense;
+  license?: PublicationLicense;
   assets?: PublicationAssetSummary;
 }
 
 /** Control characters become spaces, then whitespace collapses the way the Hub collapses it. */
 function collapse(value: string): string {
-  let text = '';
-  for (const character of value) {
-    const code = character.charCodeAt(0);
-    text += code < 32 || code === 127 ? ' ' : character;
-  }
-  return text.trim().replace(/\s+/g, ' ');
+  return replaceControlCharacters(value, ' ').trim().replace(/\s+/g, ' ');
 }
 
 /** Code points that belong to the character before them: marks, the zero-width joiner, variation selectors, skin tones. */
@@ -75,18 +69,10 @@ export function hubText(value: string, limit: number): string {
   return `${text.slice(0, end).trimEnd()}…`;
 }
 
-/** An HTTPS link without credentials. The Hub stores it normalized, which can lengthen it, and caps that form too. */
-function isHubLicenseUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' && !url.username && !url.password && url.href.length <= HUB_LICENSE_URL_LIMIT;
-  } catch { return false; }
-}
-
-function hubLicense({ name, url }: HubLicense): HubLicense | undefined {
-  const text = hubText(name, HUB_LICENSE_NAME_LIMIT);
+function hubLicense({ name, url }: PublicationLicense): PublicationLicense | undefined {
+  const text = hubText(name, PUBLICATION_LICENSE_NAME_LIMIT);
   if (!text) return undefined;
-  return { name: text, ...(url && isHubLicenseUrl(url) ? { url } : {}) };
+  return { name: text, ...(url && isPublicationLicenseUrl(url) ? { url } : {}) };
 }
 
 /** The request body for POST /api/links. */

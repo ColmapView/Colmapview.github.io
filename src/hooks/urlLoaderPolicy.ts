@@ -3,7 +3,7 @@ import type { ColmapManifest } from '../types/manifest';
 import { getPreferredSplatCandidate, isSplatFilePath, sortSplatCandidatesByPreference } from '../utils/splatFilePolicy';
 import { resolveColmapPaths, resolveImagesDir } from '../utils/colmapPathResolver';
 import {
-  encodeUrlPath,
+  joinManifestUrlPath,
   normalizeCloudStorageUrl,
   normalizeGitHostingUrl,
 } from '../utils/urlUtils';
@@ -73,12 +73,7 @@ export interface UrlNormalizationResult {
   steps: UrlNormalizationStep[];
 }
 
-export function joinManifestUrlPath(baseUrl: string, relativePath: string): string {
-  const encodedPath = encodeUrlPath(relativePath);
-  return baseUrl.endsWith('/')
-    ? `${baseUrl}${encodedPath}`
-    : `${baseUrl}/${encodedPath}`;
-}
+export { joinManifestUrlPath };
 
 export function createDefaultManifest(baseUrl: string): ColmapManifest {
   const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;

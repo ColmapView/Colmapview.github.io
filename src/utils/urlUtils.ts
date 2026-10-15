@@ -97,6 +97,14 @@ export function encodeUrlPath(path: string): string {
     .join('/');
 }
 
+/** Joins a base URL and a relative path, encoding the path's segments once. */
+export function joinManifestUrlPath(baseUrl: string, relativePath: string): string {
+  const encodedPath = encodeUrlPath(relativePath);
+  return baseUrl.endsWith('/')
+    ? `${baseUrl}${encodedPath}`
+    : `${baseUrl}/${encodedPath}`;
+}
+
 /**
  * Fetch a splat file from a URL on demand (e.g. when switching to a lazy tile).
  * The inactivity timeout allows large downloads to continue while bytes arrive.

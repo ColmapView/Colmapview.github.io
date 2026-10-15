@@ -1,4 +1,4 @@
-import { joinManifestUrlPath } from '../../hooks/urlLoaderPolicy';
+import { joinManifestUrlPath } from '../../utils/urlUtils';
 import { ColmapManifestSchema } from '../../types/manifest';
 import { timeoutSignal } from '../../utils/abortSignals';
 import { readBoundedResponse } from '../../utils/publishedViewerState';

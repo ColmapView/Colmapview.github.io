@@ -14,6 +14,7 @@ import {
   buildXShareUrl,
   canShareReconstruction,
   getShareSource,
+  resolveShareUrl,
 } from './sharePanelViewModel';
 import { useSharePanelStoreFacade } from './useSharePanelStoreFacade';
 import { getHfAccountConfiguration, getHfConfiguration } from '../../../features/huggingface/config';
@@ -70,6 +71,8 @@ export const SharePanel = memo(function SharePanel({
   const canCopyLink = canShare || Boolean(hubLink);
   const sourceViewState = hasEdits ? null : currentViewState;
   const sourceConfig = hasEdits ? null : undefined;
+  // Without a Hub link for this exact state, an edited scene can only share its original dataset.
+  const linksOriginal = hasEdits && !hubLink;
   const openDestination = (next: Destination) => {
     // The popup's row unmounts on open; keep a stable opener for dialog focus restoration.
     shareButtonRef.current?.focus({ preventScroll: true });
@@ -80,7 +83,7 @@ export const SharePanel = memo(function SharePanel({
 
   // Handle share link copy
   const handleCopyShareLink = useCallback(async () => {
-    const url = hubLink ?? (shareSource ? generateShareableUrl(shareSource, sourceViewState, sourceConfig) : null);
+    const url = resolveShareUrl(hubLink, shareSource, (source) => generateShareableUrl(source, sourceViewState, sourceConfig));
     if (url) await copyWithFeedback(url, setCopiedShareLink);
   }, [hubLink, shareSource, sourceViewState, sourceConfig]);
 
@@ -151,7 +154,7 @@ export const SharePanel = memo(function SharePanel({
       <div className="flex flex-col gap-3 text-sm">
         {canCopyLink && (
           <div className="flex flex-col gap-2">
-            {hasEdits && !hubLink && <p className="m-0 text-ds-secondary">This link opens the original dataset. Upload to share edits.</p>}
+            {linksOriginal && <p className="m-0 text-ds-secondary">This link opens the original dataset. Upload to share edits.</p>}
             <button
               type="button"
               onClick={handleCopyShareLink}
@@ -160,7 +163,7 @@ export const SharePanel = memo(function SharePanel({
               {copiedShareLink ? (
                 <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
               ) : (
-                hasEdits && !hubLink ? 'Copy original dataset link' : 'Copy link'
+                linksOriginal ? 'Copy original dataset link' : 'Copy link'
               )}
             </button>
             {canShare && <>

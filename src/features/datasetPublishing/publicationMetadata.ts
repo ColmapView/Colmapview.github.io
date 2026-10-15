@@ -9,6 +9,7 @@ import { PUBLICATION_JPEG_QUALITY, type PreparedPublication, type PublicationDet
 import type { UploadFile } from '../huggingface/hubClient';
 import { DATASET_VIEWER_SETTINGS_FILE } from '../../utils/datasetViewerSettings';
 import { buildImageUrl } from '../../utils/imageFileLookupPolicy';
+import { replaceControlCharacters } from '../../utils/controlCharacters';
 
 /** Hugging Face repository-card license identifiers, with labels for the publish dialog and names and links for Hub cards. */
 export const PUBLICATION_LICENSES = [
@@ -26,8 +27,22 @@ export const PUBLICATION_LICENSES = [
 export const PUBLICATION_LICENSE_NAME_LIMIT = 160;
 export const PUBLICATION_LICENSE_URL_LIMIT = 2048;
 
+/** A license as a name and an optional link, as the Hub card shows it. */
+export interface PublicationLicense { name: string; url?: string }
+
+/**
+ * An HTTPS link without credentials whose normalized form fits `limit`. The Hub stores links normalized,
+ * and percent-encoding can lengthen them past the cap.
+ */
+export function isPublicationLicenseUrl(value: string, limit = PUBLICATION_LICENSE_URL_LIMIT): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password && url.href.length <= limit;
+  } catch { return false; }
+}
+
 /** The license as a name and link, for the Hub card. */
-export function publicationLicenseInfo(details: Pick<PublicationDetails, 'license' | 'licenseName' | 'licenseUrl'>): { name: string; url?: string } | undefined {
+export function publicationLicenseInfo(details: Pick<PublicationDetails, 'license' | 'licenseName' | 'licenseUrl'>): PublicationLicense | undefined {
   if (details.license === 'other') {
     const name = details.licenseName?.trim();
     return name ? { name, ...(details.licenseUrl ? { url: details.licenseUrl } : {}) } : undefined;
@@ -38,15 +53,9 @@ export function publicationLicenseInfo(details: Pick<PublicationDetails, 'licens
 
 /** Removes control characters from a form value; multi-line fields keep tabs and line breaks. */
 export function stripControlCharacters(value: string, multiline = false): string {
-  let text = '';
-  for (const character of value) {
-    const code = character.charCodeAt(0);
-    // A pasted tab separates words in a single-line field.
-    if (code === 9 && !multiline) { text += ' '; continue; }
-    if ((code < 32 || code === 127) && !(multiline && (code === 9 || code === 10 || code === 13))) continue;
-    text += character;
-  }
-  return text;
+  // A pasted tab separates words in a single-line field.
+  return multiline ? replaceControlCharacters(value, '', { keepLineBreaks: true, keepTabs: true })
+    : replaceControlCharacters(value.replaceAll('	', ' '), '');
 }
 
 export function validatePublicationDetails(details: PublicationDetails): PublicationDetails {
@@ -61,18 +70,11 @@ export function validatePublicationDetails(details: PublicationDetails): Publica
     throw new HfError('Choose the license you are authorized to use for this dataset.');
   }
   if (details.license === 'other') {
-    let validUrl = false;
-    let normalizedLength = 0;
-    try {
-      const url = new URL(details.licenseUrl ?? '');
-      validUrl = url.protocol === 'https:' && !url.username && !url.password;
-      // Percent-encoding can lengthen the stored form past the cap.
-      normalizedLength = url.href.length;
-    } catch { /* Invalid custom license. */ }
-    if (!details.licenseName?.trim() || !validUrl) throw new HfError('Provide a custom license name and HTTPS license URL.');
-    if (details.licenseName.trim().length > PUBLICATION_LICENSE_NAME_LIMIT || (details.licenseUrl ?? '').length > PUBLICATION_LICENSE_URL_LIMIT
-      || normalizedLength > PUBLICATION_LICENSE_URL_LIMIT) {
-      throw new HfError('Shorten the custom license name to 160 characters and its URL to 2,048.');
+    const licenseUrl = details.licenseUrl ?? '';
+    if (!details.licenseName?.trim() || !isPublicationLicenseUrl(licenseUrl, Infinity)) throw new HfError('Provide a custom license name and HTTPS license URL.');
+    if (details.licenseName.trim().length > PUBLICATION_LICENSE_NAME_LIMIT || licenseUrl.length > PUBLICATION_LICENSE_URL_LIMIT
+      || !isPublicationLicenseUrl(licenseUrl)) {
+      throw new HfError(`Shorten the custom license name to ${PUBLICATION_LICENSE_NAME_LIMIT} characters and its URL to ${PUBLICATION_LICENSE_URL_LIMIT.toLocaleString('en-US')}.`);
     }
   }
   return { ...details, name, title };
