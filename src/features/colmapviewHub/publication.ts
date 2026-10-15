@@ -51,17 +51,26 @@ const FAILED_TOAST = 'Hub link not created. Reopen the upload dialog to retry.';
 const INVALID_LINK = 'ColmapView Hub returned an invalid link.';
 const SOURCE_CHANGED = "The dataset changed, so its preview can't be captured. Upload again to create a Hub link.";
 
+/** A failure to reach the Hub or to receive its answer: a timeout, or a network error. */
+function transportError(error: unknown): HubRequestError {
+  const timedOut = error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError');
+  return timedOut ? new HubRequestError("ColmapView Hub didn't respond.", 'timeout') : new HubRequestError("Couldn't reach ColmapView Hub.", 'network');
+}
+
 /** POST /api/links with typed failures. The returned links must lie under the configured Hub. */
 export async function requestHubLink(baseUrl: string, payload: HubLinkPayload): Promise<{ url: string; managementUrl: string }> {
   let response: Response;
   try {
     response = await fetch(`${baseUrl}/api/links`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload), signal: timeoutSignal(15000) });
-  } catch (error) {
-    const timedOut = error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError');
-    throw timedOut ? new HubRequestError("ColmapView Hub didn't respond.", 'timeout') : new HubRequestError("Couldn't reach ColmapView Hub.", 'network');
-  }
-  const result: unknown = await response.json().catch(() => null);
+  } catch (error) { throw transportError(error); }
+  // A body that stops arriving is a transport failure like a failed fetch, so Retry replays the same secret and payload.
+  // Only a body that arrived but is not JSON counts as missing fields.
+  let body: string | null = null;
+  let bodyError: unknown;
+  try { body = await response.text(); } catch (error) { bodyError = error ?? new TypeError('Body read failed'); }
+  let result: unknown = null;
+  if (body !== null) { try { result = JSON.parse(body); } catch { /* not JSON */ } }
   const field = (key: string): unknown => (result && typeof result === 'object' ? (result as Record<string, unknown>)[key] : undefined);
   if (response.status === 429) {
     // Cross-origin callers can read Retry-After only because the Hub exposes it; otherwise wait a minute.
@@ -69,6 +78,7 @@ export async function requestHubLink(baseUrl: string, payload: HubLinkPayload): 
     throw new HubRequestError(`Too many requests from your network; try again in ${Math.ceil(seconds / 60)} min.`, 'rate-limited', seconds * 1000);
   }
   if (response.status >= 500) throw new HubRequestError('ColmapView Hub is unavailable.', 'unavailable');
+  if (bodyError !== undefined) throw transportError(bodyError);
   if (!response.ok) {
     const message = field('error');
     throw new HubRequestError(typeof message === 'string' && message ? message : 'ColmapView Hub rejected this link.', 'rejected');

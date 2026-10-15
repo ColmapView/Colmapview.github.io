@@ -229,6 +229,11 @@ describe('Hub controller', () => {
   });
 });
 
+/** Successful headers, then a body read that fails part-way. */
+const brokenBody = (error: unknown) => new Response(new ReadableStream({
+  start(controller) { controller.enqueue(new TextEncoder().encode('{"url":')); controller.error(error); },
+}), { status: 201 });
+
 describe('requestHubLink', () => {
   const payload = { viewerUrl: viewer, title: 'Scene', description: '', thumbnailBase64: 'x', managementSecret: 'S'.repeat(43),
     access: 'public' as const, publicAcknowledged: true as const };
@@ -256,6 +261,9 @@ describe('requestHubLink', () => {
       'ColmapView Hub returned an invalid link.', 'rejected', 0],
     ['a malformed delete link', () => Promise.resolve(Response.json({ url: `${HUB}/Name`, managementPath: 'https://[' }, { status: 201 })),
       'ColmapView Hub returned an invalid link.', 'rejected', 0],
+    ['a 201 whose body is cut off', () => Promise.resolve(brokenBody(new TypeError('network error'))), "Couldn't reach ColmapView Hub.", 'network', 0],
+    ['a 201 whose body times out', () => Promise.resolve(brokenBody(new DOMException('The operation timed out.', 'TimeoutError'))), "ColmapView Hub didn't respond.", 'timeout', 0],
+    ['a 201 whose body is not JSON', () => Promise.resolve(new Response('<html>', { status: 201 })), 'ColmapView Hub returned an invalid link.', 'rejected', 0],
   ] as const)('maps %s', async (_name, respond, message, kind, retryAfterMs) => {
     vi.stubGlobal('fetch', vi.fn(respond));
     await expect(requestHubLink(HUB, payload)).rejects.toMatchObject({ message, kind, retryAfterMs });
