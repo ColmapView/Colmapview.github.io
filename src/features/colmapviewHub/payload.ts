@@ -26,32 +26,12 @@ function collapse(value: string): string {
   return replaceControlCharacters(value, ' ').trim().replace(/\s+/g, ' ');
 }
 
-/** Code points that belong to the character before them: marks, the zero-width joiner, variation selectors, skin tones. */
-function joinsPrevious(codePoint: number): boolean {
-  return codePoint === 0x200d || codePoint === 0xfe0e || codePoint === 0xfe0f || (codePoint >= 0x1f3fb && codePoint <= 0x1f3ff)
-    || /\p{M}/u.test(String.fromCodePoint(codePoint));
-}
-
 /** The last grapheme boundary at or before `room` UTF-16 units. */
 function graphemeCut(text: string, room: number): number {
   let end = 0;
-  if (typeof Intl.Segmenter === 'function') {
-    for (const { index, segment } of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)) {
-      if (index + segment.length > room) break;
-      end = index + segment.length;
-    }
-    return end;
-  }
-  // Without Intl.Segmenter: cut at a code point, then step back while the cut would split a sequence.
-  for (const character of text) {
-    if (end + character.length > room) break;
-    end += character.length;
-  }
-  while (end > 0) {
-    const next = text.codePointAt(end);
-    const previous = text.charCodeAt(end - 1);
-    if (!(next !== undefined && joinsPrevious(next)) && previous !== 0x200d) break;
-    end -= end > 1 && previous >= 0xdc00 && previous <= 0xdfff ? 2 : 1;
+  for (const { index, segment } of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)) {
+    if (index + segment.length > room) break;
+    end = index + segment.length;
   }
   return end;
 }

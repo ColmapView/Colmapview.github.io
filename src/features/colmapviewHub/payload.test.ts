@@ -33,16 +33,10 @@ describe('hubText', () => {
     expect(graphemes(combining.slice(0, -1)).every(part => part === 'e\u0301')).toBe(true);
   });
 
-  it('keeps graphemes whole in browsers without Intl.Segmenter', () => {
-    const segmenter = Intl.Segmenter;
-    Object.defineProperty(Intl, 'Segmenter', { value: undefined, configurable: true, writable: true });
-    try {
-      expect(hubText('e\u0301'.repeat(100), 120)).toBe(`${'e\u0301'.repeat(59)}…`);
-      expect(hubText('👍🏽'.repeat(70), 120)).toBe(`${'👍🏽'.repeat(29)}…`);
-      expect(hubText(`${'x'.repeat(115)}👩\u200d👩\u200d👧`, 120)).toBe(`${'x'.repeat(115)}…`);
-    } finally {
-      Object.defineProperty(Intl, 'Segmenter', { value: segmenter, configurable: true, writable: true });
-    }
+  it('cuts before a mark or a joined emoji sequence that does not fit whole', () => {
+    expect(hubText('e\u0301'.repeat(100), 120)).toBe(`${'e\u0301'.repeat(59)}…`);
+    expect(hubText('👍🏽'.repeat(70), 120)).toBe(`${'👍🏽'.repeat(29)}…`);
+    expect(hubText(`${'x'.repeat(115)}👩\u200d👩\u200d👧`, 120)).toBe(`${'x'.repeat(115)}…`);
   });
 });
 
