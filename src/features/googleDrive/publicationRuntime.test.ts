@@ -65,6 +65,17 @@ describe('Drive publication runtime', () => {
     expect(hub.prepare).toHaveBeenLastCalledWith({ title: 'scene' }, expect.objectContaining({ access: 'private' }));
   });
 
+  it('rejects an invalid file name before touching the Hub link, so the previous upload keeps its link', () => {
+    useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }), sourceType: 'url', sourceUrl: 'https://example.test/a/' });
+    hub.prepare.mockClear();
+    controller.publish.mockClear();
+    for (const name of ['folder/scene.zip', '   ', '..']) {
+      expect(() => publishCurrentDatasetToDrive(name, true)).toThrow('Choose a file name without slashes or control characters (up to 180 characters).');
+    }
+    expect(hub.prepare).not.toHaveBeenCalled();
+    expect(controller.publish).not.toHaveBeenCalled();
+  });
+
   it('invalidates the job when another dataset loads or the model is edited, and only then', () => {
     useReconstructionStore.setState({ urlLoading: true });
     expect(controller.invalidate).not.toHaveBeenCalled();

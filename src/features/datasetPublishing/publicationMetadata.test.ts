@@ -189,11 +189,23 @@ describe('license names, links and form text rules', () => {
     expect(stripControlCharacters('Line\u0000 one\n\ttwo\r\n', true)).toBe('Line one\n\ttwo\r\n');
   });
 
+  it('turns a pasted tab into a space in single-line fields', () => {
+    expect(stripControlCharacters('Coral\treef')).toBe('Coral reef');
+  });
+
   it('caps a custom license name at 160 characters and its URL at 2048, like the Hub', () => {
     const details = { name: 'scene', title: 'Scene', description: '', license: 'other', visibility: 'public' as const, licenseUrl: 'https://example.com/l' };
     expect(() => validatePublicationDetails({ ...details, licenseName: 'L'.repeat(160) })).not.toThrow();
     expect(() => validatePublicationDetails({ ...details, licenseName: 'L'.repeat(161) })).toThrow('Shorten the custom license name to 160 characters and its URL to 2,048.');
     expect(() => validatePublicationDetails({ ...details, licenseName: 'Custom', licenseUrl: `https://example.com/${'a'.repeat(2048)}` }))
+      .toThrow('Shorten the custom license name to 160 characters and its URL to 2,048.');
+  });
+
+  it('caps the normalized license URL too, which percent-encoding lengthens', () => {
+    const licenseUrl = `https://example.com/${'€'.repeat(300)}`;
+    expect(licenseUrl.length).toBeLessThanOrEqual(2048);
+    expect(new URL(licenseUrl).href.length).toBeGreaterThan(2048);
+    expect(() => validatePublicationDetails({ name: 'scene', title: 'Scene', description: '', license: 'other', visibility: 'public', licenseName: 'Custom', licenseUrl }))
       .toThrow('Shorten the custom license name to 160 characters and its URL to 2,048.');
   });
 });

@@ -53,6 +53,8 @@ export async function makeHubThumbnail(preview: Blob): Promise<string> {
   try {
     const context = canvas.getContext('2d');
     if (!context) throw new Error('The card preview could not be created.');
+    // A white backdrop makes transparent previews encode the same way in every browser.
+    context.fillStyle = '#ffffff'; context.fillRect(0, 0, canvas.width, canvas.height);
     const crop = coverCrop(bitmap.width, bitmap.height);
     context.drawImage(bitmap, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
     for (const quality of [0.7, 0.6, 0.5, 0.4, 0.3]) {

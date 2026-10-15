@@ -65,12 +65,14 @@ describe('bytesToBase64', () => {
 describe('makeHubThumbnail', () => {
   afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-  it('fills a 600 × 315 canvas and sends the first encoding that fits 64 KiB once stripped', async () => {
+  it('fills a white 600 × 315 canvas, draws the crop over it, and sends the first encoding that fits 64 KiB once stripped', async () => {
     const bitmap = { width: 1200, height: 300, close: vi.fn() };
-    const drawImage = vi.fn();
+    const calls: string[] = [];
+    const drawImage = vi.fn(() => { calls.push('draw'); });
+    const context = { fillStyle: '', fillRect: vi.fn(() => { calls.push(`fill ${context.fillStyle}`); }), drawImage };
     const encodings: unknown[][] = [];
     const canvas = {
-      width: 0, height: 0, getContext: () => ({ drawImage }),
+      width: 0, height: 0, getContext: () => context,
       // EXIF and the comment add 35 bytes: neither encoding fits with them, and only the second fits without them.
       toBlob(done: BlobCallback, type: string, quality: number) {
         encodings.push([type, quality, this.width, this.height]);
@@ -81,6 +83,8 @@ describe('makeHubThumbnail', () => {
     vi.spyOn(document, 'createElement').mockReturnValue(canvas as unknown as HTMLElement);
     const sent = await makeHubThumbnail(new Blob());
     const crop = coverCrop(1200, 300);
+    expect(context.fillRect).toHaveBeenCalledExactlyOnceWith(0, 0, 600, 315);
+    expect(calls).toEqual(['fill #ffffff', 'draw']);
     expect(drawImage).toHaveBeenCalledExactlyOnceWith(bitmap, crop.x, crop.y, crop.width, crop.height, 0, 0, 600, 315);
     expect(encodings).toEqual([['image/jpeg', 0.7, 600, 315], ['image/jpeg', 0.6, 600, 315]]);
     expect(sent).toBe(bytesToBase64(padded(64 * 1024)));

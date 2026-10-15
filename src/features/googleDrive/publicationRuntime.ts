@@ -2,7 +2,7 @@ import { useReconstructionStore, useDeletionStore, useDrivePublicationStatus } f
 import { assertPublicationInputCurrent, captureCurrentView, capturePublicationInput, getHubSource, getPublicationSourceKey } from '../datasetPublishing/publicationSnapshot';
 import { googleDriveAuth } from './auth';
 import { createDriveUploadClient } from './upload';
-import { createDrivePublicationController, isDrivePublishing } from './publishDataset';
+import { createDrivePublicationController, isDrivePublishing, normalizeDriveArchiveName } from './publishDataset';
 import { prepareDriveArchive } from './prepareArchive';
 import { ARCHIVE_SIZE_LIMIT } from '../../utils/zipValidation';
 import type { PublicationImageFormat } from '../datasetPublishing/types';
@@ -29,8 +29,10 @@ useReconstructionStore.subscribe(state => {
 useDeletionStore.subscribe(state => { if (state.pendingDeletions.size) drivePublication.invalidate('edit'); });
 
 export function publishCurrentDatasetToDrive(name: string, shared: boolean, imageFormat: PublicationImageFormat = 'original', preview: File | null = null): Promise<void> {
+  // Check the name before preparing the Hub, so a typo keeps the previous upload's link.
+  const archiveName = normalizeDriveArchiveName(name);
   const input = capturePublicationInput();
-  hubPublications.googleDrive.prepare({ title: name.trim().replace(/\.zip$/i, '') || 'Dataset' },
+  hubPublications.googleDrive.prepare({ title: archiveName.replace(/\.zip$/i, '') || 'Dataset' },
     { access: shared ? 'public' : 'private', preview, capture: captureCurrentView, source: getHubSource() });
   const assertCurrent = () => assertPublicationInputCurrent(input);
   return drivePublication.publish(name, shared,

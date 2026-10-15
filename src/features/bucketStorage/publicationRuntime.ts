@@ -5,6 +5,7 @@ import type { PublicationFormat, PublicationImageFormat } from '../datasetPublis
 import { bucketConnection } from './connection';
 import { createBucketPublicationController, isBucketPublishing } from './publishDataset';
 import { BucketError } from './types';
+import { bucketFolder } from './paths';
 import { hubPublications } from '../colmapviewHub/publication';
 import { bindHubPublication } from '../colmapviewHub/bindHubPublication';
 
@@ -28,8 +29,11 @@ export function publishCurrentDatasetToBucket(folder: string, format: Publicatio
   if (imageFormat === 'jpeg' && format !== 'zip') throw new BucketError('JPEG image conversion requires ZIP archive format.');
   const session = bucketConnection.getSession();
   if (!session) throw new BucketError('Connect to a bucket before uploading.');
+  // Check the input before preparing the Hub, so a typo keeps the previous upload's link.
+  if (!session.canWrite) throw new BucketError('Connect with an access key and secret to upload.');
+  const destination = bucketFolder(folder);
   const input = capturePublicationInput();
-  hubPublications.bucket.prepare({ title: folder.split('/').filter(Boolean).at(-1) || 'Dataset' },
+  hubPublications.bucket.prepare({ title: destination.split('/').filter(Boolean).at(-1) || 'Dataset' },
     { access: 'check', preview, capture: captureCurrentView, source: getHubSource() });
   const assertCurrent = () => assertPublicationInputCurrent(input);
   return bucketPublication.publish(session, folder,

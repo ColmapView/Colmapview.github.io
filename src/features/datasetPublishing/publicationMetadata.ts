@@ -41,6 +41,8 @@ export function stripControlCharacters(value: string, multiline = false): string
   let text = '';
   for (const character of value) {
     const code = character.charCodeAt(0);
+    // A pasted tab separates words in a single-line field.
+    if (code === 9 && !multiline) { text += ' '; continue; }
     if ((code < 32 || code === 127) && !(multiline && (code === 9 || code === 10 || code === 13))) continue;
     text += character;
   }
@@ -60,9 +62,16 @@ export function validatePublicationDetails(details: PublicationDetails): Publica
   }
   if (details.license === 'other') {
     let validUrl = false;
-    try { const url = new URL(details.licenseUrl ?? ''); validUrl = url.protocol === 'https:' && !url.username && !url.password; } catch { /* Invalid custom license. */ }
+    let normalizedLength = 0;
+    try {
+      const url = new URL(details.licenseUrl ?? '');
+      validUrl = url.protocol === 'https:' && !url.username && !url.password;
+      // Percent-encoding can lengthen the stored form past the cap.
+      normalizedLength = url.href.length;
+    } catch { /* Invalid custom license. */ }
     if (!details.licenseName?.trim() || !validUrl) throw new HfError('Provide a custom license name and HTTPS license URL.');
-    if (details.licenseName.trim().length > PUBLICATION_LICENSE_NAME_LIMIT || (details.licenseUrl ?? '').length > PUBLICATION_LICENSE_URL_LIMIT) {
+    if (details.licenseName.trim().length > PUBLICATION_LICENSE_NAME_LIMIT || (details.licenseUrl ?? '').length > PUBLICATION_LICENSE_URL_LIMIT
+      || normalizedLength > PUBLICATION_LICENSE_URL_LIMIT) {
       throw new HfError('Shorten the custom license name to 160 characters and its URL to 2,048.');
     }
   }
