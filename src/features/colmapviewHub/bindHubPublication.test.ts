@@ -27,7 +27,7 @@ describe('bindHubPublication', () => {
 
   it('finishes the Hub link when an upload completes', () => {
     const controller = fakeController();
-    const hub = { finish: vi.fn(), blocksUnload: vi.fn(() => false) };
+    const hub = { commit: vi.fn(), finish: vi.fn(), blocksUnload: vi.fn(() => false) };
     unbind = bindHubPublication(controller, hub as unknown as HubPublication, select);
     controller.emit({ phase: 'uploading' });
     expect(hub.finish).not.toHaveBeenCalled();
@@ -35,9 +35,23 @@ describe('bindHubPublication', () => {
     expect(hub.finish).toHaveBeenCalledWith('https://viewer.example/?url=x', undefined);
   });
 
+  it('commits the Hub draft each time an upload starts, and only then', () => {
+    const controller = fakeController();
+    const hub = { commit: vi.fn(), finish: vi.fn(), blocksUnload: vi.fn(() => false) };
+    unbind = bindHubPublication(controller, hub as unknown as HubPublication, select);
+    controller.emit({ phase: 'failed' });
+    expect(hub.commit).not.toHaveBeenCalled();
+    controller.emit({ phase: 'uploading' });
+    controller.emit({ phase: 'uploading' });
+    expect(hub.commit).toHaveBeenCalledOnce();
+    controller.emit({ phase: 'failed' });
+    controller.emit({ phase: 'uploading' });
+    expect(hub.commit).toHaveBeenCalledTimes(2);
+  });
+
   it('warns before leaving while uploading or while the Hub asks, and stops once unbound', () => {
     const controller = fakeController();
-    const hub = { finish: vi.fn(), blocksUnload: vi.fn(() => false) };
+    const hub = { commit: vi.fn(), finish: vi.fn(), blocksUnload: vi.fn(() => false) };
     unbind = bindHubPublication(controller, hub as unknown as HubPublication, select);
     expect(unloading()).toBe(false);
     controller.emit({ phase: 'uploading' });

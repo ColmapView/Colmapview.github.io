@@ -20,11 +20,16 @@ export function HubLinkResult({ state, onRetry, onDeleteLinkShown }: {
     focusStatus.current = false;
   });
   const reason = state.error && /[.!?]$/.test(state.error) ? state.error : `${state.error ?? ''}.`;
+  const status: { text: string; role?: 'status' | 'alert'; className: string } | null =
+    state.phase === 'checking' ? { text: 'Checking public access…', role: 'status', className: 'publication-note' }
+      : state.phase === 'creating' ? { text: 'Creating Hub link…', role: 'status', className: 'publication-note' }
+        : deleteRow ? { text: "Private delete link (don't share)", className: 'publication-note' }
+          : state.phase === 'failed' ? { text: `Hub link not created: ${reason} The link above still works.`, role: 'alert', className: 'text-ds-error' }
+            : null;
   return <div className="publication-access">
-    {state.phase === 'checking' && <p ref={statusRef} tabIndex={-1} role="status" className="publication-note">Checking public access…</p>}
-    {state.phase === 'creating' && <p ref={statusRef} tabIndex={-1} role="status" className="publication-note">Creating Hub link…</p>}
+    {/* Keyed by phase, so each status is a new line that assistive technology announces. */}
+    {status && <p key={state.phase} ref={statusRef} tabIndex={-1} role={status.role} className={status.className}>{status.text}</p>}
     {deleteRow && <>
-      <p ref={statusRef} tabIndex={-1} className="publication-note">{"Private delete link (don't share)"}</p>
       <CopyableField label="Private delete link" value={state.managementUrl!} />
       <div className="publication-actions">
         <a className={`${secondary} publication-button-link`} href={state.managementUrl} target="_blank" rel="noopener noreferrer">
@@ -32,12 +37,9 @@ export function HubLinkResult({ state, onRetry, onDeleteLinkShown }: {
         </a>
       </div>
     </>}
-    {state.phase === 'failed' && <>
-      <p ref={statusRef} tabIndex={-1} role="alert" className="text-ds-error">Hub link not created: {reason} The link above still works.</p>
-      {state.retryable && <div className="publication-actions">
-        <button type="button" className={secondary} disabled={state.retryAfter !== undefined}
-          onClick={() => { focusStatus.current = true; statusRef.current?.focus(); onRetry(); }}>Retry Hub link</button>
-      </div>}
-    </>}
+    {state.phase === 'failed' && state.retryable && <div className="publication-actions">
+      <button type="button" className={secondary} disabled={state.coolingDown}
+        onClick={() => { focusStatus.current = true; statusRef.current?.focus(); onRetry(); }}>Retry Hub link</button>
+    </div>}
   </div>;
 }

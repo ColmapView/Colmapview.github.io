@@ -51,7 +51,7 @@ describe('HubLinkResult', () => {
   });
 
   it('keeps Retry disabled until Retry-After passes', () => {
-    renderResult({ phase: 'failed', viewerUrl, error: 'Too many requests from your network; try again in 2 min.', retryable: true, retryAfter: Date.now() + 120_000 });
+    renderResult({ phase: 'failed', viewerUrl, error: 'Too many requests from your network; try again in 2 min.', retryable: true, coolingDown: true });
     expect(screen.getByRole('button', { name: 'Retry Hub link' })).toBeDisabled();
   });
 });

@@ -32,7 +32,7 @@ export interface HubLinkState {
   error?: string;
   retryable?: boolean;
   /** Set until a 429's Retry-After passes; the controller clears it then. */
-  retryAfter?: number;
+  coolingDown?: true;
   deleteLinkSeen?: boolean;
 }
 
@@ -104,7 +104,8 @@ interface Draft {
   source: HubSource;
   secret: string;
   capture: HubCapture | null;
-  preview: Promise<Blob | null> | null;
+  /** The card image, started with the upload; rejects with a 'preview' HubRequestError. */
+  thumbnail: Promise<string> | null;
   bucketAccess?: BucketAccess;
 }
 
@@ -133,8 +134,21 @@ export function createHubPublication(provider: HubProvider, deps: Dependencies =
   const currentSource = deps.currentSource ?? (() => getHubSource());
   /** Whether the dataset on screen is still the one a draft was made from, so a capture shows it. */
   const onScreen = (source: HubSource) => sameHubSource(currentSource(), source);
+  /** The card image from a preview, started now so it is ready when the upload is. */
+  const cardThumbnail = (preview: Promise<Blob | null>): Promise<string> => {
+    const card = preview.then(async blob => {
+      if (!blob) throw new HubRequestError('The upload preview is unavailable.', 'preview');
+      try { return await thumbnail(blob); }
+      catch { throw new HubRequestError('The card preview could not be created.', 'preview'); }
+    });
+    // run() reports a failure once it awaits the card; until then the rejection is expected.
+    card.catch(() => {});
+    return card;
+  };
   let state: HubLinkState = { phase: 'idle' };
   let draft: Draft | null = null;
+  /** A draft prepared for an upload that has not started yet; `draft: null` when the Hub is off. */
+  let staged: { draft: Draft | null } | null = null;
   let payload: HubLinkPayload | null = null;
   let dialogOpen = false;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -148,43 +162,38 @@ export function createHubPublication(provider: HubProvider, deps: Dependencies =
   const busy = () => state.phase === 'checking' || state.phase === 'creating';
 
   const run = async (viewerUrl: string): Promise<void> => {
-    const base = baseUrl();
+    const hubUrl = baseUrl();
     const current = draft;
-    if (!base || !current) return;
+    if (!hubUrl || !current) return;
     try {
-      let access: HubAccess;
-      if (current.access === 'check') {
-        if (!current.bucketAccess) {
-          set({ phase: 'checking', viewerUrl });
-          current.bucketAccess = await checkBucket(viewerUrl);
-        }
-        access = current.bucketAccess === 'public' ? 'public' : 'private';
-      } else access = current.access;
-      set({ phase: 'creating', viewerUrl, bucketAccess: current.bucketAccess });
-      if (!payload) {
-        const preview = await current.preview;
-        // The payload replaces the full-size preview; Retry captures a new one if building fails.
-        current.preview = null;
-        if (!preview) throw new HubRequestError('The upload preview is unavailable.', 'preview');
-        let thumbnailBase64: string;
-        try { thumbnailBase64 = await thumbnail(preview); }
-        catch { throw new HubRequestError('The card preview could not be created.', 'preview'); }
-        payload = buildHubPayload({ viewerUrl, metadata: current.metadata, access, thumbnailBase64, managementSecret: current.secret });
+      if (current.access === 'check' && !current.bucketAccess) {
+        // The card image has been building since the upload started, so it runs alongside the check.
+        set({ phase: 'checking', viewerUrl });
+        current.bucketAccess = await checkBucket(viewerUrl);
       }
-      const link = await request(base, payload);
-      set({ phase: 'ready', viewerUrl, bucketAccess: current.bucketAccess, url: link.url,
-        managementUrl: `${link.managementUrl}#${current.secret}`, deleteLinkSeen: false });
+      const base = { viewerUrl, bucketAccess: current.bucketAccess };
+      const access: HubAccess = current.access !== 'check' ? current.access : current.bucketAccess === 'public' ? 'public' : 'private';
+      set({ phase: 'creating', ...base });
+      if (!payload) {
+        const card = current.thumbnail;
+        // The payload replaces the card image; Retry captures a new one if building fails.
+        current.thumbnail = null;
+        if (!card) throw new HubRequestError('The upload preview is unavailable.', 'preview');
+        payload = buildHubPayload({ viewerUrl, metadata: current.metadata, access, thumbnailBase64: await card, managementSecret: current.secret });
+      }
+      const link = await request(hubUrl, payload);
+      set({ phase: 'ready', ...base, url: link.url, managementUrl: `${link.managementUrl}#${current.secret}`, deleteLinkSeen: false });
       hubShareLinks.set(provider, { url: link.url, source: current.source, readyAt: now() });
     } catch (error) {
       const failure = error instanceof HubRequestError ? error
         : new HubRequestError(error instanceof Error && error.message ? error.message : 'ColmapView Hub could not save this link.', 'rejected');
       const retryable = RETRYABLE.has(failure.kind) && (failure.kind !== 'preview' || Boolean(current.capture));
       set({ phase: 'failed', viewerUrl, bucketAccess: current.bucketAccess, error: failure.message, retryable,
-        ...(failure.retryAfterMs ? { retryAfter: now() + failure.retryAfterMs } : {}) });
+        ...(failure.retryAfterMs ? { coolingDown: true } : {}) });
       if (failure.retryAfterMs) {
         clearTimeout(retryTimer);
         const failed = state;
-        retryTimer = setTimeout(() => { if (state === failed) set({ ...failed, retryAfter: undefined }); }, failure.retryAfterMs);
+        retryTimer = setTimeout(() => { if (state === failed) set({ ...failed, coolingDown: undefined }); }, failure.retryAfterMs);
       }
     }
   };
@@ -200,19 +209,30 @@ export function createHubPublication(provider: HubProvider, deps: Dependencies =
     /** Busy, or a link exists whose delete row has not been shown yet. */
     blocksUnload: () => busy() || (state.phase === 'ready' && !state.deleteLinkSeen),
     /**
-     * Starts a draft for the next upload. The disclosure line renders exactly when the Hub is enabled
-     * (hubDisclosure), so a draft always follows a shown disclosure; that is what publicAcknowledged confirms.
+     * Stages a draft for the upload that `start` begins, then runs `start`. The draft replaces the current
+     * link and share link only once that upload starts (commit, which bindHubPublication calls), so an upload
+     * its controller refuses leaves both as they were. The disclosure line renders exactly when the Hub is
+     * enabled (hubDisclosure), so a draft always follows a shown disclosure; that is what publicAcknowledged confirms.
      */
-    prepare(metadata: HubMetadata, options: HubPrepareOptions) {
+    prepare(metadata: HubMetadata, options: HubPrepareOptions, start: () => Promise<void>): Promise<void> {
       if (busy()) throw new Error('Wait for the current Hub link to finish.');
+      const preview = !baseUrl() ? null : options.preview ? Promise.resolve(options.preview)
+        : options.capture && onScreen(options.source) ? startCapture(options.capture) : null;
+      staged = { draft: baseUrl() ? {
+        metadata: structuredClone(metadata), access: options.access, source: options.source, secret: newSecret(),
+        capture: options.capture ?? null, thumbnail: preview && cardThumbnail(preview),
+      } : null };
+      // Upload controllers start synchronously, so a draft still staged afterwards belongs to a refused upload.
+      try { return start(); } finally { staged = null; }
+    },
+    /** Replaces the current link with the staged draft. Called when the upload actually starts; a no-op otherwise. */
+    commit() {
+      if (!staged) return;
       clearTimeout(retryTimer);
       payload = null;
       hubShareLinks.set(provider, null);
-      draft = baseUrl() ? {
-        metadata: structuredClone(metadata), access: options.access, source: options.source, secret: newSecret(), capture: options.capture ?? null,
-        preview: options.preview ? Promise.resolve(options.preview)
-          : options.capture && onScreen(options.source) ? startCapture(options.capture) : null,
-      } : null;
+      draft = staged.draft;
+      staged = null;
       set({ phase: 'idle' });
     },
     /** Called when the upload is verified. Later notifications for the same draft are ignored. */
@@ -222,21 +242,19 @@ export function createHubPublication(provider: HubProvider, deps: Dependencies =
       return run(viewerUrl);
     },
     retry(): Promise<void> {
-      if (state.phase !== 'failed' || !state.retryable || state.retryAfter !== undefined || !state.viewerUrl || !draft) return Promise.resolve();
-      if (!payload && !draft.preview && draft.capture) {
+      if (state.phase !== 'failed' || !state.retryable || state.coolingDown || !state.viewerUrl || !draft) return Promise.resolve();
+      if (!payload && !draft.thumbnail && draft.capture) {
         // The view on screen belongs to another dataset now; its screenshot must not become this card's preview.
         if (!onScreen(draft.source)) {
           set({ ...state, error: SOURCE_CHANGED, retryable: false });
           return Promise.resolve();
         }
-        draft.preview = startCapture(draft.capture);
+        draft.thumbnail = cardThumbnail(startCapture(draft.capture));
       }
       return run(state.viewerUrl);
     },
     markDeleteLinkSeen() {
-      if (state.phase !== 'ready' || state.deleteLinkSeen) return;
-      state = { ...state, deleteLinkSeen: true };
-      listeners.forEach(listener => listener());
+      if (state.phase === 'ready' && !state.deleteLinkSeen) set({ ...state, deleteLinkSeen: true });
     },
     setDialogOpen(open: boolean) {
       dialogOpen = open;

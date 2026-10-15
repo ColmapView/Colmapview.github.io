@@ -15,7 +15,8 @@ const controller = vi.hoisted(() => {
     emit(next: string, nextReceipt?: typeof receipt) { phase = next; receipt = nextReceipt; listeners.forEach(listener => listener()); },
   };
 });
-const hub = vi.hoisted(() => ({ finish: vi.fn(), prepare: vi.fn(), blocksUnload: vi.fn(() => false) }));
+const hub = vi.hoisted(() => ({ finish: vi.fn(), commit: vi.fn(), blocksUnload: vi.fn(() => false),
+  prepare: vi.fn((_metadata: unknown, _options: unknown, start: () => Promise<void>) => start()) }));
 vi.mock('../colmapviewHub/publication', () => ({ hubPublications: { googleDrive: hub } }));
 vi.mock('./publishDataset', async importOriginal => ({
   ...await importOriginal<typeof import('./publishDataset')>(),
@@ -60,20 +61,26 @@ describe('Drive publication runtime', () => {
     useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }), sourceType: 'url', sourceUrl: 'https://example.test/a/' });
     void publishCurrentDatasetToDrive('scene.zip', true);
     expect(hub.prepare).toHaveBeenLastCalledWith({ title: 'scene' },
-      expect.objectContaining({ access: 'public', preview: null, source: { key: expect.stringContaining('https://example.test/a/'), revision: 0 } }));
+      expect.objectContaining({ access: 'public', preview: null, source: { key: expect.stringContaining('https://example.test/a/'), revision: 0 } }), expect.any(Function));
     void publishCurrentDatasetToDrive('scene.zip', false);
-    expect(hub.prepare).toHaveBeenLastCalledWith({ title: 'scene' }, expect.objectContaining({ access: 'private' }));
+    expect(hub.prepare).toHaveBeenLastCalledWith({ title: 'scene' }, expect.objectContaining({ access: 'private' }), expect.any(Function));
   });
 
-  it('rejects an invalid file name before touching the Hub link, so the previous upload keeps its link', () => {
+  it('starts the upload through the Hub draft and leaves the name check to the controller, whose refusal keeps the previous Hub link', () => {
     useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }), sourceType: 'url', sourceUrl: 'https://example.test/a/' });
     hub.prepare.mockClear();
     controller.publish.mockClear();
-    for (const name of ['folder/scene.zip', '   ', '..']) {
-      expect(() => publishCurrentDatasetToDrive(name, true)).toThrow('Choose a file name without slashes or control characters (up to 180 characters).');
-    }
-    expect(hub.prepare).not.toHaveBeenCalled();
-    expect(controller.publish).not.toHaveBeenCalled();
+    void publishCurrentDatasetToDrive(' Scene.ZIP ', true);
+    expect(hub.prepare).toHaveBeenCalledExactlyOnceWith({ title: 'Scene' }, expect.anything(), expect.any(Function));
+    void publishCurrentDatasetToDrive('folder/scene.zip', true);
+    expect(controller.publish).toHaveBeenCalledTimes(2);
+    expect(controller.publish).toHaveBeenLastCalledWith('folder/scene.zip', true, expect.any(Function), expect.any(Function));
+  });
+
+  it('commits the Hub draft when an upload starts', () => {
+    hub.commit.mockClear();
+    controller.emit('preparing');
+    expect(hub.commit).toHaveBeenCalledOnce();
   });
 
   it('invalidates the job when another dataset loads or the model is edited, and only then', () => {

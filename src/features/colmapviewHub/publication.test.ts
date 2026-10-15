@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createHubPublication, HubRequestError, requestHubLink } from './publication';
+import { createHubPublication, HubRequestError, requestHubLink, type HubMetadata, type HubPrepareOptions, type HubPublication } from './publication';
 import { hubShareLinks } from './hubShareLinks';
 import type { PublicationAssetSummary } from '../datasetPublishing/types';
 
@@ -17,6 +17,10 @@ function controller(overrides: NonNullable<Parameters<typeof createHubPublicatio
   return { hub, request, thumbnail };
 }
 
+/** Prepares a draft for an upload that starts at once, which commits it as bindHubPublication would. */
+const begin = (hub: HubPublication, metadata: HubMetadata, options: HubPrepareOptions) =>
+  hub.prepare(metadata, options, async () => { hub.commit(); });
+
 beforeEach(() => { for (const provider of ['huggingFace', 'googleDrive', 'bucket']) hubShareLinks.set(provider, null); });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
@@ -24,7 +28,7 @@ describe('Hub controller', () => {
   it('does nothing when the Hub is off for this host', async () => {
     const { hub, request } = controller({ baseUrl: () => null });
     expect(hub.isEnabled()).toBe(false);
-    hub.prepare({ title: 'Scene' }, { access: 'public', preview, source });
+    begin(hub, { title: 'Scene' }, { access: 'public', preview, source });
     await hub.finish(viewer);
     expect(request).not.toHaveBeenCalled();
     expect(hub.getSnapshot()).toEqual({ phase: 'idle' });
@@ -33,7 +37,7 @@ describe('Hub controller', () => {
   it('takes no screenshot for the card when the Hub is off for this host', async () => {
     const capture = vi.fn().mockResolvedValue(preview);
     const { hub, request } = controller({ baseUrl: () => null });
-    hub.prepare({ title: 'Scene' }, { access: 'public', source, capture });
+    begin(hub, { title: 'Scene' }, { access: 'public', source, capture });
     await Promise.resolve();
     await hub.finish(viewer);
     expect(capture).not.toHaveBeenCalled();
@@ -44,7 +48,7 @@ describe('Hub controller', () => {
   it('creates a public link once the upload is verified, and ignores repeated completions', async () => {
     const { hub, request, thumbnail } = controller();
     const license = { name: 'CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' };
-    hub.prepare({ title: 'Scene', description: 'Reconstruction', license }, { access: 'public', preview, source });
+    begin(hub, { title: 'Scene', description: 'Reconstruction', license }, { access: 'public', preview, source });
     expect(request).not.toHaveBeenCalled();
     await hub.finish(viewer);
     const [base, payload] = request.mock.calls[0];
@@ -60,7 +64,7 @@ describe('Hub controller', () => {
 
   it('creates an unguessable link for a private upload', async () => {
     const { hub, request } = controller();
-    hub.prepare({ title: 'Private scene' }, { access: 'private', preview, source });
+    begin(hub, { title: 'Private scene' }, { access: 'private', preview, source });
     await hub.finish(viewer);
     expect(request.mock.calls[0][1].access).toBe('private');
   });
@@ -71,7 +75,7 @@ describe('Hub controller', () => {
     const { hub } = controller({ checkBucket, request });
     const phases: string[] = [];
     hub.subscribe(() => phases.push(hub.getSnapshot().phase));
-    hub.prepare({ title: 'Bucket scene' }, { access: 'check', preview, source });
+    begin(hub, { title: 'Bucket scene' }, { access: 'check', preview, source });
     await hub.finish(viewer);
     await hub.retry();
     expect(phases).toEqual(['idle', 'checking', 'creating', 'failed', 'creating', 'ready']);
@@ -84,7 +88,7 @@ describe('Hub controller', () => {
     const request = vi.fn().mockRejectedValueOnce(new HubRequestError("Couldn't reach ColmapView Hub.", 'network'))
       .mockRejectedValueOnce(new HubRequestError('Use a viewer link without access credentials.', 'rejected'));
     const { hub, thumbnail } = controller({ request });
-    hub.prepare({ title: 'Scene' }, { access: 'public', preview, source });
+    begin(hub, { title: 'Scene' }, { access: 'public', preview, source });
     await hub.finish(viewer);
     expect(hub.getSnapshot()).toMatchObject({ phase: 'failed', error: "Couldn't reach ColmapView Hub.", retryable: true });
     await hub.retry();
@@ -100,13 +104,13 @@ describe('Hub controller', () => {
     const request = vi.fn().mockRejectedValueOnce(new HubRequestError('Too many requests from your network; try again in 2 min.', 'rate-limited', 120_000))
       .mockResolvedValue(link);
     const { hub } = controller({ request });
-    hub.prepare({ title: 'Scene' }, { access: 'public', preview, source });
+    begin(hub, { title: 'Scene' }, { access: 'public', preview, source });
     await hub.finish(viewer);
-    expect(hub.getSnapshot().retryAfter).toBeGreaterThan(Date.now());
+    expect(hub.getSnapshot().coolingDown).toBe(true);
     await hub.retry();
     expect(request).toHaveBeenCalledOnce();
     vi.advanceTimersByTime(120_000);
-    expect(hub.getSnapshot().retryAfter).toBeUndefined();
+    expect(hub.getSnapshot().coolingDown).toBeUndefined();
     await hub.retry();
     expect(hub.getSnapshot().phase).toBe('ready');
   });
@@ -114,7 +118,7 @@ describe('Hub controller', () => {
   it('captures a missing preview again on Retry, and offers no Retry when it cannot', async () => {
     const capture = vi.fn().mockResolvedValueOnce(null).mockResolvedValue(preview);
     const { hub, thumbnail } = controller();
-    hub.prepare({ title: 'Scene' }, { access: 'public', source, capture });
+    begin(hub, { title: 'Scene' }, { access: 'public', source, capture });
     await hub.finish(viewer);
     expect(hub.getSnapshot()).toMatchObject({ phase: 'failed', error: 'The upload preview is unavailable.', retryable: true });
     await hub.retry();
@@ -122,7 +126,7 @@ describe('Hub controller', () => {
     expect(thumbnail).toHaveBeenCalledWith(preview);
     expect(hub.getSnapshot().phase).toBe('ready');
     const without = controller();
-    without.hub.prepare({ title: 'Scene' }, { access: 'public', source });
+    begin(without.hub, { title: 'Scene' }, { access: 'public', source });
     await without.hub.finish(viewer);
     expect(without.hub.getSnapshot()).toMatchObject({ phase: 'failed', retryable: false });
   });
@@ -131,7 +135,7 @@ describe('Hub controller', () => {
     const capture = vi.fn().mockResolvedValueOnce(null).mockResolvedValue(preview);
     let onScreen = source;
     const { hub, request } = controller({ currentSource: () => onScreen });
-    hub.prepare({ title: 'Scene' }, { access: 'public', source, capture });
+    begin(hub, { title: 'Scene' }, { access: 'public', source, capture });
     await hub.finish(viewer);
     expect(hub.getSnapshot()).toMatchObject({ phase: 'failed', retryable: true });
     onScreen = { key: '2:url:https://storage.example/other.json:', revision: 0 };
@@ -148,7 +152,7 @@ describe('Hub controller', () => {
   it('captures nothing on Retry after an edit to the same dataset', async () => {
     const capture = vi.fn().mockResolvedValueOnce(null).mockResolvedValue(preview);
     const { hub } = controller({ currentSource: () => ({ ...source, revision: 1 }) });
-    hub.prepare({ title: 'Scene' }, { access: 'public', source, capture });
+    begin(hub, { title: 'Scene' }, { access: 'public', source, capture });
     await hub.finish(viewer);
     await hub.retry();
     expect(capture).not.toHaveBeenCalled();
@@ -159,10 +163,10 @@ describe('Hub controller', () => {
     const notify = vi.fn();
     const request = vi.fn().mockResolvedValueOnce(link).mockRejectedValueOnce(new HubRequestError('ColmapView Hub is unavailable.', 'unavailable')).mockResolvedValue(link);
     const { hub } = controller({ notify, request });
-    hub.prepare({ title: 'Scene' }, { access: 'public', preview, source });
+    begin(hub, { title: 'Scene' }, { access: 'public', preview, source });
     await hub.finish(viewer);
     expect(notify).toHaveBeenCalledExactlyOnceWith('info', 'Hub link ready. Reopen the upload dialog to copy it and its delete link.');
-    hub.prepare({ title: 'Scene' }, { access: 'public', preview, source });
+    begin(hub, { title: 'Scene' }, { access: 'public', preview, source });
     await hub.finish(viewer);
     expect(notify).toHaveBeenLastCalledWith('warning', 'Hub link not created. Reopen the upload dialog to retry.');
     hub.setDialogOpen(true);
@@ -175,7 +179,7 @@ describe('Hub controller', () => {
     const notify = vi.fn();
     const { hub } = controller({ notify, checkBucket: vi.fn(() => new Promise<'public'>(resolve => { finishCheck = resolve; })) });
     hub.setDialogOpen(true);
-    hub.prepare({ title: 'Bucket scene' }, { access: 'check', preview, source });
+    begin(hub, { title: 'Bucket scene' }, { access: 'check', preview, source });
     const finishing = hub.finish(viewer);
     expect(hub.getSnapshot().phase).toBe('checking');
     hub.setDialogOpen(false);
@@ -188,12 +192,12 @@ describe('Hub controller', () => {
     let answer!: (value: typeof link) => void;
     const request = vi.fn(() => new Promise<typeof link>(resolve => { answer = resolve; }));
     const { hub } = controller({ request });
-    hub.prepare({ title: 'Scene' }, { access: 'public', preview, source });
+    begin(hub, { title: 'Scene' }, { access: 'public', preview, source });
     expect(hub.blocksUnload()).toBe(false);
     const finishing = hub.finish(viewer);
     expect(hub.isBusy()).toBe(true);
     expect(hub.blocksUnload()).toBe(true);
-    expect(() => hub.prepare({ title: 'Changed' }, { access: 'public', preview, source })).toThrow('Wait for the current Hub link');
+    expect(() => begin(hub, { title: 'Changed' }, { access: 'public', preview, source })).toThrow('Wait for the current Hub link');
     await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
     answer(link);
     await finishing;
@@ -205,12 +209,34 @@ describe('Hub controller', () => {
 
   it('offers the ready link to the Share panel for the dataset it was made from', async () => {
     const { hub } = controller();
-    hub.prepare({ title: 'Scene' }, { access: 'public', preview, source });
+    begin(hub, { title: 'Scene' }, { access: 'public', preview, source });
     await hub.finish(viewer);
     expect(hubShareLinks.match(source, 0)).toBe(link.url);
     expect(hubShareLinks.match({ ...source, revision: 1 }, 0)).toBeNull();
-    hub.prepare({ title: 'Next' }, { access: 'public', preview, source });
+    begin(hub, { title: 'Next' }, { access: 'public', preview, source });
     expect(hubShareLinks.match(source, 0)).toBeNull();
+  });
+
+  it('replaces the link only when the upload starts, and drops a draft whose upload never starts', async () => {
+    const { hub, request } = controller();
+    await begin(hub, { title: 'Scene' }, { access: 'public', preview, source });
+    await hub.finish(viewer);
+    await hub.prepare({ title: 'Refused' }, { access: 'public', preview, source }, async () => {});
+    expect(() => hub.prepare({ title: 'Throws' }, { access: 'public', preview, source }, () => { throw new Error('Invalid name'); })).toThrow('Invalid name');
+    hub.commit();
+    expect(hub.getSnapshot()).toMatchObject({ phase: 'ready', url: link.url });
+    expect(hubShareLinks.match(source, 0)).toBe(link.url);
+    await hub.finish(viewer);
+    expect(request).toHaveBeenCalledOnce();
+  });
+
+  it('builds the card image while the upload runs', async () => {
+    const { hub, thumbnail } = controller();
+    await begin(hub, { title: 'Scene' }, { access: 'public', preview, source });
+    await vi.waitFor(() => expect(thumbnail).toHaveBeenCalledWith(preview));
+    await hub.finish(viewer);
+    expect(thumbnail).toHaveBeenCalledOnce();
+    expect(hub.getSnapshot().phase).toBe('ready');
   });
 
   it('keeps the verified asset inventory snapshot through a failure and retry', async () => {
@@ -220,7 +246,7 @@ describe('Hub controller', () => {
     const thumbnail = vi.fn().mockRejectedValueOnce(new Error('Preview decode failed')).mockResolvedValue('jpeg');
     const capture = vi.fn().mockResolvedValue(preview);
     const { hub, request } = controller({ thumbnail });
-    hub.prepare({ title: 'Scene' }, { access: 'public', preview, source, capture });
+    begin(hub, { title: 'Scene' }, { access: 'public', preview, source, capture });
     await hub.finish(viewer, assets);
     expect(hub.getSnapshot()).toMatchObject({ phase: 'failed', error: 'The card preview could not be created.', retryable: true });
     assets.masks = 99;

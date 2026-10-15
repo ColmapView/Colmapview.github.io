@@ -13,7 +13,7 @@ const controller = vi.hoisted(() => {
     emit(next: string) { phase = next; listeners.forEach(listener => listener()); },
   };
 });
-vi.mock('../colmapviewHub/publication', () => ({ hubPublications: { huggingFace: { finish: vi.fn(), prepare: vi.fn(), blocksUnload: vi.fn(() => false) } } }));
+vi.mock('../colmapviewHub/publication', () => ({ hubPublications: { huggingFace: { finish: vi.fn(), prepare: vi.fn(), commit: vi.fn(), blocksUnload: vi.fn(() => false) } } }));
 vi.mock('./publishDataset', async importOriginal => ({
   ...await importOriginal<typeof import('./publishDataset')>(),
   createPublicationController: () => controller,
