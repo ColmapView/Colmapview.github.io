@@ -5,7 +5,7 @@ const graphemes = (text: string) => [...new Intl.Segmenter(undefined, { granular
 
 describe('hubText', () => {
   it('turns control characters into spaces and collapses whitespace like the Hub', () => {
-    expect(hubText('  Scene\u0007\tname\n next  ', 120)).toBe('Scene name next');
+    expect(hubText('  Scene\u0007\tname\n\u2028next  ', 120)).toBe('Scene name next');
   });
 
   it('keeps text within the limit unchanged', () => {
@@ -29,17 +29,17 @@ describe('hubText', () => {
     const emoji = hubText('👍🏽'.repeat(70), 120);
     expect(emoji.length).toBeLessThanOrEqual(120);
     expect(graphemes(emoji.slice(0, -1)).every(part => part === '👍🏽')).toBe(true);
-    const combining = hubText('é'.repeat(100), 120);
-    expect(graphemes(combining.slice(0, -1)).every(part => part === 'é')).toBe(true);
+    const combining = hubText('e\u0301'.repeat(100), 120);
+    expect(graphemes(combining.slice(0, -1)).every(part => part === 'e\u0301')).toBe(true);
   });
 
   it('keeps graphemes whole in browsers without Intl.Segmenter', () => {
     const segmenter = Intl.Segmenter;
     Object.defineProperty(Intl, 'Segmenter', { value: undefined, configurable: true, writable: true });
     try {
-      expect(hubText('é'.repeat(100), 120)).toBe(`${'é'.repeat(59)}…`);
+      expect(hubText('e\u0301'.repeat(100), 120)).toBe(`${'e\u0301'.repeat(59)}…`);
       expect(hubText('👍🏽'.repeat(70), 120)).toBe(`${'👍🏽'.repeat(29)}…`);
-      expect(hubText(`${'x'.repeat(115)}👩‍👩‍👧`, 120)).toBe(`${'x'.repeat(115)}…`);
+      expect(hubText(`${'x'.repeat(115)}👩\u200d👩\u200d👧`, 120)).toBe(`${'x'.repeat(115)}…`);
     } finally {
       Object.defineProperty(Intl, 'Segmenter', { value: segmenter, configurable: true, writable: true });
     }
@@ -54,6 +54,12 @@ describe('buildHubPayload', () => {
     const payload = buildHubPayload({ ...base, access: 'private', metadata: { title: 'Scene', description: 'Reconstruction' } });
     expect(payload).toEqual({ ...base, title: 'Scene', description: 'Reconstruction', access: 'private', publicAcknowledged: true });
     expect(payload).not.toHaveProperty('listed');
+  });
+
+  it('leaves access out of a public link, so a Hub that predates private links still accepts it', () => {
+    const payload = buildHubPayload({ ...base, access: 'public', metadata: { title: 'Scene', description: 'Reconstruction' } });
+    expect(payload).toEqual({ ...base, title: 'Scene', description: 'Reconstruction', publicAcknowledged: true });
+    expect(payload).not.toHaveProperty('access');
   });
 
   it('falls back to a title when the given one is empty', () => {

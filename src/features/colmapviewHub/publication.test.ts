@@ -49,7 +49,7 @@ describe('Hub controller', () => {
     await hub.finish(viewer);
     const [base, payload] = request.mock.calls[0];
     expect(base).toBe(HUB);
-    expect(payload).toEqual({ viewerUrl: viewer, title: 'Scene', description: 'Reconstruction', license, access: 'public',
+    expect(payload).toEqual({ viewerUrl: viewer, title: 'Scene', description: 'Reconstruction', license,
       thumbnailBase64: 'small-jpeg', managementSecret: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/), publicAcknowledged: true });
     expect(thumbnail).toHaveBeenCalledWith(preview);
     expect(hub.getSnapshot()).toEqual({ phase: 'ready', viewerUrl: viewer, url: link.url,
@@ -76,7 +76,7 @@ describe('Hub controller', () => {
     await hub.retry();
     expect(phases).toEqual(['idle', 'checking', 'creating', 'failed', 'creating', 'ready']);
     expect(checkBucket).toHaveBeenCalledOnce();
-    expect(request.mock.calls[1][1].access).toBe(access);
+    expect(request.mock.calls[1][1].access).toBe(access === 'private' ? 'private' : undefined);
     expect(hub.getSnapshot().bucketAccess).toBe(result);
   });
 

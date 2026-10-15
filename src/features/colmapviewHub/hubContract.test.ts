@@ -6,7 +6,7 @@ import { PUBLICATION_LICENSES, publicationLicenseInfo } from '../datasetPublishi
  * A copy of the Hub's creation rules: colmapview_hub src/worker/validation.ts at commit HUB_COMMIT.
  * When the Hub changes them, update this copy and the commit together.
  */
-const HUB_COMMIT = '519ad1b';
+const HUB_COMMIT = '6865915';
 const KEYS = new Set(['viewerUrl', 'title', 'description', 'thumbnailBase64', 'license', 'assets', 'managementSecret', 'listed', 'access', 'publicAcknowledged']);
 const VIEWER_ORIGINS = new Set(['https://colmapview.opsiclear.com', 'https://colmapview.github.io']);
 const VIEWER_PATH = /^\/(?:latest\/|dev\/|v\d+\.\d+\.\d+\/)?$/;
@@ -73,8 +73,12 @@ function hubRejection(payload: Record<string, unknown>): string | null {
   if (credentials) return credentials;
   const source = url.searchParams.get('url');
   if (source) {
-    // Parsed without a base, as the Hub does: a relative or protocol-relative source skips the check (a known, parked Hub issue).
-    try { const sourceRule = credentialRule(new URL(source)); if (sourceRule) return sourceRule; } catch { /* the Hub ignores an unparseable source */ }
+    // Parsed against the viewer link, as the Hub does, so relative and protocol-relative sources are checked too.
+    // Only a source that cannot be parsed even against that base is ignored.
+    let sourceUrl: URL | null = null;
+    try { sourceUrl = new URL(source, url); } catch { /* the Hub ignores a source it cannot parse */ }
+    const sourceRule = sourceUrl && credentialRule(sourceUrl);
+    if (sourceRule) return sourceRule;
   }
   for (const [key, max, optional] of [['title', 120, false], ['description', 280, true]] as const) {
     const rule = textRule(payload[key], max, optional);
@@ -92,7 +96,7 @@ describe(`viewer payloads against the Hub's creation rules (colmapview_hub ${HUB
   it.each([
     ['plain text', { title: 'Scene', description: 'A reconstruction.' }],
     ['a long emoji title', { title: '👍🏽'.repeat(80) }],
-    ['combining marks', { title: 'é'.repeat(300), description: 'é'.repeat(900) }],
+    ['combining marks', { title: 'e\u0301'.repeat(300), description: 'e\u0301'.repeat(900) }],
     ['controls and line breaks', { title: 'Scene\u0007\tname', description: 'Line one\nline two\r\n\u0000end' }],
     ['a long custom license', { title: 'Scene', license: publicationLicenseInfo({ license: 'other', licenseName: 'L'.repeat(200), licenseUrl: 'https://example.com/license' }) }],
     ['an asset summary', { title: 'Scene', assets: { format: 'zip', imageFormat: 'jpeg', colmap: { files: 3, cameras: 2, points: 10 }, images: 2, masks: 0, splats: 1, viewerSettings: true, preview: true } }],
@@ -118,6 +122,9 @@ describe(`viewer payloads against the Hub's creation rules (colmapview_hub ${HUB
     expect(hubRejection({ ...build({ title: 'Scene' }), listed: 'yes' })).toBe('listed');
     expect(hubRejection({ ...build({ title: 'Scene' }), extra: true })).toBe('unknown key extra');
     expect(hubRejection(build({ title: 'Scene' }, 'public', viewer(encodeURIComponent('https://bucket.example/scene.zip?X-Amz-Signature=abc'))))).toBe('credentials');
+    // A protocol-relative or relative source resolves against the viewer link, so its credentials are caught too.
+    expect(hubRejection(build({ title: 'Scene' }, 'public', viewer(encodeURIComponent('//host/x?X-Amz-Signature=abc'))))).toBe('credentials');
+    expect(hubRejection(build({ title: 'Scene' }, 'public', viewer(encodeURIComponent('scene/manifest.json?token=abc'))))).toBe('credentials');
     // Normalized links are capped too, the production Hub refuses loopback viewers, and a folder upload keeps original images.
     expect(hubRejection(build({ title: 'Scene' }, 'public', viewer(`https://bucket.example/${'€'.repeat(4000)}`)))).toBe('viewerUrl');
     expect(hubRejection({ ...build({ title: 'Scene' }), license: { name: 'Custom', url: `https://example.com/${'€'.repeat(300)}` } })).toBe('license url');

@@ -6,22 +6,22 @@ import { unzipSync } from 'fflate';
 import type { Page } from '@playwright/test';
 import type { PublicationAssetSummary } from '../src/features/datasetPublishing/types';
 
-const shorteningEndpoint = 'https://hub.invalid/hub/api/links';
+const hubEndpoint = 'https://hub.invalid/hub/api/links';
 const shortUrl = 'https://hub.invalid/hub/HappyTree';
 const longId = 'HappyTree-AAAAAAAAAAAAAAAA';
 const longUrl = `https://hub.invalid/hub/${longId}`;
-interface ShorteningRequest {
-  viewerUrl: string; title: string; thumbnailBase64: string; access: 'public' | 'private'; managementSecret: string;
+interface HubRequest {
+  viewerUrl: string; title: string; thumbnailBase64: string; access?: 'public' | 'private'; managementSecret: string;
   license?: { name: string; url?: string };
   assets?: PublicationAssetSummary;
 }
-const shorteningRequests = new Map<Page, ShorteningRequest[]>();
+const hubRequests = new Map<Page, HubRequest[]>();
 
 test.beforeEach(async ({ page }) => {
-  const requests: ShorteningRequest[] = [];
-  shorteningRequests.set(page, requests);
-  await page.route(shorteningEndpoint, async route => {
-    const request = route.request().postDataJSON() as ShorteningRequest;
+  const requests: HubRequest[] = [];
+  hubRequests.set(page, requests);
+  await page.route(hubEndpoint, async route => {
+    const request = route.request().postDataJSON() as HubRequest;
     requests.push(request);
     const id = request.access === 'private' ? longId : 'HappyTree';
     await route.fulfill({ json: { id, url: `https://hub.invalid/hub/${id}`, managementPath: `/hub/manage/${id}` } });
@@ -39,7 +39,7 @@ const mocks = new Set<ReturnType<typeof createMockHuggingFace>>();
 const mockHub = (options: { lfs?: boolean } = {}) => {
   const hub = createMockHuggingFace(options); mocks.add(hub); return hub;
 };
-test.afterEach(async ({ page }) => { await Promise.all([...mocks].map(hub => hub.close())); mocks.clear(); shorteningRequests.delete(page); });
+test.afterEach(async ({ page }) => { await Promise.all([...mocks].map(hub => hub.close())); mocks.clear(); hubRequests.delete(page); });
 
 test.describe('Hugging Face dataset publication', () => {
   test('publishes settings and originals and reopens the shared link and pinned manifest anonymously', async ({ page, context, browser, baseURL, browserName }) => {
@@ -96,11 +96,12 @@ test.describe('Hugging Face dataset publication', () => {
     await expect(dialog.getByLabel('Share link', { exact: true })).toHaveValue(shortUrl);
     await expect(dialog.getByLabel('Repository name', { exact: true })).toHaveCount(0);
     expect(hub.writes).toEqual(completedWrites);
-    const requests = shorteningRequests.get(page)!;
+    const requests = hubRequests.get(page)!;
     expect(requests).toHaveLength(1);
-    expect(requests[0]).toMatchObject({ title: 'Browser test scene', access: 'public',
+    expect(requests[0]).toMatchObject({ title: 'Browser test scene',
       license: { name: 'CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' } });
     expect(requests[0]).not.toHaveProperty('listed');
+    expect(requests[0]).not.toHaveProperty('access');
     expect(requests[0].managementSecret).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(JSON.stringify(requests[0])).not.toContain('hf_browser_test_only');
     const paths = [...hub.files.keys()];
@@ -210,7 +211,7 @@ test.describe('Hugging Face dataset publication', () => {
     expect(hub.files.has('images/photo.jpg')).toBe(true);
     expect(hub.files.has('masks/photo.jpg.png')).toBe(true);
     expect(hub.visibility).toBe('private');
-    const requests = shorteningRequests.get(page)!;
+    const requests = hubRequests.get(page)!;
     expect(requests).toHaveLength(1);
     expect(requests[0].access).toBe('private');
     expect(hub.reads.every(read => read.authorization === 'Bearer hf_browser_test_only')).toBe(true);
@@ -218,7 +219,6 @@ test.describe('Hugging Face dataset publication', () => {
     await expect(dialog.getByLabel('Share link', { exact: true })).toHaveValue(longUrl);
     await expect(dialog.getByRole('region', { name: 'Published dataset' }).locator('.publication-result-title')).toHaveText('✓ Saved publisher/scene privately');
     const viewerUrl = `${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene`;
-    expect(viewerUrl).toBe(`${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene`);
     for (const mode of ['shared', 'manual'] as const) {
       const recipient = await browser.newContext();
       try {
@@ -252,9 +252,9 @@ test.describe('Hugging Face dataset publication', () => {
     const hub = mockHub();
     await hub.attach(context, baseURL!);
     let attempts = 0;
-    await page.unroute(shorteningEndpoint);
-    await page.route(shorteningEndpoint, async route => {
-      shorteningRequests.get(page)!.push(route.request().postDataJSON() as ShorteningRequest);
+    await page.unroute(hubEndpoint);
+    await page.route(hubEndpoint, async route => {
+      hubRequests.get(page)!.push(route.request().postDataJSON() as HubRequest);
       attempts++;
       await route.fulfill(attempts === 1 ? { status: 503, contentType: 'text/plain', body: 'Temporary failure' }
         : { json: { url: shortUrl, managementPath: '/hub/manage/HappyTree' } });
@@ -287,9 +287,9 @@ test.describe('Hugging Face dataset publication', () => {
     const writes = [...hub.writes];
     await dialog.getByRole('button', { name: 'Retry Hub link', exact: true }).click();
     await expect(dialog.getByLabel('Share link', { exact: true })).toHaveValue(shortUrl);
-    expect(shorteningRequests.get(page)).toHaveLength(2);
-    const requests = shorteningRequests.get(page)!;
-    expect(requests[0].access).toBe('public');
+    expect(hubRequests.get(page)).toHaveLength(2);
+    const requests = hubRequests.get(page)!;
+    expect(requests[0]).not.toHaveProperty('access');
     const archive = unzipSync(hub.files.get('dataset.zip')!);
     const paths = Object.keys(archive);
     for (const path of paths.filter(path => path.startsWith('images/'))) expect([...archive[path].subarray(0, 2)]).toEqual([0xff, 0xd8]);

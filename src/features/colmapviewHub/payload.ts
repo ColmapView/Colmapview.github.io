@@ -15,7 +15,8 @@ export interface HubLinkPayload {
   description: string;
   thumbnailBase64: string;
   managementSecret: string;
-  access: HubAccess;
+  /** Sent only for private links: a missing access means public, and the older Hub rejects the key. */
+  access?: HubAccess;
   publicAcknowledged: true;
   license?: HubLicense;
   assets?: PublicationAssetSummary;
@@ -85,7 +86,7 @@ function isHubLicenseUrl(value: string): boolean {
 function hubLicense({ name, url }: HubLicense): HubLicense | undefined {
   const text = hubText(name, HUB_LICENSE_NAME_LIMIT);
   if (!text) return undefined;
-  return { name: text, ...(url && url.length <= HUB_LICENSE_URL_LIMIT && isHubLicenseUrl(url) ? { url } : {}) };
+  return { name: text, ...(url && isHubLicenseUrl(url) ? { url } : {}) };
 }
 
 /** The request body for POST /api/links. */
@@ -97,7 +98,8 @@ export function buildHubPayload({ viewerUrl, metadata, access, thumbnailBase64, 
     viewerUrl,
     title: hubText(metadata.title, HUB_TITLE_LIMIT) || 'ColmapView dataset',
     description: hubText(metadata.description ?? '', HUB_DESCRIPTION_LIMIT),
-    thumbnailBase64, managementSecret, access, publicAcknowledged: true,
+    thumbnailBase64, managementSecret, publicAcknowledged: true,
+    ...(access === 'private' ? { access } : {}),
     ...(license ? { license } : {}),
     ...(metadata.assets ? { assets: metadata.assets } : {}),
   };
