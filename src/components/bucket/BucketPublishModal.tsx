@@ -1,7 +1,8 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useState } from 'react';
 import { CopyableField } from '../ui/CopyableField';
 import { usePublicationPreview } from '../modals/usePublicationPreview';
-import { UploadDialog, UploadFormatField, UploadImageFormatField, UploadLayout, UploadProgress, UploadResult, UploadViewPreview, PreviousUpload } from '../upload/UploadParts';
+import { UploadDialog, UploadFormatField, UploadImageFormatField, UploadLayout, UploadProgress, UploadResult, UploadSubmitRow, UploadViewPreview, PreviousUpload } from '../upload/UploadParts';
+import { useDatasetScopedValue, useFocusWhenBecomesTrue } from '../upload/uploadHooks';
 import { BucketConnectionForm } from './BucketConnectionForm';
 import { BucketFileList } from './BucketFileBrowser';
 import { useBucketBrowser } from './useBucketBrowser';
@@ -27,9 +28,7 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
   const id = useId();
   const facade = useBucketPublishStoreFacade();
   const { connection, publication, bucketConnection, bucketPublication } = facade;
-  // An edit applies only to the dataset it was made for; the dialog stays mounted across loads.
-  const [folderEdit, setFolderEdit] = useState<{ key: string; value: string } | null>(null);
-  const folder = folderEdit?.key === facade.sourceKey ? folderEdit.value : facade.datasetName;
+  const [folder, setFolder] = useDatasetScopedValue(facade.sourceKey, facade.datasetName);
   const [format, setFormat] = useState<PublicationFormat>('folder');
   const [imageFormat, setImageFormat] = useState<PublicationImageFormat>('original');
   const [error, setError] = useState<string | null>(null);
@@ -45,11 +44,7 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
   // Where the Hub is off nothing checks access, so the notice stays general; otherwise it states the check's outcome.
   const notice = !hub.enabled ? 'Access follows your bucket permissions. Viewers need bucket access for private files.'
     : hub.state.viewerUrl === publication.viewerUrl && hub.state.bucketAccess ? BUCKET_NOTICES[hub.state.bucketAccess] : undefined;
-  const wasWritable = useRef(connection.canWrite);
-  useEffect(() => {
-    if (connection.canWrite && !wasWritable.current) document.getElementById(`${id}-format`)?.focus();
-    wasWritable.current = connection.canWrite;
-  }, [connection.canWrite, id]);
+  useFocusWhenBecomesTrue(connection.canWrite, `${id}-format`);
   const publish = async () => {
     setError(null);
     try { await facade.publishDataset(folder, format, selectedImageFormat, preview.file ?? null); } catch (failure) { setError(bucketErrorMessage(failure)); }
@@ -77,7 +72,7 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
           {format === 'zip' && <UploadImageFormatField id={`${id}-images`} value={imageFormat} onChange={setImageFormat} />}
           <label htmlFor={`${id}-destination`}>Upload folder</label>
           <div className="publication-access">
-            <input id={`${id}-destination`} className={fieldClass} value={folder} onChange={event => setFolderEdit({ key: facade.sourceKey, value: event.target.value })} autoComplete="off" />
+            <input id={`${id}-destination`} className={fieldClass} value={folder} onChange={event => setFolder(event.target.value)} autoComplete="off" />
             <p className="publication-note">Each upload creates a new subfolder.</p>
           </div>
         </section>)}
@@ -106,12 +101,8 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
         <p>Apply {facade.pendingDeletions} pending image deletions before publishing.</p>
         <button type="button" className={secondary} disabled={applying} onClick={() => { void applyDeletions(); }}>Apply deletions and continue</button>
       </div>}
-      <div className="publication-submit-row">
-        {!facade.reconstruction && <span className="publication-note">Load a COLMAP dataset to upload it.</span>}
-        {disclosure && <p id={`${id}-hub-disclosure`} className="publication-note publication-disclosure">{disclosure}</p>}
-        <button type="button" aria-describedby={disclosure ? `${id}-hub-disclosure` : undefined} className={getButtonClass('primary', 'sm')} disabled={!connection.canWrite || !facade.canPublish || applying || hub.busy}
-          onClick={() => { void publish(); }}>Upload dataset</button>
-      </div>
+      <UploadSubmitRow id={id} note={!facade.reconstruction && 'Load a COLMAP dataset to upload it.'} disclosure={disclosure}
+        disabled={!connection.canWrite || !facade.canPublish || applying || hub.busy} onSubmit={() => { void publish(); }}>Upload dataset</UploadSubmitRow>
     </section>}
     {(error || publication.error) && <p role="alert" className="text-ds-error">{error || publication.error}</p>}
   </UploadDialog>;

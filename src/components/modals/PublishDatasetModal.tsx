@@ -1,10 +1,11 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { getHfConfiguration } from '../../features/huggingface/config';
 import { PUBLICATION_LICENSE_NAME_LIMIT, PUBLICATION_LICENSE_URL_LIMIT, PUBLICATION_LICENSES, stripControlCharacters, validatePublicationDetails } from '../../features/datasetPublishing/publicationMetadata';
 import { isPublishing } from '../../features/datasetPublishing/publishDataset';
 import { publicationErrorMessage } from '../../features/huggingface/http';
 import { usePublishDatasetStoreFacade } from './usePublishDatasetStoreFacade';
-import { UploadAccessField, UploadDialog, UploadFormatField, UploadImageFormatField, UploadLayout, UploadProgress, UploadResult, PreviousUpload } from '../upload/UploadParts';
+import { UploadAccessField, UploadDialog, UploadFormatField, UploadImageFormatField, UploadLayout, UploadProgress, UploadResult, UploadSubmitRow, PreviousUpload } from '../upload/UploadParts';
+import { useFocusWhenBecomesTrue } from '../upload/uploadHooks';
 import type { PublicationFormat, PublicationVisibility, PublicationImageFormat } from '../../features/datasetPublishing/types';
 import { usePublicationPreview } from './usePublicationPreview';
 import { getButtonClass, inputStyles } from '../../theme';
@@ -43,11 +44,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
   const selectedImageFormat = format === 'zip' ? imageFormat : 'original';
   const disclosure = hubDisclosure(hub.enabled, visibility, selectedImageFormat === 'original');
   const connected = auth.status === 'connected';
-  const wasConnected = useRef(connected);
-  useEffect(() => {
-    if (connected && !wasConnected.current) document.getElementById(`${id}-access`)?.focus();
-    wasConnected.current = connected;
-  }, [connected, id]);
+  useFocusWhenBecomesTrue(connected, `${id}-access`);
   const details = { name, title, description, license, licenseName, licenseUrl, visibility, format, imageFormat: selectedImageFormat };
 
   const publishNow = async () => {
@@ -160,13 +157,9 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
           <p>Apply {facade.pendingDeletions} pending image deletions before publishing.</p>
           <button type="button" className={buttonClass} disabled={applying} onClick={() => { void applyDeletions(); }}>Apply deletions and continue</button>
         </div>}
-        <div className="publication-submit-row">
-          {auth.status !== 'connected' && <span className="publication-note">Sign in to publish.</span>}
-          {disclosure && <p id={`${id}-hub-disclosure`} className="publication-note publication-disclosure">{disclosure}</p>}
-          <button type="button" aria-describedby={disclosure ? `${id}-hub-disclosure` : undefined} className={primaryButtonClass}
-            disabled={auth.status !== 'connected' || !facade.reconstruction || facade.pendingDeletions > 0 || applying || preview.busy || !preview.file || hub.busy}
-            onClick={() => { void publishNow(); }}>{visibility === 'private' ? 'Save private dataset' : 'Publish public dataset'}</button>
-        </div>
+        <UploadSubmitRow id={id} note={!connected && 'Sign in to publish.'} disclosure={disclosure}
+          disabled={!connected || !facade.reconstruction || facade.pendingDeletions > 0 || applying || preview.busy || !preview.file || hub.busy}
+          onSubmit={() => { void publishNow(); }}>{visibility === 'private' ? 'Save private dataset' : 'Publish public dataset'}</UploadSubmitRow>
       </section>}
       {(formError || publish.error || auth.error) && <p role="alert" className="text-ds-error">{formError ?? publish.error ?? auth.error}</p>}
     </>}

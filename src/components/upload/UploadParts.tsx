@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { ModalDialogShell } from '../ui/ModalDialogShell';
 import { CloseIcon } from '../../icons';
 import { CopyableField } from '../ui/CopyableField';
@@ -7,6 +7,7 @@ import { PUBLICATION_JPEG_QUALITY, type PublicationFormat, type PublicationImage
 import './upload.css';
 import { HubLinkResult } from './HubLink';
 import type { HubLink } from './useHubLink';
+import { useFocusOnMount } from './uploadHooks';
 
 const secondary = getButtonClass('secondary', 'sm');
 
@@ -97,8 +98,7 @@ export function UploadProgress({ label, message, progressLabel, max, value, deta
   label: string; message: string; progressLabel: string; max: number; value: number; detail?: string;
   onCancel: () => void; cancelDisabled?: boolean; children?: ReactNode;
 }) {
-  const statusRef = useRef<HTMLParagraphElement>(null);
-  useEffect(() => { statusRef.current?.focus(); }, []);
+  const statusRef = useFocusOnMount<HTMLParagraphElement>();
   return <section className="publication-section" aria-label={label}>
     {children}
     <p ref={statusRef} tabIndex={-1} role="status" aria-live="polite">{message}</p>
@@ -107,6 +107,22 @@ export function UploadProgress({ label, message, progressLabel, max, value, deta
     <div className="publication-actions"><button type="button" className={secondary} disabled={cancelDisabled} onClick={onCancel}>Cancel upload</button></div>
     <p className="publication-note">Keep this tab open. Reopen this dialog from Share.</p>
   </section>;
+}
+
+/**
+ * The submit row: an optional note, the Hub disclosure line when the Hub is on, and the submit button
+ * that the disclosure describes.
+ */
+export function UploadSubmitRow({ id, note, disclosure, disabled, onSubmit, children }: {
+  id: string; note?: string | false; disclosure: string | null; disabled: boolean; onSubmit: () => void; children: ReactNode;
+}) {
+  const disclosureId = `${id}-hub-disclosure`;
+  return <div className="publication-submit-row">
+    {note && <span className="publication-note">{note}</span>}
+    {disclosure && <p id={disclosureId} className="publication-note publication-disclosure">{disclosure}</p>}
+    <button type="button" aria-describedby={disclosure ? disclosureId : undefined} className={getButtonClass('primary', 'sm')} disabled={disabled}
+      onClick={onSubmit}>{children}</button>
+  </div>;
 }
 
 /** The link to share: the Hub link once it is ready, otherwise the viewer link; then the Hub status. */
@@ -130,8 +146,7 @@ export function UploadResult({ label, title, notice, viewerUrl, providerLink, hu
   providerLink?: { url: string; label: string };
   hub?: HubLink;
 }) {
-  const titleRef = useRef<HTMLParagraphElement>(null);
-  useEffect(() => { titleRef.current?.focus(); }, []);
+  const titleRef = useFocusOnMount<HTMLParagraphElement>();
   return <section className="publication-section" aria-label={label}>
     <p ref={titleRef} tabIndex={-1} role="status" className="publication-result-title">
       <span className="publication-result-check" aria-hidden="true">✓ </span>{title}

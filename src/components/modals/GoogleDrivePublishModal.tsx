@@ -1,8 +1,9 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { getGoogleDriveClientId, loadGoogleOAuthSdk, type GoogleOAuthSdk } from '../../features/googleDrive/auth';
 import { DRIVE_FILE_NAME_MAX, drivePublicationErrorMessage, isDrivePublishing } from '../../features/googleDrive/publishDataset';
 import { useGoogleDrivePublishStoreFacade } from './useGoogleDrivePublishStoreFacade';
-import { UploadAccessField, UploadDialog, UploadImageFormatField, UploadLayout, UploadProgress, UploadResult, UploadViewPreview, PreviousUpload } from '../upload/UploadParts';
+import { UploadAccessField, UploadDialog, UploadImageFormatField, UploadLayout, UploadProgress, UploadResult, UploadSubmitRow, UploadViewPreview, PreviousUpload } from '../upload/UploadParts';
+import { useDatasetScopedValue, useFocusWhenBecomesTrue } from '../upload/uploadHooks';
 import { usePublicationPreview } from './usePublicationPreview';
 import { GoogleDriveIcon } from '../../icons';
 import { getButtonClass, inputStyles } from '../../theme';
@@ -20,9 +21,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
   const { auth, publish, publication, googleDriveAuth } = facade;
   const id = useId();
   const clientId = getGoogleDriveClientId();
-  // An edit applies only to the dataset it was made for; the dialog stays mounted across loads.
-  const [nameEdit, setNameEdit] = useState<{ key: string; value: string } | null>(null);
-  const name = nameEdit?.key === facade.sourceKey ? nameEdit.value : `${facade.datasetName}.zip`;
+  const [name, setName] = useDatasetScopedValue(facade.sourceKey, `${facade.datasetName}.zip`);
   const [shared, setShared] = useState(true);
   const [imageFormat, setImageFormat] = useState<PublicationImageFormat>('original');
   const [sdk, setSdk] = useState<GoogleOAuthSdk | null>(null);
@@ -36,11 +35,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
   const hub = useHubLink('googleDrive', isOpen);
   const disclosure = hubDisclosure(hub.enabled, shared ? 'public' : 'private', imageFormat === 'original');
   const connected = auth.status === 'connected';
-  const wasConnected = useRef(connected);
-  useEffect(() => {
-    if (connected && !wasConnected.current) document.getElementById(`${id}-access`)?.focus();
-    wasConnected.current = connected;
-  }, [connected, id]);
+  useFocusWhenBecomesTrue(connected, `${id}-access`);
   useEffect(() => {
     if (!isOpen || !clientId) return;
     let cancelled = false;
@@ -80,7 +75,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
               hint={shared ? 'Link sharing is enabled after the upload is verified.' : 'Saved privately in My Drive. You can share it later in Drive.'} />
             <UploadImageFormatField id={`${id}-images`} value={imageFormat} onChange={setImageFormat} />
             <label htmlFor={`${id}-name`}>File name</label>
-            <input id={`${id}-name`} className={fieldClass} value={name} maxLength={DRIVE_FILE_NAME_MAX} onChange={event => setNameEdit({ key: facade.sourceKey, value: event.target.value })} autoComplete="off" />
+            <input id={`${id}-name`} className={fieldClass} value={name} maxLength={DRIVE_FILE_NAME_MAX} onChange={event => setName(event.target.value)} autoComplete="off" />
           </section>}
           {busy && <UploadProgress label="Drive publication progress" message={publish.message}
             progressLabel={publish.bytesTotal > 0 ? 'Drive upload progress' : 'Files packaged'}
@@ -107,12 +102,9 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
           <p>Apply {facade.pendingDeletions} pending image deletions before publishing.</p>
           <button type="button" className={secondary} disabled={applying} onClick={() => { void applyDeletions(); }}>Apply deletions and continue</button>
         </div>}
-        <div className="publication-submit-row">
-          {auth.status !== 'connected' && <span className="publication-note">Sign in to publish.</span>}
-          {disclosure && <p id={`${id}-hub-disclosure`} className="publication-note publication-disclosure">{disclosure}</p>}
-          <button type="button" aria-describedby={disclosure ? `${id}-hub-disclosure` : undefined} className={primary} disabled={auth.status !== 'connected' || !facade.reconstruction || facade.pendingDeletions > 0 || applying || hub.busy}
-            onClick={() => { void publishNow(); }}>{shared ? 'Publish shared dataset' : 'Save private dataset'}</button>
-        </div>
+        <UploadSubmitRow id={id} note={!connected && 'Sign in to publish.'} disclosure={disclosure}
+          disabled={!connected || !facade.reconstruction || facade.pendingDeletions > 0 || applying || hub.busy}
+          onSubmit={() => { void publishNow(); }}>{shared ? 'Publish shared dataset' : 'Save private dataset'}</UploadSubmitRow>
       </section>}
       {sdkError && <p role="alert" className="text-ds-error">{sdkError} <button type="button" className={secondary} onClick={() => setSdkAttempt(attempt => attempt + 1)}>Retry sign-in setup</button></p>}
       {(formError || publish.error || auth.error) && <p role="alert" className="text-ds-error">{formError ?? publish.error ?? auth.error}</p>}
