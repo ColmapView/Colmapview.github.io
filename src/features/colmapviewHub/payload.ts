@@ -26,12 +26,15 @@ function collapse(value: string): string {
   return replaceControlCharacters(value, ' ').trim().replace(/\s+/g, ' ');
 }
 
-/** The last grapheme boundary at or before `room` UTF-16 units. */
+/** The last grapheme boundary at or before `room` UTF-16 units; code points where Intl.Segmenter is missing. */
 function graphemeCut(text: string, room: number): number {
+  const segments = typeof Intl.Segmenter === 'function'
+    ? Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text), ({ segment }) => segment)
+    : Array.from(text);
   let end = 0;
-  for (const { index, segment } of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)) {
-    if (index + segment.length > room) break;
-    end = index + segment.length;
+  for (const segment of segments) {
+    if (end + segment.length > room) break;
+    end += segment.length;
   }
   return end;
 }

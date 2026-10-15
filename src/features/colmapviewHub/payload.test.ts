@@ -38,6 +38,15 @@ describe('hubText', () => {
     expect(hubText('👍🏽'.repeat(70), 120)).toBe(`${'👍🏽'.repeat(29)}…`);
     expect(hubText(`${'x'.repeat(115)}👩\u200d👩\u200d👧`, 120)).toBe(`${'x'.repeat(115)}…`);
   });
+  it('still cuts, between code points, where Intl.Segmenter is missing', () => {
+    const segmenter = Intl.Segmenter;
+    Reflect.deleteProperty(Intl, 'Segmenter');
+    try {
+      expect(hubText('😀'.repeat(70), 120)).toBe(`${'😀'.repeat(59)}…`);
+    } finally {
+      Object.defineProperty(Intl, 'Segmenter', { value: segmenter, configurable: true, writable: true });
+    }
+  });
 });
 
 describe('buildHubPayload', () => {
