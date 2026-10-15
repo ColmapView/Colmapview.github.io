@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { useReconstructionStore } from '../../store';
 import { getPublicationDatasetName, PUBLICATION_DATASET_NAME_MAX } from './publicationSnapshot';
 import type { ColmapManifest } from '../../types/manifest';
+import { bucketFolder } from '../bucketStorage/paths';
 
 const state = (patch: Partial<ReturnType<typeof useReconstructionStore.getState>>) => ({ ...useReconstructionStore.getInitialState(), ...patch });
 
@@ -50,5 +51,16 @@ describe('getPublicationDatasetName', () => {
     // A cut never splits a surrogate pair.
     const name = getPublicationDatasetName(state({ sourceName: `${'x'.repeat(175)}\u{1F600}` }));
     expect(name).toBe('x'.repeat(175));
+  });
+
+  it('caps the name at 512 UTF-8 bytes so the default bucket folder fits, cutting between characters', () => {
+    const cjk = getPublicationDatasetName(state({ sourceName: '庭'.repeat(176) }));
+    expect(cjk).toBe('庭'.repeat(170));
+    expect(new TextEncoder().encode(cjk).byteLength).toBeLessThanOrEqual(512);
+    expect(() => bucketFolder(cjk)).not.toThrow();
+    // 170 three-byte characters use 510 bytes: a two-byte character still fits, the next byte does not.
+    expect(getPublicationDatasetName(state({ sourceName: `${'庭'.repeat(170)}éz` }))).toBe(`${'庭'.repeat(170)}é`);
+    // A four-byte emoji past the cap is dropped whole, never split.
+    expect(getPublicationDatasetName(state({ sourceName: `${'庭'.repeat(170)}\u{1F600}` }))).toBe('庭'.repeat(170));
   });
 });

@@ -12,7 +12,7 @@ import type { CameraViewState } from '../../../store/types';
 import type { Reconstruction } from '../../../types/colmap';
 import type { ColmapManifest } from '../../../types/manifest';
 import { hubShareLinks } from '../../../features/colmapviewHub/hubShareLinks';
-import { getPublicationSourceKey } from '../../../features/datasetPublishing/publicationSnapshot';
+import { getHubSourceKey } from '../../../features/datasetPublishing/publicationSnapshot';
 
 interface SharePanelDataFacade {
   hasEdits: boolean;
@@ -39,7 +39,7 @@ export function useSharePanelStoreFacade(): SharePanelStoreFacade {
   const addNotification = useNotificationStore((s) => s.addNotification);
   const hfPublicationActive = usePublicationStatusStore((s) => s.phase !== 'idle');
   const drivePublicationActive = useDrivePublicationStatus((s) => s.active);
-  const sourceKey = useReconstructionStore(getPublicationSourceKey);
+  const sourceKey = useReconstructionStore(getHubSourceKey);
   useSyncExternalStore(hubShareLinks.subscribe, hubShareLinks.getVersion);
   // The Hub link opens the view saved at upload, so it is offered only for that exact dataset state.
   const hubLink = hubShareLinks.match({ key: sourceKey, revision }, pending);
