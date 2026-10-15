@@ -4,6 +4,7 @@ import {
   useCameraStore,
   useNotificationStore,
   useReconstructionStore,
+  useDeletionStore,
   usePublicationStatusStore,
   useDrivePublicationStatus,
 } from '../../../store';
@@ -11,6 +12,8 @@ import type { CameraViewState } from '../../../store/types';
 import { buildReconstruction } from '../../../test/builders';
 import type { ColmapManifest } from '../../../types/manifest';
 import { useSharePanelStoreFacade } from './useSharePanelStoreFacade';
+import { hubShareLinks } from '../../../features/colmapviewHub/hubShareLinks';
+import { getPublicationSourceKey } from '../../../features/datasetPublishing/publicationSnapshot';
 
 const manifest: ColmapManifest = {
   version: 1,
@@ -84,5 +87,19 @@ describe('useSharePanelStoreFacade', () => {
     expect(result.current.data.publicationActive).toBe(true);
     act(() => useDrivePublicationStatus.setState({ active: false }));
     expect(result.current.data.publicationActive).toBe(false);
+  });
+});
+
+describe('Hub link for the Share panel', () => {
+  it('offers the Hub link made from this dataset state, and none after an edit or with pending deletions', () => {
+    useReconstructionStore.setState({ reconstruction: buildReconstruction(), sourceType: 'url', sourceUrl: 'https://example.test/a/', reconstructionEditRevision: 0 });
+    hubShareLinks.set('huggingFace', { url: 'https://hub.invalid/hub/HappyTree', source: { key: getPublicationSourceKey(), revision: 0 }, readyAt: 1 });
+    const { result } = renderHook(() => useSharePanelStoreFacade());
+    expect(result.current.data.hubLink).toBe('https://hub.invalid/hub/HappyTree');
+    act(() => { useDeletionStore.setState({ pendingDeletions: new Set([1]) }); });
+    expect(result.current.data.hubLink).toBeNull();
+    act(() => { useDeletionStore.setState({ pendingDeletions: new Set() }); useReconstructionStore.setState({ reconstructionEditRevision: 1 }); });
+    expect(result.current.data.hubLink).toBeNull();
+    hubShareLinks.set('huggingFace', null);
   });
 });

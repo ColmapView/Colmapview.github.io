@@ -56,6 +56,7 @@ export const SharePanel = memo(function SharePanel({
       sourceUrl,
       sourceManifest,
       currentViewState,
+      hubLink,
     },
     addNotification,
   } = useSharePanelStoreFacade();
@@ -66,6 +67,7 @@ export const SharePanel = memo(function SharePanel({
   const shareSource = getShareSource(sourceUrl, sourceManifest);
   const handoffUrl = useMemo(() => driveEnabled ? null : getGoogleDriveHandoffUrl(GOOGLE_DRIVE_ENABLED_ORIGIN, shareSource), [driveEnabled, shareSource]);
   const canShare = canShareReconstruction(shareSource, reconstruction);
+  const canCopyLink = canShare || Boolean(hubLink);
   const sourceViewState = hasEdits ? null : currentViewState;
   const sourceConfig = hasEdits ? null : undefined;
   const openDestination = (next: Destination) => {
@@ -78,10 +80,9 @@ export const SharePanel = memo(function SharePanel({
 
   // Handle share link copy
   const handleCopyShareLink = useCallback(async () => {
-    if (!shareSource) return;
-    const url = generateShareableUrl(shareSource, sourceViewState, sourceConfig);
-    await copyWithFeedback(url, setCopiedShareLink);
-  }, [shareSource, sourceViewState, sourceConfig]);
+    const url = hubLink ?? (shareSource ? generateShareableUrl(shareSource, sourceViewState, sourceConfig) : null);
+    if (url) await copyWithFeedback(url, setCopiedShareLink);
+  }, [hubLink, shareSource, sourceViewState, sourceConfig]);
 
   // Handle embed URL copy
   const handleCopyEmbedUrl = useCallback(async () => {
@@ -106,11 +107,12 @@ export const SharePanel = memo(function SharePanel({
       includeShareLink,
       reconstruction,
       shareSource,
+      hubUrl: hubLink,
     });
 
     // Open X share dialog
     window.open(buildXShareUrl(sharePayload), '_blank', 'width=700,height=600,noopener,noreferrer');
-  }, [shareSource, sourceViewState, sourceConfig, reconstruction, includeShareLink]);
+  }, [hubLink, shareSource, sourceViewState, sourceConfig, reconstruction, includeShareLink]);
 
   // Handle share to LinkedIn
   const handleShareToLinkedIn = useCallback(async () => {
@@ -120,6 +122,7 @@ export const SharePanel = memo(function SharePanel({
       includeShareLink,
       reconstruction,
       shareSource,
+      hubUrl: hubLink,
     });
     const shareContent = buildLinkedInShareContent(sharePayload);
 
@@ -131,7 +134,7 @@ export const SharePanel = memo(function SharePanel({
     } catch {
       // LinkedIn remains open when clipboard access is unavailable.
     }
-  }, [shareSource, sourceViewState, sourceConfig, reconstruction, includeShareLink, addNotification]);
+  }, [hubLink, shareSource, sourceViewState, sourceConfig, reconstruction, includeShareLink, addNotification]);
 
   return <>
     <ControlButton
@@ -146,9 +149,9 @@ export const SharePanel = memo(function SharePanel({
       onClick={() => setActivePanel('share')}
     >
       <div className="flex flex-col gap-3 text-sm">
-        {canShare && (
+        {canCopyLink && (
           <div className="flex flex-col gap-2">
-            {hasEdits && <p className="m-0 text-ds-secondary">This link opens the original dataset. Upload to share edits.</p>}
+            {hasEdits && !hubLink && <p className="m-0 text-ds-secondary">This link opens the original dataset. Upload to share edits.</p>}
             <button
               type="button"
               onClick={handleCopyShareLink}
@@ -157,9 +160,10 @@ export const SharePanel = memo(function SharePanel({
               {copiedShareLink ? (
                 <><CheckIcon className="w-4 h-4 inline mr-1" />Copied!</>
               ) : (
-                hasEdits ? 'Copy original dataset link' : 'Copy link'
+                hasEdits && !hubLink ? 'Copy original dataset link' : 'Copy link'
               )}
             </button>
+            {canShare && <>
             <button
               type="button"
               onClick={handleCopyEmbedUrl}
@@ -182,6 +186,7 @@ export const SharePanel = memo(function SharePanel({
                 'Embed HTML'
               )}
             </button>
+            </>}
           </div>
         )}
         <div className="flex flex-col gap-2">
@@ -215,7 +220,7 @@ export const SharePanel = memo(function SharePanel({
               </svg>LinkedIn
             </button>
           </div>
-          {canShare && <ToggleRow label="Include link" checked={includeShareLink} onChange={setIncludeShareLink} />}
+          {canCopyLink && <ToggleRow label="Include link" checked={includeShareLink} onChange={setIncludeShareLink} />}
         </div>
       </div>
     </ControlButton>

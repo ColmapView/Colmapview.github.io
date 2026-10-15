@@ -69,6 +69,7 @@ export interface BuildSocialSharePayloadOptions {
   includeShareLink: boolean;
   reconstruction: Reconstruction | null;
   shareSource: ShareSource;
+  hubUrl?: string | null;
 }
 
 export interface SocialSharePayload {
@@ -82,8 +83,9 @@ export function buildSocialSharePayload({
   includeShareLink,
   reconstruction,
   shareSource,
+  hubUrl,
 }: BuildSocialSharePayloadOptions): SocialSharePayload {
-  const url = shareSource ? generateShareableUrl(shareSource, currentViewState) : null;
+  const url = hubUrl ?? (shareSource ? generateShareableUrl(shareSource, currentViewState) : null);
   const willIncludeLink = includeShareLink && Boolean(url);
   const text = buildSocialShareText({ reconstruction, withShareLink: willIncludeLink });
 

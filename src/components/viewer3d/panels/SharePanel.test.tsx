@@ -12,6 +12,7 @@ const facade = vi.hoisted(() => ({ data: {
   hasEdits: false, publicationActive: false, reconstruction: null as ReturnType<typeof buildReconstruction> | null,
   sourceUrl: null as string | null, sourceManifest: null as object | null,
   currentViewState: null,
+  hubLink: null as string | null,
 }, addNotification: vi.fn() }));
 const urlActions = vi.hoisted(() => ({
   generateShareableUrl: vi.fn(() => 'https://viewer.example/shared'),
@@ -52,7 +53,7 @@ beforeEach(() => {
   vi.stubEnv('VITE_HF_OAUTH_REDIRECT_URI', `${window.location.origin}/hf-callback.html`);
   vi.stubEnv('VITE_GOOGLE_DRIVE_CLIENT_ID', '123456-test.apps.googleusercontent.com');
   vi.mocked(isGoogleDriveEnabled).mockReturnValue(true);
-  Object.assign(facade.data, { hasEdits: false, publicationActive: false, reconstruction: null, sourceUrl: null, sourceManifest: null });
+  Object.assign(facade.data, { hasEdits: false, publicationActive: false, reconstruction: null, sourceUrl: null, sourceManifest: null, hubLink: null });
   vi.mocked(encodeShareData).mockClear();
   Object.values(urlActions).forEach(action => action.mockClear());
   facade.addNotification.mockClear();
@@ -262,5 +263,29 @@ describe('Share links and social actions', () => {
     rejectClipboard(new Error('Clipboard permission denied'));
     await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledOnce());
     expect(facade.addNotification).not.toHaveBeenCalled();
+  });
+});
+
+describe('Share panel Hub link', () => {
+  it('copies and shares the Hub link, also for local data without a source link', async () => {
+    facade.data.reconstruction = buildReconstruction();
+    facade.data.hubLink = 'https://hub.invalid/hub/HappyTree';
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    render(<ShareHarness />);
+    expect(screen.queryByRole('button', { name: 'Embed URL' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Copy link' }));
+    await waitFor(() => expect(urlActions.copyWithFeedback).toHaveBeenCalledWith('https://hub.invalid/hub/HappyTree', expect.any(Function)));
+    fireEvent.click(screen.getByRole('button', { name: 'Share to X' }));
+    expect(String(open.mock.calls[0][0])).toContain(encodeURIComponent('https://hub.invalid/hub/HappyTree'));
+  });
+
+  it('calls the Hub link of an edited upload a plain link, without the original-dataset note', () => {
+    facade.data.reconstruction = buildReconstruction();
+    facade.data.sourceUrl = 'https://data.example/scene/';
+    facade.data.hasEdits = true;
+    facade.data.hubLink = 'https://hub.invalid/hub/HappyTree';
+    render(<ShareHarness />);
+    expect(screen.getByRole('button', { name: 'Copy link' })).toBeVisible();
+    expect(screen.queryByText('This link opens the original dataset. Upload to share edits.')).toBeNull();
   });
 });

@@ -121,3 +121,14 @@ describe('share panel view-model helpers', () => {
   });
 
 });
+
+describe('buildSocialSharePayload with a Hub link', () => {
+  it('shares the Hub link instead of a generated viewer link', () => {
+    const generate = vi.fn(() => 'https://viewer.example/shared');
+    const payload = buildSocialSharePayload({ currentViewState: null, generateShareableUrl: generate, includeShareLink: true,
+      reconstruction: null, shareSource: null, hubUrl: 'https://colmapview.opsiclear.com/hub/HappyTree' });
+    expect(payload.url).toBe('https://colmapview.opsiclear.com/hub/HappyTree');
+    expect(payload.text).toContain('Made with ColmapView by @opsiclear');
+    expect(generate).not.toHaveBeenCalled();
+  });
+});
