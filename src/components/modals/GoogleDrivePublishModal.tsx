@@ -1,13 +1,14 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { getGoogleDriveClientId, loadGoogleOAuthSdk, type GoogleOAuthSdk } from '../../features/googleDrive/auth';
 import { drivePublicationErrorMessage, isDrivePublishing } from '../../features/googleDrive/publishDataset';
 import { useGoogleDrivePublishStoreFacade } from './useGoogleDrivePublishStoreFacade';
-import { UploadAccessField, UploadDialog, UploadImageFormatField, UploadLayout, UploadProgress, UploadResult, UploadViewPreview } from '../upload/UploadParts';
+import { UploadAccessField, UploadDialog, UploadImageFormatField, UploadLayout, UploadProgress, UploadResult, UploadViewPreview, PreviousUpload } from '../upload/UploadParts';
 import { usePublicationPreview } from './usePublicationPreview';
 import { GoogleDriveIcon } from '../../icons';
 import { getButtonClass, inputStyles } from '../../theme';
 import type { PublicationImageFormat } from '../../features/datasetPublishing/types';
 import { useHubLink } from '../upload/useHubLink';
+import { hubDisclosure } from '../../features/colmapviewHub/disclosure';
 
 const fieldClass = `${inputStyles.base} ${inputStyles.sizes.sm} w-full min-w-0`;
 const secondary = getButtonClass('secondary', 'sm');
@@ -33,6 +34,13 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
   const selecting = publish.phase === 'idle';
   const preview = usePublicationPreview(facade.sourceKey, isOpen && selecting && Boolean(clientId), facade.getScreenshotBlob);
   const hub = useHubLink('googleDrive', isOpen);
+  const disclosure = hubDisclosure(hub.enabled, shared ? 'public' : 'private', imageFormat === 'original');
+  const connected = auth.status === 'connected';
+  const wasConnected = useRef(connected);
+  useEffect(() => {
+    if (connected && !wasConnected.current) document.getElementById(`${id}-access`)?.focus();
+    wasConnected.current = connected;
+  }, [connected, id]);
   useEffect(() => {
     if (!isOpen || !clientId) return;
     let cancelled = false;
@@ -66,6 +74,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
       <UploadLayout completed={Boolean(publish.receipt)}>
         <UploadViewPreview url={preview.url} busy={preview.busy} hasDataset={Boolean(facade.reconstruction)} />
         <div className="publication-main">
+          {selecting && <PreviousUpload hub={hub} />}
           {selecting && <section className="publication-fields" aria-label="Drive dataset details">
             <UploadAccessField id={`${id}-access`} shared={shared} onChange={setShared} publicLabel="Anyone with the link"
               hint={shared ? 'Link sharing is enabled after the upload is verified.' : 'Saved privately in My Drive. You can share it later in Drive.'} />
@@ -87,7 +96,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
             </div>
             <p className="publication-note">Cancelling stops transfers. A completed file or sharing change may remain in Drive.</p>
           </section>}
-          {publish.receipt && <UploadResult label="Published Drive dataset" title="Dataset saved to Google Drive"
+          {publish.receipt && <UploadResult label="Published Drive dataset" title={publish.receipt.shared ? 'Published to Google Drive' : 'Saved privately to Google Drive'}
             notice={publish.receipt.shared ? 'Anyone with the link can view.' : 'Private. Viewers need permission to this file and must choose it in the Drive picker.'}
             viewerUrl={publish.receipt.viewerUrl} providerLink={{ url: publish.receipt.driveUrl, label: 'Google Drive' }}
             hub={hub} />}
@@ -100,6 +109,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
         </div>}
         <div className="publication-submit-row">
           {auth.status !== 'connected' && <span className="publication-note">Sign in to publish.</span>}
+          {disclosure && <p className="publication-note publication-disclosure">{disclosure}</p>}
           <button type="button" className={primary} disabled={auth.status !== 'connected' || !facade.reconstruction || facade.pendingDeletions > 0 || applying || hub.busy}
             onClick={() => { void publishNow(); }}>{shared ? 'Publish shared dataset' : 'Save private dataset'}</button>
         </div>

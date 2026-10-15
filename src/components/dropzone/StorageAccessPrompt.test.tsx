@@ -36,7 +36,7 @@ describe('storage access recovery', () => {
     expect(dialog).toHaveTextContent('https://colmapview.opsiclear.com');
     expect(dialog).toHaveTextContent('https://colmapview.github.io');
     fireEvent.change(screen.getByLabelText('Access key ID'), { target: { value: 'fixture-access' } });
-    fireEvent.change(screen.getByLabelText('Secret access key'), { target: { value: 'fixture-secret' } });
+    fireEvent.change(screen.getByLabelText('Secret key'), { target: { value: 'fixture-secret' } });
     fireEvent.click(screen.getByRole('button', { name: 'Connect and retry' }));
     await waitFor(() => expect(retry).toHaveBeenCalledOnce());
     expect(bucketConnection.getSnapshot().canWrite).toBe(true);

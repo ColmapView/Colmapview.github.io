@@ -24,8 +24,11 @@ vi.mock('../../features/googleDrive/auth', async importOriginal => ({
   ...await importOriginal<typeof import('../../features/googleDrive/auth')>(),
   loadGoogleOAuthSdk: vi.fn().mockResolvedValue({ initTokenClient: vi.fn() }),
 }));
+const hubLink = vi.hoisted(() => ({ value: { state: { phase: 'idle' }, enabled: true, busy: false, retry: vi.fn(), markDeleteLinkSeen: vi.fn() } as Record<string, unknown> }));
+vi.mock('../upload/useHubLink', () => ({ useHubLink: () => hubLink.value }));
 beforeEach(() => {
   vi.clearAllMocks();
+  hubLink.value = { state: { phase: 'idle' }, enabled: true, busy: false, retry: vi.fn(), markDeleteLinkSeen: vi.fn() };
   actions.auth = { status: 'connected', error: null }; actions.publish = { phase: 'idle' }; actions.pending = 0; actions.reconstruction = {};
   actions.sourceKey = 'current-scene'; actions.preview = { url: 'blob:current-view', busy: false }; actions.datasetName = 'dataset';
   vi.stubEnv('VITE_GOOGLE_DRIVE_CLIENT_ID', '123456-test.apps.googleusercontent.com');
@@ -195,4 +198,29 @@ describe('Google Drive publishing dialog', () => {
     rerender(<GoogleDrivePublishModal isOpen onClose={vi.fn()} />);
     expect(screen.getByLabelText('File name')).toHaveValue('harbor.zip');
   });
+  it('discloses the Hub link for the sharing choice and titles results by access', async () => {
+    await renderOpenDialog();
+    expect(screen.getByText('Also creates a short ColmapView Hub link. Anyone with it sees the title, description and preview. Original images keep their metadata, such as location.')).toBeVisible();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'private' } });
+    expect(screen.getByText('Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description and preview; the data still needs access.')).toBeVisible();
+    cleanup();
+    const receipt = { fileId: 'f', driveUrl: 'https://drive.google.com/file/d/f/view', viewerUrl: 'https://colmapview.opsiclear.com/?url=x' };
+    actions.publish = { phase: 'completed', receipt: { ...receipt, shared: false } };
+    await renderOpenDialog();
+    expect(screen.getByRole('region', { name: 'Published Drive dataset' })).toHaveTextContent('Saved privately to Google Drive');
+    cleanup();
+    actions.publish = { phase: 'completed', receipt: { ...receipt, shared: true } };
+    await renderOpenDialog();
+    expect(screen.getByRole('region', { name: 'Published Drive dataset' })).toHaveTextContent('Published to Google Drive');
+  });
+
+  it('moves focus to the first field after sign-in', async () => {
+    actions.auth = { status: 'disconnected', error: null };
+    const onClose = vi.fn();
+    const { rerender } = await renderOpenDialog(onClose);
+    actions.auth = { status: 'connected', error: null };
+    rerender(<GoogleDrivePublishModal isOpen onClose={onClose} />);
+    expect(screen.getByRole('combobox', { name: 'Access' })).toHaveFocus();
+  });
+
 });

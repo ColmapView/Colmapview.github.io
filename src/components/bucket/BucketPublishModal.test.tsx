@@ -7,7 +7,6 @@ import { bucketConnection } from '../../features/bucketStorage/connection';
 import { useDeletionStore, useReconstructionStore } from '../../store';
 import { buildCamera, buildReconstruction } from '../../test/builders';
 import type { BucketPublicationState } from '../../features/bucketStorage/publishDataset';
-import { hubPublications } from '../../features/colmapviewHub/publication';
 
 const publication = vi.hoisted(() => ({
   publish: vi.fn(), cancel: vi.fn(), reset: vi.fn(), state: { phase: 'idle', message: '', filesDone: 0, filesTotal: 0, bytesDone: 0 } as BucketPublicationState,
@@ -18,7 +17,10 @@ vi.mock('../../features/bucketStorage/publicationRuntime', () => ({ publishCurre
 const listing = '<ListBucketResult><Contents><Key>scene +#.tar</Key><Size>10</Size></Contents><CommonPrefixes><Prefix>nested/</Prefix></CommonPrefixes><IsTruncated>false</IsTruncated></ListBucketResult>';
 const root = 'https://s3.example/bucket/';
 const request = vi.fn<(url: string, init: RequestInit) => Promise<Response>>();
+const hubLink = vi.hoisted(() => ({ value: { state: { phase: 'idle' }, enabled: true, busy: false, retry: vi.fn(), markDeleteLinkSeen: vi.fn() } as Record<string, unknown> }));
+vi.mock('../upload/useHubLink', () => ({ useHubLink: () => hubLink.value }));
 beforeEach(() => {
+  hubLink.value = { state: { phase: 'idle' }, enabled: true, busy: false, retry: vi.fn(), markDeleteLinkSeen: vi.fn() };
   vi.stubGlobal('Blob', NodeBlob); vi.stubGlobal('crypto', webcrypto); vi.stubGlobal('fetch', request);
   request.mockReset().mockImplementation(async () => new Response(listing));
   bucketConnection.disconnect();
@@ -50,8 +52,7 @@ describe('bucket publisher', () => {
   it('waits for the Hub to finish checking access before another upload', () => {
     bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
     useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }) });
-    vi.spyOn(hubPublications.bucket, 'getSnapshot').mockReturnValue({ phase: 'checking', viewerUrl: 'https://viewer.example/?url=old' });
-    vi.spyOn(hubPublications.bucket, 'isBusy').mockReturnValue(true);
+    hubLink.value = { ...hubLink.value, state: { phase: 'checking', viewerUrl: 'https://viewer.example/?url=old' }, busy: true };
     open();
     expect(screen.getByRole('button', { name: 'Upload dataset' })).toBeDisabled();
   });
@@ -77,7 +78,6 @@ describe('bucket publisher', () => {
     open();
     expect(screen.getByRole('combobox', { name: 'Format' })).toHaveValue('folder');
     fireEvent.change(screen.getByRole('combobox', { name: 'Format' }), { target: { value: 'zip' } });
-    expect(screen.getByRole('textbox', { name: 'Access' })).toHaveValue('Bucket permissions');
     fireEvent.click(screen.getByRole('button', { name: 'Upload dataset' }));
     await waitFor(() => expect(publication.publish).toHaveBeenCalledExactlyOnceWith('dataset', 'zip', 'original', null));
     expect(screen.queryByRole('button', { name: 'Load dataset' })).toBeNull();
@@ -91,7 +91,7 @@ describe('bucket publisher', () => {
     expect(screen.queryByRole('button', { name: 'Load dataset' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Browse files' })).toBeNull();
     expect(screen.getByLabelText('Access key ID')).toBeRequired();
-    expect(screen.getByLabelText('Secret access key')).toBeRequired();
+    expect(screen.getByLabelText('Secret key')).toBeRequired();
     expect(screen.getByRole('button', { name: 'Upload dataset' })).toBeDisabled();
   });
   it('upgrades an unsigned read connection without losing its endpoint or persisting keys', () => {
@@ -101,7 +101,7 @@ describe('bucket publisher', () => {
     open();
     expect(screen.getByLabelText('Bucket URL')).toHaveValue(root);
     fireEvent.change(screen.getByLabelText('Access key ID'), { target: { value: 'fixture-access' } });
-    fireEvent.change(screen.getByLabelText('Secret access key'), { target: { value: 'fixture-secret' } });
+    fireEvent.change(screen.getByLabelText('Secret key'), { target: { value: 'fixture-secret' } });
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
     expect(bucketConnection.getSnapshot().canWrite).toBe(true);
     expect(screen.queryByRole('form', { name: 'Bucket connection' })).toBeNull();
@@ -115,7 +115,7 @@ describe('bucket publisher', () => {
     const session = bucketConnection.getSession();
     open();
     fireEvent.change(screen.getByLabelText('Access key ID'), { target: { value: ' ' } });
-    fireEvent.change(screen.getByLabelText('Secret access key'), { target: { value: ' ' } });
+    fireEvent.change(screen.getByLabelText('Secret key'), { target: { value: ' ' } });
     fireEvent.submit(screen.getByRole('form', { name: 'Bucket connection' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Enter an access key and secret to upload.');
     expect(bucketConnection.getSession()).toBe(session);
@@ -156,17 +156,17 @@ describe('bucket publisher', () => {
     expect(bucketConnection.getSession()).not.toBeNull();
     expect(publication.cancel).not.toHaveBeenCalled();
   });
-  it('shows the upload destination and existing bucket permissions directly', () => {
+  it('shows the upload destination without a read-only Access row', () => {
     act(() => bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' }));
     act(() => useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }) }));
     open();
     expect(screen.getByLabelText('Upload folder').closest('details')).toBeNull();
-    expect(screen.getByRole('textbox', { name: 'Access' })).toHaveValue('Bucket permissions');
-    expect(screen.getByRole('textbox', { name: 'Access' })).toHaveAttribute('readonly');
+    expect(screen.queryByRole('textbox', { name: 'Access' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Upload dataset' }));
     expect(publication.publish).toHaveBeenCalledExactlyOnceWith('dataset', 'folder', 'original', null);
   });
   it('shows the same viewer link and result actions without claiming the bucket is public', () => {
+    hubLink.value = { ...hubLink.value, enabled: false };
     act(() => bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' }));
     publication.state = { phase: 'completed', message: 'Dataset uploaded.', filesDone: 2, filesTotal: 2, bytesDone: 10,
       viewerUrl: 'https://viewer.example/?url=https://s3.example/bucket/dataset/manifest.json' };
@@ -243,4 +243,45 @@ describe('bucket publisher', () => {
     act(() => useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }), sourceName: 'harbor' }));
     expect(screen.getByLabelText('Upload folder')).toHaveValue('harbor');
   });
+  it('drops the read-only Access row, discloses the bucket Hub link, and names fields as they read', () => {
+    open();
+    expect(screen.getByLabelText('Secret key')).toBeVisible();
+    fireEvent.click(screen.getByText('More options'));
+    expect(screen.getByLabelText('Public URL (optional)')).toBeVisible();
+    expect(screen.getByLabelText('Session token (optional)')).toBeVisible();
+    bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
+    useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }) });
+    cleanup();
+    open();
+    expect(screen.queryByLabelText('Access', { exact: true })).toBeNull();
+    expect(screen.getByText('Also creates a ColmapView Hub link (short if the bucket is public). Anyone with it sees the title, description and preview. Original images keep their metadata, such as location.')).toBeVisible();
+  });
+
+  it.each([
+    ['public', 'Anyone can open this link.'],
+    ['private', 'Private. Viewers need bucket access.'],
+    ['unknown', 'Public access unconfirmed, so the Hub link is unguessable.'],
+  ] as const)('states a %s bucket outcome in the result', (bucketAccess, notice) => {
+    const viewerUrl = 'https://colmapview.opsiclear.com/?url=https://bucket.example/scene/manifest.json';
+    publication.state = { phase: 'completed', message: 'Dataset uploaded.', filesDone: 1, filesTotal: 1, bytesDone: 1, viewerUrl };
+    hubLink.value = { ...hubLink.value, state: { phase: 'ready', viewerUrl, bucketAccess, url: 'https://hub.invalid/hub/X', managementUrl: 'https://hub.invalid/hub/manage/X#k' } };
+    open();
+    expect(screen.getByText(notice)).toBeVisible();
+  });
+
+  it('says it is checking public access while the check runs, and moves focus to the first field after connecting', () => {
+    const viewerUrl = 'https://colmapview.opsiclear.com/?url=https://bucket.example/scene/manifest.json';
+    publication.state = { phase: 'completed', message: 'Dataset uploaded.', filesDone: 1, filesTotal: 1, bytesDone: 1, viewerUrl };
+    hubLink.value = { ...hubLink.value, state: { phase: 'checking', viewerUrl } };
+    open();
+    expect(screen.getByText('Checking public access…')).toBeVisible();
+    cleanup();
+    publication.state = { phase: 'idle', message: '', filesDone: 0, filesTotal: 0, bytesDone: 0 };
+    hubLink.value = { ...hubLink.value, state: { phase: 'idle' } };
+    useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }) });
+    open();
+    act(() => { bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' }); });
+    expect(screen.getByRole('combobox', { name: 'Format' })).toHaveFocus();
+  });
+
 });

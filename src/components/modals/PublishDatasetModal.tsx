@@ -1,14 +1,15 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { getHfConfiguration } from '../../features/huggingface/config';
 import { PUBLICATION_LICENSE_NAME_LIMIT, PUBLICATION_LICENSE_URL_LIMIT, PUBLICATION_LICENSES, stripControlCharacters, validatePublicationDetails } from '../../features/datasetPublishing/publicationMetadata';
 import { isPublishing } from '../../features/datasetPublishing/publishDataset';
 import { publicationErrorMessage } from '../../features/huggingface/http';
 import { usePublishDatasetStoreFacade } from './usePublishDatasetStoreFacade';
-import { UploadAccessField, UploadDialog, UploadFormatField, UploadImageFormatField, UploadLayout, UploadProgress, UploadResult } from '../upload/UploadParts';
+import { UploadAccessField, UploadDialog, UploadFormatField, UploadImageFormatField, UploadLayout, UploadProgress, UploadResult, PreviousUpload } from '../upload/UploadParts';
 import type { PublicationFormat, PublicationVisibility, PublicationImageFormat } from '../../features/datasetPublishing/types';
 import { usePublicationPreview } from './usePublicationPreview';
 import { getButtonClass, inputStyles } from '../../theme';
 import { useHubLink } from '../upload/useHubLink';
+import { hubDisclosure } from '../../features/colmapviewHub/disclosure';
 
 const bytes = (value: number) => `${(value / 1024 / 1024).toFixed(1)} MiB`;
 const fieldClass = `${inputStyles.base} ${inputStyles.sizes.sm} w-full min-w-0`;
@@ -40,6 +41,13 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
   const preview = usePublicationPreview(facade.sourceKey, isOpen && selecting && !!config, facade.getScreenshotBlob);
   const hub = useHubLink('huggingFace', isOpen);
   const selectedImageFormat = format === 'zip' ? imageFormat : 'original';
+  const disclosure = hubDisclosure(hub.enabled, visibility, selectedImageFormat === 'original');
+  const connected = auth.status === 'connected';
+  const wasConnected = useRef(connected);
+  useEffect(() => {
+    if (connected && !wasConnected.current) document.getElementById(`${id}-access`)?.focus();
+    wasConnected.current = connected;
+  }, [connected, id]);
   const details = { name, title, description, license, licenseName, licenseUrl, visibility, format, imageFormat: selectedImageFormat };
 
   const publishNow = async () => {
@@ -98,6 +106,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
           {preview.error && <p role="alert" className="text-ds-error">{preview.error}</p>}
         </section>
         <div className="publication-main">
+          {selecting && <PreviousUpload hub={hub} />}
           {selecting && <section className="publication-fields" aria-label="Dataset details">
             <UploadAccessField id={`${id}-access`} shared={visibility === 'public'} onChange={shared => setVisibility(shared ? 'public' : 'private')}
               publicLabel="Public" hint={visibility === 'public' ? 'A public, discoverable dataset that anyone can download.' : 'Requires sign-in with a Hugging Face account that has access.'} />
@@ -140,7 +149,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
             </button>}
             <button type="button" className={buttonClass} disabled={publish.uncertain} onClick={() => { publication.reset(); setFormError(null); }}>Start a new publication</button>
           </section>}
-          {publish.receipt && <UploadResult label="Published dataset" title={<>Published <strong>{publish.receipt.repoId}</strong></>}
+          {publish.receipt && <UploadResult label="Published dataset" title={publish.receipt.visibility === 'public' ? <>Published <strong>{publish.receipt.repoId}</strong></> : <>Saved <strong>{publish.receipt.repoId}</strong> privately</>}
             notice={publish.receipt.visibility === 'private' ? 'Private. Viewers must sign in to Hugging Face with an account that has access.' : 'Anyone can open this link without signing in.'}
             viewerUrl={publish.receipt.viewerUrl} providerLink={{ url: publish.receipt.repoUrl, label: 'Hugging Face page' }}
             hub={hub} />}
@@ -153,6 +162,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
         </div>}
         <div className="publication-submit-row">
           {auth.status !== 'connected' && <span className="publication-note">Sign in to publish.</span>}
+          {disclosure && <p className="publication-note publication-disclosure">{disclosure}</p>}
           <button type="button" className={primaryButtonClass}
             disabled={auth.status !== 'connected' || !facade.reconstruction || facade.pendingDeletions > 0 || applying || preview.busy || !preview.file || hub.busy}
             onClick={() => { void publishNow(); }}>{visibility === 'private' ? 'Save private dataset' : 'Publish public dataset'}</button>

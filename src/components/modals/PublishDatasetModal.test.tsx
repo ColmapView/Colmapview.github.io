@@ -20,8 +20,12 @@ vi.mock('./usePublicationPreview', () => ({ usePublicationPreview: () => ({
   replace: actions.replace,
 }) }));
 
+const hubLink = vi.hoisted(() => ({ value: { state: { phase: 'idle' }, enabled: true, busy: false, retry: vi.fn(), markDeleteLinkSeen: vi.fn() } as Record<string, unknown> }));
+vi.mock('../upload/useHubLink', () => ({ useHubLink: () => hubLink.value }));
+
 beforeEach(() => {
   vi.clearAllMocks();
+  hubLink.value = { state: { phase: 'idle' }, enabled: true, busy: false, retry: vi.fn(), markDeleteLinkSeen: vi.fn() };
   actions.publish = { phase: 'idle' };
   actions.auth = { status: 'connected', identity: { username: 'publisher' } } satisfies Auth;
   vi.stubEnv('VITE_HF_PUBLISH_ENABLED', 'true');
@@ -208,7 +212,7 @@ describe('PublishDatasetModal', () => {
       receipt: { repoId: 'publisher/scene', repoUrl, dataCommit: 'd'.repeat(40), metadataCommit: 'e'.repeat(40), viewerUrl, visibility } };
     const onClose = vi.fn();
     const { rerender } = render(<PublishDatasetModal isOpen onClose={onClose} />);
-    expect(screen.getByRole('status')).toHaveTextContent('Published publisher/scene');
+    expect(screen.getByRole('status')).toHaveTextContent(visibility === 'private' ? 'Saved publisher/scene privately' : 'Published publisher/scene');
     const field = screen.getByLabelText('Share link');
     expect(field).toHaveValue(viewerUrl);
     expect(within(field.parentElement!).getByRole('button', { name: 'Copy' })).toBeInTheDocument();
@@ -234,6 +238,56 @@ describe('PublishDatasetModal', () => {
     expect(screen.getByLabelText('Custom license name')).toHaveAttribute('maxLength', '160');
     expect(screen.getByLabelText('Custom license URL')).toHaveAttribute('maxLength', '2048');
   });
+  it('shows the disclosure for the chosen access beside the publish button', () => {
+    render(<PublishDatasetModal isOpen onClose={vi.fn()} />);
+    const row = screen.getByRole('button', { name: 'Publish public dataset' }).parentElement!;
+    expect(within(row).getByText('Also creates a short ColmapView Hub link. Anyone with it sees the title, description and preview. Original images keep their metadata, such as location.')).toBeVisible();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'private' } });
+    expect(screen.getByText('Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description and preview; the data still needs access.')).toBeVisible();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'public' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Format' }), { target: { value: 'zip' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Images' }), { target: { value: 'jpeg' } });
+    expect(screen.getByText('Also creates a short ColmapView Hub link. Anyone with it sees the title, description and preview.')).toBeVisible();
+  });
+
+  it('shows no disclosure where the Hub is off, and waits while a Hub link is being made', () => {
+    hubLink.value = { ...hubLink.value, enabled: false };
+    const { unmount } = render(<PublishDatasetModal isOpen onClose={vi.fn()} />);
+    expect(screen.queryByText(/ColmapView Hub link/)).toBeNull();
+    unmount();
+    hubLink.value = { ...hubLink.value, enabled: true, busy: true };
+    render(<PublishDatasetModal isOpen onClose={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Publish public dataset' })).toBeDisabled();
+  });
+
+  it('titles a private result "Saved … privately" and a public one "Published …"', () => {
+    const receipt = { repoId: 'publisher/scene', repoUrl: 'https://huggingface.co/datasets/publisher/scene', dataCommit: 'a', metadataCommit: 'b',
+      viewerUrl: 'https://colmapview.opsiclear.com/?url=https://huggingface.co/datasets/publisher/scene' };
+    actions.publish = { phase: 'completed', receipt: { ...receipt, visibility: 'private' } };
+    const { unmount } = render(<PublishDatasetModal isOpen onClose={vi.fn()} />);
+    expect(screen.getByRole('region', { name: 'Published dataset' })).toHaveTextContent('Saved publisher/scene privately');
+    unmount();
+    actions.publish = { phase: 'completed', receipt: { ...receipt, visibility: 'public' } };
+    render(<PublishDatasetModal isOpen onClose={vi.fn()} />);
+    expect(screen.getByRole('region', { name: 'Published dataset' })).toHaveTextContent('Published publisher/scene');
+  });
+
+  it('keeps the previous Hub link above the form after the result resets', () => {
+    hubLink.value = { ...hubLink.value, state: { phase: 'ready', viewerUrl: 'https://colmapview.opsiclear.com/?url=x', url: 'https://hub.invalid/hub/HappyTree',
+      managementUrl: 'https://hub.invalid/hub/manage/HappyTree#k' } };
+    render(<PublishDatasetModal isOpen onClose={vi.fn()} />);
+    expect(within(screen.getByRole('region', { name: 'Previous upload' })).getByLabelText('Share link')).toHaveValue('https://hub.invalid/hub/HappyTree');
+  });
+
+  it('moves focus to the first field after sign-in', () => {
+    actions.auth = { status: 'disconnected', identity: null };
+    const onClose = vi.fn();
+    const { rerender } = render(<PublishDatasetModal isOpen onClose={onClose} />);
+    actions.auth = { status: 'connected', identity: { username: 'publisher' } };
+    rerender(<PublishDatasetModal isOpen onClose={onClose} />);
+    expect(screen.getByRole('combobox', { name: 'Access' })).toHaveFocus();
+  });
+
 });
 
 const repoUrl = 'https://huggingface.co/datasets/publisher/scene';

@@ -44,17 +44,17 @@ export function BucketConnectionForm({ access, onConnected, initialBaseUrl, subm
       <label htmlFor={`${id}-access`}>Access key ID</label>
       <input id={`${id}-access`} className={fieldClass} required={requireCredentials} value={accessKeyId} onChange={event => setAccessKeyId(event.target.value)} autoComplete="off" spellCheck={false} />
       <label htmlFor={`${id}-secret`}>Secret key</label>
-      <input id={`${id}-secret`} aria-label="Secret access key" className={fieldClass} required={requireCredentials} type="password" value={secretAccessKey} onChange={event => setSecretAccessKey(event.target.value)} autoComplete="off" />
+      <input id={`${id}-secret`} className={fieldClass} required={requireCredentials} type="password" value={secretAccessKey} onChange={event => setSecretAccessKey(event.target.value)} autoComplete="off" />
     </div>
     <details>
       <summary className="cursor-pointer text-ds-secondary">More options</summary>
       <div className="publication-fields mt-2">
         <label htmlFor={`${id}-region`}>Region</label>
         <input id={`${id}-region`} className={fieldClass} value={region} onChange={event => setRegion(event.target.value)} placeholder={inferBucketRegion(baseUrl)} autoComplete="off" />
-        <label htmlFor={`${id}-public`}>Public URL</label>
-        <input id={`${id}-public`} aria-label="Public bucket URL (optional)" className={fieldClass} type="url" value={publicBaseUrl} onChange={event => setPublicBaseUrl(event.target.value)} placeholder="https://public.example/" autoComplete="off" />
-        <label htmlFor={`${id}-token`}>Session token</label>
-        <input id={`${id}-token`} aria-label="Session token (optional)" className={fieldClass} type="password" value={sessionToken} onChange={event => setSessionToken(event.target.value)} autoComplete="off" />
+        <label htmlFor={`${id}-public`}>Public URL (optional)</label>
+        <input id={`${id}-public`} className={fieldClass} type="url" value={publicBaseUrl} onChange={event => setPublicBaseUrl(event.target.value)} placeholder="https://public.example/" autoComplete="off" />
+        <label htmlFor={`${id}-token`}>Session token (optional)</label>
+        <input id={`${id}-token`} className={fieldClass} type="password" value={sessionToken} onChange={event => setSessionToken(event.target.value)} autoComplete="off" />
       </div>
     </details>
     <div className="flex flex-wrap items-start justify-between gap-2">

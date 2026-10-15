@@ -23,7 +23,7 @@ function chooseBucket(credentials = false) {
   fireEvent.change(screen.getByLabelText('Bucket URL'), { target: { value: root } });
   if (credentials) {
     fireEvent.change(screen.getByLabelText('Access key ID'), { target: { value: 'fixture-access' } });
-    fireEvent.change(screen.getByLabelText('Secret access key'), { target: { value: 'fixture-secret' } });
+    fireEvent.change(screen.getByLabelText('Secret key'), { target: { value: 'fixture-secret' } });
   }
   fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
 }
@@ -31,7 +31,7 @@ function chooseBucket(credentials = false) {
 describe('bucket storage dialog', () => {
   it('opens public objects without connecting or asking for a secret', () => {
     const props = open();
-    expect(screen.queryByLabelText('Secret access key')).toBeNull();
+    expect(screen.queryByLabelText('Secret key')).toBeNull();
     fireEvent.change(screen.getByLabelText('Dataset URL'), { target: { value: 'https://public.example/scene.tar' } });
     fireEvent.click(screen.getByRole('button', { name: 'Load dataset' }));
     expect(props.onClose).toHaveBeenCalledOnce();
@@ -63,7 +63,7 @@ describe('bucket storage dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
     expect(session.signal.aborted).toBe(true);
     expect(bucketConnection.getSession()).toBeNull();
-    expect(screen.getByLabelText('Secret access key')).toHaveValue('');
+    expect(screen.getByLabelText('Secret key')).toHaveValue('');
     expect(screen.getByLabelText('Access key ID')).toHaveValue('');
   });
   it('keeps direct object reads available when ListBucket access is denied', async () => {

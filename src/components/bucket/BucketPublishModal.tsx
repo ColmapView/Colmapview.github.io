@@ -1,7 +1,7 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { CopyableField } from '../ui/CopyableField';
 import { usePublicationPreview } from '../modals/usePublicationPreview';
-import { UploadDialog, UploadFormatField, UploadImageFormatField, UploadLayout, UploadProgress, UploadResult, UploadViewPreview } from '../upload/UploadParts';
+import { UploadDialog, UploadFormatField, UploadImageFormatField, UploadLayout, UploadProgress, UploadResult, UploadViewPreview, PreviousUpload } from '../upload/UploadParts';
 import { BucketConnectionForm } from './BucketConnectionForm';
 import { BucketFileList } from './BucketFileBrowser';
 import { useBucketBrowser } from './useBucketBrowser';
@@ -12,9 +12,16 @@ import type { PublicationFormat, PublicationImageFormat } from '../../features/d
 import { BucketIcon } from '../../icons';
 import { getButtonClass, inputStyles } from '../../theme';
 import { useHubLink } from '../upload/useHubLink';
+import { hubDisclosure } from '../../features/colmapviewHub/disclosure';
+import type { BucketAccess } from '../../features/colmapviewHub/publication';
 
 const fieldClass = `${inputStyles.base} ${inputStyles.sizes.sm} w-full min-w-0`;
 const secondary = getButtonClass('secondary', 'sm');
+const BUCKET_NOTICES: Record<BucketAccess, string> = {
+  public: 'Anyone can open this link.',
+  private: 'Private. Viewers need bucket access.',
+  unknown: 'Public access unconfirmed, so the Hub link is unguessable.',
+};
 
 export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const id = useId();
@@ -34,6 +41,15 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
   const selectedImageFormat = format === 'zip' ? imageFormat : 'original';
   const preview = usePublicationPreview(facade.sourceKey, isOpen && selecting, facade.getScreenshotBlob);
   const hub = useHubLink('bucket', isOpen);
+  const disclosure = hubDisclosure(hub.enabled, 'bucket', selectedImageFormat === 'original');
+  // Where the Hub is off nothing checks access, so the notice stays general; otherwise it states the check's outcome.
+  const notice = !hub.enabled ? 'Access follows your bucket permissions. Viewers need bucket access for private files.'
+    : hub.state.viewerUrl === publication.viewerUrl && hub.state.bucketAccess ? BUCKET_NOTICES[hub.state.bucketAccess] : undefined;
+  const wasWritable = useRef(connection.canWrite);
+  useEffect(() => {
+    if (connection.canWrite && !wasWritable.current) document.getElementById(`${id}-format`)?.focus();
+    wasWritable.current = connection.canWrite;
+  }, [connection.canWrite, id]);
   const publish = async () => {
     setError(null);
     try { await facade.publishDataset(folder, format, selectedImageFormat, preview.file ?? null); } catch (failure) { setError(bucketErrorMessage(failure)); }
@@ -55,12 +71,8 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
     <UploadLayout completed={Boolean(publication.viewerUrl)}>
       <UploadViewPreview url={preview.url} busy={preview.busy} hasDataset={Boolean(facade.reconstruction)} />
       <div className="publication-main">
+        {selecting && <PreviousUpload hub={hub} />}
         {selecting && (!connection.canWrite ? <BucketConnectionForm access="write" /> : <section className="publication-fields" aria-label="Bucket dataset details">
-          <label htmlFor={`${id}-access`}>Access</label>
-          <div className="publication-access">
-            <input id={`${id}-access`} className={fieldClass} value="Bucket permissions" readOnly aria-describedby={`${id}-access-hint`} />
-            <p id={`${id}-access-hint`} className="publication-note">Uses your bucket's existing public or private access.</p>
-          </div>
           <UploadFormatField id={`${id}-format`} value={format} onChange={setFormat} />
           {format === 'zip' && <UploadImageFormatField id={`${id}-images`} value={imageFormat} onChange={setImageFormat} />}
           <label htmlFor={`${id}-destination`}>Upload folder</label>
@@ -74,7 +86,7 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
           detail={publication.filesTotal > 0 ? `${publication.filesDone} / ${publication.filesTotal} files · ${(publication.bytesDone / 1024 / 1024).toFixed(1)} MiB` : undefined}
           cancelDisabled={publication.phase === 'cancelling'} onCancel={bucketPublication.cancel} />}
         {publication.viewerUrl && <UploadResult label="Published bucket dataset" title="Dataset saved to bucket storage"
-          notice="Access follows your bucket permissions. Viewers need bucket access for private files."
+          notice={notice}
           viewerUrl={publication.viewerUrl} hub={hub} />}
         {!busy && !selecting && !publication.viewerUrl && <section className="publication-section" aria-label="Bucket upload recovery">
           <p role="status">{publication.message}</p>
@@ -96,6 +108,7 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
       </div>}
       <div className="publication-submit-row">
         {!facade.reconstruction && <span className="publication-note">Load a COLMAP dataset to upload it.</span>}
+        {disclosure && <p className="publication-note publication-disclosure">{disclosure}</p>}
         <button type="button" className={getButtonClass('primary', 'sm')} disabled={!connection.canWrite || !facade.canPublish || applying || hub.busy}
           onClick={() => { void publish(); }}>Upload dataset</button>
       </div>

@@ -110,7 +110,7 @@ test.describe('Storage access recovery', () => {
       expect(await help.evaluate(element => element.clientWidth >= element.parentElement!.clientWidth - 1)).toBe(true);
       expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
       await dialog.getByRole('textbox', { name: 'Access key ID', exact: true }).fill('fixture-access');
-      await dialog.getByLabel('Secret access key', { exact: true }).fill('fixture-secret');
+      await dialog.getByLabel('Secret key', { exact: true }).fill('fixture-secret');
       await dialog.getByRole('button', { name: 'Connect and retry', exact: true }).click();
       await expect(dialog).toHaveCount(0);
       await expect(page.getByTestId('scene-3d')).toBeVisible({ timeout: 45000 });

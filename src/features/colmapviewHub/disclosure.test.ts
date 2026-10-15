@@ -1,0 +1,23 @@
+import { describe, expect, it } from 'vitest';
+import { hubDisclosure } from './disclosure';
+
+const PUBLIC = 'Also creates a short ColmapView Hub link. Anyone with it sees the title, description and preview.';
+const PRIVATE = 'Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description and preview; the data still needs access.';
+const BUCKET = 'Also creates a ColmapView Hub link (short if the bucket is public). Anyone with it sees the title, description and preview.';
+const ORIGINALS = 'Original images keep their metadata, such as location.';
+
+describe('hubDisclosure', () => {
+  it.each([['public', PUBLIC], ['private', PRIVATE], ['bucket', BUCKET]] as const)('states what a %s upload creates', (kind, line) => {
+    expect(hubDisclosure(true, kind, false)).toBe(line);
+  });
+
+  it('adds the metadata sentence for original images unless access is private', () => {
+    expect(hubDisclosure(true, 'public', true)).toBe(`${PUBLIC} ${ORIGINALS}`);
+    expect(hubDisclosure(true, 'bucket', true)).toBe(`${BUCKET} ${ORIGINALS}`);
+    expect(hubDisclosure(true, 'private', true)).toBe(PRIVATE);
+  });
+
+  it('is absent where the Hub is off', () => {
+    expect(hubDisclosure(false, 'public', true)).toBeNull();
+  });
+});
