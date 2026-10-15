@@ -85,7 +85,8 @@ describe('URL loader manifest source helpers', () => {
       'https://example.com/dataset/rgb/',
       'https://example.com/dataset/segmentation/',
       null,
-      null
+      null,
+      'test scene'
     );
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Image URL base for lazy loading: https://example.com/dataset/rgb/');
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Mask URL base for lazy loading: https://example.com/dataset/segmentation/');
@@ -96,13 +97,13 @@ describe('URL loader manifest source helpers', () => {
   });
 
   it('records a URL-loaded manifest\'s name for upload defaults when the scene commits', async () => {
-    const deps = { ...makeDeps(), setSourceName: vi.fn() };
+    const deps = makeDeps();
     await expect(loadManifestSource(manifest, { type: 'url', sourceUrl: 'https://example.com/manifest.json' }, deps)).resolves.toBe(true);
-    expect(deps.setSourceName).toHaveBeenLastCalledWith('test scene');
-    expect(deps.setSourceName.mock.invocationCallOrder[0]).toBeGreaterThan(deps.setSourceInfo.mock.invocationCallOrder[0]);
-    const unnamed = { ...makeDeps(), setSourceName: vi.fn() };
+    expect(deps.setSourceInfo).toHaveBeenCalledOnce();
+    expect(deps.setSourceInfo.mock.lastCall?.[6]).toBe('test scene');
+    const unnamed = makeDeps();
     await loadManifestSource({ ...manifest, name: undefined }, { type: 'url', sourceUrl: 'https://example.com/manifest.json' }, unnamed);
-    expect(unnamed.setSourceName).toHaveBeenLastCalledWith(null);
+    expect(unnamed.setSourceInfo.mock.lastCall?.[6]).toBeNull();
   });
 
   it('loads an inline manifest source and stores the manifest for embedding', async () => {
@@ -116,7 +117,8 @@ describe('URL loader manifest source helpers', () => {
       'https://example.com/dataset/rgb/',
       'https://example.com/dataset/segmentation/',
       manifest,
-      null
+      null,
+      'test scene'
     );
     expect(deps.log).toHaveBeenCalledWith('[URL Loader] Successfully loaded 3 files from manifest');
   });

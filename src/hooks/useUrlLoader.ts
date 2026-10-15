@@ -64,7 +64,6 @@ interface UrlLoadContext {
   fetchImpl: (url: string, init?: RequestInit) => Promise<Response>;
   processFiles: ReturnType<typeof useFileDropzone>['processFiles'];
   setSourceInfo: ReconstructionState['setSourceInfo'];
-  setSourceName: ReconstructionState['setSourceName'];
   setUrlProgress: ReconstructionState['setUrlProgress'];
   hasEmbeddedViewerSettings: boolean;
   remoteCatalogMerged: boolean;
@@ -117,7 +116,6 @@ export function useUrlLoadActions({ logger = appLogger, applyUrlOverrides = fals
   const logInfo = logger.info;
   const setError = useReconstructionStore((s) => s.setError);
   const setSourceInfo = useReconstructionStore((s) => s.setSourceInfo);
-  const setSourceName = useReconstructionStore((s) => s.setSourceName);
   const mergeRemoteSplatCatalog = useReconstructionStore((s) => s.mergeRemoteSplatCatalog);
   const setUrlLoading = useReconstructionStore((s) => s.setUrlLoading);
   const setUrlProgress = useReconstructionStore((s) => s.setUrlProgress);
@@ -173,7 +171,6 @@ export function useUrlLoadActions({ logger = appLogger, applyUrlOverrides = fals
         });
       }),
       setSourceInfo: guard(setSourceInfo),
-      setSourceName: guard(setSourceName),
       setUrlProgress: guard(setUrlProgress),
       hasEmbeddedViewerSettings: false,
       remoteCatalogMerged: false,
@@ -232,7 +229,7 @@ export function useUrlLoadActions({ logger = appLogger, applyUrlOverrides = fals
         }
       }
     }
-  }, [logInfo, processFiles, setSourceInfo, setSourceName, setUrlProgress, setUrlLoading,
+  }, [logInfo, processFiles, setSourceInfo, setUrlProgress, setUrlLoading,
     setUrlError, logError, setError, finishUrlLoad, applyUrlOverrides, mergeRemoteSplatCatalog]);
 
   const loadFromUrl = useCallback((url: string, options: UrlLoadOptions = {}): Promise<boolean> => runLoad(url, async (load) => {

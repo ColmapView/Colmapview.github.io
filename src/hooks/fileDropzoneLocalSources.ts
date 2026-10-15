@@ -17,7 +17,8 @@ type ProcessFiles = (
   options?: Pick<FileDropzoneWorkflowOptions, 'onSceneReplaced' | 'load' | 'signal' | 'initialSplatSelectionRevision'>
 ) => Promise<void | boolean>;
 type ClearCaches = (options?: ClearAllOptions) => void;
-type SetSourceInfo = (type: ReconstructionSourceType, url?: string | null) => void;
+type SetSourceInfo = (type: ReconstructionSourceType, url: null, imageUrlBase: null, maskUrlBase: null, manifest: null,
+  imageNameToUrl: null, sourceName: string | null) => void;
 type SetActiveZipArchive = (
   archive: ArchiveReader,
   imageIndex: Map<string, ArchiveEntry>,
@@ -56,7 +57,6 @@ interface LocalSourceBaseDeps {
   setUrlProgress: (progress: UrlLoadProgress | null) => void;
   setError: (error: string | null) => void;
   setSourceInfo: SetSourceInfo;
-  setSourceName?: (name: string | null) => void;
   clearCaches: ClearCaches;
   processFiles: ProcessFiles;
   waitForPaint?: () => Promise<void>;
@@ -98,10 +98,9 @@ async function yieldToPaint(deps: Pick<LocalSourceBaseDeps, 'waitForPaint'>): Pr
   await (deps.waitForPaint ?? waitForBrowserPaint)();
 }
 
-function commitLocalSceneSource(deps: Pick<LocalSourceBaseDeps, 'clearCaches' | 'setSourceInfo' | 'setSourceName'>, name: string | null): void {
+function commitLocalSceneSource(deps: Pick<LocalSourceBaseDeps, 'clearCaches' | 'setSourceInfo'>, name: string | null): void {
   deps.clearCaches();
-  deps.setSourceInfo('local', null);
-  deps.setSourceName?.(name);
+  deps.setSourceInfo('local', null, null, null, null, null, name);
 }
 
 /** A single dropped folder's name; several dropped entries share no name. */
@@ -163,8 +162,7 @@ export async function loadLocalZipFile(
       deps.clearCaches();
       deps.setActiveZipArchive(archive, imageIndex, fileSize, imageCount);
       transferred = true;
-      deps.setSourceInfo('zip', null);
-      deps.setSourceName?.(stripArchiveExtension(zipFile.name));
+      deps.setSourceInfo('zip', null, null, null, null, null, stripArchiveExtension(zipFile.name));
     });
     load.assertCurrent();
     if (processed === false) return false;

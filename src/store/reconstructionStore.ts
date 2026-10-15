@@ -315,8 +315,8 @@ interface ReconstructionState {
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   setProgress: (progress: number) => void;
-  setSourceInfo: (type: ReconstructionSourceType, url?: string | null, imageUrlBase?: string | null, maskUrlBase?: string | null, manifest?: ColmapManifest | null, imageNameToUrl?: Record<string, string> | null) => void;
-  setSourceName: (name: string | null) => void;
+  /** `sourceName` records a name the source carries outside the store (a folder, archive or manifest URL name) for upload defaults. */
+  setSourceInfo: (type: ReconstructionSourceType, url?: string | null, imageUrlBase?: string | null, maskUrlBase?: string | null, manifest?: ColmapManifest | null, imageNameToUrl?: Record<string, string> | null, sourceName?: string | null) => void;
   /** Applies to the scene on screen when it can; with no scene yet, it waits for the first commit ('' for None). */
   setRequestedSplatSourceId: (sourceId: string | null) => void;
   /** Merge a discovered remote splat catalog so all tiles are listed (lazy). Never opens the picker. */
@@ -485,9 +485,8 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
 
   setProgress: (progress) => set({ progress }),
 
-  setSourceInfo: (sourceType, sourceUrl = null, imageUrlBase = null, maskUrlBase = null, sourceManifest = null, imageNameToUrl = null) =>
-    set({ sourceType, sourceUrl, imageUrlBase, maskUrlBase, sourceManifest, imageNameToUrl, sourceName: null }),
-  setSourceName: (sourceName) => set({ sourceName }),
+  setSourceInfo: (sourceType, sourceUrl = null, imageUrlBase = null, maskUrlBase = null, sourceManifest = null, imageNameToUrl = null, sourceName = null) =>
+    set({ sourceType, sourceUrl, imageUrlBase, maskUrlBase, sourceManifest, imageNameToUrl, sourceName }),
 
   setRequestedSplatSourceId: (requestedSplatSourceId) => {
     const loadedFiles = get().loadedFiles;
