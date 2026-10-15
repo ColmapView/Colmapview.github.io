@@ -1,6 +1,6 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PreviousUpload, UploadProgress, UploadResult } from './UploadParts';
+import { PreviousUpload, UploadDialog, UploadProgress, UploadResult } from './UploadParts';
 import type { HubLink } from './useHubLink';
 import type { HubLinkState } from '../../features/colmapviewHub/publication';
 
@@ -12,6 +12,23 @@ const hub = (state: HubLinkState, enabled = true): HubLink => ({ state, enabled,
 const provider = { url: 'https://huggingface.co/datasets/u/scene', label: 'Hugging Face page' };
 
 describe('UploadResult', () => {
+  it.each([
+    ['a result', () => <UploadResult label="Published dataset" title="Published u/scene" viewerUrl={viewerUrl} />],
+    ['progress', () => <UploadProgress label="Upload progress" message="Uploading…" progressLabel="Upload" max={2} value={1} onCancel={vi.fn()} />],
+  ])('returns focus to the opener when a dialog reopened on %s closes', (_name, content) => {
+    const view = (isOpen: boolean) => <>
+      <button type="button">Share</button>
+      <UploadDialog isOpen={isOpen} onClose={vi.fn()} title="Publish" closeLabel="Close">{content()}</UploadDialog>
+    </>;
+    const { rerender } = render(view(false));
+    const opener = screen.getByRole('button', { name: 'Share' });
+    opener.focus();
+    rerender(view(true));
+    expect(opener).not.toHaveFocus();
+    rerender(view(false));
+    expect(opener).toHaveFocus();
+  });
+
   it('shares the viewer link until the Hub link is ready, then the Hub link', () => {
     const { rerender } = render(<UploadResult label="Published dataset" title="Published u/scene" notice="Anyone can open this link."
       viewerUrl={viewerUrl} providerLink={provider} hub={hub({ phase: 'creating', viewerUrl })} />);
