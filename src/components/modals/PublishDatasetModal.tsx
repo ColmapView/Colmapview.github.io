@@ -162,8 +162,8 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
         </div>}
         <div className="publication-submit-row">
           {auth.status !== 'connected' && <span className="publication-note">Sign in to publish.</span>}
-          {disclosure && <p className="publication-note publication-disclosure">{disclosure}</p>}
-          <button type="button" className={primaryButtonClass}
+          {disclosure && <p id={`${id}-hub-disclosure`} className="publication-note publication-disclosure">{disclosure}</p>}
+          <button type="button" aria-describedby={disclosure ? `${id}-hub-disclosure` : undefined} className={primaryButtonClass}
             disabled={auth.status !== 'connected' || !facade.reconstruction || facade.pendingDeletions > 0 || applying || preview.busy || !preview.file || hub.busy}
             onClick={() => { void publishNow(); }}>{visibility === 'private' ? 'Save private dataset' : 'Publish public dataset'}</button>
         </div>

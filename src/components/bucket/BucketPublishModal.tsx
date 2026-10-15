@@ -108,8 +108,8 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
       </div>}
       <div className="publication-submit-row">
         {!facade.reconstruction && <span className="publication-note">Load a COLMAP dataset to upload it.</span>}
-        {disclosure && <p className="publication-note publication-disclosure">{disclosure}</p>}
-        <button type="button" className={getButtonClass('primary', 'sm')} disabled={!connection.canWrite || !facade.canPublish || applying || hub.busy}
+        {disclosure && <p id={`${id}-hub-disclosure`} className="publication-note publication-disclosure">{disclosure}</p>}
+        <button type="button" aria-describedby={disclosure ? `${id}-hub-disclosure` : undefined} className={getButtonClass('primary', 'sm')} disabled={!connection.canWrite || !facade.canPublish || applying || hub.busy}
           onClick={() => { void publish(); }}>Upload dataset</button>
       </div>
     </section>}

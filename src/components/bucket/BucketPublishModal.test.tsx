@@ -72,7 +72,7 @@ describe('bucket publisher', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Upload dataset' }));
     await waitFor(() => expect(publication.publish).toHaveBeenLastCalledWith('dataset', 'folder', 'original', null));
   });
-  it('offers a ZIP option without changing bucket access or adding loading controls', async () => {
+  it('defaults to Folder, forwards a ZIP choice to the upload, and shows no Load dataset button', async () => {
     bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
     useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }) });
     open();
@@ -255,6 +255,16 @@ describe('bucket publisher', () => {
     open();
     expect(screen.queryByLabelText('Access', { exact: true })).toBeNull();
     expect(screen.getByText('Also creates a ColmapView Hub link (short if the bucket is public). Anyone with it sees the title, description and preview. Original images keep their metadata, such as location.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Upload dataset' })).toHaveAccessibleDescription('Also creates a ColmapView Hub link (short if the bucket is public). Anyone with it sees the title, description and preview. Original images keep their metadata, such as location.');
+  });
+
+  it('shows no Hub disclosure where the Hub is off', () => {
+    hubLink.value = { ...hubLink.value, enabled: false };
+    bucketConnection.connect({ baseUrl: root, region: 'auto' }, { accessKeyId: 'fixture-access', secretAccessKey: 'fixture-secret' });
+    useReconstructionStore.setState({ reconstruction: buildReconstruction({ cameras: [buildCamera()] }) });
+    open();
+    expect(screen.queryByText(/ColmapView Hub link/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Upload dataset' })).not.toHaveAttribute('aria-describedby');
   });
 
   it.each([

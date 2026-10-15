@@ -32,10 +32,22 @@ describe('HubLinkResult', () => {
     expect(screen.getByRole('alert')).toHaveTextContent("Hub link not created: Couldn't reach ColmapView Hub. The link above still works.");
     fireEvent.click(screen.getByRole('button', { name: 'Retry Hub link' }));
     expect(props.onRetry).toHaveBeenCalledOnce();
-    expect(screen.getByRole('alert').parentElement).toHaveFocus();
+    expect(screen.getByRole('alert')).toHaveFocus();
     cleanup();
     renderResult({ phase: 'failed', viewerUrl, error: 'Use a viewer link without access credentials.', retryable: false });
     expect(screen.queryByRole('button', { name: 'Retry Hub link' })).toBeNull();
+  });
+
+  it('moves focus to the Hub status line after Retry, as the phase changes', () => {
+    const onRetry = vi.fn();
+    const props = { onRetry, onDeleteLinkShown: vi.fn() };
+    const { rerender } = render(<HubLinkResult state={{ phase: 'failed', viewerUrl, error: "Couldn't reach ColmapView Hub.", retryable: true }} {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry Hub link' }));
+    rerender(<HubLinkResult state={{ phase: 'creating', viewerUrl }} {...props} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Creating Hub link…');
+    expect(screen.getByRole('status')).toHaveFocus();
+    rerender(<HubLinkResult state={{ phase: 'failed', viewerUrl, error: 'ColmapView Hub is unavailable.', retryable: true }} {...props} />);
+    expect(screen.getByRole('alert')).not.toHaveFocus();
   });
 
   it('keeps Retry disabled until Retry-After passes', () => {

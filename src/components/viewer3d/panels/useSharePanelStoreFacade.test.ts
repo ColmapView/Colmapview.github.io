@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   useCameraStore,
   useNotificationStore,
@@ -91,6 +91,13 @@ describe('useSharePanelStoreFacade', () => {
 });
 
 describe('Hub link for the Share panel', () => {
+  // The stores and the Hub link registry are module singletons; leave them as the next test expects.
+  afterEach(() => {
+    hubShareLinks.set('huggingFace', null);
+    useReconstructionStore.setState(useReconstructionStore.getInitialState(), true);
+    useDeletionStore.setState(useDeletionStore.getInitialState(), true);
+  });
+
   it('offers the Hub link made from this dataset state, and none after an edit or with pending deletions', () => {
     useReconstructionStore.setState({ reconstruction: buildReconstruction(), sourceType: 'url', sourceUrl: 'https://example.test/a/', reconstructionEditRevision: 0 });
     hubShareLinks.set('huggingFace', { url: 'https://hub.invalid/hub/HappyTree', source: { key: getPublicationSourceKey(), revision: 0 }, readyAt: 1 });
@@ -100,6 +107,5 @@ describe('Hub link for the Share panel', () => {
     expect(result.current.data.hubLink).toBeNull();
     act(() => { useDeletionStore.setState({ pendingDeletions: new Set() }); useReconstructionStore.setState({ reconstructionEditRevision: 1 }); });
     expect(result.current.data.hubLink).toBeNull();
-    hubShareLinks.set('huggingFace', null);
   });
 });

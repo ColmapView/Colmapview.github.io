@@ -109,8 +109,8 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
         </div>}
         <div className="publication-submit-row">
           {auth.status !== 'connected' && <span className="publication-note">Sign in to publish.</span>}
-          {disclosure && <p className="publication-note publication-disclosure">{disclosure}</p>}
-          <button type="button" className={primary} disabled={auth.status !== 'connected' || !facade.reconstruction || facade.pendingDeletions > 0 || applying || hub.busy}
+          {disclosure && <p id={`${id}-hub-disclosure`} className="publication-note publication-disclosure">{disclosure}</p>}
+          <button type="button" aria-describedby={disclosure ? `${id}-hub-disclosure` : undefined} className={primary} disabled={auth.status !== 'connected' || !facade.reconstruction || facade.pendingDeletions > 0 || applying || hub.busy}
             onClick={() => { void publishNow(); }}>{shared ? 'Publish shared dataset' : 'Save private dataset'}</button>
         </div>
       </section>}

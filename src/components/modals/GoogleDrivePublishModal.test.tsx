@@ -201,8 +201,10 @@ describe('Google Drive publishing dialog', () => {
   it('discloses the Hub link for the sharing choice and titles results by access', async () => {
     await renderOpenDialog();
     expect(screen.getByText('Also creates a short ColmapView Hub link. Anyone with it sees the title, description and preview. Original images keep their metadata, such as location.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Publish shared dataset' })).toHaveAccessibleDescription('Also creates a short ColmapView Hub link. Anyone with it sees the title, description and preview. Original images keep their metadata, such as location.');
     fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'private' } });
     expect(screen.getByText('Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description and preview; the data still needs access.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Save private dataset' })).toHaveAccessibleDescription('Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description and preview; the data still needs access.');
     cleanup();
     const receipt = { fileId: 'f', driveUrl: 'https://drive.google.com/file/d/f/view', viewerUrl: 'https://colmapview.opsiclear.com/?url=x' };
     actions.publish = { phase: 'completed', receipt: { ...receipt, shared: false } };
@@ -212,6 +214,15 @@ describe('Google Drive publishing dialog', () => {
     actions.publish = { phase: 'completed', receipt: { ...receipt, shared: true } };
     await renderOpenDialog();
     expect(screen.getByRole('region', { name: 'Published Drive dataset' })).toHaveTextContent('Published to Google Drive');
+  });
+
+  it('shows no Hub disclosure where the Hub is off', async () => {
+    hubLink.value = { ...hubLink.value, enabled: false };
+    await renderOpenDialog();
+    expect(screen.queryByText(/ColmapView Hub link/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Publish shared dataset' })).not.toHaveAttribute('aria-describedby');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'private' } });
+    expect(screen.queryByText(/ColmapView Hub link/)).toBeNull();
   });
 
   it('moves focus to the first field after sign-in', async () => {

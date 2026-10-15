@@ -242,8 +242,10 @@ describe('PublishDatasetModal', () => {
     render(<PublishDatasetModal isOpen onClose={vi.fn()} />);
     const row = screen.getByRole('button', { name: 'Publish public dataset' }).parentElement!;
     expect(within(row).getByText('Also creates a short ColmapView Hub link. Anyone with it sees the title, description and preview. Original images keep their metadata, such as location.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Publish public dataset' })).toHaveAccessibleDescription('Also creates a short ColmapView Hub link. Anyone with it sees the title, description and preview. Original images keep their metadata, such as location.');
     fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'private' } });
     expect(screen.getByText('Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description and preview; the data still needs access.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Save private dataset' })).toHaveAccessibleDescription('Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description and preview; the data still needs access.');
     fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'public' } });
     fireEvent.change(screen.getByRole('combobox', { name: 'Format' }), { target: { value: 'zip' } });
     fireEvent.change(screen.getByRole('combobox', { name: 'Images' }), { target: { value: 'jpeg' } });
@@ -254,6 +256,7 @@ describe('PublishDatasetModal', () => {
     hubLink.value = { ...hubLink.value, enabled: false };
     const { unmount } = render(<PublishDatasetModal isOpen onClose={vi.fn()} />);
     expect(screen.queryByText(/ColmapView Hub link/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Publish public dataset' })).not.toHaveAttribute('aria-describedby');
     unmount();
     hubLink.value = { ...hubLink.value, enabled: true, busy: true };
     render(<PublishDatasetModal isOpen onClose={vi.fn()} />);
