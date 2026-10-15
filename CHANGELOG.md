@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Create a ColmapView Hub card for every upload where the Hub is enabled: a short name when anyone can open the data (Hugging Face Public, Drive "Anyone with the link", or a bucket that passes the anonymous check), an unguessable name otherwise. A line beside the publish button discloses it.
+- Show a visible private delete link with each Hub link, keep the last Hub link in a "Previous upload" block after the upload result resets, and show a toast when a Hub link finishes while its dialog is closed.
+- Use the newest matching Hub link for Share → Copy link, X and LinkedIn.
+
+### Changed
+
+- Name Drive files and bucket folders after the dataset, crop Hub thumbnails to fill the card, and send license names with links.
+- Explain Hub failures briefly and offer Retry only for network errors, timeouts, rate limits, outages and card previews that could not be made.
+- Title results by access ("Published …" or "Saved … privately"), remove the bucket dialog's read-only Access row, and move focus through sign-in, progress and results.
+- Create Hub links only on colmapview.opsiclear.com and colmapview.github.io. Deployment builds ignore `VITE_HUB_BASE_URL`; local development and e2e builds use it when it is set.
+
+### Fixed
+
+- Bucket uploads on internal hosts, or whose public access cannot be confirmed, no longer get short names.
+- Cut Hub titles and descriptions at a word or character boundary within the Hub's limits.
+- Describe the current public defaults and the Hub in the privacy policy, terms, About page and OAuth documentation.
+
 ## [0.16.12] - 2026-10-13
 
 ### Changed

@@ -9,7 +9,7 @@ Load a COLMAP reconstruction with its original images, then choose **Share → G
 
 Public viewer links to supported Drive archives need no sign-in when the viewer's Drive API key is configured. For a private archive, use the loading panel's Drive account control to sign in and **Choose archive from Drive** through Google Picker. The recipient must already have permission to download it; a viewer URL alone does not grant access. Loading supports ZIP and TAR, including compressed TAR; publication creates ZIP output only. Loading and publishing share one tab-only connection requesting `drive.file`. Sign-in never starts an upload. Disconnect or Sign out ends that connection for both workflows.
 
-Once public sharing is verified, ColmapView automatically creates an unlisted Hub short link with the current-view thumbnail and metadata. Private uploads retain their direct viewer link and send nothing to Hub. Save the private **Manage Hub link** URL to remove the card later. If shortening fails, **Retry shortening** retries only that step; it never repeats the Drive upload. Reopening the dialog keeps the completed result available.
+After the upload is verified, ColmapView creates a ColmapView Hub link with the current-view thumbnail and metadata where the Hub is enabled: a short name when the ZIP is shared with anyone with the link, an unguessable one when it is private. The result shows the Share link and a private delete link. If the Hub request fails, **Retry Hub link** retries only that step; it never repeats the Drive upload. Reopening the dialog keeps the completed result, and after a new dataset or an edit resets it, the Previous upload block keeps the Hub link.
 
 ## Dataset contents
 
