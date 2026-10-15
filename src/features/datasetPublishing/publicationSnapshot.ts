@@ -102,11 +102,12 @@ function urlName(value: string | null): string | null {
  */
 function cleanDatasetName(value: string | null | undefined): string | null {
   if (!value) return null;
-  const encoder = new TextEncoder();
   let name = '';
   let bytes = 0;
   for (const char of replaceControlCharacters(value, ' ').replace(/[\\/]+/g, '-').replace(/\s+/g, ' ').trim()) {
-    const charBytes = encoder.encode(char).byteLength;
+    // UTF-8 length from the code point; a lone surrogate encodes as U+FFFD, three bytes.
+    const codePoint = char.codePointAt(0)!;
+    const charBytes = codePoint < 0x80 ? 1 : codePoint < 0x800 ? 2 : codePoint < 0x10000 ? 3 : 4;
     if (name.length + char.length > PUBLICATION_DATASET_NAME_MAX || bytes + charBytes > PUBLICATION_DATASET_NAME_MAX_BYTES) break;
     name += char;
     bytes += charBytes;
@@ -116,10 +117,15 @@ function cleanDatasetName(value: string | null | undefined): string | null {
 }
 
 /** A default name for uploads: the manifest name (inline, or recorded when a manifest URL loads), the recorded local name, the source URL's last segment, or "colmap-dataset". */
-export function getPublicationDatasetName(state = useReconstructionStore.getState()): string {
-  for (const candidate of [state.sourceManifest?.name, state.sourceName, urlName(state.sourceUrl)]) {
+export function publicationDatasetName(manifestName: string | null | undefined, sourceName: string | null, sourceUrl: string | null): string {
+  for (const candidate of [manifestName, sourceName, urlName(sourceUrl)]) {
     const name = cleanDatasetName(candidate);
     if (name) return name;
   }
   return 'colmap-dataset';
+}
+
+/** publicationDatasetName for a reconstruction state. */
+export function getPublicationDatasetName(state = useReconstructionStore.getState()): string {
+  return publicationDatasetName(state.sourceManifest?.name, state.sourceName, state.sourceUrl);
 }

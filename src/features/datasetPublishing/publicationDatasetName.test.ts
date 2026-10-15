@@ -63,4 +63,10 @@ describe('getPublicationDatasetName', () => {
     // A four-byte emoji past the cap is dropped whole, never split.
     expect(getPublicationDatasetName(state({ sourceName: `${'庭'.repeat(170)}\u{1F600}` }))).toBe('庭'.repeat(170));
   });
+
+  it('counts a lone surrogate as the three bytes of its replacement character', () => {
+    const lone = getPublicationDatasetName(state({ sourceName: '\ud800'.repeat(171) }));
+    expect(lone).toHaveLength(170);
+    expect(new TextEncoder().encode(lone).byteLength).toBe(510);
+  });
 });
