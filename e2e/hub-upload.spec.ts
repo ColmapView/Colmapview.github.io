@@ -37,7 +37,7 @@ test('gives a private bucket upload an unguessable Hub link and keeps it after t
     await dialog.getByRole('button', { name: 'Connect', exact: true }).click();
     await expect(dialog.getByRole('combobox', { name: 'Format' })).toBeFocused();
     await expect(dialog.getByLabel('Access', { exact: true })).toHaveCount(0);
-    await expect(dialog.getByText('Also creates a ColmapView Hub link (short if the bucket is public). Anyone with it sees the title, description and preview. Original images keep their metadata, such as location.')).toBeVisible();
+    await expect(dialog.getByText('Also creates a ColmapView Hub link (short if the bucket is public). Anyone with it sees the title, description and preview. Original images keep their metadata, such as location.', { exact: true })).toBeVisible();
     await expect(dialog.getByLabel('Upload folder', { exact: true })).toHaveValue('colmap-dataset');
     await dialog.getByRole('button', { name: 'Upload dataset', exact: true }).click();
     const result = dialog.getByRole('region', { name: 'Published bucket dataset' });
@@ -46,10 +46,15 @@ test('gives a private bucket upload an unguessable Hub link and keeps it after t
     await expect(result.getByLabel('Share link', { exact: true })).toHaveValue(longUrl);
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({ access: 'private', title: 'colmap-dataset', publicAcknowledged: true });
-    expect(String(requests[0].viewerUrl)).toContain('127.0.0.1');
+    const viewerUrl = String(requests[0].viewerUrl);
+    expect(viewerUrl.startsWith(new URL('/', baseURL).href)).toBe(true);
+    expect(viewerUrl).toContain('127.0.0.1');
+    expect(bucket.objects.size).toBeGreaterThan(0);
+    expect([...bucket.objects.keys()].some(key => key.startsWith('/bucket/colmap-dataset/') && key.endsWith('/manifest.json'))).toBe(true);
     expect(bucket.anonymousReads).toEqual([]);
     const deleteLink = await result.getByLabel('Private delete link', { exact: true }).inputValue();
-    expect(deleteLink).toMatch(new RegExp(`^https://hub\\.invalid/hub/manage/${longId}#[A-Za-z0-9_-]{43}$`));
+    expect(requests[0].managementSecret).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(deleteLink).toBe(`https://hub.invalid/hub/manage/${longId}#${String(requests[0].managementSecret)}`);
     // Marking an image for deletion is an edit: it resets the upload result, and the Hub link moves to Previous upload.
     await page.evaluate(async () => {
       const storePath = '/src/store/reconstructionStore.ts';

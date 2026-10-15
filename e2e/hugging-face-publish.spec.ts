@@ -42,7 +42,7 @@ const mockHub = (options: { lfs?: boolean } = {}) => {
 test.afterEach(async ({ page }) => { await Promise.all([...mocks].map(hub => hub.close())); mocks.clear(); shorteningRequests.delete(page); });
 
 test.describe('Hugging Face dataset publication', () => {
-  test('publishes settings and originals and reopens the shared link and pinned manifest anonymously', async ({ page, context, browser, baseURL }) => {
+  test('publishes settings and originals and reopens the shared link and pinned manifest anonymously', async ({ page, context, browser, baseURL, browserName }) => {
     test.setTimeout(120_000);
     const publisherErrors: string[] = [];
     page.on('pageerror', error => publisherErrors.push(error.message));
@@ -79,7 +79,7 @@ test.describe('Hugging Face dataset publication', () => {
     await expect(dialog.getByText(/public, discoverable dataset/)).toBeVisible();
     await dialog.screenshot({ path: test.info().outputPath('publication-form.png') });
     expect(hub.writes).toHaveLength(0);
-    await expect(dialog.getByText('Also creates a short ColmapView Hub link. Anyone with it sees the title, description and preview. Original images keep their metadata, such as location.')).toBeVisible();
+    await expect(dialog.getByText('Also creates a short ColmapView Hub link. Anyone with it sees the title, description and preview. Original images keep their metadata, such as location.', { exact: true })).toBeVisible();
     await dialog.getByRole('button', { name: 'Publish public dataset', exact: true }).click();
     await expect(dialog.getByRole('region', { name: 'Published dataset' })).toBeVisible({ timeout: 45000 });
     await expect(dialog.getByRole('button', { name: 'Upload another dataset' })).toHaveCount(0);
@@ -119,15 +119,18 @@ test.describe('Hugging Face dataset publication', () => {
       try { return [bitmap.width, bitmap.height]; } finally { bitmap.close(); }
     }, requests[0].thumbnailBase64);
     expect(dimensions).toEqual([600, 315]);
-    await expect(dialog.getByRole('region', { name: 'Published dataset' })).toContainText('Published publisher/scene');
-    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(baseURL!).origin });
+    await expect(dialog.getByRole('region', { name: 'Published dataset' }).locator('.publication-result-title')).toHaveText('✓ Published publisher/scene');
+    // Firefox cannot grant clipboard-read, so only Chromium reads the clipboard back.
+    if (browserName === 'chromium') await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(baseURL!).origin });
     await dialog.getByRole('button', { name: 'Close publish dataset' }).click();
     const toolbar = (await page.getByTestId('viewer-controls').boundingBox())!;
     await page.mouse.move(toolbar.x + toolbar.width / 2, toolbar.y + 16);
     await page.getByRole('button', { name: 'Share', exact: true }).hover();
     // Local data has no source link, so Copy link exists here only because of the Hub link.
-    await page.getByRole('region', { name: 'Share', exact: true }).getByRole('button', { name: 'Copy link', exact: true }).click();
-    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(shortUrl);
+    const sharePanel = page.getByRole('region', { name: 'Share', exact: true });
+    await sharePanel.getByRole('button', { name: 'Copy link', exact: true }).click();
+    if (browserName === 'chromium') await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(shortUrl);
+    else await expect(sharePanel.getByRole('button', { name: 'Copied!', exact: true })).toBeVisible();
     const manifest = JSON.parse(hub.files.get('colmapview.json')!.toString());
     expect(manifest.baseUrl).not.toContain('/main/');
     expect(manifest.viewerStatePath).toBe('colmapview.yaml');
@@ -192,7 +195,8 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByLabel('Dataset license', { exact: true }).selectOption('cc0-1.0');
     await expect(dialog.getByRole('checkbox', { name: 'List on Hub', exact: true })).toHaveCount(0);
     await dialog.getByRole('combobox', { name: 'Access' }).selectOption('private');
-    await expect(dialog.getByText('Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description and preview; the data still needs access.')).toBeVisible();
+    await expect(dialog.getByText('Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description and preview; the data still needs access.', { exact: true })).toBeVisible();
+    await expect(dialog.getByText(/keep their metadata/)).toHaveCount(0);
     await dialog.getByRole('button', { name: 'Save private dataset', exact: true }).click();
     await expect(dialog.getByRole('button', { name: 'Check previous upload and retry' })).toBeVisible({ timeout: 45000 });
     const dataCommit = hub.commits[0].id;
@@ -212,7 +216,7 @@ test.describe('Hugging Face dataset publication', () => {
     expect(hub.reads.every(read => read.authorization === 'Bearer hf_browser_test_only')).toBe(true);
     await expect(dialog.getByText('Private. Viewers must sign in to Hugging Face with an account that has access.')).toBeVisible();
     await expect(dialog.getByLabel('Share link', { exact: true })).toHaveValue(longUrl);
-    await expect(dialog.getByRole('region', { name: 'Published dataset' })).toContainText('Saved publisher/scene privately');
+    await expect(dialog.getByRole('region', { name: 'Published dataset' }).locator('.publication-result-title')).toHaveText('✓ Saved publisher/scene privately');
     const viewerUrl = `${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene`;
     expect(viewerUrl).toBe(`${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene`);
     for (const mode of ['shared', 'manual'] as const) {
