@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, type RefObject } from 'react';
 import { getModalDialogFocusableElements } from './modalDialogShellPolicy';
 
 /**
@@ -11,43 +11,27 @@ import { getModalDialogFocusableElements } from './modalDialogShellPolicy';
  * `initialFocusRef` overrides the default target (the panel's first focusable
  * element, or the panel itself when it holds none).
  *
- * The opener is recorded in a layout effect. Layout effects run before any passive
- * effect of the same commit, so a child that focuses itself on mount (an upload
- * result or progress line in a reopened dialog) cannot be mistaken for the opener.
+ * The opener is recorded and restored in one layout effect. Layout effects run before any
+ * passive effect of the same commit, so a child that focuses itself on mount (an upload result
+ * or progress line in a reopened dialog) cannot be mistaken for the opener; and a dialog closing
+ * in the same commit restores its own opener in its layout cleanup, before this one records it.
  */
 export function useFloatingDialogFocus(
   isOpen: boolean,
   panelRef: RefObject<HTMLDivElement | null>,
   initialFocusRef?: RefObject<HTMLElement | null>
 ): void {
-  const previousFocusRef = useRef<HTMLElement | null>(null);
-
   useLayoutEffect(() => {
-    // Body means another dialog in this commit just unmounted; its passive cleanup has yet to restore its
-    // opener, so the passive effect below records the opener after that instead.
-    if (isOpen && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
-      previousFocusRef.current = document.activeElement;
-    }
+    if (!isOpen) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
   }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
-
-    // Nothing recorded yet (see above), or a re-run after the panel or initial target changed, whose cleanup
-    // just returned focus to the opener.
-    if (!previousFocusRef.current && document.activeElement instanceof HTMLElement) {
-      previousFocusRef.current = document.activeElement;
-    }
-
     const focusable = getModalDialogFocusableElements(panelRef.current);
     (initialFocusRef?.current ?? focusable[0] ?? panelRef.current)?.focus();
-
-    return () => {
-      const previousFocus = previousFocusRef.current;
-      previousFocusRef.current = null;
-      if (previousFocus?.isConnected) {
-        previousFocus.focus();
-      }
-    };
   }, [isOpen, panelRef, initialFocusRef]);
 }
