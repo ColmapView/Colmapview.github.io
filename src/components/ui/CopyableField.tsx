@@ -1,9 +1,9 @@
-import { useId, useRef, useState } from 'react';
+import { useId, useRef, useState, type Ref } from 'react';
 import { copyToClipboard } from '../../utils/clipboard';
 import { getButtonClass, inputStyles } from '../../theme';
 
 /** A selectable value with copy feedback, including a manual fallback when copying is denied. */
-export function CopyableField({ label, value }: { label: string; value: string }) {
+export function CopyableField({ label, value, ref }: { label: string; value: string; ref?: Ref<HTMLDivElement> }) {
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [feedback, setFeedback] = useState<{ value: string; copied: boolean } | null>(null);
@@ -16,7 +16,7 @@ export function CopyableField({ label, value }: { label: string; value: string }
       inputRef.current?.select();
     }
   };
-  return <div className="flex flex-col gap-2 min-w-0">
+  return <div ref={ref} className="flex flex-col gap-2 min-w-0">
     <div className="flex gap-2 min-w-0">
       <input ref={inputRef} aria-label={label} readOnly value={value} onFocus={event => event.target.select()}
         aria-describedby={current?.copied === false ? `${id}-error` : undefined}

@@ -15,7 +15,7 @@ describe('UploadResult', () => {
   it.each([
     ['a result', () => <UploadResult label="Published dataset" title="Published u/scene" viewerUrl={viewerUrl} />],
     ['progress', () => <UploadProgress label="Upload progress" message="Uploading…" progressLabel="Upload" max={2} value={1} onCancel={vi.fn()} />],
-  ])('returns focus to the opener when a dialog reopened on %s closes', (_name, content) => {
+  ])('focuses %s when reopening a dialog and restores the opener when closing', (_name, content) => {
     const view = (isOpen: boolean) => <>
       <button type="button">Share</button>
       <UploadDialog isOpen={isOpen} onClose={vi.fn()} title="Publish" closeLabel="Close">{content()}</UploadDialog>
@@ -24,7 +24,7 @@ describe('UploadResult', () => {
     const opener = screen.getByRole('button', { name: 'Share' });
     opener.focus();
     rerender(view(true));
-    expect(opener).not.toHaveFocus();
+    expect(screen.getByRole('status')).toHaveFocus();
     rerender(view(false));
     expect(opener).toHaveFocus();
   });

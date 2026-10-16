@@ -8,8 +8,8 @@ import { getModalDialogFocusableElements } from './modalDialogShellPolicy';
  * only the Tab trap and Escape handling are modal-specific, and those stay in
  * ModalDialogShell.
  *
- * `initialFocusRef` overrides the default target (the panel's first focusable
- * element, or the panel itself when it holds none).
+ * `initialFocusRef` overrides focus chosen by a child on mount. Otherwise preserve
+ * that focus, or use the panel's first focusable element (the panel itself when it holds none).
  *
  * The opener is recorded and restored in one layout effect. Layout effects run before any
  * passive effect of the same commit, so a child that focuses itself on mount (an upload result
@@ -31,7 +31,13 @@ export function useFloatingDialogFocus(
 
   useEffect(() => {
     if (!isOpen) return;
-    const focusable = getModalDialogFocusableElements(panelRef.current);
-    (initialFocusRef?.current ?? focusable[0] ?? panelRef.current)?.focus();
+    if (initialFocusRef?.current) {
+      initialFocusRef.current.focus();
+      return;
+    }
+    const panel = panelRef.current;
+    if (panel?.contains(document.activeElement)) return;
+    const focusable = getModalDialogFocusableElements(panel);
+    (focusable[0] ?? panel)?.focus();
   }, [isOpen, panelRef, initialFocusRef]);
 }

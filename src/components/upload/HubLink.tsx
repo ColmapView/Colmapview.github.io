@@ -12,8 +12,23 @@ export function HubLinkResult({ state, onRetry, onDeleteLinkShown }: {
   // After Retry, focus follows the Hub status line, which React replaces as the phase changes.
   const statusRef = useRef<HTMLParagraphElement>(null);
   const focusStatus = useRef(false);
-  const deleteRow = state.phase === 'ready' && Boolean(state.managementUrl);
-  useEffect(() => { if (deleteRow) onDeleteLinkShown(); }, [deleteRow, onDeleteLinkShown]);
+  const deleteLinkRef = useRef<HTMLDivElement>(null);
+  const managementUrl = state.phase === 'ready' ? state.managementUrl : undefined;
+  const deleteRow = Boolean(managementUrl);
+  useEffect(() => {
+    const field = deleteLinkRef.current;
+    if (!managementUrl || state.deleteLinkSeen || !field || typeof IntersectionObserver === 'undefined') return;
+    // Mounting below the scroll fold must not dismiss the warning about losing this key.
+    let active = true;
+    const observer = new IntersectionObserver(entries => {
+      if (!active || !entries.some(entry => entry.target === field && entry.isIntersecting && entry.intersectionRatio >= 1)) return;
+      active = false;
+      observer.disconnect();
+      onDeleteLinkShown();
+    }, { threshold: 1 });
+    observer.observe(field);
+    return () => { active = false; observer.disconnect(); };
+  }, [managementUrl, state.deleteLinkSeen, onDeleteLinkShown]);
   useEffect(() => {
     if (!focusStatus.current || !statusRef.current) return;
     statusRef.current.focus();
@@ -30,7 +45,7 @@ export function HubLinkResult({ state, onRetry, onDeleteLinkShown }: {
     {/* Keyed by phase, so each status is a new line that assistive technology announces. */}
     {status && <p key={state.phase} ref={statusRef} tabIndex={-1} role={status.role} className={status.className}>{status.text}</p>}
     {deleteRow && <>
-      <CopyableField label="Private delete link" value={state.managementUrl!} />
+      <CopyableField ref={deleteLinkRef} label="Private delete link" value={state.managementUrl!} />
       <div className="publication-actions">
         <a className={`${secondary} publication-button-link`} href={state.managementUrl} target="_blank" rel="noopener noreferrer">
           Delete Hub link<span aria-hidden="true"> ↗</span>

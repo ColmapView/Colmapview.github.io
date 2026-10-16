@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { createRef } from 'react';
+import { createRef, useEffect, useRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ModalDialogShell } from './ModalDialogShell';
 import { getModalDialogFocusableElements } from './modalDialogShellPolicy';
@@ -9,6 +9,22 @@ afterEach(() => {
 });
 
 describe('ModalDialogShell', () => {
+  it('gives an explicit initial focus target precedence over focus chosen by a child', () => {
+    const initialFocusRef = createRef<HTMLButtonElement>();
+    function ChildStatus() {
+      const ref = useRef<HTMLParagraphElement>(null);
+      useEffect(() => { ref.current?.focus(); }, []);
+      return <p ref={ref} tabIndex={-1} role="status">Completed</p>;
+    }
+    render(<ModalDialogShell isOpen onClose={vi.fn()} ariaLabelledBy="publication-title" overlayClassName="overlay" panelClassName="panel"
+      initialFocusRef={initialFocusRef}>
+      <h2 id="publication-title">Publication</h2>
+      <button ref={initialFocusRef} type="button">Requested target</button>
+      <ChildStatus />
+    </ModalDialogShell>);
+    expect(screen.getByRole('button', { name: 'Requested target' })).toHaveFocus();
+  });
+
   it('renders a portal dialog, focuses the requested element, traps focus, and restores focus', async () => {
     const onClose = vi.fn();
     const initialFocusRef = createRef<HTMLInputElement>();

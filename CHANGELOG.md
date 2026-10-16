@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.14] - 2026-10-15
+
+### Fixed
+
+- Keep the leave-page warning until the private Hub delete link is fully visible, including in small or scrolled upload dialogs.
+- Preserve focus on the result or progress message when reopening an upload dialog.
+
 ## [0.16.13] - 2026-10-15
 
 ### Added
