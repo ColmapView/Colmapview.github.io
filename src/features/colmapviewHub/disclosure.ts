@@ -1,9 +1,9 @@
 export type HubDisclosureKind = 'public' | 'private' | 'bucket';
 
 const LINES: Record<HubDisclosureKind, string> = {
-  public: 'Also creates a short ColmapView Hub link. Anyone with it sees the title, description and preview.',
-  private: 'Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description and preview; the data still needs access.',
-  bucket: 'Also creates a ColmapView Hub link (short if the bucket is public). Anyone with it sees the title, description and preview.',
+  public: 'Also creates a short ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link.',
+  private: 'Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link; the data still needs access.',
+  bucket: 'Also creates a ColmapView Hub link (short if the bucket is public). Anyone with it sees the title, description, preview and dataset link.',
 };
 const ORIGINAL_IMAGES = 'Original images keep their metadata, such as location.';
 

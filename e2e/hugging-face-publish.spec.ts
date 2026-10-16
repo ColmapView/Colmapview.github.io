@@ -79,7 +79,7 @@ test.describe('Hugging Face dataset publication', () => {
     await expect(dialog.getByText(/public, discoverable dataset/)).toBeVisible();
     await dialog.screenshot({ path: test.info().outputPath('publication-form.png') });
     expect(hub.writes).toHaveLength(0);
-    await expect(dialog.getByText('Also creates a short ColmapView Hub link. Anyone with it sees the title, description and preview. Original images keep their metadata, such as location.', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('Also creates a short ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link. Original images keep their metadata, such as location.', { exact: true })).toBeVisible();
     await dialog.getByRole('button', { name: 'Publish public dataset', exact: true }).click();
     await expect(dialog.getByRole('region', { name: 'Published dataset' })).toBeVisible({ timeout: 45000 });
     await expect(dialog.getByRole('button', { name: 'Upload another dataset' })).toHaveCount(0);
@@ -196,7 +196,7 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByLabel('Dataset license', { exact: true }).selectOption('cc0-1.0');
     await expect(dialog.getByRole('checkbox', { name: 'List on Hub', exact: true })).toHaveCount(0);
     await dialog.getByRole('combobox', { name: 'Access' }).selectOption('private');
-    await expect(dialog.getByText('Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description and preview; the data still needs access.', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link; the data still needs access.', { exact: true })).toBeVisible();
     await expect(dialog.getByText(/keep their metadata/)).toHaveCount(0);
     await dialog.getByRole('button', { name: 'Save private dataset', exact: true }).click();
     await expect(dialog.getByRole('button', { name: 'Check previous upload and retry' })).toBeVisible({ timeout: 45000 });
