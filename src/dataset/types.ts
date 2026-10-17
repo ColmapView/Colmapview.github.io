@@ -18,6 +18,8 @@ export interface DatasetAccessOptions {
   onError?: (error: DatasetAccessError) => void;
   signal?: AbortSignal;
   priority?: MediaPriority;
+  /** Maximum original bytes permitted for this read. */
+  maxBytes?: number;
 }
 
 /** Source type for loaded dataset */

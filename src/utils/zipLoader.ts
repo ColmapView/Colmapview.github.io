@@ -4,7 +4,7 @@
  */
 
 import { openArchiveReader, type ArchiveServiceOptions } from '../archive/archiveService';
-import { isIndexedArchive, REMOTE_ARCHIVE_RANGE_THRESHOLD, type ArchiveSource } from '../archive/protocol';
+import { archiveError, isIndexedArchive, REMOTE_ARCHIVE_RANGE_THRESHOLD, type ArchiveSource } from '../archive/protocol';
 import { createRemoteArchiveRead } from '../archive/remoteArchive';
 import type { ArchiveEntry, ArchiveReader } from '../archive/types';
 import { isSplatFilePath } from './splatFilePolicy';
@@ -14,8 +14,14 @@ import { findDatasetViewerSettingsEntry, isDatasetViewerSettingsPath } from './d
 import { MAX_VIEWER_STATE_BYTES } from './publishedViewerState';
 import { appLogger } from './logger';
 import { awaitWithAbort } from './awaitWithAbort';
-import { closeZipArchive } from './zipArchiveState';
+import { closeZipArchive, registerZipImagePaths } from './zipArchiveState';
 import { fetchDatasetResource } from './fetchDatasetResource';
+import { prepareCameraDataset } from '../dataset/importers/prepareCameraDataset';
+import { isCameraMetadataPath, normalizeSourcePath, normalizeSourceIndex, parentPath } from '../dataset/importers/sourcePaths';
+import { archiveUrlFilename, isPlainTarHeader, tarFilename } from '../archive/archiveTypeRecognition';
+import { chooseMixedCameraScene, isPathInCameraScene, colmapSceneRoot } from '../dataset/importers/sceneDiscovery';
+import { rememberNativeMediaSource } from '../dataset/nativeMedia';
+import { resolveColmapPaths } from './colmapPathResolver';
 import {
   validateZipFile,
   validateZipUrl,
@@ -40,6 +46,8 @@ import {
 // ============================================================================
 
 export { ARCHIVE_EXTENSIONS } from './zipLoaderPolicy';
+// Failed remote indexing must not silently become a multi-gigabyte full download.
+const MAX_AUTOMATIC_ARCHIVE_FALLBACK_BYTES = 512 * 1024 * 1024;
 export {
   clearActiveZipArchive,
   extractZipImage,
@@ -76,9 +84,9 @@ export interface ZipLoadResult {
 }
 
 export interface ZipUrlLoadOptions {
-  filename: string;
-  size: number;
-  fetchImpl: ZipDownloadOptions['fetchImpl'];
+  filename?: string;
+  size?: number;
+  fetchImpl?: ZipDownloadOptions['fetchImpl'];
 }
 
 // ============================================================================
@@ -92,7 +100,7 @@ export interface ZipUrlLoadOptions {
 export function isArchiveUrl(url: string): boolean {
   try {
     const pathname = new URL(url).pathname;
-    return hasArchiveExtension(pathname);
+    return hasArchiveExtension(archiveUrlFilename(url) ?? pathname);
   } catch {
     return hasArchiveExtension(url);
   }
@@ -119,8 +127,11 @@ async function processZipArchive(
   onProgress({ percent: 50, message: 'Reading archive contents...' });
 
   // Get list of files in archive
-  const filesArray = await archive.getFilesArray();
+  let filesArray = await archive.getFilesArray();
   signal?.throwIfAborted();
+  const allEntries = normalizeSourceIndex(filesArray.map(entry => [buildArchiveEntryPath(entry.path, entry.file.name),entry.file] as const));
+  const selected = await chooseMixedCameraScene([...allEntries.keys()], signal);
+  if (selected && !selected.metadataPath) filesArray = filesArray.filter(entry => isPathInCameraScene(normalizeSourcePath(buildArchiveEntryPath(entry.path, entry.file.name)),selected));
 
   onProgress({ percent: 55, message: 'Identifying COLMAP files...' });
 
@@ -128,11 +139,12 @@ async function processZipArchive(
   const colmapEntries: Array<{ file: ArchiveEntry; path: string }> = [];
   const splatEntries: Array<{ file: ArchiveEntry; path: string; size: number }> = [];
   const imageIndex = new Map<string, ArchiveEntry>();
+  const originalMediaEntries = new Map<string,ArchiveEntry>();
   const settingsEntries = new Map<string, ArchiveEntry>();
   let imageCount = 0; // Track actual unique images (imageIndex has duplicates for lookup)
 
   for (const entry of filesArray) {
-    const fullPath = buildArchiveEntryPath(entry.path, entry.file.name);
+    const fullPath = normalizeSourcePath(buildArchiveEntryPath(entry.path, entry.file.name));
 
     if (isDatasetViewerSettingsPath(fullPath)) {
       settingsEntries.set(fullPath, entry.file);
@@ -141,6 +153,7 @@ async function processZipArchive(
     } else if (isArchiveSplatPath(fullPath)) {
       splatEntries.push({ file: entry.file, path: fullPath, size: entry.file.size });
     } else if (isArchiveImagePath(fullPath)) {
+      originalMediaEntries.set(fullPath,entry.file);
       // Store in index for lazy extraction
       for (const key of getArchiveImageLookupKeys(fullPath)) {
         if (!imageIndex.has(key)) {
@@ -151,12 +164,43 @@ async function processZipArchive(
     }
   }
 
-  onProgress({ percent: 60, message: `Extracting ${colmapEntries.length} COLMAP files...` });
+  const entries = selected && !selected.metadataPath ? new Map([...allEntries].filter(([path])=>isPathInCameraScene(path,selected))) : allEntries;
+  const nativePaths=resolveColmapPaths(colmapEntries.map(entry=>entry.path))
+    ?? resolveColmapPaths(colmapEntries.map(entry=>entry.path), { requirePoints3D: false });
+  const modelRoots=new Set(colmapEntries.map(entry=>colmapSceneRoot(parentPath(entry.path))));
+  const selectedRoot=nativePaths ? colmapSceneRoot(nativePaths.dir) : '';
+  const foreignRoots=nativePaths && !selected?.metadataPath ? [...modelRoots].filter(root=>root && root!==selectedRoot) : [];
+  const isForeignScene=(path: string)=>foreignRoots.some(root=>path.startsWith(root+'/')
+    && !(selectedRoot.startsWith(root+'/') && path.startsWith(selectedRoot+'/')));
+  if (foreignRoots.length) {
+    imageIndex.clear();imageCount=0;
+    for (const [path,entry] of originalMediaEntries) {
+      if (isForeignScene(path)) continue;
+      for (const key of getArchiveImageLookupKeys(path)) if (!imageIndex.has(key)) imageIndex.set(key,entry);
+      imageCount++;
+    }
+  }
+  if (nativePaths) registerZipImagePaths(imageIndex,entries,colmapSceneRoot(nativePaths.dir));
+  if ((selected?.metadataPath || !nativePaths) && [...entries.keys()].some(isCameraMetadataPath)) {
+    onProgress({ percent: 60, message: 'Importing camera metadata...' });
+    const prepared = await prepareCameraDataset({ kind: 'archive', entries }, { signal, metadataPath: selected?.metadataPath });
+    if (prepared) return { colmapFiles: prepared.files, imageIndex, imageCount };
+  }
+
+  // Keep model files from one complete group before canonical archive keys discard scene prefixes.
+  const chosenPaths=nativePaths ? new Set([nativePaths.cameras,nativePaths.images,nativePaths.points3D,nativePaths.rigs,nativePaths.frames].filter((path): path is string=>Boolean(path))) : null;
+  const chosenColmapEntries=chosenPaths ? colmapEntries.filter(entry=>chosenPaths.has(entry.path)) : [];
+  onProgress({ percent: 60, message: `Extracting ${chosenColmapEntries.length} COLMAP files...` });
 
   // Extract COLMAP files immediately
   const colmapFiles = new Map<string, File>();
+  if (nativePaths) rememberNativeMediaSource(colmapFiles, { source: { kind: 'archive', entries }, modelDir: nativePaths.dir });
 
-  const settingsEntry = findDatasetViewerSettingsEntry(settingsEntries);
+  const scopedSettings=nativePaths && modelRoots.size>1 ? new Map([...settingsEntries].filter(([path])=>{
+    const directory=parentPath(path);
+    return !directory || directory===nativePaths.dir || nativePaths.dir.startsWith(directory+'/');
+  })) : settingsEntries;
+  const settingsEntry = findDatasetViewerSettingsEntry(scopedSettings);
   if (settingsEntry) {
     const [path, entry] = settingsEntry;
     try {
@@ -169,9 +213,9 @@ async function processZipArchive(
     }
   }
 
-  for (let i = 0; i < colmapEntries.length; i++) {
+  for (let i = 0; i < chosenColmapEntries.length; i++) {
     signal?.throwIfAborted();
-    const entry = colmapEntries[i];
+    const entry = chosenColmapEntries[i];
     const extractedFile = await entry.file.extract();
 
     const filename = entry.path.split('/').pop() ?? entry.path;
@@ -179,14 +223,15 @@ async function processZipArchive(
 
     colmapFiles.set(key, extractedFile);
 
-    const percent = 60 + Math.round(((i + 1) / colmapEntries.length) * 10); // 60-70%
+    const percent = 60 + Math.round(((i + 1) / chosenColmapEntries.length) * 10); // 60-70%
     onProgress({ percent, message: `Extracting ${filename}...` });
   }
 
   if (splatEntries.length > 0) {
-    const sortedSplatEntries = sortArchiveSplatCandidatesByPreference(splatEntries);
+    const sortedSplatEntries = sortArchiveSplatCandidatesByPreference(splatEntries.filter(entry=>!isForeignScene(entry.path)));
     if (sortedSplatEntries.length === 0) {
-      throw new Error('Internal error selecting archive splat file');
+      // All splats may belong to unselected native scenes.
+      return { colmapFiles, imageIndex, imageCount };
     }
     for (const splatEntry of sortedSplatEntries) {
       signal?.throwIfAborted();
@@ -227,9 +272,9 @@ async function openZipArchive(
       onProgress(progress);
     }, signal), signal);
     signal?.throwIfAborted();
-    if (!hasRequiredColmapArchiveFiles(result.colmapFiles.keys())) {
+    if (!hasRequiredColmapArchiveFiles(result.colmapFiles.keys(), { requirePoints3D: false })) {
       throw new Error(
-        'Archive does not contain valid COLMAP files (cameras.bin, images.bin, points3D.bin)'
+        'Archive does not contain valid COLMAP files: cameras.bin/txt and images.bin/txt must be co-located.'
       );
     }
     return { ...result, archive, fileSize: file.size };
@@ -254,28 +299,49 @@ export async function loadZipFromUrl(
 
   onProgress({ percent: 0, message: 'Checking archive...' });
 
-  const archiveName = options?.filename ?? (getFilenameFromUrl(url) || 'archive.zip');
-  const sizeLimit = getArchiveReadSizeLimit(archiveName);
+  let archiveName = options?.filename ?? archiveUrlFilename(url) ?? (getFilenameFromUrl(url) || 'archive.zip');
 
   // Validate size
   // The size check needs the signed-in account for private Hub archives, like the download.
-  const validation = options ? validateArchiveSize(options.size, sizeLimit) : await validateZipUrl(url, {
-    signal, sizeLimit,
-    fetchImpl: (target, init) => fetchDatasetResource(target, undefined, init),
+  const validation = options?.size !== undefined ? validateArchiveSize(options.size, Number.MAX_SAFE_INTEGER) : await validateZipUrl(url, {
+    signal, sizeLimit: Number.MAX_SAFE_INTEGER,
+    fetchImpl: (target, init) => (options?.fetchImpl ?? fetchDatasetResource)(target, undefined, init),
   });
   signal?.throwIfAborted();
   if (!validation.valid) {
     throw new Error(validation.error ?? 'Invalid archive');
   }
+  let rangeRead: ReturnType<typeof createRemoteArchiveRead> | undefined;
+  if (/\.(?:tar\.gz|tgz)$/i.test(archiveName) && validation.size !== undefined && validation.size >= 512) {
+    rangeRead = createRemoteArchiveRead(url, validation.size, options?.fetchImpl);
+    try {
+      const header = new Uint8Array(await rangeRead(0, 512, signal ?? new AbortController().signal));
+      if (isPlainTarHeader(header)) archiveName = tarFilename(archiveName);
+    } catch (error) {
+      signal?.throwIfAborted();
+      if ((error as Error).name !== 'ArchiveRangeUnsupportedError' && !(error instanceof TypeError)) throw error;
+      rangeRead = undefined;
+      // Never turn an oversized range failure into a whole-archive allocation.
+      if (validation.size > 2 * 1024 * 1024 * 1024) throw error;
+    }
+  }
+  const sizeLimit = getArchiveReadSizeLimit(archiveName);
+  if (validation.size !== undefined) {
+    const checked = validateArchiveSize(validation.size, sizeLimit);
+    if (!checked.valid) throw new Error(checked.error);
+  }
 
   if (isIndexedArchive(archiveName) && validation.size !== undefined && validation.size >= REMOTE_ARCHIVE_RANGE_THRESHOLD) {
     try {
       return await openZipArchive({ kind: 'remote', name: archiveName, size: validation.size }, onProgress, signal, {
-        read: createRemoteArchiveRead(url, validation.size, options?.fetchImpl),
+        read: rangeRead ?? createRemoteArchiveRead(url, validation.size, options?.fetchImpl),
       });
     } catch (error) {
       signal?.throwIfAborted();
       if (!['ArchiveRangeUnsupportedError', 'ArchiveUnsupportedFeatureError', 'TypeError'].includes((error as Error).name)) throw error;
+      if (validation.size > MAX_AUTOMATIC_ARCHIVE_FALLBACK_BYTES) {
+        throw archiveError('Remote archive indexing is unavailable. The archive exceeds the 512 MiB automatic download fallback limit. Download it and open the local file.', 'ArchiveLocalAccessRequiredError');
+      }
       onProgress({ percent: 2, message: 'Downloading archive for local access...' });
     }
   }
@@ -312,6 +378,11 @@ export async function loadZipFromFile(
   signal?.throwIfAborted();
 
   onProgress({ percent: 0, message: 'Checking archive...' });
+
+  if (/\.(?:tar\.gz|tgz)$/i.test(zipFile.name) && isPlainTarHeader(new Uint8Array(await zipFile.slice(0, 512).arrayBuffer()))) {
+    zipFile = new File([zipFile], tarFilename(zipFile.name), { type: 'application/x-tar' });
+  }
+  signal?.throwIfAborted();
 
   // Validate size
   const validation = validateZipFile(zipFile);

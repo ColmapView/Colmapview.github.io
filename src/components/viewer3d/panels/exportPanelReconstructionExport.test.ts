@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildReconstruction } from '../../../test/builders';
+import { buildImage, buildReconstruction } from '../../../test/builders';
+import { downloadCameraDatasetPackage } from '../../../parsers/cameraDatasetPackageExport';
 import type { Sim3dEuler } from '../../../types/sim3d';
 import {
   runReconstructionExport,
   type RunReconstructionExportDeps,
 } from './exportPanelReconstructionExport';
+
+vi.mock('../../../parsers/cameraDatasetPackageExport', () => ({ downloadCameraDatasetPackage: vi.fn() }));
 
 const identityTransform: Sim3dEuler = {
   scale: 1,
@@ -44,6 +47,17 @@ function createDeps(overrides: Partial<RunReconstructionExportDeps> = {}): RunRe
 }
 
 describe('runReconstructionExport', () => {
+  it.each([0, 1, 2])('reports COLMAP mask-folder requirements for partial coverage (%i masks)', async maskCount => {
+    const reconstruction = buildReconstruction({ images: [buildImage({ imageId: 1 }), buildImage({ imageId: 2 })] });
+    const deps = createDeps({ getLiveReconstruction: () => ({ reconstruction, wasmReconstruction: null }) });
+    vi.mocked(downloadCameraDatasetPackage).mockResolvedValueOnce(maskCount);
+    await runReconstructionExport({ exportFormat: 'zip-masks', media: { getOriginalImage: async () => null, getMask: async () => null } }, deps);
+    if (maskCount === 1) {
+      expect(deps.addNotification).toHaveBeenCalledWith('warning', expect.stringMatching(/1 of 2 masks.*COLMAP requires a mask for every image/), expect.any(Number));
+    } else {
+      expect(deps.addNotification).toHaveBeenCalledWith('info', `Exported ${maskCount} masks for 2 images.`, 6000);
+    }
+  });
   it('dispatches the selected reconstruction writer', async () => {
     const deps = createDeps();
 

@@ -6,6 +6,8 @@
  * dataset root, or some other subdirectory.
  */
 
+import { isAuxiliaryImagePath } from './imageFileLookupPolicy';
+
 export interface ColmapPathSelection {
   /** Parent directory of the selected model ('' for the dataset root). */
   dir: string;
@@ -30,6 +32,16 @@ export function getBasename(path: string): string {
   const normalized = path.replace(/\\/g, '/');
   const lastSlash = normalized.lastIndexOf('/');
   return lastSlash >= 0 ? normalized.substring(lastSlash + 1) : normalized;
+}
+
+/** Remove only conventional model containers, retaining the owning scene prefix. */
+export function nativeSceneRoot(directory: string): string {
+  let root = directory.replace(/\\/g, '/');
+  for (;;) {
+    const next = root.replace(/(?:^|\/)(?:(?:sparse|sparses|colmap|colmap_workspace)(?:\/\d+)?|sparse_native|sparse_seed|known_pose_model|triangulated_model|triangulated_text)$/i, '');
+    if (next === root) return root;
+    root = next;
+  }
 }
 
 /** Map a filename to the COLMAP role it fills, or null if it is not a COLMAP file. */
@@ -125,12 +137,25 @@ export function resolveColmapPaths(
     return null;
   }
 
-  candidates.sort((a, b) => {
+  // Preprocessing exports often include an empty known-pose seed plus binary
+  // and text copies of the triangulated model. Choose the triangulated copy
+  // among complete siblings; an explicitly selected seed still loads alone.
+  const variants = ['triangulated_model', 'triangulated_text', 'known_pose_model'];
+  const preferred = new Map<string, typeof candidates[number]>();
+  for (const candidate of candidates) {
+    const rank = variants.indexOf(getBasename(candidate.dir).toLowerCase());
+    if (rank < 0) continue;
+    const parent = getParentDir(candidate.dir), current = preferred.get(parent);
+    if (!current || rank < variants.indexOf(getBasename(current.dir).toLowerCase())) preferred.set(parent, candidate);
+  }
+  const selected = candidates.filter(candidate => !variants.includes(getBasename(candidate.dir).toLowerCase())
+    || preferred.get(getParentDir(candidate.dir)) === candidate);
+  selected.sort((a, b) => {
     const scoreDelta = getColmapDirectoryScore(a.dir) - getColmapDirectoryScore(b.dir);
     return scoreDelta !== 0 ? scoreDelta : a.dir.localeCompare(b.dir);
   });
 
-  const best = candidates[0];
+  const best = selected[0];
   return {
     dir: best.dir,
     cameras: best.entry.cameras,
@@ -164,6 +189,13 @@ function getImagesDirScore(dir: string, modelDir?: string): number {
     score += 1000;
   }
   if (modelDir !== undefined) {
+    const sceneRoot = nativeSceneRoot(modelDir);
+    const left = dir.split('/').filter(Boolean), right = modelDir.split('/').filter(Boolean);
+    let shared = 0;
+    while (shared < left.length && shared < right.length && left[shared] === right[shared]) shared++;
+    // Scene proximity outranks the number of photos in other scenes.
+    score += shared * 10000;
+    if (dir === (sceneRoot ? sceneRoot + '/' : '') + 'images') score += 5000;
     const parent = getParentDir(dir);
     if (dir === modelDir) {
       score += 200; // images sit in the same directory as the bins
@@ -215,7 +247,7 @@ export function resolveImagesDir(
 ): string | null {
   const counts = new Map<string, number>();
   for (const rawPath of paths) {
-    if (!isImageFilename(getBasename(rawPath))) {
+    if (!isImageFilename(getBasename(rawPath)) || isAuxiliaryImagePath(rawPath)) {
       continue;
     }
     // Prefer the canonical `images` root (images may be nested in per-camera

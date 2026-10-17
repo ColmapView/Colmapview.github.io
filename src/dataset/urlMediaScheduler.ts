@@ -1,15 +1,17 @@
 import type { MediaPriority } from './types';
 import { MEDIA_PRIORITY_ORDER } from '../utils/imageFileRequestState';
 import { fetchDatasetResource } from '../utils/fetchDatasetResource';
+import { readBoundedResponseBytes } from './importers/sourceAccess';
 
 export type MediaTransferOutcome =
   | { kind: 'success'; blob: Blob }
   | { kind: 'absent' | 'aborted' }
-  | { kind: 'failure'; status?: number };
+  | { kind: 'failure'; status?: number; message?: string };
 
 interface TransferOptions {
   signal: AbortSignal;
   getPriority(): MediaPriority;
+  maxBytes?: number;
 }
 interface Job {
   url: string;
@@ -134,13 +136,15 @@ export class UrlMediaScheduler {
         if (!retry) job.settle({ kind: 'failure', status: 429 });
       } else if (!response.ok) {
         await response.body?.cancel();
-        job.settle(response.status === 404 ? { kind: 'absent' } : { kind: 'failure', status: response.status });
+        job.settle(response.status === 404 || response.status === 410 ? { kind: 'absent' } : { kind: 'failure', status: response.status });
       } else {
-        const blob = await response.blob();
+        const blob = job.options.maxBytes === undefined ? await response.blob()
+          : new Blob(await readBoundedResponseBytes(response, job.url, job.options.maxBytes, job.options.signal), { type: response.headers.get('content-type') ?? 'application/octet-stream' });
         job.settle(job.options.signal.aborted ? { kind: 'aborted' } : { kind: 'success', blob });
       }
-    } catch {
-      job.settle(job.options.signal.aborted ? { kind: 'aborted' } : { kind: 'failure' });
+    } catch (error) {
+      job.settle(job.options.signal.aborted ? { kind: 'aborted' } : { kind: 'failure',
+        ...(job.options.maxBytes !== undefined && error instanceof Error ? { message: error.message } : {}) });
     } finally {
       job.active = false;
       this.active -= 1;

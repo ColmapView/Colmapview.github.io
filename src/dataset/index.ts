@@ -46,6 +46,12 @@ export type {
 let instance: DatasetManager | null = null;
 let diagnosticsInstance: DatasetDiagnostics | null = null;
 
+function readCurrentDatasetState(): DatasetState {
+  const state=useReconstructionStore.getState();
+  return {sourceType:state.sourceType,imageUrlBase:state.imageUrlBase,maskUrlBase:state.maskUrlBase,
+    imageNameToUrl:state.imageNameToUrl,loadedFiles:state.loadedFiles};
+}
+
 /**
  * Get the singleton DatasetManager instance.
  * Creates on first call, bound to reconstructionStore.
@@ -112,7 +118,7 @@ export function useDataset(): DatasetManager {
       maskUrlBase,
       imageNameToUrl,
       loadedFiles,
-    })),
+    }), readCurrentDatasetState),
     [sourceType, imageUrlBase, maskUrlBase, imageNameToUrl, loadedFiles]
   );
 }

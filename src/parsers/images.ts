@@ -1,4 +1,5 @@
 import { BinaryReader } from './BinaryReader';
+import { assertDeclaredColmapTextSchema, isPhotometricImagesText } from './photometricColmap';
 import type { Image, Point2D } from '../types/colmap';
 import {
   parseColmapBigIntToken,
@@ -102,8 +103,10 @@ export function parseImagesBinary(
  * 1 0.851773 0.0165051 0.503764 -0.142941 -0.737434 1.02973 3.74354 1 image001.jpg
  * 2362.39 248.498 58396 1784.7 268.254 59027 1784.7 268.254 -1
  */
-export function parseImagesText(text: string): Map<number, Image> {
+export function parseImagesText(text: string, skipPoints2D = false): Map<number, Image> {
+  assertDeclaredColmapTextSchema(text, 'images');
   const images = new Map<number, Image>();
+  const photometric = isPhotometricImagesText(text);
   const lines = text.split('\n');
 
   let i = 0;
@@ -118,7 +121,7 @@ export function parseImagesText(text: string): Map<number, Image> {
 
     // Parse image header line
     const headerParts = line.split(/\s+/);
-    if (headerParts.length < 10) {
+    if (headerParts.length < (photometric ? 15 : 10)) {
       i++;
       continue;
     }
@@ -126,8 +129,8 @@ export function parseImagesText(text: string): Map<number, Image> {
     const imageId = parseColmapIntegerToken(headerParts[0], { min: 0 });
     const qvecValues = parseColmapNumberTokens(headerParts.slice(1, 5));
     const tvecValues = parseColmapNumberTokens(headerParts.slice(5, 8));
-    const cameraId = parseColmapIntegerToken(headerParts[8], { min: 0 });
-    const name = headerParts[9];
+    const cameraId = parseColmapIntegerToken(headerParts[photometric ? 11 : 8], { min: 0 });
+    const name = photometric ? headerParts.slice(12, -2).join(' ') : headerParts.slice(9).join(' ');
 
     if (imageId === null || qvecValues === null || tvecValues === null || cameraId === null) {
       i++;
@@ -150,16 +153,17 @@ export function parseImagesText(text: string): Map<number, Image> {
     i++;
     const points2D: Point2D[] = [];
 
-    if (i < lines.length && !lines[i].startsWith('#')) {
+    if (!skipPoints2D && i < lines.length && !lines[i].startsWith('#')) {
       const pointsLine = lines[i].trim();
       if (pointsLine !== '') {
         const pointsParts = pointsLine.split(/\s+/);
 
         // Points are in triplets: X, Y, POINT3D_ID
-        for (let j = 0; j + 2 < pointsParts.length; j += 3) {
+        const stride = photometric ? 4 : 3;
+        for (let j = 0; j + stride - 1 < pointsParts.length; j += stride) {
           const x = parseColmapNumberToken(pointsParts[j]);
           const y = parseColmapNumberToken(pointsParts[j + 1]);
-          const point3DId = parseColmapBigIntToken(pointsParts[j + 2]);
+          const point3DId = parseColmapBigIntToken(pointsParts[j + stride - 1]);
 
           if (x === null || y === null || point3DId === null) continue;
 

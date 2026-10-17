@@ -26,6 +26,8 @@ export interface ReconstructionLoadFiles {
   points3DFile: File;
   rigsFile?: File;
   framesFile?: File;
+  /** The source has poses but no points file; discard dangling observations. */
+  cameraOnly?: boolean;
 }
 
 export type ReconstructionPhase = 'initializing' | 'parsing' | 'statistics' | 'snapshot' | 'editing' | 'exporting';
@@ -135,7 +137,8 @@ export function isReconstructionRequest(value: unknown): value is Reconstruction
     case 'init': case 'dispose': return payload === null;
     case 'load': return isRecord(payload) && isFile(payload.camerasFile) && isFile(payload.imagesFile)
       && isFile(payload.points3DFile) && (payload.rigsFile === undefined || isFile(payload.rigsFile))
-      && (payload.framesFile === undefined || isFile(payload.framesFile));
+      && (payload.framesFile === undefined || isFile(payload.framesFile))
+      && (payload.cameraOnly === undefined || typeof payload.cameraOnly === 'boolean');
     case 'observations': case 'deleteImages': return isRecord(payload)
       && Array.isArray(payload.imageIds) && payload.imageIds.every(isId);
     case 'transform': return isRecord(payload) && isTransform(payload.transform);

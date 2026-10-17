@@ -46,6 +46,20 @@ afterEach(() => {
 });
 
 describe('url image files', () => {
+  it('keeps concurrent display reads with different source budgets independent',async()=>{
+    const fetch=vi.fn(async()=>new Response('12345',{headers:{'Content-Type':'image/png'}}));vi.stubGlobal('fetch',fetch);
+    const large=fetchUrlImage('https://example.test/images/','photo.png',undefined,{maxBytes:10}),onError=vi.fn();
+    const small=fetchUrlImage('https://example.test/images/','photo.png',undefined,{maxBytes:1,onError});
+    expect(await large).not.toBeNull();expect(await small).toBeNull();
+    expect(onError).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({message:expect.stringContaining('budget')}));
+  });
+  it('honors the original-source budget on a cached display preview',async()=>{
+    const fetch=vi.fn(async()=>new Response('12345',{headers:{'Content-Type':'image/png'}}));vi.stubGlobal('fetch',fetch);
+    expect(await fetchUrlImage('https://example.test/images/','photo.png',undefined,{maxBytes:10})).not.toBeNull();
+    const onError=vi.fn();
+    expect(await fetchUrlImage('https://example.test/images/','photo.png',undefined,{maxBytes:1,onError})).toBeNull();
+    expect(fetch).toHaveBeenCalledOnce();expect(onError).toHaveBeenCalledOnce();
+  });
   it('fetches, compresses, caches, and reports URL image files', async () => {
     const fetchMock = vi.fn().mockResolvedValue(okImageResponse('image'));
     vi.stubGlobal('fetch', fetchMock);
@@ -204,6 +218,15 @@ describe('url image files', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('loads an explicitly bound ninth mask after the generic absence heuristic stops', async () => {
+    const explicitUrl = 'https://example.test/actual-mask/one.png';
+    const fetchMock = vi.fn(async (url: string) => url === explicitUrl ? okImageResponse('mask') : buildResponse({ status: 404 }));
+    vi.stubGlobal('fetch', fetchMock);
+    for (let i = 0; i < 8; i++) await fetchUrlMask('https://example.test/masks/', `${i}.jpg`);
+    expect(await fetchUrlMask('https://example.test/masks/', 'ninth.jpg', undefined, explicitUrl)).toBeInstanceOf(File);
+    expect(getUrlMaskCached('ninth.jpg', 'https://example.test/masks/', explicitUrl)).toBeInstanceOf(File);
+  });
+
   it('keeps probing masks once any mask is found (partially-masked source)', async () => {
     // First image has a mask (on the .png candidate); subsequent images miss but
     // must still be probed because the source clearly ships masks.
@@ -360,4 +383,23 @@ it('preserves exhausted 429 errors for every mask consumer without reporting 404
   await fetchUrlMask('https://absent-mask.test', 'a.jpg', { onError: absentError });
   expect(absentError).not.toHaveBeenCalled();
   vi.useRealTimers();
+});
+it('coalesces bounded original reads without cancelling another consumer',async()=>{
+  const gate=createDeferred<Response>();const fetchMock=vi.fn(async()=>gate.promise);
+  vi.stubGlobal('fetch',fetchMock);
+  const firstController=new AbortController();
+  const first=fetchUrlImageRaw(null,'a.png','https://bounded.test/a.png',{maxBytes:10,signal:firstController.signal});
+  const second=fetchUrlImageRaw(null,'a.png','https://bounded.test/a.png',{maxBytes:10});
+  firstController.abort();gate.resolve(new Response(new Uint8Array([1,2,3])));
+  expect(await first).toBeNull();expect((await second)?.size).toBe(3);expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+it('retains bounded mask cache entries and retries 429 through the scheduler',async()=>{
+  vi.useFakeTimers();
+  const fetchMock=vi.fn().mockResolvedValueOnce(new Response(null,{status:429,headers:{'retry-after':'1'}})).mockResolvedValueOnce(new Response(new Uint8Array([1,2,3])));
+  vi.stubGlobal('fetch',fetchMock);
+  const pending=fetchUrlMask('https://bounded-mask.test/','a.png',{maxBytes:10},'https://bounded-mask.test/mask.png');
+  await vi.runAllTimersAsync();const file=await pending;
+  expect(file?.size).toBe(3);expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(await fetchUrlMask('https://bounded-mask.test/','a.png',{maxBytes:10},'https://bounded-mask.test/mask.png')).toBe(file);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
 });

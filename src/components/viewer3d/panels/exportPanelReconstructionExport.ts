@@ -7,6 +7,7 @@ import { exportReconstructionSnapshot } from '../../../parsers/reconstructionSna
 import type { ExportFormat } from './exportPanelViewModel';
 import type { ZipExportProgressCallback } from '../../../parsers/reconstructionZipExport';
 import { awaitWithAbort } from '../../../utils/awaitWithAbort';
+import { downloadCameraDatasetPackage, type CameraPackageMedia } from '../../../parsers/cameraDatasetPackageExport';
 
 export interface LiveReconstructionExportState {
   reconstruction: Reconstruction | null;
@@ -18,6 +19,7 @@ export interface RunReconstructionExportOptions {
   loadedImageFiles?: Map<string, File> | null;
   signal?: AbortSignal;
   onProgress?: ZipExportProgressCallback;
+  media?: CameraPackageMedia;
 }
 
 export interface ReconstructionExportWriters {
@@ -64,7 +66,7 @@ export interface RunReconstructionExportDeps {
 }
 
 export async function runReconstructionExport(
-  { exportFormat, loadedImageFiles, signal, onProgress }: RunReconstructionExportOptions,
+  { exportFormat, loadedImageFiles, signal, onProgress, media }: RunReconstructionExportOptions,
   deps: RunReconstructionExportDeps
 ): Promise<void> {
   try {
@@ -94,6 +96,20 @@ export async function runReconstructionExport(
 
     const { reconstruction, wasmReconstruction } = deps.getLiveReconstruction();
     if (!reconstruction) return;
+    if (exportFormat === 'zip-images' || exportFormat === 'zip-masks') {
+      if (!media) throw new Error('Original dataset media is unavailable.');
+      const maskCount = await downloadCameraDatasetPackage(reconstruction, wasmReconstruction, transform, media,
+        exportFormat === 'zip-masks', signal ?? new AbortController().signal, onProgress);
+      if (exportFormat === 'zip-masks') {
+        const imageCount = reconstruction.images.size;
+        if (maskCount > 0 && maskCount < imageCount) {
+          deps.addNotification('warning', `Exported ${maskCount} of ${imageCount} masks. COLMAP requires a mask for every image when using a mask folder. Process unmasked images separately.`, 10000);
+        } else {
+          deps.addNotification('info', `Exported ${maskCount} masks for ${imageCount} images.`, 6000);
+        }
+      }
+      return;
+    }
 
     if (isReconstructionSnapshot(wasmReconstruction)) {
       await exportReconstructionSnapshot(wasmReconstruction, exportFormat, loadedImageFiles, hasTransform ? transform : undefined, signal, onProgress);
@@ -125,6 +141,6 @@ export async function runReconstructionExport(
   } catch (err) {
     if (signal?.aborted) return;
     deps.logError('Export failed:', err);
-    deps.addNotification('warning', 'Export failed');
+    deps.addNotification('warning', (exportFormat === 'zip-images' || exportFormat === 'zip-masks') && err instanceof Error ? `Export failed: ${err.message}` : 'Export failed');
   }
 }

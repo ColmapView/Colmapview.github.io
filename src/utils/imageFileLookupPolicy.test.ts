@@ -33,6 +33,11 @@ describe('image file lookup policy', () => {
   });
 
   it('keeps auxiliary image files out of plain camera lookup aliases', () => {
+    for (const dir of ['sky_masks', 'actor_masks', 'dynamic_masks', 'static-mask']) {
+      expect(isAuxiliaryImagePath(`preprocessing/${dir}/scene/FRONT/000000.png`)).toBe(true);
+      expect(getImageLookupKeys(`${dir}/FRONT/000000.png`)).not.toContain('FRONT/000000.png');
+    }
+    expect(isAuxiliaryImagePath('images/sky_masks/000000.png')).toBe(false);
     expect(isAuxiliaryImagePath('project/depth/cam1/photo.jpg')).toBe(true);
     expect(isAuxiliaryImagePath('project/mask/cam1/photo.jpg')).toBe(true);
     expect(isMaskImagePath('project/mask/cam1/photo.jpg')).toBe(false);

@@ -15,6 +15,8 @@ describe('export panel view-model helpers', () => {
       'text',
       'ply',
       'zip',
+      'zip-images',
+      'zip-masks',
     ]);
     expect(EXPORT_FORMAT_DESCRIPTIONS.binary).toContain('COLMAP binary');
     expect(EXPORT_FORMAT_DESCRIPTIONS.text).toContain('Human-readable');

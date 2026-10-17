@@ -11,6 +11,7 @@ const urlImageState = createImageFileRequestState(urlFiles.scope('display'));
 const urlMaskState = createImageFileRequestState(urlFiles.scope('mask'));
 const maskTransfers = createCoalescedRequestState<MediaTransferOutcome>({ kind: 'aborted' });
 const urlRawState = createImageFileRequestState();
+const displaySourceSizes = new WeakMap<File,number>();
 const imageAliases = new Map<string, string>();
 const maskAliases = new Map<string, string[]>();
 const maskAbsence = new Map<string, { misses: number; found: boolean }>();
@@ -20,8 +21,8 @@ function transferError(result: MediaTransferOutcome, url: string): DatasetAccess
   if (result.kind !== 'failure') return undefined;
   return {
     kind: result.status === undefined ? 'network' : 'http', status: result.status, url,
-    message: result.status === 429 ? 'HTTP 429: media rate limit exhausted after retries. Try again later.'
-      : result.status ? `HTTP ${result.status}: media request failed.` : 'Network error while loading media.',
+    message: result.message ?? (result.status === 429 ? 'HTTP 429: media rate limit exhausted after retries. Try again later.'
+      : result.status ? `HTTP ${result.status}: media request failed.` : 'Network error while loading media.'),
   };
 }
 
@@ -54,25 +55,37 @@ export function getUrlImageCached(name: string, base?: string | null, explicitUr
   return key ? urlImageState.peekCached(key) : undefined;
 }
 
-export function getUrlMaskCached(name: string, base?: string | null): File | undefined {
-  const keys = base ? maskKeys(base, name) : base === undefined ? maskAliases.get(name) : undefined;
+export function getUrlMaskCached(name: string, base?: string | null, explicitUrl?: string): File | undefined {
+  const keys = explicitUrl ? [`mask:${explicitUrl}`] : base ? maskKeys(base, name) : base === undefined ? maskAliases.get(name) : undefined;
   return keys?.map(key => urlMaskState.peekCached(key)).find(file => file !== undefined);
 }
 
 export async function fetchUrlImage(
   base: string | null, name: string, explicitUrl?: string, options?: DatasetAccessOptions,
+  validateOriginal?: (file: Blob, signal: AbortSignal) => Promise<void>,
 ): Promise<File | null> {
   const resolved = resolveImageRequestUrl(base, name, explicitUrl);
   if (!resolved || options?.signal?.aborted) return null;
   const key = imageKey(resolved.url);
   imageAliases.set(name, key);
-  return urlImageState.request(key, async context => {
-    const result = await urlMediaScheduler.transfer(resolved.url, context);
+  return urlImageState.request(JSON.stringify([key,options?.maxBytes ?? null]), async context => {
+    const cached=urlImageState.getCached(key);
+    if (cached) {
+      if (options?.maxBytes !== undefined && (displaySourceSizes.get(cached) ?? 0) > options.maxBytes) throw new Error(`${resolved.filename} exceeds its read budget.`);
+      return cached;
+    }
+    const result = await urlMediaScheduler.transfer(resolved.url, { ...context, maxBytes: options?.maxBytes });
     const error = transferError(result, resolved.url);
     if (error) context.reportFailure(error);
     if (result.kind !== 'success' || !context.isCurrent()) return null;
-    return compressAndResizeToJpeg(result.blob, resolved.filename);
-  }, options);
+    await validateOriginal?.(result.blob, context.signal);
+    const preview=await compressAndResizeToJpeg(result.blob, resolved.filename);
+    if (preview && context.isCurrent()) {
+      displaySourceSizes.set(preview,result.blob.size);
+      urlImageState.setCached(key,preview);
+    }
+    return preview;
+  }, options, false);
 }
 
 /** Original image bytes are transient; only simultaneous raw requests coalesce. */
@@ -81,8 +94,8 @@ export async function fetchUrlImageRaw(
 ): Promise<File | null> {
   const resolved = resolveImageRequestUrl(base, name, explicitUrl);
   if (!resolved) return null;
-  return urlRawState.request(`raw:${resolved.url}`, async context => {
-    const result = await urlMediaScheduler.transfer(resolved.url, context);
+  return urlRawState.request(`raw:${resolved.url}:${options?.maxBytes ?? 'unbounded'}`, async context => {
+    const result = await urlMediaScheduler.transfer(resolved.url, { ...context, maxBytes: options?.maxBytes });
     const error = transferError(result, resolved.url);
     if (error) context.reportFailure(error);
     return result.kind === 'success'
@@ -91,26 +104,27 @@ export async function fetchUrlImageRaw(
   }, options, false);
 }
 
-export async function fetchUrlMask(base: string, name: string, options?: DatasetAccessOptions): Promise<File | null> {
+export async function fetchUrlMask(base: string, name: string, options?: DatasetAccessOptions, explicitUrl?: string): Promise<File | null> {
   if (options?.signal?.aborted) return null;
-  const keys = maskKeys(base, name);
-  const key = JSON.stringify(keys);
+  const candidates = explicitUrl ? [{ url: explicitUrl, filename: getFilenameFromUrl(explicitUrl) }] : buildMaskUrlCandidates(base, name);
+  const keys = candidates.map(item => `mask:${item.url}`);
+  const key = JSON.stringify([keys, options?.maxBytes ?? null]);
   maskAliases.set(name, keys);
   // An explicit consumer request refreshes recency; synchronous snapshots do not.
   const cached = keys.map(candidateKey => urlMaskState.getCached(candidateKey)).find(file => file !== undefined);
-  if (cached) return cached;
+  if (cached && (options?.maxBytes === undefined || cached.size <= options.maxBytes)) return cached;
   const absence = maskAbsence.get(base) ?? { misses: 0, found: false };
   maskAbsence.set(base, absence);
-  if (!absence.found && absence.misses >= URL_MASK_ABSENCE_THRESHOLD) return null;
+  if (!explicitUrl && !absence.found && absence.misses >= URL_MASK_ABSENCE_THRESHOLD) return null;
   return urlMaskState.request(key, async context => {
     let allAbsent = true;
     let failure: DatasetAccessError | undefined;
-    for (const { url, filename } of buildMaskUrlCandidates(base, name)) {
+    for (const { url, filename } of candidates) {
       const candidateKey = `mask:${url}`;
       const cachedCandidate = urlMaskState.getCached(candidateKey);
-      if (cachedCandidate) return cachedCandidate;
-      const result = await maskTransfers.request(candidateKey,
-        transferContext => urlMediaScheduler.transfer(url, transferContext),
+      if (cachedCandidate && (options?.maxBytes === undefined || cachedCandidate.size <= options.maxBytes)) return cachedCandidate;
+      const result = await maskTransfers.request(`${candidateKey}:${options?.maxBytes ?? 'unbounded'}`,
+        transferContext => urlMediaScheduler.transfer(url, { ...transferContext, maxBytes: options?.maxBytes }),
         { signal: context.signal, getPriority: context.getPriority });
       if (!context.isCurrent()) return null;
       if (result.kind === 'success') {

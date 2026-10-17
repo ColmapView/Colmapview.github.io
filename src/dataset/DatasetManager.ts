@@ -16,12 +16,15 @@ import type {
   DatasetStateReader,
 } from './types';
 import { getDatasetSourceAdapter } from './datasetSourceAdapters';
+import { importedSourceAdapter } from './importers/importedMedia';
 
 export class DatasetManager {
   private readonly getState: DatasetStateReader;
+  private readonly getCurrentState: DatasetStateReader;
 
-  constructor(getState: DatasetStateReader) {
+  constructor(getState: DatasetStateReader, getCurrentState: DatasetStateReader = getState) {
     this.getState = getState;
+    this.getCurrentState = getCurrentState;
   }
 
   // ===========================================================================
@@ -39,7 +42,33 @@ export class DatasetManager {
   }
 
   private getSourceAdapter(state: DatasetState) {
+    if (state.loadedFiles?.cameraImport || state.loadedFiles?.nativeMedia) return importedSourceAdapter;
     return getDatasetSourceAdapter(state.sourceType);
+  }
+
+  private isCurrent(state: DatasetState): boolean {
+    const current = this.getCurrentState();
+    return state.sourceType === current.sourceType && state.imageUrlBase === current.imageUrlBase
+      && state.maskUrlBase === current.maskUrlBase && state.imageNameToUrl === current.imageNameToUrl
+      && state.loadedFiles === current.loadedFiles;
+  }
+
+  /** All sources honor File|null settlement and suppress failures from obsolete scenes. */
+  private async readMedia(method: 'getImage' | 'getOriginalImage' | 'getMask', name: string, options?: DatasetAccessOptions): Promise<File | null> {
+    const state = this.getState();
+    if (options?.signal?.aborted || !this.isCurrent(state)) return null;
+    const onError: NonNullable<DatasetAccessOptions['onError']> = error => {
+      if (this.isCurrent(state)) {
+        try { options?.onError?.(error); } catch { /* A notification must not reject the media read. */ }
+      }
+    };
+    try {
+      const file = await this.getSourceAdapter(state)?.[method](state, name, options?.onError ? { ...options, onError } : options);
+      return !options?.signal?.aborted && this.isCurrent(state) ? file ?? null : null;
+    } catch (error) {
+      onError({ kind: options?.signal?.aborted ? 'aborted' : 'network', message: error instanceof Error ? error.message : 'Media read failed.' });
+      return null;
+    }
   }
 
   // ===========================================================================
@@ -54,13 +83,7 @@ export class DatasetManager {
    * @returns The image File or null if not found/failed
    */
   async getImage(imageName: string, options?: DatasetAccessOptions): Promise<File | null> {
-    const state = this.getState();
-    if (options?.signal?.aborted) return null;
-    const file = await (this.getSourceAdapter(state)?.getImage(state, imageName, options) ?? Promise.resolve(null));
-    const current = this.getState();
-    return !options?.signal?.aborted && state.sourceType === current.sourceType
-      && state.imageUrlBase === current.imageUrlBase && state.maskUrlBase === current.maskUrlBase
-      && state.imageNameToUrl === current.imageNameToUrl && state.loadedFiles === current.loadedFiles ? file : null;
+    return this.readMedia('getImage', imageName, options);
   }
 
   /**
@@ -71,13 +94,7 @@ export class DatasetManager {
    * @returns The original image File or null if not found/failed
    */
   async getOriginalImage(imageName: string, options?: DatasetAccessOptions): Promise<File | null> {
-    const state = this.getState();
-    if (options?.signal?.aborted) return null;
-    const file = await (this.getSourceAdapter(state)?.getOriginalImage(state, imageName, options) ?? Promise.resolve(null));
-    const current = this.getState();
-    return !options?.signal?.aborted && state.sourceType === current.sourceType
-      && state.imageUrlBase === current.imageUrlBase && state.maskUrlBase === current.maskUrlBase
-      && state.imageNameToUrl === current.imageNameToUrl && state.loadedFiles === current.loadedFiles ? file : null;
+    return this.readMedia('getOriginalImage', imageName, options);
   }
 
   getMetricImage(imageName: string, options?: DatasetAccessOptions): Promise<File | null> {
@@ -94,6 +111,7 @@ export class DatasetManager {
    */
   getImageSync(imageName: string): File | undefined {
     const state = this.getState();
+    if (!this.isCurrent(state)) return undefined;
     return this.getSourceAdapter(state)?.getImageSync(state, imageName);
   }
 
@@ -109,13 +127,7 @@ export class DatasetManager {
    * @returns The mask File or null if not found/failed
    */
   async getMask(imageName: string, options?: DatasetAccessOptions): Promise<File | null> {
-    const state = this.getState();
-    if (options?.signal?.aborted) return null;
-    const file = await (this.getSourceAdapter(state)?.getMask(state, imageName, options) ?? Promise.resolve(null));
-    const current = this.getState();
-    return !options?.signal?.aborted && state.sourceType === current.sourceType
-      && state.imageUrlBase === current.imageUrlBase && state.maskUrlBase === current.maskUrlBase
-      && state.imageNameToUrl === current.imageNameToUrl && state.loadedFiles === current.loadedFiles ? file : null;
+    return this.readMedia('getMask', imageName, options);
   }
 
   /**
@@ -128,6 +140,7 @@ export class DatasetManager {
    */
   getMaskSync(imageName: string): File | undefined {
     const state = this.getState();
+    if (!this.isCurrent(state)) return undefined;
     return this.getSourceAdapter(state)?.getMaskSync(state, imageName);
   }
 
@@ -144,6 +157,15 @@ export class DatasetManager {
    */
   async prefetchImages(imageNames: string[], concurrency: number = 5, options?: DatasetAccessOptions): Promise<void> {
     const state = this.getState();
+    if (state.loadedFiles?.cameraImport || state.loadedFiles?.nativeMedia) {
+      const batch=Math.max(1,Math.min(8,Math.floor(concurrency)||1));
+      for (let index=0;index<imageNames.length;index+=batch) {
+        if (options?.signal?.aborted || !this.isCurrent(state)) return;
+        await Promise.all(imageNames.slice(index,index+batch).map(name=>this.getImage(name,{...options,priority:options?.priority ?? 'prefetch'})));
+      }
+      return;
+    }
+    if (!this.isCurrent(state)) return;
     await this.getSourceAdapter(state)?.prefetchImages(state, imageNames, concurrency, options);
   }
 

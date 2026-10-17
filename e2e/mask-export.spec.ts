@@ -73,10 +73,11 @@ test.describe('Mask Export', () => {
     // Verify mask export is available when loaded files include masks.
     await expect(page.locator('button:has-text("Download Masks")')).toBeVisible({ timeout: 5000 });
 
-    // Verify there are separate reconstruction and image/mask download actions.
+    // This fixture has masks and camera geometry but no RGB files.
     const downloadButtons = page.locator('button:has-text("Download")');
     const downloadCount = await downloadButtons.count();
-    expect(downloadCount).toBeGreaterThanOrEqual(3);
+    expect(downloadCount).toBe(2);
+    await expect(page.getByRole('button', { name: 'Download Images', exact: true })).toHaveCount(0);
 
     await page.locator('select').first().selectOption('zip');
     const downloadPromise = page.waitForEvent('download');

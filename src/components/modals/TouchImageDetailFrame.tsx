@@ -3,8 +3,9 @@ import type { Camera, Image, ImageId, Point2D } from '../../types/colmap';
 import { TouchImageControls } from './ImageDetailControls';
 import { TouchImageDetailHeader } from './ImageDetailModalHeader';
 import { MatchImagePair, SingleImageView } from './ImageDetailViews';
-import { TOUCH_IMAGE_DETAIL_FRAME_CLASS } from './imageDetailFrameViewModel';
+import { isImageDetailMaskInteractionEnabled, TOUCH_IMAGE_DETAIL_FRAME_CLASS } from './imageDetailFrameViewModel';
 import type { MatchViewLayout, SingleImageLayout, Size2D } from './imageDetailLayoutViewModel';
+import type { MaskMode } from './imageDetailMaskViewModel';
 import type {
   ConnectedImageOption,
   MatchLine,
@@ -27,6 +28,9 @@ interface TouchImageDetailFrameProps {
   imageContainerRef: RefObject<HTMLDivElement | null>;
   imageIds: ImageId[];
   imageSrc: string | null;
+  maskSrc?: string | null;
+  maskMode?: MaskMode;
+  splitX?: number;
   isMarkedForDeletion: boolean;
   isMatchViewMode: boolean;
   matchLineOpacity: number;
@@ -69,6 +73,9 @@ export function TouchImageDetailFrame({
   imageContainerRef,
   imageIds,
   imageSrc,
+  maskSrc,
+  maskMode,
+  splitX,
   isMarkedForDeletion,
   isMatchViewMode,
   matchLineOpacity,
@@ -130,12 +137,16 @@ export function TouchImageDetailFrame({
             image={image}
             camera={camera}
             imageSrc={imageSrc}
+            maskSrc={maskSrc}
             layout={singleImageLayout}
             containerSize={containerSize}
             isMarkedForDeletion={isMarkedForDeletion}
             showPoints2D={showPoints2D}
             showPoints3D={showPoints3D}
             points2D={effectivePoints2D}
+            maskMode={maskMode}
+            splitX={splitX}
+            maskEnabled={isImageDetailMaskInteractionEnabled({ hasMask: Boolean(maskSrc), showMatchesInModal })}
           />
         )}
       </div>

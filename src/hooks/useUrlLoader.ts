@@ -39,6 +39,7 @@ import { huggingFaceDatasetInfoUrl } from '../utils/huggingFaceUrl';
 import { checkHuggingFaceDatasetAccess } from '../features/huggingface/datasetAccess';
 import { anySignal } from '../utils/abortSignals';
 import { offerUrlLoadRetry } from '../appStartupRetry';
+import { loadCameraUrlSource } from './urlLoaderCameraSource';
 
 export interface UseUrlLoaderDeps {
   logger?: Pick<AppLogger, 'error' | 'info'>;
@@ -290,8 +291,17 @@ export function useUrlLoadActions({ logger = appLogger, applyUrlOverrides = fals
     }
 
     let manifest: ColmapManifest;
+    if (/\/(?:bundle\.out|poses_bounds\.npy|cameras(?:_sphere|_normalized)?\.npz)$/i.test(new URL(normalizedUrl).pathname)) {
+      const settings = settingsBesideOnce(normalizedUrl, load); settings.start();
+      return loadCameraUrlSource(normalizedUrl, { ...load, beforeSceneCommit: settings.beforeSceneCommit });
+    }
     if (isManifestUrl(normalizedUrl)) {
-      manifest = await fetchUrlManifest(normalizedUrl, load);
+      const document = await fetchUrlManifest(normalizedUrl, load, true);
+      if ('kind' in document && document.kind === 'camera-dataset') {
+        const settings = settingsBesideOnce(normalizedUrl, load); settings.start();
+        return loadCameraUrlSource(normalizedUrl, { ...load, beforeSceneCommit: settings.beforeSceneCommit }, document.metadataFile);
+      }
+      manifest = document as ColmapManifest;
       logInfo(getManifestLoadedLogMessage(manifest));
     } else {
       load.setUrlProgress({ percent: 1, message: 'Discovering dataset files...' });

@@ -143,7 +143,8 @@ export function SingleImageView({
     showPoints2D,
     showPoints3D,
     pointCount: points2D.length,
-    maskMode,
+    // With no photograph to hover over, show the available mask immediately.
+    maskMode: !imageSrc && maskMode === 'hover' ? 'mask' : maskMode,
     splitX,
     maskEnabled,
     hasMaskSrc: Boolean(maskSrc),
@@ -157,19 +158,32 @@ export function SingleImageView({
       onMouseLeave={viewState.canShowMask ? onMaskMouseLeave : undefined}
       style={viewState.containerStyle}
     >
-      {viewState.canShowRenderedArea && (imageSrc ? (
+      {viewState.canShowRenderedArea && (
         <>
-          <img
-            src={imageSrc}
-            alt={image.name}
-            className="absolute object-contain pointer-events-none"
-            style={viewState.imageStyle}
-            draggable={false}
-          />
-          {viewState.showDeletedOverlay && (
-            <DeletedCrossOverlay
+          {imageSrc ? (
+            <>
+              <img
+                src={imageSrc}
+                alt={image.name}
+                className="absolute object-contain pointer-events-none"
+                style={viewState.imageStyle}
+                draggable={false}
+              />
+              {viewState.showDeletedOverlay && (
+                <DeletedCrossOverlay
+                  width={renderedImageWidth}
+                  height={renderedImageHeight}
+                  style={viewState.mediaOverlayStyle}
+                />
+              )}
+            </>
+          ) : (
+            <ImagePlaceholder
               width={renderedImageWidth}
               height={renderedImageHeight}
+              cameraWidth={camera.width}
+              cameraHeight={camera.height}
+              label="No image loaded"
               style={viewState.mediaOverlayStyle}
             />
           )}
@@ -182,17 +196,16 @@ export function SingleImageView({
               draggable={false}
             />
           )}
+          {!imageSrc && viewState.canShowMask && maskMode !== 'image' && (
+            <span
+              className="absolute rounded bg-black/70 px-2 py-1 text-xs text-white pointer-events-none"
+              style={{ left: layout.offsetX + 8, top: layout.offsetY + 8 }}
+            >
+              Mask only · original image unavailable
+            </span>
+          )}
         </>
-      ) : (
-        <ImagePlaceholder
-          width={renderedImageWidth}
-          height={renderedImageHeight}
-          cameraWidth={camera.width}
-          cameraHeight={camera.height}
-          label="No image loaded"
-          style={viewState.mediaOverlayStyle}
-        />
-      ))}
+      )}
       {viewState.showKeypoints && (
         <KeypointCanvas
           points2D={points2D}

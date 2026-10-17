@@ -133,7 +133,13 @@ export function useImageGalleryVisibleImageFetch({
       }
     };
     if (cachedConsumers.length === 0) loadMissing();
-    else void Promise.all(cachedConsumers).then(() => { if (!cancelled) loadMissing(); });
+    else void Promise.all(cachedConsumers).then(() => {
+      if (cancelled) return;
+      // Detail views and exports can populate the cache after the gallery's
+      // snapshot. Switching to masks must publish those hits even with no new batch.
+      if (imageNames.length === 0 && maskNames.length === 0) refreshImageCacheVersion();
+      loadMissing();
+    });
 
     return () => {
       cancelled = true;

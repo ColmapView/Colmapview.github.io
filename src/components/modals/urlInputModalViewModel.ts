@@ -28,7 +28,7 @@ export interface UrlInputHelpItem {
 }
 
 export const URL_INPUT_DESCRIPTION =
-  'Enter a public Google Drive ZIP or TAR link, an archive URL (.zip, .tar), a manifest URL (.json), or a COLMAP folder URL';
+  'Enter a public Google Drive ZIP or TAR link, an archive URL (.zip, .tar), a manifest URL (.json), a camera JSON URL, or a COLMAP folder URL';
 
 export const URL_INPUT_PLACEHOLDER =
   'https://huggingface.co/.../resolve/main/reconstruction';
@@ -41,6 +41,15 @@ export const URL_INPUT_HELP_ITEM_MUTED_CLASS = 'text-ds-muted/70';
 export const URL_INPUT_HELP_CODE_CLASS = 'text-ds-accent';
 
 export const URL_INPUT_HELP_SECTIONS: readonly UrlInputHelpSection[] = [
+  {
+    title: 'Camera datasets',
+    items: [
+      { code: 'https://example.com/scene/transforms.json' },
+      { text: 'NeRF/Nerfstudio, 3DGS, OpenSfM and OpenMVG camera JSON load with their photos.', muted: true },
+      { text: 'LLFF NPY and DTU NPZ URLs require an ordered list.txt beside the camera file.', muted: true },
+      { text: 'Camera metadata and photos can also be packed together in a ZIP or TAR.', muted: true },
+    ],
+  },
   {
     title: 'ZIP Files',
     items: [

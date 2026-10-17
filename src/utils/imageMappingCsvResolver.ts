@@ -90,7 +90,7 @@ function parseCsvRecords(text: string): string[][] {
  * no data rows.
  */
 export function parseImageMappingCsv(text: string): Record<string, string> {
-  const map: Record<string, string> = {};
+  const map: Record<string, string> = Object.create(null) as Record<string, string>;
   const rows = parseCsvRecords(stripBom(text));
   if (rows.length < 2) {
     return map;
@@ -113,18 +113,30 @@ export function parseImageMappingCsv(text: string): Record<string, string> {
   return map;
 }
 
+/** A model's own mapping or nearest ancestor; compare logical paths but retain physical fetch paths. */
+export function findImageMappingCsvCandidates(paths: readonly string[], modelDir: string,
+  identity: (path: string) => string = path => path): string[] {
+  modelDir = identity(modelDir);
+  const candidates = [...new Set(paths)].map(path => ({ path, logical: identity(path) }))
+    .filter(({ logical }) => getBasename(logical).toLowerCase() === IMAGE_MAPPING_CSV_FILENAME
+      && (!getParentDir(logical) || modelDir === getParentDir(logical) || modelDir.startsWith(getParentDir(logical) + '/')));
+  const nearest = candidates.reduce((length, { logical }) => Math.max(length, getParentDir(logical).length), -1);
+  return candidates.filter(({ logical }) => getParentDir(logical).length === nearest).map(({ path }) => path).sort();
+}
+
+/** Competing mappings at the same nearest scope cannot select one original by filename order. */
+export function findImageMappingCsv(paths: readonly string[], modelDir: string): string | undefined {
+  const candidates = findImageMappingCsvCandidates(paths, modelDir);
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
 export const imageMappingCsvStrategy: ImageSourceStrategy = {
   id: 'image-mapping-csv',
   async resolve(ctx: ImageResolveContext) {
     if (!ctx.fetchText) {
       return null;
     }
-    // Prefer a mapping CSV in the model directory; fall back to any in the tree.
-    const candidates = ctx.filePaths.filter(
-      (path) => getBasename(path).toLowerCase() === IMAGE_MAPPING_CSV_FILENAME
-    );
-    const csvPath =
-      candidates.find((path) => getParentDir(path) === ctx.modelDir) ?? candidates[0];
+    const csvPath = findImageMappingCsv(ctx.filePaths, ctx.modelDir);
     if (!csvPath) {
       return null;
     }

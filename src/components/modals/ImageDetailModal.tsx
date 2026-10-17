@@ -196,7 +196,7 @@ export function ImageDetailModal() {
 
   const loadErrors = <>
     {imageFailed && <MediaLoadError message="Image could not be loaded." retryLabel="Retry image" onRetry={retryImage} />}
-    {!touchMode && maskFailed && <MediaLoadError message="Mask could not be loaded." retryLabel="Retry mask" onRetry={retryMask} />}
+    {maskFailed && <MediaLoadError message="Mask could not be loaded." retryLabel="Retry mask" onRetry={retryMask} />}
     {isMatchViewMode && matchedImageFailed && <MediaLoadError message="Matched image could not be loaded." retryLabel="Retry matched image" onRetry={retryMatchedImage} />}
   </>;
 
@@ -219,6 +219,9 @@ export function ImageDetailModal() {
         imageContainerRef={imageContainerRef}
         imageIds={imageIds}
         imageSrc={imageSrc}
+        maskSrc={maskSrc}
+        maskMode={maskMode}
+        splitX={splitX}
         isMarkedForDeletion={isMarkedForDeletion}
         isMatchViewMode={isMatchViewMode}
         matchLineOpacity={matchLineOpacity}

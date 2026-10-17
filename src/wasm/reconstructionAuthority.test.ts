@@ -71,6 +71,31 @@ async function execute<K extends ReconstructionOperation>(authority: Reconstruct
 }
 
 describe.each(['text', 'binary'] as const)('reconstruction authority %s parity', format => {
+  it('detects uppercase native extensions consistently with path discovery', async () => {
+    const input=files(format);
+    const uppercase=Object.fromEntries(Object.entries(input).map(([key,file])=>[key,new File([file],file.name.toUpperCase())])) as unknown as ReconstructionLoadFiles;
+    const snapshot=await execute(owner(),'load',uppercase);
+    expect(snapshot.reconstruction.images.size).toBe(original.images.size);
+    expect(snapshot.point3DIds.length).toBe(original.points3D!.size);
+    expect(snapshot.reconstruction.rigData?.frames.size).toBe(original.rigData!.frames.size);
+  });
+  it('loads missing-points camera models without allocating or exporting dangling observations', async () => {
+    const authority = owner();
+    const input = files(format);
+    const snapshot = await execute(authority, 'load', { ...input, cameraOnly: true, points3DFile: new File([new Uint8Array(8)], 'points3D.bin') });
+    expect(snapshot.point3DIds.length).toBe(0);
+    expect(snapshot.reconstruction.images.size).toBe(original.images.size);
+    expect([...snapshot.reconstruction.images.values()].every(image => image.numPoints2D === 0)).toBe(true);
+    const result = await execute(authority, 'export', { format: 'binary' });
+    const exported = parseImagesBinary(result['images.bin'].buffer as ArrayBuffer);
+    for (const [id, image] of exported) {
+      expect(image.qvec).toEqual(original.images.get(id)!.qvec);
+      expect(image.tvec).toEqual(original.images.get(id)!.tvec);
+      expect(image.points2D).toEqual([]);
+    }
+    expect(parsePoints3DBinary(result['points3D.bin'].buffer as ArrayBuffer).size).toBe(0);
+    expect(snapshot.warnings.join(' ')).toContain('Camera-only model');
+  });
   it.skipIf(format === 'binary' && !existsSync(resolve('public/wasm/colmap_wasm.wasm')))('keeps observations/records in its owner while transferring stable render data, IDs, statistics and rigs', async () => {
     const authority = owner();
     const snapshot = await execute(authority, 'load', files(format));

@@ -52,6 +52,16 @@ function createParserDeps() {
 }
 
 describe('file dropzone COLMAP parser helper', () => {
+  it('skips WASM and clears observations for camera-only sources',async()=>{
+    const {parsers,images}=createParserDeps();
+    for(const image of images.values()) {image.points2D=[{xy:[1,2],point3DId:99n}];image.numPoints2D=1;}
+    const notify=vi.fn();
+    await parseColmapFiles({...createFiles(),cameraOnly:true,parsers,addNotification:notify,log:vi.fn()});
+    expect(parsers.parseWithWasm).not.toHaveBeenCalled();
+    expect(parsers.parseImagesText).toHaveBeenCalledWith('image text',true);
+    expect([...images.values()].every(image=>image.points2D.length===0&&image.numPoints2D===0)).toBe(true);
+    expect(notify).toHaveBeenCalledWith('info',expect.stringContaining('Camera-only model'));
+  });
   it('uses the WASM parser result when available', async () => {
     const { parsers } = createParserDeps();
     const camera = buildCamera({ cameraId: 10 });

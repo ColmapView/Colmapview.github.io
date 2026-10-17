@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { CAMERA_MODEL_NAMES } from '../../../utils/cameraModelNames';
 
-export type ExportFormat = 'binary' | 'text' | 'ply' | 'zip';
+export type ExportFormat = 'binary' | 'text' | 'ply' | 'zip' | 'zip-images' | 'zip-masks';
 
 interface CameraModelSummaryCamera {
   modelId: number;
@@ -12,6 +12,8 @@ export const EXPORT_FORMAT_OPTIONS: { value: ExportFormat; label: string }[] = [
   { value: 'text', label: 'Text (.txt)' },
   { value: 'ply', label: 'Points (.ply)' },
   { value: 'zip', label: 'ZIP (.zip)' },
+  { value: 'zip-images', label: 'COLMAP + original images (.zip)' },
+  { value: 'zip-masks', label: 'COLMAP + images + masks (.zip)' },
 ];
 
 export const EXPORT_FORMAT_DESCRIPTIONS: Record<ExportFormat, string> = {
@@ -19,6 +21,8 @@ export const EXPORT_FORMAT_DESCRIPTIONS: Record<ExportFormat, string> = {
   text: 'COLMAP text format. Human-readable, useful for debugging.',
   ply: 'Point cloud only. Compatible with MeshLab, CloudCompare.',
   zip: 'Binary files (.bin) in a single archive.',
+  'zip-images': 'COLMAP model and original photos, preserving their bytes and calibration. Up to 256 MiB.',
+  'zip-masks': 'COLMAP model, original photos and PNG feature masks where available. Up to 256 MiB.',
 };
 
 export function getCameraModelSummary(

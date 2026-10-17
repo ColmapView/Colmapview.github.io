@@ -3,7 +3,7 @@ import { openArchiveReader } from '../archive/archiveService';
 import { buildArchiveEntry, buildArchiveReader, buildFile } from '../test/builders';
 import { hfAuth } from '../features/huggingface/auth';
 import { downloadZip, type ZipProgressCallback } from './zipDownload';
-import { isArchiveFile, loadZipFromFile, loadZipFromUrl } from './zipLoader';
+import { isArchiveFile, isArchiveUrl, loadZipFromFile, loadZipFromUrl, findZipEntry } from './zipLoader';
 import { appLogger } from './logger';
 import type { ArchiveReader } from '../archive/types';
 import { archiveError, REMOTE_ARCHIVE_RANGE_THRESHOLD } from '../archive/protocol';
@@ -14,6 +14,36 @@ vi.mock('./zipDownload', async (importOriginal) => ({
   ...await importOriginal<typeof import('./zipDownload')>(),
   downloadZip: vi.fn(),
 }));
+
+describe('archive routing and bounded range failure', () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
+  it('does not replace a failed multi-gigabyte range index with a whole download',async()=>{
+    openArchive.mockRejectedValueOnce(archiveError('No validated ranges.','ArchiveRangeUnsupportedError'));
+    await expect(loadZipFromUrl('https://example.test/large.zip',vi.fn(),undefined,{size:3*1024**3})).rejects.toMatchObject({name:'ArchiveLocalAccessRequiredError',message:expect.stringContaining('local file')});
+    expect(downloadZip).not.toHaveBeenCalled();
+  });
+  it('does not download a range-rejected archive as a hidden recovery attempt',async()=>{
+    openArchive.mockRejectedValueOnce(archiveError('Range rejected.','ArchiveRangeRejectedError'));
+    await expect(loadZipFromUrl('https://example.test/large.zip',vi.fn(),undefined,{size:13_721_139_139})).rejects.toMatchObject({name:'ArchiveRangeRejectedError'});
+    expect(downloadZip).not.toHaveBeenCalled();
+  });
+  it('recognizes Zenodo content URLs and accepts a filename hint without inventing size metadata', async () => {
+    expect(isArchiveUrl('https://zenodo.org/api/records/1/files/scene.zip/content')).toBe(true);
+    const fetchImpl=vi.fn(async()=>new Response(null,{headers:{'content-length':'7'}}));
+    vi.mocked(downloadZip).mockResolvedValue(new Blob(['archive']));
+    openArchive.mockResolvedValue(buildArchiveReader({getFilesArray:async()=>colmapEntries()}));
+    const result=await loadZipFromUrl('https://example.test/content',vi.fn(),undefined,{filename:'scene.zip',fetchImpl});
+    expect(result.archive).toBeDefined();expect(fetchImpl).toHaveBeenCalled();
+    expect(openArchive.mock.calls.at(-1)?.[0].name).toBe('scene.zip');
+  });
+  it('cancels a range-ignored oversized tar.gz body without starting a full download', async () => {
+    const cancel=vi.fn();
+    const fetchImpl=vi.fn(async()=>new Response(new ReadableStream<Uint8Array>({cancel}),{status:200}));
+    vi.mocked(downloadZip).mockClear();
+    await expect(loadZipFromUrl('https://example.test/scene.tar.gz',vi.fn(),undefined,{size:3*1024*1024*1024,fetchImpl})).rejects.toMatchObject({name:'ArchiveRangeUnsupportedError'});
+    expect(cancel).toHaveBeenCalled();expect(downloadZip).not.toHaveBeenCalled();
+  });
+});
 
 function colmapEntries() {
   return ['cameras.bin', 'images.bin', 'points3D.bin'].map((name) => ({
@@ -34,6 +64,64 @@ describe.each(['local', 'url'] as const)('%s archive reader ownership', (source)
   });
 
   afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+  it('keeps media inside a selected nested model beneath another native scene',async()=>{
+    const photo=buildArchiveEntry({name:'a.png'});
+    openArchive.mockResolvedValue(buildArchiveReader({getFilesArray:async()=>[
+      ...colmapEntries().map(entry=>({...entry,path:'outer/colmap'})),
+      ...colmapEntries().map(entry=>({...entry,path:'outer/inner/sparse/0'})),
+      {path:'outer/inner/images',file:photo},
+    ]}));
+    const result=await load();
+    expect(result.imageIndex.get('outer/inner/images/a.png')).toBe(photo);
+    expect(result.imageCount).toBe(1);
+  });
+
+  it('rejects a model assembled from incomplete files in unrelated directories',async()=>{
+    const close=vi.fn(async()=>{});
+    openArchive.mockResolvedValue(buildArchiveReader({getFilesArray:async()=>colmapEntries().map((entry,index)=>({...entry,path:['a','b','c'][index]+'/sparse/0'})),close}));
+    await expect(load()).rejects.toThrow(/does not contain valid COLMAP/);
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('extracts one complete native model from distinct roots that share sparse/0',async()=>{
+    const firstImages=buildFile('images.bin','first'),secondImages=buildFile('images.bin','second');
+    const model=(root: string,imageFile: File)=>colmapEntries().map(entry=>({path:root+'/'+entry.path,file:buildArchiveEntry({name:entry.file.name,extract:async()=>entry.file.name==='images.bin' ? imageFile : buildFile(entry.file.name)})}));
+    const firstPhoto=buildArchiveEntry({name:'a.png'}),secondPhoto=buildArchiveEntry({name:'a.png'}),foreignSettings=vi.fn(async()=>buildFile('colmapview.yaml'));
+    openArchive.mockResolvedValue(buildArchiveReader({getFilesArray:async()=>[
+      ...model('a',firstImages),...model('b',secondImages),
+      {path:'a/images',file:firstPhoto},{path:'b/images',file:secondPhoto},
+      {path:'b',file:buildArchiveEntry({name:'colmapview.yaml',extract:foreignSettings})},
+      {path:'b/masks',file:buildArchiveEntry({name:'a.png.png'})},
+    ]}));
+    const result=await load();
+    expect(result.colmapFiles.get('sparse/0/images.bin')).toBe(firstImages);
+    expect(findZipEntry('a.png',result.imageIndex)).toBe(firstPhoto);
+    expect(foreignSettings).not.toHaveBeenCalled();
+    expect(findZipEntry('masks/a.png.png',result.imageIndex)).toBeNull();
+    expect(result.imageCount).toBe(1);
+  });
+
+  it('resolves original native image paths before ambiguous suffix aliases',async()=>{
+    const deep=buildArchiveEntry({name:'a.png'}),shallow=buildArchiveEntry({name:'a.png'});
+    openArchive.mockResolvedValue(buildArchiveReader({getFilesArray:async()=>[
+      ...colmapEntries(),{path:'images/images/nested',file:deep},{path:'images/nested',file:shallow},
+    ]}));
+    const result=await load();
+    expect(findZipEntry('images/nested/a.png',result.imageIndex)).toBe(deep);
+    expect(findZipEntry('nested/a.png',result.imageIndex)).toBe(shallow);
+  });
+
+  it('rejects equivalent archive source paths and closes the uncommitted reader',async()=>{
+    const close=vi.fn(async()=>{});
+    openArchive.mockResolvedValue(buildArchiveReader({getFilesArray:async()=>[
+      {path:'scene',file:buildArchiveEntry({name:'transforms.json'})},
+      {path:'scene/images',file:buildArchiveEntry({name:'a.png'})},
+      {path:'scene/images/.',file:buildArchiveEntry({name:'a.png'})},
+    ],close}));
+    await expect(load()).rejects.toThrow(/Duplicate source path/);
+    expect(close).toHaveBeenCalledOnce();
+  });
 
   it('keeps a successfully loaded reader open for lazy image extraction', async () => {
     const image = buildArchiveEntry({ name: 'photo.jpg' });

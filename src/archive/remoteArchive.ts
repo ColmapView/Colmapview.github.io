@@ -17,19 +17,25 @@ export function createRemoteArchiveRead(url: string, size: number, fetchImpl: Zi
   const fetchRange = async (offset: number, length: number, signal: AbortSignal) => {
     signal.throwIfAborted();
     const response = await fetchImpl!(url, REQUEST_TIMEOUT_MS, { headers: { Range: `bytes=${offset}-${offset + length - 1}` }, signal });
-    assertStorageReadAccess(response, url);
     const discard = () => { void response.body?.cancel().catch(() => {}); };
+    try { assertStorageReadAccess(response, url); } catch (error) { discard(); throw error; }
     if (response.status === 200 || response.status === 206 && !response.headers.get('content-range')) {
       discard(); throw archiveError('The server does not expose validated byte ranges.', 'ArchiveRangeUnsupportedError');
+    }
+    if (response.status === 416) {
+      discard(); throw archiveError(`The host rejected a valid archive range (${offset}-${offset + length - 1} of ${size} bytes). Download the archive and open the local file, or use a host with working byte ranges.`, 'ArchiveRangeRejectedError');
+    }
+    if (response.status === 404 || response.status === 410) {
+      discard(); throw archiveError('The archive is no longer available at this URL. Check the pinned revision or open a local copy.', 'ArchiveNotFoundError');
     }
     if (response.status !== 206) { discard(); throw new Error(`Could not read archive bytes (${response.status}).`); }
     const range = response.headers.get('content-range')?.match(/^bytes (\d+)-(\d+)\/(\d+)$/);
     if (!range || Number(range[1]) !== offset || Number(range[2]) !== offset + length - 1 || Number(range[3]) !== size) {
-      discard(); throw new Error('Archive range response is incomplete or the file changed. Please reload.');
+      discard(); throw archiveError('Archive range response is incomplete or the file changed. Please reload.', 'ArchiveChangedError');
     }
     const currentValidator = response.headers.get('etag') ?? response.headers.get('last-modified');
     if (validator !== undefined && validator !== currentValidator) {
-      discard(); throw new Error('The archive changed while it was being read. Please reload.');
+      discard(); throw archiveError('The archive changed while it was being read. Please reload.', 'ArchiveChangedError');
     }
     validator = currentValidator;
     if (!response.body) throw new Error('Archive range response has no body.');

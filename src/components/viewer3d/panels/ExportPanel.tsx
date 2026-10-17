@@ -97,6 +97,11 @@ export const ExportPanel = memo(function ExportPanel({
     await runModel((signal, setProgress) => runReconstructionExport({
       exportFormat,
       loadedImageFiles: loadedFiles?.imageFiles,
+      media: {
+        getOriginalImage: (name, options) => dataset.getOriginalImage(name, options),
+        getMask: (name, options) => dataset.getMask(name, options),
+        getBinding: name => (loadedFiles?.cameraImport ?? loadedFiles?.nativeMedia)?.bindings.get(name),
+      },
       signal,
       onProgress: percent => setProgress(percent),
     }, {
@@ -137,6 +142,7 @@ export const ExportPanel = memo(function ExportPanel({
     getLiveReconstruction,
     addNotification,
     runModel,
+    dataset,
   ]);
 
   // Get list of all image names from reconstruction

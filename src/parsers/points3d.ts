@@ -1,4 +1,5 @@
 import { BinaryReader } from './BinaryReader';
+import { assertDeclaredColmapTextSchema, isPhotometricPointsText } from './photometricColmap';
 import type { Point3D, TrackElement } from '../types/colmap';
 import {
   parseColmapBigIntToken,
@@ -70,14 +71,17 @@ export function parsePoints3DBinary(buffer: ArrayBuffer): Map<bigint, Point3D> {
  * 63390 1.67241 0.292931 0.609726 115 121 122 1.33927 16 6542 15 7345 6 6714 14 7227
  */
 export function parsePoints3DText(text: string): Map<bigint, Point3D> {
+  assertDeclaredColmapTextSchema(text, 'points3D');
   const points = new Map<bigint, Point3D>();
+  const photometric = isPhotometricPointsText(text);
   const lines = text.split('\n');
 
   for (const line of lines) {
     // Skip comments and empty lines
     if (line.startsWith('#') || line.trim() === '') continue;
 
-    const parts = line.trim().split(/\s+/);
+    const tokens = line.trim().split(/\s+/);
+    const parts = photometric ? [...tokens.slice(0, 4), ...tokens.slice(8)] : tokens;
     if (parts.length < 8) continue;
 
     const point3DId = parseColmapBigIntToken(parts[0]);

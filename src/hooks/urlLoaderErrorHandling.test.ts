@@ -9,6 +9,11 @@ import {
 import { HfError } from '../features/huggingface/http';
 
 describe('URL loader error handling', () => {
+  it('gives a local-file recovery route without asserting that an opaque fetch failure proves CORS',()=>{
+    const error=resolveUrlLoadError(new TypeError('Failed to fetch'),'https://public.test/scene.zip');
+    expect(error.message).toBe('Browser could not read the dataset');
+    expect(error.details).toContain('local folder or archive');
+  });
   it('preserves provider access context through required-file classification', () => {
     const error = new HfError('Sign in to read this dataset.', 401, false, { provider: 'hf' });
     expect(resolveUrlLoadError(error, 'https://huggingface.co/datasets/owner/private/resolve/main/cameras.bin')).toMatchObject({

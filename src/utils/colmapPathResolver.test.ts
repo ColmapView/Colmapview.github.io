@@ -1,7 +1,28 @@
 import { describe, it, expect } from 'vitest';
-import { resolveColmapPaths, getColmapDirectoryScore, resolveImagesDir } from './colmapPathResolver';
+import { resolveColmapPaths, getColmapDirectoryScore, resolveImagesDir, nativeSceneRoot } from './colmapPathResolver';
+
+describe('native scene ownership',()=>{
+  it.each(['colmap_workspace','colmap_workspace/sparse/0','colmap_workspace/sparse_native','colmap_workspace/sparse_seed'])(
+    'retains the scene prefix above workspace model %s',container=>{
+      expect(nativeSceneRoot('captures/scene A #1/'+container)).toBe('captures/scene A #1');
+    });
+  it.each(['colmap_workspace_capture','sparse_native_capture'])('preserves an arbitrary named scene %s',scene=>{
+    expect(nativeSceneRoot('captures/'+scene)).toBe('captures/'+scene);
+  });
+});
 
 describe('resolveColmapPaths', () => {
+  it('chooses a triangulated reconstruction over its empty known-pose seed and text copy', () => {
+    const paths = ['known_pose_model', 'triangulated_text', 'triangulated_model'].flatMap(dir =>
+      ['cameras', 'images', 'points3D'].map(name => `preprocessing/colmap/scene/${dir}/${name}.${dir === 'triangulated_model' ? 'bin' : 'txt'}`));
+    expect(resolveColmapPaths(paths)?.dir).toBe('preprocessing/colmap/scene/triangulated_model');
+    expect(resolveColmapPaths(paths.filter(path => !path.includes('/triangulated_model/')))?.dir).toBe('preprocessing/colmap/scene/triangulated_text');
+    expect(resolveColmapPaths(paths.filter(path => path.includes('/known_pose_model/')))?.dir).toBe('preprocessing/colmap/scene/known_pose_model');
+    expect(nativeSceneRoot('preprocessing/colmap/scene/triangulated_model')).toBe('preprocessing/colmap/scene');
+    const incomplete = paths.filter(path => !path.endsWith('/triangulated_model/images.bin'));
+    expect(resolveColmapPaths(incomplete)?.dir).toBe('preprocessing/colmap/scene/triangulated_text');
+    expect(resolveColmapPaths([...paths, ...['cameras', 'images', 'points3D'].map(name => `native/sparse/0/${name}.bin`)])?.dir).toBe('native/sparse/0');
+  });
   it('resolves a colmap/ directory (HuggingFace sweet-corals layout)', () => {
     const sel = resolveColmapPaths([
       'ds/colmap/cameras.bin',
@@ -100,6 +121,10 @@ describe('resolveColmapPaths', () => {
 });
 
 describe('resolveImagesDir', () => {
+  it('does not treat Waymo sky, actor or dynamic masks as missing RGB photographs', () => {
+    const paths = ['masks', 'sky_masks', 'actor_masks', 'dynamic_masks'].map(dir => `preprocessing/${dir}/scene/FRONT/000000.png`);
+    expect(resolveImagesDir(paths, { modelDir: 'preprocessing/colmap/scene/triangulated_model' })).toBeNull();
+  });
   it('finds a /images directory that is not at the root (sweet-corals corrected/images)', () => {
     const dir = resolveImagesDir([
       'colmap/cameras.bin',

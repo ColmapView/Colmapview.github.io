@@ -134,6 +134,52 @@ describe('ImageDetailViews', () => {
 
     expect(onMaskClick).not.toHaveBeenCalled();
   });
+
+  it.each(['hover', 'mask', 'split', 'image'] as const)('renders an independent mask without RGB in %s mode', maskMode => {
+    render(
+      <SingleImageView
+        image={buildImage({ name: 'missing.png' })}
+        camera={buildCamera()}
+        imageSrc={null}
+        maskSrc={MASK_SRC}
+        layout={buildSingleImageLayout()}
+        containerSize={buildContainerSize()}
+        isMarkedForDeletion={false}
+        showPoints2D={false}
+        showPoints3D={false}
+        points2D={[]}
+        maskMode={maskMode}
+        maskEnabled
+      />
+    );
+    const mask = screen.getByAltText('mask');
+    expect(mask).toHaveAttribute('src', MASK_SRC);
+    expect(mask).toHaveStyle({ width: '320px', height: '240px', opacity: maskMode === 'image' ? '0' : '1' });
+    expect(mask.className).not.toContain('opacity-0');
+    expect(screen.queryByRole('img', { name: 'missing.png' })).not.toBeInTheDocument();
+    if (maskMode !== 'image') expect(screen.getByText('Mask only · original image unavailable')).toBeInTheDocument();
+    else expect(screen.queryByText('Mask only · original image unavailable')).not.toBeInTheDocument();
+  });
+
+  it.each([false, true])('keeps a missing-photo placeholder when masks are unavailable (enabled=%s)', maskEnabled => {
+    const { container } = render(
+      <SingleImageView
+        image={buildImage()}
+        camera={buildCamera()}
+        imageSrc={null}
+        maskSrc={maskEnabled ? null : MASK_SRC}
+        layout={buildSingleImageLayout()}
+        containerSize={buildContainerSize()}
+        isMarkedForDeletion={false}
+        showPoints2D={false}
+        showPoints3D={false}
+        points2D={[]}
+        maskEnabled={maskEnabled}
+      />
+    );
+    expect(container.querySelector('canvas')).toHaveAttribute('width', '320');
+    expect(screen.queryByAltText('mask')).not.toBeInTheDocument();
+  });
 });
 
 function buildContainerSize(): Size2D {

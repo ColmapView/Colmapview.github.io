@@ -7,6 +7,7 @@ import {
   getDirectoryListingLinks,
   getDirectoryListingRootUrl,
   getHuggingFaceColmapTotalBytes,
+  getHuggingFaceColmapPaths,
   getHuggingFaceSplatPaths,
   getHuggingFaceDatasetTreeRequest,
   getInlineManifestLoadLogMessage,
@@ -36,6 +37,20 @@ const manifest: ColmapManifest = {
 };
 
 describe('url loader policy helpers', () => {
+  it('discovers camera-only models without mixing directories and prefers complete models', () => {
+    const entries = ['scene/sparse/0/cameras.bin', 'scene/sparse/0/images.bin'].map(path => ({type:'file',path,size:100}));
+    expect(getHuggingFaceColmapPaths(entries, '')).toMatchObject({cameras:entries[0].path,images:entries[1].path,points3D:undefined});
+    expect(getHuggingFaceColmapTotalBytes(entries, '', getHuggingFaceColmapPaths(entries, '')!)).toBe(200);
+    expect(getHuggingFaceColmapPaths([entries[0], {type:'file',path:'other/images.bin'}], '')).toBeNull();
+    const complete = [...entries, ...['cameras.txt','images.txt','points3D.txt'].map(name => ({type:'file',path:'custom/'+name,size:1}))];
+    expect(getHuggingFaceColmapPaths(complete, '')?.cameras).toBe('custom/cameras.txt');
+  });
+  it('allows explicit camera-only manifests and preserves absolute split-host URLs', () => {
+    const cameraOnly = {...manifest,files:{cameras:'cameras.txt',images:'images.txt'},splats:[]};
+    expect(getManifestColmapFileEntries(cameraOnly).requiredFiles.map(file => file.path)).toEqual(['cameras.txt','images.txt']);
+    expect(joinManifestUrlPath(manifest.baseUrl, 'https://rgb.test/a%20b.png?key=one%2Ftwo')).toBe('https://rgb.test/a%20b.png?key=one%2Ftwo');
+    expect(() => joinManifestUrlPath(manifest.baseUrl, 'file:///tmp/a')).toThrow('HTTP(S)');
+  });
   it('creates a default manifest for standard COLMAP URL layouts', () => {
     expect(createDefaultManifest('https://example.com/reconstruction/')).toEqual({
       version: 1,

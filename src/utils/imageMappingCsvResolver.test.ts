@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { imageMappingCsvStrategy, parseImageMappingCsv } from './imageMappingCsvResolver';
 import { resolveImageSource } from './imageSourceResolution';
 import { IMAGE_SOURCE_STRATEGIES } from './imageSourceStrategies';
@@ -95,6 +95,12 @@ describe('imageMappingCsvStrategy (add-on)', () => {
 
   it('declines when no fetchText is available', async () => {
     expect(await imageMappingCsvStrategy.resolve({ filePaths, modelDir: 'colmap' })).toBeNull();
+  });
+
+  it('declines conflicting mapping filenames at the same nearest scope', async () => {
+    const fetchText = vi.fn(async () => csv);
+    expect(await imageMappingCsvStrategy.resolve({ filePaths: ['colmap/image_mapping.csv', 'colmap/IMAGE_MAPPING.CSV'], modelDir: 'colmap', fetchText })).toBeNull();
+    expect(fetchText).not.toHaveBeenCalled();
   });
 });
 

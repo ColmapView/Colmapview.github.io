@@ -17,7 +17,8 @@ export interface ColmapManifest {
   files: {
     cameras: string;
     images: string;
-    points3D: string;
+    /** Omit for a camera-only reconstruction. Declared files must exist. */
+    points3D?: string;
     rigs?: string;
     frames?: string;
   };
@@ -46,6 +47,10 @@ export interface ColmapManifest {
    * mapping (e.g. image_mapping.csv); unmapped names fall back to imagesPath.
    */
   imageNameToPath?: Record<string, string>;
+  /** Explicit mask paths keyed by registered image name. Absolute HTTP(S) URLs are allowed. */
+  maskNameToPath?: Record<string, string>;
+  /** Meaning of explicit masks; unknown masks cannot be exported as feature masks. */
+  maskRole?: 'validity' | 'foreground' | 'unknown';
   /** Optional explicit array of image file paths (overrides imagesPath inference) */
   images?: string[];
   /** Optional explicit array of mask file paths (overrides masksPath inference) */
@@ -65,7 +70,7 @@ export const ColmapManifestSchema = z.object({
   files: z.object({
     cameras: z.string().min(1),
     images: z.string().min(1),
-    points3D: z.string().min(1),
+    points3D: z.string().min(1).optional(),
     rigs: z.string().optional(),
     frames: z.string().optional(),
   }),
@@ -73,6 +78,8 @@ export const ColmapManifestSchema = z.object({
   masksPath: z.string().optional(),
   skipImages: z.boolean().optional(),
   imageNameToPath: z.record(z.string(), z.string()).optional(),
+  maskNameToPath: z.record(z.string(), z.string().min(1)).optional(),
+  maskRole: z.enum(['validity', 'foreground', 'unknown']).optional(),
   images: z.array(z.string()).optional(),
   masks: z.array(z.string()).optional(),
   splats: z.array(z.string().min(1)).optional(),

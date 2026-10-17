@@ -5,6 +5,7 @@ import { createWasmReconstruction } from '../wasm';
 import type { CameraInfo } from '../wasm/types';
 import { buildBinaryFile, buildWasmReconstructionWrapper } from '../test/builders';
 import { parseWithWasm } from './wasmParser';
+import { writeImagesBinary } from './colmapBinaryWriters';
 
 vi.mock('../wasm', async (importActual) => {
   const actual = await importActual<typeof import('../wasm')>();
@@ -24,6 +25,16 @@ afterEach(() => {
 });
 
 describe('parseWithWasm', () => {
+  it('retains original double-precision poses while leaving observations lazy', async () => {
+    const wasm = createWasmParserWrapper(buildWasmCamera(CameraModelId.PINHOLE));
+    vi.mocked(createWasmReconstruction).mockResolvedValue(wasm);
+    const pose = {imageId:1,cameraId:1,name:'a.png',qvec:[.123456789012345,.23456789012345,.3456789012345,.456789012345] as [number,number,number,number],tvec:[.123456789012345,1.9876543210123,-3.3456789012345] as [number,number,number],points2D:[{xy:[1,2] as [number,number],point3DId:1n}]};
+    const bytes=writeImagesBinary(new Map([[1,pose]]));
+    const imagesFile=buildBinaryFile('images.bin','');
+    Object.defineProperty(imagesFile,'arrayBuffer',{value:async()=>bytes,configurable:true});
+    const result=await parseWithWasm(buildBinaryFile('cameras.bin',''),imagesFile,buildBinaryFile('points3D.bin',''));
+    expect(result?.images.get(1)).toMatchObject({qvec:pose.qvec,tvec:pose.tvec,points2D:[],numPoints2D:1});
+  });
   it('converts WASM cameras with supported camera model IDs', async () => {
     const wasm = createWasmParserWrapper(buildWasmCamera(CameraModelId.PINHOLE));
     vi.mocked(createWasmReconstruction).mockResolvedValue(wasm);

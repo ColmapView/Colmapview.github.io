@@ -15,6 +15,12 @@ let activeZipFileSize = 0;
 let activeZipImageCount = 0;
 
 const archiveClosePromises = new WeakMap<ArchiveReader, Promise<void>>();
+const originalImagePaths = new WeakMap<Map<string,ArchiveEntry>,{ entries: ReadonlyMap<string,ArchiveEntry>; sceneRoot: string }>();
+
+/** Keep original paths separate from suffix aliases for native COLMAP media. */
+export function registerZipImagePaths(index: Map<string,ArchiveEntry>,entries: ReadonlyMap<string,ArchiveEntry>,sceneRoot: string): void {
+  originalImagePaths.set(index,{entries,sceneRoot});
+}
 
 /** Closing may be requested by both cancellation and ownership cleanup. */
 export function closeZipArchive(archive: ArchiveReader): Promise<void> {
@@ -92,6 +98,13 @@ export function findZipEntry(
   imageName: string,
   index: Map<string, ArchiveEntry>
 ): ArchiveEntry | null {
+  const original=originalImagePaths.get(index);
+  if (original) {
+    const name=imageName.replace(/\\/g,'/');
+    const relative=name.toLowerCase().startsWith('masks/') ? name : `images/${name}`;
+    const entry=original.entries.get(original.sceneRoot ? `${original.sceneRoot}/${relative}` : relative);
+    if (entry) return entry;
+  }
   const candidates = getZipEntryLookupCandidates(imageName);
 
   for (const candidate of candidates) {

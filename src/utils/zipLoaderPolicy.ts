@@ -7,6 +7,7 @@ import {
 import {
   getImagePathLookupSuffixes,
 } from './imageFileLookupPolicy';
+import { resolveColmapPaths } from './colmapPathResolver';
 
 /** Archive extensions handled by libarchive.js. */
 export const ARCHIVE_EXTENSIONS = [
@@ -150,19 +151,8 @@ export function getColmapArchiveKey(entryPath: string): string {
   return match ? match[1] : `sparse/0/${filename}`;
 }
 
-export function hasRequiredColmapArchiveFiles(keys: Iterable<string>): boolean {
-  let foundCameras = false;
-  let foundImages = false;
-  let foundPoints = false;
-
-  for (const key of keys) {
-    const filename = key.split('/').pop()?.toLowerCase() ?? key.toLowerCase();
-    if (filename === 'cameras.bin' || filename === 'cameras.txt') foundCameras = true;
-    if (filename === 'images.bin' || filename === 'images.txt') foundImages = true;
-    if (filename === 'points3d.bin' || filename === 'points3d.txt') foundPoints = true;
-  }
-
-  return foundCameras && foundImages && foundPoints;
+export function hasRequiredColmapArchiveFiles(keys: Iterable<string>, options: { requirePoints3D?: boolean } = {}): boolean {
+  return resolveColmapPaths(keys, options) !== null;
 }
 
 export function getZipEntryLookupCandidates(imageName: string): string[] {

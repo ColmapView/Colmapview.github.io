@@ -64,6 +64,22 @@ function createOptions(overrides: Partial<HookOptions> = {}): HookOptions {
 }
 
 describe('useImageGalleryVisibleImageFetch', () => {
+  it('publishes masks cached by another consumer without restarting on the refreshed snapshot', async () => {
+    const dataset = createDataset({ hasImages: false, hasMasks: true, cachedMaskNames: ['cached.jpg'] });
+    const options = createOptions({ dataset, thumbnailDisplayMode: 'image', rows: [[{ name: 'cached.jpg' }]],
+      images: [{ name: 'cached.jpg' }], rowVirtualizer: createVirtualizer([0]) });
+    const { rerender } = renderHook(useImageGalleryVisibleImageFetch, { initialProps: options });
+    expect(options.refreshImageCacheVersion).not.toHaveBeenCalled();
+    const maskOptions = { ...options, thumbnailDisplayMode: 'mask' as const };
+    rerender(maskOptions);
+    await waitFor(() => expect(options.refreshImageCacheVersion).toHaveBeenCalledOnce());
+    expect(dataset.getMask).toHaveBeenCalledOnce();
+    expect(dataset.getImage).not.toHaveBeenCalled();
+    rerender({ ...maskOptions, rows: [[{ name: 'cached.jpg' }]], images: [{ name: 'cached.jpg' }] });
+    expect(options.refreshImageCacheVersion).toHaveBeenCalledOnce();
+    expect(dataset.getMask).toHaveBeenCalledOnce();
+  });
+
   it('reports network failures, leaves missing masks alone, and retries only on request', async () => {
     let failed = true;
     const getImage = vi.fn(async (name: string, options?: DatasetAccessOptions) => {

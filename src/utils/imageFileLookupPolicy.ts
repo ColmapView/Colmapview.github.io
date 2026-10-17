@@ -11,6 +11,12 @@ const AUXILIARY_IMAGE_SEGMENTS = new Set([
   'depths',
   'mask',
   'masks',
+  'fg_mask',
+  'fg_masks',
+  'foreground_mask',
+  'foreground_masks',
+  'obj_masks',
+  'com_masks',
   'normal',
   'normals',
   'segmentation',
@@ -18,6 +24,7 @@ const AUXILIARY_IMAGE_SEGMENTS = new Set([
   'semantic',
   'semantics',
 ]);
+const generatedMaskDirectory = /^(?:sky|actor|dynamic|static)[_-]masks?$/i;
 
 function isCanonicalImageRootSegment(segment: string): boolean {
   const lowerSegment = segment.toLowerCase();
@@ -78,7 +85,7 @@ export function isAuxiliaryImagePath(path: string): boolean {
     .filter(Boolean);
   const firstAuxiliarySegment = getSegmentIndex(
     segments,
-    segment => AUXILIARY_IMAGE_SEGMENTS.has(segment.toLowerCase())
+    segment => AUXILIARY_IMAGE_SEGMENTS.has(segment.toLowerCase()) || /^masks?[_-]\d+$/i.test(segment) || generatedMaskDirectory.test(segment)
   );
 
   if (firstAuxiliarySegment === -1) {
@@ -89,13 +96,13 @@ export function isAuxiliaryImagePath(path: string): boolean {
   return firstImageRootSegment === -1 || firstAuxiliarySegment < firstImageRootSegment;
 }
 
-export function isMaskImagePath(path: string): boolean {
+function hasMaskDirectory(path: string, predicate: (segment: string) => boolean): boolean {
   const segments = normalizeImagePath(path)
     .split('/')
     .filter(Boolean);
   const firstMaskSegment = getSegmentIndex(
     segments,
-    segment => segment.toLowerCase() === 'masks'
+    predicate
   );
 
   if (firstMaskSegment === -1) {
@@ -104,6 +111,16 @@ export function isMaskImagePath(path: string): boolean {
 
   const firstImageRootSegment = getSegmentIndex(segments, isCanonicalImageRootSegment);
   return firstImageRootSegment === -1 || firstMaskSegment < firstImageRootSegment;
+}
+
+/** The original COLMAP masks/ convention used by legacy alias indexes. */
+export function isMaskImagePath(path: string): boolean {
+  return hasMaskDirectory(path, segment => segment.toLowerCase() === 'masks');
+}
+
+/** Physical dataset mask variants; these require exact native media bindings. */
+export function isDatasetMaskImagePath(path: string): boolean {
+  return hasMaskDirectory(path, segment => /^(?:masks?(?:[_-]\d+)?|fg_masks?|foreground_masks?|obj_masks|com_masks)$/i.test(segment) || generatedMaskDirectory.test(segment));
 }
 
 export function getImagePathLookupSuffixes(path: string): string[] {

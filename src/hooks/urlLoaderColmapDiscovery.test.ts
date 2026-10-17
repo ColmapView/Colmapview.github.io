@@ -80,6 +80,16 @@ describe('getHuggingFaceImagesPath', () => {
 });
 
 describe('discoverHuggingFaceLayout', () => {
+  it('selects triangulated geometry while keeping a masks-only preprocessing release without RGB', async () => {
+    const tree = ['known_pose_model', 'triangulated_text', 'triangulated_model'].flatMap(variant => ['cameras', 'images', 'points3D'].map(name => ({
+      type: 'file', path: `${TREE_PATH}/colmap/scene/${variant}/${name}.${variant === 'triangulated_model' ? 'bin' : 'txt'}`, size: 200,
+    })));
+    tree.push({ type: 'file', path: `${TREE_PATH}/sky_masks/scene/FRONT/000000.png`, size: 100 },
+      { type: 'file', path: `${TREE_PATH}/colmap/scene/masks/FRONT/000000.png`, size: 100 });
+    const layout = await discoverHuggingFaceLayout(RESOLVE_BASE, { fetchImpl: vi.fn(async () => jsonResponse(tree)) });
+    expect(layout?.colmap?.cameras).toBe('colmap/scene/triangulated_model/cameras.bin');
+    expect(layout?.imagesPath).toBeNull();
+  });
   it('discovers COLMAP paths and the images directory in one tree read', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(sweetCoralsTree));
     const layout = await discoverHuggingFaceLayout(RESOLVE_BASE, { fetchImpl });

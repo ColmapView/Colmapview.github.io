@@ -1,6 +1,7 @@
 import { parseWithWasm } from '../parsers/wasmParser';
 import { parseCamerasBinary, parseCamerasText } from '../parsers/cameras';
 import { parseImagesBinary, parseImagesText } from '../parsers/images';
+import { isPhotometricImagesText, PHOTOMETRIC_COLMAP_WARNING } from '../parsers/photometricColmap';
 import { parsePoints3DBinary, parsePoints3DText } from '../parsers/points3d';
 import { parsePointCloudPlyBuffer } from '../parsers/plyPointCloud';
 import { parseRigsBinary, parseRigsText } from '../parsers/rigs';
@@ -88,7 +89,7 @@ export class ReconstructionAuthority {
     const started = performance.now();
     performance.mark('colmap-parse-start');
     progress('parsing');
-    const parsed = await parseWithWasm(files.camerasFile, files.imagesFile, files.points3DFile, files.rigsFile, files.framesFile);
+    const parsed = files.cameraOnly ? null : await parseWithWasm(files.camerasFile, files.imagesFile, files.points3DFile, files.rigsFile, files.framesFile);
     let cameras: Reconstruction['cameras'];
     let images: Reconstruction['images'];
     let points3D: Reconstruction['points3D'];
@@ -103,26 +104,37 @@ export class ReconstructionAuthority {
       this.parser = 'javascript';
       // Full observations are required for compatible fallback editing/export. They stay in this owner.
       [cameras, images, points3D] = await Promise.all([
-        files.camerasFile.name.endsWith('.bin')
+        files.camerasFile.name.toLowerCase().endsWith('.bin')
           ? files.camerasFile.arrayBuffer().then(parseCamerasBinary)
           : files.camerasFile.text().then(text => parseCamerasText(text, {
             onSkip: camera => this.warnings.push(`Skipped camera with unsupported model: ${camera.modelName}`),
           })),
-        files.imagesFile.name.endsWith('.bin')
-          ? files.imagesFile.arrayBuffer().then(buffer => parseImagesBinary(buffer, false))
-          : files.imagesFile.text().then(parseImagesText),
-        files.points3DFile.name.endsWith('.bin')
+        files.imagesFile.name.toLowerCase().endsWith('.bin')
+          ? files.imagesFile.arrayBuffer().then(buffer => parseImagesBinary(buffer, Boolean(files.cameraOnly)))
+          : files.imagesFile.text().then(text => {
+            if (isPhotometricImagesText(text)) this.warnings.push(PHOTOMETRIC_COLMAP_WARNING);
+            const result = parseImagesText(text, Boolean(files.cameraOnly));
+            if (!result.size && text.split(/\r?\n/).some(line => line.trim() && !line.trimStart().startsWith('#'))) {
+              throw new Error('No valid image poses were recognized in images.txt. Check the text schema and camera IDs; convert custom formats to COLMAP first.');
+            }
+            return result;
+          }),
+        files.points3DFile.name.toLowerCase().endsWith('.bin')
           ? files.points3DFile.arrayBuffer().then(parsePoints3DBinary)
           : files.points3DFile.name.toLowerCase().endsWith('.ply')
             ? files.points3DFile.arrayBuffer().then(parsePointCloudPlyBuffer)
             : files.points3DFile.text().then(parsePoints3DText),
       ]);
     }
+    if (files.cameraOnly) {
+      for (const image of images.values()) { image.points2D = []; image.numPoints2D = 0; }
+      this.warnings.push('Camera-only model: no points3D file was supplied. Observations were omitted from the exported model.');
+    }
     if (!rigData && files.rigsFile && files.framesFile) {
       try {
         const [rigs, frames] = await Promise.all([
-          files.rigsFile.name.endsWith('.bin') ? files.rigsFile.arrayBuffer().then(parseRigsBinary) : files.rigsFile.text().then(parseRigsText),
-          files.framesFile.name.endsWith('.bin') ? files.framesFile.arrayBuffer().then(parseFramesBinary) : files.framesFile.text().then(parseFramesText),
+          files.rigsFile.name.toLowerCase().endsWith('.bin') ? files.rigsFile.arrayBuffer().then(parseRigsBinary) : files.rigsFile.text().then(parseRigsText),
+          files.framesFile.name.toLowerCase().endsWith('.bin') ? files.framesFile.arrayBuffer().then(parseFramesBinary) : files.framesFile.text().then(parseFramesText),
         ]);
         rigData = { rigs, frames };
       } catch (error) {

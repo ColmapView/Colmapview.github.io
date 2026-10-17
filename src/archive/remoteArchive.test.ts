@@ -13,6 +13,30 @@ function server() {
   });
 }
 describe('remote archive ranges', () => {
+  it('cancels the body when storage access fails before range validation',async()=>{
+    const cancel=vi.fn();
+    const read=createRemoteArchiveRead('https://huggingface.co/datasets/owner/private/resolve/main/scene.zip',size,
+      vi.fn(async()=>new Response(new ReadableStream({cancel}),{status:401})));
+    await expect(read(0,30,signal())).rejects.toThrow();expect(cancel).toHaveBeenCalledOnce();
+  });
+  it('preserves offsets beyond 4 GiB without downloading the whole object', async () => {
+    const total = 13_721_139_139;
+    const request = vi.fn(async (_url: string, _timeout?: number, init?: RequestInit) => {
+      const [start, end] = new Headers(init?.headers).get('range')!.match(/\d+/g)!.map(Number);
+      expect(start).toBeGreaterThan(2 ** 32); expect(end - start).toBeLessThan(65536);
+      return new Response(new Uint8Array(end-start+1).fill(17), { status:206, headers:{'content-range':`bytes ${start}-${end}/${total}`} });
+    });
+    const read = createRemoteArchiveRead('https://example.test/large.zip', total, request);
+    expect(new Uint8Array(await read(total-30, 30, signal()))).toEqual(new Uint8Array(30).fill(17));
+    expect(request).toHaveBeenCalledOnce();
+  });
+  it.each([[416, 'ArchiveRangeRejectedError', 'local file'], [404, 'ArchiveNotFoundError', 'pinned revision']] as const)('reports %s with a recovery route and cancels the body', async (status, name, message) => {
+    const cancel = vi.fn();
+    const read = createRemoteArchiveRead('https://example.test/broken.zip', size,
+      vi.fn(async () => new Response(new ReadableStream({ cancel }), {status})));
+    await expect(read(0,30,signal())).rejects.toMatchObject({name,message:expect.stringContaining(message)});
+    expect(cancel).toHaveBeenCalledOnce();
+  });
   it('uses the signed-in Hugging Face request policy for private archive ranges', async () => {
     vi.spyOn(hfAuth, 'getSnapshot').mockReturnValue({ status: 'connected', identity: { username: 'owner' }, error: null });
     vi.spyOn(hfAuth, 'getReadAccessToken').mockReturnValue('reader-token');

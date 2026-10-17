@@ -1,4 +1,5 @@
 import type { RigData } from './rig';
+import type { CameraDatasetImportContext } from '../dataset/importers/types';
 
 // Type aliases for COLMAP IDs
 // These add semantic meaning and make code more self-documenting
@@ -119,6 +120,9 @@ export interface SplatFileSource {
 
 // File structure for loaded data
 export interface LoadedFiles {
+  cameraImport?: CameraDatasetImportContext;
+  /** Physical media bindings for an unchanged native COLMAP reconstruction. */
+  nativeMedia?: CameraDatasetImportContext;
   camerasFile?: File;
   imagesFile?: File;
   points3DFile?: File;

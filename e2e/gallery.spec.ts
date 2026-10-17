@@ -43,6 +43,8 @@ test.describe('ImageGallery', () => {
     await loadTestDataset(page);
     await expect(page.locator('text=Source:')).toBeVisible({ timeout: 45000 });
 
+    // The dismiss button can leave the pointer over a newly mounted toolbar control.
+    await page.mouse.move(0, 0);
     const divider = page.locator('.resize-handle');
     const box = await divider.boundingBox();
     expect(box).not.toBeNull();
@@ -56,7 +58,7 @@ test.describe('ImageGallery', () => {
 
     // 2px into the viewer from the divider's left edge must belong to the
     // scene, not the divider — the grab strip may only overhang the gallery.
-    const hit = await page.evaluate(([x, y]) => {
+    const probe = () => page.evaluate(([x, y]) => {
       const el = document.elementFromPoint(x, y);
       return {
         // SVG elements carry an SVGAnimatedString here, so className alone
@@ -67,9 +69,9 @@ test.describe('ImageGallery', () => {
       };
     }, [box!.x - 2, probeY] as [number, number]);
 
-    expect(hit.className).not.toContain('resize-handle');
-    expect(hit.inHandle).toBe(false);
-    expect(hit.inScene).toBe(true);
+    // Allow the hover panel to close before checking the divider's hit target.
+    await expect.poll(probe).toMatchObject({ inHandle: false, inScene: true });
+    expect((await probe()).className).not.toContain('resize-handle');
   });
 
   test('collapse tab stays fully on-screen when the gallery is collapsed', async ({ page }) => {

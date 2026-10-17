@@ -21,6 +21,7 @@ export interface ColmapParserFiles {
   points3DFile: File;
   rigsFile?: File;
   framesFile?: File;
+  cameraOnly?: boolean;
 }
 
 export interface ColmapParseResult {
@@ -58,6 +59,7 @@ export async function parseColmapFiles({
   points3DFile,
   rigsFile,
   framesFile,
+  cameraOnly,
   parsers,
   signal,
   onProgress,
@@ -65,7 +67,7 @@ export async function parseColmapFiles({
   log = appLogger.info,
 }: ParseColmapFilesOptions): Promise<ColmapParseResult> {
   if (!parsers) {
-    const service = new ReconstructionService({ camerasFile, imagesFile, points3DFile, rigsFile, framesFile }, { signal, onProgress });
+    const service = new ReconstructionService({ camerasFile, imagesFile, points3DFile, rigsFile, framesFile, cameraOnly }, { signal, onProgress });
     const snapshot = await service.load();
     addNotification('info', `Loaded ${snapshot.pointCount.toLocaleString()} points`, 5000);
     for (const warning of snapshot.data.warnings) addNotification('warning', warning);
@@ -77,7 +79,7 @@ export async function parseColmapFiles({
     };
   }
   log('[Parser] Attempting WASM parser (memory-optimized)...');
-  const wasmResult = await parsers.parseWithWasm(
+  const wasmResult = cameraOnly ? null : await parsers.parseWithWasm(
     camerasFile,
     imagesFile,
     points3DFile,
@@ -102,27 +104,32 @@ export async function parseColmapFiles({
   }
 
   log('[Parser] WASM failed, falling back to JS parser (without 2D points)');
-  const useLiteImages = imagesFile.name.endsWith('.bin');
+  const useLiteImages = imagesFile.name.toLowerCase().endsWith('.bin');
 
   // Unknown-model cameras in cameras.txt are skipped (partial loads stay
   // useful); collect them so we can surface a single aggregate notification.
   const skippedCameras: SkippedCameraRecord[] = [];
 
   const [cameras, images, points3D] = await Promise.all([
-    camerasFile.name.endsWith('.bin')
+    camerasFile.name.toLowerCase().endsWith('.bin')
       ? camerasFile.arrayBuffer().then(parsers.parseCamerasBinary)
       : camerasFile.text().then(text =>
           parsers.parseCamerasText(text, { onSkip: record => skippedCameras.push(record) })
         ),
-    imagesFile.name.endsWith('.bin')
+    imagesFile.name.toLowerCase().endsWith('.bin')
       ? imagesFile.arrayBuffer().then(buf => parsers.parseImagesBinary(buf, true))
-      : imagesFile.text().then(parsers.parseImagesText),
-    points3DFile.name.endsWith('.bin')
+      : imagesFile.text().then(text => cameraOnly ? parsers.parseImagesText(text, true) : parsers.parseImagesText(text)),
+    points3DFile.name.toLowerCase().endsWith('.bin')
       ? points3DFile.arrayBuffer().then(parsers.parsePoints3DBinary)
       : points3DFile.name.toLowerCase().endsWith('.ply')
       ? points3DFile.arrayBuffer().then(parsers.parsePointCloudPlyBuffer)
       : points3DFile.text().then(parsers.parsePoints3DText),
   ]);
+
+  if (cameraOnly) {
+    for (const image of images.values()) { image.points2D = []; image.numPoints2D = 0; }
+    addNotification('info', 'Camera-only model: no points3D file was supplied. Observations were omitted from the exported model.');
+  }
 
   if (skippedCameras.length > 0) {
     const uniqueModels = [...new Set(skippedCameras.map(s => s.modelName))];

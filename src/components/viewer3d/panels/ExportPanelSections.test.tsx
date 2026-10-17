@@ -151,6 +151,23 @@ describe('ExportPanelSections', () => {
     expect(screen.queryByRole('button', { name: 'Download Images' })).toBeNull();
   });
 
+  it('keeps mask download available when RGB photos are missing', () => {
+    const props = createMediaProps({ hasImages: false, hasMasks: true });
+    render(<ExportMediaSection {...props} />);
+    expect(screen.queryByRole('slider')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Download Images' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Download Masks' }));
+    expect(props.onExportMasks).toHaveBeenCalledOnce();
+  });
+
+  it('keeps mask export progress and cancellation available without RGB photos', () => {
+    const props = createMediaProps({ hasImages: false, hasMasks: true, maskExportProgress: 50 });
+    render(<ExportMediaSection {...props} />);
+    expect(screen.getByRole('progressbar', { name: 'Export masks' })).toHaveAttribute('aria-valuenow', '50');
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    expect(props.onCancelMasks).toHaveBeenCalledOnce();
+  });
+
   it('routes reload and disables it without original files', () => {
     const props = createReloadProps();
     render(<ExportReloadSection {...props} />);

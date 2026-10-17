@@ -46,8 +46,8 @@ export function classifyFetchError(err: unknown, url?: string): UrlLoadError {
     )) {
       return {
         type: 'cors',
-        message: 'Cross-origin request blocked',
-        details: `The browser could not read this response. Check your connection and file access. For CORS setup, whitelist these viewer origins on the server: ${getStorageCorsOrigins().join(', ')}.`,
+        message: 'Browser could not read the dataset',
+        details: `Check your connection and file access. If the host blocks browser requests, download the dataset and open its local folder or archive. Server owners can allow these viewer origins in CORS: ${getStorageCorsOrigins().join(', ')}.`,
         failedFile: url,
       };
     }
@@ -99,6 +99,10 @@ export function encodeUrlPath(path: string): string {
 
 /** Joins a base URL and a relative path, encoding the path's segments once. */
 export function joinManifestUrlPath(baseUrl: string, relativePath: string): string {
+  if (/^https?:\/\//i.test(relativePath)) return new URL(relativePath).href;
+  if (/^[a-z][a-z\d+.-]*:/i.test(relativePath) || relativePath.startsWith('//')) {
+    throw new Error('Manifest resources must use HTTP(S) URLs or relative file paths.');
+  }
   const encodedPath = encodeUrlPath(relativePath);
   return baseUrl.endsWith('/')
     ? `${baseUrl}${encodedPath}`
@@ -367,7 +371,7 @@ export function classifyFetchErrorWithCloudContext(
     const provider = detectCloudProvider(url);
     if (provider) {
       const instructions = getCorsInstructions(provider);
-      baseError.details = `The browser could not read this ${provider.toUpperCase()} response. Check bucket access and whitelist the viewer domains in its CORS policy.\n\n${instructions}`;
+      baseError.details = `The browser could not read this ${provider.toUpperCase()} response. Check connectivity, file access and the host's CORS policy, or download the dataset and open a local copy.\n\n${instructions}`;
     }
   }
 

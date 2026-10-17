@@ -32,6 +32,7 @@ export const DROP_ZONE_TOUCH_FOOTER = 'Load a URL or try a sample dataset';
 export const DROP_ZONE_INFO_LINES: DropZoneInfoLine[] = [
   { label: 'Drop folder or ZIP file', text: '- subfolders are scanned automatically' },
   { label: 'COLMAP:', text: 'cameras, images, points3D (.bin or .txt preferred)' },
+  { label: 'Cameras + photos:', text: 'NeRF/Nerfstudio, 3DGS JSON, LLFF NPY, DTU NPZ, OpenSfM, OpenMVG or ordered Bundler' },
   { label: 'Image-only:', text: 'jpg, png, webp, tiff folders are supported' },
   { label: 'Auto-detected:', text: 'sparse/0/, sparse/, or any subfolder' },
   { label: 'Optional:', text: 'source images, masks/, splats (.spz, .ply, .sog), config (.yaml)' },

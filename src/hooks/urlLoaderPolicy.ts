@@ -326,7 +326,7 @@ export function getRelativeHuggingFaceTreePaths(
 export interface HuggingFaceColmapPaths {
   cameras: string;
   images: string;
-  points3D: string;
+  points3D?: string;
   rigs?: string;
   frames?: string;
 }
@@ -342,8 +342,9 @@ export function getHuggingFaceColmapPaths(
   treePath: string
 ): HuggingFaceColmapPaths | null {
   const relativePaths = getRelativeHuggingFaceTreePaths(entries, treePath);
-  const selection = resolveColmapPaths(relativePaths, { requirePoints3D: true });
-  if (!selection || !selection.cameras || !selection.images || !selection.points3D) {
+  const selection = resolveColmapPaths(relativePaths)
+    ?? resolveColmapPaths(relativePaths, { requirePoints3D: false });
+  if (!selection?.cameras || !selection.images) {
     return null;
   }
 
@@ -372,6 +373,7 @@ export function getHuggingFaceColmapTotalBytes(
 
   let total = 0;
   for (const path of [colmap.cameras, colmap.images, colmap.points3D]) {
+    if (path === undefined) continue;
     const size = sizeByRelativePath.get(path);
     if (size === undefined) return null;
     total += size;
@@ -462,8 +464,8 @@ export function getManifestColmapFileEntries(manifest: ColmapManifest): Manifest
   const requiredFiles = [
     { key: 'sparse/0/cameras.bin', path: files.cameras },
     { key: 'sparse/0/images.bin', path: files.images },
-    { key: 'sparse/0/points3D.bin', path: files.points3D },
   ];
+  if (files.points3D) requiredFiles.push({ key: 'sparse/0/points3D.bin', path: files.points3D });
 
   const optionalFiles: UrlLoaderFileEntry[] = [];
   if (files.rigs) {

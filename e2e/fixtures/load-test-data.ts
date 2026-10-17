@@ -49,6 +49,11 @@ export async function loadTestDataset(
   extraFiles: TestDatasetFileEntry[] = []
 ): Promise<void> {
   const files = [...collectFiles(TEST_DATA_DIR), ...extraFiles];
+  return dropDatasetFiles(page, files);
+}
+
+/** Drop original-source files without adding any native COLMAP fixture. */
+export async function dropDatasetFiles(page: Page, files: TestDatasetFileEntry[]): Promise<void> {
 
   // Navigation can finish before React mounts the drop target.
   await page.getByTestId('drop-zone').waitFor({ state: 'attached' });

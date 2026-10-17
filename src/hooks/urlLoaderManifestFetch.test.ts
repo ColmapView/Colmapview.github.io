@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildFile } from '../test/builders';
 import type { ColmapManifest, UrlLoadError } from '../types/manifest';
 import { createDefaultManifest } from './urlLoaderPolicy';
+import { prepareNativeMedia } from '../dataset/nativeMedia';
+import { buildCamera, buildImage } from '../test/builders';
 import {
   deriveMasksPathFromImages,
   discoverDirectoryListingSplatPaths,
@@ -26,11 +28,78 @@ const manifest: ColmapManifest = {
   },
 };
 
+it('does not probe a Hugging Face resolve directory when the tree has no splats', async () => {
+  const base = 'https://huggingface.co/datasets/owner/preprocessing/resolve/revision/scene';
+  const fetchImpl = vi.fn(async () => jsonResponse([]));
+  expect(await discoverManifestSplatCatalog({ ...manifest, baseUrl: base }, { fetchImpl })).toEqual([]);
+  expect(fetchImpl.mock.calls).toEqual([['https://huggingface.co/api/datasets/owner/preprocessing/tree/revision/scene?recursive=true']]);
+});
+
 function jsonResponse(data: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(data), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
     ...init,
+  });
+}
+
+it('fetches only declared camera-only model files and retains the explicit media listing', async () => {
+  const cameraOnly: ColmapManifest={version:1,baseUrl:'https://models.test/pinned',files:{cameras:'cameras.bin',images:'images.bin'},
+    images:['https://photos.test/cam/a.png?key=one%2Ftwo'],masks:['masks/cam/a.jpg.png'],maskRole:'validity'};
+  const fetchFile=vi.fn(async (_base:string,path:string)=>buildFile(path));
+  const files=await fetchManifestColmapFiles(cameraOnly,{fetchFile,setUrlProgress:vi.fn()});
+  expect(fetchFile.mock.calls.map(call=>call[1])).toEqual(['cameras.bin','images.bin']);
+  const context=await prepareNativeMedia(files,files.get('sparse/0/cameras.bin')!,new Map([[1,buildCamera()]]),new Map([[1,buildImage({name:'cam/a.jpg'})]]));
+  expect(context?.bindings.get('cam/a.jpg')).toMatchObject({sourceImagePath:'https://photos.test/cam/a.png?key=one%2Ftwo',mask:{path:'masks/cam/a.jpg.png',role:'validity'}});
+});
+it('does not turn a declared missing points file into an empty model', async () => {
+  const fetchFile=vi.fn(async (_base:string,path:string)=>{if(path.includes('points3D'))throw {type:'not_found',message:'Missing declared points file'};return buildFile(path);});
+  await expect(fetchManifestColmapFiles(manifest,{fetchFile,setUrlProgress:vi.fn()})).rejects.toMatchObject({type:'not_found',message:'Missing declared points file'});
+});
+
+it.each([
+  {name:'explicit masks in an arbitrary directory', images:['photos/cam/a.jpg'], masks:['annotations/cam/a.png'], maskRole:'foreground' as const, expectedMask:'annotations/cam/a.png'},
+  {name:'a mask prefix alongside an explicit image list', images:['photos/cam/a.jpg'], masksPath:'annotations/', expectedMask:'https://models.test/pinned/annotations/cam/a.jpg.png'},
+  {name:'explicit photos in a directory with an auxiliary-looking name', images:['segmentation/cam/a.jpg'], masks:['annotations/cam/a.png'], maskRole:'foreground' as const, expectedMask:'annotations/cam/a.png'},
+])('honors $name without losing original manifest behavior',async ({name: _name,expectedMask,...media})=>{
+  const input:ColmapManifest={version:1,baseUrl:'https://models.test/pinned/',files:{cameras:'cameras.bin',images:'images.bin',points3D:'points3D.bin'},...media};
+  const files=await fetchManifestColmapFiles(input,{fetchFile:async (_base,path)=>buildFile(path),setUrlProgress:vi.fn()});
+  const context=await prepareNativeMedia(files,files.get('sparse/0/cameras.bin')!,new Map([[1,buildCamera()]]),new Map([[1,buildImage({name:'cam/a.jpg'})]]));
+  expect(context?.bindings.get('cam/a.jpg')?.sourceImagePath).toBe(media.images[0]);
+  expect(context?.bindings.get('cam/a.jpg')?.mask).toMatchObject({kind:'file',path:expectedMask});
+});
+
+it('bounds a discovered image mapping CSV before reading its body', async () => {
+  const cancel = vi.fn();
+  const response = new Response(new ReadableStream({ cancel }), { headers: { 'Content-Length': String(17 * 1024 * 1024) } });
+  const base = 'https://huggingface.co/datasets/x/y/resolve/main/ds';
+  const paths = ['colmap/cameras.bin', 'colmap/images.bin', 'colmap/points3D.bin', 'colmap/image_mapping.csv', 'images/a.jpg'];
+  const fetchImpl = vi.fn(async (url: string) => url.includes('/api/datasets/')
+    ? jsonResponse(paths.map(path => ({ type: 'file', path: 'ds/' + path, size: 100 }))) : response);
+  const discovered = await withDiscoveredColmapPaths(createDefaultManifest(base), { fetchImpl });
+  expect(discovered.imageNameToPath).toBeUndefined();
+  expect(discovered.imagesPath).toBe('images/');
+  expect(cancel).toHaveBeenCalledOnce();
+});
+
+for (const mode of ['relative', 'absolute', 'signed'] as const) for (const ownMask of [false, true]) for (const peerMask of [false, true]) {
+  it(`discovered mask prefixes follow mapped photos: ${mode}, own mask ${ownMask}, peer mask ${peerMask}`, async () => {
+    const base = 'https://huggingface.co/datasets/audit/shared-masks/resolve/pinned/';
+    const own = 'dozer/masks/cam/a.jpg.png', peer = 'poster/masks/cam/a.jpg.png', photo = 'poster/images/cam/a.jpg';
+    const mapped = mode === 'relative' ? photo : base + photo + (mode === 'signed' ? '?token=exact%2Fvalue' : '');
+    const paths = ['dozer/sparse/0/cameras.bin', 'dozer/sparse/0/images.bin', 'dozer/sparse/0/points3D.bin',
+      'poster/sparse/0/cameras.bin', 'poster/sparse/0/images.bin', 'dozer/images/cam/a.jpg', photo, 'dozer/image_mapping.csv',
+      ...(ownMask ? [own] : []), ...(peerMask ? [peer] : [])];
+    const fetchImpl = vi.fn(async (url: string) => url.includes('/api/datasets/')
+      ? jsonResponse(paths.map(path => ({ type: 'file', path, size: 100 })))
+      : new Response('colmap_image,raw_path\ncam/a.jpg,' + mapped + '\n'));
+    const manifest = await withDiscoveredColmapPaths(createDefaultManifest(base), { fetchImpl });
+    const files = await fetchManifestColmapFiles(manifest, { fetchFile: async (_base, path) => buildFile(path), setUrlProgress: vi.fn() });
+    const context = await prepareNativeMedia(files, files.get('sparse/0/cameras.bin')!, new Map([[1, buildCamera()]]),
+      new Map([[1, buildImage({ name: 'cam/a.jpg' })]]));
+    expect(context?.bindings.get('cam/a.jpg')?.sourceImagePath).toBe(mapped);
+    if (peerMask) expect(context?.bindings.get('cam/a.jpg')?.mask).toMatchObject({ path: peer, role: 'validity' });
+    else expect(context?.bindings.get('cam/a.jpg')?.mask).toBeUndefined();
   });
 }
 

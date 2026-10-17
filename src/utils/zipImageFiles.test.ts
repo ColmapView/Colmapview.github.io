@@ -59,6 +59,35 @@ afterEach(() => {
 });
 
 describe('zip image files', () => {
+  it('checks the extracted mask size when archive metadata understates it',async()=>{
+    vi.mocked(hasActiveZipArchive).mockReturnValue(true);vi.mocked(getActiveZipImageIndex).mockReturnValue(new Map());
+    const file=buildFile('mask.png','12345'),entry=buildArchiveEntry({name:'mask.png',size:1,extract:async()=>file}),onError=vi.fn();
+    expect(await fetchZipMask('photo.png',{maxBytes:2,onError},entry)).toBeNull();
+    expect(getZipMaskCached('photo.png',entry)).toBeUndefined();expect(onError).toHaveBeenCalledOnce();
+  });
+  it('enforces each concurrent explicit mask read budget',async()=>{
+    vi.mocked(hasActiveZipArchive).mockReturnValue(true);vi.mocked(getActiveZipImageIndex).mockReturnValue(new Map());
+    const file=buildFile('mask.png','12345'),pending=createDeferred<File>();
+    const entry=buildArchiveEntry({name:'mask.png',size:file.size,extract:vi.fn(()=>pending.promise)});
+    const first=fetchZipMask('photo.png',{maxBytes:10},entry),onError=vi.fn();
+    const small=fetchZipMask('photo.png',{maxBytes:1,onError},entry);
+    pending.resolve(file);
+    expect(await first).toBe(file);expect(await small).toBeNull();
+    expect(onError).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({message:expect.stringContaining('budget')}));
+  });
+  it('keeps explicitly bound entries with identical names separate in raw requests and mask caches',async()=>{
+    vi.mocked(hasActiveZipArchive).mockReturnValue(true);
+    vi.mocked(getActiveZipImageIndex).mockReturnValue(new Map());
+    const a=buildFile('mask.png','a'),b=buildFile('mask.png','bb');
+    const first=buildArchiveEntry({name:'mask.png',extract:vi.fn(async()=>a)}),second=buildArchiveEntry({name:'mask.png',extract:vi.fn(async()=>b)});
+    const [rawA,rawB]=await Promise.all([fetchZipImageRaw('same.png',undefined,first),fetchZipImageRaw('same.png',undefined,second)]);
+    expect(rawA).toBe(a);expect(rawB).toBe(b);
+    expect(await fetchZipMask('same.png',undefined,first)).toBe(a);
+    expect(await fetchZipMask('same.png',undefined,second)).toBe(b);
+    expect(getZipMaskCached('same.png',first)).toBe(a);expect(getZipMaskCached('same.png',second)).toBe(b);
+    removeZipMaskCacheEntries(['same.png']);
+    expect(getZipMaskCached('same.png',first)).toBeUndefined();expect(getZipMaskCached('same.png',second)).toBeUndefined();
+  });
   it('reports availability from the active ZIP archive', () => {
     vi.mocked(hasActiveZipArchive).mockReturnValue(false);
     expect(isZipLoadingAvailable()).toBe(false);

@@ -35,6 +35,9 @@ import { beginReconstructionLoad, markReconstructionSceneCommitted } from '../wa
 import { findDatasetViewerSettingsEntry, resolveDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { anySignal } from '../utils/abortSignals';
+import { prepareLocalCameraDataset, getPreparedCameraContext } from '../dataset/importers/prepareCameraDataset';
+import { chooseMixedCameraScene, isPathInCameraScene } from '../dataset/importers/sceneDiscovery';
+import { prepareNativeMedia } from '../dataset/nativeMedia';
 
 type SetUrlProgress = (progress: UrlLoadProgress | null) => void;
 type SetSourceInfo = {
@@ -360,6 +363,12 @@ export async function processFileDropzoneFiles(
     onSceneReplaced?.();
   };
   try {
+    const selected = getPreparedCameraContext(files) ? null : await chooseMixedCameraScene([...files.keys()], signal);
+    if (selected && !selected.metadataPath) files = new Map([...files].filter(([path]) => isPathInCameraScene(path,selected)));
+    const prepared = await prepareLocalCameraDataset(files, { signal, metadataPath: selected?.metadataPath });
+    if (prepared) files = prepared.files;
+    const cameraImport = getPreparedCameraContext(files);
+    load.assertCurrent();
     const {
       splatFileSources,
       pointCloudPlySources,
@@ -469,6 +478,7 @@ export async function processFileDropzoneFiles(
     }
 
     let { camerasFile, imagesFile, points3DFile, rigsFile, framesFile } = findColmapFiles(files);
+    let cameraOnly = false;
     if ((!camerasFile || !imagesFile || !points3DFile) && pointCloudFile) {
       const cameraImageFiles = findColmapCameraImageFiles(files);
       if (cameraImageFiles.camerasFile && cameraImageFiles.imagesFile) {
@@ -480,9 +490,21 @@ export async function processFileDropzoneFiles(
       }
     }
 
+    if (!camerasFile || !imagesFile || !points3DFile) {
+      const pair = findColmapCameraImageFiles(files);
+      if (pair.camerasFile && pair.imagesFile) {
+        camerasFile = pair.camerasFile;
+        imagesFile = pair.imagesFile;
+        rigsFile = pair.rigsFile;
+        framesFile = pair.framesFile;
+        points3DFile = new File([new Uint8Array(8)], 'points3D.bin');
+        cameraOnly = true;
+      }
+    }
+
     deps.setUrlProgress({ percent: mapProgress(5), message: 'Scanning image files...' });
-    const imageFiles = collectImageFiles(files);
-    const hasMasks = hasMaskFiles(files);
+    let imageFiles = collectImageFiles(files);
+    let hasMasks = hasMaskFiles(files) || Boolean(cameraImport && [...cameraImport.bindings.values()].some(binding => binding.mask));
 
     if (!camerasFile || !imagesFile || !points3DFile) {
       if (
@@ -546,6 +568,7 @@ export async function processFileDropzoneFiles(
       points3DFile,
       rigsFile,
       framesFile,
+      cameraOnly,
       addNotification: deps.addNotification,
       log: logger.info,
       signal: load.signal,
@@ -558,6 +581,18 @@ export async function processFileDropzoneFiles(
     });
     pendingSource = parseResult.wasmWrapper;
     load.assertCurrent();
+    const nativeMedia = cameraImport ? undefined : await prepareNativeMedia(files, camerasFile, parseResult.cameras, parseResult.images, load.signal);
+    load.assertCurrent();
+    if (nativeMedia) {
+      hasMasks = [...nativeMedia.bindings.values()].some(binding => Boolean(binding.mask)) || Boolean(nativeMedia.nativeMasks?.size);
+      if (nativeMedia.source.kind === 'local') {
+        const localFiles = nativeMedia.source.files;
+        imageFiles = new Map([...nativeMedia.bindings].flatMap(([name, binding]) => {
+          const file = localFiles.get(binding.sourceImagePath);
+          return file ? [[name, file], ['images/' + name, file]] as [string, File][] : [];
+        }));
+      }
+    }
 
     deps.setUrlProgress({ percent: mapProgress(35), message: 'Computing statistics...' });
 
@@ -608,6 +643,8 @@ export async function processFileDropzoneFiles(
     deps.setDroppedFiles(files);
     deps.clearSplatPsnr?.();
     const committedFiles: LoadedFiles = {
+      cameraImport,
+      nativeMedia,
       camerasFile,
       imagesFile,
       points3DFile,
@@ -625,6 +662,20 @@ export async function processFileDropzoneFiles(
 
     deps.setReconstruction(reconstruction);
     deps.resetView();
+    if (cameraImport) {
+      const omitted = cameraImport.metadataFrameCount - cameraImport.bindings.size;
+      const skippedSettings=cameraImport.diagnostics.some(diagnostic=>diagnostic.code==='UNAVAILABLE_SETTINGS');
+      deps.addNotification(omitted || skippedSettings ? 'warning' : 'info', `Imported ${cameraImport.bindings.size} posed photos (${cameraImport.selection.schema})${omitted ? `; ${omitted} missing or unregistered views omitted` : ''}${skippedSettings ? '; optional view settings skipped' : ''}.`, 7000);
+    }
+    if (nativeMedia?.diagnostics.length) {
+      const ambiguous = nativeMedia.diagnostics.filter(item => item.code.startsWith('AMBIGUOUS')).length;
+      if (ambiguous) deps.addNotification('warning', `${ambiguous} ambiguous photo or mask paths were left unbound. Provide an image_mapping.csv to identify the original photos.`, 7000);
+      const missing = nativeMedia.diagnostics.filter(item => item.code === 'MISSING_IMAGE').length;
+      if (missing) {
+        const maskHint = hasMasks ? ' Masks are matched; choose Show: Mask in the gallery to view them.' : '';
+        deps.addNotification('warning', `Loaded camera geometry; ${nativeMedia.bindings.size}/${nativeMedia.metadataFrameCount} photos matched.${maskHint} Supply the missing images or an image_mapping.csv to enable all photo previews and photo export.`, 9000);
+      }
+    }
 
     logger.info(
       `Loaded: ${parseResult.cameras.size} cameras, ${parseResult.images.size} images, ${pointCount.toLocaleString()} points`

@@ -44,6 +44,13 @@ import { detectTouchDevice } from './useIsTouchDevice';
 import { fetchDatasetResource } from '../utils/fetchDatasetResource';
 import { discoverBucketManifest } from '../features/bucketStorage/discovery';
 import { assertStorageReadAccess } from '../features/storageAccess';
+import { readBoundedResponseBytes } from '../dataset/importers/sourceAccess';
+import { isNerfTransforms } from '../dataset/importers/nerfTransforms';
+import { isOpenSfm, isOpenMvg } from '../dataset/importers/sfmFormats';
+import { isGaussianCameraJson } from '../dataset/importers/gaussianCameraJson';
+import { MAX_CAMERA_METADATA_BYTES } from '../dataset/importers/types';
+import { rememberNativeMediaSource } from '../dataset/nativeMedia';
+import { nativeSceneRoot } from '../utils/colmapPathResolver';
 
 type FetchUrl = (url: string, init?: RequestInit) => Promise<Response>;
 type FetchManifestFile = (
@@ -309,12 +316,24 @@ export async function discoverHuggingFaceSplatPath(
 
 export interface HuggingFaceLayout {
   colmap: HuggingFaceColmapPaths | null;
+  /** Manifest-ready image root; absolute when sibling media use a different base. */
   imagesPath: string | null;
-  /** Per-image override map (COLMAP name -> dataset-relative path), or null. */
+  /** Per-image overrides relative to mediaBaseUrl (or absolute resource URLs), or null. */
   imageNameToPath: Record<string, string> | null;
   /** Combined cameras+images+points3D size from the tree, or null if any is unknown. */
   colmapTotalBytes: number | null;
+  /** Media listing and model directory are relative to this source, which may be the owning scene. */
+  mediaBaseUrl: string;
+  mediaModelDir: string;
+  filePaths: readonly string[];
 }
+
+const nativeManifestMedia = new WeakMap<ColmapManifest, {
+  baseUrl: string;
+  modelDir: string;
+  paths: readonly string[];
+  overrides?: Readonly<Record<string, string>>;
+}>();
 
 function dirnameOf(path: string): string {
   const slash = path.lastIndexOf('/');
@@ -323,8 +342,9 @@ function dirnameOf(path: string): string {
 
 /**
  * Discover a HuggingFace dataset's COLMAP model location and images directory in
- * a single (paginated) tree read. Returns null when the base URL is not a
- * HuggingFace dataset.
+ * a paginated tree read. A URL scoped to a conventional model container also
+ * reads its owning scene for sibling media, without changing the selected model.
+ * Returns null when the base URL is not a HuggingFace dataset.
  */
 export async function discoverHuggingFaceLayout(
   baseUrl: string,
@@ -339,28 +359,61 @@ export async function discoverHuggingFaceLayout(
   const entries = await fetchHuggingFaceTreeEntries(request.apiUrl, fetchImpl);
   const colmap = getHuggingFaceColmapPaths(entries, request.treePath);
   const colmapTotalBytes = colmap ? getHuggingFaceColmapTotalBytes(entries, request.treePath, colmap) : null;
-  const modelDir = colmap ? dirnameOf(colmap.cameras) : undefined;
-  const imagesPath = getHuggingFaceImagesPath(entries, request.treePath, modelDir);
+  let mediaBaseUrl = baseUrl;
+  let mediaTreePath = request.treePath;
+  let mediaModelDir = colmap ? dirnameOf(colmap.cameras) : '';
+  let mediaEntries = entries;
+  const sceneRoot = nativeSceneRoot(request.treePath);
+  if (colmap && sceneRoot !== request.treePath) {
+    // Remove only recognised model containers (e.g. sparse/0 or triangulated_model).
+    // Never climb an arbitrary named scene or reselect a model from its siblings.
+    const modelPrefix = request.treePath.slice(sceneRoot ? sceneRoot.length + 1 : 0);
+    const sceneUrl = new URL(baseUrl);
+    const segments = sceneUrl.pathname.split('/').filter(Boolean);
+    sceneUrl.pathname = '/' + segments.slice(0, -modelPrefix.split('/').length).join('/');
+    const sceneRequest = getHuggingFaceDatasetTreeRequest(sceneUrl.href);
+    if (sceneRequest) {
+      try {
+        const sceneEntries = await fetchHuggingFaceTreeEntries(sceneRequest.apiUrl, fetchImpl);
+        // Retain the selected subtree even if an eventually consistent parent listing omits it.
+        const byPath = new Map(entries.map(entry => [entry.path, entry]));
+        for (const entry of sceneEntries) if (!byPath.has(entry.path)) byPath.set(entry.path, entry);
+        mediaEntries = [...byPath.values()];
+        mediaBaseUrl = sceneUrl.href;
+        mediaTreePath = sceneRequest.treePath;
+        mediaModelDir = [modelPrefix, mediaModelDir].filter(Boolean).join('/');
+      } catch {
+        // Optional sibling discovery must not prevent the explicitly selected model loading.
+      }
+    }
+  }
+  const discoveredImagesPath = getHuggingFaceImagesPath(mediaEntries, mediaTreePath, mediaModelDir);
+  const imagesPath = discoveredImagesPath !== null && mediaBaseUrl !== baseUrl
+    ? joinManifestUrlPath(mediaBaseUrl, discoveredImagesPath) : discoveredImagesPath;
 
   // Run the pluggable image-source resolver for special conventions (e.g. an
   // image_mapping.csv that renamed images before COLMAP). Only the per-image
   // override map is taken here; the base directory stays sourced from
   // getHuggingFaceImagesPath so there is a single source of truth for it.
-  const relativePaths = getRelativeHuggingFaceTreePaths(entries, request.treePath);
+  const relativePaths = getRelativeHuggingFaceTreePaths(mediaEntries, mediaTreePath);
   const fetchText = async (relativePath: string): Promise<string | null> => {
     try {
-      const response = await fetchImpl(joinManifestUrlPath(baseUrl, relativePath));
-      return response.ok ? await response.text() : null;
+      const response = await fetchImpl(joinManifestUrlPath(mediaBaseUrl, relativePath));
+      if (!response.ok) { await response.body?.cancel().catch(() => {}); return null; }
+      const chunks = await readBoundedResponseBytes(response, relativePath, MAX_CAMERA_METADATA_BYTES);
+      const decoder = new TextDecoder();
+      return chunks.map(chunk => decoder.decode(chunk, { stream: true })).join('') + decoder.decode();
     } catch {
       return null;
     }
   };
   const imageSource = await resolveImageSource(
-    { filePaths: relativePaths, modelDir: modelDir ?? '', fetchText },
+    { filePaths: relativePaths, modelDir: mediaModelDir, fetchText },
     IMAGE_SOURCE_STRATEGIES
   );
 
-  return { colmap, colmapTotalBytes, imagesPath, imageNameToPath: imageSource?.imageNameToPath ?? null };
+  const imageNameToPath = imageSource?.imageNameToPath ?? null;
+  return { colmap, colmapTotalBytes, imagesPath, imageNameToPath, mediaBaseUrl, mediaModelDir, filePaths: relativePaths };
 }
 
 /**
@@ -462,8 +515,13 @@ export async function withDiscoveredColmapPaths(
       deps.log?.(
         `[URL Loader] Discovered per-image path mapping for ${Object.keys(layout.imageNameToPath).length} images`
       );
-      result = { ...result, imageNameToPath: layout.imageNameToPath };
+      const imageNameToPath = layout.mediaBaseUrl !== manifest.baseUrl
+        ? Object.fromEntries(Object.entries(layout.imageNameToPath).map(([name, path]) => [name, joinManifestUrlPath(layout.mediaBaseUrl, path)]))
+        : layout.imageNameToPath;
+      result = { ...result, imageNameToPath };
     }
+    nativeManifestMedia.set(result, { baseUrl: layout.mediaBaseUrl, modelDir: layout.colmap ? layout.mediaModelDir : dirnameOf(result.files.cameras),
+      paths: layout.filePaths, overrides: layout.imageNameToPath ?? undefined });
     return result;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -665,6 +723,11 @@ async function withDiscoveredRemoteSplats(
     deps.log?.(`[URL Loader] Hugging Face splat discovery skipped: ${message}`);
   }
 
+  // A Hugging Face resolve URL serves files, never an HTML directory index.
+  // Its tree API is authoritative; probing the folder creates a spurious CORS
+  // error on otherwise readable native models with no splats.
+  if (getHuggingFaceDatasetTreeRequest(manifest.baseUrl)) return manifest;
+
   try {
     const candidates = await discoverDirectoryListingSplatPaths(manifest.baseUrl, {
       fetchImpl: deps.fetchImpl,
@@ -707,10 +770,14 @@ export async function discoverManifestSplatCatalog(
   return catalog;
 }
 
+export interface CameraDatasetDocument { kind: 'camera-dataset'; metadataFile: File }
+export function fetchUrlManifest(manifestUrl: string, deps: FetchUrlManifestDeps): Promise<ColmapManifest>;
+export function fetchUrlManifest(manifestUrl: string, deps: FetchUrlManifestDeps, allowCamera: true): Promise<ColmapManifest | CameraDatasetDocument>;
 export async function fetchUrlManifest(
   manifestUrl: string,
-  deps: FetchUrlManifestDeps
-): Promise<ColmapManifest> {
+  deps: FetchUrlManifestDeps,
+  allowCamera = false,
+): Promise<ColmapManifest | CameraDatasetDocument> {
   const fetchImpl = deps.fetchImpl ?? defaultFetchUrl;
   deps.setUrlProgress({ percent: 2, message: 'Fetching manifest...' });
 
@@ -728,7 +795,15 @@ export async function fetchUrlManifest(
     throw error;
   }
 
-  const data = await response.json();
+  const chunks = allowCamera ? await readBoundedResponseBytes(response, getFilenameFromUrl(manifestUrl), MAX_CAMERA_METADATA_BYTES) : null;
+  const metadataFile = chunks ? new File(chunks, getFilenameFromUrl(manifestUrl)) : null;
+  const decoder = new TextDecoder();
+  const data: unknown = chunks ? JSON.parse((chunks.map(chunk => decoder.decode(chunk, { stream: true })).join('') + decoder.decode()).replace(/^\uFEFF/, '')) : await response.json();
+  // A manifest-shaped document must pass manifest validation, even if it also contains frames.
+  if (metadataFile && !(data && typeof data === 'object' && 'files' in data)
+    && (isNerfTransforms(data) || isOpenSfm(data) || isOpenMvg(data) || isGaussianCameraJson(data))) {
+    return { kind: 'camera-dataset', metadataFile };
+  }
   const result = validateColmapManifest(data);
   if (!result.success) {
     const error: UrlLoadError = {
@@ -943,5 +1018,26 @@ export async function fetchManifestColmapFiles(
     }
   }
 
+  const media = nativeManifestMedia.get(manifest);
+  // Explicit manifest lists and overrides retain their original URL scope when
+  // inferred sibling media uses the broader scene as its source.
+  const mediaPath = (path: string) => media && media.baseUrl !== manifest.baseUrl
+    ? joinManifestUrlPath(manifest.baseUrl, path) : path;
+  const manifestOverrides = manifest.imageNameToPath && Object.fromEntries(Object.entries(manifest.imageNameToPath)
+    .map(([name, path]) => [name, mediaPath(path)]));
+  if (!manifest.skipImages) rememberNativeMediaSource(files, {
+    source: { kind: 'url', baseUrl: joinManifestUrlPath(media?.baseUrl ?? manifest.baseUrl, '') },
+    paths: media?.paths, imagePaths: manifest.images?.map(mediaPath), modelDir: media?.modelDir ?? dirnameOf(manifest.files.cameras),
+    // Keep inferred relative mappings relative so the native index still checks
+    // their physical existence; absolutizing them would bypass that check.
+    overrides: media?.overrides ?? manifestOverrides,
+    declaredImageRoot: joinManifestUrlPath(manifest.baseUrl, manifest.imagesPath ?? 'images/').replace(/\/?$/, '/'),
+    // A discovered sibling prefix is inference; the full listing must bind masks to the resolved photos.
+    declaredMaskRoot: media || manifest.masksPath === undefined ? undefined : joinManifestUrlPath(manifest.baseUrl, manifest.masksPath).replace(/\/?$/, '/'),
+    maskOverrides: manifest.maskNameToPath && Object.fromEntries(Object.entries(manifest.maskNameToPath)
+      .map(([name, path]) => [name, joinManifestUrlPath(manifest.baseUrl, path)])),
+    maskRole: manifest.maskRole,
+    maskPaths: manifest.masks?.map(mediaPath),
+  });
   return files;
 }

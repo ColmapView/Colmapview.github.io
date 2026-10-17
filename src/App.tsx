@@ -21,6 +21,7 @@ import { decodeShareData } from './hooks/useUrlState';
 import { detectTouchDevice } from './hooks/useIsTouchDevice';
 import { TOUCH_BREAKPOINTS } from './theme/sizing';
 import { appLogger } from './utils/logger';
+import { CameraDatasetSelectionHost } from './components/CameraDatasetSelectionHost';
 import { runStartupLoadPlan } from './appStartupLoad';
 import {
   APP_EMBED_MODE_LOG_MESSAGE,
@@ -89,6 +90,7 @@ function App() {
         <HotkeyHelpModal />
         <SplatPickerModal />
         <ConfirmationHost />
+        <CameraDatasetSelectionHost />
         <MouseTooltip />
         <NotificationContainer />
       </HotkeysProvider>

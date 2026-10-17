@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 describe('ImageDetailModalFrames', () => {
-  it('renders the touch frame and wires mobile navigation controls', () => {
+  it.each([false, true])('renders the touch frame and wires mobile navigation controls (mask-only=%s)', maskOnly => {
     const onNext = vi.fn();
     const image = buildImage({ imageId: 7, name: 'touch-main.jpg' });
     const camera = buildCamera();
@@ -38,7 +38,8 @@ describe('ImageDetailModalFrames', () => {
         image={image}
         imageContainerRef={createRef<HTMLDivElement>()}
         imageIds={[7, 8]}
-        imageSrc={IMAGE_SRC}
+        imageSrc={maskOnly ? null : IMAGE_SRC}
+        maskSrc={maskOnly ? MASK_SRC : null}
         isMarkedForDeletion={false}
         isMatchViewMode={false}
         matchLineOpacity={0.7}
@@ -66,7 +67,10 @@ describe('ImageDetailModalFrames', () => {
     );
 
     expect(screen.getByText('touch-main.jpg')).toBeVisible();
-    expect(screen.getByRole('img', { name: 'touch-main.jpg' })).toBeVisible();
+    if (maskOnly) {
+      expect(screen.getByAltText('mask')).toHaveStyle({ opacity: '1' });
+      expect(screen.getByText('Mask only · original image unavailable')).toBeVisible();
+    } else expect(screen.getByRole('img', { name: 'touch-main.jpg' })).toBeVisible();
     expect(screen.getByText('1 / 2')).toBeVisible();
 
     fireEvent.click(screen.getByRole('button', { name: /next/i }));

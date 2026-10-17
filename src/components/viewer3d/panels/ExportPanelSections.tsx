@@ -148,23 +148,22 @@ export const ExportMediaSection = memo(function ExportMediaSection({
                 Download Images
               </button>
             )}
-            {hasMasks && (
-              isExportingMasks ? (
-                <ExportProgress label="masks" progress={maskExportProgress} onCancel={onCancelMasks} />
-              ) : (
-                <button
-                  onClick={onExportMasks}
-                  className={styles.actionButton}
-                >
-                  Download Masks
-                </button>
-              )
-            )}
           </div>
         </>
       ) : (
         <div className="text-ds-secondary text-xs">
           No images available
+        </div>
+      )}
+      {hasMasks && (
+        <div className="flex flex-col gap-2 mt-2">
+          {isExportingMasks ? (
+            <ExportProgress label="masks" progress={maskExportProgress} onCancel={onCancelMasks} />
+          ) : (
+            <button onClick={onExportMasks} className={styles.actionButton}>
+              Download Masks
+            </button>
+          )}
         </div>
       )}
     </>

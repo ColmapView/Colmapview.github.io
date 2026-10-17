@@ -102,18 +102,40 @@ for (const format of ['text', 'binary'] as const) {
 }
 
 test('clearing a pending real worker load prevents snapshot installation', async ({ page }) => {
+  // Hold a real load message, avoiding browser-dependent routing of worker module imports.
+  await page.addInitScript(() => {
+    let released = false;
+    const pending: (() => void)[] = [];
+    const gate = { held: false, release: () => {
+      released = true;
+      for (const submit of pending.splice(0)) { try { submit(); } catch { /* The cleared worker is terminated. */ } }
+    } };
+    Reflect.set(window, '__colmapWorkerLoadGate', gate);
+    window.Worker = new Proxy(window.Worker, {
+      construct(Target, args) {
+        const worker = Reflect.construct(Target, args) as Worker;
+        if (String(args[0]).includes('reconstruction.worker')) {
+          const post = worker.postMessage;
+          Object.defineProperty(worker, 'postMessage', { value: (...messages: unknown[]) => {
+            const message = messages[0] as { operation?: string } | undefined;
+            const submit = () => Reflect.apply(post, worker, messages);
+            if (!released && message?.operation === 'load') { gate.held = true; pending.push(submit); }
+            else submit();
+          } });
+        }
+        return worker;
+      },
+    });
+  });
   await page.goto('/');
-  // Let the native worker be created, but hold its parser module so initialization cannot finish.
-  let release: () => void = () => undefined;
-  const held = new Promise<void>(resolve => { release = resolve; });
-  await page.route('**/reconstructionAuthority.ts*', async route => { await held; await route.continue().catch(() => undefined); });
-  const requested = page.waitForRequest(request => request.url().includes('reconstructionAuthority.ts'), { timeout: 10_000 });
   const created = page.waitForEvent('worker', {
     predicate: worker => worker.url().includes('reconstruction.worker'), timeout: 10_000,
   });
   try {
     await loadTestDataset(page);
-    const [, worker] = await Promise.all([requested, created]);
+    const [, worker] = await Promise.all([
+      expect.poll(() => page.evaluate(() => Reflect.get(window, '__colmapWorkerLoadGate')?.held)).toBe(true), created,
+    ]);
     // Files and the scene remain staged until parsing succeeds; they are not a load-start signal.
     expect(await page.evaluate(async () => {
       const storePath = '/src/store/reconstructionStore.ts';
@@ -135,8 +157,7 @@ test('clearing a pending real worker load prevents snapshot installation', async
       return { files: state.loadedFiles, reconstruction: state.reconstruction, snapshot: state.wasmReconstruction, loading: state.urlLoading };
     })).toEqual({ files: null, reconstruction: null, snapshot: null, loading: false });
   } finally {
-    release();
-    await page.unroute('**/reconstructionAuthority.ts*');
+    await page.evaluate(() => Reflect.get(window, '__colmapWorkerLoadGate')?.release()).catch(() => undefined);
   }
   await loadTestDataset(page);
   await expect(page.getByText('photo.jpg', { exact: true }).first()).toBeVisible({ timeout: 45000 });

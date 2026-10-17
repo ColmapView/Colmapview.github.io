@@ -75,6 +75,7 @@ describe('URL input modal view model', () => {
   it('keeps supported URL help sections stable', () => {
     expect(URL_INPUT_DESCRIPTION).toContain('Google Drive ZIP or TAR link');
     expect(URL_INPUT_HELP_SECTIONS.map((section) => section.title)).toEqual([
+      'Camera datasets',
       'ZIP Files',
       'Google Drive',
       'Cloud Storage URLs',
@@ -84,7 +85,7 @@ describe('URL input modal view model', () => {
       'CORS Requirements',
     ]);
     expect(URL_INPUT_HELP_SECTIONS[0].items[0]).toMatchObject({
-      code: 'https://example.com/reconstruction.zip',
+      code: 'https://example.com/scene/transforms.json',
     });
     expect(URL_INPUT_HELP_SECTIONS.at(-1)).toMatchObject({
       tone: 'warning',

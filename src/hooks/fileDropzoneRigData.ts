@@ -48,10 +48,10 @@ export async function loadOptionalRigData({
 
   try {
     const [rigs, frames] = await Promise.all([
-      rigsFile.name.endsWith('.bin')
+      rigsFile.name.toLowerCase().endsWith('.bin')
         ? rigsFile.arrayBuffer().then(parsers.parseRigsBinary)
         : rigsFile.text().then(parsers.parseRigsText),
-      framesFile.name.endsWith('.bin')
+      framesFile.name.toLowerCase().endsWith('.bin')
         ? framesFile.arrayBuffer().then(parsers.parseFramesBinary)
         : framesFile.text().then(parsers.parseFramesText),
     ]);

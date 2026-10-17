@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-17
+
+### Added
+
+- Import supported NeRF/Blender, Nerfstudio, Gaussian camera JSON, LLFF, DTU camera NPZ, RealityCapture XMP, OpenSfM, OpenMVG and Bundler camera datasets with their photographs.
+- Export camera datasets as COLMAP, COLMAP with original images, or COLMAP with images and validated masks. Camera-only native models can load without a sparse point cloud.
+
+### Fixed
+
+- Find photographs and masks above nested COLMAP model folders in local folders, archives and Hugging Face datasets while retaining the selected model.
+- Keep image names, explicit mappings, masks and scene ownership consistent across loading and export. Cancelled or replaced loads cannot populate a newer scene.
+- Preserve mask display and downloads when original photographs are unavailable, and clarify unsupported RGB errors.
+- Update the privacy disclosure for camera metadata and source-directory requests, and remove outdated statements about analytics on the current release.
+
 ## [0.16.14] - 2026-10-15
 
 ### Fixed

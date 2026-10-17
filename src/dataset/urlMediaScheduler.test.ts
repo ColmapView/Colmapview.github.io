@@ -10,6 +10,15 @@ const ok = () => buildResponse({ blob: async () => new Blob(['bytes']) });
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe('URL media scheduler', () => {
+  it('bounds actual bytes and releases admission after a hidden-length oversized response',async()=>{
+    const scheduler=new UrlMediaScheduler({perPage:1});const cancel=vi.fn();
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({start(controller){controller.enqueue(new Uint8Array(6));controller.enqueue(new Uint8Array(6));},cancel}))).mockResolvedValueOnce(new Response('next')));
+    const tooBig=scheduler.transfer('https://budget.test/a',{...options(),maxBytes:10});
+    const next=scheduler.transfer('https://budget.test/b',options());
+    await expect(tooBig).resolves.toMatchObject({kind:'failure',message:expect.stringContaining('budget')});
+    expect(cancel).toHaveBeenCalled();await expect(next).resolves.toMatchObject({kind:'success'});
+    expect(scheduler.getStats()).toMatchObject({active:0,queued:0});
+  });
   it.each(['headers', 'body'])('releases a stalled %s transfer so queued media can load', async (phase) => {
     vi.useFakeTimers();
     const scheduler = new UrlMediaScheduler({ perPage: 1 });

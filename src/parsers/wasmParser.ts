@@ -12,6 +12,7 @@ import { parseCameraModelId } from '../utils/cameraModelPolicy';
 import { appLogger } from '../utils/logger';
 import { parseSensorType } from '../utils/sensorTypePolicy';
 import { createWasmReconstruction, WasmReconstructionWrapper } from '../wasm';
+import { parseImagesBinary } from './images';
 
 /**
  * Parse COLMAP files using WASM module
@@ -33,7 +34,7 @@ export async function parseWithWasm(
   let wasm: WasmReconstructionWrapper | null = null;
 
   // Text/PLY fallbacks do not need to initialize a WASM heap merely to decline parsing.
-  if (!camerasFile.name.endsWith('.bin') || !imagesFile.name.endsWith('.bin') || !points3DFile.name.endsWith('.bin')) {
+  if (!camerasFile.name.toLowerCase().endsWith('.bin') || !imagesFile.name.toLowerCase().endsWith('.bin') || !points3DFile.name.toLowerCase().endsWith('.bin')) {
     return null;
   }
 
@@ -46,7 +47,7 @@ export async function parseWithWasm(
 
     // Also check if rig files are text (will fall back to JS for those specifically)
     const canParseRigsWithWasm = rigsFile && framesFile &&
-      rigsFile.name.endsWith('.bin') && framesFile.name.endsWith('.bin');
+      rigsFile.name.toLowerCase().endsWith('.bin') && framesFile.name.toLowerCase().endsWith('.bin');
 
     const startTime = performance.now();
 
@@ -90,13 +91,16 @@ export async function parseWithWasm(
     // Get numPoints2D per image (always available, even in lite mode)
     // We skip copying the full 2D point data to save JS heap memory (hybrid approach)
     const numPoints2DPerImage = wasm.getNumPoints2DPerImage();
+    // WASM render arrays are float32. Preserve original double-precision poses for
+    // edits and native export while still leaving observations lazy in WASM.
+    const originalImages = imagesBuffer.byteLength >= 8 ? parseImagesBinary(imagesBuffer, true) : undefined;
 
-    const images = new Map<number, ColmapImage>();
-    const allImages = wasm.getAllImageInfos();
+    const images = originalImages ?? new Map<number, ColmapImage>();
+    const allImages = originalImages ? [] : wasm.getAllImageInfos();
     for (let imgIdx = 0; imgIdx < allImages.length; imgIdx++) {
       const img = allImages[imgIdx];
-      const q = img.quaternion || [1, 0, 0, 0];
-      const t = img.translation || [0, 0, 0];
+      const q = originalImages?.get(img.imageId)?.qvec ?? img.quaternion ?? [1, 0, 0, 0];
+      const t = originalImages?.get(img.imageId)?.tvec ?? img.translation ?? [0, 0, 0];
 
       // Get numPoints2D count from WASM array
       const numPoints2D = numPoints2DPerImage && imgIdx < numPoints2DPerImage.length
