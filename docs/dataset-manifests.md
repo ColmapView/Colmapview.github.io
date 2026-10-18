@@ -109,18 +109,18 @@ prefix and bind them to the catalog generation so manifests, settings, launch
 links and displayed statistics update together. Activation should require the
 checks above, rather than upgrading every listed companion automatically.
 
-The October 18 audit identified 16 published scene entries with empty native
-point files and browser-readable nonempty XYZ PLYs: 14 BMVS variants and two
-blur-slam variants. Seven BMVS `sparse_mast3r` entries also need an explicit sibling
-photo scope. These are candidates for this workflow, not 16 fully validated
-combined scenes; the second blur-slam variant's photo association is unresolved.
+The October 18 implementation qualifies 16 published scenes through this workflow:
+14 BMVS variants and two blur-slam variants. All imported in Chromium, rendered
+their selected point sets and exported complete COLMAP + original-photo packages.
+Independent PyCOLMAP reads matched calibration and poses; complete binary checks
+matched every point coordinate and RGB value, with unchanged original photo hashes.
+The seven BMVS `sparse_mast3r` variants use explicit sibling photo/mask mappings.
+Both blur-slam variants have byte-identical cameras, poses and PLY clouds, establishing
+the explicit peer-folder photo association for the second variant.
 
-One local browser prototype uses the pinned BMVS revision
-`40fd1370ea9c87e6fed2fb91ebd94785fb632352`, the exact model in
-`large_overlap/basketball/dense/sparse`, the sibling `images/` folder and three
-explicit `mask/` mappings. It loads three camera definitions, three poses and
-350,710 PLY points; all three photographs and masks decode at 768 by 576 pixels
-and display in the gallery. Saved JSON settings retain the zero track threshold
-and frame the visible cloud. This validates the existing manifest contract and
-the local settings fix. The prototype's complete COLMAP export/reload and the
-remaining candidate scenes still need validation before updating Hub launch links.
+The checked manifests cover 496 posed photo instances, 13,502,936 points and 42
+displayable masks. Mask semantics remain unverified, so they are not qualified as
+COLMAP feature masks. A complete catalog comparison preserved all native evidence
+and left the other 5,221 scene records unchanged. The Hub's `data/scene-manifests.json`
+contains the revision-bound selections, file hashes, overview settings, viewer
+commit and export receipts used to generate each immutable manifest.
