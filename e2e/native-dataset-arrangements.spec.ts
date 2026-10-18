@@ -15,6 +15,8 @@ const layouts = [
   { label: 'colmap component with corrected images', model: 'scene/colmap/0', rgb: 'scene/corrected/images', mask: 'scene/corrected/masks' },
   { label: 'photos inside the model directory', model: 'scene/reference', rgb: 'scene/reference/images', mask: 'scene/reference/masks' },
   { label: 'custom calibration and shared DSLR images', model: 'scene/dslr_calibration_undistorted', rgb: 'scene/images/dslr', mask: 'scene/masks/dslr' },
+  { label: 'ETH3D distorted calibration and sibling photographs', model: 'scene/dslr_calibration_jpg', rgb: 'scene/images', mask: 'scene/masks', namePrefix: 'dslr_images/', directUrl: true },
+  { label: 'ETH3D undistorted calibration and sibling photographs', model: 'scene/dslr_calibration_undistorted', rgb: 'scene/images', mask: 'scene/masks', namePrefix: 'dslr_images_undistorted/', directUrl: true },
   { label: 'resized image directory and singular mask', model: 'scene/sparse', rgb: 'scene/images_4', mask: 'scene/mask', suffix: false },
   { label: 'RGB frames and foreground masks', model: 'scene/model', rgb: 'scene/rgb', mask: 'scene/fg_masks', suffix: false },
   { label: 'renamed photos with an explicit CSV', model: 'scene/colmap', rgb: 'scene/raw/camera one', mask: 'scene/masks', mapping: true },
@@ -30,7 +32,7 @@ async function fixture(page: Page, layout: typeof layouts[number]) {
     const context = canvas.getContext('2d')!; context.fillStyle = 'blue'; context.fillRect(0, 0, 8, 4);
     return canvas.toDataURL('image/png').split(',')[1];
   });
-  const names = ['cam_1/a.png', 'cam_2/a.png'];
+  const names = ['cam_1/a.png', 'cam_2/a.png'].map(name => (layout.namePrefix ?? '') + name);
   const images = new Map(names.map((name, i) => [i + 1, { imageId: i + 1, cameraId: 1, name,
     qvec: [1, 0, 0, 0] as [number, number, number, number], tvec: [i + 1, 2, 3] as [number, number, number], points2D: [] }]));
   const files = [binary(layout.model + '/cameras.bin', writeCamerasBinary(new Map([[1, { cameraId: 1, modelId: 1, width: 8, height: 4, params: [5, 6, 4, 2] }]]))),
@@ -72,7 +74,7 @@ for (const layout of layouts) for (const source of ['folder', 'zip', 'hf-url'] a
         const file = data.files.find(file => file.relativePath === path);
         return route.fulfill(file ? { status: 200, body: Buffer.from(file.base64, 'base64'), headers: { 'Access-Control-Allow-Origin': '*' } } : { status: 404 });
       });
-      await page.goto('/?url=' + encodeURIComponent(base));
+      await page.goto('/?url=' + encodeURIComponent(base + (layout.directUrl ? layout.model : '')));
     } else await dropDatasetFiles(page, source === 'folder' ? data.files : [{ relativePath: 'layouts.zip', name: 'layouts.zip', base64: fixtureZip(data.files).toString('base64') }]);
     await expect.poll(() => loaded(page)).toEqual({ native: 'colmap', count: 2, error: null });
     const media = await page.evaluate(async names => {

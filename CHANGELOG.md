@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-10-17
+
+### Fixed
+
+- Discover sibling photographs and masks for ETH3D calibration-folder links, retaining the exact selected COLMAP model and original registered image paths.
+- Keep distorted and undistorted photo representations separate during automatic native media matching, including local folders and archives.
+
 ## [0.17.0] - 2026-10-17
 
 ### Added

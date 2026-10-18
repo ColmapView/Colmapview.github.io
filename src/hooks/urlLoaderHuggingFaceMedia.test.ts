@@ -13,7 +13,7 @@ const entry = (path: string) => ({ type: 'file', path: `${scene}/${path}`, size:
 const model = (dir: string) => ['cameras.bin', 'images.bin', 'points3D.bin'].map(file => entry(`${dir}/${file}`));
 const json = (data: unknown, headers?: HeadersInit) => new Response(JSON.stringify(data), { headers });
 
-function source(modelDir: string, extraPaths: string[], options: { failParent?: boolean; parentNext?: boolean } = {}) {
+function source(modelDir: string, extraPaths: string[], options: { failParent?: boolean; parentNext?: boolean; peerModel?: boolean } = {}) {
   const base = joinManifestUrlPath(sceneBase, modelDir);
   const modelApi = getHuggingFaceDatasetTreeRequest(base)!.apiUrl;
   const sceneApi = getHuggingFaceDatasetTreeRequest(sceneBase)!.apiUrl;
@@ -22,7 +22,7 @@ function source(modelDir: string, extraPaths: string[], options: { failParent?: 
     if (url === sceneApi) {
       if (options.failParent) return new Response('unavailable', { status: 503 });
       if (options.parentNext) return json(model(modelDir), { Link: `<${sceneApi}&cursor=next>; rel="next"` });
-      return json([...model(modelDir), ...model('other/sparse/0'), ...extraPaths.map(entry)]);
+      return json([...model(modelDir), ...(options.peerModel === false ? [] : model('other/sparse/0')), ...extraPaths.map(entry)]);
     }
     if (url === sceneApi + '&cursor=next') return json(extraPaths.map(entry));
     return new Response('missing', { status: 404 });
@@ -30,16 +30,66 @@ function source(modelDir: string, extraPaths: string[], options: { failParent?: 
   return { base, fetchImpl, modelApi, sceneApi };
 }
 
-async function mediaContext(base: string, fetchImpl: (url: string) => Promise<Response>) {
+async function mediaContext(base: string, fetchImpl: (url: string) => Promise<Response>, imageName = name) {
   const manifest = await withDiscoveredColmapPaths(createDefaultManifest(base), { fetchImpl });
   const fetchFile = vi.fn(async (_base: string, path: string) => buildFile(path));
   const files = await fetchManifestColmapFiles(manifest, { fetchFile, setUrlProgress: vi.fn() });
   const context = await prepareNativeMedia(files, files.get('sparse/0/cameras.bin')!, new Map([[1, buildCamera()]]),
-    new Map([[1, buildImage({ name })]]));
+    new Map([[1, buildImage({ name: imageName })]]));
   return { manifest, fetchFile, context };
 }
 
 describe('Hugging Face URLs scoped to native models', () => {
+  it.each(['jpg', 'undistorted'])('finds sibling ETH3D %s photographs from both model and scene URLs', async variant => {
+    const modelDir = `dslr_calibration_${variant}`;
+    const photoDir = variant === 'jpg' ? 'dslr_images' : 'dslr_images_undistorted';
+    const otherDir = variant === 'jpg' ? 'dslr_images_undistorted' : 'dslr_images';
+    const imageName = `${photoDir}/DSC_6511.JPG`;
+    const photo = `images/${imageName}`, mask = `masks/${imageName}.png`;
+    const { base, fetchImpl, modelApi, sceneApi } = source(modelDir,
+      [photo, mask, `images/${otherDir}/DSC_6511.JPG`, `other/images/${imageName}`], { peerModel: false });
+    for (const url of [base, sceneBase]) {
+      const { manifest, context, fetchFile } = await mediaContext(url, fetchImpl, imageName);
+      expect(manifest.baseUrl).toBe(url);
+      expect(manifest.files.cameras).toBe(url === base ? 'cameras.bin' : `${modelDir}/cameras.bin`);
+      expect(manifest.imagesPath).toBe(url === base ? sceneBase + '/images/' : 'images/');
+      expect(context?.source).toEqual({ kind: 'url', baseUrl: sceneBase + '/' });
+      expect(context?.selection.metadataPath).toBe(modelDir);
+      expect(context?.bindings.get(imageName)).toMatchObject({ sourceImagePath: photo, mask: { path: mask, role: 'validity' } });
+      expect(context?.diagnostics).toEqual([]);
+      expect(fetchFile.mock.calls[0].slice(0, 2)).toEqual([url, manifest.files.cameras]);
+    }
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([modelApi, sceneApi, sceneApi]);
+  });
+
+  it('keeps the requested text calibration when its sibling has a binary model', async () => {
+    const modelDir = 'dslr_calibration_jpg';
+    const { base, fetchImpl, modelApi, sceneApi } = source(modelDir, []);
+    const selected = ['cameras.txt', 'images.txt', 'points3D.txt'].map(file => entry(`${modelDir}/${file}`));
+    const fetchTree = (url: string) => url === modelApi ? Promise.resolve(json(selected))
+      : url === sceneApi ? Promise.resolve(json([...model('dslr_calibration_undistorted'), entry('images/dslr_images/DSC_6511.JPG')])) : fetchImpl(url);
+    const layout = await discoverHuggingFaceLayout(base, { fetchImpl: fetchTree });
+    expect(layout?.colmap).toMatchObject({ cameras: 'cameras.txt', images: 'images.txt', points3D: 'points3D.txt' });
+    expect(layout?.colmapTotalBytes).toBe(300);
+    expect(layout?.mediaModelDir).toBe(modelDir);
+    expect(layout?.imagesPath).toBe(sceneBase + '/images/');
+    expect(layout?.filePaths).toContain(modelDir + '/cameras.txt');
+  });
+
+  it.each(['jpg', 'undistorted'])('retains %s representation policy when the parent listing fails', async variant => {
+    const modelDir = `dslr_calibration_${variant}`;
+    const photoDir = variant === 'jpg' ? 'dslr_images' : 'dslr_images_undistorted';
+    const otherDir = variant === 'jpg' ? 'dslr_images_undistorted' : 'dslr_images';
+    const { base, fetchImpl, modelApi } = source(modelDir, [], { failParent: true });
+    const fetchTree = async (url: string) => url === modelApi
+      ? json([...model(modelDir), entry(`${modelDir}/images/${otherDir}/A.JPG`)]) : fetchImpl(url);
+    const layout = await discoverHuggingFaceLayout(base, { fetchImpl: fetchTree });
+    expect(layout?.imagesPath).toBeNull();
+    const { context } = await mediaContext(base, fetchTree, `${photoDir}/A.JPG`);
+    expect(context?.source).toEqual({ kind: 'url', baseUrl: base + '/' });
+    expect(context?.bindings.size).toBe(0);
+  });
+
   it.each(['known_pose_model', 'triangulated_model', 'triangulated_text', 'sparse/0', 'sparse', 'colmap', 'colmap/sparse/0'])(
     'finds sibling orphan masks from %s without replacing the selected model', async modelDir => {
       const { base, fetchImpl, modelApi, sceneApi } = source(modelDir, [mask]);
@@ -57,7 +107,7 @@ describe('Hugging Face URLs scoped to native models', () => {
     }
   );
 
-  it.each(['triangulated_model','sparse/0','sparse','colmap','colmap/0','colmap/sparse/0','colmap/sparse','sparses/0',
+  it.each(['triangulated_model','dslr_calibration_jpg','dslr_calibration_undistorted','sparse/0','sparse','colmap','colmap/0','colmap/sparse/0','colmap/sparse','sparses/0',
     'colmap_workspace/sparse_native','colmap_workspace/sparse_seed'])(
     'binds sibling original photos and masks above %s with correctly scoped resource URLs', async modelDir => {
     const { base, fetchImpl } = source(modelDir, [`images/${name}`, mask]);

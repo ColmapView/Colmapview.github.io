@@ -15,6 +15,39 @@ afterEach(() => { clearActiveZipArchive(); vi.unstubAllGlobals(); });
 const file = (name: string, data: string | Uint8Array<ArrayBuffer> = '') => new NodeFile([data], name) as unknown as File;
 const cameras = new Map([[1, buildCamera({ width: 8, height: 4 })]]);
 const images = new Map([[1, buildImage({ name: 'cam/a.jpg' })]]);
+it.each(['jpg', 'undistorted'])('uses only matching ETH3D photos and masks for %s calibration', async variant => {
+  const modelDir = `scene/dslr_calibration_${variant}`;
+  const photoDir = variant === 'jpg' ? 'dslr_images' : 'dslr_images_undistorted';
+  const otherDir = variant === 'jpg' ? 'dslr_images_undistorted' : 'dslr_images';
+  for (const name of [`${photoDir}/A.JPG`, 'A.JPG']) {
+    for (const kind of ['local', 'archive', 'url'] as const) for (const hasMatching of [false, true]) {
+      const input = new Map([[`${modelDir}/cameras.bin`, file('cameras.bin')], [`${modelDir}/images.bin`, file('images.bin')],
+        [`scene/images/${otherDir}/A.JPG`, file('A.JPG', pngHeader(8, 4))],
+        [`scene/masks/${otherDir}/A.JPG.png`, file('A.JPG.png', pngHeader(8, 4))],
+        [`other/dslr_calibration_${variant}/cameras.bin`, file('cameras.bin')],
+        [`other/dslr_calibration_${variant}/images.bin`, file('images.bin')],
+        [`other/images/${photoDir}/A.JPG`, file('A.JPG', pngHeader(8, 4))]]);
+      if (hasMatching) {
+        input.set(`scene/images/${photoDir}/A.JPG`, file('A.JPG', pngHeader(8, 4)));
+        input.set(`scene/masks/${photoDir}/A.JPG.png`, file('A.JPG.png', pngHeader(8, 4)));
+      }
+      const source: CameraDatasetSource = kind === 'local' ? { kind, files: input }
+        : kind === 'url' ? { kind, baseUrl: 'https://models.test/' }
+          : { kind, entries: new Map([...input].map(([path, file]) => [path, { name: file.name, size: file.size, lastModified: 0,
+            extract: async () => file, extractPreview: async () => file }])) };
+      rememberNativeMediaSource(input, { source, modelDir, paths: [...input.keys()] });
+      const selectPhotos = vi.fn<SelectCameraDataset>(async choices => choices[0]);
+      const context = await prepareNativeMedia(input, input.values().next().value!, cameras,
+        new Map([[1, buildImage({ name })]]), undefined, { selectPhotos });
+      expect(context?.bindings.size, `${kind}: ${name}, matching photos: ${hasMatching}`).toBe(Number(hasMatching));
+      if (hasMatching) expect(context?.bindings.get(name)).toMatchObject({ sourceImagePath: `scene/images/${photoDir}/A.JPG`,
+        mask: { path: `scene/masks/${photoDir}/A.JPG.png`, role: 'validity' } });
+      expect(context?.nativeMasks?.size, `${kind}: ${name}`).toBe(0);
+      expect(selectPhotos).not.toHaveBeenCalled();
+    }
+  }
+});
+
 it.each(['csv', 'url-mapping'] as const)('honors an explicit physical photo path under an auxiliary-looking folder: %s', async mode => {
   const path = 'scene/segmentation/cam/a.png';
   const input = new Map([['scene/sparse/0/cameras.bin', file('cameras.bin')], [path, file('a.png', pngHeader(8, 4))]]);

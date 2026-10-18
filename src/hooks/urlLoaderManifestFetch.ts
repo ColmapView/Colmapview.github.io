@@ -50,7 +50,7 @@ import { isOpenSfm, isOpenMvg } from '../dataset/importers/sfmFormats';
 import { isGaussianCameraJson } from '../dataset/importers/gaussianCameraJson';
 import { MAX_CAMERA_METADATA_BYTES } from '../dataset/importers/types';
 import { rememberNativeMediaSource } from '../dataset/nativeMedia';
-import { nativeSceneRoot } from '../utils/colmapPathResolver';
+import { nativeSceneRoot, nativePhotoVariantMatchesModel } from '../utils/colmapPathResolver';
 
 type FetchUrl = (url: string, init?: RequestInit) => Promise<Response>;
 type FetchManifestFile = (
@@ -387,7 +387,9 @@ export async function discoverHuggingFaceLayout(
       }
     }
   }
-  const discoveredImagesPath = getHuggingFaceImagesPath(mediaEntries, mediaTreePath, mediaModelDir);
+  const modelPath = colmap ? [request.treePath, dirnameOf(colmap.cameras)].filter(Boolean).join('/') : '';
+  const photoEntries = mediaEntries.filter(entry => typeof entry.path !== 'string' || nativePhotoVariantMatchesModel(entry.path, modelPath));
+  const discoveredImagesPath = getHuggingFaceImagesPath(photoEntries, mediaTreePath, mediaModelDir);
   const imagesPath = discoveredImagesPath !== null && mediaBaseUrl !== baseUrl
     ? joinManifestUrlPath(mediaBaseUrl, discoveredImagesPath) : discoveredImagesPath;
 

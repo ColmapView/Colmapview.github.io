@@ -1,4 +1,4 @@
-import { getBasename, getParentDir, nativeSceneRoot } from '../utils/colmapPathResolver';
+import { getBasename, getParentDir, nativeSceneRoot, nativePhotoVariantMatchesModel } from '../utils/colmapPathResolver';
 import { isAuxiliaryImagePath, isImageFile, isDatasetMaskImagePath, normalizeImagePath, getPathSuffixes } from '../utils/imageFileLookupPolicy';
 
 export interface NativePathMatch { status: 'resolved' | 'missing' | 'ambiguous'; path?: string; candidates?: string[] }
@@ -38,6 +38,7 @@ export class NativeMediaPathIndex {
   private readonly declaredRole?: 'photo' | 'mask';
   private readonly baseUrl?: URL;
   private readonly basePath?: readonly string[];
+  private readonly photoModelDir: string;
   private mappingAliases?: { exact: Map<string, string[]>; folded: Map<string, string[]> };
   readonly sceneRoot: string;
   readonly modelDir: string;
@@ -48,6 +49,9 @@ export class NativeMediaPathIndex {
     this.basePath = this.baseUrl?.pathname.split('/').slice(0, -1).map(urlSegmentKey);
     this.modelDir = this.ownershipPath(clean(modelDir));
     modelDir = this.modelDir;
+    // A URL scoped inside calibration has no container in its relative model path.
+    this.photoModelDir = /(?:^|\/)dslr_calibration_(?:jpg|undistorted)(?:\/|$)/i.test(modelDir)
+      ? modelDir : [this.baseUrl?.pathname ?? '', modelDir].join('/');
     this.sceneRoot = nativeSceneRoot(modelDir);
     const all = [...paths].map(clean), groups = new Map<string, Set<string>>();
     // A declared media list still belongs to the scenes in the complete physical listing.
@@ -132,11 +136,12 @@ export class NativeMediaPathIndex {
   }
   private allowed(path: string): boolean {
     const owned = this.ownershipPath(path);
-    return !this.foreignRoots.some(root => below(owned, root));
+    return nativePhotoVariantMatchesModel(owned, this.photoModelDir) && !this.foreignRoots.some(root => below(owned, root));
   }
   isPhotoPath(path: string): boolean {
     const lookup = this.lookupPath(clean(path));
-    return lookup !== undefined && this.declaredRole !== 'mask' && (this.declaredRole === 'photo' || !isAuxiliaryImagePath(lookup));
+    return lookup !== undefined && nativePhotoVariantMatchesModel(lookup, this.photoModelDir)
+      && this.declaredRole !== 'mask' && (this.declaredRole === 'photo' || !isAuxiliaryImagePath(lookup));
   }
   isScenePhoto(path: string): boolean {
     return this.allowed(clean(path)) && this.isPhotoPath(path);

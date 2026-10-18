@@ -38,10 +38,22 @@ export function getBasename(path: string): string {
 export function nativeSceneRoot(directory: string): string {
   let root = directory.replace(/\\/g, '/');
   for (;;) {
-    const next = root.replace(/(?:^|\/)(?:(?:sparse|sparses|colmap|colmap_workspace)(?:\/\d+)?|sparse_native|sparse_seed|known_pose_model|triangulated_model|triangulated_text)$/i, '');
+    const next = root.replace(/(?:^|\/)(?:(?:sparse|sparses|colmap|colmap_workspace)(?:\/\d+)?|sparse_native|sparse_seed|known_pose_model|triangulated_model|triangulated_text|dslr_calibration_(?:jpg|undistorted))$/i, '');
     if (next === root) return root;
     root = next;
   }
+}
+
+/** ETH3D's distorted and undistorted photos can share basenames but not calibration. */
+export function nativePhotoVariantMatchesModel(path: string, modelDir: string): boolean {
+  const calibration = modelDir.replace(/\\/g, '/').split('/').reverse().find(segment => /^dslr_calibration_(jpg|undistorted)$/i.test(segment));
+  if (!calibration) return true;
+  const incompatible = calibration.toLowerCase() === 'dslr_calibration_jpg'
+    ? /^(?:dslr_images_undistorted|dslr_calibration_undistorted)$/i
+    : /^(?:dslr_images|dslr_calibration_jpg)$/i;
+  const scene = nativeSceneRoot(modelDir), normalized = path.replace(/\\/g, '/');
+  const relative = scene && normalized.startsWith(scene + '/') ? normalized.slice(scene.length + 1) : normalized;
+  return !relative.split('/').some(segment => incompatible.test(segment));
 }
 
 /** Map a filename to the COLMAP role it fills, or null if it is not a COLMAP file. */
@@ -247,7 +259,8 @@ export function resolveImagesDir(
 ): string | null {
   const counts = new Map<string, number>();
   for (const rawPath of paths) {
-    if (!isImageFilename(getBasename(rawPath)) || isAuxiliaryImagePath(rawPath)) {
+    if (!isImageFilename(getBasename(rawPath)) || isAuxiliaryImagePath(rawPath)
+      || options.modelDir !== undefined && !nativePhotoVariantMatchesModel(rawPath, options.modelDir)) {
       continue;
     }
     // Prefer the canonical `images` root (images may be nested in per-camera

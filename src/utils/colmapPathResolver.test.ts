@@ -1,13 +1,32 @@
 import { describe, it, expect } from 'vitest';
-import { resolveColmapPaths, getColmapDirectoryScore, resolveImagesDir, nativeSceneRoot } from './colmapPathResolver';
+import { resolveColmapPaths, getColmapDirectoryScore, resolveImagesDir, nativeSceneRoot, nativePhotoVariantMatchesModel } from './colmapPathResolver';
 
 describe('native scene ownership',()=>{
-  it.each(['colmap_workspace','colmap_workspace/sparse/0','colmap_workspace/sparse_native','colmap_workspace/sparse_seed'])(
+  it.each(['colmap_workspace','colmap_workspace/sparse/0','colmap_workspace/sparse_native','colmap_workspace/sparse_seed',
+    'dslr_calibration_jpg', 'dslr_calibration_undistorted', 'dslr_calibration_jpg/sparse/0'])(
     'retains the scene prefix above workspace model %s',container=>{
       expect(nativeSceneRoot('captures/scene A #1/'+container)).toBe('captures/scene A #1');
     });
-  it.each(['colmap_workspace_capture','sparse_native_capture'])('preserves an arbitrary named scene %s',scene=>{
+  it.each(['colmap_workspace_capture','sparse_native_capture','dslr_calibration_custom','dslr_calibration_jpg_capture','calibration'])('preserves an arbitrary named scene %s',scene=>{
     expect(nativeSceneRoot('captures/'+scene)).toBe('captures/'+scene);
+  });
+});
+
+describe('ETH3D photo representations', () => {
+  it.each(['jpg', 'undistorted'])('excludes the other representation from %s photo discovery', variant => {
+    const modelDir = `scene/dslr_calibration_${variant}/sparse/0`;
+    const photoDir = variant === 'jpg' ? 'dslr_images' : 'dslr_images_undistorted';
+    const otherDir = variant === 'jpg' ? 'dslr_images_undistorted' : 'dslr_images';
+    const photo = `scene/images/${photoDir}/A.JPG`, other = `scene/images/${otherDir}/A.JPG`;
+    expect(nativePhotoVariantMatchesModel(photo, modelDir)).toBe(true);
+    expect(nativePhotoVariantMatchesModel(other.replace(/\//g, '\\'), modelDir)).toBe(false);
+    expect(resolveImagesDir([photo, other], { modelDir })).toBe('scene/images');
+    expect(resolveImagesDir([other], { modelDir })).toBeNull();
+    expect(nativePhotoVariantMatchesModel(other, 'scene/sparse/0')).toBe(true);
+    expect(nativeSceneRoot(`dslr_calibration_${variant}`)).toBe('');
+    const outer = `dslr_calibration_${variant === 'jpg' ? 'undistorted' : 'jpg'}/capture`;
+    expect(nativePhotoVariantMatchesModel(`${outer}/${photo}`, `${outer}/${modelDir}`)).toBe(true);
+    expect(nativePhotoVariantMatchesModel(`${outer}/${other}`, `${outer}/${modelDir}`)).toBe(false);
   });
 });
 
