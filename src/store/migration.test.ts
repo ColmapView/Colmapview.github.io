@@ -10,11 +10,74 @@ import {
 
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
   vi.resetModules();
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  sessionStorage.clear();
+});
+
+describe('clearPersistedSettings', () => {
+  it('discards stale writes from the outgoing page before stores hydrate after a reload', async () => {
+    const migration = await importFreshMigration();
+    for (const key of Object.values(migration.STORAGE_KEYS)) localStorage.setItem(key, 'old preference');
+    localStorage.setItem('unrelated-setting', 'keep');
+    migration.clearPersistedSettings();
+    for (const key of Object.values(migration.STORAGE_KEYS)) expect(localStorage.getItem(key)).toBeNull();
+    expect(sessionStorage.getItem(migration.STORAGE_KEYS.pendingSettingsReset)).toBe('1');
+
+    // An FPS/idle update can persist the old in-memory state during a slow reload.
+    localStorage.setItem(migration.STORAGE_KEYS.ui, JSON.stringify({ state: { backgroundColor: '#ffffff' }, version: 13 }));
+    localStorage.setItem(migration.STORAGE_KEYS.camera, 'late camera preference');
+    localStorage.setItem(migration.STORAGE_KEYS.theme, 'light');
+    await importFreshMigration();
+    const { useUIStore } = await import('./stores/uiStore');
+    expect(useUIStore.getState().backgroundColor).toBe('#161616');
+    expect(localStorage.getItem(migration.STORAGE_KEYS.camera)).toBeNull();
+    expect(localStorage.getItem(migration.STORAGE_KEYS.theme)).toBeNull();
+    expect(localStorage.getItem('unrelated-setting')).toBe('keep');
+    expect(sessionStorage.getItem(migration.STORAGE_KEYS.pendingSettingsReset)).toBeNull();
+  });
+
+  it('consumes the reset once and preserves subsequent deliberate preferences', async () => {
+    const migration = await importFreshMigration();
+    migration.clearPersistedSettings();
+    await importFreshMigration();
+    const stored = JSON.stringify({ state: { backgroundColor: '#ffffff' }, version: 13 });
+    localStorage.setItem(migration.STORAGE_KEYS.ui, stored);
+    await importFreshMigration();
+    expect(localStorage.getItem(migration.STORAGE_KEYS.ui)).toBe(stored);
+    const { useUIStore } = await import('./stores/uiStore');
+    expect(useUIStore.getState().backgroundColor).toBe('#ffffff');
+  });
+
+  it('retries a pending reset without breaking startup when local storage is temporarily blocked', async () => {
+    const migration = await importFreshMigration();
+    migration.clearPersistedSettings();
+    const blocked = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new DOMException('Blocked', 'SecurityError'); });
+    await expect(importFreshMigration()).resolves.toBeDefined();
+    expect(sessionStorage.getItem(migration.STORAGE_KEYS.pendingSettingsReset)).toBe('1');
+    blocked.mockRestore();
+    await importFreshMigration();
+    expect(sessionStorage.getItem(migration.STORAGE_KEYS.pendingSettingsReset)).toBeNull();
+  });
+
+  it('discards late writes on page exit if session storage is unavailable', async () => {
+    const migration = await importFreshMigration();
+    localStorage.setItem(migration.STORAGE_KEYS.ui, 'old');
+    const original = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+      if (this === sessionStorage) throw new DOMException('Blocked', 'SecurityError');
+      return original.call(this, key, value);
+    });
+    expect(() => migration.clearPersistedSettings()).not.toThrow();
+    expect(localStorage.getItem(migration.STORAGE_KEYS.ui)).toBeNull();
+    localStorage.setItem(migration.STORAGE_KEYS.ui, 'late stale preference');
+    window.dispatchEvent(new Event('pagehide'));
+    expect(localStorage.getItem(migration.STORAGE_KEYS.ui)).toBeNull();
+  });
 });
 
 describe('parseLegacyPersistedState', () => {

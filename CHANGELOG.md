@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.4] - 2026-10-18
+
+### Fixed
+
+- Complete preference resets before the reloaded app restores its stores. Background FPS and idle updates can no longer undo Reset by saving the old white background or other preferences while the reload waits for the server.
+
 ## [0.17.3] - 2026-10-18
 
 ### Added

@@ -16,10 +16,40 @@ export const STORAGE_KEYS = {
   guide: 'colmap-viewer-guide',
   profiles: 'colmap-viewer-profiles',
   lastSeenVersion: 'colmap-viewer-last-seen-version',
+  // Session-only: complete a requested reset before the next document hydrates stores.
+  pendingSettingsReset: 'colmap-viewer-pending-settings-reset',
 } as const;
 
-export function clearPersistedSettings(): void {
+function removePersistedSettings(): void {
   Object.values(STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
+}
+
+function finishPendingSettingsReset(): void {
+  try {
+    if (sessionStorage.getItem(STORAGE_KEYS.pendingSettingsReset) !== '1') return;
+    // The outgoing page can persist stale preferences (for example an FPS or
+    // idle-state update) while its reload waits for the server. Clear those
+    // writes before any importing store or theme reads its initial state.
+    removePersistedSettings();
+    sessionStorage.removeItem(STORAGE_KEYS.pendingSettingsReset);
+  } catch {
+    // Storage restrictions must not prevent startup. Keep the marker to retry
+    // on a later navigation if storage becomes available again.
+  }
+}
+
+finishPendingSettingsReset();
+
+export function clearPersistedSettings(): void {
+  try { sessionStorage.setItem(STORAGE_KEYS.pendingSettingsReset, '1'); }
+  catch {
+    // If session storage is unavailable/full, clear once more as the outgoing
+    // document leaves, after its background updates have stopped.
+    window.addEventListener('pagehide', () => {
+      try { removePersistedSettings(); } catch { /* Storage may have become unavailable. */ }
+    }, { once: true });
+  }
+  removePersistedSettings();
 }
 
 // Property mappings for migration
