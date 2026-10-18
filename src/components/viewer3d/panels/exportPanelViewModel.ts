@@ -21,8 +21,8 @@ export const EXPORT_FORMAT_DESCRIPTIONS: Record<ExportFormat, string> = {
   text: 'COLMAP text format. Human-readable, useful for debugging.',
   ply: 'Point cloud only. Compatible with MeshLab, CloudCompare.',
   zip: 'Binary files (.bin) in a single archive.',
-  'zip-images': 'COLMAP model and original photos, preserving their bytes and calibration. Requires free browser storage.',
-  'zip-masks': 'COLMAP model, original photos and PNG feature masks where available. Requires free browser storage.',
+  'zip-images': 'COLMAP model and original photos, preserving their bytes and calibration. Requires free disk space.',
+  'zip-masks': 'COLMAP model, original photos and PNG feature masks where available. Requires free disk space.',
 };
 
 export function getCameraModelSummary(

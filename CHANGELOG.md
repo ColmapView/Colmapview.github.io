@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.3] - 2026-10-18
+
+### Added
+
+- Save COLMAP photo and mask ZIP packages directly to a chosen file in browsers with a native save picker, bypassing browser-storage quota and the bounded memory fallback. The destination is committed only after the complete package validates; ordinary downloads remain available.
+
+### Fixed
+
+- Treat native save-picker dismissal as cancellation and ignore selections that arrive after an export is cancelled or its scene changes.
+- Suggest direct saving when browser storage is insufficient for a photo-package download.
+
 ## [0.17.2] - 2026-10-18
 
 ### Fixed

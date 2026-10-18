@@ -7,6 +7,49 @@ import { unzipSync } from 'fflate';
 import { parseImagesBinary } from '../src/parsers/images';
 import { parseCamerasBinary } from '../src/parsers/cameras';
 
+type DirectSaveTestWindow = Window & {
+  directSaveTest: { handle: FileSystemFileHandle; activated: boolean; pickerCalls: number; stagingCalls: number };
+  showSaveFilePicker: () => Promise<FileSystemFileHandle>;
+};
+
+test('saves a validated photo and mask ZIP to a native file writer without staging or downloading', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'The native save picker is available in Chromium.');
+  await page.goto('/');
+  const source = await cameraFixture(page); await dropDatasetFiles(page, source);
+  await expect(page.locator('text=Source:')).toBeVisible({ timeout: 45000 });
+  // Substitute only the OS dialog; the destination and transactional writer are real browser APIs.
+  await page.evaluate(async () => {
+    const state: DirectSaveTestWindow['directSaveTest'] = {
+      handle: await (await navigator.storage.getDirectory()).getFileHandle('chosen-scene.zip', { create: true }),
+      activated: false, pickerCalls: 0, stagingCalls: 0,
+    };
+    const testWindow = window as unknown as DirectSaveTestWindow;
+    testWindow.directSaveTest = state;
+    const writer = await state.handle.createWritable(); await writer.write('existing file'); await writer.close();
+    testWindow.showSaveFilePicker = async () => {
+      state.pickerCalls++; state.activated = navigator.userActivation.isActive; return state.handle;
+    };
+    navigator.storage.getDirectory = async () => { state.stagingCalls++; throw new Error('Browser staging unavailable'); };
+  });
+  let downloads = 0; page.on('download', () => { downloads++; });
+  await page.locator('button[aria-label*="Export" i], button[data-tooltip*="Export" i]').first().hover();
+  await page.locator('select').first().selectOption('zip-masks');
+  await page.getByRole('button', { name: 'Save ZIP to file', exact: true }).click();
+  await expect(page.getByText('Saved chosen-scene.zip. Exported 2 masks for 2 images.', { exact: true })).toBeVisible();
+  const result = await page.evaluate(async () => {
+    const { handle, ...audit } = (window as unknown as DirectSaveTestWindow).directSaveTest;
+    return { ...audit, base64: btoa(String.fromCharCode(...new Uint8Array(await (await handle.getFile()).arrayBuffer()))) };
+  });
+  expect(result).toMatchObject({ activated: true, pickerCalls: 1, stagingCalls: 0 }); expect(downloads).toBe(0);
+  const archive = unzipSync(Buffer.from(result.base64, 'base64'));
+  expect(Object.keys(archive).sort()).toEqual(['images/a.png', 'images/b.png', 'masks/a.png.png', 'masks/b.png.png',
+    'sparse/0/cameras.bin', 'sparse/0/images.bin', 'sparse/0/points3D.bin'].sort());
+  for (const name of ['a.png', 'b.png']) {
+    expect(Buffer.from(archive['images/' + name])).toEqual(Buffer.from(source.find(file => file.name === name)!.base64, 'base64'));
+  }
+  expect(parseImagesBinary(new Uint8Array(archive['sparse/0/images.bin']).buffer).size).toBe(2);
+});
+
 test('exports and reimports distinct originals in nested images directories',async({page})=>{
   await page.goto('/');const source=await cameraFixture(page);
   const photos=source.filter(file=>file.relativePath.includes('/images/'));

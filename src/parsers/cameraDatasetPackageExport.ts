@@ -6,7 +6,7 @@ import type { ImportedImageBinding } from '../dataset/importers/types';
 import { normalizeSourcePath } from '../dataset/importers/sourcePaths';
 import { readImageDimensions, readImageOrientation } from '../utils/imageDimensions';
 import { prepareReconstructionFiles } from './prepareReconstructionFiles';
-import { downloadStreamingZip, type AddZipBlob } from './streamingZipExport';
+import { downloadStreamingZip, saveStreamingZip, type AddZipBlob } from './streamingZipExport';
 import { awaitWithAbort } from '../utils/awaitWithAbort';
 import type { ZipExportProgressCallback } from './reconstructionZipExport';
 import { alphaMask } from '../dataset/importers/importedMedia';
@@ -123,15 +123,18 @@ export async function writeCameraDatasetPackage(reconstruction: Reconstruction, 
   }
   return { maskCount };
 }
+export const getCameraPackageFilename = (includeMasks: boolean) => includeMasks ? 'colmap-images-masks.zip' : 'colmap-images.zip';
+
 export async function downloadCameraDatasetPackage(reconstruction: Reconstruction, source: ReconstructionSource | null,
   transform: Sim3dEuler, media: CameraPackageMedia, includeMasks: boolean, signal: AbortSignal,
-  onProgress?: ZipExportProgressCallback): Promise<number> {
-  const filename = includeMasks ? 'colmap-images-masks.zip' : 'colmap-images.zip';
-  const result = await downloadStreamingZip(filename, signal, async (write, exportSignal) => {
+  onProgress?: ZipExportProgressCallback, destination?: FileSystemFileHandle): Promise<number> {
+  const content = async (write: AddZipBlob, exportSignal: AbortSignal) => {
     const result = await writeCameraDatasetPackage(reconstruction, source, transform, media, includeMasks, exportSignal, write, onProgress);
     onProgress?.(95, 'Finishing dataset...');
     return result;
-  });
+  };
+  const result = destination ? await saveStreamingZip(destination, signal, content)
+    : await downloadStreamingZip(getCameraPackageFilename(includeMasks), signal, content);
   onProgress?.(100, 'Complete');
   return result.maskCount;
 }

@@ -74,6 +74,8 @@ The October 17 ETH3D follow-up checks sibling paths for 57 calibration records a
 
 Original source files were not rewritten. Independent PyCOLMAP checks on eight browser exports find zero camera-pose and intrinsic differences; all original RGB hashes, point counts, point IDs and colors match. Existing native point export uses float32 viewer coordinates: maximum coordinate difference in these samples is 3.76e-6 source units. This is not a claim of lossless float64 point export. Undeclared BMVS mask roles were not exported as feature masks.
 
+A further October 18 check repeats the complete Kicker photo export through **Save ZIP to file**. All 31 photo hashes and the three native model files match the verified download, with no additional browser-storage staging calls or automatic download. The picker is requested during the initiating click's user activation. Automation substitutes the operating-system dialog with a preselected real Chromium file handle; this verifies the native transactional writer, rather than the operating-system dialog itself. Separate native-writer checks preserve an existing destination after cancellation or a late missing photo, and the browser fixture verifies direct photo-and-mask export. Ordinary download and reimport regressions pass in Chromium and Firefox.
+
 The full unit suite passes 5,512 tests. The browser matrix has 156 distinct cases. Its initial run exposed the real nested-`images/` regression in both browsers; after fixing it, all 78 relevant export/native cases pass on rerun, with no skips or flaky results. Independent camera-schema projection tests also pass.
 
 ## Remaining dataset gaps

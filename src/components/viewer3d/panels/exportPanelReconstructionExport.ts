@@ -7,7 +7,8 @@ import { exportReconstructionSnapshot } from '../../../parsers/reconstructionSna
 import type { ExportFormat } from './exportPanelViewModel';
 import type { ZipExportProgressCallback } from '../../../parsers/reconstructionZipExport';
 import { awaitWithAbort } from '../../../utils/awaitWithAbort';
-import { downloadCameraDatasetPackage, type CameraPackageMedia } from '../../../parsers/cameraDatasetPackageExport';
+import { downloadCameraDatasetPackage, getCameraPackageFilename, type CameraPackageMedia } from '../../../parsers/cameraDatasetPackageExport';
+import { requestZipFile, ZipFilePickerCancelledError } from '../../../utils/zipFileDestination';
 
 export interface LiveReconstructionExportState {
   reconstruction: Reconstruction | null;
@@ -20,6 +21,7 @@ export interface RunReconstructionExportOptions {
   signal?: AbortSignal;
   onProgress?: ZipExportProgressCallback;
   media?: CameraPackageMedia;
+  saveToFile?: boolean;
 }
 
 export interface ReconstructionExportWriters {
@@ -66,11 +68,21 @@ export interface RunReconstructionExportDeps {
 }
 
 export async function runReconstructionExport(
-  { exportFormat, loadedImageFiles, signal, onProgress, media }: RunReconstructionExportOptions,
+  { exportFormat, loadedImageFiles, signal, onProgress, media, saveToFile }: RunReconstructionExportOptions,
   deps: RunReconstructionExportDeps
 ): Promise<void> {
   try {
     signal?.throwIfAborted();
+    let destination: FileSystemFileHandle | undefined;
+    if (saveToFile) {
+      if (exportFormat !== 'zip-images' && exportFormat !== 'zip-masks') throw new Error('Direct saving requires a COLMAP package with images.');
+      if (!media) throw new Error('Original dataset media is unavailable.');
+      if (!deps.getLiveReconstruction().reconstruction) return;
+      // Keep the native picker within the initiating click's activation. Merely
+      // choosing a destination does not open a writer or change an existing file.
+      destination = await requestZipFile(getCameraPackageFilename(exportFormat === 'zip-masks'), signal);
+      signal?.throwIfAborted();
+    }
     const pendingDeletionCount = deps.getPendingDeletionCount();
     if (pendingDeletionCount > 0) {
       const proceed = await awaitWithAbort(deps.confirmPendingDeletions(pendingDeletionCount), signal);
@@ -99,14 +111,17 @@ export async function runReconstructionExport(
     if (exportFormat === 'zip-images' || exportFormat === 'zip-masks') {
       if (!media) throw new Error('Original dataset media is unavailable.');
       const maskCount = await downloadCameraDatasetPackage(reconstruction, wasmReconstruction, transform, media,
-        exportFormat === 'zip-masks', signal ?? new AbortController().signal, onProgress);
+        exportFormat === 'zip-masks', signal ?? new AbortController().signal, onProgress, destination);
+      const saved = destination ? `Saved ${destination.name}. ` : '';
       if (exportFormat === 'zip-masks') {
         const imageCount = reconstruction.images.size;
         if (maskCount > 0 && maskCount < imageCount) {
-          deps.addNotification('warning', `Exported ${maskCount} of ${imageCount} masks. COLMAP requires a mask for every image when using a mask folder. Process unmasked images separately.`, 10000);
+          deps.addNotification('warning', `${saved}Exported ${maskCount} of ${imageCount} masks. COLMAP requires a mask for every image when using a mask folder. Process unmasked images separately.`, 10000);
         } else {
-          deps.addNotification('info', `Exported ${maskCount} masks for ${imageCount} images.`, 6000);
+          deps.addNotification('info', `${saved}Exported ${maskCount} masks for ${imageCount} images.`, 6000);
         }
+      } else if (destination) {
+        deps.addNotification('info', `Saved ${destination.name}.`, 6000);
       }
       return;
     }
@@ -140,7 +155,12 @@ export async function runReconstructionExport(
     }
   } catch (err) {
     if (signal?.aborted) return;
+    if (err instanceof ZipFilePickerCancelledError) {
+      deps.addNotification('info', 'Export cancelled.', 3000);
+      return;
+    }
     deps.logError('Export failed:', err);
-    deps.addNotification('warning', (exportFormat === 'zip-images' || exportFormat === 'zip-masks') && err instanceof Error ? `Export failed: ${err.message}` : 'Export failed');
+    const message = (err as { message?: unknown } | null)?.message;
+    deps.addNotification('warning', (exportFormat === 'zip-images' || exportFormat === 'zip-masks') && typeof message === 'string' ? `Export failed: ${message}` : 'Export failed');
   }
 }

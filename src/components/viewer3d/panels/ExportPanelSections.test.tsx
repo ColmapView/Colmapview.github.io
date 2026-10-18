@@ -65,12 +65,38 @@ function createReloadProps(
 
 describe('ExportPanelSections', () => {
   it('shows COLMAP progress and cancellation instead of another download action', () => {
-    const props = createReconstructionProps({ exportProgress: 85 });
+    const props = createReconstructionProps({ exportProgress: 85, exportFormat: 'zip-images', onSaveToFile: vi.fn() });
     render(<ExportReconstructionSection {...props} />);
     expect(screen.getByRole('progressbar', { name: 'Export COLMAP' })).toHaveAttribute('aria-valuenow', '85');
     expect(screen.queryByRole('button', { name: 'Download COLMAP' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save ZIP to file' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel COLMAP export' }));
     expect(props.onCancelExport).toHaveBeenCalledOnce();
+  });
+
+  it.each(['zip-images', 'zip-masks'] as const)('offers direct saving alongside ordinary downloads for %s', format => {
+    const props = createReconstructionProps({ exportFormat: format, onSaveToFile: vi.fn() });
+    render(<ExportReconstructionSection {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save ZIP to file' }));
+    expect(props.onSaveToFile).toHaveBeenCalledOnce(); expect(props.onDownload).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Download COLMAP' }));
+    expect(props.onDownload).toHaveBeenCalledOnce();
+  });
+
+  it('disables both package actions without a reconstruction', () => {
+    render(<ExportReconstructionSection {...createReconstructionProps({
+      exportFormat: 'zip-images', hasReconstruction: false, onSaveToFile: vi.fn(),
+    })} />);
+    expect(screen.getByRole('button', { name: 'Save ZIP to file' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Download COLMAP' })).toBeDisabled();
+  });
+
+  it('hides direct saving for model formats and unsupported browsers', () => {
+    const { rerender } = render(<ExportReconstructionSection {...createReconstructionProps({ onSaveToFile: vi.fn() })} />);
+    expect(screen.queryByRole('button', { name: 'Save ZIP to file' })).toBeNull();
+    rerender(<ExportReconstructionSection {...createReconstructionProps({ exportFormat: 'zip-images' })} />);
+    expect(screen.queryByRole('button', { name: 'Save ZIP to file' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Download COLMAP' })).toBeEnabled();
   });
 
   it('keeps image and mask cancellation available while preparing the ZIP', () => {

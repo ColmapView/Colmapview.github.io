@@ -21,6 +21,7 @@ export interface ExportReconstructionSectionProps {
   onOpenConversionModal: () => void;
   onOpenDeletionModal: () => void;
   onDownload: () => void;
+  onSaveToFile?: () => void;
   onDownloadSplat: () => void;
   hasSplatFile: boolean;
   exportProgress: number | null;
@@ -38,6 +39,7 @@ export const ExportReconstructionSection = memo(function ExportReconstructionSec
   onOpenConversionModal,
   onOpenDeletionModal,
   onDownload,
+  onSaveToFile,
   onDownloadSplat,
   hasSplatFile,
   exportProgress,
@@ -74,13 +76,25 @@ export const ExportReconstructionSection = memo(function ExportReconstructionSec
         {exportProgress !== null ? (
           <ExportProgress label="COLMAP" progress={exportProgress} onCancel={onCancelExport} />
         ) : (
-          <button
-            onClick={onDownload}
-            disabled={!hasReconstruction}
-            className={hasReconstruction ? styles.actionButton : styles.actionButtonDisabled}
-          >
-            Download COLMAP
-          </button>
+          <>
+            <button
+              onClick={onDownload}
+              disabled={!hasReconstruction}
+              className={hasReconstruction ? styles.actionButton : styles.actionButtonDisabled}
+            >
+              Download COLMAP
+            </button>
+            {onSaveToFile && (exportFormat === 'zip-images' || exportFormat === 'zip-masks') && (
+              <button
+                onClick={onSaveToFile}
+                disabled={!hasReconstruction}
+                className={hasReconstruction ? styles.actionButton : styles.actionButtonDisabled}
+                title="Choose a file to save directly, without using browser storage quota."
+              >
+                Save ZIP to file
+              </button>
+            )}
+          </>
         )}
         {hasSplatFile && (
           <button

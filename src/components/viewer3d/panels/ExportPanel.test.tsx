@@ -4,6 +4,7 @@ import { useDeletionStore, useReconstructionStore, useTransformStore } from '../
 import { buildReconstruction } from '../../../test/builders';
 import { createIdentityEuler } from '../../../utils/sim3dTransforms';
 import { ExportPanel } from './ExportPanel';
+import { runReconstructionExport } from './exportPanelReconstructionExport';
 
 const { reloadFilesMock, processFilesMock, requestConfirmationMock } = vi.hoisted(() => ({
   reloadFilesMock: vi.fn(async () => true),
@@ -14,6 +15,8 @@ const { reloadFilesMock, processFilesMock, requestConfirmationMock } = vi.hoiste
 vi.mock('../../../hooks/useFileDropzone', () => ({
   useFileDropzone: () => ({ reloadFiles: reloadFilesMock, processFiles: processFilesMock }),
 }));
+
+vi.mock('./exportPanelReconstructionExport', () => ({ runReconstructionExport: vi.fn(async () => {}) }));
 
 vi.mock('../../../utils/confirmation', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../../utils/confirmation')>(),
@@ -36,6 +39,22 @@ describe('ExportPanel', () => {
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('dispatches direct saves separately from the ordinary download click event', async () => {
+    vi.stubGlobal('showSaveFilePicker', vi.fn());
+    renderPanel();
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'zip-images' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save ZIP to file' }));
+    await waitFor(() => expect(runReconstructionExport).toHaveBeenCalledWith(
+      expect.objectContaining({ exportFormat: 'zip-images', saveToFile: true }), expect.any(Object),
+    ));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Download COLMAP' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Download COLMAP' }));
+    await waitFor(() => expect(runReconstructionExport).toHaveBeenLastCalledWith(
+      expect.objectContaining({ exportFormat: 'zip-images', saveToFile: false }), expect.any(Object),
+    ));
   });
 
   it('reloads the dropped files through the Reload path, which keeps remote splat tiles', async () => {

@@ -28,6 +28,7 @@ import {
 } from './ExportPanelSections';
 import { useExportPanelStoreFacade } from './useExportPanelStoreFacade';
 import { useCancellableExport } from './useCancellableExport';
+import { canSaveZipToFile } from '../../../utils/zipFileDestination';
 
 const styles = controlPanelStyles;
 
@@ -91,11 +92,12 @@ export const ExportPanel = memo(function ExportPanel({
     return getCameraModelSummary(cameras);
   }, [cameras]);
 
-  const handleExportFormat = useCallback(async () => {
+  const runExportFormat = useCallback(async (saveToFile: boolean) => {
     if (!reconstruction) return;
 
     await runModel((signal, setProgress) => runReconstructionExport({
       exportFormat,
+      saveToFile,
       loadedImageFiles: loadedFiles?.imageFiles,
       media: {
         getOriginalImage: (name, options) => dataset.getOriginalImage(name, options),
@@ -144,6 +146,8 @@ export const ExportPanel = memo(function ExportPanel({
     runModel,
     dataset,
   ]);
+  const handleExportFormat = useCallback(() => runExportFormat(false), [runExportFormat]);
+  const handleSaveToFile = useCallback(() => runExportFormat(true), [runExportFormat]);
 
   // Get list of all image names from reconstruction
   const imageNames = useMemo(() => {
@@ -240,6 +244,7 @@ export const ExportPanel = memo(function ExportPanel({
             onOpenConversionModal={onOpenConversionModal}
             onOpenDeletionModal={onOpenDeletionModal}
             onDownload={handleExportFormat}
+            onSaveToFile={canSaveZipToFile() ? handleSaveToFile : undefined}
             onDownloadSplat={handleDownloadSplat}
             hasSplatFile={Boolean(loadedFiles?.splatFile)}
           />
