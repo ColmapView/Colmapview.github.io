@@ -13,7 +13,7 @@ async function acquireTemporaryLease(name: string, signal: AbortSignal): Promise
   temporaryLeases.set(name, { release, done });
 }
 
-async function releaseTemporaryLease(name: string): Promise<void> {
+export async function releaseArchiveTemporaryLease(name: string): Promise<void> {
   const lease = temporaryLeases.get(name);
   temporaryLeases.delete(name);
   lease?.release(); await lease?.done;
@@ -25,9 +25,18 @@ export async function cleanupArchiveTemporaryFiles(): Promise<void> {
   const directory = await archiveStorageDirectory() as FileSystemDirectoryHandle & { keys(): AsyncIterable<string> };
   if (typeof directory.keys !== 'function') return;
   for await (const name of directory.keys()) {
-    if (!/^(archive|download)-[\da-f-]+$/i.test(name)) continue;
+    if (!/^(archive|download|export)-[\da-f-]+$/i.test(name)) continue;
     await navigator.locks.request(lockName(name), { ifAvailable: true }, async lock => {
-      if (lock) await directory.removeEntry(name).catch(() => {});
+      if (!lock) return;
+      if (name.startsWith('export-')) {
+        // getFile() remains disk-backed; deleting it immediately after a.click() can break
+        // an in-progress browser download. Other temporary archives have explicit owners.
+        try {
+          const file = await (await directory.getFileHandle(name)).getFile();
+          if (Date.now() - file.lastModified < 24 * 60 * 60 * 1000) return;
+        } catch { return; }
+      }
+      await directory.removeEntry(name).catch(() => {});
     });
   }
 }
@@ -70,7 +79,7 @@ export async function removeArchiveTemporaryFile(name: string): Promise<void> {
         await new Promise(resolve => setTimeout(resolve, 50));
       }
     }
-  } finally { await releaseTemporaryLease(name); }
+  } finally { await releaseArchiveTemporaryLease(name); }
 }
 
 /** Disk-backed streaming keeps large compressed/remote archives out of JS/WASM buffers. */

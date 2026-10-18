@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ARCHIVE_STORAGE_DIRECTORY, cleanupArchiveTemporaryFiles, removeArchiveTemporaryFile, storeArchiveStream } from './temporaryStorage';
+import { ARCHIVE_STORAGE_DIRECTORY, cleanupArchiveTemporaryFiles, releaseArchiveTemporaryLease, removeArchiveTemporaryFile, storeArchiveStream } from './temporaryStorage';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 function storage() {
@@ -85,5 +85,20 @@ describe('temporary archive storage', () => {
     await removeArchiveTemporaryFile('archive-aabb'); expect(held.size).toBe(0);
     directory.removeEntry.mockClear(); await cleanupArchiveTemporaryFiles();
     expect(directory.removeEntry).toHaveBeenCalledWith('archive-aabb');
+  });
+  it('retains recent exports for browser downloads and reclaims expired exports only after their writer releases its lock', async () => {
+    const {directory, handle} = storage(), held = new Set<string>();
+    Object.assign(navigator, {locks: {request: async (name: string, options: LockOptions, callback: (lock: Lock | null) => unknown) => {
+      if (options.ifAvailable) return callback(held.has(name) ? null : {name} as Lock);
+      held.add(name); try {return await callback({name} as Lock);} finally {held.delete(name);}
+    }}});
+    Object.assign(directory, {async *keys() {yield 'export-aabb';}});
+    await storeArchiveStream(stream(), 'export-aabb', new AbortController().signal);
+    await cleanupArchiveTemporaryFiles(); expect(directory.removeEntry).not.toHaveBeenCalled();
+    await releaseArchiveTemporaryLease('export-aabb');
+    await cleanupArchiveTemporaryFiles(); expect(directory.removeEntry).not.toHaveBeenCalled();
+    handle.getFile.mockResolvedValue(new File(['old'], 'old.zip', {lastModified: Date.now() - 25 * 60 * 60 * 1000}));
+    await cleanupArchiveTemporaryFiles(); expect(directory.removeEntry).toHaveBeenCalledWith('export-aabb');
+    expect(held.size).toBe(0);
   });
 });

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.2] - 2026-10-18
+
+### Fixed
+
+- Stream COLMAP photo and mask packages to temporary browser-managed disk storage, removing the 256 MiB aggregate limit when writable storage is available. ZIP64 supports large archives; original photos, camera calibration and mask validation are preserved.
+- Discard incomplete exports on cancellation, missing media or disk errors. Preserve bounded small exports on browsers without writable storage, and explain storage limits for larger packages.
+
 ## [0.17.1] - 2026-10-17
 
 ### Fixed
@@ -802,7 +809,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript for type safety
 - Deno native test runner for testing
 
-[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.16.4...HEAD
+[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.17.2...HEAD
+[0.17.2]: https://github.com/ColmapView/colmapview.github.io/compare/v0.17.1...v0.17.2
 [0.16.4]: https://github.com/ColmapView/colmapview.github.io/compare/v0.16.3...v0.16.4
 [0.16.3]: https://github.com/ColmapView/colmapview.github.io/compare/v0.16.1...v0.16.3
 [0.16.1]: https://github.com/ColmapView/colmapview.github.io/compare/v0.16.0...v0.16.1

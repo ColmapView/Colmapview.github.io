@@ -48,7 +48,11 @@ Partial mask coverage produces a warning. COLMAP's mask-folder reader requires a
 
 COLMAP model image names remain intact during packaging, including a genuine nested `images/` directory. Conversion from camera JSON removes the source image-root prefix once; subsequent native export/reimport does not remove it again. Native archive reimport resolves original media paths within the selected model's scene before considering legacy suffix aliases.
 
-Limits are 16 MiB of selected metadata, 256 metadata candidates, 100,000 frames, 64 MiB per original media read, 16 million pixels per derived/normalized mask, and 256 MiB of accumulated package input. These limits bound reads and retained inputs, not total browser/GPU memory. Large packages should use model-only export or a smaller image selection. Random access requires exposed, validated byte ranges; an oversized range failure does not trigger a whole-archive download.
+Limits are 16 MiB of selected metadata, 256 metadata candidates, 100,000 frames, 64 MiB per original media read and 16 million pixels per derived/normalized mask. Photo-package export writes original photos and normalized masks sequentially to temporary browser-managed disk storage, with backpressure and ZIP64 support. It no longer accumulates all photos or a complete ZIP in JavaScript memory and has no 256 MiB aggregate input limit when writable browser storage is available. Model serialization, one original photo, mask decoding, existing media caches and ZIP directory records still use memory; this is not a bound on total browser/GPU memory.
+
+The completed package is downloaded only after all mandatory media validates and the ZIP finishes. Cancellation, missing media and disk errors discard the temporary output. Browser storage quota and available disk space limit package size. On browsers without writable storage, small exports retain a bounded memory fallback (256 MiB of ZIP output); larger exports explain that writable storage is required. Completed disk-backed exports remain for at least 24 hours so cleanup cannot immediately invalidate the browser download; later archive operations reclaim expired files when browser locks permit safe cleanup. Clearing site data also removes them. Keep the tab open until the download starts.
+
+Random access requires exposed, validated byte ranges; an oversized range failure does not trigger a whole-archive download.
 
 ## Common data layout and array conventions
 

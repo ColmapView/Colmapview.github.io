@@ -6,12 +6,12 @@ import type { ImportedImageBinding } from '../dataset/importers/types';
 import { normalizeSourcePath } from '../dataset/importers/sourcePaths';
 import { readImageDimensions, readImageOrientation } from '../utils/imageDimensions';
 import { prepareReconstructionFiles } from './prepareReconstructionFiles';
-import { compressZip, type ZipFiles } from './zipCompression';
-import { downloadBlob } from '../utils/download';
+import { downloadStreamingZip, type AddZipBlob } from './streamingZipExport';
+import { awaitWithAbort } from '../utils/awaitWithAbort';
 import type { ZipExportProgressCallback } from './reconstructionZipExport';
 import { alphaMask } from '../dataset/importers/importedMedia';
 
-export const CAMERA_PACKAGE_BUDGET = 256 * 1024 * 1024;
+const ORIGINAL_MEDIA_READ_LIMIT = 64 * 1024 * 1024;
 export interface CameraPackageMedia {
   getOriginalImage(name: string, options?: DatasetAccessOptions): Promise<File | null>;
   getMask(name: string, options?: DatasetAccessOptions): Promise<File | null>;
@@ -47,10 +47,10 @@ export async function normalizeFeatureMask(file: Blob, width: number, height: nu
   } finally { bitmap.close(); }
 }
 
-/** All mandatory media must succeed before compression or download can begin. */
-export async function prepareCameraDatasetPackage(reconstruction: Reconstruction, source: ReconstructionSource | null,
+/** Await each disk write before reading the next original. Only a complete package is downloaded. */
+export async function writeCameraDatasetPackage(reconstruction: Reconstruction, source: ReconstructionSource | null,
   transform: Sim3dEuler, media: CameraPackageMedia, includeMasks: boolean, signal: AbortSignal,
-  onProgress?: ZipExportProgressCallback, budget = CAMERA_PACKAGE_BUDGET): Promise<{ files: ZipFiles; maskCount: number }> {
+  write: AddZipBlob, onProgress?: ZipExportProgressCallback): Promise<{ maskCount: number }> {
   signal.throwIfAborted();
   const images = [...reconstruction.images.values()];
   const names = new Map<number, string>(), used = new Set<string>();
@@ -61,7 +61,6 @@ export async function prepareCameraDatasetPackage(reconstruction: Reconstruction
     used.add(name.toLowerCase()); names.set(image.imageId, name);
   }
   const native = await prepareReconstructionFiles(reconstruction, source, transform, signal, names);
-  const files: ZipFiles = Object.create(null);
   type PathNode = { file: boolean; children: Map<string, PathNode> };
   const root: PathNode = { file: false, children: new Map() };
   function reservePath(path: string) {
@@ -78,13 +77,11 @@ export async function prepareCameraDatasetPackage(reconstruction: Reconstruction
     if (node.children.size) throw new Error(`Package path conflict: ${path}. A file and directory use the same name.`);
     node.file = true;
   }
-  let bytes = 0, maskCount = 0;
+  let maskCount = 0;
   async function add(path: string, blob: Blob) {
     signal.throwIfAborted();
     reservePath(path);
-    if (bytes + blob.size > budget) throw new Error('Export exceeds the 256 MiB package input budget. Export a smaller selection or model only.');
-    bytes += blob.size;
-    files[path] = new Uint8Array(await blob.arrayBuffer());
+    await write(path, blob);
     signal.throwIfAborted();
   }
   for (const [path, blob] of Object.entries(native)) await add(`sparse/0/${path}`, blob);
@@ -92,14 +89,15 @@ export async function prepareCameraDatasetPackage(reconstruction: Reconstruction
     signal.throwIfAborted();
     const image = images[index], name = names.get(image.imageId)!;
     let failure: DatasetAccessError | undefined;
-    const options: DatasetAccessOptions = { signal, priority: 'selected', maxBytes: Math.min(64 * 1024 * 1024, budget - bytes), onError: error => { failure = error; } };
+    const options: DatasetAccessOptions = { signal, priority: 'selected', maxBytes: ORIGINAL_MEDIA_READ_LIMIT, onError: error => { failure = error; } };
     const rgb = await media.getOriginalImage(image.name, options);
     if (!rgb) throw new Error(`Required original photo is unavailable: ${image.name}${failure ? ` (${failure.message})` : ''}`);
     if (rgb.size > options.maxBytes!) throw new Error(`Original photo exceeds its read budget: ${image.name}`);
-    const camera = reconstruction.cameras.get(image.cameraId)!;
+    const camera = reconstruction.cameras.get(image.cameraId);
+    if (!camera) throw new Error(`Camera calibration is unavailable: ${image.name}`);
     const size = await readImageDimensions(rgb, { signal });
     if (!size || size.width !== camera.width || size.height !== camera.height || await readImageOrientation(rgb, signal) !== 1) throw new Error(`Original photo does not match camera calibration: ${image.name}`);
-    const decoded = await createImageBitmap(rgb, { imageOrientation: 'none', resizeWidth: 1, resizeHeight: 1 });
+    const decoded = await awaitWithAbort(createImageBitmap(rgb, { imageOrientation: 'none', resizeWidth: 1, resizeHeight: 1 }), signal, bitmap => bitmap.close());
     decoded.close(); signal.throwIfAborted();
     await add(`images/${name}`, rgb);
     if (includeMasks) {
@@ -108,29 +106,32 @@ export async function prepareCameraDatasetPackage(reconstruction: Reconstruction
         throw new Error(`Mask role is unverified for ${image.name}; export model and images instead.`);
       }
       failure = undefined;
-      // The original RGB is already in memory: do not reread it under the remaining mask-byte budget.
+      // Derive alpha from the already-read original, rather than fetching it a second time.
       const mask = binding?.mask?.kind === 'alpha' ? await alphaMask(rgb, image.name, signal)
-        : await media.getMask(image.name, { ...options, maxBytes: Math.min(options.maxBytes!, budget - bytes) });
+        : await media.getMask(image.name, options);
       if (failure) throw new Error(`Mask read failed for ${image.name}: ${(failure as DatasetAccessError).message}`);
       if (!mask && binding?.mask?.kind === 'file') throw new Error(`Declared mask is unavailable: ${image.name}`);
       if (mask) {
+        if (mask.size > ORIGINAL_MEDIA_READ_LIMIT) throw new Error(`Mask exceeds its read budget: ${image.name}`);
         const invert = binding?.mask?.kind === 'file' && (binding.mask.invert || binding.mask.role === 'ignore');
         const png = await normalizeFeatureMask(mask, camera.width, camera.height, Boolean(invert), signal,
           binding?.mask?.kind === 'file' ? binding.mask.normalization : undefined);
         await add(`masks/${name}.png`, png); maskCount++;
       }
     }
-    onProgress?.(10 + Math.round(70 * (index + 1) / Math.max(1, images.length)), `Preparing original photos (${index + 1}/${images.length})...`);
+    onProgress?.(10 + Math.round(80 * (index + 1) / Math.max(1, images.length)), `Writing original photos (${index + 1}/${images.length})...`);
   }
-  return { files, maskCount };
+  return { maskCount };
 }
 export async function downloadCameraDatasetPackage(reconstruction: Reconstruction, source: ReconstructionSource | null,
   transform: Sim3dEuler, media: CameraPackageMedia, includeMasks: boolean, signal: AbortSignal,
   onProgress?: ZipExportProgressCallback): Promise<number> {
-  const result = await prepareCameraDatasetPackage(reconstruction, source, transform, media, includeMasks, signal, onProgress);
-  onProgress?.(85, 'Compressing dataset...');
-  const zip = await compressZip(result.files, { signal, level: 0 });
-  signal.throwIfAborted(); downloadBlob(zip, includeMasks ? 'colmap-images-masks.zip' : 'colmap-images.zip');
+  const filename = includeMasks ? 'colmap-images-masks.zip' : 'colmap-images.zip';
+  const result = await downloadStreamingZip(filename, signal, async (write, exportSignal) => {
+    const result = await writeCameraDatasetPackage(reconstruction, source, transform, media, includeMasks, exportSignal, write, onProgress);
+    onProgress?.(95, 'Finishing dataset...');
+    return result;
+  });
   onProgress?.(100, 'Complete');
   return result.maskCount;
 }
