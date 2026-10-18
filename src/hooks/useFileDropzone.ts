@@ -59,7 +59,7 @@ export function useFileDropzone() {
   const processFiles = useCallback(async (
     files: Map<string, File>,
     progressRange?: { start: number; end: number },
-    options: Pick<FileDropzoneWorkflowOptions, 'beforeSceneCommit' | 'onSceneReplaced' | 'replaceSplatScene' | 'reload' | 'throwOnError' | 'onViewerState' | 'viewerState' | 'load' | 'signal' | 'initialSplatSelectionRevision'> = {}
+    options: Pick<FileDropzoneWorkflowOptions, 'beforeSceneCommit' | 'onSceneReplaced' | 'replaceSplatScene' | 'reload' | 'throwOnError' | 'deferPointFilterWarning' | 'onViewerState' | 'viewerState' | 'load' | 'signal' | 'initialSplatSelectionRevision'> = {}
   ) => {
     const initialSplatSelectionRevision = options.initialSplatSelectionRevision ?? useReconstructionStore.getState().splatSelectionRevision;
     const load = options.load ?? beginReconstructionLoad();
@@ -116,6 +116,7 @@ export function useFileDropzone() {
         replaceSplatScene: options.replaceSplatScene ?? false,
         reload: options.reload ?? false,
         throwOnError: options.throwOnError ?? false,
+        deferPointFilterWarning: options.deferPointFilterWarning ?? false,
       });
     } finally {
       load.finish();

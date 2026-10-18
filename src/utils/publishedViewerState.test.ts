@@ -4,6 +4,19 @@ import { createIdentityEuler } from './sim3dTransforms';
 import { decodeShareData, encodeShareData } from './shareDataCodec';
 
 describe('published viewer state', () => {
+  it('preserves a zero minimum track length for XYZ clouds without observations', async () => {
+    const config = { pointCloud: { minTrackLength: 0 } };
+    expect(parsePublishedViewerState({ version: 1, viewerVersion: 'test', viewState: null, config }).config)
+      .toEqual(config);
+    expect((await decodeShareData(encodeShareData('https://example.com/manifest.json', null, config)))?.config)
+      .toEqual(config);
+  });
+
+  it.each([-1, 0.5])('drops an invalid minimum track length: %s', minTrackLength => {
+    expect(sanitizeShareConfig({ pointCloud: { minTrackLength, pointSize: 2 } }).pointCloud)
+      .toEqual({ pointSize: 2 });
+  });
+
   it('allowlists presentation fields instead of replacing store actions', () => {
     const config = sanitizeShareConfig({ pointCloud: { pointSize: 2, setPointSize: 'overwrite', '__proto__': { polluted: true } },
       ui: { backgroundColor: '#112233', notifications: ['unexpected'] } });

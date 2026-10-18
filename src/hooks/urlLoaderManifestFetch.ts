@@ -750,6 +750,7 @@ export async function discoverManifestSplatCatalog(
   manifest: ColmapManifest,
   deps: Pick<DiscoverManifestSplatDeps, 'fetchImpl' | 'log' | 'classifySplatUrl' | 'isTouchDevice'> = {}
 ): Promise<RemoteSplatCandidate[]> {
+  if (manifest.splats?.length === 0) return [];
   if (manifest.splats?.length) {
     const fetchImpl = deps.fetchImpl ?? defaultFetchUrl;
     const classify = deps.classifySplatUrl ?? ((url: string) => defaultClassifySplatUrl(url, fetchImpl));

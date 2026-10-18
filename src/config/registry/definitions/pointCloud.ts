@@ -47,11 +47,11 @@ export const pointCloudSection = defineSection({
     {
       key: 'minTrackLength',
       type: 'number',
-      min: 1,
+      min: 0,
       isInt: true,
       default: 2,
       persist: true,
-      description: 'Minimum observations for a point',
+      description: 'Minimum observations for a point (0 includes untracked XYZ points)',
     },
     {
       key: 'maxReprojectionError',

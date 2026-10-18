@@ -28,6 +28,12 @@ const manifest: ColmapManifest = {
   },
 };
 
+it('honors an explicitly empty splat selection without listing the manifest host', async () => {
+  const fetchImpl = vi.fn();
+  expect(await discoverManifestSplatCatalog({ ...manifest, splats: [] }, { fetchImpl })).toEqual([]);
+  expect(fetchImpl).not.toHaveBeenCalled();
+});
+
 it('does not probe a Hugging Face resolve directory when the tree has no splats', async () => {
   const base = 'https://huggingface.co/datasets/owner/preprocessing/resolve/revision/scene';
   const fetchImpl = vi.fn(async () => jsonResponse([]));

@@ -12,7 +12,7 @@ import type { CameraViewState } from '../store/types';
 import type { ColmapManifest } from '../types/manifest';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
-import { buildPendingFetch, buildLoadedFiles, buildReconstruction } from '../test/builders';
+import { buildPendingFetch, buildLoadedFiles, buildPoint3D, buildReconstruction } from '../test/builders';
 import { createDefaultManifest } from './urlLoaderPolicy';
 import { getActiveSplatSourceId, getShareActiveSplatSourceId } from '../utils/splatFileSourcePolicy';
 import { hfAuth, type HfAuthState } from '../features/huggingface/auth';
@@ -1154,6 +1154,30 @@ describe('useUrlLoader', () => {
     await act(async () => { expect(await result.current.loadFromManifest(manifest)).toBe(true); });
     expect(useCameraStore.getState().flyToViewState).toEqual(format === 'document' ? savedView : overrideView);
     expect(useTransformStore.getState().transform).toEqual(format === 'combined' ? overrideTransform : savedTransform);
+  });
+
+  it.each([false, true])('reports point filtering after saved settings and shared overrides (shared: %s)', async shared => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const manifest: ColmapManifest = { version: 1, baseUrl: 'https://example.com/scene', viewerStatePath: 'state.json',
+      files: { cameras: 'cameras.bin', images: 'images.bin', points3D: 'points3D.ply' }, splats: [], skipImages: true };
+    const saved = { version: 1, viewerVersion: 'test', viewState: null, config: { pointCloud: { minTrackLength: 0 } } };
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL) => String(url).endsWith('state.json')
+      ? Response.json(saved) : new Response(new Uint8Array([1, 2, 3]))));
+    if (shared) window.history.replaceState(null, '', '/#' + encodeShareData('https://example.com/manifest.json', null,
+      { pointCloud: { minTrackLength: 2 } }));
+    usePointCloudStore.getState().setMinTrackLength(2);
+    processFilesMock.mockImplementationOnce(async (_files, _range, options) => {
+      const reconstruction = buildReconstruction({ points3D: [buildPoint3D({ track: [] })] });
+      reconstruction.globalStats.totalPoints = 1;
+      useReconstructionStore.getState().setReconstruction(reconstruction);
+      options?.onSceneReplaced?.();
+    });
+    const { result } = renderHook(() => useUrlLoader({ applyUrlOverrides: true }));
+    await act(async () => { expect(await result.current.loadFromManifest(manifest)).toBe(true); });
+    const warnings = useNotificationStore.getState().notifications.filter(item => item.message.includes('hidden due to min track length'));
+    expect(warnings).toHaveLength(shared ? 1 : 0);
+    expect(usePointCloudStore.getState().minTrackLength).toBe(shared ? 2 : 0);
+    expect(processFilesMock.mock.calls[0][2]).toMatchObject({ deferPointFilterWarning: true });
   });
 
   it('applies shared link settings after a load even when the dataset has no saved settings', async () => {

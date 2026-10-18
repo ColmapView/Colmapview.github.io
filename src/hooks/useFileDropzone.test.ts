@@ -41,6 +41,12 @@ async function captureWorkflowDeps(): Promise<FileDropzoneWorkflowDeps> {
 const ply = new File(['x'], 'scene.ply');
 
 describe('useFileDropzone', () => {
+  it('passes URL warning deferral through to the actual parsing workflow', async () => {
+    const { result } = renderHook(() => useFileDropzone());
+    await act(async () => { await result.current.processFiles(new Map(), undefined, { deferPointFilterWarning: true }); });
+    expect(processFileDropzoneFilesMock.mock.calls.at(-1)?.[2]).toMatchObject({ deferPointFilterWarning: true });
+  });
+
   afterEach(() => {
     // Unmount first: resetting the store under a mounted hook is an update outside act().
     cleanup();

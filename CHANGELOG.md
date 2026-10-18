@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.5] - 2026-10-18
+
+### Fixed
+
+- Preserve a zero minimum track length in saved settings and share links so explicit camera + XYZ PLY manifests can show points without observation tracks.
+- Report point filtering after saved and shared settings have been restored, rather than warning about the previous filter during a manifest load.
+- Honor an explicitly empty splat list without probing the manifest host for unrelated assets.
+- Preserve dark byte-valued PLY colors during import and COLMAP export instead of treating a channel value of one as normalized white.
+
 ## [0.17.4] - 2026-10-18
 
 ### Fixed

@@ -75,6 +75,8 @@ The toolbar's **Align** button holds everything that works out *where the scene 
    - Optionally: an `images/` subfolder with the source images, a `masks/` folder, splats (`.spz`, `.ply`, or PlayCanvas `.sog`), and a config `.yaml`
 3. Or use the buttons on the landing panel: **Try a Toy!** loads the built-in sample, **Load URL** takes a remote reconstruction, and **Load manifest** takes a manifest file that points at one. The **Open example dataset** and **Download example manifest** links below them show what a real one looks like.
 
+For scenes with separate model, photo, mask or XYZ cloud folders, use an [explicit dataset manifest](docs/dataset-manifests.md).
+
 Subfolders are scanned automatically (`sparse/0/`, `sparse/`, or any subfolder). A ZIP archive works in place of a folder, and a folder of images alone loads as a gallery with no reconstruction.
 
 ## Interface Tour

@@ -14,6 +14,13 @@ const state: PublishedViewerState = { version: 1, viewerVersion: 'test',
     transform: createIdentityEuler(), splat: { activeSourceId: 'splats/scene.spz', transform: { ...createIdentityEuler(), translationY: 4 } } } };
 
 describe('colmapview.yaml settings', () => {
+  it('round trips zero-track cloud settings through dataset and application YAML', () => {
+    const untracked = { ...state, config: { pointCloud: { minTrackLength: 0 } } };
+    const yaml = serializeDatasetViewerSettings(untracked);
+    expect(parseDatasetViewerSettings(yaml)).toEqual(untracked);
+    expect(parseConfigYaml(yaml)).toMatchObject({ valid: true, config: { pointCloud: { minTrackLength: 0 } } });
+  });
+
   it('round trips COLMAP only without resolving it to a settings directory or a default splat', () => {
     const none = { ...state, config: { ...state.config, splat: { activeSourceId: '' } } };
     expect(parseDatasetViewerSettings(serializeDatasetViewerSettings(none))).toEqual(none);

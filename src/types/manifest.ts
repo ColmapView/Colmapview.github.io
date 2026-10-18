@@ -13,11 +13,14 @@ export interface ColmapManifest {
   baseUrl: string;
   /** Optional saved ColmapView presentation, relative to baseUrl. */
   viewerStatePath?: string;
-  /** COLMAP binary/text file paths relative to baseUrl */
+  /** Model file paths relative to baseUrl, or absolute HTTP(S) URLs. */
   files: {
     cameras: string;
     images: string;
-    /** Omit for a camera-only reconstruction. Declared files must exist. */
+    /**
+     * COLMAP binary/text or an XYZ PLY in the world coordinate system used by the poses.
+     * Omit for a camera-only reconstruction. Declared files must exist.
+     */
     points3D?: string;
     rigs?: string;
     frames?: string;
@@ -43,8 +46,9 @@ export interface ColmapManifest {
   skipImages?: boolean;
   /**
    * Optional per-image override map: COLMAP image name -> path relative to
-   * baseUrl. Resolves datasets that renamed images before COLMAP and ship a
-   * mapping (e.g. image_mapping.csv); unmapped names fall back to imagesPath.
+   * baseUrl, or absolute HTTP(S) URL. Resolves datasets that renamed images
+   * before COLMAP and ship a mapping (e.g. image_mapping.csv); unmapped names
+   * fall back to imagesPath.
    */
   imageNameToPath?: Record<string, string>;
   /** Explicit mask paths keyed by registered image name. Absolute HTTP(S) URLs are allowed. */

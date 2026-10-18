@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import type { ColmapManifest } from '../types/manifest';
 import { useFileDropzone } from './useFileDropzone';
-import { useReconstructionStore } from '../store';
+import { usePointCloudStore, useReconstructionStore } from '../store';
 import { isSplatDownloadPending } from '../store/reconstructionStore';
 import { useNotificationStore } from '../store/stores/notificationStore';
 import { isManifestUrl } from '../utils/urlUtils';
@@ -40,6 +40,7 @@ import { checkHuggingFaceDatasetAccess } from '../features/huggingface/datasetAc
 import { anySignal } from '../utils/abortSignals';
 import { offerUrlLoadRetry } from '../appStartupRetry';
 import { loadCameraUrlSource } from './urlLoaderCameraSource';
+import { getPointFilterWarning } from './fileDropzonePointFilterWarning';
 
 export interface UseUrlLoaderDeps {
   logger?: Pick<AppLogger, 'error' | 'info'>;
@@ -162,7 +163,7 @@ export function useUrlLoadActions({ logger = appLogger, applyUrlOverrides = fals
         signal: init?.signal ? anySignal([signal, init.signal]) : signal })),
       processFiles: guard((files, range, options) => {
         load.hasEmbeddedViewerSettings = Boolean(findDatasetViewerSettingsEntry(files));
-        return processFiles(files, range, { ...options, signal, initialSplatSelectionRevision,
+        return processFiles(files, range, { ...options, signal, initialSplatSelectionRevision, deferPointFilterWarning: true,
           onViewerState: load.onViewerState,
           onSceneReplaced: guard(() => {
             clearAllCaches();
@@ -197,6 +198,14 @@ export function useUrlLoadActions({ logger = appLogger, applyUrlOverrides = fals
         if (load.sceneReplaced) useReconstructionStore.getState().setSourceViewerState(savedViewerState);
         await applySavedViewerState(savedViewerState, shared, assertCurrent, initialSplatSelectionRevision, autoSplatSourceId);
         assertCurrent();
+        if (load.sceneReplaced) {
+          const { reconstruction, wasmReconstruction } = useReconstructionStore.getState();
+          const warning = getPointFilterWarning({ minTrackLength: usePointCloudStore.getState().minTrackLength,
+            pointCount: reconstruction?.globalStats.totalPoints ?? 0,
+            wasmTrackLengths: wasmReconstruction?.getTrackLengths() ?? null,
+            points3D: wasmReconstruction ? undefined : reconstruction?.points3D?.values() });
+          if (warning) useNotificationStore.getState().addNotification('warning', warning.message);
+        }
         // Ask only once restoration settled: an automatic or saved splat downloads without a
         // picker over it, and an explicit None or a choice made during the load stands.
         if (load.remoteCatalogMerged

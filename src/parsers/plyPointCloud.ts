@@ -30,6 +30,14 @@ interface PlyHeader {
   elements: PlyElement[];
 }
 
+interface PointPropertyIndices {
+  xIndex: number;
+  yIndex: number;
+  zIndex: number;
+  colorIndices: [number, number, number] | null;
+  normalizedColors: boolean[];
+}
+
 const PLY_HEADER_READ_LIMIT_BYTES = 1024 * 1024;
 const GAUSSIAN_PLY_PROPERTIES = [
   'x', 'y', 'z',
@@ -93,20 +101,15 @@ export function parsePointCloudPlyBuffer(buffer: ArrayBuffer): Map<bigint, Point
   const yIndex = requirePropertyIndex(propertyLookup, 'y');
   const zIndex = requirePropertyIndex(propertyLookup, 'z');
   const colorIndices = getColorPropertyIndices(propertyLookup);
+  const normalizedColors = (colorIndices ?? []).map(index => {
+    const property = vertexElement.properties[index];
+    return property.kind === 'scalar' && ['float', 'float32', 'double', 'float64'].includes(property.type);
+  });
+  const indices = { xIndex, yIndex, zIndex, colorIndices, normalizedColors };
 
   return header.format === 'ascii'
-    ? parseAsciiPointCloudPly(new TextDecoder('utf-8').decode(buffer), header, {
-      xIndex,
-      yIndex,
-      zIndex,
-      colorIndices,
-    })
-    : parseBinaryPointCloudPly(buffer, header, {
-      xIndex,
-      yIndex,
-      zIndex,
-      colorIndices,
-    });
+    ? parseAsciiPointCloudPly(new TextDecoder('utf-8').decode(buffer), header, indices)
+    : parseBinaryPointCloudPly(buffer, header, indices);
 }
 
 async function readPlyHeaderText(file: File): Promise<string> {
@@ -232,12 +235,7 @@ function classifyPlyHeader(header: PlyHeader): PlyCloudKind {
 function parseAsciiPointCloudPly(
   text: string,
   header: PlyHeader,
-  indices: {
-    xIndex: number;
-    yIndex: number;
-    zIndex: number;
-    colorIndices: [number, number, number] | null;
-  }
+  indices: PointPropertyIndices
 ): Map<bigint, Point3D> {
   const vertexElement = getVertexElement(header);
   const dataText = text.slice(header.headerByteLength);
@@ -260,12 +258,7 @@ function parseAsciiPointCloudPly(
 function parseBinaryPointCloudPly(
   buffer: ArrayBuffer,
   header: PlyHeader,
-  indices: {
-    xIndex: number;
-    yIndex: number;
-    zIndex: number;
-    colorIndices: [number, number, number] | null;
-  }
+  indices: PointPropertyIndices
 ): Map<bigint, Point3D> {
   const vertexElement = getVertexElement(header);
   const vertexOffset = getElementDataOffset(header, vertexElement.name);
@@ -367,12 +360,7 @@ function addPoint(
   points: Map<bigint, Point3D>,
   index: number,
   values: number[],
-  indices: {
-    xIndex: number;
-    yIndex: number;
-    zIndex: number;
-    colorIndices: [number, number, number] | null;
-  }
+  indices: PointPropertyIndices
 ): void {
   const xyz: [number, number, number] = [
     values[indices.xIndex],
@@ -385,9 +373,9 @@ function addPoint(
 
   const rgb: [number, number, number] = indices.colorIndices
     ? [
-        normalizeColor(values[indices.colorIndices[0]]),
-        normalizeColor(values[indices.colorIndices[1]]),
-        normalizeColor(values[indices.colorIndices[2]]),
+        normalizeColor(values[indices.colorIndices[0]], indices.normalizedColors[0]),
+        normalizeColor(values[indices.colorIndices[1]], indices.normalizedColors[1]),
+        normalizeColor(values[indices.colorIndices[2]], indices.normalizedColors[2]),
       ]
     : [255, 255, 255];
   const point3DId = BigInt(index + 1);
@@ -400,12 +388,12 @@ function addPoint(
   });
 }
 
-function normalizeColor(value: number): number {
+function normalizeColor(value: number, normalized: boolean): number {
   if (!Number.isFinite(value)) {
     return 255;
   }
 
-  const scaled = value >= 0 && value <= 1 ? value * 255 : value;
+  const scaled = normalized && value >= 0 && value <= 1 ? value * 255 : value;
   return Math.max(0, Math.min(255, Math.round(scaled)));
 }
 

@@ -42,6 +42,28 @@ function createGenericBinaryPlyFile(): File {
 }
 
 describe('PLY point cloud parser', () => {
+  it.each(['ascii', 'binary_little_endian', 'binary_big_endian'])(
+    'preserves dark byte colors while still decoding normalized float colors (%s)', async format => {
+      for (const colorType of ['uchar', 'float']) {
+        const rgb = colorType === 'uchar' ? [1, 0, 255] : [1, 0.5, 0];
+        const header = ['ply', `format ${format} 1.0`, 'element vertex 1',
+          ...['x', 'y', 'z'].map(name => `property float ${name}`),
+          ...['red', 'green', 'blue'].map(name => `property ${colorType} ${name}`), 'end_header', ''].join('\n');
+        let data: string | ArrayBuffer;
+        if (format === 'ascii') data = [1, 2, 3, ...rgb].join(' ') + '\n';
+        else {
+          data = new ArrayBuffer(colorType === 'uchar' ? 15 : 24);
+          const view = new DataView(data), little = format === 'binary_little_endian';
+          [1, 2, 3].forEach((value, index) => view.setFloat32(index * 4, value, little));
+          rgb.forEach((value, index) => colorType === 'uchar' ? view.setUint8(12 + index, value) : view.setFloat32(12 + index * 4, value, little));
+        }
+        const points = await parsePointCloudPlyFile(new File([header, data], 'points.ply'));
+        expect(points.get(1n)?.rgb).toEqual(colorType === 'uchar' ? [1, 0, 255] : [255, 128, 0]);
+        expect(points.get(1n)?.xyz).toEqual([1, 2, 3]);
+      }
+    }
+  );
+
   it('classifies ordinary XYZ/RGB PLY files as point clouds', async () => {
     const file = createGenericBinaryPlyFile();
 

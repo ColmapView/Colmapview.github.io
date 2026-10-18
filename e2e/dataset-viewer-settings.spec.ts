@@ -3,7 +3,7 @@ import { zipSync, strToU8 } from 'fflate';
 import { test, expect } from './fixtures/test-fixtures';
 import { loadTestDataset } from './fixtures/load-test-data';
 
-const yaml = 'ui:\n  background_color: "#123456"\ncamera:\n  scale: 0.4\n';
+const yaml = 'ui:\n  background_color: "#123456"\ncamera:\n  scale: 0.4\npoint_cloud:\n  min_track_length: 0\n';
 const files = Object.fromEntries(['cameras', 'images', 'points3D'].map(name => [
   `sparse/0/${name}.txt`, readFileSync(new URL(`./fixtures/test-data/sparse/${name}.txt`, import.meta.url)),
 ]));
@@ -42,6 +42,9 @@ for (const source of ['local folder', 'local archive', 'remote manifest', 'remot
     }
     await expect(page.getByText('Source:', { exact: false }).first()).toBeVisible({ timeout: 45000 });
     await expect(page.getByTestId('scene-3d')).toHaveCSS('background-color', 'rgb(18, 52, 86)');
+    await expect.poll(() => page.evaluate(() =>
+      JSON.parse(localStorage.getItem('colmap-viewer-pointcloud') || '{}').state?.minTrackLength
+    )).toBe(0);
     expect(errors).toEqual([]);
     expect(sidecarRequests).toBe(source === 'remote manifest' ? 1 : 0);
   });

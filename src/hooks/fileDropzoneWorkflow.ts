@@ -126,6 +126,8 @@ export interface FileDropzoneWorkflowOptions {
    */
   reload?: boolean;
   throwOnError?: boolean;
+  /** URL loads report this after their saved and shared settings have been restored. */
+  deferPointFilterWarning?: boolean;
   /**
    * Awaited once parsing is done, just before these files replace the scene: a URL load settles what
    * the new scene restores (saved settings, its splat list), so the scene never appears and then jumps.
@@ -681,16 +683,6 @@ export async function processFileDropzoneFiles(
       `Loaded: ${parseResult.cameras.size} cameras, ${parseResult.images.size} images, ${pointCount.toLocaleString()} points`
     );
 
-    const pointFilterWarning = getPointFilterWarning({
-      minTrackLength: deps.getMinTrackLength(),
-      pointCount,
-      wasmTrackLengths: parseResult.wasmWrapper?.getTrackLengths() ?? null,
-      points3D: parseResult.wasmWrapper ? undefined : parseResult.points3D?.values(),
-    });
-    if (pointFilterWarning) {
-      deps.addNotification('warning', pointFilterWarning.message);
-    }
-
     const { sourceType, imageUrlBase } = deps.getSourceInfo();
     logFileDropzoneDiagnostics(
       findMissingImageFiles(parseResult.images, imageFiles),
@@ -699,7 +691,14 @@ export async function processFileDropzoneFiles(
       { skipMissingImageDiagnostic: shouldSkipMissingImageDiagnosticForSource({ sourceType, imageUrlBase }) }
     );
     handOffCommittedSplat(currentLoadedFiles?.splatFile);
-    return await complete();
+    const completed = await complete();
+    if (!normalizedOptions.deferPointFilterWarning) {
+      const warning = getPointFilterWarning({ minTrackLength: deps.getMinTrackLength(), pointCount,
+        wasmTrackLengths: parseResult.wasmWrapper?.getTrackLengths() ?? null,
+        points3D: parseResult.wasmWrapper ? undefined : parseResult.points3D?.values() });
+      if (warning) deps.addNotification('warning', warning.message);
+    }
+    return completed;
   } catch (err) {
     if (load.signal.aborted || (err instanceof Error && err.name === 'AbortError')) return false;
     logger.error('Error processing files:', err);
