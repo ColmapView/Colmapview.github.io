@@ -5,9 +5,8 @@
     /* Vitest runs the tests in node with jsdom, so they see node and DOM globals. */
     "types": ["vite/client", "node"]
   },
-  /* Every source: the tests, the src/test helpers, and the modules they import.
-     src/store/viewerStore_test.ts is a Deno-era test that neither vitest nor CI
-     runs, so it stays out here as it does in the app project. */
+  /* Check tests, helpers and imported modules. Override the app exclusions
+     explicitly so extending that project does not silently omit the tests. */
   "include": ["src"],
-  "exclude": ["src/store/viewerStore_test.ts"]
+  "exclude": []
 }

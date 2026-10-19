@@ -78,9 +78,10 @@ Use Playwright in `e2e/` for browser behavior and real workflow coverage. Prefer
 
 ## Validation Commands
 
-- `npm run check`: JavaScript/TypeScript lint, test type checks, unit tests, and production build.
+- `npm run check:code`: JavaScript/TypeScript lint and all TypeScript projects without executing tests or building assets.
+- `npm run check`: code checks, unit tests, and production build, matching CI.
 - `npm run test:deployment:config`: deployment configuration and artifact policy checks without a browser.
-- `npx playwright test --workers=1`: browser workflow validation.
+- `npm run test:e2e`: serial Chromium browser workflow validation. Use explicit Playwright project names for Firefox and WebGPU; see [contributing](../CONTRIBUTING.md).
 - `npm run test:pycolmap`: Python compatibility checks for parser/export changes.
 
 Run the narrowest relevant command while editing, then `npm run check` before handoff. Run Playwright when changing viewer, modal, loading, export, or keyboard/mouse behavior.

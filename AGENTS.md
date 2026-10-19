@@ -6,12 +6,15 @@ This is a Vite + React 19 TypeScript app for viewing COLMAP reconstructions. Cor
 
 ## Build, Test, and Development Commands
 
-- `npm install`: install project dependencies.
+- Use Node.js 22.12 or later; `.nvmrc` selects Node 22, matching CI. See `CONTRIBUTING.md` for the development workflow.
+- `npm ci`: install the locked project dependencies.
 - `npm run dev`: start the Vite dev server at `http://localhost:5173`.
 - `npm run build`: run TypeScript project build and create the production Vite bundle.
 - `npm run lint`: run ESLint across source and tests.
+- `npm run check:code`: run lint and all TypeScript project checks without tests or a bundle.
+- `npm run check`: run code checks, unit tests and the production build, matching CI.
 - `npm run test:run`: run Vitest unit tests once.
-- `npx playwright test --workers=1`: run Playwright E2E tests serially for stable local validation.
+- `npm run test:e2e`: run Chromium E2E tests serially; pass a spec path or `--grep` after `--` for a focused run.
 - `npm run build:wasm`: rebuild the COLMAP WASM package from `colmap-wasm/`.
 - `npm run test:pycolmap`: run Python fixture compatibility tests.
 

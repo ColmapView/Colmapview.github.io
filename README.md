@@ -174,14 +174,14 @@ Notes:
 
 ## Development
 
-Use Node.js 22 and npm. Normal development uses the committed WASM assets; rebuilding WASM requires a separate local `colmap-wasm/` source checkout.
+Use Node.js 22.12 or later and npm (`.nvmrc` selects Node 22, matching CI). Normal development uses the committed WASM assets; rebuilding WASM requires a separate local `colmap-wasm/` source checkout.
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Run `npm run check` for lint, test types, unit tests and the production build. Run `npm run test:e2e -- --workers=1` for browser workflows and `npm run test:deployment` for hosted build profiles. See [architecture and module ownership](docs/architecture.md), the [design system](docs/design-system.md), and [dual-host deployment](docs/dual-hosting.md). Dated plans and audit notes record their original scope and are not current deployment instructions.
+Use `npm run check:code` for lint and all TypeScript checks while editing, and `npm run check` for the full unit suite and production build. `npm run test:e2e` runs serial Chromium browser checks; `npm run test:deployment` checks hosted build profiles. The [contributor guide](CONTRIBUTING.md) covers focused tests, browser setup and troubleshooting. See [architecture and module ownership](docs/architecture.md), the [design system](docs/design-system.md), and [dual-host deployment](docs/dual-hosting.md). Dated plans and audit notes record their original scope and are not current deployment instructions.
 
 ## Links
 
