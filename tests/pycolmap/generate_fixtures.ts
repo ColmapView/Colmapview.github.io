@@ -4,7 +4,7 @@
  * Each scenario writes to tests/pycolmap/fixtures/<name>/sparse/0/{cameras,images,points3D}.bin
  *
  * Run:
- *   npx tsx tests/pycolmap/generate_fixtures.ts
+ *   npx vite-node tests/pycolmap/generate_fixtures.ts
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -20,7 +20,7 @@ import {
   createSim3dFromEuler,
   transformReconstruction,
 } from '../../src/utils/sim3dTransforms';
-import { filterReconstructionByImageIds } from '../../src/store/actions/deletionActions';
+import { filterReconstructionByImageIds } from '../../src/utils/filterReconstruction';
 import {
   buildWasmCameraImageMaps,
   resolveColmapWasmFactory,

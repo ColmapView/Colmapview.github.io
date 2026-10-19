@@ -160,13 +160,6 @@ export async function discoverHuggingFaceSplatPaths(
     .map((entry) => ({ ...entry.candidate, splatCount: entry.classification.splatCount }));
 }
 
-export async function discoverHuggingFaceSplatPath(
-  baseUrl: string,
-  deps: DiscoverHuggingFaceSplatDeps = {}
-): Promise<RemoteSplatCandidate | null> {
-  return (await discoverHuggingFaceSplatPaths(baseUrl, deps))[0] ?? null;
-}
-
 /** A HEAD probe: the size when known, and whether the server says the file is not there. */
 async function probeRemoteFile(url: string, fetchImpl: FetchUrl): Promise<{ size: number | null; missing: boolean }> {
   let response: Response;
@@ -270,13 +263,6 @@ export async function discoverDirectoryListingSplatPaths(
   }
 
   return sortRemoteSplatCandidates([...candidatesByPath.values()]);
-}
-
-export async function discoverDirectoryListingSplatPath(
-  baseUrl: string,
-  deps: DiscoverDirectoryListingSplatDeps = {}
-): Promise<RemoteSplatCandidate | null> {
-  return (await discoverDirectoryListingSplatPaths(baseUrl, deps))[0] ?? null;
 }
 
 function getDiscoveredSplatLogMessage(

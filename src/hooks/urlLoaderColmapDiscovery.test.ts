@@ -6,7 +6,6 @@ import {
   createDefaultManifest,
 } from './urlLoaderPolicy';
 import {
-  discoverHuggingFaceColmapPaths,
   discoverHuggingFaceLayout,
   discoverHuggingFaceSplatPaths,
   withDiscoveredColmapPaths,
@@ -137,12 +136,12 @@ describe('discoverHuggingFaceSplatPaths pagination', () => {
   });
 });
 
-describe('discoverHuggingFaceColmapPaths', () => {
+describe('COLMAP layout discovery requests', () => {
   it('fetches the tree and resolves the COLMAP bin paths', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(sweetCoralsTree));
-    const result = await discoverHuggingFaceColmapPaths(RESOLVE_BASE, { fetchImpl });
+    const result = await discoverHuggingFaceLayout(RESOLVE_BASE, { fetchImpl });
     expect(fetchImpl).toHaveBeenCalledWith(TREE_API);
-    expect(result).toEqual({
+    expect(result?.colmap).toEqual({
       cameras: 'colmap/cameras.bin',
       images: 'colmap/images.bin',
       points3D: 'colmap/points3D.bin',
@@ -153,7 +152,7 @@ describe('discoverHuggingFaceColmapPaths', () => {
 
   it('returns null for non-HuggingFace base URLs without fetching', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(sweetCoralsTree));
-    const result = await discoverHuggingFaceColmapPaths('https://example.com/dataset', { fetchImpl });
+    const result = await discoverHuggingFaceLayout('https://example.com/dataset', { fetchImpl });
     expect(result).toBeNull();
     expect(fetchImpl).not.toHaveBeenCalled();
   });

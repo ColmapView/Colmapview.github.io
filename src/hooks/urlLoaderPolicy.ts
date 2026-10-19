@@ -1,6 +1,6 @@
 import type { RemoteSplatCandidate } from '../splat/loadingPolicy';
 import type { ColmapManifest } from '../types/manifest';
-import { getPreferredSplatCandidate, isSplatFilePath, sortSplatCandidatesByPreference } from '../utils/splatFilePolicy';
+import { isSplatFilePath, sortSplatCandidatesByPreference } from '../utils/splatFilePolicy';
 import { resolveColmapPaths, resolveImagesDir } from '../utils/colmapPathResolver';
 import {
   joinManifestUrlPath,
@@ -435,22 +435,6 @@ export function getHuggingFaceSplatPaths(
   }
 
   return sortRemoteSplatCandidates(candidates);
-}
-
-export function getPreferredHuggingFaceSplatPath(
-  entries: readonly HuggingFaceDatasetTreeEntry[],
-  treePath: string
-): RemoteSplatCandidate | null {
-  return getHuggingFaceSplatPaths(entries, treePath)[0] ?? null;
-}
-
-export const getLargestHuggingFacePlyPath = getPreferredHuggingFaceSplatPath;
-
-export function getLargestRemoteSplatCandidate(
-  current: RemoteSplatCandidate | null,
-  candidate: RemoteSplatCandidate
-): RemoteSplatCandidate {
-  return getPreferredSplatCandidate(current, candidate);
 }
 
 export function sortRemoteSplatCandidates(

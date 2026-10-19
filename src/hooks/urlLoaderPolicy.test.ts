@@ -12,7 +12,6 @@ import {
   getHuggingFaceDatasetTreeRequest,
   getInlineManifestLoadLogMessage,
   getLargeColmapDatasetWarning,
-  getPreferredHuggingFaceSplatPath,
   getManifestColmapFileEntries,
   getManifestLoadedLogMessage,
   getManifestLoadSourceInfo,
@@ -170,10 +169,6 @@ describe('url loader policy helpers', () => {
       { path: 'output/surface_gaussians.ply', size: 250 },
       { path: 'inside_gaussians.ply', size: 100 },
     ]);
-    expect(getPreferredHuggingFaceSplatPath(entries, treePath)).toEqual({
-      path: 'compressed/larger.spz',
-      size: 50,
-    });
   });
 
   it('joins manifest-relative URL paths while preserving existing slash behavior', () => {

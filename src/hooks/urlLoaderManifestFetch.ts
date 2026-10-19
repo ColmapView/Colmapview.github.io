@@ -17,12 +17,11 @@ import { getDiscoveredManifestMedia } from './urlLoaderColmapDiscovery';
 
 // Keep the loader's existing entry point stable while discovery owns its implementations.
 export {
-  deriveMasksPathFromImages, discoverHuggingFaceColmapPaths, discoverHuggingFaceLayout,
+  deriveMasksPathFromImages, discoverHuggingFaceLayout,
   withDiscoveredColmapPaths, type DiscoverColmapDeps, type HuggingFaceLayout,
 } from './urlLoaderColmapDiscovery';
 export {
-  discoverDirectoryListingSplatPath, discoverDirectoryListingSplatPaths,
-  discoverHuggingFaceSplatPath, discoverHuggingFaceSplatPaths, discoverManifestSplatCatalog,
+  discoverDirectoryListingSplatPaths, discoverHuggingFaceSplatPaths, discoverManifestSplatCatalog,
   type DiscoverManifestSplatDeps, type DiscoverDirectoryListingSplatDeps,
   type DiscoverHuggingFaceSplatDeps, type ClassifySplatUrl, type SplatUrlClassification,
 } from './urlLoaderSplatDiscovery';

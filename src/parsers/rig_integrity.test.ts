@@ -13,7 +13,7 @@ import type { Reconstruction, Image, Camera } from '../types/colmap';
 import { CameraModelId } from '../types/colmap';
 import type { Rig, Frame, RigData, RigPose } from '../types/rig';
 import { SensorType } from '../types/rig';
-import { filterReconstructionByImageIds } from '../store/actions/deletionActions';
+import { filterReconstructionByImageIds } from '../utils/filterReconstruction';
 import {
   createSim3dFromEuler,
   transformReconstruction,

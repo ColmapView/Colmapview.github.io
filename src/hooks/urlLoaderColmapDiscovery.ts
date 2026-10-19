@@ -132,19 +132,6 @@ export async function discoverHuggingFaceLayout(
 }
 
 /**
- * Discover where the COLMAP bins actually live in a HuggingFace dataset by
- * reading its file tree, rather than assuming the conventional sparse/0 layout.
- * Returns paths relative to the dataset base URL, or null when the base URL is
- * not a HuggingFace dataset or no complete model is present.
- */
-export async function discoverHuggingFaceColmapPaths(
-  baseUrl: string,
-  deps: Pick<DiscoverColmapDeps, 'fetchImpl'> = {}
-): Promise<HuggingFaceColmapPaths | null> {
-  return (await discoverHuggingFaceLayout(baseUrl, deps))?.colmap ?? null;
-}
-
-/**
  * Derive the masks directory as a sibling of a discovered images directory
  * (e.g. `corrected/images` -> `corrected/masks`). Returns null when the path
  * doesn't end in an `images` segment, so we don't guess for unusual layouts.

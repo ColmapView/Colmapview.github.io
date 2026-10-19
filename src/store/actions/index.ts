@@ -45,5 +45,4 @@ export {
   hasPendingDeletions,
   getPendingDeletionCount,
   getPendingDeletions,
-  filterReconstructionByImageIds,
 } from './deletionActions.js';

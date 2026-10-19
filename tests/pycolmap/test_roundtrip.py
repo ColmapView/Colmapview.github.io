@@ -90,7 +90,7 @@ class TestUntransformedRoundtrip:
 
 
 class TestTransformBakedRoundtrip:
-    """Exercises the fix for applyTransformToData (realize points2D before dropping WASM)."""
+    """Validates transformed writer records with materialized observations."""
 
     def test_loads_without_error(self):
         rec = pycolmap.Reconstruction(str(_fixture_path("transform_baked")))
@@ -119,7 +119,7 @@ class TestTransformBakedRoundtrip:
 
 
 class TestDeletionsAppliedRoundtrip:
-    """Exercises the fix for applyDeletionsToData in WASM mode (filter tracks)."""
+    """Validates filtered writer records and surviving image tracks."""
 
     def test_loads_without_error(self):
         rec = pycolmap.Reconstruction(str(_fixture_path("deletions_applied")))

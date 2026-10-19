@@ -5,12 +5,11 @@
  * These actions replace direct cross-store access with explicit coordination.
  *
  * Architecture:
- * - Pure functions (filterReconstructionByImageIds) for reusable logic
+ * - Pure record filtering lives in utils/filterReconstruction
  * - Store actions (applyDeletionsToData) for UI coordination
  */
 
 import { filterReconstructionByImageIds } from '../../utils/filterReconstruction';
-export { filterReconstructionByImageIds } from '../../utils/filterReconstruction';
 import { useReconstructionStore } from '../reconstructionStore.js';
 import { useUIStore } from '../stores/uiStore.js';
 import { useCameraStore } from '../stores/cameraStore.js';

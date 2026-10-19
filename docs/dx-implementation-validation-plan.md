@@ -1,5 +1,7 @@
 # DX Implementation and Validation Plan
 
+> Historical implementation plan and execution record. File paths, commands and test counts below describe their recorded revisions. Use the [contributor guide](../CONTRIBUTING.md) and [architecture guide](architecture.md) for the current workflow. The fixture-gated parser integrity suites referenced below were replaced on October 19, 2026 by [action/export integrity tests](../src/store/actions/editExportIntegrity.test.ts) that call the production actions.
+
 ## Objective
 
 Improve developer experience by making behavior easier to locate, test, and change without broad rewrites. The target shape is a codebase where React components render and adapt events, hooks own lifecycle, stores own shared state and actions, and pure view-model or policy modules own reusable decisions.
