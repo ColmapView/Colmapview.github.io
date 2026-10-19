@@ -1,12 +1,12 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
-import { flushSync } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import { hfAuth } from '../../features/huggingface/auth';
 import { describeHfAccess, getHfAccountConfiguration } from '../../features/huggingface/config';
 import { startupLinkRetry } from '../../appStartupRetry';
 import { googleDriveAuth, loadGoogleOAuthSdk, type GoogleOAuthSdk } from '../../features/googleDrive/auth';
 import { chooseGoogleDriveArchive, getGoogleDrivePickerConfig } from '../../features/googleDrive/picker';
 import { getGoogleDriveConfiguration, isGoogleDriveEnabled } from '../../features/googleDrive/config';
-import { getButtonClass } from '../../theme';
+import { getButtonClass, Z_INDEX } from '../../theme';
 import { AccountDialog } from '../ui/AccountDialog';
 
 export type DatasetAccountProvider = 'google' | 'hf';
@@ -54,7 +54,7 @@ export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoad
     : connected ? 'Load a public or private dataset.' : canSignIn ? 'Sign in to open private datasets.' : 'Load a public dataset by URL.';
   const driveAccessHint = connected
     ? 'Select the file to let ColmapView open it.'
-    : 'For a private file, sign in with an account that has access, then choose the file.';
+    : 'Sign in with an account that has access to this file.';
   const hint = provider === 'google'
     ? clientId ? accessMessage ? driveAccessHint : 'Only files you choose or create here are accessible. Downloads go directly to your browser.'
       : googleApiKey ? 'Private file selection is unavailable. You can load public datasets by URL.'
@@ -119,7 +119,13 @@ export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoad
       if (next.status === 'disconnected' && !next.error && !signInStarted) return;
       signInUnsubscribeRef.current?.();
       signInUnsubscribeRef.current = null;
-      if (next.status === 'connected') openPicker();
+      if (next.status === 'connected' && retryLoad) {
+        // App-created or previously selected files may already be accessible with this session.
+        // A denied retry offers this dialog again, connected and ready for explicit file selection.
+        setPickerLoading(false);
+        onClose();
+        void retryLoad();
+      } else if (next.status === 'connected') openPicker();
       else setPickerLoading(false);
     });
     googleDriveAuth.connect(clientId, sdk);
@@ -140,7 +146,7 @@ export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoad
     return () => { cancelled = true; };
   }, [provider, clientId, sdkAttempt]);
 
-  return (
+  return (<>
     <AccountDialog id={id} isOpen={provider !== null && (provider !== 'google' || googleEnabled) && !pickerOpen}
       onClose={close} title={title} connected={connected}
       status={connected || connecting || pickerLoading
@@ -181,5 +187,10 @@ export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoad
             onClick={() => { void hfAuth.connect(hfConfiguration.config); }}>Sign in</button> : null}
       </>}
     </AccountDialog>
-  );
+    {provider === 'google' && pickerOpen && createPortal(
+      <button type="button" className={`${getButtonClass('secondary', 'sm')} fixed bottom-4 right-4`}
+        style={{ zIndex: Z_INDEX.providerDialogControl }} aria-label="Cancel Drive file selection" onClick={cancelPicker}>
+        Cancel selection
+      </button>, document.body)}
+  </>);
 }

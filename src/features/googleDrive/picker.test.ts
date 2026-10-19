@@ -38,6 +38,13 @@ function signIn(expires = 3600) {
   }) }) };
   googleDriveAuth.connect('123456-client.apps.googleusercontent.com', sdk);
 }
+function loadFrame(source = 'https://docs.google.com/picker') {
+  const frame = document.createElement('iframe');
+  frame.dataset.pickerTest = '';
+  frame.src = source;
+  document.body.append(frame);
+  frame.dispatchEvent(new Event('load'));
+}
 
 beforeEach(() => {
   vi.stubEnv('VITE_GOOGLE_DRIVE_API_KEY', 'browser-key');
@@ -45,7 +52,10 @@ beforeEach(() => {
   vi.stubEnv('VITE_GOOGLE_DRIVE_APP_ID', '123456');
   signIn();
 });
-afterEach(() => { googleDriveAuth.disconnect(); vi.unstubAllEnvs(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => {
+  document.querySelectorAll('iframe[data-picker-test]').forEach(frame => frame.remove());
+  googleDriveAuth.disconnect(); vi.unstubAllEnvs(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals();
+});
 
 describe('Google Drive archive picker configuration', () => {
   it('requires the explicit numeric Cloud project number without deriving it from the OAuth client', () => {
@@ -184,6 +194,7 @@ describe('Google Drive archive picker lifecycle', () => {
     const pending = chooseGoogleDriveArchive({ sdk });
     const rejection = expect(pending).rejects.toThrow('expired or disconnected');
     await Promise.resolve();
+    loadFrame();
     await vi.advanceTimersByTimeAsync(55_000);
     await rejection;
     expect(dialog.dispose).toHaveBeenCalledOnce();
@@ -213,5 +224,43 @@ describe('Google Drive archive picker lifecycle', () => {
     await Promise.resolve();
     callback({ action: 'cancel' });
     await expect(next).resolves.toBeNull();
+  });
+  it('closes an iframe that never loads, preserves sign-in and permits a clean retry', async () => {
+    vi.useFakeTimers();
+    const { sdk, dialog, callback } = pickerSdk();
+    const pending = chooseGoogleDriveArchive({ sdk });
+    const rejection = expect(pending).rejects.toThrow('file picker did not load');
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(30_000);
+    await rejection;
+    expect(dialog.dispose).toHaveBeenCalledOnce();
+    expect(googleDriveAuth.getSnapshot().status).toBe('connected');
+    callback({ action: 'picked', docs: [{ id: 'late', name: 'late.zip' }] });
+    const next = pickerSdk();
+    const retry = chooseGoogleDriveArchive({ sdk: next.sdk });
+    await Promise.resolve();
+    next.callback({ action: 'cancel' });
+    await expect(retry).resolves.toBeNull();
+  });
+  it('allows browsing a loaded picker beyond the frame-loading deadline', async () => {
+    vi.useFakeTimers();
+    const { sdk, dialog, callback } = pickerSdk();
+    const pending = chooseGoogleDriveArchive({ sdk });
+    await Promise.resolve();
+    loadFrame();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(dialog.dispose).not.toHaveBeenCalled();
+    callback({ action: 'picked', docs: [{ id: 'file', name: 'dataset.zip' }] });
+    await expect(pending).resolves.toMatchObject({ fileId: 'file' });
+  });
+  it.each(['about:blank', 'https://other.example/picker', 'https://docs.google.com/document/'])('ignores an unrelated loaded iframe: %s', async source => {
+    vi.useFakeTimers();
+    const { sdk } = pickerSdk();
+    const pending = chooseGoogleDriveArchive({ sdk });
+    const rejection = expect(pending).rejects.toThrow('file picker did not load');
+    await Promise.resolve();
+    loadFrame(source);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await rejection;
   });
 });

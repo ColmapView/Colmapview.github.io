@@ -373,6 +373,28 @@ describe('Dataset provider account icons', () => {
     await waitFor(() => expect(props.onLoadRemoteDataset).toHaveBeenCalledExactlyOnceWith(selectedArchive.url));
   });
 
+  it('keeps cancellation available outside a picker that opened but never rendered', async () => {
+    configureDrive(true);
+    let signal: AbortSignal | undefined;
+    let finish: ((value: typeof selectedArchive) => void) | undefined;
+    vi.mocked(chooseGoogleDriveArchive).mockImplementation(options => {
+      signal = options?.signal;
+      options?.onOpen?.();
+      return new Promise(resolve => { finish = resolve; });
+    });
+    const props = createProps();
+    render(<DatasetAccountButtons {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose file from Drive' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel Drive file selection' }));
+    expect(signal?.aborted).toBe(true);
+    await act(async () => finish?.(selectedArchive));
+    expect(props.onLoadRemoteDataset).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Choose file from Drive' })).toBeEnabled();
+    expect(googleDriveAuth.getSnapshot().status).toBe('connected');
+  });
+
   it('opens the existing Hugging Face account controls and URL action', () => {
     const props = createProps();
     render(<DatasetAccountButtons {...props} />);

@@ -7,6 +7,7 @@ import { offerUrlLoadRetry } from '../../appStartupRetry';
 import { bucketConnection } from '../../features/bucketStorage/connection';
 import { hfAuth } from '../../features/huggingface/auth';
 import * as googleOAuth from '../../features/googleDrive/auth';
+import * as googlePicker from '../../features/googleDrive/picker';
 import type { UrlLoadError } from '../../types/manifest';
 
 const root = 'https://account.r2.cloudflarestorage.com/bucket/';
@@ -16,6 +17,22 @@ function fail(error: UrlLoadError, retry = vi.fn().mockResolvedValue(undefined))
   act(() => { useReconstructionStore.getState().setUrlError(error); offerUrlLoadRetry(retry); });
   return retry;
 }
+function configureDrive() {
+  vi.stubEnv('VITE_GOOGLE_DRIVE_ENABLED', 'true'); vi.stubEnv('VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN', '');
+  vi.stubEnv('VITE_GOOGLE_DRIVE_CLIENT_ID', '12345-fixture.apps.googleusercontent.com');
+  vi.stubEnv('VITE_GOOGLE_DRIVE_API_KEY', 'fixture-api-key'); vi.stubEnv('VITE_GOOGLE_DRIVE_APP_ID', '12345');
+  let authorize: ((response: googleOAuth.GoogleTokenResponse) => void) | undefined;
+  const requestAccessToken = vi.fn();
+  const sdk: googleOAuth.GoogleOAuthSdk = { initTokenClient: vi.fn(config => {
+    authorize = config.callback;
+    return { requestAccessToken };
+  }) };
+  vi.spyOn(googleOAuth, 'loadGoogleOAuthSdk').mockResolvedValue(sdk);
+  const choose = vi.spyOn(googlePicker, 'chooseGoogleDriveArchive').mockResolvedValue(null);
+  return { sdk, choose, requestAccessToken, authorize: () => act(() => authorize?.({
+    access_token: 'test-token', expires_in: 3600, token_type: 'Bearer', scope: googleOAuth.GOOGLE_DRIVE_SCOPE,
+  })) };
+}
 beforeEach(() => {
   vi.stubGlobal('crypto', webcrypto);
   vi.stubEnv('VITE_HF_PUBLISH_ENABLED', 'false'); vi.stubEnv('VITE_HF_AUTH_ENABLED', 'false');
@@ -23,6 +40,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup(); useReconstructionStore.getState().setUrlError(null); bucketConnection.disconnect();
+  googleOAuth.googleDriveAuth.disconnect();
   vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals();
 });
 describe('storage access recovery', () => {
@@ -81,16 +99,11 @@ describe('storage access recovery', () => {
     expect(connect).toHaveBeenCalledOnce();
   });
   it('offers the configured Google Drive sign-in and Picker without starting OAuth automatically', async () => {
-    vi.stubEnv('VITE_GOOGLE_DRIVE_ENABLED', 'true'); vi.stubEnv('VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN', '');
-    vi.stubEnv('VITE_GOOGLE_DRIVE_CLIENT_ID', '12345-fixture.apps.googleusercontent.com');
-    vi.stubEnv('VITE_GOOGLE_DRIVE_API_KEY', 'fixture-api-key'); vi.stubEnv('VITE_GOOGLE_DRIVE_APP_ID', '12345');
-    const requestAccessToken = vi.fn();
-    const sdk = { initTokenClient: vi.fn(() => ({ requestAccessToken })) };
-    vi.spyOn(googleOAuth, 'loadGoogleOAuthSdk').mockResolvedValue(sdk);
+    const { sdk, requestAccessToken } = configureDrive();
     fail({ type: 'auth', message: 'This Drive link could not be opened. It may be private or no longer available.', access: { provider: 'google' } });
     render(<StorageAccessPrompt {...props()} />);
     const dialog = screen.getByRole('dialog', { name: 'Google Drive' });
-    expect(dialog).toHaveTextContent('For a private file, sign in with an account that has access, then choose the file.');
+    expect(dialog).toHaveTextContent('Sign in with an account that has access to this file.');
     expect(dialog).not.toHaveTextContent('Anyone with the link');
     expect(screen.getByRole('button', { name: 'Use another link' })).toBeEnabled();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled());
@@ -99,5 +112,32 @@ describe('storage access recovery', () => {
     expect(requestAccessToken).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole('button', { name: 'Close account dialog' }));
     expect(googleOAuth.googleDriveAuth.getSnapshot().status).toBe('disconnected');
+  });
+  it('retries the retained Drive link after sign-in without requiring the picker for an accessible file', async () => {
+    const oauth = configureDrive();
+    const retry = fail({ type: 'auth', message: 'This Drive link could not be opened.', access: { provider: 'google' } });
+    render(<StorageAccessPrompt {...props()} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    oauth.authorize();
+    await waitFor(() => expect(retry).toHaveBeenCalledOnce());
+    expect(oauth.choose).not.toHaveBeenCalled();
+    expect(googleOAuth.googleDriveAuth.getSnapshot().status).toBe('connected');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+  it('offers explicit file selection if the authenticated retry still needs per-file access', async () => {
+    const oauth = configureDrive();
+    const failure: UrlLoadError = { type: 'auth', message: 'Choose this file from Drive.', access: { provider: 'google' } };
+    const retry = fail(failure, vi.fn(async () => { fail({ ...failure }); }));
+    render(<StorageAccessPrompt {...props()} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+    oauth.authorize();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Choose file from Drive' })).toBeEnabled());
+    expect(retry).toHaveBeenCalledOnce();
+    expect(oauth.choose).not.toHaveBeenCalled();
+    expect(oauth.requestAccessToken).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: 'Choose file from Drive' }));
+    await waitFor(() => expect(oauth.choose).toHaveBeenCalledOnce());
   });
 });

@@ -7,6 +7,7 @@ export { getGoogleDrivePickerConfig, type GoogleDrivePickerConfig } from './conf
 const PICKER_SCRIPT_URL = 'https://apis.google.com/js/api.js';
 const SAFE_DRIVE_ID = /^[A-Za-z0-9_-]{1,200}$/;
 const PICKER_LOAD_ERROR = 'Could not load the Google Drive picker. Check your connection and try again.';
+const PICKER_FRAME_LOAD_TIMEOUT_MS = 30_000;
 export interface GoogleDriveArchiveSelection {
   fileId: string;
   name: string;
@@ -175,6 +176,20 @@ export async function chooseGoogleDriveArchive(options: ChooseGoogleDriveArchive
     return await new Promise<GoogleDriveArchiveSelection | null>((resolve, reject) => {
       let picker: PickerDialog | undefined;
       let settled = false;
+      let frameLoadTimer: ReturnType<typeof setTimeout> | undefined;
+      const stopFrameLoadWatch = () => {
+        clearTimeout(frameLoadTimer);
+        document.removeEventListener('load', onFrameLoad, true);
+      };
+      // Google documents docs.google.com as the Picker's iframe host. Observe its navigation,
+      // without reading cross-origin contents or limiting how long the user can browse files.
+      const onFrameLoad = (event: Event) => {
+        if (!(event.target instanceof HTMLIFrameElement)) return;
+        try {
+          const source = new URL(event.target.src);
+          if (source.origin === 'https://docs.google.com' && source.pathname === '/picker') stopFrameLoadWatch();
+        } catch { /* Ignore unrelated or initial about:blank frames. */ }
+      };
       const dispose = () => {
         const current = picker;
         picker = undefined;
@@ -185,6 +200,7 @@ export async function chooseGoogleDriveArchive(options: ChooseGoogleDriveArchive
       const finish = (selection: GoogleDriveArchiveSelection | null, error?: Error) => {
         if (settled) return;
         settled = true;
+        stopFrameLoadWatch();
         options.signal?.removeEventListener('abort', cancel);
         unsubscribe();
         dispose();
@@ -205,6 +221,8 @@ export async function chooseGoogleDriveArchive(options: ChooseGoogleDriveArchive
         const token = googleDriveAuth.getAccessToken();
         if (!token) return checkAccount();
         try {
+          document.addEventListener('load', onFrameLoad, true);
+          frameLoadTimer = setTimeout(() => finish(null, new Error('The Google Drive file picker did not load. Choose the file again to retry.')), PICKER_FRAME_LOAD_TIMEOUT_MS);
           picker = archiveViews(sdk).reduce((builder, view) => builder.addView(view), new sdk.PickerBuilder())
             .setDeveloperKey(config.apiKey).setAppId(config.appId)
             .setOAuthToken(token).setOrigin(window.location.origin).setMaxItems(1)

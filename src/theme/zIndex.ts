@@ -17,4 +17,5 @@ export const Z_INDEX = {
   modalOverlay: 1200, // Blocking dialogs keep their headers and controls above notifications.
   tooltip: 2000,      // Tooltips, control panels (always on top)
   mouseTooltip: 9999, // Mouse-following tooltip (always topmost)
+  providerDialogControl: 10000, // App-owned recovery control above external picker overlays.
 } as const;
