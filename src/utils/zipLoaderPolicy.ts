@@ -1,6 +1,5 @@
 import {
   compareSplatCandidates,
-  getPreferredSplatCandidate,
   isSplatFilePath,
   type SplatCandidate,
 } from './splatFilePolicy';
@@ -70,54 +69,11 @@ export function isArchiveColmapPath(path: string): boolean {
   return COLMAP_FILENAMES.has(filename);
 }
 
-export function isArchivePlyPath(path: string): boolean {
-  return path.toLowerCase().endsWith('.ply');
-}
-
 export function isArchiveSplatPath(path: string): boolean {
   return isSplatFilePath(path);
 }
 
-export interface ArchivePlyCandidate {
-  path: string;
-  size: number;
-}
-
 export type ArchiveSplatCandidate = SplatCandidate;
-
-export function findLargestArchivePlyCandidate<TCandidate extends ArchivePlyCandidate>(
-  candidates: readonly TCandidate[]
-): TCandidate | undefined {
-  let largest: TCandidate | undefined;
-
-  for (const candidate of candidates) {
-    if (!isArchivePlyPath(candidate.path)) {
-      continue;
-    }
-
-    if (!largest || candidate.size > largest.size) {
-      largest = candidate;
-    }
-  }
-
-  return largest;
-}
-
-export function findPreferredArchiveSplatCandidate<TCandidate extends ArchiveSplatCandidate>(
-  candidates: readonly TCandidate[]
-): TCandidate | undefined {
-  let preferred: TCandidate | null = null;
-
-  for (const candidate of candidates) {
-    if (!isArchiveSplatPath(candidate.path)) {
-      continue;
-    }
-
-    preferred = getPreferredSplatCandidate(preferred, candidate);
-  }
-
-  return preferred ?? undefined;
-}
 
 export function sortArchiveSplatCandidatesByPreference<TCandidate extends ArchiveSplatCandidate>(
   candidates: readonly TCandidate[]

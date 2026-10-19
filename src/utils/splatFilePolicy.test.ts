@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   compareSplatCandidates,
-  getPreferredSplatCandidate,
+  sortSplatCandidatesByPreference,
   getSplatFileExtension,
   getSplatRendererRequirement,
   isSogSplatPath,
@@ -28,12 +28,12 @@ describe('splat file policy', () => {
     expect(compareSplatCandidates(largeSpz, smallSpz)).toBeGreaterThan(0);
     expect(compareSplatCandidates(hugePly, smallPly)).toBeGreaterThan(0);
 
-    expect([
+    expect(sortSplatCandidatesByPreference([
       hugePly,
       smallSpz,
       largeSpz,
       smallPly,
-    ].reduce(getPreferredSplatCandidate)).toBe(largeSpz);
+    ])).toEqual([largeSpz, smallSpz, hugePly, smallPly]);
   });
 
   it('accepts SOG but never prefers it over PLY or SPZ', () => {
@@ -42,7 +42,7 @@ describe('splat file policy', () => {
     const tinyPly = { path: 'scene.ply', size: 10 };
     const hugeSog = { path: 'scene.sog', size: 1_000 };
     expect(compareSplatCandidates(tinyPly, hugeSog)).toBeGreaterThan(0);
-    expect([hugeSog, { path: 'other.sog', size: 5 }].reduce(getPreferredSplatCandidate)).toBe(hugeSog);
+    expect(sortSplatCandidatesByPreference([hugeSog, { path: 'other.sog', size: 5 }])[0]).toBe(hugeSog);
   });
 
   it('knows which formats the WebGPU decoders can read', () => {

@@ -68,6 +68,8 @@ Public publication is discoverable and downloadable. Cancel stops further work a
 
 ## Maintainer setup
 
+The custom website uses [remembered connections](account-sessions.md#deployment-and-rollback) when the service is available. That path uses a separate confidential Hugging Face application with callback `https://colmapview.opsiclear.com/auth/hf/callback`; install its secret only in the Worker. Keep the public application below for GitHub Pages, local development and the custom website's browser-only fallback.
+
 ### Register a public OAuth application
 
 Create a maintainer-owned app from [Hugging Face application registration](https://huggingface.co/settings/applications/new). Choose a **public app without a client secret**. The integration uses authorization-code PKCE and requests `openid profile read-repos contribute-repos`. Allow both repository scopes: `read-repos` opens private datasets, and `contribute-repos` permits creating repositories and accessing repositories created by the app. Register the intended callback URLs. See the [official OAuth documentation](https://huggingface.co/docs/hub/oauth) for registration and scope details.
@@ -85,7 +87,7 @@ Use the actual origin if hosting elsewhere. The configured callback must have th
 
 For local development, open `http://localhost:5173/` when using the callback above. `127.0.0.1` is a different origin. When publishing is enabled but the address does not match, the **🤗 toolbar button** opens an explanation and a link to the configured viewer. Reload the dataset in that tab. Restart Vite after changing `.env.local` so it picks up the public OAuth settings.
 
-Only a public client ID and callback URL enter the build. Never add a client secret or an access token to a `VITE_` variable. Access tokens and PKCE state remain in tab memory and are discarded by disconnect or page reload.
+Only a public client ID and callback URL enter the build. Never add a client secret or an access token to a `VITE_` variable. In the browser-only flow, access tokens and PKCE state remain in tab memory and are discarded by disconnect or page reload.
 
 ### Configured application and live sign-in check
 

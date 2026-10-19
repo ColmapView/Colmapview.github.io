@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveHfAccountConfiguration, resolveHfConfig, resolveHfConfiguration } from './config';
+import { resolveHfAccountConfiguration, resolveHfConfiguration } from './config';
 
 const env = {
   VITE_HF_PUBLISH_ENABLED: 'true',
@@ -44,8 +44,8 @@ describe('Hugging Face publishing availability', () => {
     'https://colmapview.github.io/latest/hf-callback.html',
     'http://localhost:5173/hf-callback.html',
   ])('retains the existing exact .html callback at %s', redirectUri => {
-    expect(resolveHfConfig({ ...env, VITE_HF_OAUTH_REDIRECT_URI: redirectUri }, new URL(redirectUri).origin))
-      .toEqual({ clientId: 'public-client', redirectUri });
+    expect(resolveHfConfiguration({ ...env, VITE_HF_OAUTH_REDIRECT_URI: redirectUri }, new URL(redirectUri).origin))
+      .toEqual({ status: 'ready', config: { clientId: 'public-client', redirectUri } });
   });
 
   it.each([
@@ -65,7 +65,6 @@ describe('Hugging Face publishing availability', () => {
   });
 
   it.each(['http://127.0.0.1:5173', 'http://localhost:5188'])('explains an address mismatch at %s without enabling sign-in', origin => {
-    expect(resolveHfConfig(env, origin)).toBeNull();
     expect(resolveHfConfiguration(env, origin)).toMatchObject({
       status: 'unavailable', viewerUrl: 'http://localhost:5173/',
       message: expect.stringContaining('http://localhost:5173'),
@@ -85,7 +84,6 @@ describe('Hugging Face publishing availability', () => {
     'http://localhost:5173/another.html',
   ])('does not offer a recovery link or sign-in for an invalid callback: %s', redirectUri => {
     const invalid = { ...env, VITE_HF_OAUTH_REDIRECT_URI: redirectUri };
-    expect(resolveHfConfig(invalid, 'http://localhost:5173')).toBeNull();
     expect(resolveHfConfiguration(invalid, 'http://localhost:5173')).toEqual({
       status: 'unavailable', message: expect.any(String),
     });

@@ -50,11 +50,6 @@ function resolveOAuthConfiguration(env: Record<string, unknown>, origin: string,
   } catch { return unavailable; }
 }
 
-export function resolveHfConfig(env: Record<string, unknown>, origin: string): HfConfig | null {
-  const configuration = resolveHfConfiguration(env, origin);
-  return configuration.status === 'ready' ? configuration.config : null;
-}
-
 export function getHfConfiguration(): HfConfiguration {
   return resolveHfConfiguration(import.meta.env, window.location.origin);
 }

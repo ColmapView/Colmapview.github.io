@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildArchiveEntryPath,
-  findLargestArchivePlyCandidate,
-  findPreferredArchiveSplatCandidate,
   getArchiveImageLookupKeys,
   getColmapArchiveKey,
   getZipEntryLookupCandidates,
@@ -12,7 +10,6 @@ import {
   isArchiveColmapPath,
   isArchiveImagePath,
   isArchiveMimeType,
-  isArchivePlyPath,
   isArchiveSplatPath,
   sortArchiveSplatCandidatesByPreference,
 } from './zipLoaderPolicy';
@@ -31,8 +28,6 @@ describe('zip loader policy', () => {
     expect(isArchiveImagePath('project/sparse/0/images.bin')).toBe(false);
     expect(isArchiveColmapPath('project/sparse/0/points3D.bin')).toBe(true);
     expect(isArchiveColmapPath('project/images/photo.jpg')).toBe(false);
-    expect(isArchivePlyPath('project/splats/scene.PLY')).toBe(true);
-    expect(isArchivePlyPath('project/sparse/0/points3D.bin')).toBe(false);
     expect(isArchiveSplatPath('project/splats/scene.SPZ')).toBe(true);
     expect(isArchiveSplatPath('project/splats/scene.PLY')).toBe(true);
     expect(isArchiveSplatPath('project/sparse/0/points3D.bin')).toBe(false);
@@ -42,48 +37,22 @@ describe('zip loader policy', () => {
     expect(isArchiveSplatPath('scene/splats/scene.sog')).toBe(true);
   });
 
-  it('chooses the largest PLY candidate across root and nested archive folders', () => {
-    expect(findLargestArchivePlyCandidate([
+  it('orders all PLY sources across root and nested folders, excluding COLMAP files', () => {
+    expect(sortArchiveSplatCandidatesByPreference([
       { path: 'root_gaussians.ply', size: 10 },
       { path: 'output/surface_gaussians.ply', size: 100 },
       { path: '3dgs/model.ply', size: 200 },
       { path: 'folder/folder/folder/deep_gaussians.ply', size: 300 },
       { path: 'sparse/0/points3D.bin', size: 1000 },
-    ])).toEqual({
-      path: 'folder/folder/folder/deep_gaussians.ply',
-      size: 300,
-    });
+    ])).toEqual([
+      { path: 'folder/folder/folder/deep_gaussians.ply', size: 300 },
+      { path: '3dgs/model.ply', size: 200 },
+      { path: 'output/surface_gaussians.ply', size: 100 },
+      { path: 'root_gaussians.ply', size: 10 },
+    ]);
   });
 
-  it('chooses the largest SPZ candidate before falling back to PLY', () => {
-    expect(findPreferredArchiveSplatCandidate([
-      { path: 'root_gaussians.ply', size: 1_000 },
-      { path: 'output/surface_gaussians.spz', size: 100 },
-      { path: '3dgs/model.spz', size: 200 },
-      { path: 'sparse/0/points3D.bin', size: 10_000 },
-    ])).toEqual({
-      path: '3dgs/model.spz',
-      size: 200,
-    });
-
-    expect(findPreferredArchiveSplatCandidate([
-      { path: 'root_gaussians.ply', size: 1_000 },
-      { path: 'output/surface_gaussians.spz', size: 100 },
-      { path: '3dgs/model.spz', size: 200 },
-      { path: 'sparse/0/points3D.bin', size: 10_000 },
-    ])).toEqual({
-      path: '3dgs/model.spz',
-      size: 200,
-    });
-
-    expect(findPreferredArchiveSplatCandidate([
-      { path: 'root_gaussians.ply', size: 10 },
-      { path: '3dgs/model.ply', size: 200 },
-    ])).toEqual({
-      path: '3dgs/model.ply',
-      size: 200,
-    });
-
+  it('orders SPZ sources ahead of PLY and orders each format by size', () => {
     expect(sortArchiveSplatCandidatesByPreference([
       { path: 'root_gaussians.ply', size: 1_000 },
       { path: 'output/surface_gaussians.spz', size: 100 },

@@ -7,7 +7,6 @@ import type { Reconstruction, Camera, GlobalStats, Image as ColmapImage, SplatFi
 import { CameraModelId } from '../types/colmap';
 import {
   compareSplatCandidates,
-  getPreferredSplatCandidate,
   isSplatFilePath,
   type SplatCandidate,
 } from './splatFilePolicy';
@@ -115,16 +114,6 @@ function getLocalSplatCandidates(files: Map<string, File>): LocalSplatCandidate[
   return candidates;
 }
 
-/**
- * Find all splat files in a scanned dataset, sorted by default preference:
- * largest SPZ first, then largest PLY, then largest SOG.
- */
-export function findSplatFiles(files: Map<string, File>): File[] {
-  return findSplatFileSources(files)
-    .map((candidate) => candidate.file)
-    .filter((file): file is File => Boolean(file));
-}
-
 export function findSplatFileSources(files: Map<string, File>): SplatFileSource[] {
   return getLocalSplatCandidates(files)
     .sort((a, b) => compareSplatCandidates(b, a))
@@ -133,30 +122,6 @@ export function findSplatFileSources(files: Map<string, File>): SplatFileSource[
       path: candidate.path,
       file: candidate.file,
     }));
-}
-
-/**
- * Find the preferred splat file in a scanned dataset.
- */
-export function findPreferredSplatFile(files: Map<string, File>): File | undefined {
-  const preferred = getLocalSplatCandidates(files).reduce<LocalSplatCandidate | null>(
-    getPreferredSplatCandidate,
-    null
-  );
-  return preferred?.file;
-}
-
-/**
- * Find the largest PLY file in a scanned dataset.
- * Kept for callers that specifically need raw PLY selection.
- */
-export function findLargestPlyFile(files: Map<string, File>): File | undefined {
-  return getLocalSplatCandidates(files)
-    .filter((candidate) => candidate.path.toLowerCase().endsWith('.ply'))
-    .reduce<LocalSplatCandidate | null>(
-      (largest, candidate) => !largest || candidate.size > largest.size ? candidate : largest,
-      null
-    )?.file;
 }
 
 /**

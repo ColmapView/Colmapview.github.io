@@ -34,14 +34,6 @@ export function compareSplatCandidates(a: SplatCandidate, b: SplatCandidate): nu
   return a.size - b.size;
 }
 
-export function getPreferredSplatCandidate<TCandidate extends SplatCandidate>(
-  current: TCandidate | null | undefined,
-  candidate: TCandidate
-): TCandidate {
-  if (!current) return candidate;
-  return compareSplatCandidates(candidate, current) > 0 ? candidate : current;
-}
-
 export function sortSplatCandidatesByPreference<TCandidate extends SplatCandidate>(
   candidates: readonly TCandidate[]
 ): TCandidate[] {

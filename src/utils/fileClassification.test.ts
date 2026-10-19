@@ -7,9 +7,7 @@ import {
   createImagesOnlyReconstruction,
   findColmapCameraImageFiles,
   findColmapFiles,
-  findLargestPlyFile,
-  findPreferredSplatFile,
-  findSplatFiles,
+  findSplatFileSources,
   hasColmapFiles,
   hasImageFiles,
 } from './fileClassification';
@@ -115,7 +113,7 @@ describe('file classification helpers', () => {
     });
   });
 
-  it('finds the largest PLY file without treating non-PLY files as splats', () => {
+  it('keeps nested source identities, ignores COLMAP files and deduplicates file aliases', () => {
     const small = buildFile('small.ply', 'x');
     const root = buildFile('root_gaussians.ply', 'xx');
     const output = buildFile('surface_gaussians.ply', 'xxx');
@@ -123,16 +121,23 @@ describe('file classification helpers', () => {
     const largest = buildFile('deep_gaussians.ply', 'xxxxx');
     const ignored = buildFile('points3D.bin', 'xxxxxxxx');
 
-    const result = findLargestPlyFile(fileMap([
+    const result = findSplatFileSources(fileMap([
       ['splats/small.ply', small],
       ['root_gaussians.ply', root],
       ['output/surface_gaussians.ply', output],
       ['sparse/0/points3D.bin', ignored],
       ['3dgs/model.PLY', nested],
       ['folder/folder/folder/deep_gaussians.ply', largest],
+      ['deep_gaussians.ply', largest],
     ]));
 
-    expect(result).toBe(largest);
+    expect(result).toEqual([
+      { id: 'folder/folder/folder/deep_gaussians.ply', path: 'folder/folder/folder/deep_gaussians.ply', file: largest },
+      { id: '3dgs/model.PLY', path: '3dgs/model.PLY', file: nested },
+      { id: 'output/surface_gaussians.ply', path: 'output/surface_gaussians.ply', file: output },
+      { id: 'root_gaussians.ply', path: 'root_gaussians.ply', file: root },
+      { id: 'splats/small.ply', path: 'splats/small.ply', file: small },
+    ]);
   });
 
   it('finds all splat files with largest SPZ preferred over PLY fallback', () => {
@@ -148,8 +153,7 @@ describe('file classification helpers', () => {
       ['splats/small.ply', smallPly],
     ]);
 
-    expect(findPreferredSplatFile(files)).toBe(largestSpz);
-    expect(findSplatFiles(files)).toEqual([
+    expect(findSplatFileSources(files).map(source => source.file)).toEqual([
       largestSpz,
       smallSpz,
       largestPly,
@@ -165,18 +169,15 @@ describe('file classification helpers', () => {
       ['splats/scene.ply', ply],
     ]);
 
-    expect(findPreferredSplatFile(files)).toBe(ply);
-    expect(findSplatFiles(files)).toEqual([ply, sog]);
+    expect(findSplatFileSources(files).map(source => source.file)).toEqual([ply, sog]);
   });
 
-  it('returns undefined when no splat file is present', () => {
+  it('returns an empty source catalog when no splat file is present', () => {
     const files = fileMap([
       ['images/frame.jpg', buildFile('frame.jpg')],
     ]);
 
-    expect(findLargestPlyFile(files)).toBeUndefined();
-    expect(findPreferredSplatFile(files)).toBeUndefined();
-    expect(findSplatFiles(files)).toEqual([]);
+    expect(findSplatFileSources(files)).toEqual([]);
   });
 
   it('classifies COLMAP, image-only, and generated reconstruction inputs', () => {

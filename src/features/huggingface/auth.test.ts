@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
-import { resolveHfConfig } from './config';
 import { createHfAuth, exchangeOAuthCode, HF_CALLBACK_TYPE, HF_READ_SCOPES, HF_SCOPES, validateOAuthCallback } from './auth';
 import { publicationErrorMessage } from './http';
 
@@ -22,14 +21,6 @@ beforeEach(() => {
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 describe('public Hugging Face OAuth', () => {
-  it('requires explicit enablement and a same-origin registered callback', () => {
-    const env = { VITE_HF_PUBLISH_ENABLED: 'true', VITE_HF_OAUTH_CLIENT_ID: config.clientId, VITE_HF_OAUTH_REDIRECT_URI: config.redirectUri };
-    expect(resolveHfConfig(env, 'http://localhost')).toEqual(config);
-    expect(resolveHfConfig({ ...env, VITE_HF_PUBLISH_ENABLED: 'false' }, 'http://localhost')).toBeNull();
-    expect(resolveHfConfig(env, 'https://another.example')).toBeNull();
-    expect(resolveHfConfig({ ...env, VITE_HF_OAUTH_REDIRECT_URI: config.redirectUri + '?next=evil' }, 'http://localhost')).toBeNull();
-  });
-
   it('accepts only the exact callback and one-use state', () => {
     const data = { type: HF_CALLBACK_TYPE, url: callback };
     expect(validateOAuthCallback(data, config.redirectUri, state)).toBe(callback);
