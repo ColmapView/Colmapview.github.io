@@ -173,6 +173,7 @@ describe('useUrlLoader', () => {
     const connection: HfAuthState = { status: 'connected', identity: { username: 'owner' }, error: null };
     vi.spyOn(hfAuth, 'getSnapshot').mockReturnValue(connection);
     vi.spyOn(hfAuth, 'getReadAccessToken').mockReturnValue('private-loader-token');
+    vi.spyOn(hfAuth, 'ensureReadAccessToken').mockResolvedValue('private-loader-token');
     const request = vi.fn(async (url: string, init?: RequestInit) => {
       if (new Headers(init?.headers).get('Authorization') !== 'Bearer private-loader-token') return new Response(null, { status: 401 });
       if (url === 'https://huggingface.co/api/datasets/owner/private?expand=private') return Response.json({ id: 'owner/private', private: true });

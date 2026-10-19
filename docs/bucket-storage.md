@@ -19,7 +19,7 @@ Enter the complete **Bucket URL**, then fill in **Access key ID** and **Secret k
 | MinIO | `https://HOST/BUCKET/` | `us-east-1`, or the server's configured region |
 | Local MinIO | `http://localhost:9000/BUCKET/` | `us-east-1`, or the configured region |
 
-Supply an S3 access key ID and secret access key. Temporary credentials can also include a session token. The connection stays only in memory in this tab; disconnect or close the tab to drop it. Credentials are excluded from settings, manifests, browser storage, and viewer links. Signed requests are restricted to the configured bucket root and cannot follow redirects.
+Supply an S3 access key ID and secret access key; temporary credentials can include a session token. Credentials stay in tab memory by default. On the custom website, **Remember this connection** explicitly opts into [encrypted server storage](account-sessions.md) for up to 30 days. Restored requests use short-lived presigned URLs and never receive the saved secret. Read-only saved connections require **Enable uploads** before writes. Disconnect forgets the server record; closing a tab alone preserves an explicitly remembered connection. Credentials remain excluded from settings, manifests, browser storage and viewer links. Signing is restricted to the configured bucket root and cannot follow redirects.
 
 Read access needs `GetObject`, plus `ListBucket` to browse/discover folders. Uploads also need `PutObject` and `AbortMultipartUpload`. ColmapView verifies the uploaded manifest by reading it back, so upload credentials need read access too. ColmapView does not create buckets or change bucket permissions.
 

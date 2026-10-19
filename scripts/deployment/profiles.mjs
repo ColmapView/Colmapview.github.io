@@ -102,6 +102,7 @@ export function validateGithubHfConfiguration(env, isRelease) {
 export function profileEnvironment(profile, source = process.env, fixture = false) {
   if (!PROFILES.includes(profile)) throw new Error('Unknown deployment profile.');
   const env = { ...source };
+  env.VITE_ACCOUNT_SESSIONS_ENABLED = 'false';
   env.VITE_GOOGLE_DRIVE_ENABLED = 'false';
   env.VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN = '';
   for (const name of GOOGLE_NAMES) {
@@ -119,6 +120,7 @@ export function profileEnvironment(profile, source = process.env, fixture = fals
     const custom = fixture ? FIXTURE_GOOGLE_CONFIG : source;
     validateCustomConfiguration(custom);
     env.VITE_GOOGLE_DRIVE_ENABLED = 'true';
+    env.VITE_ACCOUNT_SESSIONS_ENABLED = 'true';
     env.VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN = CUSTOM_ORIGIN;
     for (const name of GOOGLE_NAMES) env[`VITE_GOOGLE_DRIVE_${name}`] = custom[`CUSTOM_GOOGLE_DRIVE_${name}`];
     for (const name of HF_NAMES) env[`VITE_HF_${name}`] = custom[`CUSTOM_HF_${name}`] || (name.endsWith('ENABLED') ? 'false' : '');

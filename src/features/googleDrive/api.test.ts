@@ -346,6 +346,7 @@ describe('Google Drive reader session on a rejected account request', () => {
       .mockResolvedValueOnce(Response.json(metadata)).mockReturnValueOnce(mediaRequest.promise);
     const source = await resolveGoogleDriveArchive(reference, { apiKey: 'app-key', fetchImpl });
     const media = source.options.fetchImpl!(source.url);
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(3));
     expect(fetchImpl.mock.calls[2][2].headers.get('Authorization')).toBe('Bearer older-token');
     signIn('newer-token');
     mediaRequest.answer(Response.json({ error: {} }, { status: 401 }));

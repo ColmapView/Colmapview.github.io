@@ -1,4 +1,5 @@
 import { assertGoogleDriveHostAllowed, getGoogleDriveConfiguration, getGoogleDriveHostingConfig, validateGoogleDriveClientId } from './config';
+import { accountSessions, type SessionToken } from '../accountSessions/api';
 
 export const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 export const GOOGLE_DRIVE_INSTALL_SCOPE = 'https://www.googleapis.com/auth/drive.install';
@@ -65,10 +66,15 @@ export function getGoogleDriveClientId(): string | null {
   return getGoogleDriveConfiguration().clientId;
 }
 
-/** Tokens stay in this tab's memory, never in viewer state, storage, or shared links. */
+/** Browser access tokens stay in tab memory; remembered credentials belong to the separate session service. */
 export function createGoogleDriveAuth() {
   const expired = 'Google Drive sign-in expired. Sign in again to continue.';
   let session: { token: string; expiresAt: number } | null = null;
+  let remembered = false;
+  let needsRefresh = false;
+  let accountSubject: string | undefined;
+  let renewal: { accountId?: string; promise: Promise<boolean> } | null = null;
+  let pendingSession: AbortController | null = null;
   let generation = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let state: GoogleDriveAuthState = { status: 'disconnected', error: null };
@@ -77,25 +83,63 @@ export function createGoogleDriveAuth() {
   const disconnect = (error: string | null = null) => {
     generation++;
     clearTimeout(timer);
+    pendingSession?.abort(); pendingSession = null;
     session = null;
     set({ status: 'disconnected', error });
+  };
+  const acceptSession = (token: SessionToken) => {
+    if (!getGoogleDriveHostingConfig().hostAllowed || !token.scope.split(' ').includes(GOOGLE_DRIVE_SCOPE)) throw new Error('Google Drive file permission was not granted.');
+    remembered = true;
+    needsRefresh = false;
+    accountSubject = token.accountId;
+    session = { token: token.accessToken, expiresAt: token.expiresAt };
+    clearTimeout(timer);
+    timer = setTimeout(() => disconnect(expired), Math.max(0, token.expiresAt - Date.now() - 5000));
+    set({ status: 'connected', error: null });
+  };
+  const readToken = (): string | null => {
+    if (!getGoogleDriveHostingConfig().hostAllowed) {
+      if (session || state.status === 'connecting') disconnect();
+      return null;
+    }
+    if (session && session.expiresAt <= Date.now() + 5000) disconnect(expired);
+    return session?.token ?? null;
+  };
+  const restore = (accountId?: string): Promise<boolean> => {
+    if (!accountSessions.getSnapshot().capabilities.google || !getGoogleDriveHostingConfig().hostAllowed) return Promise.resolve(false);
+    if (renewal && renewal.accountId === accountId) return renewal.promise;
+    const attempt = generation;
+    const promise = (needsRefresh ? accountSessions.token('google', 'view', accountId, undefined, true)
+      : accountSessions.token('google', 'view', accountId)).then(token => {
+      if (attempt !== generation) return false;
+      acceptSession(token); return true;
+    }).catch(() => false).finally(() => { if (renewal?.promise === promise) renewal = null; });
+    renewal = { accountId, promise };
+    return promise;
   };
   return {
     getSnapshot: () => state,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    getAccessToken(): string | null {
-      if (!getGoogleDriveHostingConfig().hostAllowed) {
-        if (session || state.status === 'connecting') disconnect();
-        return null;
-      }
-      if (session && session.expiresAt <= Date.now() + 5000) disconnect(expired);
-      return session?.token ?? null;
+    getAccessToken: readToken,
+    async ensureAccessToken(): Promise<string | null> {
+      const token = readToken();
+      if (remembered && (!token || session!.expiresAt <= Date.now() + 60_000)) await restore(accountSubject);
+      return readToken();
     },
-    disconnect: () => disconnect(),
+    clear: () => { accountSubject = undefined; disconnect(); },
+    disconnect() {
+      const forget = remembered || accountSessions.getSnapshot().accounts.some(account => account.provider === 'google');
+      remembered = false; accountSubject = undefined; disconnect();
+      if (forget) void accountSessions.disconnect('google').catch(() => {
+        remembered = true;
+        set({ status: 'disconnected', error: 'Could not forget the saved connection. Check your connection and try Disconnect again.' });
+      });
+    },
+    restore,
     /** Expire the session that holds the rejected token; one signed in while its request ran stays connected. */
-    expire: (token: string) => { if (session?.token === token) disconnect(expired); },
+    expire: (token: string) => { if (session?.token === token) { needsRefresh = true; disconnect(expired); } },
     /** Called synchronously from the sign-in button after the SDK is ready. */
-    connect(clientId: string, sdk: GoogleOAuthSdk, options: { loginHint?: string; install?: boolean } = {}) {
+    connect(clientId: string, sdk?: GoogleOAuthSdk | null, options: { loginHint?: string; install?: boolean } = {}) {
       try { assertGoogleDriveHostAllowed(); }
       catch (error) { disconnect((error as Error).message); return; }
       if (!validateGoogleDriveClientId(clientId)
@@ -109,6 +153,19 @@ export function createGoogleDriveAuth() {
       set({ status: 'connecting', error: null });
       const fail = (message: string) => { if (attempt === generation && state.status === 'connecting') disconnect(message); };
       timer = setTimeout(() => fail('Google sign-in timed out. Sign in again to continue.'), 180_000);
+      if (accountSessions.getSnapshot().capabilities.google) {
+        const controller = new AbortController(); pendingSession = controller;
+        const purpose = options.install ? 'install' : 'view';
+        const existing = accountSessions.getSnapshot().accounts.some(account => account.provider === 'google'
+          && (account.purpose === purpose || (purpose === 'view' && account.purpose === 'install'))
+          && (!options.loginHint || options.loginHint === account.accountId));
+        void (existing ? accountSessions.token('google', purpose, options.loginHint, controller.signal, needsRefresh)
+          : accountSessions.connect('google', { purpose, loginHint: options.loginHint }, controller.signal))
+          .then(token => { if (attempt === generation && state.status === 'connecting') acceptSession(token); })
+          .catch(error => fail(error instanceof Error ? error.message : 'Could not connect to Google Drive. Try again.'));
+        return;
+      }
+      if (!sdk) { fail('Google sign-in is still loading. Try again.'); return; }
       try {
         const client = sdk.initTokenClient({
           client_id: clientId,

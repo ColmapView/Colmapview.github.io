@@ -1,10 +1,11 @@
-import { useId, useState } from 'react';
+import { useId, useState, useSyncExternalStore } from 'react';
 import { bucketConnection } from '../../features/bucketStorage/connection';
-import { inferBucketRegion } from '../../features/bucketStorage/paths';
+import { inferBucketRegion, validateBucketConfig } from '../../features/bucketStorage/paths';
 import { BucketError, bucketErrorMessage } from '../../features/bucketStorage/types';
 import { getButtonClass, inputStyles } from '../../theme';
 import '../upload/upload.css';
 import { BucketCorsHelp } from './BucketCorsHelp';
+import { accountSessions, accountSessionsSupported } from '../../features/accountSessions/api';
 
 const fieldClass = `${inputStyles.base} ${inputStyles.sizes.sm} w-full min-w-0`;
 
@@ -23,20 +24,33 @@ export function BucketConnectionForm({ access, onConnected, initialBaseUrl, subm
   const [secretAccessKey, setSecretAccessKey] = useState('');
   const [sessionToken, setSessionToken] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const connect = () => {
+  const [remember, setRemember] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const sessions = useSyncExternalStore(accountSessions.subscribe, accountSessions.getSnapshot);
+  const canRemember = accountSessionsSupported() && sessions.capabilities.bucket;
+  const willRemember = remember && canRemember && Boolean(accessKeyId.trim() && secretAccessKey.trim());
+  const connect = async () => {
+    if (saving) return;
     setError(null);
     try {
       if (requireCredentials && (!accessKeyId.trim() || !secretAccessKey.trim())) {
         throw new BucketError(`Enter an access key and secret to ${access === 'write' ? 'upload' : 'connect'}.`);
       }
-      bucketConnection.connect({ baseUrl, region: region || inferBucketRegion(baseUrl), publicBaseUrl },
-        { accessKeyId, secretAccessKey, sessionToken });
+      const config = validateBucketConfig({ baseUrl, region: region || inferBucketRegion(baseUrl), publicBaseUrl });
+      const credentials = { accessKeyId, secretAccessKey, sessionToken };
+      if (willRemember) {
+        setSaving(true);
+        await accountSessions.rememberBucket(config, credentials, access === 'write');
+        bucketConnection.connect(config, undefined, access === 'write');
+      } else bucketConnection.connect(config, credentials);
       setAccessKeyId(''); setSecretAccessKey(''); setSessionToken('');
       onConnected?.();
-    } catch (failure) { setError(bucketErrorMessage(failure)); }
+    } catch (failure) { setError(failure instanceof Error && remember ? failure.message : bucketErrorMessage(failure)); }
+    finally { setSaving(false); }
   };
-  return <form className="flex flex-col gap-3" aria-label="Bucket connection" onSubmit={event => { event.preventDefault(); connect(); }}>
-    <p className="publication-note">{access === 'write' ? 'Connect with a key that permits uploads. Keys stay in this tab.'
+  return <form className="flex flex-col gap-3" aria-label="Bucket connection" onSubmit={event => { event.preventDefault(); void connect(); }}>
+    <p className="publication-note">{willRemember ? 'Credentials are encrypted on ColmapView’s server for up to 30 days. Disconnect forgets this connection.'
+      : access === 'write' ? 'Connect with a key that permits uploads. Keys stay in this tab.'
       : requireCredentials ? 'Connect with a key that permits reads. Keys stay in this tab.' : 'Keys are optional and stay in this tab.'}</p>
     <div className="publication-fields">
       <label htmlFor={`${id}-root`}>Bucket URL</label>
@@ -57,9 +71,12 @@ export function BucketConnectionForm({ access, onConnected, initialBaseUrl, subm
         <input id={`${id}-token`} className={fieldClass} type="password" value={sessionToken} onChange={event => setSessionToken(event.target.value)} autoComplete="off" />
       </div>
     </details>
+    {canRemember && (requireCredentials || accessKeyId || secretAccessKey) && <label className="flex items-center gap-2 text-ds-secondary">
+      <input type="checkbox" checked={remember} disabled={saving} onChange={event => setRemember(event.target.checked)} />Remember this connection
+    </label>}
     <div className="flex flex-wrap items-start justify-between gap-2">
       <BucketCorsHelp />
-      <button type="submit" className={`${getButtonClass('primary', 'sm')} flex-shrink-0 ml-auto`}>{submitLabel}</button>
+      <button type="submit" disabled={saving} className={`${getButtonClass('primary', 'sm')} flex-shrink-0 ml-auto`}>{saving ? 'Connecting…' : submitLabel}</button>
     </div>
     {error && <p role="alert" className="m-0 text-ds-error">{error}</p>}
   </form>;

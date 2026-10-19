@@ -4,6 +4,7 @@ declare const __APP_VERSION__: string;
 declare const __LOCAL_GSPLAT_WEBGPU_ENABLED__: boolean;
 
 interface ImportMetaEnv {
+  readonly VITE_ACCOUNT_SESSIONS_ENABLED?: string;
   readonly VITE_GOOGLE_DRIVE_ENABLED?: string;
   readonly VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN?: string;
   readonly VITE_GOOGLE_DRIVE_API_KEY?: string;

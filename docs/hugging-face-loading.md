@@ -1,5 +1,8 @@
 # Loading Hugging Face datasets
 
+> Connection update, October 19, 2026: the custom host now includes an optional [remembered connection service](account-sessions.md). It uses confidential OAuth callbacks, an essential session cookie and encrypted server credentials for at most 30 days. Its Google flow adds `openid` to identify the account; HF viewing and publication use separate authorizations. The browser-only setup and dated live evidence below describe the previous flow; they do not prove that the new server callbacks or refresh tokens have passed a live check. Provider setup and explicit production enablement are still required.
+
+
 Public dataset links work without signing in. To open a private dataset:
 
 1. Select the **🤗 Hugging Face** account icon next to **Upload configuration** in **Load Dataset**.

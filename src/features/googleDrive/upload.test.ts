@@ -205,6 +205,7 @@ describe('Drive publishing session on a rejected request', () => {
     let answer!: (response: Response) => void;
     const request = vi.fn<DriveUploadRequest>(() => new Promise(resolve => { answer = resolve; }));
     const upload = client(request).chunk(session, new Blob(['zip']), 0, new AbortController().signal, () => {});
+    await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
     expect(new Headers(request.mock.calls[0][1].headers).get('Authorization')).toBe('Bearer older-upload-token');
     signIn('newer-upload-token');
     answer(new Response(null, { status: 401 }));
