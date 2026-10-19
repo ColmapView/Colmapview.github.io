@@ -242,6 +242,35 @@ for (const directory of profiles) {
     });
   }
   if (profile === 'custom') {
+    test(`${directory}: a remembered HF publishing connection reopens a private archive after reload and in a new tab`, async ({ page, context }) => {
+      const server = await startArtifactServer(output, '/');
+      const traffic = await routeArtifact(context, CUSTOM_ORIGIN, server.origin, true);
+      const authRequests: string[] = [];
+      const privateUrl = 'https://huggingface.co/datasets/fixture-owner/private-scene/resolve/main/dataset.zip';
+      await context.route(`${CUSTOM_ORIGIN}/auth/**`, async route => {
+        const request = route.request(); const path = new URL(request.url()).pathname;
+        authRequests.push(path);
+        if (path === '/auth/session') await route.fulfill({ json: { capabilities: { google: false, hf: true, bucket: false },
+          accounts: [{ provider: 'hf', purpose: 'publish', accountId: 'fixture-hf', username: 'fixture-owner', renewable: true }], bucket: null, expiresAt: Date.now() + 86400_000 } });
+        else if (path === '/auth/hf/token') {
+          expect(request.postDataJSON()).toMatchObject({ purpose: 'publish' });
+          await route.fulfill({ json: { accessToken: 'saved-hf-token', accountId: 'fixture-hf', username: 'fixture-owner',
+            expiresAt: Date.now() + 3600_000, scope: 'openid profile read-repos contribute-repos', renewable: true } });
+        } else throw new Error(`Unexpected authentication request: ${path}`);
+      });
+      await context.route('https://huggingface.co/**', route => route.fulfill(route.request().headers().authorization === 'Bearer saved-hf-token'
+        ? { body: archive, headers: { 'Content-Type': 'application/zip', 'Access-Control-Allow-Origin': CUSTOM_ORIGIN, 'Content-Length': String(archive.length) } }
+        : { status: 401, body: 'Private dataset', headers: { 'Access-Control-Allow-Origin': CUSTOM_ORIGIN } }));
+      try {
+        for (const [index, active] of [page, page, await context.newPage()].entries()) {
+          if (index === 1) await active.reload(); else await active.goto(`${CUSTOM_ORIGIN}/?url=${encodeURIComponent(privateUrl)}`);
+          await expect(active.getByText('Source:', { exact: false }).first()).toBeVisible({ timeout: 45_000 });
+          await expect(active.getByRole('dialog', { name: 'Hugging Face', exact: true })).toHaveCount(0);
+        }
+        expect(authRequests.filter(path => path.endsWith('/token'))).toHaveLength(3);
+        expect(traffic.externalRequests).toEqual([]);
+      } finally { await closeArtifact(context, server); }
+    });
     test(`${directory}: remembered Drive Open with loads after reload and in a new tab without another sign-in`, async ({ page, context }) => {
       const server = await startArtifactServer(output, '/');
       const traffic = await routeArtifact(context, CUSTOM_ORIGIN, server.origin, true, undefined, { privateFile: true });

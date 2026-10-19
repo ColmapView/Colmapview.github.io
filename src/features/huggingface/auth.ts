@@ -111,15 +111,19 @@ export function createHfAuth() {
     set({ status: 'connected', identity: session.identity, error: null });
   };
   const restore = (purpose: 'view' | 'publish' = 'view', username?: string): Promise<boolean> => {
-    if (!accountSessions.getSnapshot().capabilities.hf || !accountSessions.getSnapshot().accounts.some(account => account.provider === 'hf' && account.purpose === purpose)) return Promise.resolve(false);
-    if (renewal?.purpose === purpose) return renewal.promise;
+    const saved = accountSessions.getSnapshot();
+    const hasPurpose = (value: 'view' | 'publish') => saved.accounts.some(account => account.provider === 'hf' && account.purpose === value);
+    // A publishing grant already permits reads. Prefer a separate read grant when available.
+    const actualPurpose = purpose === 'view' && !hasPurpose('view') ? 'publish' : purpose;
+    if (!saved.capabilities.hf || !hasPurpose(actualPurpose)) return Promise.resolve(false);
+    if (renewal?.purpose === actualPurpose) return renewal.promise;
     const attempt = generation;
-    const promise = (needsRefresh ? accountSessions.token('hf', purpose, undefined, undefined, true)
-      : accountSessions.token('hf', purpose)).then(token => {
+    const promise = (needsRefresh ? accountSessions.token('hf', actualPurpose, undefined, undefined, true)
+      : accountSessions.token('hf', actualPurpose)).then(token => {
       if (attempt !== generation || (username && token.username !== username)) return false;
       acceptSession(token); return true;
     }).catch(() => false).finally(() => { if (renewal?.promise === promise) renewal = null; });
-    renewal = { purpose, promise };
+    renewal = { purpose: actualPurpose, promise };
     return promise;
   };
   return {
