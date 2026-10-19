@@ -554,7 +554,7 @@ test('preview-url.mjs records only a verified alias in GITHUB_ENV, from the file
   assert.equal(steps.find(step => step.name === 'Resolve preview alias')?.run, 'node scripts/deployment/preview-url.mjs "$RUNNER_TEMP/wrangler-preview-output.ndjson"');
 });
 
-test('Cloudflare artifact headers preserve HTML on canonical and alias routes without changing asset or metadata rules', async () => {
+test('Cloudflare artifact headers prevent callback caching and preserve HTML bytes on canonical and alias routes', async () => {
   mkdirSync('.tmp', { recursive: true });
   const directory = mkdtempSync(path.resolve('.tmp/deployment-headers-'));
   const htmlRoutes = ['/', '/index', '/index.html', '/about', '/about.html', '/privacy', '/privacy.html', '/terms', '/terms.html', '/hf-callback', '/hf-callback.html'];
@@ -564,9 +564,10 @@ test('Cloudflare artifact headers preserve HTML on canonical and alias routes wi
   const server = await startArtifactServer(directory);
   try {
     for (const route of htmlRoutes) {
-      const response = await fetch(`${server.origin}${route}?url=private-file-identifier`);
+      const response = await fetch(`${server.origin}${route}${route.startsWith('/hf-callback') ? '?code=fixture-code&state=fixture-state' : '?url=private-file-identifier'}`);
       assert.equal(response.status, 200, route);
-      assert.equal(response.headers.get('cache-control'), 'public, no-cache, no-transform', route);
+      assert.equal(response.headers.get('cache-control'), route.startsWith('/hf-callback')
+        ? 'no-store, no-transform' : 'public, no-cache, no-transform', route);
       assert.equal(response.headers.get('cross-origin-opener-policy'), 'same-origin-allow-popups');
       assert.equal(response.headers.get('referrer-policy'), 'strict-origin');
       assert.equal(await response.text(), '<html><body>prepared bytes</body></html>');

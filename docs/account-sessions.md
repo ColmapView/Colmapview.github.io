@@ -26,7 +26,7 @@ The local revision has not been deployed. The Hub's `v4-remove-account-sessions`
 
 Deploy the prepared Hub retirement first, remove unused Worker auth secrets, then publish the browser-only viewer and revised policy. Older viewers already have browser authentication as a fallback when `/auth/session` reports disabled capabilities; an open tab using the retired service may need a reload. Verify the public HF client and browser callback, Google popup/Open with, private reads, uploads, cancellation and reconnect behavior. All deployment profiles force the obsolete `VITE_ACCOUNT_SESSIONS_ENABLED` flag off; it is no longer read by the viewer. Do not supply user tokens or provider client secrets to Vite.
 
-After namespace deletion, rolling back application code cannot restore saved connections. Preserve the public Google and HF registrations needed by browser authentication. Retiring the separate confidential HF app or old server callback registrations is an operator cleanup; do not remove the Google browser client or Drive UI registration.
+After namespace deletion, rolling back application code cannot restore saved connections. Preserve the public Google and HF registrations needed by browser authentication. Revoke the obsolete Google server client secret, retire the separate unused confidential HF app, and remove the old server callback registrations after checking browser sign-in. Deleting Worker bindings alone does not invalidate historical copies of a secret; deleting only an HF app secret converts that app to a public client. Preserve the Google browser client and Drive UI registration. Previously issued tokens or user-owned bucket keys require provider-side revocation if leakage is suspected.
 
 ## Validation
 
