@@ -48,12 +48,27 @@ describe('provider session restoration', () => {
     vi.mocked(accountSessions.token).mockResolvedValueOnce(hfToken());
     expect(await auth.restore()).toBe(true);
     expect(auth.getReadAccessToken()).toBe('hf-read'); expect(auth.canPublish()).toBe(false);
+    expect(accountSessions.token).toHaveBeenLastCalledWith('hf', 'view');
     expect(() => auth.getAccessToken()).toThrow('publishing dialog');
     vi.mocked(accountSessions.token).mockResolvedValueOnce(hfToken(true));
     expect(await auth.ensureAccessToken('fixture-owner')).toBe('hf-publish');
     expect(accountSessions.token).toHaveBeenLastCalledWith('hf', 'publish');
     await expect(auth.ensureAccessToken('another-owner')).rejects.toThrow('account that started');
     auth.disconnect();
+  });
+
+  it('reuses an existing HF publishing connection for reading when no separate read connection exists', async () => {
+    const original = saved.accounts;
+    saved.accounts = original.filter(account => account.provider !== 'hf' || account.purpose !== 'view');
+    try {
+      const auth = createHfAuth();
+      vi.mocked(accountSessions.token).mockResolvedValueOnce(hfToken(true));
+      expect(await auth.restore()).toBe(true);
+      expect(auth.getReadAccessToken()).toBe('hf-publish');
+      expect(accountSessions.token).toHaveBeenLastCalledWith('hf', 'publish');
+      expect(accountSessions.connect).not.toHaveBeenCalled();
+      auth.disconnect();
+    } finally { saved.accounts = original; }
   });
 
   it('does not accept a restored HF account after disconnect', async () => {

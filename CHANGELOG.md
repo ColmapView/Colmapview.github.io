@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-10-19
+
+### Fixed
+- Reopen private Hugging Face datasets after reload using an existing saved publishing connection when no separate read connection exists. Continue to prefer a saved read-only connection when available.
+
 ## [0.19.0] - 2026-10-19
 
 ### Added
