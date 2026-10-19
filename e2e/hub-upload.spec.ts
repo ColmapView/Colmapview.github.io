@@ -6,7 +6,7 @@ import { startMockBucket } from './fixtures/mock-bucket';
 
 const hubEndpoint = 'https://hub.invalid/hub/api/links';
 const longId = 'CalmRiver-AAAAAAAAAAAAAAAA';
-const longUrl = `https://hub.invalid/hub/${longId}`;
+const longUrl = `https://hub.invalid/s/${longId}`;
 const image = readFileSync(new URL('./fixtures/test-data/masks/photo.jpg.png', import.meta.url)).toString('base64');
 const dataset = ['photo.jpg', 'photo-2.jpg'].map(name => ({ relativePath: `images/${name}`, name, base64: image }));
 
@@ -24,7 +24,8 @@ test('gives a private bucket upload an unguessable Hub link and keeps it after t
   const requests: Array<Record<string, unknown>> = [];
   await page.route(hubEndpoint, async route => {
     requests.push(route.request().postDataJSON() as Record<string, unknown>);
-    await route.fulfill({ json: { id: longId, url: longUrl, managementPath: `/hub/manage/${longId}` } });
+    await route.fulfill({ json: { id: longId, url: `https://hub.invalid/hub/${longId}`, shareUrl: longUrl,
+      managementPath: `/hub/manage/${longId}` } });
   });
   try {
     await page.goto('/');

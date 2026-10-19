@@ -300,6 +300,21 @@ describe('requestHubLink', () => {
     await expect(requestHubLink(HUB, payload)).resolves.toEqual(link);
   });
 
+  it('prefers a short share URL for the same record while retaining the existing delete URL', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ id: 'HappyTree', url: `${HUB}/HappyTree`,
+      shareUrl: 'https://hub.invalid/s/HappyTree', managementPath: '/hub/manage/HappyTree' }, { status: 201 })));
+    await expect(requestHubLink(HUB, payload)).resolves.toEqual({ ...link, url: 'https://hub.invalid/s/HappyTree' });
+  });
+
+  it.each(['https://evil.example/s/HappyTree', 'https://hub.invalid/s/OtherTree',
+    'https://hub.invalid/s/HappyTree/extra', 'https://hub.invalid/sneaky/HappyTree',
+    'https://hub.invalid/s/HappyTree?token=unsafe', 'https://hub.invalid/s/HappyTree#unsafe',
+    'https://user@hub.invalid/s/HappyTree', '/s/HappyTree', null, 42])('rejects an invalid new share URL: %s', async shareUrl => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ id: 'HappyTree', url: `${HUB}/HappyTree`,
+      shareUrl, managementPath: '/hub/manage/HappyTree' }, { status: 201 })));
+    await expect(requestHubLink(HUB, payload)).rejects.toMatchObject({ kind: 'rejected' });
+  });
+
   it('posts the payload unchanged, local viewer links included, to the configured Hub', async () => {
     const local = { ...payload, viewerUrl: 'http://localhost:5173/?url=https%3A%2F%2Fstorage.example%2Fscene.zip' };
     const fetch = vi.fn(async (_url: string, _init: RequestInit) => Response.json({ id: 'HappyTree', url: `${HUB}/HappyTree`, managementPath: '/hub/manage/HappyTree' }, { status: 201 }));

@@ -59,7 +59,7 @@ function transportError(error: unknown): HubRequestError {
   return timedOut ? new HubRequestError("ColmapView Hub didn't respond.", 'timeout') : new HubRequestError("Couldn't reach ColmapView Hub.", 'network');
 }
 
-/** POST /api/links with typed failures. The returned links must lie under the configured Hub. */
+/** POST /api/links with typed failures. Management stays under the configured Hub; short shares use its origin. */
 export async function requestHubLink(baseUrl: string, payload: HubLinkPayload): Promise<{ url: string; managementUrl: string }> {
   let response: Response;
   try {
@@ -95,6 +95,16 @@ export async function requestHubLink(baseUrl: string, payload: HubLinkPayload): 
   try { link = new URL(url); management = new URL(managementPath, root); }
   catch { throw new HubRequestError(INVALID_LINK, 'rejected'); }
   if (!link.href.startsWith(root) || !management.href.startsWith(`${root}manage/`)) throw new HubRequestError(INVALID_LINK, 'rejected');
+  const shareUrl = field('shareUrl');
+  if (shareUrl !== undefined) {
+    const name = link.pathname.slice(new URL(root).pathname.length);
+    if (typeof shareUrl !== 'string' || !name || name.includes('/') || link.search || link.hash) throw new HubRequestError(INVALID_LINK, 'rejected');
+    let share: URL;
+    try { share = new URL(shareUrl); } catch { throw new HubRequestError(INVALID_LINK, 'rejected'); }
+    // The additive address must identify the same record on the same Hub origin, without extra state.
+    if (share.href !== new URL(`/s/${name}`, root).href) throw new HubRequestError(INVALID_LINK, 'rejected');
+    link = share;
+  }
   return { url: link.href, managementUrl: management.href };
 }
 

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.6] - 2026-10-18
+
+### Changed
+
+- Use `/s/<id>` for upload share links when the Hub provides the shorter address. Existing Hub links and delete links remain supported.
+
+### Fixed
+
+- Retry the saved Drive dataset link after sign-in so app-created and previously authorized files can open without the file picker.
+- Keep Cancel selection available above Google's picker and return to the connected account dialog if its iframe never loads.
+- Clarify Google Drive sign-in, private-file access and timeout recovery messages.
+
 ## [0.17.5] - 2026-10-18
 
 ### Fixed

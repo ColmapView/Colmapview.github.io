@@ -11,6 +11,8 @@ Public viewer links to supported Drive archives need no sign-in when the viewer'
 
 After the upload is verified, ColmapView creates a ColmapView Hub link with the current-view thumbnail and metadata where the Hub is enabled: a short name when the ZIP is shared with anyone with the link, an unguessable one when it is private. The result shows the Share link and a private delete link. If the Hub request fails, **Retry Hub link** retries only that step; it never repeats the Drive upload. Reopening the dialog keeps the completed result, and after a new dataset or an edit resets it, the Previous upload block keeps the Hub link.
 
+Share links use `https://colmapview.opsiclear.com/s/<id>` and open the saved viewer URL directly. Existing `/hub/<id>` links and private delete links still work. Updated viewers accept the shorter address only when it identifies the same record on the configured Hub origin; older Hub responses remain supported.
+
 ## Dataset contents
 
 The ZIP contains the current COLMAP reconstruction in binary format, original images, available masks, the active splat, and embedded `colmapview.yaml` settings. Pending reconstruction transforms are applied to exported COLMAP data, with the splat transform and current viewer settings saved for reopening. Apply pending image deletions before publishing.
