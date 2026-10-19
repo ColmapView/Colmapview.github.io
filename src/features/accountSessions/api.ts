@@ -139,8 +139,10 @@ export function createAccountSessions() {
           try { popup.location.href = started.url; } catch { abort(); }
         });
         const result = await token(selectedProvider, options.purpose, options.loginHint, combined);
-        await load(true);
+        combined.throwIfAborted();
         completed = true;
+        // The token completes sign-in. A slow metadata refresh must not leave a completed connection in the cancellable UI.
+        void load(true);
         return result;
       } finally {
         controller.abort(); try { popup.close(); } catch { /* COOP may detach the popup. */ }

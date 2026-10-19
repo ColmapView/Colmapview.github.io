@@ -82,9 +82,10 @@ describe('browser connection sessions', () => {
     const popup = { location: { href: '' }, close: vi.fn(), closed: false };
     vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
     const transactionId = 'A'.repeat(43);
+    let finishMetadata!: (response: Response) => void;
     request.mockImplementation(async path => String(path).endsWith('/connect')
       ? Response.json({ url: 'https://accounts.google.com/o/oauth2/v2/auth?state=fixture', transactionId })
-      : String(path).endsWith('/token') ? Response.json(access) : Response.json(saved));
+      : String(path).endsWith('/token') ? Response.json(access) : new Promise<Response>(resolve => { finishMetadata = resolve; }));
     const client = createAccountSessions(); const pending = client.connect('google');
     await vi.waitFor(() => expect(popup.location.href).toContain('accounts.google.com'));
     const data = { type: 'colmapview:account-session:v1', provider: 'google', transactionId };
@@ -94,6 +95,8 @@ describe('browser connection sessions', () => {
     expect(request).toHaveBeenCalledOnce();
     window.dispatchEvent(new MessageEvent('message', { origin: window.location.origin, source: popup as unknown as Window, data }));
     expect(await pending).toEqual(access); expect(popup.close).toHaveBeenCalled();
+    finishMetadata(Response.json(saved)); await client.load();
+    expect(client.getSnapshot().accounts).toEqual(saved.accounts);
   });
 
   it('cancels the exact server attempt when a popup sign-in is abandoned', async () => {
