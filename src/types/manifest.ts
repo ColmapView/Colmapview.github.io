@@ -4,8 +4,19 @@ import { z } from 'zod';
  * COLMAP manifest file format for loading reconstructions from URLs.
  * Used for loading datasets from Hugging Face and other web sources.
  */
+export interface ManifestMediaArchive {
+  /** Pinned HTTP(S) ZIP or plain TAR; its actual range size must match bytes. */
+  url: string;
+  bytes: number;
+  /** Scene-owned logical directory in which to expose members. */
+  mountPath: string;
+  /** Remove this exact member-directory prefix, without flattening subfolders. */
+  stripPrefix?: string;
+  role?: 'images' | 'masks';
+}
+
 export interface ColmapManifest {
-  /** Manifest version (currently 1) */
+  /** Version 1 for loose media; version 2 also supports companion archives. */
   version: number;
   /** Optional name for the reconstruction */
   name?: string;
@@ -61,13 +72,20 @@ export interface ColmapManifest {
   masks?: string[];
   /** Optional explicit array of splat `.spz`/`.ply`/`.sog` file paths; SPZ is preferred over PLY, then SOG. */
   splats?: string[];
+  /** Version 2: lazily indexed companion photographs or masks. */
+  mediaArchives?: ManifestMediaArchive[];
+}
+
+function safeArchivePath(value: string): boolean {
+  return !/[\\?#]/.test(value) && ![...value].some(character => character.charCodeAt(0) <= 31)
+    && value.split('/').every(part => part !== '' && part !== '.' && part !== '..');
 }
 
 /**
  * Zod schema for validating manifest files
  */
 export const ColmapManifestSchema = z.object({
-  version: z.number().int().min(1).max(1),
+  version: z.number().int().min(1).max(2),
   name: z.string().optional(),
   baseUrl: z.string().url(),
   viewerStatePath: z.string().min(1).max(4096).optional(),
@@ -87,7 +105,16 @@ export const ColmapManifestSchema = z.object({
   images: z.array(z.string()).optional(),
   masks: z.array(z.string()).optional(),
   splats: z.array(z.string().min(1)).optional(),
-});
+  mediaArchives: z.array(z.object({
+    url: z.string().url().refine(value => /^https?:\/\//i.test(value)
+      && /\.(zip|tar)$/i.test(new URL(value).pathname)),
+    bytes: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    mountPath: z.string().min(1).refine(safeArchivePath),
+    stripPrefix: z.string().refine(value => value === '' || safeArchivePath(value.replace(/\/$/, ''))).optional(),
+    role: z.enum(['images', 'masks']).optional(),
+  })).min(1).max(8).optional(),
+}).refine(value => value.version === 1 ? value.mediaArchives === undefined : value.mediaArchives !== undefined,
+  { message: 'Companion media archives require manifest version 2.' });
 
 /**
  * Progress state for URL loading

@@ -2,6 +2,36 @@ import { describe, it, expect } from 'vitest';
 import { parseImagesText } from './images';
 
 describe('parseImagesText', () => {
+  it.each([false, true])('preserves consecutive camera-only pose headers (skip points: %s)', skipPoints => {
+    // Dynamic Maps exports the next pose immediately after the previous one.
+    const input = `# IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME
+80 -0.03500771857066321 -0.042140754210753514 -0.6822095072989733 0.7291013678672659 -4791.131202697871 -2629.972891767971 -41428.63775941003 1 26047_Record004_260217_002054031_Camera_1,_+15deg.jpg
+81 -0.036416796971811986 -0.04374978484515701 -0.6823605783125221 0.7287961404873908 -4613.896627441842 -2603.481159380001 -41455.01640789224 1 26047_Record004_260217_002054928_Camera_1,_+15deg.jpg
+82 1 0 0 0 1 2 3 2 camera two.png`;
+    const images = parseImagesText(input, skipPoints);
+    expect([...images.keys()]).toEqual([80, 81, 82]);
+    expect(images.get(81)?.name).toBe('26047_Record004_260217_002054928_Camera_1,_+15deg.jpg');
+    expect(images.get(82)?.name).toBe('camera two.png');
+    expect([...images.values()].every(image => image.points2D.length === 0)).toBe(true);
+  });
+
+  it('keeps numeric observation rows and mixed omitted/empty observation rows intact', () => {
+    const images = parseImagesText(`1 1 0 0 0 0 0 0 1 first.jpg
+1 0 0 0 0 0 0 0 1 2 3 4
+2 1 0 0 0 0 0 0 1 second.jpg
+3 1 0 0 0 0 0 0 1 third.jpg
+
+4 1 0 0 0 0 0 0 1 123
+5 6 7`);
+    expect([...images.keys()]).toEqual([1, 2, 3, 4]);
+    expect(images.get(1)?.points2D).toHaveLength(4);
+    expect(images.get(1)?.points2D[3]).toEqual({ xy: [2, 3], point3DId: 4n });
+    expect(images.get(2)?.points2D).toEqual([]);
+    expect(images.get(3)?.points2D).toEqual([]);
+    expect(images.get(4)?.name).toBe('123');
+    expect(images.get(4)?.points2D).toEqual([{ xy: [5, 6], point3DId: 7n }]);
+  });
+
   it('returns empty map for empty input', () => {
     const result = parseImagesText('');
     expect(result.size).toBe(0);

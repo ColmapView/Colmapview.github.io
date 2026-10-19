@@ -9,6 +9,7 @@ import type { RemoteSplatCandidate } from '../splat/loadingPolicy';
 import { useNotificationStore } from '../store/stores/notificationStore';
 import { SPLAT_LIST_TIMEOUT_MESSAGE, splatListTimeoutWarning } from './datasetTimeoutWarnings';
 import { notificationsWithMessage } from '../test/notifications';
+import { rememberManifestMediaArchives } from './urlLoaderMediaArchives';
 
 const manifest: ColmapManifest = {
   version: 1,
@@ -59,6 +60,28 @@ afterEach(() => {
 const splatListWarnings = () => notificationsWithMessage(SPLAT_LIST_TIMEOUT_MESSAGE);
 
 describe('URL loader manifest source helpers', () => {
+  it.each(['committed', 'rejected', 'cancelled'] as const)('owns companion readers only after a scene commit: %s', async outcome => {
+    const files = makeFiles(), reader = { close: vi.fn(async () => {}), getFilesArray: async () => [] };
+    rememberManifestMediaArchives(files, { reader, index: new Map(), entries: new Map(), imagePaths: ['images/a.png'], maskPaths: [], bytes: 1024 });
+    const deps = { ...makeDeps(files), setActiveArchive: vi.fn(), signal: new AbortController().signal };
+    if (outcome === 'rejected') deps.processFiles.mockResolvedValue(false);
+    if (outcome === 'cancelled') {
+      const controller = new AbortController();
+      deps.signal = controller.signal;
+      deps.fetchColmapFiles.mockImplementation(async () => { controller.abort(); return files; });
+      await expect(loadManifestSource(manifest, { type: 'url', sourceUrl: 'https://example.com/scene.json' }, deps)).rejects.toMatchObject({ name: 'AbortError' });
+    } else {
+      expect(await loadManifestSource(manifest, { type: 'url', sourceUrl: 'https://example.com/scene.json' }, deps)).toBe(outcome === 'committed');
+    }
+    if (outcome === 'committed') {
+      expect(deps.setActiveArchive).toHaveBeenCalledWith(reader, expect.any(Map), 1024, 1);
+      expect(reader.close).not.toHaveBeenCalled();
+    } else {
+      expect(deps.setActiveArchive).not.toHaveBeenCalled();
+      expect(reader.close).toHaveBeenCalledOnce();
+    }
+  });
+
   it('loads a URL manifest source with lazy image/mask bases and processing progress', async () => {
     const files = makeFiles();
     const deps = makeDeps(files);

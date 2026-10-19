@@ -3,7 +3,7 @@ import type { DatasetAccessOptions, DatasetState } from '../types';
 import type { CameraDatasetImportContext, ImportedImageBinding } from './types';
 import { importError } from './types';
 import { imageResourceUrl } from './sourcePaths';
-import { readCameraSourceFile, MAX_CAMERA_MEDIA_BYTES } from './sourceAccess';
+import { cameraSourceArchiveEntry, readCameraSourceFile, MAX_CAMERA_MEDIA_BYTES } from './sourceAccess';
 import { readImageDimensions, readImageOrientation } from '../../utils/imageDimensions';
 import { fetchUrlImage, fetchUrlImageRaw, getUrlImageCached, fetchUrlMask } from '../../utils/urlImageFiles';
 import { fetchZipImage, getZipImageCached, fetchZipMask } from '../../utils/zipImageFiles';
@@ -35,7 +35,7 @@ const isNative = (context: CameraDatasetImportContext) => context.selection.sche
 async function original(state: DatasetState, name: string, options?: DatasetAccessOptions): Promise<File | null> {
   const context = contextOf(state), binding = context.bindings.get(name);
   if (!binding || options?.signal?.aborted) return null;
-  const file = context.source.kind === 'url'
+  const file = context.source.kind === 'url' && !cameraSourceArchiveEntry(context.source, binding.sourceImagePath)
     ? await fetchUrlImageRaw(null, name, imageResourceUrl(context.source.baseUrl,binding.sourceImagePath), { ...options, maxBytes: options?.maxBytes ?? MAX_CAMERA_MEDIA_BYTES })
     : await readCameraSourceFile(context.source, binding.sourceImagePath, options?.signal, options?.maxBytes ?? MAX_CAMERA_MEDIA_BYTES);
   if (file) {
@@ -52,9 +52,10 @@ async function display(state: DatasetState, name: string, options?: DatasetAcces
     cache(context).validated.add(name);
   };
   if (context.source.kind === 'local') return original(state, name, options);
+  const entry = cameraSourceArchiveEntry(context.source, binding.sourceImagePath);
+  if (entry) return fetchZipImage(name, options, entry, validate);
   if (context.source.kind === 'url') return fetchUrlImage(null, name, imageResourceUrl(context.source.baseUrl, binding.sourceImagePath), { ...options, maxBytes: options?.maxBytes ?? MAX_CAMERA_MEDIA_BYTES }, validate);
-  const entry = context.source.entries.get(binding.sourceImagePath);
-  return entry ? fetchZipImage(name, options, entry, validate) : null;
+  return null;
 }
 
 /** Generate a grayscale validity mask from original RGBA, retaining partial alpha. */
@@ -102,7 +103,9 @@ async function mask(state: DatasetState, name: string, options?: DatasetAccessOp
     return derived;
   }
   let file: File | null;
+  const archiveEntry = cameraSourceArchiveEntry(context.source, mask.path);
   if (context.source.kind === 'local') file = await readCameraSourceFile(context.source, mask.path, options?.signal, options?.maxBytes);
+  else if (archiveEntry) file = await fetchZipMask(name, options, archiveEntry);
   else if (context.source.kind === 'url') file = await fetchUrlMask(context.source.baseUrl, name, { ...options, maxBytes: options?.maxBytes ?? MAX_CAMERA_MEDIA_BYTES }, imageResourceUrl(context.source.baseUrl, mask.path));
   else {
     const entry = context.source.entries.get(mask.path);
@@ -124,6 +127,8 @@ export const importedSourceAdapter: DatasetSourceAdapter = {
     const context = contextOf(state), binding = context.bindings.get(name);
     if (!binding || (!(isNative(context) && context.source.kind === 'local') && !cache(context).validated.has(name))) return undefined;
     if (context.source.kind === 'local') return context.source.files.get(binding.sourceImagePath);
+    const entry = cameraSourceArchiveEntry(context.source, binding.sourceImagePath);
+    if (entry) return getZipImageCached(name, entry);
     if (context.source.kind === 'url') return getUrlImageCached(name, null, imageResourceUrl(context.source.baseUrl, binding.sourceImagePath));
     return getZipImageCached(name,context.source.entries.get(binding.sourceImagePath));
   },

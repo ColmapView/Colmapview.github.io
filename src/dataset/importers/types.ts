@@ -47,6 +47,8 @@ export type CameraDatasetSource =
     baseUrl: string;
     /** Complete file paths relative to baseUrl, when a host provides an authoritative listing. */
     filePaths?: readonly string[];
+    /** Archive members keyed by their logical, encoded resource URL. */
+    archiveEntries?: ReadonlyMap<string, ArchiveEntry>;
   };
 
 export interface CameraDatasetSelection {

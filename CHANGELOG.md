@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.2] - 2026-10-19
+
+### Fixed
+
+- Preserve consecutive camera-only COLMAP text poses when empty observation rows are omitted.
+- Load scene-owned companion ZIP/TAR photographs and masks through version 2 manifests, with lazy byte-range access and reader cleanup on cancellation, reset and replacement.
+- Resolve listed Nerfstudio `images_N` folders when originals are absent, check the resize dimensions and scale pixel intrinsics while preserving poses and distortion.
+
 ## [0.19.1] - 2026-10-19
 
 ### Fixed

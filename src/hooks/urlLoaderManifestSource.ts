@@ -10,6 +10,8 @@ import { fetchDatasetResource } from '../utils/fetchDatasetResource';
 import { FETCH_TIMEOUT } from '../utils/fetchWithTimeout';
 import { detectTouchDevice } from './useIsTouchDevice';
 import { anySignal } from '../utils/abortSignals';
+import { getManifestMediaArchives, type ManifestMediaArchives } from './urlLoaderMediaArchives';
+import { closeZipArchive, setActiveZipArchive } from '../utils/zipArchiveState';
 
 export { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS } from './urlLoaderViewerState';
 
@@ -58,6 +60,7 @@ export interface LoadManifestSourceDeps {
   onSplatListTimeout?: () => void;
   fetchImpl?: (url: string, init?: RequestInit) => Promise<Response>;
   fetchColmapFiles?: FetchColmapFiles;
+  setActiveArchive?: typeof setActiveZipArchive;
   discoverSplatCatalog?: (manifest: ColmapManifest) => Promise<RemoteSplatCandidate[]>;
   log?: Log;
   processFiles: ProcessFiles;
@@ -109,6 +112,7 @@ export async function loadManifestSource(
   const fetchColmapFiles = deps.fetchColmapFiles
     ?? ((targetManifest: ColmapManifest) => fetchManifestColmapFiles(targetManifest, {
       fetchImpl: deps.fetchImpl,
+      signal: deps.signal,
       log: (message) => log(message),
       setUrlProgress: deps.setUrlProgress,
     }));
@@ -163,9 +167,12 @@ export async function loadManifestSource(
     if ('error' in result) throw result.error;
     return result.state;
   };
+  let mediaResources: ManifestMediaArchives | undefined;
+  let mediaCommitted = false;
   try {
 
   const files = await fetchColmapFiles(manifest);
+  mediaResources = getManifestMediaArchives(files);
   assertCurrent();
   // An explicitly referenced state document is required for a correctly aligned publication.
   const explicitViewerState = manifest.viewerStatePath === undefined ? null : await getViewerState();
@@ -182,6 +189,11 @@ export async function loadManifestSource(
   const sourceInfo = getManifestLoadSourceInfo(manifest, source);
   const commitSource = () => {
     assertCurrent();
+    if (mediaResources) {
+      (deps.setActiveArchive ?? setActiveZipArchive)(mediaResources.reader, mediaResources.index,
+        mediaResources.bytes, mediaResources.imagePaths.length);
+      mediaCommitted = true;
+    }
     deps.setSourceInfo(sourceInfo.sourceType, sourceInfo.sourceUrl, sourceInfo.imageUrlBase,
       sourceInfo.maskUrlBase, sourceInfo.sourceManifest, sourceInfo.imageNameToUrl ?? null, manifest.name ?? null);
   };
@@ -226,6 +238,7 @@ export async function loadManifestSource(
 
   return true;
   } finally {
+    if (mediaResources && !mediaCommitted) await closeZipArchive(mediaResources.reader).catch(error => log('[URL Loader] Could not close companion media:', error));
     optionalSettings?.cancel();
     explicitSettingsController?.abort();
     discoveryController.abort();

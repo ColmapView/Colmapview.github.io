@@ -8,6 +8,8 @@ export interface ResolvedCameraFrame {
   path: string;
   name: string;
   size?: { width: number; height: number };
+  /** A listed images_N replacement whose pixels must match this downscale. */
+  downscaleFactor?: number;
   mask?: ImportedImageBinding['mask'];
 }
 export type ResolveCameraFrame = (reference: string, frame: Record<string,unknown>, index: number)
@@ -127,7 +129,7 @@ export async function normalizeNerfTransforms(value: unknown, resolve: ResolveCa
   const result: NormalizedCameraDataset = { cameras:new Map(),images:new Map(),bindings:new Map(),diagnostics:[],
     schema: nerfTransformsSchema(root),
     metadataFrameCount:root.frames.length };
-  const seen = new Set<string>();
+  const seen = new Set<string>(), resizedFactors = new Set<number>();
   const saved = Object.fromEntries(['applied_transform','applied_scale','aabb_scale','scale','offset'].filter(key => root[key] !== undefined).map(key => [key,root[key]]));
   if (Object.keys(saved).length) result.savedWorldMetadata = saved;
   for (let index=0; index<root.frames.length; index++) {
@@ -164,6 +166,23 @@ export async function normalizeNerfTransforms(value: unknown, resolve: ResolveCa
     if (seen.has(key)) return importError('AMBIGUOUS_IMAGE_PATH',`Duplicate/case-colliding image name: ${resolved.name}`);
     seen.add(key);
     const camera = nerfFrameCamera(root,frame,index,resolved.size);
+    if (resolved.downscaleFactor !== undefined) {
+      const factor = resolved.downscaleFactor, size = resolved.size;
+      if (result.schema !== 'nerfstudio' || !Number.isInteger(factor) || factor < 2 || factor > 64
+        || !Number.isInteger(Math.log2(factor)) || !size
+        || size.width < Math.floor(camera.width / factor) || size.width > Math.ceil(camera.width / factor)
+        || size.height < Math.floor(camera.height / factor) || size.height > Math.ceil(camera.height / factor)) {
+        return importError('IMAGE_DIMENSION_MISMATCH', `The images_${factor} photograph does not match the declared resize: ${resolved.path}.`);
+      }
+      camera.width = size.width;
+      camera.height = size.height;
+      camera.params = camera.params.map((value, offset) => offset < 4 ? value / factor : value);
+      if (!resizedFactors.has(factor)) {
+        resizedFactors.add(factor);
+        result.diagnostics.push({ code: 'RESIZED_RGB', severity: 'info', frameIndex: index, path: resolved.path,
+          message: `Using images_${factor}; focal lengths and principal points are scaled by 1/${factor}. Poses and distortion coefficients are retained.` });
+      }
+    }
     const id=index+1;
     result.cameras.set(id,{ cameraId:id,...camera });
     result.images.set(id,{ imageId:id,cameraId:id,name:resolved.name,...pose,points2D:[] });

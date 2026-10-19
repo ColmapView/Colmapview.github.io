@@ -4,6 +4,11 @@ import { importError, type CameraDatasetSource } from './types';
 
 export const MAX_CAMERA_MEDIA_BYTES = 64 * 1024 * 1024;
 
+export function cameraSourceArchiveEntry(source: CameraDatasetSource, path: string) {
+  return source.kind === 'archive' ? source.entries.get(path)
+    : source.kind === 'url' ? source.archiveEntries?.get(imageResourceUrl(source.baseUrl, path)) : undefined;
+}
+
 /** Bound actual streamed bytes, including hosts that hide or misreport Content-Length. */
 export async function readBoundedResponseBytes(response: Response, name: string, maxBytes: number, signal?: AbortSignal): Promise<Uint8Array<ArrayBuffer>[]> {
   if (Number(response.headers.get('content-length')) > maxBytes) {
@@ -44,8 +49,8 @@ export async function readCameraSourceFile(source: CameraDatasetSource, path: st
   signal?.throwIfAborted();
   let file: File|null;
   if (source.kind==='local') file=source.files.get(path) ?? null;
-  else if (source.kind==='archive') {
-    const entry=source.entries.get(path);
+  else if (source.kind==='archive' || cameraSourceArchiveEntry(source, path)) {
+    const entry=cameraSourceArchiveEntry(source, path);
     if (!entry) return null;
     if (entry.size > maxBytes) return importError('IMPORT_LIMIT_EXCEEDED',`${path} exceeds its read budget.`);
     file=await entry.extract({ signal });

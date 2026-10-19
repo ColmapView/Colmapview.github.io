@@ -103,6 +103,21 @@ export function parseImagesBinary(
  * 1 0.851773 0.0165051 0.503764 -0.142941 -0.737434 1.02973 3.74354 1 image001.jpg
  * 2362.39 248.498 58396 1784.7 268.254 59027 1784.7 268.254 -1
  */
+function isUnambiguousImageHeader(line: string, photometric: boolean): boolean {
+  // Avoid splitting potentially huge, purely numeric observation rows twice.
+  if (!/[^\d.eE+\-\s]/.test(line)) return false;
+  const parts = line.trim().split(/\s+/);
+  if (parts.length < (photometric ? 15 : 10)) return false;
+  const cameraOffset = photometric ? 11 : 8;
+  if (parseColmapIntegerToken(parts[0], { min: 0 }) === null
+    || parseColmapNumberTokens(parts.slice(1, 8)) === null
+    || parseColmapIntegerToken(parts[cameraOffset], { min: 0 }) === null) return false;
+  // Observation rows contain only numbers. Requiring a nonnumeric name avoids
+  // interpreting a long, valid observation row as another image header.
+  const name = photometric ? parts.slice(12, -2) : parts.slice(9);
+  return name.some(token => parseColmapNumberToken(token) === null);
+}
+
 export function parseImagesText(text: string, skipPoints2D = false): Map<number, Image> {
   assertDeclaredColmapTextSchema(text, 'images');
   const images = new Map<number, Image>();
@@ -152,8 +167,11 @@ export function parseImagesText(text: string, skipPoints2D = false): Map<number,
     // Parse points2D line (next line)
     i++;
     const points2D: Point2D[] = [];
+    // Some camera-only exports omit empty observation rows entirely. Preserve
+    // the next pose rather than consuming it as an invalid observation row.
+    const nextIsHeader = i < lines.length && isUnambiguousImageHeader(lines[i], photometric);
 
-    if (!skipPoints2D && i < lines.length && !lines[i].startsWith('#')) {
+    if (!nextIsHeader && !skipPoints2D && i < lines.length && !lines[i].startsWith('#')) {
       const pointsLine = lines[i].trim();
       if (pointsLine !== '') {
         const pointsParts = pointsLine.split(/\s+/);
@@ -184,7 +202,7 @@ export function parseImagesText(text: string, skipPoints2D = false): Map<number,
       points2D,
     });
 
-    i++;
+    if (!nextIsHeader) i++;
   }
 
   return images;

@@ -9,6 +9,7 @@ import { readNumpyCameraArray, readDtuCameraArchive, type NumpyCameraArray } fro
 import { normalizeLlff, normalizeDtu, dtuCameraCount } from './arrayCameraFormats';
 import { orderedCameraImages } from './orderedCameraImages';
 import { indexDtuMasks } from './dtuMaskPaths';
+import { findNerfstudioImageVariant, nerfstudioVariantPath } from './nerfstudioImageVariants';
 import { readCameraSourceFile } from './sourceAccess';
 import { fetchDatasetResource } from '../../utils/fetchDatasetResource';
 import { CAMERA_IMAGE_EXTENSIONS,canonicalImageName,isCameraMetadataPath,isCameraImagePath,isAbsoluteResourceUrl,
@@ -135,7 +136,8 @@ export async function prepareCameraDataset(source: CameraDatasetSource,options: 
   const gaussian=isGaussianCameraJson(value);
   const defaultImageRoot=gaussian || isOpenSfm(value) || isOpenMvg(value);
   const global=nerf ? value as Record<string,unknown> : {};
-  const uniformBlenderDimensions = nerf && nerfTransformsSchema(global) === 'nerf-blender';
+  const nerfSchema = nerf ? nerfTransformsSchema(global) : undefined;
+  const uniformBlenderDimensions = nerfSchema === 'nerf-blender';
   const mvgRoot = isOpenMvg(value) ? (value as Record<string,unknown>).root_path : undefined;
   const hasPortableMvgRoot = typeof mvgRoot === 'string' && !mvgRoot.startsWith('/') && !mvgRoot.startsWith('\\') && !/^[a-z]:/i.test(mvgRoot);
   const portableMvgRoot = hasPortableMvgRoot ? mvgRoot : 'images';
@@ -143,12 +145,19 @@ export async function prepareCameraDataset(source: CameraDatasetSource,options: 
   let nameRoot=root;
   const sourceReference=(reference: unknown) => resolveSourcePath(root,reference,scope,source.kind==='url',source.kind==='url' ? source.baseUrl : undefined);
   let uniformSize: {width:number;height:number}|undefined;
+  const downscaleSizes = new Map<string, { width: number; height: number }>();
+  const listedImage = (path: string) => {
+    if (paths) return paths.has(path);
+    if (!urlFilePaths || source.kind !== 'url') return false;
+    const url = new URL(imageResourceUrl(source.baseUrl, path));
+    return urlFilePaths.has(url.origin + url.pathname);
+  };
   const resolve: ResolveCameraFrame=async (reference,frame) => {
     signal?.throwIfAborted();
     if (frame.mask_path !== undefined && frame.mask_file_path !== undefined && frame.mask_path !== frame.mask_file_path) importError('INVALID_IMAGE_PATH','Conflicting mask_path and mask_file_path.');
     const maskPath = frame.mask_path === undefined ? frame.mask_file_path : frame.mask_path;
     if (maskPath !== undefined && (typeof maskPath !== 'string' || !maskPath.trim())) importError('INVALID_IMAGE_PATH','Explicit mask path must be a nonempty string.');
-    const resolvedMask = maskPath === undefined ? undefined : sourceReference(maskPath);
+    let resolvedMask = maskPath === undefined ? undefined : sourceReference(maskPath);
     const imageReference=hasPortableMvgRoot && !isAbsoluteResourceUrl(reference) ? (portableMvgRoot ? portableMvgRoot+'/'+reference : reference) : reference;
     let path=sourceReference(imageReference);
     if (bundlerImageBase) path = imageResourceUrl(bundlerImageBase, path);
@@ -161,6 +170,18 @@ export async function prepareCameraDataset(source: CameraDatasetSource,options: 
       && (!hasPortableMvgRoot || /^(?:\.\/)?images\/?$/.test(portableMvgRoot))
       && /^https:\/\/raw\.githubusercontent\.com\/openMVG\/openMVG\/[^/]+\/src\/software\/SfM\/python\/sfm_viewer\/sample_data\/$/.test(source.baseUrl)) {
       path=imageResourceUrl('https://raw.githubusercontent.com/openMVG/ImageDataset_SceauxCastle/master/images/',reference);
+    }
+    let downscaleFactor = 1;
+    if (nerfSchema === 'nerfstudio') {
+      const variant = findNerfstudioImageVariant(path, listedImage);
+      if (variant) {
+        path = variant.path;
+        downscaleFactor = variant.factor;
+        if (resolvedMask !== undefined) {
+          const scaledMask = nerfstudioVariantPath(resolvedMask, downscaleFactor, 'masks');
+          if (scaledMask && listedImage(scaledMask)) resolvedMask = scaledMask;
+        }
+      }
     }
     if (paths) {
       let matched=resolveIndexedImage(path,paths,imageStems);
@@ -212,8 +233,10 @@ export async function prepareCameraDataset(source: CameraDatasetSource,options: 
     const name=canonicalImageName(path,scope,source.kind==='url' ? source.baseUrl : undefined);
     const width=frame.w ?? global.w, height=frame.h ?? global.h;
     let size: {width:number;height:number}|undefined;
-    if (width===undefined || height===undefined || bundler) {
-      if (uniformBlenderDimensions && uniformSize) size=uniformSize;
+    const downscaleKey = `${width}x${height}:${downscaleFactor}`;
+    if (width===undefined || height===undefined || bundler || downscaleFactor > 1) {
+      if (downscaleFactor > 1 && downscaleSizes.has(downscaleKey)) size = downscaleSizes.get(downscaleKey);
+      else if (uniformBlenderDimensions && uniformSize) size=uniformSize;
       else {
         const rgb=await readCameraSourceFile(source,path,signal);
         if (!rgb) return null;
@@ -221,6 +244,7 @@ export async function prepareCameraDataset(source: CameraDatasetSource,options: 
         if (!size) return importError('INVALID_CALIBRATION',`Cannot read image dimensions for ${path}.`);
         if (await readImageOrientation(rgb,signal) !== 1) return importError('UNSUPPORTED_IMAGE_ORIENTATION',`Normalize image orientation and calibration before importing ${path}.`);
         if (uniformBlenderDimensions) uniformSize=size;
+        if (downscaleFactor > 1) downscaleSizes.set(downscaleKey, size);
       }
     }
     let mask: ImportedImageBinding['mask'];
@@ -235,7 +259,7 @@ export async function prepareCameraDataset(source: CameraDatasetSource,options: 
       }
     }
     if (!mask && /\.png$/i.test(isAbsoluteResourceUrl(path) ? new URL(path).pathname : path)) mask={ kind:'alpha',role:'foreground' };
-    return { path,name,size,mask };
+    return { path,name,size,mask, ...(downscaleFactor > 1 ? { downscaleFactor } : {}) };
   };
   let normalized: NormalizedCameraDataset;
   if (llff) normalized=await normalizeLlff(llff,names,resolve,signal);
