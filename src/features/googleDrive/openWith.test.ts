@@ -15,7 +15,7 @@ describe('Drive Open with launch parsing', () => {
   });
   it.each([
     null, [], { action: 'create', ids: ['file'] }, { action: 'open', ids: [] },
-    { action: 'open', ids: [1] }, { ...state, ids: ['../other'] },
+    { action: 'open', ids: [1] }, { ...state, ids: ['../other'] }, { ...state, ids: ['.'] },
     { ...state, ids: ['file?x=1'] }, { ...state, ids: ['a'.repeat(201)] },
     { ...state, resourceKeys: [] }, { ...state, resourceKeys: null },
     { ...state, resourceKeys: { selected_file: 'x&token=secret' } },

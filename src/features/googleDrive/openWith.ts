@@ -37,7 +37,8 @@ export function parseGoogleDriveOpenWith(search: string): GoogleDriveOpenWithReq
       source.searchParams.set('resourcekey', key);
     }
     const file = parseGoogleDriveFileUrl(source.href);
-    return file ? { kind: 'open', file: { ...file, userId: userId as string | undefined } } : invalid;
+    if (!file || file.fileId !== ids[0]) return invalid;
+    return { kind: 'open', file: { ...file, userId: userId as string | undefined } };
   } catch { return invalid; }
 }
 

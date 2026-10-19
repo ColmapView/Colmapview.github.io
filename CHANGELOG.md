@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.18.1] - 2026-10-19
+## [0.18.2] - 2026-10-19
 
 ### Added
 - Open a single ZIP or TAR selected through Google Drive's Open with menu, with explicit account sign-in and resource-key support.
