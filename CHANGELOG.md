@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-19
+
 ### Added
 - Optional remembered Google Drive and Hugging Face connections on the custom website, using a secure session cookie and encrypted server credentials with a maximum 30-day lifetime.
 - Restore the matching Google account for Drive Open with and load its archive without another ColmapView sign-in click. Renew access tokens for reading and publishing when the provider permits it.
