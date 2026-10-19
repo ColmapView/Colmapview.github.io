@@ -59,6 +59,8 @@ export interface LoadManifestSourceDeps {
   /** The splat listing stopped answering, or outlasted SPLAT_DISCOVERY_LIMIT_MS; the scene appears without its splats. */
   onSplatListTimeout?: () => void;
   fetchImpl?: (url: string, init?: RequestInit) => Promise<Response>;
+  /** Archive transport belongs to the installed scene, not the initial URL load claim. */
+  mediaFetchImpl?: (url: string, init?: RequestInit) => Promise<Response>;
   fetchColmapFiles?: FetchColmapFiles;
   setActiveArchive?: typeof setActiveZipArchive;
   discoverSplatCatalog?: (manifest: ColmapManifest) => Promise<RemoteSplatCandidate[]>;
@@ -112,6 +114,7 @@ export async function loadManifestSource(
   const fetchColmapFiles = deps.fetchColmapFiles
     ?? ((targetManifest: ColmapManifest) => fetchManifestColmapFiles(targetManifest, {
       fetchImpl: deps.fetchImpl,
+      mediaFetchImpl: deps.mediaFetchImpl ?? ((url, init) => fetchDatasetResource(url, undefined, init)),
       signal: deps.signal,
       log: (message) => log(message),
       setUrlProgress: deps.setUrlProgress,

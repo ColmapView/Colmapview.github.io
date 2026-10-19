@@ -10,6 +10,8 @@ import { useNotificationStore } from '../store/stores/notificationStore';
 import { SPLAT_LIST_TIMEOUT_MESSAGE, splatListTimeoutWarning } from './datasetTimeoutWarnings';
 import { notificationsWithMessage } from '../test/notifications';
 import { rememberManifestMediaArchives } from './urlLoaderMediaArchives';
+import * as archiveService from '../archive/archiveService';
+import { clearZipCache } from '../utils/zipImageFiles';
 
 const manifest: ColmapManifest = {
   version: 1,
@@ -60,6 +62,61 @@ afterEach(() => {
 const splatListWarnings = () => notificationsWithMessage(SPLAT_LIST_TIMEOUT_MESSAGE);
 
 describe('URL loader manifest source helpers', () => {
+  it('keeps lazy archive byte reads alive after the model load claim finishes and closes them on reset', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const controller = new AbortController();
+    let loading = true, closed = false;
+    let read!: NonNullable<archiveService.ArchiveServiceOptions['read']>;
+    const archive = { close: vi.fn(async () => { closed = true; }), getFilesArray: async () => [{ path: 'capture', file: {
+      name: 'a.png', size: 4, lastModified: 0,
+      extract: async () => {
+        if (closed) throw new Error('Reader closed');
+        return new File([await read(65536, 4, new AbortController().signal)], 'a.png');
+      },
+      extractPreview: vi.fn(),
+    } }] };
+    const open = vi.spyOn(archiveService, 'openArchiveReader').mockImplementation(async (_source, options) => {
+      read = options!.read!;
+      await read(0, 4, options!.signal!);
+      return archive;
+    });
+    const mediaFetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      const range = new Headers(init?.headers).get('Range')!.match(/bytes=(\d+)-(\d+)/)!;
+      const start = Number(range[1]), end = Number(range[2]);
+      return new Response(new Uint8Array(end - start + 1).fill(7), { status: 206,
+        headers: { 'Content-Range': `bytes ${start}-${end}/131072`, ETag: 'pinned' } });
+    });
+    vi.stubGlobal('fetch', mediaFetch);
+    const scopedFetch = vi.fn(async (url: string) => {
+      if (!loading) throw new Error('Model load claim finished');
+      return url.endsWith('.bin') ? new Response(new Uint8Array([1])) : new Response('', { status: 404 });
+    });
+    const deps = { ...makeDeps(), fetchColmapFiles: undefined, fetchImpl: scopedFetch, signal: controller.signal };
+    deps.processFiles.mockImplementation(async (_files, _range, options) => {
+      await options?.beforeSceneCommit?.();
+      // The real URL workflow clears the old scene before installing the new owner.
+      clearZipCache();
+      options?.onSceneReplaced?.();
+    });
+    try {
+      await expect(loadManifestSource({ ...manifest, version: 2, mediaArchives: [{
+        url: 'https://example.com/photos.zip', bytes: 131072, mountPath: 'images', stripPrefix: 'capture',
+      }] }, { type: 'url', sourceUrl: 'https://example.com/manifest.json' }, deps)).resolves.toBe(true);
+      loading = false;
+      controller.abort();
+      const entry = (await archive.getFilesArray())[0].file;
+      expect((await entry.extract()).size).toBe(4);
+      expect(mediaFetch).toHaveBeenCalledTimes(2);
+      expect(archive.close).not.toHaveBeenCalled();
+      clearZipCache();
+      expect(archive.close).toHaveBeenCalledOnce();
+      await expect(entry.extract()).rejects.toThrow('Reader closed');
+    } finally {
+      clearZipCache();
+      open.mockRestore();
+    }
+  });
+
   it.each(['committed', 'rejected', 'cancelled'] as const)('owns companion readers only after a scene commit: %s', async outcome => {
     const files = makeFiles(), reader = { close: vi.fn(async () => {}), getFilesArray: async () => [] };
     rememberManifestMediaArchives(files, { reader, index: new Map(), entries: new Map(), imagePaths: ['images/a.png'], maskPaths: [], bytes: 1024 });

@@ -82,6 +82,8 @@ export interface FetchManifestFileOptions {
 export interface FetchManifestColmapFilesDeps {
   signal?: AbortSignal;
   fetchImpl?: FetchUrl;
+  /** Lazy archive reads must outlive the initial model load's fetch guard. */
+  mediaFetchImpl?: FetchUrl;
   fetchFile?: FetchManifestFile;
   log?: (message: string) => void;
   setUrlProgress: SetUrlProgress;
@@ -1031,7 +1033,7 @@ export async function fetchManifestColmapFiles(
   const manifestOverrides = manifest.imageNameToPath && Object.fromEntries(Object.entries(manifest.imageNameToPath)
     .map(([name, path]) => [name, mediaPath(path)]));
   deps.signal?.throwIfAborted();
-  const archives = await openManifestMediaArchives(manifest, { signal: deps.signal, fetchImpl: deps.fetchImpl });
+  const archives = await openManifestMediaArchives(manifest, { signal: deps.signal, fetchImpl: deps.mediaFetchImpl ?? deps.fetchImpl });
   const imagePaths = archives ? [...archives.imagePaths, ...(manifest.images?.map(mediaPath) ?? [])] : manifest.images?.map(mediaPath);
   const maskPaths = archives ? [...archives.maskPaths, ...(manifest.masks?.map(mediaPath) ?? [])] : manifest.masks?.map(mediaPath);
   if (archives) rememberManifestMediaArchives(files, archives);
