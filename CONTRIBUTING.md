@@ -19,7 +19,7 @@ The app uses Vite, React, TypeScript, Three.js and Zustand. Start with the [arch
 
 | Command | Checks |
 | --- | --- |
-| `npm run check:code` | Lint and all TypeScript projects: app, tooling, browser tests and unit tests |
+| `npm run check:code` | Lint and all TypeScript projects: app, build config, browser/unit tests, deployment specs and fixture generators |
 | `npm test -- src/hooks/urlLoaderManifestFetch.test.ts` | Watch one Vitest file; omit the path to watch the full suite |
 | `npm run test:run -- src/hooks/urlLoaderManifestFetch.test.ts` | Run one Vitest file once |
 | `npm run typecheck:tests` | Check unit tests and their imports without lint or a build |
@@ -51,7 +51,7 @@ See `playwright.config.ts` for the WebGPU projects. Hardware and bicycle tests r
 ## Optional tools and troubleshooting
 
 - **WASM:** normal development uses `public/wasm/`. `npm run build:wasm` requires the separate local `colmap-wasm/` source and Emscripten/CMake toolchain.
-- **COLMAP round trips:** `npm run test:pycolmap` needs `uv` and the optional dataset described in the [pycolmap test guide](tests/pycolmap/README.md).
+- **COLMAP round trips:** `npm run test:pycolmap` needs `uv`. Synthetic importer checks run without external data; the bicycle cases use the optional dataset described in the [pycolmap test guide](tests/pycolmap/README.md).
 - **Local providers:** follow the relevant [Drive](docs/google-drive-loading.md), [Hugging Face](docs/hugging-face-loading.md), or [bucket](docs/bucket-storage.md) guide. The [Hub development guide](https://github.com/ColmapView/colmapview_hub/blob/main/docs/development.md) covers the separate service.
 - **Worktrees:** install dependencies in each checkout. A shared or junctioned `node_modules` can cause Vite to report font assets outside its serving allow list; use checkout-local dependencies to resolve that error.
 - **Port in use:** stop the old test server or choose another `COLMAP_WEBVIEW_E2E_PORT`. Browser tests intentionally refuse to reuse an unrelated development server.

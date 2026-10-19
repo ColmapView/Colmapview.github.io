@@ -1,8 +1,6 @@
 import * as path from 'node:path';
 
 export interface ViteLocalAliasPolicyOptions {
-  command: string;
-  mode: string;
   env: Record<string, string | undefined>;
   rootDir: string;
   pathExists: (targetPath: string) => boolean;

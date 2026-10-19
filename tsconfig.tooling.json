@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.e2e.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tooling.tsbuildinfo",
+    /* Infer imported .mjs helper signatures for their TypeScript callers.
+       JavaScript diagnostics remain covered by ESLint. */
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": ["scripts/**/*.ts", "tests/**/*.ts", "src/vite-env.d.ts"],
+  "exclude": ["tests/**/.venv/**", "tests/**/fixtures/**"]
+}

@@ -76,6 +76,8 @@ Use colocated Vitest files for pure helpers, store actions, hooks, and parser be
 
 Use Playwright in `e2e/` for browser behavior and real workflow coverage. Prefer locator assertions and app state signals over fixed sleeps.
 
+The root TypeScript solution checks app sources, build configuration, unit tests, browser tests and tooling. `tsconfig.tooling.json` includes the deployment browser specs/config under `scripts/deployment/` and the Node fixture generators under `tests/`. `npm run check:code` checks them even though Playwright and `vite-node` transpile without typechecking. Imported JavaScript helper signatures are inferred for TypeScript callers, while ESLint owns JavaScript diagnostics.
+
 ## Validation Commands
 
 - `npm run check:code`: JavaScript/TypeScript lint and all TypeScript projects without executing tests or building assets.

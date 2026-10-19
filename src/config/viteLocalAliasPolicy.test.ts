@@ -10,14 +10,10 @@ function makePathExists(existingPaths: string[]) {
 }
 
 function makePolicy({
-  command = 'build',
-  mode = 'production',
   env = {},
   localRendererExists = true,
   localToolboxExists = true,
 }: {
-  command?: string;
-  mode?: string;
   env?: Record<string, string | undefined>;
   localRendererExists?: boolean;
   localToolboxExists?: boolean;
@@ -30,8 +26,6 @@ function makePolicy({
   ].filter((targetPath): targetPath is string => Boolean(targetPath));
 
   return resolveViteLocalAliasPolicy({
-    command,
-    mode,
     env,
     rootDir,
     pathExists: makePathExists(existingPaths),
@@ -43,8 +37,8 @@ function slashPath(targetPath: string): string {
 }
 
 describe('Vite local alias policy', () => {
-  it('does not enable sibling gsplat aliases for release builds by default', () => {
-    const policy = makePolicy({ command: 'build', mode: 'production' });
+  it('keeps installed dependencies without explicit local opt-in, even when checkouts exist', () => {
+    const policy = makePolicy();
 
     expect(policy.localGsplatWebGpuEnabled).toBe(false);
     expect(slashPath(policy.localGsplatWebGpuAlias))
@@ -52,16 +46,13 @@ describe('Vite local alias policy', () => {
     expect(policy.aliases).not.toHaveProperty('gs-toolbox');
   });
 
-  it('does not enable sibling gsplat aliases for dev or test modes without explicit opt-in', () => {
-    for (const [command, mode] of [
-      ['serve', 'development'],
-      ['build', 'test'],
-    ] as const) {
-      const policy = makePolicy({ command, mode });
-
-      expect(policy.localGsplatWebGpuEnabled).toBe(false);
-      expect(policy.aliases).not.toHaveProperty('gs-toolbox');
-    }
+  it('keeps the installed toolbox when requested local source is absent', () => {
+    const policy = makePolicy({
+      env: { VITE_USE_LOCAL_GS_TOOLBOX_SOURCE: '1' },
+      localToolboxExists: false,
+    });
+    expect(policy.localGsplatWebGpuEnabled).toBe(false);
+    expect(policy.aliases).not.toHaveProperty('gs-toolbox');
   });
 
   it('enables the local demo renderer only when explicitly requested and present', () => {
