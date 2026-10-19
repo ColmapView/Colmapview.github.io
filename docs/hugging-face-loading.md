@@ -1,6 +1,6 @@
 # Loading Hugging Face datasets
 
-> Connection update, October 19, 2026: the custom host now includes an optional [remembered connection service](account-sessions.md). It uses confidential OAuth callbacks, an essential session cookie and encrypted server credentials for at most 30 days. Its Google flow adds `openid` to identify the account; HF viewing and publication use separate authorizations. The browser-only setup and dated live evidence below describe the previous flow; they do not prove that the new server callbacks or refresh tokens have passed a live check. Provider setup and explicit production enablement are still required.
+> Connection update, October 19, 2026: remembered connections are enabled on the custom host and have passed [dated live checks](account-sessions.md#live-checks--2026-10-19). They use confidential OAuth callbacks, an essential session cookie and encrypted server credentials for at most 30 days. GitHub Pages and the browser-only fallback keep tokens in tab memory. Historical receipts below retain their original dates and scope.
 
 
 Public dataset links work without signing in. To open a private dataset:
@@ -15,11 +15,15 @@ The signed-in session applies to discovery, reconstruction files, ZIP/TAR and ot
 
 Public reads remain anonymous, including checks for optional files a public repo does not have. After a successful authenticated read, subsequent files from that repo use the current session directly. Disconnecting, reconnecting, or token expiry invalidates that routing hint. A failed repository access check leaves the current dataset and caches intact.
 
-Shared links to private datasets still require each recipient to sign in with an account that can read the repository. Reloading the page requires signing in again. The account **Disconnect** button forgets the local token; it does not remove an already downloaded scene. When the sign-in expires (after about 8 hours), the **🤗** button in the viewer toolbar signs in again, so the open scene keeps loading private images. With publishing enabled, that button opens the publishing dialog, which has its own **Sign in** button.
+Shared links to private datasets still require each recipient to connect an account that can read the repository. On the custom host, a remembered connection restores after reloads and in other tabs, renewing access tokens when the provider allows it. A saved publishing grant also permits reading. Browser-only deployments require another sign-in after a reload or token expiry. The account **Disconnect** button clears the local token and forgets any saved server connection; it does not remove an already downloaded scene or revoke the provider's authorization grant.
 
-If a private shared link opens while signed out, the viewer returns to **Load Dataset** after the access check fails. Select the **🤗** account icon and sign in, then select **Retry shared link** in the same dialog. The retry opens the same link, with its view and settings, without reloading the page, which would end the sign-in.
+If a private shared link opens without a usable connection, the viewer offers sign-in after the access check fails. Connect the account, then use the dialog's retry action to open the same link with its view and settings. Retry keeps browser-only sign-in in the current tab.
 
 ## Viewer setup
+
+For the custom host's remembered flow, follow [account-session provisioning](account-sessions.md#deployment-and-rollback). Its confidential client and Worker secret are separate from the public browser client below. Secrets must never enter Vite variables or frontend artifacts.
+
+### Browser-only setup
 
 Use the existing public OAuth app and static `hf-callback.html` callback described in [publishing setup](hugging-face-publishing.md). Add **`read-repos`** to the OAuth app's allowed scopes. Existing users must sign in again to grant that additional permission. No client secret or download relay is needed. See the [official OAuth scope documentation](https://huggingface.co/docs/hub/oauth).
 

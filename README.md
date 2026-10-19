@@ -42,7 +42,8 @@ The toolbar's **Align** button holds everything that works out *where the scene 
 - **Google Drive archives** - On the configured [custom viewer](https://colmapview.opsiclear.com/), paste a public ZIP or TAR sharing URL to load directly through Google's API without signing in; compressed TAR is supported too. For a private archive, connect with the **Google Drive** button next to Upload configuration and choose the file through Google Picker, with tabs for Shared with me, Starred and Shared drives. Uses only per-file `drive.file` access; an arbitrary private URL alone does not authorize the file. GitHub and preview viewers offer **Use Google Drive** to open the archive on the custom host. Drive publishing creates ZIPs. See [Drive and Picker setup](docs/google-drive-loading.md) and [dual-host deployment](docs/dual-hosting.md).
 - **Private Hugging Face datasets** - Connect with the 🤗 account icon, approve the requested access, and paste a dataset, folder, manifest, or archive link. Sign-in asks for repository read access; where Hugging Face publishing is enabled, it also asks for permission to create datasets and write to the ones ColmapView creates. Images and masks load with the same session. See [Hugging Face setup](docs/hugging-face-loading.md).
 - **Dataset uploads** - Open **Share** to upload to Hugging Face, Google Drive, or an S3-compatible bucket. Hugging Face datasets are public and Drive ZIPs are shared with anyone with the link by default, with a Private choice; bucket uploads use the bucket's existing permissions. See [Hugging Face publication](docs/hugging-face-publishing.md).
-- **ColmapView Hub** - Every upload also gets a Hub link with a preview card: a short name when anyone can open the data, an unguessable one otherwise. The upload dialog shows the link and a private delete link. The Hub runs only on colmapview.opsiclear.com and colmapview.github.io: deployment builds ignore `VITE_HUB_BASE_URL`, and local development and e2e builds use it when it is set.
+- **ColmapView Hub** - Every verified upload on a Hub-enabled host also gets a link with a preview card: a short name when anyone can open the data, an unguessable one otherwise. Anyone with that link can see the card and dataset link; dataset permissions still apply. The finished upload shows the share link. Hosted builds use the configured Hub on colmapview.opsiclear.com; local development and e2e builds can override it with `VITE_HUB_BASE_URL`.
+- **Remembered connections** - The custom viewer can restore Google Drive and Hugging Face sign-in across reloads and tabs. Bucket credentials are remembered only when explicitly requested. Connections are encrypted on the server for at most 30 days; GitHub Pages keeps its browser-only authentication. See [connection behavior and validation](docs/account-sessions.md).
 - **Images-Only Mode** - View image galleries without COLMAP reconstruction data.
 - **Profile System** - Save and switch between different configuration presets.
 
@@ -170,6 +171,17 @@ Notes:
 
 - Models 11-16 (RAD_TAN_THIN_PRISM_FISHEYE, SIMPLE_DIVISION, DIVISION, SIMPLE_FISHEYE, FISHEYE, EUCM) render image previews in cropped mode.
 - EQUIRECTANGULAR (id 17) is a spherical (360°) model with no planar undistortion. These cameras render as lat/long grid spheres; selecting one shows its panorama as a photosphere. With `U` on, the view steps inside the sphere at the capture center and shows the photo through a viewport-centered circle, with the live reconstruction around it — hover the circle to fade the photo, scroll inside it to zoom, and scroll outward with the pointer outside it to leave.
+
+## Development
+
+Use Node.js 22 and npm. Normal development uses the committed WASM assets; rebuilding WASM requires a separate local `colmap-wasm/` source checkout.
+
+```sh
+npm ci
+npm run dev
+```
+
+Run `npm run check` for lint, test types, unit tests and the production build. Run `npm run test:e2e -- --workers=1` for browser workflows and `npm run test:deployment` for hosted build profiles. See [architecture and module ownership](docs/architecture.md), the [design system](docs/design-system.md), and [dual-host deployment](docs/dual-hosting.md). Dated plans and audit notes record their original scope and are not current deployment instructions.
 
 ## Links
 

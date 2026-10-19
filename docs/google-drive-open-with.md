@@ -6,7 +6,7 @@ ColmapView opens a single ZIP or TAR dataset selected in Google Drive. Where [re
 
 Use project **`colmapview-prod-20261006`**, project number **`425433759789`**, and its existing browser OAuth client. The exact supported origin remains **`https://colmapview.opsiclear.com`**. GitHub and preview hosts offer an explicit handoff and perform no Google authorization or API calls.
 
-**Setup evidence, 2026-10-19:** the production owner account saved both `drive.file` and `drive.install` in Data Access. Google displayed both under non-sensitive scopes, confirmed the save, and continued to report verified branding with no scope verification required. The Drive UI form was submitted successfully with the configuration below and all five app icons. A Marketplace listing has not been submitted. Live installation and launch checks must be recorded against the released handler separately.
+**Setup evidence, 2026-10-19:** the production owner account saved both `drive.file` and `drive.install` in Data Access. Google displayed both under non-sensitive scopes, confirmed the save, and continued to report verified branding with no scope verification required. The Drive UI form was submitted successfully with the configuration below and all five app icons. Private Drive Open with, account matching, reload/separate-tab restoration and renewal passed in Chrome against the released custom handler; see the [dated live checks](account-sessions.md#live-checks--2026-10-19). A Marketplace listing has not been submitted.
 
 In Google Drive API → Drive UI Integration, configure:
 

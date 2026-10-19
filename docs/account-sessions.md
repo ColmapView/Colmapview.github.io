@@ -8,7 +8,7 @@ On startup the viewer checks `/auth/session`. The reply contains capabilities an
 
 Drive Open with verifies that the restored Google subject matches Drive's account hint before loading the selected file. Without a matching connection it navigates to one authorization flow and returns to that file. Cancellation returns to an explicit retry control rather than restarting authorization. The launch hint is untrusted input; only the verified Google identity authorizes its use. File access remains `drive.file`; only Add to Google Drive adds `drive.install`. `openid` identifies the account without requesting email or profile access.
 
-Hugging Face stores viewing and publishing authorizations separately. Startup restores reading; opening the publisher can restore an already granted publication connection. The server's view flow requests `openid profile read-repos`; publication adds `contribute-repos`. It stores the username required by repository operations, but drops other profile fields. Provider refresh-token support must be checked with the configured application: an advertised refresh grant does not guarantee that every authorization issues one.
+Hugging Face stores viewing and publishing authorizations separately. Startup prefers a saved viewing grant and otherwise reuses a saved publishing grant for reading; that grant already permits reads. Opening the publisher can restore an already granted publication connection, but a read-only grant never authorizes publication. The server's view flow requests `openid profile read-repos`; publication adds `contribute-repos`. It stores the username required by repository operations, but drops other profile fields. Provider refresh-token support must be checked with the configured application: an advertised refresh grant does not guarantee that every authorization issues one.
 
 Bucket credentials stay tab-only unless the user checks **Remember this connection**. That choice sends the configured root, region and scoped credentials to the session service for encrypted storage. Restored browsers receive settings and short-lived presigned URLs, never the access-key secret. Downloads, uploads and multipart cleanup still go directly to the bucket. Read-only saved connections require an explicit **Enable uploads** action before signing writes. Use bucket-scoped keys; bucket CORS must allow the viewer's origin and the required methods and response headers.
 
@@ -37,4 +37,18 @@ Deploy the service with `AUTH_ENABLED=false`, provision its secrets and callback
 
 ## Validation
 
-Focused tests cover cookie integrity, CSRF, encrypted record isolation, OIDC signatures and nonce, refresh rotation/revocation, cancellation, single-use callbacks, account matching, expiry, concurrent refresh/disconnect, bounded bucket signing, permission upgrades, in-memory tokens and exact popup-origin/transaction checks. Compiled-artifact tests cover automatic Drive restoration and the unsupported-host boundary. These fixtures verify application behavior; they do not establish that a provider's production callback or secret is configured.
+Focused tests cover cookie integrity, CSRF, encrypted record isolation, OIDC signatures and nonce, refresh rotation/revocation, cancellation, single-use callbacks, account matching, expiry, concurrent refresh/disconnect, bounded bucket signing, permission upgrades, in-memory tokens and exact popup-origin/transaction checks. Compiled-artifact tests cover automatic Drive and private HF restoration and the unsupported-host boundary. These fixtures verify application behavior; they do not establish that a provider's production callback or secret is configured.
+
+### Live checks — 2026-10-19
+
+The custom production host was checked in Chrome using synthetic data with viewer **0.19.1** (source `85e9998`) and Hub **0.8.2** (source `05e4358`). The [viewer release workflow](https://github.com/ColmapView/Colmapview.github.io/actions/runs/39304184357) passed, and the custom, GitHub latest and versioned manifests matched the release source. This is dated live evidence, separate from automated fixtures and later development commits.
+
+| Connection | Live result |
+| --- | --- |
+| Google Drive | Private Open with, matching-account restoration, private ZIP save, share-link reopening, reload/separate-tab loading, forced renewal and disconnect/reconnect passed. |
+| Hugging Face | Private ZIP publication and reads, forced renewal and disconnect/reconnect passed. A saved publishing grant reopened private data after reload and in a separate tab without sign-in or retry. The separate read-only grant is covered by automated fixtures. |
+| R2 | Explicit Remember, read-only restoration, explicit upload enablement, private ZIP upload/download, reload/separate-tab loading and disconnect passed. |
+
+The disposable R2 key was revoked and its objects, bucket and Hub card removed. The additional Drive save was moved to recoverable Trash and its Hub card removed. The original Drive fixture and private HF fixture were retained for retesting. Temporary operator pages and the synthetic fixture ZIP were removed from the Hub, with live 404 checks. No real provider credentials are committed in this evidence.
+
+Safari still needs a real-device check. These checks do not establish a Marketplace listing, anonymous access to private datasets, complete large-dataset transfer coverage, or support for interrupted-upload resumption.

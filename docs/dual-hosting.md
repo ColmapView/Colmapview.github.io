@@ -1,6 +1,6 @@
 # Independent GitHub and custom hosting
 
-> Connection update, October 19, 2026: the custom host now includes an optional [remembered connection service](account-sessions.md). It uses confidential OAuth callbacks, an essential session cookie and encrypted server credentials for at most 30 days. Its Google flow adds `openid` to identify the account; HF viewing and publication use separate authorizations. The browser-only setup and dated live evidence below describe the previous flow; they do not prove that the new server callbacks or refresh tokens have passed a live check. Provider setup and explicit production enablement are still required.
+> Connection update, October 19, 2026: remembered connections are enabled on the custom host and have passed [dated live checks](account-sessions.md#live-checks--2026-10-19). They use confidential OAuth callbacks, an essential session cookie and encrypted server credentials for at most 30 days. Google adds `openid`; HF viewing and publishing remain separate authorizations. GitHub Pages and previews do not use the server session service. Older deployment receipts below retain their original dates and scope.
 
 
 ColmapView is served from these hosts. A release tag builds the GitHub profile and, when the custom gate is enabled, the custom profile from the same commit; `/dev/` is built from `main` or a manual branch run, and a preview from an explicitly selected ref:

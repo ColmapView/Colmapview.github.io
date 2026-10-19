@@ -19,6 +19,7 @@ Core modules should not import from `components/`. Parser and dataset code shoul
 - `store/`: own shared app state, persistence, and user actions. Keep UI rendering out of store actions.
 - `nodes/`: expose derived viewer state for camera, selection, navigation, and matches. Use nodes when multiple components need the same derived state.
 - `hooks/`: own reusable React behavior, subscriptions, and component-facing view models.
+- `features/`: provider authentication and transport, shared publication workflows, and the optional account-session client.
 - `parsers/`: read and write COLMAP data. Keep this layer deterministic and independent of React.
 - `utils/`: framework-light helpers and shared policies such as confirmation, cursor ownership, and storage key handling.
 - `theme/` and `icons/`: design tokens, reusable class names, and visual primitives.
@@ -33,7 +34,9 @@ Shared reconstruction calculations live in `utils/floorPlaneAlignment.ts` and `u
 
 ## Storage Providers
 
-Storage providers own authentication and transport under `features/`. `bucketStorage/connection.ts` keeps S3 credentials in a tab-local closure and exposes a redacted render snapshot. `fetchDatasetResource` composes bucket and Hugging Face request policies for discovery, lazy media, ranges, and re-publication; authenticated bucket requests stay within the configured bucket root. Provider credentials never enter reconstruction state or published manifests.
+Storage providers own authentication and transport under `features/`. `bucketStorage/connection.ts` keeps ordinary S3 credentials in a tab-local closure and exposes a redacted render snapshot. With an explicitly remembered connection, the encrypted Worker record owns the saved secret and the browser receives short-lived presigned URLs instead. `features/accountSessions/` restores supported connections before remote startup loads; Google/HF access tokens remain in tab memory while renewable credentials stay encrypted on the server for at most 30 days. GitHub Pages retains browser-only authentication. See [account sessions](account-sessions.md) for ownership, expiry and disconnection.
+
+`fetchDatasetResource` composes bucket and Hugging Face request policies for discovery, lazy media, ranges, and re-publication; authenticated bucket requests stay within the configured bucket root. Provider credentials never enter reconstruction state or published manifests.
 
 Upload dialogs share access, progress, and result controls under `components/upload/`. The provider controllers retain their own transport and permission rules. All three use `prepareTransferPublication` to pin source revisions and copy original assets, including authorized private sources. Hugging Face captures the chosen visibility with the upload job and receipt, checks it before each commit, verifies private destinations with repository-scoped authentication, and verifies public files anonymously. Bucket uploads preserve existing bucket permissions.
 
@@ -73,7 +76,8 @@ Use Playwright in `e2e/` for browser behavior and real workflow coverage. Prefer
 
 ## Validation Commands
 
-- `npm run check`: lint, unit tests, and production build.
+- `npm run check`: JavaScript/TypeScript lint, test type checks, unit tests, and production build.
+- `npm run test:deployment:config`: deployment configuration and artifact policy checks without a browser.
 - `npx playwright test --workers=1`: browser workflow validation.
 - `npm run test:pycolmap`: Python compatibility checks for parser/export changes.
 
