@@ -22,6 +22,10 @@ test('gives a private bucket upload an unguessable Hub link and keeps it after t
   test.setTimeout(120_000);
   const bucket = await startMockBucket(new URL(baseURL!).origin);
   const requests: Array<Record<string, unknown>> = [];
+  const authRequests: string[] = [];
+  page.on('request', request => {
+    if (new URL(request.url()).pathname.startsWith('/auth/')) authRequests.push(request.url());
+  });
   await page.route(hubEndpoint, async route => {
     requests.push(route.request().postDataJSON() as Record<string, unknown>);
     await route.fulfill({ json: { id: longId, url: `https://hub.invalid/hub/${longId}`, shareUrl: longUrl,
@@ -47,6 +51,9 @@ test('gives a private bucket upload an unguessable Hub link and keeps it after t
     await expect(result.getByLabel('Share link', { exact: true })).toHaveValue(longUrl);
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({ access: 'private', title: 'colmap-dataset', publicAcknowledged: true });
+    expect(JSON.stringify(requests)).not.toMatch(/e2e-access|e2e-secret/);
+    expect(await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }))).not.toMatch(/e2e-access|e2e-secret/);
+    expect(authRequests).toEqual([]);
     const viewerUrl = String(requests[0].viewerUrl);
     expect(viewerUrl.startsWith(new URL('/', baseURL).href)).toBe(true);
     expect(viewerUrl).toContain('127.0.0.1');

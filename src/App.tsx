@@ -24,7 +24,6 @@ import { appLogger } from './utils/logger';
 import { CameraDatasetSelectionHost } from './components/CameraDatasetSelectionHost';
 import { runStartupLoadPlan } from './appStartupLoad';
 import { isGoogleDriveOpenWithSearch } from './features/googleDrive/openWith';
-import { restoreAccountSessions } from './features/accountSessions/bootstrap';
 import {
   APP_EMBED_MODE_LOG_MESSAGE,
   getAppStartupLoadPlan,
@@ -73,13 +72,11 @@ function App() {
       useUIStore.getState().setTouchMode(touchAction.enabled, touchAction.source);
     }
 
-    const accountsReady = restoreAccountSessions({ skipGoogle: driveOpenWith });
     if (driveOpenWith) return;
 
     // Async function to handle URL loading
     const checkUrlAndLoad = async () => {
       const shareData = await decodeShareData(window.location.hash);
-      await accountsReady;
       await runStartupLoadPlan(getAppStartupLoadPlan({
         shareData,
         legacyManifestUrl: new URLSearchParams(search).get('url'),

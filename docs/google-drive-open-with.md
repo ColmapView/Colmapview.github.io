@@ -1,6 +1,6 @@
 # Google Drive Open with
 
-ColmapView opens a single ZIP or TAR dataset selected in Google Drive. Where [remembered connections](account-sessions.md) are enabled, it restores the matching verified Google account and loads directly. Otherwise it completes one authorization and returns to the selected archive. Cancellation offers an explicit retry. The launch account is an untrusted hint, never authorization. Existing in-memory tokens are cleared before matching the account. Invalid or multiple-file launches do not start another URL or shared-fragment load.
+ColmapView opens a single ZIP or TAR dataset selected in Google Drive. It preserves that archive while you sign in directly with Google, then loads it without a second Picker selection. Cancellation leaves an explicit retry. The launch account ID is an untrusted sign-in hint; Google enforces access to the selected file. Existing in-memory tokens are cleared before launch sign-in. Invalid or multiple-file launches do not start a conflicting URL or shared-fragment load. See [browser connections](account-sessions.md).
 
 ## Production registration
 
@@ -22,7 +22,7 @@ In Google Drive API → Drive UI Integration, configure:
 | Mobile browser / shared drives | Enabled |
 | Automatic OAuth consent / create / import / multiple files | Disabled |
 
-Declare `drive.file` and `drive.install` in Google Auth Platform → Data Access. The remembered flow also uses `openid` to verify the account identifier without requesting email or profile. Normal loading and publication request `drive.file`; only **Add to Google Drive** adds `drive.install`. Installation starts no file load or publication. [Session service setup](account-sessions.md) documents the confidential callback, encrypted credential retention and rollback. Browser-only fallback tokens remain in tab memory.
+Declare `drive.file` and `drive.install` in Google Auth Platform → Data Access. Normal loading and publication request only `drive.file`; **Add to Google Drive** also requests `drive.install`. Installation starts no file load or publication. Browser tokens stay in tab memory. This flow needs no server callback, client secret or Google `openid` scope.
 
 Google appends a URL-encoded `state` object with `action: "open"`, one file ID, optional resource keys and an optional account ID. The parser bounds and validates that input, reconstructs only a fixed Google Drive file URL, and removes raw state and the account hint from the address bar. A resource key is sent in the existing `X-Goog-Drive-Resource-Keys` header. Download permissions still apply.
 

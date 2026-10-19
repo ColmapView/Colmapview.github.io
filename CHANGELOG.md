@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.3] - 2026-10-19
+
+### Changed
+
+- Keep Google Drive and Hugging Face tokens and bucket signing keys in the current browser tab. Remove the server connection client and Remember option; reconnect after reload or token expiry.
+- Preserve the archive selected through Drive Open with during direct Google sign-in, without another Picker selection. Support password-manager autofill for bucket keys.
+- Update the privacy policy and provider guides for browser-only connections and retirement of existing saved credentials.
+- Simplify dataset selection helpers and extend type checks to deployment tooling and browser tests.
+
 ## [0.19.2] - 2026-10-19
 
 ### Fixed

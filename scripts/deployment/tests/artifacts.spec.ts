@@ -242,91 +242,91 @@ for (const directory of profiles) {
     });
   }
   if (profile === 'custom') {
-    test(`${directory}: a remembered HF publishing connection reopens a private archive after reload and in a new tab`, async ({ page, context }) => {
+    test(`${directory}: private HF links require browser sign-in even with a legacy session cookie`, async ({ page, context }) => {
       const server = await startArtifactServer(output, '/');
       const traffic = await routeArtifact(context, CUSTOM_ORIGIN, server.origin, true);
       const authRequests: string[] = [];
       const privateUrl = 'https://huggingface.co/datasets/fixture-owner/private-scene/resolve/main/dataset.zip';
+      await context.addCookies([{ name: '__Host-colmapview_session', value: 'fixture-browser-id', url: CUSTOM_ORIGIN, secure: true, httpOnly: true, sameSite: 'Lax' }]);
       await context.route(`${CUSTOM_ORIGIN}/auth/**`, async route => {
-        const request = route.request(); const path = new URL(request.url()).pathname;
-        authRequests.push(path);
-        if (path === '/auth/session') await route.fulfill({ json: { capabilities: { google: false, hf: true, bucket: false },
-          accounts: [{ provider: 'hf', purpose: 'publish', accountId: 'fixture-hf', username: 'fixture-owner', renewable: true }], bucket: null, expiresAt: Date.now() + 86400_000 } });
-        else if (path === '/auth/hf/token') {
-          expect(request.postDataJSON()).toMatchObject({ purpose: 'publish' });
-          await route.fulfill({ json: { accessToken: 'saved-hf-token', accountId: 'fixture-hf', username: 'fixture-owner',
-            expiresAt: Date.now() + 3600_000, scope: 'openid profile read-repos contribute-repos', renewable: true } });
-        } else throw new Error(`Unexpected authentication request: ${path}`);
+        authRequests.push(route.request().url());
+        await route.abort('blockedbyclient');
       });
-      await context.route('https://huggingface.co/**', route => route.fulfill(route.request().headers().authorization === 'Bearer saved-hf-token'
-        ? { body: archive, headers: { 'Content-Type': 'application/zip', 'Access-Control-Allow-Origin': CUSTOM_ORIGIN, 'Content-Length': String(archive.length) } }
-        : { status: 401, body: 'Private dataset', headers: { 'Access-Control-Allow-Origin': CUSTOM_ORIGIN } }));
+      await context.route('https://huggingface.co/**', route => route.fulfill({
+        status: 401, body: 'Private dataset', headers: { 'Access-Control-Allow-Origin': CUSTOM_ORIGIN },
+      }));
       try {
         for (const [index, active] of [page, page, await context.newPage()].entries()) {
           if (index === 1) await active.reload(); else await active.goto(`${CUSTOM_ORIGIN}/?url=${encodeURIComponent(privateUrl)}`);
-          await expect(active.getByText('Source:', { exact: false }).first()).toBeVisible({ timeout: 45_000 });
-          await expect(active.getByRole('dialog', { name: 'Hugging Face', exact: true })).toHaveCount(0);
+          const dialog = active.getByRole('dialog', { name: 'Hugging Face', exact: true });
+          await expect(dialog.getByRole('button', { name: 'Sign in with Hugging Face', exact: true })).toBeVisible();
+          await expect(active.getByText('Source:', { exact: false }).first()).not.toBeVisible();
         }
-        expect(authRequests.filter(path => path.endsWith('/token'))).toHaveLength(3);
+        expect(authRequests).toEqual([]);
         expect(traffic.externalRequests).toEqual([]);
       } finally { await closeArtifact(context, server); }
     });
-    test(`${directory}: remembered Drive Open with loads after reload and in a new tab without another sign-in`, async ({ page, context }) => {
+    test(`${directory}: Drive Open with signs in directly and reconnects after reload and in a new tab`, async ({ page, context }) => {
       const server = await startArtifactServer(output, '/');
       const traffic = await routeArtifact(context, CUSTOM_ORIGIN, server.origin, true, undefined, { privateFile: true });
       const authRequests: string[] = [];
       await context.addCookies([{ name: '__Host-colmapview_session', value: 'fixture-browser-id', url: CUSTOM_ORIGIN, secure: true, httpOnly: true, sameSite: 'Lax' }]);
       await context.route(`${CUSTOM_ORIGIN}/auth/**`, async route => {
-        const request = route.request(); const path = new URL(request.url()).pathname;
-        authRequests.push(path);
-        expect(request.headers().cookie).toContain('__Host-colmapview_session=fixture-browser-id');
-        if (path === '/auth/session') await route.fulfill({ json: { capabilities: { google: true, hf: false, bucket: false },
-          accounts: [{ provider: 'google', purpose: 'view', accountId: '123456789', renewable: true }], bucket: null, expiresAt: Date.now() + 86400_000 } });
-        else if (path === '/auth/google/token') {
-          expect(request.method()).toBe('POST');
-          expect(request.headers()['x-colmapview-session']).toBe('1');
-          expect(request.headers().origin).toBe(CUSTOM_ORIGIN);
-          expect(request.postDataJSON()).toMatchObject({ purpose: 'view' });
-          await route.fulfill({ json: { accessToken: 'selected-file-token', accountId: '123456789', expiresAt: Date.now() + 3600_000,
-            scope: 'openid https://www.googleapis.com/auth/drive.file', renewable: true } });
-        } else throw new Error(`Unexpected authentication request: ${path}`);
+        authRequests.push(route.request().url());
+        await route.abort('blockedbyclient');
       });
       const launch = `${CUSTOM_ORIGIN}/?drive=open&state=${encodeURIComponent(JSON.stringify({ action: 'open', ids: ['artifact_fixture_file'], userId: '123456789' }))}`;
       try {
-        const pages = [page, page, await context.newPage()];
-        for (const [index, active] of pages.entries()) {
+        for (const [index, active] of [page, page, await context.newPage()].entries()) {
           if (index === 1) await active.reload(); else await active.goto(launch);
+          const dialog = active.getByRole('dialog', { name: 'Google Drive', exact: true });
+          await expect(dialog).toBeVisible();
+          await dialog.getByRole('button', { name: 'Sign in with Google', exact: true }).click();
           await expect(active.getByTestId('scene-3d').locator('canvas')).toBeVisible({ timeout: 45_000 });
           await expect(active.getByText('Source:', { exact: false }).first()).toBeVisible();
-          await expect(active.getByRole('dialog', { name: 'Google Drive', exact: true })).toHaveCount(0);
+          await expect(dialog).toHaveCount(0);
           expect(active.url()).not.toMatch(/state=|123456789|selected-file-token/);
           expect(await active.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }))).not.toContain('selected-file-token');
         }
-        expect(authRequests.filter(path => path.endsWith('/token'))).toHaveLength(3);
+        expect(authRequests).toEqual([]);
         expect(traffic.driveRequests.filter(request => request.authorization === 'Bearer selected-file-token')).toHaveLength(6);
         expect(traffic.externalRequests).toEqual([]);
       } finally { await closeArtifact(context, server); }
     });
-    test(`${directory}: bucket persistence is explicit and explains retention before connecting`, async ({ page, context }) => {
+    test(`${directory}: bucket keys stay local and require reconnecting after reload`, async ({ page, context }) => {
       const server = await startArtifactServer(output, '/');
-      await routeArtifact(context, CUSTOM_ORIGIN, server.origin, true);
-      await context.route(`${CUSTOM_ORIGIN}/auth/session`, route => route.fulfill({ json: {
-        capabilities: { google: false, hf: false, bucket: true }, accounts: [], bucket: null, expiresAt: 0,
-      } }));
-      try {
-        await page.goto(`${CUSTOM_ORIGIN}/`);
+      const traffic = await routeArtifact(context, CUSTOM_ORIGIN, server.origin, true);
+      const authRequests: string[] = [];
+      await context.route(`${CUSTOM_ORIGIN}/auth/**`, async route => {
+        authRequests.push(route.request().url());
+        await route.abort('blockedbyclient');
+      });
+      const openPublisher = async () => {
         await page.getByRole('button', { name: 'Dismiss this panel', exact: true }).click();
         await page.getByRole('button', { name: 'Share', exact: true }).click();
         await page.getByRole('region', { name: 'Share', exact: true }).getByRole('button', { name: 'Bucket storage', exact: true }).click();
-        const dialog = page.getByRole('dialog', { name: 'Publish to bucket', exact: true });
+        return page.getByRole('dialog', { name: 'Publish to bucket', exact: true });
+      };
+      try {
+        await page.goto(`${CUSTOM_ORIGIN}/`);
+        const dialog = await openPublisher();
         const form = dialog.getByRole('form', { name: 'Bucket connection' });
         await form.getByLabel('Bucket URL', { exact: true }).fill('https://s3.example/bucket/');
         await form.getByLabel('Access key ID', { exact: true }).fill('fixture-access');
         await form.getByLabel('Secret key', { exact: true }).fill('fixture-secret');
-        const remember = form.getByRole('checkbox', { name: 'Remember this connection', exact: true });
-        await expect(remember).not.toBeChecked(); await remember.check();
-        await expect(form.getByText(/Credentials are encrypted on ColmapView’s server for up to 30 days/)).toBeVisible();
-        await page.screenshot({ path: `${root}/remembered-bucket-connection.png` });
+        await expect(form.getByLabel('Access key ID', { exact: true })).toHaveAttribute('autocomplete', 'username');
+        await expect(form.getByLabel('Secret key', { exact: true })).toHaveAttribute('autocomplete', 'current-password');
+        await expect(form.getByRole('checkbox')).toHaveCount(0);
+        await form.getByRole('button', { name: 'Connect', exact: true }).click();
+        await expect(dialog.getByLabel('Upload folder', { exact: true })).toBeVisible();
+        const stored = await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }));
+        expect(stored).not.toMatch(/fixture-access|fixture-secret/);
+        await page.reload();
+        const fresh = (await openPublisher()).getByRole('form', { name: 'Bucket connection' });
+        await expect(fresh.getByLabel('Access key ID', { exact: true })).toBeEmpty();
+        await expect(fresh.getByLabel('Secret key', { exact: true })).toBeEmpty();
+        expect(authRequests).toEqual([]);
+        expect(traffic.externalRequests).toEqual([]);
       } finally { await closeArtifact(context, server); }
     });
     test(`${directory}: explicit Drive installation requests menu permission without loading a dataset`, async ({ page, context }) => {

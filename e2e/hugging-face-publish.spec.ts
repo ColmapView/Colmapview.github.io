@@ -3,7 +3,7 @@ import { loadTestDataset } from './fixtures/load-test-data';
 import { createMockHuggingFace } from './fixtures/mock-hugging-face';
 import { readFileSync } from 'node:fs';
 import { unzipSync } from 'fflate';
-import type { Page } from '@playwright/test';
+import type { BrowserContext, Page } from '@playwright/test';
 import type { PublicationAssetSummary } from '../src/features/datasetPublishing/types';
 
 const hubEndpoint = 'https://hub.invalid/hub/api/links';
@@ -16,6 +16,12 @@ interface HubRequest {
   assets?: PublicationAssetSummary;
 }
 const hubRequests = new Map<Page, HubRequest[]>();
+
+function observeServerAuth(context: BrowserContext, requests: string[]) {
+  context.on('request', request => {
+    if (new URL(request.url()).pathname.startsWith('/auth/')) requests.push(request.url());
+  });
+}
 
 test.beforeEach(async ({ page }) => {
   const requests: HubRequest[] = [];
@@ -182,6 +188,8 @@ test.describe('Hugging Face dataset publication', () => {
 
   test('recovers a private upload and opens its link only after a recipient signs in', async ({ page, context, browser, baseURL }) => {
     test.setTimeout(120_000);
+    const authRequests: string[] = [];
+    observeServerAuth(context, authRequests);
     const hub = mockHub(); hub.failMetadata();
     await hub.attach(context, baseURL!); await page.goto('/');
     const image = readFileSync(new URL('./fixtures/test-data/masks/photo.jpg.png', import.meta.url)).toString('base64');
@@ -214,6 +222,8 @@ test.describe('Hugging Face dataset publication', () => {
     const requests = hubRequests.get(page)!;
     expect(requests).toHaveLength(1);
     expect(requests[0].access).toBe('private');
+    expect(JSON.stringify(requests)).not.toContain('hf_browser_test_only');
+    expect(await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }))).not.toContain('hf_browser_test_only');
     expect(hub.reads.every(read => read.authorization === 'Bearer hf_browser_test_only')).toBe(true);
     await expect(dialog.getByText('Private. Viewers must sign in to Hugging Face with an account that has access.')).toBeVisible();
     await expect(dialog.getByLabel('Share link', { exact: true })).toHaveValue(longUrl);
@@ -221,6 +231,7 @@ test.describe('Hugging Face dataset publication', () => {
     const viewerUrl = `${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene`;
     for (const mode of ['shared', 'manual'] as const) {
       const recipient = await browser.newContext();
+      observeServerAuth(recipient, authRequests);
       try {
         await hub.attach(recipient, baseURL!);
         const recipientPage = await recipient.newPage();
@@ -244,8 +255,10 @@ test.describe('Hugging Face dataset publication', () => {
         const fileReads = hub.reads.slice(readStart).filter(read => /\/resolve\//.test(read.path));
         expect(fileReads.some(read => read.path.endsWith('/colmapview.yaml') && read.authorization)).toBe(true);
         expect(fileReads.filter(read => read.authorization).every(read => read.authorization === 'Bearer hf_browser_test_only')).toBe(true);
+        expect(await recipientPage.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }))).not.toContain('hf_browser_test_only');
       } finally { await recipient.close(); }
     }
+    expect(authRequests).toEqual([]);
   });
 
   test('retries automatic shortening without repeating a public upload or listing it', async ({ page, context, baseURL }) => {

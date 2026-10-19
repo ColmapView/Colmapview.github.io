@@ -1,6 +1,6 @@
 # Publish a dataset to Hugging Face
 
-> Connection update, October 19, 2026: remembered connections are enabled on the custom host and have passed [dated live checks](account-sessions.md#live-checks--2026-10-19). They use confidential OAuth callbacks, an essential session cookie and encrypted server credentials for at most 30 days. GitHub Pages and the browser-only fallback keep tokens in tab memory. Historical receipts below retain their original dates and scope.
+> Connection update, October 19, 2026: this revision removes remembered connections. Google and Hugging Face tokens and bucket keys stay in the current tab; reconnect after reload or expiry. No credential service is used. See [browser connections and retirement](account-sessions.md). Earlier live receipts describe their dated builds, not this revision.
 
 
 ColmapView can publish the currently loaded COLMAP reconstruction, original images, available masks, and splats to a new private or public dataset in the connected user's personal Hugging Face account. Uploads default to public; choose Private before uploading when access should be restricted. Public links open anonymously; private links require sign-in with an account that has repository access. The link contains no token.
@@ -68,7 +68,7 @@ Public publication is discoverable and downloadable. Cancel stops further work a
 
 ## Maintainer setup
 
-The custom website uses [remembered connections](account-sessions.md#deployment-and-rollback) when the service is available. That path uses a separate confidential Hugging Face application with callback `https://colmapview.opsiclear.com/auth/hf/callback`; install its secret only in the Worker. Keep the public application below for GitHub Pages, local development and the custom website's browser-only fallback.
+The custom website, GitHub builds and local development use public OAuth clients and browser PKCE. No confidential app, Worker secret or server callback is needed. Keep the public application and browser callback below; see [browser connections](account-sessions.md#deployment-and-rollback).
 
 ### Register a public OAuth application
 
@@ -184,7 +184,7 @@ The viewer-state document restores display settings, the camera view, and separa
 
 Saved splat paths resolve relative to the folder containing `colmapview.yaml`, including a downloaded project inside an enclosing folder or archive. Desktop viewers restore explicitly saved selections regardless of size; touch devices retain the large-file prompt and saved alignment. Ordinary discovery without a saved selection retains its download budget. Starting a local load cancels pending URL settings. Image and mask requests encode literal filename characters, and published manifests map original image names to their uploaded paths.
 
-`src/features/huggingface/` owns public configuration, tab-local access tokens, optional remembered-session restoration, and the lazy `@huggingface/hub` adapter. `src/features/accountSessions/` owns the custom host's session API client; renewable credentials stay encrypted in the Worker. `src/features/datasetPublishing/` owns snapshot preparation, metadata, upload lifecycle, recovery, and anonymous verification. The controller outlives its dialog; large blobs stay out of React/Zustand UI state. Unique operation markers, expected parents, and atomic batch receipts distinguish a recovered upload from unrelated repository changes.
+`src/features/huggingface/` owns public configuration, tab-local access tokens, PKCE sign-in and the lazy `@huggingface/hub` adapter. Provider requests go directly from the browser; no credential service is used. `src/features/datasetPublishing/` owns snapshot preparation, metadata, upload lifecycle, recovery and anonymous verification. The controller outlives its dialog; large blobs stay out of React/Zustand UI state. Unique operation markers, expected parents and atomic batch receipts distinguish a recovered upload from unrelated repository changes.
 
 The initial upload adapter explicitly selects the SDK's LFS/basic and multipart transports (`useXet: false`). Browser tests verify both direct binary uploads and multipart completion with content hashes and part receipts. Native Xet transport remains outside the validated initial path.
 

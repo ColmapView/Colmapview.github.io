@@ -19,7 +19,7 @@ Core modules should not import from `components/`. Parser and dataset code shoul
 - `store/`: own shared app state, persistence, and user actions. Keep UI rendering out of store actions.
 - `nodes/`: expose derived viewer state for camera, selection, navigation, and matches. Use nodes when multiple components need the same derived state.
 - `hooks/`: own reusable React behavior, subscriptions, and component-facing view models.
-- `features/`: provider authentication and transport, shared publication workflows, and the optional account-session client.
+- `features/`: browser provider authentication and transport, plus shared publication workflows.
 - `parsers/`: read and write COLMAP data. Keep this layer deterministic and independent of React.
 - `utils/`: framework-light helpers and shared policies such as confirmation, cursor ownership, and storage key handling.
 - `theme/` and `icons/`: design tokens, reusable class names, and visual primitives.
@@ -36,7 +36,7 @@ Shared reconstruction calculations live in `utils/floorPlaneAlignment.ts` and `u
 
 ## Storage Providers
 
-Storage providers own authentication and transport under `features/`. `bucketStorage/connection.ts` keeps ordinary S3 credentials in a tab-local closure and exposes a redacted render snapshot. With an explicitly remembered connection, the encrypted Worker record owns the saved secret and the browser receives short-lived presigned URLs instead. `features/accountSessions/` restores supported connections before remote startup loads; Google/HF access tokens remain in tab memory while renewable credentials stay encrypted on the server for at most 30 days. GitHub Pages retains browser-only authentication. See [account sessions](account-sessions.md) for ownership, expiry and disconnection.
+Storage providers own authentication and transport under `features/`. Google Drive and Hugging Face access tokens stay in tab memory. `bucketStorage/connection.ts` signs requests directly in the browser with keys held in a closure and exposes only a redacted render snapshot. No provider credentials are persisted by the app or sent to its Worker. See [browser connections](account-sessions.md) for ownership, expiry and the retirement of the former service.
 
 `fetchDatasetResource` composes bucket and Hugging Face request policies for discovery, lazy media, ranges, and re-publication; authenticated bucket requests stay within the configured bucket root. Provider credentials never enter reconstruction state or published manifests.
 

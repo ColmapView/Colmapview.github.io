@@ -8,7 +8,6 @@ import { chooseGoogleDriveArchive, getGoogleDrivePickerConfig } from '../../feat
 import { getGoogleDriveConfiguration, isGoogleDriveEnabled } from '../../features/googleDrive/config';
 import { getButtonClass, Z_INDEX } from '../../theme';
 import { AccountDialog } from '../ui/AccountDialog';
-import { accountSessions, accountSessionsSupported } from '../../features/accountSessions/api';
 
 export type DatasetAccountProvider = 'google' | 'hf';
 
@@ -26,9 +25,6 @@ interface DatasetAccountDialogProps {
 export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoadRemoteDataset,
   accessMessage, retryLoad, driveOpenFile }: DatasetAccountDialogProps) {
   const id = useId();
-  const savedSessions = useSyncExternalStore(accountSessions.subscribe, accountSessions.getSnapshot);
-  const rememberedAccess = accountSessionsSupported() && provider !== null && savedSessions.capabilities[provider];
-  const hasSavedConnection = savedSessions.accounts.some(account => account.provider === provider);
   const [sdk, setSdk] = useState<GoogleOAuthSdk | null>(null);
   const [sdkError, setSdkError] = useState<string | null>(null);
   const [sdkAttempt, setSdkAttempt] = useState(0);
@@ -114,7 +110,7 @@ export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoad
   const signIn = (onConnected: () => void, install = false) => {
     if (!clientId || pickerLoading || connecting || pickerAbortRef.current || signInUnsubscribeRef.current) return;
     setPickerError(null);
-    if (!sdk && !rememberedAccess) return;
+    if (!sdk) return;
     setPickerLoading(true);
     let signInStarted = false;
     signInUnsubscribeRef.current = googleDriveAuth.subscribe(() => {
@@ -154,13 +150,13 @@ export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoad
   }, []);
 
   useEffect(() => {
-    if (provider !== 'google' || !clientId || rememberedAccess) return;
+    if (provider !== 'google' || !clientId) return;
     let cancelled = false;
     void loadGoogleOAuthSdk().then(value => { if (!cancelled) { setSdk(value); setSdkError(null); } }, () => {
       if (!cancelled) setSdkError('Could not load Google sign-in. Check your connection and try again.');
     });
     return () => { cancelled = true; };
-  }, [provider, clientId, sdkAttempt, rememberedAccess]);
+  }, [provider, clientId, sdkAttempt]);
 
   return (<>
     <AccountDialog id={id} isOpen={provider !== null && (provider !== 'google' || googleEnabled) && !pickerOpen}
@@ -170,10 +166,10 @@ export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoad
           : connected ? provider === 'hf' && hf.identity?.username ? `Connected as ${hf.identity.username}` : 'Connected' : 'Waiting for sign-in…'
         : null}
       statusTitle={provider === 'hf' ? hf.identity?.username : undefined} description={accessMessage ?? description}
-      hint={!connected || provider === 'google' ? rememberedAccess ? `${hint} Connection credentials are encrypted on ColmapView’s server for up to 30 days. Disconnect forgets this browser’s connection.` : hint : null}
+      hint={!connected || provider === 'google' ? hint : null}
       error={auth.error || (provider === 'google' ? sdkError || pickerError : null)}>
       {provider === 'google' ? <>
-        {(connected || connecting || pickerLoading || hasSavedConnection) && <button type="button" className={getButtonClass('ghost', 'sm')}
+        {(connected || connecting || pickerLoading) && <button type="button" className={getButtonClass('ghost', 'sm')}
           onClick={pickerLoading && !connecting ? cancelPicker : disconnect}>
           {connecting ? 'Cancel sign-in' : pickerLoading ? 'Cancel selection' : 'Disconnect'}
         </button>}
@@ -181,15 +177,15 @@ export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoad
           className={getButtonClass(clientId ? 'ghost' : 'primary', 'sm', connecting)}
           onClick={() => { close(); onOpenUrlModal(); }}>{accessMessage ? 'Use another link' : 'Load URL'}</button>}
         {clientId && !driveOpenFile && !accessMessage && !installationComplete && <button type="button"
-          disabled={(!sdk && !rememberedAccess) || connecting || pickerLoading} className={getButtonClass('ghost', 'sm', (!sdk && !rememberedAccess) || connecting || pickerLoading)}
+          disabled={!sdk || connecting || pickerLoading} className={getButtonClass('ghost', 'sm', !sdk || connecting || pickerLoading)}
           onClick={() => signIn(() => setInstallationComplete(true), true)}>Add to Google Drive</button>}
         {clientId && (sdkError && !connected
           ? <button type="button" className={getButtonClass('primary', 'sm')} onClick={() => {
             setSdkError(null); setSdkAttempt(value => value + 1);
           }}>Retry sign-in</button>
-          : <button type="button" aria-label={!connected && !sdk && !rememberedAccess ? undefined : connected ? driveOpenFile ? 'Open archive from Drive' : 'Choose file from Drive' : 'Sign in with Google'} disabled={(!connected && !sdk && !rememberedAccess) || connecting || pickerLoading}
-            className={getButtonClass('primary', 'sm', (!connected && !sdk && !rememberedAccess) || connecting || pickerLoading)}
-            onClick={chooseArchive}>{!connected && !sdk && !rememberedAccess ? 'Loading sign-in…' : connecting ? 'Signing in…' : pickerLoading ? 'Opening Drive…' : driveOpenFile ? 'Open archive' : connected ? 'Choose file' : 'Sign in'}</button>)}
+          : <button type="button" aria-label={!connected && !sdk ? undefined : connected ? driveOpenFile ? 'Open archive from Drive' : 'Choose file from Drive' : 'Sign in with Google'} disabled={(!connected && !sdk) || connecting || pickerLoading}
+            className={getButtonClass('primary', 'sm', (!connected && !sdk) || connecting || pickerLoading)}
+            onClick={chooseArchive}>{!connected && !sdk ? 'Loading sign-in…' : connecting ? 'Signing in…' : pickerLoading ? 'Opening Drive…' : driveOpenFile ? 'Open archive' : connected ? 'Choose file' : 'Sign in'}</button>)}
       </> : connected || connecting ? <>
         <button type="button" className={getButtonClass('ghost', 'sm')} onClick={disconnect}>
           {connected ? 'Disconnect' : 'Cancel sign-in'}
@@ -200,7 +196,6 @@ export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoad
         {connected && retryLink && <button type="button" className={getButtonClass('primary', 'sm')}
           onClick={() => { close(); void retryLink(); }}>{retryLoad ? 'Retry loading' : 'Retry shared link'}</button>}
       </> : <>
-        {hasSavedConnection && <button type="button" className={getButtonClass('ghost', 'sm')} onClick={disconnect}>Disconnect</button>}
         <button type="button" className={getButtonClass(canSignIn ? 'ghost' : 'primary', 'sm')}
           onClick={() => { close(); onOpenUrlModal(); }}>Load URL</button>
         {provider === 'hf' && hfConfiguration.status === 'ready' ? <button type="button" aria-label="Sign in with Hugging Face" className={getButtonClass('primary', 'sm')}

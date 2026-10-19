@@ -10,6 +10,13 @@ export const FIXTURE_GOOGLE_CONFIG = {
   CUSTOM_GOOGLE_DRIVE_CLIENT_ID: '123456789012-artifactfixture.apps.googleusercontent.com',
   CUSTOM_GOOGLE_DRIVE_APP_ID: '123456789012',
 };
+const FIXTURE_CUSTOM_CONFIG = {
+  ...FIXTURE_GOOGLE_CONFIG,
+  CUSTOM_HF_AUTH_ENABLED: 'true',
+  CUSTOM_HF_PUBLISH_ENABLED: 'true',
+  CUSTOM_HF_OAUTH_CLIENT_ID: 'artifact-fixture-public-client',
+  CUSTOM_HF_OAUTH_REDIRECT_URI: `${CUSTOM_ORIGIN}/hf-callback`,
+};
 
 const GOOGLE_NAMES = ['API_KEY', 'CLIENT_ID', 'APP_ID'];
 const HF_NAMES = ['AUTH_ENABLED', 'PUBLISH_ENABLED', 'OAUTH_CLIENT_ID', 'OAUTH_REDIRECT_URI'];
@@ -117,10 +124,9 @@ export function profileEnvironment(profile, source = process.env, fixture = fals
     for (const name of HF_NAMES) env[`HF_${name}`] = '';
   }
   if (profile === 'custom') {
-    const custom = fixture ? FIXTURE_GOOGLE_CONFIG : source;
+    const custom = fixture ? FIXTURE_CUSTOM_CONFIG : source;
     validateCustomConfiguration(custom);
     env.VITE_GOOGLE_DRIVE_ENABLED = 'true';
-    env.VITE_ACCOUNT_SESSIONS_ENABLED = 'true';
     env.VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN = CUSTOM_ORIGIN;
     for (const name of GOOGLE_NAMES) env[`VITE_GOOGLE_DRIVE_${name}`] = custom[`CUSTOM_GOOGLE_DRIVE_${name}`];
     for (const name of HF_NAMES) env[`VITE_HF_${name}`] = custom[`CUSTOM_HF_${name}`] || (name.endsWith('ENABLED') ? 'false' : '');

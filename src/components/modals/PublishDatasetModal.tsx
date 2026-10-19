@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { useId, useRef, useState } from 'react';
 import { getHfConfiguration } from '../../features/huggingface/config';
 import { PUBLICATION_LICENSE_NAME_LIMIT, PUBLICATION_LICENSE_URL_LIMIT, PUBLICATION_LICENSES, stripControlCharacters, validatePublicationDetails } from '../../features/datasetPublishing/publicationMetadata';
 import { isPublishing } from '../../features/datasetPublishing/publishDataset';
@@ -11,7 +11,6 @@ import { usePublicationPreview } from './usePublicationPreview';
 import { getButtonClass, inputStyles } from '../../theme';
 import { useHubLink } from '../upload/useHubLink';
 import { hubDisclosure } from '../../features/colmapviewHub/disclosure';
-import { accountSessions } from '../../features/accountSessions/api';
 
 const bytes = (value: number) => `${(value / 1024 / 1024).toFixed(1)} MiB`;
 const fieldClass = `${inputStyles.base} ${inputStyles.sizes.sm} w-full min-w-0`;
@@ -22,7 +21,6 @@ const accountButtonClass = getButtonClass('secondary', 'xs');
 export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const facade = usePublishDatasetStoreFacade();
   const { auth, publish, publication, hfAuth } = facade;
-  const savedSessions = useSyncExternalStore(accountSessions.subscribe, accountSessions.getSnapshot);
   const id = useId();
   const previewInput = useRef<HTMLInputElement>(null);
   const [name, setName] = useState('');
@@ -46,10 +44,6 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
   const selectedImageFormat = format === 'zip' ? imageFormat : 'original';
   const disclosure = hubDisclosure(hub.enabled, visibility, selectedImageFormat === 'original');
   const connected = auth.status === 'connected' && hfAuth.canPublish?.() !== false;
-  const configured = Boolean(config);
-  useEffect(() => {
-    if (isOpen && configured) void hfAuth.restore?.('publish');
-  }, [isOpen, configured, hfAuth]);
   useFocusWhenBecomesTrue(connected, `${id}-access`);
   const details = { name, title, description, license, licenseName, licenseUrl, visibility, format, imageFormat: selectedImageFormat };
 
@@ -75,8 +69,6 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
 
   return <UploadDialog isOpen={isOpen} onClose={onClose} closeLabel="Close publish dataset"
     title={<><span aria-hidden="true">🤗 </span>Publish to Hugging Face</>} headerActions={<>
-        {auth.status === 'disconnected' && savedSessions.accounts.some(account => account.provider === 'hf')
-          && <button type="button" className={accountButtonClass} onClick={signOut}>Disconnect</button>}
         {config && (auth.status === 'connected' ? <>
           <span className="publication-account text-ds-muted text-xs" title={auth.identity?.username}>{auth.identity?.username}</span>
           {!connected && <button type="button" className={getButtonClass('primary', 'xs')} onClick={() => { void hfAuth.connect(config); }}>Enable publishing</button>}
@@ -95,7 +87,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
     </section> : <>
       {auth.status !== 'connected' && <p className="publication-note">
         Sign-in lets ColmapView read private repositories and create datasets.
-        {savedSessions.capabilities.hf && ' This browser stays connected for up to 30 days using encrypted credentials on ColmapView’s server. Sign out forgets the connection.'}
+        {' Access tokens stay in this tab; reconnect after reload or expiry.'}
       </p>}
       <UploadLayout completed={Boolean(publish.receipt)}>
         <section className="publication-preview-panel" aria-label="Dataset preview">
