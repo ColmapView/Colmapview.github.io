@@ -7,12 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.17.8] - 2026-10-18
+## [0.17.9] - 2026-10-18
 
 ### Changed
 
 - Remove Hub deletion controls from completed uploads and Previous upload across Hugging Face, Google Drive and bucket storage.
 - Allow leaving the page once the upload and its Hub link have finished, without requiring the private delete link to be shown.
+- Update the privacy and provider help text to match the upload result and explain how to request Hub link removal.
 
 ## [0.17.7] - 2026-10-18
 
