@@ -183,7 +183,7 @@ describe('url loader policy helpers', () => {
       .toBe('https://example.com/base/sparse/0/images.bin');
   });
 
-  it('builds required and optional COLMAP file entries from manifests', () => {
+  it('builds required and optional COLMAP entries while leaving splats for lazy activation', () => {
     expect(getManifestColmapFileEntries(manifest)).toEqual({
       requiredFiles: [
         { key: 'sparse/0/cameras.bin', path: 'custom/cameras.bin' },
@@ -193,8 +193,6 @@ describe('url loader policy helpers', () => {
       optionalFiles: [
         { key: 'sparse/0/rigs.bin', path: 'custom/rigs.bin' },
         { key: 'sparse/0/frames.bin', path: 'custom/frames.bin' },
-        { key: 'splats/small.ply', path: 'splats/small.ply' },
-        { key: 'splats/large.ply', path: 'splats/large.ply' },
       ],
     });
   });
@@ -207,7 +205,6 @@ describe('url loader policy helpers', () => {
         images: 'images.bin',
         points3D: 'points3D.bin',
       },
-      splats: undefined,
     });
 
     expect(entries.optionalFiles).toEqual([]);

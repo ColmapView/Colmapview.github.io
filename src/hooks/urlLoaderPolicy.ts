@@ -474,10 +474,6 @@ export function getManifestColmapFileEntries(manifest: ColmapManifest): Manifest
   if (files.frames) {
     optionalFiles.push({ key: 'sparse/0/frames.bin', path: files.frames });
   }
-  for (const path of manifest.splats ?? []) {
-    optionalFiles.push({ key: path, path });
-  }
-
   return { requiredFiles, optionalFiles };
 }
 

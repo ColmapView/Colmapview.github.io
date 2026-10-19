@@ -122,7 +122,7 @@ function missingResponse(): Response {
 }
 
 describe('URL loader manifest fetch helpers', () => {
-  it('fetches required COLMAP independently of splat discovery and listed splat downloads without deferring options', async () => {
+  it('fetches model files independently of splat discovery and activation', async () => {
     const fetchImpl = vi.fn();
     const fetchFile = vi.fn(async (_base: string, path: string) => buildFile(path));
     const files = await fetchManifestColmapFiles({ ...manifest, splats: ['splats/a.spz', 'splats/b.spz'] }, {
@@ -140,7 +140,7 @@ describe('URL loader manifest fetch helpers', () => {
     });
     const classifySplatUrl = vi.fn(async () => ({ isSplat: true, splatCount: null }));
     const catalog = await discoverManifestSplatCatalog({ ...manifest, splats: ['splats/a.spz', 'splats/b.spz'] }, {
-      fetchImpl, classifySplatUrl, isTouchDevice: true,
+      fetchImpl, classifySplatUrl,
     });
     expect(catalog.map(candidate => [candidate.path, candidate.size])).toEqual([
       ['splats/a.spz', 2_000_000_000], ['splats/b.spz', 2_000_000_000],
@@ -155,7 +155,7 @@ describe('URL loader manifest fetch helpers', () => {
       ? new Response(null, { status }) : new Response(null, { headers: { 'content-length': '1000' } }));
     const log = vi.fn();
     const catalog = await discoverManifestSplatCatalog({ ...manifest, splats: ['splats/live.spz', 'splats/gone.spz'] }, {
-      fetchImpl, log, classifySplatUrl: vi.fn(async () => ({ isSplat: true, splatCount: null })), isTouchDevice: false,
+      fetchImpl, log, classifySplatUrl: vi.fn(async () => ({ isSplat: true, splatCount: null })),
     });
     expect(catalog.map(candidate => candidate.path).sort()).toEqual(listed ? ['splats/gone.spz', 'splats/live.spz'] : ['splats/live.spz']);
     if (!listed) expect(log).toHaveBeenCalledWith('[URL Loader] Optional file not found: splats/gone.spz');
@@ -177,7 +177,7 @@ describe('URL loader manifest fetch helpers', () => {
     const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'HEAD'
       ? new Response(null, { status: 404 }) : new Response(gaussianPlyHeader, { status: getStatus }));
     const log = vi.fn();
-    const catalog = await discoverManifestSplatCatalog({ ...manifest, splats: [path] }, { fetchImpl, log, isTouchDevice: false });
+    const catalog = await discoverManifestSplatCatalog({ ...manifest, splats: [path] }, { fetchImpl, log });
     expect(catalog).toEqual([{ path, size: 0, splatCount: path.endsWith('.ply') ? 3 : null }]);
     expect(log).not.toHaveBeenCalledWith(`[URL Loader] Optional file not found: ${path}`);
     // A .ply's header read already answered; a .spz is confirmed with one byte.
@@ -193,7 +193,7 @@ describe('URL loader manifest fetch helpers', () => {
       ? new Response(null, { headers: { 'content-length': '1000' } }) : new Response(null, { status }));
     const log = vi.fn();
     const catalog = await discoverManifestSplatCatalog({ ...manifest, splats: [path, 'splats/live.spz'] }, {
-      fetchImpl, log, isTouchDevice: false,
+      fetchImpl, log,
     });
     expect(catalog.map(candidate => candidate.path)).toEqual(['splats/live.spz']);
     expect(log).toHaveBeenCalledWith(`[URL Loader] Optional file not found: ${path}`);
@@ -333,9 +333,8 @@ describe('URL loader manifest fetch helpers', () => {
       'output/surface_gaussians.ply',
       'inside_gaussians.ply',
     ]);
-    expect(log).toHaveBeenCalledWith(
-      '[URL Loader] 5 splats found; none auto-loaded - select one to display'
-    );
+    // Discovery reports the catalog; activation waits for saved settings in the source loader.
+    expect(log).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('[URL Loader] Discovered 5 Hugging Face splat files:'));
   });
 
   it('discovers all generic directory-listing splats recursively', async () => {
@@ -432,11 +431,8 @@ describe('URL loader manifest fetch helpers', () => {
       { path: 'output/model.spz', size: 50 },
       { path: '3dgs/model.ply', size: 200 },
     ]);
-    expect(log).toHaveBeenCalledWith(
+    expect(log).toHaveBeenCalledExactlyOnceWith(
       '[URL Loader] Discovered 2 directory splat files: output/model.spz (50 bytes), 3dgs/model.ply (200 bytes)'
-    );
-    expect(log).toHaveBeenCalledWith(
-      '[URL Loader] 2 splats found; none auto-loaded - select one to display'
     );
   });
 

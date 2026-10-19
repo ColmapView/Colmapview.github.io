@@ -130,7 +130,7 @@ export async function loadManifestSource(
       lastDiscoveryAnswer = Date.now();
       return response;
     },
-    log, isTouchDevice: deps.isTouchDevice,
+    log,
   }));
   // Discovery and optional settings do not gate required file transfer or parsing.
   const catalogTask = discover(manifest).catch(() => [] as RemoteSplatCandidate[]);

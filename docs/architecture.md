@@ -30,6 +30,8 @@ When a component or hook needs many store selectors, node selectors, and actions
 
 Facades should adapt stores and nodes into typed dependencies. Pure executors and policies should receive those dependencies as parameters and avoid importing stores directly. This keeps behavior testable with plain objects while limiting store wiring to one feature-owned hook.
 
+URL manifest loading keeps its existing entry point in `hooks/urlLoaderManifestFetch.ts`, which validates documents and transfers model files. `urlLoaderColmapDiscovery.ts` owns remote model/media layout discovery; `urlLoaderSplatDiscovery.ts` returns selectable splat catalogs without activating them. `urlLoaderHuggingFaceListing.ts` owns pagination with separate contracts for best-effort discovery and complete, scene-scoped media indexing. `urlLoaderManifestSource.ts` coordinates parsing, optional settings, and the final splat activation decision after saved settings settle.
+
 Shared reconstruction calculations live in `utils/floorPlaneAlignment.ts` and `utils/histogram.ts`. The reconstruction worker and UI use these same calculations and data types. Modal styles, labels, and chart layout stay in the component policies; computation modules must not depend on those UI modules.
 
 ## Storage Providers
