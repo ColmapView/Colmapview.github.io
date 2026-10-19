@@ -53,9 +53,9 @@ test('gives a private bucket upload an unguessable Hub link and keeps it after t
     expect(bucket.objects.size).toBeGreaterThan(0);
     expect([...bucket.objects.keys()].some(key => key.startsWith('/bucket/colmap-dataset/') && key.endsWith('/manifest.json'))).toBe(true);
     expect(bucket.anonymousReads).toEqual([]);
-    const deleteLink = await result.getByLabel('Private delete link', { exact: true }).inputValue();
     expect(requests[0].managementSecret).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(deleteLink).toBe(`https://hub.invalid/hub/manage/${longId}#${String(requests[0].managementSecret)}`);
+    await expect(result.getByLabel('Private delete link', { exact: true })).toHaveCount(0);
+    await expect(result.getByRole('link', { name: 'Delete Hub link' })).toHaveCount(0);
     // Marking an image for deletion is an edit: it resets the upload result, and the Hub link moves to Previous upload.
     await page.evaluate(async () => {
       const storePath = '/src/store/reconstructionStore.ts';
@@ -67,7 +67,8 @@ test('gives a private bucket upload an unguessable Hub link and keeps it after t
     });
     const previous = dialog.getByRole('region', { name: 'Previous upload' });
     await expect(previous.getByLabel('Share link', { exact: true })).toHaveValue(longUrl);
-    await expect(previous.getByLabel('Private delete link', { exact: true })).toHaveValue(deleteLink);
+    await expect(previous.getByLabel('Private delete link', { exact: true })).toHaveCount(0);
+    await expect(previous.getByRole('link', { name: 'Delete Hub link' })).toHaveCount(0);
     await expect(dialog.getByRole('button', { name: 'Apply deletions and continue' })).toBeVisible();
   } finally { await bucket.close(); }
 });

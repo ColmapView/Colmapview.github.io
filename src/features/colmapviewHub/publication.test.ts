@@ -56,8 +56,7 @@ describe('Hub controller', () => {
     expect(payload).toEqual({ viewerUrl: viewer, title: 'Scene', description: 'Reconstruction', license,
       thumbnailBase64: 'small-jpeg', managementSecret: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/), publicAcknowledged: true });
     expect(thumbnail).toHaveBeenCalledWith(preview);
-    expect(hub.getSnapshot()).toEqual({ phase: 'ready', viewerUrl: viewer, url: link.url,
-      managementUrl: `${link.managementUrl}#${payload.managementSecret}`, deleteLinkSeen: false });
+    expect(hub.getSnapshot()).toEqual({ phase: 'ready', viewerUrl: viewer, url: link.url });
     await hub.finish(viewer);
     expect(request).toHaveBeenCalledOnce();
   });
@@ -165,7 +164,7 @@ describe('Hub controller', () => {
     const { hub } = controller({ notify, request });
     begin(hub, { title: 'Scene' }, { access: 'public', preview, source });
     await hub.finish(viewer);
-    expect(notify).toHaveBeenCalledExactlyOnceWith('info', 'Hub link ready. Reopen the upload dialog to copy it and its delete link.');
+    expect(notify).toHaveBeenCalledExactlyOnceWith('info', 'Hub link ready. Reopen the upload dialog to copy it.');
     begin(hub, { title: 'Scene' }, { access: 'public', preview, source });
     await hub.finish(viewer);
     expect(notify).toHaveBeenLastCalledWith('warning', 'Hub link not created. Reopen the upload dialog to retry.');
@@ -185,10 +184,10 @@ describe('Hub controller', () => {
     hub.setDialogOpen(false);
     finishCheck('public');
     await finishing;
-    expect(notify).toHaveBeenCalledExactlyOnceWith('info', 'Hub link ready. Reopen the upload dialog to copy it and its delete link.');
+    expect(notify).toHaveBeenCalledExactlyOnceWith('info', 'Hub link ready. Reopen the upload dialog to copy it.');
   });
 
-  it('asks to stay on the page while busy and until the delete link has been shown', async () => {
+  it('asks to stay on the page only while the Hub link is being created', async () => {
     let answer!: (value: typeof link) => void;
     const request = vi.fn(() => new Promise<typeof link>(resolve => { answer = resolve; }));
     const { hub } = controller({ request });
@@ -201,10 +200,7 @@ describe('Hub controller', () => {
     await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
     answer(link);
     await finishing;
-    expect(hub.blocksUnload()).toBe(true);
-    hub.markDeleteLinkSeen();
     expect(hub.blocksUnload()).toBe(false);
-    expect(hub.getSnapshot().deleteLinkSeen).toBe(true);
   });
 
   it('offers the ready link to the Share panel for the dataset it was made from', async () => {

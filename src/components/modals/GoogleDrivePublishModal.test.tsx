@@ -24,11 +24,11 @@ vi.mock('../../features/googleDrive/auth', async importOriginal => ({
   ...await importOriginal<typeof import('../../features/googleDrive/auth')>(),
   loadGoogleOAuthSdk: vi.fn().mockResolvedValue({ initTokenClient: vi.fn() }),
 }));
-const hubLink = vi.hoisted(() => ({ value: { state: { phase: 'idle' }, enabled: true, busy: false, retry: vi.fn(), markDeleteLinkSeen: vi.fn() } as Record<string, unknown> }));
+const hubLink = vi.hoisted(() => ({ value: { state: { phase: 'idle' }, enabled: true, busy: false, retry: vi.fn() } as Record<string, unknown> }));
 vi.mock('../upload/useHubLink', () => ({ useHubLink: () => hubLink.value }));
 beforeEach(() => {
   vi.clearAllMocks();
-  hubLink.value = { state: { phase: 'idle' }, enabled: true, busy: false, retry: vi.fn(), markDeleteLinkSeen: vi.fn() };
+  hubLink.value = { state: { phase: 'idle' }, enabled: true, busy: false, retry: vi.fn() };
   actions.auth = { status: 'connected', error: null }; actions.publish = { phase: 'idle' }; actions.pending = 0; actions.reconstruction = {};
   actions.sourceKey = 'current-scene'; actions.preview = { url: 'blob:current-view', busy: false }; actions.datasetName = 'dataset';
   vi.stubEnv('VITE_GOOGLE_DRIVE_CLIENT_ID', '123456-test.apps.googleusercontent.com');

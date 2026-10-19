@@ -137,7 +137,7 @@ function ShareLink({ viewerUrl, hub, providerLink }: { viewerUrl: string; hub?: 
         {providerLink.label}<span aria-hidden="true"> ↗</span>
       </a>}
     </div>
-    {hub && hubState && <HubLinkResult state={hubState} onRetry={hub.retry} onDeleteLinkShown={hub.markDeleteLinkSeen} />}
+    {hub && hubState && <HubLinkResult state={hubState} onRetry={hub.retry} />}
   </>;
 }
 

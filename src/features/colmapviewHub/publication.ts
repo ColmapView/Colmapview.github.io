@@ -28,12 +28,10 @@ export interface HubLinkState {
   viewerUrl?: string;
   bucketAccess?: BucketAccess;
   url?: string;
-  managementUrl?: string;
   error?: string;
   retryable?: boolean;
   /** Set until a 429's Retry-After passes; the controller clears it then. */
   coolingDown?: true;
-  deleteLinkSeen?: boolean;
 }
 
 export class HubRequestError extends Error {
@@ -48,7 +46,7 @@ export class HubRequestError extends Error {
 }
 
 const RETRYABLE = new Set<HubFailureKind>(['network', 'timeout', 'rate-limited', 'unavailable', 'preview']);
-const READY_TOAST = 'Hub link ready. Reopen the upload dialog to copy it and its delete link.';
+const READY_TOAST = 'Hub link ready. Reopen the upload dialog to copy it.';
 const FAILED_TOAST = 'Hub link not created. Reopen the upload dialog to retry.';
 const INVALID_LINK = 'ColmapView Hub returned an invalid link.';
 const SOURCE_CHANGED = "The dataset changed, so its preview can't be captured. Upload again to create a Hub link.";
@@ -192,7 +190,7 @@ export function createHubPublication(provider: HubProvider, deps: Dependencies =
         payload = buildHubPayload({ viewerUrl, metadata: current.metadata, access, thumbnailBase64: await card, managementSecret: current.secret });
       }
       const link = await request(hubUrl, payload);
-      set({ phase: 'ready', ...base, url: link.url, managementUrl: `${link.managementUrl}#${current.secret}`, deleteLinkSeen: false });
+      set({ phase: 'ready', ...base, url: link.url });
       hubShareLinks.set(provider, { url: link.url, source: current.source, readyAt: now() });
     } catch (error) {
       const failure = error instanceof HubRequestError ? error
@@ -216,8 +214,7 @@ export function createHubPublication(provider: HubProvider, deps: Dependencies =
     },
     isEnabled: () => baseUrl() !== null,
     isBusy: busy,
-    /** Busy, or a link exists whose delete row has not been shown yet. */
-    blocksUnload: () => busy() || (state.phase === 'ready' && !state.deleteLinkSeen),
+    blocksUnload: busy,
     /**
      * Stages a draft for the upload that `start` begins, then runs `start`. The draft replaces the current
      * link and share link only once that upload starts (commit, which bindHubPublication calls), so an upload
@@ -262,9 +259,6 @@ export function createHubPublication(provider: HubProvider, deps: Dependencies =
         draft.thumbnail = cardThumbnail(startCapture(draft.capture));
       }
       return run(state.viewerUrl);
-    },
-    markDeleteLinkSeen() {
-      if (state.phase === 'ready' && !state.deleteLinkSeen) set({ ...state, deleteLinkSeen: true });
     },
     setDialogOpen(open: boolean) {
       dialogOpen = open;

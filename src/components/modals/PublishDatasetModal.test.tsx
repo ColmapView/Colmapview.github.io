@@ -20,12 +20,12 @@ vi.mock('./usePublicationPreview', () => ({ usePublicationPreview: () => ({
   replace: actions.replace,
 }) }));
 
-const hubLink = vi.hoisted(() => ({ value: { state: { phase: 'idle' }, enabled: true, busy: false, retry: vi.fn(), markDeleteLinkSeen: vi.fn() } as Record<string, unknown> }));
+const hubLink = vi.hoisted(() => ({ value: { state: { phase: 'idle' }, enabled: true, busy: false, retry: vi.fn() } as Record<string, unknown> }));
 vi.mock('../upload/useHubLink', () => ({ useHubLink: () => hubLink.value }));
 
 beforeEach(() => {
   vi.clearAllMocks();
-  hubLink.value = { state: { phase: 'idle' }, enabled: true, busy: false, retry: vi.fn(), markDeleteLinkSeen: vi.fn() };
+  hubLink.value = { state: { phase: 'idle' }, enabled: true, busy: false, retry: vi.fn() };
   actions.publish = { phase: 'idle' };
   actions.auth = { status: 'connected', identity: { username: 'publisher' } } satisfies Auth;
   vi.stubEnv('VITE_HF_PUBLISH_ENABLED', 'true');
@@ -276,8 +276,7 @@ describe('PublishDatasetModal', () => {
   });
 
   it('keeps the previous Hub link above the form after the result resets', () => {
-    hubLink.value = { ...hubLink.value, state: { phase: 'ready', viewerUrl: 'https://colmapview.opsiclear.com/?url=x', url: 'https://hub.invalid/hub/HappyTree',
-      managementUrl: 'https://hub.invalid/hub/manage/HappyTree#k' } };
+    hubLink.value = { ...hubLink.value, state: { phase: 'ready', viewerUrl: 'https://colmapview.opsiclear.com/?url=x', url: 'https://hub.invalid/hub/HappyTree' } };
     render(<PublishDatasetModal isOpen onClose={vi.fn()} />);
     expect(within(screen.getByRole('region', { name: 'Previous upload' })).getByLabelText('Share link')).toHaveValue('https://hub.invalid/hub/HappyTree');
   });

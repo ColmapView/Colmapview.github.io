@@ -27,9 +27,8 @@ describe('useHubLink', () => {
     expect(renderHook(() => useHubLink('googleDrive', true)).result.current.busy).toBe(false);
   });
 
-  it('passes the delete-link and retry actions through', () => {
+  it('passes the retry action through', () => {
     const { result } = renderHook(() => useHubLink('huggingFace', false));
-    expect(result.current.markDeleteLinkSeen).toBe(hubPublications.huggingFace.markDeleteLinkSeen);
     expect(result.current.retry).toBe(hubPublications.huggingFace.retry);
   });
 });

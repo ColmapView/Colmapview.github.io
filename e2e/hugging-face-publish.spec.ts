@@ -302,9 +302,8 @@ test.describe('Hugging Face dataset publication', () => {
       viewerSettings: 'colmapview.yaml' in archive, preview: hub.files.has('colmapview-preview.png') });
     expect(requests[1]).toEqual(requests[0]);
     expect(hub.writes).toEqual(writes);
-    const deleteLink = `https://hub.invalid/hub/manage/HappyTree#${requests[0].managementSecret}`;
-    await expect(dialog.getByLabel('Private delete link', { exact: true })).toHaveValue(deleteLink);
-    await expect(dialog.getByRole('link', { name: 'Delete Hub link' })).toHaveAttribute('href', deleteLink);
+    await expect(dialog.getByLabel('Private delete link', { exact: true })).toHaveCount(0);
+    await expect(dialog.getByRole('link', { name: 'Delete Hub link' })).toHaveCount(0);
   });
 
   test('returns to the editable form when the repository name is taken', async ({ page, context, baseURL }) => {

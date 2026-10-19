@@ -17,10 +17,10 @@ vi.mock('../../features/bucketStorage/publicationRuntime', () => ({ publishCurre
 const listing = '<ListBucketResult><Contents><Key>scene +#.tar</Key><Size>10</Size></Contents><CommonPrefixes><Prefix>nested/</Prefix></CommonPrefixes><IsTruncated>false</IsTruncated></ListBucketResult>';
 const root = 'https://s3.example/bucket/';
 const request = vi.fn<(url: string, init: RequestInit) => Promise<Response>>();
-const hubLink = vi.hoisted(() => ({ value: { state: { phase: 'idle' }, enabled: true, busy: false, retry: vi.fn(), markDeleteLinkSeen: vi.fn() } as Record<string, unknown> }));
+const hubLink = vi.hoisted(() => ({ value: { state: { phase: 'idle' }, enabled: true, busy: false, retry: vi.fn() } as Record<string, unknown> }));
 vi.mock('../upload/useHubLink', () => ({ useHubLink: () => hubLink.value }));
 beforeEach(() => {
-  hubLink.value = { state: { phase: 'idle' }, enabled: true, busy: false, retry: vi.fn(), markDeleteLinkSeen: vi.fn() };
+  hubLink.value = { state: { phase: 'idle' }, enabled: true, busy: false, retry: vi.fn() };
   vi.stubGlobal('Blob', NodeBlob); vi.stubGlobal('crypto', webcrypto); vi.stubGlobal('fetch', request);
   request.mockReset().mockImplementation(async () => new Response(listing));
   bucketConnection.disconnect();
@@ -274,7 +274,7 @@ describe('bucket publisher', () => {
   ] as const)('states a %s bucket outcome in the result', (bucketAccess, notice) => {
     const viewerUrl = 'https://colmapview.opsiclear.com/?url=https://bucket.example/scene/manifest.json';
     publication.state = { phase: 'completed', message: 'Dataset uploaded.', filesDone: 1, filesTotal: 1, bytesDone: 1, viewerUrl };
-    hubLink.value = { ...hubLink.value, state: { phase: 'ready', viewerUrl, bucketAccess, url: 'https://hub.invalid/hub/X', managementUrl: 'https://hub.invalid/hub/manage/X#k' } };
+    hubLink.value = { ...hubLink.value, state: { phase: 'ready', viewerUrl, bucketAccess, url: 'https://hub.invalid/hub/X' } };
     open();
     expect(screen.getByText(notice)).toBeVisible();
   });

@@ -9,6 +9,6 @@ export function useHubLink(provider: keyof typeof hubPublications, dialogOpen: b
     controller.setDialogOpen(dialogOpen);
     return () => controller.setDialogOpen(false);
   }, [controller, dialogOpen]);
-  return { state, enabled: controller.isEnabled(), busy: controller.isBusy(), retry: controller.retry, markDeleteLinkSeen: controller.markDeleteLinkSeen };
+  return { state, enabled: controller.isEnabled(), busy: controller.isBusy(), retry: controller.retry };
 }
 export type HubLink = ReturnType<typeof useHubLink>;

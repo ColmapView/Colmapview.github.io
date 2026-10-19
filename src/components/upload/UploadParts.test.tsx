@@ -6,9 +6,9 @@ import type { HubLinkState } from '../../features/colmapviewHub/publication';
 
 afterEach(cleanup);
 const viewerUrl = 'https://colmapview.opsiclear.com/?url=https://huggingface.co/datasets/u/scene';
-const ready: HubLinkState = { phase: 'ready', viewerUrl, url: 'https://hub.invalid/hub/HappyTree', managementUrl: 'https://hub.invalid/hub/manage/HappyTree#k' };
+const ready: HubLinkState = { phase: 'ready', viewerUrl, url: 'https://hub.invalid/hub/HappyTree' };
 const hub = (state: HubLinkState, enabled = true): HubLink => ({ state, enabled, busy: state.phase === 'checking' || state.phase === 'creating',
-  retry: vi.fn(async () => {}), markDeleteLinkSeen: vi.fn() });
+  retry: vi.fn(async () => {}) });
 const provider = { url: 'https://huggingface.co/datasets/u/scene', label: 'Hugging Face page' };
 
 describe('UploadResult', () => {
@@ -38,7 +38,8 @@ describe('UploadResult', () => {
     expect(screen.getByLabelText('Share link')).toHaveValue(ready.url);
     expect(screen.getByRole('link', { name: 'Open link' })).toHaveAttribute('href', ready.url);
     expect(screen.getByRole('link', { name: 'Hugging Face page' })).toHaveAttribute('href', provider.url);
-    expect(screen.getByLabelText('Private delete link')).toHaveValue(ready.managementUrl);
+    expect(screen.queryByLabelText('Private delete link')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Delete Hub link' })).toBeNull();
   });
 
   it('moves focus to the result title', () => {
@@ -48,7 +49,7 @@ describe('UploadResult', () => {
 
   it('shows no Hub part when the Hub is off or its state belongs to another upload', () => {
     render(<UploadResult label="Published dataset" title="Published" viewerUrl={viewerUrl} hub={hub(ready, false)} />);
-    expect(screen.queryByLabelText('Private delete link')).toBeNull();
+    expect(screen.getByLabelText('Share link')).toHaveValue(viewerUrl);
     cleanup();
     render(<UploadResult label="Published dataset" title="Published" viewerUrl={viewerUrl} hub={hub({ phase: 'creating', viewerUrl: 'https://other.example/' })} />);
     expect(screen.queryByText('Creating Hub link…')).toBeNull();
@@ -63,12 +64,13 @@ describe('UploadProgress', () => {
 });
 
 describe('PreviousUpload', () => {
-  it('keeps the last Hub link and its delete row after the upload result resets', () => {
+  it('keeps the last share link after the upload result resets without deletion controls', () => {
     render(<PreviousUpload hub={hub(ready)} />);
     const block = screen.getByRole('region', { name: 'Previous upload' });
     expect(within(block).getByRole('heading', { name: 'Previous upload' })).toBeVisible();
     expect(within(block).getByLabelText('Share link')).toHaveValue(ready.url);
-    expect(within(block).getByLabelText('Private delete link')).toHaveValue(ready.managementUrl);
+    expect(within(block).queryByLabelText('Private delete link')).toBeNull();
+    expect(within(block).queryByRole('link', { name: 'Delete Hub link' })).toBeNull();
   });
 
   it('keeps a failure with Retry, and shows nothing before any upload or when the Hub is off', () => {
