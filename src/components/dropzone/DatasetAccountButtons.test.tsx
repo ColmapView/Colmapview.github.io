@@ -54,11 +54,11 @@ function createGoogleSdk() {
   return {
     sdk,
     requestAccessToken,
-    authorize: () => act(() => callback?.({
+    authorize: (scope = 'https://www.googleapis.com/auth/drive.file') => act(() => callback?.({
       access_token: 'test-token',
       expires_in: 3600,
       token_type: 'Bearer',
-      scope: 'https://www.googleapis.com/auth/drive.file',
+      scope,
     })),
   };
 }
@@ -101,6 +101,23 @@ afterEach(() => {
 });
 
 describe('Dataset provider account icons', () => {
+  it('adds the Drive menu without opening Picker or starting a dataset load', async () => {
+    const oauth = configureDrive();
+    const props = createProps();
+    render(<DatasetAccountButtons {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
+    const add = screen.getByRole('button', { name: 'Add to Google Drive' });
+    await waitFor(() => expect(add).toBeEnabled());
+    fireEvent.click(add);
+    expect(oauth.sdk.initTokenClient).toHaveBeenCalledWith(expect.objectContaining({
+      scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.install',
+    }));
+    oauth.authorize('https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.install');
+    expect(screen.getByText(/ColmapView was added to Google Drive/)).toBeVisible();
+    expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
+    expect(props.onLoadRemoteDataset).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Choose file from Drive' })).toBeEnabled();
+  });
   it('shares sign-in and disconnect with publishing instead of opening a second session', async () => {
     const oauth = configureDrive();
     vi.mocked(chooseGoogleDriveArchive).mockResolvedValue(null);
@@ -199,7 +216,7 @@ describe('Dataset provider account icons', () => {
     expect(oauth.requestAccessToken).not.toHaveBeenCalled();
     expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
     expect(screen.getByText(/Sign in to choose a ZIP or TAR file from Google Drive/)).toBeVisible();
-    expect(screen.getByText(/Only files you choose or create here are accessible/)).toBeVisible();
+    expect(screen.getByText(/Only files you choose, open from Drive or create here are accessible/)).toBeVisible();
     expect(screen.queryByRole('link', { name: 'Privacy' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Terms' })).not.toBeInTheDocument();
   });

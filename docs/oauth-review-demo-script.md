@@ -1,6 +1,6 @@
 # OAuth review demonstration script
 
-Prepared **2026-10-04** for the [Google verification packet](google-oauth-verification.md). Rehearse the actual production ColmapView build; record this demonstration if Google requests feature evidence. The sole requested Google scope, `drive.file`, is non-sensitive and does not require restricted-scope verification or its security assessment. This script is not evidence of a video, submission, production readiness, or Google approval.
+Prepared **2026-10-04**, updated **2026-10-19**, for the [Google verification packet](google-oauth-verification.md). Ordinary file sign-in requests `drive.file`; the separate Add to Google Drive action also requests `drive.install`. Both are non-sensitive. Rehearse the actual released build; this script is not evidence of a video, submission or Google approval.
 
 ## Live recording readiness
 
@@ -41,6 +41,8 @@ If Google requests a demonstration, include the complete consent and scope-usage
 For an evidence recording, keep the actual Google consent popup, app name, requested permission, and its browser address bar visible. Pause on the consent URL so the client ID can be identified, without exposing credentials. Resize or magnify the popup as needed; do not substitute a simulated screen or skip the grant. Follow the precise evidence requirements in Google's request.
 
 ## Suggested recording sequence
+
+For the Open with feature, also show **Google Drive account → Add to Google Drive**, its menu-registration consent, and that no dataset or upload starts. Then right-click one synthetic archive in Drive, choose **Open with → ColmapView**, sign in with the launching account and show that exact scene loading without Picker. The address bar should contain the canonical file link and no raw launch JSON or account ID. This workflow is separate from Google Marketplace listing approval.
 
 Allow approximately 6–10 minutes, with clear narration and no skipped consent screens.
 

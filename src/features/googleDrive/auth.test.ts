@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubGoogleDriveHost } from '../../test/googleDriveHosting';
-import { createGoogleDriveAuth, GOOGLE_DRIVE_SCOPE, type GoogleOAuthSdk, type GoogleTokenResponse } from './auth';
+import { createGoogleDriveAuth, GOOGLE_DRIVE_SCOPE, GOOGLE_DRIVE_INSTALL_SCOPE, type GoogleOAuthSdk, type GoogleTokenResponse } from './auth';
 
 function testSdk() {
   const callbacks: Parameters<GoogleOAuthSdk['initTokenClient']>[0][] = [];
@@ -13,6 +13,29 @@ const validToken: GoogleTokenResponse = { access_token: 'private-test-token', to
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 describe('Google Drive in-memory account session', () => {
+  it('requests menu registration only for installation and requires that grant', () => {
+    const auth = createGoogleDriveAuth();
+    const { sdk, callbacks } = testSdk();
+    auth.connect('123456-client.apps.googleusercontent.com', sdk, { install: true });
+    expect(callbacks[0].scope).toBe(`${GOOGLE_DRIVE_SCOPE} ${GOOGLE_DRIVE_INSTALL_SCOPE}`);
+    callbacks[0].callback(validToken);
+    expect(auth.getSnapshot()).toMatchObject({ status: 'disconnected', error: expect.stringContaining('add ColmapView') });
+    auth.connect('123456-client.apps.googleusercontent.com', sdk, { install: true });
+    callbacks[1].callback({ ...validToken, scope: `${GOOGLE_DRIVE_SCOPE} ${GOOGLE_DRIVE_INSTALL_SCOPE}` });
+    expect(auth.getSnapshot().status).toBe('connected');
+    auth.disconnect();
+  });
+  it('uses the launching Drive account as a sign-in hint without requesting installation', () => {
+    const auth = createGoogleDriveAuth();
+    const { sdk, callbacks, requestAccessToken } = testSdk();
+    auth.connect('123456-client.apps.googleusercontent.com', sdk, { loginHint: '123456789' });
+    expect(callbacks[0]).toMatchObject({ login_hint: '123456789', scope: GOOGLE_DRIVE_SCOPE, include_granted_scopes: false });
+    expect(requestAccessToken).toHaveBeenCalledWith({ prompt: '' });
+    expect(auth.getAccessToken()).toBeNull();
+    auth.disconnect();
+    callbacks[0].callback(validToken);
+    expect(auth.getAccessToken()).toBeNull();
+  });
   it('does not initiate per-file authorization on a disabled host with an injected SDK', () => {
     stubGoogleDriveHost('https://opsiclear.github.io');
     const { sdk, requestAccessToken } = testSdk();

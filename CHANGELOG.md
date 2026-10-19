@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-19
+
+### Added
+- Open a single ZIP or TAR selected through Google Drive's Open with menu, with explicit account sign-in and resource-key support.
+- Add ColmapView to Google Drive through a separate installation action. Ordinary loading and publishing retain their existing per-file permission.
+
+### Changed
+- Validate Drive launch state, discard previous account tokens and remove launch JSON/account hints from the address bar. Other hosts offer a trusted handoff to the Drive-enabled viewer.
+- Update the privacy policy and Drive setup/review documentation for menu installation and the new launch flow.
+
 ## [0.17.9] - 2026-10-18
 
 ### Changed

@@ -18,6 +18,7 @@ import { createExampleManifest, parseManifestContent } from './dropZoneManifestP
 import { useDropZoneStoreFacade } from './useDropZoneStoreFacade';
 import { CloseIcon, PlusIcon } from '../../icons';
 import { StorageAccessPrompt } from './StorageAccessPrompt';
+import { GoogleDriveOpenWith } from './GoogleDriveOpenWith';
 
 interface DropZoneProps {
   children: React.ReactNode;
@@ -290,6 +291,8 @@ export function DropZone({ children }: DropZoneProps) {
       )}
 
       {/* URL Input Modal */}
+      <GoogleDriveOpenWith loadFromUrl={loadFromUrl} loadFromManifest={loadFromManifest}
+        onOpenUrlModal={() => setIsUrlModalOpen(true)} onLoadRemoteDataset={handleUrlLoad} />
       <StorageAccessPrompt onOpenUrlModal={() => setIsUrlModalOpen(true)} onLoadRemoteDataset={handleUrlLoad} />
       <UrlInputModal
         isOpen={isUrlModalOpen}

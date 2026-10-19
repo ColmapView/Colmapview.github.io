@@ -1,6 +1,7 @@
 import { assertGoogleDriveHostAllowed, getGoogleDriveConfiguration, getGoogleDriveHostingConfig, validateGoogleDriveClientId } from './config';
 
 export const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+export const GOOGLE_DRIVE_INSTALL_SCOPE = 'https://www.googleapis.com/auth/drive.install';
 
 export interface GoogleTokenResponse {
   access_token?: string;
@@ -14,6 +15,7 @@ export interface GoogleOAuthSdk {
     client_id: string;
     scope: string;
     include_granted_scopes: boolean;
+    login_hint?: string;
     callback: (response: GoogleTokenResponse) => void;
     error_callback: (error: { type: string }) => void;
   }): { requestAccessToken(options: { prompt: string }): void };
@@ -93,7 +95,7 @@ export function createGoogleDriveAuth() {
     /** Expire the session that holds the rejected token; one signed in while its request ran stays connected. */
     expire: (token: string) => { if (session?.token === token) disconnect(expired); },
     /** Called synchronously from the sign-in button after the SDK is ready. */
-    connect(clientId: string, sdk: GoogleOAuthSdk) {
+    connect(clientId: string, sdk: GoogleOAuthSdk, options: { loginHint?: string; install?: boolean } = {}) {
       try { assertGoogleDriveHostAllowed(); }
       catch (error) { disconnect((error as Error).message); return; }
       if (!validateGoogleDriveClientId(clientId)
@@ -109,7 +111,10 @@ export function createGoogleDriveAuth() {
       timer = setTimeout(() => fail('Google sign-in timed out. Sign in again to continue.'), 180_000);
       try {
         const client = sdk.initTokenClient({
-          client_id: clientId, scope: GOOGLE_DRIVE_SCOPE, include_granted_scopes: false,
+          client_id: clientId,
+          scope: options.install ? `${GOOGLE_DRIVE_SCOPE} ${GOOGLE_DRIVE_INSTALL_SCOPE}` : GOOGLE_DRIVE_SCOPE,
+          include_granted_scopes: false,
+          ...(options.loginHint ? { login_hint: options.loginHint } : {}),
           callback: (response) => {
             if (attempt !== generation || state.status !== 'connecting') return;
             if (!getGoogleDriveHostingConfig().hostAllowed) return disconnect();
@@ -120,6 +125,9 @@ export function createGoogleDriveAuth() {
               || !response.scope?.split(' ').includes(GOOGLE_DRIVE_SCOPE)) {
               return fail('Google Drive file permission was not granted. Sign in again and allow file access.');
             }
+            if (options.install && !response.scope?.split(' ').includes(GOOGLE_DRIVE_INSTALL_SCOPE)) {
+              return fail('Permission to add ColmapView to Google Drive was not granted. Try Add to Google Drive again.');
+            }
             clearTimeout(timer);
             session = { token: response.access_token, expiresAt: Date.now() + expires * 1000 };
             timer = setTimeout(() => disconnect(expired), (expires - 5) * 1000);
@@ -128,7 +136,7 @@ export function createGoogleDriveAuth() {
           error_callback: (error) => fail(error.type === 'popup_failed_to_open'
             ? 'Allow the Google sign-in popup, then try again.' : 'Google sign-in was closed. Try again.'),
         });
-        client.requestAccessToken({ prompt: 'select_account' });
+        client.requestAccessToken({ prompt: options.loginHint ? '' : 'select_account' });
       } catch { fail('Could not start Google sign-in. Try again.'); }
     },
   };

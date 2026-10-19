@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { HotkeysProvider } from 'react-hotkeys-hook';
 import { DropZone } from './components/dropzone';
 import { AppLayout } from './components/layout';
@@ -23,6 +23,7 @@ import { TOUCH_BREAKPOINTS } from './theme/sizing';
 import { appLogger } from './utils/logger';
 import { CameraDatasetSelectionHost } from './components/CameraDatasetSelectionHost';
 import { runStartupLoadPlan } from './appStartupLoad';
+import { isGoogleDriveOpenWithSearch } from './features/googleDrive/openWith';
 import {
   APP_EMBED_MODE_LOG_MESSAGE,
   getAppStartupLoadPlan,
@@ -47,6 +48,8 @@ if (initStoreMigration()) {
 function App() {
   const { loadFromUrl, loadFromManifest } = useUrlLoadActions({ applyUrlOverrides: true });
   const hasCheckedUrl = useRef(false);
+  // Capture before child effects remove Drive's raw launch state from the address bar.
+  const [driveOpenWith] = useState(() => isGoogleDriveOpenWithSearch(window.location.search));
 
   // Check for URL parameter on mount
   useEffect(() => {
@@ -69,6 +72,8 @@ function App() {
       useUIStore.getState().setTouchMode(touchAction.enabled, touchAction.source);
     }
 
+    if (driveOpenWith) return;
+
     // Async function to handle URL loading
     const checkUrlAndLoad = async () => {
       const shareData = await decodeShareData(window.location.hash);
@@ -79,7 +84,7 @@ function App() {
     };
 
     checkUrlAndLoad();
-  }, [loadFromUrl, loadFromManifest]);
+  }, [loadFromUrl, loadFromManifest, driveOpenWith]);
 
   return (
     <ErrorBoundary>

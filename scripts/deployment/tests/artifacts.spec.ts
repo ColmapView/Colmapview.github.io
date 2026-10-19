@@ -54,10 +54,11 @@ async function enterDriveUrl(page: Page) {
 }
 
 async function routeArtifact(context: BrowserContext, origin: string, serverOrigin: string, allowDrive: boolean,
-  driveArchive = { filename: 'artifact.zip', mimeType: 'application/zip', body: archive }) {
+  driveArchive = { filename: 'artifact.zip', mimeType: 'application/zip', body: archive },
+  googleSignIn?: { privateFile?: boolean; cancel?: boolean }) {
   const externalRequests: string[] = [];
   const assetRequests: string[] = [];
-  const driveRequests: { url: string; authorization?: string }[] = [];
+  const driveRequests: { url: string; authorization?: string; resourceKey?: string }[] = [];
   await context.route('**/*', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -68,12 +69,25 @@ async function routeArtifact(context: BrowserContext, origin: string, serverOrig
       return;
     }
     if (allowDrive && url.hostname === 'www.googleapis.com' && url.pathname === '/drive/v3/files/artifact_fixture_file') {
-      driveRequests.push({ url: url.href, authorization: request.headers().authorization });
+      driveRequests.push({ url: url.href, authorization: request.headers().authorization, resourceKey: request.headers()['x-goog-drive-resource-keys'] });
+      if (googleSignIn?.privateFile && request.headers().authorization !== 'Bearer selected-file-token') {
+        await route.fulfill({ status: 404, json: { error: { code: 404, message: 'File not found' } } });
+        return;
+      }
       if (url.searchParams.get('alt') === 'media') {
         await route.fulfill({ status: 200, contentType: driveArchive.mimeType, headers: { 'Content-Length': String(driveArchive.body.length) }, body: driveArchive.body });
       } else {
         await route.fulfill({ json: { id: 'artifact_fixture_file', name: driveArchive.filename, size: String(driveArchive.body.length), mimeType: driveArchive.mimeType, capabilities: { canDownload: true } } });
       }
+      return;
+    }
+    if (allowDrive && googleSignIn && url.href === 'https://accounts.google.com/gsi/client') {
+      await route.fulfill({ contentType: 'text/javascript', body: `window.google = { accounts: { oauth2: {
+        initTokenClient(config) { return { requestAccessToken() {
+          window.__driveConsent = { scope: config.scope, loginHint: config.login_hint };
+          ${googleSignIn.cancel ? "config.error_callback({type: 'popup_closed'});" : "config.callback({ access_token: 'selected-file-token', token_type: 'Bearer', expires_in: 3600, scope: config.scope });"}
+        } }; }
+      } } };` });
       return;
     }
     // Provider SDKs, Analytics, fonts and any other external request are forbidden in this offline smoke.
@@ -97,6 +111,36 @@ for (const directory of profiles) {
     : profile === 'github' ? [GITHUB_ORIGIN] : ['https://artifact-check.pages.dev'];
 
   for (const origin of hosts) {
+    if (profile !== 'preview') test(`${directory} at ${origin}: Drive Open with startup`, async ({ page, context }) => {
+      const server = await startArtifactServer(output, metadata.base);
+      const enabled = profile === 'custom' && origin === CUSTOM_ORIGIN;
+      const traffic = await routeArtifact(context, origin, server.origin, enabled, undefined, { privateFile: true });
+      const state = { action: 'open', ids: ['artifact_fixture_file'], resourceKeys: { artifact_fixture_file: 'fixture-resource' }, userId: '123456789' };
+      try {
+        await page.goto(`${origin}${metadata.base}?drive=open&state=${encodeURIComponent(JSON.stringify(state))}&url=https://untrusted.invalid/dataset.zip`);
+        const dialog = page.getByRole('dialog', { name: 'Google Drive', exact: true });
+        await expect(dialog).toBeVisible();
+        await expect(page).not.toHaveURL(/state=/);
+        expect(page.url()).not.toContain('123456789');
+        expect(traffic.driveRequests).toEqual([]);
+        if (enabled) {
+          await dialog.getByRole('button', { name: 'Sign in with Google', exact: true }).click();
+          await expect(page.getByTestId('scene-3d').locator('canvas')).toBeVisible({ timeout: 45_000 });
+          await expect(page.getByText('Source:', { exact: false }).first()).toBeVisible();
+          expect(await page.evaluate(() => (window as Window & { __driveConsent?: unknown }).__driveConsent)).toEqual({
+            scope: 'https://www.googleapis.com/auth/drive.file', loginHint: '123456789',
+          });
+          expect(traffic.driveRequests.some(request => request.authorization === 'Bearer selected-file-token')).toBe(true);
+          expect(traffic.driveRequests.every(request => request.resourceKey === 'artifact_fixture_file/fixture-resource')).toBe(true);
+        } else {
+          const link = new URL((await dialog.getByRole('link', { name: 'Open ColmapView', exact: true }).getAttribute('href'))!);
+          expect(link.origin).toBe(CUSTOM_ORIGIN);
+          expect(JSON.parse(link.searchParams.get('state')!)).toEqual(state);
+          expect(traffic.driveRequests).toEqual([]);
+        }
+        expect(traffic.externalRequests).toEqual([]);
+      } finally { await server.close(); }
+    });
     test(`${directory} artifact at ${origin}: policies, native loading and Drive origin gate`, async ({ page, context }) => {
       expect(metadata.profile, 'artifact profile').toBe(profile);
       expect(metadata.schemaVersion).toBe(1);
@@ -191,6 +235,36 @@ for (const directory of profiles) {
     });
   }
   if (profile === 'custom') {
+    test(`${directory}: explicit Drive installation requests menu permission without loading a dataset`, async ({ page, context }) => {
+      const server = await startArtifactServer(output, '/');
+      const traffic = await routeArtifact(context, CUSTOM_ORIGIN, server.origin, true, undefined, {});
+      try {
+        await page.goto(`${CUSTOM_ORIGIN}/`);
+        await page.getByRole('button', { name: 'Google Drive account', exact: true }).click();
+        await page.getByRole('button', { name: 'Add to Google Drive', exact: true }).click();
+        await expect(page.getByText(/ColmapView was added to Google Drive/)).toBeVisible();
+        expect(await page.evaluate(() => (window as Window & { __driveConsent?: { scope: string } }).__driveConsent?.scope)).toBe('https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.install');
+        expect(traffic.driveRequests).toEqual([]);
+        expect(traffic.externalRequests).toEqual([]);
+      } finally { await server.close(); }
+    });
+    test(`${directory}: canceled and malformed Drive launches never load data`, async ({ page, context }) => {
+      const server = await startArtifactServer(output, '/');
+      const traffic = await routeArtifact(context, CUSTOM_ORIGIN, server.origin, true, undefined, { cancel: true });
+      const state = encodeURIComponent(JSON.stringify({ action: 'open', ids: ['artifact_fixture_file'] }));
+      try {
+        await page.goto(`${CUSTOM_ORIGIN}/?drive=open&state=${state}`);
+        const dialog = page.getByRole('dialog', { name: 'Google Drive', exact: true });
+        await dialog.getByRole('button', { name: 'Sign in with Google', exact: true }).click();
+        await expect(dialog.getByRole('alert')).toContainText('closed');
+        await dialog.getByRole('button', { name: 'Close account dialog', exact: true }).click();
+        await expect(dialog).not.toBeVisible();
+        await page.goto(`${CUSTOM_ORIGIN}/?drive=open&state=invalid&url=${encodeURIComponent(driveUrl)}`);
+        await expect(page.getByText(/This Google Drive launch link is invalid/)).toBeVisible();
+        expect(traffic.driveRequests).toEqual([]);
+        expect(traffic.externalRequests).toEqual([]);
+      } finally { await server.close(); }
+    });
     for (const driveArchive of [
       { filename: 'artifact.tar', mimeType: 'application/x-tar', body: tarArchive, compatibility: false },
       { filename: 'artifact.tar.gz', mimeType: 'application/gzip', body: Buffer.from(gzipSync(tarArchive)), compatibility: false },

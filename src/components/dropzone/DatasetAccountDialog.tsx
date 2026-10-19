@@ -18,11 +18,12 @@ interface DatasetAccountDialogProps {
   onLoadRemoteDataset: (url: string) => void;
   accessMessage?: string;
   retryLoad?: () => Promise<void>;
+  driveOpenFile?: { userId?: string };
 }
 
 /** Manual account entry and failed storage loads use the same sign-in and Picker lifecycle. */
 export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoadRemoteDataset,
-  accessMessage, retryLoad }: DatasetAccountDialogProps) {
+  accessMessage, retryLoad, driveOpenFile }: DatasetAccountDialogProps) {
   const id = useId();
   const [sdk, setSdk] = useState<GoogleOAuthSdk | null>(null);
   const [sdkError, setSdkError] = useState<string | null>(null);
@@ -30,6 +31,7 @@ export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoad
   const [pickerLoading, setPickerLoading] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerError, setPickerError] = useState<string | null>(null);
+  const [installationComplete, setInstallationComplete] = useState(false);
   const pickerAbortRef = useRef<AbortController | null>(null);
   const signInUnsubscribeRef = useRef<(() => void) | null>(null);
   const google = useSyncExternalStore(googleDriveAuth.subscribe, googleDriveAuth.getSnapshot);
@@ -48,7 +50,9 @@ export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoad
   const connecting = auth.status === 'connecting';
   const canSignIn = provider === 'google' ? Boolean(clientId) : hfConfiguration.status === 'ready';
   const description = provider === 'google'
-    ? clientId
+    ? installationComplete ? 'ColmapView was added to Google Drive. Right-click a ZIP or TAR and choose Open with → ColmapView.'
+      : driveOpenFile ? 'Open the dataset archive selected in Google Drive.'
+      : clientId
       ? connected ? 'Choose a ZIP or TAR file from Google Drive.' : 'Sign in to choose a ZIP or TAR file from Google Drive.'
       : googleApiKey ? 'Load a public dataset by URL.' : 'Google Drive loading is unavailable in this viewer.'
     : connected ? 'Load a public or private dataset.' : canSignIn ? 'Sign in to open private datasets.' : 'Load a public dataset by URL.';
@@ -56,7 +60,8 @@ export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoad
     ? 'Select the file to let ColmapView open it.'
     : 'Sign in with an account that has access to this file.';
   const hint = provider === 'google'
-    ? clientId ? accessMessage ? driveAccessHint : 'Only files you choose or create here are accessible. Downloads go directly to your browser.'
+    ? clientId ? driveOpenFile ? 'Sign in with the account you used in Drive. The selected archive downloads directly to your browser.'
+      : accessMessage ? driveAccessHint : 'Only files you choose, open from Drive or create here are accessible. Add to Google Drive also enables its Open with menu.'
       : googleApiKey ? 'Private file selection is unavailable. You can load public datasets by URL.'
         : 'Private file selection is unavailable.'
     : hfConfiguration.status === 'ready'
@@ -102,13 +107,9 @@ export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoad
       setPickerOpen(false);
     });
   };
-  const chooseArchive = () => {
+  const signIn = (onConnected: () => void, install = false) => {
     if (!clientId || pickerLoading || connecting || pickerAbortRef.current || signInUnsubscribeRef.current) return;
     setPickerError(null);
-    if (connected) {
-      openPicker();
-      return;
-    }
     if (!sdk) return;
     setPickerLoading(true);
     let signInStarted = false;
@@ -119,16 +120,27 @@ export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoad
       if (next.status === 'disconnected' && !next.error && !signInStarted) return;
       signInUnsubscribeRef.current?.();
       signInUnsubscribeRef.current = null;
-      if (next.status === 'connected' && retryLoad) {
+      setPickerLoading(false);
+      if (next.status === 'connected') onConnected();
+    });
+    googleDriveAuth.connect(clientId, sdk, { ...(driveOpenFile?.userId ? { loginHint: driveOpenFile.userId } : {}), ...(install ? { install: true } : {}) });
+  };
+  const chooseArchive = () => {
+    if (pickerLoading || connecting || pickerAbortRef.current || signInUnsubscribeRef.current) return;
+    setPickerError(null);
+    if (connected) {
+      if (driveOpenFile && retryLoad) { onClose(); void retryLoad(); }
+      else openPicker();
+      return;
+    }
+    signIn(() => {
+      if (retryLoad) {
         // App-created or previously selected files may already be accessible with this session.
         // A denied retry offers this dialog again, connected and ready for explicit file selection.
-        setPickerLoading(false);
         onClose();
         void retryLoad();
-      } else if (next.status === 'connected') openPicker();
-      else setPickerLoading(false);
+      } else openPicker();
     });
-    googleDriveAuth.connect(clientId, sdk);
   };
 
   useEffect(() => () => {
@@ -164,13 +176,16 @@ export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoad
         {googleApiKey && <button type="button" disabled={connecting}
           className={getButtonClass(clientId ? 'ghost' : 'primary', 'sm', connecting)}
           onClick={() => { close(); onOpenUrlModal(); }}>{accessMessage ? 'Use another link' : 'Load URL'}</button>}
+        {clientId && !driveOpenFile && !accessMessage && !installationComplete && <button type="button"
+          disabled={!sdk || connecting || pickerLoading} className={getButtonClass('ghost', 'sm', !sdk || connecting || pickerLoading)}
+          onClick={() => signIn(() => setInstallationComplete(true), true)}>Add to Google Drive</button>}
         {clientId && (sdkError && !connected
           ? <button type="button" className={getButtonClass('primary', 'sm')} onClick={() => {
             setSdkError(null); setSdkAttempt(value => value + 1);
           }}>Retry sign-in</button>
-          : <button type="button" aria-label={!connected && !sdk ? undefined : connected ? 'Choose file from Drive' : 'Sign in with Google'} disabled={(!connected && !sdk) || connecting || pickerLoading}
+          : <button type="button" aria-label={!connected && !sdk ? undefined : connected ? driveOpenFile ? 'Open archive from Drive' : 'Choose file from Drive' : 'Sign in with Google'} disabled={(!connected && !sdk) || connecting || pickerLoading}
             className={getButtonClass('primary', 'sm', (!connected && !sdk) || connecting || pickerLoading)}
-            onClick={chooseArchive}>{!connected && !sdk ? 'Loading sign-in…' : connecting ? 'Signing in…' : pickerLoading ? 'Opening Drive…' : connected ? 'Choose file' : 'Sign in'}</button>)}
+            onClick={chooseArchive}>{!connected && !sdk ? 'Loading sign-in…' : connecting ? 'Signing in…' : pickerLoading ? 'Opening Drive…' : connected ? driveOpenFile ? 'Open archive' : 'Choose file' : 'Sign in'}</button>)}
       </> : connected || connecting ? <>
         <button type="button" className={getButtonClass('ghost', 'sm')} onClick={disconnect}>
           {connected ? 'Disconnect' : 'Cancel sign-in'}
