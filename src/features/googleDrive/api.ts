@@ -128,7 +128,7 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
       if (import.meta.env.PROD && !configuration.clientId) {
         throw driveError(reference, 'Google Drive sign-in is not configured for this viewer.');
       }
-      sentToken = getAccessToken();
+      sentToken = deps.getAccessToken ? getAccessToken() : await googleDriveAuth.ensureAccessToken();
       if (!sentToken) throw driveError(reference, 'Sign in with Google Drive, then choose this archive in the Drive picker.', true);
       headers.set('Authorization', `Bearer ${sentToken}`);
     }
@@ -181,7 +181,7 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
   };
   let [response, metadataToken] = await request(makeUrl(false));
   // Public files stay anonymous. drive.file permits the private fallback only for app-created/selected files.
-  if (!useAccount && [403, 404].includes(response.status) && getAccessToken()) {
+  if (!useAccount && [403, 404].includes(response.status) && (getAccessToken() || (!deps.getAccessToken && await googleDriveAuth.ensureAccessToken()))) {
     await response.body?.cancel().catch(() => {});
     deps.signal?.throwIfAborted();
     useAccount = true;

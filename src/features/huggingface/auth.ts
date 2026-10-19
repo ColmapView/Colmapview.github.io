@@ -2,6 +2,7 @@ import type { HfConfig } from './config';
 import { boundedFetch, HfError } from './http';
 import { awaitWithAbort } from '../../utils/awaitWithAbort';
 import { anySignal, timeoutSignal } from '../../utils/abortSignals';
+import { accountSessions, type SessionToken } from '../accountSessions/api';
 
 export interface HfIdentity { username: string }
 export interface HfAuthState { status: 'disconnected' | 'connecting' | 'connected'; identity: HfIdentity | null; error: string | null }
@@ -83,11 +84,17 @@ function receiveCallback(popup: Window, config: HfConfig, expectedState: string,
 
 export function createHfAuth() {
   let session: Session | null = null;
+  let remembered = false;
+  let needsRefresh = false;
+  let currentPurpose: 'view' | 'publish' = 'view';
+  let renewal: { purpose: 'view' | 'publish'; promise: Promise<boolean> } | null = null;
+  let generation = 0;
   let pending: AbortController | null = null;
   let state: HfAuthState = { status: 'disconnected', identity: null, error: null };
   const listeners = new Set<() => void>();
   const set = (next: HfAuthState) => { state = next; listeners.forEach(listener => listener()); };
   const expire = () => {
+    needsRefresh = true;
     session = null;
     set({ status: 'disconnected', identity: null, error: 'Your Hugging Face connection expired. Sign in again.' });
   };
@@ -95,11 +102,46 @@ export function createHfAuth() {
     if (session && session.expiresAt <= Date.now() + 5000) expire();
     return session?.accessToken ?? null;
   };
+  const acceptSession = (token: SessionToken) => {
+    if (!token.username || !token.scope.split(' ').includes('read-repos')) throw new HfError('Repository read permission was not granted.');
+    remembered = true;
+    needsRefresh = false;
+    session = { accessToken: token.accessToken, expiresAt: token.expiresAt, identity: { username: token.username }, canPublish: token.scope.split(' ').includes('contribute-repos') };
+    currentPurpose = session.canPublish ? 'publish' : 'view';
+    set({ status: 'connected', identity: session.identity, error: null });
+  };
+  const restore = (purpose: 'view' | 'publish' = 'view', username?: string): Promise<boolean> => {
+    if (!accountSessions.getSnapshot().capabilities.hf || !accountSessions.getSnapshot().accounts.some(account => account.provider === 'hf' && account.purpose === purpose)) return Promise.resolve(false);
+    if (renewal?.purpose === purpose) return renewal.promise;
+    const attempt = generation;
+    const promise = (needsRefresh ? accountSessions.token('hf', purpose, undefined, undefined, true)
+      : accountSessions.token('hf', purpose)).then(token => {
+      if (attempt !== generation || (username && token.username !== username)) return false;
+      acceptSession(token); return true;
+    }).catch(() => false).finally(() => { if (renewal?.promise === promise) renewal = null; });
+    renewal = { purpose, promise };
+    return promise;
+  };
   return {
     getSnapshot: () => state,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     getReadAccessToken,
+    canPublish: () => Boolean(session?.canPublish),
     expire,
+    restore,
+    async ensureReadAccessToken(): Promise<string | null> {
+      const token = getReadAccessToken();
+      if (remembered && (!token || session!.expiresAt <= Date.now() + 60_000)) await restore(currentPurpose);
+      return getReadAccessToken();
+    },
+    async ensureAccessToken(username?: string): Promise<string> {
+      const token = getReadAccessToken();
+      if (remembered && (!token || !session?.canPublish || session.expiresAt <= Date.now() + 60_000)) await restore('publish', username);
+      if (!getReadAccessToken() || !session) throw new HfError('Reconnect the same Hugging Face account to continue.', 401);
+      if (!session.canPublish) throw new HfError('Sign in from the publishing dialog to allow dataset publication.', 403);
+      if (username && username !== session.identity.username) throw new HfError('Reconnect the account that started this publication.');
+      return session.accessToken;
+    },
     getAccessToken(username?: string) {
       if (!getReadAccessToken() || !session) {
         throw new HfError('Reconnect the same Hugging Face account to continue.', 401);
@@ -109,11 +151,32 @@ export function createHfAuth() {
       return session.accessToken;
     },
     disconnect() {
+      generation++;
       pending?.abort(); pending = null; session = null;
       set({ status: 'disconnected', identity: null, error: null });
+      if (remembered || accountSessions.getSnapshot().accounts.some(account => account.provider === 'hf')) {
+        remembered = false;
+        void accountSessions.disconnect('hf').catch(() => {
+          remembered = true;
+          set({ status: 'disconnected', identity: null, error: 'Could not forget the saved connection. Check your connection and try Disconnect again.' });
+        });
+      }
     },
     connect(config: HfConfig): Promise<void> {
       if (pending) return Promise.resolve();
+      generation++;
+      if (accountSessions.getSnapshot().capabilities.hf) {
+        const controller = new AbortController(); pending = controller;
+        const attempt = generation;
+        session = null; set({ status: 'connecting', identity: null, error: null });
+        const purpose = config.readOnly ? 'view' : 'publish';
+        const existing = accountSessions.getSnapshot().accounts.some(account => account.provider === 'hf' && account.purpose === purpose);
+        return (existing ? accountSessions.token('hf', purpose, undefined, controller.signal, needsRefresh)
+          : accountSessions.connect('hf', { purpose }, controller.signal))
+          .then(token => { if (attempt === generation && pending === controller) acceptSession(token); })
+          .catch(error => { if (attempt === generation && pending === controller) set({ status: 'disconnected', identity: null, error: error instanceof Error ? error.message : 'Could not connect to Hugging Face.' }); })
+          .finally(() => { if (pending === controller) pending = null; });
+      }
       const popup = window.open('about:blank', '_blank', 'popup,width=600,height=740');
       if (!popup) {
         set({ status: 'disconnected', identity: null, error: 'Allow the sign-in popup, then reconnect.' });

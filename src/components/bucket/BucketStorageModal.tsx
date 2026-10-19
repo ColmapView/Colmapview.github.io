@@ -87,7 +87,7 @@ export function BucketStorageModal({ isOpen, onClose, onLoadUrl, accessRequest }
         </section>
       </>}
       </>}
-      {error && <p role="alert" className="m-0 text-ds-error">{error}</p>}
+      {(error || connection.error) && <p role="alert" className="m-0 text-ds-error">{error || connection.error}</p>}
     </div>
   </ModalDialogShell>;
 }

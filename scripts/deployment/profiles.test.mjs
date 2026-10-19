@@ -48,6 +48,7 @@ test('disabled profiles erase inherited test credentials and preview erases prov
   for (const profile of ['github', 'preview']) {
     const env = profileEnvironment(profile, inherited);
     assert.equal(env.VITE_GOOGLE_DRIVE_ENABLED, 'false');
+    assert.equal(env.VITE_ACCOUNT_SESSIONS_ENABLED, 'false');
     assert.equal(env.VITE_GOOGLE_DRIVE_API_KEY, '');
     assert.equal(env.GOOGLE_DRIVE_API_KEY, '');
     assert.equal(env.VITE_GOOGLE_DRIVE_CLIENT_ID, '');
@@ -82,6 +83,7 @@ test('custom builds require their own production configuration and exact fixed o
   assert.equal(env.VITE_GOOGLE_DRIVE_API_KEY, FIXTURE_GOOGLE_CONFIG.CUSTOM_GOOGLE_DRIVE_API_KEY);
   assert.equal(env.VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN, CUSTOM_ORIGIN);
   assert.equal(env.VITE_GOOGLE_DRIVE_ENABLED, 'true');
+  assert.equal(env.VITE_ACCOUNT_SESSIONS_ENABLED, 'true');
   assert.equal(env.VITE_HF_AUTH_ENABLED, 'false');
   assert.throws(() => profileEnvironment('custom', { ...FIXTURE_GOOGLE_CONFIG, CUSTOM_HF_AUTH_ENABLED: 'true', CUSTOM_HF_OAUTH_CLIENT_ID: 'fixture', CUSTOM_HF_OAUTH_REDIRECT_URI: 'https://colmapview.github.io/latest/' }), /custom origin/);
   assert.throws(() => profileEnvironment('custom', { ...FIXTURE_GOOGLE_CONFIG, CUSTOM_HF_AUTH_ENABLED: 'true', CUSTOM_HF_OAUTH_CLIENT_ID: 'fixture', CUSTOM_HF_OAUTH_REDIRECT_URI: `${CUSTOM_ORIGIN}/` }), /hf-callback/);

@@ -5,6 +5,13 @@ import { GoogleDriveOpenWith } from './GoogleDriveOpenWith';
 import { googleDriveAuth, loadGoogleOAuthSdk, type GoogleOAuthSdk, type GoogleTokenResponse } from '../../features/googleDrive/auth';
 import { runStartupLoadPlan } from '../../appStartupLoad';
 import { chooseGoogleDriveArchive } from '../../features/googleDrive/picker';
+import { accountSessions } from '../../features/accountSessions/api';
+
+const savedSessions = vi.hoisted(() => ({ ready: true, capabilities: { google: false, hf: false, bucket: false }, accounts: [], bucket: null, expiresAt: 0 }));
+vi.mock('../../features/accountSessions/api', async original => ({
+  ...await original<typeof import('../../features/accountSessions/api')>(),
+  accountSessions: { getSnapshot: () => savedSessions, subscribe: () => () => {}, load: vi.fn(async () => savedSessions), token: vi.fn(), connectRedirect: vi.fn(), disconnect: vi.fn().mockResolvedValue(undefined) },
+}));
 
 vi.mock('../../features/googleDrive/auth', async original => ({
   ...await original<typeof import('../../features/googleDrive/auth')>(), loadGoogleOAuthSdk: vi.fn(),
@@ -24,6 +31,7 @@ const authorize = () => act(() => callback?.({ access_token: 'selected-token', t
 const props = () => ({ loadFromUrl: vi.fn(), loadFromManifest: vi.fn(), onOpenUrlModal: vi.fn(), onLoadRemoteDataset: vi.fn() });
 
 beforeEach(() => {
+  savedSessions.capabilities.google = false;
   vi.stubEnv('VITE_GOOGLE_DRIVE_ENABLED', 'true');
   vi.stubEnv('VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN', '');
   vi.stubEnv('VITE_GOOGLE_DRIVE_API_KEY', 'test-key');
@@ -38,6 +46,41 @@ afterEach(() => {
 });
 
 describe('Drive-selected archive sign-in', () => {
+  it('restores the matching saved account and loads without a Google popup, Picker or an extra click', async () => {
+    vi.stubEnv('VITE_ACCOUNT_SESSIONS_ENABLED', 'true');
+    savedSessions.capabilities.google = true;
+    vi.mocked(accountSessions.token).mockResolvedValue({ accessToken: 'saved-token', expiresAt: Date.now() + 3600_000,
+      accountId: '123456789', scope: 'openid https://www.googleapis.com/auth/drive.file', renewable: true });
+    const loaders = props();
+    render(<StrictMode><GoogleDriveOpenWith {...loaders} /></StrictMode>);
+    await waitFor(() => expect(runStartupLoadPlan).toHaveBeenCalledOnce());
+    expect(accountSessions.token).toHaveBeenCalledWith('google', 'view', '123456789');
+    expect(googleDriveAuth.getAccessToken()).toBe('saved-token');
+    expect(requestAccessToken).not.toHaveBeenCalled();
+    expect(loadGoogleOAuthSdk).not.toHaveBeenCalled();
+    expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
+  });
+  it('starts Google authorization automatically for a fresh Drive launch, preserving the selected file and account', async () => {
+    vi.stubEnv('VITE_ACCOUNT_SESSIONS_ENABLED', 'true');
+    savedSessions.capabilities.google = true;
+    vi.mocked(accountSessions.token).mockRejectedValue(new Error('A matching account is not connected'));
+    vi.mocked(accountSessions.connectRedirect).mockResolvedValue();
+    render(<StrictMode><GoogleDriveOpenWith {...props()} /></StrictMode>);
+    await waitFor(() => expect(accountSessions.connectRedirect).toHaveBeenCalledOnce());
+    expect(accountSessions.connectRedirect).toHaveBeenCalledWith('google', expect.objectContaining({ loginHint: '123456789',
+      returnTo: expect.stringContaining('https://colmapview.opsiclear.com/?drive=open&state=') }), expect.any(AbortSignal));
+    expect(runStartupLoadPlan).not.toHaveBeenCalled();
+  });
+  it('does not restart authorization after a cancelled Google return', async () => {
+    vi.stubEnv('VITE_ACCOUNT_SESSIONS_ENABLED', 'true');
+    savedSessions.capabilities.google = true;
+    vi.mocked(accountSessions.token).mockRejectedValue(new Error('No session'));
+    window.history.replaceState(null, '', `${launch}&account_provider=google&account_result=cancelled`);
+    render(<GoogleDriveOpenWith {...props()} />);
+    await screen.findByRole('button', { name: 'Sign in with Google' });
+    expect(accountSessions.connectRedirect).not.toHaveBeenCalled();
+    expect(runStartupLoadPlan).not.toHaveBeenCalled();
+  });
   it('discards another account token, removes raw state and loads exactly the selected archive after explicit sign-in', async () => {
     googleDriveAuth.connect('123-client.apps.googleusercontent.com', sdk);
     authorize();

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Optional remembered Google Drive and Hugging Face connections on the custom website, using a secure session cookie and encrypted server credentials with a maximum 30-day lifetime.
+- Restore the matching Google account for Drive Open with and load its archive without another ColmapView sign-in click. Renew access tokens for reading and publishing when the provider permits it.
+- An explicit Remember this connection choice for S3-compatible buckets, with short-lived server-signed requests and a separate upload permission step for saved read-only connections.
+
+### Changed
+- Separate remembered Hugging Face reading and publishing permissions, and forget saved credentials on Disconnect or Sign out.
+- Document connection storage, expiry and provider setup in the privacy policy and maintainer guides. Production activation requires the new server OAuth configuration.
+
 ## [0.18.2] - 2026-10-19
 
 ### Added

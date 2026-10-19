@@ -1,5 +1,8 @@
 # Independent GitHub and custom hosting
 
+> Connection update, October 19, 2026: the custom host now includes an optional [remembered connection service](account-sessions.md). It uses confidential OAuth callbacks, an essential session cookie and encrypted server credentials for at most 30 days. Its Google flow adds `openid` to identify the account; HF viewing and publication use separate authorizations. The browser-only setup and dated live evidence below describe the previous flow; they do not prove that the new server callbacks or refresh tokens have passed a live check. Provider setup and explicit production enablement are still required.
+
+
 ColmapView is served from these hosts. A release tag builds the GitHub profile and, when the custom gate is enabled, the custom profile from the same commit; `/dev/` is built from `main` or a manual branch run, and a preview from an explicitly selected ref:
 
 | Host | App base | Google Drive | Account configuration |
@@ -53,7 +56,7 @@ The old `GOOGLE_DRIVE_*` repository settings belong to the audited Testing setup
 
 ## Google production setup and approval
 
-Create a separate Google Cloud production project, enable Drive API and Google Picker API, and configure a Web application OAuth client with JavaScript origin **`https://colmapview.opsiclear.com`**. This popup token flow needs no application redirect URI. Declare **`https://www.googleapis.com/auth/drive.file`** and, for optional menu installation, **`https://www.googleapis.com/auth/drive.install`**. Restrict the browser API key to both APIs and website referrers `https://colmapview.opsiclear.com`, `https://colmapview.opsiclear.com/*` and **`https://docs.google.com/*`** for the Picker iframe. Keep localhost and its testing keys/clients in a separate project.
+Create a separate Google Cloud production project, enable Drive API and Google Picker API, and configure a Web application OAuth client with JavaScript origin **`https://colmapview.opsiclear.com`**. The browser-only fallback needs no application redirect URI. The optional remembered connection service also registers `https://colmapview.opsiclear.com/auth/google/callback` and keeps the Google client secret only in the Worker; see [session setup](account-sessions.md). Declare **`https://www.googleapis.com/auth/drive.file`** and, for optional menu installation, **`https://www.googleapis.com/auth/drive.install`**. Restrict the browser API key to both APIs and website referrers `https://colmapview.opsiclear.com`, `https://colmapview.opsiclear.com/*` and **`https://docs.google.com/*`** for the Picker iframe. Keep localhost and its testing keys/clients in a separate project.
 
 Use the saved canonical Branding URLs **`https://colmapview.opsiclear.com/about`**, **`https://colmapview.opsiclear.com/privacy`** and **`https://colmapview.opsiclear.com/terms`**. Google's current domain guide requires a DNS-verified Search Console **Domain property**; `opsiclear.com` now reports Ownership verified as recorded above. Confirm the final authorized-domain entry before review. The earlier GitHub HTML/URL-prefix file is not a substitute for DNS Domain-property verification. Verified domain ownership and saved Branding fields do not establish Google app approval.
 

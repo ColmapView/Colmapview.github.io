@@ -26,7 +26,7 @@ export const BATCH_RECEIPT_PATH = 'colmapview-upload.json';
 export const CREATION_MARKER_PATH = 'colmapview-publication.json';
 export const commitTitle = (marker: string) => `ColmapView publication ${marker}`;
 
-export function createHubClient(getAccessToken: (username: string) => string): HubClient {
+export function createHubClient(getAccessToken: (username: string) => string | Promise<string>): HubClient {
   const sdk = () => import('@huggingface/hub');
   const repo = (name: string) => ({ type: 'dataset' as const, name });
   const token = (repoId: string) => getAccessToken(repoId.split('/')[0]);
@@ -42,7 +42,7 @@ export function createHubClient(getAccessToken: (username: string) => string): H
         }
         const headers = new Headers(init?.headers);
         headers.delete('Authorization');
-        if (visibility === 'private') headers.set('Authorization', `Bearer ${token(repoId)}`);
+        if (visibility === 'private') headers.set('Authorization', `Bearer ${await token(repoId)}`);
         const response = await fetch(url, { ...init, headers, credentials: 'omit', cache: 'no-store' });
         if ([401, 403].includes(response.status)) {
           await response.body?.cancel();
@@ -59,7 +59,7 @@ export function createHubClient(getAccessToken: (username: string) => string): H
       }
     },
     async head(repoId, signal) {
-      const entries = (await sdk()).listCommits({ repo: repo(repoId), accessToken: token(repoId), batchSize: 2, fetch: boundedFetch(signal) });
+      const entries = (await sdk()).listCommits({ repo: repo(repoId), accessToken: await token(repoId), batchSize: 2, fetch: boundedFetch(signal) });
       const first = await entries.next();
       const second = await entries.next();
       await entries.return(undefined);
@@ -69,7 +69,7 @@ export function createHubClient(getAccessToken: (username: string) => string): H
     async create(repoId, operationId, visibility, signal) {
       const marker = JSON.stringify({ version: 2, operationId, repoId, visibility });
       try {
-        await (await sdk()).createRepo({ repo: repo(repoId), accessToken: token(repoId), visibility,
+        await (await sdk()).createRepo({ repo: repo(repoId), accessToken: await token(repoId), visibility,
           files: [{ path: CREATION_MARKER_PATH, content: new Blob([marker]) },
             { path: 'README.md', content: new Blob(['# Dataset publication in progress\n\nCreated with ColmapView.\n']) }],
           fetch: boundedFetch(signal),
@@ -94,7 +94,7 @@ export function createHubClient(getAccessToken: (username: string) => string): H
       const transfer = createTransferTimeout(signal);
       const uploadSignal = transfer.signal;
       try {
-        const events = (await awaitWithAbort(sdk(), uploadSignal)).uploadFilesWithProgress({ repo: repo(repoId), accessToken: token(repoId), files,
+        const events = (await awaitWithAbort(sdk(), uploadSignal)).uploadFilesWithProgress({ repo: repo(repoId), accessToken: await token(repoId), files,
           parentCommit: parent, commitTitle: commitTitle(marker), commitDescription: marker,
           abortSignal: uploadSignal, useWebWorkers: { poolSize: 2 },
           // Keep the initial browser release on the tested LFS/multipart path.

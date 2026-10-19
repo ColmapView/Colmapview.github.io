@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import { getGoogleDriveClientId, loadGoogleOAuthSdk, type GoogleOAuthSdk } from '../../features/googleDrive/auth';
 import { DRIVE_FILE_NAME_MAX, drivePublicationErrorMessage, isDrivePublishing } from '../../features/googleDrive/publishDataset';
 import { useGoogleDrivePublishStoreFacade } from './useGoogleDrivePublishStoreFacade';
@@ -10,6 +10,7 @@ import { getButtonClass, inputStyles } from '../../theme';
 import type { PublicationImageFormat } from '../../features/datasetPublishing/types';
 import { useHubLink } from '../upload/useHubLink';
 import { hubDisclosure } from '../../features/colmapviewHub/disclosure';
+import { accountSessions } from '../../features/accountSessions/api';
 
 const fieldClass = `${inputStyles.base} ${inputStyles.sizes.sm} w-full min-w-0`;
 const secondary = getButtonClass('secondary', 'sm');
@@ -21,6 +22,8 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
   const { auth, publish, publication, googleDriveAuth } = facade;
   const id = useId();
   const clientId = getGoogleDriveClientId();
+  const savedSessions = useSyncExternalStore(accountSessions.subscribe, accountSessions.getSnapshot);
+  const rememberedAccess = savedSessions.capabilities.google;
   const [name, setName] = useDatasetScopedValue(facade.sourceKey, `${facade.datasetName}.zip`);
   const [shared, setShared] = useState(true);
   const [imageFormat, setImageFormat] = useState<PublicationImageFormat>('original');
@@ -37,13 +40,13 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
   const connected = auth.status === 'connected';
   useFocusWhenBecomesTrue(connected, `${id}-access`);
   useEffect(() => {
-    if (!isOpen || !clientId) return;
+    if (!isOpen || !clientId || rememberedAccess) return;
     let cancelled = false;
     void loadGoogleOAuthSdk().then(value => { if (!cancelled) { setSdk(value); setSdkError(null); } }, () => {
       if (!cancelled) setSdkError('Could not load Google sign-in. Check your connection and retry.');
     });
     return () => { cancelled = true; };
-  }, [isOpen, clientId, sdkAttempt]);
+  }, [isOpen, clientId, sdkAttempt, rememberedAccess]);
   const publishNow = async () => {
     setFormError(null);
     try { await facade.publishDataset(name, shared, imageFormat, preview.file ?? null); }
@@ -58,13 +61,16 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
 
   return <UploadDialog isOpen={isOpen} onClose={onClose} closeLabel="Close Drive publication"
     title={<><GoogleDriveIcon className="w-3.5 h-3.5 inline mr-1" />Publish to Google Drive</>}
-    headerActions={clientId && (auth.status === 'connected' || auth.status === 'connecting'
+    headerActions={<>{auth.status === 'disconnected' && savedSessions.accounts.some(account => account.provider === 'google')
+      && <button type="button" className={getButtonClass('secondary', 'xs')} onClick={signOut}>Disconnect</button>}
+      {clientId && (auth.status === 'connected' || auth.status === 'connecting'
       ? <button type="button" className={getButtonClass('secondary', 'xs')} onClick={signOut}>{auth.status === 'connecting' ? 'Cancel sign-in' : 'Sign out'}</button>
-      : <button type="button" className={getButtonClass('primary', 'xs')} disabled={!sdk} aria-label="Sign in with Google"
-        onClick={() => { if (sdk) googleDriveAuth.connect(clientId, sdk); }}>Sign in</button>)}>
+      : <button type="button" className={getButtonClass('primary', 'xs')} disabled={!sdk && !rememberedAccess} aria-label="Sign in with Google"
+        onClick={() => { if (sdk || rememberedAccess) googleDriveAuth.connect(clientId, sdk); }}>Sign in</button>)}</>}>
     {!clientId ? <p>Google Drive publishing is unavailable in this viewer.</p> : <>
       {auth.status !== 'connected' && <p className="publication-note">
         Uploads go directly to Drive. Sign-in lets ColmapView create and manage its dataset files.
+        {rememberedAccess && ' This browser stays connected for up to 30 days using encrypted credentials on ColmapView’s server. Sign out forgets the connection.'}
       </p>}
       <UploadLayout completed={Boolean(publish.receipt)}>
         <UploadViewPreview url={preview.url} busy={preview.busy} hasDataset={Boolean(facade.reconstruction)} />

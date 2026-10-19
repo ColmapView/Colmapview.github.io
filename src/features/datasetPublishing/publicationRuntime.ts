@@ -12,7 +12,7 @@ import { publicationLicenseInfo } from './publicationMetadata';
 import { hubPublications } from '../colmapviewHub/publication';
 import { bindHubPublication, onPublicationSourceChange } from '../colmapviewHub/bindHubPublication';
 
-const client = createHubClient(username => hfAuth.getAccessToken(username));
+const client = createHubClient(username => hfAuth.ensureAccessToken(username));
 export const publication = createPublicationController(client, createPublicationVerifier(client));
 publication.subscribe(() => usePublicationStatusStore.setState({ phase: publication.getSnapshot().phase }));
 bindHubPublication(publication, hubPublications.huggingFace, current => ({

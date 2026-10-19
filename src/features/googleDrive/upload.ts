@@ -84,7 +84,7 @@ export function driveSharingUrl(file: Pick<DrivePublishedFile, 'id' | 'resourceK
 }
 
 export function createDriveUploadClient(deps: {
-  getAccessToken: () => string | null; expireSession?: (token: string) => void;
+  getAccessToken: () => string | null | Promise<string | null>; expireSession?: (token: string) => void;
   fetchImpl?: DriveUploadRequest; uploadImpl?: DriveUploadRequest;
 }) {
   const fetchImpl = deps.fetchImpl ?? ((url, init) => fetchWithTimeout(url, 60_000, init));
@@ -92,7 +92,8 @@ export function createDriveUploadClient(deps: {
   const request = async (url: string, signal: AbortSignal, init: RequestInit = {}, progress?: (bytes: number) => void) => {
     assertDrivePublishingAllowed();
     signal.throwIfAborted();
-    const token = deps.getAccessToken();
+    const token = await deps.getAccessToken();
+    signal.throwIfAborted();
     if (!token) throw new GoogleDrivePublishError('Sign in with Google to allow uploads, then retry.', 401);
     const headers = new Headers(init.headers);
     headers.set('Authorization', `Bearer ${token}`);

@@ -15,6 +15,7 @@ import { getButtonClass, inputStyles } from '../../theme';
 import { useHubLink } from '../upload/useHubLink';
 import { hubDisclosure } from '../../features/colmapviewHub/disclosure';
 import type { BucketAccess } from '../../features/colmapviewHub/publication';
+import { accountSessions } from '../../features/accountSessions/api';
 
 const fieldClass = `${inputStyles.base} ${inputStyles.sizes.sm} w-full min-w-0`;
 const secondary = getButtonClass('secondary', 'sm');
@@ -34,6 +35,7 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [inspecting, setInspecting] = useState(false);
+  const [enablingUploads, setEnablingUploads] = useState(false);
   const browser = useBucketBrowser(isOpen);
   const busy = isBucketPublishing(publication.phase);
   const selecting = publication.phase === 'idle';
@@ -67,7 +69,14 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
       <UploadViewPreview url={preview.url} busy={preview.busy} hasDataset={Boolean(facade.reconstruction)} />
       <div className="publication-main">
         {selecting && <PreviousUpload hub={hub} />}
-        {selecting && (!connection.canWrite ? <BucketConnectionForm access="write" /> : <section className="publication-fields" aria-label="Bucket dataset details">
+        {selecting && (!connection.canWrite ? connection.remembered ? <section className="publication-section">
+          <p className="publication-note">Use the remembered bucket connection for uploads. The key’s permissions still apply.</p>
+          <button type="button" className={secondary} disabled={enablingUploads} onClick={() => {
+            setEnablingUploads(true); setError(null);
+            void accountSessions.enableBucketUploads().then(saved => bucketConnection.connect(saved.config, undefined, true))
+              .catch(() => setError('Could not enable uploads. Reconnect the bucket and try again.')).finally(() => setEnablingUploads(false));
+          }}>{enablingUploads ? 'Connecting…' : 'Enable uploads'}</button>
+        </section> : <BucketConnectionForm access="write" /> : <section className="publication-fields" aria-label="Bucket dataset details">
           <UploadFormatField id={`${id}-format`} value={format} onChange={setFormat} />
           {format === 'zip' && <UploadImageFormatField id={`${id}-images`} value={imageFormat} onChange={setImageFormat} />}
           <label htmlFor={`${id}-destination`}>Upload folder</label>
@@ -104,6 +113,6 @@ export function BucketPublishModal({ isOpen, onClose }: { isOpen: boolean; onClo
       <UploadSubmitRow id={id} note={!facade.reconstruction && 'Load a COLMAP dataset to upload it.'} disclosure={disclosure}
         disabled={!connection.canWrite || !facade.canPublish || applying || hub.busy} onSubmit={() => { void publish(); }}>Upload dataset</UploadSubmitRow>
     </section>}
-    {(error || publication.error) && <p role="alert" className="text-ds-error">{error || publication.error}</p>}
+    {(error || publication.error || connection.error) && <p role="alert" className="text-ds-error">{error || publication.error || connection.error}</p>}
   </UploadDialog>;
 }

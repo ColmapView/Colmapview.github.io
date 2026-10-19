@@ -10,7 +10,7 @@ import { getOrLoadFrustumBitmap } from '../../hooks/frustumTextureCache';
 import { startOptionalDatasetViewerSettings } from '../../hooks/urlLoaderViewerState';
 import { appLogger } from '../../utils/logger';
 
-vi.mock('./auth', () => ({ hfAuth: { getReadAccessToken: vi.fn(), getSnapshot: vi.fn(), expire: vi.fn() } }));
+vi.mock('./auth', () => ({ hfAuth: { getReadAccessToken: vi.fn(), ensureReadAccessToken: vi.fn(), getSnapshot: vi.fn(), expire: vi.fn() } }));
 const root = 'https://huggingface.co/datasets/owner/scene/resolve/main/';
 const info = 'https://huggingface.co/api/datasets/owner/scene';
 const request = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
@@ -29,6 +29,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', request);
   vi.mocked(hfAuth.getSnapshot).mockReturnValue({ status: 'disconnected', identity: null, error: null });
   vi.mocked(hfAuth.getReadAccessToken).mockReturnValue(null);
+  vi.mocked(hfAuth.ensureReadAccessToken).mockImplementation(async () => hfAuth.getReadAccessToken());
 });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const CONTINUE_AFTER_FAILED_CHECK = '[Hugging Face] Dataset access check failed; continuing with the dataset files.';

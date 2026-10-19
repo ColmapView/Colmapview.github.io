@@ -1,5 +1,8 @@
 # Publish a dataset to Hugging Face
 
+> Connection update, October 19, 2026: the custom host now includes an optional [remembered connection service](account-sessions.md). It uses confidential OAuth callbacks, an essential session cookie and encrypted server credentials for at most 30 days. Its Google flow adds `openid` to identify the account; HF viewing and publication use separate authorizations. The browser-only setup and dated live evidence below describe the previous flow; they do not prove that the new server callbacks or refresh tokens have passed a live check. Provider setup and explicit production enablement are still required.
+
+
 ColmapView can publish the currently loaded COLMAP reconstruction, original images, available masks, and splats to a new private or public dataset in the connected user's personal Hugging Face account. Uploads default to public; choose Private before uploading when access should be restricted. Public links open anonymously; private links require sign-in with an account that has repository access. The link contains no token.
 
 **Status:** implemented behind a build flag. Private publication and the shared upload UI have passed mocked browser tests in Chromium and Firefox; live private publication acceptance remains to be completed. Real localhost sign-in, public repository creation, a 168 MB PLY upload, dataset-card rendering, and anonymous reopening passed against the live Hugging Face service on 2026-09-28. Hosting capabilities depend on the build configuration; see [dual hosting](dual-hosting.md). Direct links published from colmapview.github.io open in `/latest/`, or in `/dev/` when published there. Every verified upload receives a ColmapView Hub link where the Hub is enabled (see below).
