@@ -17,7 +17,7 @@ export function createBucketConnection(fetchImpl: FetchRequest = (url, init) => 
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach(listener => listener());
   const disconnect = () => {
-    const forget = state.remembered;
+    const forget = state.remembered || Boolean(accountSessions.getSnapshot().bucket);
     disconnectSession?.();
     disconnectSession = null; session = null;
     state = { config: null, canWrite: false }; notify();

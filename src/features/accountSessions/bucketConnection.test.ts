@@ -6,6 +6,15 @@ const config = { baseUrl: 'https://s3.example/bucket/', region: 'auto' };
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('remembered bucket connection', () => {
+  it('forgets a saved bucket even when this tab temporarily connected without remembering keys', () => {
+    vi.spyOn(accountSessions, 'getSnapshot').mockReturnValue({ ready: true, capabilities: { google: false, hf: false, bucket: true },
+      accounts: [], bucket: { config, writable: false }, expiresAt: Date.now() + 86400_000 });
+    const forget = vi.spyOn(accountSessions, 'disconnect').mockResolvedValue();
+    const connection = createBucketConnection();
+    connection.connect({ baseUrl: 'https://another.example/bucket/', region: 'auto' });
+    connection.disconnect(); expect(forget).toHaveBeenCalledWith('bucket');
+  });
+
   it('reads using short-lived signed URLs and reuses them for range requests without receiving a key', async () => {
     const url = config.baseUrl + 'scene.zip';
     const signed = url + '?X-Amz-Signature=fixture';
